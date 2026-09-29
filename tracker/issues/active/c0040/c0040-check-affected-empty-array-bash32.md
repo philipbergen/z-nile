@@ -1,0 +1,63 @@
+---
+id: c0040
+type: chore
+title: Check affected empty array bash32
+raft: R0010
+depends_on: []
+emergent: true
+design: draft
+created: 2026-09-28
+---
+
+# c0040: Check affected empty array bash32
+
+## Problem
+`scripts/check.sh --affected` (the default mode, and what the Claude Code stop hook runs) dies with `base_args[@]: unbound variable` whenever `--base` is not given, on bash 3.2 (the macOS system bash). Under `set -u`, bash < 4.4 treats expanding an empty array as unbound. Found while executing R0010: the iteration gate the protocol prescribes could not run on the author's Mac. `--full` is unaffected, which is why the gate and CI (bash 5) never showed it.
+
+## Non-goals
+- Auditing every script for bash-3.2 compatibility beyond this expansion.
+
+## Solution
+Expand the optional array with `${base_args[@]+"${base_args[@]}"}`, which is empty-safe on bash 3.2 through 5.
+
+## Design
+One line in `scripts/check.sh`, in the affected-tests stage.
+
+### Scalability
+n/a.
+### Maintainability
+Uses the standard portable idiom for optional arrays under `set -u`.
+### Usability
+`scripts/check.sh` with no arguments works again on a stock Mac.
+
+### Touched modules
+- `scripts/check.sh`
+
+### Affected specs
+`ALL` (a `scripts/` change).
+
+## Unknowns & experiments
+None.
+
+## Regression guard
+check.sh AC1 runs the affected gate under the host's `bash` (3.2 on macOS). R0010's check.sh runs every member's check.sh, so it runs there too.
+
+## Test plan
+- check.sh AC1: `bash scripts/check.sh --affected` exits 0 (failed before the fix with `unbound variable`).
+
+## Acceptance criteria
+
+### Checked
+- **AC1**: `scripts/check.sh --affected` without `--base` passes under the host's `bash`.
+
+### Judged
+None.
+
+### Observed
+None.
+
+## Implementation steps
+1. Write check.sh; watch AC1 fail.
+2. Fix the expansion; watch AC1 pass.
+
+## Verification log

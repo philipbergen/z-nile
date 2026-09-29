@@ -65,6 +65,29 @@ return t.spec("affected", function(it)
 		t.expect(string.find(out, `{R}("./A")`, 1, true) ~= nil).toBe(true)
 	end)
 
+	it("specs that load the place depend implicitly on src/ and default.project.json", function()
+		local g: graph.Graph = {
+			files = { "p.spec.luau", "u.spec.luau", "helper.luau", graph.PLACE_LIB },
+			deps = {
+				["p.spec.luau"] = { "helper.luau" },
+				["helper.luau"] = { graph.PLACE_LIB },
+				["u.spec.luau"] = {},
+				[graph.PLACE_LIB] = {},
+			},
+			unresolved = {},
+			dynamic = {},
+		}
+		local function sel(changed: { string }): { string }
+			return graph.affectedSpecs(g, changed, function(f)
+				return string.match(f, "%.spec%.luau$") ~= nil
+			end)
+		end
+		t.expect(sel({ "src" })).toEqual({ "p.spec.luau" })
+		t.expect(sel({ "src/shared/Logic/X/init.luau" })).toEqual({ "p.spec.luau" })
+		t.expect(sel({ "default.project.json" })).toEqual({ "p.spec.luau" })
+		t.expect(sel({ "srcfoo/x.luau", "tests/other.luau" })).toEqual({})
+	end)
+
 	it("an unrelated change selects nothing", function()
 		t.expect(select({ "README.md" })).toEqual({})
 	end)
