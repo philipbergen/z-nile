@@ -1,0 +1,21 @@
+name: check
+# Runs only when a PR is ready for review (not drafts) and on main, to keep CI load low.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  gate:
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: CompeyDev/setup-rokit@v0.2.1
+        with:
+          cache: "true"
+      - run: lune setup
+      - run: scripts/check.sh --full

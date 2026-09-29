@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/check.sh:*)",
+      "Bash(scripts/tracker.sh list:*)",
+      "Bash(scripts/tracker.sh find:*)",
+      "Bash(scripts/tracker.sh members:*)",
+      "Bash(scripts/tracker.sh check:*)",
+      "Bash(scripts/tracker.sh metrics:*)",
+      "Bash(lune run tests/run:*)",
+      "Bash(lune run scripts/affected:*)",
+      "Bash(stylua:*)",
+      "Bash(selene:*)",
+      "Bash(luau-lsp analyze:*)",
+      "Bash(rojo build:*)",
+      "Bash(rojo sourcemap:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/post-edit.sh" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/stop.sh", "timeout": 300 }]
+      }
+    ]
+  }
+}
