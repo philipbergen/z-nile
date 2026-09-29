@@ -1,6 +1,7 @@
 --!strict
 -- Spend accounting: per-issue spend.md rows written into the same commit they describe.
--- Lines come from the staged diff (tracker/ and promoted tests/acceptance/ excluded: prep work). Minutes are explicit (--time) or the
+-- Lines come from the staged diff (tracker/ excluded; on the done commit also the promoted
+-- tests/acceptance/ specs, which are prep work). Minutes are explicit (--time) or the
 -- wall-clock since the previous commit, capped to absorb idle gaps; multi-issue commits split
 -- minutes in proportion to lines added.
 local fs = require("@lune/fs")
@@ -16,17 +17,14 @@ export type Totals = { added: number, removed: number, minutes: number, commits:
 
 type FileStat = { path: string, added: number, removed: number }
 
-function spend.stagedStats(): { FileStat }
+-- `excludeAcceptance`: on the done commit, promoted acceptance specs (prep work) are not spend.
+function spend.stagedStats(excludeAcceptance: boolean?): { FileStat }
 	local out: { FileStat } = {}
-	local text = sh.git({
-		"diff",
-		"--cached",
-		"--numstat",
-		"--",
-		".",
-		":(exclude)tracker",
-		":(exclude)tests/acceptance",
-	})
+	local args = { "diff", "--cached", "--numstat", "--", ".", ":(exclude)tracker" }
+	if excludeAcceptance then
+		table.insert(args, ":(exclude)tests/acceptance")
+	end
+	local text = sh.git(args)
 	for line in string.gmatch(text, "[^\n]+") do
 		local a, r, path = string.match(line, "^(%S+)\t(%S+)\t(.+)$")
 		if a and r and path then

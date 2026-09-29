@@ -45,7 +45,8 @@ function place.scripts(game: Instance): { Instance }
 -- Returns the ModuleScript, or nil if any segment is missing or the target is not a ModuleScript.
 -- "@lune/..." and other aliases return nil (they are not valid in src/).
 function place.resolveRequire(from: Instance, spec: string): Instance?
--- String-literal require specs in a source string (same pattern as scripts/lib/graph.luau).
+-- String-literal require specs in a source string: MUST call graph.stripComments(source) first,
+-- then apply graph.luau's require pattern, so comments never count (design-review-003 F5).
 function place.requireSpecs(source: string): { string }
 ```
 - **Build output**: the build writes to `.cache/place-test.rbxl`, which is gitignored. If `rojo build` fails, `place.load()` raises an error containing rojo's stderr.

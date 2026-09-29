@@ -303,7 +303,8 @@ local function recordAndCommit(
 	raft: store.Item,
 	message: string,
 	issueIds: { string },
-	explicitMinutes: number?
+	explicitMinutes: number?,
+	isDone: boolean?
 )
 	sh.git({ "add", "-A" })
 	local issues: { store.Item } = {}
@@ -321,7 +322,7 @@ local function recordAndCommit(
 		issues = store.members(raft.id)
 	end
 	local minutes = explicitMinutes or spend.elapsedMinutes()
-	local shares = spend.attribute(issues, spend.stagedStats(), minutes, how)
+	local shares = spend.attribute(issues, spend.stagedStats(isDone), minutes, how)
 	local trailers: { string } = {}
 	for _, share in shares do
 		if share.added + share.removed == 0 and share.minutes < 0.1 then
@@ -366,12 +367,16 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 			end
 		end
 	end
-	local ok = check(copied)
+	local pok, result = pcall(check, copied)
+	local ok = pok and result == true
 	for _, m in store.members(raft.id) do
 		local dest = `tests/acceptance/{m.id}`
 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
 			fs.removeDir(dest)
 		end
+	end
+	if not pok then
+		error(result, 0)
 	end
 	return ok
 end
@@ -478,7 +483,7 @@ function cmd.done(pos: { string })
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
-	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil)
+	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true)
 	if hasUpstream() then
 		sh.must("gh", { "pr", "ready" })
 		local summary = fs.readFile(`{raft.dir}/spend.md`)

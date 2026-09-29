@@ -43,6 +43,28 @@ return t.spec("affected", function(it)
 		t.expect(string.find(graph.stripComments(src), "./A", 1, true) ~= nil).toBe(true)
 	end)
 
+	it("never strips code: strings containing -- or --[[, and ---[[ toggles, keep later requires", function()
+		local R = "req" .. "uire"
+		local cases = {
+			`local s = "a -- b"; local A = {R}("./A")\n`,
+			`local s = "--[[" local A = {R}("./A") local x = t[i[1]]\n`,
+			`---[[\nlocal A = {R}("./A")\n--]]\n`,
+			`local s = [[ -- ]] local A = {R}("./A")\n`,
+			`local s = 'it\\'s -- fine' local A = {R}("./A")\n`,
+		}
+		for _, src in cases do
+			t.expect(string.find(graph.stripComments(src), `{R}("./A")`, 1, true) ~= nil).toBe(true)
+		end
+	end)
+
+	it("strips block comments with levels", function()
+		local R = "req" .. "uire"
+		local src = `--[==[ {R}("./gone") ]] still comment ]==]\nlocal A = {R}("./A")\n`
+		local out = graph.stripComments(src)
+		t.expect((string.find(out, "gone", 1, true))).toBe(nil)
+		t.expect(string.find(out, `{R}("./A")`, 1, true) ~= nil).toBe(true)
+	end)
+
 	it("an unrelated change selects nothing", function()
 		t.expect(select({ "README.md" })).toEqual({})
 	end)

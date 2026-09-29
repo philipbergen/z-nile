@@ -60,6 +60,15 @@ return t.spec("ci workflow", function(it)
 		t.expect(found).toBe(true)
 	end)
 
+	it("never ignores failures (no continue-on-error anywhere)", function()
+		t.expect(job["continue-on-error"] == nil or job["continue-on-error"] == false).toBe(true)
+		for _, step in job.steps do
+			t.expect(step["continue-on-error"] == nil or step["continue-on-error"] == false).toBe(true)
+			local run = if type(step.run) == "string" then step.run else ""
+			t.expect((string.find(run, "|| true", 1, true))).toBe(nil)
+		end
+	end)
+
 	it("skips drafts only for pull_request events", function()
 		local cond = string.gsub(job["if"] or "", "%s+", " ")
 		t.expect(cond).toBe("github.event_name != 'pull_request' || github.event.pull_request.draft == false")

@@ -46,7 +46,7 @@ Each item is a directory named by its ID:
 The human merges the PR. Agents never merge.
 
 ## Spend (best effort, automatic)
-- **Lines**: the staged diff, excluding `tracker/`.
+- **Lines**: the staged diff, excluding `tracker/`. On the `done` commit, the promoted `tests/acceptance/` specs are also excluded, because they're prep work. Later edits to them, for example a defect fix, do count.
 - **Attribution**:
   1. `--issue` flags if given;
   2. otherwise the current focus;

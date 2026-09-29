@@ -101,13 +101,61 @@ function graph.resolve(from: string, spec: string): string?
 	return nil
 end
 
--- Remove Luau comments (block `--[[ ]]`/`--[==[ ]==]` and line `--`) so require-like text in
--- comments is never scanned. Heuristic: `--` inside a string literal is also treated as a comment,
--- which can only hide requires that follow it on the same line.
+-- Remove Luau comments so require-like text in comments is never scanned. A small lexer: string
+-- literals ('', "", ``, [[ ]] / [=[ ]=]) are copied verbatim, so `--` or `--[[` inside a string
+-- never starts a comment; `---[[ ... --]]` toggles are line comments, as in Luau.
 function graph.stripComments(src: string): string
-	local out = string.gsub(src, "%-%-%[(=*)%[.-%]%1%]", "")
-	out = string.gsub(out, "%-%-[^\n]*", "")
-	return out
+	local out: { string } = {}
+	local i, n = 1, #src
+	local function longClose(at: number): (number?, number?)
+		-- at points to "[" of a long bracket opener; returns (closeEnd, openerEnd) or nil
+		local eq = string.match(src, "^%[(=*)%[", at)
+		if not eq then
+			return nil, nil
+		end
+		local openEnd = at + #eq + 1
+		local _, closeEnd = string.find(src, "]" .. eq .. "]", openEnd + 1, true)
+		return closeEnd or n, openEnd
+	end
+	while i <= n do
+		local c = string.sub(src, i, i)
+		if c == "-" and string.sub(src, i + 1, i + 1) == "-" then
+			local closeEnd = longClose(i + 2)
+			if closeEnd then
+				i = closeEnd + 1
+			else
+				local nl = string.find(src, "\n", i, true)
+				i = nl or n + 1
+			end
+		elseif c == '"' or c == "'" or c == "`" then
+			local j = i + 1
+			while j <= n do
+				local d = string.sub(src, j, j)
+				if d == "\\" then
+					j += 2
+				elseif d == c or (d == "\n" and c ~= "`") then
+					break
+				else
+					j += 1
+				end
+			end
+			table.insert(out, string.sub(src, i, j))
+			i = j + 1
+		elseif c == "[" then
+			local closeEnd = longClose(i)
+			if closeEnd then
+				table.insert(out, string.sub(src, i, closeEnd))
+				i = closeEnd + 1
+			else
+				table.insert(out, c)
+				i += 1
+			end
+		else
+			table.insert(out, c)
+			i += 1
+		end
+	end
+	return table.concat(out)
 end
 
 function graph.build(roots: { string }): Graph
