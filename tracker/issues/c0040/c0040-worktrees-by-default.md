@@ -5,7 +5,7 @@ title: Worktrees by default
 raft: R0020
 depends_on: []
 emergent: false
-design: draft
+design: reviewed
 created: 2026-09-29
 ---
 

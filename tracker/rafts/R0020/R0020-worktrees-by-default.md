@@ -4,7 +4,7 @@ type: chore
 title: Worktrees by default
 single: true
 issues: [c0040]
-design: draft
+design: reviewed
 created: 2026-09-28
 ---
 
