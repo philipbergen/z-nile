@@ -14,10 +14,22 @@ created: 2026-09-28
 ## Problem
 - c0020's place tests prove **structure**, not **behavior**. Adapter code, meaning server scripts, remotes and the client camera and input, never runs outside Studio. That leaves any criterion about adapter behavior as Observed, meaning manual.
 - Roblox Open Cloud's Luau Execution API can run Luau inside a real server of a published place, and could turn those into Checked criteria.
-- It requires an Open Cloud API key (a secret), a universe/place to publish to, and CI secrets. Those are decisions for the human.
+- It needs an Open Cloud API key, a universe/place to publish to, and CI secrets. The human provided these on 2026-09-28 (see Resources).
+
+## Resources (provided by the human, 2026-09-28)
+| what | where | value |
+|---|---|---|
+| experience | Creator Hub, private | `Pickman (Beta)` |
+| universe ID | GitHub repo variable `ROBLOX_BETA_UNIVERSE_ID` | `10768553777` |
+| place ID | GitHub repo variable `ROBLOX_BETA_PLACE_ID` | `82331952549326` |
+| API key | GitHub repo secret `ROBLOX_API_KEY` | scoped to that experience: `universe-places` write, `luau-execution-sessions` read+write; IP allowlist `0.0.0.0/0`; has an expiry |
+
+- The key is a secret: it only exists in CI. Local runs need it exported as `ROBLOX_API_KEY`, and specs must skip (not fail) when it is absent.
+- Open question for ticket-prep: publishing test builds to the beta place replaces what beta testers play. Either test against a separate private `Pickman (CI)` experience (needs a new key scope and variables from the human), or accept the overlap while beta is small.
+- Unverified: nothing has used the key yet. An early experiment should publish once and run one trivial Luau execution task.
 
 ## Non-goals
-- Anything before the human has provided an API key and a test place.
+- Deploying to the beta place for testers; that is a separate deploy chore.
 
 ## Solution
 <!-- The approach in one paragraph. -->
