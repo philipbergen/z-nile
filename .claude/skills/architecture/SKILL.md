@@ -9,7 +9,7 @@ description: Code structure rules for pickman (strict Luau, pure Logic features 
 | path | Roblox location | contains |
 |---|---|---|
 | `src/shared/Logic/<Feature>/` | ReplicatedStorage.Shared.Logic | **pure game logic**: no engine access, fully unit-tested in Lune |
-| `src/shared/` (outside Logic) | ReplicatedStorage.Shared | shared adapters: types, remotes, config tables |
+| `src/shared/` (outside Logic) | ReplicatedStorage.Shared | shared adapters: types, remotes, config tables. ModuleScripts only: `tests/place` enforces no Script or LocalScript under ReplicatedStorage |
 | `src/server/` | ServerScriptService.Server | server adapters. `Main.server.luau` boots them |
 | `src/client/` | StarterPlayerScripts.Client | client adapters: camera, input, rendering, HUD. `Main.client.luau` boots them |
 

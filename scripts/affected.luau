@@ -44,9 +44,9 @@ local function changedFiles(base: string?): { string }
 	end
 	local mergeBase = string.gsub(git({ "merge-base", "HEAD", ref :: string }), "%s+$", "")
 	if mergeBase ~= "" then
-		add(git({ "diff", "--name-only", mergeBase }))
+		add(git({ "diff", "--name-only", "--no-renames", mergeBase }))
 	end
-	add(git({ "diff", "--name-only", "HEAD" }))
+	add(git({ "diff", "--name-only", "--no-renames", "HEAD" }))
 	add(git({ "ls-files", "--others", "--exclude-standard" }))
 	return out
 end

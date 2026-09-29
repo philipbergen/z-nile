@@ -16,6 +16,13 @@ export type Graph = {
 
 local graph = {}
 
+-- Specs that require this library load the Rojo-built place, so they implicitly depend on every
+-- file under src/ and on default.project.json (see affectedSpecs).
+graph.PLACE_LIB = "tests/lib/place.luau"
+
+-- Captures the spec of a string-literal require. Apply to stripComments output only.
+graph.REQUIRE_PATTERN = "require%(%s*[\"']([^\"']+)[\"']"
+
 local function exists(path: string): boolean
 	return fs.isFile(path)
 end
@@ -166,7 +173,7 @@ function graph.build(roots: { string }): Graph
 	for _, file in g.files do
 		local src = graph.stripComments(fs.readFile(file))
 		local deps: { string } = {}
-		for spec in string.gmatch(src, "require%(%s*[\"']([^\"']+)[\"']") do
+		for spec in string.gmatch(src, graph.REQUIRE_PATTERN) do
 			-- skip @lune builtins and interpolation lookalikes such as `require("{x}")` in strings
 			if string.sub(spec, 1, 6) ~= "@lune/" and not string.find(spec, "{", 1, true) then
 				local target = graph.resolve(file, spec)
@@ -206,11 +213,19 @@ function graph.closure(g: Graph, file: string): { [string]: boolean }
 end
 
 -- Spec files (per `isSpec`) whose require closure contains any changed file (or a file under a
--- changed directory prefix).
+-- changed directory prefix). A closure containing PLACE_LIB also counts as containing every file
+-- under src/ and default.project.json, because the place is built from them.
 function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> boolean): { string }
 	local changedSet: { [string]: boolean } = {}
+	local placeChanged = false
 	for _, f in changed do
 		changedSet[f] = true
+		if f == "src" or string.sub(f, 1, 4) == "src/" or f == "default.project.json" then
+			placeChanged = true
+		end
+	end
+	if placeChanged then
+		changedSet[graph.PLACE_LIB] = true
 	end
 	local specs: { string } = {}
 	for _, file in g.files do

@@ -21,6 +21,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
 | `tests/integration/` | a few headless cross-feature scenarios, for example simulating a whole level | several features |
 | `tests/tooling/` | the scripts in `scripts/` | scripts |
+| `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/` or `default.project.json` change | `@tests/lib/place` |
 | `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
 | `tests/meta/` | the structural rules from the architecture skill | the graph library |
 

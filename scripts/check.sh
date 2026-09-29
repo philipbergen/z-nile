@@ -55,7 +55,7 @@ stage "tests ($mode)"
 if [[ $mode == full ]]; then
   lune run tests/run
 else
-  selection=$(lune run scripts/affected -- "${base_args[@]}")
+  selection=$(lune run scripts/affected -- ${base_args[@]+"${base_args[@]}"})
   if [[ -z $selection ]]; then
     echo "no specs affected"
   elif [[ $selection == ALL ]]; then

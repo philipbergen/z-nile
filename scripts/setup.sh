@@ -24,7 +24,12 @@ if [[ $os == Darwin ]]; then
   git --version >/dev/null 2>&1 || die "git unusable; if the Xcode license is not accepted run: sudo xcodebuild -license accept"
 fi
 for tool in git gh curl unzip; do command -v "$tool" >/dev/null || die "missing $tool"; done
-gh auth status >/dev/null 2>&1 || die "run: gh auth login"
+if [[ -n ${CI:-} ]]; then
+  # an Actions installation token can be rejected by `gh auth status` (it calls /user)
+  gh api rate_limit >/dev/null 2>&1 || die "CI: GH_TOKEN missing or invalid"
+else
+  gh auth status >/dev/null 2>&1 || die "run: gh auth login"
+fi
 echo "git, gh (authenticated), curl, unzip ok"
 
 say "rokit $ROKIT_VERSION"
@@ -35,10 +40,17 @@ if ! command -v rokit >/dev/null && [[ ! -x $HOME/.rokit/bin/rokit ]]; then
   "$tmp/rokit" self-install
   rm -rf "$tmp"
 fi
-export PATH="$HOME/.rokit/bin:$PATH"
+export PATH="$HOME/.rokit/bin:$PATH" # self-install edits shell profiles, which CI never sources
+if [[ -n ${GITHUB_PATH:-} ]]; then
+  echo "$HOME/.rokit/bin" >>"$GITHUB_PATH" # later workflow steps find lune and rojo
+fi
 rokit --version
 
 say "pinned tools (rokit.toml)"
+if [[ -n ${CI:-} && -n ${GH_TOKEN:-} ]]; then
+  # avoid anonymous GitHub API rate limits; Actions tokens (ghs_) fail rokit's parser, so skip it
+  rokit authenticate github --token "$GH_TOKEN" --skip-parse --skip-verify
+fi
 rokit install --no-trust-check
 for t in rojo selene stylua luau-lsp lune; do printf '%-9s %s\n' "$t" "$($t --version 2>&1 | head -1)"; done
 

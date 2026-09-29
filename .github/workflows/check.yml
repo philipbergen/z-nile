@@ -1,11 +1,16 @@
 name: check
 # Runs only when a PR is ready for review (not drafts) and on main, to keep CI load low.
+# workflow_dispatch lets an agent prove its draft branch green: scripts/ci-verify.sh.
 on:
   push:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}
+
+# setup.sh (and thus the whole gate) sees GH_TOKEN; it only needs to read
+permissions:
+  contents: read
 
 jobs:
   gate:
@@ -14,9 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - uses: CompeyDev/setup-rokit@v0.2.1
-        with:
-          cache: "true"
-      - run: lune setup
-      - run: scripts/check.sh --full
+          fetch-depth: 0 # the tracker lifecycle spec clones the repo and needs full history
+      # the same bootstrap a new host uses (SETUP.md); its last stage is scripts/check.sh --full
+      - run: scripts/setup.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # sequestered acceptance specs of the active raft, proven on Linux before `tracker.sh done`
+      - if: github.event_name == 'workflow_dispatch'
+        run: |
+          files=$(find tracker -path '*/active/*/acceptance/*.spec.luau' | sort)
+          if [ -n "$files" ]; then lune run tests/run -- $files; fi

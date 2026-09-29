@@ -1,0 +1,2 @@
+- F1: refuted: out of this raft's scope. c0020's design doesn't cover how changed files are collected, and pinning it needs a throwaway git repo fixture. Filed as backlog chore c0060 (review verdict: approve).
+- F2: fixed (this commit): c0050's Solution now says to change the promoted spec within the chore itself, not to file a defect.

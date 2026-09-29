@@ -36,7 +36,11 @@ scripts/setup.sh
 - **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt from `scripts/tracker.sh prompt <id>`, which is self-contained.
 
 ## CI
-`.github/workflows/check.yml` runs `scripts/check.sh --full` on main and on PRs that are **not drafts**. Draft pushes cost no CI.
+`.github/workflows/check.yml` bootstraps the runner with `scripts/setup.sh`, the same script as a new host, so every CI run also proves this document on a clean Linux machine. setup.sh ends with `scripts/check.sh --full`.
+
+- **When it runs**: pushes to main, PRs that are **not drafts** (draft pushes cost no CI), and manual dispatch.
+- **Dispatch from a draft branch**: `scripts/ci-verify.sh` dispatches CI for the current branch, waits, and exits with the run's result. Push first; it refuses when the local HEAD differs from `origin/<branch>`. Dispatched runs also execute the active raft's sequestered acceptance specs.
+- **In CI, setup.sh** checks auth with `gh api rate_limit` (Actions tokens can fail `gh auth status`), authenticates rokit with `GH_TOKEN`, and adds `~/.rokit/bin` to `GITHUB_PATH` for later steps.
 
 ## Troubleshooting
 | symptom | fix |
