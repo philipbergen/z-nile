@@ -20,7 +20,7 @@ During R0010, the checkout lived in iCloud-synced `~/Documents`, and its `.git` 
 <!-- Explicit scope fences. Anything tempting that belongs to another issue. -->
 
 ## Solution
-- File a defect against the promoted spec, per the testing skill (promoted acceptance specs are never edited directly): clone with `--no-hardlinks`, into a temp dir outside the worktree.
+- Change the promoted spec `tests/acceptance/c0010/tracker-lifecycle.spec.luau` in this chore (test-infrastructure work is a chore): clone with `--no-hardlinks`, into a temp dir outside the worktree. This counts as rework on c0010's spec.
 - Add a SETUP.md troubleshooting row: "unable to read tree" or `bad sha1 file … 2` means the checkout is cloud-synced; re-clone outside `~/Documents` or iCloud.
 - Optionally, setup.sh warns when the repo path carries the `com.apple.CloudDocs` xattr.
 
