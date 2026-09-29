@@ -1,0 +1,37 @@
+--!strict
+-- c0020 AC3: specs that load the built place are affected by any src/ or project-file change,
+-- even though they do not require src/ directly.
+local graph = require("@scripts/lib/graph")
+local t = require("@tests/lib/t")
+
+local function isSpec(f: string): boolean
+	return string.match(f, "%.spec%.luau$") ~= nil
+end
+
+local function has(list: { string }, item: string): boolean
+	return table.find(list, item) ~= nil
+end
+
+return t.spec("affected: place specs", function(it)
+	local g = graph.build({ "src", "tests" })
+
+	it("exposes the place library path", function()
+		t.expect(graph.PLACE_LIB).toBe("tests/lib/place.luau")
+	end)
+
+	it("a src change selects place specs but not unrelated unit specs", function()
+		local selected = graph.affectedSpecs(g, { "src/server/Main.server.luau" }, isSpec)
+		t.expect(has(selected, "tests/place/structure.spec.luau")).toBe(true)
+		t.expect(has(selected, "tests/unit/smoke.spec.luau")).toBe(false)
+	end)
+
+	it("a default.project.json change selects place specs", function()
+		local selected = graph.affectedSpecs(g, { "default.project.json" }, isSpec)
+		t.expect(has(selected, "tests/place/structure.spec.luau")).toBe(true)
+	end)
+
+	it("an unrelated change does not select place specs", function()
+		local selected = graph.affectedSpecs(g, { "README.md" }, isSpec)
+		t.expect(has(selected, "tests/place/structure.spec.luau")).toBe(false)
+	end)
+end)

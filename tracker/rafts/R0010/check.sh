@@ -9,6 +9,7 @@ for dir in $(scripts/tracker.sh members R0010); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the place tier runs with at least one passing spec file" bash -c \
+  'out=$(lune run tests/run -- $(find tests/place -name "*.spec.luau" | sort)) && echo "$out" && echo "$out" | grep -Eq "^[0-9]+ passed, 0 failed, [1-9][0-9]* spec files$"'
 
 finish
