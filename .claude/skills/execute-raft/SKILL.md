@@ -42,7 +42,7 @@ For each issue:
 
 ## Phase 3: Whole-raft verification
 1. `bash "$(scripts/tracker.sh find R0010)/check.sh"`. Every RC line must PASS.
-2. Double-check that `scripts/check.sh --full` passes as well.
+2. Double-check that `scripts/check.sh --full` passes as well, and that `scripts/tracker.sh promote-check R0010` passes. It dry-runs the move of the acceptance specs into `tests/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
 3. **Sequestration check**: `git diff <start-commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty.
    - The start commit is the one with the subject `tracker: start R0010`.
 

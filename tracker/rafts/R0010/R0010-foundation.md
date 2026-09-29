@@ -46,6 +46,8 @@ Implemented by `check.sh`:
 - **RC0**: the full repo gate passes, and c0010 and c0020's `check.sh` pass. That includes CI green on this branch's HEAD (c0010 AC3), and the draft PR existing (c0010 AC5).
 - **RC1**: after this raft, the gate's place tier runs. `tests/place/` contains at least one spec file, and running them all (`lune run tests/run -- $(find tests/place -name '*.spec.luau')`) reports 0 failures. An empty or missing directory fails (F1).
 
+- **RC2**: `scripts/tracker.sh promote-check R0010` passes. It dry-runs the promotion of every member's acceptance specs into `tests/acceptance/` (type check + `tests/meta`), so problems appear before `done` rather than as a rollback at `done` (design-review-002 F1).
+
 ## Risks & rollback
 - **Risk**: CI on Linux behaves differently from macOS (paths, `~` expansion, `sed -i`). Mitigation: setup.sh and check.sh must stay POSIX-bash, with no `sed -i ''`. Rollback: revert the workflow file; local gates are unaffected.
 - **Risk**: GitHub API rate limits in `rokit install`. Mitigation: `rokit authenticate` in CI.

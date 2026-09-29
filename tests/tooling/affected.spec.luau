@@ -36,6 +36,13 @@ return t.spec("affected", function(it)
 		t.expect(select({ `{ROOT}/B` })).toEqual({ `{ROOT}/b_check.luau` })
 	end)
 
+	it("ignores require-like text in comments", function()
+		local R = "req" .. "uire"
+		local src = `-- {R}("./gone")\n--[[ {R}("./gone2") ]]\nlocal A = {R}("./A")\n`
+		t.expect((string.find(graph.stripComments(src), "gone", 1, true))).toBe(nil)
+		t.expect(string.find(graph.stripComments(src), "./A", 1, true) ~= nil).toBe(true)
+	end)
+
 	it("an unrelated change selects nothing", function()
 		t.expect(select({ "README.md" })).toEqual({})
 	end)

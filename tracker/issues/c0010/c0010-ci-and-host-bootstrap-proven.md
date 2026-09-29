@@ -45,7 +45,7 @@ Until this is fixed, "check.sh passes" doesn't mean "works on another machine".
      - if: github.event_name == 'workflow_dispatch'
        run: |
          files=$(find tracker -path '*/active/*/acceptance/*.spec.luau' | sort)
-         if [ -n "$files" ]; then ~/.rokit/bin/lune run tests/run -- $files; fi
+         if [ -n "$files" ]; then lune run tests/run -- $files; fi
      ```
      The run command must contain the literal `*/active/*/acceptance/*.spec.luau`, because the AC2 spec checks for it.
   The `CompeyDev/setup-rokit` action and the separate `lune setup` step are **removed**, because setup.sh does both.
@@ -53,7 +53,10 @@ Until this is fixed, "check.sh passes" doesn't mean "works on another machine".
 
 **`scripts/setup.sh` changes (Linux/CI)**:
 - **Auth** (design-review-001 F9): when `CI` is set, check auth with `gh api rate_limit >/dev/null` instead of `gh auth status`. The Actions installation token may be rejected by `auth status`, which calls `/user`. Keep `gh auth status` for humans.
-- **Rokit rate limits**: when `CI` is set and `GH_TOKEN` is present, run `rokit authenticate github --token "$GH_TOKEN"` before `rokit install`. Without it, anonymous GitHub API calls can hit rate limits.
+- **Rokit rate limits**: when `CI` is set and `GH_TOKEN` is present, run `rokit authenticate github --token "$GH_TOKEN" --skip-parse --skip-verify` before `rokit install`. Without it, anonymous GitHub API calls can hit rate limits.
+  - Both skip flags are required, because Actions tokens start with `ghs_`, which rokit 1.2.0's parser rejects (design-review-002 F3). Both flags are confirmed present in `rokit authenticate --help`.
+  - Fallback if install still fails with the token: drop the step. Five tool downloads fit within anonymous limits; record which one was used.
+- **CI PATH** (design-review-002 F2): when `GITHUB_PATH` is set, setup.sh runs `echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"`. Later steps, including the acceptance step's `lune` and `place.load()`'s `rojo`, then find the tools.
 - **PATH**: after `rokit self-install`, keep `export PATH="$HOME/.rokit/bin:$PATH"`. This is already there. Self-install edits shell profiles that CI doesn't source.
 - **Git identity**: not needed by setup.sh. The tracker spec sets a local identity in its own clone.
 - **`.luaurc` on Linux**: nothing to do. CI run 36511363843 (main, Linux) passed the Lune-types stage with the committed `~/.lune/.typedefs/<ver>/` alias. That was E2, resolved in prep; see F13.
@@ -129,7 +132,7 @@ Changes under `scripts/` force a full run (`lune run scripts/affected` prints `A
 
 ### Checked
 - **AC1**: The tracker lifecycle spec passes.
-- **AC2**: The CI workflow bootstraps via `scripts/setup.sh` with `GH_TOKEN`, is dispatchable, and skips only draft `pull_request` events.
+- **AC2**: The CI workflow bootstraps with exactly `run: scripts/setup.sh`, which runs the full gate, with `GH_TOKEN`. It is dispatchable, runs the active acceptance specs on dispatch, and skips only draft `pull_request` events.
 - **AC3**: CI is green for this branch's exact HEAD. Two things must both be true: `scripts/ci-verify.sh` succeeds, **and** check.sh independently finds a successful `workflow_dispatch` run of `check.yml` for `git rev-parse HEAD` (F5).
 - **AC4**: `scripts/setup.sh` succeeds on an already set-up host, which shows it's idempotent.
 - **AC5**: This branch has an open PR. That shows `tracker start`'s `gh` path works.
@@ -141,8 +144,8 @@ None.
 None.
 
 ## Implementation steps
-1. Edit `check.yml` as designed. Commit.
-2. Add the `rokit authenticate` step to `setup.sh` (CI only). Commit.
+1. Edit `check.yml` as designed: the setup step is exactly `run: scripts/setup.sh`, plus the dispatch-only acceptance step. Commit.
+2. `setup.sh` gets three changes: CI-only auth via `gh api rate_limit`, `rokit authenticate … --skip-parse --skip-verify`, and `GITHUB_PATH` export (design-review-002 F7). Commit.
 3. Write `scripts/ci-verify.sh` and make it executable. Commit and push.
 4. Run `scripts/ci-verify.sh`. Resolve E1–E3 using the fallbacks, and record the results in this document.
 5. Update SETUP.md's CI section: it now uses setup.sh, and `ci-verify.sh` exists.

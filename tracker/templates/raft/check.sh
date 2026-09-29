@@ -9,6 +9,8 @@ for dir in $(scripts/tracker.sh members {{ID}}); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
+check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check {{ID}}
+
 # check "RC1: <end-to-end statement>" <command>
 
 finish

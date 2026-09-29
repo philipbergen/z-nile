@@ -44,6 +44,7 @@ Fill every section of the issue template. Requirements:
   - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
   - This is what makes the checks unfakeable and sequestered.
 - **Verify the wiring**: `scripts/tracker.sh check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
+- **Dry-run the promotion**: `scripts/tracker.sh promote-check <R-id>`. The only acceptable failures before implementation are requires of modules the raft will create.
 
 ## 5. Adversarial design review (required)
 1. Mark the items `design: reviewed` once the author considers them complete. Use `tracker` frontmatter edits.

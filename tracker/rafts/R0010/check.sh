@@ -12,4 +12,6 @@ done
 check "RC1: the place tier runs with at least one passing spec file" bash -c \
   'files=$(find tests/place -name "*.spec.luau" 2>/dev/null | sort); [[ -n $files ]] && out=$(lune run tests/run -- $files) && echo "$out" && echo "$out" | grep -Eq "^[1-9][0-9]* passed, 0 failed, [1-9][0-9]* spec files$"'
 
+check "RC2: acceptance specs will survive promotion into tests/ (type check + meta)" scripts/tracker.sh promote-check R0010
+
 finish

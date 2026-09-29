@@ -20,6 +20,7 @@ usage: scripts/tracker.sh <command> ...
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>]   stage all, record spend, commit, push
   done <R-id>                                   verify checks + review resolution, move to done, ready PR
+  promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
   metrics [--include-active]                    cost per issue and rework %]]
 
@@ -348,6 +349,57 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t)
 end
 
+-- Copy each member's acceptance specs into tests/acceptance/<id>, run `check`, then remove the
+-- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run).
+local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boolean): boolean
+	local copied: { string } = {}
+	for _, m in store.members(raft.id) do
+		local acc = `{m.dir}/acceptance`
+		local dest = `tests/acceptance/{m.id}`
+		if fs.isDir(acc) and not fs.isDir(dest) then
+			fs.writeDir(dest)
+			for _, name in fs.readDir(acc) do
+				fs.writeFile(`{dest}/{name}`, fs.readFile(`{acc}/{name}`))
+				if string.match(name, "%.spec%.luau$") then
+					table.insert(copied, `{dest}/{name}`)
+				end
+			end
+		end
+	end
+	local ok = check(copied)
+	for _, m in store.members(raft.id) do
+		local dest = `tests/acceptance/{m.id}`
+		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
+			fs.removeDir(dest)
+		end
+	end
+	return ok
+end
+
+-- Structural checks promoted acceptance specs must pass in tests/: type check + meta spec
+-- (+ the specs themselves when `runSpecs`).
+local function promotedChecks(specs: { string }, runSpecs: boolean): boolean
+	local ok = sh.stream("luau-lsp", { "analyze", "--base-luaurc=.luaurc", "--platform=standard", "tests" })
+	local args = { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }
+	if runSpecs then
+		for _, p in specs do
+			table.insert(args, p)
+		end
+	end
+	return sh.stream("lune", args) and ok
+end
+
+cmd["promote-check"] = function(pos: { string })
+	local raft = store.get(pos[1] or fail("usage: promote-check <R-id>"))
+	print(`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`)
+	if not withPromotedCopies(raft, function(specs)
+		return promotedChecks(specs, false)
+	end) then
+		fail("promoted acceptance specs would break tests/ (see above)")
+	end
+	print("promote-check OK")
+end
+
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
 -- answers every finding id with "fixed" or "refuted".
 local function reviewProblem(raft: store.Item): string?
@@ -414,14 +466,7 @@ function cmd.done(pos: { string })
 	end
 	if #promoted > 0 then
 		print("\n=== promoted acceptance specs: type check + meta + run")
-		local ok =
-			sh.stream("luau-lsp", { "analyze", "--base-luaurc=.luaurc", "--platform=standard", "tests" })
-		local specs = { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }
-		for _, p in promoted do
-			table.insert(specs, p)
-		end
-		ok = ok and sh.stream("lune", specs)
-		if not ok then
+		if not promotedChecks(promoted, true) then
 			sh.git({ "reset", "-q", "--hard", "HEAD" })
 			fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
 		end

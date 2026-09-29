@@ -60,7 +60,7 @@ return t.spec("place.resolveRequire", function(it)
 	end)
 
 	it("extracts string-literal require specs from source", function()
-		-- built by concatenation so this file itself contains no literal require("...") text
+		-- built by concatenation so this file contains no literal require text for the graph scanner
 		local R = "req" .. "uire"
 		local src = `local A = {R}("./A")\nlocal B = {R}("@self/B")\nlocal s = "{R}(x)"\n`
 		t.expect(place.requireSpecs(src)).toEqual({ "./A", "@self/B" })

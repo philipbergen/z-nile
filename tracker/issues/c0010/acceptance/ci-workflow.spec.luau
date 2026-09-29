@@ -12,11 +12,14 @@ local on = wf.on or wf[true]
 local job = wf.jobs and wf.jobs.gate
 
 return t.spec("ci workflow", function(it)
-	it("bootstraps via scripts/setup.sh with GH_TOKEN", function()
+	it("bootstraps via exactly `run: scripts/setup.sh` (which runs the full gate) with GH_TOKEN", function()
 		t.expect(job ~= nil).toBe(true)
 		local found = false
 		for _, step in job.steps do
-			if type(step.run) == "string" and string.find(step.run, "scripts/setup.sh", 1, true) then
+			local run = if type(step.run) == "string"
+				then (string.gsub(string.gsub(step.run, "^%s+", ""), "%s+$", ""))
+				else ""
+			if run == "scripts/setup.sh" then
 				found = true
 				t.expect(step.env and step.env.GH_TOKEN).toBe("${{ github.token }}")
 			end

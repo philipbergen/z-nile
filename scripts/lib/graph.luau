@@ -101,13 +101,22 @@ function graph.resolve(from: string, spec: string): string?
 	return nil
 end
 
+-- Remove Luau comments (block `--[[ ]]`/`--[==[ ]==]` and line `--`) so require-like text in
+-- comments is never scanned. Heuristic: `--` inside a string literal is also treated as a comment,
+-- which can only hide requires that follow it on the same line.
+function graph.stripComments(src: string): string
+	local out = string.gsub(src, "%-%-%[(=*)%[.-%]%1%]", "")
+	out = string.gsub(out, "%-%-[^\n]*", "")
+	return out
+end
+
 function graph.build(roots: { string }): Graph
 	local g: Graph = { files = {}, deps = {}, unresolved = {}, dynamic = {} }
 	for _, root in roots do
 		graph.listLuau(root, g.files)
 	end
 	for _, file in g.files do
-		local src = fs.readFile(file)
+		local src = graph.stripComments(fs.readFile(file))
 		local deps: { string } = {}
 		for spec in string.gmatch(src, "require%(%s*[\"']([^\"']+)[\"']") do
 			-- skip @lune builtins and interpolation lookalikes such as `require("{x}")` in strings
