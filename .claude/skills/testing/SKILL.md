@@ -53,8 +53,8 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
 ## Acceptance checks (`check.sh`)
 Every issue and raft has a `check.sh` that uses `scripts/lib/ac.sh`:
 ```bash
-source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"
-A="$(dirname "${BASH_SOURCE[0]}")/acceptance"
+A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance"
+source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"
 check "AC1: ghosts never reverse outside mode changes" lune run tests/run -- "$A/reverse.spec.luau"
 check "AC2: Logic stays engine-free" lune run tests/run -- tests/meta/architecture.spec.luau
 finish

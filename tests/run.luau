@@ -23,6 +23,10 @@ end
 local files: { string } = {}
 for _, arg in process.args do
 	if arg ~= "--" then
+		-- accept absolute paths inside the repo (check.sh passes them)
+		if string.sub(arg, 1, #process.cwd) == process.cwd then
+			arg = string.sub(arg, #process.cwd + 1)
+		end
 		table.insert(files, arg)
 	end
 end

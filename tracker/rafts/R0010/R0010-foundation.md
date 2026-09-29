@@ -1,0 +1,34 @@
+---
+id: R0010
+type: chore
+title: Foundation
+single: false
+issues: [c0010, c0020]
+design: draft
+created: 2026-09-28
+---
+
+# R0010: Foundation
+
+## Theme
+<!-- Why these issues belong together (functional adjacency). Single type: chore. -->
+
+## Whole-raft design
+<!-- Module map, the interfaces between member issues, data flow. Diagram if it helps.
+     Every issue design must agree with this. Include any tracker/architecture.md changes. -->
+
+## Order & dependencies
+<!-- Execution order of member issues and why. -->
+
+## Experiments phase
+<!-- All unknowns across the raft, run FIRST. For each: question, command, result (if run in prep),
+     fallback. If an experiment fails without a fallback: stop and escalate. -->
+
+## Exit criteria
+<!-- Exact, machine-checkable goal state. Implemented by this raft's check.sh (RCn labels).
+     "Done" == `scripts/tracker.sh done R0010` succeeds. -->
+
+## Risks & rollback
+
+## Addressed during execution
+<!-- Emergent issues created and fixed in this PR (id, why it could not be postponed). -->
