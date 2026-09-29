@@ -518,9 +518,13 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	for _, m in store.members(raft.id) do
 		table.insert(ids, m.id)
 		items ..= section(m.doc) .. section(`{m.dir}/check.sh`)
-		for _, name in fs.readDir(m.dir) do
-			if string.match(name, "^design%-") then
-				items ..= section(`{m.dir}/{name}`)
+		-- the sequestered acceptance specs are the executor's contract; inline them verbatim
+		local acc = `{m.dir}/acceptance`
+		if fs.isDir(acc) then
+			local names = fs.readDir(acc)
+			table.sort(names)
+			for _, name in names do
+				items ..= section(`{acc}/{name}`)
 			end
 		end
 	end

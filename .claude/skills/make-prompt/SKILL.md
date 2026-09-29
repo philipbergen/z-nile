@@ -11,9 +11,10 @@ description: Produce the self-contained execution prompt for a raft (or a single
    - The raft and every member are `design: ready`.
    - Every issue has a `check.sh` with at least one `check`.
    - The acceptance specs exist.
-   - `git status` is clean for `tracker/`, and main is pushed. The executing agent starts from origin/main, so it must see the same files.
+   - `git status` is clean for `tracker/`, and main is pushed.
+   - The design-review history isn't inlined. Its outcomes are already folded into the documents. The executing agent starts from origin/main, so it must see the same files.
    If a placeholder raft was just created, commit and push it (`tracker: placeholder raft R…`) first. Ask the user if they haven't approved direct commits to main.
-3. **Render**: `scripts/tracker.sh prompt <id>`. This fills in `tracker/templates/prompt.md` with the raft and issue documents, the `check.sh` files, the design reviews, the architecture map and the `execute-raft`, `tracker`, `architecture`, `testing` and `review` skills, then pipes the result to `pbcopy`.
+3. **Render**: `scripts/tracker.sh prompt <id>`. This fills in `tracker/templates/prompt.md` with the raft and issue documents, the `check.sh` files, the sequestered acceptance specs, the architecture map and the `execute-raft`, `tracker`, `architecture`, `testing` and `review` skills, then pipes the result to `pbcopy`.
    - **No file is written.**
    - Use `--stdout` to inspect it instead.
 4. **Report** the character count and a 3-line outline: mission, issues, and the number of Checked criteria. Tell the user it's on the clipboard.
