@@ -5,7 +5,7 @@ title: Headless place tests
 raft: R0010
 depends_on: []
 emergent: false
-design: reviewed
+design: ready
 created: 2026-09-28
 ---
 

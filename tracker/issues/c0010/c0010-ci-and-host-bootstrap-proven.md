@@ -5,7 +5,7 @@ title: CI and host bootstrap proven
 raft: R0010
 depends_on: []
 emergent: false
-design: reviewed
+design: ready
 created: 2026-09-28
 ---
 
