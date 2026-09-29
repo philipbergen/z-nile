@@ -4,7 +4,7 @@ type: chore
 title: Foundation
 single: false
 issues: [c0010, c0020]
-design: draft
+design: reviewed
 created: 2026-09-28
 ---
 
