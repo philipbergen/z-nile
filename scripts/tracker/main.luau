@@ -394,6 +394,14 @@ function cmd.done(pos: { string })
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
+	-- Promote sequestered acceptance specs into the permanent suite.
+	for _, m in store.members(raft.id) do
+		local acc = `{m.dir}/acceptance`
+		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
+			fs.writeDir("tests/acceptance")
+			sh.git({ "mv", acc, `tests/acceptance/{m.id}` })
+		end
+	end
 	for _, m in store.members(raft.id) do
 		move(m, "done")
 	end

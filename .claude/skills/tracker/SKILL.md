@@ -23,6 +23,7 @@ Each item is a directory named by its ID:
 ```
 <ID>/<ID>-<slug>.md     the document (frontmatter + sections from tracker/templates)
 <ID>/check.sh           acceptance criteria as executable checks (see the testing skill)
+<ID>/acceptance/        sequestered acceptance specs (issues); `done` moves them to tests/acceptance/<ID>/
 <ID>/experiments/       spikes for unknowns (issues)
 <ID>/design-review-NNN.md, design-refute-NNN.md   from ticket-prep
 <ID>/review-NNN.md, refute-NNN.md                 code review, on the raft
@@ -40,7 +41,7 @@ Each item is a directory named by its ID:
 | start | `tracker.sh start R0010` | clean tree required; members must be `design: ready`. Creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. Do this first, so the in-progress claim is visible right away. |
 | focus | `tracker.sh focus f0010` | the following commits are attributed to that issue |
 | commit | `tracker.sh commit -m "msg" [--issue f0010]... [--time 25]` | `git add -A`, then records spend rows in each issue's `spend.md` and the raft's summary **in the same commit**, adds `Issue:` trailers, and pushes |
-| done | `tracker.sh done R0010` | requires the latest review round to be resolved and the raft's `check.sh` to pass. Moves everything to `done/`, commits, pushes, marks the PR **ready**, and appends spend to the PR body |
+| done | `tracker.sh done R0010` | requires the latest review round to be resolved and the raft's `check.sh` to pass. Promotes acceptance specs to `tests/acceptance/`, moves everything to `done/`, commits, pushes, marks the PR **ready**, and appends spend to the PR body |
 
 The human merges the PR. Agents never merge.
 

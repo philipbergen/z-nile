@@ -21,6 +21,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
 | `tests/integration/` | a few headless cross-feature scenarios, for example simulating a whole level | several features |
 | `tests/tooling/` | the scripts in `scripts/` | scripts |
+| `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a defect | anything, via aliases |
 | `tests/meta/` | the structural rules from the architecture skill | the graph library |
 
 A spec file looks like this:
@@ -53,13 +54,19 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
 Every issue and raft has a `check.sh` that uses `scripts/lib/ac.sh`:
 ```bash
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"
-check "AC1: ghosts never reverse outside mode changes" lune run tests/run -- tests/unit/Ghosts/reverse.spec.luau
+A="$(dirname "${BASH_SOURCE[0]}")/acceptance"
+check "AC1: ghosts never reverse outside mode changes" lune run tests/run -- "$A/reverse.spec.luau"
 check "AC2: Logic stays engine-free" lune run tests/run -- tests/meta/architecture.spec.luau
 finish
 ```
 - **One `check` per Checked criterion.** The label starts with the AC number from the document.
 - **Exit criteria**: a raft's `check.sh` runs `scripts/check.sh --full`, then every member's `check.sh`, then the raft's own RCn checks.
 - **Commands**: checks may run any deterministic command, such as a spec, a `lune run` script, `rojo build`, or a `grep` that must match nothing.
+- **Where acceptance specs live**: ticket-prep writes them in the issue's `acceptance/` folder (`tracker/issues/<id>/acceptance/*.spec.luau`), **not** in `tests/`.
+  - They target code that doesn't exist yet, so putting them in `tests/` would turn main red.
+  - They're formatted and linted, but not type-checked or run by the repo gate. Only `check.sh` runs them, by explicit path.
+  - They must require only through aliases (`@logic/…`, `@tests/…`), never relative paths, because they get moved.
+  - `tracker.sh done` **moves** them to `tests/acceptance/<id>/`, where they become permanent regression specs.
 - **Sequestered**:
   - `check.sh` files and the acceptance specs they name are written in ticket-prep, *before* execution.
   - During execution they must not change.

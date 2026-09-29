@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 stage() { printf '\n== %s\n' "$1"; }
-LUAU_DIRS=(src tests scripts)
+LUAU_DIRS=(src tests scripts tracker)
 
 stage "format (stylua --check)"
 stylua --check "${LUAU_DIRS[@]}"
@@ -43,6 +43,8 @@ luau-lsp analyze --definitions="$defs" --sourcemap=sourcemap.json --base-luaurc=
 stage "types (luau-lsp analyze, tests + scripts with Lune definitions)"
 lune_version=$(lune --version | awk '{print $2}')
 [[ -d "$HOME/.lune/.typedefs/$lune_version" ]] || lune setup >/dev/null
+# tracker/**/acceptance specs are not type-checked here: they target code that may not exist yet.
+# They are checked once `tracker.sh done` promotes them into tests/acceptance/.
 luau-lsp analyze --base-luaurc=.luaurc --platform=standard tests scripts
 
 stage "build (rojo)"

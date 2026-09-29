@@ -40,7 +40,9 @@ Fill every section of the issue template. Requirements:
 ## 4. Write the executable acceptance
 - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
 - **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines.
-- **Write the acceptance specs now**, as real spec files with the cases that pin the behavior. They must be present and fail, because the code doesn't exist yet. This is what makes the checks unfakeable and sequestered.
+- **Write the acceptance specs now** in `tracker/issues/<id>/acceptance/`, as real spec files with the cases that pin the behavior. Require only through aliases, and see the testing skill for where these live.
+  - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
+  - This is what makes the checks unfakeable and sequestered.
 - **Verify the wiring**: `scripts/tracker.sh check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
 
 ## 5. Adversarial design review (required)

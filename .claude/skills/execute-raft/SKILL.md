@@ -28,7 +28,8 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
 For each issue:
 1. `scripts/tracker.sh focus <issue>`.
 2. **Tests first.**
-   - Write the specs in the issue's Test plan. The acceptance specs named in `check.sh` may already exist from prep; don't modify those.
+   - Write the specs in the issue's Test plan under `tests/`. These are your own unit, contract and regression specs.
+   - The sequestered acceptance specs in `tracker/issues/<id>/acceptance/` already exist from prep. Don't modify or move them; `done` promotes them.
    - Run them and confirm that each one **fails for the expected reason**, not because of a syntax error or a missing file.
 3. **Implement** the Design exactly, following the Implementation steps.
    - Iterate with `scripts/check.sh --affected`.
@@ -42,7 +43,7 @@ For each issue:
 ## Phase 3: Whole-raft verification
 1. `bash "$(scripts/tracker.sh find R0010)/check.sh"`. Every RC line must PASS.
 2. Double-check that `scripts/check.sh --full` passes as well.
-3. **Sequestration check**: `git diff <start-commit> -- 'tracker/**/check.sh'` must be empty, and so must the diff of the acceptance specs.
+3. **Sequestration check**: `git diff <start-commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty.
    - The start commit is the one with the subject `tracker: start R0010`.
 
 ## Phase 4: Adversarial code review (a clean reviewer)

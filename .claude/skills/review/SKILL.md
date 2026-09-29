@@ -64,7 +64,7 @@ Attack all of the following:
 ## Code mode (before the PR is marked ready)
 Inputs: `git diff main...HEAD`, the raft and issue documents, and the `check.sh` files.
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
-2. **Sequestration**: `git diff <tracker: start commit> -- '**/check.sh'` and the acceptance specs must be unchanged. Any change is **high**.
+2. **Sequestration**: `git diff <tracker: start commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty. Any change is **high**.
 3. **Weak tests**: tests that assert on internals, lack a negative case, would pass with a stub, or depend on the wall clock or randomness.
 4. **Design adherence**: does the code match the Design? Is each deviation recorded with a reason?
 5. **Architecture rules** from the skill, including thin adapters and server authority.

@@ -3,6 +3,8 @@
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"
 
-# check "AC1: <statement>" lune run tests/run -- tests/unit/<Feature>/<name>.spec.luau
+A="$(dirname "${BASH_SOURCE[0]}")/acceptance" # sequestered specs; see the testing skill
+
+# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 
 finish
