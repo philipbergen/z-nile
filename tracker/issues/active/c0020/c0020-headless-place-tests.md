@@ -136,3 +136,7 @@ None.
 5. Update the skills' docs. Run `scripts/tracker.sh check c0020`.
 
 ## Verification log
+- 2026-09-28: tests first. `tests/place/structure.spec.luau` and the three acceptance specs failed for the expected reasons (`@tests/lib/place` missing; the synthetic-graph selector case returned no specs). After implementation, `scripts/tracker.sh check c0020` gave 3/3 PASS, and `scripts/check.sh --full` passed 27/27.
+  - **Deviation (local)**: `graph.luau` now exports `graph.REQUIRE_PATTERN`, and `build` uses it. That way `place.requireSpecs` applies graph's exact pattern instead of a copy (the design says "apply graph.luau's require pattern").
+  - `resolveRequire` returns nil for bare specs without a `./`, `../` or `@self` prefix, as well as for aliases; Roblox rejects both.
+  - Tooling case added to `tests/tooling/affected.spec.luau`: a transitive dependency on `PLACE_LIB` through a helper, the `src` directory prefix, `default.project.json`, and the near misses `srcfoo/`.

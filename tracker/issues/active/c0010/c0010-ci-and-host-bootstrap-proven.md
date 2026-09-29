@@ -154,3 +154,4 @@ None.
 6. Run `scripts/tracker.sh check c0010`.
 
 ## Verification log
+- 2026-09-28: `ci-workflow.spec` failed 3/6 before the change (setup-rokit present, no setup.sh step, no acceptance step). The lifecycle spec already passed 9/9 (E4). After the change, the first `scripts/ci-verify.sh` run (36516452734) succeeded; see E1 and E3. `scripts/tracker.sh check c0010` gave 5/5 PASS. The `rokit authenticate` path worked, so no fallback was recorded.

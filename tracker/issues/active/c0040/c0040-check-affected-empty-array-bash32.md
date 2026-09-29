@@ -61,3 +61,4 @@ None.
 2. Fix the expansion; watch AC1 pass.
 
 ## Verification log
+- 2026-09-28: AC1 failed on macOS `/bin/bash` 3.2.57 with `base_args[@]: unbound variable` and passed after the fix. `scripts/check.sh --full` is unaffected.
