@@ -4,6 +4,7 @@
     "logic": "./src/shared/Logic",
     "shared": "./src/shared",
     "tests": "./tests",
+    "scripts": "./scripts",
     "lune": "~/.lune/.typedefs/0.10.5/"
   }
 }
