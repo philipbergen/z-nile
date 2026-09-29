@@ -24,6 +24,12 @@ _Draft ideas; design happens in ticket-prep._
 - A key map producing intents.
 - An Observed check in Studio, kept to the minimum.
 
+Also owned here:
+- **World scale**: tile size in studs, wall height, eye height and field of view, as constants in one shared module that later render issues (f0290, f0310) reuse.
+- **The Roblox character**: turn off automatic character spawning (or hide and anchor it), use a scripted camera, and make sure the default controls don't move anything. Other players are never visible.
+- **Tunnels**: render what's beyond the maze edge so the tunnel doesn't look like a wall, and when the snapshot says `wrapped`, snap the camera instead of sliding it across the maze.
+- **Key map**: e.g. A/D or ←/→ = `Left`/`Right`, S/↓ = `Back`, W/↑ = `Forward`, and a key for snap-to-heading.
+
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
      client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->

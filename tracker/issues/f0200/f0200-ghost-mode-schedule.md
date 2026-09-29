@@ -19,7 +19,9 @@ Ghosts alternate scatter and chase on a per-level timetable, turn frightened whe
 
 ## Solution
 _Draft ideas; design happens in ticket-prep._
-A pure mode scheduler (level tables) that listens for `PowerStarted`. Frightened movement uses a seeded RNG. A forced reversal happens on each mode change. Ghost colours come from the mode in the client adapter.
+A pure mode scheduler (schedule rows in f0170's `Levels` table) that listens for `PowerStarted`. Frightened movement uses a seeded RNG. A forced reversal happens on each mode change. Ghost colours come from the mode in the client adapter.
+
+Drawing ghosts, including the frightened and blinking looks, is f0310.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,

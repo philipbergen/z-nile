@@ -57,14 +57,17 @@ This is the source of truth for product decisions. Every raft design must agree 
 - **HUD:** scales to small screens. Touch targets are at least 44 pt.
 - **Recentring:** a "snap look to heading" button.
 
+## Open decisions
+- **Danger awareness in first person** (f0320): minimap/radar, audio, edge indicators, vignette, or easier tables. The user decides before raft d's prep.
+
 ## Roadmap (single-type rafts; order a1 → a2 → b → c → d → e, with f any time after a2)
 | Raft | Type | Issues | Proves |
 |---|---|---|---|
 | a1 Sim harness | chore | c0090 | headless simulations and scenario specs in CI |
 | a2 Barebones game | feature | f0100, f0110, f0120, f0130 | a maze you can walk through in first person, in Studio |
 | b Beta deploy | chore | c0140, c0030 | a ready PR goes live on Beta, plus engine smoke tests |
-| c Pellets & mechanics | feature | f0150, f0160, f0170, f0180 | eating, score, lives, levels, HUD |
-| d Ghosts | feature | f0190, f0200, f0210, f0220 | classic ghost AI and its consequences |
+| c Pellets & mechanics | feature | f0150, f0160, f0170, f0180, f0290, f0300 | eating, score, lives, levels, HUD, pellets drawn, start/game over/play again |
+| d Ghosts | feature | f0190, f0200, f0210, f0220, f0310, f0320 | classic ghost AI, its consequences, ghosts drawn, danger awareness |
 | e Hiscores | feature | f0230, f0240, f0250 | all-time, daily and weekly boards |
 | f Mobile controls | feature | f0260, f0270, f0280 | playable on a phone |
 

@@ -3,7 +3,7 @@ id: f0160
 type: feature
 title: Power pellets
 raft: 
-depends_on: [f0150]
+depends_on: [f0150, f0170]
 emergent: false
 design: draft
 created: 2026-09-28
@@ -19,7 +19,7 @@ The four power pellets are worth 50 and start a frightened period. The ghosts' r
 
 ## Solution
 _Draft ideas; design happens in ticket-prep._
-Power pellets are pellets flagged `power`, plus a per-level duration table. An event is emitted, and a new power pellet during a frightened period restarts the timer.
+Power pellets are pellets flagged `power`, and the frightened duration is a row in f0170's `Levels` table. An event is emitted, and a new power pellet during a frightened period restarts the timer.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,

@@ -21,6 +21,9 @@ A game needs a beginning and an end: 3 lives, game over, and clearing every pell
 _Draft ideas; design happens in ticket-prep._
 A `Game` state machine: ready, playing, dying, level clear, game over. Per-level parameter tables (classic values). Deaths are an input event, so this is testable before ghosts exist.
 
+**This issue owns the one `Levels` table** (a pure feature in the architecture map): per-level player and ghost speeds, the frightened duration, blink count, the scatter/chase schedule and house release values. f0160, f0200 and f0210 read from it and don't keep their own copies. Rows for data those issues introduce are added by those issues.
+How the states are presented on the client (countdown, death, level clear, game over, play again) is f0300.
+
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
      client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->

@@ -3,7 +3,7 @@ id: f0210
 type: feature
 title: Ghost house
 raft: 
-depends_on: [f0190]
+depends_on: [f0190, f0170]
 emergent: false
 design: draft
 created: 2026-09-28
@@ -20,6 +20,8 @@ Ghosts start in the ghost house and leave according to classic rules (pellet cou
 ## Solution
 _Draft ideas; design happens in ticket-prep._
 House states per ghost: in house, leaving, active, eyes returning. Release rules come from a table. The door tile can only be passed by ghosts.
+
+Release timers and counters are rows in f0170's `Levels` table. The door's passability comes from f0100.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,

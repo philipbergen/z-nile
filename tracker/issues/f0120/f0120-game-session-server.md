@@ -24,6 +24,10 @@ _Draft ideas; design happens in ticket-prep._
 - Snapshot replication at the tick rate.
 - The player leaving cleans up.
 
+Also settle during prep:
+- **Where the maze lives in the world.** Clients build their own maze locally (f0130), so a player never sees another's maze. Decide whether the server places any maze geometry at all, or only simulates. If it only simulates, the "spatial offset" above is unnecessary; if Roblox physics or character placement needs the server to know a location, keep the offset.
+- **The snapshot is a versioned, extensible schema.** a2 sends only the player (tile, sub-tile progress, heading, `wrapped`). Later issues add fields: pellets (f0290), game state and countdown (f0300), ghosts (f0310), score/lives/level (f0180). The schema lives in shared code so client and server can't drift, and the owning client is the only receiver.
+
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
      client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->

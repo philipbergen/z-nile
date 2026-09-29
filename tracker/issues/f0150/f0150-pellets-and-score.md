@@ -12,7 +12,7 @@ created: 2026-09-28
 # f0150: Pellets and score
 
 ## Problem
-Pac-Man is about eating: pellets in every corridor tile of the maze, eaten when the player enters the tile, adding points (10 each). The score has to be tracked authoritatively.
+Pac-Man is about eating: a pellet on every pellet tile the maze text authors (f0100), eaten when the player enters the tile, adding points (10 each). The score has to be tracked authoritatively.
 
 ## Non-goals
 - Power pellets' effect on ghosts (raft d). HUD (f0180).
@@ -20,6 +20,8 @@ Pac-Man is about eating: pellets in every corridor tile of the maze, eaten when 
 ## Solution
 _Draft ideas; design happens in ticket-prep._
 Pellet state per maze instance. Eating runs on tile entry inside the movement step. Score events are emitted for the HUD and hiscores. Sim scenarios cover eating along a corridor and never eating the same pellet twice.
+
+Drawing pellets and sending eaten pellets to the client is f0290.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,

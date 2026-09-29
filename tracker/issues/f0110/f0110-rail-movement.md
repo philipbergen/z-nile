@@ -3,7 +3,7 @@ id: f0110
 type: feature
 title: Rail movement
 raft: 
-depends_on: [f0100]
+depends_on: [f0100, c0090]
 emergent: false
 design: draft
 created: 2026-09-28
@@ -20,6 +20,13 @@ The player has to move through the maze the way the game design describes: rail 
 ## Solution
 _Draft ideas; design happens in ticket-prep._
 A pure `Movement` feature that steps a position, heading and turn buffer by `dt` using intents. It centres on corridor centrelines, takes a turn at the first tile where the exit exists, reverses immediately on `Back`, and makes wall contact stop at the tile edge. The scenario specs use the c0090 sim harness.
+
+Edge cases prep must decide and specify:
+- **Starting heading** at spawn and after each reset (classic: moving left).
+- **Stopped at a wall**: a `Left`/`Right`/`Back` intent whose exit exists applies immediately; the player doesn't need to be moving.
+- **`Forward`**: clears any buffered turn, so the next junction is passed straight through. Decide whether it also restarts movement when stopped.
+- **Door tile**: impassable for the player (via f0100's passability query).
+- **Tunnels**: position wraps; the step reports a `wrapped` flag so the client (f0130) can skip interpolating across the maze.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,

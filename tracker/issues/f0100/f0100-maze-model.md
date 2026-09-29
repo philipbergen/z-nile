@@ -21,6 +21,11 @@ The game needs a maze: which tiles are walls, corridors, pellets, power pellets,
 _Draft ideas; design happens in ticket-prep._
 An ASCII maze format in `src/shared/Logic/Maze`, with parse and validate steps (equal widths, a single spawn, connectivity) and queries such as `isWall`, `exits(tile)`, `isJunction` and `neighbors`. Tunnels wrap around. Include the default layout.
 
+Also settle during prep:
+- **The default layout is content this issue must deliver**: an actual classic-like map (28×31 or close to it), with the ghost house, its door, 4 power pellets, a spawn tile and at least one tunnel pair. Pellet and power-pellet tiles are **authored in the maze text**; they aren't inferred from corridors.
+- The door tile's passability is a query here (`passableBy(tile, "player" | "ghost")`), so movement (f0110) and ghosts (f0210) don't each invent their own rule.
+- Coordinate conventions (origin, which way is +row, heading names) are fixed here and used everywhere else.
+
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
      client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
