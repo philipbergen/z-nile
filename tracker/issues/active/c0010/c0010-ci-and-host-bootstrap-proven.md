@@ -101,6 +101,7 @@ Changes under `scripts/` force a full run (`lune run scripts/affected` prints `A
   - Result on 2026-09-29: yes, once main's `check.yml` has `workflow_dispatch`. The probe branch `probe-dispatch` ran to success (run 36511379058) and was then deleted.
 - **E1: Does `scripts/setup.sh` run clean on `ubuntu-latest` with only `GH_TOKEN`?** This includes the auth check from F9.
   - Method: the first CI dispatch.
+  - **Result on 2026-09-28: PASS**, no fallback used. Run 36516452734 (dispatch, ubuntu-latest): `gh api rate_limit` auth, `rokit authenticate … --skip-parse --skip-verify`, self-install and `rokit install` all succeeded; the gate passed 27/27 and the dispatch-only acceptance step passed 31/31 across all 5 active acceptance specs. The job took 12 s, so no cache is needed.
   - Fallbacks:
     - `rokit self-install` fails non-interactively: extract the release zip and put `rokit` on PATH directly. Rokit also works without self-install when `~/.rokit/bin` is created by `rokit install`.
     - Rate-limited: the `rokit authenticate` step above.
@@ -109,6 +110,7 @@ Changes under `scripts/` force a full run (`lune run scripts/affected` prints `A
   - If it ever regresses: only when `CI` is set, rewrite the alias to `$HOME/.lune/.typedefs/<ver>/` right after `lune setup`, and restore `.luaurc` in an `EXIT` trap.
 - **E3: Does a dispatched run appear in `gh run list` within 120 s?**
   - Partially answered in prep: the probe's run was listed about 8 s after dispatch.
+  - **Result on 2026-09-28: PASS.** `scripts/ci-verify.sh` found the run on its first polls; dispatch to result took 24 s. Timeout stays 120 s.
   - Fallback: raise the timeout to 300 s.
 - **E4 (run in prep: PASS)**: the lifecycle spec passes 9/9 against the working tree, including the clean-tree, review, rollback and promotion paths.
 
