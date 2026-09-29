@@ -53,4 +53,5 @@ Implemented by `check.sh`:
 - **Risk**: GitHub API rate limits in `rokit install`. Mitigation: `rokit authenticate` in CI.
 
 ## Addressed during execution
-
+- **c0040** (emergent chore): `scripts/check.sh --affected` crashed on macOS bash 3.2 (`base_args[@]: unbound variable`), so the protocol's iteration gate and the Claude Code stop hook couldn't run. It was fixed in this PR because the raft's purpose is a gate that works on any host.
+- **Environment**: the original checkout in iCloud-synced `~/Documents` had a corrupt object store (review-001 F1). Execution continued from a fresh clone in `~/code/pickman`. Follow-up: c0050.

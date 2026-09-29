@@ -8,6 +8,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}
 
+# setup.sh (and thus the whole gate) sees GH_TOKEN; it only needs to read
+permissions:
+  contents: read
+
 jobs:
   gate:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false

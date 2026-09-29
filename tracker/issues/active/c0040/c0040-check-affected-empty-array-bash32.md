@@ -62,3 +62,4 @@ None.
 
 ## Verification log
 - 2026-09-28: AC1 failed on macOS `/bin/bash` 3.2.57 with `base_args[@]: unbound variable` and passed after the fix. `scripts/check.sh --full` is unaffected.
+- 2026-09-28, review-001 F6: about 5 minutes of diagnosing this landed in c0020's spend, because both were committed together (`--time 25` split by lines). spend.md is never hand-edited, so the rework is understated by roughly that amount. AC1 discriminates only where `bash` is < 4.4, which is the only place the bug exists; on bash 5 the fix and the old code behave the same.
