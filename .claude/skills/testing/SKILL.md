@@ -21,7 +21,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
 | `tests/integration/` | a few headless cross-feature scenarios, for example simulating a whole level | several features |
 | `tests/tooling/` | the scripts in `scripts/` | scripts |
-| `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a defect | anything, via aliases |
+| `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
 | `tests/meta/` | the structural rules from the architecture skill | the graph library |
 
 A spec file looks like this:
@@ -48,7 +48,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
 `scripts/affected.luau` builds the static require graph of `src/` and `tests/`. It selects every spec whose transitive requires include a changed file.
 - **Full run**: changes to `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, or any config file (`.luaurc`, `rokit.toml`, `default.project.json`, `selene.toml`, `stylua.toml`) force one.
 - **Reliability** depends on the architecture rules: literal requires, and features used only through `init`. `tests/meta` enforces those rules.
-- **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a defect with `tracker.sh new issue d affected-graph-miss-…`.
+- **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a chore, since CI and test bugs are always chores: `tracker.sh new issue c affected-graph-miss-…`.
 
 ## Acceptance checks (`check.sh`)
 Every issue and raft has a `check.sh` that uses `scripts/lib/ac.sh`:

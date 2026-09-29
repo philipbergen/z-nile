@@ -8,7 +8,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
 1. Run `scripts/tracker.sh metrics`. It covers done issues; add `--include-active` for work in progress. It prints:
    - cost per issue: lines added and removed, and agent-minutes;
    - totals and minutes per issue, by type;
-   - **Rework %** = defect ÷ (defect + feature), measured by lines added, by issue count and by agent time. Chores are excluded. The target is **under 20%** on all three.
+   - **Rework %** = defect ÷ (defect + feature), measured by lines added, by issue count and by agent time. Chores are excluded, and that includes every CI and test fix, even ones that are bugs. The target is **under 20%** on all three.
 2. **Interpret it for the user**:
    - Which of the three measures is over target, and which defects drove it. Read each defect's Problem section to find the feature issue or raft it was reworking.
    - Patterns: a design area that keeps producing defects, criteria that let defects through, or experiments that should have been run.

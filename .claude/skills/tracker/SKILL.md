@@ -12,7 +12,7 @@ All work is tracked in `tracker/`, which is committed. The only way to change tr
 |---|---|---|
 | feature issue | `f` + 4 digits | `f0010` |
 | defect issue | `d` + 4 digits | `d0020` |
-| chore issue | `c` + 4 digits | `c0030` |
+| chore issue | `c` + 4 digits | `c0030` (includes every CI/test/tooling fix, even bugs; see make-issue) |
 | raft (epic) | `R` + 4 digits | `R0010` |
 
 - **Numbering**: `f`, `d` and `c` share one number space; rafts have their own. `tracker.sh new` always picks the **next multiple of 10** above the highest number in use.

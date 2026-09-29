@@ -7,8 +7,13 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
 
 1. **Classify the work**:
    - **feature** (`f`): new player-facing or developer-facing capability.
-   - **defect** (`d`): behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
-   - **chore** (`c`): tooling, refactors or infrastructure, with no change in behavior.
+   - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
+   - **chore** (`c`): tooling, refactors or infrastructure, with no change in behavior. **Anything related to CI or tests is always a chore, even when it's a bug**, for example:
+     - a flaky or wrong spec, including a promoted acceptance spec;
+     - a test-selector graph miss;
+     - a broken gate script, `setup.sh`, hook or workflow;
+     - tracker CLI bugs.
+     These never count as rework.
 2. **Create it**: `scripts/tracker.sh new issue <f|d|c> <kebab-slug>`. The slug is 2–5 words describing the outcome.
 3. **Fill in the frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
 4. **Fill in only these sections**:

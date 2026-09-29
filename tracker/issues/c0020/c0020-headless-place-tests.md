@@ -102,7 +102,7 @@ function place.requireSpecs(source: string): { string }
 - **E3 (not testable headless; accepted risk)**: does Roblox's require-by-string treat `./` from a ModuleScript as its Parent's children, and `@self` as its own children, exactly as designed above?
   - The design follows Roblox's documented require-by-string semantics.
   - OC1 confirms it in Studio once, the first time a real feature adds relative requires. Until then there are no relative requires in `src/`.
-  - Fallback if Studio disagrees: change `resolveRequire` and file a defect.
+  - Fallback if Studio disagrees: change `resolveRequire` and file a chore (test-infrastructure bugs are chores).
 
 ## Regression guard
 - **Existing specs**: `tests/tooling/affected.spec.luau` must still pass unchanged, and the executor adds a case to it for the implicit place dependency. `tests/meta/architecture.spec.luau` must stay green.
