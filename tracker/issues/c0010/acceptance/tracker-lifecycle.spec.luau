@@ -55,6 +55,19 @@ return t.spec("tracker lifecycle", function(it)
 		git({ "remote", "remove", "origin" })
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
+		-- start from an empty tracker so ids are predictable regardless of the real backlog
+		for _, kind in { "issues", "rafts" } do
+			for _, state in { "", "active/", "done/" } do
+				local base = `{dir}/tracker/{kind}/{state}`
+				for _, name in fs.readDir(base) do
+					if string.match(name, "^[fdcR]%d%d%d%d$") then
+						fs.removeDir(base .. name)
+					end
+				end
+			end
+		end
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new f"))
 			.toBe("tracker/issues/f0010/f0010-alpha.md")
 		t.expect(must(tr({ "new", "issue", "d", "beta" }), "new d"))
