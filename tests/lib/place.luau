@@ -10,7 +10,7 @@ local roblox = require("@lune/roblox")
 
 export type Instance = any -- @lune/roblox Instance
 
-local OUT = ".cache/place-test.rbxl"
+local OUT_PREFIX = ".cache/place-test"
 local SCRIPT_ROOTS = {
 	{ "ReplicatedStorage", "Shared" },
 	{ "ServerScriptService", "Server" },
@@ -25,11 +25,18 @@ local cached: Instance? = nil
 function place.load(): Instance
 	if cached == nil then
 		fs.writeDir(".cache")
-		local r = process.exec("rojo", { "build", "default.project.json", "-o", OUT })
+		-- per-process file, so concurrent test processes never read each other's partial builds
+		local out = `{OUT_PREFIX}-{os.time()}-{math.random(1, 1e9)}.rbxl`
+		local r = process.exec("rojo", { "build", "default.project.json", "-o", out })
 		if not r.ok then
 			error(`rojo build failed ({r.code}): {r.stderr}{r.stdout}`)
 		end
-		cached = roblox.deserializePlace(fs.readFile(OUT))
+		local ok, loaded = pcall(roblox.deserializePlace, fs.readFile(out))
+		fs.removeFile(out)
+		if not ok then
+			error(`could not load {out}: {loaded}`)
+		end
+		cached = loaded
 	end
 	return cached
 end
@@ -56,28 +63,37 @@ function place.scripts(game: Instance): { Instance }
 	return out
 end
 
--- Resolve a string require the way Roblox does, from `from` (a LuaSourceContainer). "@self"
--- starts at `from`, "./" at its Parent, "../" at its Parent's Parent (each extra "../" one more
--- level up). Returns the ModuleScript, or nil if a segment is missing, the target is not a
--- ModuleScript, or the spec is an alias (aliases are not valid in src/).
+-- Resolve a string require the way Roblox does, from `from` (a LuaSourceContainer). "@self/"
+-- starts at `from`, "./" at its Parent, "../" at its Parent's Parent (each extra leading "../"
+-- one more level up). Returns the ModuleScript, or nil if a segment is missing, the target is
+-- not a ModuleScript, the spec is an alias (aliases are not valid in src/), or the path is
+-- malformed: empty, with empty or "." segments, or ".." anywhere but the leading "../" run.
 function place.resolveRequire(from: Instance, spec: string): Instance?
-	local node: Instance? = nil
+	local node: Instance?
 	local rest: string
-	if spec == "@self" or string.sub(spec, 1, 6) == "@self/" then
+	local leadingUp = false
+	if string.sub(spec, 1, 6) == "@self/" then
 		node, rest = from, string.sub(spec, 7)
 	elseif string.sub(spec, 1, 2) == "./" then
 		node, rest = from.Parent, string.sub(spec, 3)
 	elseif string.sub(spec, 1, 3) == "../" then
-		node, rest = from.Parent and from.Parent.Parent, string.sub(spec, 4)
+		node, rest, leadingUp = from.Parent and from.Parent.Parent, string.sub(spec, 4), true
 	else
 		return nil
 	end
-	for segment in string.gmatch(rest, "[^/]+") do
-		if node == nil then
+	if rest == "" then
+		return nil
+	end
+	for _, segment in string.split(rest, "/") do
+		if node == nil or segment == "" or segment == "." then
 			return nil
 		elseif segment == ".." then
+			if not leadingUp then
+				return nil
+			end
 			node = node.Parent
-		elseif segment ~= "." then
+		else
+			leadingUp = false
 			node = node:FindFirstChild(segment)
 		end
 	end

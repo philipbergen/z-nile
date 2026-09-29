@@ -140,3 +140,7 @@ None.
   - **Deviation (local)**: `graph.luau` now exports `graph.REQUIRE_PATTERN`, and `build` uses it. That way `place.requireSpecs` applies graph's exact pattern instead of a copy (the design says "apply graph.luau's require pattern").
   - `resolveRequire` returns nil for bare specs without a `./`, `../` or `@self` prefix, as well as for aliases; Roblox rejects both.
   - Tooling case added to `tests/tooling/affected.spec.luau`: a transitive dependency on `PLACE_LIB` through a helper, the `src` directory prefix, `default.project.json`, and the near misses `srcfoo/`.
+- 2026-09-28, review-001:
+  - **F2**: `resolveRequire` now rejects malformed specs: an empty path (`@self`, `./`), empty or `.` segments, and `..` outside the leading `../` run. Pinned by `tests/place/resolver.spec.luau`, which failed 3/3 before the fix.
+  - **F3, deviation (local)**: `place.load()` builds to a per-process `.cache/place-test-<time>-<rand>.rbxl` and deletes it after loading, instead of the fixed `.cache/place-test.rbxl`, so concurrent test processes can't read a half-written build.
+  - **F4**: `scripts/affected.luau` passes `--no-renames` to both diffs, so a file moved out of `src/` still selects place specs.
