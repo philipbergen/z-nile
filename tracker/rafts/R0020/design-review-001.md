@@ -1,5 +1,5 @@
 # Review 001: R0020 (design mode)
-Inputs: main @ b671ff3 — R0020 doc + check.sh; c0041 doc, check.sh, acceptance/worktree.spec.luau; scripts/tracker/main.luau, store.luau, scripts/lib/{sh.luau,ac.sh}, scripts/hooks/*.sh, scripts/check.sh, tests/run.luau, .gitignore, .claude/settings.json, tracker/templates/prompt.md, SETUP.md, skills (review, tracker, testing, execute-raft, ticket-prep); origin/R0010-foundation @ 9f451ba (c0010 tracker-lifecycle.spec.luau and its tracker tree). I ran scratch experiments under .cache/rev1 and .cache/rev2, plus `tracker.sh check c0041` (0/6: fails at "usage" because `worktree` doesn't exist, so for the right reason on `main`) and `promote-check R0020` (OK).
+Inputs: main @ b671ff3 — R0020 doc + check.sh; c0040 doc, check.sh, acceptance/worktree.spec.luau; scripts/tracker/main.luau, store.luau, scripts/lib/{sh.luau,ac.sh}, scripts/hooks/*.sh, scripts/check.sh, tests/run.luau, .gitignore, .claude/settings.json, tracker/templates/prompt.md, SETUP.md, skills (review, tracker, testing, execute-raft, ticket-prep); origin/R0010-foundation @ 9f451ba (c0010 tracker-lifecycle.spec.luau and its tracker tree). I ran scratch experiments under .cache/rev1 and .cache/rev2, plus `tracker.sh check c0040` (0/6: fails at "usage" because `worktree` doesn't exist, so for the right reason on `main`) and `promote-check R0020` (OK).
 
 ### F1 [high] The spec fixture copies whatever branch the root checkout is on, so the spec can pass only when root is on a branch literally named `main`
 Where: worktree.spec.luau, first case (`git clone -q root seed`, then `--bare seed origin`, then `clone origin main`)
@@ -10,19 +10,19 @@ Evidence: a local `git clone` checks out the source's current branch and creates
 
 Fix: in the first case, right after cloning `seed`, add `git(seed, { "checkout", "-q", "-B", "main" })` so the fixture commit and the bare repo's HEAD are `main`. Re-run the check from a non-`main` branch in prep to prove it.
 
-### F2 [high] c0041 collides with R0010's emergent c0041 on origin/R0010-foundation
-Where: tracker/issues/c0041 (main) vs. `tracker/issues/active/c0041/c0041-check-affected-empty-array-bash32.md` (origin/R0010-foundation @ 2d47dbf); R0020 doc "Order & dependencies"
-Evidence: `store.find` returns the first directory in STATE_ORDER and ignores the rest. `store.all` calls `find(name)`, so after both branches merge, one c0041 shadows the other:
+### F2 [high] c0040 collides with R0010's emergent c0040 on origin/R0010-foundation
+Where: tracker/issues/c0040 (main) vs. `tracker/issues/active/c0040/c0040-check-affected-empty-array-bash32.md` (origin/R0010-foundation @ 2d47dbf); R0020 doc "Order & dependencies"
+Evidence: `store.find` returns the first directory in STATE_ORDER and ignores the rest. `store.all` calls `find(name)`, so after both branches merge, one c0040 shadows the other:
 - `members R0020` / `members R0010` return the wrong item or a duplicate;
-- `check c0041` runs the wrong check.sh;
+- `check c0040` runs the wrong check.sh;
 - R0020's `done` may promote or move the wrong issue.
 
 The raft doc says the only merge overlap is SETUP.md, so this goes unnoticed until it bites. Ids come from `nextNumber` on each branch, so this design (whose goal is parallel rafts) will produce more of these collisions.
 
-Fix: renumber now, before execution (`scripts/tracker.sh renumber c0041 c0050`, updating the R0020 doc and check paths), and list the collision risk in "Order & dependencies". Optionally add one line to the tracker skill: emergent issues in a worktree must renumber on rebase if their id exists on `origin/main`.
+Fix: renumber now, before execution (`scripts/tracker.sh renumber c0040 c0050`, updating the R0020 doc and check paths), and list the collision risk in "Order & dependencies". Optionally add one line to the tracker skill: emergent issues in a worktree must renumber on rebase if their id exists on `origin/main`.
 
 ### F3 [high] AC2's "PR only for GitHub origins" is tested only in the negative, so an implementation that never opens a PR passes
-Where: c0041 AC2; spec case "non-GitHub origin skips the draft PR"
+Where: c0040 AC2; spec case "non-GitHub origin skips the draft PR"
 Evidence: the only assertion is that the skip message is printed for a local bare origin. An `onGitHub()` that always returns false, or a `start` that drops `gh pr create`, passes AC2 and breaks every real raft's draft PR. `done`'s `hasUpstream() and onGitHub()` gating is untested as well.
 
 Fix: add a case that points origin's fetch URL at `https://github.com/x/y.git` and `remote.origin.pushurl` at the bare repo (so `get-url` says GitHub but pushes stay local). Put a fake `gh` first on `PATH` via `process.exec`'s `env` so it records its argv, then assert `pr create --draft` was invoked.
@@ -40,7 +40,7 @@ Evidence: `git worktree remove` refuses a worktree with modified or untracked fi
 Fix: add a case with a finished-and-merged raft whose worktree has an untracked file. Assert the worktree and branch survive and stderr names it, and state the exit code (suggest 1 if anything was skipped).
 
 ### F6 [medium] check.sh AC1–AC4 report PASS when the spec fails to load
-Where: c0041/check.sh `cases_pass`
+Where: c0040/check.sh `cases_pass`
 Evidence: tests/run.luau prints `FAIL <file>: could not load spec: …`, with no ` :: `, then `0 passed, 1 failed, 1 spec files`. `cases_pass` only rejects FAIL lines containing `:: <case>`, and the summary regex accepts any counts, so all four per-AC checks print PASS. Only the final "AC1-AC4: every case" line fails. The overall gate still fails, but `done`'s log, the reviewer and the executor's triage see "AC1..AC4 PASS". The same happens if a case name is renamed or dropped. The spec also runs 5 times per check.
 
 Fix: in `cases_pass`, add `grep -q "could not load spec" <<<"$out" && { echo "$out"; return 1; }`, and require each named case to be absent from FAIL lines **and** `failed` < total. Better: run the spec once into a variable and grep it per AC.
@@ -80,7 +80,7 @@ Fix: after the start/push case, `git worktree remove wt1` + `git branch -D R0010
 
 ### F11 [medium] The docs never say where R0020 itself is executed
 Where: R0020 "Risks & rollback"; execute-raft as it stands at execution time
-Evidence: `pickman` is occupied by R0010 (on `R0010-foundation`), and `pickman.main` is the only checkout on `main`. The risk section forbids `.worktrees/` inside a main checkout until R0010 is done. The inlined execute-raft skill still says to run `start` in the current checkout, so a context-free executor will run `start R0020` in `pickman.main` and move it off `main`, which is the exact failure c0041 fixes.
+Evidence: `pickman` is occupied by R0010 (on `R0010-foundation`), and `pickman.main` is the only checkout on `main`. The risk section forbids `.worktrees/` inside a main checkout until R0010 is done. The inlined execute-raft skill still says to run `start` in the current checkout, so a context-free executor will run `start R0020` in `pickman.main` and move it off `main`, which is the exact failure c0040 fixes.
 
 Fix: add one line to the raft doc: "Execute in a sibling worktree: `git worktree add -b R0020-worktrees-by-default ../pickman.R0020 origin/main && cd ../pickman.R0020 && scripts/tracker.sh start R0020`." The new "branch already current" path in `start` then dogfoods itself; note that it needs step 1 committed first, or keep today's `start`.
 
@@ -101,7 +101,7 @@ Evidence:
 Fix: add the one-line asserts. Use `^#+ *Worktrees` for AC5.
 
 ### F14 [low] The settings allowlist and "Touched modules" leave out the new commands
-Where: .claude/settings.json; c0041 "Touched modules"
+Where: .claude/settings.json; c0040 "Touched modules"
 Evidence: `scripts/tracker.sh worktree` and `worktree-prune` aren't in `permissions.allow`, so an autonomous executor may be blocked on its very first command.
 
 Fix: add `Bash(scripts/tracker.sh worktree:*)` and `Bash(scripts/tracker.sh worktree-prune:*)`, and list `.claude/settings.json` under Touched modules.
