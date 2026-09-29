@@ -11,24 +11,30 @@ created: 2026-09-28
 # R0020: Worktrees by default
 
 ## Theme
-<!-- Why these issues belong together (functional adjacency). Single type: chore. -->
+A single-issue placeholder raft for c0040. Every raft runs in its own raft-named worktree, so the main checkout stays on `main` for capture and prep, and several rafts can run side by side.
 
 ## Whole-raft design
-<!-- Module map, the interfaces between member issues, data flow. Diagram if it helps.
-     Every issue design must agree with this. Include any tracker/architecture.md changes. -->
+See c0040's Design. The only interface is the CLI surface:
+- `tracker.sh worktree <R>` prints an absolute path;
+- `tracker.sh worktree-prune`;
+- `start` accepts an existing raft branch.
 
 ## Order & dependencies
-<!-- Execution order of member issues and why. -->
+One issue. It is independent of R0010 (in flight); the two touch different code. Expected overlap on merge:
+- `SETUP.md`: both add paragraphs;
+- `.claude/skills/tracker/SKILL.md`: R0010 doesn't change it.
+
+Whoever merges second rebases and re-runs their gate.
 
 ## Experiments phase
-<!-- All unknowns across the raft, run FIRST. For each: question, command, result (if run in prep),
-     fallback. If an experiment fails without a fallback: stop and escalate. -->
+c0040's E1 and E2 were run in prep and PASSED. E3 (the main worktree is listed first) is pinned by the spec case "works from inside another worktree".
 
 ## Exit criteria
-<!-- Exact, machine-checkable goal state. Implemented by this raft's check.sh (RCn labels).
-     "Done" == `scripts/tracker.sh done R0020` succeeds. -->
+- **RC0**: the full gate, `c0040/check.sh` and `promote-check`, as generated.
+- No extra RC: c0040's spec is itself end to end.
 
 ## Risks & rollback
+- **Risk**: a worktree under `.worktrees/` is committed from a branch created before `.gitignore` had the entry. Mitigation: `worktree` always branches from `origin/main`, which has the entry once this merges. The R0010 branch predates it, so don't create worktrees inside the main checkout until R0010 is done.
+- **Rollback**: revert the PR. `start` remains backward compatible.
 
 ## Addressed during execution
-<!-- Emergent issues created and fixed in this PR (id, why it could not be postponed). -->
