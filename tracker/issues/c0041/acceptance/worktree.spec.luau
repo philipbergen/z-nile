@@ -1,5 +1,5 @@
 --!strict
--- c0040: rafts run in raft-named worktrees; hooks act on the right tree.
+-- c0041: rafts run in raft-named worktrees; hooks act on the right tree.
 -- Fixture under .cache/wt-e2e: a bare `origin.git` (never GitHub, so gh is never called) and a
 -- clone `main/` of it, seeded from the committed HEAD with the working tree's tooling overlaid.
 local fs = require("@lune/fs")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance checks for c0040. SEQUESTERED: never edit during execution.
+# Acceptance checks for c0041. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance" # sequestered specs; see the testing skill
 source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"

@@ -1,5 +1,5 @@
 ---
-id: c0040
+id: c0041
 type: chore
 title: Worktrees by default
 raft: R0020
@@ -9,7 +9,7 @@ design: reviewed
 created: 2026-09-29
 ---
 
-# c0040: Worktrees by default
+# c0041: Worktrees by default
 
 ## Problem
 `tracker.sh start` runs `git switch -c` **in whatever checkout it's invoked from**. When R0010 was executed from the main checkout, that checkout moved to `R0010-foundation`. From then on, nobody could capture issues, prep rafts or run a second raft there without colliding with the running agent's files and commits.
@@ -163,6 +163,6 @@ None.
 2. `cmd.worktree` and `cmd["worktree-prune"]`, plus USAGE. Commit.
 3. Hooks. Commit.
 4. Docs: execute-raft, tracker skill, prompt template, SETUP.md. Commit.
-5. Run `scripts/tracker.sh check c0040` and `promote-check R0020`.
+5. Run `scripts/tracker.sh check c0041` and `promote-check R0020`.
 
 ## Verification log
