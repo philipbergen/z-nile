@@ -29,7 +29,8 @@ created: {{DATE}}
 ### Usability
 
 ### Touched modules
-<!-- One backticked repo path per bullet (file or directory prefix). Used for spend attribution
+<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
+     paths (e.g. `tests/unit/Maze`). Used for spend attribution
      and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
 
 ### Affected specs

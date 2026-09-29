@@ -30,7 +30,7 @@ end
 
 -- Paths an issue claims in its "Touched modules" section (backticked, one per bullet).
 function spend.ownedPaths(issue: store.Item): { string }
-	local text = fs.readFile(issue.doc)
+	local text = string.gsub(fs.readFile(issue.doc), "<!%-%-.-%-%->", "")
 	local section = string.match(text, "\n#+%s*Touched modules[^\n]*\n(.-)\n#") or ""
 	local out: { string } = {}
 	for path in string.gmatch(section, "`([^`]+)`") do
@@ -89,13 +89,38 @@ function spend.attribute(issues: { store.Item }, stats: { FileStat }, minutes: n
 	for _, id in order do
 		totalAdded += shares[id].added
 	end
+	-- Round with the largest-remainder method so per-issue lines sum exactly to the diff.
+	local function apportion(field: string, total: number)
+		local floors, rest = 0, {}
+		for _, id in order do
+			local v = (shares[id] :: any)[field]
+			floors += math.floor(v)
+			table.insert(rest, { id = id, frac = v - math.floor(v) });
+			(shares[id] :: any)[field] = math.floor(v)
+		end
+		table.sort(rest, function(a, b)
+			return if a.frac == b.frac then a.id < b.id else a.frac > b.frac
+		end)
+		for i = 1, total - floors do
+			local id = rest[i].id;
+			(shares[id] :: any)[field] += 1
+		end
+	end
+	local sumAdded, sumRemoved = 0, 0
+	for _, stat in stats do
+		sumAdded += stat.added
+		sumRemoved += stat.removed
+	end
 	local out: { Share } = {}
 	for _, id in order do
 		local s = shares[id]
 		local weight = if totalAdded > 0 then s.added / totalAdded else 1 / #order
 		s.minutes = round1(minutes * weight)
-		s.added = math.floor(s.added + 0.5)
-		s.removed = math.floor(s.removed + 0.5)
+	end
+	apportion("added", sumAdded)
+	apportion("removed", sumRemoved)
+	for _, id in order do
+		local s = shares[id]
 		if #order > 1 and how ~= "explicit" then
 			s.how = `{how}+proportional`
 		end
@@ -142,7 +167,8 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string)
 	local t = spend.readTotals(issue.dir)
 	local rows = ""
 	if fs.isFile(path) then
-		rows = string.match(fs.readFile(path), "|%-%-%-|[^\n]*\n(.-)\n%*%*Total") or ""
+		rows = string.match(fs.readFile(path), "|%-%-%-|[^\n]*\n(.-)\n+%*%*Total") or ""
+		rows = string.gsub(rows, "%s+$", "")
 		if rows ~= "" then
 			rows ..= "\n"
 		end

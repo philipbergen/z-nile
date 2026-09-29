@@ -148,7 +148,8 @@ function graph.closure(g: Graph, file: string): { [string]: boolean }
 	return seen
 end
 
--- Spec files (per `isSpec`) whose require closure contains any changed file.
+-- Spec files (per `isSpec`) whose require closure contains any changed file (or a file under a
+-- changed directory prefix).
 function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> boolean): { string }
 	local changedSet: { [string]: boolean } = {}
 	for _, f in changed do
@@ -158,7 +159,16 @@ function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> 
 	for _, file in g.files do
 		if isSpec(file) then
 			for dep in graph.closure(g, file) do
-				if changedSet[dep] then
+				local hit = changedSet[dep]
+				if not hit then
+					for _, c in changed do
+						if string.sub(dep, 1, #c + 1) == c .. "/" then
+							hit = true
+							break
+						end
+					end
+				end
+				if hit then
 					table.insert(specs, file)
 					break
 				end

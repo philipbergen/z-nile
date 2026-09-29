@@ -32,6 +32,10 @@ return t.spec("affected", function(it)
 		t.expect(select({ `{ROOT}/B/init.luau` })).toEqual({ `{ROOT}/b_check.luau` })
 	end)
 
+	it("a directory prefix selects everything under it", function()
+		t.expect(select({ `{ROOT}/B` })).toEqual({ `{ROOT}/b_check.luau` })
+	end)
+
 	it("an unrelated change selects nothing", function()
 		t.expect(select({ "README.md" })).toEqual({})
 	end)

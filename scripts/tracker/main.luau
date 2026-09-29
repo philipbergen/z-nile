@@ -298,9 +298,13 @@ function cmd.focus(pos: { string })
 	print(`focus: {issue.id}`)
 end
 
-local function recordAndCommit(message: string, issueIds: { string }, explicitMinutes: number?)
+local function recordAndCommit(
+	raft: store.Item,
+	message: string,
+	issueIds: { string },
+	explicitMinutes: number?
+)
 	sh.git({ "add", "-A" })
-	local raft = activeRaft()
 	local issues: { store.Item } = {}
 	local how: string
 	if #issueIds > 0 then
@@ -319,6 +323,9 @@ local function recordAndCommit(message: string, issueIds: { string }, explicitMi
 	local shares = spend.attribute(issues, spend.stagedStats(), minutes, how)
 	local trailers: { string } = {}
 	for _, share in shares do
+		if share.added + share.removed == 0 and share.minutes < 0.1 then
+			continue -- nothing to record (e.g. a pure tracker move)
+		end
 		spend.appendRow(store.get(share.id), share, message)
 		table.insert(
 			trailers,
@@ -338,7 +345,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		fail("usage: commit -m <msg> [--issue <id>]... [--time <minutes>]")
 	end
 	local t = opts["--time"] and tonumber((string.gsub(opts["--time"][1], "m$", "")))
-	recordAndCommit(message, opts["--issue"] or {}, t)
+	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t)
 end
 
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
@@ -355,13 +362,13 @@ local function reviewProblem(raft: store.Item): string?
 		return "no review-NNN.md: run the adversarial code review first"
 	end
 	local num = string.format("%03d", latest)
-	local review = fs.readFile(`{raft.dir}/review-{num}.md`)
+	local review = "\n" .. fs.readFile(`{raft.dir}/review-{num}.md`)
 	local verdict = string.match(review, "\n[Vv]erdict:%s*(%a+)")
 	if verdict == "approve" then
 		return nil
 	end
 	local refutePath = `{raft.dir}/refute-{num}.md`
-	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
+	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
 	local missing = {}
 	for id in string.gmatch(review, "\n###%s+(F%d+)") do
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
@@ -394,7 +401,7 @@ function cmd.done(pos: { string })
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
-	recordAndCommit(`tracker: done {raft.id}`, {}, nil)
+	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil)
 	if hasUpstream() then
 		sh.must("gh", { "pr", "ready" })
 		local summary = fs.readFile(`{raft.dir}/spend.md`)
