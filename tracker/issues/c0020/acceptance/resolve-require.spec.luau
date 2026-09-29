@@ -60,7 +60,9 @@ return t.spec("place.resolveRequire", function(it)
 	end)
 
 	it("extracts string-literal require specs from source", function()
-		local src = 'local A = require("./A")\nlocal B = require("@self/B")\nlocal s = "require(x)"\n'
+		-- built by concatenation so this file itself contains no literal require("...") text
+		local R = "req" .. "uire"
+		local src = `local A = {R}("./A")\nlocal B = {R}("@self/B")\nlocal s = "{R}(x)"\n`
 		t.expect(place.requireSpecs(src)).toEqual({ "./A", "@self/B" })
 	end)
 end)

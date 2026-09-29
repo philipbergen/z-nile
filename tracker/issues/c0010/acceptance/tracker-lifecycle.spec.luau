@@ -53,6 +53,21 @@ return t.spec("tracker lifecycle", function(it)
 		end
 		must(process.exec("git", { "clone", "-q", root, dir }), "clone")
 		git({ "remote", "remove", "origin" })
+		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+		local listed = process.exec(
+			"git",
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
+			{ cwd = root }
+		)
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if fs.isFile(`{root}/{path}`) then
+				local parent = string.match(path, "^(.*)/[^/]+$")
+				if parent then
+					fs.writeDir(`{dir}/{parent}`)
+				end
+				fs.writeFile(`{dir}/{path}`, fs.readFile(`{root}/{path}`))
+			end
+		end
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
 		-- start from an empty tracker so ids are predictable regardless of the real backlog
@@ -88,7 +103,7 @@ return t.spec("tracker lifecycle", function(it)
 		must(tr({ "renumber", "f0030", "f0031" }), "renumber")
 		local raftDoc = read("tracker/rafts/R0010/R0010-demo.md")
 		t.expect(string.find(raftDoc, "f0031", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(raftDoc, "f0030", 1, true)).toBe(nil)
+		t.expect((string.find(raftDoc, "f0030", 1, true))).toBe(nil)
 		t.expect(fs.isFile(`{dir}/tracker/issues/f0031/f0031-gamma.md`)).toBe(true)
 	end)
 
@@ -130,7 +145,10 @@ return t.spec("tracker lifecycle", function(it)
 			write(p, TRIVIAL_CHECK)
 		end
 		fs.writeDir(`{dir}/tracker/issues/f0010/acceptance`)
-		write("tracker/issues/f0010/acceptance/alpha.spec.luau", "--!strict\nreturn nil\n")
+		write(
+			"tracker/issues/f0010/acceptance/alpha.spec.luau",
+			'--!strict\nlocal t = require("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
+		)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		local before = tonumber(git({ "rev-list", "--count", "HEAD" })) :: number
@@ -170,7 +188,7 @@ return t.spec("tracker lifecycle", function(it)
 			.toBe(true)
 	end)
 
-	it("done requires a resolved review, then promotes acceptance specs and finishes", function()
+	it("done requires a clean tree and a resolved review", function()
 		local r1 = tr({ "done", "R0010" })
 		t.expect(r1.ok).toBe(false)
 		t.expect(string.find(r1.stderr, "no review", 1, true) ~= nil).toBe(true)
@@ -180,12 +198,37 @@ return t.spec("tracker lifecycle", function(it)
 			"# Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
 		)
 		write("tracker/rafts/active/R0010/refute-001.md", "- F1: fixed abc: done\n")
+		local dirty = tr({ "done", "R0010" })
+		t.expect(dirty.ok).toBe(false)
+		t.expect(string.find(dirty.stderr, "clean tree", 1, true) ~= nil).toBe(true)
+
+		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		local r2 = tr({ "done", "R0010" })
 		t.expect(r2.ok).toBe(false)
 		t.expect(string.find(r2.stderr, "F2", 1, true) ~= nil).toBe(true)
+	end)
 
+	it("done rolls back when a promoted acceptance spec fails", function()
 		write("tracker/rafts/active/R0010/refute-001.md", "- F1: fixed abc: done\n- F2: refuted: by design\n")
+		local good = read("tracker/issues/active/f0010/acceptance/alpha.spec.luau")
+		write(
+			"tracker/issues/active/f0010/acceptance/alpha.spec.luau",
+			(string.gsub(good, "toBe%(1%)", "toBe(2)"))
+		)
 		must(tr({ "commit", "-m", "review 001 answered", "--time", "1" }), "commit")
+		local head = git({ "rev-parse", "HEAD" })
+		local r = tr({ "done", "R0010" })
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "rolled back", 1, true) ~= nil).toBe(true)
+		t.expect(git({ "rev-parse", "HEAD" })).toBe(head)
+		t.expect(git({ "status", "--porcelain" })).toBe("")
+		t.expect(fs.isDir(`{dir}/tracker/rafts/active/R0010`)).toBe(true)
+		t.expect(fs.isFile(`{dir}/tracker/issues/active/f0010/acceptance/alpha.spec.luau`)).toBe(true)
+		write("tracker/issues/active/f0010/acceptance/alpha.spec.luau", good)
+		must(tr({ "commit", "-m", "fix acceptance fixture", "--time", "1" }), "commit")
+	end)
+
+	it("done promotes acceptance specs and finishes", function()
 		must(tr({ "done", "R0010" }), "done")
 		t.expect(fs.isDir(`{dir}/tracker/rafts/done/R0010`)).toBe(true)
 		t.expect(fs.isDir(`{dir}/tracker/issues/done/f0010`)).toBe(true)

@@ -30,6 +30,21 @@ return t.spec("affected: place specs", function(it)
 		t.expect(has(selected, "tests/place/structure.spec.luau")).toBe(true)
 	end)
 
+	it("selects by dependency on the place library, not by directory", function()
+		local synthetic: graph.Graph = {
+			files = { "x/p.spec.luau", "x/q.spec.luau", "tests/lib/place.luau" },
+			deps = {
+				["x/p.spec.luau"] = { "tests/lib/place.luau" },
+				["x/q.spec.luau"] = {},
+				["tests/lib/place.luau"] = {},
+			},
+			unresolved = {},
+			dynamic = {},
+		}
+		t.expect(graph.affectedSpecs(synthetic, { "src/client/Foo.luau" }, isSpec))
+			.toEqual({ "x/p.spec.luau" })
+	end)
+
 	it("an unrelated change does not select place specs", function()
 		local selected = graph.affectedSpecs(g, { "README.md" }, isSpec)
 		t.expect(has(selected, "tests/place/structure.spec.luau")).toBe(false)

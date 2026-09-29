@@ -33,18 +33,18 @@ scripts/affected.luau ─▶ scripts/lib/graph.luau (c0020: PLACE_LIB implicit d
 
 ## Order & dependencies
 1. **c0020 first.** It's purely local and fully specified.
-2. **c0010 second.** Its AC3 (CI green) then also proves c0020's place tests pass on Linux.
+2. **c0010 second.** Its AC3 (CI green) then also proves on Linux both c0020's place tests and every active acceptance spec, through the dispatch-only acceptance step (F8).
 
 ## Experiments phase
 Most of this raft's unknowns concern the CI environment and are resolved by c0010's first `scripts/ci-verify.sh` run.
-- **c0010**: E1 (setup.sh on ubuntu), E2 (the `lune` alias on Linux), E3 (the dispatch run appearing).
+- **c0010**: E1 (setup.sh on ubuntu, including auth) and E3 (the dispatch run appearing). E0 (dispatching a branch) and E2 (the `lune` alias on Linux) were run in prep and PASSED.
 - **c0020**: E1 and E2 were run in prep and PASSED. E3 is an accepted risk, deferred to the first relative require, with OC1.
 - **Order**: push c0020's work early, then dispatch CI once, to surface E1–E3 before finishing c0010.
 
 ## Exit criteria
 Implemented by `check.sh`:
 - **RC0**: the full repo gate passes, and c0010 and c0020's `check.sh` pass. That includes CI green on this branch's HEAD (c0010 AC3), and the draft PR existing (c0010 AC5).
-- **RC1**: after this raft, the gate's place tier runs: `lune run tests/run -- tests/place` reports at least 1 passing spec file and 0 failures.
+- **RC1**: after this raft, the gate's place tier runs. `tests/place/` contains at least one spec file, and running them all (`lune run tests/run -- $(find tests/place -name '*.spec.luau')`) reports 0 failures. An empty or missing directory fails (F1).
 
 ## Risks & rollback
 - **Risk**: CI on Linux behaves differently from macOS (paths, `~` expansion, `sed -i`). Mitigation: setup.sh and check.sh must stay POSIX-bash, with no `sed -i ''`. Rollback: revert the workflow file; local gates are unaffected.

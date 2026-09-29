@@ -65,8 +65,9 @@ finish
 - **Where acceptance specs live**: ticket-prep writes them in the issue's `acceptance/` folder (`tracker/issues/<id>/acceptance/*.spec.luau`), **not** in `tests/`.
   - They target code that doesn't exist yet, so putting them in `tests/` would turn main red.
   - They're formatted and linted, but not type-checked or run by the repo gate. Only `check.sh` runs them, by explicit path.
-  - They must require only through aliases (`@logic/…`, `@tests/…`), never relative paths, because they get moved.
-  - `tracker.sh done` **moves** them to `tests/acceptance/<id>/`, where they become permanent regression specs.
+  - They must require only through aliases (`@logic/…`, `@tests/…`, `@scripts/…`), never relative paths, because they get moved.
+  - Never write literal `require("…")` text inside strings or comments. The graph scanner would treat it as a real require. Build such text by concatenation.
+  - `tracker.sh done` **moves** them to `tests/acceptance/<id>/`, where they become permanent regression specs. It then type-checks `tests/`, runs `tests/meta` and the promoted specs, and **rolls back** if any of that fails.
 - **Sequestered**:
   - `check.sh` files and the acceptance specs they name are written in ticket-prep, *before* execution.
   - During execution they must not change.

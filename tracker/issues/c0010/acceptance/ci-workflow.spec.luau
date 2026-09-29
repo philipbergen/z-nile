@@ -5,7 +5,8 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml"))
+local text = fs.readFile(".github/workflows/check.yml")
+local wf = serde.decode("yaml", text)
 -- YAML 1.1 parsers may read the bare key `on` as boolean true
 local on = wf.on or wf[true]
 local job = wf.jobs and wf.jobs.gate
@@ -32,10 +33,28 @@ return t.spec("ci workflow", function(it)
 
 	it("is dispatchable and runs on main pushes and pull requests", function()
 		t.expect(on ~= nil).toBe(true)
-		t.expect(on.workflow_dispatch ~= nil).toBe(true)
+		-- `workflow_dispatch:` (null) decodes to an absent key, so also accept the raw text form
+		local dispatchable = on.workflow_dispatch ~= nil
+			or string.find(text, "\n%s+workflow_dispatch:%s*[\n{]") ~= nil
+		t.expect(dispatchable).toBe(true)
 		t.expect(on.push and on.push.branches and on.push.branches[1]).toBe("main")
 		local types = on.pull_request and on.pull_request.types or {}
 		t.expect(table.find(types, "ready_for_review") ~= nil).toBe(true)
+	end)
+
+	it("runs the active raft's acceptance specs on workflow_dispatch", function()
+		local found = false
+		for _, step in job.steps do
+			local cond = if type(step["if"]) == "string" then step["if"] else ""
+			local run = if type(step.run) == "string" then step.run else ""
+			if
+				string.find(cond, "workflow_dispatch", 1, true)
+				and string.find(run, "*/active/*/acceptance/*.spec.luau", 1, true)
+			then
+				found = true
+			end
+		end
+		t.expect(found).toBe(true)
 	end)
 
 	it("skips drafts only for pull_request events", function()

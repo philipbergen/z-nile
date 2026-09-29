@@ -4,10 +4,26 @@ local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
 local game = place.load()
+local ROOTS = {
+	"ReplicatedStorage.Shared.",
+	"ServerScriptService.Server.",
+	"StarterPlayer.StarterPlayerScripts.Client.",
+}
 
 return t.spec("place rules", function(it)
-	it("finds the three script roots", function()
-		t.expect(#place.scripts(game) >= 2).toBe(true)
+	it("lists scripts only from the three script roots, including both Main scripts", function()
+		local names = {}
+		for _, s in place.scripts(game) do
+			local full = s:GetFullName()
+			local ok = false
+			for _, prefix in ROOTS do
+				ok = ok or string.sub(full, 1, #prefix) == prefix
+			end
+			t.expect(ok).toBe(true)
+			names[full] = true
+		end
+		t.expect(names["ServerScriptService.Server.Main"]).toBe(true)
+		t.expect(names["StarterPlayer.StarterPlayerScripts.Client.Main"]).toBe(true)
 	end)
 
 	it("every script in the place starts with --!strict", function()

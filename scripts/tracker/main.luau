@@ -387,6 +387,9 @@ function cmd.done(pos: { string })
 	if raft.kind ~= "raft" or raft.state ~= "active" then
 		fail(`{raft.id} must be an active raft`)
 	end
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail("commit everything first (scripts/tracker.sh commit); done needs a clean tree")
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
@@ -394,12 +397,33 @@ function cmd.done(pos: { string })
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
-	-- Promote sequestered acceptance specs into the permanent suite.
+	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
+	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
+	local promoted: { string } = {}
 	for _, m in store.members(raft.id) do
 		local acc = `{m.dir}/acceptance`
 		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
 			fs.writeDir("tests/acceptance")
 			sh.git({ "mv", acc, `tests/acceptance/{m.id}` })
+			for _, name in fs.readDir(`tests/acceptance/{m.id}`) do
+				if string.match(name, "%.spec%.luau$") then
+					table.insert(promoted, `tests/acceptance/{m.id}/{name}`)
+				end
+			end
+		end
+	end
+	if #promoted > 0 then
+		print("\n=== promoted acceptance specs: type check + meta + run")
+		local ok =
+			sh.stream("luau-lsp", { "analyze", "--base-luaurc=.luaurc", "--platform=standard", "tests" })
+		local specs = { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }
+		for _, p in promoted do
+			table.insert(specs, p)
+		end
+		ok = ok and sh.stream("lune", specs)
+		if not ok then
+			sh.git({ "reset", "-q", "--hard", "HEAD" })
+			fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
 		end
 	end
 	for _, m in store.members(raft.id) do

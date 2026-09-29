@@ -61,6 +61,10 @@ function place.requireSpecs(source: string): { string }
 - `Client.Main` is a `LocalScript`;
 - `Shared.Logic` exists.
 
+**Aliases**: `.luaurc` has the alias `@scripts` → `./scripts`, landed in prep (design-review-001 F2). Acceptance specs use `@scripts/lib/graph`. No `.luaurc` change is needed during execution.
+
+**Selection by dependency, not directory**: `affectedSpecs` must decide from each spec's require closure, never from its path. After `done`, `tests/acceptance/c0020/*.spec.luau` also load the place library and must be selected for `src/` changes (F11). A synthetic-graph case in `affected-place.spec.luau` pins this.
+
 **Docs**:
 - Add the tier `tests/place/` to the testing skill's table.
 - The architecture skill says that `tests/place` enforces "no Script or LocalScript under ReplicatedStorage".
@@ -106,7 +110,7 @@ function place.requireSpecs(source: string): { string }
 ## Test plan
 - **`acceptance/resolve-require.spec.luau`**, on synthetic trees: `@self child` → AC1; `./ sibling` → AC1; `../ uncle` → AC1; `missing segment is nil` → AC1; `non-ModuleScript target is nil` → AC1; `aliases are nil` → AC1.
 - **`acceptance/place-rules.spec.luau`**, on the built place: `every src script is strict` → AC2; `no Script/LocalScript under Shared` → AC2; `every require in src resolves in the DataModel` → AC2.
-- **`acceptance/affected-place.spec.luau`**: `a src change selects place specs, not unrelated unit specs` → AC3; `a default.project.json change selects place specs` → AC3.
+- **`acceptance/affected-place.spec.luau`**: `a src change selects place specs, not unrelated unit specs` → AC3; `a default.project.json change selects place specs` → AC3; `selects by dependency on the place library, not by directory` (synthetic graph) → AC3; `an unrelated change does not select place specs` → AC3.
 - **`tests/place/structure.spec.luau`** (the executor's own): Main scripts' classes, and Logic exists.
 
 ## Acceptance criteria

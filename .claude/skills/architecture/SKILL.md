@@ -27,7 +27,7 @@ description: Code structure rules for pickman (strict Luau, pure Logic features 
    - A feature's own files use `require("@self/…")` or `./…`.
 5. **Requires are string literals, with relative paths or `@self`.**
    - Roblox and Lune resolve them the same way. Inside `init.luau`, `./X` means a *sibling of the feature directory*.
-   - `.luaurc` aliases (`@logic`, `@tests`) are only for `tests/` and `scripts/`, because Roblox doesn't read `.luaurc`.
+   - `.luaurc` aliases (`@logic`, `@shared`, `@tests`, `@scripts`) are only for `tests/` and `scripts/`, because Roblox doesn't read `.luaurc`.
    - No dynamic requires in `src/`.
 6. **Dependencies between features must be declared** in the ```` ```deps ```` block of `tracker/architecture.md` (`Consumer -> Provider`), and the graph must stay acyclic.
    - Adding an edge is a design decision, made in ticket-prep and not during execution.
