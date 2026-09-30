@@ -70,7 +70,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
    - the fixes are more than about 15% of the PR's lines;
    - a Judged criterion was ruled fail;
    - you refuted (rather than fixed) any high finding or failed Judged criterion, so a new reviewer rules on the refutation.
-7. **Cap: 3 rounds.** The reviewer's own file decides what is significant, not your answer to it. If `review-003.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds 1-2 need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in `review-003.md` do not block, and you can't downgrade the severity the reviewer wrote: file each with `tracker.sh new issue`, answer it in `refute-003.md` as `- F<n>: refuted: below the merge threshold (medium|low), filed as <id>`, and quote every such line in the round's PR comment. This is an interim form until c0360 adds a real `deferred` answer, because `tracker.sh done` accepts only `fixed` or `refuted`. It is the sole exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
+7. **Cap: 3 rounds.** The reviewer's own file decides what is significant, not your answer to it. If `review-003.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds 1-2 need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in `review-003.md` do not block, and you can't downgrade the severity the reviewer wrote. Fix them (answer `fixed`) if the fix is small; otherwise: file each with `tracker.sh new issue`, answer it in `refute-003.md` as `- F<n>: refuted: below the merge threshold (medium|low), filed as <id>`, and quote every such line in the round's PR comment. This is an interim form until c0360 adds a real `deferred` answer, because `tracker.sh done` accepts only `fixed` or `refuted`. It is the sole exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
@@ -96,13 +96,15 @@ Stop and report if any of these happen:
 To escalate:
 1. Commit whatever is green.
 2. Push.
-3. Leave the PR in **draft**.
+3. Leave the PR in **draft**, or, if it's already ready (a `BLOCKED:` stop after `done`), leave it as it is and unmerged.
 4. Post a PR comment that starts with `BLOCKED:` and covers what you tried, the evidence, and the decision you need.
 
 ## Final report format
 ```
-R0010: <title>. <READY | BLOCKED>
+R0010: <title>. <MERGED | BLOCKED>
 PR: <url>
+Merge: <merge commit sha> | not merged: <which condition failed>
+Cleanup: done | <what was skipped and why> (if this only becomes known after the report is posted, add a follow-up PR comment)
 Criteria: <n>/<n> Checked PASS (tracker.sh done output), Judged: <rulings>
 Observed (human, in Studio): <numbered steps from the issues' Observed sections>
 Deviations: <issue: what and why> | none

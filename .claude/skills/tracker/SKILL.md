@@ -63,7 +63,7 @@ First confirm the merge: `gh pr view <pr> --json state -q .state` must print `ME
    - if the root is on another branch (in-progress work there): `git -C <root> fetch origin main:main`, which fast-forwards `main` without switching branches;
    - if `fetch` refuses because `main` is checked out in some other worktree, run `git -C <that worktree> pull --ff-only` there if it's clean; if it isn't, skip it and say so in the report.
 2. Leave and remove the worktree. Your shell cwd resets on each call and a Claude Code session owns its cwd, so:
-   - if this session created the worktree with EnterWorktree, call ExitWorktree with `remove` (pass `discard_changes` only after checking the diff against `main` is empty, as it is after a squash merge; compare against `origin/main` after `git fetch`, since the root's `main` may not be updated yet);
+   - if this session created the worktree with EnterWorktree, call ExitWorktree with `remove` (pass `discard_changes` only after checking that the PR is `MERGED`, that `git rev-parse HEAD` equals the PR's `headRefOid`, and that `git status --short` is empty; a diff against `main` can't be used, because `main` may have moved on past the squash);
    - otherwise run `git -C <root> worktree remove <path>`. If it says the worktree is locked, `git -C <root> worktree unlock <path>` first. Use `--force` only when you've confirmed the leftovers are ignored files.
 3. Delete the local branch from the root: `git -C <root> branch -D <branch>` (a squash merge makes `-d` refuse, which is why the `MERGED` check comes first). ExitWorktree `remove` already does this.
 4. `git -C <root> worktree prune`, then check `git -C <root> worktree list` shows only worktrees still in use.
