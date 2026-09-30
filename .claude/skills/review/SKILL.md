@@ -26,7 +26,9 @@ Inputs: <commit sha / files reviewed>
 ### F1 [high] <one-line claim>
 Where: <path:line or doc section>
 Evidence: <the concrete failing scenario, input, or quote. Not "might be" but "does X when Y">
-Fix: <the smallest change that resolves it>
+Critique: <why it matters, and the fix the author will be tempted to make>
+Consequences: <take that fix one step further: the new rules, state, edge cases or user decisions it brings, or "none">
+Recommendation: <the fix that holds up after its consequences, with the spec cases or decisions it needs>
 
 ### F2 [medium] ...
 
@@ -40,6 +42,8 @@ Verdict: approve | changes
 - **high**: a wrong result, a crash, a security or authority hole, an acceptance criterion that's unmet or can be passed by a wrong implementation, or a regression.
 - **medium**: a likely future defect, a scalability trap, an architecture rule bent, a missing test for an edge case.
 - **low**: a clarity or maintainability improvement.
+
+**Think one step further.** A finding isn't finished at "here's the fix". Say what new rule, state, edge case or user decision the fix brings, and how it interacts with existing rules, and make the Recommendation cover it, including its spec cases, so it doesn't come back as next round's finding.
 
 Don't pad the review. Zero findings with `Verdict: approve` is a valid result. Use `approve` only when no high or medium findings remain.
 
@@ -55,6 +59,7 @@ In code mode the PR shows the review as it happens: the author pushes and posts 
 
 ## Design mode (from ticket-prep)
 Attack all of the following:
+0. **Rules and mutants**: audit each issue's Rules and mutants table. Every behavioural rule in the Design needs a row. Rows marked `run` were mutation-tested in prep; spot-run only the `reasoned` rows you doubt. A missing row, a row whose spec case can't fail, or a plausible mutant nobody listed is a finding.
 1. **Unknowns**: every assumption that isn't proven, especially about Roblox or engine behavior, replication, or performance. Is each one an experiment with a pass/fail question and a fallback?
 2. **Acceptance criteria**:
    - Can a wrong or hard-coded implementation pass `check.sh`?
@@ -69,6 +74,7 @@ Attack all of the following:
 
 ## Code mode (before the PR is marked ready)
 Inputs: `git diff main...HEAD`, the raft and issue documents, and the `check.sh` files.
+A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (execute-raft stop conditions).
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
 2. **Sequestration**: `git diff <tracker: start commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty. Any change is **high**.
 3. **Weak tests**: tests that assert on internals, lack a negative case, would pass with a stub, or depend on the wall clock or randomness.
