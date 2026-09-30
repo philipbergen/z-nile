@@ -1,0 +1,247 @@
+--!strict
+-- c0430: the workstream plan, worktrees cut from a ref, and stream review files.
+-- Fixture under .cache/ws-e2e: a seed clone of the repo (no origin, `main` forced, the working tree's
+-- tooling overlaid, tracker emptied) where rafts and issues are created; then a bare `origin.git`
+-- cloned from the seed and a clone `main/` for the worktree cases.
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local t = require("@tests/lib/t")
+
+type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+
+local function trim(s: string): string
+	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
+end
+
+local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+local base = `{root}/.cache/ws-e2e`
+local seed = `{base}/seed`
+local origin = `{base}/origin.git`
+local main = `{base}/main`
+local wt1 = `{main}/.worktrees/R0010-demo`
+local stream = `{main}/.worktrees/ws-f0010`
+
+local function run(cwd: string, cmd: string, args: { string }): Result
+	return process.exec(cmd, args, { cwd = cwd })
+end
+
+local function must(r: Result, what: string): string
+	if not r.ok then
+		error(`{what} failed ({r.code}): {r.stderr}{r.stdout}`, 2)
+	end
+	return trim(r.stdout)
+end
+
+local function git(cwd: string, args: { string }): string
+	return must(run(cwd, "git", args), "git " .. table.concat(args, " "))
+end
+
+local function tr(cwd: string, args: { string }): Result
+	return run(cwd, "bash", { "scripts/tracker.sh", table.unpack(args) })
+end
+
+local function identity(cwd: string)
+	git(cwd, { "config", "user.name", "e2e" })
+	git(cwd, { "config", "user.email", "e2e@example.invalid" })
+end
+
+local function edit(path: string, from: string, to: string)
+	local text, n = string.gsub(fs.readFile(path), from, to)
+	assert(n > 0, `pattern {from} not found in {path}`)
+	fs.writeFile(path, text)
+end
+
+local function has(text: string, needle: string): boolean
+	return string.find(text, needle, 1, true) ~= nil
+end
+
+-- Replace the issue's Touched modules section with these bullets (none: keep the template comment).
+local function touches(id: string, paths: { string })
+	local doc = `{seed}/tracker/issues/{id}/{id}.md`
+	local text = fs.readFile(doc)
+	local a = string.find(text, "### Touched modules", 1, true)
+	local b = string.find(text, "### Affected specs", 1, true)
+	assert(a and b, "template sections not found")
+	local bullets = {}
+	for _, p in paths do
+		table.insert(bullets, "- `" .. p .. "`")
+	end
+	fs.writeFile(
+		doc,
+		string.sub(text, 1, a - 1)
+			.. "### Touched modules\n"
+			.. table.concat(bullets, "\n")
+			.. "\n\n"
+			.. string.sub(text, b)
+	)
+end
+
+local function depends(id: string, deps: { string })
+	edit(
+		`{seed}/tracker/issues/{id}/{id}.md`,
+		"depends_on: %[%]",
+		"depends_on: [" .. table.concat(deps, ", ") .. "]"
+	)
+end
+
+local function countWorktrees(): number
+	local _, n = string.gsub(git(main, { "worktree", "list", "--porcelain" }), "worktree ", "")
+	return n
+end
+
+return t.spec("workstreams", function(it)
+	it("workstreams orders waves by depends_on and serializes overlapping modules", function()
+		if fs.isDir(base) then
+			fs.removeDir(base)
+		end
+		fs.writeDir(base)
+		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
+		identity(seed)
+		git(seed, { "checkout", "-q", "-B", "main" })
+		git(seed, { "remote", "remove", "origin" })
+		local listed = run(
+			root,
+			"git",
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+		)
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if fs.isFile(`{root}/{path}`) then
+				local parent = string.match(path, "^(.*)/[^/]+$")
+				if parent then
+					fs.writeDir(`{seed}/{parent}`)
+				end
+				fs.writeFile(`{seed}/{path}`, fs.readFile(`{root}/{path}`))
+			end
+		end
+		for _, kind in { "issues", "rafts" } do
+			for _, state in { "", "active/", "done/" } do
+				local dir = `{seed}/tracker/{kind}/{state}`
+				if fs.isDir(dir) then
+					for _, name in fs.readDir(dir) do
+						if string.match(name, "^[fdcR]%d%d%d%d$") then
+							fs.removeDir(dir .. name)
+						end
+					end
+				end
+			end
+		end
+		-- ten issues f0010..f0100
+		for _, slug in { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j" } do
+			must(tr(seed, { "new", "issue", "f", slug }), "new issue " .. slug)
+		end
+		must(tr(seed, { "new", "raft", "feature", "demo", "f0010", "f0020", "f0030", "f0040" }), "raft demo")
+		must(tr(seed, { "new", "raft", "feature", "solo", "f0050", "--single" }), "raft solo")
+		must(tr(seed, { "new", "raft", "feature", "chain", "f0060", "f0070", "f0080" }), "raft chain")
+		must(tr(seed, { "new", "raft", "feature", "loop", "f0090", "f0100" }), "raft loop")
+		touches("f0010", { "src/a" })
+		touches("f0020", { "src/b" })
+		touches("f0030", { "src/a/sub" })
+		touches("f0040", { "src/c" })
+		depends("f0040", { "f0020" })
+		touches("f0050", { "src/solo" })
+		-- f0060 keeps the template's comment only: no touched modules
+		touches("f0070", { "src/z" })
+		touches("f0080", { "src/y" })
+		depends("f0080", { "f0070", "c0999" }) -- c0999 is not in the raft: ignored
+		touches("f0090", { "src/p" })
+		touches("f0100", { "src/q" })
+		depends("f0090", { "f0100" })
+		depends("f0100", { "f0090" })
+		-- R0010 and its issues are ready to start
+		edit(`{seed}/tracker/rafts/R0010/R0010.md`, "design: draft", "design: ready")
+		for _, id in { "f0010", "f0020", "f0030", "f0040" } do
+			edit(`{seed}/tracker/issues/{id}/{id}.md`, "design: draft", "design: ready")
+		end
+		git(seed, { "add", "-A" })
+		git(seed, { "commit", "-qm", "fixture" })
+		must(process.exec("git", { "clone", "-q", "--bare", seed, origin }), "bare origin")
+		must(process.exec("git", { "clone", "-q", origin, main }), "clone main")
+		identity(main)
+
+		local r = tr(main, { "workstreams", "R0010" })
+		t.expect(must(r, "workstreams R0010")).toBe(table.concat({
+			"raft R0010: 4 issues",
+			"f0010 wave 1",
+			"f0020 wave 1",
+			"f0030 wave 2 after f0010 (overlap)",
+			"f0040 wave 2 after f0020 (depends_on)",
+			"parallel: yes (wave 1: f0010 f0020)",
+		}, "\n"))
+	end)
+
+	it("a single-issue raft is sequential", function()
+		t.expect(must(tr(main, { "workstreams", "R0020" }), "workstreams R0020"))
+			.toBe("raft R0020: 1 issue\nf0050 wave 1\nparallel: no")
+	end)
+
+	it("an issue without touched modules is serialized with a warning", function()
+		local r = tr(main, { "workstreams", "R0030" })
+		t.expect(must(r, "workstreams R0030")).toBe(table.concat({
+			"raft R0030: 3 issues",
+			"f0060 wave 1",
+			"f0070 wave 2 after f0060 (no touched modules)",
+			"f0080 wave 3 after f0060 (no touched modules), f0070 (depends_on)",
+			"parallel: no",
+		}, "\n"))
+		t.expect(has(r.stderr, "warning: f0060 has no Touched modules; serialized")).toBe(true)
+	end)
+
+	it("a dependency cycle and an unknown raft are errors", function()
+		local cycle = tr(main, { "workstreams", "R0040" })
+		t.expect(cycle.ok).toBe(false)
+		t.expect(has(cycle.stderr, "cycle") and has(cycle.stderr, "f0090") and has(cycle.stderr, "f0100"))
+			.toBe(true)
+		t.expect(tr(main, { "workstreams", "R9999" }).ok).toBe(false)
+		t.expect(tr(main, { "workstreams", "f0010" }).ok).toBe(false)
+	end)
+
+	it("worktree --from bases the new worktree on the ref", function()
+		t.expect(must(tr(main, { "worktree", "R0010" }), "worktree R0010")).toBe(wt1)
+		git(wt1, { "commit", "-q", "--allow-empty", "-m", "raft work" })
+		local tip = git(wt1, { "rev-parse", "HEAD" })
+		t.expect(tip ~= git(main, { "rev-parse", "origin/main" })).toBe(true)
+		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "R0010-demo" }), "worktree --from"))
+			.toBe(stream)
+		t.expect(git(stream, { "branch", "--show-current" })).toBe("ws-f0010")
+		t.expect(git(stream, { "rev-parse", "HEAD" })).toBe(tip)
+		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "R0010-demo" }), "again")).toBe(stream)
+	end)
+
+	it("worktree --from rejects an unknown ref and a raft id", function()
+		local before = countWorktrees()
+		local unknown = tr(main, { "worktree", "ws-f0020", "--from", "no-such-ref" })
+		t.expect(unknown.ok).toBe(false)
+		t.expect(has(unknown.stderr, "no-such-ref")).toBe(true)
+		t.expect(git(main, { "branch", "--list", "ws-f0020" })).toBe("")
+		local raft = tr(main, { "worktree", "R0020", "--from", "R0010-demo" })
+		t.expect(raft.ok).toBe(false)
+		t.expect(has(raft.stderr, "named worktrees")).toBe(true)
+		t.expect(countWorktrees()).toBe(before)
+		t.expect(fs.isDir(`{main}/.worktrees/R0020-solo`)).toBe(false)
+	end)
+
+	it("stream review files are not review rounds", function()
+		must(tr(wt1, { "start", "R0010" }), "start R0010")
+		local dir = `{wt1}/tracker/rafts/active/R0010`
+		fs.writeFile(
+			`{dir}/stream-review-f0010-001.md`,
+			"# Review 001\n\n### F1 [high] x\n\nVerdict: changes\n"
+		)
+		fs.writeFile(`{dir}/stream-refute-f0010-001.md`, "- F1: fixed: y; consequences: none\n")
+		git(wt1, { "add", "-A" })
+		git(wt1, { "commit", "-qm", "stream review files" })
+		-- with no review-NNN.md, done still asks for the adversarial review, whatever the stream files say
+		local done = tr(wt1, { "done", "R0010" })
+		t.expect(done.ok).toBe(false)
+		t.expect(has(done.stderr, "no review-NNN.md")).toBe(true)
+		local metrics = must(tr(wt1, { "metrics" }), "metrics")
+		t.expect(has(metrics, "| R0010 | 0 | 0 | none |")).toBe(true)
+	end)
+
+	it("prompt embeds the workstreams plan", function()
+		local out = must(tr(main, { "prompt", "R0010", "--stdout" }), "prompt")
+		t.expect(has(out, "## Workstreams plan")).toBe(true)
+		t.expect(has(out, "f0030 wave 2 after f0010 (overlap)")).toBe(true)
+		t.expect(has(out, "parallel: yes (wave 1: f0010 f0020)")).toBe(true)
+	end)
+end)

@@ -147,10 +147,10 @@ return t.spec("worktrees", function(it)
 		for i, pair in rafts do
 			must(tr(seed, { "new", "raft", "feature", pair[2], `f00{i}0` }), "new raft " .. pair[2])
 		end
-		edit(`{seed}/tracker/issues/f0050/f0050-epsilon.md`, "design: draft", "design: ready")
+		edit(`{seed}/tracker/issues/f0050/f0050.md`, "design: draft", "design: ready")
 		for i, pair in rafts do
-			edit(`{seed}/tracker/issues/f00{i}0/f00{i}0-{pair[1]}.md`, "design: draft", "design: ready")
-			edit(`{seed}/tracker/rafts/R00{i}0/R00{i}0-{pair[2]}.md`, "design: draft", "design: ready")
+			edit(`{seed}/tracker/issues/f00{i}0/f00{i}0.md`, "design: draft", "design: ready")
+			edit(`{seed}/tracker/rafts/R00{i}0/R00{i}0.md`, "design: draft", "design: ready")
 		end
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })
@@ -293,14 +293,6 @@ return t.spec("worktrees", function(it)
 	end)
 
 	it("duplicate ids are reported", function()
-		-- a second document in one item directory
-		fs.writeFile(`{named}/tracker/issues/f0020/f0020-dup.md`, "---\nid: f0020\n---\n")
-		for _, args in { { "find", "f0020" }, { "list" } } do
-			local r = tr(named, args)
-			t.expect(r.ok).toBe(false)
-			t.expect(string.find(r.stderr .. r.stdout, "f0020", 1, true) ~= nil).toBe(true)
-		end
-		git(named, { "clean", "-fdq" })
 		-- the same id in two state directories
 		must(
 			process.exec(
@@ -309,11 +301,27 @@ return t.spec("worktrees", function(it)
 			),
 			"cp"
 		)
-		local r = tr(named, { "find", "f0020" })
-		t.expect(r.ok).toBe(false)
-		t.expect(string.find(r.stderr .. r.stdout, "f0020", 1, true) ~= nil).toBe(true)
+		for _, args in { { "find", "f0020" }, { "list" } } do
+			local r = tr(named, args)
+			t.expect(r.ok).toBe(false)
+			t.expect(string.find(r.stderr .. r.stdout, "f0020", 1, true) ~= nil).toBe(true)
+		end
 		git(named, { "clean", "-fdq" })
 		t.expect(tr(named, { "find", "f0020" }).ok).toBe(true)
+	end)
+
+	it("a number shared by two prefixes is a warning", function()
+		-- f0050 exists; a chore with the same number is harmless but worth a warning
+		fs.writeDir(`{named}/tracker/issues/c0050`)
+		fs.writeFile(
+			`{named}/tracker/issues/c0050/c0050.md`,
+			"---\nid: c0050\ntype: chore\ntitle: Twin\nslug: twin\n---\n"
+		)
+		local r = tr(named, { "list" })
+		t.expect(r.ok).toBe(true)
+		t.expect(string.find(r.stderr, "0050", 1, true) ~= nil).toBe(true)
+		git(named, { "clean", "-fdq" })
+		t.expect(string.find(tr(named, { "list" }).stderr, "warning", 1, true)).toBe(nil)
 	end)
 
 	it("worktree recreates a worktree whose directory was deleted", function()

@@ -3,7 +3,7 @@ id: c0041
 type: chore
 title: Worktrees by default
 raft: R0020
-depends_on: []
+depends_on: [c0420]
 emergent: false
 design: reviewed
 created: 2026-09-29
@@ -30,7 +30,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 ## Solution
 - **`tracker.sh worktree <target>`**: creates, or reuses, a worktree under `<main checkout>/.worktrees/` on its own branch, branched from a freshly fetched `origin/main`, and prints its path. The target is a raft id (`R0020`) or a plain lowercase name (`capture-raft-viewer`, `prep-raft-browser`, `skills-worktree-rule`).
 - **`start`**: runs inside the raft's worktree and reuses its branch. `start`, `new`, `renumber` and a raft-creating `prompt` **refuse to run in the main checkout** when the repo has an `origin`.
-- **`store.find`** errors on a duplicate item id, so a collision between concurrently created items is detected instead of one item silently disappearing.
+- **Id clashes** between concurrently created items: after c0420 (documents named `<ID>.md`), two branches that pick the same id conflict in git. c0041 adds the rest: `store.find` errors when one id exists in two state directories, `tracker.sh list` **warns** when one number is used by two prefixes (`f0420` and `c0420`: harmless, but best avoided), and landing step 0 runs `list` after merging `origin/main`.
 - **`tracker.sh worktree-prune`**: removes the worktrees of rafts that are finished on the base branch, and lists any other worktree it keeps.
 - **`.worktrees/`** is gitignored.
 - **Hooks** resolve the tree they act on from the hook input, not from their own location.
@@ -58,7 +58,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 
    **Use `tracker.sh worktree`, not the harness's `EnterWorktree`.** EnterWorktree creates worktrees under `.claude/worktrees/`, which is not gitignored and which `worktree-prune` never sees.
 3. **Landing** (the one procedure every change follows; the tracker skill has it in full):
-   0. **Sync first**: `git fetch origin main && git merge origin/main` in the worktree, run `scripts/check.sh --full`, and if two items now share an id (`store.find` reports `duplicate id`), `tracker.sh renumber` yours and commit. Captures and preps run concurrently and pick their ids from their own base, so this step is what catches a collision before it merges.
+   0. **Sync first**: `git fetch origin main && git merge origin/main` in the worktree. If `main` brought the new document layout (c0420), run `scripts/tracker.sh migrate` and commit. If the merge conflicts in `tracker/…/<ID>/<ID>.md`, two items picked the same number: `git merge --abort`, `scripts/tracker.sh renumber <ID> <next free>` on your own branch, commit, and merge again. Then run `scripts/tracker.sh list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `scripts/check.sh --full`. Captures and preps run concurrently and choose ids from their own base, so this step is what catches a clash before it merges.
    1. Commit in the worktree: `tracker.sh commit` inside a raft (it needs an active raft); plain `git add` and `git commit` for capture, prep and doc-only changes, which have none.
    2. `git push -u origin <branch>`, then open the PR (a raft's PR is opened as a draft by `start`; any other PR is opened ready, `gh pr create`).
    3. Merge only when the tracker skill's "Merging" conditions hold: the agent ran `scripts/check.sh --full` on the final head, CI is green on that head sha, and the PR is `MERGEABLE` and `CLEAN`. Then `gh pr merge --squash`. A raft additionally needs `tracker.sh done` and the resolved review. Prep and capture that the user did not ask for are not merged without asking (memory rule: ask before new work).
@@ -96,7 +96,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 - **Draft PRs**: `start` pushes when origin exists, as today, and runs `gh pr create --draft` only when `onGitHub()`; otherwise it prints `origin is not GitHub: skipped draft PR`. `done` runs `gh pr ready` and `gh pr edit` only when `hasUpstream() and onGitHub()`.
 - **USAGE**: add both commands.
 
-**`scripts/tracker/store.luau`**: `store.find(id)` errors `duplicate id <id>: <the directories or documents>` when an item's directory holds more than one `<id>-*.md`, or the same id exists in more than one state directory. `list`, `check`, `members` and `prompt` then fail loudly instead of returning whichever item `readDir` yielded first. (Two branches that each add `c0420` produce differently named docs and byte-identical `check.sh` files, so `git merge` sees no conflict and one item would otherwise vanish.)
+**`scripts/tracker/store.luau`**: `store.find(id)` errors `duplicate id <id>: <the directories>` when the same id exists in more than one state directory (for example after a `start` and a branch merge go wrong). `list`, `check`, `members` and `prompt` then fail loudly instead of returning the first directory. **`cmd.list`** (`scripts/tracker/main.luau`) also prints, after its table, one `warning: number <NNNN> is used by <id>, <id>` line on stderr for each number shared by two issue prefixes (issues only; rafts have their own numbers), and still exits 0. (With the old `<ID>-<slug>.md` naming, two branches adding the same id merged silently; c0420 makes that a git conflict on `<ID>.md`, so within one directory a second document can no longer appear.)
 
 **`.gitignore`**: add `.worktrees/`.
 
@@ -143,7 +143,7 @@ The hooks read the tree from the hook input and use a form that really fails on 
 ### Usability
 - Humans keep `main` checked out, current and clean, whatever agents are running.
 - Agents get a single copy-pasteable first command, and the human gets a single launch line.
-- Several rafts and several captures can be in flight at once. Issue numbers assigned in separate unmerged worktrees can collide, and landing step 0 plus `store.find`'s duplicate error make that visible before the merge; `tracker.sh renumber` (tracker skill, "Conflicts") resolves it.
+- Several rafts and several captures can be in flight at once. Issue numbers assigned in separate unmerged worktrees can collide: with c0420 the collision is a git conflict on `<ID>.md` (resolved by `renumber` before merging), and landing step 0's `list` covers the harmless case of one number under two prefixes.
 
 ### Touched modules
 - `scripts/tracker/main.luau`
@@ -173,7 +173,7 @@ The hooks read the tree from the hook input and use a form that really fails on 
   - The executor may test it (log stdin from a throwaway hook) and record the result in the Verification log; either answer leaves the design valid.
 - **E5 (run in prep: PASS)**: on git 2.54 and macOS bash 3.2, `git worktree add <path> <branch>` for a branch checked out elsewhere fails with `fatal: '<branch>' is already used by worktree at '<path>'`, exit 128; `cd ""` returns 0; a worktree directory deleted with `rm -rf` stays registered (`prunable`) and `git worktree add` then fails with `is a missing but already registered worktree` until `git worktree prune`; and `git worktree add -b <b> <path> origin/main` sets the upstream to `origin/main` unless `--no-track` is given.
 - **E6 (run in prep: see the Verification log for the latest run)**: can the designed tooling satisfy the sequestered spec, and does the spec catch wrong implementations? A throwaway prototype (reverted, never committed) is run against the spec, the full gate, and planted mistakes; the result and the mistakes are recorded in the Verification log.
-- **E7 (run in prep: PASS)**: two branches that each add `tracker/issues/c0420/` with different slugs squash-merge with no conflict (the template's `check.sh` is identical, the docs are differently named), leaving one directory with two docs. That is why `store.find` must error on it.
+- **E7 (run in prep: PASS; superseded by c0420)**: with the old `<ID>-<slug>.md` naming, two branches that each add `tracker/issues/c0420/` squash-merge with no conflict (the template's `check.sh` is identical, the docs are differently named), leaving one directory with two docs. c0420 (document named `<ID>.md`) turns that into an add/add conflict, pinned by c0420's spec; c0041 keeps only the same-id-in-two-states error and the shared-number warning.
 
 ## Regression guard
 - **c0010's sequestered `tracker-lifecycle.spec.luau`** (`tests/acceptance/c0010/`): its clone has no remote, so `refuseInMainCheckout` never fires, and it runs `start` on `main` (the unchanged `switch -c` path). It must stay green.
@@ -209,7 +209,8 @@ Cases (`spec case → AC`):
 - `worktree-prune never forces: a dirty finished worktree survives and the exit code is 1` → AC3
 - `worktree-prune run from inside a finished worktree skips it` → AC3
 - `worktree refuses a done raft` → AC6
-- `duplicate ids are reported` → AC7: a second `<id>-*.md` in an item directory, and the same id in `issues/` and `issues/active/`, each make `find` and `list` fail naming the id.
+- `duplicate ids are reported` → AC7: the same id in `issues/` and `issues/active/` makes `find` and `list` fail naming the id.
+- `a number shared by two prefixes is a warning` → AC7: `f0050` and a `c0050` both exist; `list` exits 0 and warns naming `0050`.
 - `post-edit hook lints with the edited file's worktree config` → AC4 (writes its own `selene.toml` in each tree, so it doesn't depend on the repo's lint config)
 - `post-edit hook ignores a file outside any repository` → AC4
 - `stop hook gates the session's cwd worktree` → AC4
@@ -239,7 +240,8 @@ Cases (`spec case → AC`):
 | post-edit lints with the edited file's tree config | `post-edit hook lints with the edited file's worktree config` | `cd` to the hook's own repo | reasoned |
 | Hooks ignore a file outside any repo | `post-edit hook ignores a file outside any repository` | bare `cd "$(…)"` without `|| exit 0` | reasoned |
 | stop gates the session cwd's repo root | `stop hook gates the session's cwd worktree`, `…when cwd is a subdirectory` | `cd "$cwd"` without `rev-parse --show-toplevel` | run (M4) |
-| A duplicate item id is an error | `duplicate ids are reported` | no detection | run (M10) |
+| The same id in two state directories is an error | `duplicate ids are reported` | no detection | run (M10) |
+| One number under two prefixes is a warning, not an error | `a number shared by two prefixes is a warning` | no warning; exit 1 instead of a warning | run (M14, M15) |
 | The documents carry the rule | AC5 grep and JC1 | leave an old instruction | reasoned (a grep and a ruling, not a mutation) |
 
 ## Acceptance criteria
@@ -251,7 +253,7 @@ Cases (`spec case → AC`):
 - **AC4**: The hooks act on the tree of the edited file (post-edit) or the session's `cwd`, or its repo root when `cwd` is a subdirectory (stop), not on the tree the hook script lives in.
 - **AC5**: The skills, prompt template, settings and AGENTS.md carry the worktree rule: the named files contain `scripts/tracker.sh worktree`, the tracker skill has "Worktrees" and "Landing a change" sections, the settings allow the two new commands, and none of the skills or the template contains the old instructions to switch to, commit on, or diff against `main` in the main checkout (the negative grep in `check.sh`).
 - **AC6**: `tracker.sh worktree <name>` creates, or reuses, `.worktrees/<name>` on branch `<name>` from origin/main for a valid plain name, recreates one whose directory was deleted, and rejects invalid names, item ids that aren't rafts, and done rafts, creating nothing. `new issue` works inside such a worktree, and `new` and `start` are refused in the main checkout of a repo with an origin.
-- **AC7**: An item id that appears twice (two documents in one item directory, or the same id in two state directories) makes `find` and `list` fail naming the id.
+- **AC7**: An item id that exists in two state directories makes `find` and `list` fail naming the id, and `list` warns (exit 0) when one number is used by two issue prefixes.
 
 ### Judged
 - **JC1: the skills leave no path that mutates the main checkout.**
@@ -263,7 +265,7 @@ None.
 
 ## Implementation steps
 1. `.gitignore`, `raftBranch`, `mainRoot`, `onGitHub`, `refuseInMainCheckout`; use them in `start` and `done`, and guard `new`, `renumber` and `prompt`. Commit.
-2. `store.find`'s duplicate error. `cmd.worktree` (raft and named targets) and `cmd["worktree-prune"]`, plus USAGE. Commit.
+2. `store.find`'s duplicate-state error and `list`'s shared-number warning. `cmd.worktree` (raft and named targets) and `cmd["worktree-prune"]`, plus USAGE. Commit.
 3. Hooks and `.claude/settings.json`. Commit.
 4. Docs: AGENTS.md, the six skills, the prompt template, SETUP.md. Commit.
 5. Run `scripts/tracker.sh check c0041` and `promote-check R0020`. Optionally record E4.

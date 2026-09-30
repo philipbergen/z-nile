@@ -54,7 +54,8 @@ check "AC6: named worktrees; bad names, item ids, done rafts rejected; new/start
   "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft" \
   "start and new are refused" "renumber is refused" "prompt does not create" \
   "new issue works in a named worktree" "worktree recreates a worktree"
-check "AC7: a duplicate item id is reported" cases_pass "duplicate ids are reported"
+check "AC7: a duplicate id is an error; a shared number is a warning" cases_pass \
+  "duplicate ids are reported" "a number shared by two prefixes"
 check "AC1-AC4, AC6, AC7: every case of the worktree spec passes" all_cases_pass
 
 finish
