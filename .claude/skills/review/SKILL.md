@@ -72,6 +72,12 @@ Attack all of the following:
 7. **Raft coherence**: do the issue designs agree with the whole-raft design and with each other, and is the order right?
 8. **Executability**: could an agent that has never seen this repo deliver it from the documents alone, without asking a question?
 
+## Stream mode (execute-raft Phase 2B)
+A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
+- **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs. Run the stream's checks (`scripts/tracker.sh check <issue>`, `scripts/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules, its own document, and its `stream-review-<issue>-*` and `stream-refute-<issue>-*` files; anything else is a finding.
+- **Output**: only `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md`, written in the stream worktree, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author answers in `stream-refute-<issue>-NNN.md`.
+- These files are not review rounds: `tracker.sh done` and `metrics` ignore them.
+
 ## Code mode (before the PR is marked ready)
 Inputs: `git fetch origin main && git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
 A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (execute-raft stop conditions).

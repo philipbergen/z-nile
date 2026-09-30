@@ -16,6 +16,6 @@ description: Produce the self-contained execution prompt for a raft (an issue wi
    - The design-review history isn't inlined. Its outcomes are already folded into the documents.
    - **No file is written.**
    - Use `--stdout` to inspect it instead.
-4. **Report** the character count and a 3-line outline: mission, issues, and the number of Checked criteria. Tell the user it's on the clipboard, and give the launch line `scripts/tracker.sh launch R…`, which creates or reuses the raft's worktree (`scripts/tracker.sh worktree R…`) under `.worktree/` and starts the agent inside it.
+4. **Report** the character count and a 3-line outline: mission, issues, and the number of Checked criteria, plus the plan's last line (`parallel: yes` or `parallel: no`, from `tracker.sh workstreams <R-id>`). Tell the user it's on the clipboard, and give the launch line `scripts/tracker.sh launch R…`, which creates or reuses the raft's worktree (`scripts/tracker.sh worktree R…`) under `.worktree/` and starts the agent inside it.
 
 To change what every prompt contains, edit `tracker/templates/prompt.md` or the skills. Don't hand-edit individual prompts.

@@ -38,7 +38,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
    - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
    - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
-   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
 2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
 
@@ -57,12 +57,13 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
 - **Paths**: `tracker/{issues,rafts}/<ID>` is backlog, `…/active/<ID>` is in progress, and `…/done/<ID>` is finished.
 - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`, and only `ticket-prep` sets it.
 - **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. A lone issue gets a `single: true` raft made by ticket-prep in its prep worktree; `tracker.sh prompt <issue>` refuses to create one in the main checkout.
-- **One raft = one branch (`R0010-<slug>`) = one PR.**
+- **One raft = one branch (`R0010-<slug>`) = one PR.** In Phase 2B, temporary stream branches (`ws-<issue>`) feed the raft branch and are deleted.
 
 | step | command | effect |
 |---|---|---|
 | start | `tracker.sh start R0010` | clean tree required; members must be `design: ready`. Creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. Do this first, so the in-progress claim is visible right away. |
-| worktree | `tracker.sh worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. |
+| worktree | `tracker.sh worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `tracker.sh worktree ws-<issue> --from <raft branch>`). |
+| workstreams | `tracker.sh workstreams <R-id>` | read-only plan for parallel execution (execute-raft Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
 | launch | `tracker.sh launch <R-id\|name> [-- cmd…]` | `worktree`, then runs the command (default `claude`) in that worktree with `exec`: terminal, signals and exit status are native. Refuses an unusable command or worktree path before anything starts |
 | prune | `tracker.sh worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
 | focus | `tracker.sh focus f0010` | the following commits are attributed to that issue |
