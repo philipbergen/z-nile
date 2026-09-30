@@ -2,10 +2,10 @@
 id: c0090
 type: chore
 title: Game sim harness
-raft: 
+raft: R0030
 depends_on: []
 emergent: false
-design: draft
+design: ready
 created: 2026-09-28
 ---
 
@@ -15,56 +15,268 @@ created: 2026-09-28
 Pillar 2 of the game design needs every game rule to be checked headless in CI, but there's no way yet to *run the game* outside Roblox: stepping a world on a fixed tick with scripted intents and asserting on what happens. Without that, "collisions work" or "ghosts catch an idle player" can only be checked by hand in Studio.
 
 ## Non-goals
-- The game rules themselves: a2 onward. Rendering, and any Roblox APIs.
+- **Game rules and game state.** No maze, movement or session exists yet (a2 onward). The harness is generic over a *model*; the game's Logic provides one later (f0120's `Session`).
+- **A fixed-step accumulator for the server.** Turning frame `dt` into ticks at runtime belongs to f0120. The harness steps whole ticks only.
+- **A seeded RNG in Logic.** Needed by f0200/f0220; they design it. The harness only hands the seed to `model.new`.
+- **A story text format** ("at tick 0 intent Left"). Builder calls (`sim.intent`, `sim.expect`) read the same way, stay typed, and need no parser.
+- **A replay CLI.** Replays are re-run from a spec or scratch script with `sim.replay`, because a CLI would need a model registry.
+- Rendering and any Roblox API.
 
 ## Solution
-_Draft ideas; design happens in ticket-prep._
-- A `tests/lib/sim.luau` harness: build a world from a maze string, then feed a script of intents at ticks with `sim.run(world, script, ticks)` and get back a trace of events and states.
-- Scenario specs that read like stories (`at tick 0 intent Left; expect tile (3,5) at tick 12`).
-- Replay files saved for failures.
-- A performance budget: N ticks with M mazes in under X ms. This becomes a regression spec.
-- A place in the testing skill as a new test tier.
+A test library, `tests/lib/sim.luau`, that runs any **model** (`new(seed)`, `step(state, intents, tick)`, `observe(state)`) for N ticks from a **script** of timed intents and expectations, and returns a **trace**: an observation per tick and every event stamped with its tick. Failures carry the model, seed and tick, and write a JSON **replay** that `sim.replay` re-runs exactly. `sim.assertDeterministic` runs a scenario twice and names the first diverging tick. `sim.bench` steps many worlds interleaved, like the server, for performance budgets. A new spec tier, `tests/scenario/`, holds story-style simulations; this issue adds the harness's own specs there.
 
 ## Design
-<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
-     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
+
+### Tick semantics (the contract everything else relies on)
+- **Time `t`** is the world after `t` steps. Time 0 is `model.new(seed)`, before any step.
+- **Step k moves the world from time k to time k+1.** Step `k` (k = 0 … ticks−1) is called as `model.step(state, intents, k)`.
+- **An intent at k is delivered in step k.** Several intents at the same tick are delivered in script order in one list. Steps with no intents get an empty list, never nil.
+  - Each delivered intent is a **deep copy** of the script item's intent, made per run. A model may mutate what it receives without affecting a second run (`assertDeterministic`), the replay file, or the caller's script (design-review-001 F8).
+- **An expectation `at = t`** is checked against the observation at time `t`, so `at = 0` checks the initial state. Expectations at the same tick are checked in script order; the first failure ends the run.
+- **Events returned by step k are visible at time k+1**, so they are stamped `tick = k+1`. A step may return nil for "no events".
+- **`stopWhen(obs, events, t)`** is called after each step with the new time `t` and that step's events. The order at each time `t` is: record, **check the expectations at `t`**, then call `stopWhen`. So an expectation at the stop tick is always checked, never skipped and never "never reached" (design-review-003 F1). True ends the run.
+- **`record` changes only what is kept** (the trace's `states`/`events` and the replay's). Expectations, `stopWhen`, never-reached and failure reporting behave the same with `record = false` (design-review-003 F2).
+
+### `tests/lib/sim.luau` (new)
+```lua
+export type Event = { [string]: any }           -- must have `kind: string`; checked at runtime
+export type Model<State> = {
+	name: string,                                -- [%w_-]+; used in messages and replay file names
+	tickRate: number,                            -- ticks per second (the game will use 30)
+	new: (seed: number) -> State,
+	step: (state: State, intents: { any }, tick: number) -> { Event }?,  -- mutates state
+	observe: (state: State) -> any,              -- JSON-safe value; the harness deep-copies it
+}
+export type Item = { at: number, intent: any?, expect: any?, label: string? }
+export type RunOptions = {
+	seed: number,                                -- integer
+	ticks: number,                               -- positive integer: the maximum number of steps
+	script: { Item }?,
+	stopWhen: ((obs: any, events: { Event }, t: number) -> boolean)?,
+	record: boolean?,                            -- default true; false keeps only `final`; checks still run
+}
+export type Stamped = { tick: number, event: Event }
+export type Trace = {
+	model: string, seed: number, ticks: number,
+	steps: number,                               -- steps actually run (< ticks only if stopWhen fired)
+	stopped: boolean,                            -- stopWhen fired
+	states: { any },                             -- states[t + 1] = observation at time t, t = 0..steps
+	events: { Stamped },                         -- emission order; ticks never decrease
+	final: any,                                  -- observation at time `steps`, even when record = false
+}
+
+function sim.intent(at: number, intent: any): Item
+function sim.expect(at: number, want: { [string]: any } | (obs: any) -> (), label: string?): Item
+function sim.run<S>(model: Model<S>, opts: RunOptions): Trace
+function sim.state(trace: Trace, t: number): any                 -- errors ("tick") if t wasn't recorded
+function sim.events(trace: Trace, match: (string | (Event) -> boolean)?): { Stamped }  -- string matches event.kind
+function sim.firstTick(trace: Trace, match: string | (Event) -> boolean): number?
+function sim.ticks<S>(model: Model<S>, seconds: number): number  -- floor(seconds * tickRate + 0.5)
+function sim.seconds<S>(model: Model<S>, ticks: number): number
+function sim.seeds(n: number, base: number?): { number }         -- base (default 1) .. base + n - 1
+function sim.assertDeterministic<S>(model: Model<S>, opts: RunOptions): Trace
+function sim.replay<S>(model: Model<S>, path: string): Trace
+function sim.bench<S>(model: Model<S>, opts: { worlds: number, ticks: number, seed: number? }): { seconds: number, steps: number }
+```
+
+**Expectations**
+- A **table** `want` is a *partial* match on the observation's **top-level keys only**: each key in `want` must deep-equal the observation's value, and other top-level keys are ignored. Partiality doesn't recurse: `{ pos = { x = 6 } }` does **not** match an observed `pos = { x = 6, y = 0 }`, and `{ seen = {} }` doesn't match a non-empty list (design-review-002 F1). The message is `field "x": expected 7, got 8`. Values are shown as `%q` strings, numbers, or compact JSON for tables (`serde.encode("json", v)`, not pretty, e.g. `{"x":7}`); a table that can't be encoded falls back to `tostring` (design-review-001 F1).
+- A **function** `want` is called with a deep copy of the observation. Any error it raises is a failure at its tick, and the error text is included.
+
+**Failures** (expectation, never-reached expectation, or an error raised by `step`) raise one error, with level 0 so it isn't prefixed by a file position:
+```
+sim[<model>] seed <seed> tick <t>: <label | "expect" | "step raised">: <detail>
+replay: .cache/sim/<model>-seed<seed>-tick<t>.json
+```
+- For a step error, `<t>` is the step's `k`.
+- **The failure message is built first; the replay is written under `pcall`.** If writing fails (for example `@lune/serde` refuses an integer-keyed table), the error still carries the original message, with `replay: not written (<reason>)` in place of the path (design-review-001 F3).
+- After the run, any expectation with `at > steps` (possible only after `stopWhen`) fails as `never reached (stopped at tick <steps>)`.
+- **Harness misuse** is rejected **before `model.new` or any step runs**, with an error naming the problem: `ticks` or `seed` not an integer (or ticks < 1); an item's `at` not an integer ≥ 0; an item with both or neither of `intent`/`expect` (`script item <i>`); an intent at `at ≥ ticks` or an expectation at `at > ticks` (`beyond`). An event without a string `kind` is an error at the step that returned it.
+
+**Replay file** (JSON via `@lune/serde`, directory created on demand, overwritten on a rerun):
+```json
+{ "model": "drunk", "seed": 42, "ticks": 40, "steps": 9,
+  "failure": { "tick": 9, "message": "...", "kind": "expect" },
+  "script": [ { "at": 0, "intent": "hello" }, ... every intent item, in script order ],
+  "states": [ ...observations at times 0..steps... ],
+  "events": [ { "tick": 1, "event": { "kind": "Moved", ... } }, ... ] }
+```
+- `steps` is always the number of steps completed when the run ended (design-review-001 F7). For an expectation failure at time `t` that's `t`; for a step error in step `k` it's `k`; for a never-reached expectation it's the tick where `stopWhen` stopped the run. `failure.tick` is the tick in the message.
+- `states` and `events` are what the run recorded: with `record = false` both are empty arrays.
+- `failure.kind` is `"expect"` (a failed expectation), `"never"` (a never-reached expectation) or `"step"` (an error raised by `step`, including an event without a `kind`) (design-review-003 F4).
+- `sim.replay(model, path)` errors (mentioning `model`) if `path` was recorded for another model name. Otherwise it **re-runs the model** (`new`, then `step`; it never returns the file's states) for `seed` and `steps` ticks, with the intents at `at < steps`, `record = true`, and no expectations (design-review-003 F3).
+- For `failure.kind = "step"` it runs one more step (step `steps`, with its intents), so the failing call happens again; that error propagates as a plain error, and no new replay is written. This is what makes a crash debuggable: put a print in the model and replay. Its states and events equal the file's (when the file was recorded with `record = true`).
+- `steps = 0` is valid for a replay (a failure at time 0): the returned trace has `steps = 0`, one state (the initial observation) and no events. The `ticks ≥ 1` rule applies only to `sim.run` callers (design-review-001 F2).
+- Intents and observations must therefore be JSON-safe (no functions, no sparse arrays, no NaN). This is documented in the testing skill.
+- `.cache/` is already gitignored. Paths are relative to the cwd, which is the repo root for `tests/run` and `check.sh`.
+
+**`sim.assertDeterministic`** runs `sim.run` twice with the same options (forcing `record = true`). It compares, for t = 0, 1, … up to the **longer** of the two runs (a time one run lacks counts as a difference), the observation at time `t` and the list of events stamped `t`. At the first difference it raises `sim[<model>] seed <seed>: nondeterministic: diverged at tick <t>`. Otherwise it returns the first trace. Script expectations still apply.
+
+**`sim.bench`** creates `worlds` states with seeds `seed, seed+1, …` (default seed 1). For k = 0 … ticks−1 it steps every world once, in creation order, with an empty frozen intent list and tick `k`, like the server's loop over solo mazes. No observation, recording or copying happens. It returns the **elapsed** seconds of the stepping loop only, measured with `os.clock()`, and `steps = worlds × ticks`. In Lune `os.clock` is a monotonic wall timer, not CPU time (design-review-001 F4), so a descheduled process counts too.
+- **Budgets are the one sanctioned timing exception** to the testing skill's "no wall-clock time" rule. They must keep a margin of at least 50× over the measured cost; AC6's margin is about 150×. The testing skill records this rule.
+
+### `tests/scenario/` (new tier)
+- **Holds** story-style simulations: specs that drive Logic through `@tests/lib/sim`.
+- **May require** Logic features (`@logic/...`), `@tests/lib/sim`, `@tests/lib/t` and `@tests/fixtures/...`. Never adapters: they reference Roblox globals that don't exist in Lune.
+- `tests/run` already collects every `tests/**/*.spec.luau`, and `affected` already builds the graph over `tests/`, so no runner or selector change is needed.
+- This issue adds `tests/scenario/harness.spec.luau` (the executor's own harness spec, over a fixture model) and `tests/fixtures/sim/walker.luau` (a small deterministic model the executor's spec and later docs can reuse).
+
+### Docs
+The testing skill gets the following.
+- **A row in the spec-layout table**: `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, fixtures.
+- **A short "Simulations" section**:
+  - the tick semantics above, including these three sentences verbatim, because AC7 greps for them (design-review-001 F6):
+    - `Step k moves the world from time k to time k+1.`
+    - `An intent at k is delivered in step k.`
+    - `Events returned by step k are visible at time k+1.`
+  - that observations and intents are deep-copied;
+  - the bench timing exception and its 50× margin rule, using the words `timing exception` (AC7 greps for them), and qualifying the "Good specs" no-wall-clock rule accordingly (design-review-002 F4);
+  - how to choose a tier, using the words `tests/integration/ is for` (AC7 greps for them): anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`; `tests/integration/ is for` cross-feature checks that don't step time. The `tests/integration/` row's "simulating a whole level" example is replaced accordingly (design-review-002 F5);
+  - a minimal example model and scenario;
+  - the JSON-safety rule;
+  - how to re-run a replay: `sim.replay(Model, ".cache/sim/…json")` in a scratch spec (the literal text `sim.replay` must appear);
+  - "measurable proxies for feel go here", for example "an idle player is caught within N–M s across 20 seeds", using `sim.seeds` and `sim.firstTick`.
 
 ### Scalability
+- **Per step**: one `observe`, one recursive copy of the observation, and a linear scan of the script for items at that tick.
+  - Cost is O(script × ticks). Scripts are tens of items, so this is negligible next to the model.
+  - If scripts ever grow to thousands of items, pre-bucket them by tick. That's a local change.
+- **Memory**: `record = true` keeps `ticks + 1` observations. Observations are expected to be small summaries (tiles, counts), not the whole maze.
+  - A 60-second scenario at 30 Hz is 1,801 observations. Long runs and benches use `record = false`.
+- **`sim.bench`** does no per-step allocation beyond what the model does. The budget spec (AC6) pins harness overhead: 64 worlds × 1,800 ticks of a trivial model in under 0.5 s elapsed.
+  - Prep's prototype measured about 3 ms for 115,200 steps. The margin is about 150×, so CI jitter doesn't matter.
+
 ### Maintainability
+- **The model is the only plug-in point.** A new feature needs no harness change.
+  - f0110 can wrap `Movement` in a model, and f0120's `Session` becomes the game's model.
+  - Later rafts add scenario specs, not harness code.
+- **One place defines tick semantics.** The Logic features (movement, collisions) are built on the same "step k, visible at k+1" convention, which the testing skill documents.
+- **No dependency on game code.** Nothing in `src/` changes, and `tracker/architecture.md` is untouched.
+
 ### Usability
+- **Scenario authors**: a scenario is a list of `sim.intent(tick, x)` and `sim.expect(tick, {field = value}, "label")` calls. Failures say which model, seed, tick, label and field, with expected vs actual, and where the replay is.
+- **Hard to misuse**: impossible schedules, such as an intent that would never be delivered or an expectation that could never be checked, fail before the run starts, not as a confusing pass.
+- **Seconds read naturally**: `sim.ticks(model, 2.5)` and `sim.seconds(model, t)` keep scenarios in seconds.
 
 ### Touched modules
-<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
-     paths (e.g. `tests/unit/Maze`). Used for spend attribution
-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
+- `tests/lib/sim.luau`
+- `tests/scenario`
+- `tests/fixtures/sim`
+- `.claude/skills/testing/SKILL.md`
 
 ### Affected specs
-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
+`lune run scripts/affected -- tests/lib/sim.luau tests/scenario tests/fixtures/sim .claude/skills/testing/SKILL.md` prints `ALL` (a `tests/lib/` change forces a full run). New specs: `tests/scenario/harness.spec.luau` and the six acceptance specs below.
 
 ## Unknowns & experiments
-<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
-     result if already run during prep, and the fallback design if it fails. -->
+- **E1 (run in prep: PASS)**: is `os.clock` in Lune 0.10.5 monotonic, with enough resolution for a sub-second budget? (`experiments/E1-clock-serde.luau`)
+  - Result on 2026-09-29: 1e6 additions measured 0.004 s; the smallest observed step was 4e-8 s; monotonic.
+  - Design review 001 (F4) found that it measures **elapsed** time: 0.302 s across a 0.3 s sleep. The design now says "elapsed" and records budgets as a timing exception with a large margin.
+- **E2b (run in prep)**: `@lune/serde` refuses integer-keyed tables (`invalid type: integer 3, expected a string key`) and encodes `{x = 7}` as `{"x":7}`. Hence the `pcall` around the replay write (F3) and the compact-JSON message format (F1).
+- **E2 (run in prep: PASS)**: does `@lune/serde` JSON round-trip nested intent tables and integer ticks? (same file)
+  - Result: yes. Nested tables survive, and integers decode as numbers equal to the originals.
+- **E3 (run in prep: PASS)**: can the designed API satisfy the acceptance specs, and do the specs type-check in strict mode against it?
+  - Method: a throwaway prototype of `tests/lib/sim.luau` (about 330 lines, not committed). All six acceptance specs passed: 36/36 cases.
+  - `luau-lsp analyze --platform=standard` reported 0 errors in the acceptance specs after three small annotations.
+  - Mutation check: specs failed for each of six plausible wrong implementations.
+    - no snapshot copy;
+    - events stamped `k`;
+    - intents delivered one tick late;
+    - missing never-reached check;
+    - determinism check ignoring events;
+    - replay dropping intents.
+  - Note for the executor: under strict mode, `opts.script or {}` has the type `{Item} | {}`. Annotate it (`local script: { Item } = opts.script or {}`) to keep the gate's type check clean.
+
+No unknowns remain for execution.
 
 ## Regression guard
-<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+- **Nothing in `src/` changes.** `tests/place`, `tests/meta` and every existing spec must stay green under `scripts/check.sh --full`. That runs anyway, because `tests/lib/` changes force a full run.
+- **`tests/meta/architecture.spec.luau`**: new files under `tests/` must be `--!strict`, and their requires must resolve.
+- **Replay files** go under `.cache/`, which is gitignored, so specs can't dirty the tree. RC2 runs the scenario specs and c0090's acceptance specs (including the deliberately failing runs that write replays) and checks that `git status --porcelain` is unchanged. The full gate itself isn't covered by RC2 (design-review-002 F4).
 
 ## Test plan
-<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
+The acceptance specs already exist, and fail until `tests/lib/sim.luau` exists.
+- **`acceptance/script.spec.luau`** → AC1. Cases:
+  - delivery at the tick, in script order;
+  - time t is the state after t steps;
+  - `state` rejects unrecorded times;
+  - event stamping, and `events`/`firstTick`;
+  - snapshots, not live references;
+  - seconds ↔ ticks;
+  - seeds;
+  - `record = false`.
+- **`acceptance/expect.spec.luau`** → AC2. Cases:
+  - partial match;
+  - table-valued fields compared deeply, and shown as compact JSON on failure;
+  - partial matching is top-level only (a sub-table missing a key fails);
+  - expectations at the stop tick are checked before stopping; `stopWhen` gets each new time and that step's events;
+  - `record = false` still checks expectations, and its replay has no states;
+  - a function expectation's copy can be mutated without changing the trace;
+  - the never-reached and step-error failures also write replays, with `steps` and `failure.tick` as designed;
+  - failure message contents;
+  - time-0 check;
+  - function expectation gets the state at its tick;
+  - error in a function expectation;
+  - first failing tick wins;
+  - `stopWhen`;
+  - never reached;
+  - step error reported with its tick.
+- **`acceptance/replay.spec.luau`** → AC3. Cases:
+  - file written, with the documented contents;
+  - distinct per seed;
+  - replay reproduces states and events and delivers only earlier intents;
+  - a time-0 failure replays to a one-state trace;
+  - replay re-runs the model (counts `new` and `step` calls);
+  - replaying a step error re-runs the failing step with its intents and re-raises;
+  - `failure.kind` for expect, never-reached and step failures;
+  - a non-JSON-safe observation still reports the real failure, with `replay: not written`;
+  - wrong model refused.
+- **`acceptance/determinism.spec.luau`** → AC4. Cases:
+  - same seed, same trace;
+  - different seeds differ;
+  - passes a seeded model;
+  - each run receives fresh copies of the scripted intents, and the script is untouched;
+  - runs of different lengths diverge at the first tick one of them lacks;
+  - names the diverging tick for a state leak (tick 6) and an event leak (tick 4).
+- **`acceptance/misuse.spec.luau`** → AC5. Cases:
+  - ticks, seed, `at` and exactly-one-of checks;
+  - intent/expect beyond range;
+  - expectation at the last tick allowed;
+  - event without a kind;
+  - no step runs before a validation error.
+- **`acceptance/bench.spec.luau`** → AC6. Cases:
+  - interleaved order and seeds;
+  - empty intents and the world's own tick;
+  - step count;
+  - budget.
+- **`tests/scenario/harness.spec.luau`** (the executor's own; RC1): a story over `tests/fixtures/sim/walker.luau` in the style the testing skill documents, plus `sim.assertDeterministic` on it.
 
 ## Acceptance criteria
 
 ### Checked
-<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
+- **AC1**: `sim.run` delivers scripted intents to the step of their tick, records a snapshot per time (0…steps), stamps events with the time they become visible, and provides `state`, `events`, `firstTick`, `ticks`, `seconds` and `seeds` as designed.
+- **AC2**: Expectations (partial-table and function) are checked at their time; failures name the model, seed, tick, label and field with both values; `stopWhen` ends the run early; unreachable expectations and step errors fail with their tick.
+- **AC3**: A failure writes the designed JSON replay under `.cache/sim/`, names it in the message, and `sim.replay` reproduces the recorded states and events exactly (and refuses another model's replay).
+- **AC4**: Runs are reproducible per seed, and `sim.assertDeterministic` names the first tick where two same-seed runs diverge in state or events.
+- **AC5**: Harness misuse fails before any step runs, with a message naming the problem.
+- **AC6**: `sim.bench` steps N worlds interleaved from consecutive seeds, and 64 worlds × 1,800 ticks of a trivial model take under 0.5 s elapsed.
+- **AC7**: The testing skill documents the `tests/scenario/` tier and how it differs from `tests/integration/`, the `@tests/lib/sim` harness, `sim.replay`, the bench timing exception, and the tick-semantics contract in the three verbatim sentences.
 
 ### Judged
-<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
-     Ruled on by the adversarial code reviewer. -->
+None.
 
 ### Observed
-<!-- Minimal Studio playtest steps for the human (OCn). -->
+None. Nothing here touches Roblox.
 
 ## Implementation steps
-<!-- Ordered, small, each verifiable. -->
+1. `tests/lib/sim.luau`:
+   - types and builders;
+   - `validate`;
+   - `run` with recording, expectations, `stopWhen` and never-reached;
+   - `state`, `events`, `firstTick`, `ticks`, `seconds` and `seeds`.
+   Run AC1, AC2 and AC5. Commit.
+2. Replay writing on every failure path, then `sim.replay`. Run AC3. Commit.
+3. `assertDeterministic` and `bench`. Run AC4 and AC6. Commit.
+4. `tests/fixtures/sim/walker.luau` and `tests/scenario/harness.spec.luau`. Commit.
+5. Testing skill: the tier row and the Simulations section. Run AC7, then `scripts/check.sh --full` and `scripts/tracker.sh check c0090`. Commit.
 
 ## Verification log
-<!-- Appended at the end of execution: date, commands run, results. -->
