@@ -20,7 +20,7 @@ return t.spec("board unit", function(it)
 	end)
 
 	it("encode nests, orders keys, and writes booleans and numbers", function()
-		local nested: any = { z = { 1, 2, { b = true, a = false } }, a = 3, m = {} }
+		local nested: any = { z = { 1, 2, { b = true, a = false } :: any }, a = 3, m = {} }
 		t.expect(board.encode(nested)).toBe('{"a":3,"m":[],"z":[1,2,{"a":false,"b":true}]}')
 	end)
 

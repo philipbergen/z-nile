@@ -1,5 +1,6 @@
 --!strict
 -- Tracker CLI. Run through scripts/tracker.sh. See .claude/skills/tracker/SKILL.md.
+local board = require("./board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local sh = require("../lib/sh")
@@ -27,7 +28,8 @@ usage: scripts/tracker.sh <command> ...
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
-  metrics [--include-active]                    cost per issue and rework %]]
+  metrics [--include-active]                    cost per issue and rework %
+  board [--out PATH] [--open]                   write the tracker as one HTML page (default .cache/board.html)]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 
@@ -135,7 +137,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 	local i = 1
 	while i <= #args do
 		local a = args[i]
-		if a == "--single" or a == "--stdout" or a == "--include-active" then
+		if a == "--single" or a == "--stdout" or a == "--include-active" or a == "--open" then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
 			opts[a] = opts[a] or {}
@@ -1044,6 +1046,23 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	print(`  by lines added:  {pct(d.added, f.added)}`)
 	print(`  by issues:       {pct(d.count, f.count)}`)
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+end
+
+function cmd.board(_pos: { string }, opts: { [string]: { string } })
+	local out = if opts["--out"] and opts["--out"][1] ~= "" then opts["--out"][1] else ".cache/board.html"
+	local dir = string.match(out, "^(.*)/[^/]*$")
+	if dir and dir ~= "" then
+		fs.writeDir(dir)
+	end
+	fs.writeFile(out, board.build())
+	print(out)
+	if opts["--open"] then
+		local opener = if process.os == "macos" then "open" else "xdg-open"
+		local ok, r = pcall(sh.run, opener, { out })
+		if not ok or not r.ok then
+			stdio.ewrite(`warning: could not open {out} with {opener}; the page is written\n`)
+		end
+	end
 end
 
 local args = table.clone(process.args)
