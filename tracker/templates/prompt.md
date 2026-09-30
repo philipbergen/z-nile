@@ -22,6 +22,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 6. **Stay inside the designs.** Anything not covered by an issue must become a new issue first (`scripts/tracker.sh new issue …`).
 
 ## Environment
+- **Never edit the main checkout.** You work only in the raft's worktree under `.worktree/`.
 - Tools are pinned in `rokit.toml` and live in `~/.rokit/bin`. If any are missing, see `SETUP.md`.
 - Iterate with `scripts/check.sh --affected`. The full gate is `scripts/check.sh --full`.
 - Run one item's acceptance checks with `scripts/tracker.sh check <id>`.

@@ -78,7 +78,7 @@ function store.find(id: string): Item?
 			local doc = docIn(dir, id)
 			local slug = store.readFront(doc).slug
 			if not slug or slug == "" then
-				error(`{doc} has no slug: in its frontmatter; run scripts/tracker.sh migrate`, 0)
+				error(`{doc} has no slug: in its frontmatter; add slug: <kebab-case-words>`, 0)
 			end
 			local item: Item = { id = id, kind = kind, state = state, dir = dir, doc = doc, slug = slug }
 			return item

@@ -5,6 +5,7 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
 
 # Make an issue
 
+0. **Open a capture worktree first**, before anything is created: `cd "$(scripts/tracker.sh worktree capture-<slug>)"` (tracker skill, Worktrees). Everything below runs there, never in the main checkout.
 1. **Classify the work**:
    - **feature** (`f`): new player-facing or developer-facing capability.
    - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
@@ -22,4 +23,4 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
    - A few bullet-point ideas under Solution, if they came up.
    Everything else is left for `ticket-prep`. Keep `design: draft`.
 5. **Duplicates**: look for overlaps with `scripts/tracker.sh list backlog`. If there's an overlap, say so and ask whether to merge.
-6. **Land it.** Capture in a worktree, never in the main checkout: start with `cd "$(scripts/tracker.sh worktree capture-<slug>)"` *before* step 2 (tracker skill, Worktrees). Then commit there with plain `git add tracker && git commit -m "tracker: new <id> <title>"` and follow Landing a change (push, PR, merge once the conditions hold, pull the main checkout, remove the worktree). Report the ID and path.
+6. **Land it.** Commit in the capture worktree with plain `git add tracker && git commit -m "tracker: new <id> <title>"` and follow Landing a change (push, PR, merge once the conditions hold, pull the main checkout, remove the worktree). Report the ID and path.

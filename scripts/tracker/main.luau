@@ -241,23 +241,6 @@ function cmd.members(pos: { string })
 end
 
 function cmd.list(pos: { string })
-	-- f0420 and c0420 share a number (issues have one number space): harmless, but worth a warning
-	local byNumber: { [string]: { string } } = {}
-	for _, issue in store.all("issue") do
-		local n = string.sub(issue.id, 2)
-		byNumber[n] = byNumber[n] or {}
-		table.insert(byNumber[n], issue.id)
-	end
-	local shared: { string } = {}
-	for n, ids in byNumber do
-		if #ids > 1 then
-			table.insert(shared, n)
-		end
-	end
-	table.sort(shared)
-	for _, n in shared do
-		stdio.ewrite(`warning: number {n} is used by {table.concat(byNumber[n], ", ")}\n`)
-	end
 	for _, kind in { "raft", "issue" } do
 		for _, item in store.all(kind) do
 			if not pos[1] or pos[1] == item.state then
@@ -274,6 +257,23 @@ function cmd.list(pos: { string })
 				)
 			end
 		end
+	end
+	-- f0420 and c0420 share a number (issues have one number space): harmless, but worth a warning
+	local byNumber: { [string]: { string } } = {}
+	for _, issue in store.all("issue") do
+		local n = string.sub(issue.id, 2)
+		byNumber[n] = byNumber[n] or {}
+		table.insert(byNumber[n], issue.id)
+	end
+	local shared: { string } = {}
+	for n, ids in byNumber do
+		if #ids > 1 then
+			table.insert(shared, n)
+		end
+	end
+	table.sort(shared)
+	for _, n in shared do
+		stdio.ewrite(`warning: number {n} is used by {table.concat(byNumber[n], ", ")}\n`)
 	end
 end
 
@@ -358,12 +358,19 @@ function cmd.migrate()
 						elseif #files == 1 then
 							local old, new = `{dir}/{files[1]}`, `{dir}/{id}.md`
 							local slug = string.match(files[1], `^{id}%-(.+)%.md$`) :: string
+							if not string.match(fs.readFile(old), "^%-%-%-\n") then
+								-- nothing to add the slug to: report it and leave the document alone
+								stdio.ewrite(`{old}: no frontmatter; add one (id, title, slug) by hand\n`)
+								ambiguous = true
+								continue
+							end
 							if sh.run("git", { "ls-files", "--error-unmatch", old }).ok then
 								sh.git({ "mv", old, new })
 							else
 								fs.move(old, new)
 							end
-							if not store.readFront(new).slug then
+							local current = store.readFront(new).slug
+							if not current or current == "" then
 								store.setFront(new, "slug", slug)
 							end
 							print(`{old} -> {new}`)
@@ -608,7 +615,7 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local path = `{root}/.worktree/{dirName}`
 	sh.run("git", { "worktree", "prune" }) -- forget worktrees whose directory was deleted
 	if hasOrigin() then
-		sh.run("git", { "fetch", "--quiet", "origin" })
+		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
 	end
 	for _, w in worktrees() do
 		if w.path == path then
@@ -619,6 +626,12 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	if sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
+		local track = sh.git({ "for-each-ref", "--format=%(upstream:track)", `refs/heads/{branch}` })
+		if track == "[gone]" then
+			stdio.ewrite(
+				`warning: the upstream of {branch} is gone (merged?); resuming it anyway: git branch -D {branch} gives a fresh start\n`
+			)
+		end
 		sh.git({ "worktree", "add", path, branch })
 	elseif sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok then
 		sh.git({ "branch", "--track", branch, `origin/{branch}` })
@@ -638,7 +651,7 @@ cmd["worktree-prune"] = function()
 	local root = mainRoot()
 	sh.run("git", { "worktree", "prune" })
 	if hasOrigin() then
-		sh.run("git", { "fetch", "--quiet", "origin" })
+		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
 	end
 	local base = if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
 		then "origin/main"
