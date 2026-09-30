@@ -48,7 +48,7 @@ There is no new dependency edge (`tracker/architecture.md` is unchanged).
 - R0070 (review second order) has merged: this prep branch already contains it, and the designs follow its rules (Rules and mutants tables, the consequence step).
 
 ## Experiments phase
-Every issue was prototyped in prep (stacked: c0420, then c0041, then c0430; all reverted, none committed) and validated together: c0420's 10 naming cases, c0041's 28 worktree cases and c0430's 8 workstream cases pass; `scripts/check.sh --full` passes with all three prototypes and the repo migrated (346 specs); and 12 + 15 + 13 planted mistakes (per issue's Rules and mutants table) each fail the case written for them. The residual unknowns are c0041's E3 and E4 (pinned or optional), and c0430's OC1 (a real parallel run).
+Every issue was prototyped in prep (stacked: c0420, then c0041, then c0430; all reverted, none committed) and validated together: c0420's 11 naming cases, c0041's 28 worktree cases and c0430's 12 workstream cases pass; `scripts/check.sh --full` and `promote-check R0020` pass with all three prototypes and the repo migrated (346 specs); the permanent guard spec passes once the three old specs are updated; and 13 + 16 + 18 planted mistakes (per issue's Rules and mutants table) each fail the case written for them. `workstreams R0020` on the migrated tracker prints the RC1 plan. The e2e specs also disable background git maintenance in their fixtures, after intermittent clone failures in back-to-back runs. The residual unknowns are c0041's E3 and E4 (pinned or optional), and c0430's OC1 (a real parallel run).
 
 ## Exit criteria
 - **RC0**: the full gate, every member's `check.sh` and `promote-check`, as generated.

@@ -21,8 +21,17 @@ local main = `{base}/main`
 local wt1 = `{main}/.worktrees/R0010-demo`
 local stream = `{main}/.worktrees/ws-f0010`
 
+-- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
+local NO_GC = {
+	GIT_CONFIG_COUNT = "2",
+	GIT_CONFIG_KEY_0 = "gc.auto",
+	GIT_CONFIG_VALUE_0 = "0",
+	GIT_CONFIG_KEY_1 = "maintenance.auto",
+	GIT_CONFIG_VALUE_1 = "false",
+}
+
 local function run(cwd: string, cmd: string, args: { string }): Result
-	return process.exec(cmd, args, { cwd = cwd })
+	return process.exec(cmd, args, { cwd = cwd, env = NO_GC })
 end
 
 local function must(r: Result, what: string): string

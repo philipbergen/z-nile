@@ -190,3 +190,7 @@ None.
   - The first run exposed a spec gap: "legacy file silently accepted" survived, because a legacy document without a slug still errors (naming the file and `migrate`). The spec now also refuses a legacy-named document that already carries a slug, and the mutant fails.
   - A USAGE line mentioning `<ID>-<slug>.md` would trip AC9's own grep, so the executor words it differently.
 
+- **Prototype run 2 (2026-09-30, after design-review-004), reverted, never committed:** the prototype was rebuilt stacked with c0041 and c0430 and re-run.
+  - All 11 naming cases pass (new: `a branch that added a legacy document merges a migrated main, then migrate converts it`), the new guard spec passes once the three old specs are updated, `scripts/check.sh --full` and `promote-check R0020` pass (346 specs), and `tracker.sh check c0420` passes 10 of 11 (AC9, the skill text, is the executor's).
+  - A thirteenth planted mistake, `migrate` skipping the backlog state, fails the new case (and cascades into the state-dependent ones).
+  - Fixture hardening: the e2e specs set `gc.auto=0` and `maintenance.auto=false` for every fixture git command. Before that, back-to-back runs of the three e2e specs intermittently failed with missing-object or failed-copy errors from `git clone`, which looked like a background `gc --auto` from the previous fixture racing the re-created one. After the change, nine consecutive runs of the three specs passed.

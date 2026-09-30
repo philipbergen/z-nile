@@ -27,6 +27,15 @@ local wt3 = `{main}/.worktrees/R0030-third`
 local wt4 = `{main}/.worktrees/R0040-fourth`
 local named = `{main}/.worktrees/capture-demo`
 
+-- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
+local NO_GC = {
+	GIT_CONFIG_COUNT = "2",
+	GIT_CONFIG_KEY_0 = "gc.auto",
+	GIT_CONFIG_VALUE_0 = "0",
+	GIT_CONFIG_KEY_1 = "maintenance.auto",
+	GIT_CONFIG_VALUE_1 = "false",
+}
+
 local function run(
 	cwd: string,
 	cmd: string,
@@ -38,9 +47,13 @@ local function run(
 	if stdin then
 		opts.stdio = { stdin = stdin }
 	end
+	local merged = table.clone(NO_GC)
 	if env then
-		opts.env = env
+		for k, v in env do
+			merged[k] = v
+		end
 	end
+	opts.env = merged
 	return process.exec(cmd, args, opts)
 end
 
