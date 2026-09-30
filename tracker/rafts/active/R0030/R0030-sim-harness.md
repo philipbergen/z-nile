@@ -43,3 +43,4 @@ Implemented by `check.sh`:
 - **Rollback**: revert the PR. Nothing else depends on the harness yet.
 
 ## Addressed during execution
+Review 001 (approve, 6 low): fixed model-name validation, event bucketing in assertDeterministic, a skill example and a spec comment; refuted two (see refute-001.md). No emergent issues.
