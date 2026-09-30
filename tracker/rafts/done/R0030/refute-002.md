@@ -1,0 +1,1 @@
+- F1: refuted: the design requires the literal text `tests/integration/ is for` and AC7's check.sh greps for exactly that string, so the backtick placement is deliberate; moving it would fail AC7, which is sequestered. Low severity, no change.
