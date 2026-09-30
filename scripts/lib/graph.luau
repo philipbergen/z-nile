@@ -168,7 +168,7 @@ function graph.srcAliasAllowed(spec: string): boolean
 	return string.sub(spec, 1, 2) == "./"
 		or string.sub(spec, 1, 3) == "../"
 		or string.sub(spec, 1, 6) == "@self/"
-		or string.sub(spec, 1, 25) == "@game/ReplicatedStorage/"
+		or string.sub(spec, 1, 24) == "@game/ReplicatedStorage/"
 end
 
 -- Resolve a require string from `from` (repo-relative file) to a repo-relative file, or nil.

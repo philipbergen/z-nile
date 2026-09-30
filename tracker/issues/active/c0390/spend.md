@@ -3,6 +3,7 @@
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
 | 1 | 2026-09-30 05:57 | c0390: graph @game resolution | 114 | 3 | 0.6 | focus |
+| 2 | 2026-09-30 05:57 | c0390: fix @game prefix length | 1 | 1 | 0.1 | focus |
 
-**Total:** +114 / -3 lines, 0.6 agent-minutes over 1 commits
-<!-- totals: added=114 removed=3 minutes=0.6 commits=1 -->
+**Total:** +115 / -4 lines, 0.7 agent-minutes over 2 commits
+<!-- totals: added=115 removed=4 minutes=0.7 commits=2 -->
