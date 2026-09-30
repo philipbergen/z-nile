@@ -30,6 +30,7 @@ local origin = `{base}/origin.git`
 local main = `{base}/main`
 local fakebin = `{base}/fakebin`
 local log = `{base}/agent.log`
+local fakehome = `{base}/fakehome`
 local wt1 = `{main}/.worktree/R0010`
 local named = `{main}/.worktree/capture-demo`
 local strays = { `{base}/outside`, `{main}/.claude/worktrees/x`, `{main}/.worktree-old/y` }
@@ -80,6 +81,15 @@ local function agentEnv(exitCode: string?): { [string]: string }
 		FAKE_LOG = log,
 		FAKE_EXIT = exitCode or "0",
 	}
+end
+
+-- A fake `lune` first on the wrapper's PATH (it puts $HOME/.rokit/bin first): it stands in for the
+-- worktree step and prints whatever FAKE_LUNE asks for.
+local function badWorktreeEnv(mode: string): { [string]: string }
+	local env = agentEnv()
+	env.HOME = fakehome
+	env.FAKE_LUNE = mode
+	return env
 end
 
 -- What the last fake agent run recorded: its physical working directory, then one line per argument.
@@ -159,6 +169,13 @@ return t.spec("launch", function(it)
 			must(process.exec("chmod", { "+x", `{fakebin}/{name}` }), "chmod")
 		end
 
+		fs.writeDir(`{fakehome}/.rokit/bin`)
+		fs.writeFile(
+			`{fakehome}/.rokit/bin/lune`,
+			'#!/usr/bin/env bash\ncase "${FAKE_LUNE:-}" in\n  empty) exit 0 ;;\n  multi) printf "a warning line\\n/somewhere/else\\n"; exit 0 ;;\n  rel) echo relative/path; exit 0 ;;\n  *) exit 99 ;;\nesac\n'
+		)
+		must(process.exec("chmod", { "+x", `{fakehome}/.rokit/bin/lune` }), "chmod fake lune")
+
 		local r = tr(main, { "launch", "R0010", "--", "agent" }, agentEnv())
 		must(r, "launch R0010")
 		t.expect(recorded()).toEqual({ wt1 })
@@ -200,23 +217,55 @@ return t.spec("launch", function(it)
 		local missing = tr(main, { "launch", "capture-demo", "--", "no-such-agent-xyz" }, agentEnv())
 		t.expect(missing.ok).toBe(false)
 		t.expect(has(missing.stderr, "cannot run no-such-agent-xyz")).toBe(true)
+		-- a typo in the command must not leave a worktree behind
+		local typo = tr(main, { "launch", "capture-typo", "--", "no-such-agent-xyz" }, agentEnv())
+		t.expect(typo.ok).toBe(false)
+		t.expect(fs.isDir(`{main}/.worktree/capture-typo`)).toBe(false)
 	end)
 
-	it("launch rejects an unknown target, a done raft and a stray argument, and starts nothing", function()
-		local before = countWorktrees()
-		fs.removeFile(log)
-		for _, target in { "R9999", "Bad_Name", "f0010", "R0020" } do
-			local r = tr(main, { "launch", target, "--", "agent" }, agentEnv())
-			if r.ok then
-				error(`launch accepted {target}`)
+	it(
+		"launch rejects an unknown target, a done raft, a stray argument and a bad command, and starts nothing",
+		function()
+			local before = countWorktrees()
+			fs.removeFile(log)
+			for _, target in { "R9999", "Bad_Name", "f0010", "R0020" } do
+				local r = tr(main, { "launch", target, "--", "agent" }, agentEnv())
+				if r.ok then
+					error(`launch accepted {target}`)
+				end
 			end
+			-- a token after the target that isn't -- is a usage error, not a command
+			t.expect(tr(main, { "launch", "R0010", "agent" }, agentEnv()).ok).toBe(false)
+			t.expect(tr(main, { "launch" }, agentEnv()).ok).toBe(false)
+			-- an empty command and a relative command are refused; so is a file that isn't executable
+			t.expect(tr(main, { "launch", "capture-demo", "--", "" }, agentEnv()).ok).toBe(false)
+			-- a relative command that exists would mean the repo root before the cd and the worktree after it
+			fs.writeFile(`{main}/relagent`, fs.readFile(`{fakebin}/agent`))
+			must(process.exec("chmod", { "+x", `{main}/relagent` }), "chmod relagent")
+			local relative = tr(main, { "launch", "capture-demo", "--", "./relagent" }, agentEnv())
+			t.expect(relative.ok).toBe(false)
+			t.expect(has(relative.stderr, "absolute path")).toBe(true)
+			fs.removeFile(`{main}/relagent`)
+			t.expect(tr(main, { "launch", "capture-demo", "--", "/etc/hosts" }, agentEnv()).ok).toBe(false)
+			t.expect(fs.isFile(log)).toBe(false) -- nothing ran
+			t.expect(countWorktrees()).toBe(before)
+			t.expect(fs.isDir(`{main}/.worktree/R0020`)).toBe(false)
 		end
-		-- a token after the target that isn't -- is a usage error, not a command
-		t.expect(tr(main, { "launch", "R0010", "agent" }, agentEnv()).ok).toBe(false)
-		t.expect(tr(main, { "launch" }, agentEnv()).ok).toBe(false)
-		t.expect(fs.isFile(log)).toBe(false) -- nothing ran
-		t.expect(countWorktrees()).toBe(before)
-		t.expect(fs.isDir(`{main}/.worktree/R0020`)).toBe(false)
+	)
+
+	it("launch stops when the worktree step returns no usable path", function()
+		-- nothing, several lines, or a relative path: the agent must not run, anywhere
+		for _, mode in { "empty", "multi", "rel" } do
+			if fs.isFile(log) then
+				fs.removeFile(log)
+			end
+			local r = tr(main, { "launch", "capture-demo", "--", "agent" }, badWorktreeEnv(mode))
+			if r.ok then
+				error(`launch went ahead on a {mode} worktree path`)
+			end
+			t.expect(has(r.stderr, "no usable worktree path")).toBe(true)
+			t.expect(fs.isFile(log)).toBe(false)
+		end
 	end)
 
 	it("worktree-prune warns about a worktree outside .worktree/ and leaves it", function()
@@ -233,6 +282,6 @@ return t.spec("launch", function(it)
 		-- worktrees inside .worktree/ and the main checkout are not flagged
 		local _, warnings = string.gsub(r.stderr, "warning:", "")
 		t.expect(warnings).toBe(#strays)
-		t.expect(has(r.stderr, `{main}/.worktree/`)).toBe(false)
+		t.expect(has(r.stderr, `warning: {main}/.worktree/`)).toBe(false)
 	end)
 end)

@@ -28,7 +28,8 @@ check "AC2: arguments after -- pass through untouched, stdin reaches the command
   "launch defaults to claude" "launch forwards stdin"
 check "AC3: launch returns the exit code and reports a command that can't start" cases_pass \
   "launch returns the command's exit code"
-check "AC4: an invalid target or a stray argument starts nothing" cases_pass "launch rejects an unknown target"
+check "AC4: an invalid target, stray argument or bad command starts nothing; an unusable worktree path stops the launch" cases_pass \
+  "launch rejects an unknown target" "launch stops when the worktree step"
 check "AC5: worktree-prune warns about worktrees outside .worktree/" cases_pass \
   "worktree-prune warns about a worktree outside"
 check "AC6: the skills state the inside-the-repo rule and the launch line; no sibling or .worktrees/ path" bash -c '

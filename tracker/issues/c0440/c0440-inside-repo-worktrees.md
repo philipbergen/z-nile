@@ -46,17 +46,24 @@ if [[ ${1:-} == launch ]]; then
   shift
   if [[ ${1:-} == -- ]]; then shift
   elif [[ $# -gt 0 ]]; then echo "launch: unexpected argument '$1' (put the command after --)" >&2; exit 1; fi
-  path=$(lune run scripts/tracker/main -- worktree "$target") || exit 1   # validates; prints only the path
-  cmd=${1:-claude}
-  if [[ $# -gt 0 ]]; then shift; fi
-  command -v "$cmd" >/dev/null 2>&1 || { echo "cannot run $cmd: not found" >&2; exit 1; }
+  cmd=claude
+  if [[ $# -gt 0 ]]; then cmd=$1; shift; fi
+  if [[ -z $cmd || ( $cmd == */* && $cmd != /* ) ]]; then
+    echo "cannot run '$cmd': give a command on PATH or an absolute path" >&2; exit 1; fi
+  cmdpath=$(type -P "$cmd" 2>/dev/null) || cmdpath=
+  if [[ -z $cmdpath || ! -x $cmdpath ]]; then echo "cannot run $cmd: not found" >&2; exit 1; fi
+  path=$(lune run scripts/tracker/main -- worktree "$target") || exit 1
+  if [[ $path != /* || $path == *$'\n'* || ! -d $path ]]; then
+    echo "launch: no usable worktree path for $target" >&2; exit 1; fi
   echo "launching $cmd in $path" >&2
-  cd "$path" && exec "$cmd" "$@"
+  cd "$path" || exit 1
+  exec "$cmd" "$@"
 fi
 ```
 - **The worktree is ensured by the existing command** (`tracker.sh worktree`, c0041, later extended by c0430's `--from`), so there is no shared function to extract and nothing for `launch` and `worktree` to drift on. An unknown target, a bad name or a done raft fails there, before anything is launched, and its message reaches the user.
-- Everything after the first `--` reaches the command untouched, including another `--`, empty strings, spaces, quotes and `*` (always `"$@"`, never `$*`). A token after the target that isn't `--` is a usage error.
-- `command -v` is checked before `exec`, because a failed `exec` prints bash's own message and exits 127; the error is `cannot run <command>: not found`, exit 1.
+- Everything after the first `--` reaches the command untouched, including another `--`, empty strings, spaces, quotes and `*` (always `"$@"`, never `$*`; the command itself is run as typed, so its `argv[0]` is unchanged). A token after the target that isn't `--` is a usage error.
+- **The command is checked first**, before any worktree is created (a typo must not leave a worktree behind): it must be non-empty and either a bare name or an absolute path (a relative path would mean the repo root before the `cd` and the worktree after it), found by `type -P` and executable; otherwise `cannot run <command>: …`, exit 1. A failed `exec` would print bash's own message and exit 127.
+- **The worktree path is checked** before anything runs: it must be absolute, one line and an existing directory, and the `cd` must succeed. Without this, an empty path makes `cd ""` succeed on bash 3.2 (the agent would run in the main checkout) and a multi-line path makes the `cd` fail inside an `&&` list, where `set -e` doesn't stop the wrapper, so it would fall through to its last line and run the agent's arguments as a tracker command.
 - The command's exit status, signals (`128+n`) and TTY are native because nothing sits between the user and the command.
 
 ### `scripts/tracker/main.luau`
@@ -64,9 +71,10 @@ fi
 - **USAGE** lists `launch` (handled by the wrapper).
 
 ### Docs (AC6 and JC1)
-- **tracker skill**, Worktrees section: "Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's `.claude/worktrees/`. Humans start an agent with `scripts/tracker.sh launch <target>` (for example `launch R0020`); an agent that is already running `cd`s with `scripts/tracker.sh worktree`." `launch` joins the lifecycle table, and the skill's earlier launch sentence (c0041: `cd "$(scripts/tracker.sh worktree R…)" && claude`) is rewritten to `launch`.
+- **tracker skill**, Worktrees section: "Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's `.claude/worktrees/`. Humans start an agent with `scripts/tracker.sh launch <target>` (for example `launch R0020`); an agent that is already running `cd`s with `scripts/tracker.sh worktree`." `launch` joins the lifecycle table and the main-checkout whitelist of rule 1 (humans run it there; c0041's JC1 judges the final state), and the skill's earlier launch sentence (c0041: `cd "$(scripts/tracker.sh worktree R…)" && claude`) is rewritten to `launch`.
 - **make-prompt**: the report ends with `scripts/tracker.sh launch R…` (it creates or reuses the worktree with `scripts/tracker.sh worktree R…`), replacing the two-step line.
 - **SETUP.md**, "Agents on this host", and **AGENTS.md**: the same launch line and the inside-the-repo rule in one sentence each.
+- **A nested worktree also sees the main checkout's `.luaurc`** (luau-lsp and Lune merge a parent directory's config). The worktree's own `.luaurc` wins for any alias it defines, and CI, which checks out the branch alone, is the final check: the tracker skill's Worktrees section says so in one sentence.
 - **c0041's checks keep passing.** c0041's AC5 (rerun when the raft's `done` runs every member's `check.sh`) needs the string `scripts/tracker.sh worktree` in the execute-raft, tracker, make-issue, ticket-prep and make-prompt skills and `scripts/tracker.sh worktree {{RAFT_ID}}` in the prompt template. These edits *add* `launch`; they never remove those strings (AC6 checks it).
 - **`tracker/templates/prompt.md`** keeps the agent's first action (`cd "$(scripts/tracker.sh worktree {{RAFT_ID}})"`) for a session that was started elsewhere; it adds that the worktree lives under `.worktree/` inside the repo.
 - **Nothing still says `.worktrees/` or a sibling path** (a `../pickman…` path) in the skills, template, SETUP.md or AGENTS.md (AC6's negative grep); the prescribed text above therefore never spells one out.
@@ -75,7 +83,7 @@ fi
 - `launch` adds one process and the worktree check. `worktree-prune` adds one path comparison per worktree.
 
 ### Maintainability
-- One function creates worktrees, for `worktree` and `launch`. The convention is one directory name and two path shapes.
+- `launch` creates nothing itself: it calls `worktree`, so the convention is one directory name and two path shapes.
 - `launch` makes no assumption about the agent, so other agents (Grok, a shell) use the same entry point.
 
 ### Usability
@@ -98,6 +106,7 @@ fi
 - **E1 (prototype)**: can the designed `launch` and the stray warning satisfy the sequestered spec, and does the spec catch wrong implementations? Recorded in the Verification log (prototype stacked on c0420 and c0041; reverted).
 - **E2 (run in prep: PASS)**: a worktree inside the repo directory doesn't disturb the main checkout or its gate. This PR was prepared in `.worktree/prep-inside-repo` with the directory excluded through `.git/info/exclude`, and `git status` in the main checkout stayed clean. In a scratch clone that held a full nested worktree (`.worktree/inner`, ignored through `.gitignore`), `git status` was clean and `scripts/check.sh --full` passed with exactly the same 346 specs as without it: no tool scanned the nested copy.
 - **E3 (run in prep: PASS)**: what a session started inside `.worktree/<id>` sees. A headless `claude` started in `.worktree/prep-inside-repo` reported the **main** project's memory directory (`~/.claude/projects/-Users-philipbergen-code-pickman/memory/`), so the user's memory is shared across worktrees; it got its own transcript directory. It was given only the worktree's own `CLAUDE.md` and `AGENTS.md`, not the main checkout's. So the repo's instructions follow the worktree's branch, and nothing is lost by launching there.
+- **E5 (run in prep: PASS, by the reviewer)**: a worktree inside the repo inherits the main checkout's `.luaurc` as a parent configuration (both `luau-lsp analyze` and `lune run` merge it; `promote-check` logs loading it). Consequence: an alias that a branch renames or removes still resolves locally, to the main checkout's files, while CI fails. It is the reverse of E2, is a Risk recorded in the raft, and is covered by the skill sentence above and by CI being the final gate.
 - **E4 (run in prep: PASS, by the reviewer)**: Lune 0.10.5's `process.exec` cannot give a child a terminal on stdin, and Ctrl-C kills Lune while a SIGINT-trapping child keeps running. That is why `launch` is a bash `exec` in `scripts/tracker.sh`. The bash form was prototyped under macOS `/bin/bash` 3.2 with `set -euo pipefail` and passed the argument cases.
 
 ## Regression guard
@@ -113,7 +122,8 @@ Cases (`spec case → AC`):
 - `launch defaults to claude and passes arguments after -- through untouched` → AC2 (awkward arguments arrive unchanged: options, an argument with spaces, an empty string, `*`, a quoted string and a second `--`)
 - `launch forwards stdin to the command` → AC2 (the spec feeds `hello` on stdin; the fake agent reads it)
 - `launch returns the command's exit code and reports a command that can't start` → AC3 (the message is `cannot run <command>`)
-- `launch rejects an unknown target, a done raft and a stray argument, and starts nothing` → AC4
+- `launch rejects an unknown target, a done raft, a stray argument and a bad command, and starts nothing` → AC4 (an empty command and a relative command are refused; a typo in the command leaves no worktree behind)
+- `launch stops when the worktree step returns no usable path` → AC4 (a fake `lune` on `$HOME/.rokit/bin` prints nothing, several lines or a relative path)
 - `worktree-prune warns about a worktree outside .worktree/ and leaves it` → AC5 (three strays: a sibling directory, `.claude/worktrees/x` and `.worktree-old/y` inside the repo; worktrees inside `.worktree/` are not flagged)
 
 ### Rules and mutants
@@ -126,8 +136,9 @@ Cases (`spec case → AC`):
 | Arguments after `--` pass through untouched; the default command is `claude` | `launch defaults to claude and passes arguments …` | `exec "$cmd" $*` (unquoted); no default | run |
 | Stdin reaches the command | `launch forwards stdin to the command` | run the command through Lune's `process.exec` | run |
 | The launcher is replaced by the command (terminal, Ctrl-C and signals are native) | OC1 (Ctrl-C in a launched agent) | run the command as a child without `exec` | reasoned (needs a terminal; OC1) |
-| The exit code propagates; an unstartable command is `cannot run <command>` | `launch returns the command's exit code …` | always exit 0; drop the `command -v` check (bash's own message differs) | run |
-| An invalid target or a stray argument starts nothing | `launch rejects an unknown target, a done raft and a stray argument …` | launch anyway when the worktree step fails; accept a token after the target | run |
+| The exit code propagates; an unstartable command is `cannot run <command>` | `launch returns the command's exit code …` | always exit 0; drop the executable check (bash's own message differs) | run |
+| An invalid target, a stray argument or a bad command starts nothing and creates nothing | `launch rejects an unknown target, a done raft, a stray argument and a bad command …` | launch anyway when the worktree step fails; accept a token after the target; accept a relative command; check the command only after creating the worktree | run |
+| A worktree step that returns no usable path stops the launch | `launch stops when the worktree step returns no usable path` | `cd "$path" && exec` without checking the path | run |
 | A worktree outside `.worktree/` (including `.claude/worktrees/` and `.worktree-old/`) is warned about and left alone | `worktree-prune warns about a worktree outside .worktree/ …` | warn only for paths outside the repo directory; match the prefix without the trailing slash; say nothing; remove it | run |
 | The documents state the rule and the launch line | AC6 grep and JC1 | leave a sibling-path instruction | reasoned (a grep and a ruling, not a mutation) |
 
@@ -137,7 +148,7 @@ Cases (`spec case → AC`):
 - **AC1**: `tracker.sh launch <target> -- <command>` runs the command with the target's worktree (`<repo>/.worktree/<name or R-id>`) as its working directory, creating the worktree if needed and reusing it otherwise.
 - **AC2**: Everything after `--` reaches the command untouched (options, spaces, an empty string, `*`, quotes, a second `--`), stdin reaches it, and without `--` the command is `claude` with no arguments.
 - **AC3**: `launch` exits with the command's exit code, and a command that can't start is `cannot run <command>` with exit 1.
-- **AC4**: An unknown target, an invalid name, a done raft and a stray argument are refused before anything is launched.
+- **AC4**: An unknown target, an invalid name, a done raft, a stray argument and a bad command (empty, relative, not found) are refused before anything is launched, a typo in the command creates no worktree, and a worktree step that returns no usable path stops the launch.
 - **AC5**: `worktree-prune` warns on stderr about every worktree outside `.worktree/` (other than the main checkout), including `.claude/worktrees/…` and `.worktree-old/…` inside the repo, names its path, removes nothing, and doesn't warn about worktrees inside.
 - **AC6**: The tracker skill states the inside-the-repo rule and documents `launch`; make-prompt, SETUP.md and AGENTS.md carry the launch line; c0041's markers (`scripts/tracker.sh worktree …`) are still present in those documents, and no skill, template, SETUP.md or AGENTS.md text says `.worktrees/` or a sibling path (`../pickman…`).
 
@@ -161,3 +172,6 @@ Cases (`spec case → AC`):
   - Eleven planted mistakes each fail the case written for them: running in the caller's directory, unquoted arguments (`$*`), a swallowed exit status, no `command -v` check (bash's own message differs from `cannot run …`), launching anyway when the worktree step fails, running the command through Lune's `process.exec` (the stdin case fails: that is the reviewer's F1), accepting a stray argument, a prune that says nothing about strays, one that flags only paths outside the repo directory, one that drops the trailing slash (`.worktree-old/` escapes), and one that removes the stray.
   - One first mutant, `; exit 0` after the command, survived because it is equivalent: under `set -e` a failing last command of an `&&` list already exits with its status. A mutant that really swallows the status (`|| true`) is killed.
   - Spec bugs found on the way and fixed: a `recorded()` helper built on `gmatch` returned extra empty lines (now `string.split`); an unused helper failed lint; c0041's "never forces" case asserted the branch name in prune's stderr, which names the worktree path; a comment with apostrophes broke a single-quoted `bash -c` block in `check.sh`.
+- **Prototype run 2 (2026-09-30, after design-review-008), reverted, never committed:** the `launch` block was hardened (command checked before any worktree is created, worktree path checked, `cd` checked, `exec "$cmd"` as typed) and re-run stacked with c0420, c0041 and c0430. All 7 launch cases pass (new: `launch stops when the worktree step returns no usable path`, driven by a fake `lune` on `$HOME/.rokit/bin`; a bad-command case; a relative command that really exists), c0041's 29 cases pass, and `selene`, `stylua --check`, `promote-check R0020` and `bash -n` on every `check.sh` are clean.
+  - Fifteen planted mistakes each fail the case written for them: running in the caller's directory, unquoted arguments, a swallowed exit status, no executable check, launching when the worktree step fails, a path that isn't checked, running the command through Lune, no default command, a stray argument accepted, a relative command accepted, the worktree created before the command is checked, a prune that is silent about strays, one that flags only paths outside the repo directory, one that drops the trailing slash, and one that removes the stray.
+  - Two mutants looked like survivors and were not spec gaps: `; exit 0` after the command is equivalent under `set -e`; and "a relative command is accepted" first survived because a nonexistent `./agent` fails either way. The spec now creates a real executable `./relagent` and asserts the `absolute path` message.
