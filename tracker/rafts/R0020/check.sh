@@ -12,13 +12,13 @@ done
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0020
 
 # RC1: the raft's own plan runs on the real, migrated tracker and orders its issues as designed
-# (c0420 layout, then c0041 worktrees, then c0430 plan): this ties the three issues together.
+# (c0420 layout, then c0041 worktrees, then c0440 launch, then c0430 plan): this ties the issues together.
 rc1_plan() {
   local out; out=$(scripts/tracker.sh workstreams R0020) || return 1
   echo "$out"
   grep -qE "^c0420 wave 1$" <<<"$out" && grep -qE "^c0041 wave 2 after c0420" <<<"$out" \
-    && grep -qE "^c0430 wave 3 after " <<<"$out"
+    && grep -qE "^c0440 wave 3 after " <<<"$out" && grep -qE "^c0430 wave 4 after " <<<"$out"
 }
-check "RC1: workstreams plans R0020 as c0420 (wave 1), c0041 (wave 2), c0430 (wave 3)" rc1_plan
+check "RC1: workstreams plans R0020 as c0420, c0041, c0440, c0430 (waves 1 to 4)" rc1_plan
 
 finish
