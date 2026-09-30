@@ -229,3 +229,5 @@ None here: f0130's Studio playtest shows the maze.
 3. `tests/unit/Maze` specs. Run `scripts/check.sh --affected` and `scripts/tracker.sh check f0100`. Commit.
 
 ## Verification log
+
+- 2026-09-29: AC1-AC4 PASS (`tracker.sh check f0100`, 4/4). `scripts/check.sh --affected` green. No deviations. Luau note: `KINDS[c]` needed an explicit `Kind?` annotation to avoid widening to `string` after the `fail` guard.
