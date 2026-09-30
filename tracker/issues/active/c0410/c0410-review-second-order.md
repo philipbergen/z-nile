@@ -161,6 +161,8 @@ The metrics pass lists one directory per raft, which is negligible.
 | `format` from design-review-001 | rounds :: counts, R0070 second-order | format always classic | run |
 | the rounds table sits between per-type and rework | rounds :: placement | printed after the rework lines | run |
 | issue directories aren't counted | rounds :: sandbox (review files in an issue dir) | issue dirs counted | run |
+| `format` comes from the first design review, not the latest | tests/tooling/metrics-rounds :: first, not latest (own spec) | format from the latest design review | run |
+| `Consequences:` must start a line | tests/tooling/metrics-rounds :: line-start (own spec) | no line-start anchor | run |
 | a raft without reviews is `none`, and metrics doesn't crash | rounds :: sandbox (R0020 has no reviews) | unguarded read of design-review-001; missing labelled classic | run |
 | design mode item 0 comes before item 1 | review-skill :: design mode item 0 | item 0 placed after the others | reasoned |
 | ticket-prep step 3's table has the `checked` column | ticket-prep :: step 3 | bullet without `checked` | run |
@@ -188,3 +190,9 @@ None.
 
 ## Verification log
 - 2026-09-30: implemented in three commits as designed: (1) the review skill: `Critique`/`Consequences`/`Recommendation` in the finding template, the "one step further" paragraph, design-mode item 0 (Rules and mutants), and the code-mode escalation note; (2) the `### Rules and mutants` table in `tracker/templates/issue/doc.md`, and ticket-prep's step 3 bullet, step 5 consequence step and `consequences:` refute format; (3) `tracker.sh metrics` prints `| raft | design rounds | code rounds | format |` between the per-type table and the rework lines. `tracker.sh check c0410`: AC1-AC5 PASS (5/5). `scripts/check.sh --full`: 328 passed before, gate passes after. No deviations. No own specs: the Test plan lists only the sequestered acceptance specs. A new issue created after the change gets the table (checked, then the throwaway issue deleted).
+- 2026-09-30: review-001 (code mode) had 2 medium and 2 low findings, all fixed, with the consequence step run on each fix:
+  - F1: ticket-prep step 4 defines the **Mutation check** (`run` = the row's mutant was applied to a prototype and the case failed on an assertion, recorded in Unknowns & experiments; no prototype means `reasoned`), and review item 0 matches ("check the record, spot-run only the rows you doubt", `reasoned` rows are read or spot-checked).
+  - F2: an own spec, `tests/tooling/metrics-rounds.spec.luau`, pins the `format` rule's two edges (first review not latest, and `Consequences:` at line start) in its own sandbox `.cache/metrics-rounds-sandbox`. Both reviewer mutants pass AC5 but fail this spec on an assertion. Two `run` rows were added to the Rules and mutants table.
+  - F3: the metrics skill lists the rounds table and tells the reader to compare design rounds between `classic` and `second-order` rafts and to treat backlog and active rafts as incomplete.
+  - F4: design reviews live in the raft's directory, in the review skill and (consequence of that) in the tracker skill's directory listing.
+- Deviations from the design (small, local, recorded): the metrics skill, the tracker skill's one directory-listing line, and ticket-prep step 4 were touched beyond the listed modules, and an own spec was added although the Test plan lists only acceptance specs.

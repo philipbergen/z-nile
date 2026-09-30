@@ -38,3 +38,9 @@ Implemented by `check.sh`:
 - **Rollback**: revert the PR. Only docs and one metrics table change.
 
 ## Addressed during execution
+Review 001 (0 high, 2 medium, 2 low), all fixed in the same PR:
+- F1: ticket-prep step 4 now defines the Mutation check, and review item 0 matches.
+- F2: own spec `tests/tooling/metrics-rounds.spec.luau` for the `format` rule.
+- F3: the metrics skill describes the rounds table (this contradicts the raft's "no change to other skills" line; recorded as a local adjustment).
+- F4: design reviews live in the raft directory (review skill, and one line of the tracker skill).
+No emergent issues.
