@@ -19,7 +19,7 @@ The adversarial reviewers in `execute-raft` Phase 4 (code mode) and `ticket-prep
 - Changing what the reviewer checks or how findings are answered.
 
 ## Solution
-State it in both launch steps: launch the clean reviewer on the strongest model available (in Claude Code, pass `model: "opus"` to the Agent tool; other harnesses pick their strongest model), even when the author runs on a cheaper one. Direct small PR approved by the user 2026-09-29 instead of full ticket-prep.
+State it in both launch steps: launch the clean reviewer on Opus 5.5 by name (in Claude Code, `model: "opus"` on the Agent tool), never a substitute such as Fable, even when the author runs on a cheaper model. Direct small PR approved by the user 2026-09-29 instead of full ticket-prep.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
@@ -49,8 +49,8 @@ State it in both launch steps: launch the clean reviewer on the strongest model 
 ## Acceptance criteria
 
 ### Checked
-- AC1: `execute-raft` Phase 4 tells the author to launch the code reviewer on the strongest model (names `opus`).
-- AC2: `ticket-prep` step 5 tells the author to launch the design reviewer on the strongest model (names `opus`).
+- AC1: `execute-raft` Phase 4 tells the author to launch the code reviewer on Opus 5.5 (names `opus`).
+- AC2: `ticket-prep` step 5 tells the author to launch the design reviewer on Opus 5.5 (names `opus`).
 
 ### Judged
 <!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
