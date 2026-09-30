@@ -125,3 +125,6 @@ Judged: f0130 JC1 (thin client adapters). Observed: f0120 OC1 (two players, isol
 - **Rollback**: revert the PR. Nothing else depends on these features yet, and `tracker/architecture.md`'s edges can stay (unused declared edges are harmless).
 
 ## Addressed during execution
+- **review-001 F1 (high, fixed)**: `Wrapped` fired on a step that crossed the tunnel seam twice (a wrapping `Back`, then movement back over it) without a position jump. `Movement.step` now tracks seam parity (`wrapped ~= w`). Recorded as a deviation in f0110.
+- **review-001 F2 (low, fixed)**: the client now destroys the old maze model when a snapshot names a new maze id.
+- The recommended scenario story `tests/scenario/session-walk.spec.luau` was added (f0120).
