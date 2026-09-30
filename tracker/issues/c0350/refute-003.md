@@ -1,0 +1,4 @@
+- F1: fixed: Phase 4 step 6 now triggers a re-review when a high or failed Judged criterion is refuted rather than fixed (AC8). Because this is review-003, the fix itself has no reviewer, so under this PR's own rule the merge is blocked and the human decides.
+- F2: fixed: AC5 wording and label in the issue and check.sh match the BLOCKED-after-done behavior.
+- F3: fixed: `--body $'...'` for real newlines; `gh pr view --json mergeCommit -q .mergeCommit.oid` for the sha (AC9).
+- F4: fixed: re-poll `UNKNOWN` for up to a minute; the `discard_changes` check compares against `origin/main` after fetch.

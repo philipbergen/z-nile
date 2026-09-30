@@ -6,7 +6,7 @@ description: The autonomous execution protocol for one raft - one branch, one PR
 # Execute a raft
 
 Input: a raft ID (`R0010`) whose issues are `design: ready`.
-Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`.
+Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`, then merged by you (Phase 6).
 
 Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
 
@@ -68,13 +68,20 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
    - any high-severity finding was fixed;
    - the fixes changed a public API or the design;
    - the fixes are more than about 15% of the PR's lines;
-   - a Judged criterion was ruled fail.
-7. **Cap: 3 rounds.** If round 3 still isn't resolved, stop and escalate.
+   - a Judged criterion was ruled fail;
+   - you refuted (rather than fixed) any high finding or failed Judged criterion, so a new reviewer rules on the refutation.
+7. **Cap: 3 rounds.** The reviewer's own file decides what is significant, not your answer to it. If `review-003.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds 1-2 need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in `review-003.md` do not block, and you can't downgrade the severity the reviewer wrote. Fix them (answer `fixed`) if the fix is small; otherwise: file each with `tracker.sh new issue`, answer it in `refute-003.md` as `- F<n>: refuted: below the merge threshold (medium|low), filed as <id>`, and quote every such line in the round's PR comment. This is an interim form until c0360 adds a real `deferred` answer, because `tracker.sh done` accepts only `fixed` or `refuted`. It is the sole exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
-2. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
-3. Write the final report (below). This goes in your reply, and also as a PR comment: `gh pr comment --body-file -`.
+2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `scripts/check.sh --full`, commit), so the PR is up to date before `done` and nothing needs changing after it.
+3. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
+4. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
+
+## Phase 6: Merge and clean up
+1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`scripts/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
+2. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
+3. Follow "After merge" in the tracker skill, last: update the root's `main`, remove this raft's worktree, delete the local branch. Post no further commits to the branch. Then give the same report in your reply.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
@@ -89,13 +96,15 @@ Stop and report if any of these happen:
 To escalate:
 1. Commit whatever is green.
 2. Push.
-3. Leave the PR in **draft**.
+3. Leave the PR in **draft**, or, if it's already ready (a `BLOCKED:` stop after `done`), leave it as it is and unmerged.
 4. Post a PR comment that starts with `BLOCKED:` and covers what you tried, the evidence, and the decision you need.
 
 ## Final report format
 ```
-R0010: <title>. <READY | BLOCKED>
+R0010: <title>. <MERGED | BLOCKED>
 PR: <url>
+Merge: <merge commit sha> | not merged: <which condition failed>
+Cleanup: done | <what was skipped and why> (if this only becomes known after the report is posted, add a follow-up PR comment)
 Criteria: <n>/<n> Checked PASS (tracker.sh done output), Judged: <rulings>
 Observed (human, in Studio): <numbered steps from the issues' Observed sections>
 Deviations: <issue: what and why> | none

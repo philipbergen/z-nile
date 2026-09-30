@@ -1,0 +1,6 @@
+- F1: fixed: significance now comes from the reviewer's `review-003.md`: any high finding or failed Judged criterion blocks the merge whether or not fixed, since no reviewer remains to verify it; severities can't be downgraded; the deferral form covers medium/low only (real fix: c0360).
+- F2: fixed: `main` is merged in before `done` (Phase 5 step 2); after `done`, only a clean merge or an ID renumber is done, with plain git; anything else is `BLOCKED:` with no unreviewed code change.
+- F3: fixed: Phase 6 now posts the final report on the merged PR first and does cleanup last.
+- F4: fixed: CI check uses `gh pr view --json headRefOid,statusCheckRollup`; head sha must match, `gate` must be COMPLETED/SUCCESS, SKIPPED or missing means wait.
+- F5: fixed: concrete `gh pr merge --squash --subject ... --body ...` form with the trailer; a failing root `pull --ff-only` is left and reported.
+- F6: fixed in part: c0350's non-goal now names c0360. The claim that c0360's empty check.sh would pass vacuously is wrong (`scripts/lib/ac.sh` `finish` fails when no checks are defined); c0360 stays a backlog draft to be designed by ticket-prep.

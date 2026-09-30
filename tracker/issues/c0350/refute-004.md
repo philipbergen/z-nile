@@ -1,0 +1,6 @@
+- F1: fixed: the final-report template now reads `<MERGED | BLOCKED>` with `Merge:` and `Cleanup:` lines, and says to add a follow-up comment for cleanup problems found after posting.
+- F2: fixed: the `discard_changes` precondition is now PR `MERGED`, HEAD equal to `headRefOid`, and a clean tree.
+- F3: fixed: the escalation steps say a `BLOCKED:` stop after `done` leaves the ready PR as it is, unmerged.
+- F4: fixed: step 7 says to answer a medium or low `fixed` when the fix is small, and to use the interim form only otherwise.
+- F5: refuted: below the merge threshold (low), filed as c0370.
+- F6: refuted: below the merge threshold (low). AC order in the doc versus check.sh is cosmetic; the labels are numbered, so nothing depends on it.
