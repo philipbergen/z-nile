@@ -32,6 +32,7 @@ Fill every section of the issue template. Requirements:
   - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
 - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
 - **Test plan**: `spec file :: case → ACn`.
+- **Rules and mutants**: a table with one row per behavioural rule in the Design: `| rule | spec :: case | mutant it kills | checked |`. The mutant is a plausible wrong implementation, and the spec case must fail for it. `checked` is `run` if prep's mutation check ran it, else `reasoned`. When you prototype, fill the table from the mutation check.
 - **Acceptance criteria**:
   - **Checked**: nearly all criteria.
   - **Judged**: only with a rubric.
@@ -51,9 +52,9 @@ Fill every section of the issue template. Requirements:
 ## 5. Adversarial design review (required)
 1. Mark the items `design: reviewed` once the author considers them complete. Use `tracker` frontmatter edits.
 2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `review` skill (design mode), the raft and issue paths, and read access to the repo. It writes `design-review-NNN.md` in the raft directory. Run the reviewer on **Opus 5.5**, even if you run on a cheaper model: in Claude Code, pass `model: "opus"` to the Agent tool, and don't substitute another model, such as Fable or Sonnet.
-3. Answer every finding:
+3. Answer every finding. Before editing, run the **consequence step** on your own fix: what new rules, state, edge cases or user decisions does it bring? Add their Rules and mutants rows and spec cases in the same change, and put any decisions to the user now, all at once.
    - Fix it in the documents, specs or `check.sh`.
-   - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>`).
+   - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`).
 4. Run another round with a new clean reviewer if any high finding was fixed or the design changed materially. Stop after 3 rounds and bring the open questions to the user.
 5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member.
 
