@@ -47,7 +47,7 @@ Fill every section of the issue template. Requirements:
   - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
   - This is what makes the checks unfakeable and sequestered.
 - **Verify the wiring**: `scripts/tracker.sh check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
-- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. With no prototype, mark every row `reasoned`; the reviewer then judges those rows by reading them.
+- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
 - **Dry-run the promotion**: `scripts/tracker.sh promote-check <R-id>`. The only acceptable failures before implementation are requires of modules the raft will create.
 
 ## 5. Adversarial design review (required)

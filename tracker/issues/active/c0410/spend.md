@@ -9,6 +9,7 @@
 | 5 | 2026-09-30 16:01 | c0410: define the mutation check (review F1), document the rounds table in the metrics skill (F3), design reviews live on the raft (F4) | 6 | 3 | 6.0 | focus |
 | 6 | 2026-09-30 16:04 | c0410: own spec pinning the metrics format rule (review F2), record the fixes | 0 | 0 | 9.0 | focus |
 | 7 | 2026-09-30 16:09 | R0070: refute-001 | 0 | 0 | 3.0 | focus |
+| 8 | 2026-09-30 16:13 | c0410: reasoned means not run (review-002 F2), record the spend undercount (F1), update Touched modules and Affected specs (F3) | 2 | 2 | 5.0 | focus |
 
-**Total:** +36 / -6 lines, 41.0 agent-minutes over 7 commits
-<!-- totals: added=36 removed=6 minutes=41.0 commits=7 -->
+**Total:** +38 / -8 lines, 46.0 agent-minutes over 8 commits
+<!-- totals: added=38 removed=8 minutes=46.0 commits=8 -->

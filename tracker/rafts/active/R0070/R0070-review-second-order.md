@@ -43,4 +43,5 @@ Review 001 (0 high, 2 medium, 2 low), all fixed in the same PR:
 - F2: own spec `tests/tooling/metrics-rounds.spec.luau` for the `format` rule.
 - F3: the metrics skill describes the rounds table (this contradicts the raft's "no change to other skills" line; recorded as a local adjustment).
 - F4: design reviews live in the raft directory (review skill, and one line of the tracker skill).
+Review 002 (approve, 3 low), all fixed: `spend.md` for c0410 undercounts by about 89 lines (the own spec was committed by another session outside `tracker.sh commit`, and is not hand-edited); `reasoned` now means "not run, with the reason recorded"; c0410's Touched modules and Affected specs list what was actually touched.
 No emergent issues.

@@ -50,7 +50,7 @@ Recommendation: <the fix that holds up after its consequences, with the spec cas
 - **The `one step further` paragraph is prose, outside the template.** AC3 checks it with fenced blocks removed, because the phrase also fits in the Consequences template line.
 - **In Design mode, add item `0.`**, written `0. **Rules and mutants**`, before the existing items. It contains `missing row` and `reasoned`: audit each issue's Rules and mutants table.
   - Every behavioural rule in the Design needs a row.
-  - Rows marked `run` were mutation-tested in prep. Spot-run only the `reasoned` rows you doubt, which keeps it cheap (design-review-001 F3).
+  - Rows marked `run` were mutation-tested on a prototype in prep (the outcome is recorded in Unknowns & experiments), so check that record and spot-run only rows you doubt. `reasoned` rows weren't run, with the reason recorded, so judge them by reading or spot-check them (design-review-001 F3; code review-002 F2). Ticket-prep step 4 defines the **Mutation check** the same way.
   - A missing row, a row whose case can't fail, or an unlisted plausible mutant is a finding.
 - **Code mode** uses the same finding format, but doesn't audit the table (AC3 checks the phrase is absent there). Add a sentence to it containing `escalat…`: a code-mode Recommendation never asks the author to edit sequestered `check.sh` or acceptance specs, or to decide product questions. If that's the only fix, the author escalates (design-review-001 F5).
 
@@ -106,9 +106,12 @@ The metrics pass lists one directory per raft, which is negligible.
 - `.claude/skills/ticket-prep/SKILL.md`
 - `tracker/templates/issue/doc.md`
 - `scripts/tracker/main.luau`
+- `.claude/skills/metrics/SKILL.md` (added in execution: review-001 F3)
+- `.claude/skills/tracker/SKILL.md` (one directory-listing line, added in execution: review-001 F4)
+- `tests/tooling/metrics-rounds.spec.luau` (added in execution: review-001 F2)
 
 ### Affected specs
-`lune run scripts/affected -- scripts/tracker/main.luau` prints `ALL` (`scripts/` forces a full run). New specs: the three acceptance specs.
+`lune run scripts/affected -- scripts/tracker/main.luau` prints `ALL` (`scripts/` forces a full run). New specs: the five acceptance specs, plus the own spec `tests/tooling/metrics-rounds.spec.luau` added in execution.
 
 ## Unknowns & experiments
 - **E1 (run in prep: PASS)**: can the format change coexist with `tracker.sh done`?
@@ -196,3 +199,4 @@ None.
   - F3: the metrics skill lists the rounds table and tells the reader to compare design rounds between `classic` and `second-order` rafts and to treat backlog and active rafts as incomplete.
   - F4: design reviews live in the raft's directory, in the review skill and (consequence of that) in the tracker skill's directory listing.
 - Deviations from the design (small, local, recorded): the metrics skill, the tracker skill's one directory-listing line, and ticket-prep step 4 were touched beyond the listed modules, and an own spec was added although the Test plan lists only acceptance specs.
+- 2026-09-30: review-002 (code mode): approve, with 3 low findings, all fixed. F1: `spend.md` undercounts by about 89 lines, because the own spec `tests/tooling/metrics-rounds.spec.luau` was committed by another Claude session working in the same checkout (`da96dd3`, `prep draft`), outside `tracker.sh commit`. `spend.md` is written only by the tracker, so it was not edited by hand: read c0410's lines added as about +125, not +36. F2: `reasoned` now means "the mutant wasn't run, with the reason recorded" in ticket-prep step 4, review item 0 and this Design. F3: Touched modules and Affected specs updated. After the review-001 fixes the raft moved to its own worktree, `../pickman-r0070`.
