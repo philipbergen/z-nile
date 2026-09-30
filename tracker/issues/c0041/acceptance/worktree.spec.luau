@@ -143,9 +143,11 @@ return t.spec("worktrees", function(it)
 		for _, pair in rafts do
 			must(tr(seed, { "new", "issue", "f", pair[1] }), "new issue " .. pair[1])
 		end
+		must(tr(seed, { "new", "issue", "f", "epsilon" }), "new issue epsilon") -- f0050: no raft
 		for i, pair in rafts do
 			must(tr(seed, { "new", "raft", "feature", pair[2], `f00{i}0` }), "new raft " .. pair[2])
 		end
+		edit(`{seed}/tracker/issues/f0050/f0050-epsilon.md`, "design: draft", "design: ready")
 		for i, pair in rafts do
 			edit(`{seed}/tracker/issues/f00{i}0/f00{i}0-{pair[1]}.md`, "design: draft", "design: ready")
 			edit(`{seed}/tracker/rafts/R00{i}0/R00{i}0-{pair[2]}.md`, "design: draft", "design: ready")
@@ -184,6 +186,21 @@ return t.spec("worktrees", function(it)
 		local new = tr(main, { "new", "issue", "c", "probe" })
 		t.expect(new.ok).toBe(false)
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
+		t.expect(git(main, { "status", "--porcelain" })).toBe("")
+	end)
+
+	it("renumber is refused in the main checkout", function()
+		local r = tr(main, { "renumber", "f0050", "f0060" })
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
+		t.expect(git(main, { "status", "--porcelain" })).toBe("")
+	end)
+
+	it("prompt does not create a placeholder raft in the main checkout", function()
+		-- f0050 has no raft: `prompt` would wrap it in a placeholder raft
+		local r = tr(main, { "prompt", "f0050", "--stdout" })
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
 
@@ -308,7 +325,9 @@ return t.spec("worktrees", function(it)
 
 	it("worktree rejects bad names and non-raft ids", function()
 		local before = countWorktrees()
-		for _, bad in { "Bad Name", "../x", "a/b", "UPPER", "f0010", "c0041", "-lead", "" } do
+		for _, bad in
+			{ "Bad Name", "../x", "a/b", "UPPER", "f0010", "c0041", "-lead", "", string.rep("a", 61) }
+		do
 			local r = tr(main, { "worktree", bad })
 			if r.ok then
 				error(`worktree accepted {bad}`)
@@ -381,7 +400,8 @@ return t.spec("worktrees", function(it)
 		local hook = `{main}/scripts/hooks/post-edit.sh`
 		local probe = "--!strict\nlocal unused = 1\nreturn nil\n"
 		-- the worktree allows unused variables; the main checkout denies them
-		edit(`{wt2}/selene.toml`, 'unused_variable = "deny"', 'unused_variable = "allow"')
+		fs.writeFile(`{wt2}/selene.toml`, 'std = "roblox"\n\n[rules]\nunused_variable = "allow"\n')
+		fs.writeFile(`{main}/selene.toml`, 'std = "roblox"\n\n[rules]\nunused_variable = "deny"\n')
 		fs.writeFile(`{wt2}/src/shared/Probe.luau`, probe)
 		fs.writeFile(`{main}/src/shared/Probe.luau`, probe)
 		local inWorktree = run(main, "bash", { hook }, editJson(`{wt2}/src/shared/Probe.luau`))
@@ -389,6 +409,7 @@ return t.spec("worktrees", function(it)
 		fs.removeFile(`{wt2}/src/shared/Probe.luau`)
 		fs.removeFile(`{main}/src/shared/Probe.luau`)
 		git(wt2, { "checkout", "--", "selene.toml" })
+		git(main, { "checkout", "--", "selene.toml" })
 		t.expect(inWorktree.code).toBe(0)
 		t.expect(inMain.code).toBe(2)
 	end)

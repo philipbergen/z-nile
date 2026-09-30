@@ -44,7 +44,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
    - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
    - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
-   - the read-only tracker commands `list`, `find`, `members`, `check`, `metrics`, `prompt <R-id>`, and the worktree commands `worktree` and `worktree-prune`.
+   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `prompt <R-id>`, and the worktree commands `worktree` and `worktree-prune`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
 2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
 
    | work | target | branch and path |
@@ -72,10 +72,10 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 **`scripts/tracker/main.luau`**
 - **`local function mainRoot(): string`**: the main checkout's root, the first `worktree` entry of `git worktree list --porcelain`. Worktrees are always created under `mainRoot()/.worktrees/`, even when the command runs inside another worktree.
 - **`local function onGitHub(): boolean`**: true iff `git remote get-url origin` succeeds and its output contains `github.com`.
-- **`local function refuseInMainCheckout(what: string)`**: if an `origin` remote exists and `git rev-parse --show-toplevel` equals `mainRoot()`, fail with `{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`. A repo with no origin (c0010's lifecycle spec clone, other tests) is never refused. Called by `new`, `renumber`, `start` (unless the current branch is already `raftBranch(raft)`) and by `prompt` when it would create a placeholder raft.
+- **`local function refuseInMainCheckout(what: string)`**: if an `origin` remote exists and `git rev-parse --show-toplevel` equals `mainRoot()`, fail with `{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`. A repo with no origin (c0010's lifecycle spec clone, other tests) is never refused. Called by `new`, `renumber` and `start` (unless the current branch is already `raftBranch(raft)`). `prompt` creates its placeholder raft by calling `new`, so the guard covers it too (its message names `new`).
 - **`cmd.worktree(pos)`** (`worktree <target>`):
-  1. **Classify** the target. It matches `^R%d%d%d%d$` → a raft. It matches `^[fdc]%d%d%d%d$` → error `give a raft id or a name`. It matches `^[a-z][a-z0-9-]*$` (at most 40 characters) → a named worktree. Anything else, including `/`, `..`, spaces or uppercase, → error `invalid worktree name`, before anything is created.
-  2. **Raft targets** must exist (`store.get`) and be in backlog or active. A done raft is refused.
+  1. **Classify** the target. It matches `^R%d%d%d%d$` → a raft. It matches `^[fdc]%d%d%d%d$` → error `give a raft id or a name`. It matches `^[a-z][a-z0-9-]*$` (at most 60 characters) → a named worktree. Anything else, including `/`, `..`, spaces or uppercase, → error `invalid worktree name`, before anything is created.
+  2. **Raft targets** must exist (`store.get` in the invoking tree) and be in backlog or active. A done raft is refused. If the raft isn't in the invoking tree, the error says so and suggests `git -C <root> pull --ff-only` (the invoking tree may simply be behind `origin/main`; every landing ends by pulling the root).
   3. `git worktree prune`, so a registered worktree whose directory was deleted is forgotten (git otherwise refuses `is a missing but already registered worktree`), then `git fetch --quiet origin`, only if an `origin` remote exists.
   4. `branch` is `raftBranch(raft)` or the name. `path = mainRoot() .. "/.worktrees/" .. branch`.
   5. Then one of four cases:
@@ -119,13 +119,15 @@ The hooks read the tree from the hook input and use a form that really fails on 
   - both commands in the lifecycle table;
   - the "don't commit tracked work with a plain `git commit`" line becomes "use `tracker.sh commit` inside a raft; plain `git` for capture, prep and doc-only worktrees (see Landing a change)";
   - "Merging" becomes the merge conditions for *any* PR, with the raft-only additions marked;
+  - line 36 ("Running a single issue means wrapping it in a placeholder raft…") becomes: a lone issue gets a `--single` raft made by ticket-prep in its prep worktree (`tracker.sh prompt <issue>` refuses to create one in the main checkout);
   - "After merge" is replaced by landing step 4; the "root is on another branch" and EnterWorktree/ExitWorktree paragraphs are deleted.
 - **execute-raft**: Phase 0 step 1 becomes `cd "$(scripts/tracker.sh worktree R0010)"` and then confirming the gate there; step 2 is `tracker.sh start`. "Never switch branches in the main checkout." Phase 4's reviewer input becomes `git fetch origin main && git diff origin/main...HEAD` (the local `main` is no longer kept current). Phase 5 step 2 merges `origin/main`. Phase 6 refers to the landing procedure.
 - **make-issue**: step 6 becomes a worktree `capture-<slug>`, commit, PR, merge, pull.
 - **ticket-prep**: step 1 runs in a worktree `prep-<slug>` that is used for the whole prep (`new raft`, design, specs, reviews). Step 6 becomes one prep commit, PR, merge, pull, replacing "commit to main". "Ask before committing to main" becomes "ask before merging prep the user did not request".
-- **make-prompt**: readiness is checked from the main checkout after `git pull --ff-only`, read-only. A raftless issue is not wrapped by make-prompt: it goes back to ticket-prep (which creates the raft, `--single` for a lone issue, in its worktree). The report ends with the launch line `cd "$(scripts/tracker.sh worktree R…)" && claude`.
+- **make-prompt**: the description and step 1 ("…a single issue, which gets a placeholder raft"; "`tracker.sh prompt` creates a placeholder raft") change: readiness is checked from the main checkout after `git pull --ff-only`, read-only, and a raftless issue is not wrapped by make-prompt: it goes back to ticket-prep (which creates the raft, `--single` for a lone issue, in its worktree). The "commit and push the placeholder raft / direct commits" paragraph is deleted. The report ends with the launch line `cd "$(scripts/tracker.sh worktree R…)" && claude`.
 - **review**: design mode "runs on main before any PR exists" becomes "runs in the prep worktree; its files ride in the prep PR"; code mode's `git diff main...HEAD` becomes `git diff origin/main...HEAD`.
 - **`tracker/templates/prompt.md`**: hard rule 2 is prefixed with "your working directory is the raft's worktree: your first action is `cd "$(scripts/tracker.sh worktree {{RAFT_ID}})"`", and the Environment section says never to edit the main checkout.
+- **`scripts/tracker/main.luau` messages**: `start`'s error "wrap a single issue with `prompt <issue>` or `new raft ... --single`" becomes "make a `--single` raft with `new raft ... --single` (ticket-prep)", and `prompt`'s "created placeholder raft …; commit and push it before handing out the prompt" becomes "…; land it (tracker skill, Landing a change) before handing out the prompt".
 - **SETUP.md**, "Agents on this host": one paragraph on worktrees, the launch line and pruning. The troubleshooting row saying `tracker.sh start` needs an `origin` and fails on `gh pr create` is corrected: `start` skips the draft PR for a non-GitHub origin.
 
 ### Scalability
@@ -181,7 +183,7 @@ The hooks read the tree from the hook input and use a form that really fails on 
 ## Test plan
 `acceptance/worktree.spec.luau` sets up a scratch `.cache/wt-e2e/`:
 - a bare `origin.git`, cloned from the repo's committed HEAD, **with `main` forced as the fixture's branch** and the seed's own `origin` remote removed (so the seed can run `new`), with the working-tree `scripts/`, `tracker/templates/` and `.gitignore` overlaid and committed;
-- a clone `main/` of that bare repo, with an empty tracker and four ready fixture rafts, `R0010` (`demo`) to `R0040` (`fourth`), each with one issue `f0010` to `f0040`;
+- a clone `main/` of that bare repo, with an empty tracker, four ready fixture rafts, `R0010` (`demo`) to `R0040` (`fourth`), each with one issue `f0010` to `f0040`, and one raftless ready issue `f0050`;
 - the clone's origin is the local bare repo, so pushes are real and `gh` is never called, except in the GitHub case, which puts a fake `gh` first on `PATH` (with `GIT_TERMINAL_PROMPT=0`).
 
 Cases (`spec case → AC`):
@@ -189,6 +191,8 @@ Cases (`spec case → AC`):
 - `worktree is idempotent and works from inside another worktree` → AC1
 - `main checkout stays on main and clean` → AC1
 - `start and new are refused in the main checkout` → AC6
+- `renumber is refused in the main checkout` → AC6
+- `prompt does not create a placeholder raft in the main checkout` → AC6
 - `worktree resumes an existing branch after its worktree is deleted` → AC1
 - `worktree refuses a branch checked out elsewhere` → AC1
 - `start inside the worktree reuses the branch and pushes` → AC2 (also asserts one commit on top of `origin/main`)
@@ -198,7 +202,7 @@ Cases (`spec case → AC`):
 - `worktree creates a named worktree from origin/main` → AC6
 - `new issue works in a named worktree` → AC6
 - `worktree recreates a worktree whose directory was deleted` → AC6
-- `worktree rejects bad names and non-raft ids` → AC6
+- `worktree rejects bad names and non-raft ids` → AC6 (also a 61-character name)
 - `worktree-prune removes squash-merged done rafts and keeps unfinished ones` → AC3
 - `worktree-prune keeps a raft that is done only on its own unmerged branch` → AC3
 - `worktree-prune lists a named worktree and leaves it` → AC3
@@ -206,12 +210,37 @@ Cases (`spec case → AC`):
 - `worktree-prune run from inside a finished worktree skips it` → AC3
 - `worktree refuses a done raft` → AC6
 - `duplicate ids are reported` → AC7: a second `<id>-*.md` in an item directory, and the same id in `issues/` and `issues/active/`, each make `find` and `list` fail naming the id.
-- `post-edit hook lints with the edited file's worktree config` → AC4
+- `post-edit hook lints with the edited file's worktree config` → AC4 (writes its own `selene.toml` in each tree, so it doesn't depend on the repo's lint config)
 - `post-edit hook ignores a file outside any repository` → AC4
 - `stop hook gates the session's cwd worktree` → AC4
 - `stop hook gates the worktree root when cwd is a subdirectory` → AC4
 
 `check.sh` runs the spec **once** per check into a variable, fails a check if the spec did not load (`could not load spec`), requires each named case to exist in the spec source (the runner prints no per-case PASS lines) and not appear in a FAIL line, and then requires the summary to show no failures.
+
+### Rules and mutants
+`run` rows were mutation-tested on the prep prototype (Verification log); `reasoned` rows were not run.
+
+| rule | spec :: case | mutant it kills | checked |
+|---|---|---|---|
+| A new worktree is cut from a freshly fetched `origin/main`, not the invoking tree | `worktree branches from the fresh origin/main` | branch from `HEAD`; never fetch | run (M5, M6) |
+| A new branch has no upstream | `worktree creates a raft-named worktree` (asserts no upstream) | omit `--no-track` | run (M8) |
+| Worktrees land under the main checkout, idempotently, even from inside another worktree | `worktree is idempotent` | create under the invoking toplevel; fail on a second call | reasoned |
+| A stale registration is pruned first | `worktree recreates a worktree whose directory was deleted` | skip `git worktree prune` | run (M7) |
+| A branch checked out elsewhere is refused with exit 1 and nothing created | `worktree refuses a branch checked out elsewhere` | always `worktree add -b`; report git's 128 | reasoned |
+| An existing or origin-only branch is resumed | `worktree resumes an existing branch` | always `worktree add -b` | reasoned |
+| Names: lowercase plain names and raft ids only | `worktree rejects bad names and non-raft ids` | accept any string | reasoned |
+| `start`, `new`, `renumber` and (through `new`) raft-creating `prompt` refuse in a main checkout with an origin | `start and new are refused`, `renumber is refused`, `prompt does not create a placeholder raft` | `start` unguarded; `renumber` unguarded; `new` unguarded | run (M9, M11, M12) |
+| `start` reuses the current raft branch and commits once on `origin/main` | `start inside the worktree reuses the branch and pushes` | always `switch -c`; an extra commit | reasoned |
+| A draft PR is opened only for a GitHub origin | `GitHub origin opens the draft PR`, `non-GitHub origin skips the draft PR` | `onGitHub()` always false; always call `gh` | run (M3) |
+| Prune judges "finished" on the base branch, not the worktree's own branch | `worktree-prune removes squash-merged`, `keeps a raft that is done only on its own unmerged branch` | judge on the worktree's branch | run (M2) |
+| Prune never forces | `worktree-prune never forces` | pass `--force` | run (M1) |
+| Prune skips the worktree it runs in | `worktree-prune run from inside a finished worktree skips it` | remove the current directory's worktree | reasoned |
+| Prune lists named worktrees and leaves them | `worktree-prune lists a named worktree` | remove or ignore them | reasoned |
+| post-edit lints with the edited file's tree config | `post-edit hook lints with the edited file's worktree config` | `cd` to the hook's own repo | reasoned |
+| Hooks ignore a file outside any repo | `post-edit hook ignores a file outside any repository` | bare `cd "$(…)"` without `|| exit 0` | reasoned |
+| stop gates the session cwd's repo root | `stop hook gates the session's cwd worktree`, `…when cwd is a subdirectory` | `cd "$cwd"` without `rev-parse --show-toplevel` | run (M4) |
+| A duplicate item id is an error | `duplicate ids are reported` | no detection | run (M10) |
+| The documents carry the rule | AC5 grep and JC1 | leave an old instruction | reasoned (a grep and a ruling, not a mutation) |
 
 ## Acceptance criteria
 
@@ -226,7 +255,7 @@ Cases (`spec case → AC`):
 
 ### Judged
 - **JC1: the skills leave no path that mutates the main checkout.**
-  - **Pass**: in each of execute-raft, make-issue, ticket-prep, make-prompt, review, tracker, the prompt template, AGENTS.md and SETUP.md, every instruction that runs in the main checkout is on the whitelist in the worktree rule (rule 1), and every instruction that edits, stages, commits, switches branches or runs a gate does so in a worktree. The landing procedure is stated once (tracker skill) and referenced, not contradicted, elsewhere.
+  - **Pass**: in each of execute-raft, make-issue, ticket-prep, make-prompt, review, tracker, the prompt template, AGENTS.md and SETUP.md, every instruction that runs in the main checkout is on the whitelist in the worktree rule (rule 1), and every instruction that edits, stages, commits, switches branches or runs the repo gate (`scripts/check.sh`, `tracker.sh check`, `done`) does so in a worktree; the one exception is the whitelisted first-time `scripts/setup.sh`. The landing procedure is stated once (tracker skill) and referenced, not contradicted, elsewhere.
   - **Fail**: any main-checkout command that isn't on the whitelist, any instruction to commit, switch or edit on `main`, or two documents that disagree about the procedure. Quote each offending line.
 
 ### Observed
@@ -246,4 +275,5 @@ None.
   - Ten planted mistakes each fail the case written to catch them (some also cascade into later cases that share fixture state): prune passing `--force`; "finished" judged on the worktree's own branch instead of the base; `onGitHub()` always false; the stop hook using `cwd` without `rev-parse --show-toplevel`; branching from `HEAD` instead of `origin/main`; never fetching; not pruning stale registrations first; no `--no-track`; `start` not refusing in the main checkout; no duplicate-id detection.
   - Two prototype-only fixes worth knowing: the worktree-list parser needed a non-optional accumulator to pass strict type checking, and the spec's seed clone must drop its `origin` remote so it can run `new` (which is refused in a main checkout that has one).
 - **E5 and E7 prep runs (2026-09-30):** re-verified in a scratch repo on git 2.54: the default upstream of `worktree add -b b p origin/main` is `origin/main` and `--no-track` removes it; a deleted worktree directory stays `prunable` and `worktree add` refuses until `git worktree prune`; two branches adding `c0420` with different doc slugs squash-merge with exit 0 into one directory holding two docs.
+- **E6 prep run 3 (2026-09-30, after merging R0070 into the prep branch):** the prototype was ported onto the current `main.luau` and passes all 27 spec cases; `scripts/check.sh --full` passes with it (346 specs, including R0070's). Thirteen planted mistakes each fail the case written to catch them: the ten listed above (M1 to M10) plus `renumber` unguarded (M11), `new` unguarded, which also lets `prompt` create a raft in the main checkout (M12), and the post-edit hook linting from its own repo instead of the file's (M13). The prototype is reverted and not committed.
 

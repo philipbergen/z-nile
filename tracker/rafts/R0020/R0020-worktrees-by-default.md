@@ -23,11 +23,14 @@ There is no new dependency edge (`tracker/architecture.md` is unchanged).
 
 ## Order & dependencies
 One issue, no dependencies. R0010 (the former in-flight raft that conflicted with it) has merged.
-- **Bootstrap: how R0020 itself is executed.** `tracker.sh worktree` doesn't exist until this raft merges, and the prompt inlines today's execute-raft ("switch to main, start"). So the human creates the worktree by hand and launches the agent in it: `git -C <root> worktree add -b R0020-worktrees-by-default ../pickman-R0020 origin/main`, then `cd ../pickman-R0020 && claude`. The executor runs `scripts/tracker.sh start R0020` there. `start` finds the branch already current (today's `start` would also work), so it never switches branches, and the main checkout is untouched. Do not create `.worktrees/` by hand in the main checkout before this raft has merged: it isn't gitignored yet.
-- Expected merge overlap with other in-flight rafts: the skills (`tracker`, `execute-raft`, `make-prompt`, `review`), `tracker/templates/prompt.md` and `SETUP.md`. R0070 (review second order, in flight) may touch the review and metrics skills; whoever merges second rebases and re-runs their gate.
+- **Bootstrap: how R0020 itself is executed.** `tracker.sh worktree` doesn't exist until this raft merges, and the prompt inlines today's execute-raft. So the human creates the worktree by hand, **detached**, and launches the agent in it: `git -C <root> worktree add --detach ../pickman-R0020 origin/main`, then `cd ../pickman-R0020 && claude`. The executor follows Phase 0 with two changes:
+  - it does **not** run `git switch main && git pull` (in a linked worktree `git switch main` fails, because the main checkout has `main` checked out): it runs `scripts/check.sh --full` in the worktree, which confirms `origin/main` is green;
+  - `scripts/tracker.sh start R0020` then runs today's `start`, whose `git switch -c R0020-worktrees-by-default` succeeds from a detached HEAD. (A branch created beforehand with `worktree add -b` would make `start` fail: `a branch named … already exists`.)
+  The main checkout is untouched. Do not create `.worktrees/` by hand in the main checkout before this raft has merged: it isn't gitignored yet.
+- Expected merge overlap with other in-flight rafts: the skills (`tracker`, `execute-raft`, `make-prompt`, `review`), `tracker/templates/prompt.md` and `SETUP.md`. R0070 (review second order) has merged: this prep branch already contains it, and c0041's design follows its rules (Rules and mutants table, the consequence step). Whoever merges second rebases and re-runs their gate.
 
 ## Experiments phase
-c0041's E1, E2, E5 and E6 were run in prep and PASSED. E6 ran a throwaway prototype of the tooling against the sequestered spec, with four planted mistakes each caught. E3 is pinned by the spec case "works from inside another worktree", and E4 (whether the Stop hook's `cwd` follows a `cd`) is optional because nothing depends on it.
+c0041's E1, E2, E5 and E6 were run in prep and PASSED. E6 ran a throwaway prototype of the tooling against the sequestered spec, with ten planted mistakes each caught. E3 is pinned by the spec case "works from inside another worktree", and E4 (whether the Stop hook's `cwd` follows a `cd`) is optional because nothing depends on it.
 
 ## Exit criteria
 - **RC0**: the full gate, `c0041/check.sh` and `promote-check`, as generated.

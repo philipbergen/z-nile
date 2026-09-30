@@ -46,11 +46,14 @@ check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
   done
   bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
     -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
-    -e "git diff main...HEAD" -e "ExitWorktree" .claude/skills tracker/templates AGENTS.md SETUP.md || true)
+    -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
+    -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
+    .claude/skills tracker/templates AGENTS.md SETUP.md scripts/tracker/main.luau || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC6: named worktrees; bad names, item ids, done rafts rejected; new/start refused in the main checkout" cases_pass \
   "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft" \
-  "start and new are refused" "new issue works in a named worktree" "worktree recreates a worktree"
+  "start and new are refused" "renumber is refused" "prompt does not create" \
+  "new issue works in a named worktree" "worktree recreates a worktree"
 check "AC7: a duplicate item id is reported" cases_pass "duplicate ids are reported"
 check "AC1-AC4, AC6, AC7: every case of the worktree spec passes" all_cases_pass
 
