@@ -46,6 +46,12 @@ created: {{DATE}}
 ## Test plan
 <!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
 
+### Rules and mutants
+<!-- One row per behavioural rule in the Design. The mutant is a plausible wrong implementation
+     that the spec case must fail for (from the prep mutation check, or reasoned). -->
+| rule | spec :: case | mutant it kills | checked |
+|---|---|---|---|
+
 ## Acceptance criteria
 
 ### Checked

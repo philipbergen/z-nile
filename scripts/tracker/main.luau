@@ -609,6 +609,26 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		local p = 100 * def / (def + feat)
 		return string.format("%.1f%%%s", p, if p > 20 then " (OVER 20% TARGET)" else "")
 	end
+	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
+	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
+	for _, raft in store.all("raft") do
+		local design, code = 0, 0
+		for _, name in fs.readDir(raft.dir) do
+			if string.match(name, "^design%-review%-%d+%.md$") then
+				design += 1
+			elseif string.match(name, "^review%-%d+%.md$") then
+				code += 1
+			end
+		end
+		local first = `{raft.dir}/design-review-001.md`
+		local format = "none"
+		if fs.isFile(first) then
+			format = if string.find("\n" .. fs.readFile(first), "\nConsequences:", 1, true)
+				then "second-order"
+				else "classic"
+		end
+		print(string.format("| %s | %d | %d | %s |", raft.id, design, code, format))
+	end
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
 	print(`  by lines added:  {pct(d.added, f.added)}`)
 	print(`  by issues:       {pct(d.count, f.count)}`)
