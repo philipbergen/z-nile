@@ -24,7 +24,8 @@ all_cases_pass() {
 
 check "AC1: raft-named worktree from origin/main; resumes; refuses a taken branch; main untouched" cases_pass \
   "worktree creates a raft-named" "worktree is idempotent" "main checkout stays on main" \
-  "worktree resumes an existing branch" "worktree refuses a branch checked out elsewhere"
+  "worktree resumes an existing branch" "worktree refuses a branch checked out elsewhere" \
+  "worktree branches from the fresh origin/main"
 check "AC2: start in worktree reuses branch, pushes, draft PR only for GitHub" cases_pass \
   "start inside the worktree" "non-GitHub origin" "GitHub origin opens the draft PR"
 check "AC3: worktree-prune removes finished rafts only, never forces" cases_pass \
@@ -40,11 +41,17 @@ check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
   grep -qi "worktree" AGENTS.md || { echo "AGENTS.md"; exit 1; }
   grep -qiE "^#+ +worktrees" .claude/skills/tracker/SKILL.md || { echo "tracker: no Worktrees section"; exit 1; }
   grep -qiE "^#+ +landing a change" .claude/skills/tracker/SKILL.md || { echo "tracker: no Landing a change section"; exit 1; }
-  bad=$(grep -rnF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
-    -e "runs on main before any PR" .claude/skills tracker/templates AGENTS.md SETUP.md || true)
+  for c in "worktree:\*" "worktree-prune:\*"; do
+    grep -q "Bash(scripts/tracker.sh $c)" .claude/settings.json || { echo "settings: missing $c"; exit 1; }
+  done
+  bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
+    -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
+    -e "git diff main...HEAD" -e "ExitWorktree" .claude/skills tracker/templates AGENTS.md SETUP.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC6: named worktrees; bad names, item ids and done rafts rejected" cases_pass \
-  "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft"
-check "AC1-AC4, AC6: every case of the worktree spec passes" all_cases_pass
+check "AC6: named worktrees; bad names, item ids, done rafts rejected; new/start refused in the main checkout" cases_pass \
+  "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft" \
+  "start and new are refused" "new issue works in a named worktree" "worktree recreates a worktree"
+check "AC7: a duplicate item id is reported" cases_pass "duplicate ids are reported"
+check "AC1-AC4, AC6, AC7: every case of the worktree spec passes" all_cases_pass
 
 finish

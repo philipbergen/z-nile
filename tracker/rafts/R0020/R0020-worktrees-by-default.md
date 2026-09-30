@@ -23,6 +23,7 @@ There is no new dependency edge (`tracker/architecture.md` is unchanged).
 
 ## Order & dependencies
 One issue, no dependencies. R0010 (the former in-flight raft that conflicted with it) has merged.
+- **Bootstrap: how R0020 itself is executed.** `tracker.sh worktree` doesn't exist until this raft merges, and the prompt inlines today's execute-raft ("switch to main, start"). So the human creates the worktree by hand and launches the agent in it: `git -C <root> worktree add -b R0020-worktrees-by-default ../pickman-R0020 origin/main`, then `cd ../pickman-R0020 && claude`. The executor runs `scripts/tracker.sh start R0020` there. `start` finds the branch already current (today's `start` would also work), so it never switches branches, and the main checkout is untouched. Do not create `.worktrees/` by hand in the main checkout before this raft has merged: it isn't gitignored yet.
 - Expected merge overlap with other in-flight rafts: the skills (`tracker`, `execute-raft`, `make-prompt`, `review`), `tracker/templates/prompt.md` and `SETUP.md`. R0070 (review second order, in flight) may touch the review and metrics skills; whoever merges second rebases and re-runs their gate.
 
 ## Experiments phase

@@ -111,6 +111,7 @@ return t.spec("worktrees", function(it)
 		identity(seed)
 		-- whatever the source was (a feature branch, or CI's detached HEAD), the fixture is on main
 		git(seed, { "checkout", "-q", "-B", "main" })
+		git(seed, { "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
 		local listed = run(
 			root,
@@ -160,6 +161,8 @@ return t.spec("worktrees", function(it)
 		t.expect(fs.isDir(wt1)).toBe(true)
 		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
 		t.expect(git(wt1, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/main" }))
+		-- a new branch must not track origin/main: a bare `git push` would target the wrong ref
+		t.expect(run(wt1, "git", { "rev-parse", "--abbrev-ref", "@{u}" }).ok).toBe(false)
 	end)
 
 	it("worktree is idempotent and works from inside another worktree", function()
@@ -170,6 +173,16 @@ return t.spec("worktrees", function(it)
 	end)
 
 	it("main checkout stays on main and clean", function()
+		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
+		t.expect(git(main, { "status", "--porcelain" })).toBe("")
+	end)
+
+	it("start and new are refused in the main checkout", function()
+		local start = tr(main, { "start", "R0030" })
+		t.expect(start.ok).toBe(false)
+		t.expect(string.find(start.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
+		local new = tr(main, { "new", "issue", "c", "probe" })
+		t.expect(new.ok).toBe(false)
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
@@ -198,6 +211,7 @@ return t.spec("worktrees", function(it)
 		startOut = must(tr(wt1, { "start", "R0010" }), "start")
 		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
 		t.expect(git(wt1, { "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")
+		t.expect(git(wt1, { "rev-parse", "HEAD~1" })).toBe(git(main, { "rev-parse", "origin/main" }))
 		t.expect(fs.isDir(`{wt1}/tracker/rafts/active/R0010`)).toBe(true)
 		t.expect(git(origin, { "rev-parse", "R0010-demo" })).toBe(git(wt1, { "rev-parse", "HEAD" }))
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
@@ -217,7 +231,7 @@ return t.spec("worktrees", function(it)
 		must(process.exec("chmod", { "+x", fakebin .. "/gh" }), "chmod fake gh")
 		git(main, { "remote", "set-url", "origin", "https://github.com/x/y.git" })
 		git(main, { "remote", "set-url", "--push", "origin", origin })
-		local env = { PATH = `{fakebin}:{process.env.PATH}` }
+		local env = { PATH = `{fakebin}:{process.env.PATH}`, GIT_TERMINAL_PROMPT = "0" }
 		local r = run(wt2, "bash", { "scripts/tracker.sh", "start", "R0020" }, nil, env)
 		git(main, { "remote", "set-url", "origin", origin })
 		git(main, { "config", "--unset", "remote.origin.pushurl" })
@@ -227,12 +241,69 @@ return t.spec("worktrees", function(it)
 		t.expect(string.find(log, "--draft", 1, true) ~= nil).toBe(true)
 	end)
 
+	it("worktree branches from the fresh origin/main, not the invoking tree", function()
+		-- someone else lands a commit: advance origin from a separate clone
+		local other = `{base}/other`
+		must(process.exec("git", { "clone", "-q", origin, other }), "clone other")
+		identity(other)
+		git(other, { "commit", "-q", "--allow-empty", "-m", "someone else" })
+		git(other, { "push", "-q", "origin", "main" })
+		local landed = string.match(git(main, { "ls-remote", origin, "refs/heads/main" }), "^(%x+)")
+		-- wt2 has its own commit (start's); the main checkout's main is now stale
+		local staleMain = git(main, { "rev-parse", "main" })
+		local made = `{main}/.worktrees/capture-fresh`
+		t.expect(must(tr(wt2, { "worktree", "capture-fresh" }), "worktree capture-fresh")).toBe(made)
+		local head = git(made, { "rev-parse", "HEAD" })
+		t.expect(head).toBe(landed)
+		t.expect(head ~= git(wt2, { "rev-parse", "HEAD" })).toBe(true)
+		t.expect(head ~= staleMain).toBe(true)
+		git(main, { "pull", "-q", "--ff-only" }) -- keep the fixture's main in step for later pushes
+	end)
+
 	it("worktree creates a named worktree from origin/main", function()
 		t.expect(must(tr(main, { "worktree", "capture-demo" }), "worktree capture-demo")).toBe(named)
 		t.expect(git(named, { "branch", "--show-current" })).toBe("capture-demo")
 		t.expect(git(named, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/main" }))
 		t.expect(must(tr(main, { "worktree", "capture-demo" }), "again")).toBe(named)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
+	end)
+
+	it("new issue works in a named worktree", function()
+		must(tr(named, { "new", "issue", "c", "probe" }), "new issue in a named worktree")
+		t.expect(git(named, { "status", "--porcelain" }) ~= "").toBe(true)
+		git(named, { "clean", "-fdq" })
+		t.expect(git(named, { "status", "--porcelain" })).toBe("")
+	end)
+
+	it("duplicate ids are reported", function()
+		-- a second document in one item directory
+		fs.writeFile(`{named}/tracker/issues/f0020/f0020-dup.md`, "---\nid: f0020\n---\n")
+		for _, args in { { "find", "f0020" }, { "list" } } do
+			local r = tr(named, args)
+			t.expect(r.ok).toBe(false)
+			t.expect(string.find(r.stderr .. r.stdout, "f0020", 1, true) ~= nil).toBe(true)
+		end
+		git(named, { "clean", "-fdq" })
+		-- the same id in two state directories
+		must(
+			process.exec(
+				"cp",
+				{ "-R", `{named}/tracker/issues/f0020`, `{named}/tracker/issues/active/f0020` }
+			),
+			"cp"
+		)
+		local r = tr(named, { "find", "f0020" })
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr .. r.stdout, "f0020", 1, true) ~= nil).toBe(true)
+		git(named, { "clean", "-fdq" })
+		t.expect(tr(named, { "find", "f0020" }).ok).toBe(true)
+	end)
+
+	it("worktree recreates a worktree whose directory was deleted", function()
+		fs.removeDir(named)
+		t.expect(must(tr(main, { "worktree", "capture-demo" }), "worktree after rm")).toBe(named)
+		t.expect(fs.isDir(named)).toBe(true)
+		t.expect(git(named, { "branch", "--show-current" })).toBe("capture-demo")
 	end)
 
 	it("worktree rejects bad names and non-raft ids", function()
