@@ -12,7 +12,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 |---|---|
 | Movement | **Rail movement with free look**, described below |
 | Players | **Solo mazes.** Each player gets their own maze instance (with their own ghosts) inside a shared server. Other players' mazes aren't visible. Logic should still allow N players per maze later. |
-| Authority | The **server** simulates every maze. Clients send intents and render the replicated state. |
+| Authority | The **server** simulates every maze. Clients send intents and render the replicated state. A session starts only when its client signals it's ready (user, 2026-09-29). |
 | Deploy | A separate, private **Pickman Beta** experience. Every PR that becomes ready for review is published there (last one wins). Production publishing will be decided later. |
 | Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now. |
 | Platforms | Desktop (keyboard and mouse) and **mobile (touch)**. Gamepad isn't planned; it gets the same intents if it's added later. |
@@ -20,18 +20,21 @@ This is the source of truth for product decisions. Every raft design must agree 
 ## Movement model: rail with free look
 - **The maze is a grid of tiles.** Walls are whole tiles. Walkable tiles form corridors, and a junction is a tile with more than 2 exits.
 - **Movement:**
-  - The player always moves along the current corridor at the level's speed (tiles per second, **(prep)**) and stops at a wall.
+  - The player always moves along the current corridor at the level's speed and stops at a wall. Level 1 is **7.5 tiles/s**, the arcade's 80% (R0040); per-level speeds come with raft c.
+  - **Corners are classic** (decided by the user, 2026-09-29): at a corner the player stops unless a turn into it is buffered. There is no automatic cornering.
   - There is no free strafing; position is always on a corridor centreline.
 - **Turn intents:** `Left`, `Right`, `Back` and `Forward`, relative to the current heading.
   - A turn intent is **buffered** and taken at the next tile where that exit exists.
-  - `Back` reverses immediately.
-  - The buffer expires after a window chosen in **(prep)**.
+  - `Back` reverses immediately: a literal reverse of the current heading, as in the arcade, even right after a turn (user, 2026-09-29).
+  - The buffer expires after **0.8 s** (24 ticks; R0040). A re-press restarts it.
+  - **Cornering grace** (user, 2026-09-29): a turn arriving one tick after passing straight through a centre where that exit exists is taken there, cutting the corner.
+  - **Missed turns** (user, 2026-09-29): a later press for a turn the player just passed straight by is discarded while the player is still nearer that junction than the next one ahead with that exit, so a late press never diverts the player at a later junction. A press nearer the next such junction is buffered for it.
 - **Look:** the camera's yaw and pitch are free and never change the heading. A "snap look to heading" action recentres it.
 - **Collisions are grid rules in Logic:**
-  - wall contact means stopping at the tile edge;
+  - wall contact means stopping at the tile edge: the player is one tile wide, so its front edge meets the wall when its centre reaches the last tile's centre (R0040);
   - pellets are eaten when the player enters a tile;
   - player and ghost collide when they share a tile, or when they swap tiles within one tick.
-- **Tick rate:** Logic runs on a fixed tick (**(prep)**, e.g. 30 Hz) and is independent of frame rate. Clients interpolate.
+- **Tick rate:** Logic runs on a fixed **30 Hz** tick (R0040) and is independent of frame rate. Clients interpolate.
 
 ## Scoring and rules (classic defaults; tune in (prep))
 - **Points:** pellet 10, power pellet 50, ghosts 200/400/800/1600 within one power period.

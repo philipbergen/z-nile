@@ -1,0 +1,93 @@
+--!strict
+-- f0120 AC1: a session holds players by id; joining, leaving and config errors behave as designed.
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local t = require("@tests/lib/t")
+
+local classic = Maze.layout("classic")
+
+return t.spec("f0120 session lifecycle", function(it)
+	it("starts at tick 0 with no players", function()
+		local s = Session.new(classic, 1)
+		t.expect(s.tick).toBe(0)
+		t.expect(Session.players(s)).toEqual({})
+	end)
+
+	it("joins players at the spawn and lists them sorted by id", function()
+		local s = Session.new(classic, 1)
+		Session.join(s, "b")
+		Session.join(s, "a")
+		t.expect(Session.players(s)).toEqual({ "a", "b" })
+		local snap = Session.snapshot(s, "a")
+		t.expect(snap.player.x).toBe(13)
+		t.expect(snap.player.y).toBe(23)
+		t.expect(snap.player.heading).toBe("W")
+		t.expect(snap.player.moving).toBe(true)
+	end)
+
+	it("refuses to join the same id twice", function()
+		local s = Session.new(classic, 1)
+		Session.join(s, "a")
+		t.expect(function()
+			Session.join(s, "a")
+		end).toThrow("already")
+	end)
+
+	it("leave removes a player; leaving twice or an unknown id is harmless", function()
+		local s = Session.new(classic, 1)
+		Session.join(s, "a")
+		Session.join(s, "b")
+		Session.leave(s, "a")
+		Session.leave(s, "a")
+		Session.leave(s, "nobody")
+		t.expect(Session.players(s)).toEqual({ "b" })
+		t.expect(function()
+			Session.snapshot(s, "a")
+		end).toThrow("unknown player")
+	end)
+
+	it("a player can rejoin after leaving and starts over at the spawn", function()
+		local s = Session.new(classic, 1)
+		Session.join(s, "a")
+		for _ = 1, 8 do
+			Session.step(s)
+		end
+		Session.leave(s, "a")
+		Session.join(s, "a")
+		t.expect(Session.snapshot(s, "a").player.x).toBe(13)
+	end)
+
+	it("players in one session move independently", function()
+		local s = Session.new(classic, 1)
+		Session.join(s, "a")
+		Session.join(s, "b")
+		Session.submit(s, "a", "Back")
+		Session.step(s)
+		t.expect(Session.snapshot(s, "a").player.heading).toBe("E")
+		t.expect(Session.snapshot(s, "b").player.heading).toBe("W")
+	end)
+
+	it("sessions do not share state", function()
+		local a = Session.new(classic, 1)
+		local b = Session.new(classic, 2)
+		Session.join(a, "p")
+		Session.join(b, "p")
+		Session.step(a)
+		t.expect(a.tick).toBe(1)
+		t.expect(b.tick).toBe(0)
+		t.expect(Session.snapshot(b, "p").player.x).toBe(13)
+	end)
+
+	it("validates its config", function()
+		t.expect(function()
+			Session.new(classic, 1, { movement = { speed = 0, turnBufferTicks = 24 }, maxIntentsPerTick = 4 })
+		end).toThrow("speed")
+		t.expect(function()
+			Session.new(
+				classic,
+				1,
+				{ movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 0 }
+			)
+		end).toThrow("maxIntentsPerTick")
+	end)
+end)
