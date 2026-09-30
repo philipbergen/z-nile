@@ -6,7 +6,7 @@ T=.claude/skills/tracker/SKILL.md
 X=.claude/skills/execute-raft/SKILL.md
 after() { sed -n '/^## After merge/,/^## /p' "$T"; }
 
-ac1() { after | grep -q 'git worktree remove' && after | grep -q 'git branch -D' && after | grep -qi 'remote branch'; }
+ac1() { after | grep -q 'worktree remove' && after | grep -q 'branch -D' && after | grep -qi 'remote branch'; }
 ac2() { after | grep -q 'fetch origin main:main' && after | grep -q 'ff-only'; }
 ac3() { sed -n '/^## Phase 6/,/^## Stop/p' "$X" | grep -q 'After merge'; }
 

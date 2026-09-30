@@ -16,7 +16,7 @@ After a PR merges, nothing in the skills says to update the root checkout's `mai
 
 ## Non-goals
 - Automating this in `tracker.sh` (R0020 / c0041 covers worktree tooling).
-- Merging: agents still merge only when the human asks.
+- Deciding when to merge: that is c0350's "Merging" section; this issue covers only what happens after a merge, whoever did it.
 
 ## Solution
 <!-- The approach in one paragraph. -->

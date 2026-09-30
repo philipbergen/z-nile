@@ -47,22 +47,29 @@ Each item is a directory named by its ID:
 The agent that delivered the raft merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
 1. `tracker.sh done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (execute-raft Phase 4). Only a *significant* finding left after review round 3 (an unresolved high, or a failed Judged criterion) blocks the merge and engages the human; leftover mediums and lows become follow-up issues.
 2. `scripts/check.sh --full` passes on the final head, run by you.
-3. CI is green on the PR's exact head sha: `gh pr checks <pr> --watch --fail-fast`. If CI never started for that sha (drafts skip it, and `done` pushes before marking ready), dispatch it with `scripts/ci-verify.sh` and wait.
-4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows it mergeable and up to date. If behind or conflicting, merge `origin/main` into the branch, renumber any colliding IDs (see Conflicts), then repeat steps 2-3.
+3. CI is green on the PR's exact head sha. `done` pushes and then marks the PR ready, and the ready event starts the `pull_request` run, so:
+   - poll `gh pr checks <pr>` until it lists at least one check (an empty list is **not** green), then `gh pr checks <pr> --watch --fail-fast` must exit 0 with every check `pass`;
+   - confirm the run's sha equals `git rev-parse HEAD`;
+   - if no run appears within about 5 minutes, dispatch one with `scripts/ci-verify.sh` (it needs HEAD equal to `origin/<branch>`, so push first) and wait. If the dispatched run fails, treat it as red.
+4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN`; any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. If behind or conflicting, merge `origin/main` into the branch, renumber any colliding IDs (see Conflicts), rerun `check.sh --full`, push, and repeat step 3. If resolving it needed anything beyond tracker renumbering (any change to `src/`, `tests/` or scripts), that's a fix on a finished PR: post a comment and run a new clean review round (execute-raft Phase 4) before merging.
 5. The human hasn't said to hold.
 
-Then `gh pr merge <pr> --squash` with the `Co-Authored-By` trailer, and follow "After merge". Never use `--admin`, never bypass branch protection, and never merge on red or missing CI, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
+Then `gh pr merge <pr> --squash` with the `Co-Authored-By` trailer, and follow "After merge". This repo may have no branch protection, so these conditions are the only gate: you enforce them. Never use `--admin`, and never merge on red or missing CI, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
 
 Observed criteria (human Studio playtests) do not block the merge. Put them in the final report and PR comment, and file any failure the human finds later as a defect issue.
 
 ## After merge
 Once the PR is merged (by you, or by the human), clean up locally. GitHub deletes the remote branch on merge, so don't delete it yourself.
-1. Update the root checkout's `main`, from the root, not from the worktree:
+First confirm the merge: `gh pr view <pr> --json state -q .state` must print `MERGED`. `<root>` is the first path in `git worktree list`.
+1. Update the root checkout's `main`, with `git -C <root>`, never by switching branches or stashing there:
    - if the root is on `main`: `git -C <root> pull --ff-only`;
-   - if the root is on another branch (in-progress work there): `git -C <root> fetch origin main:main`, which fast-forwards `main` without switching branches. Never switch or stash the root's work to do this.
-2. Remove the worktree: `git worktree remove <path>` from the root (add `--force` only if you've confirmed the leftovers are ignored files). If your session is inside it, leave it first.
-3. Delete the local branch: `git branch -D <branch>` (a squash merge leaves `-d` refusing, so first confirm the merge with `gh pr view --json state`).
-4. `git worktree prune`, then check `git worktree list` shows only worktrees still in use.
+   - if the root is on another branch (in-progress work there): `git -C <root> fetch origin main:main`, which fast-forwards `main` without switching branches;
+   - if `fetch` refuses because `main` is checked out in some other worktree, run `git -C <that worktree> pull --ff-only` there if it's clean; if it isn't, skip it and say so in the report.
+2. Leave and remove the worktree. Your shell cwd resets on each call and a Claude Code session owns its cwd, so:
+   - if this session created the worktree with EnterWorktree, call ExitWorktree with `remove` (pass `discard_changes` only after checking the diff against `main` is empty, as it is after a squash merge);
+   - otherwise run `git -C <root> worktree remove <path>`. If it says the worktree is locked, `git -C <root> worktree unlock <path>` first. Use `--force` only when you've confirmed the leftovers are ignored files.
+3. Delete the local branch from the root: `git -C <root> branch -D <branch>` (a squash merge makes `-d` refuse, which is why the `MERGED` check comes first). ExitWorktree `remove` already does this.
+4. `git -C <root> worktree prune`, then check `git -C <root> worktree list` shows only worktrees still in use.
 
 ## The PR is the visible record
 The draft PR opened by `start` stays the live log of the raft. Every `tracker.sh commit` pushes. In addition, comment on the PR (`gh pr comment`) when: a review starts (with the sha), a review file lands (verdict and findings by severity), a review is answered (the refute lines), an issue finishes, and on any `BLOCKED:` stop. Never sit on unpushed work, and never leave review files uncommitted. See execute-raft Phase 4.

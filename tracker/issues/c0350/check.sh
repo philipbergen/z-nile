@@ -9,7 +9,10 @@ phase6() { sed -n '/^## Phase 6/,/^## Stop/p' "$X"; }
 phase4() { sed -n '/^## Phase 4/,/^## Phase 5/p' "$X"; }
 
 ac1() { merging | grep -q 'gh pr merge' && merging | grep -q 'check.sh --full' && merging | grep -q 'green on the PR' && merging | grep -q 'Never use `--admin`'; }
-ac2() { ! grep -q 'Agents never merge' "$T"; }
+ac2() { ! grep -qiE 'agents? (never|must not|do not|don.t) merge|human merges the PR' "$T" "$X"; }
+ac5() { merging | grep -q 'CLEAN' && merging | grep -q 'not\*\* green' && merging | grep -q 'new clean review round'; }
+ac6() { phase4 | grep -q 'never a high' && phase4 | grep -q 'c0360'; }
+ac7() { sed -n '/^## Phase 5/,/^## Phase 6/p' "$X" | grep -q 'Ready to merge' && phase6 | grep -q 'merge commit sha'; }
 ac3() { merging | grep -q 'significant' && phase4 | grep -q 'significant' && phase4 | grep -q 'unresolved \*\*high\*\*'; }
 ac4() { phase6 | grep -q 'without waiting for a human'; }
 
@@ -17,5 +20,8 @@ check "AC1: Merging section has the conditions" ac1
 check "AC2: no 'agents never merge'" ac2
 check "AC3: only significant round-3 leftovers block" ac3
 check "AC4: Phase 6 merges without a human" ac4
+check "AC5: merge gate is explicit (CLEAN, empty checks not green, re-review after code changes)" ac5
+check "AC6: interim answer is limited and points at c0360" ac6
+check "AC7: final report comes after the merge" ac7
 
 finish
