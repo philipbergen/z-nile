@@ -47,6 +47,9 @@ On a re-review round, first read the previous `review-NNN.md` and `refute-NNN.md
 - If a refutation is right, drop that finding.
 - If it's wrong, repeat it with the new evidence.
 
+## Visible record
+Reviews are shown on the PR as they happen. In code mode the author's harness pushes before you start and posts a "started" comment; write `review-NNN.md` to disk in full before finishing, since it's committed, pushed and summarized to the PR the moment you're done. Never leave findings only in your reply. On a re-review, your file should make clear which earlier findings were dropped or repeated, since that is what the PR shows.
+
 ## Design mode (from ticket-prep)
 Attack all of the following:
 1. **Unknowns**: every assumption that isn't proven, especially about Roblox or engine behavior, replication, or performance. Is each one an experiment with a pass/fail question and a fallback?

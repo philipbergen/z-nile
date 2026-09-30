@@ -47,29 +47,34 @@ For each issue:
    - The start commit is the one with the subject `tracker: start R0010`.
 
 ## Phase 4: Adversarial code review (a clean reviewer)
-1. Start a **clean** reviewer. It has none of your context and gets only these inputs:
+The PR is the visible record of the work. **Push at every step below, and post a PR comment at each one** (`gh pr comment --body-file -`), so a human watching sees the review start, its findings, and how they were answered. Never hold review state locally.
+
+1. **Before launching**: make sure the tree is clean and `git push` is done, so the reviewer sees exactly what the PR shows. Post a comment: `Review NNN started at <short sha> (code mode)`.
+2. Start a **clean** reviewer. It has none of your context and gets only these inputs:
    - the `review` skill (code mode);
    - `git diff main...HEAD`;
    - the raft and issue documents and `check.sh` files;
    - read access to the repo.
    In Claude Code, that's a fresh subagent. For other agents, use a new session or context that receives only those inputs.
-2. The reviewer writes `review-NNN.md` in the raft directory (starting at 001), including a ruling on every Judged criterion.
-3. You respond in `refute-NNN.md`, with one line per finding:
+3. The reviewer writes `review-NNN.md` in the raft directory (starting at 001), including a ruling on every Judged criterion. **As soon as it's written**: `scripts/tracker.sh commit -m "R0010: review-NNN"` (this pushes), then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`.
+4. You respond in `refute-NNN.md`, with one line per finding:
    - `- F3: fixed <short sha>: <what changed>`, or
    - `- F3: refuted: <argument with evidence>`.
    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed.
-4. Commit the fixes, the review file and the refute file.
-5. **Re-review** with `review-NNN+1.md` from a *new* clean reviewer if any of these are true:
+5. Commit each fix as you make it (pushed by `tracker.sh commit`), then commit the refute file. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+6. **Re-review** with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1):
    - any high-severity finding was fixed;
    - the fixes changed a public API or the design;
    - the fixes are more than about 15% of the PR's lines;
    - a Judged criterion was ruled fail.
-6. **Cap: 3 rounds.** If round 3 still isn't resolved, stop and escalate.
+7. **Cap: 3 rounds.** If round 3 still isn't resolved, stop and escalate.
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
 2. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
 3. Write the final report (below). This goes in your reply, and also as a PR comment: `gh pr comment --body-file -`.
+
+Throughout phases 1-2, also post a short PR comment when an experiment round finishes and when each issue passes `tracker.sh check`.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
