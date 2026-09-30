@@ -14,6 +14,11 @@ export type Graph = {
 	dynamic: { string }, -- files containing require() with a non-literal argument
 }
 
+export type GameRoot = {
+	instance: string, -- "/"-joined instance names from the DataModel, e.g. "ReplicatedStorage/Shared"
+	path: string, -- the node's normalized "$path", e.g. "src/shared"
+}
+
 local graph = {}
 
 -- Specs that require this library load the Rojo-built place, so they implicitly depend on every
@@ -77,11 +82,103 @@ function graph.aliases(): { [string]: string }
 	return aliases :: { [string]: string }
 end
 
+local gameRootsCache: { GameRoot }? = nil
+
+local function collectRoots(node: any, prefix: { string }, out: { GameRoot })
+	for key, child in node do
+		if string.sub(key, 1, 1) ~= "$" and type(child) == "table" then
+			local inst = table.clone(prefix)
+			table.insert(inst, key)
+			local path = child["$path"]
+			if type(path) == "string" then
+				table.insert(out, { instance = table.concat(inst, "/"), path = normalize(path) })
+			end
+			collectRoots(child, inst, out)
+		end
+	end
+end
+
+-- Every node of the Rojo project tree that has a "$path", longest instance path first. `project` is
+-- a decoded project table; nil reads ./default.project.json and caches that result per process (an
+-- explicit project is never cached and never answered from the cache).
+function graph.gameRoots(project: any?): { GameRoot }
+	if project == nil and gameRootsCache ~= nil then
+		return gameRootsCache
+	end
+	local decoded = project or serde.decode("json", fs.readFile("default.project.json"))
+	local out: { GameRoot } = {}
+	collectRoots(decoded.tree or {}, {}, out)
+	table.sort(out, function(a, b)
+		if #a.instance ~= #b.instance then
+			return #a.instance > #b.instance
+		end
+		return a.instance < b.instance
+	end)
+	if project == nil then
+		gameRootsCache = out
+	end
+	return out
+end
+
+-- "@game/<seg>/<seg>..." to a repo-relative .luau file, or nil. `roots` nil means
+-- graph.gameRoots(), looked up through the module table at call time.
+function graph.resolveGame(spec: string, roots: { GameRoot }?): string?
+	if string.sub(spec, 1, 6) ~= "@game/" then
+		return nil
+	end
+	local segs = string.split(string.sub(spec, 7), "/")
+	for _, seg in segs do
+		if seg == "" or seg == "." or seg == ".." then
+			return nil
+		end
+	end
+	for _, root in roots or graph.gameRoots() do
+		local rootSegs = string.split(root.instance, "/")
+		local match = #rootSegs <= #segs
+		if match then
+			for i, seg in rootSegs do
+				if segs[i] ~= seg then
+					match = false
+					break
+				end
+			end
+		end
+		if match then
+			-- the longest mapped node owns its subtree: no fallback to a shorter root
+			local base = root.path
+			for i = #rootSegs + 1, #segs do
+				base ..= "/" .. segs[i]
+			end
+			if string.match(base, "%.server$") or string.match(base, "%.client$") then
+				return nil
+			end
+			if exists(base .. ".luau") then
+				return base .. ".luau"
+			elseif exists(base .. "/init.luau") then
+				return base .. "/init.luau"
+			end
+			return nil
+		end
+	end
+	return nil
+end
+
+-- true for "./…", "../…", "@self/<x>" and "@game/ReplicatedStorage/<x>": the only specs src may use.
+function graph.srcAliasAllowed(spec: string): boolean
+	return string.sub(spec, 1, 2) == "./"
+		or string.sub(spec, 1, 3) == "../"
+		or string.sub(spec, 1, 6) == "@self/"
+		or string.sub(spec, 1, 25) == "@game/ReplicatedStorage/"
+end
+
 -- Resolve a require string from `from` (repo-relative file) to a repo-relative file, or nil.
-function graph.resolve(from: string, spec: string): string?
+-- `game` optionally injects the @game roots (default: graph.gameRoots()).
+function graph.resolve(from: string, spec: string, game: { GameRoot }?): string?
 	local base: string
 	if string.sub(spec, 1, 6) == "@lune/" then
 		return nil
+	elseif string.sub(spec, 1, 6) == "@game/" then
+		return graph.resolveGame(spec, game)
 	elseif string.sub(spec, 1, 6) == "@self/" or spec == "@self" then
 		local selfDir = if isInit(from) then dirname(from) else string.gsub(from, "%.luau$", "")
 		base = selfDir .. string.sub(spec, 6)
@@ -165,7 +262,8 @@ function graph.stripComments(src: string): string
 	return table.concat(out)
 end
 
-function graph.build(roots: { string }): Graph
+-- `game` optionally injects the @game roots, passed to graph.resolve.
+function graph.build(roots: { string }, game: { GameRoot }?): Graph
 	local g: Graph = { files = {}, deps = {}, unresolved = {}, dynamic = {} }
 	for _, root in roots do
 		graph.listLuau(root, g.files)
@@ -176,7 +274,7 @@ function graph.build(roots: { string }): Graph
 		for spec in string.gmatch(src, graph.REQUIRE_PATTERN) do
 			-- skip @lune builtins and interpolation lookalikes such as `require("{x}")` in strings
 			if string.sub(spec, 1, 6) ~= "@lune/" and not string.find(spec, "{", 1, true) then
-				local target = graph.resolve(file, spec)
+				local target = graph.resolve(file, spec, game)
 				if target then
 					table.insert(deps, target)
 				else
@@ -193,6 +291,19 @@ function graph.build(roots: { string }): Graph
 		g.deps[file] = deps
 	end
 	return g
+end
+
+-- Every string-literal require in `dir` (recursive, comments ignored) that srcAliasAllowed rejects.
+function graph.srcAliasViolations(dir: string): { { file: string, spec: string } }
+	local out: { { file: string, spec: string } } = {}
+	for _, file in graph.listLuau(dir) do
+		for spec in string.gmatch(graph.stripComments(fs.readFile(file)), graph.REQUIRE_PATTERN) do
+			if not graph.srcAliasAllowed(spec) then
+				table.insert(out, { file = file, spec = spec })
+			end
+		end
+	end
+	return out
 end
 
 -- All files reachable from `file` through requires (including itself).
