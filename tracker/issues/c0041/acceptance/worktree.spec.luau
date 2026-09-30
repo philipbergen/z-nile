@@ -148,7 +148,7 @@ return t.spec("worktrees", function(it)
 			must(tr(seed, { "new", "raft", "feature", pair[2], `f00{i}0` }), "new raft " .. pair[2])
 		end
 		edit(`{seed}/tracker/issues/f0050/f0050.md`, "design: draft", "design: ready")
-		for i, pair in rafts do
+		for i = 1, #rafts do
 			edit(`{seed}/tracker/issues/f00{i}0/f00{i}0.md`, "design: draft", "design: ready")
 			edit(`{seed}/tracker/rafts/R00{i}0/R00{i}0.md`, "design: draft", "design: ready")
 		end
