@@ -45,6 +45,15 @@ Each item is a directory named by its ID:
 
 The human merges the PR. Agents never merge.
 
+## After merge
+Once the PR is merged (by the human, or by an agent at their request), clean up locally. GitHub deletes the remote branch on merge, so don't delete it yourself.
+1. Update the root checkout's `main`, from the root, not from the worktree:
+   - if the root is on `main`: `git -C <root> pull --ff-only`;
+   - if the root is on another branch (in-progress work there): `git -C <root> fetch origin main:main`, which fast-forwards `main` without switching branches. Never switch or stash the root's work to do this.
+2. Remove the worktree: `git worktree remove <path>` from the root (add `--force` only if you've confirmed the leftovers are ignored files). If your session is inside it, leave it first.
+3. Delete the local branch: `git branch -D <branch>` (a squash merge leaves `-d` refusing, so first confirm the merge with `gh pr view --json state`).
+4. `git worktree prune`, then check `git worktree list` shows only worktrees still in use.
+
 ## The PR is the visible record
 The draft PR opened by `start` stays the live log of the raft. Every `tracker.sh commit` pushes. In addition, comment on the PR (`gh pr comment`) when: a review starts (with the sha), a review file lands (verdict and findings by severity), a review is answered (the refute lines), an issue finishes, and on any `BLOCKED:` stop. Never sit on unpushed work, and never leave review files uncommitted. See execute-raft Phase 4.
 

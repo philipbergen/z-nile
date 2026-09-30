@@ -76,6 +76,9 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 2. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
 3. Write the final report (below). This goes in your reply, and also as a PR comment: `gh pr comment --body-file -`.
 
+## Phase 6: After merge
+When the human reports the PR merged (or asks you to merge it), follow "After merge" in the tracker skill: update the root's `main`, remove this raft's worktree, delete the local branch. Post no further commits to the branch.
+
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
 - An experiment fails and has no fallback.
