@@ -14,6 +14,7 @@ scripts/setup.sh
 | GitHub CLI | `brew install gh` | see cli.github.com |
 | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
 | curl, unzip | preinstalled | distro packages |
+| Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`tests/acceptance/c0400/smoke.spec.luau`) |
 
 ## What `scripts/setup.sh` does
 1. **Rokit** (the toolchain manager, v1.2.0): downloads the prebuilt release asset with `gh release download -R rojo-rbx/rokit`, then runs `rokit self-install`.
