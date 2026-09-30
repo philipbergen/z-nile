@@ -1,14 +1,14 @@
-# Review 001: c0330 (code mode)
-Inputs: main...HEAD at 78fde99 plus working tree; .claude/skills/{execute-raft,review,tracker}/SKILL.md, tracker/issues/c0330/{doc,check.sh}, scripts/tracker/main.luau, scripts/tracker/spend.luau, scripts/lib/ac.sh. Note: no raft dir exists, so this file lives in the issue directory. `tracker.sh done` would not read it here.
+# Review 001: c0331 (code mode)
+Inputs: main...HEAD at 78fde99 plus working tree; .claude/skills/{execute-raft,review,tracker}/SKILL.md, tracker/issues/c0331/{doc,check.sh}, scripts/tracker/main.luau, scripts/tracker/spend.luau, scripts/lib/ac.sh. Note: no raft dir exists, so this file lives in the issue directory. `tracker.sh done` would not read it here.
 
 ### F1 [medium] check.sh AC1 and AC3 pass on a doc that does not do what the AC says
-Where: tracker/issues/c0330/check.sh ac1, ac3
+Where: tracker/issues/c0331/check.sh ac1, ac3
 Evidence: ac1 requires the string `Review NNN started` and any case-insensitive `push` anywhere in Phase 4. The Phase 4 intro line already contains "Push at every step", so the push half is always true. Delete the "make sure the tree is clean and git push is done" clause from step 1 and AC1 still passes, as it does if the started comment is posted after the reviewer is launched. ac3 only greps `Review NNN addressed`, so it passes with no push, no refute-file commit and no `gh pr comment` (AC3 says "pushed and commented"). ac2 similarly matches strings anywhere in the Phase 4 range, not in the step that owns them. The sed range `/^## Phase 4/,/^## Phase 5/` also runs to EOF if the Phase 5 heading is renamed, which makes the greps more lenient. Nothing checks the cadence outside Phase 4 (issue-finished and experiment comments, the BLOCKED comment, the tracker skill's list of events).
 Fix: since check.sh is sequestered, tighten it before execution. Grep for `git push` within step 1, or for a line matching `Review NNN started.*` together with `gh pr comment`. Require `Review NNN addressed` on the same line as `refute`. Also add a check for "issue" plus "tracker.sh check" plus "comment" and for `BLOCKED` in the tracker skill.
 
 ### F2 [medium] The "throughout phases 1-2" comment rule is in the wrong place, and Phase 3 has no cadence
 Where: .claude/skills/execute-raft/SKILL.md:77 (last paragraph after Phase 5)
-Evidence: The sentence "Throughout phases 1-2, also post a short PR comment when an experiment round finishes and when each issue passes `tracker.sh check`" sits at the end of Phase 5, after the final-report step. An agent following phases in order reads Phases 1-2 without seeing it. Phase 2 step 4 ("Finish the issue") is where the issue-finish comment belongs, and Phase 1's commit step is where the experiment comment belongs. The c0330 Solution says "Phase 0-3", and the tracker skill lists "an issue finishes", but no AC covers it. The wording is also unclear as to whether the comment is required or optional ("also post a short").
+Evidence: The sentence "Throughout phases 1-2, also post a short PR comment when an experiment round finishes and when each issue passes `tracker.sh check`" sits at the end of Phase 5, after the final-report step. An agent following phases in order reads Phases 1-2 without seeing it. Phase 2 step 4 ("Finish the issue") is where the issue-finish comment belongs, and Phase 1's commit step is where the experiment comment belongs. The c0331 Solution says "Phase 0-3", and the tracker skill lists "an issue finishes", but no AC covers it. The wording is also unclear as to whether the comment is required or optional ("also post a short").
 Fix: move the two comments into Phase 1 (after the experiments commit) and Phase 2 step 4, and delete the trailing paragraph. Use imperative wording.
 
 ### F3 [medium] Re-review file format conflicts with tracker.sh done's parser
@@ -37,7 +37,7 @@ Evidence: `push()` silently does nothing when there is no upstream and only prin
 Fix: add "If push or `gh pr comment` fails, retry once; if it still fails, note it in the verification log and continue (do not skip the review), and mention it in the final report." Use `git push -u origin HEAD`-safe wording or check with `git status -sb` that the branch is not ahead.
 
 ### F8 [low] Design mode and doc completeness
-Where: review/SKILL.md "Visible record"; c0330 issue doc
+Where: review/SKILL.md "Visible record"; c0331 issue doc
 Evidence: Design-mode reviews are explicitly out of scope (non-goal), and the review skill's new section only speaks of code mode, but does not say design mode is exempt, so a design reviewer may look for a PR to comment on. Also the issue doc still has empty Design, Touched-module reasons, Test plan, Implementation steps and Verification log sections, and `design: draft`. The escalation path (BLOCKED) is covered by the tracker skill line, but execute-raft's Stop-conditions section was not touched and does not say to also push the review files.
 Fix: add one line "Design mode has no PR yet; nothing here applies." Fill or mark the empty sections n/a, and set `design` appropriately.
 
@@ -47,6 +47,6 @@ Fix: add one line "Design mode has no PR yet; nothing here applies." Fill or mar
 - AC4's two greps do match the added headings.
 
 ## Judged criteria (code mode only)
-None defined for c0330.
+None defined for c0331.
 
 Verdict: changes

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance checks for c0330. SEQUESTERED: never edit during execution.
+# Acceptance checks for c0331. SEQUESTERED: never edit during execution.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(git -C "$A" rev-parse --show-toplevel)/scripts/lib/ac.sh"
 S=.claude/skills

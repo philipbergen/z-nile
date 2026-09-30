@@ -1,5 +1,5 @@
 ---
-id: c0330
+id: c0331
 type: chore
 title: PR-visible review cadence
 raft: 
@@ -9,7 +9,7 @@ design: draft
 created: 2026-09-29
 ---
 
-# c0330: PR-visible review cadence
+# c0331: PR-visible review cadence
 
 ## Problem
 The skills treat the draft PR as a placeholder until `tracker.sh done`. Review starts, review findings and fixes are committed locally, and (per execute-raft Phase 4) only pushed as a side effect of later commits. A human watching the PR cannot see that a review is running, what it found, or whether it was addressed. Desired: the PR is a live record of the work.
