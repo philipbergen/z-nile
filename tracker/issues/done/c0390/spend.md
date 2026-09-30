@@ -7,6 +7,7 @@
 | 3 | 2026-09-30 06:05 | c0390: place resolves @game from tree root | 10 | 3 | 7.8 | focus |
 | 4 | 2026-09-30 06:06 | c0390: meta rule, skill docs, tooling spec, log | 36 | 2 | 0.3 | focus |
 | 5 | 2026-09-30 06:08 | c0390: review-001 fixes (init segment, frozen roots, tie-break test) | 15 | 0 | 2.4 | focus |
+| 6 | 2026-09-30 06:08 | tracker: done R0050 | 0 | 0 | 0.3 | raft |
 
-**Total:** +176 / -9 lines, 11.2 agent-minutes over 5 commits
-<!-- totals: added=176 removed=9 minutes=11.2 commits=5 -->
+**Total:** +176 / -9 lines, 11.5 agent-minutes over 6 commits
+<!-- totals: added=176 removed=9 minutes=11.5 commits=6 -->
