@@ -5,7 +5,7 @@ title: Doc filename without slug
 raft: R0020
 depends_on: []
 emergent: false
-design: draft
+design: reviewed
 created: 2026-09-30
 ---
 

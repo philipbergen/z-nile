@@ -6,7 +6,7 @@ slug: parallel-workstreams
 raft: R0020
 depends_on: [c0041, c0420]
 emergent: false
-design: draft
+design: reviewed
 created: 2026-09-30
 ---
 
@@ -75,7 +75,7 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 
 ### Other documents
 - **`.claude/skills/review/SKILL.md`**: a short "Stream mode" section: scope is one issue's diff, the file name, no Judged criteria, Sonnet is allowed, and it never replaces the Opus review.
-- **`.claude/skills/tracker/SKILL.md`**: `workstreams` and `worktree <name> --from <ref>` in the command table; the PR-record paragraph adds the per-stream comments.
+- **`.claude/skills/tracker/SKILL.md`**: `workstreams` and `worktree <name> --from <ref>` in the command table; `workstreams` joins the read-only tracker commands in the Worktrees section's main-checkout whitelist (c0041's rule 1); the PR-record paragraph adds the per-stream comments.
 - **`.claude/skills/make-prompt/SKILL.md`**: the report (step 4) adds the plan's last line (`parallel: yes|no`).
 - **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially."
 - **`tracker/architecture.md`**: unchanged.

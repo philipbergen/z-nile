@@ -321,7 +321,7 @@ return t.spec("worktrees", function(it)
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stderr, "0050", 1, true) ~= nil).toBe(true)
 		git(named, { "clean", "-fdq" })
-		t.expect(string.find(tr(named, { "list" }).stderr, "warning", 1, true)).toBe(nil)
+		t.expect((string.find(tr(named, { "list" }).stderr, "warning", 1, true))).toBe(nil)
 	end)
 
 	it("worktree recreates a worktree whose directory was deleted", function()
