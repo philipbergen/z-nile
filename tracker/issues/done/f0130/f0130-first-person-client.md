@@ -242,3 +242,5 @@ The acceptance specs already exist.
 5. The Studio playtest (OC1) is for the human. List its steps in the final report.
 
 ## Verification log
+
+- 2026-09-29: AC1-AC6 PASS (`tracker.sh check f0130`, 6/6). `scripts/check.sh --full` green, including the Roblox type check of all four client files. No deviations, except that `Camera` locks the mouse and reads its delta before the no-snapshot-yet guard (design order 1 then 2), so the cursor is captured from the start. JC1 (thin adapters) is for the reviewer; OC1 (Studio walk-through) is for the human.

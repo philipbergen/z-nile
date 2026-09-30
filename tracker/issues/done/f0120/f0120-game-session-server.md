@@ -245,3 +245,5 @@ None.
 5. `tests/unit/Session` and the scenario story. Run `scripts/tracker.sh check f0120`. Commit.
 
 ## Verification log
+
+- 2026-09-29: AC1-AC7 PASS (`tracker.sh check f0120`, 7/7). `scripts/check.sh --full` green, including the Roblox type check of `Sessions.luau`. No deviations. Added the recommended scenario story `tests/scenario/session-walk.spec.luau`. OC1 (two-player Studio test) is left to the human; see the final report.

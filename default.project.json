@@ -2,8 +2,17 @@
   "name": "pickman",
   "tree": {
     "$className": "DataModel",
+    "Players": {
+      "$properties": { "CharacterAutoLoads": false }
+    },
     "ReplicatedStorage": {
-      "Shared": { "$path": "src/shared" }
+      "Shared": { "$path": "src/shared" },
+      "Remotes": {
+        "$className": "Folder",
+        "Ready": { "$className": "RemoteEvent" },
+        "Intent": { "$className": "RemoteEvent" },
+        "Snapshot": { "$className": "RemoteEvent" }
+      }
     },
     "ServerScriptService": {
       "Server": { "$path": "src/server" }
