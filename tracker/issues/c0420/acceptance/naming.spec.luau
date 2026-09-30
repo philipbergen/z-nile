@@ -48,6 +48,8 @@ local function write(path: string, text: string)
 	fs.writeFile(`{seed}/{path}`, text)
 end
 
+local legacyTip = ""
+
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
@@ -182,6 +184,7 @@ return t.spec("document naming", function(it)
 		write("tracker/rafts/done/R0040/R0040-rd.md", legacy("R0040", "chore", "Rd"))
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "legacy documents" })
+		legacyTip = git({ "rev-parse", "HEAD" })
 
 		local r = tr({ "migrate" })
 		local out = must(r, "migrate")
@@ -230,6 +233,33 @@ return t.spec("document naming", function(it)
 		fs.removeDir(`{seed}/tracker/issues/d0060`)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "more" })
+	end)
+
+	it("a branch that added a legacy document merges a migrated main, then migrate converts it", function()
+		local branch = git({ "branch", "--show-current" })
+		local migratedTip = git({ "rev-parse", "HEAD" })
+		-- a branch cut before the migration adds one legacy document and edits another
+		git({ "checkout", "-q", "-b", "inflight", legacyTip })
+		write("tracker/issues/d0080/d0080-fresh.md", legacy("d0080", "defect", "Fresh"))
+		write(
+			"tracker/issues/d0030/d0030-legacy.md",
+			legacy("d0030", "defect", "Legacy") .. "\nan edit on the branch\n"
+		)
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "work on a legacy branch" })
+		local merge = run(seed, "git", { "merge", "-q", "--no-edit", migratedTip })
+		t.expect(merge.ok).toBe(true)
+		-- the edited document followed the rename; the new one is still legacy until migrate runs
+		t.expect(has(read("tracker/issues/d0030/d0030.md"), "an edit on the branch")).toBe(true)
+		t.expect(fs.isFile(`{seed}/tracker/issues/d0080/d0080-fresh.md`)).toBe(true)
+		local r = tr({ "migrate" })
+		local out = must(r, "migrate after merging")
+		t.expect(has(out, "tracker/issues/d0080/d0080-fresh.md -> tracker/issues/d0080/d0080.md")).toBe(true)
+		t.expect(select(2, string.gsub(out, "%->", ""))).toBe(1)
+		t.expect(read("tracker/issues/d0080/d0080.md")).toBe(migrated("d0080", "defect", "Fresh", "fresh"))
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "migrated on the branch" })
+		git({ "checkout", "-q", branch })
 	end)
 
 	it("renumber renames the document and rewrites references", function()

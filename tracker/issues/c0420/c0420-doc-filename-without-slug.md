@@ -23,6 +23,7 @@ The worktree rule (c0041) makes this likelier, because captures and preps used t
 - **Preventing the collision itself.** Two branches can still pick the same number; this issue makes that a loud git conflict on `<ID>.md` instead of a silent merge, and the tracker skill says how to resolve it (`renumber` before merging). Warning about a shared number across prefixes (`f0420` and `c0420`) is c0041's landing step.
 - **Renaming other files** (`check.sh`, `spend.md`, reviews) or item directories.
 - **Validating slugs found in legacy filenames.** `migrate` copies whatever the old filename held.
+- **Supporting other rafts that are in flight during the transition.** The policy (user decision, 2026-09-30) is that R0020 is executed and merged while **no other raft is started or active**, and no raft starts until it has merged. Captures and preps that only add or edit backlog documents adopt the layout by merging `main` and running `migrate` (a spec case pins that); a branch whose items were *moved* (a started raft) cannot, because a move and a rename of the same document conflict in git (rename/rename), which this chore doesn't try to resolve.
 
 ## Solution
 - The document is `<ID>/<ID>.md`. The slug moves into the frontmatter (`slug: doc-filename-without-slug`), next to `title`.
@@ -74,7 +75,7 @@ Three specs name the old document paths; this chore is the test fix the testing 
 Assertions, counts and expectations other than those paths are not touched (JC1).
 
 ### Docs
-The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatter incl. slug + sections from tracker/templates)`, and its "Conflicts" section says: a merge that reports a conflict in `tracker/…/<ID>/<ID>.md` is two items that picked the same number. Run `git merge --abort`, `scripts/tracker.sh renumber <ID> <next free>` on your own branch, then merge again. After merging a `main` that contains this change, a branch that still has legacy-named documents runs `scripts/tracker.sh migrate` and commits.
+The ticket-prep skill's line "In `R…-slug.md`, before any issue gets detail" becomes "In the raft document (`R<NNNN>.md`), before any issue gets detail". The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatter incl. slug + sections from tracker/templates)`, and its "Conflicts" section says: a merge that reports `CONFLICT (add/add)` in `tracker/…/<ID>/<ID>.md` is two items that picked the same number. Run `git merge --abort`, `scripts/tracker.sh renumber <ID> <next free>` on your own branch, then merge again. After merging a `main` that contains this change, a branch that still has legacy-named documents runs `scripts/tracker.sh migrate` and commits. Only a `CONFLICT (add/add)` on `tracker/…/<ID>/<ID>.md` means two items picked the same number. A content conflict on a document is two edits to one item: resolve it like any other merge and never renumber.
 
 ### Scalability
 - `find` reads one more file (the frontmatter of the document it already opens). `list` and `all` already read every document for titles, so the cost is unchanged: about 100 small files.
@@ -99,6 +100,7 @@ The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatte
 - `tests/acceptance/c0410`
 - `tests/tooling/metrics-rounds.spec.luau`
 - `.claude/skills/tracker/SKILL.md`
+- `.claude/skills/ticket-prep/SKILL.md`
 
 ### Affected specs
 `lune run scripts/affected -- scripts/tracker/store.luau scripts/tracker/main.luau tracker/templates/issue/doc.md tracker/templates/raft/doc.md tests/acceptance/c0010 tests/acceptance/c0410 tests/tooling/metrics-rounds.spec.luau .claude/skills/tracker/SKILL.md` prints `ALL`, because `scripts/` forces a full run. New: `acceptance/naming.spec.luau`.
@@ -113,7 +115,8 @@ The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatte
 - **c0010's promoted `tracker-lifecycle.spec.luau`, c0410's `rounds.spec.luau` and `metrics-rounds.spec.luau`**: updated only in path strings (JC1) and must pass.
 - **Every other tracker command** (`start`, `focus`, `commit`, `done`, `promote-check`, `prompt`, `metrics`, `members`, `check`) reads documents through `store`, so `tests/tooling/*` and the c0010 lifecycle spec exercise them on the new layout.
 - **`spend`**: per-issue `spend.md` is unaffected.
-- **In-flight branches** that still contain legacy documents get a clear error and the `migrate` command, not silent misbehaviour.
+- **Branches that still contain legacy documents** (captures and preps adding backlog documents) get a clear error and the `migrate` command, not silent misbehaviour; the case `a branch that added a legacy document merges a migrated main` pins the recovery. Started rafts are excluded by the transition policy (Non-goals).
+- **Prepped rafts on the old layout.** R0060 (c0400) was prepped before this change; its design line and its three fixture specs were updated in place in the same PR (paths only), and the new permanent guard spec (`acceptance/guard.spec.luau`, promoted to `tests/acceptance/c0420/`) fails any later spec that names a `<ID>-<slug>.md` document (only `naming.spec.luau` is exempt).
 
 ## Test plan
 `acceptance/naming.spec.luau` sets up a scratch `.cache/naming-e2e/` repo: a clone of the repo's committed HEAD with `main` forced as its branch and its `origin` removed (so the tracker's commands run freely), the working tree's `scripts/`, `tracker/templates/` and `.gitignore` overlaid, and the tracker emptied. Cases (`spec case → AC`):
@@ -125,8 +128,10 @@ The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatte
 - `a legacy-named document is an error that points at migrate` → AC3
 - `migrate converts legacy documents in every state` → AC4
 - `migrate is idempotent and refuses an ambiguous directory` → AC4
+- `a branch that added a legacy document merges a migrated main, then migrate converts it` → AC4 (a branch cut before the migration adds one legacy document and edits another; merging the migrated `main` exits 0, and `migrate` converts only the new document)
 - `renumber renames the document and rewrites references` → AC5
 - `two branches creating the same id conflict on the document` → AC8
+- `guard.spec`: `no spec under tests/ or tracker/ names a <ID>-<slug>.md document` → AC10
 
 `check.sh` adds repo-level checks for AC6, AC7 and AC9 (below).
 
@@ -142,6 +147,8 @@ The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatte
 | A legacy name is an error pointing at `migrate`, even when the document already has a slug | `a legacy-named document is an error …` | silently accept a legacy-named file; report "no such item" | run |
 | `migrate` renames with history and adds the slug, in every state, issues and rafts | `migrate converts legacy documents in every state` | skip a state directory; skip rafts; drop the slug; `fs.move` instead of `git mv` | run |
 | `migrate` is idempotent and refuses ambiguity | `migrate is idempotent …` | overwrite `<ID>.md` when both exist | run |
+| A branch that added a legacy document adopts the layout by merging `main` and running `migrate` | `a branch that added a legacy document merges …` | `migrate` skips the backlog state | run |
+| No spec names a legacy document path | `guard.spec` | scan only `tests/`, or skip `tracker/` | reasoned (the guard itself is the check; a scan that skips a directory can't be proven without injecting a file) |
 | `renumber` renames the new document name and rewrites references | `renumber renames …` | leave the old document name | run |
 | A same-id collision conflicts in git | `two branches creating the same id conflict …` | write a slug-named file | run |
 | The repo is migrated; specs updated; docs updated | AC6, AC7, AC9 checks, JC1 | leave one legacy document or one old path | reasoned (repo-level greps and a ruling, not a mutation) |
@@ -157,7 +164,8 @@ The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatte
 - **AC6**: The repo has no legacy `<ID>-<slug>.md` document, every item directory has `<ID>.md` with a `slug:` line, and `scripts/tracker.sh list` succeeds.
 - **AC7**: The three specs that named the old paths pass on the new layout.
 - **AC8**: Two branches that each create the next free id with different slugs conflict on `<ID>/<ID>.md` when merged.
-- **AC9**: The tracker skill describes the new layout and the conflict and migration procedure, and no skill, template or script text still says `<ID>-<slug>.md`.
+- **AC9**: The tracker skill describes the new layout and the conflict and migration procedure (only `add/add` means renumber), and no skill, template or script text still says `<ID>-<slug>.md` or `…-slug.md`.
+- **AC10**: No spec under `tests/` or `tracker/` names a legacy `<ID>-<slug>.md` document path (the permanent guard; `naming.spec.luau` is exempt by name).
 
 ### Judged
 - **JC1: the three specs changed only in their paths.**
@@ -171,7 +179,7 @@ None.
 1. `store.luau` (`docIn`, `find`, slug from the frontmatter) and the two templates. Commit.
 2. `new` (slug validation, `SLUG`, `<ID>.md`) and `renumber`. Commit.
 3. `cmd.migrate` and USAGE. Commit.
-4. Run `scripts/tracker.sh migrate`, commit the renamed documents. Update the three specs and the tracker skill. Commit.
+4. Run `scripts/tracker.sh migrate`, commit the renamed documents. Update the three specs, the tracker skill and the ticket-prep line. Commit.
 5. `scripts/tracker.sh check c0420`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
 
 ## Verification log

@@ -10,7 +10,7 @@ local fixture = {} :: any
 -- { path relative to root, frontmatter lines, body }
 fixture.FILES = {
 	{
-		path = "rafts/done/R0010/R0010-alpha.md",
+		path = "rafts/done/R0010/R0010.md",
 		front = {
 			"id: R0010",
 			"type: chore",
@@ -22,7 +22,7 @@ fixture.FILES = {
 		body = "# R0010: Alpha\n\nThe first raft.\n",
 	},
 	{
-		path = "rafts/active/R0020/R0020-beta.md",
+		path = "rafts/active/R0020/R0020.md",
 		front = {
 			"id: R0020",
 			"type: feature",
@@ -34,7 +34,7 @@ fixture.FILES = {
 		body = "# R0020: Beta\n\nIn progress.\n",
 	},
 	{
-		path = "rafts/R0030/R0030-gamma.md",
+		path = "rafts/R0030/R0030.md",
 		front = {
 			"id: R0030",
 			"type: feature",
@@ -46,7 +46,7 @@ fixture.FILES = {
 		body = "# R0030: Gamma\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
 	},
 	{
-		path = "rafts/R0040/R0040-delta.md",
+		path = "rafts/R0040/R0040.md",
 		front = {
 			"id: R0040",
 			"type: feature",
@@ -58,7 +58,7 @@ fixture.FILES = {
 		body = "# R0040: Delta\n",
 	},
 	{
-		path = "rafts/R0050/R0050-epsilon.md",
+		path = "rafts/R0050/R0050.md",
 		front = {
 			"id: R0050",
 			"type: chore",
@@ -70,7 +70,7 @@ fixture.FILES = {
 		body = "# R0050: Epsilon\n",
 	},
 	{
-		path = "issues/done/c0010/c0010-first.md",
+		path = "issues/done/c0010/c0010.md",
 		front = {
 			"id: c0010",
 			"type: chore",
@@ -83,7 +83,7 @@ fixture.FILES = {
 		body = "# c0010: First\n",
 	},
 	{
-		path = "issues/active/f0020/f0020-second.md",
+		path = "issues/active/f0020/f0020.md",
 		front = {
 			"id: f0020",
 			"type: feature",
@@ -96,7 +96,7 @@ fixture.FILES = {
 		body = "# f0020: Second\n",
 	},
 	{
-		path = "issues/f0030/f0030-third.md",
+		path = "issues/f0030/f0030.md",
 		front = {
 			"id: f0030",
 			"type: feature",
@@ -109,7 +109,7 @@ fixture.FILES = {
 		body = "# f0030: Third\n",
 	},
 	{
-		path = "issues/f0031/f0031-third-b.md",
+		path = "issues/f0031/f0031.md",
 		front = {
 			"id: f0031",
 			"type: feature",
@@ -122,7 +122,7 @@ fixture.FILES = {
 		body = "# f0031: Third B\n\nMentions </script><script>alert(1)</script> literally.\n",
 	},
 	{
-		path = "issues/f0040/f0040-fourth.md",
+		path = "issues/f0040/f0040.md",
 		front = {
 			"id: f0040",
 			"type: feature",
@@ -135,7 +135,7 @@ fixture.FILES = {
 		body = "# f0040: Fourth\n",
 	},
 	{
-		path = "issues/c0050/c0050-fifth.md",
+		path = "issues/c0050/c0050.md",
 		front = {
 			"id: c0050",
 			"type: chore",
@@ -148,7 +148,7 @@ fixture.FILES = {
 		body = "# c0050: Fifth\n",
 	},
 	{
-		path = "issues/f0060/f0060-loose.md",
+		path = "issues/f0060/f0060.md",
 		front = {
 			"id: f0060",
 			"type: feature",
@@ -161,7 +161,7 @@ fixture.FILES = {
 		body = "# f0060: Loose\n",
 	},
 	{
-		path = "issues/done/c0070/c0070-closed.md",
+		path = "issues/done/c0070/c0070.md",
 		front = {
 			"id: c0070",
 			"type: chore",
@@ -174,7 +174,7 @@ fixture.FILES = {
 		body = "# c0070: Closed\n",
 	},
 	{
-		path = "rafts/R0070/R0070-zeta.md",
+		path = "rafts/R0070/R0070.md",
 		front = {
 			"id: R0070",
 			"type: feature",
@@ -186,7 +186,7 @@ fixture.FILES = {
 		body = "# R0070: Zeta\n",
 	},
 	{
-		path = "issues/f0070/f0070-waits-on-loose.md",
+		path = "issues/f0070/f0070.md",
 		front = {
 			"id: f0070",
 			"type: feature",
@@ -199,7 +199,7 @@ fixture.FILES = {
 		body = "# f0070: Waits\n",
 	},
 	{
-		path = "issues/f0080/f0080-orphan.md",
+		path = "issues/f0080/f0080.md",
 		front = {
 			"id: f0080",
 			"type: feature",

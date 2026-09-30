@@ -125,14 +125,16 @@ return t.spec("workstreams", function(it)
 				end
 			end
 		end
-		-- ten issues f0010..f0100
-		for _, slug in { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j" } do
+		-- sixteen issues f0010..f0160
+		for _, slug in { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p" } do
 			must(tr(seed, { "new", "issue", "f", slug }), "new issue " .. slug)
 		end
 		must(tr(seed, { "new", "raft", "feature", "demo", "f0010", "f0020", "f0030", "f0040" }), "raft demo")
 		must(tr(seed, { "new", "raft", "feature", "solo", "f0050", "--single" }), "raft solo")
 		must(tr(seed, { "new", "raft", "feature", "chain", "f0060", "f0070", "f0080" }), "raft chain")
 		must(tr(seed, { "new", "raft", "feature", "loop", "f0090", "f0100" }), "raft loop")
+		must(tr(seed, { "new", "raft", "feature", "line", "f0110", "f0120", "f0130" }), "raft line")
+		must(tr(seed, { "new", "raft", "feature", "prefix", "f0140", "f0150", "f0160" }), "raft prefix")
 		touches("f0010", { "src/a" })
 		touches("f0020", { "src/b" })
 		touches("f0030", { "src/a/sub" })
@@ -147,6 +149,15 @@ return t.spec("workstreams", function(it)
 		touches("f0100", { "src/q" })
 		depends("f0090", { "f0100" })
 		depends("f0100", { "f0090" })
+		touches("f0110", { "src/m" })
+		touches("f0120", { "src/n" })
+		touches("f0130", { "src/o" })
+		depends("f0120", { "f0110" })
+		depends("f0130", { "f0120" })
+		touches("f0140", { "src/a" })
+		touches("f0150", { "src/ab" }) -- a sibling of src/a, not inside it
+		touches("f0160", { "src/a/x" }) -- inside src/a, and it also depends on f0140
+		depends("f0160", { "f0140" })
 		-- R0010 and its issues are ready to start
 		edit(`{seed}/tracker/rafts/R0010/R0010.md`, "design: draft", "design: ready")
 		for _, id in { "f0010", "f0020", "f0030", "f0040" } do
@@ -195,6 +206,27 @@ return t.spec("workstreams", function(it)
 		t.expect(tr(main, { "workstreams", "f0010" }).ok).toBe(false)
 	end)
 
+	it("waves are one more than the latest dependency (a chain of three)", function()
+		t.expect(must(tr(main, { "workstreams", "R0050" }), "workstreams R0050")).toBe(table.concat({
+			"raft R0050: 3 issues",
+			"f0110 wave 1",
+			"f0120 wave 2 after f0110 (depends_on)",
+			"f0130 wave 3 after f0120 (depends_on)",
+			"parallel: no",
+		}, "\n"))
+	end)
+
+	it("overlap compares whole path components and depends_on wins the reason", function()
+		-- src/ab is not inside src/a; src/a/x is, but f0160 also depends on f0140, which is the label
+		t.expect(must(tr(main, { "workstreams", "R0060" }), "workstreams R0060")).toBe(table.concat({
+			"raft R0060: 3 issues",
+			"f0140 wave 1",
+			"f0150 wave 1",
+			"f0160 wave 2 after f0140 (depends_on)",
+			"parallel: yes (wave 1: f0140 f0150)",
+		}, "\n"))
+	end)
+
 	it("worktree --from bases the new worktree on the ref", function()
 		t.expect(must(tr(main, { "worktree", "R0010" }), "worktree R0010")).toBe(wt1)
 		git(wt1, { "commit", "-q", "--allow-empty", "-m", "raft work" })
@@ -220,8 +252,34 @@ return t.spec("workstreams", function(it)
 		t.expect(fs.isDir(`{main}/.worktrees/R0020-solo`)).toBe(false)
 	end)
 
-	it("stream review files are not review rounds", function()
+	it("tracker.sh commit refuses while a squash merge is unresolved", function()
 		must(tr(wt1, { "start", "R0010" }), "start R0010")
+		local notes = `{wt1}/notes.txt`
+		fs.writeFile(notes, "one\n")
+		git(wt1, { "add", "-A" })
+		git(wt1, { "commit", "-qm", "notes" })
+		local tip = git(wt1, { "rev-parse", "HEAD" })
+		local branch = git(wt1, { "branch", "--show-current" })
+		for _, b in { "stream-a", "stream-b" } do
+			git(wt1, { "checkout", "-q", "-b", b, tip })
+			fs.writeFile(notes, b .. "\n")
+			git(wt1, { "add", "-A" })
+			git(wt1, { "commit", "-qm", b })
+		end
+		git(wt1, { "checkout", "-q", branch })
+		git(wt1, { "merge", "--squash", "-q", "stream-a" })
+		git(wt1, { "commit", "-qm", "stream a" })
+		local before = git(wt1, { "rev-parse", "HEAD" })
+		t.expect(run(wt1, "git", { "merge", "--squash", "stream-b" }).ok).toBe(false)
+		local r = tr(wt1, { "commit", "-m", "stream b" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "unmerged")).toBe(true)
+		t.expect(git(wt1, { "rev-parse", "HEAD" })).toBe(before)
+		t.expect(has(fs.readFile(notes), "<<<<<<<")).toBe(true) -- the markers were never committed
+		git(wt1, { "reset", "-q", "--hard", "HEAD" })
+	end)
+
+	it("stream review files are not review rounds", function()
 		local dir = `{wt1}/tracker/rafts/active/R0010`
 		fs.writeFile(
 			`{dir}/stream-review-f0010-001.md`,
@@ -236,6 +294,14 @@ return t.spec("workstreams", function(it)
 		t.expect(has(done.stderr, "no review-NNN.md")).toBe(true)
 		local metrics = must(tr(wt1, { "metrics" }), "metrics")
 		t.expect(has(metrics, "| R0010 | 0 | 0 | none |")).toBe(true)
+	end)
+
+	it("prompt embeds the error for a plan that can't be built", function()
+		local r = tr(main, { "prompt", "R0040", "--stdout" })
+		local out = must(r, "prompt R0040")
+		t.expect(has(out, "## Workstreams plan")).toBe(true)
+		t.expect(has(out, "plan unavailable: dependency cycle")).toBe(true)
+		t.expect(has(out, "parallel: no")).toBe(true)
 	end)
 
 	it("prompt embeds the workstreams plan", function()

@@ -65,10 +65,10 @@ Read-only; it runs anywhere (it is on the main-checkout whitelist of c0041's wor
 Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the human hasn't asked for sequential execution. Otherwise Phase 2 runs as today (Phase 2A). The **lead** is the agent following the prompt; it alone pushes, merges, comments on the PR and runs `tracker.sh commit`/`done`.
 
 1. **Plan**: run `workstreams`, post it as a PR comment, and execute wave by wave.
-2. **Start a wave**: for every issue in the wave, create its worktree with `scripts/tracker.sh worktree ws-<issue> --from <raft branch>`, then spawn one **Sonnet** subagent per stream (Agent tool, `model: "sonnet"`), **all in one message so they run concurrently**. The brief contains: the raft and issue ids; the absolute stream worktree path ("your shell doesn't keep a working directory: start every command with `cd <path> &&` or use `git -C <path>`"); the issue document, `check.sh` and acceptance specs to satisfy (paths, all sequestered); the rules: tests first, implement the Design exactly, edit only the issue's Touched modules and its own Verification log, never edit `check.sh`, acceptance specs or `tracker/architecture.md`, never push, comment on the PR or run `tracker.sh commit`; commit with plain `git add -A && git commit -m "<issue>: <what>"`; run `scripts/check.sh --affected` and `scripts/tracker.sh check <issue>` in the worktree; stop and report (don't improvise) on the protocol's stop conditions. The stream reports `done` or `blocked`, its final commit sha, minutes worked, deviations, and anything another issue needs.
-3. **Review each stream** as soon as it reports `done`: a clean **Sonnet** subagent (`model: "sonnet"`) with the `review` skill in **stream mode**: inputs are `git diff <raft branch>...ws-<issue>`, the issue document, `check.sh` and acceptance specs, and read access; it runs the stream's checks; it writes only `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md` **in the stream worktree**, in the review skill's format (no Judged section). The lead commits that file on the stream branch. The stream's author (continue the same subagent with SendMessage) answers in `stream-refute-<issue>-NNN.md` with `fixed` or `refuted` lines, as in Phase 4. **At most 2 rounds per stream**; a round-2 high finding still standing means the lead takes that issue over or escalates.
-4. **Merge the stream**: in the raft worktree, `git merge --squash ws-<issue>`, then `scripts/tracker.sh commit -m "<issue>: <what the stream did>" --issue <issue> --time <stream minutes>`. Squashing stages exactly the stream's net change, so spend lines are attributed to the issue; the stream's own commits stay out of the raft history. Run `tracker.sh check <issue>`. Then remove the stream worktree and branch (`git -C <root> worktree remove <path> && git -C <root> branch -D ws-<issue>`). The lead posts a PR comment for the stream: review verdict and findings by severity, the merge sha.
-5. **Next wave**: its streams start from the raft branch after the previous wave's merges. A blocked or unresolved stream is finished by the lead itself in the raft worktree (Phase 2A for that issue), and the Verification log says so.
+2. **Start a wave**: for every issue in the wave, create its worktree with `scripts/tracker.sh worktree ws-<issue> --from <raft branch>`, then spawn one **Sonnet** subagent per stream (Agent tool, `model: "sonnet"`), **all in one message so they run concurrently**. The brief contains: the raft and issue ids; the absolute stream worktree path ("your shell doesn't keep a working directory: start every command with `cd <path> &&` or use `git -C <path>`"); the issue document, `check.sh` and acceptance specs to satisfy (paths, all sequestered); the rules: tests first, implement the Design exactly, edit only the issue's Touched modules and its own Verification log, never edit `check.sh`, acceptance specs or `tracker/architecture.md`; never push, comment on the PR, or run `tracker.sh new`, `focus`, `commit`, `renumber`, `migrate` or `done` (the lead alone allocates ids and commits on the raft branch, so a problem a stream finds that no issue covers goes in its final report, and the lead files it); commit with plain `git add -A && git commit -m "<issue>: <what>"`; run `scripts/check.sh --affected` and `scripts/tracker.sh check <issue>` in the worktree; stop and report (don't improvise) on the protocol's stop conditions. The stream reports `done` or `blocked`, its final commit sha, minutes worked, deviations, and anything another issue needs.
+3. **Review each stream** as soon as it reports `done`: a clean **Sonnet** subagent (`model: "sonnet"`) with the `review` skill in **stream mode**: inputs are `git diff <raft branch>...ws-<issue>`, the issue document, `check.sh` and acceptance specs, and read access; it runs the stream's checks; it checks that `git diff --name-only <raft branch>...ws-<issue>` stays inside the issue's Touched modules, the issue's own document, and its `stream-review-<issue>-*` and `stream-refute-<issue>-*` files (anything else is a finding); it writes only `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md` **in the stream worktree**, in the review skill's format (no Judged section). The lead commits that file on the stream branch. The stream's author (continue the same subagent with SendMessage) answers in `stream-refute-<issue>-NNN.md` with `fixed` or `refuted` lines, as in Phase 4. **At most 2 rounds per stream**; a round-2 high finding still standing means the lead takes that issue over or escalates.
+4. **Merge the stream**: in the raft worktree, `git merge --squash ws-<issue>`, then `scripts/tracker.sh commit -m "<issue>: <what the stream did>" --issue <issue> --time <stream minutes>`. Squashing stages exactly the stream's net change, so spend lines are attributed to the issue; the stream's own commits stay out of the raft history. **If the squash conflicts** (two streams touched one file outside their declared modules), the lead resolves it in the raft worktree, notes it in both issues' Verification logs, reruns both issues' checks, and only then runs `tracker.sh commit`, which refuses while unmerged paths remain. Run `tracker.sh check <issue>`. Then remove the stream worktree and branch (`git -C <root> worktree remove <path> && git -C <root> branch -D ws-<issue>`). The lead posts a PR comment for the stream: review verdict and findings by severity, the merge sha.
+5. **Next wave**: its streams start from the raft branch after the previous wave's merges. A blocked or unresolved stream is finished by the lead itself in the raft worktree (Phase 2A for that issue), the Verification log says so, and the lead removes that stream's worktree and branch with the same chained command as in step 4 (otherwise a later `worktree ws-<issue> --from …` would silently resume the stale branch).
 6. **Integrate**: after the last wave, **evaluate the acceptance criteria**: `scripts/tracker.sh check <issue>` for every member issue and the raft's `check.sh`. The lead makes any last-minute changes (small, committed with `tracker.sh commit`, each noted in the affected issue's Verification log). Then Phase 3 (whole-raft verification) and **Phase 4, the adversarial review of the sum total, on Opus**, exactly as today.
 7. **Model policy**: stream implementers and stream reviewers run on Sonnet by the user's decision; the Phase 4 reviewer still runs on **Opus** (`model: "opus"`). Stream reviews never substitute for it, are not review rounds (`tracker.sh done` and `metrics` ignore `stream-review-*` and `stream-refute-*` files), and their findings need no `refute` answers for `done`.
 8. **Final report** gains one line: `Workstreams: <issue>: <stream review verdict> | sequential`.
@@ -77,11 +77,12 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 - **`.claude/skills/review/SKILL.md`**: a short "Stream mode" section: scope is one issue's diff, the file name, no Judged criteria, Sonnet is allowed, and it never replaces the Opus review.
 - **`.claude/skills/tracker/SKILL.md`**: `workstreams` and `worktree <name> --from <ref>` in the command table; `workstreams` joins the read-only tracker commands in the Worktrees section's main-checkout whitelist (c0041's rule 1); the PR-record paragraph adds the per-stream comments.
 - **`.claude/skills/make-prompt/SKILL.md`**: the report (step 4) adds the plan's last line (`parallel: yes|no`).
-- **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially."
+- **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially." Hard rule 2 ("Commit only with `scripts/tracker.sh commit`") gains "(in Phase 2B, stream branches are committed with plain git; the raft branch only with `tracker.sh commit`)".
 - **`tracker/architecture.md`**: unchanged.
 
 ### `scripts/tracker/main.luau` changes
-- `touchedModules(item)`, `workstreamPlan(raft): (string, string)` (text and the warnings), `cmd.workstreams`, the `--from` option in `cmd.worktree`, the `{{WORKSTREAMS}}` variable in `cmd.prompt`, USAGE.
+- `touchedModules(item)`, `workstreamPlan(raft)` returning the plan text, its warnings and an error message instead of failing, `cmd.workstreams` (prints the warnings, fails with the error), the `--from` option in `cmd.worktree`, the `{{WORKSTREAMS}}` variable in `cmd.prompt` (on a plan error it embeds `plan unavailable: <error>` and `parallel: no` and still exits 0), USAGE.
+- **`recordAndCommit`** (used by `tracker.sh commit` and `done`) fails `unmerged paths: resolve the merge first` when `git ls-files -u` prints anything, **before** `git add -A`. Without it, the documented `git merge --squash` followed by `tracker.sh commit` commits conflict markers and pushes them.
 - `reviewProblem` and `metrics` already match `review-NNN.md` with anchored patterns; a spec pins that stream files don't match.
 
 ### Scalability
@@ -91,6 +92,7 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 ### Maintainability
 - The protocol lives in one skill section; the tooling is two small, deterministic, tested functions.
 - The wave rule is data (`depends_on`, Touched modules), so well-written issues are the only input.
+- The plan parses the Touched modules section with its own small parser (bullets only, every path kept, including root files such as `AGENTS.md`), while spend attribution (`spend.ownedPaths`) drops paths without a `/`. The difference is deliberate: a file at the repo root must still count as overlap for scheduling, but can't be attributed by prefix. Unifying them would change spend attribution and needs its own spec case, so it is out of scope.
 
 ### Usability
 - The human sees the plan in the prompt, the per-stream PR comments as they happen, and one Opus review at the end, as today.
@@ -118,17 +120,21 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 - **R0040-style rafts** (several issues) now show `parallel: yes`, but nothing changes unless the lead chooses Phase 2B.
 
 ## Test plan
-`acceptance/workstreams.spec.luau` builds a scratch `.cache/ws-e2e/` like c0041's: a seed clone of the repo (no origin, `main` forced, the working tree's `scripts/`, `tracker/templates/`, `.gitignore` overlaid, tracker emptied) in which it creates issues and rafts with `new` and edits their `depends_on` and Touched modules; then a bare `origin.git` cloned from the seed and a clone `main/` for the worktree cases. Rafts: `R0010` (`demo`): f0010 (`src/a`), f0020 (`src/b`), f0030 (`src/a/sub`), f0040 (depends on f0020, `src/c`); `R0020` (`solo`): f0050; `R0030` (`chain`): f0060 (no touched modules), f0070 (`src/z`), f0080 (depends on f0070 and on `c0999`, which isn't in the raft; `src/y`); `R0040` (`loop`): f0090 and f0100 depending on each other.
+`acceptance/workstreams.spec.luau` builds a scratch `.cache/ws-e2e/` like c0041's: a seed clone of the repo (no origin, `main` forced, the working tree's `scripts/`, `tracker/templates/`, `.gitignore` overlaid, tracker emptied) in which it creates issues and rafts with `new` and edits their `depends_on` and Touched modules; then a bare `origin.git` cloned from the seed and a clone `main/` for the worktree cases. Rafts: `R0010` (`demo`): f0010 (`src/a`), f0020 (`src/b`), f0030 (`src/a/sub`), f0040 (depends on f0020, `src/c`); `R0020` (`solo`): f0050; `R0030` (`chain`): f0060 (no touched modules), f0070 (`src/z`), f0080 (depends on f0070 and on `c0999`, which isn't in the raft; `src/y`); `R0040` (`loop`): f0090 and f0100 depending on each other; `R0050` (`line`): f0110, then f0120 depending on f0110, then f0130 depending on f0120 (a chain: waves 1, 2, 3); `R0060` (`prefix`): f0140 (`src/a`), f0150 (`src/ab`, not an overlap) and f0160 (depends on f0140 *and* touches `src/a/x`, so both reasons hold and `depends_on` wins).
 
 Cases (`spec case → AC`):
 - `workstreams orders waves by depends_on and serializes overlapping modules` → AC1 (R0010, exact output)
 - `a single-issue raft is sequential` → AC1
 - `an issue without touched modules is serialized with a warning` → AC1 (R0030, exact output, also a dependency outside the raft is ignored)
 - `a dependency cycle and an unknown raft are errors` → AC1
+- `waves are one more than the latest dependency (a chain of three)` → AC1 (R0050: f0110 wave 1, f0120 wave 2, f0130 wave 3)
+- `overlap compares whole path components and depends_on wins the reason` → AC1 (R0060, exact output)
 - `worktree --from bases the new worktree on the ref` → AC2
 - `worktree --from rejects an unknown ref and a raft id` → AC2
+- `tracker.sh commit refuses while a squash merge is unresolved` → AC5 (two branches change one line; the second `git merge --squash` conflicts; `tracker.sh commit` exits 1 naming the unmerged paths and HEAD doesn't move)
 - `stream review files are not review rounds` → AC3 (an active raft with only `stream-review-*` and `stream-refute-*` files: `done` still says `no review-NNN.md`, and `metrics` counts zero code rounds)
 - `prompt embeds the workstreams plan` → AC4
+- `prompt embeds the error for a plan that can't be built` → AC4 (R0040, the dependency cycle: exit 0, `plan unavailable`, `parallel: no`)
 
 ### Rules and mutants
 `run` rows were mutation-tested on the prep prototype (Verification log); `reasoned` rows were not run.
@@ -136,7 +142,9 @@ Cases (`spec case → AC`):
 | rule | spec :: case | mutant it kills | checked |
 |---|---|---|---|
 | Dependencies put an issue in a later wave | `workstreams orders waves …` | ignore `depends_on` | run |
-| Overlapping touched modules (equal or parent/child) are serialized | `workstreams orders waves …` | compare only equal paths; ignore overlap | run |
+| Overlapping touched modules (equal or parent/child, by whole path components) are serialized | `workstreams orders waves …`, `overlap compares whole path components …` | compare only equal paths; ignore overlap; a string-prefix test (`src/ab` overlaps `src/a`) | run |
+| A wave is one more than the latest wave it must follow | `waves are one more than the latest dependency …` | `1 + #after` (a chain's third issue lands beside the second) | run |
+| When an issue both depends on and overlaps another, the reason is `depends_on` | `overlap compares whole path components and depends_on wins the reason` | let `overlap` win the label | run |
 | An issue with no touched modules is serialized after everything and warns | `an issue without touched modules …` | treat it as independent | run |
 | Dependencies outside the raft are ignored | `an issue without touched modules …` (f0080 depends on `c0999`) | fail or wait on an unknown dependency | run |
 | A cycle is an error naming the issues; an unknown raft is an error | `a dependency cycle and an unknown raft …` | loop forever; print an empty plan | run |
@@ -144,21 +152,23 @@ Cases (`spec case → AC`):
 | `--from` bases a new worktree on the ref | `worktree --from bases …` | ignore `--from` (use `origin/main`) | run |
 | `--from` needs a resolvable ref and a named target | `worktree --from rejects …` | fall back to `HEAD`; accept a raft id | run |
 | Stream files are not review rounds | `stream review files are not review rounds` | match any file containing `review` | run |
-| The prompt embeds the plan | `prompt embeds the workstreams plan` | omit the section | run |
-| execute-raft carries the protocol; model policy stated; other docs updated | AC5 grep and JC1 | leave a step out; put Sonnet on the Phase 4 review | reasoned (greps and a ruling, not a mutation) |
+| The prompt embeds the plan, or the error when the plan can't be built | `prompt embeds the workstreams plan`, `prompt embeds the error …` | omit the section; fail the whole prompt on a cycle | run |
+| `tracker.sh commit` refuses while merge conflicts are unresolved | `tracker.sh commit refuses while a squash merge is unresolved` | no check (commits the markers) | run |
+| execute-raft carries the protocol; model policy stated; other docs updated | AC6 grep and JC1 | leave a step out; put Sonnet on the Phase 4 review | reasoned (greps and a ruling, not a mutation) |
 
 ## Acceptance criteria
 
 ### Checked
-- **AC1**: `tracker.sh workstreams <R-id>` prints the plan in the documented format: waves from `depends_on` (in-raft only) and overlapping Touched modules, issues with no touched modules serialized with a warning, `parallel: yes|no`, and fails on a dependency cycle or an unknown raft.
+- **AC1**: `tracker.sh workstreams <R-id>` prints the plan in the documented format: waves from `depends_on` (in-raft only) and overlapping Touched modules (whole path components; a wave is one more than the latest wave it follows; `depends_on` wins the reason), issues with no touched modules serialized with a warning, `parallel: yes|no`, and fails on a dependency cycle or an unknown raft.
 - **AC2**: `tracker.sh worktree <name> --from <ref>` creates the worktree on a new branch at `<ref>`'s tip (not `origin/main`), is idempotent, and rejects an unknown ref and a raft id, creating nothing.
 - **AC3**: `stream-review-*` and `stream-refute-*` files in a raft directory are not review rounds: `done` still requires `review-NNN.md`, and `metrics` doesn't count them.
-- **AC4**: `tracker.sh prompt` embeds the plan under `## Workstreams plan`.
-- **AC5**: The execute-raft skill contains the parallel protocol (Phase 2B with the plan, the per-stream Sonnet implementer and Sonnet review, the squash merge, the acceptance evaluation, and the Opus review of the whole), the review skill has a stream mode, the tracker skill lists the two commands, and the prompt template has the plan section (the greps in `check.sh`).
+- **AC4**: `tracker.sh prompt` embeds the plan under `## Workstreams plan`, or `plan unavailable: <error>` and `parallel: no` (exit 0) when the plan can't be built.
+- **AC5**: `tracker.sh commit` fails with `unmerged paths` and doesn't move HEAD while `git ls-files -u` lists anything.
+- **AC6**: The execute-raft skill contains the parallel protocol (Phase 2B with the plan, the per-stream Sonnet implementer and Sonnet review, the squash merge, the acceptance evaluation, and the Opus review of the whole), the review skill has a stream mode, the tracker skill lists the two commands, and the prompt template has the plan section and the amended commit rule (the greps in `check.sh`).
 
 ### Judged
 - **JC1: the protocol is complete, ordered and safe.**
-  - **Pass**: a reader who has never seen the repo can follow Phase 2B from the skill alone. It states, in this order: plan; start a wave (Sonnet streams, one message, the brief's contents); review each stream (clean Sonnet subagent, stream files, at most 2 rounds); squash-merge with `tracker.sh commit --issue`; next wave; evaluate every issue's acceptance checks and the raft check; last-minute changes; Phase 3; Phase 4 on Opus. It says that only the lead pushes, merges, comments on the PR and runs `tracker.sh commit`/`done`, that streams never touch files outside their Touched modules or any sequestered file, what happens when a stream blocks, and that stream reviews never replace the Opus review.
+  - **Pass**: a reader who has never seen the repo can follow Phase 2B from the skill alone. It states, in this order: plan; start a wave (Sonnet streams, one message, the brief's contents); review each stream (clean Sonnet subagent, stream files, at most 2 rounds); squash-merge with `tracker.sh commit --issue`; next wave; evaluate every issue's acceptance checks and the raft check; last-minute changes; Phase 3; Phase 4 on Opus. It says that only the lead pushes, merges, comments on the PR, allocates ids and runs `tracker.sh commit`/`done`; that streams never touch files outside their Touched modules or any sequestered file and report emergent problems instead of filing them; what happens when a squash merge conflicts; what happens when a stream blocks (including removing its worktree and branch); that the stream reviewer checks containment; and that stream reviews never replace the Opus review.
   - **Fail**: a missing or contradictory step, Sonnet put on the Phase 4 review, a stream allowed to push or merge, or no fallback. Quote it.
 
 ### Observed
@@ -168,8 +178,9 @@ Cases (`spec case → AC`):
 1. `touchedModules`, `workstreamPlan` and `cmd.workstreams`, plus USAGE. Run AC1. Commit.
 2. `--from` in `cmd.worktree`. Run AC2. Commit.
 3. `{{WORKSTREAMS}}` in `cmd.prompt` and the template. Run AC3 and AC4. Commit.
-4. Docs: execute-raft Phase 2B and the final report line, the review skill's stream mode, the tracker and make-prompt skills. Run AC5. Commit.
-5. `scripts/tracker.sh check c0430`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
+4. `recordAndCommit`'s unmerged-paths guard. Run AC5. Commit.
+5. Docs: execute-raft Phase 2B and the final report line, the review skill's stream mode, the tracker and make-prompt skills, the prompt template's hard rule. Run AC6. Commit.
+6. `scripts/tracker.sh check c0430`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
 
 ## Verification log
 

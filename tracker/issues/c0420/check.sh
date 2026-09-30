@@ -27,8 +27,8 @@ check "AC1: new writes <ID>.md with a slug; bad slugs rejected" cases_pass \
 check "AC2: find, list, members, start on the new layout; slug from the frontmatter" cases_pass \
   "find, list, members and start" "a document without a slug"
 check "AC3: a legacy-named document is an error pointing at migrate" cases_pass "a legacy-named document"
-check "AC4: migrate converts legacy documents, idempotent, refuses ambiguity" cases_pass \
-  "migrate converts" "migrate is idempotent"
+check "AC4: migrate converts legacy documents, idempotent, refuses ambiguity, adopts a merged branch" cases_pass \
+  "migrate converts" "migrate is idempotent" "a branch that added a legacy document"
 check "AC5: renumber renames the document and rewrites references" cases_pass "renumber renames"
 check "AC6: the repo is migrated: no legacy document, every item has <ID>.md with a slug" bash -c '
   legacy=$(find tracker -name "[fdcR][0-9][0-9][0-9][0-9]-*.md")
@@ -49,8 +49,11 @@ check "AC8: two branches creating the same id conflict on the document" cases_pa
 check "AC9: the skill describes the layout; no text still says <ID>-<slug>.md" bash -c '
   grep -qF "<ID>/<ID>.md" .claude/skills/tracker/SKILL.md || { echo "tracker skill: layout line"; exit 1; }
   grep -qi "migrate" .claude/skills/tracker/SKILL.md || { echo "tracker skill: no migrate procedure"; exit 1; }
-  bad=$(grep -rnF -e "<ID>-<slug>" -e "<id>-<slug>" .claude scripts tracker/templates SETUP.md AGENTS.md || true)
+  grep -qF "add/add" .claude/skills/tracker/SKILL.md || { echo "tracker skill: only add/add means renumber"; exit 1; }
+  bad=$(grep -rnF -e "<ID>-<slug>" -e "<id>-<slug>" -e "-slug.md" -e "-<slug>.md" .claude scripts tracker/templates SETUP.md AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
+check "AC10: no spec names a legacy document path (the permanent guard)" \
+  lune run tests/run -- "$A/guard.spec.luau"
 check "AC1-AC5, AC8: every case of the naming spec passes" all_cases_pass
 
 finish

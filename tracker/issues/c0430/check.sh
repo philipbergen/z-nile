@@ -24,12 +24,14 @@ all_cases_pass() {
 
 check "AC1: the plan: waves, overlaps, no-modules warning, parallel line, cycle and unknown raft errors" cases_pass \
   "workstreams orders waves" "a single-issue raft is sequential" "an issue without touched modules" \
-  "a dependency cycle and an unknown raft"
+  "a dependency cycle and an unknown raft" "waves are one more than the latest" "overlap compares whole path"
 check "AC2: worktree --from bases on the ref; unknown ref and raft id rejected" cases_pass \
   "worktree --from bases" "worktree --from rejects"
 check "AC3: stream review files are not review rounds" cases_pass "stream review files are not review rounds"
-check "AC4: the prompt embeds the plan" cases_pass "prompt embeds the workstreams plan"
-check "AC5: skills and template carry the parallel protocol" bash -c '
+check "AC4: the prompt embeds the plan, or the error when it can't be built" cases_pass \
+  "prompt embeds the workstreams plan" "prompt embeds the error"
+check "AC5: tracker.sh commit refuses while merge conflicts are unresolved" cases_pass "tracker.sh commit refuses"
+check "AC6: skills and template carry the parallel protocol" bash -c '
   e=.claude/skills/execute-raft/SKILL.md
   for k in "Phase 2B" "tracker.sh workstreams" "--from" "stream-review" "git merge --squash" "model: \"sonnet\"" "model: \"opus\""; do
     grep -qF -- "$k" "$e" || { echo "execute-raft: missing $k"; exit 1; }
@@ -39,7 +41,8 @@ check "AC5: skills and template carry the parallel protocol" bash -c '
   grep -qF -- "--from" .claude/skills/tracker/SKILL.md || { echo "tracker skill: --from"; exit 1; }
   grep -qF "parallel:" .claude/skills/make-prompt/SKILL.md || { echo "make-prompt: parallel line"; exit 1; }
   grep -qF "## Workstreams plan" tracker/templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
-  grep -qF "{{WORKSTREAMS}}" tracker/templates/prompt.md || { echo "prompt template: variable"; exit 1; }'
-check "AC1-AC4: every case of the workstreams spec passes" all_cases_pass
+  grep -qF "{{WORKSTREAMS}}" tracker/templates/prompt.md || { echo "prompt template: variable"; exit 1; }
+  grep -qF "stream branches are committed with plain git" tracker/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }'
+check "AC1-AC5: every case of the workstreams spec passes" all_cases_pass
 
 finish

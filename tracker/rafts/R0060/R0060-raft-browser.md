@@ -22,7 +22,7 @@ Decisions the user made in prep (2026-09-29), quoted in c0400's Problem, includi
 ## Whole-raft design
 See c0400's Design. The shape:
 ```
-tracker/{rafts,issues}/[active/|done/]<ID>/<ID>-<slug>.md
+tracker/{rafts,issues}/[active/|done/]<ID>/<ID>.md
    │ board.collect(root)                 (statuses, raft deps both ways, top level, tabs, No raft, home)
    ▼
 Model ──board.encode──▶ JSON (sorted keys, [] for empty, < escaped)

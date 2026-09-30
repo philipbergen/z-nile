@@ -25,11 +25,12 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 - **A hook that denies edits made by other tools** (Edit, Write, plain `git`) in the main checkout. The tracker CLI does refuse its own mutations there (see Design), and the rule is in the skills and the prompt, but a hook is a separate follow-up, not filed here.
 - **A `tracker.sh land` command.** Landing (fetch, merge, gate, push, PR, wait for CI, merge, pull, clean up) stays a documented procedure built from `git` and `gh`, like the merge conditions in the tracker skill today.
 - **Automatic removal of named (non-raft) worktrees** by `worktree-prune`. The landing procedure removes them; prune only lists the leftovers.
-- Changing `tracker.sh start` semantics beyond accepting an already-checked-out raft branch and refusing to run in the main checkout. c0010's sequestered lifecycle spec drives `start` in a remote-less clone and must keep passing unchanged.
+- Changing `tracker.sh start` semantics beyond accepting an already-checked-out raft branch and refusing to run in the main checkout. c0010's sequestered lifecycle spec drives `start` in a remote-less clone and must keep passing (c0420 updates only its document paths).
+- **Backlog chore c0370 (duplicate id detection)** is superseded by this issue's `store.find` error and c0420's collision conflict; close it when this raft lands.
 
 ## Solution
 - **`tracker.sh worktree <target>`**: creates, or reuses, a worktree under `<main checkout>/.worktrees/` on its own branch, branched from a freshly fetched `origin/main`, and prints its path. The target is a raft id (`R0020`) or a plain lowercase name (`capture-raft-viewer`, `prep-raft-browser`, `skills-worktree-rule`).
-- **`start`**: runs inside the raft's worktree and reuses its branch. `start`, `new`, `renumber` and a raft-creating `prompt` **refuse to run in the main checkout** when the repo has an `origin`.
+- **`start`**: runs inside the raft's worktree and reuses its branch. `start`, `new`, `renumber`, `migrate` and a raft-creating `prompt` **refuse to run in the main checkout** when the repo has an `origin`.
 - **Id clashes** between concurrently created items: after c0420 (documents named `<ID>.md`), two branches that pick the same id conflict in git. c0041 adds the rest: `store.find` errors when one id exists in two state directories, `tracker.sh list` **warns** when one number is used by two prefixes (`f0420` and `c0420`: harmless, but best avoided), and landing step 0 runs `list` after merging `origin/main`.
 - **`tracker.sh worktree-prune`**: removes the worktrees of rafts that are finished on the base branch, and lists any other worktree it keeps.
 - **`.worktrees/`** is gitignored.
@@ -58,7 +59,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 
    **Use `tracker.sh worktree`, not the harness's `EnterWorktree`.** EnterWorktree creates worktrees under `.claude/worktrees/`, which is not gitignored and which `worktree-prune` never sees.
 3. **Landing** (the one procedure every change follows; the tracker skill has it in full):
-   0. **Sync first**: `git fetch origin main && git merge origin/main` in the worktree. If `main` brought the new document layout (c0420), run `scripts/tracker.sh migrate` and commit. If the merge conflicts in `tracker/…/<ID>/<ID>.md`, two items picked the same number: `git merge --abort`, `scripts/tracker.sh renumber <ID> <next free>` on your own branch, commit, and merge again. Then run `scripts/tracker.sh list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `scripts/check.sh --full`. Captures and preps run concurrently and choose ids from their own base, so this step is what catches a clash before it merges.
+   0. **Sync first**: `git fetch origin main && git merge origin/main` in the worktree. If `main` brought the new document layout (c0420), run `scripts/tracker.sh migrate` and commit. Only a `CONFLICT (add/add)` on `tracker/…/<ID>/<ID>.md` means two items picked the same number: `git merge --abort`, `scripts/tracker.sh renumber <ID> <next free>` on your own branch, commit, and merge again. Any other conflict on a document (content, rename) is two edits to one item: resolve it like a normal merge and never renumber. Then run `scripts/tracker.sh list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `scripts/check.sh --full`. Captures and preps run concurrently and choose ids from their own base, so this step is what catches a clash before it merges.
    1. Commit in the worktree: `tracker.sh commit` inside a raft (it needs an active raft); plain `git add` and `git commit` for capture, prep and doc-only changes, which have none.
    2. `git push -u origin <branch>`, then open the PR (a raft's PR is opened as a draft by `start`; any other PR is opened ready, `gh pr create`).
    3. Merge only when the tracker skill's "Merging" conditions hold: the agent ran `scripts/check.sh --full` on the final head, CI is green on that head sha, and the PR is `MERGEABLE` and `CLEAN`. Then `gh pr merge --squash`. A raft additionally needs `tracker.sh done` and the resolved review. Prep and capture that the user did not ask for are not merged without asking (memory rule: ask before new work).
@@ -72,7 +73,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 **`scripts/tracker/main.luau`**
 - **`local function mainRoot(): string`**: the main checkout's root, the first `worktree` entry of `git worktree list --porcelain`. Worktrees are always created under `mainRoot()/.worktrees/`, even when the command runs inside another worktree.
 - **`local function onGitHub(): boolean`**: true iff `git remote get-url origin` succeeds and its output contains `github.com`.
-- **`local function refuseInMainCheckout(what: string)`**: if an `origin` remote exists and `git rev-parse --show-toplevel` equals `mainRoot()`, fail with `{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`. A repo with no origin (c0010's lifecycle spec clone, other tests) is never refused. Called by `new`, `renumber` and `start` (unless the current branch is already `raftBranch(raft)`). `prompt` creates its placeholder raft by calling `new`, so the guard covers it too (its message names `new`).
+- **`local function refuseInMainCheckout(what: string)`**: if an `origin` remote exists and `git rev-parse --show-toplevel` equals `mainRoot()`, fail with `{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`. A repo with no origin (c0010's lifecycle spec clone, other tests) is never refused. Called by `new`, `renumber`, `migrate` (c0420) and `start` (unless the current branch is already `raftBranch(raft)`). `prompt` creates its placeholder raft by calling `new`, so the guard covers it too (its message names `new`).
 - **`cmd.worktree(pos)`** (`worktree <target>`):
   1. **Classify** the target. It matches `^R%d%d%d%d$` → a raft. It matches `^[fdc]%d%d%d%d$` → error `give a raft id or a name`. It matches `^[a-z][a-z0-9-]*$` (at most 60 characters) → a named worktree. Anything else, including `/`, `..`, spaces or uppercase, → error `invalid worktree name`, before anything is created.
   2. **Raft targets** must exist (`store.get` in the invoking tree) and be in backlog or active. A done raft is refused. If the raft isn't in the invoking tree, the error says so and suggests `git -C <root> pull --ff-only` (the invoking tree may simply be behind `origin/main`; every landing ends by pulling the root).
@@ -191,7 +192,7 @@ Cases (`spec case → AC`):
 - `worktree is idempotent and works from inside another worktree` → AC1
 - `main checkout stays on main and clean` → AC1
 - `start and new are refused in the main checkout` → AC6
-- `renumber is refused in the main checkout` → AC6
+- `renumber is refused in the main checkout` → AC6 (also `migrate`)
 - `prompt does not create a placeholder raft in the main checkout` → AC6
 - `worktree resumes an existing branch after its worktree is deleted` → AC1
 - `worktree refuses a branch checked out elsewhere` → AC1
@@ -230,7 +231,7 @@ Cases (`spec case → AC`):
 | A branch checked out elsewhere is refused with exit 1 and nothing created | `worktree refuses a branch checked out elsewhere` | always `worktree add -b`; report git's 128 | reasoned |
 | An existing or origin-only branch is resumed | `worktree resumes an existing branch` | always `worktree add -b` | reasoned |
 | Names: lowercase plain names and raft ids only | `worktree rejects bad names and non-raft ids` | accept any string | reasoned |
-| `start`, `new`, `renumber` and (through `new`) raft-creating `prompt` refuse in a main checkout with an origin | `start and new are refused`, `renumber is refused`, `prompt does not create a placeholder raft` | `start` unguarded; `renumber` unguarded; `new` unguarded | run (M9, M11, M12) |
+| `start`, `new`, `renumber`, `migrate` and (through `new`) raft-creating `prompt` refuse in a main checkout with an origin | `start and new are refused`, `renumber is refused` (also asserts `migrate`), `prompt does not create a placeholder raft` | `start` unguarded; `renumber` unguarded; `new` unguarded; `migrate` unguarded | run (M9, M11, M12, M16) |
 | `start` reuses the current raft branch and commits once on `origin/main` | `start inside the worktree reuses the branch and pushes` | always `switch -c`; an extra commit | reasoned |
 | A draft PR is opened only for a GitHub origin | `GitHub origin opens the draft PR`, `non-GitHub origin skips the draft PR` | `onGitHub()` always false; always call `gh` | run (M3) |
 | Prune judges "finished" on the base branch, not the worktree's own branch | `worktree-prune removes squash-merged`, `keeps a raft that is done only on its own unmerged branch` | judge on the worktree's branch | run (M2) |

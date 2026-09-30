@@ -190,9 +190,11 @@ return t.spec("worktrees", function(it)
 	end)
 
 	it("renumber is refused in the main checkout", function()
-		local r = tr(main, { "renumber", "f0050", "f0060" })
-		t.expect(r.ok).toBe(false)
-		t.expect(string.find(r.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
+		for _, args in { { "renumber", "f0050", "f0060" }, { "migrate" } } do
+			local r = tr(main, args)
+			t.expect(r.ok).toBe(false)
+			t.expect(string.find(r.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
+		end
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
 
