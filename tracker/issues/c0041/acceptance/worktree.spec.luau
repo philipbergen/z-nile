@@ -1,7 +1,9 @@
 --!strict
--- c0041: rafts run in raft-named worktrees; hooks act on the right tree.
--- Fixture under .cache/wt-e2e: a bare `origin.git` (never GitHub, so gh is never called) and a
--- clone `main/` of it, seeded from the committed HEAD with the working tree's tooling overlaid.
+-- c0041: every change runs in a worktree; hooks act on the right tree.
+-- Fixture under .cache/wt-e2e: a bare `origin.git` (never GitHub, except in the one case that fakes
+-- both the URL and `gh`) and a clone `main/` of it, seeded from the committed HEAD with the working
+-- tree's tooling overlaid. The fixture pins its own `main` branch, so this spec passes from any
+-- branch and from a detached HEAD (CI's pull_request checkout).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -17,14 +19,29 @@ local base = `{root}/.cache/wt-e2e`
 local seed = `{base}/seed`
 local origin = `{base}/origin.git`
 local main = `{base}/main`
+local fakebin = `{base}/fakebin`
+local ghlog = `{base}/gh.log`
 local wt1 = `{main}/.worktrees/R0010-demo`
 local wt2 = `{main}/.worktrees/R0020-other`
+local wt3 = `{main}/.worktrees/R0030-third`
+local wt4 = `{main}/.worktrees/R0040-fourth`
+local named = `{main}/.worktrees/capture-demo`
 
-local function run(cwd: string, cmd: string, args: { string }, stdin: string?): Result
+local function run(
+	cwd: string,
+	cmd: string,
+	args: { string },
+	stdin: string?,
+	env: { [string]: string }?
+): Result
+	local opts: any = { cwd = cwd }
 	if stdin then
-		return process.exec(cmd, args, { cwd = cwd, stdio = { stdin = stdin } })
+		opts.stdio = { stdin = stdin }
 	end
-	return process.exec(cmd, args, { cwd = cwd })
+	if env then
+		opts.env = env
+	end
+	return process.exec(cmd, args, opts)
 end
 
 local function must(r: Result, what: string): string
@@ -61,6 +78,27 @@ local function stopJson(cwd: string): string
 	return '{"cwd":"' .. cwd .. '","stop_hook_active":false}'
 end
 
+local function countWorktrees(): number
+	local _, n = string.gsub(git(main, { "worktree", "list", "--porcelain" }), "worktree ", "")
+	return n
+end
+
+-- Finish a raft on its own branch, as `tracker.sh done` would (plain git: this spec is about
+-- worktrees, not done's checks). `from` is the raft's directory state: "" (backlog) or "active/".
+local function finishOnBranch(wt: string, raft: string, issue: string, from: string)
+	git(wt, { "mv", `tracker/rafts/{from}{raft}`, `tracker/rafts/done/{raft}` })
+	git(wt, { "mv", `tracker/issues/{from}{issue}`, `tracker/issues/done/{issue}` })
+	git(wt, { "commit", "-qm", `finish {raft}` })
+	git(wt, { "push", "-q", "-u", "origin", "HEAD" })
+end
+
+-- Squash-merge a raft branch into main and push, as GitHub's squash button would.
+local function squashMerge(branch: string)
+	git(main, { "merge", "--squash", "-q", branch })
+	git(main, { "commit", "-qm", `{branch} (squash)` })
+	git(main, { "push", "-q", "origin", "main" })
+end
+
 local startOut = ""
 
 return t.spec("worktrees", function(it)
@@ -71,6 +109,8 @@ return t.spec("worktrees", function(it)
 		fs.writeDir(base)
 		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
 		identity(seed)
+		-- whatever the source was (a feature branch, or CI's detached HEAD), the fixture is on main
+		git(seed, { "checkout", "-q", "-B", "main" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
 		local listed = run(
 			root,
@@ -86,7 +126,7 @@ return t.spec("worktrees", function(it)
 				fs.writeFile(`{seed}/{path}`, fs.readFile(`{root}/{path}`))
 			end
 		end
-		-- empty tracker, then two ready fixture rafts
+		-- empty tracker, then four ready fixture rafts
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/", "done/" } do
 				local dir = `{seed}/tracker/{kind}/{state}`
@@ -97,19 +137,17 @@ return t.spec("worktrees", function(it)
 				end
 			end
 		end
-		must(tr(seed, { "new", "issue", "f", "alpha" }), "new f0010")
-		must(tr(seed, { "new", "issue", "f", "beta" }), "new f0020")
-		must(tr(seed, { "new", "raft", "feature", "demo", "f0010" }), "new R0010")
-		must(tr(seed, { "new", "raft", "feature", "other", "f0020" }), "new R0020")
-		for _, doc in
-			{
-				"tracker/issues/f0010/f0010-alpha.md",
-				"tracker/issues/f0020/f0020-beta.md",
-				"tracker/rafts/R0010/R0010-demo.md",
-				"tracker/rafts/R0020/R0020-other.md",
-			}
-		do
-			edit(`{seed}/{doc}`, "design: draft", "design: ready")
+		local rafts =
+			{ { "alpha", "demo" }, { "beta", "other" }, { "gamma", "third" }, { "delta", "fourth" } }
+		for _, pair in rafts do
+			must(tr(seed, { "new", "issue", "f", pair[1] }), "new issue " .. pair[1])
+		end
+		for i, pair in rafts do
+			must(tr(seed, { "new", "raft", "feature", pair[2], `f00{i}0` }), "new raft " .. pair[2])
+		end
+		for i, pair in rafts do
+			edit(`{seed}/tracker/issues/f00{i}0/f00{i}0-{pair[1]}.md`, "design: draft", "design: ready")
+			edit(`{seed}/tracker/rafts/R00{i}0/R00{i}0-{pair[2]}.md`, "design: draft", "design: ready")
 		end
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })
@@ -136,6 +174,26 @@ return t.spec("worktrees", function(it)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
 
+	it("worktree resumes an existing branch after its worktree is deleted", function()
+		-- the branch exists only on origin: push it, then delete the worktree and the local branch
+		git(main, { "push", "-q", "origin", "R0010-demo" })
+		git(main, { "worktree", "remove", wt1 })
+		git(main, { "branch", "-D", "R0010-demo" })
+		t.expect(must(tr(main, { "worktree", "R0010" }), "worktree resume")).toBe(wt1)
+		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
+		t.expect(git(wt1, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/R0010-demo" }))
+	end)
+
+	it("worktree refuses a branch checked out elsewhere", function()
+		-- the main checkout is on main, so a worktree named main must be refused, creating nothing
+		local before = countWorktrees()
+		local r = tr(main, { "worktree", "main" })
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "already used by worktree at", 1, true) ~= nil).toBe(true)
+		t.expect(fs.isDir(`{main}/.worktrees/main`)).toBe(false)
+		t.expect(countWorktrees()).toBe(before)
+	end)
+
 	it("start inside the worktree reuses the branch and pushes", function()
 		startOut = must(tr(wt1, { "start", "R0010" }), "start")
 		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
@@ -149,22 +207,103 @@ return t.spec("worktrees", function(it)
 		t.expect(string.find(startOut, "origin is not GitHub: skipped draft PR", 1, true) ~= nil).toBe(true)
 	end)
 
+	it("GitHub origin opens the draft PR", function()
+		-- origin looks like GitHub for reads but pushes stay local; a fake gh records its arguments
+		fs.writeDir(fakebin)
+		fs.writeFile(
+			fakebin .. "/gh",
+			`#!/usr/bin/env bash\necho "$@" >> "{ghlog}"\necho https://github.com/x/y/pull/1\n`
+		)
+		must(process.exec("chmod", { "+x", fakebin .. "/gh" }), "chmod fake gh")
+		git(main, { "remote", "set-url", "origin", "https://github.com/x/y.git" })
+		git(main, { "remote", "set-url", "--push", "origin", origin })
+		local env = { PATH = `{fakebin}:{process.env.PATH}` }
+		local r = run(wt2, "bash", { "scripts/tracker.sh", "start", "R0020" }, nil, env)
+		git(main, { "remote", "set-url", "origin", origin })
+		git(main, { "config", "--unset", "remote.origin.pushurl" })
+		must(r, "start with a GitHub origin")
+		local log = fs.readFile(ghlog)
+		t.expect(string.find(log, "pr create", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(log, "--draft", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("worktree creates a named worktree from origin/main", function()
+		t.expect(must(tr(main, { "worktree", "capture-demo" }), "worktree capture-demo")).toBe(named)
+		t.expect(git(named, { "branch", "--show-current" })).toBe("capture-demo")
+		t.expect(git(named, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/main" }))
+		t.expect(must(tr(main, { "worktree", "capture-demo" }), "again")).toBe(named)
+		t.expect(git(main, { "status", "--porcelain" })).toBe("")
+	end)
+
+	it("worktree rejects bad names and non-raft ids", function()
+		local before = countWorktrees()
+		for _, bad in { "Bad Name", "../x", "a/b", "UPPER", "f0010", "c0041", "-lead", "" } do
+			local r = tr(main, { "worktree", bad })
+			if r.ok then
+				error(`worktree accepted {bad}`)
+			end
+		end
+		local r = tr(main, { "worktree", "R9999" })
+		t.expect(r.ok).toBe(false)
+		t.expect(countWorktrees()).toBe(before)
+	end)
+
 	it("worktree-prune removes squash-merged done rafts and keeps unfinished ones", function()
-		-- finish R0010 on its branch (plain git: this spec is about worktrees, not done's checks)
-		git(wt1, { "mv", "tracker/rafts/active/R0010", "tracker/rafts/done/R0010" })
-		git(wt1, { "mv", "tracker/issues/active/f0010", "tracker/issues/done/f0010" })
-		git(wt1, { "commit", "-qm", "finish R0010" })
-		git(wt1, { "push", "-q" })
-		-- squash-merge into main, as GitHub's squash button would
-		git(main, { "merge", "--squash", "-q", "R0010-demo" })
-		git(main, { "commit", "-qm", "R0010 (squash)" })
-		git(main, { "push", "-q", "origin", "main" })
+		-- R0010 is done on its branch and squash-merged; R0030 is done only on its own pushed branch
+		finishOnBranch(wt1, "R0010", "f0010", "active/")
+		squashMerge("R0010-demo")
+		must(tr(main, { "worktree", "R0030" }), "worktree R0030")
+		finishOnBranch(wt3, "R0030", "f0030", "")
 
 		must(tr(main, { "worktree-prune" }), "worktree-prune")
 		t.expect(fs.isDir(wt1)).toBe(false)
 		t.expect(git(main, { "branch", "--list", "R0010-demo" })).toBe("")
 		t.expect(fs.isDir(wt2)).toBe(true)
 		t.expect(git(main, { "branch", "--list", "R0020-other" }) ~= "").toBe(true)
+	end)
+
+	it("worktree-prune keeps a raft that is done only on its own unmerged branch", function()
+		t.expect(fs.isDir(wt3)).toBe(true)
+		t.expect(git(main, { "branch", "--list", "R0030-third" }) ~= "").toBe(true)
+	end)
+
+	it("worktree-prune lists a named worktree and leaves it", function()
+		local r = tr(main, { "worktree-prune" })
+		t.expect(r.ok).toBe(true)
+		t.expect(string.find(r.stdout .. r.stderr, "capture-demo", 1, true) ~= nil).toBe(true)
+		t.expect(fs.isDir(named)).toBe(true)
+	end)
+
+	it("worktree-prune never forces: a dirty finished worktree survives and the exit code is 1", function()
+		must(tr(main, { "worktree", "R0040" }), "worktree R0040")
+		finishOnBranch(wt4, "R0040", "f0040", "")
+		squashMerge("R0040-fourth")
+		fs.writeFile(`{wt4}/unsaved.txt`, "work in progress")
+		local r = tr(main, { "worktree-prune" })
+		t.expect(r.ok).toBe(false)
+		t.expect(r.code).toBe(1)
+		t.expect(string.find(r.stderr, "R0040-fourth", 1, true) ~= nil).toBe(true)
+		t.expect(fs.isFile(`{wt4}/unsaved.txt`)).toBe(true)
+		t.expect(git(main, { "branch", "--list", "R0040-fourth" }) ~= "").toBe(true)
+	end)
+
+	it("worktree-prune run from inside a finished worktree skips it", function()
+		fs.removeFile(`{wt4}/unsaved.txt`)
+		local r = tr(wt4, { "worktree-prune" })
+		t.expect(r.ok).toBe(true)
+		t.expect(fs.isDir(wt4)).toBe(true)
+		-- from the main checkout the same worktree is removed
+		must(tr(main, { "worktree-prune" }), "prune from main")
+		t.expect(fs.isDir(wt4)).toBe(false)
+		t.expect(git(main, { "branch", "--list", "R0040-fourth" })).toBe("")
+	end)
+
+	it("worktree refuses a done raft", function()
+		local before = countWorktrees()
+		local r = tr(main, { "worktree", "R0010" })
+		t.expect(r.ok).toBe(false)
+		t.expect(fs.isDir(wt1)).toBe(false)
+		t.expect(countWorktrees()).toBe(before)
 	end)
 
 	it("post-edit hook lints with the edited file's worktree config", function()
@@ -183,6 +322,16 @@ return t.spec("worktrees", function(it)
 		t.expect(inMain.code).toBe(2)
 	end)
 
+	it("post-edit hook ignores a file outside any repository", function()
+		local hook = `{main}/scripts/hooks/post-edit.sh`
+		local dir = must(process.exec("mktemp", { "-d" }), "mktemp")
+		fs.writeFile(`{dir}/Probe.luau`, "--!strict\nlocal unused = 1\nreturn nil\n")
+		local r = run(main, "bash", { hook }, editJson(`{dir}/Probe.luau`))
+		fs.removeDir(dir)
+		-- linted from the hook's own repo it would fail; outside a repo there is nothing to lint
+		t.expect(r.code).toBe(0)
+	end)
+
 	it("stop hook gates the session's cwd worktree", function()
 		local hook = `{main}/scripts/hooks/stop.sh`
 		fs.writeFile(`{wt2}/src/shared/Broken.luau`, "--!strict\nlocal = \n")
@@ -191,5 +340,13 @@ return t.spec("worktrees", function(it)
 		fs.removeFile(`{wt2}/src/shared/Broken.luau`)
 		t.expect(inWorktree.code).toBe(2)
 		t.expect(inMain.code).toBe(0)
+	end)
+
+	it("stop hook gates the worktree root when cwd is a subdirectory", function()
+		local hook = `{main}/scripts/hooks/stop.sh`
+		fs.writeFile(`{wt2}/src/shared/Broken.luau`, "--!strict\nlocal = \n")
+		local fromSubdir = run(main, "bash", { hook }, stopJson(`{wt2}/src/shared`))
+		fs.removeFile(`{wt2}/src/shared/Broken.luau`)
+		t.expect(fromSubdir.code).toBe(2)
 	end)
 end)
