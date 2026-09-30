@@ -2,7 +2,7 @@
 id: f0200
 type: feature
 title: Ghost mode schedule
-raft: 
+raft: R0100
 depends_on: [f0190, f0160]
 emergent: false
 design: draft

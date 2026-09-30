@@ -2,7 +2,7 @@
 id: f0210
 type: feature
 title: Ghost house
-raft: 
+raft: R0100
 depends_on: [f0190, f0170]
 emergent: false
 design: draft

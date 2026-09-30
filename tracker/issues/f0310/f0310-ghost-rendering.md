@@ -2,7 +2,7 @@
 id: f0310
 type: feature
 title: Ghost rendering
-raft: 
+raft: R0100
 depends_on: [f0190, f0200, f0210, f0130]
 emergent: false
 design: draft

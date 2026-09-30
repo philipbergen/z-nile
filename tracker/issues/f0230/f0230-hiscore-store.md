@@ -2,7 +2,7 @@
 id: f0230
 type: feature
 title: Hiscore store
-raft: 
+raft: R0110
 depends_on: [f0170]
 emergent: false
 design: draft

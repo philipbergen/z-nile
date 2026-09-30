@@ -2,7 +2,7 @@
 id: f0280
 type: feature
 title: Mobile hud layout
-raft: 
+raft: R0120
 depends_on: [f0180, f0260]
 emergent: false
 design: draft

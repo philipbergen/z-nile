@@ -2,7 +2,7 @@
 id: f0160
 type: feature
 title: Power pellets
-raft: 
+raft: R0090
 depends_on: [f0150, f0170]
 emergent: false
 design: draft

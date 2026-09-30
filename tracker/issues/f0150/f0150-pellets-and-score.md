@@ -2,7 +2,7 @@
 id: f0150
 type: feature
 title: Pellets and score
-raft: 
+raft: R0090
 depends_on: [f0110]
 emergent: false
 design: draft
