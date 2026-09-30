@@ -32,13 +32,13 @@ Each item is a directory named by its ID:
 ```
 
 ## Worktrees
-Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request. The main checkout stays on `main` and is never edited.
+Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request. The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`.
 
 1. **The main checkout is read-only.** The complete list of commands that may run there:
    - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
    - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
-   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `prompt <R-id>`, and the worktree commands `worktree` and `worktree-prune`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
 2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
 
@@ -49,8 +49,8 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
    | prepping a raft (ticket-prep) | `prep-<slug>`, the raft's slug | `.worktree/prep-<slug>`, the same branch name |
    | a skill, doc or config edit | `<area>-<slug>`, for example `skills-worktree-rule` | `.worktree/<area>-<slug>`, the same branch name |
 
-   A change to skills, docs or tooling is still tracked work: it has an issue and normally a raft, and is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the raft's slug: its id isn't known until `new raft` has run inside it. Use `tracker.sh worktree`, not the harness's own worktree feature: its directories aren't under `.worktree/`, and `worktree-prune` never sees them.
-3. **Launching an agent**: the human starts it *inside* the worktree, `cd "$(scripts/tracker.sh worktree R0010)" && claude`. Then the hooks and every relative path already point at the right tree, and nothing depends on a `cd` persisting across tool calls (a subagent's shell resets its working directory on every call). An agent started elsewhere runs the `cd` as its first action and uses absolute worktree paths afterwards.
+   A change to skills, docs or tooling is still tracked work: it has an issue and normally a raft, and is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the raft's slug: its id isn't known until `new raft` has run inside it. Use `tracker.sh worktree`, not the harness's own worktree feature: its directories aren't under `.worktree/`, and `worktree-prune` never sees them (it warns about any worktree outside `.worktree/` and leaves it). A worktree inside the repo also sees the main checkout's `.luaurc` as a parent configuration, so an alias a branch renames can still resolve locally: CI, which checks out the branch alone, is the final check.
+3. **Launching an agent**: the human starts it *inside* the worktree with `scripts/tracker.sh launch <target>` (for example `launch R0010`; `-- <command> [args…]` runs another command than `claude`). It creates or reuses the worktree (`scripts/tracker.sh worktree`) and replaces itself with the command, so the agent gets the terminal and Ctrl-C directly. Then the hooks and every relative path already point at the right tree, and nothing depends on a `cd` persisting across tool calls (a subagent's shell resets its working directory on every call). An agent started elsewhere runs the `cd` as its first action and uses absolute worktree paths afterwards.
 4. **Prep merges before execution.** A prep PR merges (Landing a change) before `make-prompt` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items. `make-prompt` never creates a raft: a raftless issue goes back to ticket-prep.
 
 ## Lifecycle: the directory is the status
@@ -63,6 +63,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
 |---|---|---|
 | start | `tracker.sh start R0010` | clean tree required; members must be `design: ready`. Creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. Do this first, so the in-progress claim is visible right away. |
 | worktree | `tracker.sh worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. |
+| launch | `tracker.sh launch <R-id\|name> [-- cmd…]` | `worktree`, then runs the command (default `claude`) in that worktree with `exec`: terminal, signals and exit status are native. Refuses an unusable command or worktree path before anything starts |
 | prune | `tracker.sh worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
 | focus | `tracker.sh focus f0010` | the following commits are attributed to that issue |
 | commit | `tracker.sh commit -m "msg" [--issue f0010]... [--time 25]` | `git add -A`, then records spend rows in each issue's `spend.md` and the raft's summary **in the same commit**, adds `Issue:` trailers, and pushes |

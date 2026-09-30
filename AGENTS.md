@@ -2,7 +2,7 @@
 
 A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`.
 
-**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request**; the main checkout is never edited (tracker skill, Worktrees and Landing a change). Before doing anything, read the skill that applies. The skills hold all the rules.
+**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request**; the main checkout is never edited (tracker skill, Worktrees and Landing a change). Start an agent with `scripts/tracker.sh launch <target>`. Before doing anything, read the skill that applies. The skills hold all the rules.
 
 | Skill | Read when |
 |---|---|

@@ -23,6 +23,7 @@ usage: scripts/tracker.sh <command> ...
   done <R-id>                                   verify checks + review resolution, move to done, ready PR
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
+  launch <R-id|name> [-- cmd...]                run a command (default claude) in the target's worktree (scripts/tracker.sh)
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
   metrics [--include-active]                    cost per issue and rework %]]
@@ -508,6 +509,14 @@ cmd["worktree-prune"] = function()
 					end
 				end
 			end
+		end
+	end
+	-- worktrees belong under .worktree/: flag (never move or remove) any other than the main checkout
+	for _, w in worktrees() do
+		if w.path ~= root and string.sub(w.path, 1, #prefix) ~= prefix then
+			stdio.ewrite(
+				`warning: {w.path} is outside .worktree/: move it with git worktree move, or remove it\n`
+			)
 		end
 	end
 	if failed then
