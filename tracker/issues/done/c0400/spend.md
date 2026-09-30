@@ -9,6 +9,7 @@
 | 5 | 2026-09-30 22:38 | c0400: tracker skill board row, node in SETUP.md (AC5) | 2 | 0 | 3.0 | focus |
 | 6 | 2026-09-30 22:40 | c0400: verification log | 0 | 0 | 1.0 | focus |
 | 7 | 2026-09-30 22:48 | c0400: review-001 fixes (hostile ids, shortcuts, links, placeholders, board args, --open failure) | 168 | 8 | 12.0 | focus |
+| 8 | 2026-09-30 22:49 | tracker: done R0060 | 0 | 0 | 1.1 | raft |
 
-**Total:** +968 / -27 lines, 49.0 agent-minutes over 7 commits
-<!-- totals: added=968 removed=27 minutes=49.0 commits=7 -->
+**Total:** +968 / -27 lines, 50.1 agent-minutes over 8 commits
+<!-- totals: added=968 removed=27 minutes=50.1 commits=8 -->
