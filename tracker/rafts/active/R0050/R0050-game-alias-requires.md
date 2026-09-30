@@ -45,3 +45,4 @@ Implemented by `check.sh`:
 - **Rollback**: revert the PR. Nothing in `src` uses `@game` until R0040.
 
 ## Addressed during execution
+Review 001 lows (F1-F3) fixed in c0390.
