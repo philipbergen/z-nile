@@ -19,7 +19,8 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 |---|---|---|
 | `tests/unit/<Feature>/` | one feature's behavior | only that feature (through its `init`) plus `@tests/lib/t` |
 | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
-| `tests/integration/` | a few headless cross-feature scenarios, for example simulating a whole level | several features |
+| `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
+| `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
 | `tests/tooling/` | the scripts in `scripts/` | scripts |
 | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/` or `default.project.json` change | `@tests/lib/place` |
 | `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
@@ -40,10 +41,41 @@ end)
 The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThrow(pattern?)`.
 
 **Good specs**:
-- **Deterministic**: no wall-clock time and no unseeded randomness. Pass `dt` and a seeded RNG instead.
+- **Deterministic**: no wall-clock time and no unseeded randomness. Pass `dt` and a seeded RNG instead. The one timing exception is `sim.bench` budgets (see Simulations).
 - **One behavior per case**, with a name that states it.
 - **Assert on public API results**, never on internals.
 - **Hard to fake.** An acceptance spec must fail for plausible wrong implementations: an off-by-one, a missing edge case, a hard-coded value. Include at least one case that a hard-coded or partial implementation would fail.
+
+## Simulations (`@tests/lib/sim`)
+`tests/lib/sim.luau` runs any **model** (`new(seed)`, `step(state, intents, tick)`, `observe(state)`, plus `name` and `tickRate`) for N ticks from a script of timed intents and expectations, and returns a trace. The game's Logic provides a model; `tests/fixtures/sim/walker.luau` is a small one.
+
+**Tick semantics** (the contract every model must follow):
+- Time `t` is the world after `t` steps. Time 0 is `model.new(seed)`.
+- Step k moves the world from time k to time k+1.
+- An intent at k is delivered in step k. Several intents at one tick arrive in script order; a step with none gets an empty list.
+- Events returned by step k are visible at time k+1, so they are stamped `tick = k+1`.
+- An expectation `at = t` is checked against the observation at time `t` (`at = 0` is the initial state). Per time the order is: record, check expectations, then `stopWhen`.
+
+```lua
+local sim = require("@tests/lib/sim")
+local Walker = require("@tests/fixtures/sim/walker")
+local t = require("@tests/lib/t")
+local trace = sim.run(Walker, {
+    seed = 1,
+    ticks = sim.ticks(Walker, 0.5),
+    script = { sim.intent(0, "R"), sim.expect(5, { x = 10 }, "reaches the wall") },
+})
+t.expect(sim.firstTick(trace, "Bump")).toBe(6)
+```
+- A table expectation is a partial match on top-level keys only; a function expectation gets a copy of the observation and fails by raising.
+- Observations and intents are **deep-copied**: the harness snapshots each observation, and each run gets fresh copies of the scripted intents.
+- **JSON-safe**: intents, observations and events must be JSON-safe (no functions, sparse arrays or NaN), because failures write a replay.
+- Misuse (bad `ticks`, `seed` or `at`, an intent or expectation beyond the run) fails before any step.
+- `sim.assertDeterministic` runs a scenario twice and names the first diverging tick. `sim.seeds(n)` and `sim.firstTick` support measurable proxies for feel: "an idle player is caught within N-M s across 20 seeds" goes here, not in Observed.
+- **Replays**: a failure writes `.cache/sim/<model>-seed<seed>-tick<t>.json` (gitignored) and names it in the message. To debug, re-run it from a scratch spec: `sim.replay(Model, ".cache/sim/…json")`. It re-runs the model, so a `print` in the model works; for a step error the failing step runs again and re-raises.
+- **`sim.bench`** steps N worlds interleaved, like the server, and returns elapsed seconds. Budgets are the one **timing exception** to "no wall-clock time": keep a margin of at least 50x over the measured cost.
+
+**Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time.
 
 ## Affected selection
 `scripts/affected.luau` builds the static require graph of `src/` and `tests/`. It selects every spec whose transitive requires include a changed file.

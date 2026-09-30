@@ -280,3 +280,4 @@ None. Nothing here touches Roblox.
 5. Testing skill: the tier row and the Simulations section. Run AC7, then `scripts/check.sh --full` and `scripts/tracker.sh check c0090`. Commit.
 
 ## Verification log
+- 2026-09-29: implemented `tests/lib/sim.luau`, `tests/fixtures/sim/walker.luau`, `tests/scenario/harness.spec.luau` and the testing-skill Simulations section as designed. AC1-AC7 PASS; `check.sh --full` passes. No deviations. Own specs: the scenario spec covers the story, `stopWhen` and `assertDeterministic` over the walker fixture (the acceptance specs cover the rest of the API).
