@@ -83,7 +83,7 @@ return t.spec("worktree and stale remote refs", function(it)
 			end
 		end
 		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-qm", "fixture" })
+		git(seed, { "commit", "-q", "--allow-empty", "-m", "fixture" })
 		must(process.exec("git", { "clone", "-q", "--bare", seed, origin }), "bare origin")
 		must(process.exec("git", { "clone", "-q", origin, main }), "clone main")
 		identity(main)
