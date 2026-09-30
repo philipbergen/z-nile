@@ -15,7 +15,7 @@ You have no shared context with the author. Judge only what's in front of you:
 - in code mode, the diff.
 
 ## Output file
-- Design mode: `design-review-NNN.md`, in each reviewed item's directory, or in the raft's directory when reviewing a whole raft.
+- Design mode: `design-review-NNN.md`, in the raft's directory (`tracker.sh metrics` counts rounds from there).
 - Code mode: `review-NNN.md`, in the raft directory.
 - `NNN` continues from the highest existing number.
 
@@ -59,7 +59,7 @@ In code mode the PR shows the review as it happens: the author pushes and posts 
 
 ## Design mode (from ticket-prep)
 Attack all of the following:
-0. **Rules and mutants**: audit each issue's Rules and mutants table. Every behavioural rule in the Design needs a row. Rows marked `run` were mutation-tested in prep; spot-run only the `reasoned` rows you doubt. A missing row, a row whose spec case can't fail, or a plausible mutant nobody listed is a finding.
+0. **Rules and mutants**: audit each issue's Rules and mutants table. Every behavioural rule in the Design needs a row. Rows marked `run` were mutation-tested on a prototype in prep, with the outcome recorded in Unknowns & experiments; check that record, and spot-run only the rows you doubt. `reasoned` rows had no prototype, so judge them by reading, or spot-check them with a scratch copy. A missing row, a row whose spec case can't fail, or a plausible mutant nobody listed is a finding.
 1. **Unknowns**: every assumption that isn't proven, especially about Roblox or engine behavior, replication, or performance. Is each one an experiment with a pass/fail question and a fallback?
 2. **Acceptance criteria**:
    - Can a wrong or hard-coded implementation pass `check.sh`?
