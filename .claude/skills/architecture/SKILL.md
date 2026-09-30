@@ -25,9 +25,12 @@ description: Code structure rules for pickman (strict Luau, pure Logic features 
 4. **A feature is a directory with an `init.luau`, which is its public API.**
    - Other code requires a feature only through `init`: `require("../Maze")`, never `require("../Maze/Grid")`.
    - A feature's own files use `require("@self/…")` or `./…`.
-5. **Requires are string literals, with relative paths or `@self`.**
-   - Roblox and Lune resolve them the same way. Inside `init.luau`, `./X` means a *sibling of the feature directory*.
+5. **Requires are string literals, with relative paths, `@self` or `@game/ReplicatedStorage/`.**
+   - Roblox and Lune resolve relative paths and `@self` the same way (not `@game`, which Lune can't resolve; that's why adapters are never required from `tests/`). Inside `init.luau`, `./X` means a *sibling of the feature directory*.
    - `.luaurc` aliases (`@logic`, `@shared`, `@tests`, `@scripts`) are only for `tests/` and `scripts/`, because Roblox doesn't read `.luaurc`.
+   - `src` reaches another Rojo root only through Roblox's built-in alias, across Rojo roots: e.g. an adapter's `require("@game/ReplicatedStorage/Shared/Logic/Session")`. Within one root, use relative paths or `@self`.
+   - `@game` requires in `src` go only into ReplicatedStorage. `ServerScriptService` never replicates to clients, so a client require there fails at runtime; running client scripts are clones under `Players.<p>.PlayerScripts`, so a require into `StarterPlayer` loads a second, separate module instance. The resolvers can't tell these apart, so `tests/meta` enforces the rule through `graph.srcAliasAllowed`.
+   - Logic never uses `@game`: the engine-word rule in `tests/meta` already rejects the word `game` in Logic files. `tests/place` and `tests/meta` both resolve `@game` through `default.project.json`.
    - No dynamic requires in `src/`.
 6. **Dependencies between features must be declared** in the ```` ```deps ```` block of `tracker/architecture.md` (`Consumer -> Provider`), and the graph must stay acyclic.
    - Adding an edge is a design decision, made in ticket-prep and not during execution.

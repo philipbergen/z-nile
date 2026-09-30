@@ -49,6 +49,14 @@ return t.spec("architecture", function(it)
 		t.expect(table.concat(msgs, "\n")).toBe("")
 	end)
 
+	it("src requires use only relative paths, @self/ or @game/ReplicatedStorage/", function()
+		local msgs = {}
+		for _, v in graph.srcAliasViolations("src") do
+			table.insert(msgs, `{v.file}: {v.spec}`)
+		end
+		t.expect(table.concat(msgs, "\n")).toBe("")
+	end)
+
 	it("src has no dynamic requires", function()
 		local bad = {}
 		for _, f in g.dynamic do
