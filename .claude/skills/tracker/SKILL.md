@@ -25,7 +25,7 @@ Each item is a directory named by its ID:
 <ID>/check.sh           acceptance criteria as executable checks (see the testing skill)
 <ID>/acceptance/        sequestered acceptance specs (issues); `done` moves them to tests/acceptance/<ID>/
 <ID>/experiments/       spikes for unknowns (issues)
-<ID>/design-review-NNN.md, design-refute-NNN.md   from ticket-prep
+<ID>/design-review-NNN.md, design-refute-NNN.md   from ticket-prep, on the raft
 <ID>/review-NNN.md, refute-NNN.md                 code review, on the raft
 <ID>/spend.md           written by tracker.sh commit; never edit by hand
 ```
