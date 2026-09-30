@@ -1,0 +1,8 @@
+- F1: fixed: check.sh now scopes each AC to its numbered Phase 4 step (awk), and adds AC5-AC7 for phases 1-3, the approve path and the re-review format. check.sh was rewritten deliberately: this chore has no raft, so nothing was sequestered.
+- F2: fixed: comment rules moved into Phase 1, Phase 2 step 4 and Phase 3 in imperative wording; trailing paragraph deleted (AC5).
+- F3: fixed: review skill says withdrawn findings go in a non-heading `Dropped from review-NNN:` line and repeats get new ids with `(repeat of review-NNN Fk)` (AC7).
+- F4: fixed: Phase 4 step 4 sends an `approve` with no findings straight to Phase 5 (AC6).
+- F5: fixed: the author commits the review file; the reviewer is told to write only that file (execute-raft step 2, review skill).
+- F6: fixed: review-file commit uses `--time 0`.
+- F7: fixed: Phase 4 intro says retry once, carry on, report in the next comment, and check `git status -sb` for `ahead`; redundant bare `git push` removed from step 1.
+- F8: fixed: review skill exempts design mode; issue doc now lists AC5-AC7. Design/Test plan sections stay minimal for a docs-only chore.

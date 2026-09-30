@@ -60,6 +60,9 @@ AC1: execute-raft Phase 4 pushes and comments when a review starts.
 AC2: execute-raft Phase 4 commits/pushes review-NNN.md and comments its findings.
 AC3: execute-raft Phase 4 pushes and comments after the refute/fixes.
 AC4: tracker and review skills document the PR as the visible record.
+AC5: execute-raft phases 1-3 each post a PR comment.
+AC6: the approve-with-no-findings path skips the refute file.
+AC7: the re-review file format cannot trip `tracker.sh done`'s finding parser.
 <!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
 
 ### Judged
