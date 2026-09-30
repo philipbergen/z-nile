@@ -29,11 +29,11 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 - **Backlog chore c0370 (duplicate id detection)** is superseded by this issue's `store.find` error and c0420's collision conflict; close it when this raft lands.
 
 ## Solution
-- **`tracker.sh worktree <target>`**: creates, or reuses, a worktree under `<main checkout>/.worktrees/` on its own branch, branched from a freshly fetched `origin/main`, and prints its path. The target is a raft id (`R0020`) or a plain lowercase name (`capture-raft-viewer`, `prep-raft-browser`, `skills-worktree-rule`).
+- **`tracker.sh worktree <target>`**: creates, or reuses, a worktree under `<main checkout>/.worktree/` on its own branch, branched from a freshly fetched `origin/main`, and prints its path. The target is a raft id (`R0020`) or a plain lowercase name (`capture-raft-viewer`, `prep-raft-browser`, `skills-worktree-rule`).
 - **`start`**: runs inside the raft's worktree and reuses its branch. `start`, `new`, `renumber`, `migrate` and a raft-creating `prompt` **refuse to run in the main checkout** when the repo has an `origin`.
 - **Id clashes** between concurrently created items: after c0420 (documents named `<ID>.md`), two branches that pick the same id conflict in git. c0041 adds the rest: `store.find` errors when one id exists in two state directories, `tracker.sh list` **warns** when one number is used by two prefixes (`f0420` and `c0420`: harmless, but best avoided), and landing step 0 runs `list` after merging `origin/main`.
 - **`tracker.sh worktree-prune`**: removes the worktrees of rafts that are finished on the base branch, and lists any other worktree it keeps.
-- **`.worktrees/`** is gitignored.
+- **`.worktree/`** is gitignored.
 - **Hooks** resolve the tree they act on from the hook input, not from their own location.
 - **Draft PRs** are opened only when `origin` is a GitHub remote. That also makes worktree flows testable against a local bare remote.
 - **Skills, prompt, settings and AGENTS.md** state the worktree rule and a single **landing procedure**, and every instruction that used to say "commit to main", "switch to main" or "diff against main" is changed to match.
@@ -50,9 +50,9 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 
    | work | target | branch and path |
    |---|---|---|
-   | executing a raft | `R0010` | `R0010-<slug>` at `.worktrees/R0010-<slug>` |
-   | capturing an issue (make-issue) | `capture-<slug>` | `capture-<slug>` at `.worktrees/capture-<slug>` |
-   | prepping a raft (ticket-prep) | `prep-<slug>`, the raft's slug | `prep-<slug>` at `.worktrees/prep-<slug>` |
+   | executing a raft | `R0010` | branch `R0010-<slug>` at `.worktree/R0010` |
+   | capturing an issue (make-issue) | `capture-<slug>` | `capture-<slug>` at `.worktree/capture-<slug>` |
+   | prepping a raft (ticket-prep) | `prep-<slug>`, the raft's slug | `prep-<slug>` at `.worktree/prep-<slug>` |
    | a skill, doc or config edit | `<area>-<slug>`, for example `skills-worktree-rule` | the same name |
 
    A change to skills, docs or the tooling is still tracked work: it has an issue and normally a raft, and it is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the raft's slug: the raft id isn't known until `new raft` has run inside it.
@@ -71,14 +71,14 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 `raftBranch(raft) = raft.id .. "-" .. raft.slug` is extracted from `start` and reused everywhere.
 
 **`scripts/tracker/main.luau`**
-- **`local function mainRoot(): string`**: the main checkout's root, the first `worktree` entry of `git worktree list --porcelain`. Worktrees are always created under `mainRoot()/.worktrees/`, even when the command runs inside another worktree.
+- **`local function mainRoot(): string`**: the main checkout's root, the first `worktree` entry of `git worktree list --porcelain`. Worktrees are always created under `mainRoot()/.worktree/`, even when the command runs inside another worktree.
 - **`local function onGitHub(): boolean`**: true iff `git remote get-url origin` succeeds and its output contains `github.com`.
 - **`local function refuseInMainCheckout(what: string)`**: if an `origin` remote exists and `git rev-parse --show-toplevel` equals `mainRoot()`, fail with `{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`. A repo with no origin (c0010's lifecycle spec clone, other tests) is never refused. Called by `new`, `renumber`, `migrate` (c0420) and `start` (unless the current branch is already `raftBranch(raft)`). `prompt` creates its placeholder raft by calling `new`, so the guard covers it too (its message names `new`).
 - **`cmd.worktree(pos)`** (`worktree <target>`):
   1. **Classify** the target. It matches `^R%d%d%d%d$` → a raft. It matches `^[fdc]%d%d%d%d$` → error `give a raft id or a name`. It matches `^[a-z][a-z0-9-]*$` (at most 60 characters) → a named worktree. Anything else, including `/`, `..`, spaces or uppercase, → error `invalid worktree name`, before anything is created.
   2. **Raft targets** must exist (`store.get` in the invoking tree) and be in backlog or active. A done raft is refused. If the raft isn't in the invoking tree, the error says so and suggests `git -C <root> pull --ff-only` (the invoking tree may simply be behind `origin/main`; every landing ends by pulling the root).
   3. `git worktree prune`, so a registered worktree whose directory was deleted is forgotten (git otherwise refuses `is a missing but already registered worktree`), then `git fetch --quiet origin`, only if an `origin` remote exists.
-  4. `branch` is `raftBranch(raft)` or the name. `path = mainRoot() .. "/.worktrees/" .. branch`.
+  4. `branch` is `raftBranch(raft)` or the name. `path = mainRoot() .. "/.worktree/" .. dirName`, where `dirName` is the raft id for a raft target and the name otherwise (the branch stays `raftBranch(raft)`).
   5. Then one of four cases:
      - **The path is already a registered worktree**: print the path, exit 0. The command is idempotent and resumable.
      - **The branch is checked out in another worktree** (for example the main checkout is still on it): print `<branch> is already used by worktree at <that path>` to stderr and exit 1. Nothing is created. (Git itself says `is already used by worktree at`, exit 128; the command checks `git worktree list --porcelain` first and reports its own exit code.)
@@ -88,10 +88,10 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 - **`cmd["worktree-prune"]`**:
   1. `git worktree prune`, then `git fetch --quiet origin`, if origin exists. The base is `origin/main`, or `main` if there's no origin.
   2. Every git command runs with `-C mainRoot()`. A worktree that contains the current directory is skipped with a message, never removed from under the running command.
-  3. For each worktree under `mainRoot()/.worktrees/` named `<R-id>-<slug>`: it is **finished** iff `git ls-tree -d <base> tracker/rafts/done/<R-id>` prints a line, meaning the raft reached `done/` **on the base branch**. That works for any merge strategy (GitHub squash merges make `git branch --merged` useless), and a raft moved to `done/` only on its own unmerged branch is not finished, so review fixes still land.
+  3. For each worktree under `mainRoot()/.worktree/` whose directory is named `<R-id>` (its branch is the worktree's own, `w.branch`): it is **finished** iff `git ls-tree -d <base> tracker/rafts/done/<R-id>` prints a line, meaning the raft reached `done/` **on the base branch**. That works for any merge strategy (GitHub squash merges make `git branch --merged` useless), and a raft moved to `done/` only on its own unmerged branch is not finished, so review fixes still land.
      - A freshly created worktree with no commits counts as merged by ancestry but is **not** finished, so it's kept.
-  4. For a finished worktree, run `git worktree remove <path>` and then `git branch -D <branch>`. The capital D is safe because the raft's content is on the base branch, and it's needed because squashed branches aren't ancestors. **Never `--force`.** A worktree with modified or untracked files makes `git worktree remove` fail: name it on stderr, keep it and its branch, and continue.
-  5. Any other worktree under `.worktrees/` (a named one) is left alone and listed as `kept <path> (named worktree: remove it when its PR has merged)`.
+  4. For a finished worktree, run `git worktree remove <path>` and then, if the worktree has a branch (a detached one, such as the bootstrap worktree before `start`, has none), `git branch -D <its branch>`. The capital D is safe because the raft's content is on the base branch, and it's needed because squashed branches aren't ancestors. **Never `--force`.** A worktree with modified or untracked files makes `git worktree remove` fail: name it on stderr, keep it and its branch, and continue.
+  5. Any other worktree under `.worktree/` (a named one) is left alone and listed on **stdout** as `kept <path> (named worktree: remove it when its PR has merged)`. (Stream summary: `removed …` and `kept …` lines go to stdout; the dirty-worktree refusal and, in c0440, stray warnings go to stderr.)
   6. Print one line per removed worktree. **Exit 1** if any finished worktree could not be removed, else 0.
 - **`cmd.start`**: if `git branch --show-current` already equals `raftBranch(raft)`, skip `git switch -c`; otherwise call `refuseInMainCheckout("start")` first and then behave exactly as today. All other checks (backlog, clean tree, `design: ready`) are unchanged.
 - **Draft PRs**: `start` pushes when origin exists, as today, and runs `gh pr create --draft` only when `onGitHub()`; otherwise it prints `origin is not GitHub: skipped draft PR`. `done` runs `gh pr ready` and `gh pr edit` only when `hasUpstream() and onGitHub()`.
@@ -99,7 +99,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
 
 **`scripts/tracker/store.luau`**: `store.find(id)` errors `duplicate id <id>: <the directories>` when the same id exists in more than one state directory (for example after a `start` and a branch merge go wrong). `list`, `check`, `members` and `prompt` then fail loudly instead of returning the first directory. **`cmd.list`** (`scripts/tracker/main.luau`) also prints, after its table, one `warning: number <NNNN> is used by <id>, <id>` line on stderr for each number shared by two issue prefixes (issues only; rafts have their own numbers), and still exits 0. (With the old `<ID>-<slug>.md` naming, two branches adding the same id merged silently; c0420 makes that a git conflict on `<ID>.md`, so within one directory a second document can no longer appear.)
 
-**`.gitignore`**: add `.worktrees/`.
+**`.gitignore`**: add `.worktree/`.
 
 **`.claude/settings.json`**: add `Bash(scripts/tracker.sh worktree:*)` and `Bash(scripts/tracker.sh worktree-prune:*)` to `permissions.allow`, so the prompt's first command doesn't block on a permission prompt.
 
@@ -167,7 +167,7 @@ The hooks read the tree from the hook input and use a form that really fails on 
 
 ## Unknowns & experiments
 - **E1 (run in prep: PASS)**: can a worktree for `main` coexist while the main checkout is on another branch? Yes: this issue's own prep ran in `../pickman-c0041` while the main checkout was on `main`, and R0040 ran in `../pickman-R0040` beside a dirty main checkout.
-- **E2 (run in prep: PASS)**: `.worktrees/` is gitignored, so it's invisible to `git status` and to the gate. The gate only scans explicit roots: stylua and selene get `src tests scripts tracker`, `graph.build` gets `src tests`, `find tracker …`, and rojo only reads project `$path`s. The spec case `main checkout stays on main and clean` pins it.
+- **E2 (run in prep: PASS)**: `.worktree/` is gitignored, so it's invisible to `git status` and to the gate. The gate only scans explicit roots: stylua and selene get `src tests scripts tracker`, `graph.build` gets `src tests`, `find tracker …`, and rojo only reads project `$path`s. The spec case `main checkout stays on main and clean` pins it.
 - **E3**: does `git worktree list --porcelain` list the main checkout first, even when run from a linked worktree? Git's documentation says so. The spec runs `worktree` from inside a linked worktree to pin it. Fallback: `git rev-parse --path-format=absolute --git-common-dir`, then its parent.
 - **E4**: does the Stop hook input's `cwd` follow a `cd` made in a Bash tool call?
   - It's unproven, so nothing depends on it: the primary path is launching the agent inside the worktree (rule 4), where `$CLAUDE_PROJECT_DIR` and `cwd` are the worktree from the start.
@@ -205,6 +205,7 @@ Cases (`spec case → AC`):
 - `worktree recreates a worktree whose directory was deleted` → AC6
 - `worktree rejects bad names and non-raft ids` → AC6 (also a 61-character name)
 - `worktree-prune removes squash-merged done rafts and keeps unfinished ones` → AC3
+- `worktree-prune removes a finished raft's detached worktree` → AC3 (no branch to delete, exit 0)
 - `worktree-prune keeps a raft that is done only on its own unmerged branch` → AC3
 - `worktree-prune lists a named worktree and leaves it` → AC3
 - `worktree-prune never forces: a dirty finished worktree survives and the exit code is 1` → AC3
@@ -235,6 +236,8 @@ Cases (`spec case → AC`):
 | `start` reuses the current raft branch and commits once on `origin/main` | `start inside the worktree reuses the branch and pushes` | always `switch -c`; an extra commit | reasoned |
 | A draft PR is opened only for a GitHub origin | `GitHub origin opens the draft PR`, `non-GitHub origin skips the draft PR` | `onGitHub()` always false; always call `gh` | run (M3) |
 | Prune judges "finished" on the base branch, not the worktree's own branch | `worktree-prune removes squash-merged`, `keeps a raft that is done only on its own unmerged branch` | judge on the worktree's branch | run (M2) |
+| A raft worktree is `.worktree/<R-id>` (branch `<R-id>-<slug>`), and prune reads the id from the directory name | `worktree creates a raft-named worktree …`, `worktree-prune removes squash-merged …` | name the directory by the branch; parse the old `<R-id>-<slug>` directory name | run (P1, P2) |
+| A finished raft's detached worktree is removed without a branch delete | `worktree-prune removes a finished raft's detached worktree` | `branch -D` on a missing branch (crash, exit 1) | run (P3) |
 | Prune never forces | `worktree-prune never forces` | pass `--force` | run (M1) |
 | Prune skips the worktree it runs in | `worktree-prune run from inside a finished worktree skips it` | remove the current directory's worktree | reasoned |
 | Prune lists named worktrees and leaves them | `worktree-prune lists a named worktree` | remove or ignore them | reasoned |
@@ -248,12 +251,12 @@ Cases (`spec case → AC`):
 ## Acceptance criteria
 
 ### Checked
-- **AC1**: `tracker.sh worktree <R>` creates, or reuses, `.worktrees/<R-id>-<slug>` on branch `<R-id>-<slug>` from a freshly fetched origin/main, with no upstream. It prints only the absolute path, never moves the main checkout, resumes from an existing branch, refuses a branch checked out elsewhere, and `.worktrees/` never shows up in the main checkout's `git status`.
+- **AC1**: `tracker.sh worktree <R>` creates, or reuses, `.worktree/<R-id>` on branch `<R-id>-<slug>` from a freshly fetched origin/main, with no upstream. It prints only the absolute path, never moves the main checkout, resumes from an existing branch, refuses a branch checked out elsewhere, and `.worktree/` never shows up in the main checkout's `git status`.
 - **AC2**: `start` inside that worktree reuses the branch, commits once, and pushes. It opens a draft PR for GitHub origins (`gh pr create --draft`) and skips it, with a message, for others.
 - **AC3**: `worktree-prune` removes the worktree and branch of every raft that is in `done/` on the base branch, including after a squash merge. It keeps everything else: unfinished rafts, freshly created worktrees, a raft done only on its own unmerged branch, a dirty worktree (exit 1, never `--force`), the worktree it runs in, and named worktrees (listed).
 - **AC4**: The hooks act on the tree of the edited file (post-edit) or the session's `cwd`, or its repo root when `cwd` is a subdirectory (stop), not on the tree the hook script lives in.
 - **AC5**: The skills, prompt template, settings and AGENTS.md carry the worktree rule: the named files contain `scripts/tracker.sh worktree`, the tracker skill has "Worktrees" and "Landing a change" sections, the settings allow the two new commands, and none of the skills or the template contains the old instructions to switch to, commit on, or diff against `main` in the main checkout (the negative grep in `check.sh`).
-- **AC6**: `tracker.sh worktree <name>` creates, or reuses, `.worktrees/<name>` on branch `<name>` from origin/main for a valid plain name, recreates one whose directory was deleted, and rejects invalid names, item ids that aren't rafts, and done rafts, creating nothing. `new issue` works inside such a worktree, and `new` and `start` are refused in the main checkout of a repo with an origin.
+- **AC6**: `tracker.sh worktree <name>` creates, or reuses, `.worktree/<name>` on branch `<name>` from origin/main for a valid plain name, recreates one whose directory was deleted, and rejects invalid names, item ids that aren't rafts, and done rafts, creating nothing. `new issue` works inside such a worktree, and `new` and `start` are refused in the main checkout of a repo with an origin.
 - **AC7**: An item id that exists in two state directories makes `find` and `list` fail naming the id, and `list` warns (exit 0) when one number is used by two issue prefixes.
 
 ### Judged
@@ -282,3 +285,5 @@ None.
 - **Reconciliation with c0420 and c0430 (2026-09-30):** c0041 now depends on c0420 (documents named `<ID>.md`). Its spec's fixture uses the new names; `store.find` keeps only the same-id-in-two-states error, and `list` warns on a number shared by two prefixes (new case; planted mistakes M14, no warning, and M15, a warning that exits 1, each fail exactly that case: run after the reconciliation). Stacked on the c0420 and c0430 prototypes, the spec passes all 28 cases and the full gate passes (346 specs). A lint error (an unused loop variable left by the rename) was found by the gate and fixed in the spec.
 
 - **Prototype run 3 (2026-09-30, after design-review-004), reverted, never committed:** stacked with c0420 and c0430. All 28 worktree cases pass; `migrate` is now guarded in the main checkout and the `renumber is refused` case asserts it; a sixteenth planted mistake, `migrate` unguarded (M16), fails exactly that case. Landing step 0 and the Conflicts text now say that only `CONFLICT (add/add)` means renumber. The spec helpers disable `gc.auto` and `maintenance.auto` for fixtures (see c0420's log for the flake this removed).
+- **Path convention change (2026-09-30, with c0440):** worktrees now live in `<repo>/.worktree/` (singular), a raft's at `.worktree/<R-id>` and the rest at `.worktree/<name>`; branches keep their names (`R0010-<slug>`), and `worktree-prune` reads a raft's id from the directory name and its branch from git. The spec's paths were updated; with the stacked prototype all 28 cases pass and two more planted mistakes (P1: name the directory by branch, P2: parse the old `<R-id>-<slug>` directory name) each fail the cases written for them.
+- **Prune on a detached raft worktree (2026-09-30, design-review-007 F7):** the bootstrap worktree is detached until `start`, so `worktree-prune` removes a finished raft's worktree and deletes a branch only if it has one (new case `worktree-prune removes a finished raft's detached worktree`; planted mistake P3, `branch -D` without a nil check, fails it). The stacked prototype passes all 29 cases.

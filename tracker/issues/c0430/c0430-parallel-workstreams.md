@@ -4,7 +4,7 @@ type: chore
 title: Parallel workstreams
 slug: parallel-workstreams
 raft: R0020
-depends_on: [c0041, c0420]
+depends_on: [c0041, c0420, c0440]
 emergent: false
 design: ready
 created: 2026-09-30

@@ -30,7 +30,7 @@ check "AC2: start in worktree reuses branch, pushes, draft PR only for GitHub" c
   "start inside the worktree" "non-GitHub origin" "GitHub origin opens the draft PR"
 check "AC3: worktree-prune removes finished rafts only, never forces" cases_pass \
   "worktree-prune removes" "worktree-prune keeps a raft" "worktree-prune lists a named" \
-  "worktree-prune never forces" "worktree-prune run from inside"
+  "worktree-prune never forces" "worktree-prune run from inside" "worktree-prune removes a finished raft"
 check "AC4: hooks act on the edited file's / session cwd's tree" cases_pass \
   "post-edit hook lints" "post-edit hook ignores" "stop hook gates the session" "stop hook gates the worktree root"
 check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '

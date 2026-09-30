@@ -21,11 +21,11 @@ local origin = `{base}/origin.git`
 local main = `{base}/main`
 local fakebin = `{base}/fakebin`
 local ghlog = `{base}/gh.log`
-local wt1 = `{main}/.worktrees/R0010-demo`
-local wt2 = `{main}/.worktrees/R0020-other`
-local wt3 = `{main}/.worktrees/R0030-third`
-local wt4 = `{main}/.worktrees/R0040-fourth`
-local named = `{main}/.worktrees/capture-demo`
+local wt1 = `{main}/.worktree/R0010`
+local wt2 = `{main}/.worktree/R0020`
+local wt3 = `{main}/.worktree/R0030`
+local wt4 = `{main}/.worktree/R0040`
+local named = `{main}/.worktree/capture-demo`
 
 -- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
 local NO_GC = {
@@ -235,7 +235,7 @@ return t.spec("worktrees", function(it)
 		local r = tr(main, { "worktree", "main" })
 		t.expect(r.ok).toBe(false)
 		t.expect(string.find(r.stderr, "already used by worktree at", 1, true) ~= nil).toBe(true)
-		t.expect(fs.isDir(`{main}/.worktrees/main`)).toBe(false)
+		t.expect(fs.isDir(`{main}/.worktree/main`)).toBe(false)
 		t.expect(countWorktrees()).toBe(before)
 	end)
 
@@ -283,7 +283,7 @@ return t.spec("worktrees", function(it)
 		local landed = string.match(git(main, { "ls-remote", origin, "refs/heads/main" }), "^(%x+)")
 		-- wt2 has its own commit (start's); the main checkout's main is now stale
 		local staleMain = git(main, { "rev-parse", "main" })
-		local made = `{main}/.worktrees/capture-fresh`
+		local made = `{main}/.worktree/capture-fresh`
 		t.expect(must(tr(wt2, { "worktree", "capture-fresh" }), "worktree capture-fresh")).toBe(made)
 		local head = git(made, { "rev-parse", "HEAD" })
 		t.expect(head).toBe(landed)
@@ -395,7 +395,7 @@ return t.spec("worktrees", function(it)
 		local r = tr(main, { "worktree-prune" })
 		t.expect(r.ok).toBe(false)
 		t.expect(r.code).toBe(1)
-		t.expect(string.find(r.stderr, "R0040-fourth", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(r.stderr, wt4, 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(`{wt4}/unsaved.txt`)).toBe(true)
 		t.expect(git(main, { "branch", "--list", "R0040-fourth" }) ~= "").toBe(true)
 	end)
@@ -417,6 +417,14 @@ return t.spec("worktrees", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(fs.isDir(wt1)).toBe(false)
 		t.expect(countWorktrees()).toBe(before)
+	end)
+
+	it("worktree-prune removes a finished raft's detached worktree", function()
+		-- R0010 is done on main; a detached worktree for it (like the bootstrap one) has no branch to delete
+		git(main, { "worktree", "add", "-q", "--detach", wt1, "origin/main" })
+		local r = tr(main, { "worktree-prune" })
+		t.expect(r.ok).toBe(true)
+		t.expect(fs.isDir(wt1)).toBe(false)
 	end)
 
 	it("post-edit hook lints with the edited file's worktree config", function()

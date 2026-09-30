@@ -18,8 +18,8 @@ local base = `{root}/.cache/ws-e2e`
 local seed = `{base}/seed`
 local origin = `{base}/origin.git`
 local main = `{base}/main`
-local wt1 = `{main}/.worktrees/R0010-demo`
-local stream = `{main}/.worktrees/ws-f0010`
+local wt1 = `{main}/.worktree/R0010`
+local stream = `{main}/.worktree/ws-f0010`
 
 -- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
 local NO_GC = {
@@ -300,7 +300,7 @@ return t.spec("workstreams", function(it)
 		t.expect(raft.ok).toBe(false)
 		t.expect(has(raft.stderr, "named worktrees")).toBe(true)
 		t.expect(countWorktrees()).toBe(before)
-		t.expect(fs.isDir(`{main}/.worktrees/R0020-solo`)).toBe(false)
+		t.expect(fs.isDir(`{main}/.worktree/R0020`)).toBe(false)
 	end)
 
 	it("tracker.sh commit refuses while a squash merge is unresolved", function()
