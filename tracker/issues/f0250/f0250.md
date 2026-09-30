@@ -2,7 +2,7 @@
 id: f0250
 type: feature
 title: Hiscore board ui
-raft: 
+raft: R0110
 depends_on: [f0230]
 emergent: false
 design: draft

@@ -2,7 +2,7 @@
 id: f0220
 type: feature
 title: Ghost collisions
-raft: 
+raft: R0100
 depends_on: [f0190, f0200, f0170]
 emergent: false
 design: draft

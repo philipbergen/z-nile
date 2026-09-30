@@ -2,7 +2,7 @@
 id: f0240
 type: feature
 title: Hiscore submit
-raft: 
+raft: R0110
 depends_on: [f0230]
 emergent: false
 design: draft
