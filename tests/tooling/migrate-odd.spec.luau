@@ -1,7 +1,7 @@
 --!strict
 -- `tracker.sh migrate` on odd legacy documents (review 001 F3): one with no frontmatter is reported and
--- left alone (exit 1), and an empty `slug:` line is filled from the old filename. Run in a plain
--- temporary directory: migrate needs only the tracker tree.
+-- left alone (exit 1), and an empty `slug:` line is filled from the old filename. Run in a temporary
+-- directory outside the repo: migrate needs only the tracker tree.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -11,7 +11,10 @@ local function trim(s: string): string
 end
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/migrate-odd`
+-- outside any repository: inside one, the main-checkout guard (CI is one) would refuse to run migrate
+local base = trim(process.exec("mktemp", { "-d" }).stdout)
+-- the tool shim finds lune through a manifest in the working directory or above it
+fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
 
 -- legacy document names are built from parts: the guard spec rejects literal ones
 local function legacy(id: string, slug: string): string
@@ -32,10 +35,6 @@ end
 
 return t.spec("migrate on odd documents", function(it)
 	it("a document without frontmatter is reported and left alone; the others still convert", function()
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(base)
 		write(legacy("f0010", "bare"), "just text, no frontmatter\n")
 		write(legacy("f0020", "fine"), "---\nid: f0020\ntitle: Fine\n---\n\nbody\n")
 		local r = migrate()
@@ -60,5 +59,6 @@ return t.spec("migrate on odd documents", function(it)
 		local doc = fs.readFile(`{base}/tracker/issues/f0030/f0030.md`)
 		t.expect(string.find(doc, "\nslug: filled\n", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(doc, "\nslug:\n", 1, true))).toBe(nil)
+		fs.removeDir(base)
 	end)
 end)
