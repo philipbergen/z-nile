@@ -56,7 +56,9 @@ AC1: the tracker skill has a "Merging" section that lets the agent merge, requir
 AC2: the tracker skill no longer says agents never merge.
 AC3: only a significant leftover after round 3 blocks the merge (both skills say so).
 AC4: execute-raft Phase 6 merges without waiting for a human.
-AC5: the merge gate is explicit: `CLEAN` merge state, an empty checks list is not green, and code changes after `done` get a new clean review round.
+AC5: the merge gate is explicit: `CLEAN` merge state, CI verified by head sha and the `gate` check (not an empty or skipped list), and anything beyond a clean merge or renumber after `done` is `BLOCKED:`.
+AC8: a refuted high or failed Judged criterion triggers a re-review round.
+AC9: the merge command produces a real trailer and the merge sha has a command.
 AC6: the interim "below the merge threshold" answer is limited to medium and low findings and points at c0360.
 AC7: the final report is written after the merge and carries the merge sha.
 <!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
