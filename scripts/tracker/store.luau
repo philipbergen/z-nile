@@ -62,6 +62,16 @@ end
 
 function store.find(id: string): Item?
 	local kind = kindOf(id)
+	local dirs: { string } = {}
+	for _, state in STATE_ORDER do
+		local d = store.dirFor(kind, state, id)
+		if fs.isDir(d) then
+			table.insert(dirs, d)
+		end
+	end
+	if #dirs > 1 then
+		error(`duplicate id {id}: {table.concat(dirs, ", ")}`, 0)
+	end
 	for _, state in STATE_ORDER do
 		local dir = store.dirFor(kind, state, id)
 		if fs.isDir(dir) then
