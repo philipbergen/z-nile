@@ -50,7 +50,7 @@ Fill every section of the issue template. Requirements:
 
 ## 5. Adversarial design review (required)
 1. Mark the items `design: reviewed` once the author considers them complete. Use `tracker` frontmatter edits.
-2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `review` skill (design mode), the raft and issue paths, and read access to the repo. It writes `design-review-NNN.md` in the raft directory.
+2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `review` skill (design mode), the raft and issue paths, and read access to the repo. It writes `design-review-NNN.md` in the raft directory. Run the reviewer on **Opus 5.5**, even if you run on a cheaper model: in Claude Code, pass `model: "opus"` to the Agent tool, and don't substitute another model, such as Fable or Sonnet.
 3. Answer every finding:
    - Fix it in the documents, specs or `check.sh`.
    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>`).
