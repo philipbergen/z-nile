@@ -59,12 +59,6 @@ local function tr(cwd: string, args: { string }, env: { [string]: string }?): Re
 	return run(cwd, "bash", { "scripts/tracker.sh", table.unpack(args) }, env)
 end
 
-local function edit(path: string, from: string, to: string)
-	local text, n = string.gsub(fs.readFile(path), from, to)
-	assert(n > 0, `pattern {from} not found in {path}`)
-	fs.writeFile(path, text)
-end
-
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
