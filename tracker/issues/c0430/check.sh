@@ -43,7 +43,8 @@ check "AC6: skills and template carry the parallel protocol" bash -c '
   grep -qF "## Workstreams plan" tracker/templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
   grep -qF "{{WORKSTREAMS}}" tracker/templates/prompt.md || { echo "prompt template: variable"; exit 1; }
   grep -qF "stream branches are committed with plain git" tracker/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
-  grep -qF "One raft branch and one PR" tracker/templates/prompt.md || { echo "prompt template: hard rule 1"; exit 1; }'
+  grep -qF "One raft branch and one PR" tracker/templates/prompt.md || { echo "prompt template: hard rule 2 (one raft branch)"; exit 1; }
+  grep -qF "Follow the \`execute-raft\` skill" tracker/templates/prompt.md || { echo "prompt template: hard rule 1 is gone"; exit 1; }'
 check "AC1-AC5: every case of the workstreams spec passes" all_cases_pass
 
 finish

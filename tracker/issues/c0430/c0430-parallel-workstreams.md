@@ -6,7 +6,7 @@ slug: parallel-workstreams
 raft: R0020
 depends_on: [c0041, c0420]
 emergent: false
-design: reviewed
+design: ready
 created: 2026-09-30
 ---
 
@@ -77,7 +77,7 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 - **`.claude/skills/review/SKILL.md`**: a short "Stream mode" section: scope is one issue's diff, the file name, no Judged criteria, Sonnet is allowed, and it never replaces the Opus review.
 - **`.claude/skills/tracker/SKILL.md`**: `workstreams` and `worktree <name> --from <ref>` in the command table; `workstreams` joins the read-only tracker commands in the Worktrees section's main-checkout whitelist (c0041's rule 1); the PR-record paragraph adds the per-stream comments.
 - **`.claude/skills/make-prompt/SKILL.md`**: the report (step 4) adds the plan's last line (`parallel: yes|no`).
-- **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially." Hard rule 1 ("One branch and one PR for this whole prompt") becomes "One raft branch and one PR for this whole prompt (in Phase 2B, temporary stream branches feed it and are deleted)", and hard rule 2 ("Commit only with `scripts/tracker.sh commit`") gains "(in Phase 2B, stream branches are committed with plain git; the raft branch only with `tracker.sh commit`)".
+- **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially." Hard rule 2 ("**One branch and one PR for this whole prompt.** `scripts/tracker.sh start` creates both. Commit only with `scripts/tracker.sh commit`.") becomes "**One raft branch and one PR for this whole prompt** (in Phase 2B, temporary stream branches feed it and are deleted). `scripts/tracker.sh start` creates both. Commit only with `scripts/tracker.sh commit` (in Phase 2B, stream branches are committed with plain git; the raft branch only with `tracker.sh commit`)." Hard rule 1 ("Follow the `execute-raft` skill") is untouched.
 - **`tracker/architecture.md`**: unchanged.
 
 ### `scripts/tracker/main.luau` changes

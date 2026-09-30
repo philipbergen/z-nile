@@ -4,7 +4,7 @@ type: chore
 title: Worktrees by default
 single: false
 issues: [c0041, c0420, c0430]
-design: reviewed
+design: ready
 created: 2026-09-28
 ---
 
@@ -43,7 +43,7 @@ There is no new dependency edge (`tracker/architecture.md` is unchanged).
   - `scripts/tracker.sh start R0020` then runs today's `start`, whose `git switch -c R0020-worktrees-by-default` succeeds from a detached HEAD. (A branch created beforehand with `worktree add -b` would make `start` fail: `a branch named … already exists`.)
   The main checkout is untouched. Do not create `.worktrees/` by hand in the main checkout before this raft has merged: it isn't gitignored yet. The raft is executed **sequentially** (Phase 2A): the parallel protocol it adds isn't available to it.
 - **Transition policy (user decision, 2026-09-30): no other raft is started or active while R0020 is open, and none starts until it has merged.** Nothing is in flight today (R0060, the raft viewer, is prepped but not started). c0420 renames every tracker document, and a raft that had *moved* its items (`start`) would hit a rename/rename conflict on merging the migrated `main`; the policy avoids that instead of tooling around it. Captures and preps that only add or edit backlog documents are unaffected: they merge `main`, run `scripts/tracker.sh migrate`, and commit.
-- **R0060 (c0400) was updated in place in this prep PR** so it matches the new layout: its design line and the fixture paths in its `model`, `page` and `smoke` specs (42 paths, no assertion changed). c0420's permanent guard spec fails any later spec file that spells a literal `<ID>-<slug>.md` document path (names built by interpolation are out of its reach).
+- **R0060 (c0400) was updated in place in this prep PR** so it matches the new layout (and now says it depends on R0020: `depends_on: [c0420]` on c0400, and its Order paragraph): its design line and the fixture paths in its `model`, `page` and `smoke` specs (42 paths, no assertion changed). c0420's permanent guard spec fails any later spec file that spells a literal `<ID>-<slug>.md` document path (names built by interpolation are out of its reach).
 - **c0370 (duplicate id detection, backlog) is superseded** by c0041's `store.find` error and c0420's collision conflict; close it when this raft lands.
 - R0070 (review second order) has merged: this prep branch already contains it, and the designs follow its rules (Rules and mutants tables, the consequence step).
 

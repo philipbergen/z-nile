@@ -5,7 +5,7 @@ title: Doc filename without slug
 raft: R0020
 depends_on: []
 emergent: false
-design: reviewed
+design: ready
 created: 2026-09-30
 ---
 
@@ -176,7 +176,7 @@ The ticket-prep skill's line "In `R…-slug.md`, before any issue gets detail" b
 None.
 
 ## Implementation steps
-1. `cmd.migrate` and its USAGE line, **alone**, written so it never calls `store.find` (it scans directories). Run its cases against the old store. `scripts/tracker.sh commit` this: the tracker still reads the legacy layout.
+1. `cmd.migrate` and its USAGE line, **alone**, written so it never calls `store.find` (it scans directories). Its naming-spec cases can't pass yet (the spec shares one fixture with the new `new` and ends its migrate case with a `find` the old store rejects), so check it by hand on a scratch copy of a legacy tracker, and expect the spec to fail until step 2. `scripts/tracker.sh commit` this: the tracker still reads the legacy layout.
 2. **One commit for the layout switch.** `tracker.sh commit` reads every document through the store (`activeRaft` → `store.all` → `store.find`), so the store and the documents must change together: edit `store.luau` (`docIn`, `find`, slug from the frontmatter), the two templates, `new` (slug validation, `SLUG`, `<ID>.md`) and `renumber`; run `scripts/tracker.sh migrate` (it works with either store); update the three specs' paths and fixture `slug:` lines, the tracker skill and the ticket-prep line. Run no other `tracker.sh` command until the tree is fully migrated, then `scripts/tracker.sh commit`.
 3. `scripts/tracker.sh check c0420`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
 
