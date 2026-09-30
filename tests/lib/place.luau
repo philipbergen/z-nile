@@ -65,14 +65,21 @@ end
 
 -- Resolve a string require the way Roblox does, from `from` (a LuaSourceContainer). "@self/"
 -- starts at `from`, "./" at its Parent, "../" at its Parent's Parent (each extra leading "../"
--- one more level up). Returns the ModuleScript, or nil if a segment is missing, the target is
--- not a ModuleScript, the spec is an alias (aliases are not valid in src/), or the path is
+-- one more level up), and "@game/" at the root of `from`'s instance tree (the DataModel in the
+-- built place; ".." is not allowed after it). Returns the ModuleScript, or nil if a segment is missing, the target is
+-- not a ModuleScript, the spec is any other alias (aliases are not valid in src/), or the path is
 -- malformed: empty, with empty or "." segments, or ".." anywhere but the leading "../" run.
 function place.resolveRequire(from: Instance, spec: string): Instance?
 	local node: Instance?
 	local rest: string
 	local leadingUp = false
-	if string.sub(spec, 1, 6) == "@self/" then
+	if string.sub(spec, 1, 6) == "@game/" then
+		node = from
+		while node.Parent ~= nil do
+			node = node.Parent
+		end
+		rest = string.sub(spec, 7)
+	elseif string.sub(spec, 1, 6) == "@self/" then
 		node, rest = from, string.sub(spec, 7)
 	elseif string.sub(spec, 1, 2) == "./" then
 		node, rest = from.Parent, string.sub(spec, 3)
