@@ -115,6 +115,7 @@ function graph.gameRoots(project: any?): { GameRoot }
 		return a.instance < b.instance
 	end)
 	if project == nil then
+		table.freeze(out)
 		gameRootsCache = out
 	end
 	return out
@@ -131,6 +132,9 @@ function graph.resolveGame(spec: string, roots: { GameRoot }?): string?
 		if seg == "" or seg == "." or seg == ".." then
 			return nil
 		end
+	end
+	if segs[#segs] == "init" then
+		return nil -- Roblox names the instance after the directory, never "init"
 	end
 	for _, root in roots or graph.gameRoots() do
 		local rootSegs = string.split(root.instance, "/")
