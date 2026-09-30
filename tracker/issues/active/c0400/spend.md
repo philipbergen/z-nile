@@ -8,6 +8,7 @@
 | 4 | 2026-09-30 22:38 | c0400: tracker.sh board, --open, USAGE (AC3) | 22 | 3 | 6.0 | focus |
 | 5 | 2026-09-30 22:38 | c0400: tracker skill board row, node in SETUP.md (AC5) | 2 | 0 | 3.0 | focus |
 | 6 | 2026-09-30 22:40 | c0400: verification log | 0 | 0 | 1.0 | focus |
+| 7 | 2026-09-30 22:48 | c0400: review-001 fixes (hostile ids, shortcuts, links, placeholders, board args, --open failure) | 168 | 8 | 12.0 | focus |
 
-**Total:** +800 / -19 lines, 37.0 agent-minutes over 6 commits
-<!-- totals: added=800 removed=19 minutes=37.0 commits=6 -->
+**Total:** +968 / -27 lines, 49.0 agent-minutes over 7 commits
+<!-- totals: added=968 removed=27 minutes=49.0 commits=7 -->

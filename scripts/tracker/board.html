@@ -68,13 +68,18 @@ ul.links { margin: 0; padding-left: 20px; }
   model.issues.forEach(function (i) { issueById[i.id] = i; });
   var tab = model.initialTab, sel = -1;
 
+  // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  // Raw HTML in a document is shown as text, except comments (the templates' hints), which stay hidden.
+  marked.use({ renderer: { html: function (t) { return /^\s*<!--/.test(t.text) ? "" : esc(t.text); } } });
+
   function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   function badge(s) { return s ? '<span class="badge s-' + esc(s) + '">' + esc(s) + "</span>" : ""; }
   function idLink(id) {
-    var it = byId[id] || issueById[id];
-    return '<a class="jump" data-id="' + esc(id) + '">' + esc(id) + "</a>" + (it ? " " + esc(it.title) + " " + badge(it.status) : "");
+    var it = has(byId, id) ? byId[id] : has(issueById, id) ? issueById[id] : null;
+    return '<a class="jump" data-id="' + esc(id) + '" href="#' + esc(id) + '">' + esc(id) + "</a>" + (it ? " " + esc(it.title) + " " + badge(it.status) : "");
   }
   function group(title, ids) {
     if (!ids.length) return "";
@@ -139,18 +144,18 @@ ul.links { margin: 0; padding-left: 20px; }
   function go(raw) {
     var q = String(raw).trim();
     q = q.charAt(0).toUpperCase() === "R" ? "R" + q.slice(1) : q.toLowerCase();
+    if (!has(model.home, q)) return false;
     var entry = model.home[q];
-    if (!entry) return false;
     tab = byId[entry].tab;
     sel = model.tabs[tab].indexOf(entry);
     renderList();
-    renderPane(entry, issueById[q] ? q : null);
+    renderPane(entry, has(issueById, q) ? q : null);
     try { history.replaceState(null, "", "#" + q); } catch (e) { /* file:// quirks */ }
     return true;
   }
 
   document.addEventListener("keydown", function (e) {
-    if (e.target === search) return;
+    if (e.target === search || e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key, ids = model.tabs[tab];
     if (k === "/") { e.preventDefault(); search.focus(); search.select(); }
     else if (k === "ArrowRight" || k === "ArrowLeft") {
@@ -176,7 +181,8 @@ ul.links { margin: 0; padding-left: 20px; }
     go(a.getAttribute("data-id"));
   });
 
-  var start = decodeURIComponent(location.hash.slice(1));
+  var start = "";
+  try { start = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* malformed: no match */ }
   if (!(start && go(start))) switchTab(tab);
 })();
 </script>

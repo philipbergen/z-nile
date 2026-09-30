@@ -1,0 +1,5 @@
+- F1: fixed: the page script uses own-property lookups for `home`, `byId` and `issueById`, and guards `decodeURIComponent`; `board.spec` covers `#constructor`, `#__proto__`, `#%`, `#%E0` and searches for `constructor`, `__proto__`, `hasOwnProperty`.
+- F2: fixed: `board.spec` has an `--open` case whose openers exit 3 (warning on stderr, stdout only the path, exit 0, page written); the opener-not-found path stays covered by the `pcall` alone, noted in the Rules and mutants table.
+- F3: fixed: `cmd.board` refuses positional arguments and an `--out` that is empty or starts with `-`, and prints (and opens) the absolute path; two cases.
+- F4: fixed: the keydown handler returns early with Cmd, Ctrl or Alt held, and pane links have `href="#<ID>"` after `data-id`; two cases.
+- F5: fixed: `marked.use` renders raw HTML as escaped text and hides only comments; one case. This makes documents' intentional raw HTML visible as text, which no tracker document uses today.

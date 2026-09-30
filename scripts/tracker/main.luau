@@ -1048,13 +1048,23 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
 end
 
-function cmd.board(_pos: { string }, opts: { [string]: { string } })
-	local out = if opts["--out"] and opts["--out"][1] ~= "" then opts["--out"][1] else ".cache/board.html"
+function cmd.board(pos: { string }, opts: { [string]: { string } })
+	local given = opts["--out"] and opts["--out"][1]
+	if #pos > 0 or (given and (given == "" or string.sub(given, 1, 1) == "-")) then
+		fail(
+			"usage: board [--out PATH] [--open]  (an --out path can't start with -; write ./-x for such a file)"
+		)
+	end
+	local out = given or ".cache/board.html"
 	local dir = string.match(out, "^(.*)/[^/]*$")
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
 	fs.writeFile(out, board.build())
+	-- tracker.sh runs from the repo root, so say where a relative path really is
+	if string.sub(out, 1, 1) ~= "/" then
+		out = process.cwd .. out
+	end
 	print(out)
 	if opts["--open"] then
 		local opener = if process.os == "macos" then "open" else "xdg-open"
