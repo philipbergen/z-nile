@@ -6,7 +6,7 @@ slug: inside-repo-worktrees
 raft: R0020
 depends_on: [c0041]
 emergent: false
-design: reviewed
+design: ready
 created: 2026-09-30
 ---
 
@@ -122,7 +122,7 @@ Cases (`spec case → AC`):
 - `launch defaults to claude and passes arguments after -- through untouched` → AC2 (awkward arguments arrive unchanged: options, an argument with spaces, an empty string, `*`, a quoted string and a second `--`)
 - `launch forwards stdin to the command` → AC2 (the spec feeds `hello` on stdin; the fake agent reads it)
 - `launch returns the command's exit code and reports a command that can't start` → AC3 (the message is `cannot run <command>`)
-- `launch rejects an unknown target, a done raft, a stray argument and a bad command, and starts nothing` → AC4 (an empty command and a relative command are refused; a typo in the command leaves no worktree behind)
+- `launch rejects an unknown target, a done raft, a stray argument or a bad command` → AC4 (an empty command and a relative command are refused; a typo in the command leaves no worktree behind)
 - `launch stops when the worktree step returns no usable path` → AC4 (a fake `lune` on `$HOME/.rokit/bin` prints nothing, several lines or a relative path)
 - `worktree-prune warns about a worktree outside .worktree/ and leaves it` → AC5 (three strays: a sibling directory, `.claude/worktrees/x` and `.worktree-old/y` inside the repo; worktrees inside `.worktree/` are not flagged)
 
@@ -136,8 +136,8 @@ Cases (`spec case → AC`):
 | Arguments after `--` pass through untouched; the default command is `claude` | `launch defaults to claude and passes arguments …` | `exec "$cmd" $*` (unquoted); no default | run |
 | Stdin reaches the command | `launch forwards stdin to the command` | run the command through Lune's `process.exec` | run |
 | The launcher is replaced by the command (terminal, Ctrl-C and signals are native) | OC1 (Ctrl-C in a launched agent) | run the command as a child without `exec` | reasoned (needs a terminal; OC1) |
-| The exit code propagates; an unstartable command is `cannot run <command>` | `launch returns the command's exit code …` | always exit 0; drop the executable check (bash's own message differs) | run |
-| An invalid target, a stray argument or a bad command starts nothing and creates nothing | `launch rejects an unknown target, a done raft, a stray argument and a bad command …` | launch anyway when the worktree step fails; accept a token after the target; accept a relative command; check the command only after creating the worktree | run |
+| The exit code propagates; an unstartable command is `cannot run <command>` | `launch returns the command's exit code …` | always exit 0; drop the command lookup (bash's own message differs) | run |
+| An invalid target, a stray argument or a bad command starts nothing and creates nothing | `launch rejects an unknown target, a done raft, a stray argument or a bad command` | launch anyway when the worktree step fails; accept a token after the target; accept a relative command; check the command only after creating the worktree | run |
 | A worktree step that returns no usable path stops the launch | `launch stops when the worktree step returns no usable path` | `cd "$path" && exec` without checking the path | run |
 | A worktree outside `.worktree/` (including `.claude/worktrees/` and `.worktree-old/`) is warned about and left alone | `worktree-prune warns about a worktree outside .worktree/ …` | warn only for paths outside the repo directory; match the prefix without the trailing slash; say nothing; remove it | run |
 | The documents state the rule and the launch line | AC6 grep and JC1 | leave a sibling-path instruction | reasoned (a grep and a ruling, not a mutation) |
@@ -175,3 +175,4 @@ Cases (`spec case → AC`):
 - **Prototype run 2 (2026-09-30, after design-review-008), reverted, never committed:** the `launch` block was hardened (command checked before any worktree is created, worktree path checked, `cd` checked, `exec "$cmd"` as typed) and re-run stacked with c0420, c0041 and c0430. All 7 launch cases pass (new: `launch stops when the worktree step returns no usable path`, driven by a fake `lune` on `$HOME/.rokit/bin`; a bad-command case; a relative command that really exists), c0041's 29 cases pass, and `selene`, `stylua --check`, `promote-check R0020` and `bash -n` on every `check.sh` are clean.
   - Fifteen planted mistakes each fail the case written for them: running in the caller's directory, unquoted arguments, a swallowed exit status, no executable check, launching when the worktree step fails, a path that isn't checked, running the command through Lune, no default command, a stray argument accepted, a relative command accepted, the worktree created before the command is checked, a prune that is silent about strays, one that flags only paths outside the repo directory, one that drops the trailing slash, and one that removes the stray.
   - Two mutants looked like survivors and were not spec gaps: `; exit 0` after the command is equivalent under `set -e`; and "a relative command is accepted" first survived because a nonexistent `./agent` fails either way. The spec now creates a real executable `./relagent` and asserts the `absolute path` message.
+- **Mechanical check (2026-09-30, after design-review-009):** review 009 found that a case name too long for stylua's 110 columns is wrapped, which makes `check.sh`'s one-line `it("<prefix>` lookup fail for a correct implementation. The name was shortened, and all 60 case prefixes in the four members' `check.sh` files were then checked against their specs: none is missing. The fake `lune`'s `rel` mode now prints `.`, and the prototype confirms that a mutant keeping only the directory test is killed.

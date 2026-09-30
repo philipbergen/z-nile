@@ -172,7 +172,7 @@ return t.spec("launch", function(it)
 		fs.writeDir(`{fakehome}/.rokit/bin`)
 		fs.writeFile(
 			`{fakehome}/.rokit/bin/lune`,
-			'#!/usr/bin/env bash\ncase "${FAKE_LUNE:-}" in\n  empty) exit 0 ;;\n  multi) printf "a warning line\\n/somewhere/else\\n"; exit 0 ;;\n  rel) echo relative/path; exit 0 ;;\n  *) exit 99 ;;\nesac\n'
+			'#!/usr/bin/env bash\ncase "${FAKE_LUNE:-}" in\n  empty) exit 0 ;;\n  multi) printf "a warning line\\n/somewhere/else\\n"; exit 0 ;;\n  rel) echo .; exit 0 ;;\n  *) exit 99 ;;\nesac\n'
 		)
 		must(process.exec("chmod", { "+x", `{fakehome}/.rokit/bin/lune` }), "chmod fake lune")
 
@@ -223,35 +223,34 @@ return t.spec("launch", function(it)
 		t.expect(fs.isDir(`{main}/.worktree/capture-typo`)).toBe(false)
 	end)
 
-	it(
-		"launch rejects an unknown target, a done raft, a stray argument and a bad command, and starts nothing",
-		function()
-			local before = countWorktrees()
+	it("launch rejects an unknown target, a done raft, a stray argument or a bad command", function()
+		local before = countWorktrees()
+		if fs.isFile(log) then
 			fs.removeFile(log)
-			for _, target in { "R9999", "Bad_Name", "f0010", "R0020" } do
-				local r = tr(main, { "launch", target, "--", "agent" }, agentEnv())
-				if r.ok then
-					error(`launch accepted {target}`)
-				end
-			end
-			-- a token after the target that isn't -- is a usage error, not a command
-			t.expect(tr(main, { "launch", "R0010", "agent" }, agentEnv()).ok).toBe(false)
-			t.expect(tr(main, { "launch" }, agentEnv()).ok).toBe(false)
-			-- an empty command and a relative command are refused; so is a file that isn't executable
-			t.expect(tr(main, { "launch", "capture-demo", "--", "" }, agentEnv()).ok).toBe(false)
-			-- a relative command that exists would mean the repo root before the cd and the worktree after it
-			fs.writeFile(`{main}/relagent`, fs.readFile(`{fakebin}/agent`))
-			must(process.exec("chmod", { "+x", `{main}/relagent` }), "chmod relagent")
-			local relative = tr(main, { "launch", "capture-demo", "--", "./relagent" }, agentEnv())
-			t.expect(relative.ok).toBe(false)
-			t.expect(has(relative.stderr, "absolute path")).toBe(true)
-			fs.removeFile(`{main}/relagent`)
-			t.expect(tr(main, { "launch", "capture-demo", "--", "/etc/hosts" }, agentEnv()).ok).toBe(false)
-			t.expect(fs.isFile(log)).toBe(false) -- nothing ran
-			t.expect(countWorktrees()).toBe(before)
-			t.expect(fs.isDir(`{main}/.worktree/R0020`)).toBe(false)
 		end
-	)
+		for _, target in { "R9999", "Bad_Name", "f0010", "R0020" } do
+			local r = tr(main, { "launch", target, "--", "agent" }, agentEnv())
+			if r.ok then
+				error(`launch accepted {target}`)
+			end
+		end
+		-- a token after the target that isn't -- is a usage error, not a command
+		t.expect(tr(main, { "launch", "R0010", "agent" }, agentEnv()).ok).toBe(false)
+		t.expect(tr(main, { "launch" }, agentEnv()).ok).toBe(false)
+		-- an empty command and a relative command are refused; so is a file that isn't executable
+		t.expect(tr(main, { "launch", "capture-demo", "--", "" }, agentEnv()).ok).toBe(false)
+		-- a relative command that exists would mean the repo root before the cd and the worktree after it
+		fs.writeFile(`{main}/relagent`, fs.readFile(`{fakebin}/agent`))
+		must(process.exec("chmod", { "+x", `{main}/relagent` }), "chmod relagent")
+		local relative = tr(main, { "launch", "capture-demo", "--", "./relagent" }, agentEnv())
+		t.expect(relative.ok).toBe(false)
+		t.expect(has(relative.stderr, "absolute path")).toBe(true)
+		fs.removeFile(`{main}/relagent`)
+		t.expect(tr(main, { "launch", "capture-demo", "--", "/etc/hosts" }, agentEnv()).ok).toBe(false)
+		t.expect(fs.isFile(log)).toBe(false) -- nothing ran
+		t.expect(countWorktrees()).toBe(before)
+		t.expect(fs.isDir(`{main}/.worktree/R0020`)).toBe(false)
+	end)
 
 	it("launch stops when the worktree step returns no usable path", function()
 		-- nothing, several lines, or a relative path: the agent must not run, anywhere

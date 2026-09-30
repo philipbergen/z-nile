@@ -6,7 +6,7 @@ slug: parallel-workstreams
 raft: R0020
 depends_on: [c0041, c0420, c0440]
 emergent: false
-design: reviewed
+design: ready
 created: 2026-09-30
 ---
 
