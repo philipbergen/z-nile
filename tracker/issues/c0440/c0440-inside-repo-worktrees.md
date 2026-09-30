@@ -76,7 +76,7 @@ Worktrees are created only under `<main checkout>/.worktree/`: `.worktree/<R-id>
 
 ## Unknowns & experiments
 - **E1 (prototype)**: can the designed `launch` and the stray warning satisfy the sequestered spec, and does the spec catch wrong implementations? Recorded in the Verification log (prototype stacked on c0420 and c0041; reverted).
-- **E2 (run in prep: PASS)**: a worktree inside the repo directory doesn't disturb the main checkout. This PR was prepared in `.worktree/prep-inside-repo` with the directory excluded through `.git/info/exclude`, and `git status` in the main checkout stayed clean.
+- **E2 (run in prep: PASS)**: a worktree inside the repo directory doesn't disturb the main checkout or its gate. This PR was prepared in `.worktree/prep-inside-repo` with the directory excluded through `.git/info/exclude`, and `git status` in the main checkout stayed clean. In a scratch clone that held a full nested worktree (`.worktree/inner`, ignored through `.gitignore`), `git status` was clean and `scripts/check.sh --full` passed with exactly the same 346 specs as without it: no tool scanned the nested copy.
 - **E3 (Observed, OC1)**: whether a session started in `.worktree/<id>` sees the same project memory and settings as one started in the main checkout. The repo's `CLAUDE.md`, skills and hooks are in the worktree, so they apply; per-project memory is keyed by the session's directory and may not be shared. If it isn't, that is worth a follow-up; it doesn't change this design.
 
 ## Regression guard
