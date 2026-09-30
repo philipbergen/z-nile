@@ -1,0 +1,66 @@
+---
+id: c0380
+type: chore
+title: Reviewer strong model
+raft: 
+depends_on: []
+emergent: false
+design: draft
+created: 2026-09-29
+---
+
+# c0380: Reviewer strong model
+
+## Problem
+The adversarial reviewers in `execute-raft` Phase 4 (code mode) and `ticket-prep` step 5 (design mode) are launched as fresh subagents, and neither skill names a model. A subagent inherits the executor's model, so a raft executed on a cheaper model (Sonnet) is reviewed by that same model, which tends to share the author's blind spots. Review is a small share of the spend and the main guard against rework, so the reviewer should run on the strongest model available (Opus 5.5 today), whatever model executes.
+
+## Non-goals
+- A dedicated `.claude/agents/` reviewer definition.
+- Changing what the reviewer checks or how findings are answered.
+
+## Solution
+State it in both launch steps: launch the clean reviewer on the strongest model available (in Claude Code, pass `model: "opus"` to the Agent tool; other harnesses pick their strongest model), even when the author runs on a cheaper one. Direct small PR approved by the user 2026-09-29 instead of full ticket-prep.
+
+## Design
+<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
+     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
+
+### Scalability
+### Maintainability
+### Usability
+
+### Touched modules
+- `.claude/skills/execute-raft/SKILL.md`
+- `.claude/skills/ticket-prep/SKILL.md`
+
+### Affected specs
+<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
+
+## Unknowns & experiments
+<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
+     result if already run during prep, and the fallback design if it fails. -->
+
+## Regression guard
+<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+
+## Test plan
+<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
+
+## Acceptance criteria
+
+### Checked
+- AC1: `execute-raft` Phase 4 tells the author to launch the code reviewer on the strongest model (names `opus`).
+- AC2: `ticket-prep` step 5 tells the author to launch the design reviewer on the strongest model (names `opus`).
+
+### Judged
+<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
+     Ruled on by the adversarial code reviewer. -->
+
+### Observed
+<!-- Minimal Studio playtest steps for the human (OCn). -->
+
+## Implementation steps
+<!-- Ordered, small, each verifiable. -->
+
+## Verification log
+<!-- Appended at the end of execution: date, commands run, results. -->
