@@ -3,7 +3,7 @@ id: c0400
 type: chore
 title: Raft browser
 raft: R0060
-depends_on: []
+depends_on: [c0420]
 emergent: false
 design: ready
 created: 2026-09-29
@@ -108,7 +108,7 @@ function board.checkMarked(js: string)           -- errors unless sha256(js) == 
 function board.inlineMarked(js: string): string  -- js minus its trailing "//# sourceMappingURL=…" line
 function board.build(root: string?): string      -- read MARKED_PATH, checkMarked, render(collect(root))
 ```
-**`collect(root)`** walks the same layout as `store`: `{root}/{rafts,issues}/[active/|done/]<ID>/<ID>-<slug>.md`.
+**`collect(root)`** walks the same layout as `store`: `{root}/{rafts,issues}/[active/|done/]<ID>/<ID>.md` (the layout after c0420; the slug is frontmatter, and the board doesn't read it).
 - It takes `state` from the directory, and uses `store.isRaftId`/`isIssueId` for the directory names.
 - `store.readFront(path)` supplies the frontmatter. A list value like `[f0100, c0090]` is parsed by taking every `%w+` run, then sorting. The body is everything after the closing `---` line, with leading blank lines dropped.
 - Other files in an item's directory (`check.sh`, reviews, `spend.md`, `acceptance/`) are ignored.

@@ -12,52 +12,52 @@ local fixture = {} :: any
 
 fixture.FILES = {
 	{
-		path = "rafts/done/R0010/R0010-alpha.md",
+		path = "rafts/done/R0010/R0010.md",
 		front = { "id: R0010", "type: chore", "title: Alpha", "design: ready" },
 		body = "# R0010: Alpha\n",
 	},
 	{
-		path = "rafts/active/R0020/R0020-beta.md",
+		path = "rafts/active/R0020/R0020.md",
 		front = { "id: R0020", "type: feature", "title: Beta", "design: ready" },
 		body = "# R0020: Beta\n",
 	},
 	{
-		path = "rafts/R0030/R0030-gamma.md",
+		path = "rafts/R0030/R0030.md",
 		front = { "id: R0030", "type: feature", "title: Gamma", "design: ready" },
 		body = "# R0030: Gamma\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
 	},
 	{
-		path = "rafts/R0050/R0050-epsilon.md",
+		path = "rafts/R0050/R0050.md",
 		front = { "id: R0050", "type: chore", "title: Epsilon", "design: reviewed" },
 		body = "# R0050: Epsilon\n",
 	},
 	{
-		path = "issues/done/c0010/c0010-first.md",
+		path = "issues/done/c0010/c0010.md",
 		front = { "id: c0010", "type: chore", "title: First", "raft: R0010", "depends_on: []" },
 		body = "# c0010: First\n",
 	},
 	{
-		path = "issues/active/f0020/f0020-second.md",
+		path = "issues/active/f0020/f0020.md",
 		front = { "id: f0020", "type: feature", "title: Second", "raft: R0020", "depends_on: [c0010]" },
 		body = "# f0020: Second\n",
 	},
 	{
-		path = "issues/f0030/f0030-third.md",
+		path = "issues/f0030/f0030.md",
 		front = { "id: f0030", "type: feature", "title: Third", "raft: R0030", "depends_on: [f0020]" },
 		body = "# f0030: Third\n",
 	},
 	{
-		path = "issues/f0031/f0031-third-b.md",
+		path = "issues/f0031/f0031.md",
 		front = { "id: f0031", "type: feature", "title: Third B", "raft: R0030", "depends_on: []" },
 		body = "# f0031: Third B\n",
 	},
 	{
-		path = "issues/c0050/c0050-fifth.md",
+		path = "issues/c0050/c0050.md",
 		front = { "id: c0050", "type: chore", "title: Fifth", "raft: R0050", "depends_on: []" },
 		body = "# c0050: Fifth\n",
 	},
 	{
-		path = "issues/f0060/f0060-loose.md",
+		path = "issues/f0060/f0060.md",
 		front = { "id: f0060", "type: feature", "title: Loose", "raft: ", "depends_on: []" },
 		body = "# f0060: Loose\n",
 	},
