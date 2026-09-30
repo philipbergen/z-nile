@@ -2,6 +2,7 @@
 id: {{ID}}
 type: {{TYPE}}
 title: {{TITLE}}
+slug: {{SLUG}}
 single: {{SINGLE}}
 issues: [{{ISSUES}}]
 design: draft

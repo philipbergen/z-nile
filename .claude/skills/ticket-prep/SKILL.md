@@ -17,7 +17,7 @@ The goal is a raft that **any strong agent can deliver on the first attempt with
 ## 2. Design the raft as a whole
 `tracker/game-design.md` holds the user's product decisions, and it's binding. A design that needs to change a decision stops and asks the user. The raft document **quotes the decisions it relies on** under Theme, so the execution prompt carries them.
 
-In `R…-slug.md`, before any issue gets detail:
+In the raft document (`R<NNNN>.md`), before any issue gets detail:
 - **Theme**: why these belong together.
 - **Whole-raft design**: the module map, which features are new or changed, the interfaces between issues (typed signatures), and the data flow. Add a small diagram if it helps.
 - **Architecture changes**: any new dependency edge goes in `tracker/architecture.md` now, including the ```` ```deps ```` block.

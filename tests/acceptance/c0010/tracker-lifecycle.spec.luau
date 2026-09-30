@@ -85,12 +85,9 @@ return t.spec("tracker lifecycle", function(it)
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
-		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new f"))
-			.toBe("tracker/issues/f0010/f0010-alpha.md")
-		t.expect(must(tr({ "new", "issue", "d", "beta" }), "new d"))
-			.toBe("tracker/issues/d0020/d0020-beta.md")
-		t.expect(must(tr({ "new", "issue", "f", "gamma" }), "new f"))
-			.toBe("tracker/issues/f0030/f0030-gamma.md")
+		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new f")).toBe("tracker/issues/f0010/f0010.md")
+		t.expect(must(tr({ "new", "issue", "d", "beta" }), "new d")).toBe("tracker/issues/d0020/d0020.md")
+		t.expect(must(tr({ "new", "issue", "f", "gamma" }), "new f")).toBe("tracker/issues/f0030/f0030.md")
 	end)
 
 	it("rejects a raft that mixes types", function()
@@ -101,12 +98,12 @@ return t.spec("tracker lifecycle", function(it)
 
 	it("renumber steps an id and rewrites references", function()
 		t.expect(must(tr({ "new", "raft", "feature", "demo", "f0010", "f0030" }), "new raft"))
-			.toBe("tracker/rafts/R0010/R0010-demo.md")
+			.toBe("tracker/rafts/R0010/R0010.md")
 		must(tr({ "renumber", "f0030", "f0031" }), "renumber")
-		local raftDoc = read("tracker/rafts/R0010/R0010-demo.md")
+		local raftDoc = read("tracker/rafts/R0010/R0010.md")
 		t.expect(string.find(raftDoc, "f0031", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(raftDoc, "f0030", 1, true))).toBe(nil)
-		t.expect(fs.isFile(`{dir}/tracker/issues/f0031/f0031-gamma.md`)).toBe(true)
+		t.expect(fs.isFile(`{dir}/tracker/issues/f0031/f0031.md`)).toBe(true)
 	end)
 
 	it("start refuses issues that are not design: ready", function()
@@ -120,20 +117,20 @@ return t.spec("tracker lifecycle", function(it)
 	it("start branches, moves items to active, and commits exactly once", function()
 		for _, doc in
 			{
-				"tracker/issues/f0010/f0010-alpha.md",
-				"tracker/issues/f0031/f0031-gamma.md",
-				"tracker/rafts/R0010/R0010-demo.md",
+				"tracker/issues/f0010/f0010.md",
+				"tracker/issues/f0031/f0031.md",
+				"tracker/rafts/R0010/R0010.md",
 			}
 		do
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
-			"tracker/issues/f0010/f0010-alpha.md",
+			"tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
 		edit(
-			"tracker/issues/f0031/f0031-gamma.md",
+			"tracker/issues/f0031/f0031.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/gamma`\n"
 		)

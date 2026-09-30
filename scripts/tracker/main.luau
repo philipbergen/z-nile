@@ -108,6 +108,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if not (prefix and store.TYPES[prefix] and slug) then
 			fail("usage: new issue <f|d|c> <slug> [--raft R0010]")
 		end
+		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
+			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
+		end
 		local id = store.formatId(prefix, store.nextNumber("issue"))
 		local raftId = opts["--raft"] and opts["--raft"][1]
 		local raft = raftId and store.get(raftId)
@@ -118,18 +121,22 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			ID = id,
 			TYPE = store.TYPES[prefix],
 			TITLE = title(slug),
+			SLUG = slug,
 			RAFT = raftId or "",
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}-{slug}.md`, render("tracker/templates/issue/doc.md", vars))
+		fs.writeFile(`{dir}/{id}.md`, render("tracker/templates/issue/doc.md", vars))
 		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/issue/check.sh", vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}-{slug}.md`)
+		print(`{dir}/{id}.md`)
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
 		if not (rtype and store.PREFIX[rtype] and slug) then
 			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single]")
+		end
+		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
+			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
 		local members: { store.Item } = {}
 		for i = 4, #pos do
@@ -158,14 +165,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			ID = id,
 			TYPE = rtype,
 			TITLE = title(slug),
+			SLUG = slug,
 			SINGLE = if opts["--single"] then "true" else "false",
 			ISSUES = table.concat(ids, ", "),
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}-{slug}.md`, render("tracker/templates/raft/doc.md", vars))
+		fs.writeFile(`{dir}/{id}.md`, render("tracker/templates/raft/doc.md", vars))
 		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/raft/check.sh", vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}-{slug}.md`)
+		print(`{dir}/{id}.md`)
 	else
 		fail(USAGE)
 	end
@@ -226,10 +234,10 @@ function cmd.renumber(pos: { string })
 	local tracked = sh.run("git", { "ls-files", "--error-unmatch", item.doc }).ok
 	if tracked then
 		sh.git({ "mv", item.dir, dest })
-		sh.git({ "mv", `{dest}/{old}-{item.slug}.md`, `{dest}/{new}-{item.slug}.md` })
+		sh.git({ "mv", `{dest}/{old}.md`, `{dest}/{new}.md` })
 	else
 		fs.move(item.dir, dest)
-		fs.move(`{dest}/{old}-{item.slug}.md`, `{dest}/{new}-{item.slug}.md`)
+		fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
 	end
 	-- rewrite references everywhere in the tracker
 	local function walk(dir: string)

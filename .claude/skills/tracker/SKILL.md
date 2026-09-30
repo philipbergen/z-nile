@@ -16,12 +16,13 @@ All work is tracked in `tracker/`, which is committed. The only way to change tr
 | raft (epic) | `R` + 4 digits | `R0010` |
 
 - **Numbering**: `f`, `d` and `c` share one number space; rafts have their own. `tracker.sh new` always picks the **next multiple of 10** above the highest number in use.
-- **Conflicts**: if two PRs pick the same number, whoever merges or rebases second **steps up by one** with `tracker.sh renumber f0010 f0011`, or `f0012` if that's taken too. `renumber` rewrites every reference.
+- **Legacy layout**: documents used to be named with their slug. `tracker.sh migrate` renames any such document to `<ID>.md` and adds `slug:` to its frontmatter; run it, and commit, after merging a `main` that has the new layout.
+- **Conflicts**: two branches that pick the same number now conflict in git, because both write `<ID>/<ID>.md`. Only a `CONFLICT (add/add)` on that path means two items share a number: run `git merge --abort`, `git fetch origin main`, then `tracker.sh renumber <ID> <next free>` on your own branch, where next free is the next multiple of 10 above the highest number of that kind in **both** your tree and `origin/main` (`git ls-tree -d --name-only origin/main tracker/issues/ tracker/issues/active/ tracker/issues/done/`, or `tracker/rafts/…` for a raft), and merge again. `renumber` rewrites every reference. A content conflict on a document is two edits to one item: resolve it like any merge, and never renumber.
 - **References**: always refer to items by bare ID, never by path. Use `tracker.sh find <id>` to get the current directory.
 
 Each item is a directory named by its ID:
 ```
-<ID>/<ID>-<slug>.md     the document (frontmatter + sections from tracker/templates)
+<ID>/<ID>.md            the document (frontmatter incl. slug + sections from tracker/templates)
 <ID>/check.sh           acceptance criteria as executable checks (see the testing skill)
 <ID>/acceptance/        sequestered acceptance specs (issues); `done` moves them to tests/acceptance/<ID>/
 <ID>/experiments/       spikes for unknowns (issues)
