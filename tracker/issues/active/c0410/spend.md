@@ -7,6 +7,7 @@
 | 3 | 2026-09-30 15:57 | c0410: tracker.sh metrics prints review rounds and format per raft | 20 | 0 | 7.0 | focus |
 | 4 | 2026-09-30 15:57 | c0410: verification log | 0 | 0 | 2.0 | focus |
 | 5 | 2026-09-30 16:01 | c0410: define the mutation check (review F1), document the rounds table in the metrics skill (F3), design reviews live on the raft (F4) | 6 | 3 | 6.0 | focus |
+| 6 | 2026-09-30 16:04 | c0410: own spec pinning the metrics format rule (review F2), record the fixes | 0 | 0 | 9.0 | focus |
 
-**Total:** +36 / -6 lines, 29.0 agent-minutes over 5 commits
-<!-- totals: added=36 removed=6 minutes=29.0 commits=5 -->
+**Total:** +36 / -6 lines, 38.0 agent-minutes over 6 commits
+<!-- totals: added=36 removed=6 minutes=38.0 commits=6 -->
