@@ -134,8 +134,31 @@ return t.spec("workstreams", function(it)
 				end
 			end
 		end
-		-- sixteen issues f0010..f0160
-		for _, slug in { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p" } do
+		-- twenty issues f0010..f0200
+		for _, slug in
+			{
+				"a",
+				"b",
+				"c",
+				"d",
+				"e",
+				"f",
+				"g",
+				"h",
+				"i",
+				"j",
+				"k",
+				"l",
+				"m",
+				"n",
+				"o",
+				"p",
+				"q",
+				"r",
+				"s",
+				"t",
+			}
+		do
 			must(tr(seed, { "new", "issue", "f", slug }), "new issue " .. slug)
 		end
 		must(tr(seed, { "new", "raft", "feature", "demo", "f0010", "f0020", "f0030", "f0040" }), "raft demo")
@@ -144,6 +167,7 @@ return t.spec("workstreams", function(it)
 		must(tr(seed, { "new", "raft", "feature", "loop", "f0090", "f0100" }), "raft loop")
 		must(tr(seed, { "new", "raft", "feature", "line", "f0110", "f0120", "f0130" }), "raft line")
 		must(tr(seed, { "new", "raft", "feature", "prefix", "f0140", "f0150", "f0160" }), "raft prefix")
+		must(tr(seed, { "new", "raft", "feature", "late", "f0170", "f0180", "f0190", "f0200" }), "raft late")
 		touches("f0010", { "src/a" })
 		touches("f0020", { "src/b" })
 		touches("f0030", { "src/a/sub" })
@@ -167,6 +191,12 @@ return t.spec("workstreams", function(it)
 		touches("f0150", { "src/ab" }) -- a sibling of src/a, not inside it
 		touches("f0160", { "src/a/x" }) -- inside src/a, and it also depends on f0140
 		depends("f0160", { "f0140" })
+		touches("f0170", { "src/s1" })
+		touches("f0180", { "src/s2" })
+		depends("f0180", { "f0170" }) -- wave 2
+		touches("f0190", { "src/s3" }) -- wave 1, but a higher id than f0180
+		touches("f0200", { "src/s4" })
+		depends("f0200", { "f0180", "f0190" })
 		-- R0010 and its issues are ready to start
 		edit(`{seed}/tracker/rafts/R0010/R0010.md`, "design: draft", "design: ready")
 		for _, id in { "f0010", "f0020", "f0030", "f0040" } do
@@ -222,6 +252,18 @@ return t.spec("workstreams", function(it)
 			"f0120 wave 2 after f0110 (depends_on)",
 			"f0130 wave 3 after f0120 (depends_on)",
 			"parallel: no",
+		}, "\n"))
+	end)
+
+	it("the latest wave in the after set decides, whatever its id", function()
+		-- f0200 follows f0180 (wave 2) and f0190 (wave 1, the higher id): its wave is 3, not 2
+		t.expect(must(tr(main, { "workstreams", "R0070" }), "workstreams R0070")).toBe(table.concat({
+			"raft R0070: 4 issues",
+			"f0170 wave 1",
+			"f0180 wave 2 after f0170 (depends_on)",
+			"f0190 wave 1",
+			"f0200 wave 3 after f0180 (depends_on), f0190 (depends_on)",
+			"parallel: yes (wave 1: f0170 f0190)",
 		}, "\n"))
 	end)
 

@@ -77,7 +77,7 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 - **`.claude/skills/review/SKILL.md`**: a short "Stream mode" section: scope is one issue's diff, the file name, no Judged criteria, Sonnet is allowed, and it never replaces the Opus review.
 - **`.claude/skills/tracker/SKILL.md`**: `workstreams` and `worktree <name> --from <ref>` in the command table; `workstreams` joins the read-only tracker commands in the Worktrees section's main-checkout whitelist (c0041's rule 1); the PR-record paragraph adds the per-stream comments.
 - **`.claude/skills/make-prompt/SKILL.md`**: the report (step 4) adds the plan's last line (`parallel: yes|no`).
-- **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially." Hard rule 2 ("Commit only with `scripts/tracker.sh commit`") gains "(in Phase 2B, stream branches are committed with plain git; the raft branch only with `tracker.sh commit`)".
+- **`tracker/templates/prompt.md`**: a `## Workstreams plan` section with `{{WORKSTREAMS}}` and one sentence: "If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially." Hard rule 1 ("One branch and one PR for this whole prompt") becomes "One raft branch and one PR for this whole prompt (in Phase 2B, temporary stream branches feed it and are deleted)", and hard rule 2 ("Commit only with `scripts/tracker.sh commit`") gains "(in Phase 2B, stream branches are committed with plain git; the raft branch only with `tracker.sh commit`)".
 - **`tracker/architecture.md`**: unchanged.
 
 ### `scripts/tracker/main.luau` changes
@@ -120,7 +120,7 @@ Use it when `tracker.sh workstreams <R-id>` ends with `parallel: yes` and the hu
 - **R0040-style rafts** (several issues) now show `parallel: yes`, but nothing changes unless the lead chooses Phase 2B.
 
 ## Test plan
-`acceptance/workstreams.spec.luau` builds a scratch `.cache/ws-e2e/` like c0041's: a seed clone of the repo (no origin, `main` forced, the working tree's `scripts/`, `tracker/templates/`, `.gitignore` overlaid, tracker emptied) in which it creates issues and rafts with `new` and edits their `depends_on` and Touched modules; then a bare `origin.git` cloned from the seed and a clone `main/` for the worktree cases. Rafts: `R0010` (`demo`): f0010 (`src/a`), f0020 (`src/b`), f0030 (`src/a/sub`), f0040 (depends on f0020, `src/c`); `R0020` (`solo`): f0050; `R0030` (`chain`): f0060 (no touched modules), f0070 (`src/z`), f0080 (depends on f0070 and on `c0999`, which isn't in the raft; `src/y`); `R0040` (`loop`): f0090 and f0100 depending on each other; `R0050` (`line`): f0110, then f0120 depending on f0110, then f0130 depending on f0120 (a chain: waves 1, 2, 3); `R0060` (`prefix`): f0140 (`src/a`), f0150 (`src/ab`, not an overlap) and f0160 (depends on f0140 *and* touches `src/a/x`, so both reasons hold and `depends_on` wins).
+`acceptance/workstreams.spec.luau` builds a scratch `.cache/ws-e2e/` like c0041's: a seed clone of the repo (no origin, `main` forced, the working tree's `scripts/`, `tracker/templates/`, `.gitignore` overlaid, tracker emptied) in which it creates issues and rafts with `new` and edits their `depends_on` and Touched modules; then a bare `origin.git` cloned from the seed and a clone `main/` for the worktree cases. Rafts: `R0010` (`demo`): f0010 (`src/a`), f0020 (`src/b`), f0030 (`src/a/sub`), f0040 (depends on f0020, `src/c`); `R0020` (`solo`): f0050; `R0030` (`chain`): f0060 (no touched modules), f0070 (`src/z`), f0080 (depends on f0070 and on `c0999`, which isn't in the raft; `src/y`); `R0040` (`loop`): f0090 and f0100 depending on each other; `R0050` (`line`): f0110, then f0120 depending on f0110, then f0130 depending on f0120 (a chain: waves 1, 2, 3); `R0070` (`late`): f0170 (wave 1), f0180 depending on it (wave 2), f0190 (wave 1, a *higher id* than f0180) and f0200 depending on f0180 and f0190 (wave 3); `R0060` (`prefix`): f0140 (`src/a`), f0150 (`src/ab`, not an overlap) and f0160 (depends on f0140 *and* touches `src/a/x`, so both reasons hold and `depends_on` wins).
 
 Cases (`spec case → AC`):
 - `workstreams orders waves by depends_on and serializes overlapping modules` → AC1 (R0010, exact output)
@@ -128,6 +128,7 @@ Cases (`spec case → AC`):
 - `an issue without touched modules is serialized with a warning` → AC1 (R0030, exact output, also a dependency outside the raft is ignored)
 - `a dependency cycle and an unknown raft are errors` → AC1
 - `waves are one more than the latest dependency (a chain of three)` → AC1 (R0050: f0110 wave 1, f0120 wave 2, f0130 wave 3)
+- `the latest wave in the after set decides, whatever its id` → AC1 (R0070, exact output)
 - `overlap compares whole path components and depends_on wins the reason` → AC1 (R0060, exact output)
 - `worktree --from bases the new worktree on the ref` → AC2
 - `worktree --from rejects an unknown ref and a raft id` → AC2
@@ -143,7 +144,7 @@ Cases (`spec case → AC`):
 |---|---|---|---|
 | Dependencies put an issue in a later wave | `workstreams orders waves …` | ignore `depends_on` | run |
 | Overlapping touched modules (equal or parent/child, by whole path components) are serialized | `workstreams orders waves …`, `overlap compares whole path components …` | compare only equal paths; ignore overlap; a string-prefix test (`src/ab` overlaps `src/a`) | run |
-| A wave is one more than the latest wave it must follow | `waves are one more than the latest dependency …` | `1 + #after` (a chain's third issue lands beside the second) | run |
+| A wave is one more than the latest wave it must follow | `waves are one more than the latest dependency …`, `the latest wave in the after set decides, whatever its id` | `1 + #after` (a chain's third issue lands beside the second); the last member by id decides | run |
 | When an issue both depends on and overlaps another, the reason is `depends_on` | `overlap compares whole path components and depends_on wins the reason` | let `overlap` win the label | run |
 | An issue with no touched modules is serialized after everything and warns | `an issue without touched modules …` | treat it as independent | run |
 | Dependencies outside the raft are ignored | `an issue without touched modules …` (f0080 depends on `c0999`) | fail or wait on an unknown dependency | run |
@@ -190,3 +191,4 @@ Cases (`spec case → AC`):
 
 - **Prototype run 2 (2026-09-30, after design-review-004), reverted, never committed:** stacked with c0420 and c0041. All 12 workstreams cases pass; `scripts/check.sh --full` passes; `tracker.sh check c0430` passes 6 of 7 (AC6, the docs, is the executor's); `workstreams R0020` on the migrated tracker prints `c0420 wave 1`, `c0041 wave 2 after c0420`, `c0430 wave 3 after c0041, c0420` and `parallel: no`, which is the raft's RC1.
   - Five more planted mistakes each fail the case written for them: `tracker.sh commit` without the unmerged-paths check (it committed the conflict markers), a wave of `1 + #after` (a chain's third issue lands beside the second), a string-prefix overlap (`src/ab` overlaps `src/a`), `overlap` winning the label over `depends_on`, and `prompt` failing on a dependency cycle.
+- **Prototype run 3 (2026-09-30, after design-review-005), reverted, never committed:** the stack was rebuilt and the new fixture raft `R0070` added; all 13 workstreams cases pass, and a nineteenth planted mistake for c0430, "the last member of the after set (by id) decides the wave" (W18), fails exactly the new case `the latest wave in the after set decides, whatever its id`.

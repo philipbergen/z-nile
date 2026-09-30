@@ -24,7 +24,7 @@ all_cases_pass() {
 
 check "AC1: the plan: waves, overlaps, no-modules warning, parallel line, cycle and unknown raft errors" cases_pass \
   "workstreams orders waves" "a single-issue raft is sequential" "an issue without touched modules" \
-  "a dependency cycle and an unknown raft" "waves are one more than the latest" "overlap compares whole path"
+  "a dependency cycle and an unknown raft" "waves are one more than the latest" "the latest wave in the after set" "overlap compares whole path"
 check "AC2: worktree --from bases on the ref; unknown ref and raft id rejected" cases_pass \
   "worktree --from bases" "worktree --from rejects"
 check "AC3: stream review files are not review rounds" cases_pass "stream review files are not review rounds"
@@ -42,7 +42,8 @@ check "AC6: skills and template carry the parallel protocol" bash -c '
   grep -qF "parallel:" .claude/skills/make-prompt/SKILL.md || { echo "make-prompt: parallel line"; exit 1; }
   grep -qF "## Workstreams plan" tracker/templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
   grep -qF "{{WORKSTREAMS}}" tracker/templates/prompt.md || { echo "prompt template: variable"; exit 1; }
-  grep -qF "stream branches are committed with plain git" tracker/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }'
+  grep -qF "stream branches are committed with plain git" tracker/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
+  grep -qF "One raft branch and one PR" tracker/templates/prompt.md || { echo "prompt template: hard rule 1"; exit 1; }'
 check "AC1-AC5: every case of the workstreams spec passes" all_cases_pass
 
 finish

@@ -3,7 +3,7 @@ id: c0400
 type: chore
 title: Raft browser
 raft: R0060
-depends_on: []
+depends_on: [c0420]
 emergent: false
 design: ready
 created: 2026-09-29

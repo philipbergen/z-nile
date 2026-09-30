@@ -35,7 +35,7 @@ scripts/tracker.sh board [--out] [--open] ──▶ .cache/board.html (gitignore
 - **No change to `src/`, `tests/meta` or `tracker/architecture.md`.** `scripts/tracker/main.luau` gains one command and one boolean flag. The tracker skill gains one line.
 
 ## Order & dependencies
-One issue. Its steps go vendor, model, page, CLI, docs. There are no dependencies: it reads the tracker layout that `store.luau` already defines.
+One issue. Its steps go vendor, model, page, CLI, docs. **It depends on R0020** (c0420, documents named `<ID>.md`): it reads the tracker layout that `store.luau` defines, and its real-tracker CLI spec only passes on the migrated tracker, so start it after R0020 has merged. (Its design line and fixtures were updated in place for the new layout.)
 
 ## Experiments phase
 All run in prep, all PASS:

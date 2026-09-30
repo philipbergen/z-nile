@@ -75,7 +75,7 @@ Three specs name the old document paths; this chore is the test fix the testing 
 Assertions, counts and expectations other than those paths are not touched (JC1).
 
 ### Docs
-The ticket-prep skill's line "In `R…-slug.md`, before any issue gets detail" becomes "In the raft document (`R<NNNN>.md`), before any issue gets detail". The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatter incl. slug + sections from tracker/templates)`, and its "Conflicts" section says: a merge that reports `CONFLICT (add/add)` in `tracker/…/<ID>/<ID>.md` is two items that picked the same number. Run `git merge --abort`, `scripts/tracker.sh renumber <ID> <next free>` on your own branch, then merge again. After merging a `main` that contains this change, a branch that still has legacy-named documents runs `scripts/tracker.sh migrate` and commits. Only a `CONFLICT (add/add)` on `tracker/…/<ID>/<ID>.md` means two items picked the same number. A content conflict on a document is two edits to one item: resolve it like any other merge and never renumber.
+The ticket-prep skill's line "In `R…-slug.md`, before any issue gets detail" becomes "In the raft document (`R<NNNN>.md`), before any issue gets detail". The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatter incl. slug + sections from tracker/templates)`, and its "Conflicts" section says: a merge that reports `CONFLICT (add/add)` in `tracker/…/<ID>/<ID>.md` is two items that picked the same number. Run `git merge --abort`, `git fetch origin main`, then `scripts/tracker.sh renumber <ID> <next free>` on your own branch, where next free is the next multiple of 10 above the highest number of that kind in **both** your tree and `origin/main` (`git ls-tree -d --name-only origin/main tracker/issues/ tracker/issues/active/ tracker/issues/done/`, or `tracker/rafts/…` for a raft), then merge again. After merging a `main` that contains this change, a branch that still has legacy-named documents runs `scripts/tracker.sh migrate` and commits. Only a `CONFLICT (add/add)` on `tracker/…/<ID>/<ID>.md` means two items picked the same number. A content conflict on a document is two edits to one item: resolve it like any other merge and never renumber.
 
 ### Scalability
 - `find` reads one more file (the frontmatter of the document it already opens). `list` and `all` already read every document for titles, so the cost is unchanged: about 100 small files.
@@ -116,7 +116,7 @@ The ticket-prep skill's line "In `R…-slug.md`, before any issue gets detail" b
 - **Every other tracker command** (`start`, `focus`, `commit`, `done`, `promote-check`, `prompt`, `metrics`, `members`, `check`) reads documents through `store`, so `tests/tooling/*` and the c0010 lifecycle spec exercise them on the new layout.
 - **`spend`**: per-issue `spend.md` is unaffected.
 - **Branches that still contain legacy documents** (captures and preps adding backlog documents) get a clear error and the `migrate` command, not silent misbehaviour; the case `a branch that added a legacy document merges a migrated main` pins the recovery. Started rafts are excluded by the transition policy (Non-goals).
-- **Prepped rafts on the old layout.** R0060 (c0400) was prepped before this change; its design line and its three fixture specs were updated in place in the same PR (paths only), and the new permanent guard spec (`acceptance/guard.spec.luau`, promoted to `tests/acceptance/c0420/`) fails any later spec that names a `<ID>-<slug>.md` document (only `naming.spec.luau` is exempt).
+- **Prepped rafts on the old layout.** R0060 (c0400) was prepped before this change; its design line and its three fixture specs were updated in place in the same PR (paths only), and the new permanent guard spec (`acceptance/guard.spec.luau`, promoted to `tests/acceptance/c0420/`) fails any later spec file that spells a literal `<ID>-<slug>.md` document path (names built by interpolation are out of its reach; only c0420's own `naming.spec.luau` is exempt, by full path).
 
 ## Test plan
 `acceptance/naming.spec.luau` sets up a scratch `.cache/naming-e2e/` repo: a clone of the repo's committed HEAD with `main` forced as its branch and its `origin` removed (so the tracker's commands run freely), the working tree's `scripts/`, `tracker/templates/` and `.gitignore` overlaid, and the tracker emptied. Cases (`spec case → AC`):
@@ -176,11 +176,9 @@ The ticket-prep skill's line "In `R…-slug.md`, before any issue gets detail" b
 None.
 
 ## Implementation steps
-1. `store.luau` (`docIn`, `find`, slug from the frontmatter) and the two templates. Commit.
-2. `new` (slug validation, `SLUG`, `<ID>.md`) and `renumber`. Commit.
-3. `cmd.migrate` and USAGE. Commit.
-4. Run `scripts/tracker.sh migrate`, commit the renamed documents. Update the three specs, the tracker skill and the ticket-prep line. Commit.
-5. `scripts/tracker.sh check c0420`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
+1. `cmd.migrate` and its USAGE line, **alone**, written so it never calls `store.find` (it scans directories). Run its cases against the old store. `scripts/tracker.sh commit` this: the tracker still reads the legacy layout.
+2. **One commit for the layout switch.** `tracker.sh commit` reads every document through the store (`activeRaft` → `store.all` → `store.find`), so the store and the documents must change together: edit `store.luau` (`docIn`, `find`, slug from the frontmatter), the two templates, `new` (slug validation, `SLUG`, `<ID>.md`) and `renumber`; run `scripts/tracker.sh migrate` (it works with either store); update the three specs' paths and fixture `slug:` lines, the tracker skill and the ticket-prep line. Run no other `tracker.sh` command until the tree is fully migrated, then `scripts/tracker.sh commit`.
+3. `scripts/tracker.sh check c0420`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
 
 ## Verification log
 

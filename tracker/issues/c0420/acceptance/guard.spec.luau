@@ -1,12 +1,18 @@
 --!strict
 -- c0420: no spec names a legacy-layout document path (<ID>-<slug>.md). Documents are <ID>.md, so a spec
--- (or a prepped raft's acceptance spec) that writes or expects the old name breaks the moment it runs
--- against the real tracker. The naming spec builds legacy names on purpose and is exempt by name.
+-- (or a prepped raft's acceptance spec) that spells the old name literally breaks the moment it runs
+-- against the real tracker. Names built by interpolation are out of this guard's reach.
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
 local LEGACY = "[fdcR]%d%d%d%d%-[a-z][%w%-]*%.md"
-local EXEMPT = "naming.spec.luau" -- c0420's own spec, promoted to tests/acceptance/c0420/
+-- c0420's own naming spec builds legacy names on purpose. Exempt by full path, wherever the item
+-- is in its lifecycle (backlog, active) and once promoted.
+local EXEMPT: { [string]: boolean } = {
+	["tracker/issues/c0420/acceptance/naming.spec.luau"] = true,
+	["tracker/issues/active/c0420/acceptance/naming.spec.luau"] = true,
+	["tests/acceptance/c0420/naming.spec.luau"] = true,
+}
 
 local function specs(dir: string, out: { string })
 	if not fs.isDir(dir) then
@@ -16,7 +22,7 @@ local function specs(dir: string, out: { string })
 		local path = `{dir}/{name}`
 		if fs.isDir(path) then
 			specs(path, out)
-		elseif string.match(name, "%.spec%.luau$") and name ~= EXEMPT then
+		elseif string.match(name, "%.spec%.luau$") and not EXEMPT[path] then
 			table.insert(out, path)
 		end
 	end
