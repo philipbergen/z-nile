@@ -42,22 +42,22 @@ local function sandbox(): string
 	fs.copy("scripts", `{SB}/scripts`)
 	fs.copy(".luaurc", `{SB}/.luaurc`)
 	fs.copy("rokit.toml", `{SB}/rokit.toml`)
-	local front = "---\nid: %s\ntype: chore\ntitle: T\n---\n\n# %s\n"
+	local front = "---\nid: %s\ntype: chore\ntitle: T\nslug: t\n---\n\n# %s\n"
 	local classic = "# Review 001\n\n### F1 [low] x\nWhere: a\nEvidence: b\nFix: c\n\nVerdict: approve\n"
 	local second =
 		"# Review 001\n\n### F1 [low] x\nWhere: a\nEvidence: b\nCritique: c\nConsequences: none\nRecommendation: d\n\nVerdict: approve\n"
-	write(`{SB}/tracker/rafts/R0010/R0010-a.md`, string.format(front, "R0010", "R0010"))
+	write(`{SB}/tracker/rafts/R0010/R0010.md`, string.format(front, "R0010", "R0010"))
 	write(`{SB}/tracker/rafts/R0010/design-review-001.md`, classic)
-	write(`{SB}/tracker/rafts/R0020/R0020-b.md`, string.format(front, "R0020", "R0020")) -- no reviews yet
-	write(`{SB}/tracker/rafts/R0030/R0030-c.md`, string.format(front, "R0030", "R0030"))
+	write(`{SB}/tracker/rafts/R0020/R0020.md`, string.format(front, "R0020", "R0020")) -- no reviews yet
+	write(`{SB}/tracker/rafts/R0030/R0030.md`, string.format(front, "R0030", "R0030"))
 	write(`{SB}/tracker/rafts/R0030/design-review-001.md`, second)
 	write(`{SB}/tracker/rafts/R0030/design-review-002.md`, second)
 	write(`{SB}/tracker/rafts/R0030/design-refute-001.md`, "- F1: fixed: x; consequences: none\n")
 	write(`{SB}/tracker/rafts/R0030/review-001.md`, second)
 	-- reviews inside an issue directory are not counted for any raft
 	write(
-		`{SB}/tracker/issues/c0010/c0010-x.md`,
-		"---\nid: c0010\ntype: chore\ntitle: X\nraft: R0030\n---\n\n# c0010\n"
+		`{SB}/tracker/issues/c0010/c0010.md`,
+		"---\nid: c0010\ntype: chore\ntitle: X\nslug: x\nraft: R0030\n---\n\n# c0010\n"
 	)
 	write(`{SB}/tracker/issues/c0010/design-review-001.md`, second)
 	write(`{SB}/tracker/issues/c0010/review-001.md`, second)

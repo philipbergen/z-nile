@@ -34,6 +34,7 @@ scripts/setup.sh
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
 - **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt from `scripts/tracker.sh prompt <id>`, which is self-contained.
+- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start an agent inside it with `scripts/tracker.sh launch R0010`; every job starts in a worktree directory inside the repo, never outside it. After a PR merges, the agent removes its worktree; `scripts/tracker.sh worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
 `.github/workflows/check.yml` bootstraps the runner with `scripts/setup.sh`, the same script as a new host, so every CI run also proves this document on a clean Linux machine. setup.sh ends with `scripts/check.sh --full`.
@@ -48,4 +49,4 @@ scripts/setup.sh
 | `lune: command not found` | open a new shell, or `export PATH="$HOME/.rokit/bin:$PATH"` |
 | luau-lsp can't resolve `@lune/...` | run `lune setup`, and check that the `lune` alias version in `.luaurc` matches `rokit.toml` |
 | `sourcemap parsing failed` | a Rojo `$path` directory has no `.luau` files. Every root needs at least one |
-| `tracker.sh start` fails on `gh pr create` | `gh auth status`; and there must be an `origin` remote |
+| `tracker.sh start` fails on `gh pr create` | `gh auth status`. A non-GitHub `origin` skips the draft PR, and with no `origin` the push is skipped too |

@@ -2,6 +2,7 @@
 id: {{ID}}
 type: {{TYPE}}
 title: {{TITLE}}
+slug: {{SLUG}}
 raft: {{RAFT}}
 depends_on: []
 emergent: {{EMERGENT}}

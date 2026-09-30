@@ -16,10 +16,15 @@ usage: scripts/tracker.sh <command> ...
   members <R-id>                                print directories of every issue in the raft
   check <id>                                    run an item's check.sh (a raft runs its own)
   renumber <old> <new>                          step an id (conflict resolution)
+  migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   start <R-id>                                  branch, move to active, commit, push, draft PR
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>]   stage all, record spend, commit, push
   done <R-id>                                   verify checks + review resolution, move to done, ready PR
+  worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
+  worktree-prune                                remove worktrees of rafts that are done on main
+  launch <R-id|name> [-- cmd...]                run a command (default claude) in the target's worktree (scripts/tracker.sh)
+  workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
   metrics [--include-active]                    cost per issue and rework %]]
@@ -65,6 +70,52 @@ local function move(item: store.Item, state: store.State): store.Item
 	return store.get(item.id)
 end
 
+local function raftBranch(raft: store.Item): string
+	return `{raft.id}-{raft.slug}`
+end
+
+local function hasOrigin(): boolean
+	return sh.run("git", { "remote", "get-url", "origin" }).ok
+end
+
+-- Only a GitHub origin gets draft PRs: anything else (a local bare remote in a spec) has no `gh`.
+local function onGitHub(): boolean
+	local r = sh.run("git", { "remote", "get-url", "origin" })
+	return r.ok and string.find(r.stdout, "github.com", 1, true) ~= nil
+end
+
+-- One entry per worktree of this repository: its path and, unless detached, its branch.
+local function worktrees(): { { path: string, branch: string? } }
+	local out = {}
+	local cur: { path: string, branch: string? } = { path = "", branch = nil }
+	for line in string.gmatch(sh.git({ "worktree", "list", "--porcelain" }), "[^\n]+") do
+		local p = string.match(line, "^worktree (.+)$")
+		if p then
+			cur = { path = p, branch = nil }
+			table.insert(out, cur)
+		else
+			local b = string.match(line, "^branch refs/heads/(.+)$")
+			if b then
+				cur.branch = b
+			end
+		end
+	end
+	return out
+end
+
+-- The main checkout's root: git lists it first, even when asked from a linked worktree.
+local function mainRoot(): string
+	return worktrees()[1].path
+end
+
+-- Tracker commands that change the tree refuse to run in the main checkout of a repo with an origin:
+-- every change is made in a worktree (tracker skill, "Worktrees").
+local function refuseInMainCheckout(what: string)
+	if hasOrigin() and sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot() then
+		fail(`{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`)
+	end
+end
+
 local function activeRaft(): store.Item
 	local rafts = {}
 	for _, r in store.all("raft") do
@@ -101,11 +152,15 @@ end
 local cmd = {}
 
 function cmd.new(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("new")
 	local what = pos[1]
 	if what == "issue" then
 		local prefix, slug = pos[2], pos[3]
 		if not (prefix and store.TYPES[prefix] and slug) then
 			fail("usage: new issue <f|d|c> <slug> [--raft R0010]")
+		end
+		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
+			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
 		local id = store.formatId(prefix, store.nextNumber("issue"))
 		local raftId = opts["--raft"] and opts["--raft"][1]
@@ -117,18 +172,22 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			ID = id,
 			TYPE = store.TYPES[prefix],
 			TITLE = title(slug),
+			SLUG = slug,
 			RAFT = raftId or "",
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}-{slug}.md`, render("tracker/templates/issue/doc.md", vars))
+		fs.writeFile(`{dir}/{id}.md`, render("tracker/templates/issue/doc.md", vars))
 		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/issue/check.sh", vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}-{slug}.md`)
+		print(`{dir}/{id}.md`)
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
 		if not (rtype and store.PREFIX[rtype] and slug) then
 			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single]")
+		end
+		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
+			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
 		local members: { store.Item } = {}
 		for i = 4, #pos do
@@ -157,14 +216,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			ID = id,
 			TYPE = rtype,
 			TITLE = title(slug),
+			SLUG = slug,
 			SINGLE = if opts["--single"] then "true" else "false",
 			ISSUES = table.concat(ids, ", "),
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}-{slug}.md`, render("tracker/templates/raft/doc.md", vars))
+		fs.writeFile(`{dir}/{id}.md`, render("tracker/templates/raft/doc.md", vars))
 		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/raft/check.sh", vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}-{slug}.md`)
+		print(`{dir}/{id}.md`)
 	else
 		fail(USAGE)
 	end
@@ -198,6 +258,23 @@ function cmd.list(pos: { string })
 			end
 		end
 	end
+	-- f0420 and c0420 share a number (issues have one number space): harmless, but worth a warning
+	local byNumber: { [string]: { string } } = {}
+	for _, issue in store.all("issue") do
+		local n = string.sub(issue.id, 2)
+		byNumber[n] = byNumber[n] or {}
+		table.insert(byNumber[n], issue.id)
+	end
+	local shared: { string } = {}
+	for n, ids in byNumber do
+		if #ids > 1 then
+			table.insert(shared, n)
+		end
+	end
+	table.sort(shared)
+	for _, n in shared do
+		stdio.ewrite(`warning: number {n} is used by {table.concat(byNumber[n], ", ")}\n`)
+	end
 end
 
 -- Runs check.sh for an item. A raft's check.sh is responsible for running its members' checks.
@@ -213,6 +290,7 @@ function cmd.check(pos: { string })
 end
 
 function cmd.renumber(pos: { string })
+	refuseInMainCheckout("renumber")
 	local old, new = pos[1], pos[2]
 	if not old or not new or string.sub(old, 1, 1) ~= string.sub(new, 1, 1) then
 		fail("usage: renumber <old> <new> (same type prefix)")
@@ -225,10 +303,10 @@ function cmd.renumber(pos: { string })
 	local tracked = sh.run("git", { "ls-files", "--error-unmatch", item.doc }).ok
 	if tracked then
 		sh.git({ "mv", item.dir, dest })
-		sh.git({ "mv", `{dest}/{old}-{item.slug}.md`, `{dest}/{new}-{item.slug}.md` })
+		sh.git({ "mv", `{dest}/{old}.md`, `{dest}/{new}.md` })
 	else
 		fs.move(item.dir, dest)
-		fs.move(`{dest}/{old}-{item.slug}.md`, `{dest}/{new}-{item.slug}.md`)
+		fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
 	end
 	-- rewrite references everywhere in the tracker
 	local function walk(dir: string)
@@ -249,10 +327,68 @@ function cmd.renumber(pos: { string })
 	print(`{old} -> {new}`)
 end
 
+-- Converts documents that still carry their slug in the filename (legacy layout) to `<ID>.md` with
+-- `slug:` in the frontmatter. It scans directories itself and never goes through `store.find`,
+-- which rejects the legacy layout, so it runs against either version of the store.
+function cmd.migrate()
+	refuseInMainCheckout("migrate")
+	local ambiguous = false
+	for _, kind in { "issues", "rafts" } do
+		for _, state in { "", "active/", "done/" } do
+			local base = `{store.ROOT}/{kind}/{state}`
+			if fs.isDir(base) then
+				local names = fs.readDir(base)
+				table.sort(names)
+				for _, id in names do
+					local isId = if kind == "rafts" then store.isRaftId(id) else store.isIssueId(id)
+					local dir = base .. id
+					if isId and fs.isDir(dir) then
+						local files: { string } = {}
+						local hasNew = false
+						for _, name in fs.readDir(dir) do
+							if name == `{id}.md` then
+								hasNew = true
+							elseif string.match(name, `^{id}%-.+%.md$`) then
+								table.insert(files, name)
+							end
+						end
+						if #files > 0 and (hasNew or #files > 1) then
+							stdio.ewrite(`{dir}: ambiguous documents: {table.concat(files, ", ")}\n`)
+							ambiguous = true
+						elseif #files == 1 then
+							local old, new = `{dir}/{files[1]}`, `{dir}/{id}.md`
+							local slug = string.match(files[1], `^{id}%-(.+)%.md$`) :: string
+							if not string.match(fs.readFile(old), "^%-%-%-\n") then
+								-- nothing to add the slug to: report it and leave the document alone
+								stdio.ewrite(`{old}: no frontmatter; add one (id, title, slug) by hand\n`)
+								ambiguous = true
+								continue
+							end
+							if sh.run("git", { "ls-files", "--error-unmatch", old }).ok then
+								sh.git({ "mv", old, new })
+							else
+								fs.move(old, new)
+							end
+							local current = store.readFront(new).slug
+							if not current or current == "" then
+								store.setFront(new, "slug", slug)
+							end
+							print(`{old} -> {new}`)
+						end
+					end
+				end
+			end
+		end
+	end
+	if ambiguous then
+		process.exit(1)
+	end
+end
+
 function cmd.start(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: start <R-id>"))
 	if raft.kind ~= "raft" then
-		fail("only rafts are started; wrap a single issue with `prompt <issue>` or `new raft ... --single`")
+		fail("only rafts are started; make a `--single` raft with `new raft ... --single` (ticket-prep)")
 	end
 	if raft.state ~= "backlog" then
 		fail(`{raft.id} is already {raft.state}`)
@@ -266,8 +402,11 @@ function cmd.start(pos: { string })
 			fail(`{m.id} is not design: ready (run ticket-prep first)`)
 		end
 	end
-	local branch = `{raft.id}-{raft.slug}`
-	sh.git({ "switch", "-c", branch })
+	local branch = raftBranch(raft)
+	if sh.git({ "branch", "--show-current" }) ~= branch then
+		refuseInMainCheckout("start")
+		sh.git({ "switch", "-c", branch })
+	end
 	raft = move(raft, "active")
 	for _, m in members do
 		move(m, "active")
@@ -275,8 +414,12 @@ function cmd.start(pos: { string })
 	local ftitle = store.readFront(raft.doc).title or raft.slug
 	sh.git({ "commit", "--quiet", "-m", `tracker: start {raft.id} {ftitle}` })
 	print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
-	if sh.run("git", { "remote", "get-url", "origin" }).ok then
+	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
+		if not onGitHub() then
+			print("origin is not GitHub: skipped draft PR")
+			return
+		end
 		local body = `Raft **{raft.id}**: {ftitle}\n\nIssues: `
 		local ids = {}
 		for _, m in members do
@@ -289,6 +432,267 @@ function cmd.start(pos: { string })
 		print(`draft PR: {url}`)
 	else
 		print("no origin remote: skipped push and draft PR")
+	end
+end
+
+-- The backticked paths on the bulleted lines of an issue's "### Touched modules" section, or nil when
+-- it has none (a draft issue has only the template comment).
+local function touchedModules(item: store.Item): { string }?
+	local text = fs.readFile(item.doc)
+	local section = string.match(text, "\n### Touched modules\n(.-)\n##")
+	if not section then
+		return nil
+	end
+	local out: { string } = {}
+	for path in string.gmatch("\n" .. section, "\n%-%s+`([^`]+)`") do
+		table.insert(out, (string.gsub(path, "/+$", "")))
+	end
+	if #out == 0 then
+		return nil
+	end
+	return out
+end
+
+-- Two paths overlap when they are equal or one is a parent directory of the other, by whole components.
+local function overlaps(a: string, b: string): boolean
+	return a == b or string.sub(a, 1, #b + 1) == b .. "/" or string.sub(b, 1, #a + 1) == a .. "/"
+end
+
+-- The plan text for a raft, its warnings, and an error when it can't be built. Issues are placed in
+-- waves: one more than the latest wave they must follow (in-raft `depends_on`, and any issue already
+-- placed whose Touched modules overlap; an issue with none overlaps everything). Deterministic: the
+-- lowest-id ready issue is placed first.
+local function workstreamPlan(raft: store.Item): (string, { string }, string?)
+	local members = store.members(raft.id)
+	local isMember: { [string]: boolean } = {}
+	for _, m in members do
+		isMember[m.id] = true
+	end
+	local deps: { [string]: { string } } = {}
+	local touched: { [string]: { string }? } = {}
+	local warnings: { string } = {}
+	for _, m in members do
+		local d: { string } = {}
+		for _, id in store.idList(store.readFront(m.doc).depends_on) do
+			if isMember[id] then
+				table.insert(d, id)
+			end
+		end
+		deps[m.id] = d
+		touched[m.id] = touchedModules(m)
+		if not touched[m.id] then
+			table.insert(warnings, `warning: {m.id} has no Touched modules; serialized`)
+		end
+	end
+	local wave: { [string]: number } = {}
+	local after: { [string]: { string } } = {}
+	local why: { [string]: { [string]: string } } = {}
+	local assigned: { string } = {}
+	local remaining: { string } = {}
+	for _, m in members do
+		table.insert(remaining, m.id)
+	end
+	while #remaining > 0 do
+		local pick = 0
+		for i, id in remaining do
+			local ready = true
+			for _, d in deps[id] do
+				if not wave[d] then
+					ready = false
+				end
+			end
+			if ready then
+				pick = i
+				break
+			end
+		end
+		if pick == 0 then
+			return "", warnings, `dependency cycle among: {table.concat(remaining, ", ")}`
+		end
+		local id = table.remove(remaining, pick) :: string
+		local reasons: { [string]: string } = {}
+		for _, d in deps[id] do
+			reasons[d] = "depends_on"
+		end
+		for _, other in assigned do
+			if not reasons[other] then
+				local a, b = touched[id], touched[other]
+				if not a or not b then
+					reasons[other] = "no touched modules"
+				else
+					for _, x in a do
+						for _, y in b do
+							if overlaps(x, y) then
+								reasons[other] = "overlap"
+							end
+						end
+					end
+				end
+			end
+		end
+		local list: { string } = {}
+		local w = 0
+		for other in reasons do
+			table.insert(list, other)
+		end
+		table.sort(list)
+		for _, other in list do
+			w = math.max(w, wave[other])
+		end
+		wave[id], after[id], why[id] = w + 1, list, reasons
+		table.insert(assigned, id)
+	end
+	local lines = { `raft {raft.id}: {#members} issue{if #members == 1 then "" else "s"}` }
+	local byWave: { [number]: { string } } = {}
+	for _, m in members do
+		local line = `{m.id} wave {wave[m.id]}`
+		if #after[m.id] > 0 then
+			local parts: { string } = {}
+			for _, other in after[m.id] do
+				table.insert(parts, `{other} ({why[m.id][other]})`)
+			end
+			line ..= ` after {table.concat(parts, ", ")}`
+		end
+		table.insert(lines, line)
+		byWave[wave[m.id]] = byWave[wave[m.id]] or {}
+		table.insert(byWave[wave[m.id]], m.id)
+	end
+	local parallel = "parallel: no"
+	for k = 1, #members do
+		if byWave[k] and #byWave[k] >= 2 then
+			parallel = `parallel: yes (wave {k}: {table.concat(byWave[k], " ")})`
+			break
+		end
+	end
+	table.insert(lines, parallel)
+	return table.concat(lines, "\n"), warnings, nil
+end
+
+function cmd.workstreams(pos: { string })
+	local raft = store.get(pos[1] or fail("usage: workstreams <R-id>"))
+	if raft.kind ~= "raft" then
+		fail(`{raft.id} is not a raft`)
+	end
+	local text, warnings, planError = workstreamPlan(raft)
+	if planError then
+		fail(planError)
+	end
+	for _, w in warnings do
+		stdio.ewrite(w .. "\n")
+	end
+	print(text)
+end
+
+function cmd.worktree(pos: { string }, opts: { [string]: { string } })
+	local target = pos[1] or fail("usage: worktree <R-id|name>")
+	local branch: string
+	local dirName: string
+	if string.match(target, "^R%d%d%d%d$") then
+		local missing =
+			`{target} is not in this tree; if it was just merged, run git -C {mainRoot()} pull --ff-only`
+		local raft = store.find(target) or fail(missing)
+		if raft.state == "done" then
+			fail(`{target} is done`)
+		end
+		branch, dirName = raftBranch(raft), target
+	elseif string.match(target, "^[fdc]%d%d%d%d$") then
+		fail("give a raft id or a name")
+	elseif #target <= 60 and string.match(target, "^[a-z][a-z0-9%-]*$") then
+		branch, dirName = target, target
+	else
+		fail(`invalid worktree name: {target}`)
+	end
+	local from = opts["--from"] and opts["--from"][1]
+	if from then
+		if string.match(target, "^R%d%d%d%d$") then
+			fail("--from is for named worktrees")
+		end
+		if not sh.run("git", { "rev-parse", "--verify", "--quiet", from .. "^{commit}" }).ok then
+			fail(`unknown ref {from}`)
+		end
+	end
+	local root = mainRoot()
+	local path = `{root}/.worktree/{dirName}`
+	sh.run("git", { "worktree", "prune" }) -- forget worktrees whose directory was deleted
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
+	end
+	for _, w in worktrees() do
+		if w.path == path then
+			print(path)
+			return
+		elseif w.branch == branch then
+			fail(`{branch} is already used by worktree at {w.path}`)
+		end
+	end
+	if sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
+		local track = sh.git({ "for-each-ref", "--format=%(upstream:track)", `refs/heads/{branch}` })
+		if track == "[gone]" then
+			stdio.ewrite(
+				`warning: the upstream of {branch} is gone (merged?); resuming it anyway: git branch -D {branch} gives a fresh start\n`
+			)
+		end
+		sh.git({ "worktree", "add", path, branch })
+	elseif sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok then
+		sh.git({ "branch", "--track", branch, `origin/{branch}` })
+		sh.git({ "worktree", "add", path, branch })
+	else
+		local base = from
+			or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+				then "origin/main"
+				else "main"
+		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
+		sh.git({ "worktree", "add", "--no-track", "-b", branch, path, base })
+	end
+	print(path)
+end
+
+cmd["worktree-prune"] = function()
+	local root = mainRoot()
+	sh.run("git", { "worktree", "prune" })
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
+	end
+	local base = if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+		then "origin/main"
+		else "main"
+	local here = sh.git({ "rev-parse", "--show-toplevel" })
+	local prefix = root .. "/.worktree/"
+	local failed = false
+	for _, w in worktrees() do
+		local name = if string.sub(w.path, 1, #prefix) == prefix then string.sub(w.path, #prefix + 1) else nil
+		if name and not string.find(name, "/", 1, true) then
+			if not string.match(name, "^R%d%d%d%d$") then
+				print(`kept {w.path} (named worktree: remove it when its PR has merged)`)
+			elseif sh.git({ "-C", root, "ls-tree", "-d", base, `tracker/rafts/done/{name}` }) ~= "" then
+				-- finished: the raft is in done/ on the base branch, whatever merge strategy landed it
+				if w.path == here then
+					print(`skipped {w.path} (it is the current directory)`)
+				else
+					local r = sh.run("git", { "-C", root, "worktree", "remove", w.path })
+					if r.ok then
+						if w.branch then
+							sh.git({ "-C", root, "branch", "-D", w.branch })
+						end
+						print(`removed {w.path}`)
+					else
+						stdio.ewrite(`kept {w.path}: {sh.trim(r.stderr)}\n`)
+						failed = true
+					end
+				end
+			end
+		end
+	end
+	-- worktrees belong under .worktree/: flag (never move or remove) any other than the main checkout
+	for _, w in worktrees() do
+		if w.path ~= root and string.sub(w.path, 1, #prefix) ~= prefix then
+			stdio.ewrite(
+				`warning: {w.path} is outside .worktree/: move it with git worktree move, or remove it\n`
+			)
+		end
+	end
+	if failed then
+		process.exit(1)
 	end
 end
 
@@ -306,6 +710,10 @@ local function recordAndCommit(
 	explicitMinutes: number?,
 	isDone: boolean?
 )
+	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
+	if sh.git({ "ls-files", "-u" }) ~= "" then
+		fail("unmerged paths: resolve the merge first")
+	end
 	sh.git({ "add", "-A" })
 	local issues: { store.Item } = {}
 	local how: string
@@ -484,7 +892,7 @@ function cmd.done(pos: { string })
 		fs.removeFile(FOCUS_FILE)
 	end
 	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true)
-	if hasUpstream() then
+	if hasUpstream() and onGitHub() then
 		sh.must("gh", { "pr", "ready" })
 		local summary = fs.readFile(`{raft.dir}/spend.md`)
 		local body = sh.must("gh", { "pr", "view", "--json", "body", "-q", ".body" })
@@ -506,7 +914,7 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 			cmd.new({ "raft", store.typeOf(target), target.slug, target.id }, { ["--single"] = { "true" } })
 			raft = store.get(store.readFront(target.doc).raft)
 			stdio.ewrite(
-				`created placeholder raft {raft.id}; commit and push it before handing out the prompt\n`
+				`created placeholder raft {raft.id}; land it (tracker skill, Landing a change) before handing out the prompt\n`
 			)
 		end
 	end
@@ -532,6 +940,8 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	for _, s in SKILLS_INLINED do
 		skills ..= section(`.claude/skills/{s}/SKILL.md`)
 	end
+	local plan, _, planError = workstreamPlan(raft)
+	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
 	local text = render("tracker/templates/prompt.md", {
 		RAFT_ID = raft.id,
 		RAFT_TITLE = store.readFront(raft.doc).title or raft.slug,
@@ -540,6 +950,7 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 		ITEMS = items,
 		SKILLS = skills,
 		ARCHITECTURE = fs.readFile("tracker/architecture.md"),
+		WORKSTREAMS = planText,
 	})
 	for _, m in store.members(raft.id) do
 		if store.readFront(m.doc).design ~= "ready" then

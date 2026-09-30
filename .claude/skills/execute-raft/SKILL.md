@@ -11,9 +11,9 @@ Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`, then merg
 Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
 
 ## Phase 0: Claim (in the first minutes)
-1. `git switch main && git pull --ff-only`, then confirm `scripts/check.sh --full` passes on main.
+1. Work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees). It branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
    - **If main is red, stop.** Report it; don't fix main inside this raft.
-2. `scripts/tracker.sh start R0010`. This creates the branch, moves the items to `active/`, commits, pushes, and opens a **draft** PR.
+2. `scripts/tracker.sh start R0010`. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 
@@ -40,6 +40,24 @@ For each issue:
    - If it's wrong in a way that changes a public API, a cross-feature dependency or an acceptance criterion, **stop** and escalate.
 6. **Emergent problems**: follow "Emergent issues" in the tracker skill. Only fix them now if they can't be postponed.
 
+## Phase 2B: Parallel workstreams (instead of Phase 2, when the plan allows it)
+Use this when `scripts/tracker.sh workstreams <R-id>` ends with `parallel: yes` (the prompt embeds the plan) and the human hasn't asked for sequential execution. Otherwise run Phase 2 as written (Phase 2A). You are the **lead**: you alone push, merge, comment on the PR, allocate ids, and run `tracker.sh commit`, `focus` and `done`. The rest of this phase uses subagents; they can't spawn others, so you start every one of them.
+
+1. **Plan.** Run `scripts/tracker.sh workstreams <R-id>`, post it as a PR comment, and execute **wave by wave**. A stream is one issue; the issues in a wave don't depend on each other and don't share files.
+2. **Start a wave.** For every issue in the wave, create its worktree from the raft branch: `scripts/tracker.sh worktree ws-<issue> --from <raft branch>`. Then spawn one **Sonnet** subagent per stream (Agent tool, `model: "sonnet"`), **all in one message so the streams run concurrently**. Each brief contains:
+   - the raft and issue ids, and the absolute path of the stream worktree ("your shell doesn't keep a working directory: start every command with `cd <path> &&` or use `git -C <path>`");
+   - the issue document, its `check.sh` and its acceptance specs (paths; all sequestered), and the architecture, testing and tracker skills to follow;
+   - the rules: tests first, implement the Design exactly, edit only the issue's Touched modules and its own Verification log, never edit `check.sh`, acceptance specs or `tracker/architecture.md`; never push, never comment on the PR, and never run `tracker.sh new`, `focus`, `commit`, `renumber`, `migrate` or `done` (you allocate ids and commit on the raft branch, so a problem the stream finds that no issue covers goes in its final report, and you file it); commit with plain `git add -A && git commit -m "<issue>: <what>"`; run `scripts/check.sh --affected` and `scripts/tracker.sh check <issue>` in the worktree; on a stop condition, stop and report instead of improvising;
+   - what to report: `done` or `blocked`, the final commit sha, the minutes worked, deviations, and anything another issue needs.
+3. **Review each stream** as soon as it reports `done`: a clean **Sonnet** subagent (`model: "sonnet"`) using the review skill's **Stream mode**. Its inputs are `git diff <raft branch>...ws-<issue>`, the issue document, `check.sh` and acceptance specs. It runs the stream's checks, checks that the diff stays inside the issue's Touched modules, its own document, and its `stream-review-<issue>-*` and `stream-refute-<issue>-*` files, and writes only `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md` **in the stream worktree**. You commit that file on the stream branch. The stream's author (continue the same subagent with SendMessage) answers in `stream-refute-<issue>-NNN.md` with `fixed` or `refuted` lines, as in Phase 4. **At most 2 rounds per stream**; a high finding still standing after round 2 means you take that issue over or escalate.
+4. **Merge the stream.** In the raft worktree run `git merge --squash ws-<issue>`, then `scripts/tracker.sh commit -m "<issue>: <what the stream did>" --issue <issue> --time <stream minutes>`. Squashing stages exactly the stream's net change, so the spend lines go to that issue, and the stream's own commits stay out of the raft history.
+   - **If the squash conflicts** (two streams touched one file outside their declared modules), resolve it in the raft worktree, note it in both issues' Verification logs, rerun both issues' checks, and only then run `tracker.sh commit`, which refuses while unmerged paths remain.
+   - Run `scripts/tracker.sh check <issue>`, then remove the stream's worktree and branch: `git -C <root> worktree remove <path> && git -C <root> branch -D ws-<issue>`. Comment on the PR: the review verdict and findings by severity, and the merge sha.
+5. **Next wave.** Its streams start from the raft branch after the previous wave's merges. A blocked or unresolved stream is finished by you in the raft worktree (Phase 2A for that issue); say so in the Verification log, and remove its worktree and branch with the same command as in step 4, or a later `worktree ws-<issue> --from …` would silently resume the stale branch.
+6. **Integrate.** After the last wave, **evaluate the acceptance criteria**: run `scripts/tracker.sh check <issue>` for every member issue and the raft's own `check.sh`. Make any last-minute changes yourself (small, committed with `tracker.sh commit`, each noted in the affected issue's Verification log). Then run Phase 3, and **Phase 4, the adversarial review of the sum total, on Opus**, exactly as written.
+7. **Model policy.** Stream implementers and stream reviewers run on Sonnet (`model: "sonnet"`). The Phase 4 reviewer still runs on Opus (`model: "opus"`): stream reviews are a cheap first filter and never substitute for it. They aren't review rounds (`tracker.sh done` and `metrics` ignore `stream-review-*` and `stream-refute-*` files), and their findings need no answers for `done`.
+8. **Final report.** Add one line per issue: `Workstreams: <issue>: <stream review verdict> | sequential`.
+
 ## Phase 3: Whole-raft verification
 When the steps below pass, post a PR comment with the RC results.
 
@@ -54,7 +72,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 1. **Before launching**: commit any pending work with `tracker.sh commit` so the reviewer sees exactly what the PR shows, and post the comment `Review NNN started at <short sha> (code mode)`.
 2. Start a **clean** reviewer. It has none of your context and gets only these inputs:
    - the `review` skill (code mode);
-   - `git diff main...HEAD`;
+   - `git fetch origin main && git diff origin/main...HEAD` (the local `main` isn't kept current);
    - the raft and issue documents and `check.sh` files;
    - read access to the repo.
    In Claude Code, that's a fresh subagent. For other agents, use a new session or context that receives only those inputs.
@@ -82,7 +100,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 ## Phase 6: Merge and clean up
 1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`scripts/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
-3. Follow "After merge" in the tracker skill, last: update the root's `main`, remove this raft's worktree, delete the local branch. Post no further commits to the branch. Then give the same report in your reply.
+3. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main`, removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
@@ -112,4 +130,5 @@ Deviations: <issue: what and why> | none
 Emergent issues: <ids and one line each> | none
 Follow-ups filed: <ids> | none
 Spend: <raft spend.md totals>
+Workstreams: <issue>: <stream review verdict> | sequential   (one line per issue; only when Phase 2B was used)
 ```

@@ -1,6 +1,6 @@
 --!strict
 -- Tracker storage: locating items, reading/writing their documents, allocating IDs.
--- Layout: tracker/{issues,rafts}/[active/|done/]<ID>/<ID>-<slug>.md (+ check.sh, spend.md, reviews)
+-- Layout: tracker/{issues,rafts}/[active/|done/]<ID>/<ID>.md (+ check.sh, spend.md, reviews)
 local fs = require("@lune/fs")
 
 export type State = string -- "backlog" | "active" | "done"
@@ -10,7 +10,7 @@ export type Item = {
 	kind: Kind,
 	state: State,
 	dir: string, -- repo-relative directory
-	doc: string, -- repo-relative path of <ID>-<slug>.md
+	doc: string, -- repo-relative path of <ID>.md
 	slug: string,
 }
 
@@ -47,24 +47,38 @@ function store.dirFor(kind: Kind, state: State, id: string): string
 	return `{store.kindDir(kind)}/{STATE_DIRS[state]}{id}`
 end
 
-local function docIn(dir: string, id: string): (string?, string?)
+local function docIn(dir: string, id: string): string
+	local doc = `{dir}/{id}.md`
+	if fs.isFile(doc) then
+		return doc
+	end
 	for _, name in fs.readDir(dir) do
-		local slug = string.match(name, `^{id}%-(.+)%.md$`)
-		if slug then
-			return `{dir}/{name}`, slug
+		if string.match(name, `^{id}%-.+%.md$`) then
+			error(`{dir}: {name} uses the legacy document name; run scripts/tracker.sh migrate`, 0)
 		end
 	end
-	return nil, nil
+	error(`{dir} has no {id}.md`, 0)
 end
 
 function store.find(id: string): Item?
 	local kind = kindOf(id)
+	local dirs: { string } = {}
+	for _, state in STATE_ORDER do
+		local d = store.dirFor(kind, state, id)
+		if fs.isDir(d) then
+			table.insert(dirs, d)
+		end
+	end
+	if #dirs > 1 then
+		error(`duplicate id {id}: {table.concat(dirs, ", ")}`, 0)
+	end
 	for _, state in STATE_ORDER do
 		local dir = store.dirFor(kind, state, id)
 		if fs.isDir(dir) then
-			local doc, slug = docIn(dir, id)
-			if not doc or not slug then
-				error(`{dir} has no {id}-<slug>.md`, 0)
+			local doc = docIn(dir, id)
+			local slug = store.readFront(doc).slug
+			if not slug or slug == "" then
+				error(`{doc} has no slug: in its frontmatter; add slug: <kebab-case-words>`, 0)
 			end
 			local item: Item = { id = id, kind = kind, state = state, dir = dir, doc = doc, slug = slug }
 			return item

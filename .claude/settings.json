@@ -7,6 +7,8 @@
       "Bash(scripts/tracker.sh members:*)",
       "Bash(scripts/tracker.sh check:*)",
       "Bash(scripts/tracker.sh metrics:*)",
+      "Bash(scripts/tracker.sh worktree:*)",
+      "Bash(scripts/tracker.sh worktree-prune:*)",
       "Bash(lune run tests/run:*)",
       "Bash(lune run scripts/affected:*)",
       "Bash(stylua:*)",

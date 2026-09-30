@@ -55,7 +55,7 @@ On a re-review round, first read the previous `review-NNN.md` and `refute-NNN.md
 In code mode the PR shows the review as it happens: the author pushes and posts a "started" comment before you begin, and commits, pushes and summarizes `review-NNN.md` when you finish. So:
 - Write `review-NNN.md` in full; findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
 - On a re-review, list withdrawn findings in a non-heading line under `Inputs:`, for example `Dropped from review-001: F2, F4`. Give a repeated finding a new id and say `(repeat of review-001 F3)` in its claim. Every `### F<n>` heading is a finding that `tracker.sh done` requires an answer to, and ids restart at F1 each round.
-- Design mode runs on main before any PR exists, so it is exempt; its files are committed and pushed with the prep commit.
+- Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
 
 ## Design mode (from ticket-prep)
 Attack all of the following:
@@ -72,8 +72,14 @@ Attack all of the following:
 7. **Raft coherence**: do the issue designs agree with the whole-raft design and with each other, and is the order right?
 8. **Executability**: could an agent that has never seen this repo deliver it from the documents alone, without asking a question?
 
+## Stream mode (execute-raft Phase 2B)
+A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
+- **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs. Run the stream's checks (`scripts/tracker.sh check <issue>`, `scripts/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules, its own document, and its `stream-review-<issue>-*` and `stream-refute-<issue>-*` files; anything else is a finding.
+- **Output**: only `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md`, written in the stream worktree, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author answers in `stream-refute-<issue>-NNN.md`.
+- These files are not review rounds: `tracker.sh done` and `metrics` ignore them.
+
 ## Code mode (before the PR is marked ready)
-Inputs: `git diff main...HEAD`, the raft and issue documents, and the `check.sh` files.
+Inputs: `git fetch origin main && git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
 A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (execute-raft stop conditions).
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
 2. **Sequestration**: `git diff <tracker: start commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty. Any change is **high**.
