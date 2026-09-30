@@ -2,17 +2,17 @@
 id: c0410
 type: chore
 title: Review second order
-raft: 
+raft: R0070
 depends_on: []
 emergent: false
-design: draft
+design: ready
 created: 2026-09-30
 ---
 
 # c0410: Review second order
 
 ## Problem
-Design reviews take too many rounds. R0040 and R0060 each needed four, and R0050 four as well; the skill's cap is three. Two causes stood out in this session (2026-09-29):
+Design reviews take too many rounds. R0040 needed five design rounds, and R0050 and R0060 four each; R0010 and R0030 three (the skill's cap is three). Two causes stood out in this session (2026-09-29):
 - **Fixes create the next round's findings.** A finding ends at `Fix:`, and nobody asks what that fix leads to. For example, R0040's cornering grace (round 2) led directly to round 3's and round 4's highs: grace after a turn, presses two ticks late, the junction the player meant. All three were visible from round 2.
 - **Coverage is sampled, not audited.** Each fresh reviewer hunts open-ended and finds a different subset. Nearly every high was a behavioural rule with no spec case that kills a plausible wrong implementation.
 
@@ -26,53 +26,164 @@ Cost matters. There's no parallel reviewers for now; measure whether rounds drop
 - Parallel focused reviewers in round 1 (deferred by the user for cost).
 - A "Decisions needed" section, a lessons checklist, and narrower re-reviews (candidates for later, if this doesn't converge enough).
 - Changing the round cap.
+- The execute-raft answer loop and its code refute format (`fixed`/`refuted`). Code reviews use the new finding format, but authors answer as before (design-review-001 F5).
 
 ## Solution
-Ideas:
-- **Review skill**: the finding format gains `Critique`, `Consequences` (the new rules, state, edge cases and decisions the obvious fix brings) and `Recommendation` (the fix that holds up after that, with its spec cases). Design mode also audits the issue's rule-and-mutant table for missing rows.
-- **Issue template and ticket-prep**: add a "Rules and mutants" table under Test plan, filled in during prep from the mutation check. Refute files state the recommendation as applied, plus any consequences rejected and why.
-- **Measure**: note the number of review rounds per raft in the raft doc, to compare before and after.
+Three documentation changes and one small tooling change:
+- **The review skill**: each finding becomes Where → Evidence → **Critique** → **Consequences** → **Recommendation**, with no bare `Fix:`. A new rule says to trace each fix one step further. Design mode starts by auditing the issue's **Rules and mutants** table.
+- **The issue template**: a `### Rules and mutants` table under Test plan.
+- **The ticket-prep skill**: the author fills the table, and runs the **consequence step** on their own fixes between rounds. Design refute lines carry `consequences:`.
+- **`tracker.sh metrics`**: prints review rounds per raft, counted from the files, so we can see whether rounds drop (the baseline is in the Problem).
 
 ## Design
-<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
-     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
+
+### `.claude/skills/review/SKILL.md`
+In the output-file template, replace the `Fix:` line of `### F1 [high]` with three lines, in this order after `Evidence:`:
+```
+Critique: <why it matters, and the fix the author will be tempted to make>
+Consequences: <take that fix one step further: the new rules, state, edge cases or user decisions it brings, or "none">
+Recommendation: <the fix that holds up after its consequences, with the spec cases or decisions it needs>
+```
+- **Keep** the `### F<n> [severity] <claim>` headings, the `## Judged criteria` section and the `Verdict:` line exactly as they are. `tracker.sh done` (`reviewProblem` in `scripts/tracker/main.luau`) finds findings with the pattern `\n###%s+(F%d+)` and reads `Verdict:`, so this is a format extension, not a change the parser notices.
+- **Add a paragraph after the severity list**, containing the words `one step further`: a finding isn't finished at "here's the fix". Say what new rule, state, edge case or user decision the fix brings, and how it interacts with existing rules, and make the Recommendation cover it, so it doesn't come back as next round's finding.
+- **The Recommendation line must mention consequences**: AC1 checks its text contains `consequences`, so the old "smallest change" wording can't survive.
+- **The `one step further` paragraph is prose, outside the template.** AC3 checks it with fenced blocks removed, because the phrase also fits in the Consequences template line.
+- **In Design mode, add item `0.`**, written `0. **Rules and mutants**`, before the existing items. It contains `missing row` and `reasoned`: audit each issue's Rules and mutants table.
+  - Every behavioural rule in the Design needs a row.
+  - Rows marked `run` were mutation-tested in prep. Spot-run only the `reasoned` rows you doubt, which keeps it cheap (design-review-001 F3).
+  - A missing row, a row whose case can't fail, or an unlisted plausible mutant is a finding.
+- **Code mode** uses the same finding format, but doesn't audit the table (AC3 checks the phrase is absent there). Add a sentence to it containing `escalat…`: a code-mode Recommendation never asks the author to edit sequestered `check.sh` or acceptance specs, or to decide product questions. If that's the only fix, the author escalates (design-review-001 F5).
+
+### `tracker/templates/issue/doc.md`
+Directly after `## Test plan` and its comment, and before `## Acceptance criteria`, add:
+```
+### Rules and mutants
+<!-- One row per behavioural rule in the Design. The mutant is a plausible wrong implementation
+     that the spec case must fail for (from the prep mutation check, or reasoned). -->
+| rule | spec :: case | mutant it kills | checked |
+|---|---|---|---|
+```
+`checked` is `run` (mutation-tested in prep) or `reasoned`.
+Issues created from now on get it. Existing issue documents are unchanged.
+
+### `.claude/skills/ticket-prep/SKILL.md`
+- **Step 3** (the section `## 3.`), after the Test plan bullet: a `Rules and mutants` bullet with the table's shape, including the `checked` column. When prep prototypes, fill it from the mutation check (`run`); otherwise reason it out (`reasoned`).
+- **Step 5.3** (in the section `## 5.`), answering findings: before editing, run the **consequence step** on your own fix. Name the new rules, state, edge cases or user decisions it brings, add their table rows and spec cases in the same change, and put any decisions to the user now, all at once.
+- **The refute line format** becomes `- F2: fixed: <what>; consequences: <handled how, or none>`. `refuted:` lines are unchanged. Design refute files aren't parsed by any tool, so this is free.
+
+### `tracker.sh metrics` (`cmd.metrics` in `scripts/tracker/main.luau`)
+After the per-type table, and before the rework lines, print:
+```
+Review rounds per raft (design-review-NNN.md and review-NNN.md files).
+| raft | design rounds | code rounds | format |
+|---|---|---|---|
+| R0010 | 3 | 2 | classic |
+…
+```
+- There's one row per raft from `store.all("raft")`, in every state, already sorted by id.
+- **Design rounds** is the number of files in the raft's directory matching `^design%-review%-%d+%.md$`. **Code rounds** is the number matching `^review%-%d+%.md$`. Refute files aren't counted.
+- **`format`** tells which rafts used the new method, since raft ids don't say when a raft was prepped (design-review-001 F2):
+  - `second-order` if the raft's `design-review-001.md` has a line starting `Consequences:`;
+  - `classic` if it exists without one;
+  - `none` if there's no design review.
+  - R0070 is `second-order`, since its own round 1 piloted the format.
+- Issue directories aren't counted. Every raft so far keeps its design reviews in the raft directory, as ticket-prep asks for whole-raft reviews.
 
 ### Scalability
+The metrics pass lists one directory per raft, which is negligible.
+
 ### Maintainability
+- The format is prose in two skills plus one template. Its pins (AC1–AC4) check exact phrases and the field order, so an edit that silently drops the method fails the checks.
+- The metrics table is the before/after measure: compare design rounds for rafts prepped after this merges against the baseline above.
+
 ### Usability
+- **Reviewers** write one extra line of analysis per finding.
+- **Authors** get recommendations that already include the consequences, so fewer surprise rounds, and one table to fill during prep, which the mutation check already produces.
+- **The user** gets forced decisions earlier and all together.
 
 ### Touched modules
-<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
-     paths (e.g. `tests/unit/Maze`). Used for spend attribution
-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
+- `.claude/skills/review/SKILL.md`
+- `.claude/skills/ticket-prep/SKILL.md`
+- `tracker/templates/issue/doc.md`
+- `scripts/tracker/main.luau`
 
 ### Affected specs
-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
+`lune run scripts/affected -- scripts/tracker/main.luau` prints `ALL` (`scripts/` forces a full run). New specs: the three acceptance specs.
 
 ## Unknowns & experiments
-<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
-     result if already run during prep, and the fallback design if it fails. -->
+- **E1 (run in prep: PASS)**: can the format change coexist with `tracker.sh done`?
+  - `format.spec` applies `reviewProblem`'s own heading pattern to the new template and finds F1 and F2.
+  - `Verdict:` is unchanged.
+- **E2 (run in prep: PASS)**: a prototype of all four changes, in a scratch worktree, passes c0410's check (5/5) and the tooling and tracker-lifecycle specs (23/23).
+  - Mutation check: every row marked `run` in the table was run, and each fails the check.
+  - That includes design-review-001's own wrong edit (the paragraph dropped, the old Recommendation text, the audit under Code mode), which fails AC1 and AC3.
+- **The residual question is whether this reduces rounds.** That's the experiment itself, measured by the new metrics table over the next rafts. There's nothing to prove in prep.
 
 ## Regression guard
-<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+- `tests/tooling/spend.spec.luau`, `tests/tooling/affected.spec.luau` and the promoted `tests/acceptance/c0010/tracker-lifecycle.spec.luau`, which exercise `main.luau` and `metrics`.
+- `tracker.sh done`'s parsing is pinned by AC1's heading case.
+- The full gate runs, since `scripts/` changed.
 
 ## Test plan
-<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
+- **`acceptance/format.spec.luau`** → AC1:
+  - the fields in order;
+  - no `Fix:`;
+  - headings parse with `reviewProblem`'s pattern;
+  - the verdict line.
+- **`acceptance/table.spec.luau`** → AC2: the table sits between Test plan and Acceptance criteria, with the exact header row (including `checked`).
+- **`acceptance/review-skill.spec.luau`** → AC3, section-aware (design-review-001 F1):
+  - `one step further` appears in prose;
+  - Design mode has item `0. **Rules and mutants**`, before item `1.`, with `missing row` and `reasoned`;
+  - Code mode doesn't mention the table, and escalates.
+- **`acceptance/ticket-prep.spec.luau`** → AC4: `## 3.` has the table with its full header, including `checked`; `## 5.` has the `consequence step` and the refute format `fixed: <what>; consequences:`.
+- **`acceptance/rounds.spec.luau`** → AC5:
+  - counts and `format` for the done rafts R0010 (3/2, classic), R0030 (3/2, classic) and R0050 (4/1, classic), whose files never change;
+  - R0070 is `second-order`;
+  - the table prints between the per-type table and the rework lines;
+  - every raft is listed once, sorted;
+  - a **sandbox** case (design-review-002 F1) copies `scripts/`, `.luaurc` and `rokit.toml` into `.cache/c0410-sandbox` with its own tracker tree and runs `metrics` there. It expects R0010 `1/0 classic`, R0020 `0/0 none` (no reviews, no crash) and R0030 `2/1 second-order` (refutes not counted), with review files inside an issue directory not counted. The sandbox is removed afterwards.
+
+### Rules and mutants
+| rule | spec :: case | mutant it kills | checked |
+|---|---|---|---|
+| findings have Critique, Consequences, Recommendation in order | format :: fields in order | Consequences line dropped | run |
+| the Recommendation asks for the fix after its consequences | format :: Recommendation mentions consequences | old "smallest change" wording kept | run |
+| no bare Fix line | format :: no bare Fix | `Fix:` kept alongside | run |
+| headings stay parseable by `done` | format :: headings parse | headings made bold (`**F1**`) | run |
+| the template carries the table, with `checked` | table :: between Test plan and ACs | header without `checked` | run |
+| the one-step-further rule is prose, not just in the template | review-skill :: prose outside the template | paragraph dropped (phrase only in template) | run |
+| design mode item 0 audits the table, spot-running reasoned rows | review-skill :: design mode item 0 | audit placed under Code mode | run |
+| code mode doesn't audit the table and escalates | review-skill :: code mode | audit under Code mode; no escalation note | run |
+| ticket-prep step 3 asks for the table | ticket-prep :: step 3 | table bullet missing | reasoned |
+| ticket-prep step 5 runs the consequence step and records it | ticket-prep :: step 5 | consequence step only in step 3 | run |
+| rounds counted for every raft, sorted | rounds :: every raft once | only done rafts counted | run |
+| design and code rounds counted from the right files | rounds :: counts | refute files counted as reviews | run |
+| `format` from design-review-001 | rounds :: counts, R0070 second-order | format always classic | run |
+| the rounds table sits between per-type and rework | rounds :: placement | printed after the rework lines | run |
+| issue directories aren't counted | rounds :: sandbox (review files in an issue dir) | issue dirs counted | run |
+| a raft without reviews is `none`, and metrics doesn't crash | rounds :: sandbox (R0020 has no reviews) | unguarded read of design-review-001; missing labelled classic | run |
+| design mode item 0 comes before item 1 | review-skill :: design mode item 0 | item 0 placed after the others | reasoned |
+| ticket-prep step 3's table has the `checked` column | ticket-prep :: step 3 | bullet without `checked` | run |
+| step 5's refute format is `fixed: <what>; consequences:` | ticket-prep :: step 5 | refute format without consequences | reasoned |
 
 ## Acceptance criteria
 
 ### Checked
-<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
+- **AC1**: The review skill's finding template has Where, Evidence, Critique, Consequences and Recommendation in that order, no bare `Fix:`, `### F<n>` headings that `tracker.sh done`'s pattern parses, and the verdict line.
+- **AC2**: The issue template has a `### Rules and mutants` table with the header `| rule | spec :: case | mutant it kills | checked |`, between Test plan and Acceptance criteria.
+- **AC3**: The review skill tells reviewers, in prose, to trace each fix one step further. Design mode's item `0.` audits the Rules and mutants table for missing rows, spot-running doubtful `reasoned` rows. Code mode doesn't audit the table, and escalates rather than recommending changes to locked files.
+- **AC4**: The ticket-prep skill has the author fill the Rules and mutants table in step 3, run the consequence step on their own fixes in step 5, and write `consequences:` in refute lines.
+- **AC5**: `tracker.sh metrics` prints design and code review rounds and the review `format` for every raft, counted from `design-review-NNN.md` and `review-NNN.md` files, sorted by raft id, between the per-type table and the rework lines.
 
 ### Judged
-<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
-     Ruled on by the adversarial code reviewer. -->
+None.
 
 ### Observed
-<!-- Minimal Studio playtest steps for the human (OCn). -->
+None.
 
 ## Implementation steps
-<!-- Ordered, small, each verifiable. -->
+1. The review skill template and paragraph, design-mode item 0, and the code-mode note. Run AC1 and AC3. Commit.
+2. The issue template table and the ticket-prep additions. Run AC2 and AC4. Commit.
+3. The metrics review-rounds table with `format`. Run AC5, `scripts/check.sh --full` and `scripts/tracker.sh check R0070`. Commit.
 
 ## Verification log
-<!-- Appended at the end of execution: date, commands run, results. -->
