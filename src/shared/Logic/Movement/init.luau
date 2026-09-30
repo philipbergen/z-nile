@@ -157,7 +157,7 @@ function Movement.step(m: Maze.Maze, s: State, intents: { Intent }, c: Config): 
 				s.progress = UNITS - s.progress
 				s.heading = Maze.opposite(s.heading)
 				s.moving = true
-				wrapped = wrapped or w
+				wrapped = wrapped ~= w
 			else
 				s.heading = Maze.opposite(s.heading)
 				s.moving = open(m, s.tile, s.heading)
@@ -207,7 +207,7 @@ function Movement.step(m: Maze.Maze, s: State, intents: { Intent }, c: Config): 
 				local n, w = Maze.neighbor(m, s.tile, s.heading)
 				s.tile = n
 				s.progress = 0
-				wrapped = wrapped or w
+				wrapped = wrapped ~= w
 				s.run = math.min(s.run + 1, m.width + m.height)
 				decide(m, s)
 			end

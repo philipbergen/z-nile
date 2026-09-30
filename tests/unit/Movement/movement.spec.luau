@@ -35,4 +35,30 @@ return t.spec("Movement extras", function(it)
 		t.expect(Movement.step(m, s, {}, Movement.DEFAULT_CONFIG)).toEqual({})
 		t.expect({ Movement.position(s) }).toEqual({ 1, 1 })
 	end)
+
+	-- review-001 F1: Wrapped means the position jumped, so two seam crossings in one step cancel out.
+	local seam = Maze.parse({ "#####", "  P  ", "#####" })
+	local cfg = { speed = 30, turnBufferTicks = 24 }
+	local function nearSeam(): Movement.State
+		local s = Movement.spawn(seam, "W")
+		for _ = 1, 9 do -- (0,1) at tick 8, then x = -0.25
+			Movement.step(seam, s, {}, cfg)
+		end
+		return s
+	end
+
+	it("Back just past the seam, crossing it again in the same step, reports no jump", function()
+		local s = nearSeam()
+		t.expect({ Movement.position(s) }).toEqual({ -0.25, 1 })
+		t.expect(Movement.step(seam, s, { "Back" }, cfg)).toEqual({})
+		t.expect({ Movement.position(s) }).toEqual({ 0, 1 })
+	end)
+
+	it("Back twice in one step next to the seam reports no jump", function()
+		local s = nearSeam()
+		local events = Movement.step(seam, s, { "Back", "Back" }, cfg)
+		for _, e in events do
+			t.expect(e.kind == "Wrapped").toBe(false)
+		end
+	end)
 end)

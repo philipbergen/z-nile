@@ -13,10 +13,14 @@ local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
 local ready = remotes:WaitForChild("Ready") :: RemoteEvent
 
 local built: string? = nil
+local model: Model? = nil
 snapshots.OnClientEvent:Connect(function(snap: Session.Snapshot)
 	if built ~= snap.maze then
 		built = snap.maze
-		MazeView.build(Maze.layout(snap.maze))
+		if model then
+			model:Destroy()
+		end
+		model = MazeView.build(Maze.layout(snap.maze))
 	end
 	Camera.push(snap)
 end)

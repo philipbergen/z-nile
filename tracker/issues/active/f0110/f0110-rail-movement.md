@@ -269,3 +269,5 @@ None here: f0130's Studio playtest drives movement for real.
 ## Verification log
 
 - 2026-09-29: AC1-AC9 PASS (`tracker.sh check f0110`, 9/9). `scripts/check.sh --affected` green. No deviations from the design. Luau note: beyond for-in variables, unannotated *locals* initialised from `Maze.left/right/opposite` also widen to `string` in luau-lsp 1.70.1, so `back`, `h` and `pending` carry explicit types.
+
+- 2026-09-29 (review-001 F1, deviation): the design's `wrapped = wrapped or w` reports `Wrapped` when a step crosses the seam twice (a `Back` that wraps, then movement back over it), although the position doesn't jump. Changed both sites to `wrapped = wrapped ~= w`: each crossing flips the side of the seam, so `Wrapped` now means the position jumped, as AC6 states. Unit specs added in `tests/unit/Movement`. No acceptance criterion or API changed.
