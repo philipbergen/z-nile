@@ -64,3 +64,4 @@ State it in both launch steps: launch the clean reviewer on Opus 5.5 by name (in
 
 ## Verification log
 <!-- Appended at the end of execution: date, commands run, results. -->
+- 2026-09-29: `tracker/issues/c0380/check.sh` failed 0/2 before the edit, passed 2/2 after. Shipped outside a raft as PR #5 (`f4d4083`), user-approved direct small PR; no ticket-prep or adversarial review. Closed by hand with `git mv` to `done/` (no `tracker.sh` command closes a raft-less issue); `design:` left at `draft` because ticket-prep never ran.
