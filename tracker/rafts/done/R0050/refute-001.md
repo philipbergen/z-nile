@@ -1,0 +1,3 @@
+- F1: fixed 789cc61: resolveGame returns nil for an explicit init segment
+- F2: fixed 789cc61: gameRoots cache is frozen
+- F3: fixed 789cc61: tie-break order asserted in tests/tooling/game-roots.spec.luau

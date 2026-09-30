@@ -206,3 +206,5 @@ None. The engine side is observed in R0040 (f0120 OC1).
 4. Architecture skill rule 5 (heading and bullet). Run AC4, `scripts/check.sh --full`, and `scripts/tracker.sh check R0050`. Commit.
 
 ## Verification log
+
+- 2026-09-29: 5/5 ACs PASS; `check.sh --full` green (116 specs). Added `tests/tooling/game-roots.spec.luau`. No deviations.
