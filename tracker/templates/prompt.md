@@ -26,6 +26,12 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 - Iterate with `scripts/check.sh --affected`. The full gate is `scripts/check.sh --full`.
 - Run one item's acceptance checks with `scripts/tracker.sh check <id>`.
 
+## Workstreams plan
+```
+{{WORKSTREAMS}}
+```
+If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially.
+
 ## Architecture map (tracker/architecture.md)
 {{ARCHITECTURE}}
 

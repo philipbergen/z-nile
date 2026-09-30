@@ -24,6 +24,7 @@ usage: scripts/tracker.sh <command> ...
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
   launch <R-id|name> [-- cmd...]                run a command (default claude) in the target's worktree (scripts/tracker.sh)
+  workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
   metrics [--include-active]                    cost per issue and rework %]]
@@ -427,7 +428,155 @@ function cmd.start(pos: { string })
 	end
 end
 
-function cmd.worktree(pos: { string })
+-- The backticked paths on the bulleted lines of an issue's "### Touched modules" section, or nil when
+-- it has none (a draft issue has only the template comment).
+local function touchedModules(item: store.Item): { string }?
+	local text = fs.readFile(item.doc)
+	local section = string.match(text, "\n### Touched modules\n(.-)\n##")
+	if not section then
+		return nil
+	end
+	local out: { string } = {}
+	for path in string.gmatch("\n" .. section, "\n%-%s+`([^`]+)`") do
+		table.insert(out, (string.gsub(path, "/+$", "")))
+	end
+	if #out == 0 then
+		return nil
+	end
+	return out
+end
+
+-- Two paths overlap when they are equal or one is a parent directory of the other, by whole components.
+local function overlaps(a: string, b: string): boolean
+	return a == b or string.sub(a, 1, #b + 1) == b .. "/" or string.sub(b, 1, #a + 1) == a .. "/"
+end
+
+-- The plan text for a raft, its warnings, and an error when it can't be built. Issues are placed in
+-- waves: one more than the latest wave they must follow (in-raft `depends_on`, and any issue already
+-- placed whose Touched modules overlap; an issue with none overlaps everything). Deterministic: the
+-- lowest-id ready issue is placed first.
+local function workstreamPlan(raft: store.Item): (string, { string }, string?)
+	local members = store.members(raft.id)
+	local isMember: { [string]: boolean } = {}
+	for _, m in members do
+		isMember[m.id] = true
+	end
+	local deps: { [string]: { string } } = {}
+	local touched: { [string]: { string }? } = {}
+	local warnings: { string } = {}
+	for _, m in members do
+		local d: { string } = {}
+		for _, id in store.idList(store.readFront(m.doc).depends_on) do
+			if isMember[id] then
+				table.insert(d, id)
+			end
+		end
+		deps[m.id] = d
+		touched[m.id] = touchedModules(m)
+		if not touched[m.id] then
+			table.insert(warnings, `warning: {m.id} has no Touched modules; serialized`)
+		end
+	end
+	local wave: { [string]: number } = {}
+	local after: { [string]: { string } } = {}
+	local why: { [string]: { [string]: string } } = {}
+	local assigned: { string } = {}
+	local remaining: { string } = {}
+	for _, m in members do
+		table.insert(remaining, m.id)
+	end
+	while #remaining > 0 do
+		local pick = 0
+		for i, id in remaining do
+			local ready = true
+			for _, d in deps[id] do
+				if not wave[d] then
+					ready = false
+				end
+			end
+			if ready then
+				pick = i
+				break
+			end
+		end
+		if pick == 0 then
+			return "", warnings, `dependency cycle among: {table.concat(remaining, ", ")}`
+		end
+		local id = table.remove(remaining, pick) :: string
+		local reasons: { [string]: string } = {}
+		for _, d in deps[id] do
+			reasons[d] = "depends_on"
+		end
+		for _, other in assigned do
+			if not reasons[other] then
+				local a, b = touched[id], touched[other]
+				if not a or not b then
+					reasons[other] = "no touched modules"
+				else
+					for _, x in a do
+						for _, y in b do
+							if overlaps(x, y) then
+								reasons[other] = "overlap"
+							end
+						end
+					end
+				end
+			end
+		end
+		local list: { string } = {}
+		local w = 0
+		for other in reasons do
+			table.insert(list, other)
+		end
+		table.sort(list)
+		for _, other in list do
+			w = math.max(w, wave[other])
+		end
+		wave[id], after[id], why[id] = w + 1, list, reasons
+		table.insert(assigned, id)
+	end
+	local lines = { `raft {raft.id}: {#members} issue{if #members == 1 then "" else "s"}` }
+	local byWave: { [number]: { string } } = {}
+	for _, m in members do
+		local line = `{m.id} wave {wave[m.id]}`
+		if #after[m.id] > 0 then
+			local parts: { string } = {}
+			for _, other in after[m.id] do
+				table.insert(parts, `{other} ({why[m.id][other]})`)
+			end
+			line ..= ` after {table.concat(parts, ", ")}`
+		end
+		table.insert(lines, line)
+		byWave[wave[m.id]] = byWave[wave[m.id]] or {}
+		table.insert(byWave[wave[m.id]], m.id)
+	end
+	local parallel = "parallel: no"
+	for k = 1, #members do
+		if byWave[k] and #byWave[k] >= 2 then
+			parallel = `parallel: yes (wave {k}: {table.concat(byWave[k], " ")})`
+			break
+		end
+	end
+	table.insert(lines, parallel)
+	return table.concat(lines, "\n"), warnings, nil
+end
+
+function cmd.workstreams(pos: { string })
+	local raft = store.get(pos[1] or fail("usage: workstreams <R-id>"))
+	if raft.kind ~= "raft" then
+		fail(`{raft.id} is not a raft`)
+	end
+	local text, warnings, planError = workstreamPlan(raft)
+	if planError then
+		fail(planError)
+	end
+	for _, w in warnings do
+		stdio.ewrite(w .. "\n")
+	end
+	print(text)
+end
+
+function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local target = pos[1] or fail("usage: worktree <R-id|name>")
 	local branch: string
 	local dirName: string
@@ -445,6 +594,15 @@ function cmd.worktree(pos: { string })
 		branch, dirName = target, target
 	else
 		fail(`invalid worktree name: {target}`)
+	end
+	local from = opts["--from"] and opts["--from"][1]
+	if from then
+		if string.match(target, "^R%d%d%d%d$") then
+			fail("--from is for named worktrees")
+		end
+		if not sh.run("git", { "rev-parse", "--verify", "--quiet", from .. "^{commit}" }).ok then
+			fail(`unknown ref {from}`)
+		end
 	end
 	local root = mainRoot()
 	local path = `{root}/.worktree/{dirName}`
@@ -466,9 +624,10 @@ function cmd.worktree(pos: { string })
 		sh.git({ "branch", "--track", branch, `origin/{branch}` })
 		sh.git({ "worktree", "add", path, branch })
 	else
-		local base = if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
-			then "origin/main"
-			else "main"
+		local base = from
+			or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+				then "origin/main"
+				else "main"
 		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
 		sh.git({ "worktree", "add", "--no-track", "-b", branch, path, base })
 	end
@@ -538,6 +697,10 @@ local function recordAndCommit(
 	explicitMinutes: number?,
 	isDone: boolean?
 )
+	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
+	if sh.git({ "ls-files", "-u" }) ~= "" then
+		fail("unmerged paths: resolve the merge first")
+	end
 	sh.git({ "add", "-A" })
 	local issues: { store.Item } = {}
 	local how: string
@@ -764,6 +927,8 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	for _, s in SKILLS_INLINED do
 		skills ..= section(`.claude/skills/{s}/SKILL.md`)
 	end
+	local plan, _, planError = workstreamPlan(raft)
+	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
 	local text = render("tracker/templates/prompt.md", {
 		RAFT_ID = raft.id,
 		RAFT_TITLE = store.readFront(raft.doc).title or raft.slug,
@@ -772,6 +937,7 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 		ITEMS = items,
 		SKILLS = skills,
 		ARCHITECTURE = fs.readFile("tracker/architecture.md"),
+		WORKSTREAMS = planText,
 	})
 	for _, m in store.members(raft.id) do
 		if store.readFront(m.doc).design ~= "ready" then
