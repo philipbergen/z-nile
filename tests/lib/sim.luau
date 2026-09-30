@@ -99,7 +99,10 @@ end
 
 -- Validation --------------------------------------------------------------------------------------
 
-local function validate(opts: RunOptions)
+local function validate(name: string, opts: RunOptions)
+	if type(name) ~= "string" or not string.match(name, "^[%w_-]+$") then
+		error("sim: model name must match [%w_-]+", 3)
+	end
 	if not isInteger(opts.seed) then
 		error("sim: seed must be an integer", 3)
 	end
@@ -286,7 +289,7 @@ local function execute<S>(model: Model<S>, opts: RunOptions, replaying: boolean)
 end
 
 function sim.run<S>(model: Model<S>, opts: RunOptions): Trace
-	validate(opts)
+	validate(model.name, opts)
 	return execute(model, opts, false)
 end
 
@@ -354,12 +357,12 @@ end
 
 -- Determinism -------------------------------------------------------------------------------------
 
-local function eventsAt(trace: Trace, t: number): { Event }
-	local out = {}
+local function bucketEvents(trace: Trace): { [number]: { Event } }
+	local out: { [number]: { Event } } = {}
 	for _, s in trace.events do
-		if s.tick == t then
-			table.insert(out, s.event)
-		end
+		local list = out[s.tick] or {}
+		out[s.tick] = list
+		table.insert(list, s.event)
 	end
 	return out
 end
@@ -369,10 +372,9 @@ function sim.assertDeterministic<S>(model: Model<S>, opts: RunOptions): Trace
 	o.record = true
 	local a = sim.run(model, o)
 	local b = sim.run(model, o)
+	local ea, eb = bucketEvents(a), bucketEvents(b)
 	for t = 0, math.max(#a.states, #b.states) - 1 do
-		if
-			not deepEqual(a.states[t + 1], b.states[t + 1]) or not deepEqual(eventsAt(a, t), eventsAt(b, t))
-		then
+		if not deepEqual(a.states[t + 1], b.states[t + 1]) or not deepEqual(ea[t] or {}, eb[t] or {}) then
 			error(`sim[{model.name}] seed {opts.seed}: nondeterministic: diverged at tick {t}`, 0)
 		end
 	end

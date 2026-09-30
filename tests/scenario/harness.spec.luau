@@ -32,6 +32,7 @@ return t.spec("scenario: walker story", function(it)
 		t.expect(trace.steps).toBe(6)
 	end)
 
+	-- the walker ignores its seed, so this only shows the pattern; leak detection is covered by the c0090 acceptance specs
 	it("is deterministic across seeds", function()
 		for _, seed in sim.seeds(5) do
 			sim.assertDeterministic(Walker, { seed = seed, ticks = 20, script = { sim.intent(2, "R") } })

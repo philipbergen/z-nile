@@ -59,6 +59,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
 ```lua
 local sim = require("@tests/lib/sim")
 local Walker = require("@tests/fixtures/sim/walker")
+local t = require("@tests/lib/t")
 local trace = sim.run(Walker, {
     seed = 1,
     ticks = sim.ticks(Walker, 0.5),
