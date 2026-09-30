@@ -139,9 +139,9 @@ The tracker skill's layout line becomes `<ID>/<ID>.md   the document (frontmatte
 | A bad slug is rejected before anything is created | `new rejects a bad slug …` | no validation; create first, validate later | run |
 | The slug comes from the frontmatter | `find, list, members and start work …` | derive the slug from the filename; hard-code it | run |
 | A missing slug is an error naming the document | `a document without a slug …` | return an empty slug | run |
-| A legacy name is an error pointing at `migrate` | `a legacy-named document is an error …` | silently accept the legacy file; report "no such item" | run |
+| A legacy name is an error pointing at `migrate`, even when the document already has a slug | `a legacy-named document is an error …` | silently accept a legacy-named file; report "no such item" | run |
 | `migrate` renames with history and adds the slug, in every state, issues and rafts | `migrate converts legacy documents in every state` | skip a state directory; skip rafts; drop the slug; `fs.move` instead of `git mv` | run |
-| `migrate` is idempotent and refuses ambiguity | `migrate is idempotent …` | overwrite `<ID>.md` when both exist; add `slug:` twice | run |
+| `migrate` is idempotent and refuses ambiguity | `migrate is idempotent …` | overwrite `<ID>.md` when both exist | run |
 | `renumber` renames the new document name and rewrites references | `renumber renames …` | leave the old document name | run |
 | A same-id collision conflicts in git | `two branches creating the same id conflict …` | write a slug-named file | run |
 | The repo is migrated; specs updated; docs updated | AC6, AC7, AC9 checks, JC1 | leave one legacy document or one old path | reasoned (repo-level greps and a ruling, not a mutation) |
@@ -175,3 +175,10 @@ None.
 5. `scripts/tracker.sh check c0420`, `scripts/check.sh --full`, `promote-check R0020`. Commit.
 
 ## Verification log
+
+- **Prototype run (2026-09-30), reverted, never committed:** about 90 lines across `store.luau`, `main.luau` and the two templates, then `tracker.sh migrate` on this repo (52 documents) and the three specs' paths and fixture `slug:` lines updated.
+  - All 10 naming-spec cases pass; `scripts/check.sh --full` passes (346 specs); `tracker.sh check c0420` passes 10/10 once the tracker skill text is updated (AC9).
+  - Twelve planted mistakes each fail the case written for them: `new` keeping the slug-named file (also breaks the collision case), a template without the slug, no slug validation, a hard-coded slug, a missing slug not an error, a legacy file silently accepted, `migrate` skipping `done/`, skipping rafts, dropping the slug, using `fs.move` instead of `git mv`, overwriting when both documents exist, and `renumber` leaving the old document name.
+  - The first run exposed a spec gap: "legacy file silently accepted" survived, because a legacy document without a slug still errors (naming the file and `migrate`). The spec now also refuses a legacy-named document that already carries a slug, and the mutant fails.
+  - A USAGE line mentioning `<ID>-<slug>.md` would trip AC9's own grep, so the executor words it differently.
+
