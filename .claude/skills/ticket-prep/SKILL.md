@@ -8,6 +8,8 @@ description: Turn backlog issues into an execution-ready raft - group by functio
 The goal is a raft that **any strong agent can deliver on the first attempt without asking questions.** Time spent here is cheaper than rework. Be thorough.
 
 ## 1. Form the raft
+**Work in a prep worktree** for the whole prep (new raft, design, specs, reviews): `cd "$(scripts/tracker.sh worktree prep-<slug>)"`, named by the raft's slug because its id isn't known yet (tracker skill, Worktrees). Design reviews run there too, and their files ride in the prep PR.
+
 - **Candidates**: `scripts/tracker.sh list backlog`. Group issues by **functional adjacency**: they touch the same features or interfaces, or they're only meaningful together.
 - **One type per raft.** Never mix feature, defect and chore. A defect found while planning a feature raft goes in its own raft.
 - **Size**: aim for something that fits in one reviewable PR, roughly under 1,500 changed lines. Split larger groups into sequential rafts.
@@ -60,8 +62,8 @@ Fill every section of the issue template. Requirements:
 5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member.
 
 ## 6. Commit and hand off
-- **Commit** the prepared tracker items, acceptance specs and architecture changes to main as one commit, `tracker: prep R0010 <title>`, then push.
-  - Ask the user before committing if they haven't approved prep work going straight to main.
+- **Commit** the prepared tracker items, acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep R0010 <title>`, then follow Landing a change (tracker skill): push, PR, merge, pull the main checkout, remove the worktree.
+  - Ask the user before merging prep they didn't request.
 - **Report**:
   - the raft ID and its issues;
   - the key design decisions;

@@ -55,7 +55,7 @@ On a re-review round, first read the previous `review-NNN.md` and `refute-NNN.md
 In code mode the PR shows the review as it happens: the author pushes and posts a "started" comment before you begin, and commits, pushes and summarizes `review-NNN.md` when you finish. So:
 - Write `review-NNN.md` in full; findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
 - On a re-review, list withdrawn findings in a non-heading line under `Inputs:`, for example `Dropped from review-001: F2, F4`. Give a repeated finding a new id and say `(repeat of review-001 F3)` in its claim. Every `### F<n>` heading is a finding that `tracker.sh done` requires an answer to, and ids restart at F1 each round.
-- Design mode runs on main before any PR exists, so it is exempt; its files are committed and pushed with the prep commit.
+- Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
 
 ## Design mode (from ticket-prep)
 Attack all of the following:
@@ -73,7 +73,7 @@ Attack all of the following:
 8. **Executability**: could an agent that has never seen this repo deliver it from the documents alone, without asking a question?
 
 ## Code mode (before the PR is marked ready)
-Inputs: `git diff main...HEAD`, the raft and issue documents, and the `check.sh` files.
+Inputs: `git fetch origin main && git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
 A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (execute-raft stop conditions).
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
 2. **Sequestration**: `git diff <tracker: start commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty. Any change is **high**.

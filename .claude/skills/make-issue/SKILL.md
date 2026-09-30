@@ -22,4 +22,4 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
    - A few bullet-point ideas under Solution, if they came up.
    Everything else is left for `ticket-prep`. Keep `design: draft`.
 5. **Duplicates**: look for overlaps with `scripts/tracker.sh list backlog`. If there's an overlap, say so and ask whether to merge.
-6. **Commit to main**, since tracker-only changes don't need a PR: `git add tracker && git commit -m "tracker: new <id> <title>"`, then push. Report the ID and path.
+6. **Land it.** Capture in a worktree, never in the main checkout: start with `cd "$(scripts/tracker.sh worktree capture-<slug>)"` *before* step 2 (tracker skill, Worktrees). Then commit there with plain `git add tracker && git commit -m "tracker: new <id> <title>"` and follow Landing a change (push, PR, merge once the conditions hold, pull the main checkout, remove the worktree). Report the ID and path.

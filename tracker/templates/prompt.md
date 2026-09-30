@@ -15,7 +15,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 
 ## Hard rules
 1. **Follow the `execute-raft` skill below, step by step.** It is your protocol.
-2. **One branch and one PR for this whole prompt.** `scripts/tracker.sh start {{RAFT_ID}}` creates both. Commit only with `scripts/tracker.sh commit`.
+2. **Work only in the raft's worktree.** Your first action is `cd "$(scripts/tracker.sh worktree {{RAFT_ID}})"` (skip it if your working directory already is that worktree), and you never edit the main checkout. **One branch and one PR for this whole prompt.** `scripts/tracker.sh start {{RAFT_ID}}` creates both. Commit only with `scripts/tracker.sh commit`.
 3. **Never edit** any `check.sh`, `tracker/architecture.md` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
 4. **Experiments come before any production code.** If an experiment fails and has no fallback, stop.
 5. **Tests come first** for each issue. Watch them fail for the right reason, then implement.

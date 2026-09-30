@@ -379,7 +379,7 @@ end
 function cmd.start(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: start <R-id>"))
 	if raft.kind ~= "raft" then
-		fail("only rafts are started; wrap a single issue with `prompt <issue>` or `new raft ... --single`")
+		fail("only rafts are started; make a `--single` raft with `new raft ... --single` (ticket-prep)")
 	end
 	if raft.state ~= "backlog" then
 		fail(`{raft.id} is already {raft.state}`)
@@ -729,7 +729,7 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 			cmd.new({ "raft", store.typeOf(target), target.slug, target.id }, { ["--single"] = { "true" } })
 			raft = store.get(store.readFront(target.doc).raft)
 			stdio.ewrite(
-				`created placeholder raft {raft.id}; commit and push it before handing out the prompt\n`
+				`created placeholder raft {raft.id}; land it (tracker skill, Landing a change) before handing out the prompt\n`
 			)
 		end
 	end

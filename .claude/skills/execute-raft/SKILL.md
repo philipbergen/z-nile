@@ -11,9 +11,9 @@ Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`, then merg
 Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
 
 ## Phase 0: Claim (in the first minutes)
-1. `git switch main && git pull --ff-only`, then confirm `scripts/check.sh --full` passes on main.
+1. Work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees). It branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
    - **If main is red, stop.** Report it; don't fix main inside this raft.
-2. `scripts/tracker.sh start R0010`. This creates the branch, moves the items to `active/`, commits, pushes, and opens a **draft** PR.
+2. `scripts/tracker.sh start R0010`. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 
@@ -54,7 +54,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 1. **Before launching**: commit any pending work with `tracker.sh commit` so the reviewer sees exactly what the PR shows, and post the comment `Review NNN started at <short sha> (code mode)`.
 2. Start a **clean** reviewer. It has none of your context and gets only these inputs:
    - the `review` skill (code mode);
-   - `git diff main...HEAD`;
+   - `git fetch origin main && git diff origin/main...HEAD` (the local `main` isn't kept current);
    - the raft and issue documents and `check.sh` files;
    - read access to the repo.
    In Claude Code, that's a fresh subagent. For other agents, use a new session or context that receives only those inputs.
@@ -82,7 +82,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 ## Phase 6: Merge and clean up
 1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`scripts/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
-3. Follow "After merge" in the tracker skill, last: update the root's `main`, remove this raft's worktree, delete the local branch. Post no further commits to the branch. Then give the same report in your reply.
+3. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main`, removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
