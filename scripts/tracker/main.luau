@@ -16,6 +16,7 @@ usage: scripts/tracker.sh <command> ...
   members <R-id>                                print directories of every issue in the raft
   check <id>                                    run an item's check.sh (a raft runs its own)
   renumber <old> <new>                          step an id (conflict resolution)
+  migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   start <R-id>                                  branch, move to active, commit, push, draft PR
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>]   stage all, record spend, commit, push
@@ -247,6 +248,56 @@ function cmd.renumber(pos: { string })
 	end
 	walk(store.ROOT)
 	print(`{old} -> {new}`)
+end
+
+-- Converts documents that still carry their slug in the filename (legacy layout) to `<ID>.md` with
+-- `slug:` in the frontmatter. It scans directories itself and never goes through `store.find`,
+-- which rejects the legacy layout, so it runs against either version of the store.
+function cmd.migrate()
+	local ambiguous = false
+	for _, kind in { "issues", "rafts" } do
+		for _, state in { "", "active/", "done/" } do
+			local base = `{store.ROOT}/{kind}/{state}`
+			if fs.isDir(base) then
+				local names = fs.readDir(base)
+				table.sort(names)
+				for _, id in names do
+					local isId = if kind == "rafts" then store.isRaftId(id) else store.isIssueId(id)
+					local dir = base .. id
+					if isId and fs.isDir(dir) then
+						local files: { string } = {}
+						local hasNew = false
+						for _, name in fs.readDir(dir) do
+							if name == `{id}.md` then
+								hasNew = true
+							elseif string.match(name, `^{id}%-.+%.md$`) then
+								table.insert(files, name)
+							end
+						end
+						if #files > 0 and (hasNew or #files > 1) then
+							stdio.ewrite(`{dir}: ambiguous documents: {table.concat(files, ", ")}\n`)
+							ambiguous = true
+						elseif #files == 1 then
+							local old, new = `{dir}/{files[1]}`, `{dir}/{id}.md`
+							local slug = string.match(files[1], `^{id}%-(.+)%.md$`) :: string
+							if sh.run("git", { "ls-files", "--error-unmatch", old }).ok then
+								sh.git({ "mv", old, new })
+							else
+								fs.move(old, new)
+							end
+							if not store.readFront(new).slug then
+								store.setFront(new, "slug", slug)
+							end
+							print(`{old} -> {new}`)
+						end
+					end
+				end
+			end
+		end
+	end
+	if ambiguous then
+		process.exit(1)
+	end
 end
 
 function cmd.start(pos: { string })
