@@ -267,3 +267,5 @@ None here: f0130's Studio playtest drives movement for real.
 6. `tests/unit/Movement`, then AC7. Run `scripts/check.sh --affected` and `scripts/tracker.sh check f0110`. Commit.
 
 ## Verification log
+
+- 2026-09-29: AC1-AC9 PASS (`tracker.sh check f0110`, 9/9). `scripts/check.sh --affected` green. No deviations from the design. Luau note: beyond for-in variables, unannotated *locals* initialised from `Maze.left/right/opposite` also widen to `string` in luau-lsp 1.70.1, so `back`, `h` and `pending` carry explicit types.
