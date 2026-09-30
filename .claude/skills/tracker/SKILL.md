@@ -45,16 +45,13 @@ Each item is a directory named by its ID:
 
 ## Merging
 The agent that delivered the raft merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
-1. `tracker.sh done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (execute-raft Phase 4). Only a *significant* finding left after review round 3 (an unresolved high, or a failed Judged criterion) blocks the merge and engages the human; leftover mediums and lows become follow-up issues.
+1. `tracker.sh done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (execute-raft Phase 4). Only a *significant* finding in `review-003.md` (any high, or a failed Judged criterion) blocks the merge and engages the human; mediums and lows become follow-up issues (execute-raft Phase 4 step 7).
 2. `scripts/check.sh --full` passes on the final head, run by you.
-3. CI is green on the PR's exact head sha. `done` pushes and then marks the PR ready, and the ready event starts the `pull_request` run, so:
-   - poll `gh pr checks <pr>` until it lists at least one check (an empty list is **not** green), then `gh pr checks <pr> --watch --fail-fast` must exit 0 with every check `pass`;
-   - confirm the run's sha equals `git rev-parse HEAD`;
-   - if no run appears within about 5 minutes, dispatch one with `scripts/ci-verify.sh` (it needs HEAD equal to `origin/<branch>`, so push first) and wait. If the dispatched run fails, treat it as red.
-4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN`; any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. If behind or conflicting, merge `origin/main` into the branch, renumber any colliding IDs (see Conflicts), rerun `check.sh --full`, push, and repeat step 3. If resolving it needed anything beyond tracker renumbering (any change to `src/`, `tests/` or scripts), that's a fix on a finished PR: post a comment and run a new clean review round (execute-raft Phase 4) before merging.
+3. CI is green on the PR's exact head sha. `done` pushes and then marks the PR ready, and the ready event starts the `pull_request` run. Poll `gh pr view <pr> --json headRefOid,statusCheckRollup` until `headRefOid` equals `git rev-parse HEAD` and the `gate` check is `COMPLETED` with conclusion `SUCCESS`. Any other state is **not** green: a missing `gate`, `IN_PROGRESS`, or `SKIPPED` (the run from when the PR was a draft) means keep waiting; `FAILURE` is red. If no `gate` run for this sha appears within about 5 minutes of the ready event, dispatch one with `scripts/ci-verify.sh` (it needs HEAD equal to `origin/<branch>`, so push first) and wait. If the dispatched run fails, treat it as red.
+4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN`; any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (execute-raft Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`tracker.sh commit` needs an active raft, and `done` has moved it), rerun `check.sh --full`, push, and repeat step 3. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
 5. The human hasn't said to hold.
 
-Then `gh pr merge <pr> --squash` with the `Co-Authored-By` trailer, and follow "After merge". This repo may have no branch protection, so these conditions are the only gate: you enforce them. Never use `--admin`, and never merge on red or missing CI, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
+Then `gh pr merge <pr> --squash --subject "<raft>: <title> (#<pr>)" --body "<summary>\n\n<the Co-Authored-By line from your commit instructions>"`, and follow "After merge". This repo may have no branch protection, so these conditions are the only gate: you enforce them. Never use `--admin`, and never merge on red or missing CI, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
 
 Observed criteria (human Studio playtests) do not block the merge. Put them in the final report and PR comment, and file any failure the human finds later as a defect issue.
 
@@ -62,7 +59,7 @@ Observed criteria (human Studio playtests) do not block the merge. Put them in t
 Once the PR is merged (by you, or by the human), clean up locally. GitHub deletes the remote branch on merge, so don't delete it yourself.
 First confirm the merge: `gh pr view <pr> --json state -q .state` must print `MERGED`. `<root>` is the first path in `git worktree list`.
 1. Update the root checkout's `main`, with `git -C <root>`, never by switching branches or stashing there:
-   - if the root is on `main`: `git -C <root> pull --ff-only`;
+   - if the root is on `main`: `git -C <root> pull --ff-only` (if it fails, for example on local commits or a dirty tree, leave it and say so in the report);
    - if the root is on another branch (in-progress work there): `git -C <root> fetch origin main:main`, which fast-forwards `main` without switching branches;
    - if `fetch` refuses because `main` is checked out in some other worktree, run `git -C <that worktree> pull --ff-only` there if it's clean; if it isn't, skip it and say so in the report.
 2. Leave and remove the worktree. Your shell cwd resets on each call and a Claude Code session owns its cwd, so:

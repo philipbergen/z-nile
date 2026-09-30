@@ -15,7 +15,7 @@ created: 2026-09-29
 The skills say "the human merges the PR; agents never merge", so every finished raft waits for a person even when review and tests are all green. The agent should merge its own PR once it has reviewed and run all relevant tests, and engage the human only when something significant is still open after review round 3.
 
 ## Non-goals
-- Changing `tracker.sh done` to accept a `deferred` answer form (interim: `refuted: below the merge threshold, filed as <id>`).
+- Changing `tracker.sh done` to accept a `deferred` answer form: that is c0360 (interim: `refuted: below the merge threshold (medium|low), filed as <id>`).
 - Enabling GitHub auto-merge or altering branch protection.
 
 ## Solution
