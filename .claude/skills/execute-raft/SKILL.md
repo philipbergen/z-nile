@@ -6,7 +6,7 @@ description: The autonomous execution protocol for one raft - one branch, one PR
 # Execute a raft
 
 Input: a raft ID (`R0010`) whose issues are `design: ready`.
-Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`.
+Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`, then merged by you (Phase 6).
 
 Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
 
@@ -69,15 +69,17 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
    - the fixes changed a public API or the design;
    - the fixes are more than about 15% of the PR's lines;
    - a Judged criterion was ruled fail.
-7. **Cap: 3 rounds.** If round 3 still isn't resolved, stop and escalate.
+7. **Cap: 3 rounds.** Only a *significant* leftover after round 3 blocks the merge and engages the human: an unresolved **high** finding, or a Judged criterion ruled fail. In that case stop and escalate. Anything less (unresolved medium or low findings) does not block: file each as a follow-up issue, answer it in `refute-003.md` as `- F<n>: refuted: below the merge threshold, filed as <id>` (the only form `tracker.sh done` accepts besides `fixed`), list the ids in the round's PR comment, and continue to Phase 5.
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
 2. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
 3. Write the final report (below). This goes in your reply, and also as a PR comment: `gh pr comment --body-file -`.
 
-## Phase 6: After merge
-When the human reports the PR merged (or asks you to merge it), follow "After merge" in the tracker skill: update the root's `main`, remove this raft's worktree, delete the local branch. Post no further commits to the branch.
+## Phase 6: Merge and clean up
+1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`scripts/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop.
+2. Follow "After merge" in the tracker skill: update the root's `main`, remove this raft's worktree, delete the local branch. Post no further commits to the branch.
+3. Put the merge commit sha in the final report.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
