@@ -90,7 +90,7 @@ The goal, decided by the user on 2026-09-30, is **the worktree rule**: the main 
   2. Every git command runs with `-C mainRoot()`. A worktree that contains the current directory is skipped with a message, never removed from under the running command.
   3. For each worktree under `mainRoot()/.worktree/` whose directory is named `<R-id>` (its branch is the worktree's own, `w.branch`): it is **finished** iff `git ls-tree -d <base> tracker/rafts/done/<R-id>` prints a line, meaning the raft reached `done/` **on the base branch**. That works for any merge strategy (GitHub squash merges make `git branch --merged` useless), and a raft moved to `done/` only on its own unmerged branch is not finished, so review fixes still land.
      - A freshly created worktree with no commits counts as merged by ancestry but is **not** finished, so it's kept.
-  4. For a finished worktree, run `git worktree remove <path>` and then `git branch -D <its branch>`. The capital D is safe because the raft's content is on the base branch, and it's needed because squashed branches aren't ancestors. **Never `--force`.** A worktree with modified or untracked files makes `git worktree remove` fail: name it on stderr, keep it and its branch, and continue.
+  4. For a finished worktree, run `git worktree remove <path>` and then, if the worktree has a branch (a detached one, such as the bootstrap worktree before `start`, has none), `git branch -D <its branch>`. The capital D is safe because the raft's content is on the base branch, and it's needed because squashed branches aren't ancestors. **Never `--force`.** A worktree with modified or untracked files makes `git worktree remove` fail: name it on stderr, keep it and its branch, and continue.
   5. Any other worktree under `.worktree/` (a named one) is left alone and listed as `kept <path> (named worktree: remove it when its PR has merged)`.
   6. Print one line per removed worktree. **Exit 1** if any finished worktree could not be removed, else 0.
 - **`cmd.start`**: if `git branch --show-current` already equals `raftBranch(raft)`, skip `git switch -c`; otherwise call `refuseInMainCheckout("start")` first and then behave exactly as today. All other checks (backlog, clean tree, `design: ready`) are unchanged.
@@ -205,6 +205,7 @@ Cases (`spec case → AC`):
 - `worktree recreates a worktree whose directory was deleted` → AC6
 - `worktree rejects bad names and non-raft ids` → AC6 (also a 61-character name)
 - `worktree-prune removes squash-merged done rafts and keeps unfinished ones` → AC3
+- `worktree-prune removes a finished raft's detached worktree` → AC3 (no branch to delete, exit 0)
 - `worktree-prune keeps a raft that is done only on its own unmerged branch` → AC3
 - `worktree-prune lists a named worktree and leaves it` → AC3
 - `worktree-prune never forces: a dirty finished worktree survives and the exit code is 1` → AC3
@@ -236,6 +237,7 @@ Cases (`spec case → AC`):
 | A draft PR is opened only for a GitHub origin | `GitHub origin opens the draft PR`, `non-GitHub origin skips the draft PR` | `onGitHub()` always false; always call `gh` | run (M3) |
 | Prune judges "finished" on the base branch, not the worktree's own branch | `worktree-prune removes squash-merged`, `keeps a raft that is done only on its own unmerged branch` | judge on the worktree's branch | run (M2) |
 | A raft worktree is `.worktree/<R-id>` (branch `<R-id>-<slug>`), and prune reads the id from the directory name | `worktree creates a raft-named worktree …`, `worktree-prune removes squash-merged …` | name the directory by the branch; parse the old `<R-id>-<slug>` directory name | run (P1, P2) |
+| A finished raft's detached worktree is removed without a branch delete | `worktree-prune removes a finished raft's detached worktree` | `branch -D` on a missing branch (crash, exit 1) | run (P3) |
 | Prune never forces | `worktree-prune never forces` | pass `--force` | run (M1) |
 | Prune skips the worktree it runs in | `worktree-prune run from inside a finished worktree skips it` | remove the current directory's worktree | reasoned |
 | Prune lists named worktrees and leaves them | `worktree-prune lists a named worktree` | remove or ignore them | reasoned |
@@ -284,3 +286,4 @@ None.
 
 - **Prototype run 3 (2026-09-30, after design-review-004), reverted, never committed:** stacked with c0420 and c0430. All 28 worktree cases pass; `migrate` is now guarded in the main checkout and the `renumber is refused` case asserts it; a sixteenth planted mistake, `migrate` unguarded (M16), fails exactly that case. Landing step 0 and the Conflicts text now say that only `CONFLICT (add/add)` means renumber. The spec helpers disable `gc.auto` and `maintenance.auto` for fixtures (see c0420's log for the flake this removed).
 - **Path convention change (2026-09-30, with c0440):** worktrees now live in `<repo>/.worktree/` (singular), a raft's at `.worktree/<R-id>` and the rest at `.worktree/<name>`; branches keep their names (`R0010-<slug>`), and `worktree-prune` reads a raft's id from the directory name and its branch from git. The spec's paths were updated; with the stacked prototype all 28 cases pass and two more planted mistakes (P1: name the directory by branch, P2: parse the old `<R-id>-<slug>` directory name) each fail the cases written for them.
+- **Prune on a detached raft worktree (2026-09-30, design-review-007 F7):** the bootstrap worktree is detached until `start`, so `worktree-prune` removes a finished raft's worktree and deletes a branch only if it has one (new case `worktree-prune removes a finished raft's detached worktree`; planted mistake P3, `branch -D` without a nil check, fails it). The stacked prototype passes all 29 cases.

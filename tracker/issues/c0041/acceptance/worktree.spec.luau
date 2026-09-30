@@ -419,6 +419,14 @@ return t.spec("worktrees", function(it)
 		t.expect(countWorktrees()).toBe(before)
 	end)
 
+	it("worktree-prune removes a finished raft's detached worktree", function()
+		-- R0010 is done on main; a detached worktree for it (like the bootstrap one) has no branch to delete
+		git(main, { "worktree", "add", "-q", "--detach", wt1, "origin/main" })
+		local r = tr(main, { "worktree-prune" })
+		t.expect(r.ok).toBe(true)
+		t.expect(fs.isDir(wt1)).toBe(false)
+	end)
+
 	it("post-edit hook lints with the edited file's worktree config", function()
 		local hook = `{main}/scripts/hooks/post-edit.sh`
 		local probe = "--!strict\nlocal unused = 1\nreturn nil\n"

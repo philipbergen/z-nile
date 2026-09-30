@@ -24,11 +24,11 @@ all_cases_pass() {
 
 check "AC1: launch runs the command in the target's worktree, creating or reusing it" cases_pass \
   "launch runs the command inside"
-check "AC2: arguments after -- pass through untouched; the default command is claude" cases_pass \
-  "launch defaults to claude"
+check "AC2: arguments after -- pass through untouched, stdin reaches the command; the default is claude" cases_pass \
+  "launch defaults to claude" "launch forwards stdin"
 check "AC3: launch returns the exit code and reports a command that can't start" cases_pass \
   "launch returns the command's exit code"
-check "AC4: an invalid target starts nothing" cases_pass "launch rejects an unknown target"
+check "AC4: an invalid target or a stray argument starts nothing" cases_pass "launch rejects an unknown target"
 check "AC5: worktree-prune warns about worktrees outside .worktree/" cases_pass \
   "worktree-prune warns about a worktree outside"
 check "AC6: the skills state the inside-the-repo rule and the launch line; no sibling or .worktrees/ path" bash -c '
@@ -40,6 +40,11 @@ check "AC6: the skills state the inside-the-repo rule and the launch line; no si
     grep -qF "scripts/tracker.sh launch" "$f" || { echo "$f: launch line"; exit 1; }
   done
   grep -qF ".worktree/" tracker/templates/prompt.md || { echo "prompt template: .worktree/"; exit 1; }
+  # the c0041 AC5 markers must survive: done reruns every member check.sh
+  for f in execute-raft tracker make-issue ticket-prep make-prompt; do
+    grep -qF "scripts/tracker.sh worktree" ".claude/skills/$f/SKILL.md" || { echo "$f: c0041 marker lost"; exit 1; }
+  done
+  grep -qF "scripts/tracker.sh worktree {{RAFT_ID}}" tracker/templates/prompt.md || { echo "prompt template: c0041 marker lost"; exit 1; }
   bad=$(grep -rnE -e "\.worktrees/" -e "\.\./pickman" .claude/skills tracker/templates SETUP.md AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC1-AC5: every case of the launch spec passes" all_cases_pass

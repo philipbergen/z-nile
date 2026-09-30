@@ -32,16 +32,26 @@ local fakebin = `{base}/fakebin`
 local log = `{base}/agent.log`
 local wt1 = `{main}/.worktree/R0010`
 local named = `{main}/.worktree/capture-demo`
-local stray = `{base}/outside`
+local strays = { `{base}/outside`, `{main}/.claude/worktrees/x`, `{main}/.worktree-old/y` }
 
-local function run(cwd: string, cmd: string, args: { string }, env: { [string]: string }?): Result
+local function run(
+	cwd: string,
+	cmd: string,
+	args: { string },
+	env: { [string]: string }?,
+	stdin: string?
+): Result
 	local merged = table.clone(NO_GC)
 	if env then
 		for k, v in env do
 			merged[k] = v
 		end
 	end
-	return process.exec(cmd, args, { cwd = cwd, env = merged })
+	local opts: any = { cwd = cwd, env = merged }
+	if stdin then
+		opts.stdio = { stdin = stdin }
+	end
+	return process.exec(cmd, args, opts)
 end
 
 local function must(r: Result, what: string): string
@@ -55,8 +65,8 @@ local function git(cwd: string, args: { string }): string
 	return must(run(cwd, "git", args), "git " .. table.concat(args, " "))
 end
 
-local function tr(cwd: string, args: { string }, env: { [string]: string }?): Result
-	return run(cwd, "bash", { "scripts/tracker.sh", table.unpack(args) }, env)
+local function tr(cwd: string, args: { string }, env: { [string]: string }?, stdin: string?): Result
+	return run(cwd, "bash", { "scripts/tracker.sh", table.unpack(args) }, env, stdin)
 end
 
 local function has(text: string, needle: string): boolean
@@ -144,7 +154,7 @@ return t.spec("launch", function(it)
 		for _, name in { "claude", "agent" } do
 			fs.writeFile(
 				`{fakebin}/{name}`,
-				'#!/usr/bin/env bash\n{ pwd -P; for a in "$@"; do echo "$a"; done; } > "$FAKE_LOG"\nexit "${FAKE_EXIT:-0}"\n'
+				'#!/usr/bin/env bash\n{ pwd -P; for a in "$@"; do echo "$a"; done; if [ -n "${FAKE_READ:-}" ]; then read -r line; echo "stdin:$line"; fi; } > "$FAKE_LOG"\nexit "${FAKE_EXIT:-0}"\n'
 			)
 			must(process.exec("chmod", { "+x", `{fakebin}/{name}` }), "chmod")
 		end
@@ -163,22 +173,25 @@ return t.spec("launch", function(it)
 	it("launch defaults to claude and passes arguments after -- through untouched", function()
 		must(tr(main, { "launch", "capture-demo" }, agentEnv()), "launch capture-demo")
 		t.expect(recorded()).toEqual({ named }) -- the default command, no arguments
-		must(
-			tr(main, {
-				"launch",
-				"capture-demo",
-				"--",
-				"agent",
-				"--from",
-				"origin/main",
-				"--model",
-				"x",
-				"--",
-				"y",
-			}, agentEnv()),
-			"launch with arguments"
-		)
-		t.expect(recorded()).toEqual({ named, "--from", "origin/main", "--model", "x", "--", "y" })
+		-- options, an argument with spaces, an empty string, a glob, a quoted string and a second --
+		local awkward = { "--from", "origin/main", "a b", "", "*", '"q"', "--", "y" }
+		local args = { "launch", "capture-demo", "--", "agent" }
+		for _, a in awkward do
+			table.insert(args, a)
+		end
+		must(tr(main, args, agentEnv()), "launch with arguments")
+		local want = { named }
+		for _, a in awkward do
+			table.insert(want, a)
+		end
+		t.expect(recorded()).toEqual(want)
+	end)
+
+	it("launch forwards stdin to the command", function()
+		local env = agentEnv()
+		env.FAKE_READ = "1"
+		must(tr(main, { "launch", "capture-demo", "--", "agent" }, env, "hello\n"), "launch with stdin")
+		t.expect(recorded()).toEqual({ named, "stdin:hello" })
 	end)
 
 	it("launch returns the command's exit code and reports a command that can't start", function()
@@ -186,10 +199,10 @@ return t.spec("launch", function(it)
 		t.expect(seven.code).toBe(7)
 		local missing = tr(main, { "launch", "capture-demo", "--", "no-such-agent-xyz" }, agentEnv())
 		t.expect(missing.ok).toBe(false)
-		t.expect(has(missing.stderr, "no-such-agent-xyz")).toBe(true)
+		t.expect(has(missing.stderr, "cannot run no-such-agent-xyz")).toBe(true)
 	end)
 
-	it("launch rejects an unknown target and a done raft and starts nothing", function()
+	it("launch rejects an unknown target, a done raft and a stray argument, and starts nothing", function()
 		local before = countWorktrees()
 		fs.removeFile(log)
 		for _, target in { "R9999", "Bad_Name", "f0010", "R0020" } do
@@ -198,20 +211,28 @@ return t.spec("launch", function(it)
 				error(`launch accepted {target}`)
 			end
 		end
+		-- a token after the target that isn't -- is a usage error, not a command
+		t.expect(tr(main, { "launch", "R0010", "agent" }, agentEnv()).ok).toBe(false)
+		t.expect(tr(main, { "launch" }, agentEnv()).ok).toBe(false)
 		t.expect(fs.isFile(log)).toBe(false) -- nothing ran
 		t.expect(countWorktrees()).toBe(before)
 		t.expect(fs.isDir(`{main}/.worktree/R0020`)).toBe(false)
 	end)
 
 	it("worktree-prune warns about a worktree outside .worktree/ and leaves it", function()
-		git(main, { "worktree", "add", "-q", "-b", "stray", stray, "origin/main" })
+		-- three strays: a sibling directory, the harness's .claude/worktrees/ and .worktree-old/, both inside the repo
+		for i, path in strays do
+			git(main, { "worktree", "add", "-q", "-b", `stray{i}`, path, "origin/main" })
+		end
 		local r = tr(main, { "worktree-prune" })
 		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stderr, `warning: {stray} is outside .worktree/`)).toBe(true)
-		t.expect(fs.isDir(stray)).toBe(true)
+		for _, path in strays do
+			t.expect(has(r.stderr, `warning: {path} is outside .worktree/`)).toBe(true)
+			t.expect(fs.isDir(path)).toBe(true) -- left alone
+		end
 		-- worktrees inside .worktree/ and the main checkout are not flagged
 		local _, warnings = string.gsub(r.stderr, "warning:", "")
-		t.expect(warnings).toBe(1)
+		t.expect(warnings).toBe(#strays)
 		t.expect(has(r.stderr, `{main}/.worktree/`)).toBe(false)
 	end)
 end)

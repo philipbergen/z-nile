@@ -32,7 +32,7 @@ created: 2026-09-28
 ```
 Interfaces between the issues:
 - **c0420 → c0041, c0430**: the document is `<ID>/<ID>.md`, `Item.slug` comes from the frontmatter, and `tracker.sh migrate` converts legacy documents. c0041's and c0430's specs and fixtures use the new layout.
-- **c0041 → c0440, c0430**: `tracker.sh worktree <name>` (paths `.worktree/<R-id>` and `.worktree/<name>`) and the main-checkout whitelist. c0440 extracts its body into `ensureWorktree` for `launch`; c0430 adds `--from <ref>` to the same command and its read-only `workstreams` joins the whitelist.
+- **c0041 → c0440, c0430**: `tracker.sh worktree <name>` (paths `.worktree/<R-id>` and `.worktree/<name>`) and the main-checkout whitelist. c0440's `launch` (in the bash wrapper) calls it; c0430 adds `--from <ref>` to the same command and its read-only `workstreams` joins the whitelist.
 - All four edit `scripts/tracker/main.luau` and the tracker, execute-raft and other skills, so they're executed in this order and never in parallel (c0430's own tooling doesn't exist until it merges).
 
 There is no new dependency edge (`tracker/architecture.md` is unchanged).
@@ -58,7 +58,7 @@ There is no new dependency edge (`tracker/architecture.md` is unchanged).
 - R0070 (review second order) has merged: this prep branch already contains it, and the designs follow its rules (Rules and mutants tables, the consequence step).
 
 ## Experiments phase
-Every issue was prototyped in prep (stacked: c0420, then c0041, then c0440, then c0430; all reverted, none committed) and validated together: c0420's 11 naming cases, c0041's 28 worktree cases, c0440's 5 launch cases and c0430's 13 workstream cases pass; `scripts/check.sh --full` and `promote-check R0020` pass with all three prototypes and the repo migrated (346 specs); the permanent guard spec passes once the three old specs are updated; and 13 + 18 + 7 + 19 planted mistakes (per issue's Rules and mutants table) each fail the case written for them. `workstreams R0020` on the migrated tracker prints the RC1 plan. The e2e specs also disable background git maintenance in their fixtures, after intermittent clone failures in back-to-back runs. The residual unknowns are c0041's E3 and E4 (pinned or optional), and c0430's OC1 (a real parallel run).
+Every issue was prototyped in prep (stacked: c0420, then c0041, then c0440, then c0430; all reverted, none committed) and validated together: c0420's 11 naming cases, c0041's 29 worktree cases, c0440's 6 launch cases and c0430's 13 workstream cases pass; `scripts/check.sh --full` and `promote-check R0020` pass with all three prototypes and the repo migrated (346 specs); the permanent guard spec passes once the three old specs are updated; and 13 + 19 + 11 + 19 planted mistakes (per issue's Rules and mutants table) each fail the case written for them. `workstreams R0020` on the migrated tracker prints the RC1 plan. The e2e specs also disable background git maintenance in their fixtures, after intermittent clone failures in back-to-back runs. The residual unknowns are c0041's E3 and E4 (pinned or optional), and c0430's OC1 (a real parallel run).
 
 ## Exit criteria
 - **RC0**: the full gate, every member's `check.sh` and `promote-check`, as generated.
@@ -66,7 +66,7 @@ Every issue was prototyped in prep (stacked: c0420, then c0041, then c0440, then
 
 ## Risks & rollback
 - **Risk: process weight.** Every capture and prep now costs a PR and a CI run. Accepted by the user; the landing procedure is one documented sequence, and merging is the agent's job.
-- **Risk: a session's project memory is keyed by its directory.** A session launched in `.worktree/<id>` may not see the memory of sessions started in the main checkout (c0440 E3 and OC1 check it). The repo's own instructions, skills and hooks are in the worktree and apply.
+- **Memory and instructions in a nested worktree** were checked in prep (c0440 E3): a session started in `.worktree/<id>` uses the main project's memory directory, and loads the worktree's own `CLAUDE.md` and `AGENTS.md` only, so the instructions follow the branch.
 - **Risk: an agent forgets the rule.** It's a documented rule, not a guard, apart from the CLI refusing `new`, `renumber` and `start` in the main checkout. Mitigation: the prompt's first action and the launch line put the agent in the worktree. A hook that denies other edits there is a candidate follow-up (c0041 Non-goals).
 - **Risk: a worktree under `.worktree/` is committed from a branch created before `.gitignore` had the entry.** `worktree` branches from `origin/main`, which has the entry once this merges, and the fixtures used by the specs carry it.
 - **Risk: the rename.** c0420 touches every tracker document and three specs (two of them promoted and sequestered). Mitigation: the transition policy (nothing in flight); `migrate` is idempotent and is what backlog-only branches run; JC1 requires those specs to change only in paths and fixture `slug:` lines; the old layout gives an error that names the command; the permanent guard spec catches any later literal legacy path in a spec.
