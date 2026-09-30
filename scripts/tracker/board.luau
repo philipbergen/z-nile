@@ -108,7 +108,9 @@ local function scan(
 ): { { id: string, state: string, front: { [string]: string }, body: string } }
 	local found = {}
 	local base = `{root}/{kind}`
-	local isId = if kind == "rafts" then store.isRaftId else store.isIssueId
+	local function isId(name: string): boolean
+		return if kind == "rafts" then store.isRaftId(name) else store.isIssueId(name)
+	end
 	for _, state in { "backlog", "active", "done" } do
 		local dir = if state == "backlog" then base else `{base}/{state}`
 		if not fs.isDir(dir) then
@@ -117,15 +119,12 @@ local function scan(
 		for _, name in fs.readDir(dir) do
 			local doc = `{dir}/{name}/{name}.md`
 			if isId(name) and fs.isFile(doc) then
-				table.insert(
-					found,
-					{
-						id = name,
-						state = state,
-						front = store.readFront(doc),
-						body = bodyOf(fs.readFile(doc)),
-					}
-				)
+				table.insert(found, {
+					id = name,
+					state = state,
+					front = store.readFront(doc),
+					body = bodyOf(fs.readFile(doc)),
+				})
 			end
 		end
 	end
@@ -176,7 +175,7 @@ function board.collect(root: string?): Model
 	end
 
 	local members: { [string]: { string } } = {}
-	local loose: { [Tab]: { string } } = { done = {}, active = {}, waiting = {} }
+	local loose: { [string]: { string } } = { done = {}, active = {}, waiting = {} }
 	for _, issue in issues do
 		if issue.raft then
 			members[issue.raft] = members[issue.raft] or {}
@@ -212,7 +211,7 @@ function board.collect(root: string?): Model
 	end
 
 	-- dependencies: raft -> raft through member issues, and raft -> raftless issue (blocks, never a raft dependency)
-	local noRaftDependents: { [Tab]: { [string]: boolean } } = { done = {}, active = {}, waiting = {} }
+	local noRaftDependents: { [string]: { [string]: boolean } } = { done = {}, active = {}, waiting = {} }
 	for _, raft in rafts do
 		local deps: { [string]: boolean } = {}
 		local blockers: { [string]: boolean } = {}
@@ -268,7 +267,7 @@ function board.collect(root: string?): Model
 			home[id] = raft.id
 		end
 	end
-	for _, tab in TAB_ORDER do
+	for _, tab: Tab in TAB_ORDER do
 		if #loose[tab] == 0 then
 			continue
 		end
@@ -307,6 +306,79 @@ function board.collect(root: string?): Model
 		home = home,
 		initialTab = if #tabs.active > 0 then "active" else "waiting",
 	}
+end
+
+local ESCAPES: { [string]: string } = {
+	['"'] = '\\"',
+	["\\"] = "\\\\",
+	["\n"] = "\\n",
+	["\r"] = "\\r",
+	["\t"] = "\\t",
+	["<"] = "\\u003c",
+}
+
+local function encodeString(s: string): string
+	local escaped = string.gsub(s, '[%c"\\<]', function(c: string): string
+		return ESCAPES[c] or string.format("\\u%04x", string.byte(c))
+	end)
+	return `"{escaped}"`
+end
+
+-- Deterministic JSON: keys sorted, empty tables as [], and < escaped so data can never end a <script>.
+function board.encode(v: any): string
+	local kind = typeof(v)
+	if kind == "string" then
+		return encodeString(v)
+	elseif kind == "boolean" then
+		return if v then "true" else "false"
+	elseif kind == "number" then
+		return tostring(v)
+	elseif kind ~= "table" then
+		error(`board.encode cannot write a {kind}`, 0)
+	end
+	local parts: { string } = {}
+	if next(v) == nil then
+		return "[]"
+	elseif #v > 0 then
+		for _, item in v do
+			table.insert(parts, board.encode(item))
+		end
+		return `[{table.concat(parts, ",")}]`
+	end
+	local keys: { string } = {}
+	for k in v do
+		table.insert(keys, k)
+	end
+	table.sort(keys)
+	for _, k in keys do
+		table.insert(parts, `{encodeString(k)}:{board.encode(v[k])}`)
+	end
+	return `\{{table.concat(parts, ",")}}`
+end
+
+-- The page: the template with marked and the model in place of its two placeholders. Assembled from pieces,
+-- never with gsub, so `%` or a placeholder-looking string in marked or the data can't be misread.
+function board.render(m: Model, markedJs: string): string
+	local template = fs.readFile(board.TEMPLATE_PATH)
+	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
+	local dataAt, dataEnd = string.find(template, "{{DATA}}", 1, true)
+	if not (markedAt and markedEnd and dataAt and dataEnd and markedEnd < dataAt) then
+		error(board.TEMPLATE_PATH .. " needs the MARKED and then the DATA placeholder, once each", 0)
+	end
+	return table.concat({
+		string.sub(template, 1, markedAt - 1),
+		board.inlineMarked(markedJs),
+		string.sub(template, markedEnd + 1, dataAt - 1),
+		board.encode(m),
+		string.sub(template, dataEnd + 1),
+	})
+end
+
+-- The page for the tracker under root (default: the real one), from the pinned marked.
+function board.build(root: string?): string
+	local markedJs = fs.readFile(board.MARKED_PATH)
+	board.checkMarked(markedJs)
+	return board.render(board.collect(root), markedJs)
 end
 
 return board
