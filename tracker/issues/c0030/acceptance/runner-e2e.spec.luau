@@ -35,7 +35,9 @@ local function serve(): (number, { string }, () -> ())
 				end
 				local n = string.match(req.path, "^/cloud/v2/tasks/(%d+)$")
 				if req.method == "GET" and n then
-					local value = if string.find(scriptsByTask[n] or "", "PASS-ME", 1, true) then "PASS" else "nope"
+					local value = if string.find(scriptsByTask[n] or "", "PASS-ME", 1, true)
+						then "PASS"
+						else "nope"
 					return {
 						status = 200,
 						body = serde.encode(

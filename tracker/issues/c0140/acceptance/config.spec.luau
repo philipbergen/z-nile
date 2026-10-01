@@ -45,34 +45,39 @@ return t.spec("c0140 OpenCloud.configFromEnv", function(it)
 		end
 	end)
 
-	it("a base override is accepted only for a loopback address, so the key can't be sent elsewhere", function()
-		for _, ok in { "http://127.0.0.1:8080", "http://localhost:1" } do
-			local cfg = OpenCloud.configFromEnv(with({ OPENCLOUD_BASE = ok }))
-			t.expect((cfg :: OpenCloud.Config).base).toBe(ok)
+	it(
+		"a base override is accepted only for a loopback address, so the key can't be sent elsewhere",
+		function()
+			for _, ok in { "http://127.0.0.1:8080", "http://localhost:1" } do
+				local cfg = OpenCloud.configFromEnv(with({ OPENCLOUD_BASE = ok }))
+				t.expect((cfg :: OpenCloud.Config).base).toBe(ok)
+			end
+			for _, bad in
+				{
+					"https://example.com",
+					"http://127.0.0.1.evil.com:80",
+					"http://localhost.evil.com:80",
+					"http://evil.com/?http://127.0.0.1:1",
+					"http://127.0.0.1",
+					"http://127.0.0.1:8080/",
+					"http://10.0.0.1:80",
+				}
+			do
+				t.expect(function()
+					OpenCloud.configFromEnv(with({ OPENCLOUD_BASE = bad }))
+				end).toThrow("loopback")
+			end
+			local plain = OpenCloud.configFromEnv(with({ OPENCLOUD_BASE = "" }))
+			t.expect((plain :: OpenCloud.Config).base).toBe(nil) -- unset or empty: Roblox's own host
+			t.expect((OpenCloud.configFromEnv(FULL) :: OpenCloud.Config).base).toBe(nil)
 		end
-		for _, bad in
-			{
-				"https://example.com",
-				"http://127.0.0.1.evil.com:80",
-				"http://localhost.evil.com:80",
-				"http://evil.com/?http://127.0.0.1:1",
-				"http://127.0.0.1",
-				"http://127.0.0.1:8080/",
-				"http://10.0.0.1:80",
-			}
-		do
-			t.expect(function()
-				OpenCloud.configFromEnv(with({ OPENCLOUD_BASE = bad }))
-			end).toThrow("loopback")
-		end
-		local plain = OpenCloud.configFromEnv(with({ OPENCLOUD_BASE = "" }))
-		t.expect((plain :: OpenCloud.Config).base).toBe(nil) -- unset or empty: Roblox's own host
-		t.expect((OpenCloud.configFromEnv(FULL) :: OpenCloud.Config).base).toBe(nil)
-	end)
+	)
 
 	it("the error does not repeat the key", function()
-		local ok, err =
-			pcall(OpenCloud.configFromEnv, with({ ROBLOX_API_KEY = "TOP-SECRET-KEY", ROBLOX_BETA_PLACE_ID = "x" }))
+		local ok, err = pcall(
+			OpenCloud.configFromEnv,
+			with({ ROBLOX_API_KEY = "TOP-SECRET-KEY", ROBLOX_BETA_PLACE_ID = "x" })
+		)
 		t.expect(ok).toBe(false)
 		t.expect((string.find(tostring(err), "TOP-SECRET-KEY", 1, true))).toBe(nil)
 	end)

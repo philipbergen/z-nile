@@ -18,13 +18,16 @@ local function run(args: { string }, env: { [string]: string })
 end
 
 return t.spec("c0030 scripts/runtime-test", function(it)
-	it("needs a version number: usage and exit 2 without one, or with one that isn't a whole number >= 1", function()
-		for _, args in { {}, { "abc" }, { "0" }, { "-3" }, { "1.5" } } do
-			local r = run(args, NONE)
-			t.expect(r.code).toBe(2)
-			t.expect(string.find(r.stdout, "usage", 1, true) ~= nil).toBe(true)
+	it(
+		"needs a version number: usage and exit 2 without one, or with one that isn't a whole number >= 1",
+		function()
+			for _, args in { {}, { "abc" }, { "0" }, { "-3" }, { "1.5" } } do
+				local r = run(args, NONE)
+				t.expect(r.code).toBe(2)
+				t.expect(string.find(r.stdout, "usage", 1, true) ~= nil).toBe(true)
+			end
 		end
-	end)
+	)
 
 	it("not configured: says so with a warning and succeeds", function()
 		local r = run({ "5" }, NONE)

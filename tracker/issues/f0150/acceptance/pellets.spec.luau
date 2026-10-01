@@ -104,13 +104,16 @@ return t.spec("f0150 Pellets", function(it)
 		t.expect(Pellets.remaining(b)).toBe(3)
 	end)
 
-	it("points are 10 and 50, and eating stops the player for 1 and 3 frames of the arcade's 60 fps", function()
-		t.expect(Pellets.POINTS.pellet).toBe(10)
-		t.expect(Pellets.POINTS.power).toBe(50)
-		t.expect(Pellets.STALL_FRAMES.pellet).toBe(1)
-		t.expect(Pellets.STALL_FRAMES.power).toBe(3)
-		t.expect(Pellets.ARCADE_FPS).toBe(60)
-	end)
+	it(
+		"points are 10 and 50, and eating stops the player for 1 and 3 frames of the arcade's 60 fps",
+		function()
+			t.expect(Pellets.POINTS.pellet).toBe(10)
+			t.expect(Pellets.POINTS.power).toBe(50)
+			t.expect(Pellets.STALL_FRAMES.pellet).toBe(1)
+			t.expect(Pellets.STALL_FRAMES.power).toBe(3)
+			t.expect(Pellets.ARCADE_FPS).toBe(60)
+		end
+	)
 
 	it("stallUnits is the distance the pause costs at the player's speed", function()
 		-- at 30 units a tick and 30 ticks a second, 1/60 s is 15 units and 3/60 s is 45

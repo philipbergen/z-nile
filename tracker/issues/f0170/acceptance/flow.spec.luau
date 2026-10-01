@@ -100,32 +100,35 @@ return t.spec("f0170 play flow through Session", function(it)
 		t.expect(sim.state(trace, 62).player.x).toBe(12.5)
 	end)
 
-	it("a death freezes the player, then the next attempt starts at the spawn with a fresh countdown", function()
-		local trace = sim.run(model(RULES), {
-			seed = 1,
-			ticks = 200,
-			script = { sim.intent(80, "Kill") },
-		})
-		-- walking since time 60; at tick 80 the player is 5 tiles along
-		t.expect(sim.state(trace, 80).player.x).toBe(8)
-		t.expect(sim.state(trace, 81).play.phase).toBe("dying")
-		t.expect(sim.state(trace, 81).play.lives).toBe(2)
-		for tk = 81, 124 do
-			t.expect(sim.state(trace, tk).player.x).toBe(8) -- frozen while dying
+	it(
+		"a death freezes the player, then the next attempt starts at the spawn with a fresh countdown",
+		function()
+			local trace = sim.run(model(RULES), {
+				seed = 1,
+				ticks = 200,
+				script = { sim.intent(80, "Kill") },
+			})
+			-- walking since time 60; at tick 80 the player is 5 tiles along
+			t.expect(sim.state(trace, 80).player.x).toBe(8)
+			t.expect(sim.state(trace, 81).play.phase).toBe("dying")
+			t.expect(sim.state(trace, 81).play.lives).toBe(2)
+			for tk = 81, 124 do
+				t.expect(sim.state(trace, tk).player.x).toBe(8) -- frozen while dying
+			end
+			-- 45 ticks of dying from the kill at 80, then back at the spawn, ready again for 60 ticks
+			t.expect(sim.state(trace, 125).play.phase).toBe("ready")
+			t.expect(sim.state(trace, 125).player.x).toBe(13)
+			t.expect(sim.state(trace, 125).player.heading).toBe("W")
+			t.expect(sim.state(trace, 125).play.timer).toBe(60)
+			t.expect(sim.state(trace, 184).play.phase).toBe("ready")
+			t.expect(sim.state(trace, 185).play.phase).toBe("playing")
+			local lost = sim.events(trace, "LifeLost")
+			t.expect(#lost).toBe(1)
+			t.expect(lost[1].tick).toBe(81)
+			t.expect(lost[1].event.lives).toBe(2)
+			t.expect(lost[1].event.player).toBe("p")
 		end
-		-- 45 ticks of dying from the kill at 80, then back at the spawn, ready again for 60 ticks
-		t.expect(sim.state(trace, 125).play.phase).toBe("ready")
-		t.expect(sim.state(trace, 125).player.x).toBe(13)
-		t.expect(sim.state(trace, 125).player.heading).toBe("W")
-		t.expect(sim.state(trace, 125).play.timer).toBe(60)
-		t.expect(sim.state(trace, 184).play.phase).toBe("ready")
-		t.expect(sim.state(trace, 185).play.phase).toBe("playing")
-		local lost = sim.events(trace, "LifeLost")
-		t.expect(#lost).toBe(1)
-		t.expect(lost[1].tick).toBe(81)
-		t.expect(lost[1].event.lives).toBe(2)
-		t.expect(lost[1].event.player).toBe("p")
-	end)
+	)
 
 	it("the respawn is a teleport: the snapshot's jumpTick marks it", function()
 		local trace = sim.run(model(RULES), {

@@ -111,15 +111,20 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		)
 	end)
 
-	it("the workflow's triggers and the gate job are unchanged, and nothing runs on pull_request_target", function()
-		local on: any = wf["on"]
-		t.expect(on.push).toEqual({ branches = { "main" } })
-		t.expect(on.pull_request).toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
-		t.expect(on.workflow_dispatch ~= nil).toBe(true)
-		t.expect(on.pull_request_target).toBe(nil)
-		t.expect(gate["if"]).toBe("github.event_name != 'pull_request' || github.event.pull_request.draft == false")
-		t.expect(gate["runs-on"]).toBe("ubuntu-latest")
-	end)
+	it(
+		"the workflow's triggers and the gate job are unchanged, and nothing runs on pull_request_target",
+		function()
+			local on: any = wf["on"]
+			t.expect(on.push).toEqual({ branches = { "main" } })
+			t.expect(on.pull_request)
+				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
+			t.expect(on.workflow_dispatch ~= nil).toBe(true)
+			t.expect(on.pull_request_target).toBe(nil)
+			t.expect(gate["if"])
+				.toBe("github.event_name != 'pull_request' || github.event.pull_request.draft == false")
+			t.expect(gate["runs-on"]).toBe("ubuntu-latest")
+		end
+	)
 
 	it("publishes one at a time, never aborting a publish in flight", function()
 		t.expect(beta.concurrency).toEqual({ group = "beta-deploy", ["cancel-in-progress"] = false })
@@ -160,30 +165,36 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		t.expect(has(text, "set -x")).toBe(false)
 	end)
 
-	it("installs the tools without running the gate again, before it deploys, with no Roblox secret", function()
-		local setup, setupAt = find(beta, function(s: any)
-			return has(s.run, "scripts/setup.sh")
-		end)
-		local _, deployAt = find(beta, function(s: any)
-			return s.id == "deploy"
-		end)
-		t.expect(setup.run).toBe("scripts/setup.sh --tools")
-		t.expect(setupAt < deployAt).toBe(true)
-		t.expect(beta.steps[1].uses).toBe("actions/checkout@v4")
-	end)
+	it(
+		"installs the tools without running the gate again, before it deploys, with no Roblox secret",
+		function()
+			local setup, setupAt = find(beta, function(s: any)
+				return has(s.run, "scripts/setup.sh")
+			end)
+			local _, deployAt = find(beta, function(s: any)
+				return s.id == "deploy"
+			end)
+			t.expect(setup.run).toBe("scripts/setup.sh --tools")
+			t.expect(setupAt < deployAt).toBe(true)
+			t.expect(beta.steps[1].uses).toBe("actions/checkout@v4")
+		end
+	)
 
-	it("comments the published version after the deploy, only when something was published, in place", function()
-		local comment, commentAt = find(beta, function(s: any)
-			return has(s.run, "gh pr comment")
-		end)
-		local _, deployAt = find(beta, function(s: any)
-			return s.id == "deploy"
-		end)
-		t.expect(commentAt > deployAt).toBe(true)
-		t.expect(comment["if"]).toBe("steps.deploy.outputs.version != ''")
-		t.expect(has(comment.run, "--edit-last --create-if-none")).toBe(true)
-		t.expect(comment.env.VERSION).toBe("${{ steps.deploy.outputs.version }}")
-	end)
+	it(
+		"comments the published version after the deploy, only when something was published, in place",
+		function()
+			local comment, commentAt = find(beta, function(s: any)
+				return has(s.run, "gh pr comment")
+			end)
+			local _, deployAt = find(beta, function(s: any)
+				return s.id == "deploy"
+			end)
+			t.expect(commentAt > deployAt).toBe(true)
+			t.expect(comment["if"]).toBe("steps.deploy.outputs.version != ''")
+			t.expect(has(comment.run, "--edit-last --create-if-none")).toBe(true)
+			t.expect(comment.env.VERSION).toBe("${{ steps.deploy.outputs.version }}")
+		end
+	)
 
 	it("never lets a `${{ }}` expression or untrusted PR text into a command line", function()
 		for _, job in { gate, beta } do
@@ -193,7 +204,9 @@ return t.spec("c0140 beta job in check.yml", function(it)
 				end
 			end
 		end
-		for _, bad in { "pull_request.title", "pull_request.body", "head_ref", "head.ref", "github.event.comment" } do
+		for _, bad in
+			{ "pull_request.title", "pull_request.body", "head_ref", "head.ref", "github.event.comment" }
+		do
 			t.expect(has(text, bad)).toBe(false)
 		end
 	end)

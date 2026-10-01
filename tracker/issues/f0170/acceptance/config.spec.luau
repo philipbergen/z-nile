@@ -31,7 +31,11 @@ return t.spec("f0170 session configs", function(it)
 	end)
 
 	it("a config without a play record means no pauses, however the rest is set", function()
-		local s = Session.new(CORRIDOR, 1, { movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 2 })
+		local s = Session.new(
+			CORRIDOR,
+			1,
+			{ movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 2 }
+		)
 		Session.join(s, "p")
 		t.expect(Session.frame(s, "p").play.phase).toBe("playing")
 	end)
@@ -40,12 +44,24 @@ return t.spec("f0170 session configs", function(it)
 		"level speeds scale the base speed, so the base may not be so fast that a later level would cross two tiles",
 		function()
 			-- 96 * 1.25 = 120 units is one whole tile per tick: the most a step may cover
-			Session.new(CORRIDOR, 1, { movement = { speed = 96, turnBufferTicks = 24 }, maxIntentsPerTick = 4 })
+			Session.new(
+				CORRIDOR,
+				1,
+				{ movement = { speed = 96, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
+			)
 			t.expect(function()
-				Session.new(CORRIDOR, 1, { movement = { speed = 97, turnBufferTicks = 24 }, maxIntentsPerTick = 4 })
+				Session.new(
+					CORRIDOR,
+					1,
+					{ movement = { speed = 97, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
+				)
 			end).toThrow("too fast")
 			t.expect(function()
-				Session.new(CORRIDOR, 1, { movement = { speed = 120, turnBufferTicks = 24 }, maxIntentsPerTick = 4 })
+				Session.new(
+					CORRIDOR,
+					1,
+					{ movement = { speed = 120, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
+				)
 			end).toThrow("level")
 		end
 	)

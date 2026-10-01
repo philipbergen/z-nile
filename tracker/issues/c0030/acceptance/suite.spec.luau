@@ -63,27 +63,30 @@ return t.spec("c0030 OpenCloud.runSuite", function(it)
 		t.expect(suite.lines).toEqual({ "PASS a.luau" })
 	end)
 
-	it("anything else is a failure that names the script: other values, no value, errors, cancellations", function()
-		local cases: { { responses: { OpenCloud.Response }, expect: string } } = {
-			{ responses = done("nope"), expect = "returned nope" },
-			{ responses = done(false), expect = "returned false" },
-			{ responses = { created(), task("COMPLETE") }, expect = "returned nil" },
-			{
-				responses = { created(), task("FAILED", { error = { message = "boom" } }) },
-				expect = "boom",
-			},
-			{ responses = { created(), task("CANCELLED") }, expect = "CANCELLED" },
-			{ responses = { respond(403, "denied") }, expect = "403" },
-		}
-		for _, c in cases do
-			local cfg = suiteFake({ c.responses })
-			local suite = OpenCloud.runSuite(cfg, 5, { { name = "x.luau", source = "return 1" } })
-			t.expect(suite.passed).toBe(0)
-			t.expect(suite.failed).toBe(1)
-			t.expect(string.find(suite.lines[1], "FAIL x.luau", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(suite.lines[1], c.expect, 1, true) ~= nil).toBe(true)
+	it(
+		"anything else is a failure that names the script: other values, no value, errors, cancellations",
+		function()
+			local cases: { { responses: { OpenCloud.Response }, expect: string } } = {
+				{ responses = done("nope"), expect = "returned nope" },
+				{ responses = done(false), expect = "returned false" },
+				{ responses = { created(), task("COMPLETE") }, expect = "returned nil" },
+				{
+					responses = { created(), task("FAILED", { error = { message = "boom" } }) },
+					expect = "boom",
+				},
+				{ responses = { created(), task("CANCELLED") }, expect = "CANCELLED" },
+				{ responses = { respond(403, "denied") }, expect = "403" },
+			}
+			for _, c in cases do
+				local cfg = suiteFake({ c.responses })
+				local suite = OpenCloud.runSuite(cfg, 5, { { name = "x.luau", source = "return 1" } })
+				t.expect(suite.passed).toBe(0)
+				t.expect(suite.failed).toBe(1)
+				t.expect(string.find(suite.lines[1], "FAIL x.luau", 1, true) ~= nil).toBe(true)
+				t.expect(string.find(suite.lines[1], c.expect, 1, true) ~= nil).toBe(true)
+			end
 		end
-	end)
+	)
 
 	it("one failure does not stop the others, and the counts add up", function()
 		local cfg = suiteFake({ done("PASS"), done("bad"), done("PASS") })

@@ -132,30 +132,36 @@ return t.spec("f0150 eating slowdown", function(it)
 		end
 	end)
 
-	it("a pause still owed when the player dies is forgotten: the next attempt starts at full speed", function()
-		local rules: Session.Config = {
-			movement = { speed = 30, turnBufferTicks = 24 },
-			maxIntentsPerTick = 4,
-			eatSlowdown = true,
-			play = {
-				lives = 3,
-				extraLifeScore = 0,
-				readyTicks = 2,
-				dyingTicks = 2,
-				levelClearTicks = 3,
-				tickRate = 30,
-			},
-		}
-		-- the first pellet is eaten at tick 4, which owes 15 units; the player is caught at tick 4
-		local trace = sim.run(modelWith(CORRIDOR, rules), { seed = 1, ticks = 14, script = { sim.intent(4, "Kill") } })
-		t.expect(sim.events(trace, "PelletEaten")[1].tick).toBe(4)
-		t.expect(#sim.events(trace, "LifeLost")).toBe(1)
-		-- back at the spawn, in play again from tick 8: the first step covers the full 30 units
-		t.expect(sim.state(trace, 8).player.x).toBe(6)
-		t.expect(sim.state(trace, 8).play.phase).toBe("playing")
-		t.expect(sim.state(trace, 9).player.x).toBe(x(30))
-		t.expect(sim.state(trace, 10).player.x).toBe(x(60))
-	end)
+	it(
+		"a pause still owed when the player dies is forgotten: the next attempt starts at full speed",
+		function()
+			local rules: Session.Config = {
+				movement = { speed = 30, turnBufferTicks = 24 },
+				maxIntentsPerTick = 4,
+				eatSlowdown = true,
+				play = {
+					lives = 3,
+					extraLifeScore = 0,
+					readyTicks = 2,
+					dyingTicks = 2,
+					levelClearTicks = 3,
+					tickRate = 30,
+				},
+			}
+			-- the first pellet is eaten at tick 4, which owes 15 units; the player is caught at tick 4
+			local trace = sim.run(
+				modelWith(CORRIDOR, rules),
+				{ seed = 1, ticks = 14, script = { sim.intent(4, "Kill") } }
+			)
+			t.expect(sim.events(trace, "PelletEaten")[1].tick).toBe(4)
+			t.expect(#sim.events(trace, "LifeLost")).toBe(1)
+			-- back at the spawn, in play again from tick 8: the first step covers the full 30 units
+			t.expect(sim.state(trace, 8).player.x).toBe(6)
+			t.expect(sim.state(trace, 8).play.phase).toBe("playing")
+			t.expect(sim.state(trace, 9).player.x).toBe(x(30))
+			t.expect(sim.state(trace, 10).player.x).toBe(x(60))
+		end
+	)
 
 	it("a new level starts with nothing owed: the first step covers the full level speed", function()
 		local small = Maze.parse({ "#####", "#..P#", "#####" }, "small")
