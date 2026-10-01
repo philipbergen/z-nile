@@ -10,7 +10,7 @@ This file changes only through a `ticket-prep` design, never during execution un
 |---|---|
 | Maze | The tile grid: built-in layouts, parsing and validation, tile kinds, passability per agent, neighbours with wrap, heading conventions (R0040, f0100) |
 | Movement | Rail movement of one player through a Maze: sub-tile position, buffered turns, stops, Back, tunnels, tile entry (R0040, f0110) |
-| Levels | The one table of per-level parameters (player speed factor, frightened time, flashes), classic values; later raft d adds ghost columns (R0090, f0170) |
+| Levels | The one table of per-level parameters (player speed factor, frightened speed factor, frightened time, flashes), classic values; later raft d adds ghost columns (R0090, f0170) |
 | Pellets | The pellets of one maze instance: what is left, eating, reset, points and the eating-pause distance (R0090, f0150) |
 | Game | One player's run as a state machine: ready, playing, dying, level clear, game over; lives, level, score, extra life, the frightened counter (R0090, f0170; f0160) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0040, f0120) |

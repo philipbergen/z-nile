@@ -66,6 +66,22 @@ return t.spec("f0170 session configs", function(it)
 		end
 	)
 
+	it(
+		"a play config whose tick rate is not the session's is refused: the frightened time would be rescaled",
+		function()
+			local movement = { speed = 30, turnBufferTicks = 24 }
+			local ok: Game.Config = table.clone(Game.CLASSIC_CONFIG)
+			Session.new(CORRIDOR, 1, { movement = movement, maxIntentsPerTick = 4, play = ok }) -- 30: fine
+			for _, rate in { 60, 29, 31, 1 } do
+				local off: Game.Config = table.clone(Game.CLASSIC_CONFIG)
+				off.tickRate = rate
+				t.expect(function()
+					Session.new(CORRIDOR, 1, { movement = movement, maxIntentsPerTick = 4, play = off })
+				end).toThrow("tickRate")
+			end
+		end
+	)
+
 	it("bad rules are refused when a player joins", function()
 		local bad: any = table.clone(Game.CLASSIC_CONFIG)
 		bad.lives = 0

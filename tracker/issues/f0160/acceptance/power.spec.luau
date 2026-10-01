@@ -206,6 +206,20 @@ return t.spec("f0160 power pellets", function(it)
 		end
 	)
 
+	it("a power pellet outside play does nothing: no event and no period", function()
+		local g = Game.new(Game.CLASSIC_CONFIG) -- in the ready countdown
+		t.expect(#Game.power(g)).toBe(0)
+		t.expect(g.frightened).toBe(0)
+		for _ = 1, 60 do
+			Game.step(g)
+		end
+		t.expect(g.phase).toBe("playing")
+		Game.died(g)
+		t.expect(g.phase).toBe("dying")
+		t.expect(#Game.power(g)).toBe(0)
+		t.expect(g.frightened).toBe(0)
+	end)
+
 	it("the period only runs down while the run is in play", function()
 		local g = Game.new({
 			lives = 3,
