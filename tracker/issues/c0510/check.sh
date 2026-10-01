@@ -61,11 +61,13 @@ usage_lists_new_commands() {
 check "AC7: the usage text lists status, sync, --fetch and --desc" usage_lists_new_commands
 
 replacements_applied() {
-  # the one promoted spec whose fixtures cannot fetch from a fake origin, rewritten in prep (review 001 F1)
-  local R="$HERE/replacements" # moves with this directory when `done` files the issue
-  cmp -s "$R/c0041-worktree.spec.luau" tests/acceptance/c0041/worktree.spec.luau || { echo "tests/acceptance/c0041/worktree.spec.luau is not the prepared replacement"; return 1; }
-  grep -q 'PICKMAN_PUBLISH' tests/acceptance/c0041/worktree.spec.luau
+  # the promoted specs this issue deliberately changes, rewritten in prep (review 001 F1, review 003 F2)
+  local R="$HERE/replacements" f
+  for f in c0041/worktree c0140/workflow; do
+    cmp -s "$R/${f%%/*}-${f##*/}.spec.luau" "tests/acceptance/$f.spec.luau" || { echo "tests/acceptance/$f.spec.luau is not the prepared replacement"; return 1; }
+  done
+  grep -q 'PICKMAN_PUBLISH' tests/acceptance/c0041/worktree.spec.luau && grep -q 'paths-ignore' tests/acceptance/c0140/workflow.spec.luau
 }
-check "AC8: the c0041 worktree spec is exactly the prepared replacement (it sets PICKMAN_PUBLISH=0 for its fixtures)" replacements_applied
+check "AC8: the c0041 and c0140 specs are exactly the prepared replacements (PICKMAN_PUBLISH=0 in c0041's fixtures, paths-ignore in c0140's trigger)" replacements_applied
 
 finish

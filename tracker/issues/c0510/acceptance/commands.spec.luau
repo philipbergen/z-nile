@@ -15,8 +15,18 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 local base = `{root}/.cache/c0510-commands`
 local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 
+-- git never looks for a repository above .cache: a fixture that loses its own .git fails instead of
+-- falling through to the real repository (the incident c0640 and R0200 describe)
+local function fenced(env: { [string]: string }?): { [string]: string }
+	local out = { GIT_CEILING_DIRECTORIES = `{root}/.cache` }
+	for k, v in env or {} do
+		out[k] = v
+	end
+	return out
+end
+
 local function run(cwd: string, cmd: string, args: { string }, env: { [string]: string }?): Result
-	return process.exec(cmd, args, { cwd = cwd, env = env })
+	return process.exec(cmd, args, { cwd = cwd, env = fenced(env) })
 end
 local function git(cwd: string, args: { string }): string
 	local r = run(cwd, "git", args)
@@ -140,6 +150,17 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 		t.expect(trOk(cap, { "new", "issue", "c", "beta" })).toBe("tracker/issues/c0210/c0210.md")
 	end)
 
+	it("stamps from separate processes differ, so identical moves conflict in git", function()
+		local function stampOf(path: string): string
+			return string.match(onOrigin(path) or "", "\nstatus: (%a+%-%a+%-%a+%-%a+)\n") :: string
+		end
+		local first, second =
+			stampOf("tracker/issues/c0010/c0010.md"), stampOf("tracker/issues/c0210/c0210.md")
+		t.expect(first ~= nil and second ~= nil).toBe(true)
+		t.expect(first == second).toBe(false)
+		t.expect(string.match(first, "^new%-") ~= nil).toBe(true)
+	end)
+
 	it(
 		"an id taken by another terminal during the push is never overwritten: the next one is used",
 		function()
@@ -210,11 +231,11 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 	end)
 
 	it("a move is checked against origin, not the local file; invalid moves change nothing", function()
-		-- locally c0240 says prepared, origin says preparing: it cannot become active yet
+		-- locally c0240 says prepared (prepared>preparing would be legal), origin says preparing (it would not)
 		local before = git(origin, { "rev-parse", "main" })
-		local r = tr(cap, { "status", "c0240", "active" })
+		local r = tr(cap, { "status", "c0240", "preparing" })
 		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "preparing")).toBe(true)
+		t.expect(has(r.stderr, "is preparing on origin/main")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		local bad = tr(cap, { "status", "c0240", "done" })
 		t.expect(bad.ok).toBe(false)
@@ -403,11 +424,16 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 			process.exec("cp", { "-R", `{root}/scripts`, `{lost}/scripts` })
 			process.exec("cp", { "-R", `{root}/tracker/templates`, `{lost}/tracker/templates` })
 			local before = git(`{outer}/origin.git`, { "rev-parse", "main" })
-			for _, args in { { "new", "issue", "c", "x" }, { "status" }, { "sync" } } do
+			for _, args in { { "new", "issue", "c", "x" }, { "status" }, { "sync" }, { "worktree", "zz" } } do
 				local r = tr(lost, args)
 				t.expect(r.ok).toBe(false)
 				t.expect(has(r.stderr, "repository root")).toBe(true)
 			end
+			-- turning publishing off does not switch the guard off
+			local offline = tr(lost, { "new", "issue", "c", "y" }, { PICKMAN_PUBLISH = "0" })
+			t.expect(offline.ok).toBe(false)
+			t.expect(has(offline.stderr, "repository root")).toBe(true)
+			t.expect(has(git(`{outer}/repo`, { "worktree", "list" }), "zz")).toBe(false)
 			t.expect(git(`{outer}/origin.git`, { "rev-parse", "main" })).toBe(before)
 			t.expect(fs.isDir(`{lost}/tracker/issues`)).toBe(false)
 		end
@@ -428,32 +454,46 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 		end
 	)
 
-	it("a claim made by this terminal can be resumed; one made by another terminal cannot", function()
+	it("a start that dies after its claim is resumed by this terminal and refused to every other", function()
 		-- the earlier worktree and branch go away: the raft is prepared on origin again
 		git(main, { "worktree", "remove", "--force", `{base}/main/.worktree/R0010` })
 		git(main, { "branch", "-D", "R0010-demo" })
 		git(origin, { "branch", "-D", "R0010-demo" })
 		trOk(main, { "sync" })
 		local wt = trOk(main, { "worktree", "resume-r" })
-		-- terminal A publishes the claim by hand (as a start that died right after its push would have)
-		trOk(wt, { "sync" })
-		trOk(wt, { "status", "R0010", "active" })
-		local claim = (onOrigin("tracker/rafts/R0010/R0010.md") :: string):match(
-				"\nstatus: ([^\n]+)\n"
-			) :: string
-		-- without the claim file the claim is somebody else's
-		local other2 = tr(wt, { "start", "R0010" })
+		-- a local commit edits the raft's status line, so merging origin's claim conflicts and start dies after it
+		local doc = `{wt}/tracker/rafts/R0010/R0010.md`
+		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nstatus: [^\n]*", "\nstatus: prepared-zz-zz-zz")))
+		git(wt, { "commit", "-q", "-am", "local edit of the status line" })
+		local died = tr(wt, { "start", "R0010" })
+		t.expect(died.ok).toBe(false)
+		t.expect(has(died.stderr, "merge")).toBe(true)
+		local claim = trim(fs.readFile(`{wt}/.cache/tracker-claim-R0010`))
+		t.expect(has(onOrigin("tracker/rafts/R0010/R0010.md"), `status: {claim}`)).toBe(true)
+		t.expect(fs.isDir(`{wt}/tracker/rafts/active/R0010`)).toBe(false) -- nothing moved locally
+		-- another terminal has no claim file and is refused
+		local wt2 = trOk(main, { "worktree", "resume-r2" })
+		trOk(wt2, { "sync" })
+		local other2 = tr(wt2, { "start", "R0010" })
 		t.expect(other2.ok).toBe(false)
 		t.expect(has(other2.stderr, "active")).toBe(true)
-		fs.writeDir(`{wt}/.cache`)
-		fs.writeFile(`{wt}/.cache/tracker-claim-R0010`, claim)
+		-- this terminal resolves the conflict and runs start again: it continues without publishing anything
+		git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 		local tip = git(origin, { "rev-parse", "main" })
-		-- the worktree is on a different branch name than the raft's, so the raft branch is created here
-		git(wt, { "switch", "-q", "--detach", "origin/main" })
 		local ok = tr(wt, { "start", "R0010" })
+		t.expect(ok.stderr).toBe("")
 		t.expect(ok.ok).toBe(true)
-		t.expect(git(origin, { "rev-parse", "main" })).toBe(tip) -- nothing new was published
+		t.expect(git(origin, { "rev-parse", "main" })).toBe(tip)
 		t.expect(fs.isDir(`{wt}/tracker/rafts/active/R0010`)).toBe(true)
+		-- `status <id> active` is not a way to take the lock: only start claims
+		local direct = tr(wt2, { "status", "R0010", "active" })
+		t.expect(direct.ok).toBe(false)
+		t.expect(has(direct.stderr, "only tracker.sh start")).toBe(true)
+		-- giving the claim back ends this worktree's ownership: its claim file goes
+		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-R0010`)).toBe(true)
+		trOk(wt, { "status", "R0010", "prepared" })
+		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-R0010`)).toBe(false)
+		t.expect(trOk(wt, { "status", "R0010" })).toBe("prepared")
 	end)
 
 	it(

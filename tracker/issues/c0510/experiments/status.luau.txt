@@ -83,9 +83,11 @@ function status.derive(state: string, design: string?, inRaft: boolean?): string
 	return if inRaft then "preparing" else "new"
 end
 
--- An item that is `preparing` only by derivation (no stored status) can be claimed by stamping it.
-function status.canClaim(from: string, to: string, stored: boolean): boolean
-	return from == "preparing" and to == "preparing" and not stored
+-- An existing draft raft is `preparing` only by derivation (nothing stored), so it is claimed by
+-- stamping it once. The claim applies to a raft and, through it, its members; `viaRaft` is false for
+-- an issue named on its own, which can never be claimed that way.
+function status.canClaim(from: string, to: string, stored: boolean, viaRaft: boolean): boolean
+	return from == "preparing" and to == "preparing" and not stored and viaRaft
 end
 
 function status.effective(front: { [string]: string }, state: string): string

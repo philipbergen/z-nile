@@ -1,0 +1,157 @@
+diff --git a/.claude/skills/execute-raft/SKILL.md b/.claude/skills/execute-raft/SKILL.md
+index 3647b48..2e11a5b 100644
+--- a/.claude/skills/execute-raft/SKILL.md
++++ b/.claude/skills/execute-raft/SKILL.md
+@@ -11,9 +11,9 @@ Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`, then merg
+ Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
+ 
+ ## Phase 0: Claim (in the first minutes)
+-1. Work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees). It branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
++1. Run `scripts/tracker.sh sync` in the worktree you launched in, or work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees). It branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
+    - **If main is red, stop.** Report it; don't fix main inside this raft.
+-2. `scripts/tracker.sh start R0010`. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
++2. `scripts/tracker.sh start R0010`. It claims the raft and its members on `origin/main` first (refused if another terminal started it); if a later step fails, see the tracker skill, Sync and claim, A failed start. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
+ 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
+    - Write down, for yourself, which files each issue touches.
+ 
+@@ -64,8 +64,7 @@ When the steps below pass, post a PR comment with the RC results.
+ 1. `bash "$(scripts/tracker.sh find R0010)/check.sh"`. Every RC line must PASS.
+ 2. Double-check that `scripts/check.sh --full` passes as well, and that `scripts/tracker.sh promote-check R0010` passes. It dry-runs the move of the acceptance specs into `tests/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
+ 3. **Gate speed**: record the **gate wall time** and the `slowest:` specs from a `scripts/check.sh --full` run in each issue's Verification log. If a stage or spec dominates or the time regressed, fix it or file the chore, per the testing skill's Speed section.
+-4. **Sequestration check**: `git diff <start-commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty.
+-   - The start commit is the one with the subject `tracker: start R0010`.
++4. **Sequestration check**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/` done by `start`). The three-dot form separates what this branch changed from what `main` brought in, so other terminals' new stubs are not false positives.
+ 
+ ## Phase 4: Adversarial code review (a clean reviewer)
+ The PR is the visible record of the work. Push and post a PR comment (`gh pr comment --body-file -`) at each step below, so a human watching sees the review start, its findings, and how they were answered. Never hold review state locally. If a push or `gh` call fails, retry once, then carry on and mention the failure in your next comment; don't block on it. `tracker.sh commit` skips the push when there is no upstream, so check that `git status -sb` shows no `ahead`.
+diff --git a/.claude/skills/make-issue/SKILL.md b/.claude/skills/make-issue/SKILL.md
+index d8cda72..db67214 100644
+--- a/.claude/skills/make-issue/SKILL.md
++++ b/.claude/skills/make-issue/SKILL.md
+@@ -5,7 +5,7 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+ 
+ # Make an issue
+ 
+-0. **Open a capture worktree first**, before anything is created: `cd "$(scripts/tracker.sh worktree capture-<slug>)"` (tracker skill, Worktrees). Everything below runs there, never in the main checkout.
++0. **Open a capture worktree first**, before anything is created: `cd "$(scripts/tracker.sh worktree capture-<slug>)"` (tracker skill, Worktrees). Everything below runs there, never in the main checkout. Then run `scripts/tracker.sh sync`, so you see every item other terminals have created.
+ 1. **Classify the work**:
+    - **feature** (`f`): new player-facing or developer-facing capability.
+    - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
+@@ -15,7 +15,7 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+      - a broken gate script, `setup.sh`, hook or workflow;
+      - tracker CLI bugs.
+      These never count as rework.
+-2. **Create it**: `scripts/tracker.sh new issue <f|d|c> <kebab-slug>`. The slug is 2–5 words describing the outcome.
++2. **Create it**: `scripts/tracker.sh new issue <f|d|c> <kebab-slug> --desc "<one line>"`. The stub, with that line as its Problem, is pushed to `origin/main` at once, so other terminals see the id and the item. The slug is 2–5 words describing the outcome.
+ 3. **Fill in the frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
+ 4. **Fill in only these sections**:
+    - **Problem**: the user's words, sharpened. Who is affected, what happens now, and what should happen.
+diff --git a/.claude/skills/make-prompt/SKILL.md b/.claude/skills/make-prompt/SKILL.md
+index 512a873..ea1f6dc 100644
+--- a/.claude/skills/make-prompt/SKILL.md
++++ b/.claude/skills/make-prompt/SKILL.md
+@@ -10,7 +10,7 @@ description: Produce the self-contained execution prompt for a raft (an issue wi
+    - The raft and every member are `design: ready`.
+    - Every issue has a `check.sh` with at least one `check`.
+    - The acceptance specs exist.
+-   - Run `git pull --ff-only` in the main checkout first, then check that `git status` is clean for `tracker/`: the prep PR has merged and main is current. (Read-only checks only: nothing is edited in the main checkout.)
++   - Run `scripts/tracker.sh sync` in the main checkout first, then check that `git status` is clean for `tracker/` and that `scripts/tracker.sh status <R-id>` prints `prepared`: the prep PR has merged and main is current. (Read-only checks only: nothing is edited in the main checkout.)
+    - Every `depends_on` of a member issue that isn't a member of this raft names an item in `done/` (`scripts/tracker.sh find <id>`), for example the chore that removes a promoted spec the issue overrides. If one isn't, stop and say which.
+    - The executing agent starts from origin/main, so it must see the same files.
+ 3. **Render**: `scripts/tracker.sh prompt <id>`. This fills in `tracker/templates/prompt.md` with the raft and issue documents, the `check.sh` files, the sequestered acceptance specs, the architecture map and the `execute-raft`, `tracker`, `architecture`, `testing` and `review` skills, then pipes the result to `pbcopy`.
+diff --git a/.claude/skills/metrics/SKILL.md b/.claude/skills/metrics/SKILL.md
+index ed9f9da..6c2c07b 100644
+--- a/.claude/skills/metrics/SKILL.md
++++ b/.claude/skills/metrics/SKILL.md
+@@ -5,6 +5,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
+ 
+ # Metrics
+ 
++0. Run `scripts/tracker.sh sync --fetch` first (it only updates `origin/main`).
+ 1. Run `scripts/tracker.sh metrics`. It covers done issues; add `--include-active` for work in progress. It prints:
+    - cost per issue: lines added and removed, and agent-minutes;
+    - totals and minutes per issue, by type;
+diff --git a/.claude/skills/review/SKILL.md b/.claude/skills/review/SKILL.md
+index abce33f..9afd4e2 100644
+--- a/.claude/skills/review/SKILL.md
++++ b/.claude/skills/review/SKILL.md
+@@ -79,10 +79,10 @@ A stream review is a cheap first filter on **one issue's** work, run by a clean
+ - These files are not review rounds: `tracker.sh done` and `metrics` ignore them.
+ 
+ ## Code mode (before the PR is marked ready)
+-Inputs: `git fetch origin main && git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
++Inputs: `scripts/tracker.sh sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
+ A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (execute-raft stop conditions).
+ 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
+-2. **Sequestration**: `git diff <tracker: start commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty. Any change is **high**.
++2. **Sequestration**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/`). Any other change is **high**. The three-dot form shows only what this branch changed, not what `main` brought in.
+ 3. **Weak tests**: tests that assert on internals, lack a negative case, would pass with a stub, or depend on the wall clock or randomness.
+ 4. **Design adherence**: does the code match the Design? Is each deviation recorded with a reason?
+ 5. **Architecture rules** from the skill, including thin adapters and server authority.
+diff --git a/.claude/skills/ticket-prep/SKILL.md b/.claude/skills/ticket-prep/SKILL.md
+index 3192d02..394406c 100644
+--- a/.claude/skills/ticket-prep/SKILL.md
++++ b/.claude/skills/ticket-prep/SKILL.md
+@@ -10,10 +10,10 @@ The goal is a raft that **any strong agent can deliver on the first attempt with
+ ## 1. Form the raft
+ **Work in a prep worktree** for the whole prep (new raft, design, specs, reviews): `cd "$(scripts/tracker.sh worktree prep-<slug>)"`, named by the raft's slug because its id isn't known yet (tracker skill, Worktrees). Design reviews run there too, and their files ride in the prep PR.
+ 
+-- **Candidates**: `scripts/tracker.sh list backlog`. Group issues by **functional adjacency**: they touch the same features or interfaces, or they're only meaningful together.
++- **Sync first**: `scripts/tracker.sh sync` (tracker skill, Sync and claim). **Candidates**: `scripts/tracker.sh status` (what is `new`, and what others have claimed) and `scripts/tracker.sh list backlog`. Group issues by **functional adjacency**: they touch the same features or interfaces, or they're only meaningful together.
+ - **One type per raft.** Never mix feature, defect and chore. A defect found while planning a feature raft goes in its own raft.
+ - **Size**: aim for something that fits in one reviewable PR, roughly under 1,500 changed lines. Split larger groups into sequential rafts.
+-- **Create it**: `scripts/tracker.sh new raft <feature|defect|chore> <slug> <ids…>`. A single issue gets a raft too: add `--single`.
++- **Create it**: `scripts/tracker.sh new raft <feature|defect|chore> <slug> <ids…>`: it claims the issues (status `preparing`) on `origin/main` at once, and refuses any issue another terminal holds. To prep a raft that already exists, claim it with `scripts/tracker.sh status <R-id> preparing`; an issue added during prep is claimed first (`status <id> preparing`), a dropped one released (`status <id> new`). A single issue gets a raft too: add `--single`.
+ - If an issue is missing, create it first with the `make-issue` skill.
+ 
+ ## 2. Design the raft as a whole
+diff --git a/.claude/skills/tracker/SKILL.md b/.claude/skills/tracker/SKILL.md
+index 69c1981..3ba4c19 100644
+--- a/.claude/skills/tracker/SKILL.md
++++ b/.claude/skills/tracker/SKILL.md
+@@ -38,7 +38,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+    - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
+    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
+    - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
+-   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
++   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `status` (without a target status), `sync`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
+ 2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
+ 
+@@ -73,7 +73,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ 
+ ## Landing a change
+ One procedure for every change: a raft, a capture, a prep or an edit.
+-0. **Sync first.** `git fetch origin main && git merge origin/main` in the worktree.
++0. **Sync first.** `scripts/tracker.sh sync` in the worktree (a fetch and a merge of `origin/main`).
+    - If `main` brought the new document layout, run `scripts/tracker.sh migrate` and commit.
+    - A `CONFLICT (add/add)` on a tracker document means two items picked the same number: see Conflicts.
+    - Then run `scripts/tracker.sh list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `scripts/check.sh --full`.
+@@ -130,3 +130,15 @@ The draft PR opened by `start` stays the live log of the raft. Every `tracker.sh
+ - `tracker.sh check <id>`
+ - `tracker.sh prompt <id> [--stdout]`
+ - `tracker.sh metrics [--include-active]`
++
++## Sync and claim
++Tracker state is shared the moment it changes, not when a PR merges, so parallel terminals see each other's work.
++- **Sync first.** Every skill that reads or changes tracker state starts with `scripts/tracker.sh sync` (a merge of `origin/main` in a worktree, a fast-forward in the main checkout). Reviewers and stream agents never merge: they run `scripts/tracker.sh sync --fetch`, which only updates `origin/main`, so the diff they judge does not move.
++- **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `tracker.sh status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `tracker.sh done`, and only `start` claims `active`.
++- **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
++- **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims its members), `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `start`. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `tracker/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, a `check.sh` only when it is created, and an existing document only in its `status:` line. Code, designs, reviews and acceptance specs never ride it. A commit that skips CI for the many tiny pushes is intended: `check.yml` ignores `tracker/**` on `push`, not on `pull_request`.
++- **Claims.** Prep claims with `new raft` (issues must be `new`). An existing draft raft is claimed with `scripts/tracker.sh status <R-id> preparing`, which stamps the raft and its members; an issue added to a raft during prep is claimed first with `status <id> preparing`; one dropped is released with `status <id> new`. `start` refuses a raft unless it and its members are `prepared` on `origin/main`.
++- **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give the claim back with `status <R-id> prepared`. The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
++- **Offline.** `PICKMAN_PUBLISH=0` (or a repository without `origin`) keeps every command local, as it was before. Publishing and every other command that changes a repository first check that git's repository root is the checkout the tracker lives in; read-only commands do not.
++- **Cutover.** Preps that were open before this landed exist only on their branches. After it lands each runs `tracker.sh sync`, claims its members (`status <id> preparing`), and checks its raft id against `tracker.sh status`, renumbering on a clash.
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index 1a4562c..ba93d47 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -4,6 +4,7 @@ name: check
+ on:
+   push:
+     branches: [main]
++    paths-ignore: ['tracker/**'] # tracker state is pushed straight to main in tiny commits (c0510)
+   pull_request:
+     types: [opened, synchronize, reopened, ready_for_review]
+   workflow_dispatch: {}

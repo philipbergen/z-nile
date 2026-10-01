@@ -31,20 +31,52 @@ return t.spec("tracker status rules", function(it)
 		end
 	end)
 
-	it(
-		"only preparing>prepared and active>done ride a pull request; every other move is published",
-		function()
-			for _, from in ALL do
-				for _, to in ALL do
-					if ALLOWED[`{from}>{to}`] then
-						local carried = (from == "preparing" and to == "prepared")
-							or (from == "active" and to == "done")
-						t.expect(status.carriedByPr(from, to)).toBe(carried)
-					end
+	it("only preparing>prepared rides a pull request; every other move is published", function()
+		for _, from in ALL do
+			for _, to in ALL do
+				if ALLOWED[`{from}>{to}`] then
+					t.expect(status.carriedByPr(from, to)).toBe(from == "preparing" and to == "prepared")
 				end
 			end
 		end
-	)
+	end)
+
+	it("a stamp is the state plus three words from the list, and parse and phrase read it back", function()
+		local words: { [string]: boolean } = {}
+		local picks = 0
+		for _, state in ALL do
+			local v = status.stamp(state, function(max)
+				picks += 1
+				return (picks * 7) % max + 1
+			end)
+			t.expect(string.match(v, "^" .. state .. "%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
+			t.expect(status.parse(v)).toBe(state)
+			local phrase = status.phrase(v) :: string
+			t.expect(phrase ~= nil).toBe(true)
+			for word in string.gmatch(phrase, "%a+") do
+				words[word] = true
+			end
+		end
+		t.expect(status.phrase("active")).toBe(nil)
+		t.expect(next(words) ~= nil).toBe(true)
+	end)
+
+	it("stamps made from different picks differ, and a pick of 1 is the first word of the list", function()
+		local a = status.stamp("preparing", function()
+			return 1
+		end)
+		local b = status.stamp("preparing", function()
+			return 2
+		end)
+		local c = status.stamp("preparing", function(max)
+			return max
+		end)
+		t.expect(a == b).toBe(false)
+		t.expect(a == c).toBe(false)
+		t.expect(status.parse(a)).toBe("preparing")
+		t.expect(status.parse(c)).toBe("preparing")
+		t.expect(string.match(a, "^preparing%-(%a+)%-%1%-%1$") ~= nil).toBe(true) -- the same pick gives the same word
+	end)
 
 	it("parse accepts the five names and nothing else", function()
 		for _, s in ALL do
@@ -81,11 +113,12 @@ return t.spec("tracker status rules", function(it)
 		t.expect(status.effective({ raft = "R0100", status = "new-aa-bb-cc" }, "backlog")).toBe("new")
 	end)
 
-	it("an existing draft raft is claimed by stamping preparing, once", function()
-		t.expect(status.canClaim("preparing", "preparing", false)).toBe(true)
-		t.expect(status.canClaim("preparing", "preparing", true)).toBe(false) -- already stamped: someone owns it
-		t.expect(status.canClaim("new", "preparing", false)).toBe(false) -- that is an ordinary move
-		t.expect(status.canClaim("prepared", "preparing", false)).toBe(false)
+	it("an existing draft raft is claimed by stamping preparing, once; a lone issue never is", function()
+		t.expect(status.canClaim("preparing", "preparing", false, true)).toBe(true)
+		t.expect(status.canClaim("preparing", "preparing", true, true)).toBe(false) -- already stamped: someone owns it
+		t.expect(status.canClaim("preparing", "preparing", false, false)).toBe(false) -- an issue on its own
+		t.expect(status.canClaim("new", "preparing", false, true)).toBe(false) -- that is an ordinary move
+		t.expect(status.canClaim("prepared", "preparing", false, true)).toBe(false)
 	end)
 
 	it("an explicit status wins over the derived one; an invalid one is ignored", function()

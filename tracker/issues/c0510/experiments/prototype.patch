@@ -1,20 +1,5 @@
-diff --git a/scripts/tracker.sh b/scripts/tracker.sh
-index 1fd87c9..aa8fdf0 100755
---- a/scripts/tracker.sh
-+++ b/scripts/tracker.sh
-@@ -3,6 +3,10 @@
- set -euo pipefail
- cd "$(dirname "$0")/.."
- export PATH="$HOME/.rokit/bin:$PATH"
-+# the repository this script belongs to: the CLI refuses to run if git finds another one (a fixture
-+# whose .git is missing would fall through to an enclosing repository)
-+PICKMAN_ROOT="$(pwd -P)"
-+export PICKMAN_ROOT
- # `launch` is handled here, not in Lune: the command must be exec'd so it gets the terminal, signals and
- # exit status natively (Lune can't forward stdin to a child, and dies on Ctrl-C while the child lives on).
- if [[ ${1:-} == launch ]]; then
 diff --git a/scripts/tracker/main.luau b/scripts/tracker/main.luau
-index ff1c7d1..22da279 100644
+index ec8c85c..f1f8b0f 100644
 --- a/scripts/tracker/main.luau
 +++ b/scripts/tracker/main.luau
 @@ -3,15 +3,19 @@
@@ -38,34 +23,27 @@ index ff1c7d1..22da279 100644
    find <id>                                     print the item's current directory
    list [backlog|active|done]                    list items
    members <R-id>                                print directories of every issue in the raft
-@@ -118,6 +122,115 @@ local function refuseInMainCheckout(what: string)
+@@ -118,6 +122,119 @@ local function refuseInMainCheckout(what: string)
  	end
  end
  
-+-- tracker.sh exports the physical directory it changed into. A fixture whose own `.git` is missing
-+-- would otherwise fall through to an enclosing repository, the real one, and publish to its origin.
++-- tracker.sh changes into the repository root before it starts Lune, so the working directory is the
++-- checkout the tracker belongs to. A fixture whose own `.git` is missing would otherwise fall through to an
++-- enclosing repository, the real one, and change it.
 +local function guardRepoRoot()
-+	local root = process.env.PICKMAN_ROOT
-+	if root == nil or root == "" then
-+		return
-+	end
++	local here = sh.run("pwd", { "-P" })
 +	local top = sh.run("git", { "rev-parse", "--show-toplevel" })
-+	if not top.ok or sh.trim(top.stdout) ~= root then
++	-- no repository at all (a sandbox outside any checkout) cannot fall through to another one
++	if here.ok and top.ok and sh.trim(top.stdout) ~= sh.trim(here.stdout) then
 +		fail(
-+			`refusing to run: git's repository root is "{sh.trim(top.stdout)}", not "{root}" (is .git missing here?)`
++			`refusing to run: git's repository root is "{sh.trim(top.stdout)}", not "{sh.trim(here.stdout)}" (is .git missing here?)`
 +		)
 +	end
 +end
 +
-+-- Commands that only read the tracker (metrics, list, board) run in sandboxes without a .git of their
-+-- own on purpose, so the guard sits where the damage can happen: the publisher and `sync`.
 +local function publishing(): boolean
 +	local v = process.env.PICKMAN_PUBLISH
-+	local on = hasOrigin() and (v == nil or v == "" or v ~= "0")
-+	if on then
-+		guardRepoRoot()
-+	end
-+	return on
++	return hasOrigin() and (v == nil or v == "" or v ~= "0")
 +end
 +
 +local function frontOf(text: string): { [string]: string }
@@ -116,10 +94,21 @@ index ff1c7d1..22da279 100644
 +	end
 +end
 +
++-- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
++-- os.time() plus os.clock() (seconds since boot) gave every process the same stamp.
++local function entropy(): number
++	local r = sh.run("od", { "-An", "-N4", "-tu4", "/dev/urandom" })
++	local n = tonumber(sh.trim(r.stdout))
++	if r.ok and n then
++		return n % 2147483647
++	end
++	return (os.time() * 31 + math.floor((os.clock() % 1) * 1e6)) % 2147483647
++end
++
 +local seeded = false
 +local function stamp(state: string): string
 +	if not seeded then
-+		math.randomseed(os.time() + math.floor(os.clock() * 1e6))
++		math.randomseed(entropy())
 +		seeded = true
 +	end
 +	return statusLib.stamp(state, function(n: number): number
@@ -154,7 +143,7 @@ index ff1c7d1..22da279 100644
  local function activeRaft(): store.Item
  	local rafts = {}
  	for _, r in store.all("raft") do
-@@ -137,7 +250,13 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+@@ -137,7 +254,13 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  	local i = 1
  	while i <= #args do
  		local a = args[i]
@@ -169,7 +158,7 @@ index ff1c7d1..22da279 100644
  			opts[a] = { "true" }
  		elseif string.sub(a, 1, 1) == "-" then
  			opts[a] = opts[a] or {}
-@@ -164,10 +283,63 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -164,10 +287,63 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
  			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
  		end
@@ -234,7 +223,7 @@ index ff1c7d1..22da279 100644
  		local dir = store.dirFor("issue", state, id)
  		fs.writeDir(dir)
  		local vars = {
-@@ -191,6 +363,84 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -191,6 +367,84 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
  			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
  		end
@@ -319,7 +308,7 @@ index ff1c7d1..22da279 100644
  		local members: { store.Item } = {}
  		for i = 4, #pos do
  			local issue = store.get(pos[i])
-@@ -232,6 +482,127 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -232,6 +486,140 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -366,6 +355,11 @@ index ff1c7d1..22da279 100644
 +	if not statusLib.parse(to) then
 +		fail(`unknown status {to} (new, preparing, prepared, active, done)`)
 +	end
++	if to == "active" then
++		fail(
++			"only tracker.sh start claims active: it checks the tree, the designs and the dependencies first"
++		)
++	end
 +	local moved: { { id: string, from: string } } = {}
 +	local carried = false
 +	local r = publish.commit(".", function(paths, read)
@@ -402,7 +396,12 @@ index ff1c7d1..22da279 100644
 +			if carried and t ~= id and cur ~= "preparing" then
 +				return `{t} is {cur} on origin/main: claim it first with tracker.sh status {t} preparing`
 +			end
-+			if not (statusLib.canMove(cur, to) or statusLib.canClaim(cur, to, tf.status ~= nil)) then
++			if
++				not (
++					statusLib.canMove(cur, to)
++					or statusLib.canClaim(cur, to, tf.status ~= nil, store.isRaftId(id))
++				)
++			then
 +				return `{t} is {cur} on origin/main: cannot move to {to}`
 +			end
 +			table.insert(moved, { id = t, from = cur :: string })
@@ -426,13 +425,16 @@ index ff1c7d1..22da279 100644
 +	else
 +		mergeOrigin()
 +	end
++	-- giving a claim back ends this worktree's ownership of it
++	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
++		fs.removeFile(claimFile(id))
++	end
 +end
 +
 +-- `sync` brings origin/main into this checkout (a merge in a worktree, a fast-forward in the main
 +-- checkout). `sync --fetch` only updates origin/main: reviewers and stream agents use it, because
 +-- a merge would add a commit and change the diff they judge.
 +function cmd.sync(_: { string }, opts: { [string]: { string } })
-+	guardRepoRoot()
 +	sh.git({ "fetch", "--quiet", "origin", "main" })
 +	if not opts["--fetch"] then
 +		if sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot() then
@@ -447,7 +449,7 @@ index ff1c7d1..22da279 100644
  function cmd.find(pos: { string })
  	print(store.get(pos[1] or fail("usage: find <id>")).dir)
  end
-@@ -414,8 +785,60 @@ function cmd.start(pos: { string })
+@@ -431,8 +819,60 @@ function cmd.start(pos: { string })
  		end
  	end
  	local branch = raftBranch(raft)
@@ -509,6 +511,29 @@ index ff1c7d1..22da279 100644
  		sh.git({ "switch", "-c", branch })
  	end
  	raft = move(raft, "active")
+@@ -1141,6 +1581,22 @@ if not handler then
+ 	print(USAGE)
+ 	process.exit(if name then 1 else 0)
+ end
++-- Every command that can change a repository checks first that git's root is the checkout the tracker
++-- lives in, whatever PICKMAN_PUBLISH says. Only commands that read the tracker run in `.git`-less
++-- sandboxes on purpose (specs do), so they alone are exempt.
++local READ_ONLY: { [string]: boolean } = {
++	list = true,
++	find = true,
++	members = true,
++	metrics = true,
++	board = true,
++	workstreams = true,
++	["promote-check"] = true,
++	prompt = true,
++}
++if not READ_ONLY[name :: string] then
++	guardRepoRoot()
++end
+ local rest = table.move(args, 2, #args, 1, {})
+ local pos, opts = flags(rest)
+ local ok, err = pcall(handler, pos, opts)
 diff --git a/scripts/tracker/store.luau b/scripts/tracker/store.luau
 index 42992ef..3f7cfe9 100644
 --- a/scripts/tracker/store.luau
