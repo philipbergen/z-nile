@@ -175,6 +175,10 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 			attempt({ "- F1: fixed abc: ok", "- F2: deferred-ish c0020: later", "- F3: fixed abc: ok" }),
 			"F2"
 		)
+		-- an unanswered finding is reported on its own, before any invalid deferral
+		local mixed = attempt({ "- F1: ignored", "- F2: deferred c0999: later", "- F3: fixed abc: ok" })
+		refused(mixed, "F1", "not answered")
+		t.expect((string.find(mixed.stderr, "c0999", 1, true))).toBe(nil)
 	end)
 
 	it("finishes when medium and low findings are deferred", function()
