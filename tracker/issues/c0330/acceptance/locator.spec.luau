@@ -99,15 +99,22 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		t.expect(fs.isFile(marker)).toBe(true) -- without AC_LIST the spec runs
 	end)
 
-	it("tracker.sh check refuses to run with AC_LIST set", function()
-		local r = process.exec(
-			"scripts/tracker.sh",
-			{ "check", "c0330" },
-			{ cwd = root, env = { AC_LIST = "1" } }
-		)
-		t.expect(r.ok).toBe(false)
-		t.expect(string.find(r.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
-		t.expect((string.find(r.stdout, "criteria", 1, true))).toBe(nil)
+	it("tracker.sh check and done refuse to run with AC_LIST set", function()
+		-- Without the guards, `tracker.sh check` of an item whose check.sh runs a spec at the top level
+		-- would run that spec, which would run this one again: refuse to start unless the layers below
+		-- (ac.sh list mode, the spec runner's refusal) are proven, and use an item with no such script.
+		if not (listing and runnerRefuses) then
+			error("AC_LIST list mode is not safe (ac.sh or tests/run): not running tracker.sh check under it")
+		end
+		local env = { AC_LIST = "1" }
+		local checked = process.exec("scripts/tracker.sh", { "check", "c0090" }, { cwd = root, env = env })
+		t.expect(checked.ok).toBe(false)
+		t.expect(string.find(checked.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(checked.stdout, "criteria", 1, true))).toBe(nil)
+		-- `done` refuses before it looks at anything else (R9999 does not exist)
+		local finished = process.exec("scripts/tracker.sh", { "done", "R9999" }, { cwd = root, env = env })
+		t.expect(finished.ok).toBe(false)
+		t.expect(string.find(finished.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("the issue template's check.sh works before and after the acceptance specs are promoted", function()

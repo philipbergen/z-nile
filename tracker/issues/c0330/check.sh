@@ -30,7 +30,7 @@ check "AC3: every finished item's check.sh finds the repo, and no live one uses 
 check "AC4: list mode can't be mistaken for a pass or re-run specs (runner, top-level specs, tracker.sh check)" cases_pass \
   "the spec runner refuses to run specs when AC_LIST is set" \
   "a check.sh that runs a spec at top level only lists in list mode" \
-  "tracker.sh check refuses to run with AC_LIST set"
+  "tracker.sh check and done refuse to run with AC_LIST set"
 check "AC5: the testing skill shows the new locator and AC_LIST" bash -c '
   f=.claude/skills/testing/SKILL.md
   for s in "AC_LIST=1" "[[ -d \$A ]] || A=\"\$PWD/tests/acceptance/"; do
