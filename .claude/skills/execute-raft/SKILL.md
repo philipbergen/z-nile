@@ -80,7 +80,8 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 3. The reviewer writes `review-NNN.md` in the raft directory (starting at 001), including a ruling on every Judged criterion. **When the reviewer finishes**, you commit it: `scripts/tracker.sh commit -m "R0010: review-NNN" --time 0` (this pushes; `--time 0` keeps the reviewer's runtime out of author spend). Then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`.
 4. **If the verdict is `approve` with no findings, go to Phase 5**: there is no refute file, and the verdict comment is the record. Otherwise respond in `refute-NNN.md`, with one line per finding:
    - `- F3: fixed <short sha>: <what changed>`, or
-   - `- F3: refuted: <argument with evidence>`.
+   - `- F3: refuted: <argument with evidence>`, or
+   - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left after round 3).
    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed.
 5. Commit each fix as you make it (pushed by `tracker.sh commit`), then commit the refute file. Post a comment `Review NNN addressed`, pasting the refute file's lines.
 6. **Re-review** with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1):
@@ -89,12 +90,12 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
    - the fixes are more than about 15% of the PR's lines;
    - a Judged criterion was ruled fail;
    - you refuted (rather than fixed) any high finding or failed Judged criterion, so a new reviewer rules on the refutation.
-7. **Cap: 3 rounds.** The reviewer's own file decides what is significant, not your answer to it. If `review-003.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds 1-2 need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in `review-003.md` do not block, and you can't downgrade the severity the reviewer wrote. Fix them (answer `fixed`) if the fix is small; otherwise: file each with `tracker.sh new issue`, answer it in `refute-003.md` as `- F<n>: refuted: below the merge threshold (medium|low), filed as <id>`, and quote every such line in the round's PR comment. This is an interim form until c0360 adds a real `deferred` answer, because `tracker.sh done` accepts only `fixed` or `refuted`. It is the sole exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
+7. **Cap: 3 rounds.** The reviewer's own file decides what is significant, not your answer to it. If `review-003.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds 1-2 need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in `review-003.md` do not block, and you can't downgrade the severity the reviewer wrote. Fix them (answer `fixed`) if the fix is small; otherwise file each with `tracker.sh new issue`, answer it in `refute-003.md` as `- F<n>: deferred <id>: <why>` (`<id>` is the new backlog issue; `tracker.sh done` accepts it only for a medium or low finding), and quote every such line in the round's PR comment. A deferral is honest, not a refutation, so it is no exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
 2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `scripts/check.sh --full`, commit), so the PR is up to date before `done` and nothing needs changing after it.
-3. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
+3. `scripts/tracker.sh done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
 4. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 
 ## Phase 6: Merge and clean up
