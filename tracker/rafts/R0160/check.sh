@@ -13,5 +13,6 @@ check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker
 
 check "RC1: scripts/setup.sh is valid shell" bash -n scripts/setup.sh
 check "RC2: the board builds into a fresh directory with the workflow's command" bash -c 'out=$(mktemp -d)/dist/board.html && scripts/tracker.sh board --out "$out" >/dev/null && grep -q "board-data" "$out"'
+check "RC3: the lifecycle spec that drives tracker.sh start still passes" lune run tests/run -- tests/acceptance/c0010/tracker-lifecycle.spec.luau
 
 finish
