@@ -2,7 +2,7 @@
 id: f0300
 type: feature
 title: Game flow
-raft: R0090
+raft: R0130
 depends_on: [f0170, f0130]
 emergent: false
 design: draft

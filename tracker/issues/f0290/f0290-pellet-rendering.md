@@ -2,7 +2,7 @@
 id: f0290
 type: feature
 title: Pellet rendering
-raft: R0090
+raft: R0130
 depends_on: [f0150, f0160, f0130]
 emergent: false
 design: draft

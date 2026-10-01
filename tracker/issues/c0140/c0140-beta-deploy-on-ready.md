@@ -22,6 +22,7 @@ _Draft ideas; design happens in ticket-prep._
 - A CI job on `ready_for_review` and on non-draft `synchronize`: `rojo build`, then publish through the Open Cloud Place Publishing API to the Beta universe and place.
 - Secrets: `ROBLOX_API_KEY`, `BETA_UNIVERSE_ID`, `BETA_PLACE_ID`. The user creates the experience and the key; prep writes exact steps.
 - Only one deploy runs at a time (concurrency group). The PR gets a comment with the version number.
+- **Prep result (2026-09-30)**: PASS. One publish (Beta version 5) and one Luau execution worked from a GitHub-hosted runner with the repo's secret and variables, using karma's request shape; details in R0080's *Prep experiment*. The first attempt's WAF 403 was a malformed URL of mine.
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,

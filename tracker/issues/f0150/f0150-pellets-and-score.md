@@ -3,66 +3,148 @@ id: f0150
 type: feature
 title: Pellets and score
 raft: R0090
-depends_on: [f0110]
+depends_on: [f0170, f0110]
 emergent: false
-design: draft
+design: reviewed
 created: 2026-09-28
 ---
 
 # f0150: Pellets and score
 
 ## Problem
-Pac-Man is about eating: a pellet on every pellet tile the maze text authors (f0100), eaten when the player enters the tile, adding points (10 each). The score has to be tracked authoritatively.
+Pac-Man is about eating: a pellet on every pellet tile the maze text authors (f0100), eaten when the player enters the tile, adding points (10 each, 50 for a power pellet). Eating the last one clears the level, and the classic game also stops the player briefly for each dot. The score and the pellets must be tracked authoritatively, per player.
 
 ## Non-goals
-- Power pellets' effect on ghosts (raft d). HUD (f0180).
+- What a power pellet does beyond its 50 points (frightened time, `PowerStarted`): f0160.
+- HUD (R0130's f0180), drawing pellets and replicating which ones are eaten (R0130's f0290). This issue's frame carries the score; the eaten set reaches the client in f0290.
+- Fruit (a game-design non-goal).
 
 ## Solution
-_Draft ideas; design happens in ticket-prep._
-Pellet state per maze instance. Eating runs on tile entry inside the movement step. Score events are emitted for the HUD and hiscores. Sim scenarios cover eating along a corridor and never eating the same pellet twice.
-
-Drawing pellets and sending eaten pellets to the client is f0290.
+- **`Pellets`** (new, pure): the pellets still to eat in one maze instance.
+- **`Session`** gives each member its own `Pellets`. On every `Entered` event of the movement step it eats the pellet on that tile, reports `PelletEaten`, scores it through `Game.addScore`, owes the arcade's eating pause, and clears the level when none remain.
+- The level clear, the reset to a fresh maze on the next level, and the faster next level use `Game` and `Levels` from f0170.
 
 ## Design
-<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
-     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
+
+### Decisions made in prep
+- **Pellets and score are per member** (solo mazes): two players in one session never share a pellet.
+- **Eating happens when the player enters a tile** (`Entered`), the spawn tile holds no pellet, and a pellet is never eaten twice.
+- **Points**: pellet 10, power pellet 50.
+- **Classic eating slowdown** (user, 2026-09-30): eating a dot stops Pac-Man for 1 frame of the arcade's 60 fps and an energizer for 3. The pause is modelled as **distance owed**, not time: `stallUnits(kind, speed, tickRate) = floor(speed × frames × tickRate / 60)`, which at level 1 is 15 units for a dot and 45 for a power pellet (half a tick's 30-unit step, and one and a half), and at level 2 (34) is 17 and 51. On the next ticks the player's step is reduced by what is owed, at most the step itself, so the pause is exact and spills across ticks. A death, a new level and a new run all forget what is owed (`reset` clears it for every reason).
+- **The slowdown is a config flag** (`Config.eatSlowdown`), off in `DEFAULT_CONFIG` and on in `GAME_CONFIG`, like the pauses, so promoted specs are unaffected.
+- **A cleared level** clears only when the player eats the last pellet while `playing`. Next level: pellets restored, player back at the spawn (a teleport, `jumpTick`), speed from `Levels`, score and lives kept. **A death keeps the pellets already eaten**, as in the arcade. **Play again** restores all pellets.
+- **Staging**: this issue doesn't call `Game.power` (so its specs never pin positions that depend on the frightened speed, f0160's); a power pellet is eaten, scored and stalls, nothing more, until f0160 adds the frightened period.
+
+### `src/shared/Logic/Pellets/init.luau` (new, pure)
+```lua
+export type Kind = "pellet" | "power"
+export type Pellets = { ... }     -- opaque; per maze instance
+Pellets.POINTS = { pellet = 10, power = 50 }
+Pellets.STALL_FRAMES = { pellet = 1, power = 3 }
+Pellets.ARCADE_FPS = 60
+function Pellets.new(m: Maze.Maze): Pellets                   -- a pellet on every "pellet"/"power" tile of the maze
+function Pellets.at(p: Pellets, tile: Maze.Tile): Kind?       -- errors "pellets: tile (x, y) is out of bounds"
+function Pellets.eat(p: Pellets, tile: Maze.Tile): Kind?      -- removes and returns; nil if none; same bounds error
+function Pellets.remaining(p: Pellets): number
+function Pellets.total(p: Pellets): number                    -- what `new` found; 244 on the classic maze (240 + 4)
+function Pellets.reset(p: Pellets)                            -- every pellet back
+function Pellets.tiles(p: Pellets, kind: Kind?): { Maze.Tile }  -- what is left, row-major
+function Pellets.stallUnits(kind: Kind, speed: number, tickRate: number): number
+```
+
+### `Session` changes
+```lua
+export type Event = { ... item: string?, points: number?, level: number?, score: number? ... }
+-- new events:  PelletEaten { player, x, y, item = "pellet"|"power", points }
+--              LevelCleared { player, level, score }   (from Game.cleared; also appended to step's events)
+```
+- **Member** gains `pellets: Pellets` and `stall: number` (units owed).
+- **`step`**, per player: take the queue; `moving` as in f0170; if moving, `speed = Levels.playerSpeed(base, level)`, `owed = min(stall, speed)`, `stall -= owed`, call `Movement.step` with `speed - owed`. For each `Entered` event at (x, y): `kind = Pellets.eat`; if a pellet: add `PelletEaten`, `Game.addScore(points)`, and if `eatSlowdown` add `stallUnits(kind, speed, TICK_RATE)` to `stall`; then, if `Pellets.remaining == 0`, `Game.cleared`, which starts the level-clear pause.
+- **Per tick**, the eating pause is taken from the step at that tick's speed (`Levels.playerSpeed`, frightened column from f0160), and a dot's pause is computed at the speed of the tick it was eaten in. **Order inside a step: eat, then clear the level** (raft d adds collision after, so a clear wins over a same-tick kill).
+- **Respawn and level changes** (`Ready{respawn|level|again}`) teleport (f0170's reset) and additionally clear `stall`; `level` and `again` also `Pellets.reset`.
+- `Session.frame().play.score` is the score; the events carry the rest.
 
 ### Scalability
+A `Pellets` is one array of ≤ 868 cells (28 × 31), a per-member copy; eating is O(1) per tile entry; `tiles` (for f0290) is O(cells) and only called on demand. 50 players add about 50 kB.
+
 ### Maintainability
+Eating, scoring and pause are one code path in `Session.step` keyed on `Entered`, so ghosts (raft d) and fruit add their own events beside it. The pause is in units, so it scales with level speed without special cases.
+
 ### Usability
+Eating feels like the arcade: a tiny hitch at every dot, a bigger one at an energizer, and the level ends the moment the last dot goes. The score is always visible in the frame for f0180.
 
 ### Touched modules
-<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
-     paths (e.g. `tests/unit/Maze`). Used for spend attribution
-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
+- `src/shared/Logic/Pellets`
+- `src/shared/Logic/Session`
+- `tests/unit/Pellets`
+- `tests/unit/Session`
 
 ### Affected specs
-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
+`lune run scripts/affected -- src/shared/Logic/Pellets src/shared/Logic/Session tests/unit/Pellets tests/unit/Session` prints the same set as f0170's (`tests/acceptance/f0130/*`, `tests/place/*`, `tests/scenario/session-walk`, `tests/unit/Session`, `tests/unit/View`). New: this issue's four acceptance specs and `tests/unit/Pellets`.
 
 ## Unknowns & experiments
-<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
-     result if already run during prep, and the fallback design if it fails. -->
+- **E1 (run in prep: PASS)**: what do the numbers of the eating pause come out as? An independent Python model (separate from the prototype) of the corridor `{"########","#.....P#","########"}`: without the pause, dots at ticks 2, 6, 10, 14, 18; with it 2, 7, 11, 16, 20; positions 3→75, 4→105, 7→195, 8→210, 12→315, reaching the wall at tick 23. With a power pellet on the 4th tile: eaten at 16, positions 16→435, 17→435, 18→450, 19→480. The prototype matches every one; `slowdown.spec` pins them.
+- **E2 (run in prep: PASS)**: does adding pellets break promoted specs? On the prototype: only `tests/unit/Session/session.spec.luau`'s event-count case, which now sees `PelletEaten` beside `Entered` at tick 2 (the classic maze has a pellet on (12, 23)). That spec is editable (executor-owned); update the expected count. The promoted acceptance specs are untouched.
+- **E3 (run in prep: PASS)**: mutation check, 61 mutants across the raft, 60 killed by assertions, 1 equivalent (see the tables).
 
 ## Regression guard
-<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+- **Movement and Session's promoted specs** use `DEFAULT_CONFIG` (slowdown off), so the walk timings they pin are unchanged; but the classic maze now has pellets: events gain `PelletEaten`. `session.spec` unit case: update its expected events (executor).
+- **`tests/scenario/session-walk.spec.luau`** counts `Entered` events by kind, so extra events don't disturb it (checked on the prototype).
 
 ## Test plan
-<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
+All acceptance specs exist.
+- `pellets.spec.luau` → AC1.
+- `eating.spec.luau` → AC2.
+- `slowdown.spec.luau` → AC3.
+- `level.spec.luau` → AC4.
+- **The executor's own specs**: `tests/unit/Pellets` (a couple of API cases) and the updated `tests/unit/Session` event-count case.
+
+### Rules and mutants
+| rule | spec :: case | mutant it kills | checked |
+|---|---|---|---|
+| a pellet is removed when eaten, never eaten twice | pellets :: eating returns the kind…; eating :: a pellet is never eaten twice | eat doesn't remove | run |
+| reset puts back pellets AND power pellets | pellets :: reset puts every pellet back | reset drops power pellets | run |
+| out-of-bounds tiles are an error | pellets :: a tile outside the maze… | bounds check removed | run |
+| stall depends on the kind | pellets :: stallUnits…; slowdown :: a power pellet stops… | every kind stalls 1 frame | run |
+| `tiles` is row-major | pellets :: tiles lists… | unsorted | run |
+| a power pellet is worth 50 | eating :: a power pellet is worth 50 | worth 10 | run |
+| eating scores and shows in the frame | eating :: the score is 10 a pellet… | no points | run |
+| eating is reported with item/x/y | eating :: the player eats each pellet… | event lacks fields | run |
+| each player has their own pellets | eating :: each player eats their own… | pellets shared | run |
+| the last pellet clears the level | level :: eating the last pellet… | never clears | run |
+| next level restores pellets | level :: every pellet is back… | pellets kept | run |
+| play again restores pellets | level :: play again… | pellets kept | run |
+| a death keeps eaten pellets | level :: the level-clear pause and the respawn… | a respawn also resets the pellets | run |
+| a kill in the level-clear pause is ignored, the level advances | level :: a kill during the level-clear pause… | `died` allowed in `levelclear` | run |
+| a kill after game over is ignored | level :: play again… (LifeLost stays 3, lives 0) | `died` allowed in `gameover` | run |
+| a new level forgets the owed pause | slowdown :: a new level starts with nothing owed | cleared only on respawn; not on a new level | run |
+| a new run forgets the owed pause, even after losing the last life owing one | slowdown :: a new run starts with nothing owed… | not cleared on play again | run |
+| lives carry to the next level | level :: lives carry over… | lives reset on a new level | run |
+| next level is faster | level :: the new level runs at the new level's speed | speed not scaled | run |
+| the pause scales with the level's speed (17 at level 2) | level :: eating on level 2 pauses for 17 | uses base speed | run |
+| the pause is owed only with the flag | slowdown :: the slowdown is on in GAME_CONFIG…; eating (no flag) | slowdown always on | run |
+| an owed pause is forgotten at respawn | slowdown :: a pause still owed when the player dies… | owed units kept | run |
+| a pause costs exactly 15/45 units | slowdown :: the pause for a pellet…; a power pellet… | wrong units | run |
 
 ## Acceptance criteria
 
 ### Checked
-<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
+- **AC1**: `Pellets` holds a pellet on every pellet and power tile (244 on the classic maze: 240 + 4), eats each once, refuses out-of-bounds tiles, resets fully, lists what is left row-major, is independent per instance, and reports points (10/50) and stall distances (15/45 at 30 units a tick).
+- **AC2**: A player entering a tile with a pellet eats it in that tick (`PelletEaten` with player, tile, item and points), 10 points a pellet and 50 for a power pellet; the score is in the frame; the spawn tile and eaten tiles score nothing; two players in a session eat separately; runs are deterministic per seed.
+- **AC3**: With `eatSlowdown`, eating stops the player for exactly 15 units (pellet) or 45 (power pellet) at 30 units a tick, spread across ticks (dots at 2, 7, 11, 16, 20; 435 then 435 and the wall at tick 19 after a power pellet); without the flag walking is steady; an owed pause is forgotten on respawn, on a new level and on a new run; `GAME_CONFIG` has it on and `DEFAULT_CONFIG` off.
+- **AC4**: Eating the last pellet reports `LevelCleared` and pauses; the next level starts at the spawn (a teleport) with every pellet back, at level 2's speed (34 units) and pause (17 units), score and lives kept; a death keeps eaten pellets, and a kill during the level-clear pause or after game over does nothing; play again restores them; with no pauses a cleared level rolls straight on.
 
 ### Judged
-<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
-     Ruled on by the adversarial code reviewer. -->
+None.
 
 ### Observed
-<!-- Minimal Studio playtest steps for the human (OCn). -->
+- **OC1** (Studio, with R0130's HUD and pellet drawing): eating along a corridor has a visible, arcade-like hitch at each dot and a bigger one at an energizer.
 
 ## Implementation steps
-<!-- Ordered, small, each verifiable. -->
+1. `Pellets` and `tests/unit/Pellets`. Run AC1. Commit.
+2. `Session`: per-member pellets, eating on `Entered`, events and score. Run AC2. Commit.
+3. The eating slowdown. Run AC3. Commit.
+4. Level clear and reset on a new level / play again. Run AC4. Commit.
+5. Update `tests/unit/Session`'s event-count case; `scripts/check.sh --full`; `scripts/tracker.sh check f0150`. Commit.
 
 ## Verification log
-<!-- Appended at the end of execution: date, commands run, results. -->

@@ -27,6 +27,7 @@ created: 2026-09-28
 - The key is a secret: it only exists in CI. Local runs need it exported as `ROBLOX_API_KEY`, and specs must skip (not fail) when it is absent.
 - Open question for ticket-prep: publishing test builds to the beta place replaces what beta testers play. Either test against a separate private `Pickman (CI)` experience (needs a new key scope and variables from the human), or accept the overlap while beta is small.
 - Unverified: nothing has used the key yet. An early experiment should publish once and run one trivial Luau execution task.
+- **Prep result (2026-09-30)**: PASS. One publish (Beta version 5) and one Luau execution worked from a GitHub-hosted runner with the repo's secret and variables, using karma's request shape; details in R0080's *Prep experiment*. The first attempt's WAF 403 was a malformed URL of mine.
 
 ## Non-goals
 - Deploying to the beta place for testers; that is a separate deploy chore.

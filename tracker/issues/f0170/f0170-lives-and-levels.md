@@ -3,67 +3,191 @@ id: f0170
 type: feature
 title: Lives and levels
 raft: R0090
-depends_on: [f0150]
+depends_on: []
 emergent: false
-design: draft
+design: reviewed
 created: 2026-09-28
+slug: lives-and-levels
 ---
 
 # f0170: Lives and levels
 
 ## Problem
-A game needs a beginning and an end: 3 lives, game over, and clearing every pellet advancing to the next level, which resets the maze with harder parameters (speeds, frightened duration).
+A game needs a beginning and an end: 3 lives, game over, and clearing every pellet advancing to the next level with harder parameters. Nothing in `Session` has a notion of a run yet: the player walks from tick 0, forever. This issue adds the run (the phases, lives, level and score) and what the server sends about it.
 
 ## Non-goals
-- What causes a death: ghosts (f0220). Hiscore submission (f0240).
+- What causes a death: ghosts (raft d). Until then, `Session.kill` is the server-side hook that tests and later ghosts call.
+- Pellets, scoring and the level-clear trigger (f0150), power pellets and frightened time (f0160), hiscore submission (raft e), drawing any of it (R0130).
+- Changing the v1 snapshot. `Session.snapshot` stays byte-for-byte what it is; the new `Session.frame` is added beside it.
 
 ## Solution
-_Draft ideas; design happens in ticket-prep._
-A `Game` state machine: ready, playing, dying, level clear, game over. Per-level parameter tables (classic values). Deaths are an input event, so this is testable before ghosts exist.
-
-**This issue owns the one `Levels` table** (a pure feature in the architecture map): per-level player and ghost speeds, the frightened duration, blink count, the scatter/chase schedule and house release values. f0160, f0200 and f0210 read from it and don't keep their own copies. Rows for data those issues introduce are added by those issues.
-How the states are presented on the client (countdown, death, level clear, game over, play again) is f0300.
+Three new pure features and one extended one:
+- **`Levels`**: the one table of per-level parameters, taken from the classic tables (Pittman, *The Pac-Man Dossier*, Table A.1). This issue owns it; f0160 reads the frightened time, and raft d adds ghost columns.
+- **`Game`**: one player's run as a small state machine: `ready → playing → dying → (ready | gameover)`, and `levelclear → ready` for the next level. It holds lives, level, score, the frightened counter (used from f0160) and an extra-life rule. Pure, stepped once per tick, told what happened; it never looks at the maze.
+- **`Session`** owns one `Game` per player. It moves the player only while the phase is `playing`, discards intents otherwise, resets the player on respawn, scales speed by level, and exposes `kill`, `playAgain` and `frame`.
+- **`src/server/Sessions.luau`** creates sessions with `Session.GAME_CONFIG` and sends `Session.frame` instead of the snapshot.
 
 ## Design
-<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
-     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
+
+### Decisions made in prep
+- **Two rule sets, so nothing already promoted breaks.** `Session.DEFAULT_CONFIG` has *no* pauses and no slowdown: a run is in `playing` from tick 0 and a death respawns on the next step. The promoted f0110/f0120/f0130 specs and `tests/unit/Session` therefore keep passing unchanged. `Session.GAME_CONFIG` is the real game (classic pauses, eating slowdown) and is the only thing the server adapter uses.
+- **Naming**: the run record is called `play`, never `game`: architecture rules ban the lowercase word `game` in Logic, comments included.
+- **Pauses** (classic feel, at 30 ticks/s): ready 60 ticks (2 s), dying 45 (1.5 s), level clear 60 (2 s). `Game.CLASSIC_CONFIG`.
+- **Lives 3; one extra life at 10,000** points, once per run (user, 2026-09-30). `extraLifeScore = 0` means never.
+- **Intents outside `playing` are discarded**, not queued: a key mashed during "Ready!" must not turn the player at the first junction.
+- **Speed by level**: the classic table, relative to level 1's 7.5 tiles/s: level 1 ×1.0, levels 2–4 ×1.125, 5–20 ×1.25, 21+ ×1.125. Speed in units per tick is `floor(base × factor + 0.5)`: 30, 34 (33.75), 38 (37.5), 34.
+- **Speed while frightened** (user, 2026-09-30, after design review F4): Table A.1's "Pac-Man fright speed" is a second column, `frightSpeedFactor`: level 1 ×1.125 (90% of full speed), levels 2–4 ×1.1875 (95%), 5–20 ×1.25 (100%), 21+ ×1.125 (unused: no frightened time). In units per tick that is 34, 36, 38 and 34. `Levels.playerSpeed(base, level, frightened?)` picks the column. f0160 owns when it applies.
+- **Levels past 21 use row 21**; `Levels.COUNT = 21`.
+- **Only the server ends a life.** There is no Kill intent: `Session.kill` is a server function that a test or (in raft d) ghost collision calls, so a client cannot kill or reset itself. `playAgain` is the one thing a client may ask (a later issue wires a remote, f0300) and it only works at `gameover`.
+- **Respawn is a teleport**: back to the spawn tile, heading and queue reset, and `jumpTick` marks it so the camera cuts. **`jumpTick` means "the tick of the first frame at the new position"**: a teleport made inside `step` (a respawn or a new level) records `tick`; one made between steps (`playAgain`) records `tick + 1`, so a frame taken before the next step may carry a `jumpTick` one ahead of its own `tick` (harmless to `View`, which cuts when `jumpTick > previous.tick`). (`tick` never goes back: f0130's `Camera.push` relies on it.)
+- **`kill` and a clear only count in `playing`** (review F2): a kill during the level-clear pause or after game over does nothing, as the arcade's ghosts vanish. Raft d calls `kill` from ghost collision every tick, including the tick the last pellet is eaten: **the order inside one `Session.step` is eat, then clear, then (raft d's) collision**, so the clear wins and the later `kill` is a no-op.
+
+### `src/shared/Logic/Levels/init.luau` (new, pure)
+```lua
+export type Row = { speedFactor: number, frightSpeedFactor: number, frightenedSeconds: number, flashes: number }
+Levels.ROWS: { Row }                       -- frozen, 21 rows
+Levels.COUNT = 21
+function Levels.row(level: number): Row    -- levels past COUNT use the last row; errors "levels: level must be a whole number >= 1"
+function Levels.playerSpeed(baseSpeed: number, level: number, frightened: boolean?): number  -- floor(base * factor + 0.5); the frightened column when true
+function Levels.frightenedTicks(level: number, tickRate: number): number     -- floor(seconds * tickRate + 0.5)
+```
+The table (frightened seconds / flashes): L1 6/5, L2 5/5, L3 4/5, L4 3/5, L5 2/5, L6 5/5, L7–8 2/5, L9 1/3, L10 5/5, L11 2/5, L12–13 1/3, L14 3/5, L15–16 1/3, L17 0/0, **L18 1/3**, L19–20 0/0, L21 0/0 (exactly as `acceptance/levels.spec.luau` pins it, with the speed and frightened-speed factors).
+
+### `src/shared/Logic/Game/init.luau` (new, pure)
+```lua
+export type Phase = "ready" | "playing" | "dying" | "levelclear" | "gameover"
+export type Config = { lives: number, extraLifeScore: number, readyTicks: number, dyingTicks: number, levelClearTicks: number, tickRate: number }
+export type Event = { kind: string, points: number?, lives: number?, level: number?, score: number?, ticks: number?, reason: string? }
+export type Game = { config: Config, phase: Phase, level: number, score: number, lives: number, timer: number, frightened: number, extraLifeGiven: boolean }
+Game.CLASSIC_CONFIG, Game.IMMEDIATE_CONFIG          -- frozen
+function Game.new(config: Config?): Game            -- validates; errors start "rules:"
+function Game.canMove(g: Game): boolean              -- phase == "playing"
+function Game.addScore(g: Game, points: number): { Event }   -- ExtraLife once when score reaches extraLifeScore
+function Game.cleared(g: Game): { Event }            -- LevelCleared; only from "playing"
+function Game.died(g: Game): { Event }               -- LifeLost; only from "playing"
+function Game.playAgain(g: Game): ({ Event }, boolean)        -- only from "gameover"
+function Game.step(g: Game): { Event }               -- Playing / Ready{reason = respawn|level|again} / GameOver
+```
+A zero-length pause is no pause: `readyTicks = 0` goes straight to `playing`. `Game.power` and the `PowerEnded` event are added by f0160; the `frightened` field exists (always 0) from here so `Frame` has its final shape.
+
+### `src/shared/Logic/Session/init.luau` (extended)
+```lua
+export type Config = { movement: Movement.Config, maxIntentsPerTick: number, play: Game.Config?, eatSlowdown: boolean? }
+export type PlayFrame = { phase: Game.Phase, level: number, score: number, lives: number, timer: number, frightened: number }
+export type Frame = { v: number, tick: number, maze: string, player: PlayerSnapshot, play: PlayFrame }
+Session.GAME_CONFIG: Config                          -- classic pauses, eatSlowdown = true
+function Session.kill(s: Session, id: PlayerId): { Event }
+function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
+function Session.frame(s: Session, id: PlayerId): Frame      -- snapshot + play; fresh tables
+```
+- `Session.new` also errors `session: speed N is too fast: level L would be S > 120` when any level's speed, in either column, would exceed one tile per tick (`Movement.UNITS`).
+- `step`: per player, decide `moving = Game.canMove(play)` **at the start of the tick**, then `Game.step`, then move only if `moving`. The events of the game step (`Playing`, `Ready`, `GameOver`) are appended with the player id.
+- Respawn (`Ready{respawn}`) and a new level (`Ready{level}`) and play again (`Ready{again}`) all teleport to spawn: `Movement.spawn`, queue cleared, `jumpTick` per the rule above (`Session.playAgain` sets `tick + 1` after the reset).
+- `frame` is what the server replicates. **Frame extends the snapshot; later issues add fields beside `play`; a client ignores unknown fields.** `Session.snapshot` is unchanged and v1.
+
+### Server adapter
+`src/server/Sessions.luau`: `Session.new(Maze.layout(Maze.DEFAULT), player.UserId, Session.GAME_CONFIG)` and `Remotes.Snapshot:FireClient(player, Session.frame(s, id))`. Nothing else changes: still created on `Ready`, no `PlayerAdded`.
 
 ### Scalability
+One `Game` per player: nine numbers. `Levels` is a frozen 21-row table. The frame adds six integers (≈ 60 bytes) to a ≈ 100-byte snapshot; the per-tick cost is unchanged in kind (one extra state-machine step).
+
 ### Maintainability
+- Every rule sits in `Game` (pure, table-driven by `Config`), and the tests drive it through the sim harness; `Session` only routes.
+- `Levels` is the single home of per-level data; later columns (ghost speeds, scatter/chase, house release) are added there, not copied.
+- The frame contract is "these fields exist"; extending it is additive, and the promoted `snapshot` spec is untouched.
+
 ### Usability
+The player gets the classic rhythm: a countdown before play, a pause when caught, a pause at a cleared level, and game over after the third life. Keys pressed during a pause do nothing instead of steering the next attempt.
 
 ### Touched modules
-<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
-     paths (e.g. `tests/unit/Maze`). Used for spend attribution
-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
+- `src/shared/Logic/Levels`
+- `src/shared/Logic/Game`
+- `src/shared/Logic/Session`
+- `src/server`
+- `tests/unit/Levels`
+- `tests/unit/Game`
+- `tests/unit/Session`
 
 ### Affected specs
-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
+`lune run scripts/affected -- src/shared/Logic/Levels src/shared/Logic/Game src/shared/Logic/Session src/server tests/unit/Levels tests/unit/Game tests/unit/Session` prints:
+`tests/acceptance/f0130/{place,pose,walls}.spec.luau`, `tests/place/{resolver,structure}.spec.luau`, `tests/scenario/session-walk.spec.luau`, `tests/unit/Session/session.spec.luau`, `tests/unit/View/view.spec.luau`. New: this issue's six acceptance specs, plus `tests/unit/Levels`, `tests/unit/Game`.
 
 ## Unknowns & experiments
-<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
-     result if already run during prep, and the fallback design if it fails. -->
+- **E1 (run in prep: PASS)**: can the new rules be added without touching any promoted spec? Prototype in a scratch worktree: the full suite ran 451 passed, with only three expected failures: the architecture deps not yet declared, the two new features lacking unit specs, and one executor-owned unit case (see Regression guard).
+- **E2 (run in prep: PASS)**: is the classic level table reproduced? The 21 rows and pauses were checked against the primary source (Pittman's *Dossier*): level 21+ is 90% of the top speed, the frightened times and flashes per level. Speeds are relative to level 1 (80%): ×1.0, 1.125, 1.25, 1.125 (90/80, 100/80).
+- **E3 (run in prep: PASS)**: do the phases line up to exact ticks? The flow spec pins a whole timeline: `Ready` at 0, `Playing` at 60, dying at 91, `Ready` at 135, `Playing` at 195, dying at 301, `Ready` at 345, `Playing` at 405 over 420 ticks. All pass on the prototype.
+- **E4 (mutation check, run)**: 61 mutants across the three issues, 60 killed by assertions; the last (G10) is equivalent (`frightened` is already 0 outside `playing`). Design review round 1 found five mutants the first set missed (`kill` working in the level-clear pause or after game over, a hard-coded `level >= 17`, a `playAgain` that slides the camera, two partial clears of the owed pause, a text-only adapter spec); each was added and is now killed. See the tables.
+- **Residual (Observed, OC1)**: what the countdown and the pauses feel like in Studio, through f0300's flow and f0180's HUD (R0130).
 
 ## Regression guard
-<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+- **Promoted f0110 / f0120 / f0130 specs** must pass unchanged: they use `Session.DEFAULT_CONFIG`, which has no pauses and no slowdown. The v1 snapshot spec pins exactly the keys `maze, player, tick, v` and `heading, jumpTick, moving, x, y`: `Session.snapshot` must not gain a field (`frame.spec` case "the v1 snapshot is unchanged").
+- **`tests/unit/Session/session.spec.luau`** has an event-count case that becomes 3 events instead of 2 at tick 2 on the classic maze (once pellets exist, f0150; see there). Nothing in this issue changes it.
+- **Meta rules**: `Game -> Levels`, `Session -> Game`, `Session -> Levels` are declared in `tracker/architecture.md` in prep; `tests/unit/Levels` and `tests/unit/Game` must exist. No lowercase `game` in Logic.
+- **Place rules**: `Sessions.luau` keeps the `Ready` handshake and no `PlayerAdded` (f0120's place spec stays; `adapter.spec` adds that it uses `GAME_CONFIG` and `Session.frame`).
 
 ## Test plan
-<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
+All specs exist in `acceptance/`.
+- `levels.spec.luau` → AC1 (the classic table with both speed columns, 21+ rule, errors, read-only, speed rounding, frightened ticks and speeds).
+- `game.spec.luau` → AC2 (every Game rule, pure, including no death or clear in the level-clear pause or after game over).
+- `flow.spec.luau` → AC3 (through Session and the sim: the countdown, discarded intents, kill/respawn/teleport, three deaths, play again, the exact phase timeline, no client kill).
+- `frame.spec.luau` → AC4 (frame = snapshot + `play`, JSON, fresh tables, v1 snapshot unchanged).
+- `config.spec.luau` → AC5 (DEFAULT has no pauses, GAME_CONFIG is classic, too-fast speed refused, bad rules refused).
+- `adapter.spec.luau` → AC6 (the server adapter).
+- **The executor's own specs**: `tests/unit/Levels` (a few row lookups) and `tests/unit/Game` (a one-life run), so the architecture rule "every feature has unit specs" holds.
+
+### Rules and mutants
+| rule | spec :: case | mutant it kills | checked |
+|---|---|---|---|
+| level 2 is 12.5% faster | levels :: has a row for each of the 21 levels | L2 factor left at 1.0 | run |
+| levels past 21 use the last row | levels :: every level after the last uses the last row | past 21 wraps to level 1 | run |
+| speed rounds half up (33.75 → 34) | levels :: playerSpeed scales… | rounds down (33) | run |
+| level must be a whole number ≥ 1 | levels :: rejects a level that is not… | level 0 accepted | run |
+| frightened seconds convert to ticks at the tick rate | levels :: frightenedTicks converts… | ignores `tickRate` (hard-coded 30); rounding vs truncating is not observable with whole-second data | run |
+| the frightened speed column is the classic one (34/36/38/34) | levels :: has a row…; playerSpeed while frightened… | level 2's frightened speed copied from level 1 | run |
+| a death or clear does nothing in the level-clear pause | game :: a death or a clear during the level-clear pause…; level :: a kill during the level-clear pause… | `died` allowed in `levelclear` | run |
+| a death or clear does nothing after game over | game :: a death or a clear during…; level :: play again… (kill after game over) | `died`/`cleared` allowed in `gameover` | run |
+| a play-again teleport is stamped with the next tick | flow :: play again starts a fresh run | `jumpTick = tick` (the camera would slide) | run |
+| level 17 has no frightened time | levels :: has a row…; f0160 power :: the period is the level's | level 17 frightens 1 s | run |
+| extra life once at 10,000 | game :: the score adds up… | awarded at every crossing / flag never set | run |
+| threshold is inclusive (≥) | game :: the score adds up… | `>` instead of `>=` | run |
+| only a run in play loses a life or clears | game :: only a run in play…; flow :: Kill only works while… | `died` works in any phase | run |
+| the third loss ends the run | game :: losing the last life…; flow :: three deaths end the run | game over one life early | run |
+| ready lasts exactly `readyTicks` | game :: ready lasts exactly…; flow :: timeline | countdown one tick short | run |
+| play again only at gameover | game :: playAgain…; flow :: play again… | works mid-run | run |
+| a cleared level advances the level | game :: clearing the maze… | level not incremented | run |
+| play again resets score, lives and the extra-life flag | game :: playAgain…; level :: play again… | score kept / flag kept | run |
+| the player cannot move during ready | flow :: the player waits…; level :: … | `moving` always true | run |
+| intents during a pause are discarded | flow :: intents sent during the countdown… | queue kept through ready | run |
+| respawn is a teleport | flow :: the respawn is a teleport… | jumpTick not set | run |
+| respawn returns to spawn | flow :: kill / respawn | player left where it died | run |
+| level speed applies | level :: the new level runs at 34 units a tick | speed not scaled | run |
+| too-fast speeds refused | config :: speed too fast | guard removed | run |
+| default rules have no pauses | config :: the default config has no pauses | default = classic | run |
+| frame carries `play` | frame :: carries every field… | `play` dropped | run |
+| the adapter passes GAME_CONFIG to `Session.new` and sends frames | adapter :: both cases (comments stripped, call shape matched) | config named but unused; frame only in a comment | run |
+| level-clear pause length | game :: clearing the maze pauses… | zero-length pause | run |
 
 ## Acceptance criteria
 
 ### Checked
-<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
+- **AC1**: `Levels` holds the classic table for levels 1–21 (speed factor, frightened speed factor, frightened seconds, flashes), repeats the last row past 21, rejects a non-whole or < 1 level, is read-only, scales speed with rounding half up (30/34/38/34 normal, 34/36/38/34 frightened) and converts frightened seconds to ticks.
+- **AC2**: `Game` runs the state machine exactly as designed: ready/playing/dying/levelclear/gameover with exact tick counts, 3 lives, one extra life at 10,000, game over at the third loss, a death or a clear only from `playing` (nothing in the level-clear pause or after game over), play again only from gameover, invalid rules refused.
+- **AC3**: Through `Session` and the sim harness: the run starts with the ready countdown, intents during pauses are discarded, a death teleports the player to the spawn (with `jumpTick`), three deaths end the run, play again restarts it (its teleport is stamped with the next tick), phases follow the designed timeline for any seed, and no intent string can kill the player.
+- **AC4**: `Session.frame` is the snapshot plus a `play` record with the required typed fields; it is plain JSON-safe data, fresh each call; the v1 `Session.snapshot` is unchanged.
+- **AC5**: `Session.DEFAULT_CONFIG` has no pauses (play from tick 0), `Session.GAME_CONFIG` is classic, a base speed making any level exceed one tile per tick is refused, and invalid rules are refused when a player joins.
+- **AC6**: The server adapter (source with comments removed) passes `Session.GAME_CONFIG` as the config of every `Session.new`, sends `Session.frame` to the client (never the bare snapshot), and still starts sessions only on `Ready`.
 
 ### Judged
-<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
-     Ruled on by the adversarial code reviewer. -->
+None.
 
 ### Observed
-<!-- Minimal Studio playtest steps for the human (OCn). -->
+- **OC1** (Studio, after R0130's flow and HUD are in): the ready countdown, the respawn after a death and the level change feel right; nothing turns the player at the first junction after a pause.
 
 ## Implementation steps
-<!-- Ordered, small, each verifiable. -->
+1. `Levels` and `tests/unit/Levels`. Run AC1. Commit.
+2. `Game` and `tests/unit/Game`. Run AC2. Commit.
+3. `Session`: config, per-player `Game`, step gating, respawn, `kill`, `playAgain`. Run AC3 and AC5. Commit.
+4. `Session.frame` and the adapter. Run AC4 and AC6. Commit.
+5. Update the editable `tests/unit/Session` if needed; `scripts/check.sh --full`; `scripts/tracker.sh check f0170`. Commit.
 
 ## Verification log
-<!-- Appended at the end of execution: date, commands run, results. -->
