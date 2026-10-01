@@ -1,0 +1,1 @@
+- F1: fixed d05885c: the Verification log entry in c0060.md now records the commands run and their results (it said "see report").

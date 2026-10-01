@@ -80,7 +80,8 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 3. The reviewer writes `review-NNN.md` in the raft directory (starting at 001), including a ruling on every Judged criterion. **When the reviewer finishes**, you commit it: `scripts/tracker.sh commit -m "R0010: review-NNN" --time 0` (this pushes; `--time 0` keeps the reviewer's runtime out of author spend). Then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`.
 4. **If the verdict is `approve` with no findings, go to Phase 5**: there is no refute file, and the verdict comment is the record. Otherwise respond in `refute-NNN.md`, with one line per finding:
    - `- F3: fixed <short sha>: <what changed>`, or
-   - `- F3: refuted: <argument with evidence>`.
+   - `- F3: refuted: <argument with evidence>`, or
+   - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left after round 3).
    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed.
 5. Commit each fix as you make it (pushed by `tracker.sh commit`), then commit the refute file. Post a comment `Review NNN addressed`, pasting the refute file's lines.
 6. **Re-review** with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1):
