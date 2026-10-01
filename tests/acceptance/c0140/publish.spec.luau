@@ -1,7 +1,7 @@
 --!strict
 -- c0140 AC1: OpenCloud.publish puts a built place on the Beta experience through the Place Publishing
 -- API, with exactly the request that works against Roblox (its shape was proven from CI in prep), retries
--- only "Roblox busy" and never lets the API key out of the x-api-key header.
+-- "Roblox busy" (409) and, since c0490, transient 429/5xx, and never lets the API key out of the x-api-key header.
 local OpenCloud = require("@scripts/lib/opencloud")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
@@ -88,7 +88,7 @@ return t.spec("c0140 OpenCloud.publish", function(it)
 	end)
 
 	it("any other failure is final: no retry, and the status and body are reported", function()
-		for _, code in { 400, 401, 403, 404, 429, 500, 503 } do
+		for _, code in { 400, 401, 403, 404 } do
 			local cfg, calls, naps =
 				fake({ respond(code, '{"errors":[{"code":9009,"message":"WAF Blocked Request"}]}') })
 			local err = message(function()
