@@ -1,0 +1,573 @@
+diff --git a/scripts/tracker/main.luau b/scripts/tracker/main.luau
+index ec8c85c..cdca2c7 100644
+--- a/scripts/tracker/main.luau
++++ b/scripts/tracker/main.luau
+@@ -3,15 +3,20 @@
+ local board = require("./board")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local publish = require("./publish")
+ local sh = require("../lib/sh")
+ local spend = require("./spend")
++local statusLib = require("./status")
+ local stdio = require("@lune/stdio")
+ local store = require("./store")
+ 
+ local USAGE = [[
+ usage: scripts/tracker.sh <command> ...
+-  new issue <f|d|c> <slug> [--raft R0010]     create an issue (emergent if the raft is active)
++  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"]   create an issue (emergent if the raft is active)
+   new raft <feature|defect|chore> <slug> <issue>... [--single]
++  status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; start claims active)
++  sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
++  stamp <state>                                 print a fresh status stamp (diagnostics)
+   find <id>                                     print the item's current directory
+   list [backlog|active|done]                    list items
+   members <R-id>                                print directories of every issue in the raft
+@@ -118,6 +123,119 @@ local function refuseInMainCheckout(what: string)
+ 	end
+ end
+ 
++-- tracker.sh changes into the repository root before it starts Lune, so the working directory is the
++-- checkout the tracker belongs to. A fixture whose own `.git` is missing would otherwise fall through to an
++-- enclosing repository, the real one, and change it.
++local function guardRepoRoot()
++	local here = sh.run("pwd", { "-P" })
++	local top = sh.run("git", { "rev-parse", "--show-toplevel" })
++	-- no repository at all (a sandbox outside any checkout) cannot fall through to another one
++	if here.ok and top.ok and sh.trim(top.stdout) ~= sh.trim(here.stdout) then
++		fail(
++			`refusing to run: git's repository root is "{sh.trim(top.stdout)}", not "{sh.trim(here.stdout)}" (is .git missing here?)`
++		)
++	end
++end
++
++local function publishing(): boolean
++	local v = process.env.PICKMAN_PUBLISH
++	return hasOrigin() and (v == nil or v == "" or v ~= "0")
++end
++
++local function frontOf(text: string): { [string]: string }
++	local out: { [string]: string } = {}
++	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
++	for k, v in string.gmatch(block, "([%w_]+):[ ]*([^\n]*)") do
++		out[k] = sh.trim(v :: string)
++	end
++	return out
++end
++
++local function withFront(text: string, key: string, value: string): string
++	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
++	local replaced, n = string.gsub("\n" .. (block :: string), `\n{key}:[^\n]*\n`, function()
++		return `\n{key}: {value}\n`
++	end, 1)
++	if n == 0 then
++		replaced = "\n" .. (block :: string) .. `{key}: {value}\n`
++	end
++	return (head :: string) .. string.sub(replaced, 2) .. (rest :: string)
++end
++
++local function stateOfPath(path: string): store.State
++	return if string.find(path, "/active/", 1, true)
++		then "active"
++		elseif string.find(path, "/done/", 1, true) then "done"
++		else "backlog"
++end
++
++local function docPath(paths: { string }, id: string): string?
++	for _, p in paths do
++		if string.sub(p, -(#id * 2 + 5)) == `/{id}/{id}.md` then
++			return p
++		end
++	end
++	return nil
++end
++
++-- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
++-- left as it was and `tracker.sh sync` can be run again after resolving by hand.
++local function mergeOrigin()
++	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
++	if not r.ok then
++		sh.run("git", { "merge", "--abort" })
++		fail(
++			`published, but merging origin/main failed (merge aborted): {r.stderr}{r.stdout}\nresolve it with: git merge origin/main`
++		)
++	end
++end
++
++-- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
++-- os.time() plus os.clock() (seconds since boot) gave every process the same stamp.
++local function entropy(): number
++	local r = sh.run("od", { "-An", "-N4", "-tu4", "/dev/urandom" })
++	local n = tonumber(sh.trim(r.stdout))
++	if r.ok and n then
++		return n % 2147483647
++	end
++	return (os.time() * 31 + math.floor((os.clock() % 1) * 1e6)) % 2147483647
++end
++
++local seeded = false
++local function stamp(state: string): string
++	if not seeded then
++		math.randomseed(entropy())
++		seeded = true
++	end
++	return statusLib.stamp(state, function(n: number): number
++		return math.random(1, n)
++	end)
++end
++
++local function raftIsActiveHere(): boolean
++	for _, r in store.all("raft") do
++		if r.state == "active" then
++			return true
++		end
++	end
++	return false
++end
++
++local function claimFile(raftId: string): string
++	return `.cache/tracker-claim-{raftId}`
++end
++
++local function idsOf(paths: { string }, kind: string): { string }
++	local out: { string } = {}
++	for _, p in paths do
++		local id = string.match(p, "/([fdcR]%d%d%d%d)/[^/]+$")
++		if id and (if kind == "raft" then store.isRaftId(id) else store.isIssueId(id)) then
++			table.insert(out, id)
++		end
++	end
++	return out
++end
++
+ local function activeRaft(): store.Item
+ 	local rafts = {}
+ 	for _, r in store.all("raft") do
+@@ -137,7 +255,13 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 	local i = 1
+ 	while i <= #args do
+ 		local a = args[i]
+-		if a == "--single" or a == "--stdout" or a == "--include-active" or a == "--open" then
++		if
++			a == "--single"
++			or a == "--stdout"
++			or a == "--include-active"
++			or a == "--open"
++			or a == "--fetch"
++		then
+ 			opts[a] = { "true" }
+ 		elseif string.sub(a, 1, 1) == "-" then
+ 			opts[a] = opts[a] or {}
+@@ -164,10 +288,63 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
+ 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
+ 		end
+-		local id = store.formatId(prefix, store.nextNumber("issue"))
+ 		local raftId = opts["--raft"] and opts["--raft"][1]
+ 		local raft = raftId and store.get(raftId)
+ 		local state: store.State = if raft and raft.state == "active" then "active" else "backlog"
++		if raftId and state == "backlog" and publishing() then
++			fail("--raft is only for emergent issues of an active raft")
++		end
++		if state == "backlog" and publishing() then
++			local chosen = ""
++			local r = publish.commit(".", function(paths)
++				local ids = idsOf(paths, "issue")
++				for _, i in store.all("issue") do
++					table.insert(ids, i.id)
++				end
++				chosen = store.formatId(prefix, statusLib.nextNumber(ids))
++				local vars = {
++					ID = chosen,
++					TYPE = store.TYPES[prefix],
++					TITLE = title(slug),
++					SLUG = slug,
++					RAFT = "",
++					EMERGENT = "false",
++					DATE = today(),
++				}
++				local doc = render("tracker/templates/issue/doc.md", vars)
++				local desc = opts["--desc"] and opts["--desc"][1]
++				if desc then
++					doc = string.gsub(doc, "## Problem\n<!%-%-.-%-%->", function()
++						return "## Problem\n" .. desc
++					end, 1)
++				end
++				return {
++					{
++						path = `tracker/issues/{chosen}/{chosen}.md`,
++						content = withFront(doc, "status", stamp("new")),
++					},
++					{
++						path = `tracker/issues/{chosen}/check.sh`,
++						content = render("tracker/templates/issue/check.sh", vars),
++						mode = "100755",
++					},
++				}
++			end, function()
++				return `tracker: new {chosen} {slug}`
++			end)
++			if not r.ok then
++				fail(
++					`new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
++				)
++			end
++			-- inside a raft's worktree the stub reaches the branch with the final merge of origin/main
++			if not raftIsActiveHere() then
++				mergeOrigin()
++			end
++			print(`tracker/issues/{chosen}/{chosen}.md`)
++			return
++		end
++		local id = store.formatId(prefix, store.nextNumber("issue"))
+ 		local dir = store.dirFor("issue", state, id)
+ 		fs.writeDir(dir)
+ 		local vars = {
+@@ -191,6 +368,84 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
+ 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
+ 		end
++		if publishing() then
++			if sh.git({ "status", "--porcelain" }) ~= "" then
++				fail(
++					"working tree is not clean: commit or stash first (new raft merges origin/main right after it claims)"
++				)
++			end
++			local ids: { string } = {}
++			for i = 4, #pos do
++				table.insert(ids, pos[i])
++			end
++			if #ids == 0 then
++				fail("a raft needs at least one issue")
++			end
++			local chosen = ""
++			local r = publish.commit(".", function(paths, read)
++				local known = idsOf(paths, "raft")
++				for _, raft in store.all("raft") do
++					table.insert(known, raft.id)
++				end
++				chosen = store.formatId("R", statusLib.nextNumber(known))
++				local claim = stamp("preparing")
++				local changes: { publish.Change } = {}
++				for _, id in ids do
++					local path = docPath(paths, id)
++					local text = path and read(path)
++					if not path or not text then
++						return `{id} is not on origin/main`
++					end
++					local owner = frontOf(text).raft
++					if owner and owner ~= "" then
++						return `{id} already belongs to {owner}`
++					end
++					local st = statusLib.effective(frontOf(text), stateOfPath(path))
++					if st ~= "new" then
++						return `{id} is {st} on origin/main, not new`
++					end
++					if store.TYPES[string.sub(id, 1, 1)] ~= rtype then
++						return `{id} is a {store.TYPES[string.sub(id, 1, 1)]}; a {rtype} raft cannot contain it`
++					end
++					-- only `status:` is written: `raft:` sits beside `depends_on:`, which a capture PR may be editing
++					table.insert(changes, { path = path, content = withFront(text, "status", claim) })
++				end
++				local vars = {
++					ID = chosen,
++					TYPE = rtype,
++					TITLE = title(slug),
++					SLUG = slug,
++					SINGLE = if opts["--single"] then "true" else "false",
++					ISSUES = table.concat(ids, ", "),
++					DATE = today(),
++				}
++				table.insert(changes, {
++					path = `tracker/rafts/{chosen}/{chosen}.md`,
++					content = withFront(render("tracker/templates/raft/doc.md", vars), "status", claim),
++				})
++				table.insert(changes, {
++					path = `tracker/rafts/{chosen}/check.sh`,
++					content = render("tracker/templates/raft/check.sh", vars),
++					mode = "100755",
++				})
++				return changes
++			end, function()
++				return `tracker: new raft {chosen} {slug}`
++			end)
++			if not r.ok then
++				fail(`new raft: {r.reason}`)
++			end
++			mergeOrigin()
++			-- membership is written locally and committed, so later merges of origin/main stay clean
++			for _, id in ids do
++				local doc = store.get(id).doc
++				store.setFront(doc, "raft", chosen)
++				sh.git({ "add", doc })
++			end
++			sh.git({ "commit", "--quiet", "-m", `tracker: {chosen} members` })
++			print(`tracker/rafts/{chosen}/{chosen}.md`)
++			return
++		end
+ 		local members: { store.Item } = {}
+ 		for i = 4, #pos do
+ 			local issue = store.get(pos[i])
+@@ -232,6 +487,159 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 	end
+ end
+ 
++local function originPaths(): { string }
++	sh.git({ "fetch", "--quiet", "origin", "main" })
++	return string.split(
++		sh.git({ "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" }),
++		"\n"
++	)
++end
++
++-- `status` lists what origin/main says about every item that is not done; `status <id>` prints one
++-- item's status; `status <id> <to>` moves it (checked against origin/main, not the local file).
++-- A move of a raft moves its members too. Published moves are pushed at once; the move to
++-- `prepared` is carried by the prep PR and only edits the local documents.
++function cmd.status(pos: { string })
++	local id, to = pos[1], pos[2]
++	if to then
++		refuseInMainCheckout("status")
++	end
++	if not publishing() then
++		fail("status needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
++	end
++	if not id then
++		for _, p in originPaths() do
++			if publish.allowed(p) and string.match(p, "/[^/]+%.md$") and stateOfPath(p) ~= "done" then
++				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
++				local fid = string.match(p, "/([fdcR]%d%d%d%d)/[^/]+$") :: string
++				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
++			end
++		end
++		return
++	end
++	if not to then
++		local p = docPath(originPaths(), id)
++		if not p then
++			fail(`{id} is not on origin/main`)
++		end
++		print(
++			statusLib.effective(
++				frontOf(sh.git({ "show", `origin/main:{p :: string}` })),
++				stateOfPath(p :: string)
++			)
++		)
++		return
++	end
++	if not statusLib.parse(to) then
++		fail(`unknown status {to} (new, preparing, prepared, active, done)`)
++	end
++	if to == "active" then
++		fail(
++			"only tracker.sh start claims active: it checks the tree, the designs and the dependencies first"
++		)
++	end
++	local moved: { { id: string, from: string } } = {}
++	local carried = false
++	local r = publish.commit(".", function(paths, read)
++		moved = {}
++		local path = docPath(paths, id)
++		local text = path and read(path)
++		if not path or not text then
++			return `{id} is not on origin/main`
++		end
++		local front = frontOf(text)
++		local from = statusLib.effective(front, stateOfPath(path))
++		carried = statusLib.carriedByPr(from, to)
++		-- a carried move lands with the prep PR, so it follows the member list that PR will carry
++		local list = front.issues
++		if carried and store.isRaftId(id) then
++			list = store.readFront(store.get(id).doc).issues
++		end
++		local targets = { id }
++		if store.isRaftId(id) then
++			for _, m in store.idList(list) do
++				table.insert(targets, m)
++			end
++		end
++		local value = stamp(to)
++		local changes: { publish.Change } = {}
++		for _, t in targets do
++			local tp = docPath(paths, t)
++			local tt = tp and read(tp)
++			if not tp or not tt then
++				return `{t} is not on origin/main`
++			end
++			local tf = frontOf(tt)
++			local cur = statusLib.effective(tf, stateOfPath(tp))
++			if carried and t ~= id and cur ~= "preparing" then
++				return `{t} is {cur} on origin/main: claim it first with tracker.sh status {t} preparing`
++			end
++			if carried then
++				-- the move to `prepared` ties the two fields together: designs are ready first
++				local localItem = store.get(t)
++				if store.readFront(localItem.doc).design ~= "ready" then
++					return `{t} is not design: ready: set it (ticket-prep) before status {id} prepared`
++				end
++			end
++			if
++				not (
++					statusLib.canMove(cur, to)
++					or statusLib.canClaim(cur, to, tf.status ~= nil, store.isRaftId(id))
++				)
++			then
++				return `{t} is {cur} on origin/main: cannot move to {to}`
++			end
++			table.insert(moved, { id = t, from = cur :: string })
++			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
++		end
++		if carried then
++			return {}
++		end
++		return changes
++	end, function()
++		return `tracker: {id} {to}`
++	end)
++	if not r.ok then
++		fail(r.reason or "publish failed")
++	end
++	if carried then
++		local value = stamp(to)
++		for _, m in moved do
++			store.setFront(store.get(m.id).doc, "status", value)
++		end
++	else
++		mergeOrigin()
++	end
++	-- giving a claim back ends this worktree's ownership of it
++	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
++		fs.removeFile(claimFile(id))
++	end
++end
++
++-- Prints a fresh stamp for a state (diagnostics, and how specs prove that stamps differ between processes).
++function cmd.stamp(pos: { string })
++	local state = pos[1]
++	if not state or not statusLib.parse(state) then
++		fail("usage: stamp <new|preparing|prepared|active|done>")
++	end
++	print(stamp(state))
++end
++
++-- `sync` brings origin/main into this checkout (a merge in a worktree, a fast-forward in the main
++-- checkout). `sync --fetch` only updates origin/main: reviewers and stream agents use it, because
++-- a merge would add a commit and change the diff they judge.
++function cmd.sync(_: { string }, opts: { [string]: { string } })
++	sh.git({ "fetch", "--quiet", "origin", "main" })
++	if not opts["--fetch"] then
++		if sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot() then
++			sh.git({ "pull", "--quiet", "--ff-only" })
++		else
++			mergeOrigin()
++		end
++	end
++	print(`synced to {sh.git({ "rev-parse", "--short", "origin/main" })}`)
++end
++
+ function cmd.find(pos: { string })
+ 	print(store.get(pos[1] or fail("usage: find <id>")).dir)
+ end
+@@ -431,8 +839,60 @@ function cmd.start(pos: { string })
+ 		end
+ 	end
+ 	local branch = raftBranch(raft)
+-	if sh.git({ "branch", "--show-current" }) ~= branch then
++	-- every local precondition first: a refusal after the claim would leave origin saying `active`
++	local onBranch = sh.git({ "branch", "--show-current" }) == branch
++	if not onBranch then
+ 		refuseInMainCheckout("start")
++		if sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
++			fail(`branch {branch} already exists: switch to it and run start there`)
++		end
++	end
++	if publishing() then
++		local ids = { raft.id }
++		for _, m in members do
++			table.insert(ids, m.id)
++		end
++		fs.writeDir(".cache")
++		local mine = if fs.isFile(claimFile(raft.id)) then sh.trim(fs.readFile(claimFile(raft.id))) else ""
++		local claim = stamp("active")
++		-- written before the push: a start that dies right after it can then be resumed by this terminal
++		fs.writeFile(claimFile(raft.id), claim)
++		local r = publish.commit(".", function(paths, read)
++			local changes: { publish.Change } = {}
++			for _, id in ids do
++				local path = docPath(paths, id)
++				local text = path and read(path)
++				if not path or not text then
++					return `{id} is not on origin/main`
++				end
++				local raw = frontOf(text).status
++				if mine ~= "" and raw == mine then
++					continue -- claimed earlier by this terminal: a retry of a failed start
++				end
++				local st = statusLib.effective(frontOf(text), stateOfPath(path))
++				if not statusLib.canMove(st, "active") then
++					return `{id} is {st} on origin/main, not prepared`
++				end
++				table.insert(changes, { path = path, content = withFront(text, "status", claim) })
++			end
++			return changes
++		end, `tracker: start {raft.id}`)
++		if not r.ok or not r.sha then
++			-- refused, or nothing to claim (a resumed claim): keep or restore the file accordingly
++			if mine ~= "" then
++				fs.writeFile(claimFile(raft.id), mine)
++			elseif fs.isFile(claimFile(raft.id)) then
++				fs.removeFile(claimFile(raft.id))
++			end
++		end
++		if not r.ok then
++			fail(r.reason or "publish failed")
++		end
++		mergeOrigin()
++		raft = store.get(raft.id)
++		members = store.members(raft.id)
++	end
++	if not onBranch then
+ 		sh.git({ "switch", "-c", branch })
+ 	end
+ 	raft = move(raft, "active")
+@@ -1141,6 +1601,22 @@ if not handler then
+ 	print(USAGE)
+ 	process.exit(if name then 1 else 0)
+ end
++-- Every command that can change a repository checks first that git's root is the checkout the tracker
++-- lives in, whatever PICKMAN_PUBLISH says. Only commands that read the tracker run in `.git`-less
++-- sandboxes on purpose (specs do), so they alone are exempt.
++local READ_ONLY: { [string]: boolean } = {
++	list = true,
++	find = true,
++	members = true,
++	metrics = true,
++	board = true,
++	workstreams = true,
++	["promote-check"] = true,
++	stamp = true,
++}
++if not READ_ONLY[name :: string] then
++	guardRepoRoot()
++end
+ local rest = table.move(args, 2, #args, 1, {})
+ local pos, opts = flags(rest)
+ local ok, err = pcall(handler, pos, opts)
+diff --git a/scripts/tracker/store.luau b/scripts/tracker/store.luau
+index 42992ef..3f7cfe9 100644
+--- a/scripts/tracker/store.luau
++++ b/scripts/tracker/store.luau
+@@ -152,8 +152,10 @@ function store.setFront(path: string, key: string, value: string)
+ 	if not head or not block or not rest then
+ 		error(`{path} has no frontmatter`, 0)
+ 	end
+-	local pattern = `(\n?){key}:[^\n]*\n`
+-	local replaced, n = string.gsub("\n" .. block, pattern, `%1{key}: {value}\n`, 1)
++	-- anchored at a line start: a title that mentions `status:` must not absorb the new value
++	local replaced, n = string.gsub("\n" .. block, `\n{key}:[^\n]*\n`, function()
++		return `\n{key}: {value}\n`
++	end, 1)
+ 	if n == 0 then
+ 		replaced = "\n" .. block .. `{key}: {value}\n`
+ 	end

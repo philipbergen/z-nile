@@ -1,0 +1,207 @@
+--!strict
+-- Pushes a tracker-only commit to origin/main with git plumbing. Never touches the caller's working
+-- tree, index, HEAD or branch. See c0510.
+local process = require("@lune/process")
+local task = require("@lune/task")
+
+local publish = {}
+
+export type Change = { path: string, content: string, mode: string? }
+export type Result = { ok: boolean, sha: string?, reason: string? }
+export type Build = (paths: { string }, read: (string) -> string?) -> { Change } | string
+
+local function trim(s: string): string
+	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
+end
+
+-- tracker/(issues|rafts)/[active/ | done/]<ID>/(<ID>.md | check.sh), the id's prefix matching the kind.
+function publish.allowed(path: string): boolean
+	if string.find(path, "..", 1, true) or string.sub(path, 1, 1) == "/" then
+		return false
+	end
+	local kind, rest = string.match(path, "^tracker/(%a+)/(.+)$")
+	if not kind or not rest then
+		return false
+	end
+	local stripped: string = string.match(rest, "^active/(.+)$") or string.match(rest, "^done/(.+)$") or rest
+	local id, file = string.match(stripped, "^(%w+)/([%w%.]+)$")
+	if not id then
+		return false
+	end
+	local okId = if kind == "issues"
+		then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
+		else (kind == "rafts" and string.match(id, "^R%d%d%d%d$") ~= nil)
+	return okId and (file == `{id}.md` or file == "check.sh")
+end
+
+-- The document with its single `status:` frontmatter line removed, or nil when it has no well-formed
+-- frontmatter. A published edit of an existing document may differ from origin's only in that line.
+local function withoutStatus(text: string): string?
+	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
+	if not head or not block or not rest then
+		return nil
+	end
+	local lines = 0
+	local kept = string.gsub("\n" .. block, "\nstatus:[^\n]*", function()
+		lines += 1
+		return ""
+	end)
+	if lines > 1 then
+		return nil
+	end
+	return head .. kept .. rest
+end
+
+local function git(
+	cwd: string,
+	args: { string },
+	env: { [string]: string }?,
+	stdin: string?
+): process.ExecResult
+	return process.exec(
+		"git",
+		args,
+		{ cwd = cwd, env = env, stdio = if stdin then { stdin = stdin } else nil }
+	)
+end
+
+local function fail(reason: string): Result
+	return { ok = false, reason = reason }
+end
+
+function publish.commit(cwd: string, build: Build, message: string | () -> string, tries: number?): Result
+	local max = tries or 5
+	local last = ""
+	for attempt = 1, max do
+		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
+		if not fetched.ok then
+			last = "fetch failed: " .. trim(fetched.stderr) -- a lock held by a sibling worktree: back off, retry
+			task.wait(0.15 * attempt)
+			continue
+		end
+		-- every later step names this sha, never `origin/main`: sibling worktrees share that ref
+		local rev = git(cwd, { "rev-parse", "--verify", "origin/main^{commit}" })
+		local base = trim(rev.stdout)
+		if not rev.ok or not string.match(base, "^%x+$") then
+			return fail("cannot resolve origin/main: " .. trim(rev.stderr))
+		end
+		local listing = git(cwd, { "ls-tree", "-r", "--name-only", "--full-tree", base, "tracker/" })
+		if not listing.ok then
+			return fail("cannot list origin/main: " .. trim(listing.stderr))
+		end
+		local paths: { string } = {}
+		for p in string.gmatch(listing.stdout, "[^\n]+") do
+			if publish.allowed(p) then
+				table.insert(paths, p)
+			end
+		end
+		local function read(p: string): string?
+			local r = git(cwd, { "show", `{base}:{p}` })
+			return if r.ok then r.stdout else nil
+		end
+		local out = build(paths, read)
+		if type(out) == "string" then
+			return fail(out)
+		end
+		for _, c in out do
+			if not publish.allowed(c.path) then
+				return fail(`{c.path} is not a tracker item file`)
+			end
+			local existing = read(c.path)
+			if existing and string.sub(c.path, -9) == "/check.sh" then
+				return fail(`{c.path} already exists on origin/main: check.sh is never rewritten`)
+			end
+			if string.find(c.content, "\r", 1, true) then
+				return fail(`{c.path}: carriage returns are not allowed in a published change`)
+			end
+			if existing then
+				local before, after = withoutStatus(existing), withoutStatus(c.content)
+				if not before or not after or before ~= after then
+					return fail(
+						`{c.path}: a published change to an existing document may only edit its status: line`
+					)
+				end
+			end
+		end
+		if #out == 0 then
+			return { ok = true }
+		end
+		local gitDir = trim(git(cwd, { "rev-parse", "--absolute-git-dir" }).stdout)
+		local index =
+			`{gitDir}/pickman-publish-{os.time()}-{math.floor(os.clock() * 1e6)}-{math.random(1, 1e9)}`
+		local env = { GIT_INDEX_FILE = index }
+		local function step(args: { string }, stdin: string?): (string?, string?)
+			local r = git(cwd, args, env, stdin)
+			if not r.ok then
+				return nil, trim(r.stderr .. r.stdout)
+			end
+			return trim(r.stdout)
+		end
+		local err = ""
+		local sha: string? = nil
+		repeat
+			local ok, e = step({ "read-tree", base })
+			if not ok then
+				err = e or "read-tree failed"
+				break
+			end
+			local bad = false
+			for _, c in out do
+				local blob, be = step({ "hash-object", "-w", "--stdin" }, c.content)
+				if not blob or not string.match(blob, "^%x+$") then
+					err, bad = be or "hash-object failed", true
+					break
+				end
+				local added, ue =
+					step({ "update-index", "--add", "--cacheinfo", `{c.mode or "100644"},{blob},{c.path}` })
+				if not added and ue then
+					err, bad = ue, true
+					break
+				end
+			end
+			if bad then
+				break
+			end
+			local tree = step({ "write-tree" })
+			if not tree or not string.match(tree, "^%x+$") then
+				err = "write-tree failed"
+				break
+			end
+			local baseTree = trim(git(cwd, { "rev-parse", base .. "^{tree}" }).stdout)
+			if tree == baseTree then
+				sha = ""
+				break
+			end
+			local text = if type(message) == "function" then message() else message
+			local made = git(cwd, { "commit-tree", tree, "-p", base, "-m", text })
+			local candidate = trim(made.stdout)
+			if
+				not made.ok
+				or not (string.match(candidate, "^%x+$") and (#candidate == 40 or #candidate == 64))
+			then
+				err = "commit-tree failed: " .. trim(made.stderr)
+				break
+			end
+			sha = candidate
+		until true
+		process.exec("rm", { "-f", index })
+		if sha == nil then
+			return fail(err)
+		end
+		if sha == "" then
+			return { ok = true } -- the change was already there
+		end
+		local pushed = git(
+			cwd,
+			{ "push", "-q", `--force-with-lease=refs/heads/main:{base}`, "origin", `{sha}:refs/heads/main` }
+		)
+		if pushed.ok then
+			return { ok = true, sha = sha }
+		end
+		last = trim(pushed.stderr)
+		task.wait(0.05 * attempt)
+	end
+	return fail(`push rejected after {max} tries: {last}`)
+end
+
+return publish
