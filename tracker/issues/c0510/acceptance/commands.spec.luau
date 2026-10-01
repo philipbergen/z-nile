@@ -333,6 +333,11 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 			local function ready(path: string)
 				fs.writeFile(path, (string.gsub(fs.readFile(path), "design: draft", "design: ready")))
 			end
+			-- the raft's own design counts too: a draft raft cannot be prepared, whatever its members say
+			local rawRaft = tr(cap, { "status", rz, "prepared" })
+			t.expect(rawRaft.ok).toBe(false)
+			t.expect(has(rawRaft.stderr, rz)).toBe(true)
+			t.expect(has(rawRaft.stderr, "design: ready")).toBe(true)
 			ready(doc)
 			ready(`{cap}/tracker/issues/{zeta}/{zeta}.md`)
 			local original = fs.readFile(doc)
@@ -464,6 +469,7 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 					{ "board", "--out", `{lost}/board.html` },
 					{ "workstreams", "R0010" },
 					{ "promote-check", "R0010" },
+					{ "stamp", "new" },
 				}
 			do
 				t.expect(has(tr(lost, args).stderr, "repository root")).toBe(false)
