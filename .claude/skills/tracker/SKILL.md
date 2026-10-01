@@ -69,7 +69,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
 | prune | `tracker.sh worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
 | focus | `tracker.sh focus f0010` | the following commits are attributed to that issue |
 | commit | `tracker.sh commit -m "msg" [--issue f0010]... [--time 25]` | `git add -A`, then records spend rows in each issue's `spend.md` and the raft's summary **in the same commit**, adds `Issue:` trailers, and pushes |
-| done | `tracker.sh done R0010` | requires the latest review round to be resolved and the raft's `check.sh` to pass. Promotes acceptance specs to `tests/acceptance/`, marks the PR **ready** before its final push, moves everything to `done/`, commits, pushes, and appends spend to the PR body |
+| done | `tracker.sh done R0010` | requires the latest review round to be resolved (each finding answered `fixed`, `refuted`, or, for a medium or low finding, `deferred <id>: <why>` naming a backlog issue) and the raft's `check.sh` to pass. Promotes acceptance specs to `tests/acceptance/`, marks the PR **ready** before its final push, moves everything to `done/`, commits, pushes, and appends spend to the PR body |
 
 ## Landing a change
 One procedure for every change: a raft, a capture, a prep or an edit.

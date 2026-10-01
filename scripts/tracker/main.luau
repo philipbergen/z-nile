@@ -825,7 +825,7 @@ cmd["promote-check"] = function(pos: { string })
 end
 
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
--- answers every finding id with "fixed" or "refuted".
+-- answers every finding id with "fixed", "refuted" or a valid "deferred <id>: <why>".
 local function reviewProblem(raft: store.Item): string?
 	local latest = 0
 	for _, name in fs.readDir(raft.dir) do
@@ -846,14 +846,35 @@ local function reviewProblem(raft: store.Item): string?
 	local refutePath = `{raft.dir}/refute-{num}.md`
 	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
 	local missing = {}
-	for id in string.gmatch(review, "\n###%s+(F%d+)") do
+	local invalid = {}
+	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if not line or not (string.find(line, "^fixed") or string.find(line, "^refuted")) then
+		if line and (string.find(line, "^fixed") or string.find(line, "^refuted")) then
+			continue
+		end
+		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
 			table.insert(missing, id)
+			continue
+		end
+		local target = string.match(line, "^deferred%s+([fdc]%d%d%d%d):%s*%S")
+		local severity = string.match(rest or "", "^%s*%[(%a+)%]")
+		local rating = if severity then string.lower(severity) else "unrated"
+		if not target then
+			table.insert(invalid, `{id}: deferred needs "<issue id>: <why>"`)
+		elseif rating ~= "medium" and rating ~= "low" then
+			table.insert(invalid, `{id} is {rating}: only a medium or low finding can be deferred`)
+		else
+			local item = store.find(target)
+			if not item or item.kind ~= "issue" or item.state ~= "backlog" then
+				table.insert(invalid, `{id}: {target} is not a backlog issue`)
+			end
 		end
 	end
 	if #missing > 0 then
 		return `review-{num}.md findings not answered in refute-{num}.md: {table.concat(missing, ", ")}`
+	end
+	if #invalid > 0 then
+		return `refute-{num}.md: {table.concat(invalid, "; ")}`
 	end
 	return nil
 end
