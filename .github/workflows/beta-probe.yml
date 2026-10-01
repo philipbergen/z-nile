@@ -1,0 +1,37 @@
+name: beta-probe
+# ONE-OFF prep probe for R0080 (never merged): setup --tools on a fresh runner, the runtime script against the
+# already published Beta version 5 (no publish), and the PR comment edit-in-place with an Actions token.
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/setup.sh --tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: runtime test against Beta version 5 (read-only: no publish)
+        run: lune run scripts/runtime-test -- 5
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+      - name: comment twice, expect one comment holding the second text
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR" --edit-last --create-if-none --body "probe comment one"
+          gh pr comment "$PR" --edit-last --create-if-none --body "probe comment two"
+          gh pr view "$PR" --json comments -q '.comments | map(.body) | join(" | ")'
+          n=$(gh pr view "$PR" --json comments -q '.comments | length')
+          echo "comments=$n"
+          [ "$n" = 1 ]
+          gh pr view "$PR" --json comments -q '.comments[0].body' | grep -q "probe comment two"
