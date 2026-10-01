@@ -1,7 +1,7 @@
 --!strict
 -- c0140 AC1: OpenCloud.publish puts a built place on the Beta experience through the Place Publishing
 -- API, with exactly the request that works against Roblox (its shape was proven from CI in prep), retries
--- only "Roblox busy" and never lets the API key out of the x-api-key header.
+-- "Roblox busy" (409) and, since c0490, transient 429/5xx, and never lets the API key out of the x-api-key header.
 local OpenCloud = require("@scripts/lib/opencloud")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
