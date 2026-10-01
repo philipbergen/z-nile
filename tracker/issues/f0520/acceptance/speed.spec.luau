@@ -6,6 +6,7 @@
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
 local Session = require("@logic/Session")
+local View = require("@logic/View")
 local t = require("@tests/lib/t")
 
 -- the spawn is at the east end (x = 13): a corridor long enough to walk for several real seconds
@@ -64,6 +65,17 @@ return t.spec("f0520 game speed", function(it)
 		end
 		t.expect(before - Session.snapshot(s, "p").player.x).toBeNear(15, 1e-9)
 	end)
+
+	it(
+		"the client's blend between snapshots advances over 1/15 s: View.alpha is elapsed times the step rate",
+		function()
+			t.expect(View.alpha(0)).toBe(0)
+			t.expect(View.alpha(1 / 30)).toBeNear(0.5, 1e-9)
+			t.expect(View.alpha(1 / 15)).toBeNear(1, 1e-9)
+			t.expect(View.alpha(2 / 15)).toBeNear(2, 1e-9) -- View.interpolate clamps it
+			t.expect(View.alpha(1)).toBeNear(Session.STEP_RATE, 1e-9)
+		end
+	)
 
 	it("the turn buffer lasts 1.6 real seconds: 24 ticks at 15 steps a second", function()
 		t.expect(Movement.DEFAULT_CONFIG.turnBufferTicks / Session.STEP_RATE).toBeNear(1.6, 1e-9)

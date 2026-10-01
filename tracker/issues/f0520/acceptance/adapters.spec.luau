@@ -28,13 +28,18 @@ return t.spec("f0520 adapters use the step rate", function(it)
 		t.expect(calls).toBe(1)
 	end)
 
-	it("the client interpolates over the step rate, never the tick rate", function()
+	it("the client's blend is View.alpha of the elapsed real time, never the tick rate", function()
 		local src = source({ "StarterPlayer", "StarterPlayerScripts", "Client", "Camera" })
 		local calls = 0
 		for call in string.gmatch(src, "View%.interpolate%b()") do
 			calls += 1
-			t.expect(string.find(call, "Session.STEP_RATE", 1, true) ~= nil).toBe(true)
-			t.expect((string.find(call, "Session.TICK_RATE", 1, true))).toBe(nil)
+			-- the blend comes from View.alpha of the real seconds since the latest snapshot arrived, nothing else
+			t.expect(
+				string.find(
+					call,
+					"^View%.interpolate%(%s*prev%s*,%s*snap%s*,%s*View%.alpha%(%s*os%.clock%(%)%s*%-%s*arrived%s*%)%s*%)$"
+				) ~= nil
+			).toBe(true)
 		end
 		t.expect(calls).toBe(1)
 	end)
