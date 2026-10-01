@@ -39,7 +39,9 @@ return t.spec("c0450 override check", function(it)
 					"ALL",
 					"depends_on",
 					"chore",
+					"carries no list",
 					"remove or narrow",
+					"prefer narrowing",
 					"Order & dependencies",
 					"Overrides: none",
 				}
@@ -67,6 +69,7 @@ return t.spec("c0450 override check", function(it)
 				"Overrides:",
 				"scripts/affected",
 				"grep -rlF",
+				"carries no list",
 				"tests/acceptance",
 				"depends_on",
 				"placeholder",
@@ -74,6 +77,14 @@ return t.spec("c0450 override check", function(it)
 			}
 		do
 			t.expect(has(item, token)).toBe(true)
+		end
+	end)
+
+	it("make-prompt's readiness check refuses a raft whose issue depends on an unfinished item", function()
+		local prompt = fs.readFile(".claude/skills/make-prompt/SKILL.md")
+		local ready = section(prompt, "2. **Check readiness", "3. ")
+		for _, token in { "depends_on", "isn't a member", "done/", "stop" } do
+			t.expect(has(ready, token)).toBe(true)
 		end
 	end)
 

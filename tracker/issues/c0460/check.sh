@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0460. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
-A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance" # sequestered specs; see the testing skill
-source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0460 after it
+A="$HERE/acceptance"
+[[ -d $A ]] || A="$PWD/tests/acceptance/c0460"
 
+# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
+# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 check "AC1: board.yml triggers only on push to main and dispatch, read-only, per-ref concurrency, main-only job, no hidden conditions" lune run tests/run -- "$A/board-workflow.spec.luau"
 check "AC2: board.yml sets up, builds dist/board.html, and uploads that file as tracker-board, in that order" lune run tests/run -- "$A/board-workflow.spec.luau"
 check "AC3: setup.sh stage run against a stub gate: runs when unset or empty, skips when set; no other call or setter; SETUP.md documents it" lune run tests/run -- "$A/setup-skip-gate.spec.luau"
