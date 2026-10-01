@@ -3,6 +3,7 @@
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-01 05:36 | c0460: board workflow, setup.sh gate skip, docs | 35 | 4 | 5.0 | explicit |
+| 2 | 2026-10-01 06:44 | R0160: review-003 answered; c0460 claims corrected; file c0530 | 0 | 0 | 15.0 | explicit |
 
-**Total:** +35 / -4 lines, 5.0 agent-minutes over 1 commits
-<!-- totals: added=35 removed=4 minutes=5.0 commits=1 -->
+**Total:** +35 / -4 lines, 20.0 agent-minutes over 2 commits
+<!-- totals: added=35 removed=4 minutes=20.0 commits=2 -->
