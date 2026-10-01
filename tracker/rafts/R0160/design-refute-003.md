@@ -1,4 +1,4 @@
-# Refute 003: R0140
+# Refute 003: R0160
 
 - F1: fixed: a new case in `setup-skip-gate.spec.luau` requires `set -euo pipefail` to be the only `set` line in `setup.sh` and forbids a `trap` statement (a `^%s*trap%s` match, because the word "Bootstrap" in the header comment contains "trap "). Prototype mutants `set +e` before the stage and `trap true ERR` both fail on it. consequences: `setup.sh` can't change shell options or add a trap without a chore, the accepted route.
 - F2: fixed: the documented command is `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci`, pinned in `board-docs.spec` (the `rm -rf` mutant fails) and used by OC1. consequences: none.

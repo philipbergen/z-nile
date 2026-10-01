@@ -1,8 +1,8 @@
-# Review 001: R0140 (design mode)
-Inputs: base aa06e7c plus the uncommitted prep files: tracker/rafts/R0140/{R0140.md,check.sh}, tracker/issues/c0450/{c0450.md,check.sh,acceptance/override-check.spec.luau}, tracker/issues/c0460/{c0460.md,check.sh,acceptance/*.spec.luau}. I ran `tracker.sh check c0450` (2/5, the expected failures), `tracker.sh check c0460` (3/7, the expected failures) and `promote-check R0140` (OK). I also ran mutation checks on a scratch copy (scratchpad/r0140).
+# Review 001: R0160 (design mode)
+Inputs: base aa06e7c plus the uncommitted prep files: tracker/rafts/R0160/{R0160.md,check.sh}, tracker/issues/c0450/{c0450.md,check.sh,acceptance/override-check.spec.luau}, tracker/issues/c0460/{c0460.md,check.sh,acceptance/*.spec.luau}. I ran `tracker.sh check c0450` (2/5, the expected failures), `tracker.sh check c0460` (3/7, the expected failures) and `promote-check R0160` (OK). I also ran mutation checks on a scratch copy (scratchpad/r0140).
 
 ### F1 [high] setup-skip-gate.spec passes an inverted guard that silently removes the full gate from check.yml
-Where: tracker/issues/c0460/acceptance/setup-skip-gate.spec.luau (both guard cases); c0460 Regression guard; R0140 Risks ("a spec covers the unset case")
+Where: tracker/issues/c0460/acceptance/setup-skip-gate.spec.luau (both guard cases); c0460 Regression guard; R0160 Risks ("a spec covers the unset case")
 Evidence: In a scratch copy I replaced the final stage of `scripts/setup.sh` with `if [[ -z ${PICKMAN_SKIP_GATE:-} ]]; then say "gate (skipped: …)"; else say "gate"; scripts/check.sh --full; fi` (`-z` instead of `-n`) and added a mention to SETUP.md. Result: `setup-skip-gate.spec.luau` gave 3 passed, 0 failed, and `bash -n` was OK. With this mutant, `check.yml` (which doesn't set the variable) skips the gate and reports green on every PR and on `main`. No AC catches it:
 - AC7 runs `scripts/check.sh --full` directly, not through setup.sh.
 - `tests/acceptance/c0010/ci-workflow.spec.luau` only checks that check.yml runs `scripts/setup.sh` with GH_TOKEN.
@@ -58,7 +58,7 @@ Recommendation: Rewrite the bullet and the Design paragraph:
 Add tokens to the spec so these sentences can't silently disappear: for example, `remove or narrow` in the prep section, and the self-naming exemption.
 
 ### F4 [medium] board-workflow.spec passes workflows that fail or never run on GitHub
-Where: tracker/issues/c0460/acceptance/board-workflow.spec.luau; c0460 Rules and mutants; R0140 Risks ("its structure is pinned by a spec")
+Where: tracker/issues/c0460/acceptance/board-workflow.spec.luau; c0460 Rules and mutants; R0160 Risks ("its structure is pinned by a spec")
 Evidence: Scratch runs against the Design's exact YAML gave 6/6 for the original and also 6/6 for each of these mutants:
 - (a) `GH_TOKEN` env removed from the setup step. setup.sh then dies in CI with "CI: GH_TOKEN missing or invalid", because `gh api rate_limit` has no token.
 - (b) `if: github.event_name == 'workflow_dispatch'` on the upload step, a plausible copy from check.yml's last step. The board is built and never uploaded on push.

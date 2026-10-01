@@ -1,5 +1,5 @@
-# Review 002: R0140 (design mode)
-Inputs: prep worktree HEAD aa06e7c plus the uncommitted prep files: tracker/rafts/R0140/{R0140.md,check.sh,design-review-001.md,design-refute-001.md}, tracker/issues/c0450/{c0450.md,check.sh,acceptance/override-check.spec.luau}, tracker/issues/c0460/{c0460.md,check.sh,acceptance/*.spec.luau}; origin/main b6e3e59 (R0130) for drift. I ran `tracker.sh check c0450` (2/5, the expected failures), `tracker.sh check c0460` (3/7, the expected failures) and `promote-check R0140` (OK). In scratch copies I built the c0450 text and the c0460 `setup.sh` stage from the Design and ran the specs: override-check plus c0410 gave 19/19, setup-skip-gate gave 6/6, and all of `tests/acceptance` plus `tests/tooling` with the new template gave 413/413. I also ran my own mutants and replayed `start` on a b6e3e59 tree.
+# Review 002: R0160 (design mode)
+Inputs: prep worktree HEAD aa06e7c plus the uncommitted prep files: tracker/rafts/R0160/{R0160.md,check.sh,design-review-001.md,design-refute-001.md}, tracker/issues/c0450/{c0450.md,check.sh,acceptance/override-check.spec.luau}, tracker/issues/c0460/{c0460.md,check.sh,acceptance/*.spec.luau}; origin/main b6e3e59 (R0130) for drift. I ran `tracker.sh check c0450` (2/5, the expected failures), `tracker.sh check c0460` (3/7, the expected failures) and `promote-check R0160` (OK). In scratch copies I built the c0450 text and the c0460 `setup.sh` stage from the Design and ran the specs: override-check plus c0410 gave 19/19, setup-skip-gate gave 6/6, and all of `tests/acceptance` plus `tests/tooling` with the new template gave 413/413. I also ran my own mutants and replayed `start` on a b6e3e59 tree.
 Dropped from design-review-001: F2, F3, F4, F5, F6, F7. The fixes hold. I accept the F5 correction: a workflow-level concurrency group is evaluated when the run is queued, before job `if` conditions, so a global group would let a skipped branch dispatch cancel the `main` run, and the per-ref group plus the main-only job `if` is right. F6 also holds: the visible placeholder renders through `tracker.sh new` (`{{…}}` substitution only), the board and `metrics` build, and `c0410/table.spec` stays green. F1 was only partly fixed and comes back as F2.
 
 ### F1 [high] Both issue `check.sh` files use the locator that main's promoted c0330 spec forbids, so the gate turns red at `tracker.sh start`
@@ -11,7 +11,7 @@ Recommendation:
 - Merge origin/main into the prep worktree.
 - Regenerate both `check.sh` headers from the current `tracker/templates/issue/check.sh`, with the `HERE`/`pwd -P` locator and the fallback to `tests/acceptance/c0450` or `c0460`, keeping the `check` lines unchanged.
 - Rerun `tracker.sh check c0450` and `c0460`. Expect the same pass/fail split as now.
-- Rerun `promote-check R0140`.
+- Rerun `promote-check R0160`.
 - Run `tests/acceptance/c0330/locator.spec.luau` with the items copied into `active/` and `done/` in a scratch tree, and check that `AC_LIST=1 bash tracker/issues/c0460/check.sh` lists 7 criteria.
 - Add `tests/acceptance/c0330/locator.spec.luau` as "at risk" to both Regression guards.
 - In c0450 Design, give it as the worked example of the directory-walk residual. The folder skim should name specs that walk `tracker/`, such as c0330, c0400, c0420 and c0430.
