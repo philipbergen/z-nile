@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Bootstrap a new host for pickman. Idempotent; safe to re-run. See SETUP.md.
+# Usage: scripts/setup.sh [--tools]   (--tools: install the toolchain only, skip the gate)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+case "${1:-}" in
+  "" | --tools) ;;
+  *) printf 'SETUP FAILED: unknown argument %s (only --tools)\n' "$1" >&2; exit 2 ;;
+esac
 
 ROKIT_VERSION=v1.2.0
 say() { printf '\n== %s\n' "$1"; }
@@ -57,6 +63,11 @@ for t in rojo selene stylua luau-lsp lune; do printf '%-9s %s\n' "$t" "$($t --ve
 say "lune type definitions"
 lune setup >/dev/null
 git checkout -- .luaurc 2>/dev/null || true # lune setup may reorder .luaurc; keep the committed one
+
+if [[ ${1:-} == --tools ]]; then
+  echo "tools only: gate skipped (--tools)"
+  exit 0
+fi
 
 say "gate"
 scripts/check.sh --full

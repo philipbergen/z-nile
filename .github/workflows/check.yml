@@ -29,3 +29,49 @@ jobs:
         run: |
           files=$(find tracker -path '*/active/*/acceptance/*.spec.luau' | sort)
           if [ -n "$files" ]; then lune run tests/run -- $files; fi
+
+  # Every PR that is ready for review goes live on the private Pickman Beta experience and the runtime tests
+  # then run in a real server of that version. Only after the gate is green, only for branches of this repo
+  # (secrets never reach a fork), and the Roblox secrets are named only in the env of the steps that need
+  # them. The order is the order in which gates finish, not of pushes; the comment names the commit.
+  beta:
+    needs: gate
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20 # the job holds the shared beta-deploy lock: a stalled request must not hold it for hours
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: beta-deploy
+      cancel-in-progress: false # a running publish finishes; only the newest waiting one survives
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/setup.sh --tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - id: deploy
+        run: lune run scripts/deploy-beta
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+      - if: steps.deploy.outputs.version != ''
+        run: |
+          gh pr comment "$PR" --edit-last --create-if-none \
+            --body "Published to Pickman (Beta): version $VERSION (commit $SHA)."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          VERSION: ${{ steps.deploy.outputs.version }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+      - if: steps.deploy.outputs.version != ''
+        run: lune run scripts/runtime-test -- "$VERSION"
+        env:
+          VERSION: ${{ steps.deploy.outputs.version }}
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}

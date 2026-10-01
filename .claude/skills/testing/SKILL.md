@@ -22,6 +22,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
 | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
 | `tests/tooling/` | the scripts in `scripts/` | scripts |
+| `tests/runtime/` | scripts that run inside a real Roblox server of the published Beta place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`, run by CI after a publish; skipped when no key is configured). Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
 | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/` or `default.project.json` change | `@tests/lib/place` |
 | `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
 | `tests/meta/` | the structural rules from the architecture skill | the graph library |
