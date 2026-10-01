@@ -77,8 +77,10 @@ local function run(args: { string }, env: { [string]: string }?): Result
 		table.insert(full, a)
 	end
 	local merged: { [string]: string } = { PICKMAN_JOBS = "" } -- empty means unset; never inherit the caller's
-	for k, v in env or {} do
-		merged[k] = v
+	if env then
+		for k, v in env do
+			merged[k] = v
+		end
 	end
 	local r = process.exec("lune", full, { cwd = root, env = merged })
 	return { ok = r.ok, code = r.code, stdout = r.stdout, stderr = r.stderr }
