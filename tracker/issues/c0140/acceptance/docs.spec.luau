@@ -11,9 +11,7 @@ end
 
 return t.spec("c0140 SETUP.md documents Beta publishing", function(it)
 	it("names the secret, the two variables and the key's publish scope", function()
-		for _, needle in
-			{ "ROBLOX_API_KEY", "ROBLOX_BETA_UNIVERSE_ID", "ROBLOX_BETA_PLACE_ID", "universe-places" }
-		do
+		for _, needle in { "ROBLOX_API_KEY", "ROBLOX_BETA_UNIVERSE_ID", "ROBLOX_BETA_PLACE_ID", "universe-places" } do
 			t.expect(has(needle)).toBe(true)
 		end
 	end)

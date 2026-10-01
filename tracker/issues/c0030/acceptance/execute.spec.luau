@@ -131,9 +131,7 @@ return t.spec("c0030 OpenCloud.execute", function(it)
 	end)
 
 	it("the API key never appears in an error", function()
-		for _, responses in
-			{ { respond(403, "x") }, { created(), respond(500, "y") }, { respond(200, "{}") } }
-		do
+		for _, responses in { { respond(403, "x") }, { created(), respond(500, "y") }, { respond(200, "{}") } } do
 			local cfg = fake(responses)
 			local ok, err = pcall(OpenCloud.execute, cfg, 5, "return 1")
 			t.expect(ok).toBe(false)

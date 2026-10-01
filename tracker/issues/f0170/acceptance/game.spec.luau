@@ -29,21 +29,18 @@ local function stepsUntilChange(g: Game.Game): (number, { Game.Event })
 end
 
 return t.spec("f0170 Game", function(it)
-	it(
-		"the classic rules: 3 lives, an extra life at 10,000, pauses of 2, 1.5 and 2 seconds at 30 Hz",
-		function()
-			local c = Game.CLASSIC_CONFIG
-			t.expect(c.lives).toBe(3)
-			t.expect(c.extraLifeScore).toBe(10000)
-			t.expect(c.readyTicks).toBe(60)
-			t.expect(c.dyingTicks).toBe(45)
-			t.expect(c.levelClearTicks).toBe(60)
-			t.expect(c.tickRate).toBe(30)
-			local i = Game.IMMEDIATE_CONFIG
-			t.expect(i.readyTicks + i.dyingTicks + i.levelClearTicks).toBe(0)
-			t.expect(i.lives).toBe(3)
-		end
-	)
+	it("the classic rules: 3 lives, an extra life at 10,000, pauses of 2, 1.5 and 2 seconds at 30 Hz", function()
+		local c = Game.CLASSIC_CONFIG
+		t.expect(c.lives).toBe(3)
+		t.expect(c.extraLifeScore).toBe(10000)
+		t.expect(c.readyTicks).toBe(60)
+		t.expect(c.dyingTicks).toBe(45)
+		t.expect(c.levelClearTicks).toBe(60)
+		t.expect(c.tickRate).toBe(30)
+		local i = Game.IMMEDIATE_CONFIG
+		t.expect(i.readyTicks + i.dyingTicks + i.levelClearTicks).toBe(0)
+		t.expect(i.lives).toBe(3)
+	end)
 
 	it("a new run starts in ready, with level 1, score 0, full lives and the ready countdown", function()
 		local g = Game.new(SMALL)

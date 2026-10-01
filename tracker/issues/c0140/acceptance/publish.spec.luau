@@ -44,8 +44,7 @@ return t.spec("c0140 OpenCloud.publish", function(it)
 		local version = OpenCloud.publish(cfg, "PLACEBYTES\0\255")
 		t.expect(version).toBe(7)
 		t.expect(#calls).toBe(1)
-		t.expect(calls[1].url)
-			.toBe("https://example.test/universes/v1/111/places/222/versions?versionType=Published")
+		t.expect(calls[1].url).toBe("https://example.test/universes/v1/111/places/222/versions?versionType=Published")
 		t.expect(calls[1].method).toBe("POST")
 		t.expect(calls[1].headers["x-api-key"]).toBe(KEY)
 		t.expect(calls[1].headers["Content-Type"]).toBe("application/octet-stream")
@@ -126,11 +125,8 @@ return t.spec("c0140 OpenCloud.publish", function(it)
 		t.expect((string.find(err, KEY, 1, true))).toBe(nil)
 	end)
 
-	it(
-		"the request body for the JSON endpoints is real JSON (sanity for the serde the library uses)",
-		function()
-			local decoded = serde.decode("json" :: "json", '{"versionNumber":3}') :: any
-			t.expect(decoded.versionNumber).toBe(3)
-		end
-	)
+	it("the request body for the JSON endpoints is real JSON (sanity for the serde the library uses)", function()
+		local decoded = serde.decode("json" :: "json", '{"versionNumber":3}') :: any
+		t.expect(decoded.versionNumber).toBe(3)
+	end)
 end)

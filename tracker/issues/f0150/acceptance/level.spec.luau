@@ -48,8 +48,7 @@ end
 -- a short pause at each change, so the phases are easy to see: ready 2, dying 2, level clear 3
 local PAUSES: Game.Config =
 	{ lives = 3, extraLifeScore = 10000, readyTicks = 2, dyingTicks = 2, levelClearTicks = 3, tickRate = 30 }
-local RULES: Session.Config =
-	{ movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4, play = PAUSES }
+local RULES: Session.Config = { movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4, play = PAUSES }
 local PLAIN: Session.Config = { movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
 
 local function eatTicks(trace: sim.Trace): { number }

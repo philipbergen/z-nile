@@ -24,8 +24,7 @@ return t.spec("c0140 scripts/deploy-beta", function(it)
 	end)
 
 	it("a missing id alone is also 'not configured'", function()
-		local r =
-			run({ ROBLOX_API_KEY = "k", ROBLOX_BETA_UNIVERSE_ID = "1", ROBLOX_BETA_PLACE_ID = "" }, work)
+		local r = run({ ROBLOX_API_KEY = "k", ROBLOX_BETA_UNIVERSE_ID = "1", ROBLOX_BETA_PLACE_ID = "" }, work)
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stdout, "not configured", 1, true) ~= nil).toBe(true)
 	end)
