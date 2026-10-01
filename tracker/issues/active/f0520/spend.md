@@ -3,6 +3,7 @@
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-01 06:36 | f0520: GAME_SPEED, STEP_RATE and View.alpha | 9 | 1 | 8.0 | explicit |
+| 2 | 2026-10-01 06:36 | f0520: server clock and client blend use the step rate | 2 | 2 | 6.0 | explicit |
 
-**Total:** +9 / -1 lines, 8.0 agent-minutes over 1 commits
-<!-- totals: added=9 removed=1 minutes=8.0 commits=1 -->
+**Total:** +11 / -3 lines, 14.0 agent-minutes over 2 commits
+<!-- totals: added=11 removed=3 minutes=14.0 commits=2 -->

@@ -42,7 +42,7 @@ function Camera.start()
 		if snap == nil then
 			return
 		end
-		local pose = View.interpolate(prev, snap, (os.clock() - arrived) * Session.TICK_RATE)
+		local pose = View.interpolate(prev, snap, View.alpha(os.clock() - arrived))
 		local target = View.headingYaw(snap.player.heading)
 		local turned = View.approachYaw(yaw or target, target, View.turnRate() * dt)
 		yaw = turned
