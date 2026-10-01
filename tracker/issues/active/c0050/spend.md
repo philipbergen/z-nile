@@ -3,6 +3,7 @@
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-01 01:33 | c0050: isolated clones for specs, SETUP.md cloud-sync row (stream, reviewed) | 28 | 6 | 25.0 | explicit |
+| 2 | 2026-10-01 01:43 | c0050: clone.isolated returns dest so the promoted spec type-checks (found by promote-check) | 4 | 2 | 3.0 | explicit |
 
-**Total:** +28 / -6 lines, 25.0 agent-minutes over 1 commits
-<!-- totals: added=28 removed=6 minutes=25.0 commits=1 -->
+**Total:** +32 / -8 lines, 28.0 agent-minutes over 2 commits
+<!-- totals: added=32 removed=8 minutes=28.0 commits=2 -->
