@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Acceptance checks for f0160. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
-A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance" # sequestered specs; see the testing skill
-source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/f0160 after it
+A="$HERE/acceptance"
+[[ -d $A ]] || A="$PWD/tests/acceptance/f0160"
 
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: a power pellet starts the level's frightened period, restarts it when eaten again, and it ends" lune run tests/run -- "$A/power.spec.luau"
+check "AC2: a whole run plays through Session headless, deterministically" lune run tests/run -- "$A/full-run.spec.luau"
 
 finish
