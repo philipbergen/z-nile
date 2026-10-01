@@ -58,7 +58,7 @@ Every PR that is ready for review is published to the private **Pickman (Beta)**
 - **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write. It only exists in CI.
 - **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits.
 - If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
-- Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the commit Beta is running.
+- Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
 - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
 - The job installs only the tools (`scripts/setup.sh --tools`); the gate has already run.
 - By hand: export the three settings and run `lune run scripts/deploy-beta`. That publishes to Beta.
