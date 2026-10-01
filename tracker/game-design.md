@@ -18,15 +18,17 @@ This is the source of truth for product decisions. Every raft design must agree 
 | Platforms | Desktop (keyboard and mouse) and **mobile (touch)**. Gamepad isn't planned; it gets the same intents if it's added later. |
 
 ## Movement model: rail with free look
+**All durations and speeds in this document are game time** (30 ticks per game second); the game is played at half speed, so real time is twice as long (see *Game speed* below).
+
 - **The maze is a grid of tiles.** Walls are whole tiles. Walkable tiles form corridors, and a junction is a tile with more than 2 exits.
 - **Movement:**
-  - The player always moves along the current corridor at the level's speed and stops at a wall. Level 1 is **7.5 tiles/s**, the arcade's 80% (R0040). Per level (R0090, *Pac-Man Dossier* Table A.1, relative to level 1): levels 2–4 ×1.125, 5–20 ×1.25, 21 and on ×1.125, in whole units per tick (30, 34, 38, 34).
+  - The player always moves along the current corridor at the level's speed and stops at a wall. Level 1 is **7.5 tiles/s of game time** (3.75 in real time, see Game speed), the arcade's 80% (R0040). Per level (R0090, *Pac-Man Dossier* Table A.1, relative to level 1): levels 2–4 ×1.125, 5–20 ×1.25, 21 and on ×1.125, in whole units per tick (30, 34, 38, 34).
   - **Corners are classic** (decided by the user, 2026-09-29): at a corner the player stops unless a turn into it is buffered. There is no automatic cornering.
   - There is no free strafing; position is always on a corridor centreline.
 - **Turn intents:** `Left`, `Right`, `Back` and `Forward`, relative to the current heading.
   - A turn intent is **buffered** and taken at the next tile where that exit exists.
   - `Back` reverses immediately: a literal reverse of the current heading, as in the arcade, even right after a turn (user, 2026-09-29).
-  - The buffer expires after **0.8 s** (24 ticks; R0040). A re-press restarts it.
+  - The buffer expires after **0.8 s of game time** (24 ticks; R0040), 1.6 s in real time. A re-press restarts it.
   - **Cornering grace** (user, 2026-09-29): a turn arriving one tick after passing straight through a centre where that exit exists is taken there, cutting the corner.
   - **Missed turns** (user, 2026-09-29): a later press for a turn the player just passed straight by is discarded while the player is still nearer that junction than the next one ahead with that exit, so a late press never diverts the player at a later junction. A press nearer the next such junction is buffered for it.
 - **Look:** the camera's yaw and pitch are free and never change the heading. A "snap look to heading" action recentres it.
@@ -34,14 +36,15 @@ This is the source of truth for product decisions. Every raft design must agree 
   - wall contact means stopping at the tile edge: the player is one tile wide, so its front edge meets the wall when its centre reaches the last tile's centre (R0040);
   - pellets are eaten when the player enters a tile;
   - player and ghost collide when they share a tile, or when they swap tiles within one tick.
-- **Tick rate:** Logic runs on a fixed **30 Hz** tick (R0040) and is independent of frame rate. Clients interpolate.
+- **Game speed** (user, 2026-10-01): the game is played at half speed. The rules count 30 ticks per game second (`Session.TICK_RATE`), and the server steps 15 steps per real second (`Session.STEP_RATE` = `TICK_RATE` × `GAME_SPEED` 0.5), so everything in game time takes twice as long in real time: level 1 is **3.75 tiles/s** (not 7.5), the turn buffer lasts 1.6 s, and the pauses and the frightened time will too. Slowing the clock leaves every tick-pinned rule and spec untouched. Camera turn smoothing (`View.TURN_SECONDS`) and mouse look stay in real time, which is the author's choice (user may veto): a key press now waits up to one step to take effect, about 67 ms instead of 33 ms. Limits counted in steps follow the clock: at most 4 intents per step is 60 intents per real second, and the 5-step catch-up cap after a hitch is 1/3 s of real time.
+- **Tick rate:** Logic runs on a fixed tick of **30 ticks per game second** (R0040) and is independent of frame rate. Clients interpolate.
 
 ## Scoring and rules (classic defaults; tune in (prep))
 - **Points:** pellet 10, power pellet 50, ghosts 200/400/800/1600 within one power period.
 - **Lives:** 3, and **one extra life, the first time the score reaches 10,000** (user, 2026-09-30; R0090). Once per run.
 - **Eating slowdown** (user, 2026-09-30; R0090): eating stops the player as in the arcade: 1 frame of 60 fps for a dot, 3 for an energizer, at the level's speed (15 and 45 units at level 1, where a tile is 120 units and a tick is 30). The distance is owed and taken from the next steps; a death, a new level or a new run forgets it. **Deviation (R0090 design review round 2)**: the pause is *distance* at the speed of the tick that ate the pellet, so across a speed change it is up to a third of a frame off: an energizer (eaten at the normal speed, paid at the faster frightened one) stops the player about 2.65 frames rather than 3, and a dot eaten while frightened costs 17 units at level 1. Not visible (about 6 ms); the user can ask for frames-owed instead.
 - **Levels:** clearing all pellets advances to the next level, which restores every pellet and puts the player back at the start. Speeds, the frightened duration and the mode schedule vary per level, following the classic tables; level 21 and on repeat the 21st row; frightened time is 0 on levels 17, 19, 20 and from 21 on, but 1 s on level 18 (R0090). **While frightened the player runs faster** (Table A.1, relative to level 1's 80%: levels 1 ×1.125, 2–4 ×1.1875, 5–20 ×1.25), user 2026-09-30. A death keeps the pellets already eaten.
-- **Run pauses** (R0090, 30 ticks/s): "Ready!" 2 s before play and after each death and level; death 1.5 s; level clear 2 s. Keys pressed in a pause are ignored.
+- **Run pauses** (R0090, game time, 30 ticks per game second; double in real time): "Ready!" 2 s before play and after each death and level; death 1.5 s; level clear 2 s. Keys pressed in a pause are ignored.
 - **Ghosts:** the four classic personalities.
   - Blinky targets the player's tile.
   - Pinky targets 4 tiles ahead.

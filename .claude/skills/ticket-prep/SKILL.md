@@ -33,6 +33,12 @@ Fill every section of the issue template. Requirements:
   - Each gets a pass/fail question, a method and a fallback.
   - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
 - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
+- **Override check**: promoted specs in `tests/acceptance/` are never edited during execution, so find the conflicts now.
+  - For each Touched path, run `lune run scripts/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.
+  - For each promoted spec S whose pinned behavior the issue deliberately changes, name S on an `Overrides:` line in **Regression guard**.
+    - A chore changes S in its own raft.
+    - Any other type: file a chore c that only has to remove or narrow S (prefer narrowing; if S must go, c also drops the line naming it from the owning item's `check.sh`), so `main` stays green (a spec that asserts behavior `main` doesn't have yet can't land). c names S on its own `Overrides:` line, which satisfies the check for c. The issue's Test plan gets a case that pins the new behavior, its `Overrides:` line names S and c, `depends_on: [c]` goes in its frontmatter, and its raft's **Order & dependencies** says c must be in `done/` before `start` (make-prompt refuses otherwise). A product decision behind the change goes to the user now.
+  - If there is none, write `Overrides: none`.
 - **Test plan**: `spec file :: case → ACn`.
 - **Rules and mutants**: a table with one row per behavioural rule in the Design: `| rule | spec :: case | mutant it kills | checked |`. The mutant is a plausible wrong implementation, and the spec case must fail for it. `checked` is `run` if prep's mutation check ran it, else `reasoned`. When you prototype, fill the table from the mutation check.
 - **Acceptance criteria**:

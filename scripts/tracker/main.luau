@@ -413,6 +413,23 @@ function cmd.start(pos: { string })
 			fail(`{m.id} is not design: ready (run ticket-prep first)`)
 		end
 	end
+	-- a dependency outside the raft must already be done: nothing else orders rafts
+	local inRaft: { [string]: boolean } = {}
+	for _, m in members do
+		inRaft[m.id] = true
+	end
+	for _, m in members do
+		for _, dep in store.idList(store.readFront(m.doc).depends_on) do
+			if not inRaft[dep] then
+				local found = store.find(dep)
+				if not found or found.state ~= "done" then
+					fail(
+						`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} as this branch sees it: it must be done first. If it has merged, git merge origin/main and retry; never edit depends_on to get past this`
+					)
+				end
+			end
+		end
+	end
 	local branch = raftBranch(raft)
 	if sh.git({ "branch", "--show-current" }) ~= branch then
 		refuseInMainCheckout("start")
