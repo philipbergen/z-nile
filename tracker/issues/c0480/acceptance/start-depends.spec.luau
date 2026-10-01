@@ -79,11 +79,11 @@ return t.spec("c0480 start checks depends_on", function(it)
 		for _, slug in { "base", "needs-base", "pair-a", "pair-b", "ghost", "late-a", "late-b" } do
 			must(tr({ "new", "issue", "f", slug }), "new issue " .. slug)
 		end
-		-- f0010 base; f0020 needs it; f0040 needs its raft-mate f0030; f0050 needs a missing id; f0070 (second member) needs f0010
+		-- f0010 base; f0020 needs it; f0040 needs its raft-mate f0030; f0050 needs a missing id; f0070 (second member) needs its raft-mate f0060 and then f0010
 		edit("tracker/issues/f0020/f0020.md", "depends_on: %[%]", "depends_on: [f0010]")
 		edit("tracker/issues/f0040/f0040.md", "depends_on: %[%]", "depends_on: [f0030]")
 		edit("tracker/issues/f0050/f0050.md", "depends_on: %[%]", "depends_on: [f9999]")
-		edit("tracker/issues/f0070/f0070.md", "depends_on: %[%]", "depends_on: [f0010]")
+		edit("tracker/issues/f0070/f0070.md", "depends_on: %[%]", "depends_on: [f0060, f0010]")
 		must(tr({ "new", "raft", "feature", "base", "f0010" }), "raft base")
 		must(tr({ "new", "raft", "feature", "needs-base", "f0020" }), "raft needs-base")
 		must(tr({ "new", "raft", "feature", "pair", "f0030", "f0040" }), "raft pair")
@@ -118,6 +118,8 @@ return t.spec("c0480 start checks depends_on", function(it)
 		t.expect(has(r.stderr, "f0050")).toBe(true)
 		t.expect(has(r.stderr, "f9999")).toBe(true)
 		t.expect(has(r.stderr, "unknown")).toBe(true)
+		t.expect(has(r.stderr, "origin/main")).toBe(true)
+		t.expect(has(r.stderr, "never edit depends_on")).toBe(true)
 	end)
 
 	it("refuses an issue that depends on a backlog item outside the raft, naming both", function()
@@ -126,9 +128,10 @@ return t.spec("c0480 start checks depends_on", function(it)
 		t.expect(has(r.stderr, "f0020")).toBe(true)
 		t.expect(has(r.stderr, "f0010")).toBe(true)
 		t.expect(has(r.stderr, "backlog")).toBe(true)
+		t.expect(has(r.stderr, "origin/main")).toBe(true)
 	end)
 
-	it("checks every member, not only the first", function()
+	it("checks every member and every dependency in its list", function()
 		local r = tr({ "start", "R0050" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "f0070")).toBe(true)
@@ -149,6 +152,7 @@ return t.spec("c0480 start checks depends_on", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "f0010")).toBe(true)
 		t.expect(has(r.stderr, "active")).toBe(true)
+		t.expect(has(r.stderr, "origin/main")).toBe(true)
 	end)
 
 	it("starts the raft once the dependency is done", function()
@@ -173,7 +177,8 @@ return t.spec("c0480 start checks depends_on", function(it)
 			end
 		end
 		t.expect(row ~= "").toBe(true)
-		t.expect(has(row, "depends_on")).toBe(true)
-		t.expect(has(row, "done")).toBe(true)
+		for _, token in { "depends_on", "done", "origin/main", "never edit", "stop" } do
+			t.expect(has(row, token)).toBe(true)
+		end
 	end)
 end)
