@@ -9,6 +9,8 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the game runs at half speed: 15 steps per real second, 3.75 tiles/s, turn buffer 1.6 s" lune run tests/run -- "$A/speed.spec.luau"
+check "AC2: the server clock and the client interpolation both use Session.STEP_RATE" lune run tests/run -- "$A/adapters.spec.luau"
+check "AC3: game-design.md records the half speed" lune run tests/run -- "$A/docs.spec.luau"
 
 finish
