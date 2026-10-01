@@ -6,4 +6,4 @@
 - F6: fixed: `adapter.spec` strips comments, requires every `Session.new` call to end with `Session.GAME_CONFIG)` and a `:FireClient(<player>, Session.frame(` call, and no `Session.snapshot(`; mutants N12 and N13 (run, killed). It does not pin local variable names.
 - F7: fixed: the row now names the mutant that was run (ignores `tickRate`) and says rounding is not observable with whole-second data.
 - F8: fixed: the stale comment is gone and `full-run.spec` asserts level 2's first step covers 34 units; AC2 says so.
-- F9: fixed: `origin/main` merged into the prep worktree (`.worktree/prep-pellets-and-mechanics`), `tracker.sh migrate` run (R0140's document), `tracker.sh list` clean, `scripts/check.sh --full` passes (454 cases).
+- F9: fixed: `origin/main` merged into the prep worktree (`.worktree/prep-pellets-and-mechanics`), `tracker.sh migrate` run (R0150's document), `tracker.sh list` clean, `scripts/check.sh --full` passes (454 cases).
