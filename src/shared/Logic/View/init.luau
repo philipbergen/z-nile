@@ -92,6 +92,12 @@ function View.walls(m: Maze.Maze, margin: number?): { Rect }
 	return rects
 end
 
+-- How far between the previous and the latest snapshot we are, `elapsed` real seconds after the latest one
+-- arrived: snapshots come one per step, Session.STEP_RATE steps per real second.
+function View.alpha(elapsed: number): number
+	return elapsed * Session.STEP_RATE
+end
+
 function View.interpolate(prev: Session.Snapshot?, latest: Session.Snapshot, alpha: number): Pose
 	local a = if alpha ~= alpha then 1 else math.clamp(alpha, 0, 1)
 	local to = latest.player

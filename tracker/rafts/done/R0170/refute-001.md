@@ -1,0 +1,1 @@
+- F1: fixed: the *Game speed* bullet in game-design.md now says the per-step limits follow the clock (4 intents per step is 60 intents per real second; the 5-step catch-up cap is 1/3 s of real time). No code change, as the review recommended.
