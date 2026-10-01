@@ -104,6 +104,20 @@ return t.spec("c0460 board workflow", function(it)
 		t.expect(upload.with["if-no-files-found"]).toBe("error")
 	end)
 
+	it("has exactly four steps: checkout, setup, build, upload, with their exact inputs", function()
+		local steps = job(load()).steps
+		t.expect(#steps).toBe(4)
+		t.expect(steps[1]).toEqual({ uses = "actions/checkout@v4" })
+		t.expect(steps[3]).toEqual({ run = "scripts/tracker.sh board --out dist/board.html" })
+		t.expect(steps[4].uses).toBe("actions/upload-artifact@v4")
+		t.expect(steps[4].with).toEqual({
+			name = "tracker-board",
+			path = "dist/board.html",
+			["retention-days"] = 30,
+			["if-no-files-found"] = "error",
+		})
+	end)
+
 	it("checks the repository out before anything else", function()
 		local steps = job(load()).steps
 		t.expect(steps[1].uses).toBe("actions/checkout@v4")
