@@ -16,13 +16,13 @@ jobs:
       - run: scripts/setup.sh --tools
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: runtime test against Beta version 5 (read-only: no publish)
+      - name: "runtime test against Beta version 5 (read-only, no publish)"
         run: lune run scripts/runtime-test -- 5
         env:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
           ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
           ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
-      - name: comment twice, expect one comment holding the second text
+      - name: "comment twice, expect one comment holding the second text"
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
