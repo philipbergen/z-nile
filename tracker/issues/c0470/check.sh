@@ -43,6 +43,17 @@ gate_prints_timings() {
     "^GATE PASSED \(affected\)$" || return 1
   [[ $(tail -n 1 <<<"$out") == "GATE PASSED (affected)" ]] || { echo "GATE PASSED must stay the last line"; return 1; }
 }
+gate_stages_are_started_together() { # structure: five par_start lines, all before the single par_wait
+  local starts waits first_wait last_start
+  starts=$(grep -cE '^par_start ' scripts/check.sh)
+  waits=$(grep -cE '^par_wait' scripts/check.sh)
+  [[ $starts -eq 5 && $waits -eq 1 ]] || { echo "expected 5 par_start and 1 par_wait lines, got $starts and $waits"; return 1; }
+  first_wait=$(grep -nE '^par_wait' scripts/check.sh | head -1 | cut -d: -f1)
+  last_start=$(grep -nE '^par_start ' scripts/check.sh | tail -1 | cut -d: -f1)
+  [[ $last_start -lt $first_wait ]] || { echo "a par_start comes after par_wait: the stages are not all started together"; return 1; }
+}
+check "AC4a: check.sh starts the five static stages together, then waits once" gate_stages_are_started_together
+
 check "AC4: the gate prints every stage in a fixed order with its time, then the wall time, then GATE PASSED" \
   gate_prints_timings
 

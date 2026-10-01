@@ -40,6 +40,14 @@ local function cases(body: string): string
 	return 'return { name = "fixture", cases = { { name = "case", fn = function() ' .. body .. " end } } }"
 end
 
+local function casesN(n: number, body: string): string
+	local list = {}
+	for i = 1, n do
+		table.insert(list, '{ name = "case' .. i .. '", fn = function() ' .. body .. " end }")
+	end
+	return 'return { name = "fixture", cases = { ' .. table.concat(list, ", ") .. " } }"
+end
+
 local PASS = cases("")
 
 -- waits (polling) for the other fixture's marker; fails after PICKMAN_RV_TIMEOUT seconds
@@ -58,18 +66,21 @@ local function rendezvous(me: string, other: string): string
 end
 
 local ONCE = [[
-local fs = require("@lune/fs")
-if fs.isFile("@MARKER@") then error("ran twice") end
-fs.writeFile("@MARKER@", "x")]]
+-- mkdir is atomic: whichever run creates the marker first wins, any other run fails
+if not require("@lune/process").exec("mkdir", { "@MARKER@" }).ok then error("ran twice") end]]
 
-local SLEEP1 = 'require("@lune/process").exec("sleep", { "1" })'
+local SLEEP1 = 'require("@lune/process").exec("sleep", { "0.6" })'
 
 local function run(args: { string }, env: { [string]: string }?): Result
 	local full = { "run", "tests/run", "--" }
 	for _, a in args do
 		table.insert(full, a)
 	end
-	local r = process.exec("lune", full, { cwd = root, env = env })
+	local merged: { [string]: string } = { PICKMAN_JOBS = "" } -- empty means unset; never inherit the caller's
+	for k, v in env or {} do
+		merged[k] = v
+	end
+	local r = process.exec("lune", full, { cwd = root, env = merged })
 	return { ok = r.ok, code = r.code, stdout = r.stdout, stderr = r.stderr }
 end
 
@@ -99,7 +110,7 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		reset()
 		local a = fixture("a", rendezvous("a", "b"))
 		local b = fixture("b", rendezvous("b", "a"))
-		local r = run({ "--jobs", "1", a, b }, { PICKMAN_RV_TIMEOUT = "2" })
+		local r = run({ "--jobs", "1", a, b }, { PICKMAN_RV_TIMEOUT = "1" })
 		t.expect(r.ok).toBe(false)
 		t.expect(lastLine(r.stdout)).toBe("1 passed, 1 failed, 2 spec files")
 	end)
@@ -117,13 +128,27 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		reset()
 		local a = fixture("a", rendezvous("a", "b"))
 		local b = fixture("b", rendezvous("b", "a"))
-		local serial = run({ a, b }, { PICKMAN_JOBS = "1", PICKMAN_RV_TIMEOUT = "2" })
+		local serial = run({ a, b }, { PICKMAN_JOBS = "1", PICKMAN_RV_TIMEOUT = "1" })
 		t.expect(serial.ok).toBe(false)
 		reset()
 		a = fixture("a", rendezvous("a", "b"))
 		b = fixture("b", rendezvous("b", "a"))
 		local over = run({ "--jobs", "2", a, b }, { PICKMAN_JOBS = "1" })
 		t.expect(over.ok).toBe(true)
+	end)
+
+	it("a bad PICKMAN_JOBS exits 2, an empty one means unset, and --jobs may follow the files", function()
+		reset()
+		local a = fixture("a", PASS)
+		local b = fixture("b", PASS)
+		local bad = run({ a, b }, { PICKMAN_JOBS = "lots" })
+		t.expect(bad.code).toBe(2)
+		t.expect(indexOf(bad.stdout .. bad.stderr, "PICKMAN_JOBS")).toBeTruthy()
+		local empty = run({ a, b }, { PICKMAN_JOBS = "" })
+		t.expect(empty.ok).toBe(true)
+		local after = run({ a, b, "--jobs", "2" })
+		t.expect(after.ok).toBe(true)
+		t.expect(lastLine(after.stdout)).toBe("2 passed, 0 failed, 2 spec files")
 	end)
 
 	it("a bad --jobs value exits 2 and names the flag", function()
@@ -138,14 +163,14 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 
 	it("a failing case fails the run, prints its FAIL line, and the other specs still count", function()
 		reset()
-		local a = fixture("a", PASS)
+		local a = fixture("a", casesN(3, ""))
 		local b = fixture("b", cases('error("boom-b")'))
-		local c = fixture("c", PASS)
+		local c = fixture("c", casesN(2, ""))
 		local r = run({ "--jobs", "3", a, b, c })
 		t.expect(r.ok).toBe(false)
 		t.expect(indexOf(r.stdout, `FAIL {b} :: case`)).toBeTruthy()
 		t.expect(indexOf(r.stdout, "boom-b")).toBeTruthy()
-		t.expect(lastLine(r.stdout)).toBe("2 passed, 1 failed, 3 spec files")
+		t.expect(lastLine(r.stdout)).toBe("5 passed, 1 failed, 3 spec files")
 	end)
 
 	it("a spec that cannot load is one failure", function()
@@ -166,6 +191,21 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(indexOf(r.stdout, `FAIL {b}: worker exited with code 3`)).toBeTruthy()
 		t.expect(lastLine(r.stdout)).toBe("1 passed, 1 failed, 2 spec files")
+	end)
+
+	it("a worker that exits 0 without a summary, or exits non-zero after one, is one failure", function()
+		reset()
+		local a = fixture("a", casesN(2, ""))
+		local silent = fixture("b-silent", cases('require("@lune/process").exit(0)'))
+		local liar = fixture(
+			"c-liar",
+			cases('print("1 passed, 0 failed, 1 spec files"); require("@lune/process").exit(5)')
+		)
+		local r = run({ "--jobs", "3", a, silent, liar })
+		t.expect(r.ok).toBe(false)
+		t.expect(indexOf(r.stdout, `FAIL {silent}: worker exited with code 0`)).toBeTruthy()
+		t.expect(indexOf(r.stdout, `FAIL {liar}: worker exited with code 5`)).toBeTruthy()
+		t.expect(lastLine(r.stdout)).toBe("2 passed, 2 failed, 3 spec files")
 	end)
 
 	it("failures print in sorted file order, not in the order the workers finish", function()
@@ -195,7 +235,7 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		t.expect(r.ok).toBe(true)
 		t.expect(lastLine(r.stdout)).toBe("6 passed, 0 failed, 6 spec files")
 		for i = 1, 6 do
-			t.expect(fs.isFile(`{base}/ran-{i}`)).toBe(true)
+			t.expect(fs.isDir(`{base}/ran-{i}`)).toBe(true)
 		end
 	end)
 
@@ -210,8 +250,8 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		t.expect(line).toBeTruthy()
 		local slowAt, fastAt =
 			indexOf(line :: string, "slow.spec.luau"), indexOf(line :: string, "fast.spec.luau")
-		t.expect(slowAt).toBe(1)
-		t.expect(fastAt == nil or fastAt > (slowAt :: number)).toBe(true)
+		t.expect(slowAt ~= nil and fastAt ~= nil).toBe(true)
+		t.expect((slowAt :: number) < (fastAt :: number)).toBe(true)
 		t.expect(string.match(lastLine(r.stdout), "^%d+ passed, %d+ failed, %d+ spec files$")).toBeTruthy()
 	end)
 

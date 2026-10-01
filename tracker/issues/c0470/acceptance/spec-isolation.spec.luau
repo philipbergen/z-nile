@@ -1,7 +1,9 @@
 --!strict
 -- c0470: specs may run concurrently, so no two spec files may own the same `.cache/<dir>` fixture
 -- directory. (`.cache/sim` is the sim library's replay directory: its files are named per model,
--- seed and tick, and it is shared by design.)
+-- seed and tick, and are only written when a simulation fails. Model names are not unique across
+-- spec files, so a collision is possible in principle; it would only rewrite a replay file, never
+-- change a result. That is why it is exempt.)
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")

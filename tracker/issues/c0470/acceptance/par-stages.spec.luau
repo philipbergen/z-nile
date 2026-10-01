@@ -47,8 +47,10 @@ return t.spec("scripts/lib/par.sh", function(it)
 
 	it("a stage starts when par_start is called, not when par_wait is", function()
 		reset()
+		-- polls up to 5 s for the marker before par_wait is ever called: a lazy library never creates it
 		local r = sh(
-			`par_start mark touch {base}/started\nsleep 0.5\n[ -e {base}/started ] && echo started-before-wait\npar_wait`
+			`par_start mark touch {base}/started\nfor i in $(seq 1 100); do [ -e {base}/started ] && break; sleep 0.05; done\n`
+				.. `[ -e {base}/started ] && echo started-before-wait\npar_wait`
 		)
 		t.expect(indexOf(r.out, "started-before-wait")).toBeTruthy()
 	end)
@@ -101,13 +103,16 @@ return t.spec("scripts/lib/par.sh", function(it)
 		t.expect((hb :: number) < (bo :: number)).toBe(true)
 	end)
 
-	it("every header carries the stage's elapsed seconds", function()
+	it("every header carries that stage's own elapsed seconds, measured when it ends", function()
 		reset()
-		local r = sh("par_start quick true\npar_start napping sleep 1\npar_wait")
-		t.expect(string.match(r.out, "== quick %(%d+%.%ds[^\n]*%)")).toBeTruthy()
-		local secs = string.match(r.out, "== napping %((%d+%.%d)s")
-		t.expect(secs).toBeTruthy()
-		t.expect(tonumber(secs :: string) :: number >= 1).toBe(true)
+		-- the slow stage is started first and waited for first; a library that stamps the end time
+		-- when `wait` returns would report the quick stage as slow too
+		local r = sh("par_start napping sleep 2\npar_start quick true\npar_wait")
+		local napping = tonumber(string.match(r.out, "== napping %((%d+%.%d)s") or "")
+		local quick = tonumber(string.match(r.out, "== quick %((%d+%.%d)s") or "")
+		t.expect(napping ~= nil and quick ~= nil).toBe(true)
+		t.expect((napping :: number) >= 2).toBe(true)
+		t.expect((quick :: number) < 1.5).toBe(true)
 	end)
 
 	it("par_wait is reusable: a second batch is independent of the first", function()
