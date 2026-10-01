@@ -89,7 +89,7 @@ index abce33f..9afd4e2 100644
  4. **Design adherence**: does the code match the Design? Is each deviation recorded with a reason?
  5. **Architecture rules** from the skill, including thin adapters and server authority.
 diff --git a/.claude/skills/ticket-prep/SKILL.md b/.claude/skills/ticket-prep/SKILL.md
-index 3192d02..00ca81b 100644
+index 3192d02..b2cadc9 100644
 --- a/.claude/skills/ticket-prep/SKILL.md
 +++ b/.claude/skills/ticket-prep/SKILL.md
 @@ -10,10 +10,10 @@ The goal is a raft that **any strong agent can deliver on the first attempt with
@@ -110,15 +110,15 @@ index 3192d02..00ca81b 100644
     - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`).
  4. Run another round with a new clean reviewer if any high finding was fixed or the design changed materially. Stop after 3 rounds and bring the open questions to the user.
 -5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member.
-+5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member, **then run `scripts/tracker.sh status <R-id> prepared`** (carried: it edits the local documents, and refuses unless the raft and its members are `design: ready` and `preparing` on `origin/main`), and only then make the prep commit. Without it the members keep their `preparing` stamp and the raft can be neither started nor prompted.
++5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member, **then run `scripts/tracker.sh status <R-id> prepared`** (carried: it edits the local documents, and refuses unless the raft and its members are `design: ready` and `preparing` on `origin/main`), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` lines by hand to `prepared-<three words>` instead). Without it the members keep their `preparing` stamp and the raft can be neither started nor prompted.
  
  ## 6. Commit and hand off
  - **Commit** the prepared tracker items, acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep R0010 <title>`, then follow Landing a change (tracker skill): push, PR, merge, pull the main checkout, remove the worktree.
 diff --git a/.claude/skills/tracker/SKILL.md b/.claude/skills/tracker/SKILL.md
-index 69c1981..4e952de 100644
+index 69c1981..78191bf 100644
 --- a/.claude/skills/tracker/SKILL.md
 +++ b/.claude/skills/tracker/SKILL.md
-@@ -32,13 +32,13 @@ Each item is a directory named by its ID:
+@@ -32,14 +32,14 @@ Each item is a directory named by its ID:
  ```
  
  ## Worktrees
@@ -126,14 +126,17 @@ index 69c1981..4e952de 100644
 +Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request (except tracker state, see Sync and claim). The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`.
  
  1. **The main checkout is read-only.** The complete list of commands that may run there:
-    - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
+-   - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
++   - `git fetch`, `git pull --ff-only` (or `scripts/tracker.sh sync`, which does the same there), and read-only inspection (`git status|log|diff|show|worktree list`);
     - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
     - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
 -   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
-+   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `status` (without a target status), `sync`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
-    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
+-   The tracker enforces part of this: `new`, `renumber`, `migrate`, `start` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
++   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
++   The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
  2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
  
+    | work | target | path and branch |
 @@ -53,7 +53,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
  3. **Launching an agent**: the human starts it *inside* the worktree with `scripts/tracker.sh launch <target>` (for example `launch R0010`; `-- <command> [args…]` runs another command than `claude`). It creates or reuses the worktree (`scripts/tracker.sh worktree`) and replaces itself with the command, so the agent gets the terminal and Ctrl-C directly. Then the hooks and every relative path already point at the right tree, and nothing depends on a `cd` persisting across tool calls (a subagent's shell resets its working directory on every call). An agent started elsewhere runs the `cd` as its first action and uses absolute worktree paths afterwards.
  4. **Prep merges before execution.** A prep PR merges (Landing a change) before `make-prompt` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items. `make-prompt` never creates a raft: a raftless issue goes back to ticket-prep.
@@ -168,7 +171,7 @@ index 69c1981..4e952de 100644
 +- **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared`. The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
 +- **Offline.** `PICKMAN_PUBLISH=0` (or a repository without `origin`) keeps every command local, as it was before. Publishing and every other command that changes a repository first check that git's repository root is the checkout the tracker lives in; read-only commands do not.
 +- **Whose claim.** A claim is not enforced against other terminals' give-backs: `status <R-id> prepared` from `active`, `status <id> new` and `status <id> preparing` are open to anyone, so use them only for a claim that is yours (the user's decision: ownership is documented, not checked). Never give back a claim you did not make; ask the user.
-+- **Cutover.** A prep that was open before this landed exists only on its branch, so nothing on `origin/main` knows its raft id or members. Land such preps before this one merges, and renumber on a clash (c0500). Do not stamp their members with `status <id> preparing`: a stamped member of a raft that is not on `origin/main` cannot be moved to `prepared` and can never be started.
++- **Cutover.** A prep that was open before this landed exists only on its branch, so nothing on `origin/main` knows its raft id or members. Land such preps first, and renumber on a clash (see Conflicts). Do not stamp their members with `status <id> preparing`: a stamped member of a raft that is not on `origin/main` cannot be moved to `prepared` and can never be started.
 diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
 index 1a4562c..ba93d47 100644
 --- a/.github/workflows/check.yml

@@ -345,6 +345,11 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 			t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 			-- claim it, then drop zeta: the carried move reaches cnew and the raft only
 			trOk(cap, { "status", cnew, "preparing" })
+			-- claimed, but its design is still a draft: the move refuses, naming it (the raft's own design is ready)
+			local early = tr(cap, { "status", rz, "prepared" })
+			t.expect(early.ok).toBe(false)
+			t.expect(has(early.stderr, cnew)).toBe(true)
+			t.expect(has(early.stderr, "design: ready")).toBe(true)
 			ready(`{cap}/tracker/issues/{cnew}/{cnew}.md`)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [{cnew}]`)))
 			local zetaDoc = `{cap}/tracker/issues/{zeta}/{zeta}.md`
