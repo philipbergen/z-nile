@@ -22,6 +22,7 @@ return t.spec("c0140 SETUP.md documents Beta publishing", function(it)
 		t.expect(has("ready for review")).toBe(true)
 		t.expect(has("skips")).toBe(true)
 		t.expect(has("Forks")).toBe(true)
+		t.expect(has("gates finish")).toBe(true) -- the order is gate completion, and the comment names the commit
 	end)
 
 	it("documents the tools-only setup mode and how to publish by hand", function()

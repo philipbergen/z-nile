@@ -27,13 +27,14 @@ version_flows() {
 }
 check "RC1: the published version flows deploy -> PR comment -> runtime tests, in that order" version_flows
 
-# RC2: the Roblox API key is named in exactly one place, the beta job's env, and nowhere is it echoed
-secret_once() {
-  [ "$(grep -c 'secrets.ROBLOX_API_KEY' .github/workflows/check.yml)" = 1 ] || { echo "secret named more than once"; return 1; }
-  beta_job | grep -q 'ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}' || { echo "secret not in the beta job env"; return 1; }
+# RC2: the Roblox API key is named in exactly two places, the env of the deploy step and of the runtime step,
+# both inside the beta job, and nowhere is it echoed
+secret_scoped() {
+  [ "$(grep -c 'secrets.ROBLOX_API_KEY' .github/workflows/check.yml)" = 2 ] || { echo "secret should be named exactly twice"; return 1; }
+  [ "$(beta_job | grep -c 'secrets.ROBLOX_API_KEY')" = 2 ] || { echo "secret named outside the beta job"; return 1; }
   ! grep -rnE 'echo[^#]*ROBLOX_API_KEY|set -x' .github/workflows scripts/deploy-beta.luau scripts/runtime-test.luau scripts/lib/opencloud.luau
 }
-check "RC2: the API key lives only in the beta job's env and is never echoed" secret_once
+check "RC2: the API key is named only in the env of the deploy and runtime steps, and never echoed" secret_scoped
 
 # RC3: with nothing configured both commands succeed with a warning, so a fork or a fresh clone is not red
 unconfigured() {

@@ -12,7 +12,7 @@ end
 
 return t.spec("c0140 setup.sh --tools", function(it)
 	it("has a tools-only mode that exits before the gate", function()
-		local flag = at("--tools")
+		local flag = at("== --tools ]]") -- the condition itself, not a mention in a comment
 		local gate = at('say "gate"')
 		t.expect(flag ~= nil).toBe(true)
 		t.expect(gate ~= nil).toBe(true)
@@ -30,7 +30,11 @@ return t.spec("c0140 setup.sh --tools", function(it)
 	end)
 
 	it("installs the tools before it can stop", function()
-		t.expect((at("rokit install") :: number) < (at("--tools") :: number)).toBe(true)
-		t.expect((at("lune setup") :: number) < (at("--tools") :: number)).toBe(true)
+		t.expect((at("rokit install") :: number) < (at("== --tools ]]") :: number)).toBe(true)
+		t.expect((at("lune setup") :: number) < (at("== --tools ]]") :: number)).toBe(true)
+	end)
+
+	it("refuses an argument it doesn't know instead of silently running the whole gate", function()
+		t.expect(at("unknown argument") ~= nil).toBe(true)
 	end)
 end)

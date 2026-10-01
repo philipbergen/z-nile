@@ -1,23 +1,29 @@
 --!strict
--- c0140 AC4: the CI side. A PR that is ready for review is published to Beta after the gate is green,
--- from branches of this repo only, one publish at a time, with the Roblox secrets named in exactly one
--- place (the beta job's env) and no way for them to reach a log or a fork.
+-- c0140 AC4: the CI side, checked on the parsed workflow, not on its text (text matches can't tell a condition
+-- from a comment, or && from ||). A PR that is ready for review is published to Beta after the gate is
+-- green, from branches of this repo only, one publish at a time, with the Roblox secrets named only in the
+-- env of the step that needs them, and no way for them to reach a log or a fork.
 local fs = require("@lune/fs")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
 local text = fs.readFile(".github/workflows/check.yml")
+local wf: any = serde.decode("yaml" :: "yaml", text)
+local beta: any = wf.jobs.beta
+local gate: any = wf.jobs.gate
 
--- the text of one job: from `  name:` to the next job (two-space indent) or the end
-local function job(name: string): string
-	local from = string.find(text, `\n  {name}:\n`, 1, true)
-	t.expect(from ~= nil).toBe(true)
-	local start = (from :: number) + 1
-	local nextJob = string.find(text, "\n  [%w_%-]+:\n", start + 1)
-	return string.sub(text, start, if nextJob then nextJob else #text)
+local function collapse(s: string): string
+	return (string.gsub(string.gsub(s, "%s+", " "), "^ ", ""):gsub(" $", ""))
 end
 
-local function has(haystack: string, needle: string): boolean
-	return string.find(haystack, needle, 1, true) ~= nil
+-- the first step satisfying `pred`, and its index
+local function find(job: any, pred: (any) -> boolean): (any, number)
+	for i, step in job.steps do
+		if pred(step) then
+			return step, i
+		end
+	end
+	error("no such step")
 end
 
 local function count(haystack: string, needle: string): number
@@ -32,103 +38,118 @@ local function count(haystack: string, needle: string): number
 	end
 end
 
+local KEY = "${{ secrets.ROBLOX_API_KEY }}"
+local UNIVERSE = "${{ vars.ROBLOX_BETA_UNIVERSE_ID }}"
+local PLACE = "${{ vars.ROBLOX_BETA_PLACE_ID }}"
+
+local function has(s: any, needle: string): boolean
+	return type(s) == "string" and string.find(s, needle, 1, true) ~= nil
+end
+
 return t.spec("c0140 beta job in check.yml", function(it)
-	local beta = job("beta")
-	local gate = job("gate")
-
-	it("runs only after the gate, and only for a PR that is ready and from this repo", function()
-		t.expect(has(beta, "needs: gate")).toBe(true)
-		t.expect(has(beta, "github.event_name == 'pull_request'")).toBe(true)
-		t.expect(has(beta, "github.event.pull_request.draft == false")).toBe(true)
-		t.expect(has(beta, "github.event.pull_request.head.repo.full_name == github.repository")).toBe(true)
+	it("runs after the gate, and only for a PR that is ready for review and from this repo", function()
+		t.expect(beta.needs).toBe("gate")
+		t.expect(collapse(beta["if"])).toBe(
+			"github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository"
+		)
 	end)
 
-	it("never publishes from a dispatched run or a push to main", function()
-		t.expect(has(beta, "github.event_name == 'pull_request'")).toBe(true) -- the only event it accepts
-		t.expect(has(beta, "workflow_dispatch")).toBe(false)
-		t.expect(has(beta, "refs/heads/main")).toBe(false)
+	it(
+		"the workflow's triggers and the gate job are unchanged, and nothing runs on pull_request_target",
+		function()
+			local on: any = wf["on"]
+			t.expect(on.push).toEqual({ branches = { "main" } })
+			t.expect(on.pull_request)
+				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
+			t.expect(on.workflow_dispatch ~= nil).toBe(true)
+			t.expect(on.pull_request_target).toBe(nil)
+			t.expect(gate["if"])
+				.toBe("github.event_name != 'pull_request' || github.event.pull_request.draft == false")
+			t.expect(gate["runs-on"]).toBe("ubuntu-latest")
+		end
+	)
+
+	it("publishes one at a time, never aborting a publish in flight", function()
+		t.expect(beta.concurrency).toEqual({ group = "beta-deploy", ["cancel-in-progress"] = false })
 	end)
 
-	it("publishes one at a time, never aborting a publish in flight, newest waiting wins", function()
-		t.expect(has(beta, "group: beta-deploy")).toBe(true)
-		t.expect(has(beta, "cancel-in-progress: false")).toBe(true)
+	it("can't hold the shared lock for hours: the job has a timeout of at most 30 minutes", function()
+		t.expect(type(beta["timeout-minutes"])).toBe("number")
+		t.expect(beta["timeout-minutes"] > 0 and beta["timeout-minutes"] <= 30).toBe(true)
 	end)
 
-	it("names the secrets only in the beta job's env, and never in a command", function()
-		t.expect(count(text, "secrets.ROBLOX_API_KEY")).toBe(1)
-		t.expect(has(beta, "ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}")).toBe(true)
-		t.expect(count(text, "vars.ROBLOX_BETA_UNIVERSE_ID")).toBe(1)
-		t.expect(count(text, "vars.ROBLOX_BETA_PLACE_ID")).toBe(1)
-		t.expect(has(gate, "secrets.")).toBe(false)
+	it("keeps the workflow read-only and gives write on pull requests only to the beta job", function()
+		t.expect(wf.permissions).toEqual({ contents = "read" })
+		t.expect(beta.permissions).toEqual({ contents = "read", ["pull-requests"] = "write" })
+		t.expect(gate.permissions).toBe(nil)
+	end)
+
+	it("names the secret only in the env of the deploy step (c0030 adds the runtime step's)", function()
+		local deploy = find(beta, function(s: any)
+			return s.id == "deploy"
+		end)
+		t.expect(deploy.run).toBe("lune run scripts/deploy-beta")
+		t.expect(deploy.env).toEqual({
+			ROBLOX_API_KEY = KEY,
+			ROBLOX_BETA_UNIVERSE_ID = UNIVERSE,
+			ROBLOX_BETA_PLACE_ID = PLACE,
+		})
+		-- nowhere else: not the job, not the gate, not the other steps of the beta job (but the runtime step)
+		t.expect(beta.env).toBe(nil)
+		t.expect(has(serde.encode("json" :: "json", gate), "secrets.")).toBe(false)
+		for _, step in beta.steps do
+			if step.id ~= "deploy" and not has(step.run, "runtime-test") then
+				t.expect(has(serde.encode("json" :: "json", step), "ROBLOX")).toBe(false)
+			end
+		end
+		t.expect(count(text, "secrets.ROBLOX_API_KEY") <= 2).toBe(true)
 		t.expect(has(text, 'echo "$ROBLOX_API_KEY')).toBe(false)
 		t.expect(has(text, "set -x")).toBe(false)
 	end)
 
 	it(
-		"keeps the workflow's permissions read-only and gives only the beta job write on pull requests",
+		"installs the tools without running the gate again, before it deploys, with no Roblox secret",
 		function()
-			local head = string.sub(text, 1, string.find(text, "\njobs:", 1, true) :: number)
-			t.expect(has(head, "contents: read")).toBe(true)
-			t.expect(has(head, "pull-requests")).toBe(false)
-			t.expect(has(beta, "pull-requests: write")).toBe(true)
-			t.expect(has(gate, "pull-requests")).toBe(false)
-			t.expect(has(text, "pull_request_target")).toBe(false)
+			local setup, setupAt = find(beta, function(s: any)
+				return has(s.run, "scripts/setup.sh")
+			end)
+			local _, deployAt = find(beta, function(s: any)
+				return s.id == "deploy"
+			end)
+			t.expect(setup.run).toBe("scripts/setup.sh --tools")
+			t.expect(setupAt < deployAt).toBe(true)
+			t.expect(beta.steps[1].uses).toBe("actions/checkout@v4")
 		end
 	)
-
-	it("installs the tools without running the gate again, then deploys and comments the version", function()
-		t.expect(has(beta, "scripts/setup.sh --tools")).toBe(true)
-		t.expect(has(beta, "id: deploy")).toBe(true)
-		t.expect(has(beta, "lune run scripts/deploy-beta")).toBe(true)
-		t.expect(has(beta, "gh pr comment")).toBe(true)
-		t.expect(has(beta, "steps.deploy.outputs.version")).toBe(true)
-		local setup = string.find(beta, "scripts/setup.sh --tools", 1, true) :: number
-		local deploy = string.find(beta, "lune run scripts/deploy-beta", 1, true) :: number
-		local comment = string.find(beta, "gh pr comment", 1, true) :: number
-		t.expect(setup < deploy).toBe(true)
-		t.expect(deploy < comment).toBe(true)
-	end)
 
 	it(
-		"comments only when something was published, and updates its own comment rather than adding one",
+		"comments the published version after the deploy, only when something was published, in place",
 		function()
-			-- the nearest `if:` above the comment command is the publish guard
-			local comment = string.find(beta, "gh pr comment", 1, true) :: number
-			local guard: number? = nil
-			local pos = 1
-			while true do
-				local s, e = string.find(
-					string.sub(beta, 1, comment),
-					"if: steps.deploy.outputs.version != ''",
-					pos,
-					true
-				)
-				if not s then
-					break
-				end
-				guard = s
-				pos = (e :: number) + 1
-			end
-			t.expect(guard ~= nil).toBe(true)
-			t.expect(comment - (guard :: number) < 120).toBe(true)
-			t.expect(has(beta, "--edit-last")).toBe(true)
-			t.expect(has(beta, "--create-if-none")).toBe(true)
+			local comment, commentAt = find(beta, function(s: any)
+				return has(s.run, "gh pr comment")
+			end)
+			local _, deployAt = find(beta, function(s: any)
+				return s.id == "deploy"
+			end)
+			t.expect(commentAt > deployAt).toBe(true)
+			t.expect(comment["if"]).toBe("steps.deploy.outputs.version != ''")
+			t.expect(has(comment.run, "--edit-last --create-if-none")).toBe(true)
+			t.expect(comment.env.VERSION).toBe("${{ steps.deploy.outputs.version }}")
 		end
 	)
 
-	it("passes untrusted PR text only through env, never into a command line", function()
+	it("never lets a `${{ }}` expression or untrusted PR text into a command line", function()
+		for _, job in { gate, beta } do
+			for _, step in job.steps do
+				if step.run then
+					t.expect((string.find(step.run, "${{", 1, true))).toBe(nil)
+				end
+			end
+		end
 		for _, bad in
 			{ "pull_request.title", "pull_request.body", "head_ref", "head.ref", "github.event.comment" }
 		do
 			t.expect(has(text, bad)).toBe(false)
 		end
-	end)
-
-	it("the gate job is unchanged in what it triggers on", function()
-		t.expect(
-			has(text, "if: github.event_name != 'pull_request' || github.event.pull_request.draft == false")
-		)
-			.toBe(true)
-		t.expect(has(text, "fetch-depth: 0")).toBe(true)
 	end)
 end)
