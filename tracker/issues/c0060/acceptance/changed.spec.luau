@@ -118,6 +118,18 @@ return t.spec("c0060 changed files", function(it)
 		t.expect(listed(byDefault, "src/feature2.luau")).toBe(true)
 	end)
 
+	it("with no usable base, still lists uncommitted and untracked files", function()
+		git({ "checkout", "-q", "feature" })
+		write("src/late.luau", "return 'late'\n") -- untracked
+		write("src/b.luau", "return 'b3'\n") -- unstaged
+		local files = changed.files("no-such-ref", repo)
+		t.expect(listed(files, "src/late.luau")).toBe(true)
+		t.expect(listed(files, "src/b.luau")).toBe(true)
+		t.expect(listed(files, "place/a.luau")).toBe(false) -- committed changes need a base to compare with
+		git({ "checkout", "-q", "--", "src/b.luau" })
+		fs.removeFile(`{repo}/src/late.luau`)
+	end)
+
 	it("scripts/affected takes its changed files from the module", function()
 		local text = fs.readFile(`{root}/scripts/affected.luau`)
 		t.expect(string.find(text, 'require("./lib/changed")', 1, true) ~= nil).toBe(true)
