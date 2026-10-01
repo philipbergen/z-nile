@@ -15,7 +15,13 @@ check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker
 spec() { # spec <issue> <name>: path of that issue's acceptance spec, wherever it lives now
   local d
   d="$(git rev-parse --show-toplevel)"
-  [[ -f $d/tests/acceptance/$1/$2 ]] && echo "$d/tests/acceptance/$1/$2" || echo "$d/tracker/issues/$1/acceptance/$2"
+  if [[ -f $d/tests/acceptance/$1/$2 ]]; then
+    echo "$d/tests/acceptance/$1/$2"
+  elif [[ -f $d/tracker/issues/active/$1/acceptance/$2 ]]; then # active: where `done` runs this check, before promotion
+    echo "$d/tracker/issues/active/$1/acceptance/$2"
+  else
+    echo "$d/tracker/issues/$1/acceptance/$2"
+  fi
 }
 check "RC1: a whole run plays headless: countdown, eating, power pellet, clear, next level, deaths, game over, play again" \
   lune run tests/run -- "$(spec f0160 full-run.spec.luau)"
