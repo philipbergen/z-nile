@@ -1,6 +1,6 @@
 --!strict
 -- Server adapter: one Session per player who signals Ready, stepped on the server clock. It only
--- relays remote events and time to Session; validation, limits and stepping are Logic.
+-- relays remote events and time to Session; validation, limits, stepping and the rules are Logic.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -22,7 +22,7 @@ function Sessions.start()
 	-- the client is listening for snapshots once it signals Ready; a repeat signal is ignored
 	ready.OnServerEvent:Connect(function(player: Player)
 		if sessions[player] == nil then
-			local s = Session.new(Maze.layout(Maze.DEFAULT), player.UserId)
+			local s = Session.new(Maze.layout(Maze.DEFAULT), player.UserId, Session.GAME_CONFIG)
 			Session.join(s, tostring(player.UserId))
 			sessions[player] = s
 		end
@@ -43,7 +43,7 @@ function Sessions.start()
 		for _ = 1, Session.advance(clock, dt) do
 			for player, s in sessions do
 				Session.step(s)
-				snapshot:FireClient(player, Session.snapshot(s, tostring(player.UserId)))
+				snapshot:FireClient(player, Session.frame(s, tostring(player.UserId)))
 			end
 		end
 	end)
