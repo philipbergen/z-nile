@@ -5,6 +5,7 @@
 | 1 | 2026-10-01 06:36 | f0520: GAME_SPEED, STEP_RATE and View.alpha | 9 | 1 | 8.0 | explicit |
 | 2 | 2026-10-01 06:36 | f0520: server clock and client blend use the step rate | 2 | 2 | 6.0 | explicit |
 | 3 | 2026-10-01 06:37 | f0520: game-design edits and verification log | 0 | 0 | 4.0 | explicit |
+| 4 | 2026-10-01 06:41 | R0170: fix RC1 spec path in check.sh (prep correction, user-approved: path only) | 0 | 0 | 3.0 | focus |
 
-**Total:** +11 / -3 lines, 18.0 agent-minutes over 3 commits
-<!-- totals: added=11 removed=3 minutes=18.0 commits=3 -->
+**Total:** +11 / -3 lines, 21.0 agent-minutes over 4 commits
+<!-- totals: added=11 removed=3 minutes=21.0 commits=4 -->
