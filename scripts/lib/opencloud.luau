@@ -114,4 +114,96 @@ function OpenCloud.publish(cfg: Config, place: string): number
 	error("opencloud: publish gave up", 0) -- unreachable: the loop returns or errors
 end
 
+export type Run = { ok: boolean, state: string, results: { any }, detail: string }
+
+-- Runs a Luau script in a server of a published version and waits for it. `ok` is true when the task
+-- completed; `results` are the script's return values. HTTP failures creating or polling raise.
+function OpenCloud.execute(
+	cfg: Config,
+	version: number,
+	source: string,
+	opts: { timeoutSeconds: number?, pollSeconds: number? }?
+): Run
+	local timeout = opts and opts.timeoutSeconds or 120
+	local poll = opts and opts.pollSeconds or 3
+	local create = http(cfg)({
+		url = `{base(cfg)}/cloud/v2/universes/{cfg.universeId}/places/{cfg.placeId}/versions/{version}/luau-execution-session-tasks`,
+		method = "POST",
+		headers = headers(cfg, "application/json"),
+		body = serde.encode("json" :: "json", { script = source }),
+	})
+	if create.statusCode ~= 200 then
+		error(`opencloud: creating the task failed with HTTP {create.statusCode}: {create.body}`, 0)
+	end
+	local created = serde.decode("json" :: "json", create.body) :: any
+	local path = created.path
+	if type(path) ~= "string" then
+		error(`opencloud: the task has no path: {create.body}`, 0)
+	end
+	local waited = 0
+	while true do
+		local res = http(cfg)({
+			url = `{base(cfg)}/cloud/v2/{path}`,
+			method = "GET",
+			headers = headers(cfg),
+			body = nil,
+		})
+		if res.statusCode ~= 200 then
+			error(`opencloud: polling the task failed with HTTP {res.statusCode}: {res.body}`, 0)
+		end
+		local polled = serde.decode("json" :: "json", res.body) :: any
+		local state = tostring(polled.state)
+		if state == "COMPLETE" then
+			local output = polled.output
+			local results = if type(output) == "table" and type(output.results) == "table"
+				then output.results
+				else {}
+			return { ok = true, state = state, results = results, detail = "" }
+		elseif state == "FAILED" or state == "CANCELLED" then
+			local err = polled.error
+			local detail = if type(err) == "table" then tostring(err.message) else res.body
+			return { ok = false, state = state, results = {}, detail = detail }
+		end
+		if waited >= timeout then
+			return { ok = false, state = state, results = {}, detail = `still {state} after {timeout} s` }
+		end
+		nap(cfg, poll)
+		waited += poll
+	end
+end
+
+export type Script = { name: string, source: string }
+export type Suite = { lines: { string }, passed: number, failed: number }
+
+-- Runs each script in a server of the version. A script passes only by returning "PASS"; a task that
+-- failed, was cancelled, timed out, returned anything else, or couldn't be run at all is a failure, and
+-- the rest still run.
+function OpenCloud.runSuite(
+	cfg: Config,
+	version: number,
+	scripts: { Script },
+	opts: { timeoutSeconds: number?, pollSeconds: number? }?
+): Suite
+	local suite: Suite = { lines = {}, passed = 0, failed = 0 }
+	for _, s in scripts do
+		local ok, run = pcall(OpenCloud.execute, cfg, version, s.source, opts)
+		local problem: string? = nil
+		if not ok then
+			problem = tostring(run)
+		elseif not (run :: Run).ok then
+			problem = `{(run :: Run).state} {(run :: Run).detail}`
+		elseif (run :: Run).results[1] ~= "PASS" then
+			problem = `returned {tostring((run :: Run).results[1])}`
+		end
+		if problem then
+			suite.failed += 1
+			table.insert(suite.lines, `FAIL {s.name}: {problem}`)
+		else
+			suite.passed += 1
+			table.insert(suite.lines, `PASS {s.name}`)
+		end
+	end
+	return suite
+end
+
 return OpenCloud
