@@ -43,6 +43,7 @@ created: {{DATE}}
 
 ## Regression guard
 <!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+Overrides: <promoted specs (tests/acceptance/) this issue deliberately changes, each with its chore, or none>
 
 ## Test plan
 <!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->

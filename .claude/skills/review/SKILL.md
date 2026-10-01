@@ -66,7 +66,7 @@ Attack all of the following:
    - Does every Checked criterion correspond to a real check?
    - Could a Judged or Observed criterion be turned into a measurable proxy?
 3. **Completeness**: missing edge cases, such as empty input, bounds, simultaneous events, respawns, frame-rate independence, or player disconnects.
-4. **Regressions**: which existing behavior could break, and is it guarded?
+4. **Regressions**: which existing behavior could break, and is it guarded? Check each issue's `Overrides:` line: for every Touched path run `lune run scripts/affected -- <path>` and `grep -rlF -e <path> tests/acceptance` (`ALL` carries no list: grep alone, also with the basename), and confirm that every promoted spec the design would turn red is named there, with its chore in `depends_on` unless the issue is itself a chore. An unnamed override, a missing line or an unfilled placeholder is **high**.
 5. **Architecture**: is Logic kept pure, and are requires legal? Is every new dependency declared in `architecture.md`, and is the graph still acyclic? Is the server authoritative?
 6. **Scalability, maintainability and usability**: are they addressed concretely?
 7. **Raft coherence**: do the issue designs agree with the whole-raft design and with each other, and is the order right?
