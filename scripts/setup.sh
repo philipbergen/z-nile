@@ -58,8 +58,12 @@ say "lune type definitions"
 lune setup >/dev/null
 git checkout -- .luaurc 2>/dev/null || true # lune setup may reorder .luaurc; keep the committed one
 
-say "gate"
-scripts/check.sh --full
+if [[ -n ${PICKMAN_SKIP_GATE:-} ]]; then
+  say "gate (skipped: PICKMAN_SKIP_GATE is set)"
+else
+  say "gate"
+  scripts/check.sh --full
+fi
 
 cat <<'EOF'
 

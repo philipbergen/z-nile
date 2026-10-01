@@ -24,7 +24,7 @@ scripts/setup.sh
    - To upgrade a tool: `rokit add --force <owner/tool>`, then commit `rokit.toml` as a chore issue.
 3. **Lune type definitions**: `lune setup` writes them to `~/.lune/.typedefs/<version>/`.
    - `.luaurc` refers to them through the `lune` alias (`~/.lune/.typedefs/<version>/`). The version in that alias must match `rokit.toml`.
-4. **Gate**: runs `scripts/check.sh --full`.
+4. **Gate**: runs `scripts/check.sh --full`. Set `PICKMAN_SKIP_GATE=1` (any non-empty value) to skip this step and install the toolchain only; the board workflow does.
    - The first run downloads the Roblox type definitions for luau-lsp to `.cache/globalTypes.d.luau`. This is gitignored and fetched again if missing.
 
 ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
