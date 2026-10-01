@@ -15,7 +15,7 @@ check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker
 spec() {
   local d
   d="$(git rev-parse --show-toplevel)"
-  [[ -f $d/tests/acceptance/f0520/$1 ]] && echo "$d/tests/acceptance/f0520/$1" || echo "$d/tracker/issues/f0520/acceptance/$1"
+  [[ -f $d/tests/acceptance/f0520/$1 ]] && echo "$d/tests/acceptance/f0520/$1" || echo "$d/$(scripts/tracker.sh find f0520)/acceptance/$1"
 }
 check "RC1: end to end, the player covers 3.75 tiles in one real second through the server's own clock" \
   lune run tests/run -- "$(spec speed.spec.luau)"
