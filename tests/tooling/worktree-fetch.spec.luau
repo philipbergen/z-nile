@@ -2,6 +2,7 @@
 -- `tracker.sh worktree` and stale remote-tracking refs (review 001 F1): the repo deletes branches on
 -- merge, so a clone keeps `origin/<name>` refs for branches that no longer exist. A fetch without
 -- --prune made `worktree <name>` resume such a dead branch instead of cutting a fresh one.
+local clone = require("@tests/lib/clone")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -67,7 +68,7 @@ return t.spec("worktree and stale remote refs", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
+		clone.isolated(root, seed)
 		identity(seed)
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })

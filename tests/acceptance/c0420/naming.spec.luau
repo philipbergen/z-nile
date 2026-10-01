@@ -3,6 +3,7 @@
 -- Fixture under .cache/naming-e2e: a clone of the repo's committed HEAD with `main` forced as its
 -- branch, no `origin` (so every tracker command runs freely), the working tree's tooling overlaid,
 -- and the tracker emptied. The spec passes from any branch and from a detached HEAD.
+local clone = require("@tests/lib/clone")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -84,7 +85,7 @@ return t.spec("document naming", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
+		clone.isolated(root, seed)
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
 		git({ "checkout", "-q", "-B", "main" })

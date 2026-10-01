@@ -1,6 +1,7 @@
 --!strict
 -- c0010 AC1: the tracker CLI lifecycle works end to end, driven for real in a throwaway clone
 -- of the committed HEAD (no remote, so start/done skip push and gh).
+local clone = require("@tests/lib/clone")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -53,7 +54,7 @@ return t.spec("tracker lifecycle", function(it)
 		if fs.isDir(dir) then
 			fs.removeDir(dir)
 		end
-		must(process.exec("git", { "clone", "-q", root, dir }), "clone")
+		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
 		local listed = process.exec(

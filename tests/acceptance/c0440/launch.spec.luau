@@ -4,6 +4,7 @@
 -- Fixture under .cache/launch-e2e: a seed clone of the repo (no origin, `main` forced, the working
 -- tree's tooling overlaid, tracker emptied) with raft R0010, a done raft R0020 and issues f0010,
 -- f0020; then a bare origin and a clone `main/`.
+local clone = require("@tests/lib/clone")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -112,7 +113,7 @@ return t.spec("launch", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
+		clone.isolated(root, seed)
 		git(seed, { "config", "user.name", "e2e" })
 		git(seed, { "config", "user.email", "e2e@example.invalid" })
 		git(seed, { "checkout", "-q", "-B", "main" })
