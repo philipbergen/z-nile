@@ -4,11 +4,17 @@
 --
 -- Tick contract: step k takes time k to k + 1. Intents submitted before step k act in step k, and
 -- the events it returns are visible at time k + 1, which is the new `tick`.
+local Game = require("./Game")
+local Levels = require("./Levels")
 local Maze = require("./Maze")
 local Movement = require("./Movement")
 
 export type PlayerId = string
-export type Config = { movement: Movement.Config, maxIntentsPerTick: number }
+export type Config = {
+	movement: Movement.Config,
+	maxIntentsPerTick: number,
+	play: Game.Config?, -- the run's rules; nil means no pauses (a run in play from tick 0)
+}
 export type PlayerSnapshot = {
 	x: number,
 	y: number, -- Movement.position: continuous tile coordinates
@@ -17,13 +23,34 @@ export type PlayerSnapshot = {
 	jumpTick: number, -- tick of the latest position discontinuity, -1 if none
 }
 export type Snapshot = { v: number, tick: number, maze: string, player: PlayerSnapshot }
-export type Event = { kind: string, player: PlayerId, x: number?, y: number? }
+export type PlayFrame = {
+	phase: Game.Phase,
+	level: number,
+	score: number,
+	lives: number,
+	timer: number,
+	frightened: number,
+}
+export type Frame = { v: number, tick: number, maze: string, player: PlayerSnapshot, play: PlayFrame }
+export type Event = {
+	kind: string,
+	player: PlayerId,
+	x: number?,
+	y: number?,
+	points: number?,
+	lives: number?,
+	level: number?,
+	score: number?,
+	ticks: number?,
+	reason: string?,
+}
 export type Clock = { rate: number, maxSteps: number, acc: number }
 
 type Member = {
 	move: Movement.State,
 	queue: { Movement.Intent },
 	jumpTick: number,
+	play: Game.Game,
 }
 export type Session = {
 	tick: number, -- steps completed
@@ -44,12 +71,39 @@ local DEFAULT_CONFIG: Config = {
 }
 Session.DEFAULT_CONFIG = table.freeze(DEFAULT_CONFIG)
 
+-- the real game: the classic pauses
+local GAME_CONFIG: Config = {
+	movement = Movement.DEFAULT_CONFIG,
+	maxIntentsPerTick = 4,
+	play = Game.CLASSIC_CONFIG,
+}
+Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
+
+-- a speed that would cover more than one tile in a tick on some level is refused up front
+local function checkLevelSpeeds(base: number)
+	for level = 1, Levels.COUNT do
+		for _, frightened in { false, true } do
+			local speed = Levels.playerSpeed(base, level, frightened)
+			if speed > Movement.UNITS then
+				error(
+					`session: speed {base} is too fast: level {level} would be {speed} > {Movement.UNITS}`,
+					0
+				)
+			end
+		end
+	end
+end
+
 function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
 	local c = config or Session.DEFAULT_CONFIG
 	Movement.validateConfig(c.movement)
 	if type(c.maxIntentsPerTick) ~= "number" or c.maxIntentsPerTick < 1 then
 		error(`session: maxIntentsPerTick must be >= 1, got {c.maxIntentsPerTick}`, 0)
 	end
+	if c.play and c.play.tickRate ~= Session.TICK_RATE then
+		error(`session: play.tickRate must be {Session.TICK_RATE}, got {c.play.tickRate}`, 0)
+	end
+	checkLevelSpeeds(c.movement.speed)
 	return { tick = 0, maze = maze, seed = seed, config = c, members = {} }
 end
 
@@ -57,7 +111,12 @@ function Session.join(s: Session, id: PlayerId)
 	if s.members[id] then
 		error(`session: player {id} already joined`, 0)
 	end
-	s.members[id] = { move = Movement.spawn(s.maze), queue = {}, jumpTick = -1 }
+	s.members[id] = {
+		move = Movement.spawn(s.maze),
+		queue = {},
+		jumpTick = -1,
+		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
+	}
 end
 
 function Session.leave(s: Session, id: PlayerId)
@@ -88,6 +147,26 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
 	return true, nil
 end
 
+-- the player back at the spawn: a teleport, so the camera cuts at `jumpTick`
+local function teleport(s: Session, member: Member, jumpTick: number)
+	member.move = Movement.spawn(s.maze)
+	member.queue = {}
+	member.jumpTick = jumpTick
+end
+
+local function tagged(id: PlayerId, e: Game.Event): Event
+	return {
+		kind = e.kind,
+		player = id,
+		points = e.points,
+		lives = e.lives,
+		level = e.level,
+		score = e.score,
+		ticks = e.ticks,
+		reason = e.reason,
+	}
+end
+
 function Session.step(s: Session): { Event }
 	s.tick += 1
 	local out: { Event } = {}
@@ -95,7 +174,23 @@ function Session.step(s: Session): { Event }
 		local member = s.members[id]
 		local queue = member.queue
 		member.queue = {}
-		for _, e in Movement.step(s.maze, member.move, queue, s.config.movement) do
+		-- whether the player moves this tick is decided before the run's phase changes
+		local moving = Game.canMove(member.play)
+		for _, e in Game.step(member.play) do
+			table.insert(out, tagged(id, e))
+			if e.kind == "Ready" then
+				teleport(s, member, s.tick)
+			end
+		end
+		if not moving then
+			continue
+		end
+		local level = member.play.level
+		local config: Movement.Config = {
+			speed = Levels.playerSpeed(s.config.movement.speed, level),
+			turnBufferTicks = s.config.movement.turnBufferTicks,
+		}
+		for _, e in Movement.step(s.maze, member.move, queue, config) do
 			local event: Event = { kind = e.kind, player = id }
 			if e.kind == "Entered" or e.kind == "Stopped" then
 				event.x, event.y = e.x, e.y
@@ -108,11 +203,40 @@ function Session.step(s: Session): { Event }
 	return out
 end
 
-function Session.snapshot(s: Session, id: PlayerId): Snapshot
+local function memberOf(s: Session, id: PlayerId): Member
 	local member = s.members[id]
 	if member == nil then
 		error(`session: unknown player {id}`, 0)
 	end
+	return member
+end
+
+-- The server ends a life (a ghost caught the player). Only a run in play loses one.
+function Session.kill(s: Session, id: PlayerId): { Event }
+	local member = memberOf(s, id)
+	local out: { Event } = {}
+	for _, e in Game.died(member.play) do
+		table.insert(out, tagged(id, e))
+	end
+	return out
+end
+
+-- A new run, only after game over. Made between steps, so the first frame at the spawn is the next tick's.
+function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
+	local member = memberOf(s, id)
+	local events, ok = Game.playAgain(member.play)
+	local out: { Event } = {}
+	for _, e in events do
+		table.insert(out, tagged(id, e))
+	end
+	if ok then
+		teleport(s, member, s.tick + 1)
+	end
+	return out, ok
+end
+
+function Session.snapshot(s: Session, id: PlayerId): Snapshot
+	local member = memberOf(s, id)
 	local x, y = Movement.position(member.move)
 	return {
 		v = Session.SNAPSHOT_VERSION,
@@ -124,6 +248,27 @@ function Session.snapshot(s: Session, id: PlayerId): Snapshot
 			heading = member.move.heading,
 			moving = member.move.moving,
 			jumpTick = member.jumpTick,
+		},
+	}
+end
+
+-- What the server replicates: the v1 snapshot plus the run's state. Later issues add fields beside
+-- `play`; a client ignores fields it doesn't know.
+function Session.frame(s: Session, id: PlayerId): Frame
+	local snap = Session.snapshot(s, id)
+	local play = s.members[id].play
+	return {
+		v = snap.v,
+		tick = snap.tick,
+		maze = snap.maze,
+		player = snap.player,
+		play = {
+			phase = play.phase,
+			level = play.level,
+			score = play.score,
+			lives = play.lives,
+			timer = play.timer,
+			frightened = play.frightened,
 		},
 	}
 end
