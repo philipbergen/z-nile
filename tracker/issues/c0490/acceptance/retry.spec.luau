@@ -1,0 +1,104 @@
+--!strict
+-- c0490: AC2: a transient failure creating or polling a task, or publishing, is retried.
+local OpenCloud = require("@scripts/lib/opencloud")
+local serde = require("@lune/serde")
+local t = require("@tests/lib/t")
+
+local KEY = "SECRET-KEY-0123456789"
+local PATH = "universes/111/places/222/versions/5/luau-execution-sessions/abc/tasks/abc"
+
+local function respond(code: number, body: string): OpenCloud.Response
+	return { statusCode = code, body = body }
+end
+
+local function created(): OpenCloud.Response
+	return respond(200, serde.encode("json" :: "json", { path = PATH, state = "PROCESSING" }))
+end
+
+local function task(state: string, extra: { [string]: any }?): OpenCloud.Response
+	local body: { [string]: any } = { path = PATH, state = state }
+	if extra then
+		for k, v in extra do
+			body[k] = v
+		end
+	end
+	return respond(200, serde.encode("json" :: "json", body))
+end
+
+local function done(): OpenCloud.Response
+	return task("COMPLETE", { output = { results = { "PASS" } } })
+end
+
+type Extra = {
+	retrySeconds: number?,
+	transientSeconds: number?,
+	transientBudgetSeconds: number?,
+}
+
+-- answers the scripted responses in order, then repeats the last one
+local function fake(
+	responses: { OpenCloud.Response },
+	extra: Extra?
+): (OpenCloud.Config, { OpenCloud.Request }, { number })
+	local calls: { OpenCloud.Request } = {}
+	local naps: { number } = {}
+	local cfg: OpenCloud.Config = {
+		apiKey = KEY,
+		universeId = "111",
+		placeId = "222",
+		base = "https://example.test",
+		request = function(r: OpenCloud.Request): OpenCloud.Response
+			table.insert(calls, r)
+			return responses[math.min(#calls, #responses)]
+		end,
+		sleep = function(seconds: number)
+			table.insert(naps, seconds)
+		end,
+	}
+	if extra then
+		cfg.retrySeconds = extra.retrySeconds
+		cfg.transientSeconds = extra.transientSeconds
+		cfg.transientBudgetSeconds = extra.transientBudgetSeconds
+	end
+	return cfg, calls, naps
+end
+
+return t.spec("c0490 retrying transient failures", function(it)
+	it("retries a transient failure creating the task, then goes on to poll", function()
+		local cfg, calls, naps = fake({ respond(429, "slow down"), respond(503, "down"), created(), done() })
+		local run = OpenCloud.execute(cfg, 5, "return 'PASS'")
+		t.expect(run.ok).toBe(true)
+		t.expect(#calls).toBe(4)
+		t.expect(calls[1].method).toBe("POST")
+		t.expect(calls[2].method).toBe("POST")
+		t.expect(calls[2].body).toBe(calls[1].body) -- the retry sends the same script
+		t.expect(calls[3].method).toBe("POST")
+		t.expect(calls[4].method).toBe("GET")
+		t.expect(#naps).toBe(2) -- one pause per retry, none after success
+	end)
+
+	it("retries a transient failure polling the task, and polls the same task again", function()
+		local cfg, calls, naps = fake({ created(), respond(502, "bad gateway"), respond(429, "x"), done() })
+		local run = OpenCloud.execute(cfg, 5, "return 'PASS'")
+		t.expect(run.ok).toBe(true)
+		t.expect(#calls).toBe(4)
+		t.expect(calls[3].url).toBe(calls[2].url)
+		t.expect(calls[4].url).toBe(`https://example.test/cloud/v2/{PATH}`)
+		t.expect(#naps).toBe(2)
+	end)
+
+	it(
+		"runSuite retries inside a script, so a blip does not fail it, and a dead service still does",
+		function()
+			local cfg1 = fake({ respond(503, "a"), created(), done() })
+			local suite1 = OpenCloud.runSuite(cfg1, 5, { { name = "a", source = "x" } })
+			t.expect(suite1.passed).toBe(1)
+			t.expect(suite1.failed).toBe(0)
+			local cfg2 = fake({ respond(503, "gone") })
+			local suite2 =
+				OpenCloud.runSuite(cfg2, 5, { { name = "a", source = "x" }, { name = "b", source = "y" } })
+			t.expect(suite2.failed).toBe(2)
+			t.expect(suite2.lines[1]).toBe("FAIL a: opencloud: creating the task failed with HTTP 503: gone")
+		end
+	)
+end)

@@ -218,7 +218,7 @@ return t.spec("f0170 Game", function(it)
 		t.expect(ok).toBe(false)
 		t.expect(#events).toBe(0)
 		stepsUntilChange(g)
-		_, ok = Game.playAgain(g)
+		events, ok = Game.playAgain(g)
 		t.expect(ok).toBe(false) -- not over yet
 		Game.addScore(g, 10040) -- earns the extra life: four lives to lose
 		for _ = 1, 4 do
