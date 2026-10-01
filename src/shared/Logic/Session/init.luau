@@ -8,12 +8,14 @@ local Game = require("./Game")
 local Levels = require("./Levels")
 local Maze = require("./Maze")
 local Movement = require("./Movement")
+local Pellets = require("./Pellets")
 
 export type PlayerId = string
 export type Config = {
 	movement: Movement.Config,
 	maxIntentsPerTick: number,
 	play: Game.Config?, -- the run's rules; nil means no pauses (a run in play from tick 0)
+	eatSlowdown: boolean?, -- eating stops the player for a moment, as in the arcade
 }
 export type PlayerSnapshot = {
 	x: number,
@@ -43,6 +45,7 @@ export type Event = {
 	score: number?,
 	ticks: number?,
 	reason: string?,
+	item: string?,
 }
 export type Clock = { rate: number, maxSteps: number, acc: number }
 
@@ -51,6 +54,8 @@ type Member = {
 	queue: { Movement.Intent },
 	jumpTick: number,
 	play: Game.Game,
+	pellets: Pellets.Pellets,
+	stall: number, -- units of eating pause still owed
 }
 export type Session = {
 	tick: number, -- steps completed
@@ -76,6 +81,7 @@ local GAME_CONFIG: Config = {
 	movement = Movement.DEFAULT_CONFIG,
 	maxIntentsPerTick = 4,
 	play = Game.CLASSIC_CONFIG,
+	eatSlowdown = true,
 }
 Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
 
@@ -116,6 +122,8 @@ function Session.join(s: Session, id: PlayerId)
 		queue = {},
 		jumpTick = -1,
 		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
+		pellets = Pellets.new(s.maze),
+		stall = 0,
 	}
 end
 
@@ -152,6 +160,7 @@ local function teleport(s: Session, member: Member, jumpTick: number)
 	member.move = Movement.spawn(s.maze)
 	member.queue = {}
 	member.jumpTick = jumpTick
+	member.stall = 0
 end
 
 local function tagged(id: PlayerId, e: Game.Event): Event
@@ -167,6 +176,31 @@ local function tagged(id: PlayerId, e: Game.Event): Event
 	}
 end
 
+-- The player entered a tile: eat what is on it, score it, owe the eating pause, and clear the level
+-- when the last pellet goes. Appends to `out`.
+local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, speed: number, out: { Event })
+	local eaten: Pellets.Kind? = Pellets.eat(member.pellets, tile)
+	if eaten == nil then
+		return
+	end
+	local kind: Pellets.Kind = eaten :: Pellets.Kind
+	local points = Pellets.POINTS[kind]
+	local event: Event =
+		{ kind = "PelletEaten", player = id, x = tile.x, y = tile.y, item = kind, points = points }
+	table.insert(out, event)
+	for _, e in Game.addScore(member.play, points) do
+		table.insert(out, tagged(id, e))
+	end
+	if s.config.eatSlowdown then
+		member.stall += Pellets.stallUnits(kind, speed, Session.TICK_RATE)
+	end
+	if Pellets.remaining(member.pellets) == 0 then
+		for _, e in Game.cleared(member.play) do
+			table.insert(out, tagged(id, e))
+		end
+	end
+end
+
 function Session.step(s: Session): { Event }
 	s.tick += 1
 	local out: { Event } = {}
@@ -180,16 +214,20 @@ function Session.step(s: Session): { Event }
 			table.insert(out, tagged(id, e))
 			if e.kind == "Ready" then
 				teleport(s, member, s.tick)
+				if e.reason ~= "respawn" then
+					Pellets.reset(member.pellets) -- a new level or a new run: every pellet is back
+				end
 			end
 		end
 		if not moving then
 			continue
 		end
-		local level = member.play.level
-		local config: Movement.Config = {
-			speed = Levels.playerSpeed(s.config.movement.speed, level),
-			turnBufferTicks = s.config.movement.turnBufferTicks,
-		}
+		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level)
+		-- an eating pause is owed distance: this step covers what is left of the speed
+		local owed = math.min(member.stall, speed)
+		member.stall -= owed
+		local config: Movement.Config =
+			{ speed = speed - owed, turnBufferTicks = s.config.movement.turnBufferTicks }
 		for _, e in Movement.step(s.maze, member.move, queue, config) do
 			local event: Event = { kind = e.kind, player = id }
 			if e.kind == "Entered" or e.kind == "Stopped" then
@@ -198,6 +236,9 @@ function Session.step(s: Session): { Event }
 				member.jumpTick = s.tick
 			end
 			table.insert(out, event)
+			if e.kind == "Entered" then
+				eat(s, id, member, { x = e.x, y = e.y }, speed, out)
+			end
 		end
 	end
 	return out
@@ -231,6 +272,7 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
 	end
 	if ok then
 		teleport(s, member, s.tick + 1)
+		Pellets.reset(member.pellets)
 	end
 	return out, ok
 end

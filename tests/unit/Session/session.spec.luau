@@ -31,9 +31,12 @@ return t.spec("Session extras", function(it)
 		for _ = 1, 2 do
 			events = Session.step(s)
 		end
-		t.expect(#events).toBe(2)
+		-- each player enters a tile with a pellet on it: Entered and PelletEaten
+		t.expect(#events).toBe(4)
 		t.expect(events[1].player).toBe("a")
-		t.expect(events[2].player).toBe("b")
+		t.expect(events[2].player).toBe("a")
+		t.expect(events[3].player).toBe("b")
+		t.expect(events[4].player).toBe("b")
 	end)
 
 	it("a player who leaves gets no more events", function()
