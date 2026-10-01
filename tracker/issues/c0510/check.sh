@@ -50,6 +50,8 @@ skills_carry_sync_and_claim() {
   grep -q 'new -> preparing -> prepared -> active -> done' "$t" || { echo "tracker skill does not list the statuses"; return 1; }
   grep -q 'paths-ignore\|tracker-only' "$t" || { echo "tracker skill does not state the direct-push limit"; return 1; }
   grep -q 'status <R-id> preparing' "$t" || { echo "tracker skill does not say how an existing raft is claimed"; return 1; }
+  grep -q 'status <R-id> prepared' .claude/skills/ticket-prep/SKILL.md || { echo "ticket-prep does not run status <R-id> prepared before the prep commit"; return 1; }
+  grep -q 'Whose claim' "$t" || { echo "tracker skill does not say that claims are not owned"; return 1; }
 }
 check "AC6: the skills sync (reviewers fetch only), diff sequestered files against origin/main...HEAD, and the tracker skill states the sync-and-claim rules" skills_carry_sync_and_claim
 

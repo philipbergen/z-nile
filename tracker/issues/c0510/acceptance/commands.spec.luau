@@ -150,17 +150,6 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 		t.expect(trOk(cap, { "new", "issue", "c", "beta" })).toBe("tracker/issues/c0210/c0210.md")
 	end)
 
-	it("stamps from separate processes differ, so identical moves conflict in git", function()
-		local function stampOf(path: string): string
-			return string.match(onOrigin(path) or "", "\nstatus: (%a+%-%a+%-%a+%-%a+)\n") :: string
-		end
-		local first, second =
-			stampOf("tracker/issues/c0010/c0010.md"), stampOf("tracker/issues/c0210/c0210.md")
-		t.expect(first ~= nil and second ~= nil).toBe(true)
-		t.expect(first == second).toBe(false)
-		t.expect(string.match(first, "^new%-") ~= nil).toBe(true)
-	end)
-
 	it(
 		"an id taken by another terminal during the push is never overwritten: the next one is used",
 		function()
@@ -224,6 +213,13 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 
 	it("a move to prepared is carried by the PR: local edit only, nothing published", function()
 		local before = git(origin, { "rev-parse", "main" })
+		-- it refuses while the design is not ready: the two fields move together
+		local early = tr(cap, { "status", "c0240", "prepared" })
+		t.expect(early.ok).toBe(false)
+		t.expect(has(early.stderr, "design: ready")).toBe(true)
+		t.expect(has(fs.readFile(`{cap}/tracker/issues/c0240/c0240.md`), "status: prepared")).toBe(false)
+		local c0240 = `{cap}/tracker/issues/c0240/c0240.md`
+		fs.writeFile(c0240, (string.gsub(fs.readFile(c0240), "design: draft", "design: ready")))
 		trOk(cap, { "status", "c0240", "prepared" })
 		t.expect(has(fs.readFile(`{cap}/tracker/issues/c0240/c0240.md`), "status: prepared")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
@@ -333,6 +329,12 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 				string.match(trOk(cap, { "new", "issue", "c", "iota", "--desc", "Iota." }), "(c%d+)") :: string
 			-- prep adds cnew to the raft locally (the document the prep PR will carry)
 			local doc = `{cap}/tracker/rafts/{rz}/{rz}.md`
+			-- the designs are ready (the move to prepared refuses otherwise)
+			local function ready(path: string)
+				fs.writeFile(path, (string.gsub(fs.readFile(path), "design: draft", "design: ready")))
+			end
+			ready(doc)
+			ready(`{cap}/tracker/issues/{zeta}/{zeta}.md`)
 			local original = fs.readFile(doc)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [%1, {cnew}]`)))
 			local before = git(origin, { "rev-parse", "main" })
@@ -343,6 +345,7 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 			t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 			-- claim it, then drop zeta: the carried move reaches cnew and the raft only
 			trOk(cap, { "status", cnew, "preparing" })
+			ready(`{cap}/tracker/issues/{cnew}/{cnew}.md`)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [{cnew}]`)))
 			local zetaDoc = `{cap}/tracker/issues/{zeta}/{zeta}.md`
 			local zetaBefore = fs.readFile(zetaDoc)
@@ -424,10 +427,41 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 			process.exec("cp", { "-R", `{root}/scripts`, `{lost}/scripts` })
 			process.exec("cp", { "-R", `{root}/tracker/templates`, `{lost}/tracker/templates` })
 			local before = git(`{outer}/origin.git`, { "rev-parse", "main" })
-			for _, args in { { "new", "issue", "c", "x" }, { "status" }, { "sync" }, { "worktree", "zz" } } do
+			-- every command that is not read-only is refused, not just the ones that publish
+			local writing = {
+				{ "new", "issue", "c", "x" },
+				{ "new", "raft", "chore", "r", "c0010", "--single" },
+				{ "renumber", "c0010", "c0011" },
+				{ "migrate" },
+				{ "start", "R0010" },
+				{ "focus", "c0010" },
+				{ "commit", "-m", "x" },
+				{ "done", "R0010" },
+				{ "check", "c0010" },
+				{ "status" },
+				{ "sync" },
+				{ "worktree", "zz" },
+				{ "worktree-prune" },
+				{ "prompt", "c0010", "--stdout" },
+			}
+			for _, args in writing do
 				local r = tr(lost, args)
 				t.expect(r.ok).toBe(false)
 				t.expect(has(r.stderr, "repository root")).toBe(true)
+			end
+			-- the read-only commands are exempt (other specs run them in sandboxes without a .git)
+			for _, args in
+				{
+					{ "list" },
+					{ "find", "c0010" },
+					{ "members", "R0010" },
+					{ "metrics" },
+					{ "board", "--out", `{lost}/board.html` },
+					{ "workstreams", "R0010" },
+					{ "promote-check", "R0010" },
+				}
+			do
+				t.expect(has(tr(lost, args).stderr, "repository root")).toBe(false)
 			end
 			-- turning publishing off does not switch the guard off
 			local offline = tr(lost, { "new", "issue", "c", "y" }, { PICKMAN_PUBLISH = "0" })
@@ -569,4 +603,23 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 			t.expect(has(onOrigin(`tracker/rafts/{localRaft}/{localRaft}.md`), "status: active")).toBe(true)
 		end
 	)
+
+	it("stamps from processes started together differ, so identical moves conflict in git", function()
+		-- three terminals stamp at the same moment: a time-based seed would give them one phrase
+		local out = process.exec("bash", {
+			"-c",
+			`cd {cap} && (bash scripts/tracker.sh stamp new & bash scripts/tracker.sh stamp new & bash scripts/tracker.sh stamp new & wait)`,
+		}, { env = fenced() })
+		t.expect(out.ok).toBe(true)
+		local stamps: { string } = {}
+		for line in string.gmatch(out.stdout, "[^\n]+") do
+			t.expect(string.match(line, "^new%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
+			table.insert(stamps, line)
+		end
+		t.expect(#stamps).toBe(3)
+		t.expect(stamps[1] == stamps[2] or stamps[1] == stamps[3] or stamps[2] == stamps[3]).toBe(false)
+		-- the stubs the CLI publishes carry such stamps too
+		local doc = onOrigin("tracker/issues/c0010/c0010.md") or ""
+		t.expect(string.match(doc, "\nstatus: new%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)
+	end)
 end)

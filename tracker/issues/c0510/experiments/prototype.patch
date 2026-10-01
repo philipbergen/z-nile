@@ -1,8 +1,8 @@
 diff --git a/scripts/tracker/main.luau b/scripts/tracker/main.luau
-index ec8c85c..f1f8b0f 100644
+index ec8c85c..f99aeed 100644
 --- a/scripts/tracker/main.luau
 +++ b/scripts/tracker/main.luau
-@@ -3,15 +3,19 @@
+@@ -3,15 +3,20 @@
  local board = require("./board")
  local fs = require("@lune/fs")
  local process = require("@lune/process")
@@ -20,10 +20,11 @@ index ec8c85c..f1f8b0f 100644
    new raft <feature|defect|chore> <slug> <issue>... [--single]
 +  status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared|active)
 +  sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
++  stamp <state>                                 print a fresh status stamp (diagnostics)
    find <id>                                     print the item's current directory
    list [backlog|active|done]                    list items
    members <R-id>                                print directories of every issue in the raft
-@@ -118,6 +122,119 @@ local function refuseInMainCheckout(what: string)
+@@ -118,6 +123,119 @@ local function refuseInMainCheckout(what: string)
  	end
  end
  
@@ -143,7 +144,7 @@ index ec8c85c..f1f8b0f 100644
  local function activeRaft(): store.Item
  	local rafts = {}
  	for _, r in store.all("raft") do
-@@ -137,7 +254,13 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+@@ -137,7 +255,13 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  	local i = 1
  	while i <= #args do
  		local a = args[i]
@@ -158,7 +159,7 @@ index ec8c85c..f1f8b0f 100644
  			opts[a] = { "true" }
  		elseif string.sub(a, 1, 1) == "-" then
  			opts[a] = opts[a] or {}
-@@ -164,10 +287,63 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -164,10 +288,63 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
  			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
  		end
@@ -223,7 +224,7 @@ index ec8c85c..f1f8b0f 100644
  		local dir = store.dirFor("issue", state, id)
  		fs.writeDir(dir)
  		local vars = {
-@@ -191,6 +367,84 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -191,6 +368,84 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
  			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
  		end
@@ -308,13 +309,16 @@ index ec8c85c..f1f8b0f 100644
  		local members: { store.Item } = {}
  		for i = 4, #pos do
  			local issue = store.get(pos[i])
-@@ -232,6 +486,140 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -232,6 +487,159 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
 +local function originPaths(): { string }
 +	sh.git({ "fetch", "--quiet", "origin", "main" })
-+	return string.split(sh.git({ "ls-tree", "-r", "--name-only", "origin/main", "tracker/" }), "\n")
++	return string.split(
++		sh.git({ "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" }),
++		"\n"
++	)
 +end
 +
 +-- `status` lists what origin/main says about every item that is not done; `status <id>` prints one
@@ -396,6 +400,13 @@ index ec8c85c..f1f8b0f 100644
 +			if carried and t ~= id and cur ~= "preparing" then
 +				return `{t} is {cur} on origin/main: claim it first with tracker.sh status {t} preparing`
 +			end
++			if carried then
++				-- the move to `prepared` ties the two fields together: designs are ready first
++				local localItem = store.get(t)
++				if store.readFront(localItem.doc).design ~= "ready" then
++					return `{t} is not design: ready: set it (ticket-prep) before status {id} prepared`
++				end
++			end
 +			if
 +				not (
 +					statusLib.canMove(cur, to)
@@ -431,6 +442,15 @@ index ec8c85c..f1f8b0f 100644
 +	end
 +end
 +
++-- Prints a fresh stamp for a state (diagnostics, and how specs prove that stamps differ between processes).
++function cmd.stamp(pos: { string })
++	local state = pos[1]
++	if not state or not statusLib.parse(state) then
++		fail("usage: stamp <new|preparing|prepared|active|done>")
++	end
++	print(stamp(state))
++end
++
 +-- `sync` brings origin/main into this checkout (a merge in a worktree, a fast-forward in the main
 +-- checkout). `sync --fetch` only updates origin/main: reviewers and stream agents use it, because
 +-- a merge would add a commit and change the diff they judge.
@@ -449,7 +469,7 @@ index ec8c85c..f1f8b0f 100644
  function cmd.find(pos: { string })
  	print(store.get(pos[1] or fail("usage: find <id>")).dir)
  end
-@@ -431,8 +819,60 @@ function cmd.start(pos: { string })
+@@ -431,8 +839,60 @@ function cmd.start(pos: { string })
  		end
  	end
  	local branch = raftBranch(raft)
@@ -511,7 +531,7 @@ index ec8c85c..f1f8b0f 100644
  		sh.git({ "switch", "-c", branch })
  	end
  	raft = move(raft, "active")
-@@ -1141,6 +1581,22 @@ if not handler then
+@@ -1141,6 +1601,22 @@ if not handler then
  	print(USAGE)
  	process.exit(if name then 1 else 0)
  end
@@ -526,7 +546,7 @@ index ec8c85c..f1f8b0f 100644
 +	board = true,
 +	workstreams = true,
 +	["promote-check"] = true,
-+	prompt = true,
++	stamp = true,
 +}
 +if not READ_ONLY[name :: string] then
 +	guardRepoRoot()

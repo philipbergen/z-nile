@@ -85,7 +85,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if not rev.ok or not string.match(base, "^%x+$") then
 			return fail("cannot resolve origin/main: " .. trim(rev.stderr))
 		end
-		local listing = git(cwd, { "ls-tree", "-r", "--name-only", base, "tracker/" })
+		local listing = git(cwd, { "ls-tree", "-r", "--name-only", "--full-tree", base, "tracker/" })
 		if not listing.ok then
 			return fail("cannot list origin/main: " .. trim(listing.stderr))
 		end
