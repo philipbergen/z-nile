@@ -13,6 +13,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `lune run tests/run -- <spec files>` | specific specs |
 | `lune run scripts/affected -- [--base REF] [files…]` | show which specs a change selects (`ALL` = full run) |
 | `scripts/tracker.sh check <id>` | an item's acceptance checks |
+| `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
 
 ## Spec layout (`*.spec.luau`)
 | dir | tier | may require |
@@ -118,6 +119,12 @@ finish
 - **Observed**: the minimum set of Studio playtest steps for the human.
 
 If something could be expressed as a measurable proxy, it's not Judged or Observed. For example, "ghost pursuit feels fair" can become "an idle player is caught within 6–12 s across 20 seeds".
+
+## Speed
+A standing rule, not a one-off. Tests and checks run very often, so they must run **concurrently** and as swiftly as possible.
+- **What exists**: `scripts/lib/par.sh` runs the independent static stages together (`par_start` / `par_wait`: buffered, timed, reported in start order); `tests/run` runs spec files in concurrent workers (`--jobs N`, `PICKMAN_JOBS`). `PICKMAN_JOBS=1` restores serial runs when you suspect an ordering bug.
+- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`tracker.sh new issue c gate-slow-<what>`). Never add a serial dependency between stages without a reason.
+- **Writing specs for speed**: no wall-clock assertions and no fixed sleeps to let something finish (a bounded poll or rendezvous with a timeout is fine). Shell-heavy fixtures own a unique `.cache/<name>` (a literal `.cache/<dir>` in two spec files under `tests/` fails the gate, a mere mention counts, and `sim` is exempt). No shared mutable state across spec files. Prefer in-process Logic specs, and split or stub a spec that takes more than about a second.
 
 ## Hooks (Claude Code only)
 - After every `.luau` edit: stylua formats the file and selene lints it.
