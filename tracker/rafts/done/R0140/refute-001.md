@@ -1,0 +1,4 @@
+- F1: fixed (this commit series): lane body wrapped in `pcall`, a spawn failure is recorded as a failed outcome (`worker exited with code -1`); regression spec `tests/tooling/run-lane-error.spec.luau` runs with no `lune` on the workers' PATH and expects `0 passed, 2 failed`.
+- F2: fixed: not reproduced (suite green under 12 busy processes, full log kept). The one cause I could provoke is two suites in the same worktree sharing `.cache/<name>` fixtures, which deletes clones and makes a spec run git in the real worktree (I hit exactly that). Recorded in the raft Risks and as a Speed rule in the testing skill. AC6/RC2 untouched.
+- F3: fixed: lanes are `min(jobs, #files)`. An explicit `--jobs` above 8 is honoured on purpose; the cap of 8 applies to the default (Design wording "capped at 8" is about the default).
+- F4: fixed: `par_start` installs an INT/TERM trap (`par_abort` kills stages, removes the temp dir, exits 130); `par_wait` clears it.

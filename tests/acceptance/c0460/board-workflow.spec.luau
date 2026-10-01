@@ -78,19 +78,19 @@ return t.spec("c0460 board workflow", function(it)
 		end
 	end)
 
-	it("bootstraps with setup.sh, skipping the full gate", function()
+	it("bootstraps with setup.sh --tools, and only the tools", function()
 		local steps = job(load()).steps
 		local setup = runStep(steps, "scripts/setup.sh")
 		t.expect(setup).toBeTruthy()
-		-- YAML reads an unquoted 1 as a number; either way the shell sees a non-empty string
-		t.expect(tostring(setup.env.PICKMAN_SKIP_GATE)).toBe("1")
+		t.expect(setup.run).toBe("scripts/setup.sh --tools")
 		-- without the token setup.sh dies on CI ("GH_TOKEN missing or invalid")
 		t.expect(setup.env.GH_TOKEN).toBe("${{ github.token }}")
+		t.expect(keys(setup.env)).toEqual({ "GH_TOKEN" })
 	end)
 
 	it("builds the board after setup and uploads exactly that file after the build", function()
 		local steps = job(load()).steps
-		local _, setupAt = runStep(steps, "scripts/setup.sh")
+		local _, setupAt = runStep(steps, "scripts/setup.sh --tools")
 		local build, buildAt = runStep(steps, "scripts/tracker.sh board --out ")
 		local upload, uploadAt = usesStep(steps, "actions/upload-artifact@v4")
 		t.expect(build).toBeTruthy()
@@ -102,6 +102,23 @@ return t.spec("c0460 board workflow", function(it)
 		t.expect(upload.with.path).toBe(out)
 		t.expect(upload.with.name).toBe("tracker-board")
 		t.expect(upload.with["if-no-files-found"]).toBe("error")
+	end)
+
+	it("has exactly four steps: checkout, setup, build, upload, with their exact inputs", function()
+		local wf = load()
+		t.expect(keys(wf)).toEqual({ "concurrency", "jobs", "name", "on", "permissions" })
+		t.expect(keys(job(wf))).toEqual({ "if", "runs-on", "steps" })
+		local steps = job(wf).steps
+		t.expect(#steps).toBe(4)
+		t.expect(steps[1]).toEqual({ uses = "actions/checkout@v4" })
+		t.expect(steps[3]).toEqual({ run = "scripts/tracker.sh board --out dist/board.html" })
+		t.expect(steps[4].uses).toBe("actions/upload-artifact@v4")
+		t.expect(steps[4].with).toEqual({
+			name = "tracker-board",
+			path = "dist/board.html",
+			["retention-days"] = 30,
+			["if-no-files-found"] = "error",
+		})
 	end)
 
 	it("checks the repository out before anything else", function()
