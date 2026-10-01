@@ -11,6 +11,15 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0090
 
-# check "RC1: <end-to-end statement>" <command>
+# sequestered specs: in the issue directories before `tracker.sh done`, promoted to tests/acceptance after it
+spec() { # spec <issue> <name>: path of that issue's acceptance spec, wherever it lives now
+  local d
+  d="$(git rev-parse --show-toplevel)"
+  [[ -f $d/tests/acceptance/$1/$2 ]] && echo "$d/tests/acceptance/$1/$2" || echo "$d/tracker/issues/$1/acceptance/$2"
+}
+check "RC1: a whole run plays headless: countdown, eating, power pellet, clear, next level, deaths, game over, play again" \
+  lune run tests/run -- "$(spec f0160 full-run.spec.luau)"
+check "RC2: the adapter sends Session.frame with GAME_CONFIG, and the v1 snapshot spec still passes" \
+  lune run tests/run -- "$(spec f0170 adapter.spec.luau)" "$(spec f0120 snapshot.spec.luau)"
 
 finish

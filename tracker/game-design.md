@@ -20,7 +20,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 ## Movement model: rail with free look
 - **The maze is a grid of tiles.** Walls are whole tiles. Walkable tiles form corridors, and a junction is a tile with more than 2 exits.
 - **Movement:**
-  - The player always moves along the current corridor at the level's speed and stops at a wall. Level 1 is **7.5 tiles/s**, the arcade's 80% (R0040); per-level speeds come with raft c.
+  - The player always moves along the current corridor at the level's speed and stops at a wall. Level 1 is **7.5 tiles/s**, the arcade's 80% (R0040). Per level (R0090, *Pac-Man Dossier* Table A.1, relative to level 1): levels 2–4 ×1.125, 5–20 ×1.25, 21 and on ×1.125, in whole units per tick (30, 34, 38, 34).
   - **Corners are classic** (decided by the user, 2026-09-29): at a corner the player stops unless a turn into it is buffered. There is no automatic cornering.
   - There is no free strafing; position is always on a corridor centreline.
 - **Turn intents:** `Left`, `Right`, `Back` and `Forward`, relative to the current heading.
@@ -38,8 +38,10 @@ This is the source of truth for product decisions. Every raft design must agree 
 
 ## Scoring and rules (classic defaults; tune in (prep))
 - **Points:** pellet 10, power pellet 50, ghosts 200/400/800/1600 within one power period.
-- **Lives:** 3. An extra life at 10,000 points is **(prep)**.
-- **Levels:** clearing all pellets advances to the next level. Speeds, the frightened duration and the mode schedule vary per level, following the classic tables.
+- **Lives:** 3, and **one extra life, the first time the score reaches 10,000** (user, 2026-09-30; R0090). Once per run.
+- **Eating slowdown** (user, 2026-09-30; R0090): eating stops the player as in the arcade: 1 frame of 60 fps for a dot, 3 for an energizer, at the level's speed (15 and 45 units at level 1, where a tile is 120 units and a tick is 30). The distance is owed and taken from the next steps; a death, a new level or a new run forgets it. **Deviation (R0090 design review round 2)**: the pause is *distance* at the speed of the tick that ate the pellet, so across a speed change it is up to a third of a frame off: an energizer (eaten at the normal speed, paid at the faster frightened one) stops the player about 2.65 frames rather than 3, and a dot eaten while frightened costs 17 units at level 1. Not visible (about 6 ms); the user can ask for frames-owed instead.
+- **Levels:** clearing all pellets advances to the next level, which restores every pellet and puts the player back at the start. Speeds, the frightened duration and the mode schedule vary per level, following the classic tables; level 21 and on repeat the 21st row; frightened time is 0 on levels 17, 19, 20 and from 21 on, but 1 s on level 18 (R0090). **While frightened the player runs faster** (Table A.1, relative to level 1's 80%: levels 1 ×1.125, 2–4 ×1.1875, 5–20 ×1.25), user 2026-09-30. A death keeps the pellets already eaten.
+- **Run pauses** (R0090, 30 ticks/s): "Ready!" 2 s before play and after each death and level; death 1.5 s; level clear 2 s. Keys pressed in a pause are ignored.
 - **Ghosts:** the four classic personalities.
   - Blinky targets the player's tile.
   - Pinky targets 4 tiles ahead.
@@ -63,13 +65,14 @@ This is the source of truth for product decisions. Every raft design must agree 
 ## Open decisions
 - **Danger awareness in first person** (f0320): minimap/radar, audio, edge indicators, vignette, or easier tables. The user decides before raft d's prep.
 
-## Roadmap (single-type rafts; order a1 → a2 → b → c → d → e, with f any time after a2)
+## Roadmap (single-type rafts; order a1 → a2 → b → c → c2 → d → e, with f any time after a2)
 | Raft | Type | Issues | Proves |
 |---|---|---|---|
 | a1 Sim harness (R0030, done) | chore | c0090 | headless simulations and scenario specs in CI |
 | a2 Barebones game (R0040, done) | feature | f0100, f0110, f0120, f0130 | a maze you can walk through in first person, in Studio |
 | b Beta deploy (R0080) | chore | c0140, c0030 | a ready PR goes live on Beta, plus engine smoke tests |
-| c Pellets & mechanics (R0090) | feature | f0150, f0160, f0170, f0180, f0290, f0300 | eating, score, lives, levels, HUD, pellets drawn, start/game over/play again |
+| c Pellets & mechanics (R0090) | feature | f0150, f0160, f0170 | eating, score, lives, levels, power pellets: the rules, headless |
+| c2 Presentation (R0150) | feature | f0180, f0290, f0300 | HUD, pellets drawn, start/game over/play again |
 | d Ghosts (R0100) | feature | f0190, f0200, f0210, f0220, f0310, f0320 | classic ghost AI, its consequences, ghosts drawn, danger awareness |
 | e Hiscores (R0110) | feature | f0230, f0240, f0250 | all-time, daily and weekly boards |
 | f Mobile controls (R0120) | feature | f0260, f0270, f0280 | playable on a phone |
