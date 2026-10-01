@@ -1,0 +1,26 @@
+name: board
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: board-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  board:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/setup.sh --tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: scripts/tracker.sh board --out dist/board.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tracker-board
+          path: dist/board.html
+          retention-days: 30
+          if-no-files-found: error
