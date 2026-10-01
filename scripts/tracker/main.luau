@@ -886,6 +886,15 @@ function cmd.done(pos: { string })
 			fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
 		end
 	end
+	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
+	if hasUpstream() and onGitHub() then
+		-- pcall: process.exec throws when gh can't be spawned at all (not on PATH)
+		local ok, r = pcall(sh.run, "gh", { "pr", "ready" })
+		if not (ok and r.ok) then
+			sh.git({ "reset", "-q", "--hard", "HEAD" })
+			fail("could not mark the PR ready (rolled back); fix gh and retry done")
+		end
+	end
 	for _, m in store.members(raft.id) do
 		move(m, "done")
 	end
@@ -895,7 +904,6 @@ function cmd.done(pos: { string })
 	end
 	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true)
 	if hasUpstream() and onGitHub() then
-		sh.must("gh", { "pr", "ready" })
 		local summary = fs.readFile(`{raft.dir}/spend.md`)
 		local body = sh.must("gh", { "pr", "view", "--json", "body", "-q", ".body" })
 		sh.must("gh", { "pr", "edit", "--body", body .. "\n\n" .. summary })

@@ -94,7 +94,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
 2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `scripts/check.sh --full`, commit), so the PR is up to date before `done` and nothing needs changing after it.
-3. `scripts/tracker.sh done R0010`. It re-verifies everything, moves the items to `done/`, pushes, and marks the PR ready.
+3. `scripts/tracker.sh done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
 4. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 
 ## Phase 6: Merge and clean up
