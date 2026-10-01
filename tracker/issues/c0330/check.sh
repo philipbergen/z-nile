@@ -33,9 +33,10 @@ check "AC4: list mode can't be mistaken for a pass or re-run specs (runner, top-
   "tracker.sh check and done refuse to run with AC_LIST set"
 check "AC5: the testing skill shows the new locator and AC_LIST" bash -c '
   f=.claude/skills/testing/SKILL.md
-  for s in "AC_LIST=1" "[[ -d \$A ]] || A=\"\$PWD/tests/acceptance/"; do
+  for s in "AC_LIST=1" "[[ -d \$A ]] || A=\"\$PWD/tests/acceptance/" "Work outside \`check\`"; do
     grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }
   done
+  grep -qF "Work outside" tracker/templates/issue/check.sh || { echo "the template lacks the rule about work outside check"; exit 1; }
   if grep -qF "git -C \"\$A/..\"" "$f"; then echo "the old locator is still in the example"; exit 1; fi'
 
 finish
