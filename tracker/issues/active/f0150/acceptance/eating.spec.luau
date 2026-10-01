@@ -12,6 +12,11 @@ local CORRIDOR = Maze.parse({ "########", "#.....P#", "######.#", "########" }, 
 -- three pellets and then a power pellet, with the same kind of pocket
 local WITH_POWER = Maze.parse({ "#######", "#o...P#", "#####.#", "#######" }, "with-power")
 
+-- a row of mixed values; a table literal of mixed element types does not type-check
+local function row(...: any): { any }
+	return { ... }
+end
+
 local PLAIN: Session.Config = { movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
 
 local function model(maze: Maze.Maze, players: { string }): sim.Model<Session.Session>
@@ -49,11 +54,11 @@ return t.spec("f0150 eating", function(it)
 	it("the player eats each pellet the tick it enters the tile, 10 points each", function()
 		local trace = sim.run(model(CORRIDOR, { "p" }), { seed = 1, ticks = 30 })
 		t.expect(eaten(trace)).toEqual({
-			{ 2, 5, 1, "pellet", 10 },
-			{ 6, 4, 1, "pellet", 10 },
-			{ 10, 3, 1, "pellet", 10 },
-			{ 14, 2, 1, "pellet", 10 },
-			{ 18, 1, 1, "pellet", 10 },
+			row(2, 5, 1, "pellet", 10),
+			row(6, 4, 1, "pellet", 10),
+			row(10, 3, 1, "pellet", 10),
+			row(14, 2, 1, "pellet", 10),
+			row(18, 1, 1, "pellet", 10),
 		})
 		-- the event comes from the same step as the tile entry
 		local entered = sim.events(trace, "Entered")
@@ -74,10 +79,10 @@ return t.spec("f0150 eating", function(it)
 	it("a power pellet is worth 50 and is reported as one", function()
 		local trace = sim.run(model(WITH_POWER, { "p" }), { seed = 1, ticks = 30 })
 		t.expect(eaten(trace)).toEqual({
-			{ 2, 4, 1, "pellet", 10 },
-			{ 6, 3, 1, "pellet", 10 },
-			{ 10, 2, 1, "pellet", 10 },
-			{ 14, 1, 1, "power", 50 },
+			row(2, 4, 1, "pellet", 10),
+			row(6, 3, 1, "pellet", 10),
+			row(10, 2, 1, "pellet", 10),
+			row(14, 1, 1, "power", 50),
 		})
 		t.expect(sim.state(trace, 14).play.score).toBe(80)
 	end)

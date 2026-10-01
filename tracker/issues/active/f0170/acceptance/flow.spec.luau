@@ -55,6 +55,11 @@ local function model(config: Session.Config): sim.Model<Session.Session>
 	}
 end
 
+-- a row of mixed values; a table literal of mixed element types does not type-check
+local function row(...: any): { any }
+	return { ... }
+end
+
 local function phases(trace: sim.Trace): { { string | number } }
 	-- { tick, phase } each time the phase changes
 	local out = {}
@@ -237,14 +242,14 @@ return t.spec("f0170 play flow through Session", function(it)
 			})
 			-- a kill at k shows as dying at k + 1; dying lasts 45 ticks and ready 60
 			t.expect(phases(trace)).toEqual({
-				{ 0, "ready" },
-				{ 60, "playing" },
-				{ 91, "dying" },
-				{ 135, "ready" },
-				{ 195, "playing" },
-				{ 301, "dying" },
-				{ 345, "ready" },
-				{ 405, "playing" },
+				row(0, "ready"),
+				row(60, "playing"),
+				row(91, "dying"),
+				row(135, "ready"),
+				row(195, "playing"),
+				row(301, "dying"),
+				row(345, "ready"),
+				row(405, "playing"),
 			})
 		end
 	end)
