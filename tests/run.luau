@@ -20,6 +20,14 @@ local function collect(dir: string, out: { string })
 	end
 end
 
+-- List mode (AC_LIST) makes check.sh only list its checks, so a spec run at the top of a check.sh
+-- must not run either: refuse before collecting anything.
+local listMode = process.env.AC_LIST
+if listMode ~= nil and listMode ~= "" then
+	print("AC_LIST is set: specs are not run in list mode (unset it to run them)")
+	process.exit(1)
+end
+
 local files: { string } = {}
 for _, arg in process.args do
 	if arg ~= "--" then

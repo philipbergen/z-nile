@@ -279,8 +279,17 @@ function cmd.list(pos: { string })
 	end
 end
 
+-- List mode (AC_LIST) would make check.sh verify nothing and still print a clean summary.
+local function refuseListMode()
+	local v = process.env.AC_LIST
+	if v ~= nil and v ~= "" then
+		fail("AC_LIST is set: checks would only be listed, not run; unset it")
+	end
+end
+
 -- Runs check.sh for an item. A raft's check.sh is responsible for running its members' checks.
 local function runCheck(item: store.Item): boolean
+	refuseListMode()
 	print(`\n=== {item.id} check.sh`)
 	return sh.stream("bash", { `{item.dir}/check.sh` })
 end
@@ -850,6 +859,7 @@ local function reviewProblem(raft: store.Item): string?
 end
 
 function cmd.done(pos: { string })
+	refuseListMode()
 	local raft = store.get(pos[1] or fail("usage: done <R-id>"))
 	if raft.kind ~= "raft" or raft.state ~= "active" then
 		fail(`{raft.id} must be an active raft`)
