@@ -76,7 +76,7 @@ local DEFAULT_CONFIG: Config = {
 }
 Session.DEFAULT_CONFIG = table.freeze(DEFAULT_CONFIG)
 
--- the real game: the classic pauses
+-- the real rules: the classic pauses and the eating slowdown
 local GAME_CONFIG: Config = {
 	movement = Movement.DEFAULT_CONFIG,
 	maxIntentsPerTick = 4,
@@ -184,7 +184,7 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
 		return
 	end
 	local kind: Pellets.Kind = eaten :: Pellets.Kind
-	local points = Pellets.POINTS[kind]
+	local points = Pellets.points(kind)
 	local event: Event =
 		{ kind = "PelletEaten", player = id, x = tile.x, y = tile.y, item = kind, points = points }
 	table.insert(out, event)
@@ -193,6 +193,11 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
 	end
 	if s.config.eatSlowdown then
 		member.stall += Pellets.stallUnits(kind, speed, Session.TICK_RATE)
+	end
+	if kind == "power" then
+		for _, e in Game.power(member.play) do
+			table.insert(out, tagged(id, e))
+		end
 	end
 	if Pellets.remaining(member.pellets) == 0 then
 		for _, e in Game.cleared(member.play) do
@@ -210,6 +215,7 @@ function Session.step(s: Session): { Event }
 		member.queue = {}
 		-- whether the player moves this tick is decided before the run's phase changes
 		local moving = Game.canMove(member.play)
+		local frightened = member.play.frightened > 0
 		for _, e in Game.step(member.play) do
 			table.insert(out, tagged(id, e))
 			if e.kind == "Ready" then
@@ -222,7 +228,7 @@ function Session.step(s: Session): { Event }
 		if not moving then
 			continue
 		end
-		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level)
+		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level, frightened)
 		-- an eating pause is owed distance: this step covers what is left of the speed
 		local owed = math.min(member.stall, speed)
 		member.stall -= owed
@@ -262,7 +268,7 @@ function Session.kill(s: Session, id: PlayerId): { Event }
 	return out
 end
 
--- A new run, only after game over. Made between steps, so the first frame at the spawn is the next tick's.
+-- A new run, only once the run is over. Made between steps, so the first frame at the spawn is the next tick's.
 function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
 	local member = memberOf(s, id)
 	local events, ok = Game.playAgain(member.play)

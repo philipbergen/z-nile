@@ -3,6 +3,8 @@
 -- ready -> playing -> dying -> (ready | gameover), and playing -> levelclear -> ready for the next
 -- level. It holds lives, level, score, the frightened counter and the extra-life rule; it never looks
 -- at a maze. A pause of zero ticks is no pause.
+local Levels = require("./Levels")
+
 export type Phase = "ready" | "playing" | "dying" | "levelclear" | "gameover"
 export type Config = {
 	lives: number,
@@ -130,6 +132,18 @@ function Game.died(g: Game): { Event }
 	return { { kind = "LifeLost", lives = g.lives } }
 end
 
+-- A power pellet was eaten: the level's frightened period starts over (it never adds). Only a run in
+-- play has one, so the counter is 0 in every other phase. Where the level has no frightened time the
+-- event still reports it, with `ticks = 0`.
+function Game.power(g: Game): { Event }
+	if g.phase ~= "playing" then
+		return {}
+	end
+	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate)
+	g.frightened = ticks
+	return { { kind = "PowerStarted", ticks = ticks, level = g.level } }
+end
+
 function Game.playAgain(g: Game): ({ Event }, boolean)
 	if g.phase ~= "gameover" then
 		return {}, false
@@ -146,6 +160,13 @@ function Game.step(g: Game): { Event }
 		if g.timer <= 0 then
 			g.phase, g.timer = "playing", 0
 			return { { kind = "Playing", level = g.level } }
+		end
+	elseif phase == "playing" then
+		if g.frightened > 0 then
+			g.frightened -= 1
+			if g.frightened == 0 then
+				return { { kind = "PowerEnded", level = g.level } }
+			end
 		end
 	elseif phase == "dying" then
 		g.timer -= 1

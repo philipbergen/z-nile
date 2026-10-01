@@ -11,8 +11,14 @@ export type Pellets = {
 	total: number,
 }
 
-local POINTS: { [Kind]: number } = { pellet = 10, power = 50 }
-local STALL_FRAMES: { [Kind]: number } = { pellet = 1, power = 3 } -- frames of the arcade's 60 fps
+-- one number per kind
+export type PerKind = { pellet: number, power: number }
+local POINTS: PerKind = { pellet = 10, power = 50 }
+local STALL_FRAMES: PerKind = { pellet = 1, power = 3 } -- frames of the arcade's 60 fps
+
+local function perKind(table_: PerKind, kind: Kind): number
+	return if kind == "pellet" then table_.pellet else table_.power
+end
 
 local Pellets = {}
 Pellets.POINTS = table.freeze(POINTS)
@@ -56,6 +62,11 @@ function Pellets.at(p: Pellets, tile: Maze.Tile): Kind?
 end
 
 -- Removes and returns what was on the tile; nil if nothing was.
+-- Points for eating one.
+function Pellets.points(kind: Kind): number
+	return perKind(POINTS, kind)
+end
+
 function Pellets.eat(p: Pellets, tile: Maze.Tile): Kind?
 	local i = index(p, tile)
 	local kind: Kind? = p.cells[i]
@@ -96,7 +107,7 @@ end
 
 -- The distance eating stops the player for: `frames` of the arcade's 60 fps at the player's speed.
 function Pellets.stallUnits(kind: Kind, speed: number, tickRate: number): number
-	return math.floor(speed * Pellets.STALL_FRAMES[kind] * tickRate / Pellets.ARCADE_FPS)
+	return math.floor(speed * perKind(STALL_FRAMES, kind) * tickRate / Pellets.ARCADE_FPS)
 end
 
 return Pellets

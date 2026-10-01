@@ -21,6 +21,18 @@ return t.spec("Game extras", function(it)
 		t.expect(g.phase).toBe("gameover")
 	end)
 
+	it("a power pellet starts the level's frightened period and it runs out", function()
+		local g = Game.new(Game.IMMEDIATE_CONFIG)
+		local events = Game.power(g)
+		t.expect(events[1].kind).toBe("PowerStarted")
+		t.expect(g.frightened).toBe(180)
+		for _ = 1, 179 do
+			t.expect(#Game.step(g)).toBe(0)
+		end
+		t.expect(Game.step(g)[1].kind).toBe("PowerEnded")
+		t.expect(g.frightened).toBe(0)
+	end)
+
 	it("adding score leaves the run's phase alone", function()
 		local g = Game.new(Game.IMMEDIATE_CONFIG)
 		Game.addScore(g, 10)
