@@ -1,0 +1,3 @@
+- F1: fixed: the Merging rule now says to judge `beta` only by the PR's own `pull_request` runs for the head sha; a `SKIPPED` `beta` from a dispatched run never counts, for or against.
+- F2: deferred c0490: a transient 429 or 5xx while polling is how c0030 was designed (any non-200 raises), so a change here would depart from the sequestered design; a backlog chore adds retries and a documented recovery.
+- F3: fixed: SETUP.md now says the comment names the PR's commit and that Beta runs it merged with `main`. The comment text itself is pinned by a sequestered spec and is unchanged.
