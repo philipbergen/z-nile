@@ -24,7 +24,7 @@ scripts/setup.sh
    - To upgrade a tool: `rokit add --force <owner/tool>`, then commit `rokit.toml` as a chore issue.
 3. **Lune type definitions**: `lune setup` writes them to `~/.lune/.typedefs/<version>/`.
    - `.luaurc` refers to them through the `lune` alias (`~/.lune/.typedefs/<version>/`). The version in that alias must match `rokit.toml`.
-4. **Gate**: runs `scripts/check.sh --full`. Set `PICKMAN_SKIP_GATE=1` (any non-empty value) to skip this step and install the toolchain only; the board workflow does.
+4. **Gate**: runs `scripts/check.sh --full`.
    - The first run downloads the Roblox type definitions for luau-lsp to `.cache/globalTypes.d.luau`. This is gitignored and fetched again if missing.
 
 ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
@@ -52,3 +52,14 @@ scripts/setup.sh
 | `sourcemap parsing failed` | a Rojo `$path` directory has no `.luau` files. Every root needs at least one |
 | `tracker.sh start` fails on `gh pr create` | `gh auth status`. A non-GitHub `origin` skips the draft PR, and with no `origin` the push is skipped too |
 | lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
+
+## Beta publishing (Pickman Beta)
+Every PR that is ready for review is published to the private **Pickman (Beta)** experience by the `beta` job in `.github/workflows/check.yml`, after the gate is green. A PR comment names the published version and commit, and a later push edits that comment.
+- **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write. It only exists in CI.
+- **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits.
+- If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
+- Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
+- The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
+- The job installs only the tools (`scripts/setup.sh --tools`); the gate has already run.
+- By hand: export the three settings and run `lune run scripts/deploy-beta`. That publishes to Beta.
+- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version: `lune run scripts/runtime-test -- <version>`. They skip with a warning when the settings are missing.
