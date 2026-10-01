@@ -150,6 +150,24 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		})
 	end
 
+	it("does not mark the PR ready when done refuses", function()
+		installGh()
+		-- an unresolved review: one open finding and no answer to it
+		write(
+			"tracker/rafts/active/R0010/review-001.md",
+			"# Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
+		)
+		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
+		local r = done(false)
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "F1", 1, true) ~= nil).toBe(true)
+		local log = if fs.isFile(`{base}/gh.log`) then fs.readFile(`{base}/gh.log`) else ""
+		t.expect((string.find(log, "pr ready", 1, true))).toBe(nil)
+		-- restore the approving review for the cases that follow
+		write("tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
+	end)
+
 	it("rolls back and stays active when gh cannot mark the PR ready", function()
 		installGh()
 		local before = git({ "rev-parse", "HEAD" })

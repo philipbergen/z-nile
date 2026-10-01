@@ -21,15 +21,19 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec and not appe
   done
 }
 
-check "AC1: done marks the PR ready while origin has the previous head, then pushes the done commit" cases_pass \
-  "marks the PR ready while origin still has the previous head"
+check "AC1: done marks the PR ready while origin has the previous head, then pushes; a refused done never marks it" cases_pass \
+  "marks the PR ready while origin still has the previous head" "does not mark the PR ready when done refuses"
 check "AC2: a gh failure rolls done back (HEAD, tree, raft state, nothing pushed)" cases_pass \
   "rolls back and stays active when gh cannot mark the PR ready"
-check "AC3: the tracker skill documents the new order and drops the old one" bash -c '
-  f=.claude/skills/tracker/SKILL.md
+check "AC3: the skills document the new order and drop the old one" bash -c '
+  t=.claude/skills/tracker/SKILL.md; x=.claude/skills/execute-raft/SKILL.md
   for s in "marks the PR **ready** before its final push" "the push starts the \`pull_request\` run"; do
-    grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }
+    grep -qF -- "$s" "$t" || { echo "tracker skill is missing: $s"; exit 1; }
   done
-  if grep -qF "\`done\` pushes and then marks the PR ready" "$f"; then echo "old order still described"; exit 1; fi'
+  grep -qF -- "marks the PR ready, then moves the items" "$x" || { echo "execute-raft Phase 5 is missing the new order"; exit 1; }
+  for s in "\`done\` pushes and then marks the PR ready" "of the ready event"; do
+    if grep -qF -- "$s" "$t"; then echo "tracker skill still says: $s"; exit 1; fi
+  done
+  if grep -qF -- "pushes, and marks the PR ready" "$x"; then echo "execute-raft still says the old order"; exit 1; fi'
 
 finish

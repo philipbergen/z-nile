@@ -145,15 +145,28 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 	end)
 
 	it("refuses a deferral that names no issue or gives no reason", function()
-		refused(attempt({ "- F1: fixed abc: ok", "- F2: deferred", "- F3: fixed abc: ok" }), "F2")
-		refused(attempt({ "- F1: fixed abc: ok", "- F2: deferred c0020", "- F3: fixed abc: ok" }), "F2")
-		refused(attempt({ "- F1: fixed abc: ok", "- F2: deferred c0020:   ", "- F3: fixed abc: ok" }), "F2")
+		refused(
+			attempt({ "- F1: fixed abc: ok", "- F2: deferred", "- F3: fixed abc: ok" }),
+			"F2",
+			"deferred needs"
+		)
+		refused(
+			attempt({ "- F1: fixed abc: ok", "- F2: deferred c0020", "- F3: fixed abc: ok" }),
+			"F2",
+			"deferred needs"
+		)
+		refused(
+			attempt({ "- F1: fixed abc: ok", "- F2: deferred c0020:   ", "- F3: fixed abc: ok" }),
+			"F2",
+			"deferred needs"
+		)
 	end)
 
 	it("refuses to defer a finding whose severity is not stated", function()
-		local review =
-			"# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\nVerdict: changes requested\n"
-		refused(attempt({ "- F1: deferred c0020: later" }, review), "F1")
+		-- the unrated finding is followed by a rated one: its severity must not be borrowed
+		local review = "# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
+			.. "### F2 [low] a rated finding\nEvidence: y\n\nVerdict: changes requested\n"
+		refused(attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok" }, review), "F1", "unrated")
 	end)
 
 	it("still accepts fixed and refuted for any severity, and rejects other words", function()

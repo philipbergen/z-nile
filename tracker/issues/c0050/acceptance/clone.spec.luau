@@ -16,7 +16,7 @@ local function linkedObjects(dir: string): string
 	return (string.gsub(r.stdout, "%s+$", ""))
 end
 
--- every .spec.luau under dir (this file excluded)
+-- every .spec.luau under dir
 local function specs(dir: string, out: { string })
 	if not fs.isDir(dir) then
 		return
@@ -25,9 +25,16 @@ local function specs(dir: string, out: { string })
 		local path = `{dir}/{name}`
 		if fs.isDir(path) then
 			specs(path, out)
-		elseif string.match(name, "%.spec%.luau$") and name ~= "clone.spec.luau" then
+		elseif string.match(name, "%.spec%.luau$") then
 			table.insert(out, path)
 		end
+	end
+end
+
+local function git(args: { string }, cwd: string)
+	local r = process.exec("git", args, { cwd = cwd })
+	if not r.ok then
+		error(`git {table.concat(args, " ")} failed: {r.stderr}`, 2)
 	end
 end
 
@@ -36,14 +43,22 @@ return t.spec("c0050 isolated clones", function(it)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
-		fs.writeDir(base)
+		-- a throwaway source repository, so that this spec never hardlinks the real object store itself
+		local source = `{base}/source`
+		fs.writeDir(source)
+		git({ "init", "-q" }, source)
+		git({ "config", "user.name", "e2e" }, source)
+		git({ "config", "user.email", "e2e@example.invalid" }, source)
+		fs.writeFile(`{source}/file.txt`, "one\n")
+		git({ "add", "-A" }, source)
+		git({ "commit", "-qm", "one" }, source)
 		-- the control: a plain local clone hardlinks, which is what this guards against
-		t.expect(process.exec("git", { "clone", "-q", root, `{base}/plain` }).ok).toBe(true)
+		t.expect(process.exec("git", { "clone", "-q", source, `{base}/plain` }).ok).toBe(true)
 		t.expect(linkedObjects(`{base}/plain`) ~= "").toBe(true)
-		clone.isolated(root, `{base}/isolated`)
+		clone.isolated(source, `{base}/isolated`)
 		t.expect(linkedObjects(`{base}/isolated`)).toBe("")
 		local head = process.exec("git", { "rev-parse", "HEAD" }, { cwd = `{base}/isolated` })
-		local want = process.exec("git", { "rev-parse", "HEAD" }, { cwd = root })
+		local want = process.exec("git", { "rev-parse", "HEAD" }, { cwd = source })
 		t.expect(head.stdout).toBe(want.stdout)
 	end)
 
@@ -60,7 +75,7 @@ return t.spec("c0050 isolated clones", function(it)
 		local offenders: { string } = {}
 		for _, file in files do
 			for literal in string.gmatch(fs.readFile(file), '{%s*"clone"[^}]*}') do
-				local clonesRoot = string.find(literal, "[%s,]root[%s,}]") ~= nil
+				local clonesRoot = string.find(literal, "[%s,{]root[%s,}]") ~= nil
 				if clonesRoot and not string.find(literal, '"--no-hardlinks"', 1, true) then
 					table.insert(offenders, file)
 				end

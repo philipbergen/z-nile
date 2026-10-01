@@ -24,6 +24,8 @@ check "RC1: every finished item's check.sh (not closed:) lists its checks from a
   done'
 check "RC2: no skill describes the interim deferral form or the old done order" bash -c '
   if grep -rqF "interim form" .claude/skills; then echo "interim form still in the skills"; exit 1; fi
-  if grep -qF "\`done\` pushes and then marks the PR ready" .claude/skills/tracker/SKILL.md; then echo "old order still described"; exit 1; fi'
+  if grep -qF "\`done\` pushes and then marks the PR ready" .claude/skills/tracker/SKILL.md; then echo "tracker skill: old order"; exit 1; fi
+  if grep -qF "of the ready event" .claude/skills/tracker/SKILL.md; then echo "tracker skill: waits on the ready event"; exit 1; fi
+  if grep -qF "pushes, and marks the PR ready" .claude/skills/execute-raft/SKILL.md; then echo "execute-raft: old order"; exit 1; fi'
 
 finish

@@ -126,6 +126,12 @@ return t.spec("c0060 changed files", function(it)
 		t.expect(listed(files, "src/late.luau")).toBe(true)
 		t.expect(listed(files, "src/b.luau")).toBe(true)
 		t.expect(listed(files, "place/a.luau")).toBe(false) -- committed changes need a base to compare with
+		-- an uncommitted move: the HEAD diff must not detect renames either
+		git({ "mv", "tests/x.luau", "tests/y.luau" })
+		local moved = changed.files("no-such-ref", repo)
+		t.expect(listed(moved, "tests/x.luau")).toBe(true)
+		t.expect(listed(moved, "tests/y.luau")).toBe(true)
+		git({ "mv", "tests/y.luau", "tests/x.luau" })
 		git({ "checkout", "-q", "--", "src/b.luau" })
 		fs.removeFile(`{repo}/src/late.luau`)
 	end)
