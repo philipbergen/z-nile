@@ -23,7 +23,7 @@ end
 local function sh(script: string, env: { [string]: string }?)
 	local r = process.exec(
 		"/bin/bash",
-		{ "-c", `source scripts/lib/par.sh\n{script}` },
+		{ "-c", `set -euo pipefail\nsource scripts/lib/par.sh\n{script}` },
 		{ cwd = root, env = env }
 	)
 	return { ok = r.ok, code = r.code, out = r.stdout .. r.stderr }
@@ -113,6 +113,19 @@ return t.spec("scripts/lib/par.sh", function(it)
 		t.expect(napping ~= nil and quick ~= nil).toBe(true)
 		t.expect((napping :: number) >= 2).toBe(true)
 		t.expect((quick :: number) < 1.5).toBe(true)
+	end)
+
+	it("two gates running at once do not mix their output", function()
+		reset()
+		local script = `( par_start only-a bash -c 'sleep 0.5; echo output-a'; par_wait ) > {base}/a.out &\n`
+			.. `( par_start only-b bash -c 'sleep 0.5; echo output-b'; par_wait ) > {base}/b.out &\nwait`
+		local r = sh(script)
+		t.expect(r.ok).toBe(true)
+		local a, b = fs.readFile(`{base}/a.out`), fs.readFile(`{base}/b.out`)
+		t.expect(indexOf(a, "output-a")).toBeTruthy()
+		t.expect(indexOf(a, "output-b")).toBe(nil)
+		t.expect(indexOf(b, "output-b")).toBeTruthy()
+		t.expect(indexOf(b, "output-a")).toBe(nil)
 	end)
 
 	it("par_wait is reusable: a second batch is independent of the first", function()

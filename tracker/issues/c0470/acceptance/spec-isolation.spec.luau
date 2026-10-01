@@ -1,6 +1,8 @@
 --!strict
 -- c0470: specs may run concurrently, so no two spec files may own the same `.cache/<dir>` fixture
--- directory. (`.cache/sim` is the sim library's replay directory: its files are named per model,
+-- directory. Only tests/ is scanned (sequestered prep specs under tracker/ join the scan when
+-- `tracker.sh done` promotes them, which is where a collision is caught). A literal mention counts as
+-- use. (`.cache/sim` is the sim library's replay directory: its files are named per model,
 -- seed and tick, and are only written when a simulation fails. Model names are not unique across
 -- spec files, so a collision is possible in principle; it would only rewrite a replay file, never
 -- change a result. That is why it is exempt.)
@@ -85,8 +87,7 @@ return t.spec("spec fixture directories are not shared", function(it)
 		local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 		local texts: { [string]: string } = {}
 		collect(`{root}/tests`, texts)
-		collect(`{root}/tracker`, texts)
-		local found = sharedDirs(texts)
-		t.expect(found).toEqual({})
+		-- a string, so a failure names the colliding directories and files
+		t.expect(table.concat(sharedDirs(texts), "\n")).toBe("")
 	end)
 end)

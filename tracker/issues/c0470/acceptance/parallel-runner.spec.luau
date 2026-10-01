@@ -56,13 +56,20 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 fs.writeFile("@BASE@/@ME@.ready", "x")
 local limit = os.time() + tonumber(process.env.PICKMAN_RV_TIMEOUT or "20")
-while not fs.isFile("@BASE@/@OTHER@.ready") do
-	if os.time() > limit then error("no rendezvous with @OTHER@") end
-	process.exec("sleep", { "0.05" })
+for _, other in { @OTHERS@ } do
+	while not fs.isFile("@BASE@/" .. other .. ".ready") do
+		if os.time() > limit then error("no rendezvous with " .. other) end
+		process.exec("sleep", { "0.05" })
+	end
 end]]
 
-local function rendezvous(me: string, other: string): string
-	return cases(fill(RENDEZVOUS, { BASE = base, ME = me, OTHER = other }))
+-- a fixture that waits for every name in `others` (each of them waits for it in turn)
+local function rendezvous(me: string, ...: string): string
+	local quoted = {}
+	for _, o in { ... } do
+		table.insert(quoted, `"{o}"`)
+	end
+	return cases(fill(RENDEZVOUS, { BASE = base, ME = me, OTHERS = table.concat(quoted, ", ") }))
 end
 
 local ONCE = [[
@@ -106,6 +113,24 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		local r = run({ "--jobs", "2", a, b })
 		t.expect(r.ok).toBe(true)
 		t.expect(lastLine(r.stdout)).toBe("2 passed, 0 failed, 2 spec files")
+	end)
+
+	it("--jobs N is a cap: three specs that all wait for each other need exactly 3 lanes", function()
+		reset()
+		local a = fixture("a", rendezvous("a", "b", "c"))
+		local b = fixture("b", rendezvous("b", "a", "c"))
+		local c = fixture("c", rendezvous("c", "a", "b"))
+		-- 2 lanes: a and b wait for c, which only starts after one of them times out
+		local two = run({ "--jobs", "2", a, b, c }, { PICKMAN_RV_TIMEOUT = "1" })
+		t.expect(two.ok).toBe(false)
+		t.expect(lastLine(two.stdout)).toBe("1 passed, 2 failed, 3 spec files")
+		reset()
+		a = fixture("a", rendezvous("a", "b", "c"))
+		b = fixture("b", rendezvous("b", "a", "c"))
+		c = fixture("c", rendezvous("c", "a", "b"))
+		local three = run({ "--jobs", "3", a, b, c })
+		t.expect(three.ok).toBe(true)
+		t.expect(lastLine(three.stdout)).toBe("3 passed, 0 failed, 3 spec files")
 	end)
 
 	it("--jobs 1 runs them one at a time, so the same rendezvous times out", function()
@@ -236,6 +261,18 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		local r = run(args)
 		t.expect(r.ok).toBe(true)
 		t.expect(lastLine(r.stdout)).toBe("6 passed, 0 failed, 6 spec files")
+		-- the output shape: one slowest: line naming at most 3 specs, and exactly one summary line
+		local lines = {}
+		for line in string.gmatch(r.stdout, "[^\n]+") do
+			table.insert(lines, line)
+		end
+		t.expect(#lines).toBe(2)
+		local entries = 0
+		for _ in string.gmatch(lines[1], "%.spec%.luau %d+%.%ds") do
+			entries += 1
+		end
+		t.expect(string.sub(lines[1], 1, 9)).toBe("slowest: ")
+		t.expect(entries).toBe(3)
 		for i = 1, 6 do
 			t.expect(fs.isDir(`{base}/ran-{i}`)).toBe(true)
 		end
