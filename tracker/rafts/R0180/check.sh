@@ -11,6 +11,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0180
 
-check "RC1: runtime tests still skip green when publishing is not configured" bash -c 'env -u ROBLOX_API_KEY -u ROBLOX_BETA_UNIVERSE_ID -u ROBLOX_BETA_PLACE_ID lune run scripts/runtime-test -- 1 2>&1 | grep -q "not configured"'
+check "RC1: runtime tests still skip green when publishing is not configured" bash -c 'set -o pipefail; out=$(env -u ROBLOX_API_KEY -u ROBLOX_BETA_UNIVERSE_ID -u ROBLOX_BETA_PLACE_ID -u OPENCLOUD_BASE lune run scripts/runtime-test -- 1 2>&1) && grep -q "not configured" <<<"$out"'
 
 finish

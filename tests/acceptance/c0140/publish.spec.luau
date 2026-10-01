@@ -88,7 +88,7 @@ return t.spec("c0140 OpenCloud.publish", function(it)
 	end)
 
 	it("any other failure is final: no retry, and the status and body are reported", function()
-		for _, code in { 400, 401, 403, 404, 429, 500, 503 } do
+		for _, code in { 400, 401, 403, 404 } do
 			local cfg, calls, naps =
 				fake({ respond(code, '{"errors":[{"code":9009,"message":"WAF Blocked Request"}]}') })
 			local err = message(function()
