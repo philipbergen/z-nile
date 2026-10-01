@@ -9,6 +9,8 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: renumber without <new> picks one above the highest number across the local tree and origin/main, refuses when that is unknown or full, and still honors an explicit <new>" lune run tests/run -- "$A/renumber.spec.luau"
+check "AC2: tracker.sh new keeps its multiple-of-10 spacing" lune run tests/run -- "$A/new-spacing.spec.luau"
+check "AC3: the tracker skill's Conflicts bullet describes the new renumber" lune run tests/run -- "$A/skill-doc.spec.luau"
 
 finish
