@@ -105,7 +105,10 @@ return t.spec("c0460 board workflow", function(it)
 	end)
 
 	it("has exactly four steps: checkout, setup, build, upload, with their exact inputs", function()
-		local steps = job(load()).steps
+		local wf = load()
+		t.expect(keys(wf)).toEqual({ "concurrency", "jobs", "name", "on", "permissions" })
+		t.expect(keys(job(wf))).toEqual({ "if", "runs-on", "steps" })
+		local steps = job(wf).steps
 		t.expect(#steps).toBe(4)
 		t.expect(steps[1]).toEqual({ uses = "actions/checkout@v4" })
 		t.expect(steps[3]).toEqual({ run = "scripts/tracker.sh board --out dist/board.html" })
