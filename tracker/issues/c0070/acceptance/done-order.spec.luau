@@ -202,6 +202,9 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 	end)
 
 	it("marks the PR ready while origin still has the previous head, then pushes the done commit", function()
+		-- this raft has nothing to promote: the ready call must not depend on a promotion happening
+		fs.removeFile(`{work}/tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
+		must(tr({ "commit", "-m", "no acceptance spec", "--time", "1" }), "commit")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)
 		if not r.ok then
@@ -210,6 +213,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local after = git({ "rev-parse", "HEAD" })
 		t.expect(after ~= before).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(fs.isDir(`{work}/tests/acceptance/f0010`)).toBe(false) -- nothing was promoted
 		-- gh was asked to mark the PR ready, and to edit its body with the spend summary
 		local log = fs.readFile(`{base}/gh.log`)
 		t.expect(string.find(log, "pr ready", 1, true) ~= nil).toBe(true)
