@@ -279,8 +279,17 @@ function cmd.list(pos: { string })
 	end
 end
 
+-- List mode (AC_LIST) would make check.sh verify nothing and still print a clean summary.
+local function refuseListMode()
+	local v = process.env.AC_LIST
+	if v ~= nil and v ~= "" then
+		fail("AC_LIST is set: checks would only be listed, not run; unset it")
+	end
+end
+
 -- Runs check.sh for an item. A raft's check.sh is responsible for running its members' checks.
 local function runCheck(item: store.Item): boolean
+	refuseListMode()
 	print(`\n=== {item.id} check.sh`)
 	return sh.stream("bash", { `{item.dir}/check.sh` })
 end
@@ -816,7 +825,7 @@ cmd["promote-check"] = function(pos: { string })
 end
 
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
--- answers every finding id with "fixed" or "refuted".
+-- answers every finding id with "fixed", "refuted" or a valid "deferred <id>: <why>".
 local function reviewProblem(raft: store.Item): string?
 	local latest = 0
 	for _, name in fs.readDir(raft.dir) do
@@ -837,19 +846,41 @@ local function reviewProblem(raft: store.Item): string?
 	local refutePath = `{raft.dir}/refute-{num}.md`
 	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
 	local missing = {}
-	for id in string.gmatch(review, "\n###%s+(F%d+)") do
+	local invalid = {}
+	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if not line or not (string.find(line, "^fixed") or string.find(line, "^refuted")) then
+		if line and (string.find(line, "^fixed") or string.find(line, "^refuted")) then
+			continue
+		end
+		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
 			table.insert(missing, id)
+			continue
+		end
+		local target = string.match(line, "^deferred%s+([fdc]%d%d%d%d):%s*%S")
+		local severity = string.match(rest or "", "^%s*%[(%a+)%]")
+		local rating = if severity then string.lower(severity) else "unrated"
+		if not target then
+			table.insert(invalid, `{id}: deferred needs "<issue id>: <why>"`)
+		elseif rating ~= "medium" and rating ~= "low" then
+			table.insert(invalid, `{id} is {rating}: only a medium or low finding can be deferred`)
+		else
+			local item = store.find(target)
+			if not item or item.kind ~= "issue" or item.state ~= "backlog" then
+				table.insert(invalid, `{id}: {target} is not a backlog issue`)
+			end
 		end
 	end
 	if #missing > 0 then
 		return `review-{num}.md findings not answered in refute-{num}.md: {table.concat(missing, ", ")}`
 	end
+	if #invalid > 0 then
+		return `refute-{num}.md: {table.concat(invalid, "; ")}`
+	end
 	return nil
 end
 
 function cmd.done(pos: { string })
+	refuseListMode()
 	local raft = store.get(pos[1] or fail("usage: done <R-id>"))
 	if raft.kind ~= "raft" or raft.state ~= "active" then
 		fail(`{raft.id} must be an active raft`)
@@ -886,6 +917,15 @@ function cmd.done(pos: { string })
 			fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
 		end
 	end
+	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
+	if hasUpstream() and onGitHub() then
+		-- pcall: process.exec throws when gh can't be spawned at all (not on PATH)
+		local ok, r = pcall(sh.run, "gh", { "pr", "ready" })
+		if not (ok and r.ok) then
+			sh.git({ "reset", "-q", "--hard", "HEAD" })
+			fail("could not mark the PR ready (rolled back); fix gh and retry done")
+		end
+	end
 	for _, m in store.members(raft.id) do
 		move(m, "done")
 	end
@@ -895,7 +935,6 @@ function cmd.done(pos: { string })
 	end
 	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true)
 	if hasUpstream() and onGitHub() then
-		sh.must("gh", { "pr", "ready" })
 		local summary = fs.readFile(`{raft.dir}/spend.md`)
 		local body = sh.must("gh", { "pr", "view", "--json", "body", "-q", ".body" })
 		sh.must("gh", { "pr", "edit", "--body", body .. "\n\n" .. summary })

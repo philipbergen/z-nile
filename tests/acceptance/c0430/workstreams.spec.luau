@@ -3,6 +3,7 @@
 -- Fixture under .cache/ws-e2e: a seed clone of the repo (no origin, `main` forced, the working tree's
 -- tooling overlaid, tracker emptied) where rafts and issues are created; then a bare `origin.git`
 -- cloned from the seed and a clone `main/` for the worktree cases.
+local clone = require("@tests/lib/clone")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -104,7 +105,7 @@ return t.spec("workstreams", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
+		clone.isolated(root, seed)
 		identity(seed)
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })

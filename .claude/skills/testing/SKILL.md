@@ -86,12 +86,16 @@ t.expect(sim.firstTick(trace, "Bump")).toBe(6)
 ## Acceptance checks (`check.sh`)
 Every issue and raft has a `check.sh` that uses `scripts/lib/ac.sh`:
 ```bash
-A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance"
-source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+A="$HERE/acceptance" # sequestered specs: here before `tracker.sh done`, promoted after it
+[[ -d $A ]] || A="$PWD/tests/acceptance/<id>"
 check "AC1: ghosts never reverse outside mode changes" lune run tests/run -- "$A/reverse.spec.luau"
 check "AC2: Logic stays engine-free" lune run tests/run -- tests/meta/architecture.spec.luau
 finish
 ```
+- **Must run after promotion**: a `check.sh` is re-runnable once `tracker.sh done` has moved its specs, which is what the fallback line is for. `AC_LIST=1 bash <check.sh>` lists a script's checks (`LIST  <label>`) without running them and ends with `n criteria listed (none run)`; `tests/run`, `tracker.sh check` and `tracker.sh done` refuse to run while `AC_LIST` is set.
+- Work outside `check` is limited to running a spec through `tests/run` (which list mode refuses), `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 - **One `check` per Checked criterion.** The label starts with the AC number from the document.
 - **Exit criteria**: a raft's `check.sh` runs `scripts/check.sh --full`, then every member's `check.sh`, then the raft's own RCn checks.
 - **Commands**: checks may run any deterministic command, such as a spec, a `lune run` script, `rojo build`, or a `grep` that must match nothing.
