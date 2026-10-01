@@ -4,6 +4,7 @@
 -- both the URL and `gh`) and a clone `main/` of it, seeded from the committed HEAD with the working
 -- tree's tooling overlaid. The fixture pins its own `main` branch, so this spec passes from any
 -- branch and from a detached HEAD (CI's pull_request checkout).
+local clone = require("@tests/lib/clone")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -120,7 +121,7 @@ return t.spec("worktrees", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", root, seed }), "clone seed")
+		clone.isolated(root, seed)
 		identity(seed)
 		-- whatever the source was (a feature branch, or CI's detached HEAD), the fixture is on main
 		git(seed, { "checkout", "-q", "-B", "main" })
