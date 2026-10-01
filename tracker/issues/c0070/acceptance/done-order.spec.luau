@@ -166,6 +166,24 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- restore the approving review for the cases that follow
 		write("tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
+		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
+		-- leave the tree as it was, and still not have called gh pr ready
+		write(
+			"tracker/issues/f0010/acceptance/bad.spec.luau",
+			"--!strict\nlocal t = "
+				.. REQ
+				.. '("@tests/lib/t")\n\nreturn t.spec("bad", function(it)\n\tit("fails", function()\n\t\tt.expect(1).toBe(2)\n\tend)\nend)\n'
+		)
+		must(tr({ "commit", "-m", "failing spec", "--time", "1" }), "commit")
+		local promoted = done(false)
+		t.expect(promoted.ok).toBe(false)
+		t.expect(string.find(promoted.stderr, "promoted acceptance specs fail", 1, true) ~= nil).toBe(true)
+		local after = if fs.isFile(`{base}/gh.log`) then fs.readFile(`{base}/gh.log`) else ""
+		t.expect((string.find(after, "pr ready", 1, true))).toBe(nil)
+		t.expect(git({ "status", "--porcelain" })).toBe("")
+		t.expect(fs.isFile(`{work}/tracker/issues/active/f0010/acceptance/bad.spec.luau`)).toBe(true)
+		fs.removeFile(`{work}/tracker/issues/active/f0010/acceptance/bad.spec.luau`)
+		must(tr({ "commit", "-m", "drop the failing spec", "--time", "1" }), "commit")
 	end)
 
 	it("rolls back and stays active when gh cannot mark the PR ready", function()
