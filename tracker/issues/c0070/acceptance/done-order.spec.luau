@@ -169,7 +169,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready
 		write(
-			"tracker/issues/f0010/acceptance/bad.spec.luau",
+			"tracker/issues/active/f0010/acceptance/bad.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("bad", function(it)\n\tit("fails", function()\n\t\tt.expect(1).toBe(2)\n\tend)\nend)\n'
