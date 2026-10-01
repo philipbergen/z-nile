@@ -20,9 +20,10 @@ end
 -- AC_LIST honoured: set by the first case. The cases that run every done check.sh refuse to start
 -- without it, because a check.sh that ignored AC_LIST would run the whole gate recursively.
 local listing = false
+local runnerRefuses = false
 
 return t.spec("c0330 check.sh locates the repo after promotion", function(it)
-	it("AC_LIST=1 lists a check without running it, and finish still counts it", function()
+	it("AC_LIST=1 lists a check without running it, and says so", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -33,12 +34,80 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		local listed = process.exec("bash", { "-c", script, "_", ac, marker }, { env = { AC_LIST = "1" } })
 		t.expect(listed.ok).toBe(true)
 		t.expect(string.find(listed.stdout, "AC1: touches a file", 1, true) ~= nil).toBe(true)
+		-- listing is not passing: the summary must not claim that criteria passed
+		t.expect(string.find(listed.stdout, "1 criteria listed", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(listed.stdout, "criteria passed", 1, true))).toBe(nil)
 		t.expect(fs.isFile(marker)).toBe(false)
 		local ran = process.exec("bash", { "-c", script, "_", ac, marker })
 		t.expect(ran.ok).toBe(true)
+		t.expect(string.find(ran.stdout, "1/1 criteria passed", 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(marker)).toBe(true) -- without AC_LIST the check runs as before
 		fs.removeFile(marker)
+		-- an empty check.sh still never passes, listed or not
+		local empty = process.exec(
+			"bash",
+			{ "-c", 'source "$1"; finish', "_", ac },
+			{ env = { AC_LIST = "1" } }
+		)
+		t.expect(empty.ok).toBe(false)
 		listing = true
+	end)
+
+	it("the spec runner refuses to run specs when AC_LIST is set", function()
+		local r = process.exec("lune", { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }, {
+			cwd = root,
+			env = { AC_LIST = "1" },
+		})
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stdout .. r.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(r.stdout, "passed", 1, true))).toBe(nil)
+		runnerRefuses = true
+	end)
+
+	it("a check.sh that runs a spec at top level only lists in list mode", function()
+		-- the shared-fixture pattern runs its spec outside `check`; in list mode that must be inert
+		local dir = `{base}/top`
+		fs.writeDir(dir)
+		local marker = `{dir}/spec-ran`
+		local call = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
+		fs.writeFile(
+			`{dir}/marker.spec.luau`,
+			"--!strict\nlocal fs = "
+				.. call
+				.. '("@lune/fs")\nlocal t = '
+				.. call
+				.. '("@tests/lib/t")\n'
+				.. `fs.writeFile("{marker}", "")\n`
+				.. 'return t.spec("marker", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
+		)
+		fs.writeFile(
+			`{dir}/check.sh`,
+			table.concat({
+				"#!/usr/bin/env bash",
+				`source "{root}/scripts/lib/ac.sh"`,
+				`spec_out=$(lune run tests/run -- "{dir}/marker.spec.luau" 2>&1)`,
+				'check "AC1: fixture" true',
+				"finish",
+				"",
+			}, "\n")
+		)
+		local listed = process.exec("bash", { `{dir}/check.sh` }, { cwd = base, env = { AC_LIST = "1" } })
+		t.expect(listed.ok).toBe(true)
+		t.expect(fs.isFile(marker)).toBe(false)
+		local ran = process.exec("bash", { `{dir}/check.sh` }, { cwd = base })
+		t.expect(ran.ok).toBe(true)
+		t.expect(fs.isFile(marker)).toBe(true) -- without AC_LIST the spec runs
+	end)
+
+	it("tracker.sh check refuses to run with AC_LIST set", function()
+		local r = process.exec(
+			"scripts/tracker.sh",
+			{ "check", "c0330" },
+			{ cwd = root, env = { AC_LIST = "1" } }
+		)
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(r.stdout, "criteria", 1, true))).toBe(nil)
 	end)
 
 	it("the issue template's check.sh works before and after the acceptance specs are promoted", function()
@@ -76,8 +145,8 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 	end)
 
 	it("every finished item's check.sh finds the repo from any directory", function()
-		if not listing then
-			error("AC_LIST is not honoured by scripts/lib/ac.sh: not running every done check.sh")
+		if not (listing and runnerRefuses) then
+			error("AC_LIST list mode is not safe (ac.sh or tests/run): not running every done check.sh")
 		end
 		local checked = 0
 		for _, kind in { "issues", "rafts" } do
@@ -98,7 +167,7 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 					if not ran then
 						error(`{name}: could not run check.sh: {r}`)
 					end
-					if not r.ok or not string.find(r.stdout, "criteria passed", 1, true) then
+					if not r.ok or not string.find(r.stdout, "criteria listed", 1, true) then
 						error(`{name}: check.sh cannot locate the repo or its specs:\n{r.stderr}{r.stdout}`)
 					end
 					checked += 1
