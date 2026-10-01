@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0010. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
-A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance" # sequestered specs; see the testing skill
-source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0010 after it
+A="$HERE/acceptance"
+[[ -d $A ]] || A="$PWD/tests/acceptance/c0010"
 
 check "AC1: tracker lifecycle spec passes" lune run tests/run -- "$A/tracker-lifecycle.spec.luau"
 check "AC2: CI bootstraps via setup.sh, is dispatchable, skips only drafts" lune run tests/run -- "$A/ci-workflow.spec.luau"
