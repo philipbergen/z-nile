@@ -51,3 +51,4 @@ scripts/setup.sh
 | luau-lsp can't resolve `@lune/...` | run `lune setup`, and check that the `lune` alias version in `.luaurc` matches `rokit.toml` |
 | `sourcemap parsing failed` | a Rojo `$path` directory has no `.luau` files. Every root needs at least one |
 | `tracker.sh start` fails on `gh pr create` | `gh auth status`. A non-GitHub `origin` skips the draft PR, and with no `origin` the push is skipped too |
+| lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
