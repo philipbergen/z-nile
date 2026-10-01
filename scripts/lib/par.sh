@@ -20,10 +20,20 @@ par_elapsed() { # $1 start, $2 end -> "<s.s>"
   awk -v a="$1" -v b="$2" 'BEGIN { printf "%.1f", b - a }'
 }
 
+par_abort() { # Ctrl-C or TERM: stop the stages and remove the buffers
+  local pid
+  for pid in ${PAR_PIDS[@]+"${PAR_PIDS[@]}"}; do kill "$pid" 2>/dev/null || true; done
+  [[ -z $PAR_DIR ]] || rm -rf "$PAR_DIR"
+  exit 130
+}
+
 par_start() {
   local label=$1 i
   shift
-  [[ -n $PAR_DIR ]] || PAR_DIR=$(mktemp -d "${TMPDIR:-/tmp}/par.XXXXXX")
+  if [[ -z $PAR_DIR ]]; then
+    PAR_DIR=$(mktemp -d "${TMPDIR:-/tmp}/par.XXXXXX")
+    trap par_abort INT TERM
+  fi
   i=$PAR_N
   PAR_N=$((PAR_N + 1))
   PAR_LABELS[$i]=$label
@@ -48,6 +58,7 @@ par_wait() {
     cat "$PAR_DIR/$i.out"
   done
   [[ -z $PAR_DIR ]] || rm -rf "$PAR_DIR"
+  trap - INT TERM
   PAR_DIR=""
   PAR_N=0
   PAR_LABELS=()

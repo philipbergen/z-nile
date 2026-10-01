@@ -99,21 +99,21 @@ type Outcome = { file: string, seconds: number, code: number, stdout: string, st
 -- Coordinator: `jobs` lanes pull the next file and run it as a one-file, one-job runner process.
 local function runConcurrently()
 	local outcomes: { Outcome } = {}
-	local nextIndex, running = 1, jobs
-	for _ = 1, jobs do
+	local nextIndex, running = 1, math.min(jobs, #files)
+	for _ = 1, math.min(jobs, #files) do
 		task.spawn(function()
 			while nextIndex <= #files do
 				local index = nextIndex
 				nextIndex += 1
 				local file = files[index]
 				local started = os.clock()
-				local r = process.exec("lune", { "run", "tests/run", "--", "--jobs", "1", file })
+				local ok, r = pcall(process.exec, "lune", { "run", "tests/run", "--", "--jobs", "1", file })
 				outcomes[index] = {
 					file = file,
 					seconds = os.clock() - started,
-					code = r.code,
-					stdout = r.stdout,
-					stderr = r.stderr,
+					code = if ok then r.code else -1,
+					stdout = if ok then r.stdout else "",
+					stderr = if ok then r.stderr else tostring(r),
 				}
 			end
 			running -= 1
