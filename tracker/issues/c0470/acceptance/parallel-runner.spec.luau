@@ -122,8 +122,12 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		local c = fixture("c", rendezvous("c", "a", "b"))
 		-- 2 lanes: a and b wait for c, which only starts after one of them times out
 		local two = run({ "--jobs", "2", a, b, c }, { PICKMAN_RV_TIMEOUT = "1" })
+		-- the first of a and b to give up must fail; the other may still see c's marker in time, so
+		-- either 1 or 2 passes is legal. An uncapped runner passes all 3.
 		t.expect(two.ok).toBe(false)
-		t.expect(lastLine(two.stdout)).toBe("1 passed, 2 failed, 3 spec files")
+		local last = lastLine(two.stdout)
+		t.expect(last == "1 passed, 2 failed, 3 spec files" or last == "2 passed, 1 failed, 3 spec files")
+			.toBe(true)
 		reset()
 		a = fixture("a", rendezvous("a", "b", "c"))
 		b = fixture("b", rendezvous("b", "a", "c"))
