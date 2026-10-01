@@ -32,23 +32,20 @@ local function specs(dir: string, out: { string })
 end
 
 return t.spec("c0050 isolated clones", function(it)
-	it(
-		"an isolated clone shares no object file with the repository, and is a working copy of HEAD",
-		function()
-			if fs.isDir(base) then
-				fs.removeDir(base)
-			end
-			fs.writeDir(base)
-			-- the control: a plain local clone hardlinks, which is what this guards against
-			t.expect(process.exec("git", { "clone", "-q", root, `{base}/plain` }).ok).toBe(true)
-			t.expect(linkedObjects(`{base}/plain`) ~= "").toBe(true)
-			clone.isolated(root, `{base}/isolated`)
-			t.expect(linkedObjects(`{base}/isolated`)).toBe("")
-			local head = process.exec("git", { "rev-parse", "HEAD" }, { cwd = `{base}/isolated` })
-			local want = process.exec("git", { "rev-parse", "HEAD" }, { cwd = root })
-			t.expect(head.stdout).toBe(want.stdout)
+	it("an isolated clone shares no object file with the repo", function()
+		if fs.isDir(base) then
+			fs.removeDir(base)
 		end
-	)
+		fs.writeDir(base)
+		-- the control: a plain local clone hardlinks, which is what this guards against
+		t.expect(process.exec("git", { "clone", "-q", root, `{base}/plain` }).ok).toBe(true)
+		t.expect(linkedObjects(`{base}/plain`) ~= "").toBe(true)
+		clone.isolated(root, `{base}/isolated`)
+		t.expect(linkedObjects(`{base}/isolated`)).toBe("")
+		local head = process.exec("git", { "rev-parse", "HEAD" }, { cwd = `{base}/isolated` })
+		local want = process.exec("git", { "rev-parse", "HEAD" }, { cwd = root })
+		t.expect(head.stdout).toBe(want.stdout)
+	end)
 
 	it("a failed clone is an error that names the source", function()
 		local ok, err = pcall(clone.isolated, `{base}/does-not-exist`, `{base}/never`)

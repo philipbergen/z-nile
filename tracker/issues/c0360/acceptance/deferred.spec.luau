@@ -164,23 +164,20 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		)
 	end)
 
-	it(
-		"finishes when a medium and a low finding are deferred to a backlog issue and the high one is fixed",
-		function()
-			local r = attempt({
-				"- F1: refuted: the reviewer misread the spec (test: x)",
-				"- F2: deferred c0020: needs its own design",
-				"- F3: deferred c0020: same follow-up",
-			})
-			if not r.ok then
-				error(r.stderr .. r.stdout)
-			end
-			t.expect(fs.isDir(`{work}/tracker/rafts/done/R0010`)).toBe(true)
-			t.expect(fs.isDir(`{work}/tracker/issues/done/f0010`)).toBe(true)
-			t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
-			t.expect(fs.isDir(`{work}/tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
+	it("finishes when medium and low findings are deferred", function()
+		local r = attempt({
+			"- F1: refuted: the reviewer misread the spec (test: x)",
+			"- F2: deferred c0020: needs its own design",
+			"- F3: deferred c0020: same follow-up",
+		})
+		if not r.ok then
+			error(r.stderr .. r.stdout)
 		end
-	)
+		t.expect(fs.isDir(`{work}/tracker/rafts/done/R0010`)).toBe(true)
+		t.expect(fs.isDir(`{work}/tracker/issues/done/f0010`)).toBe(true)
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(fs.isDir(`{work}/tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
+	end)
 
 	it("cleans up", function()
 		fs.removeDir(work)

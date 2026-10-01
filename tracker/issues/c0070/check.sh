@@ -1,9 +1,35 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0070. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
-A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance" # sequestered specs; see the testing skill
-source "$(git -C "$A/.." rev-parse --show-toplevel)/scripts/lib/ac.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0070 after it
+A="$HERE/acceptance"
+[[ -d $A ]] || A="$PWD/tests/acceptance/c0070"
 
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+spec="$A/done-order.spec.luau"
+# The spec's cases share one fixture, so it runs once; each check then requires its own named cases to
+# exist in the spec and not fail, and that the spec loaded at all.
+spec_out=$(lune run tests/run -- "$spec" 2>&1)
+cases_pass() { # $@: case-name prefixes that must exist in the spec and not appear in a FAIL line
+  if grep -q "could not load spec" <<<"$spec_out"; then echo "$spec_out"; return 1; fi
+  grep -Eq "^[0-9]+ passed, [0-9]+ failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out"; return 1; }
+  local c
+  for c in "$@"; do
+    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
+    if grep -F "FAIL" <<<"$spec_out" | grep -qF ":: $c"; then grep -F ":: $c" <<<"$spec_out"; return 1; fi
+  done
+}
+
+check "AC1: done marks the PR ready while origin has the previous head, then pushes the done commit" cases_pass \
+  "marks the PR ready while origin still has the previous head"
+check "AC2: a gh failure rolls done back (HEAD, tree, raft state, nothing pushed)" cases_pass \
+  "rolls back and stays active when gh cannot mark the PR ready"
+check "AC3: the tracker skill documents the new order and drops the old one" bash -c '
+  f=.claude/skills/tracker/SKILL.md
+  for s in "marks the PR **ready** before its final push" "the push starts the \`pull_request\` run"; do
+    grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }
+  done
+  if grep -qF "\`done\` pushes and then marks the PR ready" "$f"; then echo "old order still described"; exit 1; fi'
 
 finish
