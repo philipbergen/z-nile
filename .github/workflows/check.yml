@@ -68,3 +68,10 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           VERSION: ${{ steps.deploy.outputs.version }}
           SHA: ${{ github.event.pull_request.head.sha }}
+      - if: steps.deploy.outputs.version != ''
+        run: lune run scripts/runtime-test -- "$VERSION"
+        env:
+          VERSION: ${{ steps.deploy.outputs.version }}
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
