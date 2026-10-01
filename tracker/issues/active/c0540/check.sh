@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance checks for c0530 (emergent, written during R0090 execution).
+# Acceptance checks for c0540 (emergent, written during R0090 execution).
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh"
 # a spec of another issue: promoted to tests/acceptance/<id> after `done`, else in that issue's directory
