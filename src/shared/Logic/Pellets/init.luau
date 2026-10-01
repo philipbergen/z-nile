@@ -61,12 +61,12 @@ function Pellets.at(p: Pellets, tile: Maze.Tile): Kind?
 	return p.cells[index(p, tile)]
 end
 
--- Removes and returns what was on the tile; nil if nothing was.
 -- Points for eating one.
 function Pellets.points(kind: Kind): number
 	return perKind(POINTS, kind)
 end
 
+-- Removes and returns what was on the tile; nil if nothing was.
 function Pellets.eat(p: Pellets, tile: Maze.Tile): Kind?
 	local i = index(p, tile)
 	local kind: Kind? = p.cells[i]
