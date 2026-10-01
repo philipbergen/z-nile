@@ -13,12 +13,14 @@ end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 local made: { string } = {}
 
-local function git(cwd: string, args: { string }): process.ExecResult
-	local all = { "-c", "user.name=t", "-c", "user.email=t@example.com" }
+-- Fixture steps must succeed: a broken fixture would otherwise show up as a misleading refusal.
+local function git(cwd: string, args: { string })
+	local all = { "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false" }
 	for _, a in args do
 		table.insert(all, a)
 	end
-	return process.exec("git", all, { cwd = cwd })
+	local r = process.exec("git", all, { cwd = cwd })
+	t.expect(r.ok).toBe(true)
 end
 
 -- An item path is relative to tracker/ and ends in the id: "issues/c0100", "issues/done/c0300", "rafts/R0120".
@@ -28,24 +30,41 @@ local function put(base: string, path: string, body: string?)
 	fs.writeFile(`{base}/tracker/{path}/{id}.md`, `---\nid: {id}\ntitle: T\nslug: s\n---\n\n{body or ""}\n`)
 end
 
--- `origin` = nil: no origin/main ref at all. The repo has no remote, so tracker.sh's main-checkout guard is off.
-local function fixture(origin: { string }?, localItems: { string }, bodies: { [string]: string }?): string
-	local base = trim(process.exec("mktemp", { "-d" }).stdout)
-	table.insert(made, base)
-	fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
-	git(base, { "init", "-q" })
-	if origin then
-		for _, path in origin do
-			put(base, path)
-		end
-		git(base, { "add", "-A" })
-		git(base, { "commit", "-q", "-m", "origin" })
-		git(base, { "update-ref", "refs/remotes/origin/main", "HEAD" })
-		fs.removeDir(`{base}/tracker`)
-	end
-	for _, path in localItems do
+-- Starts an unrelated root commit on `branch` holding exactly `items`, so that commit differs from every
+-- other commit in the fixture.
+local function commitItems(base: string, branch: string, items: { string }, bodies: { [string]: string }?)
+	git(base, { "checkout", "-q", "--orphan", branch })
+	git(base, { "rm", "-rfq", "--ignore-unmatch", "." })
+	for _, path in items do
 		put(base, path, bodies and bodies[path])
 	end
+	git(base, { "add", "-A" })
+	git(base, { "commit", "-q", "-m", branch })
+end
+
+-- Three different commits: origin/main holds `origin`; an optional local branch `main` holds `localMain`;
+-- HEAD (branch `local`) holds only the local items. So an implementation that reads HEAD or a local
+-- `main` instead of origin/main is caught. `origin` = nil: no origin/main ref at all. The repo has no
+-- remote, so tracker.sh's main-checkout guard is off.
+local function fixture(
+	origin: { string }?,
+	localItems: { string },
+	bodies: { [string]: string }?,
+	localMain: { string }?
+): string
+	local base = trim(process.exec("mktemp", { "-d" }).stdout)
+	table.insert(made, base)
+	git(base, { "init", "-q", "-b", "scratch" })
+	if origin then
+		commitItems(base, "origin", origin)
+		git(base, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+	end
+	if localMain then
+		commitItems(base, "main", localMain)
+	end
+	commitItems(base, "local", localItems, bodies)
+	-- written last and never committed: `commitItems` clears the tree. The tool shim finds lune through it.
+	fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
 	return base
 end
 
@@ -175,6 +194,25 @@ return t.spec("renumber without <new>", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(say(r.stderr, "9999")).toBe(true)
 		t.expect(has(base, "issues/f0100/f0100.md")).toBe(true)
+	end)
+
+	it("a stale local main does not count: only origin/main is read", function()
+		local base = fixture({ "issues/c0150" }, { "issues/f0100" }, nil, { "issues/c0020" })
+		t.expect(tracker(base, { "renumber", "f0100" }).ok).toBe(true)
+		t.expect(has(base, "issues/f0151/f0151.md")).toBe(true)
+	end)
+
+	it("a local main ahead of origin/main does not count either", function()
+		local base = fixture({ "issues/c0150" }, { "issues/f0100" }, nil, { "issues/c0900" })
+		t.expect(tracker(base, { "renumber", "f0100" }).ok).toBe(true)
+		t.expect(has(base, "issues/f0151/f0151.md")).toBe(true)
+	end)
+
+	it("9999 itself is still free: origin at 9998 gives f9999", function()
+		local base = fixture({ "issues/c9998" }, { "issues/f0100" })
+		local r = tracker(base, { "renumber", "f0100" })
+		t.expect(r.ok).toBe(true)
+		t.expect(has(base, "issues/f9999/f9999.md")).toBe(true)
 	end)
 
 	it("the usage text shows <new> as optional", function()

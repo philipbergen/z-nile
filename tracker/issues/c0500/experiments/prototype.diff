@@ -1,5 +1,5 @@
 diff --git a/.claude/skills/tracker/SKILL.md b/.claude/skills/tracker/SKILL.md
-index 7be2746..397e60c 100644
+index 69c1981..79a0363 100644
 --- a/.claude/skills/tracker/SKILL.md
 +++ b/.claude/skills/tracker/SKILL.md
 @@ -17,7 +17,7 @@ All work is tracked in `tracker/`, which is committed. The only way to change tr
@@ -12,7 +12,7 @@ index 7be2746..397e60c 100644
  
  Each item is a directory named by its ID:
 diff --git a/scripts/tracker/main.luau b/scripts/tracker/main.luau
-index ff1c7d1..3061e1d 100644
+index ec8c85c..0b0cb2f 100644
 --- a/scripts/tracker/main.luau
 +++ b/scripts/tracker/main.luau
 @@ -16,7 +16,7 @@ usage: scripts/tracker.sh <command> ...
@@ -65,15 +65,16 @@ index ff1c7d1..3061e1d 100644
  	if store.find(new) then
  		fail(`{new} already exists`)
 diff --git a/scripts/tracker/store.luau b/scripts/tracker/store.luau
-index 42992ef..e698e0b 100644
+index 42992ef..df1525e 100644
 --- a/scripts/tracker/store.luau
 +++ b/scripts/tracker/store.luau
-@@ -126,6 +126,22 @@ function store.nextNumber(kind: Kind): number
+@@ -126,6 +126,23 @@ function store.nextNumber(kind: Kind): number
  	return (math.floor(max / 10) + 1) * 10
  end
  
-+-- Next free number for `renumber`: one above the highest number of `kind` in the local tree and in
-+-- `otherIds` (ids seen elsewhere, such as origin/main). Ids of the other kind are ignored.
++-- Number-space rule for `renumber`: one above the highest number of `kind` in the local tree (read through
++-- `store.all`, so it fails like `tracker.sh list` on a malformed tree) and in `otherIds` (ids seen elsewhere,
++-- such as origin/main). Ids of the other kind are ignored.
 +function store.nextAbove(kind: Kind, otherIds: { string }): number
 +	local max = 0
 +	for _, item in store.all(kind) do
