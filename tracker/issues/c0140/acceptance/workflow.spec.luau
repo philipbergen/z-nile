@@ -191,7 +191,9 @@ return t.spec("c0140 beta job in check.yml", function(it)
 			end)
 			t.expect(commentAt > deployAt).toBe(true)
 			t.expect(comment["if"]).toBe("steps.deploy.outputs.version != ''")
-			t.expect(has(comment.run, "--edit-last --create-if-none")).toBe(true)
+			t.expect(collapse(comment.run)).toBe(
+				'gh pr comment "$PR" --edit-last --create-if-none \\ --body "Published to Pickman (Beta): version $VERSION (commit $SHA)."'
+			)
 			t.expect(comment.env.VERSION).toBe("${{ steps.deploy.outputs.version }}")
 		end
 	)
