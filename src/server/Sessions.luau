@@ -17,7 +17,7 @@ function Sessions.start()
 	local snapshot = remotes:WaitForChild("Snapshot") :: RemoteEvent
 
 	local sessions: { [Player]: Session.Session } = {}
-	local clock = Session.newClock()
+	local clock = Session.newClock(Session.STEP_RATE)
 
 	-- the client is listening for snapshots once it signals Ready; a repeat signal is ignored
 	ready.OnServerEvent:Connect(function(player: Player)

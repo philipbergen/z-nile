@@ -66,7 +66,9 @@ export type Session = {
 }
 
 local Session = {}
-Session.TICK_RATE = 30
+Session.TICK_RATE = 30 -- ticks per second of play: every rule counts these
+Session.GAME_SPEED = 0.5 -- play runs at half speed in real time (user, 2026-10-01)
+Session.STEP_RATE = Session.TICK_RATE * Session.GAME_SPEED -- steps per real second: what the clock and the client use
 Session.SNAPSHOT_VERSION = 1
 Session.MAX_STEPS_PER_ADVANCE = 5
 
