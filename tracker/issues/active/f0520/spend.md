@@ -6,6 +6,7 @@
 | 2 | 2026-10-01 06:36 | f0520: server clock and client blend use the step rate | 2 | 2 | 6.0 | explicit |
 | 3 | 2026-10-01 06:37 | f0520: game-design edits and verification log | 0 | 0 | 4.0 | explicit |
 | 4 | 2026-10-01 06:41 | R0170: fix RC1 spec path in check.sh (prep correction, user-approved: path only) | 0 | 0 | 3.0 | focus |
+| 5 | 2026-10-01 06:47 | R0170: answer review-001 (F1 doc note) | 0 | 0 | 4.0 | focus |
 
-**Total:** +11 / -3 lines, 21.0 agent-minutes over 4 commits
-<!-- totals: added=11 removed=3 minutes=21.0 commits=4 -->
+**Total:** +11 / -3 lines, 25.0 agent-minutes over 5 commits
+<!-- totals: added=11 removed=3 minutes=25.0 commits=5 -->
