@@ -6,6 +6,7 @@ local Camera = require("./Camera")
 local Controls = require("./Controls")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
+local PelletView = require("./PelletView")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -14,19 +15,28 @@ local ready = remotes:WaitForChild("Ready") :: RemoteEvent
 
 local built: string? = nil
 local model: Model? = nil
-snapshots.OnClientEvent:Connect(function(snap: Session.Snapshot)
-	if built ~= snap.maze then
-		built = snap.maze
+local pellets: PelletView.Handle? = nil
+snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+	if built ~= frame.maze then
+		built = frame.maze
 		if model then
-			model:Destroy()
+			model:Destroy() -- its pellets with it
 		end
-		model = MazeView.build(Maze.layout(snap.maze))
+		local m = Maze.layout(frame.maze)
+		local walls = MazeView.build(m)
+		model = walls
+		pellets = PelletView.build(m, walls)
 	end
-	Camera.push(snap)
+	Camera.push(frame)
+	-- last: a code that fails to decode can't stop the rest of the frame
+	if pellets then
+		PelletView.show(pellets, frame.pellets)
+	end
 end)
 
 Camera.start()
 Controls.start(Camera.snap)
+PelletView.start()
 
 -- listening now: tell the server, so its first snapshot reaches a client that can show it
 ready:FireServer()
