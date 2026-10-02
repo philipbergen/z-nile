@@ -7,6 +7,7 @@
 | 3 | 2026-10-02 14:45 | f0290: View.pellet and View.pulse | 22 | 0 | 0.3 | focus |
 | 4 | 2026-10-02 14:45 | f0290: PelletView draws the frame's pellets | 88 | 6 | 0.1 | focus |
 | 5 | 2026-10-02 14:45 | f0290: verification log | 0 | 0 | 0.2 | focus |
+| 6 | 2026-10-02 14:55 | tracker: done R0150 | 0 | 0 | 0.2 | raft+proportional |
 
-**Total:** +238 / -7 lines, 1.6 agent-minutes over 5 commits
-<!-- totals: added=238 removed=7 minutes=1.6 commits=5 -->
+**Total:** +238 / -7 lines, 1.8 agent-minutes over 6 commits
+<!-- totals: added=238 removed=7 minutes=1.8 commits=6 -->
