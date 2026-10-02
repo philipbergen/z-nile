@@ -16,6 +16,8 @@ This is the source of truth for product decisions. Every raft design must agree 
 | Deploy | A separate, private **Pickman Beta** experience. Every PR that becomes ready for review is published there (last one wins). Production publishing will be decided later. |
 | Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now. |
 | Platforms | Desktop (keyboard and mouse) and **mobile (touch)**. Gamepad isn't planned; it gets the same intents if it's added later. |
+| Danger awareness (2026-10-01) | **A minimap/radar and edge indicators** show where ghosts are in first person. The indicators give a sense of distance, not just direction: bigger and brighter as the ghost gets closer (R0100, f0320). Audio and a proximity vignette were not chosen. |
+| Slower ghosts (2026-10-01) | Ghosts may be slower than the classic tables, through **one tuning factor** (`Levels.GHOST_TUNING`) on the hunting and frightened ghost speeds, not on eyes. It ships at the classic 1 until the user gives the factor, after a Beta playtest (R0100, f0200). |
 
 ## Movement model: rail with free look
 **All durations and speeds in this document are game time** (30 ticks per game second); the game is played at half speed, so real time is twice as long (see *Game speed* below).
@@ -45,12 +47,13 @@ This is the source of truth for product decisions. Every raft design must agree 
 - **Eating slowdown** (user, 2026-09-30; R0090): eating stops the player as in the arcade: 1 frame of 60 fps for a dot, 3 for an energizer, at the level's speed (15 and 45 units at level 1, where a tile is 120 units and a tick is 30). The distance is owed and taken from the next steps; a death, a new level or a new run forgets it. **Deviation (R0090 design review round 2)**: the pause is *distance* at the speed of the tick that ate the pellet, so across a speed change it is up to a third of a frame off: an energizer (eaten at the normal speed, paid at the faster frightened one) stops the player about 2.65 frames rather than 3, and a dot eaten while frightened costs 17 units at level 1. Not visible (about 6 ms); the user can ask for frames-owed instead.
 - **Levels:** clearing all pellets advances to the next level, which restores every pellet and puts the player back at the start. Speeds, the frightened duration and the mode schedule vary per level, following the classic tables; level 21 and on repeat the 21st row; frightened time is 0 on levels 17, 19, 20 and from 21 on, but 1 s on level 18 (R0090). **While frightened the player runs faster** (Table A.1, relative to level 1's 80%: levels 1 ×1.125, 2–4 ×1.1875, 5–20 ×1.25), user 2026-09-30. A death keeps the pellets already eaten.
 - **Run pauses** (R0090, game time, 30 ticks per game second; double in real time): "Ready!" 2 s before play and after each death and level; death 1.5 s; level clear 2 s. Keys pressed in a pause are ignored.
-- **Ghosts:** the four classic personalities.
+- **Ghosts:** the four classic personalities (R0100: details below).
   - Blinky targets the player's tile.
   - Pinky targets 4 tiles ahead.
   - Inky uses a vector from Blinky.
   - Clyde targets the player when more than 8 tiles away, and his scatter corner when closer.
   - Modes: scatter, chase and frightened. Ghosts never reverse, except when the mode changes. Ghosts are released from the ghost house by rule.
+  - **Details chosen in R0100's prep (the user may veto any):** ghosts decide at tile centres and take the exit closest in a straight line to their target (ties: up, left, down, right), with the arcade's no-up junctions; Pinky and Inky aim exactly ahead of the player, **without the arcade's overflow bug** when the player faces up; **Cruise Elroy is not built**; ghost speeds follow Table A.1 rounded to whole sub-tile units (level 1: 28 units a tick against the player's 30), slower in the side tunnels and while frightened; the timetable is Table A.2 and stops while the ghosts are blue; frightened ghosts turn back once, then wander at random (seeded, **uniformly among the open exits**; the arcade's choice is slightly biased), and **blink for the last `flashes` flashes of 14 ticks** (7 blue, 7 white); **eyes run at twice level 1's player speed**; houses release by personal counters (Pinky 0; Inky 30 on level 1, 0 later; Clyde 60, 50, 0), an idle timer (4 s, 3 s from level 5) and a global counter after a death (7, 17, 32); a kill beats an eating in the same tick and a cleared level beats a kill; **an eaten ghost comes out of the house dangerous (not blue) for the rest of that power period**, as in the arcade; a power pellet eaten on the tile a ghost reaches in the same tick makes it blue before the contact (so it is eaten); a blue ghost met on the very tick the blue time ends kills; the end of the blue time does not turn ghosts back; **there is no pause when a ghost is eaten and no score pop-up where it was eaten** (the arcade freezes the game for about a second; the user may ask for it).
 - **Fruit:** a non-goal for now.
 
 ## Hiscores
@@ -66,7 +69,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 - **Recentring:** a "snap look to heading" button.
 
 ## Open decisions
-- **Danger awareness in first person** (f0320): minimap/radar, audio, edge indicators, vignette, or easier tables. The user decides before raft d's prep.
+- **The slower-ghosts factor** (f0200): a number for `Levels.GHOST_TUNING`, after a Beta playtest of the classic tables with the radar and the edge indicators.
 
 ## Roadmap (single-type rafts; order a1 → a2 → b → c → c2 → d → e, with f any time after a2)
 | Raft | Type | Issues | Proves |
@@ -76,7 +79,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 | b Beta deploy (R0080) | chore | c0140, c0030 | a ready PR goes live on Beta, plus engine smoke tests |
 | c Pellets & mechanics (R0090) | feature | f0150, f0160, f0170 | eating, score, lives, levels, power pellets: the rules, headless |
 | c2 Presentation (R0150) | feature | f0180, f0290, f0300 | HUD, pellets drawn, start/game over/play again |
-| d Ghosts (R0100) | feature | f0190, f0200, f0210, f0220, f0310, f0320 | classic ghost AI, its consequences, ghosts drawn, danger awareness |
+| d Ghosts (R0100) | feature | f0190, f0200, f0210, f0220, f0310, f0320 | classic ghost AI, its consequences, ghosts drawn, danger awareness (radar and edge indicators) |
 | e Hiscores (R0110) | feature | f0230, f0240, f0250 | all-time, daily and weekly boards |
 | f Mobile controls (R0120) | feature | f0260, f0270, f0280 | playable on a phone |
 

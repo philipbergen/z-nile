@@ -1,0 +1,1767 @@
+diff --git a/src/client/Camera.luau b/src/client/Camera.luau
+index fe870b2..a9e5b57 100644
+--- a/src/client/Camera.luau
++++ b/src/client/Camera.luau
+@@ -3,6 +3,7 @@
+ local RunService = game:GetService("RunService")
+ local UserInputService = game:GetService("UserInputService")
+ 
++local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
+ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+@@ -13,6 +14,7 @@ local latest: Session.Snapshot? = nil
+ local arrived = 0
+ local look: View.Look = { yaw = 0, pitch = 0 }
+ local yaw: number? = nil
++local current: Awareness.Pose? = nil
+ 
+ -- Snapshots only move forward: a connected client's session is never replaced.
+ function Camera.push(snap: Session.Snapshot)
+@@ -23,6 +25,12 @@ function Camera.push(snap: Session.Snapshot)
+ 	end
+ end
+ 
++-- The camera's pose in tile coordinates and its yaw as View and Awareness define it, as of the last frame,
++-- for other client views.
++function Camera.pose(): Awareness.Pose?
++	return current
++end
++
+ function Camera.snap()
+ 	look = View.snap(look)
+ end
+@@ -47,6 +55,7 @@ function Camera.start()
+ 		local turned = View.approachYaw(yaw or target, target, View.turnRate() * dt)
+ 		yaw = turned
+ 
++		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
+ 		local x, z = View.world(pose.x, pose.y)
+ 		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight, z)
+ 			* CFrame.Angles(0, turned + look.yaw, 0)
+diff --git a/src/client/DangerHud.luau b/src/client/DangerHud.luau
+new file mode 100644
+index 0000000..dc0ba9d
+--- /dev/null
++++ b/src/client/DangerHud.luau
+@@ -0,0 +1,141 @@
++--!strict
++-- Client adapter: the danger aids. A radar in the top-right corner (the maze around the player, turned so up
++-- is where the camera looks) and arrows on the screen edge for ghosts out of view, larger and brighter the
++-- closer they are along the maze. All the geometry is Awareness; this only draws it.
++local Players = game:GetService("Players")
++local RunService = game:GetService("RunService")
++
++local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
++local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
++local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
++
++local CELL = 8 -- pixels per tile on the radar
++local ARROW_MAX = 56 -- pixels at full size
++local LOOK_COLORS: { [string]: Color3 } = {
++	normal = Color3.fromRGB(255, 60, 60),
++	frightened = Color3.fromRGB(80, 80, 255),
++	blinking = Color3.fromRGB(230, 230, 255),
++	eyes = Color3.fromRGB(200, 200, 200),
++}
++
++local DangerHud = {}
++
++local function arrow(parent: Instance): TextLabel
++	local a = Instance.new("TextLabel")
++	a.AnchorPoint = Vector2.new(0.5, 0.5)
++	a.BackgroundTransparency = 1
++	a.Text = "▲"
++	a.Font = Enum.Font.GothamBold
++	a.Parent = parent
++	return a
++end
++
++local latest: Session.Snapshot? = nil
++local maze: Maze.Maze? = nil
++
++function DangerHud.push(snap: Session.Snapshot, m: Maze.Maze)
++	if latest == nil or snap.tick > latest.tick then
++		latest = snap
++		maze = m
++	end
++end
++
++function DangerHud.start(getPose: () -> Awareness.Pose?)
++	local gui = Instance.new("ScreenGui")
++	gui.Name = "Danger"
++	gui.ResetOnSpawn = false
++	gui.IgnoreGuiInset = true
++	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
++
++	local radarSize = (Awareness.RADAR_RADIUS * 2 + 1) * CELL
++	local radar = Instance.new("Frame")
++	radar.Name = "Radar"
++	radar.AnchorPoint = Vector2.new(1, 0)
++	radar.Position = UDim2.new(1, -16, 0, 16)
++	radar.Size = UDim2.fromOffset(radarSize, radarSize)
++	radar.BackgroundColor3 = Color3.new(0, 0, 0)
++	radar.BackgroundTransparency = 0.35
++	radar.ClipsDescendants = true
++	radar.Parent = gui
++	local function dot(parent: Instance, color: Color3, size: number): Frame
++		local f = Instance.new("Frame")
++		f.AnchorPoint = Vector2.new(0.5, 0.5)
++		f.Size = UDim2.fromOffset(size, size)
++		f.BackgroundColor3 = color
++		f.BorderSizePixel = 0
++		f.Parent = parent
++		return f
++	end
++	local you = dot(radar, Color3.fromRGB(255, 255, 0), CELL)
++	you.Position = UDim2.fromOffset(radarSize / 2, radarSize / 2)
++	local walls: { Frame } = {}
++	local blips: { Frame } = {}
++	local arrows: { TextLabel } = {}
++
++	RunService.RenderStepped:Connect(function()
++		local snap, m, pose = latest, maze, getPose()
++		if snap == nil or m == nil or pose == nil or snap.ghosts == nil then
++			return
++		end
++		local ghosts: { Awareness.Ghost } = {}
++		for _, g in snap.ghosts do
++			table.insert(ghosts, { x = g.x, y = g.y, look = g.look })
++		end
++		local r = Awareness.radar(m, pose, ghosts)
++		for i, w in r.walls do
++			local f: Frame = walls[i] or dot(radar, Color3.fromRGB(33, 33, 222), CELL)
++			walls[i] = f
++			f.Visible = true
++			f.Position = UDim2.fromOffset(radarSize / 2 + w.x * CELL, radarSize / 2 + w.y * CELL)
++		end
++		for i = #r.walls + 1, #walls do
++			walls[i].Visible = false
++		end
++		for i = 1, #ghosts do
++			local f: Frame = blips[i] or dot(radar, Color3.new(1, 1, 1), CELL)
++			blips[i] = f
++			f.Visible = false
++		end
++		for i, b in r.blips do
++			local f: Frame = blips[i]
++			f.Visible = true
++			f.BackgroundColor3 = LOOK_COLORS[b.look] or LOOK_COLORS.normal
++			f.Position = UDim2.fromOffset(radarSize / 2 + b.x * CELL, radarSize / 2 + b.y * CELL)
++		end
++
++		local view = gui.AbsoluteSize
++		local aspect = view.X / math.max(view.Y, 1)
++		local list = Awareness.indicators(m, pose, ghosts, {
++			verticalFieldOfView = math.rad(workspace.CurrentCamera.FieldOfView),
++			aspect = aspect,
++		})
++		for i = 1, #ghosts do
++			local a: TextLabel = arrows[i] or arrow(gui)
++			arrows[i] = a
++			a.Visible = false
++		end
++		for i, ind in list do
++			local a: TextLabel = arrows[i]
++			local u, v = Awareness.edgePoint(ind.bearing, aspect)
++			local px = (u * 0.5 + 0.5) * view.X
++			local py = (v * 0.5 + 0.5) * view.Y
++			-- keep the arrow fully on screen
++			local size = ARROW_MAX * ind.size
++			px = math.clamp(px, size / 2, view.X - size / 2)
++			py = math.clamp(py, size / 2, view.Y - size / 2)
++			a.Visible = true
++			a.Position = UDim2.fromOffset(px, py)
++			a.Size = UDim2.fromOffset(size, size)
++			a.TextSize = size
++			a.TextColor3 = (LOOK_COLORS[ind.look] or LOOK_COLORS.normal):Lerp(
++				Color3.new(1, 1, 1),
++				1 - ind.brightness
++			)
++			a.TextTransparency = 1 - ind.brightness
++			-- the arrow points at the ghost: toward the screen centre rotated by the bearing
++			a.Rotation = math.deg(-ind.bearing)
++		end
++	end)
++end
++
++return DangerHud
+diff --git a/src/client/GhostView.luau b/src/client/GhostView.luau
+new file mode 100644
+index 0000000..4f671ee
+--- /dev/null
++++ b/src/client/GhostView.luau
+@@ -0,0 +1,115 @@
++--!strict
++-- Client adapter: one model per ghost, moved to View's interpolated pose every frame and coloured by its look.
++-- It draws what the snapshots say; every decision about a ghost was made on the server.
++local RunService = game:GetService("RunService")
++
++local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
++local View = require("@game/ReplicatedStorage/Shared/Logic/View")
++
++local COLORS: { [string]: Color3 } = {
++	blinky = Color3.fromRGB(255, 0, 0),
++	pinky = Color3.fromRGB(255, 184, 255),
++	inky = Color3.fromRGB(0, 255, 255),
++	clyde = Color3.fromRGB(255, 184, 82),
++}
++local FRIGHTENED = Color3.fromRGB(33, 33, 255)
++local FLASH_WHITE = Color3.fromRGB(255, 255, 255)
++local EYE = Color3.fromRGB(255, 255, 255)
++local PUPIL = Color3.fromRGB(33, 33, 255)
++local EYES = {
++	{ name = "EyeL", offset = CFrame.new(-1.4, 1.2, -2.6) },
++	{ name = "EyeR", offset = CFrame.new(1.4, 1.2, -2.6) },
++	{ name = "PupilL", offset = CFrame.new(-1.4, 1.2, -3.2) },
++	{ name = "PupilR", offset = CFrame.new(1.4, 1.2, -3.2) },
++}
++local BODY = Vector3.new(6, 7, 6) -- taller than the 4-stud eye height, so a ghost shows over the pellets
++
++local GhostView = {}
++
++local models: { Model } = {}
++local prev: Session.Snapshot? = nil
++local latest: Session.Snapshot? = nil
++local arrived = 0
++
++local function part(parent: Model, name: string, size: Vector3, color: Color3, shape: Enum.PartType): Part
++	local p = Instance.new("Part")
++	p.Name = name
++	p.Shape = shape
++	p.Anchored = true
++	p.CanCollide = false
++	p.CanQuery = false
++	p.CanTouch = false
++	p.Size = size
++	p.Color = color
++	p.Material = Enum.Material.Neon
++	p.Parent = parent
++	return p
++end
++
++local function build(name: string): Model
++	local model = Instance.new("Model")
++	model.Name = name
++	local body = part(model, "Body", BODY, COLORS[name] or FLASH_WHITE, Enum.PartType.Block)
++	model.PrimaryPart = body
++	for _, part_ in EYES do
++		local size = if string.sub(part_.name, 1, 3) == "Eye"
++			then Vector3.new(1.6, 2, 1.6)
++			else Vector3.new(0.8, 1, 0.8)
++		part(
++			model,
++			part_.name,
++			size,
++			if string.sub(part_.name, 1, 3) == "Eye" then EYE else PUPIL,
++			Enum.PartType.Ball
++		)
++	end
++	model.Parent = workspace
++	return model
++end
++
++local function paint(model: Model, name: string, look: string, flash: boolean)
++	local body = model:FindFirstChild("Body") :: Part
++	body.Transparency = if look == "eyes" then 1 else 0
++	if look == "frightened" then
++		body.Color = FRIGHTENED
++	elseif look == "blinking" then
++		body.Color = if flash then FLASH_WHITE else FRIGHTENED
++	else
++		body.Color = COLORS[name] or FLASH_WHITE
++	end
++end
++
++-- Snapshots only move forward, as in Camera.
++function GhostView.push(snap: Session.Snapshot)
++	if latest == nil or snap.tick > latest.tick then
++		prev = latest
++		latest = snap
++		arrived = os.clock()
++	end
++end
++
++function GhostView.start()
++	RunService:BindToRenderStep("PickmanGhosts", Enum.RenderPriority.Camera.Value, function()
++		local snap = latest
++		if snap == nil or snap.ghosts == nil then
++			return
++		end
++		local poses = View.interpolateGhosts(prev, snap, View.alpha(os.clock() - arrived))
++		for i, pose in poses do
++			local g = (snap.ghosts :: { Session.GhostSnapshot })[i]
++			local model: Model = models[i] or build(g.name)
++			models[i] = model
++			paint(model, g.name, pose.look, pose.flash)
++			local x, z = View.world(pose.x, pose.y)
++			local facing = CFrame.new(x, BODY.Y / 2, z) * CFrame.Angles(0, View.headingYaw(pose.heading), 0)
++			model:PivotTo(facing)
++			-- the eyes sit on the front face, so a ghost coming toward the player reads differently
++			for _, eye in EYES do
++				local p = model:FindFirstChild(eye.name) :: Part
++				p.CFrame = facing * eye.offset
++			end
++		end
++	end)
++end
++
++return GhostView
+diff --git a/src/client/Main.client.luau b/src/client/Main.client.luau
+index f12338f..120c51c 100644
+--- a/src/client/Main.client.luau
++++ b/src/client/Main.client.luau
+@@ -4,6 +4,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
+ 
+ local Camera = require("./Camera")
+ local Controls = require("./Controls")
++local DangerHud = require("./DangerHud")
++local GhostView = require("./GhostView")
+ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+ local MazeView = require("./MazeView")
+ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+@@ -23,9 +25,13 @@ snapshots.OnClientEvent:Connect(function(snap: Session.Snapshot)
+ 		model = MazeView.build(Maze.layout(snap.maze))
+ 	end
+ 	Camera.push(snap)
++	GhostView.push(snap)
++	DangerHud.push(snap, Maze.layout(snap.maze))
+ end)
+ 
+ Camera.start()
++GhostView.start()
++DangerHud.start(Camera.pose)
+ Controls.start(Camera.snap)
+ 
+ -- listening now: tell the server, so its first snapshot reaches a client that can show it
+diff --git a/src/shared/Logic/Awareness/init.luau b/src/shared/Logic/Awareness/init.luau
+new file mode 100644
+index 0000000..5a85d4e
+--- /dev/null
++++ b/src/shared/Logic/Awareness/init.luau
+@@ -0,0 +1,246 @@
++--!strict
++-- Awareness: how the player senses ghosts they cannot see (R0100). Engine-free numbers in, numbers out: a
++-- minimap (radar) around the player and edge indicators for ghosts outside the field of view, which grow
++-- and brighten as the ghost gets closer along the maze. The client draws what this returns.
++--
++-- Coordinates are tile units. A yaw follows View: 0 looks north (-y), a positive yaw turns left. A bearing is
++-- the angle from where the camera looks to the ghost, positive to the left, in (-pi, pi].
++local Maze = require("./Maze")
++
++export type Look = "normal" | "frightened" | "blinking" | "eyes"
++export type Ghost = { x: number, y: number, look: Look }
++export type Pose = { x: number, y: number, yaw: number }
++export type Options = {
++	verticalFieldOfView: number?, -- the camera's (Roblox's) vertical field of view in radians
++	aspect: number?, -- screen width over height: the horizontal field of view follows from it
++	maxDistance: number?, -- tiles along the maze beyond which a ghost is not indicated
++	minSize: number?,
++	maxSize: number?,
++	minBrightness: number?,
++}
++export type Indicator = {
++	index: number, -- the ghost's place in the input list
++	bearing: number,
++	distance: number, -- tiles along the maze
++	size: number, -- 0..1: the larger, the closer
++	brightness: number, -- 0..1: the brighter, the closer
++	look: Look,
++}
++export type Blip = { x: number, y: number, look: Look } -- offsets from the player, x right and y down on the radar
++export type Radar = { radius: number, walls: { { x: number, y: number } }, blips: { Blip } }
++
++local DEFAULTS = {
++	verticalFieldOfView = math.rad(80), -- as View.SCALE.fieldOfView; Roblox's FieldOfView is the vertical one
++	aspect = 16 / 9,
++	maxDistance = 12,
++	minSize = 0.25,
++	maxSize = 1,
++	minBrightness = 0.3,
++}
++
++local Awareness = {}
++Awareness.DEFAULTS = table.freeze(DEFAULTS)
++Awareness.RADAR_RADIUS = 7
++
++-- Tiles to walk from `from` to `to` through the maze, ghosts' routes (doors and the house included), or
++-- nil when it is more than `limit`. Wrapping tunnels count.
++-- Breadth-first search over the ghosts' routes. Returns the tiles to walk and the direction in which the
++-- shortest path crosses a tunnel wrap (-1 west, 1 east, 0 when it does not cross one), or nil beyond `limit`.
++local function search(m: Maze.Maze, from: Maze.Tile, to: Maze.Tile, limit: number): (number?, number)
++	if from.x == to.x and from.y == to.y then
++		return 0, 0
++	end
++	local seen: { [number]: boolean } = { [from.y * m.width + from.x + 1] = true }
++	local frontier: { { tile: Maze.Tile, wrap: number } } = { { tile = from, wrap = 0 } }
++	for distance = 1, limit do
++		local nextFrontier: { { tile: Maze.Tile, wrap: number } } = {}
++		for _, node in frontier do
++			for _, h: Maze.Heading in Maze.HEADINGS do
++				local n, wrapped = Maze.neighbor(m, node.tile, h)
++				local key = n.y * m.width + n.x + 1
++				if not seen[key] and Maze.passable(m, n, "ghost") then
++					local wrap = node.wrap
++					if wrapped and (h == "W" or h == "E") then
++						wrap = if h == "W" then -1 else 1
++					end
++					if n.x == to.x and n.y == to.y then
++						return distance, wrap
++					end
++					seen[key] = true
++					table.insert(nextFrontier, { tile = n, wrap = wrap })
++				end
++			end
++		end
++		frontier = nextFrontier
++		if #frontier == 0 then
++			return nil, 0
++		end
++	end
++	return nil, 0
++end
++
++-- Tiles to walk from `from` to `to` through the maze, ghosts' routes (doors and the house included), or
++-- nil when it is more than `limit`. Wrapping tunnels count.
++function Awareness.pathDistance(m: Maze.Maze, from: Maze.Tile, to: Maze.Tile, limit: number): number?
++	local distance = search(m, from, to, limit)
++	return distance
++end
++
++-- The bearing of a point seen from the pose.
++function Awareness.bearing(pose: Pose, x: number, y: number): number
++	local dx, dy = x - pose.x, y - pose.y
++	local fx, fy = -math.sin(pose.yaw), -math.cos(pose.yaw)
++	local lx, ly = -math.cos(pose.yaw), math.sin(pose.yaw)
++	return math.atan2(dx * lx + dy * ly, dx * fx + dy * fy)
++end
++
++-- Where on the screen border (u right, v down, both in -1..1) an indicator at `bearing` sits.
++function Awareness.edgePoint(bearing: number, aspect: number): (number, number)
++	local du, dv = -math.sin(bearing), -math.cos(bearing)
++	local t = math.huge
++	if du ~= 0 then
++		t = math.min(t, aspect / math.abs(du))
++	end
++	if dv ~= 0 then
++		t = math.min(t, 1 / math.abs(dv))
++	end
++	return du * t / aspect, dv * t
++end
++
++local function occupied(g: Ghost, m: Maze.Maze): Maze.Tile
++	return { x = math.floor(g.x + 0.5) % m.width, y = math.floor(g.y + 0.5) % m.height }
++end
++
++-- A row wraps when both of its edge tiles are open to ghosts: only then does the maze continue on the other
++-- side. The classic maze wraps one row, sideways; nothing wraps vertically.
++local function rowWraps(m: Maze.Maze, y: number): boolean
++	return Maze.passable(m, { x = 0, y = y }, "ghost")
++		and Maze.passable(m, { x = m.width - 1, y = y }, "ghost")
++end
++
++-- The part of a position left over once it is rounded to its tile: in -0.5 .. 0.5. Positions are not wrapped (a
++-- ghost heading east runs on from 27.0 to 27.99 before it is back at tile 0), but tiles are.
++local function frac(v: number): number
++	return v - math.floor(v + 0.5)
++end
++
++-- Where a ghost is relative to the pose along the path the search found: the tile offset, across the wrap in
++-- direction `wrap` (-1, 0 or 1), plus the two fractions, so the answer is continuous when either of them crosses
++-- the edge of the map. `unseen` says the 3D positions, which do not wrap, are on opposite sides of the maze from
++-- where the path puts the ghost: it cannot be seen, whatever its bearing.
++local function offsetVia(
++	m: Maze.Maze,
++	pose: Pose,
++	here: Maze.Tile,
++	g: Ghost,
++	tile: Maze.Tile,
++	wrap: number
++): (number, number, boolean)
++	local dx = (tile.x - here.x) + wrap * m.width + frac(g.x) - frac(pose.x)
++	local unseen = math.abs((g.x - pose.x) - dx) > m.width / 2
++	return dx, g.y - pose.y, unseen
++end
++
++-- The radar has no path search: it takes the short way round when the player's row or the point's row wraps.
++local function offsetShort(m: Maze.Maze, pose: Pose, x: number, y: number): (number, number)
++	local dx, dy = x - pose.x, y - pose.y
++	local prow, row = math.floor(pose.y + 0.5), math.floor(y + 0.5)
++	local wraps = (prow >= 0 and prow < m.height and rowWraps(m, prow))
++		or (row >= 0 and row < m.height and rowWraps(m, row))
++	if wraps then
++		if dx > m.width / 2 then
++			dx -= m.width
++		elseif dx < -m.width / 2 then
++			dx += m.width
++		end
++	end
++	return dx, dy
++end
++
++-- One indicator per ghost that is close along the maze and outside the field of view, nearest first.
++-- Eyes (a ghost going home) are never indicated.
++function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, options: Options?): { Indicator }
++	local o: Options = options or {}
++	-- a ghost inside the horizontal field is on screen: it gets no arrow, however the screen is shaped
++	local fov = 2
++		* math.atan(
++			math.tan((o.verticalFieldOfView or DEFAULTS.verticalFieldOfView) / 2)
++				* (o.aspect or DEFAULTS.aspect)
++		)
++	local maxDistance = o.maxDistance or DEFAULTS.maxDistance
++	local minSize = o.minSize or DEFAULTS.minSize
++	local maxSize = o.maxSize or DEFAULTS.maxSize
++	local minBrightness = o.minBrightness or DEFAULTS.minBrightness
++	local here: Maze.Tile =
++		{ x = math.floor(pose.x + 0.5) % m.width, y = math.floor(pose.y + 0.5) % m.height }
++	local out: { Indicator } = {}
++	for i, g in ghosts do
++		if g.look ~= "eyes" then
++			local tile = occupied(g, m)
++			local d, wrap = search(m, here, tile, maxDistance)
++			if d ~= nil then
++				local dx, dy, unseen = offsetVia(m, pose, here, g, tile, wrap)
++				local bearing = Awareness.bearing(pose, pose.x + dx, pose.y + dy)
++				if unseen or math.abs(bearing) > fov / 2 then
++					local closeness = 1 - math.clamp(d / maxDistance, 0, 1)
++					table.insert(out, {
++						index = i,
++						bearing = bearing,
++						distance = d,
++						size = minSize + (maxSize - minSize) * closeness,
++						brightness = minBrightness + (1 - minBrightness) * closeness,
++						look = g.look,
++					})
++				end
++			end
++		end
++	end
++	table.sort(out, function(a: Indicator, b: Indicator): boolean
++		if a.distance ~= b.distance then
++			return a.distance < b.distance
++		end
++		return a.index < b.index
++	end)
++	return out
++end
++
++-- The radar's content around the player, turned so that "up" is where the camera looks.
++function Awareness.radar(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, radius: number?): Radar
++	local r = radius or Awareness.RADAR_RADIUS
++	local cx, cy = math.floor(pose.x + 0.5), math.floor(pose.y + 0.5)
++	local sin, cos = math.sin(pose.yaw), math.cos(pose.yaw)
++	local function turn(dx: number, dy: number): (number, number)
++		-- x grows to the right, y downward (backwards)
++		local right = dx * cos - dy * sin
++		local back = dx * sin + dy * cos
++		return right, back
++	end
++	local walls: { { x: number, y: number } } = {}
++	for dy = -r, r do
++		local y = cy + dy
++		if y >= 0 and y < m.height then -- nothing is drawn above the top or below the bottom of the maze
++			for dx = -r, r do
++				local x = cx + dx
++				if x < 0 or x >= m.width then
++					x = if rowWraps(m, y) then x % m.width else -1 -- off the sides: only a tunnel row continues
++				end
++				if x >= 0 and dx * dx + dy * dy <= r * r and Maze.kind(m, { x = x, y = y }) == "wall" then
++					-- the wall is on its tile, the player is not at the centre of theirs: the radar moves with the player
++					local rx, ry = turn(dx - frac(pose.x), dy - frac(pose.y))
++					table.insert(walls, { x = rx, y = ry })
++				end
++			end
++		end
++	end
++	local blips: { Blip } = {}
++	for _, g in ghosts do
++		local dx, dy = offsetShort(m, pose, g.x, g.y)
++		if dx * dx + dy * dy <= (r + 0.5) * (r + 0.5) then
++			local x, y = turn(dx, dy)
++			table.insert(blips, { x = x, y = y, look = g.look })
++		end
++	end
++	return { radius = r, walls = walls, blips = blips }
++end
++
++return Awareness
+diff --git a/src/shared/Logic/Ghosts/Classic.luau b/src/shared/Logic/Ghosts/Classic.luau
+new file mode 100644
+index 0000000..8d230ab
+--- /dev/null
++++ b/src/shared/Logic/Ghosts/Classic.luau
+@@ -0,0 +1,42 @@
++--!strict
++-- The classic layout's ghost data: where each ghost starts, the corner it scatters to and the junctions
++-- where it may not turn up. Keyed by layout id; a maze without an entry has no ghosts.
++local Maze = require("../Maze")
++
++export type Name = "blinky" | "pinky" | "inky" | "clyde"
++export type Start = { tile: Maze.Tile, heading: Maze.Heading, inHouse: boolean }
++export type Data = {
++	starts: { [Name]: Start },
++	corners: { [Name]: Maze.Tile }, -- scatter targets; they lie outside the maze
++	noUp: { Maze.Tile },
++	exitX: number, -- the column the ghosts use to pass the door
++	doorY: number, -- the door row; the tile above it is where eyes aim
++}
++
++local DATA: { [string]: Data } = {
++	classic = {
++		starts = {
++			blinky = { tile = { x = 14, y = 11 }, heading = "W", inHouse = false },
++			pinky = { tile = { x = 13, y = 14 }, heading = "S", inHouse = true },
++			inky = { tile = { x = 12, y = 14 }, heading = "N", inHouse = true },
++			clyde = { tile = { x = 15, y = 14 }, heading = "N", inHouse = true },
++		},
++		corners = {
++			blinky = { x = 25, y = -3 },
++			pinky = { x = 2, y = -3 },
++			inky = { x = 27, y = 31 },
++			clyde = { x = 0, y = 31 },
++		},
++		noUp = { { x = 12, y = 11 }, { x = 15, y = 11 }, { x = 12, y = 23 }, { x = 15, y = 23 } },
++		exitX = 13,
++		doorY = 12,
++	},
++}
++
++local Classic = {}
++
++function Classic.of(m: Maze.Maze): Data?
++	return DATA[m.id]
++end
++
++return Classic
+diff --git a/src/shared/Logic/Ghosts/Rng.luau b/src/shared/Logic/Ghosts/Rng.luau
+new file mode 100644
+index 0000000..71961d0
+--- /dev/null
++++ b/src/shared/Logic/Ghosts/Rng.luau
+@@ -0,0 +1,20 @@
++--!strict
++-- A small deterministic generator (Park-Miller, multiplier 16807): the state is one number, so a Ghosts set
++-- stays plain data, and every product stays below 2^53 on every platform.
++local Rng = {}
++
++local MODULUS = 2147483647
++
++-- a state in 1..MODULUS-1 from any whole seed
++function Rng.seed(seed: number): number
++	local s = math.floor(seed) % (MODULUS - 1)
++	return s + 1
++end
++
++-- The next state and a whole number in 1..n.
++function Rng.next(state: number, n: number): (number, number)
++	local nextState = (state * 16807) % MODULUS
++	return nextState, nextState % n + 1
++end
++
++return Rng
+diff --git a/src/shared/Logic/Ghosts/init.luau b/src/shared/Logic/Ghosts/init.luau
+new file mode 100644
+index 0000000..adc2dac
+--- /dev/null
++++ b/src/shared/Logic/Ghosts/init.luau
+@@ -0,0 +1,632 @@
++--!strict
++-- Ghosts: the four classic ghosts of one maze instance as pure state. Navigation (the exit that minimises
++-- the straight-line distance to a target, never reversing on its own), the scatter/chase schedule and
++-- frightened mode, the ghost house and its release rules, and the contacts with the player.
++-- Time and randomness come in as parameters; a set holds its own seeded generator state.
++local Classic = require("@self/Classic")
++local Levels = require("./Levels")
++local Maze = require("./Maze")
++local Movement = require("./Movement")
++local Rng = require("@self/Rng")
++
++export type Name = Classic.Name
++export type Mode = "scatter" | "chase"
++export type Status = "house" | "leaving" | "active" | "eyes"
++export type Look = "normal" | "frightened" | "blinking" | "eyes"
++
++export type Walker = { tile: Maze.Tile, heading: Maze.Heading, progress: number }
++export type Ghost = {
++	name: Name,
++	tile: Maze.Tile,
++	heading: Maze.Heading,
++	progress: number, -- integer units 0..UNITS-1 from tile's centre toward its neighbour ahead
++	status: Status,
++	frightened: boolean, -- blue: set by a power pellet, cleared when eaten or when the power ends
++	reverse: boolean, -- turn back at the next centre
++}
++export type House = {
++	personal: { pinky: number, inky: number, clyde: number }, -- pellets eaten while each was next in line
++	global: number?, -- after a death: pellets eaten since, instead of the personal counters
++	idle: number, -- ticks since the last pellet
++}
++export type Set = {
++	maze: Maze.Maze,
++	level: number,
++	rng: number,
++	mode: Mode,
++	phase: number, -- index into the level's schedule; past its end it is chase for good
++	phaseTicks: number, -- ticks spent in this phase (the clock stops while frightened)
++	frightened: number, -- ticks of power left
++	chain: number, -- ghosts eaten in this power period
++	ghosts: { Ghost }, -- always in NAMES order
++	house: House,
++	tuning: number,
++	open: boolean, -- ghosts start in the house (false: all four start active, for tests)
++}
++export type Options = { start: ("house" | "active")?, level: number?, tuning: number? }
++export type Chase = { player: Maze.Tile, heading: Maze.Heading, blinky: Maze.Tile, self: Maze.Tile }
++export type Input = {
++	player: Maze.Tile, -- the tile the player occupies
++	heading: Maze.Heading,
++	level: number,
++	baseSpeed: number, -- level 1's player speed in units per tick
++	tickRate: number,
++}
++export type Event = { kind: string, ghost: Name?, mode: Mode?, ticks: number?, x: number?, y: number? }
++export type Contact = { name: Name, kind: "kill" | "eat" }
++export type Opts = { noUp: boolean?, house: boolean? }
++
++local UNITS = Movement.UNITS
++local NAMES: { Name } = { "blinky", "pinky", "inky", "clyde" }
++local ORDER: { Maze.Heading } = { "N", "W", "S", "E" } -- ties go to up, left, down, right
++local FLASH_TICKS = 14 -- one flash of the blinking: 7 ticks blue, 7 white
++local EYES_SCORE = { 200, 400, 800, 1600 }
++
++local Ghosts = {}
++Ghosts.NAMES = table.freeze(NAMES)
++Ghosts.FLASH_TICKS = FLASH_TICKS
++
++local function fail(problem: string): never
++	error(`ghosts: {problem}`, 0)
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- navigation (f0190)
++
++function Ghosts.noUpTiles(m: Maze.Maze): { Maze.Tile }
++	local data = Classic.of(m)
++	return if data then data.noUp else {}
++end
++
++local function isNoUp(m: Maze.Maze, tile: Maze.Tile): boolean
++	for _, t in Ghosts.noUpTiles(m) do
++		if t.x == tile.x and t.y == tile.y then
++			return true
++		end
++	end
++	return false
++end
++
++-- Where a ghost scatters to: a corner outside the maze. Nil for a maze without ghosts.
++function Ghosts.scatterTile(m: Maze.Maze, name: Name): Maze.Tile
++	local data = Classic.of(m)
++	if data == nil then
++		fail(`maze '{m.id}' has no ghost data`)
++	end
++	return (data :: Classic.Data).corners[name]
++end
++
++local function ahead(tile: Maze.Tile, h: Maze.Heading, n: number): Maze.Tile
++	local dx, dy = Maze.delta(h)
++	return { x = tile.x + dx * n, y = tile.y + dy * n }
++end
++
++-- The tile a ghost aims at while chasing: Blinky the player's tile; Pinky 4 tiles ahead of the player;
++-- Inky twice the vector from Blinky to the tile 2 ahead of the player; Clyde the player's tile when more
++-- than 8 tiles away, else his scatter corner.
++function Ghosts.chaseTarget(m: Maze.Maze, name: Name, c: Chase): Maze.Tile
++	if name == "blinky" then
++		return { x = c.player.x, y = c.player.y }
++	elseif name == "pinky" then
++		return ahead(c.player, c.heading, 4)
++	elseif name == "inky" then
++		local pivot = ahead(c.player, c.heading, 2)
++		return { x = pivot.x + (pivot.x - c.blinky.x), y = pivot.y + (pivot.y - c.blinky.y) }
++	end
++	local dx, dy = c.player.x - c.self.x, c.player.y - c.self.y
++	if dx * dx + dy * dy > 64 then
++		return { x = c.player.x, y = c.player.y }
++	end
++	return Ghosts.scatterTile(m, "clyde")
++end
++
++local function allowed(m: Maze.Maze, tile: Maze.Tile, opts: Opts): boolean
++	if not Maze.passable(m, tile, "ghost") then
++		return false
++	end
++	if opts.house then
++		return true
++	end
++	local kind = Maze.kind(m, tile)
++	return kind ~= "door" and kind ~= "house"
++end
++
++-- The headings a ghost on `tile`, arrived heading `heading`, may leave by, in tie-break order. It never
++-- turns back unless nothing else is open; it may not go up on a no-up tile; the door and the house are
++-- closed unless `opts.house`.
++local function exitsOf(m: Maze.Maze, tile: Maze.Tile, heading: Maze.Heading, opts: Opts): { Maze.Heading }
++	local out: { Maze.Heading } = {}
++	local back: Maze.Heading = Maze.opposite(heading)
++	for _, h: Maze.Heading in ORDER do
++		if h ~= back and allowed(m, (Maze.neighbor(m, tile, h)), opts) then
++			if not (h == "N" and opts.noUp and isNoUp(m, tile)) then
++				table.insert(out, h)
++			end
++		end
++	end
++	if #out == 0 and allowed(m, (Maze.neighbor(m, tile, back)), opts) then
++		table.insert(out, back)
++	end
++	return out
++end
++
++-- The exit that brings the ghost closest, in a straight line, to `target`.
++function Ghosts.pickExit(
++	m: Maze.Maze,
++	tile: Maze.Tile,
++	heading: Maze.Heading,
++	target: Maze.Tile,
++	opts: Opts?
++): Maze.Heading
++	local o: Opts = opts or {}
++	local best: Maze.Heading? = nil
++	local bestDistance = math.huge
++	for _, h: Maze.Heading in exitsOf(m, tile, heading, o) do
++		local dx, dy = Maze.delta(h)
++		local nx, ny = tile.x + dx - target.x, tile.y + dy - target.y
++		local d = nx * nx + ny * ny
++		if d < bestDistance then
++			best, bestDistance = h, d
++		end
++	end
++	return best or heading
++end
++
++function Ghosts.walker(tile: Maze.Tile, heading: Maze.Heading): Walker
++	return { tile = { x = tile.x, y = tile.y }, heading = heading, progress = 0 }
++end
++
++function Ghosts.occupied(w: Walker): Maze.Tile
++	if w.progress * 2 < UNITS then
++		return { x = w.tile.x, y = w.tile.y }
++	end
++	local dx, dy = Maze.delta(w.heading)
++	return { x = w.tile.x + dx, y = w.tile.y + dy }
++end
++
++local function occupiedWrapped(m: Maze.Maze, w: Walker): Maze.Tile
++	if w.progress * 2 < UNITS then
++		return { x = w.tile.x, y = w.tile.y }
++	end
++	return (Maze.neighbor(m, w.tile, w.heading))
++end
++
++function Ghosts.position(w: Walker): (number, number)
++	local dx, dy = Maze.delta(w.heading)
++	local f = w.progress / UNITS
++	return w.tile.x + dx * f, w.tile.y + dy * f
++end
++
++-- Advances `speed` units along the rails. `decide` is asked for the heading each time the walker is on a
++-- tile centre, with the heading it arrived by. Returns Entered (tile occupied changes) and Wrapped events.
++function Ghosts.walk(
++	m: Maze.Maze,
++	w: Walker,
++	speed: number,
++	decide: (tile: Maze.Tile, heading: Maze.Heading) -> Maze.Heading
++): { Event }
++	local before = occupiedWrapped(m, w)
++	local wraps = 0
++	local remaining = speed
++	while remaining > 0 do
++		if w.progress == 0 then
++			w.heading = decide(w.tile, w.heading)
++		end
++		local d = math.min(remaining, UNITS - w.progress)
++		w.progress += d
++		remaining -= d
++		if w.progress == UNITS then
++			local n, wrapped = Maze.neighbor(m, w.tile, w.heading)
++			w.tile = n
++			w.progress = 0
++			if wrapped then
++				wraps += 1
++			end
++		end
++	end
++	local events: { Event } = {}
++	for _ = 1, wraps do
++		table.insert(events, { kind = "Wrapped" })
++	end
++	local after = occupiedWrapped(m, w)
++	if after.x ~= before.x or after.y ~= before.y then
++		table.insert(events, { kind = "Entered", x = after.x, y = after.y })
++	end
++	return events
++end
++
++-- Is the tile in a side tunnel, where ghosts slow down: the six tiles at each edge of a row that wraps.
++function Ghosts.tunnel(m: Maze.Maze, tile: Maze.Tile): boolean
++	if
++		not Maze.passable(m, { x = 0, y = tile.y }, "ghost")
++		and not Maze.passable(m, { x = m.width - 1, y = tile.y }, "ghost")
++	then
++		return false
++	end
++	return tile.x <= 5 or tile.x >= m.width - 6
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- the set
++
++local function newGhost(name: Name, data: Classic.Data, start: "house" | "active"): Ghost
++	local s = data.starts[name]
++	local status: Status = if s.inHouse and start == "house" then "house" else "active"
++	local tile = { x = s.tile.x, y = s.tile.y }
++	if status == "active" and s.inHouse then
++		-- tests only: park the house ghosts on the open tile above the door
++		tile = {
++			x = data.exitX + (if name == "pinky" then -1 elseif name == "inky" then 0 else 1),
++			y = data.doorY - 1,
++		}
++	end
++	return {
++		name = name,
++		tile = tile,
++		heading = s.heading,
++		progress = 0,
++		status = status,
++		frightened = false,
++		reverse = false,
++	}
++end
++
++local function place(set: Set)
++	local data = Classic.of(set.maze) :: Classic.Data
++	set.ghosts = {}
++	for _, name: Name in NAMES do
++		table.insert(set.ghosts, newGhost(name, data, if set.open then "house" else "active"))
++	end
++end
++
++function Ghosts.new(m: Maze.Maze, seed: number, opts: Options?): Set
++	if Classic.of(m) == nil then
++		fail(`maze '{m.id}' has no ghost data`)
++	end
++	local o: Options = opts or {}
++	local set: Set = {
++		maze = m,
++		level = o.level or 1,
++		rng = Rng.seed(seed),
++		mode = "scatter",
++		phase = 1,
++		phaseTicks = 0,
++		frightened = 0,
++		chain = 0,
++		ghosts = {},
++		house = { personal = { pinky = 0, inky = 0, clyde = 0 }, global = nil, idle = 0 },
++		tuning = o.tuning or Levels.GHOST_TUNING,
++		open = (o.start or "house") == "house",
++	}
++	place(set)
++	return set
++end
++
++-- Does the maze have ghosts at all?
++function Ghosts.available(m: Maze.Maze): boolean
++	return Classic.of(m) ~= nil
++end
++
++function Ghosts.ghost(set: Set, name: Name): Ghost
++	for _, g in set.ghosts do
++		if g.name == name then
++			return g
++		end
++	end
++	error(`ghosts: unknown ghost {name}`, 0)
++end
++
++-- The tiles the ghosts occupy now, in NAMES order.
++function Ghosts.occupiedTiles(set: Set): { Maze.Tile }
++	local out: { Maze.Tile } = {}
++	for _, g in set.ghosts do
++		table.insert(out, (occupiedWrapped(set.maze, g)))
++	end
++	return out
++end
++
++-- the look: how the ghost is drawn
++function Ghosts.look(set: Set, g: Ghost): Look
++	if g.status == "eyes" then
++		return "eyes"
++	end
++	if not g.frightened then
++		return "normal"
++	end
++	if set.frightened > 0 and set.frightened <= Levels.row(set.level).flashes * FLASH_TICKS then
++		return "blinking"
++	end
++	return "frightened"
++end
++
++-- While blinking: is this the white half of the flash?
++function Ghosts.flash(set: Set): boolean
++	if set.frightened <= 0 or set.frightened > Levels.row(set.level).flashes * FLASH_TICKS then
++		return false
++	end
++	return math.floor((set.frightened - 1) / (FLASH_TICKS / 2)) % 2 == 0
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- modes (f0200)
++
++local function reverseAll(set: Set)
++	for _, g in set.ghosts do
++		if g.status == "active" then
++			g.reverse = true
++		end
++	end
++end
++
++-- A power pellet was eaten: `ticks` of fright (0 on levels without any: the ghosts still turn back).
++function Ghosts.power(set: Set, ticks: number)
++	set.frightened = ticks
++	set.chain = 0
++	for _, g in set.ghosts do
++		if g.status ~= "eyes" then
++			g.frightened = ticks > 0
++		end
++	end
++	reverseAll(set)
++end
++
++local function speedOf(set: Set, g: Ghost, input: Input): number
++	if g.status == "eyes" then
++		return Levels.ghostSpeed(input.baseSpeed, input.level, "eyes", set.tuning)
++	end
++	if Ghosts.tunnel(set.maze, Ghosts.occupied(g)) then
++		return Levels.ghostSpeed(input.baseSpeed, input.level, "tunnel", set.tuning)
++	end
++	local kind: Levels.GhostSpeed = if g.frightened then "frightened" else "normal"
++	return Levels.ghostSpeed(input.baseSpeed, input.level, kind, set.tuning)
++end
++
++local function tickMode(set: Set, input: Input, out: { Event })
++	if set.frightened > 0 then
++		set.frightened -= 1
++		if set.frightened == 0 then
++			for _, g in set.ghosts do
++				g.frightened = false
++			end
++			table.insert(out, { kind = "FrightenedEnded" })
++		end
++		return -- the schedule clock stops while the ghosts are blue
++	end
++	local schedule = Levels.schedule(input.level, input.tickRate)
++	local length = schedule[set.phase]
++	set.phaseTicks += 1
++	if length ~= nil and set.phaseTicks >= length then
++		set.phase += 1
++		set.phaseTicks = 0
++		set.mode = if set.mode == "scatter" then "chase" else "scatter"
++		reverseAll(set)
++		table.insert(out, { kind = "ModeChanged", mode = set.mode })
++	end
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- the house (f0210)
++
++local QUEUE: { Name } = { "pinky", "inky", "clyde" }
++local GLOBAL_LIMITS: { [string]: number } = { pinky = 7, inky = 17, clyde = 32 }
++
++local function waiting(set: Set): Name?
++	for _, name: Name in QUEUE do
++		if Ghosts.ghost(set, name).status == "house" then
++			return name
++		end
++	end
++	return nil
++end
++
++local function release(set: Set, name: Name, out: { Event })
++	local g = Ghosts.ghost(set, name)
++	g.status = "leaving"
++	g.reverse = false
++	set.house.idle = 0
++	table.insert(out, { kind = "GhostReleased", ghost = name })
++end
++
++-- Personal counters: the ghost next in line leaves when its counter reaches the level's limit.
++local function releaseByCounters(set: Set, out: { Event })
++	while set.house.global == nil do
++		local name = waiting(set)
++		if name == nil then
++			return
++		end
++		local limit = (Levels.row(set.level).dotLimits :: any)[name]
++		local personal: { [string]: number } = set.house.personal :: any
++		if personal[name] < limit then
++			return
++		end
++		release(set, name :: Name, out)
++	end
++end
++
++-- The player ate a pellet.
++function Ghosts.pelletEaten(set: Set): { Event }
++	local out: { Event } = {}
++	local house = set.house
++	house.idle = 0
++	if house.global ~= nil then
++		local count = (house.global :: number) + 1
++		house.global = count
++		for _, name: Name in QUEUE do
++			if count == GLOBAL_LIMITS[name] and Ghosts.ghost(set, name).status == "house" then
++				release(set, name :: Name, out)
++			end
++		end
++		if count >= GLOBAL_LIMITS.clyde and Ghosts.ghost(set, "clyde").status ~= "house" then
++			house.global = nil -- the personal counters take over again
++		end
++	else
++		local name = waiting(set)
++		if name ~= nil then
++			local personal: { [string]: number } = house.personal :: any
++			personal[name] += 1
++		end
++		releaseByCounters(set, out)
++	end
++	return out
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- stepping
++
++local function randomExit(set: Set, tile: Maze.Tile, heading: Maze.Heading): Maze.Heading
++	local exits = exitsOf(set.maze, tile, heading, {})
++	if #exits == 0 then
++		return heading
++	end
++	local state, pick = Rng.next(set.rng, #exits)
++	set.rng = state
++	return exits[pick]
++end
++
++local function targetOf(set: Set, g: Ghost, input: Input): Maze.Tile
++	if set.mode == "scatter" then
++		return Ghosts.scatterTile(set.maze, g.name)
++	end
++	local blinky = Ghosts.ghost(set, "blinky")
++	return Ghosts.chaseTarget(set.maze, g.name, {
++		player = input.player,
++		heading = input.heading,
++		blinky = Ghosts.occupied(blinky),
++		self = Ghosts.occupied(g),
++	})
++end
++
++local function decider(
++	set: Set,
++	g: Ghost,
++	input: Input,
++	out: { Event }
++): (Maze.Tile, Maze.Heading) -> Maze.Heading
++	local data = Classic.of(set.maze) :: Classic.Data
++	return function(tile: Maze.Tile, heading: Maze.Heading): Maze.Heading
++		if g.status == "leaving" then
++			if tile.x ~= data.exitX then
++				return if tile.x < data.exitX then "E" else "W"
++			end
++			if tile.y > data.doorY - 1 then
++				return "N"
++			end
++			-- out above the door: hunt from here
++			g.status = "active"
++			table.insert(out, { kind = "GhostLeft", ghost = g.name })
++			return "W"
++		elseif g.status == "eyes" then
++			local home = { x = data.exitX, y = data.doorY - 1 }
++			local kind = Maze.kind(set.maze, tile)
++			if kind == "door" or kind == "house" then
++				if tile.y >= data.doorY + 2 then
++					g.status = "leaving"
++					g.frightened = false
++					table.insert(out, { kind = "GhostRevived", ghost = g.name })
++					return "N"
++				end
++				return "S"
++			end
++			if tile.x == home.x and tile.y == home.y then
++				return "S"
++			end
++			return Ghosts.pickExit(set.maze, tile, heading, home, { house = true })
++		end
++		-- active
++		if g.reverse then
++			g.reverse = false
++			return Maze.opposite(heading)
++		end
++		if g.frightened then
++			return randomExit(set, tile, heading)
++		end
++		return Ghosts.pickExit(set.maze, tile, heading, targetOf(set, g, input), { noUp = true })
++	end
++end
++
++-- One tick. Ghosts in the house wait; the rest walk.
++function Ghosts.step(set: Set, input: Input): { Event }
++	local out: { Event } = {}
++	set.level = input.level
++	tickMode(set, input, out)
++	-- idle release and zero-limit release
++	local house = set.house
++	house.idle += 1
++	releaseByCounters(set, out)
++	if house.idle >= math.floor(Levels.row(input.level).idleSeconds * input.tickRate) then
++		local name = waiting(set)
++		if name ~= nil then
++			release(set, name :: Name, out)
++		end
++		house.idle = 0
++	end
++	for _, g in set.ghosts do
++		if g.status ~= "house" then
++			local events = Ghosts.walk(set.maze, g, speedOf(set, g, input), decider(set, g, input, out))
++			for _, e in events do
++				e.ghost = g.name
++				table.insert(out, e)
++			end
++		end
++	end
++	return out
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- contacts (f0220)
++
++-- Where the player and the ghosts met this tick: sharing a tile, or swapping tiles within the tick.
++-- `prev` holds the tiles the ghosts occupied before the step (Ghosts.occupiedTiles).
++function Ghosts.contacts(
++	set: Set,
++	prev: { Maze.Tile },
++	playerPrev: Maze.Tile,
++	playerNow: Maze.Tile
++): { Contact }
++	local out: { Contact } = {}
++	local now = Ghosts.occupiedTiles(set)
++	for i, g in set.ghosts do
++		if g.status == "active" then
++			local same = now[i].x == playerNow.x and now[i].y == playerNow.y
++			local swapped = now[i].x == playerPrev.x
++				and now[i].y == playerPrev.y
++				and prev[i].x == playerNow.x
++				and prev[i].y == playerNow.y
++			if same or swapped then
++				table.insert(out, { name = g.name, kind = if g.frightened then "eat" else "kill" })
++			end
++		end
++	end
++	return out
++end
++
++-- The player eats a frightened ghost: it becomes eyes and the chain pays 200, 400, 800, 1600.
++function Ghosts.eat(set: Set, name: Name): number
++	local g = Ghosts.ghost(set, name)
++	g.status = "eyes"
++	g.frightened = false
++	g.reverse = false -- a pending turn-back dies with the ghost's old life
++	set.chain += 1
++	return EYES_SCORE[math.min(set.chain, #EYES_SCORE)]
++end
++
++-- ---------------------------------------------------------------------------------------------
++-- resets
++
++-- Back to the starts. "respawn" after a death keeps the counters and starts the global counter;
++-- "level" and "run" begin afresh (a run also starts at level 1).
++function Ghosts.reset(set: Set, reason: "respawn" | "level" | "run", level: number)
++	set.level = level
++	set.mode, set.phase, set.phaseTicks = "scatter", 1, 0
++	set.frightened, set.chain = 0, 0
++	set.house.idle = 0
++	if reason == "respawn" then
++		set.house.global = 0
++	else
++		set.house.personal = { pinky = 0, inky = 0, clyde = 0 }
++		set.house.global = nil
++	end
++	place(set)
++end
++
++return Ghosts
+diff --git a/src/shared/Logic/Levels/init.luau b/src/shared/Logic/Levels/init.luau
+index c0c7292..e785f91 100644
+--- a/src/shared/Logic/Levels/init.luau
++++ b/src/shared/Logic/Levels/init.luau
+@@ -2,23 +2,61 @@
+ -- Levels: the one table of per-level parameters, the classic values from Pittman's Pac-Man Dossier
+ -- (Table A.1). Speeds are factors of level 1's speed. Later rafts add ghost columns here.
+ 
++export type Ghost = {
++	speedFactor: number, -- a ghost's speed relative to level 1's player speed
++	tunnelFactor: number, -- in the side tunnels
++	frightFactor: number, -- while frightened
++}
++export type Release = { pinky: number, inky: number, clyde: number }
+ export type Row = {
+ 	speedFactor: number, -- player speed relative to level 1
+ 	frightSpeedFactor: number, -- player speed while a power pellet is active, relative to level 1
+ 	frightenedSeconds: number,
+ 	flashes: number,
++	ghost: Ghost, -- R0100
++	dotLimits: Release, -- pellets the player must eat before each ghost leaves the house (personal counters)
++	idleSeconds: number, -- seconds without a pellet before the house releases the next ghost
++	schedule: { number }, -- seconds of scatter, chase, scatter, ...; after the last one it is chase for good
+ }
+ 
++-- Pittman's Table A.1 gives the ghost columns as a share of the arcade's maximum speed; level 1's
++-- player runs at 80% of it, so each share is divided by 80.
++local GHOST_L1: Ghost =
++	table.freeze({ speedFactor = 0.75 / 0.8, tunnelFactor = 0.4 / 0.8, frightFactor = 0.5 / 0.8 })
++local GHOST_L2: Ghost =
++	table.freeze({ speedFactor = 0.85 / 0.8, tunnelFactor = 0.45 / 0.8, frightFactor = 0.55 / 0.8 })
++local GHOST_L5: Ghost =
++	table.freeze({ speedFactor = 0.95 / 0.8, tunnelFactor = 0.5 / 0.8, frightFactor = 0.6 / 0.8 })
++-- Table A.2: scatter and chase seconds; the final chase never ends
++local SCHEDULE_L1: { number } = table.freeze({ 7, 20, 7, 20, 5, 20, 5 })
++local SCHEDULE_L2: { number } = table.freeze({ 7, 20, 7, 20, 5, 1033, 1 / 60 })
++local SCHEDULE_L5: { number } = table.freeze({ 5, 20, 5, 20, 5, 1037, 1 / 60 })
++-- the personal dot counters and the idle timer
++local LIMITS_L1: Release = table.freeze({ pinky = 0, inky = 30, clyde = 60 })
++local LIMITS_L2: Release = table.freeze({ pinky = 0, inky = 0, clyde = 50 })
++local LIMITS_L3: Release = table.freeze({ pinky = 0, inky = 0, clyde = 0 })
++
+ local function row(speed: number, fright: number, seconds: number, flashes: number): Row
+ 	return table.freeze({
+ 		speedFactor = speed,
+ 		frightSpeedFactor = fright,
+ 		frightenedSeconds = seconds,
+ 		flashes = flashes,
++		ghost = GHOST_L1,
++		dotLimits = LIMITS_L1,
++		idleSeconds = 4,
++		schedule = SCHEDULE_L1,
+ 	})
+ end
+ 
+-local ROWS: { Row } = {
++-- the same row with the ghost columns of its level
++local function withGhosts(r: Row, ghost: Ghost, limits: Release, idle: number, schedule: { number }): Row
++	local copy = table.clone(r)
++	copy.ghost, copy.dotLimits, copy.idleSeconds, copy.schedule = ghost, limits, idle, schedule
++	return table.freeze(copy)
++end
++
++local BASE: { Row } = {
+ 	row(1, 1.125, 6, 5),
+ 	row(1.125, 1.1875, 5, 5),
+ 	row(1.125, 1.1875, 4, 5),
+@@ -41,6 +79,18 @@ local ROWS: { Row } = {
+ 	row(1.25, 1.25, 0, 0),
+ 	row(1.125, 1.125, 0, 0),
+ }
++local ROWS: { Row } = {}
++for level, r in BASE do
++	if level == 1 then
++		ROWS[level] = r
++	elseif level == 2 then
++		ROWS[level] = withGhosts(r, GHOST_L2, LIMITS_L2, 4, SCHEDULE_L2)
++	elseif level <= 4 then
++		ROWS[level] = withGhosts(r, GHOST_L2, LIMITS_L3, 4, SCHEDULE_L2)
++	else
++		ROWS[level] = withGhosts(r, GHOST_L5, LIMITS_L3, 3, SCHEDULE_L5)
++	end
++end
+ 
+ local Levels = {}
+ Levels.ROWS = table.freeze(ROWS)
+@@ -69,4 +119,34 @@ function Levels.frightenedTicks(level: number, tickRate: number): number
+ 	return round(Levels.row(level).frightenedSeconds * tickRate)
+ end
+ 
++-- The user's "slower ghosts" factor (R0100): 1 is the classic tables. It scales the speeds of hunting and
++-- frightened ghosts, never the eyes returning to the house.
++Levels.GHOST_TUNING = 1
++Levels.EYES_FACTOR = 2 -- eyes run at this many times level 1's player speed
++
++export type GhostSpeed = "normal" | "tunnel" | "frightened" | "eyes"
++
++-- Units per tick for a ghost on `level`; `tuning` defaults to Levels.GHOST_TUNING. At least 1.
++function Levels.ghostSpeed(baseSpeed: number, level: number, kind: GhostSpeed, tuning: number?): number
++	local g = Levels.row(level).ghost
++	local k = tuning or Levels.GHOST_TUNING
++	if kind == "eyes" then
++		return round(baseSpeed * Levels.EYES_FACTOR)
++	end
++	local factor = if kind == "normal"
++		then g.speedFactor
++		elseif kind == "tunnel" then g.tunnelFactor
++		else g.frightFactor
++	return math.max(1, round(baseSpeed * factor * k))
++end
++
++-- Phase lengths in ticks (scatter, chase, scatter, ...); the chase after the last one lasts forever.
++function Levels.schedule(level: number, tickRate: number): { number }
++	local out: { number } = {}
++	for _, seconds in Levels.row(level).schedule do
++		table.insert(out, math.max(1, round(seconds * tickRate)))
++	end
++	return out
++end
++
+ return Levels
+diff --git a/src/shared/Logic/Session/init.luau b/src/shared/Logic/Session/init.luau
+index 3d682ec..1694788 100644
+--- a/src/shared/Logic/Session/init.luau
++++ b/src/shared/Logic/Session/init.luau
+@@ -5,6 +5,7 @@
+ -- Tick contract: step k takes time k to k + 1. Intents submitted before step k act in step k, and
+ -- the events it returns are visible at time k + 1, which is the new `tick`.
+ local Game = require("./Game")
++local Ghosts = require("./Ghosts")
+ local Levels = require("./Levels")
+ local Maze = require("./Maze")
+ local Movement = require("./Movement")
+@@ -16,6 +17,7 @@ export type Config = {
+ 	maxIntentsPerTick: number,
+ 	play: Game.Config?, -- the run's rules; nil means no pauses (a run in play from tick 0)
+ 	eatSlowdown: boolean?, -- eating stops the player for a moment, as in the arcade
++	ghosts: boolean?, -- the four ghosts hunt the player (mazes with ghost data only)
+ }
+ export type PlayerSnapshot = {
+ 	x: number,
+@@ -24,7 +26,23 @@ export type PlayerSnapshot = {
+ 	moving: boolean,
+ 	jumpTick: number, -- tick of the latest position discontinuity, -1 if none
+ }
+-export type Snapshot = { v: number, tick: number, maze: string, player: PlayerSnapshot }
++export type Look = Ghosts.Look
++export type GhostSnapshot = {
++	name: Ghosts.Name,
++	x: number,
++	y: number, -- continuous tile coordinates
++	heading: Maze.Heading,
++	look: Look,
++	flash: boolean, -- the white half of a blinking flash
++	jumpTick: number, -- tick of the latest position discontinuity, -1 if none
++}
++export type Snapshot = {
++	v: number,
++	tick: number,
++	maze: string,
++	player: PlayerSnapshot,
++	ghosts: { GhostSnapshot }?, -- present when the session has ghosts
++}
+ export type PlayFrame = {
+ 	phase: Game.Phase,
+ 	level: number,
+@@ -33,7 +51,14 @@ export type PlayFrame = {
+ 	timer: number,
+ 	frightened: number,
+ }
+-export type Frame = { v: number, tick: number, maze: string, player: PlayerSnapshot, play: PlayFrame }
++export type Frame = {
++	v: number,
++	tick: number,
++	maze: string,
++	player: PlayerSnapshot,
++	play: PlayFrame,
++	ghosts: { GhostSnapshot }?,
++}
+ export type Event = {
+ 	kind: string,
+ 	player: PlayerId,
+@@ -46,6 +71,7 @@ export type Event = {
+ 	ticks: number?,
+ 	reason: string?,
+ 	item: string?,
++	ghost: Ghosts.Name?,
+ }
+ export type Clock = { rate: number, maxSteps: number, acc: number }
+ 
+@@ -56,6 +82,8 @@ type Member = {
+ 	play: Game.Game,
+ 	pellets: Pellets.Pellets,
+ 	stall: number, -- units of eating pause still owed
++	ghosts: Ghosts.Set?,
++	ghostJump: { [string]: number }, -- per ghost: tick of its latest position discontinuity
+ }
+ export type Session = {
+ 	tick: number, -- steps completed
+@@ -84,6 +112,7 @@ local GAME_CONFIG: Config = {
+ 	maxIntentsPerTick = 4,
+ 	play = Game.CLASSIC_CONFIG,
+ 	eatSlowdown = true,
++	ghosts = true,
+ }
+ Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
+ 
+@@ -126,6 +155,8 @@ function Session.join(s: Session, id: PlayerId)
+ 		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
+ 		pellets = Pellets.new(s.maze),
+ 		stall = 0,
++		ghosts = if s.config.ghosts and Ghosts.available(s.maze) then Ghosts.new(s.maze, s.seed) else nil,
++		ghostJump = {},
+ 	}
+ end
+ 
+@@ -178,6 +209,22 @@ local function tagged(id: PlayerId, e: Game.Event): Event
+ 	}
+ end
+ 
++-- Every ghost back at its start (and a camera cut for each): after a death, on a new level, on a new run.
++local function resetGhosts(member: Member, reason: string?, tick: number)
++	local set = member.ghosts
++	if set == nil then
++		return
++	end
++	local why: "respawn" | "level" | "run" = if reason == "respawn"
++		then "respawn"
++		elseif reason == "again" then "run"
++		else "level"
++	Ghosts.reset(set, why, member.play.level)
++	for _, name: Ghosts.Name in Ghosts.NAMES do
++		member.ghostJump[name] = tick
++	end
++end
++
+ -- The player entered a tile: eat what is on it, score it, owe the eating pause, and clear the level
+ -- when the last pellet goes. Appends to `out`.
+ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, speed: number, out: { Event })
+@@ -208,6 +255,80 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
+ 	end
+ end
+ 
++-- The ghosts take their step after the player, then meet the player. A pellet eaten this tick counts for the
++-- house first; a power pellet turns the ghosts blue after they have moved (so the clock matches the run's).
++local function stepGhosts(
++	s: Session,
++	id: PlayerId,
++	member: Member,
++	playerPrev: Maze.Tile,
++	ghostsPrev: { Maze.Tile },
++	from: number,
++	out: { Event }
++)
++	local set = member.ghosts :: Ghosts.Set
++	local power: number? = nil
++	for i = from + 1, #out do
++		local e = out[i]
++		if e.kind == "PelletEaten" then
++			for _, g in Ghosts.pelletEaten(set) do
++				local kind: string = g.kind
++				table.insert(out, { kind = kind, player = id, ghost = g.ghost })
++			end
++		elseif e.kind == "PowerStarted" then
++			power = e.ticks
++		end
++	end
++	local playerNow = Movement.occupied(s.maze, member.move)
++	local input: Ghosts.Input = {
++		player = playerNow,
++		heading = member.move.heading,
++		level = member.play.level,
++		baseSpeed = s.config.movement.speed,
++		tickRate = Session.TICK_RATE,
++	}
++	for _, g in Ghosts.step(set, input) do
++		local kind: string = g.kind
++		if kind == "Wrapped" and g.ghost then
++			member.ghostJump[g.ghost] = s.tick
++		elseif kind ~= "Entered" then
++			local event: Event = { kind = kind, player = id, ghost = g.ghost }
++			table.insert(out, event)
++		end
++	end
++	if power then
++		Ghosts.power(set, power)
++	end
++	-- the last pellet clearing the level this very tick wins over a ghost that arrives at the same time
++	if not Game.canMove(member.play) then
++		return
++	end
++	local kill = false
++	local eaten: { Ghosts.Name } = {}
++	for _, c in Ghosts.contacts(set, ghostsPrev, playerPrev, playerNow) do
++		if c.kind == "kill" then
++			kill = true
++			table.insert(out, { kind = "Caught", player = id, ghost = c.name })
++		else
++			table.insert(eaten, c.name)
++		end
++	end
++	if kill then
++		for _, e in Game.died(member.play) do
++			table.insert(out, tagged(id, e))
++		end
++		return
++	end
++	for _, name: Ghosts.Name in eaten do
++		local points = Ghosts.eat(set, name)
++		local event: Event = { kind = "GhostEaten", player = id, ghost = name, points = points }
++		table.insert(out, event)
++		for _, e in Game.addScore(member.play, points) do
++			table.insert(out, tagged(id, e))
++		end
++	end
++end
++
+ function Session.step(s: Session): { Event }
+ 	s.tick += 1
+ 	local out: { Event } = {}
+@@ -225,6 +346,7 @@ function Session.step(s: Session): { Event }
+ 				if e.reason ~= "respawn" then
+ 					Pellets.reset(member.pellets) -- a new level or a new run: every pellet is back
+ 				end
++				resetGhosts(member, e.reason, s.tick)
+ 			end
+ 		end
+ 		if not moving then
+@@ -236,6 +358,9 @@ function Session.step(s: Session): { Event }
+ 		member.stall -= owed
+ 		local config: Movement.Config =
+ 			{ speed = speed - owed, turnBufferTicks = s.config.movement.turnBufferTicks }
++		local before = #out
++		local playerPrev = Movement.occupied(s.maze, member.move)
++		local ghostsPrev = if member.ghosts then Ghosts.occupiedTiles(member.ghosts) else {}
+ 		for _, e in Movement.step(s.maze, member.move, queue, config) do
+ 			local event: Event = { kind = e.kind, player = id }
+ 			if e.kind == "Entered" or e.kind == "Stopped" then
+@@ -248,6 +373,9 @@ function Session.step(s: Session): { Event }
+ 				eat(s, id, member, { x = e.x, y = e.y }, speed, out)
+ 			end
+ 		end
++		if member.ghosts then
++			stepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)
++		end
+ 	end
+ 	return out
+ end
+@@ -281,10 +409,33 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
+ 	if ok then
+ 		teleport(s, member, s.tick + 1)
+ 		Pellets.reset(member.pellets)
++		resetGhosts(member, "again", s.tick + 1)
+ 	end
+ 	return out, ok
+ end
+ 
++local function ghostSnapshots(member: Member): { GhostSnapshot }?
++	local set = member.ghosts
++	if set == nil then
++		return nil
++	end
++	local out: { GhostSnapshot } = {}
++	local flash = Ghosts.flash(set)
++	for _, g in set.ghosts do
++		local x, y = Ghosts.position(g)
++		table.insert(out, {
++			name = g.name,
++			x = x,
++			y = y,
++			heading = g.heading,
++			look = Ghosts.look(set, g),
++			flash = flash and Ghosts.look(set, g) == "blinking",
++			jumpTick = member.ghostJump[g.name] or -1,
++		})
++	end
++	return out
++end
++
+ function Session.snapshot(s: Session, id: PlayerId): Snapshot
+ 	local member = memberOf(s, id)
+ 	local x, y = Movement.position(member.move)
+@@ -299,6 +450,7 @@ function Session.snapshot(s: Session, id: PlayerId): Snapshot
+ 			moving = member.move.moving,
+ 			jumpTick = member.jumpTick,
+ 		},
++		ghosts = ghostSnapshots(member),
+ 	}
+ end
+ 
+@@ -312,6 +464,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
+ 		tick = snap.tick,
+ 		maze = snap.maze,
+ 		player = snap.player,
++		ghosts = snap.ghosts,
+ 		play = {
+ 			phase = play.phase,
+ 			level = play.level,
+diff --git a/src/shared/Logic/View/init.luau b/src/shared/Logic/View/init.luau
+index b03a2c9..00ef600 100644
+--- a/src/shared/Logic/View/init.luau
++++ b/src/shared/Logic/View/init.luau
+@@ -108,6 +108,31 @@ function View.interpolate(prev: Session.Snapshot?, latest: Session.Snapshot, alp
+ 	return { x = from.x + (to.x - from.x) * a, y = from.y + (to.y - from.y) * a }
+ end
+ 
++export type GhostPose = { x: number, y: number, heading: Maze.Heading, look: Session.Look, flash: boolean }
++
++-- Where each ghost is drawn between the previous and the latest snapshot, in the latest snapshot's order.
++-- A ghost that jumped (a tunnel wrap or a reset) between the two is not blended across the jump.
++function View.interpolateGhosts(
++	prev: Session.Snapshot?,
++	latest: Session.Snapshot,
++	alpha: number
++): { GhostPose }
++	local out: { GhostPose } = {}
++	local a = if alpha ~= alpha then 1 else math.clamp(alpha, 0, 1)
++	local before: Session.Snapshot? = if prev and prev.tick < latest.tick then prev else nil
++	local ghosts: { Session.GhostSnapshot } = latest.ghosts or {}
++	for i, g in ghosts do
++		local x, y = g.x, g.y
++		local fromList: { Session.GhostSnapshot } = if before and before.ghosts then before.ghosts else {}
++		local from = fromList[i]
++		if before and from and from.name == g.name and g.jumpTick <= before.tick then
++			x, y = from.x + (g.x - from.x) * a, from.y + (g.y - from.y) * a
++		end
++		table.insert(out, { x = x, y = y, heading = g.heading, look = g.look, flash = g.flash })
++	end
++	return out
++end
++
+ function View.approachYaw(current: number, target: number, maxDelta: number): number
+ 	local diff = wrap(target - current)
+ 	if math.abs(diff) <= maxDelta then
+diff --git a/tests/unit/Awareness/awareness.spec.luau b/tests/unit/Awareness/awareness.spec.luau
+new file mode 100644
+index 0000000..4648a5e
+--- /dev/null
++++ b/tests/unit/Awareness/awareness.spec.luau
+@@ -0,0 +1,9 @@
++--!strict
++local Awareness = require("@logic/Awareness")
++local t = require("@tests/lib/t")
++
++return t.spec("Awareness basics", function(it)
++	it("a point straight ahead has bearing 0", function()
++		t.expect(Awareness.bearing({ x = 5, y = 5, yaw = 0 }, 5, 3)).toBeNear(0, 1e-9)
++	end)
++end)
+diff --git a/tests/unit/Ghosts/ghosts.spec.luau b/tests/unit/Ghosts/ghosts.spec.luau
+new file mode 100644
+index 0000000..92b3819
+--- /dev/null
++++ b/tests/unit/Ghosts/ghosts.spec.luau
+@@ -0,0 +1,12 @@
++--!strict
++local Ghosts = require("@logic/Ghosts")
++local Maze = require("@logic/Maze")
++local t = require("@tests/lib/t")
++
++return t.spec("Ghosts basics", function(it)
++	it("the classic maze has four ghosts in the documented order", function()
++		local set = Ghosts.new(Maze.layout("classic"), 1)
++		t.expect(#set.ghosts).toBe(4)
++		t.expect(Ghosts.NAMES).toEqual({ "blinky", "pinky", "inky", "clyde" })
++	end)
++end)

@@ -1,0 +1,21 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local m = Maze.layout("classic")
+local times = {}
+for seed = 1, 20 do
+	local s = Session.new(m, seed, Session.GAME_CONFIG)
+	Session.join(s, "p")
+	local caught: number? = nil
+	local first: { [string]: number } = {}
+	for tick = 1, 30 * 120 do
+		for _, e in Session.step(s) do
+			if e.kind == "Caught" and not caught then caught = tick end
+			if (e.kind == "GhostReleased" or e.kind == "GhostLeft" or e.kind == "ModeChanged") and not first[e.kind .. tostring(e.ghost)] then first[e.kind .. tostring(e.ghost)] = tick end
+		end
+		if caught then break end
+	end
+	table.insert(times, caught or -1)
+	if seed == 1 then for k, v in first do print(k, v) end end
+end
+print(table.concat(times, " "))
