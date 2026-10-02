@@ -32,14 +32,14 @@ Each item is a directory named by its ID:
 ```
 
 ## Worktrees
-Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request. The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`.
+Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request (except tracker state, see Sync and claim). The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`.
 
 1. **The main checkout is read-only.** The complete list of commands that may run there:
-   - `git fetch`, `git pull --ff-only`, and read-only inspection (`git status|log|diff|show|worktree list`);
+   - `git fetch`, `git pull --ff-only` (or `scripts/tracker.sh sync`, which does the same there), and read-only inspection (`git status|log|diff|show|worktree list`);
    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
    - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
-   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
-   The tracker enforces part of this: `new`, `renumber`, `migrate`, `start` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
+   - the read-only tracker commands `list`, `find`, `members`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+   The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
 2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
 
    | work | target | path and branch |
@@ -53,7 +53,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
 3. **Launching an agent**: the human starts it *inside* the worktree with `scripts/tracker.sh launch <target>` (for example `launch R0010`; `-- <command> [args…]` runs another command than `claude`). It creates or reuses the worktree (`scripts/tracker.sh worktree`) and replaces itself with the command, so the agent gets the terminal and Ctrl-C directly. Then the hooks and every relative path already point at the right tree, and nothing depends on a `cd` persisting across tool calls (a subagent's shell resets its working directory on every call). An agent started elsewhere runs the `cd` as its first action and uses absolute worktree paths afterwards.
 4. **Prep merges before execution.** A prep PR merges (Landing a change) before `make-prompt` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items. `make-prompt` never creates a raft: a raftless issue goes back to ticket-prep.
 
-## Lifecycle: the directory is the status
+## Lifecycle: the directory and the status
 - **Paths**: `tracker/{issues,rafts}/<ID>` is backlog, `…/active/<ID>` is in progress, and `…/done/<ID>` is finished.
 - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`, and only `ticket-prep` sets it.
 - **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. A lone issue gets a `single: true` raft made by ticket-prep in its prep worktree; `tracker.sh prompt <issue>` refuses to create one in the main checkout.
@@ -73,7 +73,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
 
 ## Landing a change
 One procedure for every change: a raft, a capture, a prep or an edit.
-0. **Sync first.** `git fetch origin main && git merge origin/main` in the worktree.
+0. **Sync first.** `scripts/tracker.sh sync` in the worktree (a fetch and a merge of `origin/main`).
    - If `main` brought the new document layout, run `scripts/tracker.sh migrate` and commit.
    - A `CONFLICT (add/add)` on a tracker document means two items picked the same number: see Conflicts.
    - Then run `scripts/tracker.sh list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `scripts/check.sh --full`.
@@ -130,3 +130,16 @@ The draft PR opened by `start` stays the live log of the raft. Every `tracker.sh
 - `tracker.sh check <id>`
 - `tracker.sh prompt <id> [--stdout]`
 - `tracker.sh metrics [--include-active]`
+
+## Sync and claim
+Tracker state is shared the moment it changes, not when a PR merges, so parallel terminals see each other's work.
+- **Sync first.** Every skill that reads or changes tracker state starts with `scripts/tracker.sh sync` (a merge of `origin/main` in a worktree, a fast-forward in the main checkout). Reviewers and stream agents never merge: they run `scripts/tracker.sh sync --fetch`, which only updates `origin/main`, so the diff they judge does not move.
+- **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `tracker.sh status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `tracker.sh done`, and only `start` claims `active`.
+- **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+- **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims its members), `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `start`. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `tracker/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, a `check.sh` only when it is created, and an existing document only in its `status:` line. Code, designs, reviews and acceptance specs never ride it. A commit that skips CI for the many tiny pushes is intended: `check.yml` ignores `tracker/**` on `push`, not on `pull_request`.
+- **Claims.** Prep claims with `new raft` (issues must be `new`). An existing draft raft is claimed with `scripts/tracker.sh status <R-id> preparing`, which stamps the raft and its members; an issue added to a raft during prep is claimed first with `status <id> preparing`; one dropped is released with `status <id> new`. `start` refuses a raft unless it and its members are `prepared` on `origin/main`.
+- **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared`. The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
+- **Offline.** `PICKMAN_PUBLISH=0` (or a repository without `origin`) keeps every command local, as it was before. Publishing and every other command that changes a repository first check that git's repository root is the checkout the tracker lives in; read-only commands do not.
+- **Whose claim.** A claim is not enforced against other terminals' give-backs: `status <R-id> prepared` from `active`, `status <id> new` and `status <id> preparing` are open to anyone, so use them only for a claim that is yours (the user's decision: ownership is documented, not checked). Never give back a claim you did not make; ask the user.
+- **Cutover.** A prep that was open before this landed exists only on its branch, so nothing on `origin/main` knows its raft id or members. Land such preps first, and renumber on a clash (see Conflicts). Do not stamp their members with `status <id> preparing`: a stamped member of a raft that is not on `origin/main` cannot be moved to `prepared` and can never be started.

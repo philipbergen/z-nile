@@ -10,7 +10,7 @@ description: Produce the self-contained execution prompt for a raft (an issue wi
    - The raft and every member are `design: ready`.
    - Every issue has a `check.sh` with at least one `check`.
    - The acceptance specs exist.
-   - Run `git pull --ff-only` in the main checkout first, then check that `git status` is clean for `tracker/`: the prep PR has merged and main is current. (Read-only checks only: nothing is edited in the main checkout.)
+   - Run `scripts/tracker.sh sync` in the main checkout first, then check that `git status` is clean for `tracker/` and that `scripts/tracker.sh status <R-id>` prints `prepared`: the prep PR has merged and main is current. (Read-only checks only: nothing is edited in the main checkout.)
    - Every `depends_on` of a member issue that isn't a member of this raft names an item in `done/` (`scripts/tracker.sh find <id>`), for example the chore that removes a promoted spec the issue overrides. If one isn't, stop and say which.
    - The executing agent starts from origin/main, so it must see the same files.
 3. **Render**: `scripts/tracker.sh prompt <id>`. This fills in `tracker/templates/prompt.md` with the raft and issue documents, the `check.sh` files, the sequestered acceptance specs, the architecture map and the `execute-raft`, `tracker`, `architecture`, `testing` and `review` skills, then pipes the result to `pbcopy`.

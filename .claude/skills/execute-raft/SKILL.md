@@ -11,9 +11,9 @@ Output: one PR, taken out of draft by `scripts/tracker.sh done R0010`, then merg
 Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
 
 ## Phase 0: Claim (in the first minutes)
-1. Work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees). It branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
+1. Work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees), then run `scripts/tracker.sh sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
    - **If main is red, stop.** Report it; don't fix main inside this raft.
-2. `scripts/tracker.sh start R0010`. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
+2. `scripts/tracker.sh start R0010`. It claims the raft and its members on `origin/main` first (refused if another terminal started it); if a later step fails, see the tracker skill, Sync and claim, A failed start. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 
@@ -64,8 +64,7 @@ When the steps below pass, post a PR comment with the RC results.
 1. `bash "$(scripts/tracker.sh find R0010)/check.sh"`. Every RC line must PASS.
 2. Double-check that `scripts/check.sh --full` passes as well, and that `scripts/tracker.sh promote-check R0010` passes. It dry-runs the move of the acceptance specs into `tests/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
 3. **Gate speed**: record the **gate wall time** and the `slowest:` specs from a `scripts/check.sh --full` run in each issue's Verification log. If a stage or spec dominates or the time regressed, fix it or file the chore, per the testing skill's Speed section.
-4. **Sequestration check**: `git diff <start-commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty.
-   - The start commit is the one with the subject `tracker: start R0010`.
+4. **Sequestration check**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/` done by `start`). The three-dot form separates what this branch changed from what `main` brought in, so other terminals' new stubs are not false positives.
 
 ## Phase 4: Adversarial code review (a clean reviewer)
 The PR is the visible record of the work. Push and post a PR comment (`gh pr comment --body-file -`) at each step below, so a human watching sees the review start, its findings, and how they were answered. Never hold review state locally. If a push or `gh` call fails, retry once, then carry on and mention the failure in your next comment; don't block on it. `tracker.sh commit` skips the push when there is no upstream, so check that `git status -sb` shows no `ahead`.

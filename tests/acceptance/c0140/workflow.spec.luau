@@ -115,7 +115,8 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		"the workflow's triggers and the gate job are unchanged, and nothing runs on pull_request_target",
 		function()
 			local on: any = wf["on"]
-			t.expect(on.push).toEqual({ branches = { "main" } })
+			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it
+			t.expect(on.push).toEqual({ branches = { "main" }, ["paths-ignore"] = { "tracker/**" } })
 			t.expect(on.pull_request)
 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
 			t.expect(on.workflow_dispatch ~= nil).toBe(true)

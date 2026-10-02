@@ -111,7 +111,7 @@ finish
 - **Sequestered**:
   - `check.sh` files and the acceptance specs they name are written in ticket-prep, *before* execution.
   - During execution they must not change.
-  - The code reviewer diffs them against the `tracker: start` commit.
+  - The code reviewer checks them with `git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'`, which must list only `R100` renames (review skill, Code mode item 2).
   - If one is actually wrong, the executor stops and escalates; it doesn't patch it.
 
 ## Criteria tiers (in each issue document)
