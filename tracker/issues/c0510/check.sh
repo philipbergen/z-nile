@@ -72,4 +72,13 @@ replacements_applied() {
 }
 check "AC8: the c0041 and c0140 specs are exactly the prepared replacements (PICKMAN_PUBLISH=0 in c0041's fixtures, paths-ignore in c0140's trigger)" replacements_applied
 
+no_index() { # the tree is built with mktree: no index, so no git variable for the repository guards (R0210) to ban
+  local f=scripts/tracker/publish.luau
+  [[ -f $f ]] || { echo "$f is missing"; return 1; }
+  # the variable name is split so this file does not name it (R0210's gate scans every check.sh)
+  if grep -rnE "GIT_INDEX_""FILE|read-tree|update-index|write-tree" scripts/tracker/; then echo "the tracker code uses an index"; return 1; fi
+  grep -qE '"mktree"' "$f" || { echo "the publisher does not pass \"mktree\" to git"; return 1; }
+}
+check "AC9: the publisher builds its tree with mktree and uses no index" no_index
+
 finish

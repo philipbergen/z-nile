@@ -227,6 +227,66 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 	end)
 
+	it("files with spaces, tabs or other odd names beside a change are kept exactly", function()
+		-- odd names at every level the publisher rebuilds: the root, tracker/, tracker/issues/
+		local odd = {
+			"read me.txt",
+			"tracker/odd\tname.md",
+			"tracker/issues/na\u{ef}ve notes.md",
+			"tracker/issues/x  y",
+		}
+		for _, p in odd do
+			local dir = string.match(p, "^(.*)/[^/]+$")
+			if dir then
+				fs.writeDir(`{other}/{dir}`)
+			end
+			fs.writeFile(`{other}/{p}`, `kept: {p}\n`)
+		end
+		fs.writeDir(`{other}/tracker/issues`)
+		fs.writeFile(`{other}/tracker/issues/run me.sh`, "#!/bin/sh\n")
+		process.exec("chmod", { "+x", `{other}/tracker/issues/run me.sh` })
+		git(other, { "pull", "-q", "--ff-only", "origin", "main" })
+		git(other, { "add", "-A" })
+		git(other, { "commit", "-q", "-m", "odd names" })
+		git(other, { "push", "-q", "origin", "HEAD:main" })
+		local before = git(origin, { "rev-parse", "main" })
+		local made = "tracker/issues/c0401/c0401.md"
+		local r = publish.commit(work, function()
+			return { change(made, "---\nid: c0401\n---\n") }
+		end, "tracker: beside odd names")
+		t.expect(r.ok).toBe(true)
+		local after = git(origin, { "rev-parse", "main" })
+		-- exactly one path changed, and every other entry (name, mode, object) is byte-identical
+		t.expect(git(origin, { "diff-tree", "-r", "--no-renames", "--name-only", before, after })).toBe(made)
+		local function entries(rev: string): string
+			local all =
+				process.exec("git", { "ls-tree", "-r", "-z", "--full-tree", rev }, { cwd = origin }).stdout
+			local kept: { string } = {}
+			for _, rec in string.split(all, "\0") do
+				if rec ~= "" and not string.find(rec, "\t" .. made, 1, true) then
+					table.insert(kept, rec)
+				end
+			end
+			return table.concat(kept, "\0")
+		end
+		t.expect(entries(after) == entries(before)).toBe(true)
+	end)
+
+	it("a path whose folder is a file on origin is refused, naming the whole path", function()
+		git(other, { "pull", "-q", "--ff-only", "origin", "main" })
+		fs.writeFile(`{other}/tracker/issues/c0402`, "a file, not a folder\n")
+		git(other, { "add", "-A" })
+		git(other, { "commit", "-q", "-m", "a file where a folder goes" })
+		git(other, { "push", "-q", "origin", "HEAD:main" })
+		local before = git(origin, { "rev-parse", "main" })
+		local r = publish.commit(work, function()
+			return { change("tracker/issues/c0402/c0402.md", "x\n") }
+		end, "tracker: into a file")
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.reason or "", "tracker/issues/c0402 is a file", 1, true) ~= nil).toBe(true)
+		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
+	end)
+
 	it("a git failure is reported with git's message and nothing is pushed", function()
 		local before = git(origin, { "rev-parse", "main" })
 		git(work, { "config", "user.name", "" })

@@ -19,8 +19,10 @@ local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 -- falling through to the real repository (the incident c0640 and R0200 describe)
 local function fenced(env: { [string]: string }?): { [string]: string }
 	local out = { GIT_CEILING_DIRECTORIES = `{root}/.cache` }
-	for k, v in env or {} do
-		out[k] = v
+	if env then
+		for k, v in env do
+			out[k] = v
+		end
 	end
 	return out
 end

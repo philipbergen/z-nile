@@ -1,5 +1,5 @@
 --!strict
--- Pushes a tracker-only commit to origin/main with git plumbing. Never touches the caller's working
+-- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
 local process = require("@lune/process")
 local task = require("@lune/task")
@@ -69,6 +69,57 @@ local function fail(reason: string): Result
 	return { ok = false, reason = reason }
 end
 
+type Node = { blob: string?, mode: string?, children: { [string]: Node } }
+type Step = (args: { string }, stdin: string?) -> (string?, string?)
+
+-- The tree `treeish` (nil for none) with `node`'s changes applied, as a new tree object; each level is one
+-- `ls-tree -z` and one `mktree -z`, and only the trees on a changed path are rebuilt.
+local function makeTree(step: Step, treeish: string?, node: Node, prefix: string): (string?, string?)
+	local entries: { [string]: string } = {} -- name -> "<mode> <type> <object>"
+	if treeish then
+		local listed, le = step({ "ls-tree", "-z", treeish })
+		if not listed then
+			return nil, le
+		end
+		for _, rec in string.split(listed, "\0") do
+			if rec ~= "" then
+				-- "<mode> <type> <object>\t<name>": the name may hold spaces, tabs, anything but NUL
+				local meta, name = string.match(rec, "^(%d+ %a+ %x+)\t(.+)$")
+				if not meta or not name then
+					return nil, `cannot read the tree at {prefix}: {rec}`
+				end
+				entries[name] = meta
+			end
+		end
+	end
+	for name, child in node.children do
+		if child.blob then
+			entries[name] = `{child.mode} blob {child.blob}`
+		else
+			local existing = entries[name]
+			local sub = if existing then string.match(existing, "^040000 tree (%x+)$") else nil
+			if existing and not sub then
+				return nil, `{prefix}{name} is a file on origin/main, not a folder`
+			end
+			local made, me = makeTree(step, sub, child, `{prefix}{name}/`)
+			if not made then
+				return nil, me
+			end
+			entries[name] = `040000 tree {made}`
+		end
+	end
+	local input: { string } = {}
+	for name, meta in entries do
+		table.insert(input, `{meta}\t{name}\0`)
+	end
+	local tree, te = step({ "mktree", "-z" }, table.concat(input))
+	tree = if tree then trim(tree) else nil
+	if not tree or not string.match(tree, "^%x+$") then
+		return nil, te or "mktree failed"
+	end
+	return tree
+end
+
 function publish.commit(cwd: string, build: Build, message: string | () -> string, tries: number?): Result
 	local max = tries or 5
 	local last = ""
@@ -126,48 +177,70 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if #out == 0 then
 			return { ok = true }
 		end
-		local gitDir = trim(git(cwd, { "rev-parse", "--absolute-git-dir" }).stdout)
-		local index =
-			`{gitDir}/pickman-publish-{os.time()}-{math.floor(os.clock() * 1e6)}-{math.random(1, 1e9)}`
-		local env = { GIT_INDEX_FILE = index }
+		-- The new tree is built with mktree, from the base tree down each changed path: no index at all, neither
+		-- the caller's nor a private one, so nothing here names git's index variable (R0210's guards ban it).
 		local function step(args: { string }, stdin: string?): (string?, string?)
-			local r = git(cwd, args, env, stdin)
+			local r = git(cwd, args, nil, stdin)
 			if not r.ok then
 				return nil, trim(r.stderr .. r.stdout)
 			end
-			return trim(r.stdout)
+			return r.stdout
 		end
+		local rootNode: Node = { children = {} }
 		local err = ""
 		local sha: string? = nil
 		repeat
-			local ok, e = step({ "read-tree", base })
-			if not ok then
-				err = e or "read-tree failed"
-				break
-			end
 			local bad = false
 			for _, c in out do
 				local blob, be = step({ "hash-object", "-w", "--stdin" }, c.content)
+				blob = if blob then trim(blob) else nil
 				if not blob or not string.match(blob, "^%x+$") then
 					err, bad = be or "hash-object failed", true
 					break
 				end
-				local added, ue =
-					step({ "update-index", "--add", "--cacheinfo", `{c.mode or "100644"},{blob},{c.path}` })
-				if not added and ue then
-					err, bad = ue, true
+				local node = rootNode
+				local parts = string.split(c.path, "/")
+				for i = 1, #parts - 1 do
+					local child = node.children[parts[i]] or { children = {} }
+					node.children[parts[i]] = child
+					node = child
+				end
+				node.children[parts[#parts]] = { blob = blob, mode = c.mode or "100644", children = {} }
+			end
+			if bad then
+				break
+			end
+			local rt = git(cwd, { "rev-parse", "--verify", base .. "^{tree}" })
+			local baseTree = trim(rt.stdout)
+			if not rt.ok or not string.match(baseTree, "^%x+$") then
+				err = "cannot resolve origin/main's tree: " .. trim(rt.stderr)
+				break
+			end
+			local tree, te = makeTree(step, baseTree, rootNode, "")
+			if not tree then
+				err = te or "mktree failed"
+				break
+			end
+			-- the new tree differs from the base in the change's paths only: anything else is a bug that would
+			-- delete or rewrite files on main
+			local diff, de = step({ "diff-tree", "-r", "--no-renames", "-z", "--name-only", baseTree, tree })
+			if not diff then
+				err = de or "diff-tree failed"
+				break
+			end
+			local wanted: { [string]: boolean } = {}
+			for _, c in out do
+				wanted[c.path] = true
+			end
+			for _, p in string.split(diff, "\0") do
+				if p ~= "" and not wanted[p] then
+					err, bad = `the new tree would also change {p}, which is not in the change`, true
 					break
 				end
 			end
 			if bad then
 				break
 			end
-			local tree = step({ "write-tree" })
-			if not tree or not string.match(tree, "^%x+$") then
-				err = "write-tree failed"
-				break
-			end
-			local baseTree = trim(git(cwd, { "rev-parse", base .. "^{tree}" }).stdout)
 			if tree == baseTree then
 				sha = ""
 				break
@@ -184,7 +257,6 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			end
 			sha = candidate
 		until true
-		process.exec("rm", { "-f", index })
 		if sha == nil then
 			return fail(err)
 		end
