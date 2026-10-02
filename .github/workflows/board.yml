@@ -17,7 +17,7 @@ jobs:
       - run: scripts/setup.sh --tools
         env:
           GH_TOKEN: ${{ github.token }}
-      - run: scripts/tracker.sh board --out dist/board.html
+      - run: scripts/tracker.sh board --out dist/board.html -O
       - uses: actions/upload-artifact@v4
         with:
           name: tracker-board

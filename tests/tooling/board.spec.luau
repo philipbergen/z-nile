@@ -1,5 +1,5 @@
 --!strict
--- c0400: the board's own unit cases: the JSON writer, an empty tracker, and the `--open` flag.
+-- c0400: the board's own unit cases: the JSON writer, an empty tracker, and opening (the default, `--open` and `-O`).
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -202,7 +202,7 @@ return t.spec("board unit", function(it)
 
 	it("board prints the absolute path of a relative --out", function()
 		local out = ".cache/board-unit-abs/page.html"
-		local r = process.exec("scripts/tracker.sh", { "board", "--out", out })
+		local r = process.exec("scripts/tracker.sh", { "board", "--out", out, "-O" })
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stdout, `{process.cwd}{out}`, 1, true) ~= nil).toBe(true)
 		fs.removeDir(".cache/board-unit-abs")
