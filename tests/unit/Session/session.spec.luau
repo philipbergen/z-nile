@@ -68,4 +68,10 @@ return t.spec("Session extras", function(it)
 			t.expect(x[10]).toBeNear(5.125, 1e-9)
 		end
 	)
+
+	it("a new player's frame carries every pellet of the classic maze", function()
+		local s = Session.new(classic, 1)
+		Session.join(s, "p")
+		t.expect(Session.frame(s, "p").pellets).toBe(string.rep("_", 40) .. "P")
+	end)
 end)
