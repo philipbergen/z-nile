@@ -39,6 +39,7 @@ function FlowView.start()
 	gui.Name = "Flow"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 0 -- under the HUD
 
 	local f = Instance.new("Frame")
 	f.Name = "Fade"

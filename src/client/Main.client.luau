@@ -6,7 +6,6 @@ local Camera = require("./Camera")
 local Controls = require("./Controls")
 local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
 local FlowView = require("./FlowView")
-local Game = require("@game/ReplicatedStorage/Shared/Logic/Game")
 local HudView = require("./HudView")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
@@ -18,7 +17,7 @@ local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
 local ready = remotes:WaitForChild("Ready") :: RemoteEvent
 
 -- the rules the server plays by, so the overlay times its fade to the same dying pause
-local RULES = (Session.GAME_CONFIG.play or Game.CLASSIC_CONFIG) :: Game.Config
+local RULES = assert(Session.GAME_CONFIG.play, "Session.GAME_CONFIG has no play rules")
 
 local built: string? = nil
 local model: Model? = nil

@@ -65,6 +65,7 @@ function HudView.start()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "Hud"
 	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 1 -- above Flow's fade: the score and lives stay readable through a death
 	score = label("Score", Enum.TextXAlignment.Left, gui)
 	level = label("Level", Enum.TextXAlignment.Right, gui)
 	local lf = Instance.new("Frame")
