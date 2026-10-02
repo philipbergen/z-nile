@@ -40,7 +40,10 @@ end
 local guard = process.env.PICKMAN_OPEN_GUARD
 -- nested only when the marker names a live guard (its `open` stub exists): a stale or stray value can't switch it off
 if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
-	local made = process.exec("mktemp", { "-d" })
+	-- under $TMPDIR explicitly: macOS mktemp -d ignores TMPDIR without a template
+	local base = string.gsub(process.env.TMPDIR or "", "/+$", "")
+	local made =
+		process.exec("mktemp", { "-d", `{if base == "" then "/tmp" else base}/pickman-guard.XXXXXX` })
 	if not made.ok then
 		stdio.ewrite(`tests/run: mktemp failed: {made.stderr}\n`)
 		process.exit(1)

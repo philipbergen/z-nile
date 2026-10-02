@@ -6,6 +6,7 @@
 | 2 | 2026-10-02 14:09 | c0550: board opens by default unless -O; workflow and skills | 11 | 8 | 5.0 | focus |
 | 3 | 2026-10-02 14:14 | c0550: guard re-run fails clearly when lune is missing (review-001 F1) | 38 | 4 | 6.0 | focus |
 | 4 | 2026-10-02 14:14 | R0220: refute-001 | 0 | 0 | 1.0 | focus |
+| 5 | 2026-10-02 14:19 | c0550: guard dir under TMPDIR explicitly; positive control (review-002 F1) | 30 | 1 | 6.0 | focus |
 
-**Total:** +88 / -14 lines, 18.0 agent-minutes over 4 commits
-<!-- totals: added=88 removed=14 minutes=18.0 commits=4 -->
+**Total:** +118 / -15 lines, 24.0 agent-minutes over 5 commits
+<!-- totals: added=118 removed=15 minutes=24.0 commits=5 -->
