@@ -466,7 +466,7 @@ return t.spec("tracker commands publish state to origin/main", function(it)
 					{ "find", "c0010" },
 					{ "members", "R0010" },
 					{ "metrics" },
-					{ "board", "--out", `{lost}/board.html` },
+					{ "board", "--out", `{lost}/board.html`, "-O" }, -- -O (c0550): never start a browser
 					{ "workstreams", "R0010" },
 					{ "promote-check", "R0010" },
 					{ "stamp", "new" },

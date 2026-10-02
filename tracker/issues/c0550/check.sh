@@ -6,9 +6,16 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to 
 # sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0550 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0550"
+OLD="$PWD/tests/acceptance"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: board opens the written page once, by its absolute path, by default" lune run tests/run -- "$A/open.spec.luau"
+check "AC2: -O writes and prints the page but opens nothing, and takes no value" lune run tests/run -- "$A/open.spec.luau"
+check "AC3: --open is still accepted; --open with -O is refused before writing" lune run tests/run -- "$A/open.spec.luau"
+check "AC4: a failing opener only warns; the page is written and the exit code is 0" lune run tests/run -- "$A/open.spec.luau"
+check "AC5: the usage text and the tracker skill's board row document -O" lune run tests/run -- "$A/open.spec.luau"
+check "AC6: the board workflow builds with -O" lune run tests/run -- "$A/open.spec.luau"
+check "AC7: the overridden board specs and the tooling board spec pass" lune run tests/run -- "$OLD/c0400/cli.spec.luau" "$OLD/c0460/board-workflow.spec.luau" "$OLD/c0460/board-docs.spec.luau" tests/tooling/board.spec.luau
+check "AC8: tests/run fails a run in which a spec started a browser, and changes nothing else" lune run tests/run -- "$A/guard.spec.luau"
+check "AC9: the testing skill's No browsers bullet names tests/run, -O and PICKMAN_OPEN_GUARD" bash -c 'l=$(grep -F -- "- **No browsers.**" .claude/skills/testing/SKILL.md) && grep -qF "tests/run" <<<"$l" && grep -qF -- "-O" <<<"$l" && grep -qF PICKMAN_OPEN_GUARD <<<"$l"'
 
 finish

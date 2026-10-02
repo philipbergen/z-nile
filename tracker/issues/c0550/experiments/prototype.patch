@@ -1,0 +1,145 @@
+diff --git a/.claude/skills/testing/SKILL.md b/.claude/skills/testing/SKILL.md
+index 34b4661..33652e0 100644
+--- a/.claude/skills/testing/SKILL.md
++++ b/.claude/skills/testing/SKILL.md
+@@ -47,6 +47,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ - **One behavior per case**, with a name that states it.
+ - **Assert on public API results**, never on internals.
+ - **Hard to fake.** An acceptance spec must fail for plausible wrong implementations: an off-by-one, a missing edge case, a hard-coded value. Include at least one case that a hard-coded or partial implementation would fail.
++- **No browsers.** `tests/run` puts recording `open` and `xdg-open` stubs first on `PATH` for the whole run (workers and nested runners included, through `PICKMAN_OPEN_GUARD`) and fails the run if any is called. Run `tracker.sh board` with `-O`; a spec that tests opening puts its own stubs first on `PATH`. A spec that sets `PATH` for a child prepends to it, never replaces it, or the guard's stubs are lost.
+ 
+ ## Simulations (`@tests/lib/sim`)
+ `tests/lib/sim.luau` runs any **model** (`new(seed)`, `step(state, intents, tick)`, `observe(state)`, plus `name` and `tickRate`) for N ticks from a script of timed intents and expectations, and returns a trace. The game's Logic provides a model; `tests/fixtures/sim/walker.luau` is a small one.
+diff --git a/.claude/skills/tracker/SKILL.md b/.claude/skills/tracker/SKILL.md
+index 69c1981..1c943a5 100644
+--- a/.claude/skills/tracker/SKILL.md
++++ b/.claude/skills/tracker/SKILL.md
+@@ -65,7 +65,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | worktree | `tracker.sh worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `tracker.sh worktree ws-<issue> --from <raft branch>`). |
+ | workstreams | `tracker.sh workstreams <R-id>` | read-only plan for parallel execution (execute-raft Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
+ | launch | `tracker.sh launch <R-id\|name> [-- cmd…]` | `worktree`, then runs the command (default `claude`) in that worktree with `exec`: terminal, signals and exit status are native. Refuses an unusable command or worktree path before anything starts |
+-| board | `tracker.sh board [--out PATH] [--open]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; regenerate to refresh). Tabs Active / Waiting / Done (Waiting lists only rafts with no unfinished dependency), cursor keys, `/` then an id to jump to it, each raft's issues and dependencies rendered with the vendored marked. `--open` opens it in the browser. `.github/workflows/board.yml` rebuilds it on every push to `main` and keeps it as the `tracker-board` Actions artifact: `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci` fetches the latest into a fresh directory (gh won't overwrite an existing file, and `.cache/board.html` is the local default). On `main`, Active is empty: rafts move to `active/` only on their branch |
++| board | `tracker.sh board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; regenerate to refresh). Tabs Active / Waiting / Done (Waiting lists only rafts with no unfinished dependency), cursor keys, `/` then an id to jump to it, each raft's issues and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as CI and the specs do; `--open`, the old opt-in, is still accepted and is the default). `.github/workflows/board.yml` rebuilds it on every push to `main` and keeps it as the `tracker-board` Actions artifact: `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci` fetches the latest into a fresh directory (gh won't overwrite an existing file, and `.cache/board.html` is the local default). On `main`, Active is empty: rafts move to `active/` only on their branch |
+ | prune | `tracker.sh worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
+ | focus | `tracker.sh focus f0010` | the following commits are attributed to that issue |
+ | commit | `tracker.sh commit -m "msg" [--issue f0010]... [--time 25]` | `git add -A`, then records spend rows in each issue's `spend.md` and the raft's summary **in the same commit**, adds `Issue:` trailers, and pushes |
+diff --git a/.github/workflows/board.yml b/.github/workflows/board.yml
+index e8e6008..7c377b8 100644
+--- a/.github/workflows/board.yml
++++ b/.github/workflows/board.yml
+@@ -17,7 +17,7 @@ jobs:
+       - run: scripts/setup.sh --tools
+         env:
+           GH_TOKEN: ${{ github.token }}
+-      - run: scripts/tracker.sh board --out dist/board.html
++      - run: scripts/tracker.sh board --out dist/board.html -O
+       - uses: actions/upload-artifact@v4
+         with:
+           name: tracker-board
+diff --git a/scripts/tracker/main.luau b/scripts/tracker/main.luau
+index ec8c85c..e741b2d 100644
+--- a/scripts/tracker/main.luau
++++ b/scripts/tracker/main.luau
+@@ -29,7 +29,8 @@ usage: scripts/tracker.sh <command> ...
+   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
+   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
+   metrics [--include-active]                    cost per issue and rework %
+-  board [--out PATH] [--open]                   write the tracker as one HTML page (default .cache/board.html)]]
++  board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
++                                                and open it in the browser; -O only writes it]]
+ 
+ local FOCUS_FILE = ".cache/tracker-focus"
+ 
+@@ -137,7 +138,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 	local i = 1
+ 	while i <= #args do
+ 		local a = args[i]
+-		if a == "--single" or a == "--stdout" or a == "--include-active" or a == "--open" then
++		if a == "--single" or a == "--stdout" or a == "--include-active" or a == "--open" or a == "-O" then
+ 			opts[a] = { "true" }
+ 		elseif string.sub(a, 1, 1) == "-" then
+ 			opts[a] = opts[a] or {}
+@@ -1107,9 +1108,10 @@ end
+ function cmd.board(pos: { string }, opts: { [string]: { string } })
+ 	local given = opts["--out"] and opts["--out"][1]
+ 	if #pos > 0 or (given and (given == "" or string.sub(given, 1, 1) == "-")) then
+-		fail(
+-			"usage: board [--out PATH] [--open]  (an --out path can't start with -; write ./-x for such a file)"
+-		)
++		fail("usage: board [--out PATH] [-O]  (an --out path can't start with -; write ./-x for such a file)")
++	end
++	if opts["--open"] and opts["-O"] then
++		fail("board: --open and -O contradict each other (the page opens by default; -O only writes it)")
+ 	end
+ 	local out = given or ".cache/board.html"
+ 	local dir = string.match(out, "^(.*)/[^/]*$")
+@@ -1122,7 +1124,7 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
+ 		out = process.cwd .. out
+ 	end
+ 	print(out)
+-	if opts["--open"] then
++	if not opts["-O"] then
+ 		local opener = if process.os == "macos" then "open" else "xdg-open"
+ 		local ok, r = pcall(sh.run, opener, { out })
+ 		if not ok or not r.ok then
+diff --git a/tests/run.luau b/tests/run.luau
+index 8b861fe..f0d6644 100644
+--- a/tests/run.luau
++++ b/tests/run.luau
+@@ -32,6 +32,43 @@ if listMode ~= nil and listMode ~= "" then
+ 	process.exit(1)
+ end
+ 
++-- Browser guard: no spec may start a real browser (`tracker.sh board` opens one unless given -O). The outermost runner
++-- puts recording `open` and `xdg-open` stubs first on PATH and runs itself again as a child with that PATH (Lune can't
++-- change its own environment for children). Workers and nested runners see PICKMAN_OPEN_GUARD and run normally, so
++-- every opener call in the whole run lands in one log; a non-empty log fails the run. A spec that tests opening
++-- puts its own stubs before these.
++local guard = process.env.PICKMAN_OPEN_GUARD
++-- nested only when the marker names a live guard (its `open` stub exists): a stale or stray value can't switch it off
++if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
++	local made = process.exec("mktemp", { "-d" })
++	if not made.ok then
++		stdio.ewrite(`tests/run: mktemp failed: {made.stderr}\n`)
++		process.exit(1)
++	end
++	local dir = (string.gsub(made.stdout, "%s+$", ""))
++	for _, name in { "open", "xdg-open" } do
++		fs.writeFile(`{dir}/{name}`, `#!/bin/sh\necho "{name} $*" >> "{dir}/opened.log"\n`)
++		process.exec("chmod", { "+x", `{dir}/{name}` })
++	end
++	local args = { "run", "tests/run", "--" }
++	for _, a in process.args do
++		if a ~= "--" then
++			table.insert(args, a)
++		end
++	end
++	local r = process.exec("lune", args, {
++		env = { PATH = `{dir}:{process.env.PATH or ""}`, PICKMAN_OPEN_GUARD = dir },
++		stdio = { stdout = "forward", stderr = "forward" },
++	})
++	local log = if fs.isFile(`{dir}/opened.log`) then fs.readFile(`{dir}/opened.log`) else ""
++	fs.removeDir(dir)
++	if log ~= "" then
++		print(`FAIL a spec started a browser (tracker.sh board without -O, or an unstubbed opener):\n{log}`)
++		process.exit(1)
++	end
++	process.exit(r.code)
++end
++
+ local USAGE = "usage: lune run tests/run [--jobs N] [spec files]"
+ 
+ local function usageError(name: string)
+diff --git a/tests/tooling/board.spec.luau b/tests/tooling/board.spec.luau
+index 202bbe8..443f5c5 100644
+--- a/tests/tooling/board.spec.luau
++++ b/tests/tooling/board.spec.luau
+@@ -202,7 +202,7 @@ return t.spec("board unit", function(it)
+ 
+ 	it("board prints the absolute path of a relative --out", function()
+ 		local out = ".cache/board-unit-abs/page.html"
+-		local r = process.exec("scripts/tracker.sh", { "board", "--out", out })
++		local r = process.exec("scripts/tracker.sh", { "board", "--out", out, "-O" })
+ 		t.expect(r.ok).toBe(true)
+ 		t.expect(string.find(r.stdout, `{process.cwd}{out}`, 1, true) ~= nil).toBe(true)
+ 		fs.removeDir(".cache/board-unit-abs")
