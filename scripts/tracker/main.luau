@@ -29,7 +29,8 @@ usage: scripts/tracker.sh <command> ...
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id|issue-id> [--stdout]             render the execution prompt to the clipboard
   metrics [--include-active]                    cost per issue and rework %
-  board [--out PATH] [--open]                   write the tracker as one HTML page (default .cache/board.html)]]
+  board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
+                                                and open it in the browser; -O only writes it]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 
@@ -137,7 +138,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 	local i = 1
 	while i <= #args do
 		local a = args[i]
-		if a == "--single" or a == "--stdout" or a == "--include-active" or a == "--open" then
+		if a == "--single" or a == "--stdout" or a == "--include-active" or a == "--open" or a == "-O" then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
 			opts[a] = opts[a] or {}
@@ -1107,9 +1108,10 @@ end
 function cmd.board(pos: { string }, opts: { [string]: { string } })
 	local given = opts["--out"] and opts["--out"][1]
 	if #pos > 0 or (given and (given == "" or string.sub(given, 1, 1) == "-")) then
-		fail(
-			"usage: board [--out PATH] [--open]  (an --out path can't start with -; write ./-x for such a file)"
-		)
+		fail("usage: board [--out PATH] [-O]  (an --out path can't start with -; write ./-x for such a file)")
+	end
+	if opts["--open"] and opts["-O"] then
+		fail("board: --open and -O contradict each other (the page opens by default; -O only writes it)")
 	end
 	local out = given or ".cache/board.html"
 	local dir = string.match(out, "^(.*)/[^/]*$")
@@ -1122,7 +1124,7 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 		out = process.cwd .. out
 	end
 	print(out)
-	if opts["--open"] then
+	if not opts["-O"] then
 		local opener = if process.os == "macos" then "open" else "xdg-open"
 		local ok, r = pcall(sh.run, opener, { out })
 		if not ok or not r.ok then
