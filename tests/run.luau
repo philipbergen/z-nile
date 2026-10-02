@@ -32,6 +32,43 @@ if listMode ~= nil and listMode ~= "" then
 	process.exit(1)
 end
 
+-- Browser guard: no spec may start a real browser (`tracker.sh board` opens one unless given -O). The outermost runner
+-- puts recording `open` and `xdg-open` stubs first on PATH and runs itself again as a child with that PATH (Lune can't
+-- change its own environment for children). Workers and nested runners see PICKMAN_OPEN_GUARD and run normally, so
+-- every opener call in the whole run lands in one log; a non-empty log fails the run. A spec that tests opening
+-- puts its own stubs before these.
+local guard = process.env.PICKMAN_OPEN_GUARD
+-- nested only when the marker names a live guard (its `open` stub exists): a stale or stray value can't switch it off
+if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
+	local made = process.exec("mktemp", { "-d" })
+	if not made.ok then
+		stdio.ewrite(`tests/run: mktemp failed: {made.stderr}\n`)
+		process.exit(1)
+	end
+	local dir = (string.gsub(made.stdout, "%s+$", ""))
+	for _, name in { "open", "xdg-open" } do
+		fs.writeFile(`{dir}/{name}`, `#!/bin/sh\necho "{name} $*" >> "{dir}/opened.log"\n`)
+		process.exec("chmod", { "+x", `{dir}/{name}` })
+	end
+	local args = { "run", "tests/run", "--" }
+	for _, a in process.args do
+		if a ~= "--" then
+			table.insert(args, a)
+		end
+	end
+	local r = process.exec("lune", args, {
+		env = { PATH = `{dir}:{process.env.PATH or ""}`, PICKMAN_OPEN_GUARD = dir },
+		stdio = { stdout = "forward", stderr = "forward" },
+	})
+	local log = if fs.isFile(`{dir}/opened.log`) then fs.readFile(`{dir}/opened.log`) else ""
+	fs.removeDir(dir)
+	if log ~= "" then
+		print(`FAIL a spec started a browser (tracker.sh board without -O, or an unstubbed opener):\n{log}`)
+		process.exit(1)
+	end
+	process.exit(r.code)
+end
+
 local USAGE = "usage: lune run tests/run [--jobs N] [spec files]"
 
 local function usageError(name: string)
