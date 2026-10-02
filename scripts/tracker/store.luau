@@ -2,6 +2,7 @@
 -- Tracker storage: locating items, reading/writing their documents, allocating IDs.
 -- Layout: tracker/{issues,rafts}/[active/|done/]<ID>/<ID>.md (+ check.sh, spend.md, reviews)
 local fs = require("@lune/fs")
+local statusLib = require("./status")
 
 export type State = string -- "backlog" | "active" | "done"
 export type Kind = string -- "issue" | "raft"
@@ -118,12 +119,13 @@ function store.all(kind: Kind): { Item }
 end
 
 -- Next free number: the next multiple of 10 above the highest number in use.
-function store.nextNumber(kind: Kind): number
-	local max = 0
+-- The next number for `kind` above every local id and every id in `extra` (origin's, when known).
+function store.nextNumber(kind: Kind, extra: { string }?): number
+	local ids: { string } = table.clone(extra or {})
 	for _, item in store.all(kind) do
-		max = math.max(max, tonumber(string.sub(item.id, 2)) :: number)
+		table.insert(ids, item.id)
 	end
-	return (math.floor(max / 10) + 1) * 10
+	return statusLib.nextNumber(ids)
 end
 
 function store.formatId(prefix: string, n: number): string
@@ -146,20 +148,28 @@ function store.readFront(path: string): { [string]: string }
 	return out
 end
 
-function store.setFront(path: string, key: string, value: string)
-	local text = fs.readFile(path)
+-- `text` with frontmatter key `key` set to `value` (added as the last key when missing), or nil when the text
+-- has no frontmatter. Anchored at a line start: a title that mentions `status:` must not absorb the new value.
+function store.withFront(text: string, key: string, value: string): string?
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
 	if not head or not block or not rest then
-		error(`{path} has no frontmatter`, 0)
+		return nil
 	end
-	-- anchored at a line start: a title that mentions `status:` must not absorb the new value
 	local replaced, n = string.gsub("\n" .. block, `\n{key}:[^\n]*\n`, function()
 		return `\n{key}: {value}\n`
 	end, 1)
 	if n == 0 then
 		replaced = "\n" .. block .. `{key}: {value}\n`
 	end
-	fs.writeFile(path, head .. string.sub(replaced, 2) .. rest)
+	return head .. string.sub(replaced, 2) .. rest
+end
+
+function store.setFront(path: string, key: string, value: string)
+	local text = store.withFront(fs.readFile(path), key, value)
+	if not text then
+		error(`{path} has no frontmatter`, 0)
+	end
+	fs.writeFile(path, text)
 end
 
 function store.typeOf(item: Item): string

@@ -136,6 +136,32 @@ local function guardRepoRoot()
 			`refusing to run: git's repository root is "{sh.trim(top.stdout)}", not "{sh.trim(here.stdout)}" (is .git missing here?)`
 		)
 	end
+	-- the root alone is not enough: an inherited git-directory variable makes the working directory the root while
+	-- git reads and writes another repository. So git's directory must be this checkout's own .git (a directory,
+	-- or in a linked worktree a `gitdir:` file).
+	local dir = sh.run("git", { "rev-parse", "--absolute-git-dir" })
+	if here.ok and dir.ok then
+		local root = sh.trim(here.stdout)
+		local own: string? = nil
+		if fs.isDir(`{root}/.git`) then
+			own = `{root}/.git`
+		elseif fs.isFile(`{root}/.git`) then
+			local target = string.match(fs.readFile(`{root}/.git`), "^gitdir:%s*(.-)%s*$")
+			if target then
+				own = if string.sub(target, 1, 1) == "/" then target else `{root}/{target}`
+			end
+		end
+		local function physical(path: string): string?
+			local r = sh.run("sh", { "-c", 'cd "$1" 2>/dev/null && pwd -P', "_", path })
+			return if r.ok then sh.trim(r.stdout) else nil
+		end
+		local used = physical(sh.trim(dir.stdout))
+		if not own or physical(own) ~= used then
+			fail(
+				`refusing to run: git's repository is "{used or sh.trim(dir.stdout)}", not this checkout's own .git in "{root}"`
+			)
+		end
+	end
 end
 
 local function publishing(): boolean
@@ -146,21 +172,22 @@ end
 local function frontOf(text: string): { [string]: string }
 	local out: { [string]: string } = {}
 	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
-	for k, v in string.gmatch(block, "([%w_]+):[ ]*([^\n]*)") do
-		out[k] = sh.trim(v :: string)
+	-- one key per line, anchored at the line start like the writer (store.withFront)
+	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
+		local k, v = string.match(line, "^([%w_]+):[ ]*(.*)$")
+		if k and v then
+			out[k] = sh.trim(v)
+		end
 	end
 	return out
 end
 
 local function withFront(text: string, key: string, value: string): string
-	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
-	local replaced, n = string.gsub("\n" .. (block :: string), `\n{key}:[^\n]*\n`, function()
-		return `\n{key}: {value}\n`
-	end, 1)
-	if n == 0 then
-		replaced = "\n" .. (block :: string) .. `{key}: {value}\n`
+	local out = store.withFront(text, key, value)
+	if not out then
+		fail("a tracker document has no frontmatter")
 	end
-	return (head :: string) .. string.sub(replaced, 2) .. (rest :: string)
+	return out :: string
 end
 
 local function stateOfPath(path: string): store.State
@@ -237,6 +264,17 @@ local function idsOf(paths: { string }, kind: string): { string }
 	return out
 end
 
+-- The ids of `kind` on origin/main, after a quiet fetch, when publishing is on; otherwise none (no network).
+-- Local-only creations (emergent issues, PICKMAN_PUBLISH=0 aside) then still number above what origin holds.
+local function originIds(kind: string): { string }
+	if not publishing() then
+		return {}
+	end
+	sh.run("git", { "fetch", "-q", "origin", "main" })
+	local r = sh.run("git", { "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" })
+	return if r.ok then idsOf(string.split(r.stdout, "\n"), kind) else {}
+end
+
 local function activeRaft(): store.Item
 	local rafts = {}
 	for _, r in store.all("raft") do
@@ -277,6 +315,17 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 	return pos, opts
 end
 
+-- The issue document with `--desc` (when given) in place of the Problem section's comment.
+local function withDesc(doc: string, opts: { [string]: { string } }): string
+	local desc = opts["--desc"] and opts["--desc"][1]
+	if not desc then
+		return doc
+	end
+	return (string.gsub(doc, "## Problem\n<!%-%-.-%-%->", function()
+		return "## Problem\n" .. desc
+	end, 1))
+end
+
 local cmd = {}
 
 function cmd.new(pos: { string }, opts: { [string]: { string } })
@@ -313,13 +362,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					EMERGENT = "false",
 					DATE = today(),
 				}
-				local doc = render("tracker/templates/issue/doc.md", vars)
-				local desc = opts["--desc"] and opts["--desc"][1]
-				if desc then
-					doc = string.gsub(doc, "## Problem\n<!%-%-.-%-%->", function()
-						return "## Problem\n" .. desc
-					end, 1)
-				end
+				local doc = withDesc(render("tracker/templates/issue/doc.md", vars), opts)
 				return {
 					{
 						path = `tracker/issues/{chosen}/{chosen}.md`,
@@ -346,7 +389,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			print(`tracker/issues/{chosen}/{chosen}.md`)
 			return
 		end
-		local id = store.formatId(prefix, store.nextNumber("issue"))
+		local id = store.formatId(prefix, store.nextNumber("issue", originIds("issue")))
 		local dir = store.dirFor("issue", state, id)
 		fs.writeDir(dir)
 		local vars = {
@@ -358,7 +401,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, render("tracker/templates/issue/doc.md", vars))
+		fs.writeFile(`{dir}/{id}.md`, withDesc(render("tracker/templates/issue/doc.md", vars), opts))
 		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/issue/check.sh", vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -463,7 +506,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if #members == 0 then
 			fail("a raft needs at least one issue")
 		end
-		local id = store.formatId("R", store.nextNumber("raft"))
+		local id = store.formatId("R", store.nextNumber("raft", originIds("raft")))
 		local dir = store.dirFor("raft", "backlog", id)
 		fs.writeDir(dir)
 		local ids: { string } = {}
@@ -859,10 +902,14 @@ function cmd.start(pos: { string })
 		local claim = stamp("active")
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
 		fs.writeFile(claimFile(raft.id), claim)
+		local raftPath: string? = nil
 		local r = publish.commit(".", function(paths, read)
 			local changes: { publish.Change } = {}
 			for _, id in ids do
 				local path = docPath(paths, id)
+				if id == raft.id then
+					raftPath = path
+				end
 				local text = path and read(path)
 				if not path or not text then
 					return `{id} is not on origin/main`
@@ -879,6 +926,15 @@ function cmd.start(pos: { string })
 			end
 			return changes
 		end, `tracker: start {raft.id}`)
+		-- a push that reached origin but reported failure (the connection dropped after it): origin already
+		-- carries this claim, so it is ours and start goes on
+		if not r.ok and raftPath then
+			sh.run("git", { "fetch", "-q", "origin", "main" })
+			local now = sh.run("git", { "show", `origin/main:{raftPath}` })
+			if now.ok and frontOf(now.stdout).status == claim then
+				r = { ok = true, sha = sh.trim(sh.run("git", { "rev-parse", "origin/main" }).stdout) }
+			end
+		end
 		if not r.ok or not r.sha then
 			-- refused, or nothing to claim (a resumed claim): keep or restore the file accordingly
 			if mine ~= "" then
