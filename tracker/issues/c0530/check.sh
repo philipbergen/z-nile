@@ -7,8 +7,14 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to 
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0530"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: with no argument, setup.sh installs the tools, then runs the gate once with --full, last" lune run tests/run -- "$A/setup-run.spec.luau"
+check "AC2: --tools installs the tools and runs no gate" lune run tests/run -- "$A/setup-run.spec.luau"
+check "AC3: neither CI nor any variable skips the gate; the CI branches run on CI" lune run tests/run -- "$A/setup-run.spec.luau"
+check "AC4: a red gate fails setup with its exit code and no SETUP OK" lune run tests/run -- "$A/setup-run.spec.luau"
+check "AC5: an unknown argument exits 2 and runs nothing" lune run tests/run -- "$A/setup-run.spec.luau"
+check "AC6: a host without rokit installs the pinned release, then runs the gate" lune run tests/run -- "$A/setup-run.spec.luau"
+check "AC7: the spec leaves no fixture behind" bash -c 'lune run tests/run -- "$0" >/dev/null && [[ ! -e .cache/c0530-setup ]]' "$A/setup-run.spec.luau"
+check "AC8: the slice-based setup-tools spec is gone and no other check.sh names it" bash -c '[[ ! -e tests/acceptance/c0460/setup-tools.spec.luau ]] && ! grep -rl --include=check.sh "setup-tools.spec" tracker | grep -v "/c0530/check.sh$"'
+check "AC9: c0140's text spec still passes" lune run tests/run -- tests/acceptance/c0140/tools.spec.luau
 
 finish
