@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Camera = require("./Camera")
 local Controls = require("./Controls")
+local HudView = require("./HudView")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
 local PelletView = require("./PelletView")
@@ -28,6 +29,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 		pellets = PelletView.build(m, walls)
 	end
 	Camera.push(frame)
+	HudView.show(frame.play)
 	-- last: a code that fails to decode can't stop the rest of the frame
 	if pellets then
 		PelletView.show(pellets, frame.pellets)
@@ -37,6 +39,7 @@ end)
 Camera.start()
 Controls.start(Camera.snap)
 PelletView.start()
+HudView.start()
 
 -- listening now: tell the server, so its first snapshot reaches a client that can show it
 ready:FireServer()
