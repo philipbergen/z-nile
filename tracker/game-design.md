@@ -13,6 +13,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 | Movement | **Rail movement with free look**, described below |
 | Players | **Solo mazes.** Each player gets their own maze instance (with their own ghosts) inside a shared server. Other players' mazes aren't visible. Logic should still allow N players per maze later. |
 | Authority | The **server** simulates every maze. Clients send intents and render the replicated state. A session starts only when its client signals it's ready (user, 2026-09-29). |
+| Two places (2026-10-02) | The experience has two places. The **lobby** (the existing place, the experience's start place) shows a hiscore list and a START GAME button, and a click teleports the player to the **game place**, which hosts the actual game. At game over an overlay shows the results and waits for a tap, then teleports back to the lobby (f0710, after c0690). The hiscore list is an empty panel until R0110 fills it. Both places live in the Beta experience (a repo variable for the game place's id); production stays undecided. (R0240, f0670; c0700) |
 | Deploy | A separate, private **Pickman Beta** experience. Every PR that becomes ready for review is published there (last one wins). Production publishing will be decided later. |
 | Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now. |
 | Platforms | Desktop (keyboard and mouse) and **mobile (touch)**. Gamepad isn't planned; it gets the same intents if it's added later. |
@@ -82,5 +83,6 @@ This is the source of truth for product decisions. Every raft design must agree 
 | d Ghosts (R0100) | feature | f0190, f0200, f0210, f0220, f0310, f0320 | classic ghost AI, its consequences, ghosts drawn, danger awareness (radar and edge indicators) |
 | e Hiscores (R0110) | feature | f0230, f0240, f0250 | all-time, daily and weekly boards |
 | f Mobile controls (R0120) | feature | f0260, f0270, f0280 | playable on a phone |
+| g Lobby place (R0240) | feature | f0670 | a lobby place with a start button that teleports to the game place (any time; the Beta publish is c0700, the way back f0710) |
 
 Process chores that aren't tied to a game raft: c0041 (worktrees, R0020), c0050, c0060, c0070 and c0080.
