@@ -56,10 +56,17 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
 			table.insert(args, a)
 		end
 	end
-	local r = process.exec("lune", args, {
-		env = { PATH = `{dir}:{process.env.PATH or ""}`, PICKMAN_OPEN_GUARD = dir },
-		stdio = { stdout = "forward", stderr = "forward" },
-	})
+	local ok, r = pcall(function()
+		return process.exec("lune", args, {
+			env = { PATH = `{dir}:{process.env.PATH or ""}`, PICKMAN_OPEN_GUARD = dir },
+			stdio = { stdout = "forward", stderr = "forward" },
+		})
+	end)
+	if not ok then
+		fs.removeDir(dir)
+		stdio.ewrite(`tests/run: could not re-run itself with the browser guard (is lune on PATH?): {r}\n`)
+		process.exit(1)
+	end
 	local log = if fs.isFile(`{dir}/opened.log`) then fs.readFile(`{dir}/opened.log`) else ""
 	fs.removeDir(dir)
 	if log ~= "" then
