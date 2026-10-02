@@ -8,6 +8,7 @@
 | 4 | 2026-10-02 14:45 | c0510: verification log (raft check, gate speed) | 0 | 0 | 3.0 | focus |
 | 5 | 2026-10-02 14:59 | c0510: review 001 fixes (git-dir guard, ids above origin's, --desc locally, claim that landed, one frontmatter writer, testing skill diff) | 195 | 29 | 30.0 | focus |
 | 6 | 2026-10-02 14:59 | R0200: refute-001 | 0 | 0 | 3.0 | focus |
+| 7 | 2026-10-02 14:59 | c0510: final verification log; merged origin/main (R0150) | 0 | 0 | 2.0 | focus |
 
-**Total:** +1111 / -56 lines, 58.0 agent-minutes over 6 commits
-<!-- totals: added=1111 removed=56 minutes=58.0 commits=6 -->
+**Total:** +1111 / -56 lines, 60.0 agent-minutes over 7 commits
+<!-- totals: added=1111 removed=56 minutes=60.0 commits=7 -->
