@@ -7,6 +7,7 @@
 | 3 | 2026-10-02 14:48 | f0300: FlowView, MazeView.flash, Camera.setCursor and the client wiring | 147 | 2 | 1.2 | focus |
 | 4 | 2026-10-02 14:49 | R0150: Phase 3 verification | 0 | 0 | 2.0 | focus |
 | 5 | 2026-10-02 14:55 | R0150: review-001 fixes (assert the play rules; explicit ScreenGui DisplayOrder) | 1 | 1 | 1.5 | explicit |
+| 6 | 2026-10-02 14:55 | R0150: refute-001 | 0 | 0 | 1.0 | focus |
 
-**Total:** +239 / -5 lines, 5.2 agent-minutes over 5 commits
-<!-- totals: added=239 removed=5 minutes=5.2 commits=5 -->
+**Total:** +239 / -5 lines, 6.2 agent-minutes over 6 commits
+<!-- totals: added=239 removed=5 minutes=6.2 commits=6 -->
