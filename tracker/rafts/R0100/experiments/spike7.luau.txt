@@ -1,0 +1,10 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local m = Maze.layout("classic")
+local s = Session.new(m, 1, Session.GAME_CONFIG)
+Session.join(s, "p")
+for tick = 1, 900 do
+	if tick == 62 then Session.submit(s, "p", "Right") end
+	for _, e in Session.step(s) do if e.kind == "Caught" then print("caught", tick, e.ghost) end end
+end

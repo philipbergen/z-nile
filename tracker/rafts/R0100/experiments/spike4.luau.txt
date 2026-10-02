@@ -1,0 +1,20 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Ghosts = require("@logic/Ghosts")
+local m = Maze.layout("classic")
+for _, from in { { x = 1, y = 29 }, { x = 26, y = 1 }, { x = 6, y = 5 }, { x = 21, y = 23 } } do
+	local set = Ghosts.new(m, 1, { start = "active" })
+	Ghosts.power(set, 900)
+	local b = Ghosts.ghost(set, "blinky")
+	b.tile, b.progress = { x = from.x, y = from.y }, 0
+	Ghosts.eat(set, "blinky")
+	local trail = {}
+	for tick = 1, 700 do
+		Ghosts.step(set, { player = { x = 1, y = 29 }, heading = "E", level = 1, baseSpeed = 30, tickRate = 30 })
+		local o = Ghosts.occupied(b)
+		local ok, kind = pcall(Maze.kind, m, { x = o.x % m.width, y = o.y % m.height })
+		table.insert(trail, `{o.x},{o.y}:{kind}:{b.status}:{b.heading}`)
+		if kind == "wall" then print("WALL from", from.x, from.y, "tick", tick); for i = math.max(1, #trail - 6), #trail do print(trail[i]) end break end
+		if b.status == "active" then print("done", from.x, from.y, tick) break end
+	end
+end

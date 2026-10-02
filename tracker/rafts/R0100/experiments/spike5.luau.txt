@@ -1,0 +1,19 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local m = Maze.layout("classic")
+local s = Session.new(m, 1, Session.GAME_CONFIG)
+Session.join(s, "p")
+local snap = Session.snapshot(s, "p")
+print(#(snap.ghosts :: any), s.members.p.ghosts ~= nil)
+local who = {}
+for seed = 1, 20 do
+	local s2 = Session.new(m, seed, Session.GAME_CONFIG)
+	Session.join(s2, "p")
+	for tick = 1, 1000 do
+		for _, e in Session.step(s2) do
+			if e.kind == "Caught" then who[e.ghost :: string] = (who[e.ghost :: string] or 0) + 1 print(seed, tick, e.ghost) end
+		end
+		if s2.members.p.play.phase ~= "playing" and s2.members.p.play.phase ~= "ready" then break end
+	end
+end
