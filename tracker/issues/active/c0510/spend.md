@@ -4,6 +4,7 @@
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-02 14:34 | c0510: status rules, mktree publisher, publishing commands, sync-and-claim skills, check.yml paths-ignore, c0041/c0140 replacements | 916 | 27 | 15.0 | focus |
 | 2 | 2026-10-02 14:35 | c0510: verification log | 0 | 0 | 2.0 | focus |
+| 3 | 2026-10-02 14:44 | R0200: check.sh finds c0510's specs wherever they are (user-approved fix of the sequestered RC1/RC2 path) | 0 | 0 | 5.0 | explicit |
 
-**Total:** +916 / -27 lines, 17.0 agent-minutes over 2 commits
-<!-- totals: added=916 removed=27 minutes=17.0 commits=2 -->
+**Total:** +916 / -27 lines, 22.0 agent-minutes over 3 commits
+<!-- totals: added=916 removed=27 minutes=22.0 commits=3 -->

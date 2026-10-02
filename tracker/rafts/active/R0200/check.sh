@@ -14,14 +14,17 @@ check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker
 claim_race_is_refused_end_to_end() {
   # the acceptance spec drives two terminals against a bare origin; running it again from the raft
   # level proves the whole path (new, claim, start) with the promoted or sequestered copy
-  local A="tracker/issues/c0510/acceptance"
+  # wherever c0510 is (backlog, active/ during execution, done/), else the promoted copy (user-approved fix, PR #44)
+  local A
+  A="$(scripts/tracker.sh find c0510 2>/dev/null)/acceptance"
   [[ -d $A ]] || A="tests/acceptance/c0510"
   lune run tests/run -- "$A/commands.spec.luau" >/dev/null 2>&1
 }
 check "RC1: two terminals cannot both claim or start the same item (end to end, bare origin)" claim_race_is_refused_end_to_end
 
 stable_on_repeat() {
-  local i A="tracker/issues/c0510/acceptance"
+  local i A
+  A="$(scripts/tracker.sh find c0510 2>/dev/null)/acceptance"
   [[ -d $A ]] || A="tests/acceptance/c0510"
   for i in 1 2 3; do
     lune run tests/run -- "$A/publish.spec.luau" "$A/commands.spec.luau" >/dev/null 2>&1 || { echo "repeat $i failed"; return 1; }
