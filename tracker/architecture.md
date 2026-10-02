@@ -15,6 +15,8 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Game | One player's run as a state machine: ready, playing, dying, level clear, game over; lives, level, score, extra life, the frightened counter (R0090, f0170; f0160) |
 | Ghosts | The four classic ghosts of one maze instance as pure state: navigation and targets, the scatter/chase schedule and frightened mode, the ghost house and its release rules, contacts with the player, the classic layout's ghost data and the seeded generator they use (R0100, f0190 f0200 f0210 f0220) |
 | Awareness | How the player senses ghosts they cannot see, engine-free: the radar around the player and the edge indicators that grow and brighten as a ghost nears along the maze (R0100, f0320) |
+| Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0240, f0670) |
+| Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0240, f0670) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0040, f0120) |
 | Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout (R0150, f0180) |
 | Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER and the play-again prompt and keys (R0150, f0300) |
@@ -34,6 +36,7 @@ Ghosts -> Maze
 Ghosts -> Movement
 Hud -> Levels
 Hud -> Session
+Lobby -> Travel
 Movement -> Maze
 Pellets -> Maze
 Session -> Game

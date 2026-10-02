@@ -11,6 +11,29 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0240
 
-# check "RC1: <end-to-end statement>" <command>
+# a sequestered issue spec before `tracker.sh done`, its promoted copy after it
+spec() { # $1 issue id, $2 spec name
+  local f="tracker/issues/$1/acceptance/$2.spec.luau"
+  [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
+  echo "$f"
+}
+
+lobby_end_to_end() {
+  local i
+  for i in 1 2 3; do
+    lune run tests/run -- "$(spec f0670 lobby-run)" "$(spec f0670 lobby-place)" "$(spec f0670 lobby-adapters)" >/dev/null 2>&1 \
+      || { echo "the lobby specs fail on repeat $i"; return 1; }
+  done
+}
+check "RC1: the lobby, built from its own project, runs as a player lives it (press, failure, wait, retry, teleport) and the specs pass three times in a row with no shared state" lobby_end_to_end
+
+game_place_untouched() {
+  local files
+  files=$(find tests/acceptance/f0120 tests/acceptance/f0130 tests/acceptance/f0170 tests/acceptance/f0180 tests/acceptance/f0290 tests/acceptance/f0300 tests/acceptance/f0520 tests/acceptance/c0020 tests/place -name '*.spec.luau' | sort)
+  # shellcheck disable=SC2086
+  lune run tests/run -- $files >/dev/null 2>&1 || { echo "a game place spec fails"; return 1; }
+  git diff --quiet "$(git merge-base origin/main HEAD)" -- default.project.json src/server src/client || { echo "the game place changed"; return 1; }
+}
+check "RC2: the game place is untouched: default.project.json, src/server and src/client are as they were when the branch left main, and its place and adapter specs pass" game_place_untouched
 
 finish
