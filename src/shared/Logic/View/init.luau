@@ -6,12 +6,14 @@
 -- and a positive yaw turns left, so heading yaws follow the usual camera-frame convention.
 local Maze = require("./Maze")
 local Movement = require("./Movement")
+local Pellets = require("./Pellets")
 local Session = require("./Session")
 
 export type Rect = { x0: number, y0: number, x1: number, y1: number } -- inclusive tile range
 export type Action = Movement.Intent | "Snap"
 export type Look = { yaw: number, pitch: number } -- radians, relative to the heading
 export type Pose = { x: number, y: number } -- tile coordinates
+export type PelletPart = { x: number, y: number, z: number, diameter: number } -- world studs; y is up
 
 local PI = math.pi
 local TAU = 2 * math.pi
@@ -37,6 +39,8 @@ View.TURN_SECONDS = 0.12 -- per quarter turn
 View.MAX_PITCH = math.rad(80)
 View.MOUSE_RADIANS_PER_PIXEL = 0.004
 View.KEYS = table.freeze(KEYS)
+-- Pellets float just below the eye line; a power pellet is bigger and pulses, in real seconds.
+View.PELLET = table.freeze({ height = 3, pellet = 1, power = 3, pulseSeconds = 0.5, pulseMin = 0.7 })
 
 -- An angle in (-pi, pi].
 local function wrap(a: number): number
@@ -130,6 +134,24 @@ end
 
 function View.snap(_l: Look): Look
 	return { yaw = 0, pitch = 0 }
+end
+
+-- Where a pellet is drawn: its tile's centre at View.PELLET.height, sized by its kind.
+function View.pellet(slot: Pellets.Slot): PelletPart
+	local x, z = View.world(slot.x, slot.y)
+	local p = View.PELLET
+	return { x = x, y = p.height, z = z, diameter = if slot.kind == "power" then p.power else p.pellet }
+end
+
+-- A pellet's size factor `seconds` of real time in. A power pellet swings smoothly between pulseMin and 1,
+-- once per pulseSeconds, starting full; a pellet, or a time that is NaN or infinite, is 1.
+function View.pulse(kind: Pellets.Kind, seconds: number): number
+	if kind ~= "power" or seconds ~= seconds or math.abs(seconds) == math.huge then
+		return 1
+	end
+	local p = View.PELLET
+	local wave = 0.5 + 0.5 * math.cos(2 * PI * seconds / p.pulseSeconds)
+	return p.pulseMin + (1 - p.pulseMin) * wave
 end
 
 function View.action(keyName: string): Action?

@@ -32,4 +32,16 @@ return t.spec("View extras", function(it)
 			(View.KEYS :: any).Q = "Back"
 		end).toThrow()
 	end)
+
+	it("places a pellet at its tile's world centre at the pellet height", function()
+		t.expect(View.pellet({ x = 2, y = 3, kind = "pellet" }))
+			.toEqual({ x = 16, y = 3, z = 24, diameter = 1 })
+		t.expect(View.pellet({ x = 2, y = 3, kind = "power" }).diameter).toBe(3)
+	end)
+
+	it("pulses only power pellets, from full size down to pulseMin and back", function()
+		t.expect(View.pulse("pellet", 0.25)).toBe(1)
+		t.expect(View.pulse("power", 0)).toBeNear(1, 1e-9)
+		t.expect(View.pulse("power", 0.25)).toBeNear(0.7, 1e-9)
+	end)
 end)
