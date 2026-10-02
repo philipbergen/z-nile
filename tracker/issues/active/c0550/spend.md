@@ -8,6 +8,7 @@
 | 4 | 2026-10-02 14:14 | R0220: refute-001 | 0 | 0 | 1.0 | focus |
 | 5 | 2026-10-02 14:19 | c0550: guard dir under TMPDIR explicitly; positive control (review-002 F1) | 30 | 1 | 6.0 | focus |
 | 6 | 2026-10-02 14:19 | R0220: refute-002 | 0 | 0 | 1.0 | focus |
+| 7 | 2026-10-02 14:19 | R0220: final verification log | 0 | 0 | 2.0 | focus |
 
-**Total:** +118 / -15 lines, 25.0 agent-minutes over 6 commits
-<!-- totals: added=118 removed=15 minutes=25.0 commits=6 -->
+**Total:** +118 / -15 lines, 27.0 agent-minutes over 7 commits
+<!-- totals: added=118 removed=15 minutes=27.0 commits=7 -->
