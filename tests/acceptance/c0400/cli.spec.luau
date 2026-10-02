@@ -1,6 +1,7 @@
 --!strict
 -- c0400 AC3: `scripts/tracker.sh board` writes the page for the real tracker, to .cache/board.html by
--- default or to --out, prints the path, and the file equals board.build().
+-- default or to --out, prints the path, and the file equals board.build(). `-O` (c0550) keeps the gate
+-- from starting a browser; it comes last, so the spec passes before and after c0550.
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -13,7 +14,7 @@ return t.spec("c0400 tracker.sh board", function(it)
 		if fs.isDir(".cache/c0400-cli") then
 			fs.removeDir(".cache/c0400-cli")
 		end
-		local r = process.exec("scripts/tracker.sh", { "board", "--out", OUT })
+		local r = process.exec("scripts/tracker.sh", { "board", "--out", OUT, "-O" })
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stdout, OUT, 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(OUT)).toBe(true)
@@ -22,7 +23,7 @@ return t.spec("c0400 tracker.sh board", function(it)
 	end)
 
 	it("defaults to .cache/board.html", function()
-		local r = process.exec("scripts/tracker.sh", { "board" })
+		local r = process.exec("scripts/tracker.sh", { "board", "-O" })
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stdout, ".cache/board.html", 1, true) ~= nil).toBe(true)
 		t.expect(fs.readFile(".cache/board.html") == board.build()).toBe(true)
