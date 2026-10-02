@@ -13,6 +13,7 @@ local latest: Session.Snapshot? = nil
 local arrived = 0
 local look: View.Look = { yaw = 0, pitch = 0 }
 local yaw: number? = nil
+local cursor = false -- the mouse is free (and shown) for a prompt
 
 -- Snapshots only move forward: a connected client's session is never replaced.
 function Camera.push(snap: Session.Snapshot)
@@ -27,14 +28,21 @@ function Camera.snap()
 	look = View.snap(look)
 end
 
+-- Frees the mouse and shows it (true), or locks it to the centre and hides it (false), from the next frame.
+function Camera.setCursor(free: boolean)
+	cursor = free
+end
+
 function Camera.start()
 	local camera = workspace.CurrentCamera :: Camera
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.FieldOfView = View.SCALE.fieldOfView
-	UserInputService.MouseIconEnabled = false
 
 	RunService:BindToRenderStep("PickmanCamera", Enum.RenderPriority.Camera.Value + 1, function(dt: number)
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseBehavior = if cursor
+			then Enum.MouseBehavior.Default
+			else Enum.MouseBehavior.LockCenter
+		UserInputService.MouseIconEnabled = cursor
 		local delta = UserInputService:GetMouseDelta()
 		look = View.look(look, delta.X, delta.Y)
 

@@ -4,6 +4,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Camera = require("./Camera")
 local Controls = require("./Controls")
+local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
+local FlowView = require("./FlowView")
+local Game = require("@game/ReplicatedStorage/Shared/Logic/Game")
 local HudView = require("./HudView")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
@@ -14,9 +17,13 @@ local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
 local ready = remotes:WaitForChild("Ready") :: RemoteEvent
 
+-- the rules the server plays by, so the overlay times its fade to the same dying pause
+local RULES = (Session.GAME_CONFIG.play or Game.CLASSIC_CONFIG) :: Game.Config
+
 local built: string? = nil
 local model: Model? = nil
 local pellets: PelletView.Handle? = nil
+local lit = false -- the walls are drawn lit
 snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	if built ~= frame.maze then
 		built = frame.maze
@@ -27,9 +34,17 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 		local walls = MazeView.build(m)
 		model = walls
 		pellets = PelletView.build(m, walls)
+		lit = false -- new walls are built unlit
 	end
 	Camera.push(frame)
 	HudView.show(frame.play)
+	local overlay = Flow.overlay(frame.play, RULES)
+	FlowView.show(overlay)
+	if model and overlay.flash ~= lit then
+		lit = overlay.flash
+		MazeView.flash(model, overlay.flash)
+	end
+	Camera.setCursor(overlay.playAgain)
 	-- last: a code that fails to decode can't stop the rest of the frame
 	if pellets then
 		PelletView.show(pellets, frame.pellets)
@@ -40,6 +55,7 @@ Camera.start()
 Controls.start(Camera.snap)
 PelletView.start()
 HudView.start()
+FlowView.start()
 
 -- listening now: tell the server, so its first snapshot reaches a client that can show it
 ready:FireServer()
