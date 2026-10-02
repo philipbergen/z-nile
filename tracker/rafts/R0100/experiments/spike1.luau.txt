@@ -1,0 +1,31 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Ghosts = require("@logic/Ghosts")
+local m = Maze.layout("classic")
+for _, t in Ghosts.noUpTiles(m) do
+	local ex = Maze.exits(m, t, "ghost")
+	print("noUp", t.x, t.y, Maze.kind(m, t), table.concat(ex, ","))
+end
+-- a walker chasing a fixed target for 3000 ticks from each start: legality
+local set = Ghosts.new(m, 7, { start = "active" })
+local bad = 0
+local reversals = 0
+for _, g in set.ghosts do
+	local w = Ghosts.walker(g.tile, g.heading)
+	local prev = w.heading
+	local atCentre = {}
+	for tick = 1, 4000 do
+		local target = { x = 5 + (tick // 400) * 3 % 20, y = 5 + (tick // 300) % 20 }
+		Ghosts.walk(m, w, 28, function(tile, heading)
+			local h = Ghosts.pickExit(m, tile, heading, target, { noUp = true })
+			if h == Maze.opposite(heading) then reversals += 1 end
+			return h
+		end)
+		local o = Ghosts.occupied(w)
+		local tile = { x = o.x % m.width, y = o.y % m.height }
+		if not Maze.passable(m, tile, "ghost") then bad += 1 end
+		local k = Maze.kind(m, tile)
+		if k == "door" or k == "house" then bad += 1000 end
+	end
+end
+print("bad", bad, "forced reversals", reversals)
