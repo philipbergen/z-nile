@@ -16,7 +16,9 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Ghosts | The four classic ghosts of one maze instance as pure state: navigation and targets, the scatter/chase schedule and frightened mode, the ghost house and its release rules, contacts with the player, the classic layout's ghost data and the seeded generator they use (R0100, f0190 f0200 f0210 f0220) |
 | Awareness | How the player senses ghosts they cannot see, engine-free: the radar around the player and the edge indicators that grow and brighten as a ghost nears along the maze (R0100, f0320) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0040, f0120) |
-| View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0040, f0130) |
+| Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout (R0150, f0180) |
+| Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER and the play-again prompt and keys (R0150, f0300) |
+| View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0040, f0130); pellet placement and pulse (R0150, f0290) |
 
 ## Allowed dependencies
 
@@ -24,10 +26,14 @@ One `Consumer -> Provider` per line.
 
 ```deps
 Awareness -> Maze
+Flow -> Game
+Flow -> Session
 Game -> Levels
 Ghosts -> Levels
 Ghosts -> Maze
 Ghosts -> Movement
+Hud -> Levels
+Hud -> Session
 Movement -> Maze
 Pellets -> Maze
 Session -> Game
@@ -38,5 +44,6 @@ Session -> Movement
 Session -> Pellets
 View -> Maze
 View -> Movement
+View -> Pellets
 View -> Session
 ```

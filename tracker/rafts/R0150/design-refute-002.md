@@ -1,0 +1,5 @@
+# Design refute 002: R0150
+
+- F1: fixed: f0300 `place.spec` gains "the cursor flag frees the mouse and shows the icon, never the other way round". It pins `MouseBehavior = if <flag> then Enum.MouseBehavior.Default else Enum.MouseBehavior.LockCenter`, requires `MouseIconEnabled = <flag>` with the same flag, and forbids `MouseIconEnabled = not`. New row F21 (inverted condition) was run on the prototype and killed. AC3 is reworded. consequences: it pins the lock line to an `if` expression, which is the form the design already states; none further.
+- F2: fixed: the R0150 diagram now draws the per-frame order Camera, HUD, overlay, then `PelletView.show` last, matching the text, f0290 and f0300. consequences: none.
+- F3: fixed: f0290's design and AC1 say `slots` returns a **deep copy**, and that `encode`/`decode` read the private cache, never `slots`. The prototype was changed to match. Mutant M20 now uses the subtler `table.clone` (shallow) and is killed. consequences: none; the encode cost claim (about 26 µs) was measured on a version that copied, so it is an upper bound.
