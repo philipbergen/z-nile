@@ -15,7 +15,7 @@ local made: { string } = {}
 
 -- Fixture steps must succeed: a broken fixture would otherwise show up as a misleading refusal.
 local function git(cwd: string, args: { string })
-	local all = { "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false" }
+	local all = { "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false" }
 	for _, a in args do
 		table.insert(all, a)
 	end

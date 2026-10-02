@@ -1,0 +1,45 @@
+# Answers to design review 001 (R0210)
+
+- F1: fixed: the runner's guards moved into `scripts/lib/fence.sh` (`pickman_fence`), used by the top-level run and by `ac.sh`.
+  - It unsets `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE`, `GIT_PREFIX`, `GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_COUNT` before anything runs. The snapshot runs its git through `env -u` with the same list.
+  - It writes the sentinel `.cache/.git` (`gitdir: /nonexistent/pickman-fence`).
+  - c0330's real-root `tracker.sh check`/`done` calls now run in a fixture holding the tracker (an `Overrides:` line names it).
+  - New cases: `fence :: git in a fixture folder without a repository, or in .cache itself, finds none`, `fence :: inherited repository overrides are stripped before any spec runs` (run with `GIT_DIR` and `GIT_INDEX_FILE` pointing at the repository: the probe's fixture resolves to its own git dir and the repository's index is unchanged), and `repo-fence :: this run is guarded for this checkout` (the variables are unset).
+  - Consequences: real-root commands are now also covered at run time by F2's ref guard. Real-root writes that are not ref updates (index, tracked files, config) are named in the testing skill's "Caught only by review" list (F10).
+- F2: fixed, with (b) and (c), and the push block done centrally instead of (a):
+  - (c) **ref guard**: every git a check runs gets `core.hooksPath=scripts/lib/git-hooks` through injected config. Its `reference-transaction` hook refuses any ref update (commit, branch, switch, reset, update-ref, worktree add, a `remote rm` ref deletion) in a repository listed in `PICKMAN_FENCE_REAL_GIT`. Spiked in scratch before adopting it: refused in the real repository, a fixture's own commits and branches allowed, about 50 ms per commit. Measured: c0041 alone took 14.0 s guarded versus 18.0 s unguarded, so no slowdown beyond noise. No spec relies on fixture hooks (grep).
+  - **Push guard** (a, centrally): a `pre-push` hook in the same hook directory runs in the pushing repository, where the injected config applies. It resolves the push URL (absolute, relative or `file://`) to its repository and refuses the push if that repository is protected. A first attempt with `pushInsteadOf` prefix rules missed relative URLs (mutation M9 survived), hence the hook. This covers every clone of the root without editing c0010, c0050, c0070 and c0360.
+  - (b) **tripwire**: now checks `user.*` config, and any new ref whose tip a fixture identity (`@example.invalid`) wrote.
+  - Cases: `fence :: a ref update in the repository from inside a run is refused`, `fence :: a push from a fixture into the repository is refused; into a fixture it works`, `fence :: a run that changed remote or user config fails…`, `fence :: a run during which a fixture-written ref or a worktree under .cache appeared fails`.
+  - Consequences, all handled:
+    - **Injected config can be overridden by any spec that sets `GIT_CONFIG_COUNT`.** Five specs did so (`gc.auto`/`maintenance.auto`), which silently turned the guard off for them. The guard now sets those two keys itself, the five specs drop theirs (c0041, c0420, c0430 and c0440 named on `Overrides:`; `worktree-fetch` is a tooling spec), and the gate scan forbids `GIT_CONFIG_`.
+    - **Nested guards accumulate**: the ceiling, the protected-repository list and the first hook path all survive a guard set up inside another, so an inner run can't re-open the outer repository.
+    - **Fixture identities**: all specs use `@example.invalid` today, and the gate spec now enforces it (`repo-fence :: every fixture commits as <name>@example.invalid`).
+- F3: fixed: both c0640 specs clear only the marker for inner runs, so the outer ceiling and ref guard stay. That makes every probe double-guarded. The ceiling case now asserts that the inner ceiling keeps the outer one. Consequences: none beyond that case.
+- F4: fixed:
+  - **Rebased** onto `origin/main` `01395fc`.
+  - **Prototype v2** (`proto2-c0640`) is built on the parallel runner. `fence.enter()` sits right after the `AC_LIST` refusal and before argument parsing; a new case shows `--jobs x` still exits 2 through the guard. Workers carry the marker and record their pids in the lock.
+  - **Measured again**:
+    - full gate, parallel: 633 passed, 0 failed, 103 files, 18.6 s wall; with every v2 change, 21.1 s;
+    - serial (`PICKMAN_JOBS=1`): 638 passed, 0 failed, 104 files;
+    - two suites at once: RC1;
+    - every mutant: re-run, see c0640.
+  - **Fixed sleeps** are replaced with rendezvous files (`hold`/`go`, the second run's output watched by the first, RC1's start-on-lock), except one bounded observation window in the two-waiters case, which can only prove "never two at once" over time. The Speed section's "one suite per worktree" sentence is replaced by the lock.
+  - Consequences: the specs are split into `fence.spec.luau` and `lock.spec.luau` so they run in separate lanes (about 7 s each). Their `.cache` names (`c0640-fence`, `f-*`, `c0640-lock`, `l-*`, `tests-run` in the lock spec only) are distinct for the spec-isolation guard.
+- F5: fixed:
+  - Every guarded process (the re-run child and each worker) writes `pid-<n>` into the lock, and a lock is stale only when every recorded process is gone.
+  - Takeover is serialised by a mutex directory (`<lock>.takeover`, created with `mkdir`): only its holder may remove a stale lock, so two waiters can't both remove one, and a fresh lock is never removed.
+  - Cases: `lock :: a run whose top process was killed keeps the lock while its specs still run` (verified: the orphan keeps running and keeps the lock; once it ends, the next run takes over) and `lock :: two runs waiting on one dead lock take it one at a time`.
+  - Consequences: a lock that exists but is not yet claimed is treated as live for 2 s.
+- F6: fixed:
+  - The branch (symbolic ref) is compared exactly. The commit fails the run only if the new HEAD doesn't descend from the old one, or if a commit between them has an `@example.invalid` author.
+  - `remote.*.gh-resolved` is ignored.
+  - Cases: `fence :: someone else's commit during a run, or gh's own config, does not trip it` and `fence :: a run during which HEAD gained a fixture commit, or lost history, fails`.
+- F7: fixed: the marker counts only if `pwd -P` is at or below it and the ceiling contains `<marker>/.cache`. Otherwise the run notes it and guards itself. Case: `fence :: a fake marker does not switch the guards off`.
+- F8: fixed:
+  - Case `fence :: the gate spec fails on a spec, script or identity that would bypass a guard` copies the gate spec into a fresh repository, plants a `.luau` naming `GIT_DIR`, a script with `env -u GIT_CEILING_DIRECTORIES` and a non-fixture `user.email`, and expects a failure naming all three.
+  - The scan now covers `scripts/` and also names `PICKMAN_FENCE_`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_CONFIG_`, `hooksPath`, `env -i` and `env -u`.
+  - AC6 requires the gate spec's five case names and a clean pass, and the scan rows are `run`.
+- F9: fixed: `Overrides: tests/acceptance/c0330/locator.spec.luau` (its tracker calls move into a fixture) and `tests/acceptance/c0041/worktree.spec.luau`, `c0420/naming.spec.luau`, `c0430/workstreams.spec.luau`, `c0440/launch.spec.luau` (they drop their own git config, now the guard's). This is a chore, so no `depends_on`. AC7 runs all of them.
+- F10: fixed: the testing section now names the protected objects, the allowed writers (`.cache/`, `sourcemap.json`, `promote-check`'s transient copies), "Enforced at run time" (each guard and exactly what it covers) and "Caught only by review" (writes to the real checkout's tracked files or index, config writes at the root, anything run outside `tests/run` and `check.sh`). AGENTS.md says "the runner enforces most of it … what it can't see, review must catch". Review items 8 and 9 point at the "Caught only by review" list.
+- F11: fixed: `PICKMAN_TEST_LOCK_WAIT` defaults to 240 s (under the Stop hook's 300 s), and a give-up prints why, which `stop.sh` relays. Dead pids come from an exited `sh -c 'echo $$'`. RC1's snapshot includes fixture-written refs, and it starts the second suite when the first's lock appears.
