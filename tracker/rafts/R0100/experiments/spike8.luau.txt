@@ -1,0 +1,9 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local serde = require("@lune/serde")
+local s = Session.new(Maze.layout("classic"), 1, Session.GAME_CONFIG)
+Session.join(s, "p")
+for _ = 1, 200 do Session.step(s) end
+local f = Session.frame(s, "p")
+print(#serde.encode("json", f :: any), #serde.encode("json", (f :: any).ghosts))

@@ -4,6 +4,7 @@
 local Maze = require("./Maze")
 
 export type Kind = "pellet" | "power"
+export type Slot = { x: number, y: number, kind: Kind }
 export type Pellets = {
 	maze: Maze.Maze,
 	cells: { [number]: Kind }, -- tile index -> what is still there
@@ -103,6 +104,88 @@ function Pellets.tiles(p: Pellets, kind: Kind?): { Maze.Tile }
 		end
 	end
 	return out
+end
+
+-- The wire order of each maze's pellets, computed once per maze. Private: callers get copies.
+local slotCache: { [Maze.Maze]: { Slot } } = setmetatable({}, { __mode = "k" }) :: any
+
+local function slotsOf(m: Maze.Maze): { Slot }
+	local cached = slotCache[m]
+	if cached == nil then
+		local list: { Slot } = {}
+		for y = 0, m.height - 1 do
+			for x = 0, m.width - 1 do
+				local k = Maze.kind(m, { x = x, y = y })
+				if k == "pellet" or k == "power" then
+					table.insert(list, { x = x, y = y, kind = k :: Kind })
+				end
+			end
+		end
+		slotCache[m] = list
+		return list
+	end
+	return cached
+end
+
+-- Every pellet and power tile of the layout, row-major: the order of the bits in a code. A deep copy.
+function Pellets.slots(m: Maze.Maze): { Slot }
+	local out: { Slot } = {}
+	for i, slot in slotsOf(m) do
+		out[i] = { x = slot.x, y = slot.y, kind = slot.kind }
+	end
+	return out
+end
+
+Pellets.ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+local VALUE: { [string]: number } = {}
+for i = 1, #Pellets.ALPHABET do
+	VALUE[string.sub(Pellets.ALPHABET, i, i)] = i - 1
+end
+
+-- What is left, as text: one bit per slot (1 = still there), six to a base64url character. Slot i is
+-- bit (i - 1) % 6 of character (i - 1) // 6 + 1; the unused bits of the last character are 0.
+function Pellets.encode(p: Pellets): string
+	local slots = slotsOf(p.maze)
+	local width = p.maze.width
+	local chars: { string } = {}
+	local value = 0
+	for i, slot in slots do
+		if p.cells[slot.y * width + slot.x + 1] then
+			value += bit32.lshift(1, (i - 1) % 6)
+		end
+		if i % 6 == 0 or i == #slots then
+			table.insert(chars, string.sub(Pellets.ALPHABET, value + 1, value + 1))
+			value = 0
+		end
+	end
+	return table.concat(chars)
+end
+
+-- Per slot, whether the pellet is still there. Refuses a code that can't come from this maze: a wrong
+-- length, a character outside the alphabet, or a set bit past the last slot.
+function Pellets.decode(m: Maze.Maze, code: string): { boolean }
+	local n = #slotsOf(m)
+	local want = (n + 5) // 6
+	if #code ~= want then
+		error(`pellets: the code has {#code} characters, this maze needs {want}`, 0)
+	end
+	local present: { boolean } = {}
+	for c = 1, want do
+		local value = VALUE[string.sub(code, c, c)]
+		if value == nil then
+			error(`pellets: character {c} of the code is not base64url`, 0)
+		end
+		for b = 0, 5 do
+			local i = (c - 1) * 6 + b + 1
+			local set = bit32.btest(value, bit32.lshift(1, b))
+			if i <= n then
+				present[i] = set
+			elseif set then
+				error(`pellets: bit {b} of the last character is past the last slot`, 0)
+			end
+		end
+	end
+	return present
 end
 
 -- The distance eating stops the player for: `frames` of the arcade's 60 fps at the player's speed.

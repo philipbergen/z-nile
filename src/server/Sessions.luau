@@ -15,6 +15,7 @@ function Sessions.start()
 	local ready = remotes:WaitForChild("Ready") :: RemoteEvent
 	local intent = remotes:WaitForChild("Intent") :: RemoteEvent
 	local snapshot = remotes:WaitForChild("Snapshot") :: RemoteEvent
+	local playAgain = remotes:WaitForChild("PlayAgain") :: RemoteEvent
 
 	local sessions: { [Player]: Session.Session } = {}
 	local clock = Session.newClock(Session.STEP_RATE)
@@ -32,6 +33,14 @@ function Sessions.start()
 		local s = sessions[player]
 		if s then
 			Session.submit(s, tostring(player.UserId), raw)
+		end
+	end)
+
+	-- only the sender's own run, and only if Logic says the run is over; anything the client sends is ignored
+	playAgain.OnServerEvent:Connect(function(player: Player)
+		local s = sessions[player]
+		if s then
+			Session.playAgain(s, tostring(player.UserId))
 		end
 	end)
 

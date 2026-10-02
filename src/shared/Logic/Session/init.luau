@@ -33,7 +33,14 @@ export type PlayFrame = {
 	timer: number,
 	frightened: number,
 }
-export type Frame = { v: number, tick: number, maze: string, player: PlayerSnapshot, play: PlayFrame }
+export type Frame = {
+	v: number,
+	tick: number,
+	maze: string,
+	player: PlayerSnapshot,
+	play: PlayFrame,
+	pellets: string, -- Pellets.encode of what the player has left to eat
+}
 export type Event = {
 	kind: string,
 	player: PlayerId,
@@ -320,6 +327,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
 			timer = play.timer,
 			frightened = play.frightened,
 		},
+		pellets = Pellets.encode(s.members[id].pellets),
 	}
 end
 

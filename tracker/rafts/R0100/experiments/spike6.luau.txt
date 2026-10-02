@@ -1,0 +1,17 @@
+--!strict
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local Ghosts = require("@logic/Ghosts")
+local Movement = require("@logic/Movement")
+local m = Maze.layout("classic")
+local s = Session.new(m, 1, Session.GAME_CONFIG)
+Session.join(s, "p")
+for _ = 1, 61 do Session.step(s) end
+local at = Movement.occupied(m, s.members.p.move)
+print("player", at.x, at.y, s.members.p.move.progress, s.members.p.play.phase)
+local g = Ghosts.ghost(s.members.p.ghosts :: any, "inky")
+g.tile, g.progress, g.status = { x = at.x, y = at.y }, 0, "active"
+local ev = Session.step(s)
+for _, e in ev do print(e.kind, e.ghost) end
+local a2 = Movement.occupied(m, s.members.p.move)
+print("after", a2.x, a2.y, g.tile.x, g.tile.y, g.progress, g.heading)
