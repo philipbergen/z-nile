@@ -69,8 +69,14 @@ local function git(cwd: string, args: { string }): string
 	return must(run(cwd, "git", args), "git " .. table.concat(args, " "))
 end
 
+-- c0510: the commands publish to origin/main when there is an origin. These fixtures test worktrees,
+-- not publishing (c0510's commands spec does), and one of them fakes a GitHub URL it cannot fetch.
 local function tr(cwd: string, args: { string }): Result
-	return run(cwd, "bash", { "scripts/tracker.sh", table.unpack(args) })
+	return process.exec(
+		"bash",
+		{ "scripts/tracker.sh", table.unpack(args) },
+		{ cwd = cwd, env = { PICKMAN_PUBLISH = "0" } }
+	)
 end
 
 local function identity(cwd: string)
@@ -264,7 +270,8 @@ return t.spec("worktrees", function(it)
 		must(process.exec("chmod", { "+x", fakebin .. "/gh" }), "chmod fake gh")
 		git(main, { "remote", "set-url", "origin", "https://github.com/x/y.git" })
 		git(main, { "remote", "set-url", "--push", "origin", origin })
-		local env = { PATH = `{fakebin}:{process.env.PATH}`, GIT_TERMINAL_PROMPT = "0" }
+		local env =
+			{ PATH = `{fakebin}:{process.env.PATH}`, GIT_TERMINAL_PROMPT = "0", PICKMAN_PUBLISH = "0" }
 		local r = run(wt2, "bash", { "scripts/tracker.sh", "start", "R0020" }, nil, env)
 		git(main, { "remote", "set-url", "origin", origin })
 		git(main, { "config", "--unset", "remote.origin.pushurl" })

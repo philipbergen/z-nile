@@ -4,6 +4,7 @@ name: check
 on:
   push:
     branches: [main]
+    paths-ignore: ['tracker/**'] # tracker state is pushed straight to main in tiny commits (c0510)
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}

@@ -10,10 +10,10 @@ The goal is a raft that **any strong agent can deliver on the first attempt with
 ## 1. Form the raft
 **Work in a prep worktree** for the whole prep (new raft, design, specs, reviews): `cd "$(scripts/tracker.sh worktree prep-<slug>)"`, named by the raft's slug because its id isn't known yet (tracker skill, Worktrees). Design reviews run there too, and their files ride in the prep PR.
 
-- **Candidates**: `scripts/tracker.sh list backlog`. Group issues by **functional adjacency**: they touch the same features or interfaces, or they're only meaningful together.
+- **Sync first**: `scripts/tracker.sh sync` (tracker skill, Sync and claim). **Candidates**: `scripts/tracker.sh status` (what is `new`, and what others have claimed) and `scripts/tracker.sh list backlog`. Group issues by **functional adjacency**: they touch the same features or interfaces, or they're only meaningful together.
 - **One type per raft.** Never mix feature, defect and chore. A defect found while planning a feature raft goes in its own raft.
 - **Size**: aim for something that fits in one reviewable PR, roughly under 1,500 changed lines. Split larger groups into sequential rafts.
-- **Create it**: `scripts/tracker.sh new raft <feature|defect|chore> <slug> <ids…>`. A single issue gets a raft too: add `--single`.
+- **Create it**: `scripts/tracker.sh new raft <feature|defect|chore> <slug> <ids…>`: it claims the issues (status `preparing`) on `origin/main` at once, and refuses any issue another terminal holds. To prep a raft that already exists, claim it with `scripts/tracker.sh status <R-id> preparing`; an issue added during prep is claimed first (`status <id> preparing`), a dropped one released (`status <id> new`). A single issue gets a raft too: add `--single`.
 - If an issue is missing, create it first with the `make-issue` skill.
 
 ## 2. Design the raft as a whole
@@ -65,7 +65,7 @@ Fill every section of the issue template. Requirements:
    - Fix it in the documents, specs or `check.sh`.
    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`).
 4. Run another round with a new clean reviewer if any high finding was fixed or the design changed materially. Stop after 3 rounds and bring the open questions to the user.
-5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member.
+5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member, **then run `scripts/tracker.sh status <R-id> prepared`** (carried: it edits the local documents, and refuses unless the raft and its members are `design: ready` and `preparing` on `origin/main`), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` lines by hand to `prepared-<three words>` instead). Without it the members keep their `preparing` stamp and the raft can be neither started nor prompted.
 
 ## 6. Commit and hand off
 - **Commit** the prepared tracker items, acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep R0010 <title>`, then follow Landing a change (tracker skill): push, PR, merge, pull the main checkout, remove the worktree.

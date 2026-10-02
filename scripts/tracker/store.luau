@@ -152,8 +152,10 @@ function store.setFront(path: string, key: string, value: string)
 	if not head or not block or not rest then
 		error(`{path} has no frontmatter`, 0)
 	end
-	local pattern = `(\n?){key}:[^\n]*\n`
-	local replaced, n = string.gsub("\n" .. block, pattern, `%1{key}: {value}\n`, 1)
+	-- anchored at a line start: a title that mentions `status:` must not absorb the new value
+	local replaced, n = string.gsub("\n" .. block, `\n{key}:[^\n]*\n`, function()
+		return `\n{key}: {value}\n`
+	end, 1)
 	if n == 0 then
 		replaced = "\n" .. block .. `{key}: {value}\n`
 	end

@@ -5,6 +5,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
 
 # Metrics
 
+0. Run `scripts/tracker.sh sync --fetch` first (it only updates `origin/main`).
 1. Run `scripts/tracker.sh metrics`. It covers done issues; add `--include-active` for work in progress. It prints:
    - cost per issue: lines added and removed, and agent-minutes;
    - totals and minutes per issue, by type;

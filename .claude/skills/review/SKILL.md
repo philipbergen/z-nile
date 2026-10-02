@@ -79,10 +79,10 @@ A stream review is a cheap first filter on **one issue's** work, run by a clean 
 - These files are not review rounds: `tracker.sh done` and `metrics` ignore them.
 
 ## Code mode (before the PR is marked ready)
-Inputs: `git fetch origin main && git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
+Inputs: `scripts/tracker.sh sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
 A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (execute-raft stop conditions).
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
-2. **Sequestration**: `git diff <tracker: start commit> -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must be empty. Any change is **high**.
+2. **Sequestration**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/`). Any other change is **high**. The three-dot form shows only what this branch changed, not what `main` brought in.
 3. **Weak tests**: tests that assert on internals, lack a negative case, would pass with a stub, or depend on the wall clock or randomness.
 4. **Design adherence**: does the code match the Design? Is each deviation recorded with a reason?
 5. **Architecture rules** from the skill, including thin adapters and server authority.
