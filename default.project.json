@@ -11,7 +11,8 @@
         "$className": "Folder",
         "Ready": { "$className": "RemoteEvent" },
         "Intent": { "$className": "RemoteEvent" },
-        "Snapshot": { "$className": "RemoteEvent" }
+        "Snapshot": { "$className": "RemoteEvent" },
+        "PlayAgain": { "$className": "RemoteEvent" }
       }
     },
     "ServerScriptService": {

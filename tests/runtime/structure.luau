@@ -8,7 +8,7 @@ assert(server, "ServerScriptService.Server is missing")
 assert(server:FindFirstChild("Main"), "Server.Main is missing")
 local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
 assert(remotes, "ReplicatedStorage.Remotes is missing")
-for _, name in { "Ready", "Intent", "Snapshot" } do
+for _, name in { "Ready", "Intent", "Snapshot", "PlayAgain" } do
 	assert(remotes:FindFirstChild(name), "Remotes." .. name .. " is missing")
 end
 assert(game:GetService("Players").CharacterAutoLoads == false, "CharacterAutoLoads must be false")

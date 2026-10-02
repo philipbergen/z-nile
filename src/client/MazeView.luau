@@ -6,6 +6,7 @@ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 local WALL = Color3.fromRGB(33, 33, 222)
 local DOOR = Color3.fromRGB(255, 184, 255)
 local FLOOR = Color3.fromRGB(0, 0, 0)
+local LIT = Color3.fromRGB(255, 255, 255)
 
 local MazeView = {}
 
@@ -56,6 +57,16 @@ function MazeView.build(m: Maze.Maze): Model
 
 	model.Parent = workspace
 	return model
+end
+
+-- The walls lit (the level-clear flash) or back in their own colour.
+function MazeView.flash(model: Model, lit: boolean)
+	local color = if lit then LIT else WALL
+	for _, child in model:GetChildren() do
+		if child.Name == "Wall" and child:IsA("BasePart") then
+			child.Color = color
+		end
+	end
 end
 
 return MazeView
