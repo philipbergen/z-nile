@@ -69,4 +69,25 @@ return t.spec("Ghosts extras", function(it)
 		local _ = trail(8)
 		t.expect(trail(7)).toBe(a)
 	end)
+
+	it("a ghost that leaves the house comes out heading west", function()
+		local set = Ghosts.new(classic, 1)
+		local input = {
+			player = { x = 1, y = 29 },
+			heading = "E" :: Maze.Heading,
+			level = 3,
+			baseSpeed = 30,
+			tickRate = 30,
+		}
+		local left = false
+		for _ = 1, 120 do
+			for _, e in Ghosts.step(set, input) do
+				if e.kind == "GhostLeft" and e.ghost == "pinky" then
+					left = true
+					t.expect(Ghosts.ghost(set, "pinky").heading).toBe("W")
+				end
+			end
+		end
+		t.expect(left).toBe(true)
+	end)
 end)

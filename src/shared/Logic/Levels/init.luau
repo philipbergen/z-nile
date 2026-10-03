@@ -140,12 +140,22 @@ function Levels.ghostSpeed(baseSpeed: number, level: number, kind: GhostSpeed, t
 	return math.max(1, round(baseSpeed * factor * k))
 end
 
--- Phase lengths in ticks (scatter, chase, scatter, ...); the chase after the last one lasts forever.
+-- Phase lengths in ticks (scatter, chase, scatter, ...); the chase after the last one lasts forever. Computed once
+-- per level and tick rate: the step asks for it every tick, and the returned table is frozen.
+local schedules: { [string]: { number } } = {}
 function Levels.schedule(level: number, tickRate: number): { number }
+	local levelRow = Levels.row(level) -- refuses a level that is not a whole number >= 1
+	local key = `{math.min(level, Levels.COUNT)}/{tickRate}`
+	local found = schedules[key]
+	if found then
+		return found
+	end
 	local out: { number } = {}
-	for _, seconds in Levels.row(level).schedule do
+	for _, seconds in levelRow.schedule do
 		table.insert(out, math.max(1, round(seconds * tickRate)))
 	end
+	table.freeze(out)
+	schedules[key] = out
 	return out
 end
 
