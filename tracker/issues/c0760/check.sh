@@ -16,7 +16,8 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec; the whole s
   grep -Eq "^[0-9]+ passed, 0 failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out" | tail -n 40; return 1; }
   local c
   for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
+    # stylua may wrap `it(` and a long name over two lines: join lines before matching
+    tr -d '\n\t' < "$spec" | grep -qF "it(\"$c" || { echo "the spec has no case starting \"$c\""; return 1; }
   done
 }
 

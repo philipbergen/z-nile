@@ -26,5 +26,14 @@ check "RC4: the usage text lists ready, stop and prompt <R-id> [--path], and no 
     grep -qF -- "$k" <<<"$u" || { echo "usage: missing $k"; exit 1; }
   done
   ! grep -qw "launch" <<<"$u" || { echo "usage: launch"; exit 1; }'
+check "RC5: the done check.sh files edited in prep pass (c0041, c0430, c0440, c0450)" bash -c '
+  for id in c0041 c0430 c0440 c0450; do
+    bash "tracker/issues/done/$id/check.sh" >/dev/null 2>&1 || { echo "$id check.sh fails"; bash "tracker/issues/done/$id/check.sh" | grep FAIL; exit 1; }
+  done'
+check "RC6: c0510's replacement copies match and ready-raft syncs (c0510 AC6/AC8, targeted)" bash -c '
+  R=tracker/issues/done/c0510/replacements
+  cmp -s "$R/c0041-worktree.spec.luau" tests/acceptance/c0041/worktree.spec.luau || { echo "c0041 replacement differs"; exit 1; }
+  cmp -s "$R/c0140-workflow.spec.luau" tests/acceptance/c0140/workflow.spec.luau || { echo "c0140 replacement differs"; exit 1; }
+  grep -Eq "tracker\.sh sync([^ -]|$)" .claude/skills/ready-raft/SKILL.md || { echo "ready-raft: no merging sync"; exit 1; }'
 
 finish

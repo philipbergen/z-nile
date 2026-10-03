@@ -290,11 +290,27 @@ return t.spec("tracker stop", function(it)
 		local before = tip()
 		trOk(cap, { "sync" })
 		for _, id in { "R0010", "c0020" } do
-			local r = tr(cap, { "status", id, "prepared" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "stop")).toBe(true)
+			for _, to in { "prepared", "preparing", "new" } do
+				local r = tr(cap, { "status", id, to })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "stop")).toBe(true)
+			end
 		end
 		t.expect(tip()).toBe(before)
+	end)
+
+	it("stop refuses a raft with a member already in done/", function()
+		-- a broken state, made by hand: c0020 finished while its raft is still readied
+		git(main, { "mv", "tracker/issues/active/c0020", "tracker/issues/done/c0020" })
+		git(main, { "commit", "-q", "-m", "c0020 done by hand" })
+		git(main, { "push", "-q", "origin", "HEAD:main" })
+		local before = tip()
+		local r = tr(main, { "stop", "R0010" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "c0020")).toBe(true)
+		t.expect(tip()).toBe(before)
+		git(main, { "revert", "--no-edit", "-q", "HEAD" })
+		git(main, { "push", "-q", "origin", "HEAD:main" })
 	end)
 
 	it("stop gives back a raft claimed by the legacy start, without moving it", function()

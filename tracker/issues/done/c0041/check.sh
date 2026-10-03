@@ -37,7 +37,7 @@ check "AC3: worktree-prune removes finished rafts only, never forces" cases_pass
 check "AC4: hooks act on the edited file's / session cwd's tree" cases_pass \
   "post-edit hook lints" "post-edit hook ignores" "stop hook gates the session" "stop hook gates the worktree root"
 check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
-  for f in execute-raft tracker make-issue ticket-prep make-prompt; do
+  for f in execute-raft tracker make-issue ticket-prep ready-raft; do
     grep -qF "scripts/tracker.sh worktree" ".claude/skills/$f/SKILL.md" || { echo "$f: no worktree command"; exit 1; }
   done
   grep -qF "scripts/tracker.sh worktree {{RAFT_ID}}" tracker/templates/prompt.md || { echo "prompt template"; exit 1; }

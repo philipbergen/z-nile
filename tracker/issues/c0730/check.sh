@@ -17,7 +17,8 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec and not appe
   grep -Eq "^[0-9]+ passed, 0 failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out" | tail -n 40; return 1; }
   local c
   for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
+    # stylua may wrap `it(` and a long name over two lines: join lines before matching
+    tr -d '\n\t' < "$spec" | grep -qF "it(\"$c" || { echo "the spec has no case starting \"$c\""; return 1; }
   done
 }
 
@@ -29,13 +30,13 @@ check "AC3: ready refuses outside the main checkout, without origin, unprepared,
 check "AC4: ready publishes one commit moving every file to active/, stamped, check.sh paths rewritten" cases_pass \
   "ready moves the raft and its members" "ready rewrites the moved check.sh paths"
 check "AC5: the main checkout is pulled, prompt.md is written and ignored, no clipboard" cases_pass \
-  "ready pulls the main checkout" "ready never calls pbcopy"
+  "ready pulls the main checkout" "ready never calls pbcopy" "prompt.md embeds the workstreams plan"
 check "AC6: ready on an active raft regenerates the prompt without a commit" cases_pass \
   "ready on an active raft regenerates"
 check "AC7: start on a readied raft branches with an empty commit and moves nothing" cases_pass \
   "start on a readied raft"
 check "AC8: the current raft is found by branch; emergent issues only on the raft's branch" cases_pass \
-  "commit works on a raft branch" "new issue --raft needs the raft's branch"
+  "commit works on a raft branch" "new issue --raft needs the raft's branch" "done rewrites check.sh paths"
 check "AC9: done rewrites check.sh paths to done/" cases_pass "done rewrites check.sh paths"
 check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.md; no clipboard; no banned phrases" bash -c '
   s=.claude/skills/ready-raft/SKILL.md
@@ -54,13 +55,19 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
   ! grep -qF "moves the items to \`active/\`" .claude/skills/execute-raft/SKILL.md || { echo "execute-raft: start still moves"; exit 1; }
   bad=$(grep -rnIi -e "pbcopy" -e "clipboard" .claude tracker/templates scripts AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }
-  bad=$(grep -rniF -e "straight to main" -e "Commit to main" -e "direct commits to main" -e "to main as one commit" \
+  # the 13 phrases c0041 AC5 bans
+  bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
+    -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
+    -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
+    -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
     .claude/skills tracker/templates AGENTS.md SETUP.md scripts/tracker/main.luau || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC11: the overridden c0450 spec passes; no done check.sh names make-prompt" bash -c '
+check "AC11: the overridden c0450 spec passes; no done check.sh names make-prompt (edited in prep)" bash -c '
   lune run tests/run -- tests/acceptance/c0450/override-check.spec.luau || exit 1
   grep -qF "ready-raft/SKILL.md" tests/acceptance/c0450/override-check.spec.luau || { echo "c0450 spec: not repointed"; exit 1; }
   bad=$(grep -rlF "make-prompt" tracker/issues/done tracker/rafts/done --include=check.sh || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
+check "AC12: sync in the main checkout sweeps stale prompts and keeps readied ones" cases_pass \
+  "sync in the main checkout sweeps the prompt"
 
 finish

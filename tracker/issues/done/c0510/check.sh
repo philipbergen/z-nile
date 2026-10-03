@@ -33,7 +33,7 @@ check "AC5: check.yml ignores tracker/** on push, and only on push" workflow_ign
 skills_carry_sync_and_claim() {
   local s merging='tracker\.sh sync([^ -]|$)'
   # the working skills run the merging form; reviewers, stream agents and metrics fetch only
-  for s in tracker ticket-prep make-prompt execute-raft make-issue; do
+  for s in tracker ticket-prep ready-raft execute-raft make-issue; do
     grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill has no 'tracker.sh sync' (merging) step"; return 1; }
   done
   for s in review metrics; do

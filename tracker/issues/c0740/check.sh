@@ -17,19 +17,20 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec; the whole s
   grep -Eq "^[0-9]+ passed, 0 failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out" | tail -n 40; return 1; }
   local c
   for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
+    # stylua may wrap `it(` and a long name over two lines: join lines before matching
+    tr -d '\n\t' < "$spec" | grep -qF "it(\"$c" || { echo "the spec has no case starting \"$c\""; return 1; }
   done
 }
 
-check "AC1: stop refuses outside the main checkout and for a raft that is not readied" cases_pass \
-  "stop refuses outside the main checkout"
+check "AC1: stop refuses outside the main checkout, for a raft that is not readied, and with a member in done/" cases_pass \
+  "stop refuses outside the main checkout" "stop refuses a raft with a member already in done/"
 check "AC2: stop moves the raft back in one commit, stamped prepared; a round trip is byte-exact" cases_pass \
   "stop moves a readied raft back" "a ready and stop round trip restores"
 check "AC3: prompt.md and the active directory are removed; the main checkout is clean and current" cases_pass \
   "stop removes prompt.md"
 check "AC4: a started raft's branch is left and named; the raft can be readied again" cases_pass \
   "stop of a started raft" "a stopped raft can be readied again"
-check "AC5: status refuses a readied item and names stop" cases_pass "status refuses to move a readied item"
+check "AC5: status refuses any move of a readied item and names stop" cases_pass "status refuses to move a readied item"
 check "AC6: stop gives back a legacy-started raft without moving it" cases_pass "stop gives back a raft claimed by the legacy start"
 check "AC7: the stop-raft skill, the tracker skill and AGENTS.md" bash -c '
   s=.claude/skills/stop-raft/SKILL.md

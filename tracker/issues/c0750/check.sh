@@ -16,7 +16,8 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec; the whole s
   grep -Eq "^[0-9]+ passed, 0 failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out" | tail -n 40; return 1; }
   local c
   for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
+    # stylua may wrap `it(` and a long name over two lines: join lines before matching
+    tr -d '\n\t' < "$spec" | grep -qF "it(\"$c" || { echo "the spec has no case starting \"$c\""; return 1; }
   done
 }
 
@@ -39,12 +40,15 @@ check "AC5: the launch-raft skill; docs point to /launch-raft; no tracker.sh lau
   grep -qF "launch-raft/SKILL.md" AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
   bad=$(grep -rnF "tracker.sh launch" .claude AGENTS.md SETUP.md tracker/templates scripts || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC6: the overridden c0440 and c0041 specs pass" bash -c '
+check "AC6: the overridden c0440, c0430 and c0041 specs pass; c0510's replacement copy still matches" bash -c '
   lune run tests/run -- tests/acceptance/c0440/launch.spec.luau || exit 1
   ! grep -qF "it(\"launch" tests/acceptance/c0440/launch.spec.luau || { echo "c0440: launch cases remain"; exit 1; }
   grep -qF "it(\"worktree-prune warns about a worktree outside" tests/acceptance/c0440/launch.spec.luau || { echo "c0440: prune case lost"; exit 1; }
   ! grep -qF "tracker.sh launch" tracker/issues/done/c0440/check.sh || { echo "c0440 check.sh: launch"; exit 1; }
+  lune run tests/run -- tests/acceptance/c0430/workstreams.spec.luau || exit 1
+  ! grep -qF "it(\"prompt embeds" tests/acceptance/c0430/workstreams.spec.luau || { echo "c0430: prompt cases remain"; exit 1; }
   grep -qF "it(\"prompt does not create" tests/acceptance/c0041/worktree.spec.luau || { echo "c0041: prompt case renamed"; exit 1; }
+  cmp -s tracker/issues/done/c0510/replacements/c0041-worktree.spec.luau tests/acceptance/c0041/worktree.spec.luau || { echo "c0510 replacement differs from the c0041 spec"; exit 1; }
   lune run tests/run -- tests/acceptance/c0041/worktree.spec.luau'
 
 finish

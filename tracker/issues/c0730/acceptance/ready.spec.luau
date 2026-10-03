@@ -207,6 +207,38 @@ return t.spec("tracker ready", function(it)
 			issueDoc("c0060", "Epsilon", "R0050", "", "ready", PREPARED)
 		)
 		write(seed, "tracker/issues/c0060/check.sh", HEAD .. '# check "AC1: later" true\nfinish\n', true)
+		-- R0060: prepared, its two members depend on each other (the workstream plan can't be built)
+		write(
+			seed,
+			"tracker/rafts/R0060/R0060.md",
+			raftDoc("R0060", "Cyclic", "cyclic", "c0070, c0080", "ready", PREPARED)
+		)
+		write(seed, "tracker/rafts/R0060/check.sh", simpleCheck("R0060", "rafts", ""), true)
+		write(
+			seed,
+			"tracker/issues/c0070/c0070.md",
+			issueDoc("c0070", "Zeta", "R0060", "c0080", "ready", PREPARED)
+		)
+		write(seed, "tracker/issues/c0070/check.sh", simpleCheck("c0070", "issues", ""), true)
+		write(
+			seed,
+			"tracker/issues/c0080/c0080.md",
+			issueDoc("c0080", "Eta", "R0060", "c0070", "ready", PREPARED)
+		)
+		write(seed, "tracker/issues/c0080/check.sh", simpleCheck("c0080", "issues", ""), true)
+		-- R0070: prepared on paper, but its member's design is only reviewed
+		write(
+			seed,
+			"tracker/rafts/R0070/R0070.md",
+			raftDoc("R0070", "Unready", "unready", "c0110", "ready", PREPARED)
+		)
+		write(seed, "tracker/rafts/R0070/check.sh", simpleCheck("R0070", "rafts", ""), true)
+		write(
+			seed,
+			"tracker/issues/c0110/c0110.md",
+			issueDoc("c0110", "Theta", "R0070", "", "reviewed", PREPARED)
+		)
+		write(seed, "tracker/issues/c0110/check.sh", simpleCheck("c0110", "issues", ""), true)
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		git(base, { "clone", "-q", "--bare", seed, origin })
@@ -245,6 +277,12 @@ return t.spec("tracker ready", function(it)
 		fs.removeFile(`{main}/stray.txt`)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "clean")).toBe(true)
+		git(main, { "switch", "-q", "-c", "side" })
+		local off = tr(main, { "ready", "R0010" })
+		git(main, { "switch", "-q", "main" })
+		git(main, { "branch", "-q", "-D", "side" })
+		t.expect(off.ok).toBe(false)
+		t.expect(has(off.stderr, "main")).toBe(true)
 		t.expect(tip()).toBe(before)
 	end)
 
@@ -261,6 +299,9 @@ return t.spec("tracker ready", function(it)
 		local r = tr(main, { "ready", "R0050" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "c0060")).toBe(true)
+		local unready = tr(main, { "ready", "R0070" }) -- prepared, but c0110 is not design: ready
+		t.expect(unready.ok).toBe(false)
+		t.expect(has(unready.stderr, "c0110")).toBe(true)
 		t.expect(tip()).toBe(before)
 	end)
 
@@ -383,6 +424,17 @@ return t.spec("tracker ready", function(it)
 		t.expect(fs.isFile(clipLog)).toBe(false)
 	end)
 
+	it("prompt.md embeds the workstreams plan, or the error when it can't be built", function()
+		local plain = fs.readFile(`{main}/tracker/rafts/active/R0010/prompt.md`)
+		t.expect(has(plain, "## Workstreams plan")).toBe(true)
+		t.expect(has(plain, "parallel: ")).toBe(true)
+		trOk(main, { "ready", "R0060" }) -- dependencies inside the raft never block ready
+		local cyclic = fs.readFile(`{main}/tracker/rafts/active/R0060/prompt.md`)
+		t.expect(has(cyclic, "## Workstreams plan")).toBe(true)
+		t.expect(has(cyclic, "plan unavailable: dependency cycle")).toBe(true)
+		t.expect(has(cyclic, "parallel: no")).toBe(true)
+	end)
+
 	it("ready on an active raft regenerates the prompt without a new commit", function()
 		local before = tip()
 		local path = `{main}/tracker/rafts/active/R0010/prompt.md`
@@ -444,10 +496,34 @@ return t.spec("tracker ready", function(it)
 		trOk(wt4, { "start", "R0040" })
 		write(wt4, "tracker/rafts/active/R0040/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		trOk(wt4, { "commit", "-m", "review", "--time", "1" })
+		-- the current raft is this branch's raft, not the first or lowest active one (R0010 and R0060 are active too)
+		t.expect(fs.isFile(`{wt4}/tracker/rafts/active/R0040/spend.md`)).toBe(true)
+		t.expect(fs.isFile(`{wt4}/tracker/rafts/active/R0010/spend.md`)).toBe(false)
+		t.expect(fs.isFile(`{wt4}/tracker/rafts/active/R0060/spend.md`)).toBe(false)
 		trOk(wt4, { "done", "R0040" })
 		t.expect(fs.readFile(`{wt4}/tracker/issues/done/c0040/check.sh`))
 			.toBe(simpleCheck("c0040", "issues", "done/"))
 		t.expect(fs.readFile(`{wt4}/tracker/rafts/done/R0040/check.sh`))
 			.toBe(simpleCheck("R0040", "rafts", "done/"))
+	end)
+
+	it("sync in the main checkout sweeps the prompt of a raft that left active/", function()
+		local wt4 = trOk(main, { "worktree", "R0040" })
+		-- the PR merges: R0040's branch, now done, lands on origin/main
+		git(wt4, { "push", "-q", "origin", "HEAD:main" })
+		local stale = `{main}/tracker/rafts/active/R0040`
+		t.expect(fs.isFile(`{stale}/prompt.md`)).toBe(true)
+		fs.writeFile(`{stale}/.DS_Store`, "finder") -- ignored by a global gitignore on a Mac, untracked here
+		trOk(main, { "sync" })
+		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
+		t.expect(fs.isDir(stale)).toBe(false)
+		t.expect(fs.isFile(`{main}/tracker/rafts/done/R0040/R0040.md`)).toBe(true)
+		-- a raft that is still readied keeps its prompt
+		t.expect(fs.isFile(`{main}/tracker/rafts/active/R0010/prompt.md`)).toBe(true)
+		t.expect(fs.isFile(`{main}/tracker/rafts/active/R0060/prompt.md`)).toBe(true)
+		local list = tr(main, { "list" })
+		t.expect(list.ok).toBe(true)
+		t.expect(has(list.stdout, "R0040")).toBe(true)
+		t.expect(tr(main, { "board", "-O", "--out", `{base}/board.html` }).ok).toBe(true)
 	end)
 end)

@@ -171,12 +171,16 @@ return t.spec("tracker prompt", function(it)
 	end)
 
 	it("prompt refuses a raft that is not readied and names ready-raft", function()
+		-- even with a stale prompt.md left for it in the main checkout: origin/main decides
+		local stale = `{main}/tracker/rafts/active/R0020`
+		write(main, "tracker/rafts/active/R0020/prompt.md", "stale prompt\n")
 		for _, cwd in { main, cap } do
 			local r = tr(cwd, { "prompt", "R0020" })
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.stderr, "/ready-raft")).toBe(true)
 			t.expect(r.stdout).toBe("")
 		end
+		fs.removeDir(stale)
 	end)
 
 	it(

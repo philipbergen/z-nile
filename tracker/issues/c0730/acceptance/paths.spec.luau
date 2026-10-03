@@ -58,17 +58,17 @@ return t.spec("tracker paths", function(it)
 			.toBe("x tracker/rafts/active/R0010")
 	end)
 
-	it("normalize strips the state segment and is unchanged by rewrite", function()
-		t.expect(
-			paths.normalize("a tracker/issues/active/c0010/b tracker/rafts/done/R0010 tracker/issues/f0020")
-		)
-			.toBe("a tracker/issues/c0010/b tracker/rafts/R0010 tracker/issues/f0020")
+	it("rewrite changes nothing but the state segments of the listed ids", function()
+		-- every item path with its state segment removed: what a move may not change
+		local function strip(text: string): string
+			return (string.gsub(text, "(tracker/%a+/)%a+/([fdcR]%d%d%d%d)", "%1%2"))
+		end
 		local moved =
 			paths.rewrite(TEXT, { c0010 = "tracker/issues/done/c0010", R0010 = "tracker/rafts/active/R0010" })
 		t.expect(moved ~= TEXT).toBe(true)
-		t.expect(paths.normalize(moved)).toBe(paths.normalize(TEXT))
-		-- a real edit is not hidden by normalize
-		t.expect(paths.normalize(moved .. "rm -rf /\n") ~= paths.normalize(TEXT)).toBe(true)
-		t.expect(paths.normalize("tracker/issues/c00100")).toBe("tracker/issues/c00100")
+		t.expect(strip(moved)).toBe(strip(TEXT))
+		-- an unlisted id keeps its segment: c0020 stays active/
+		t.expect(string.find(moved, "tracker/issues/active/c0020/c0020.md", 1, true) ~= nil).toBe(true)
+		t.expect(paths.rewrite("", { c0010 = "tracker/issues/active/c0010" })).toBe("")
 	end)
 end)

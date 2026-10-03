@@ -37,6 +37,7 @@ local CHECK = '#!/usr/bin/env bash\ncheck "AC1: a" lune run tests/run -- tracker
 	.. 'check "AC2: b" test -f tracker/issues/c0020/c0020.md\nfinish\n'
 local SPEC = "-- c0010 acceptance marker\nreturn nil\n"
 local RUN = "#!/bin/sh\necho spike\n"
+local CRLF = "spike output\r\nline two\r\n" -- a moved file is byte-checked, so its carriage returns are kept
 local FROM, TO = "tracker/issues/c0010", "tracker/issues/active/c0010"
 
 local function write(path: string, text: string, exec: boolean?)
@@ -111,6 +112,7 @@ return t.spec("tracker publish moves", function(it)
 		write(`{FROM}/check.sh`, CHECK, true)
 		write(`{FROM}/acceptance/a.spec.luau`, SPEC)
 		write(`{FROM}/experiments/run.sh`, RUN, true)
+		write(`{FROM}/experiments/out.txt`, CRLF)
 		write("tracker/issues/c0020/c0020.md", "---\nid: c0020\nstatus: new\n---\n")
 		write("tracker/issues/c0020/check.sh", "#!/bin/sh\n", true)
 		-- c0030 exists in both places: a move onto it must be refused
@@ -202,6 +204,15 @@ return t.spec("tracker publish moves", function(it)
 			before,
 			"check.sh"
 		)
+		-- c0020 is not moved by this publish, so its path keeps its segment
+		refused(
+			attempt(function(changes)
+				local c = find(changes, "check.sh")
+				c.content = (string.gsub(c.content, "tracker/issues/c0020/", "tracker/issues/active/c0020/"))
+			end),
+			before,
+			"check.sh"
+		)
 	end)
 
 	it("a move onto an existing path, across ids or to another relative path is refused", function()
@@ -241,6 +252,70 @@ return t.spec("tracker publish moves", function(it)
 		)
 	end)
 
+	it("a move into or out of done/ is refused", function()
+		local before = tip()
+		local r = publish.commit(work, function(list, read)
+			local out = moveChanges(list, read)
+			for _, c in out do
+				c.path = (string.gsub(c.path, "^tracker/issues/active/", "tracker/issues/done/"))
+				if c.from == `{FROM}/check.sh` then -- a consistent move in every other respect
+					c.content = paths.rewrite(
+						read(c.from :: string) :: string,
+						{ c0010 = "tracker/issues/done/c0010" }
+					)
+				end
+			end
+			return out
+		end, "tracker: to done")
+		refused(r, before)
+	end)
+
+	it("a from outside an item directory is refused, and that file stays on origin", function()
+		local before = tip()
+		refused(
+			attempt(function(changes)
+				table.insert(changes, { path = `{TO}/x.luau`, from = "src/x.luau", content = "return 1\n" })
+			end),
+			before
+		)
+		t.expect(git(origin, { "show", "main:src/x.luau" })).toBe("return 1")
+	end)
+
+	it("a second change at a moved path is refused", function()
+		local before = tip()
+		-- a status edit of the source document beside its move would leave c0010 in two directories
+		refused(
+			attempt(function(changes)
+				table.insert(changes, {
+					path = `{FROM}/c0010.md`,
+					content = (string.gsub(DOC, "status: [^\n]*", "status: new")),
+				})
+			end),
+			before
+		)
+		-- a second write of the target would replace the validated move
+		refused(
+			attempt(function(changes)
+				table.insert(
+					changes,
+					{ path = `{TO}/c0010.md`, content = "---\nid: c0010\nstatus: active\n---\n" }
+				)
+			end),
+			before
+		)
+		-- the same source moved twice
+		refused(
+			attempt(function(changes)
+				local c = find(changes, "acceptance/a.spec.luau")
+				table.insert(
+					changes,
+					{ path = `{TO}/acceptance/b.spec.luau`, from = c.from, content = c.content }
+				)
+			end),
+			before
+		)
+	end)
+
 	it("a whole-directory move lands as one commit with every file, mode and sibling kept", function()
 		local before = tip()
 		local r = attempt(nil)
@@ -252,10 +327,12 @@ return t.spec("tracker publish moves", function(it)
 			`{FROM}/acceptance/a.spec.luau`,
 			`{FROM}/c0010.md`,
 			`{FROM}/check.sh`,
+			`{FROM}/experiments/out.txt`,
 			`{FROM}/experiments/run.sh`,
 			`{TO}/acceptance/a.spec.luau`,
 			`{TO}/c0010.md`,
 			`{TO}/check.sh`,
+			`{TO}/experiments/out.txt`,
 			`{TO}/experiments/run.sh`,
 		}
 		table.sort(want)
@@ -267,6 +344,12 @@ return t.spec("tracker publish moves", function(it)
 			.toBe("tracker/issues/active/.gitkeep")
 		t.expect(git(origin, { "show", `main:{TO}/acceptance/a.spec.luau` }) .. "\n").toBe(SPEC)
 		t.expect(git(origin, { "show", `main:{TO}/experiments/run.sh` }) .. "\n").toBe(RUN)
+		local crlf = process.exec(
+			"git",
+			{ "show", `main:{TO}/experiments/out.txt` },
+			{ cwd = origin, env = { GIT_CEILING_DIRECTORIES = `{root}/.cache` } }
+		)
+		t.expect(crlf.stdout).toBe(CRLF)
 		t.expect(string.sub(git(origin, { "ls-tree", "main", `{TO}/experiments/run.sh` }), 1, 6))
 			.toBe("100755")
 		t.expect(string.sub(git(origin, { "ls-tree", "main", `{TO}/check.sh` }), 1, 6)).toBe("100755")
