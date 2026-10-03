@@ -3,6 +3,7 @@
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
@@ -14,6 +15,7 @@ local arrived = 0
 local look: View.Look = { yaw = 0, pitch = 0 }
 local yaw: number? = nil
 local cursor = false -- the mouse is free (and shown) for a prompt
+local current: Awareness.Pose? = nil
 
 -- Snapshots only move forward: a connected client's session is never replaced.
 function Camera.push(snap: Session.Snapshot)
@@ -22,6 +24,12 @@ function Camera.push(snap: Session.Snapshot)
 		latest = snap
 		arrived = os.clock()
 	end
+end
+
+-- The camera's pose in tile coordinates and its yaw as View and Awareness define it, as of the last frame,
+-- for other client views.
+function Camera.pose(): Awareness.Pose?
+	return current
 end
 
 function Camera.snap()
@@ -55,6 +63,7 @@ function Camera.start()
 		local turned = View.approachYaw(yaw or target, target, View.turnRate() * dt)
 		yaw = turned
 
+		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
 		local x, z = View.world(pose.x, pose.y)
 		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight, z)
 			* CFrame.Angles(0, turned + look.yaw, 0)
