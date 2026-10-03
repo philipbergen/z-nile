@@ -11,7 +11,7 @@ A="$HERE/acceptance"
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the pure status rules hold" lune run tests/run -- "$A/status.spec.luau"
 check "AC2: the publisher pushes only whitelisted files on top of origin/main and retries a lost race" lune run tests/run -- "$A/publish.spec.luau"
-check "AC3: the CLI publishes, claims, starts, syncs and stays local when asked" lune run tests/run -- "$A/commands.spec.luau"
+check "AC3: the CLI publishes, claims, starts, syncs and stays local when asked" lune run tests/run -- "$A"/commands*.spec.luau # R0250 c0680 splits the spec
 existing_specs_pass() { # the runner takes files, not directories
   local files
   files=$(find tests/acceptance tests/tooling -name '*.spec.luau' | sort)

@@ -11,7 +11,7 @@ phase4() { sed -n '/^## Phase 4/,/^## Phase 5/p' "$X"; }
 ac1() { merging | grep -q 'gh pr merge' && merging | grep -q 'check.sh --full' && merging | grep -q 'green on the PR' && merging | grep -q 'Never use `--admin`'; }
 ac2() { ! grep -qiE 'agents? (never|must not|do not|don.t) merge|human merges the PR' "$T" "$X"; }
 ac5() { merging | grep -q 'CLEAN' && merging | grep -q 'headRefOid' && merging | grep -q 'SKIPPED' && merging | grep -q 'BLOCKED:'; }
-ac6() { phase4 | grep -q "can't downgrade" && phase4 | grep -q 'c0360' && phase4 | grep -q 'review-003.md. contains any'; }
+ac6() { phase4 | grep -q "can't downgrade" && phase4 | grep -q 'c0360' && phase4 | grep -qE 'review-(003|NNN)\.md. contains any'; }
 ac8() { phase4 | grep -q 'you refuted (rather than fixed) any high'; }
 ac9() { merging | grep -q "body \$'" && merging | grep -q 'mergeCommit'; }
 ac7() { sed -n '/^## Phase 5/,/^## Phase 6/p' "$X" | grep -q 'Ready to merge' && phase6 | grep -q 'merge commit sha' && phase6 | grep -q 'before. cleanup'; }
