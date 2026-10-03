@@ -21,7 +21,7 @@ usage: scripts/tracker.sh <command> ...
   list [backlog|active|done]                    list items
   members <R-id>                                print directories of every issue in the raft
   check <id>                                    run an item's check.sh (a raft runs its own)
-  renumber <old> <new>                          step an id (conflict resolution)
+  renumber <old> [<new>]                        step an id (conflict resolution); <new> defaults to one above the highest
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   start <R-id>                                  branch, move to active, commit, push, draft PR
   focus <issue-id>                              attribute following commits to this issue
@@ -753,11 +753,38 @@ function cmd.check(pos: { string })
 	end
 end
 
+-- Ids of items on origin/main (any state), read from the git tree as it is: the local tree may be behind. Unlike
+-- originIds (used by `new`), it never fetches and refuses when origin/main can't be read: renumber must not guess.
+local function originMainIds(): { string }
+	local args = { "ls-tree", "-d", "--name-only", "origin/main" }
+	for _, kind in { "issues", "rafts" } do
+		for _, state in { "", "active/", "done/" } do
+			table.insert(args, `{store.ROOT}/{kind}/{state}`)
+		end
+	end
+	local r = sh.run("git", args)
+	if not r.ok then
+		fail("cannot read origin/main (run `git fetch origin main`), or pass <new> explicitly")
+	end
+	local ids: { string } = {}
+	for line in string.gmatch(r.stdout, "[^\n]+") do
+		table.insert(ids, (string.match(line, "[^/]+$")) :: string)
+	end
+	return ids
+end
+
 function cmd.renumber(pos: { string })
 	refuseInMainCheckout("renumber")
 	local old, new = pos[1], pos[2]
-	if not old or not new or string.sub(old, 1, 1) ~= string.sub(new, 1, 1) then
-		fail("usage: renumber <old> <new> (same type prefix)")
+	if not old or (new and string.sub(old, 1, 1) ~= string.sub(new, 1, 1)) then
+		fail("usage: renumber <old> [<new>] (same type prefix)")
+	end
+	if not new then
+		local n = store.nextAbove(store.get(old).kind, originMainIds())
+		if n > 9999 then
+			fail("no number above 9999 is free")
+		end
+		new = store.formatId(string.sub(old, 1, 1), n)
 	end
 	if store.find(new) then
 		fail(`{new} already exists`)
