@@ -264,6 +264,13 @@ local function idsOf(paths: { string }, kind: string): { string }
 	return out
 end
 
+-- Every file path under tracker/ on origin/main as it is (no fetch), and whether origin/main could be read. The one
+-- reader of origin/main's ids: `new` (originIds) and `renumber` (originMainIds) differ only in fetching and failure.
+local function originTree(): (boolean, { string })
+	local r = sh.run("git", { "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" })
+	return r.ok, if r.ok then string.split(r.stdout, "\n") else {}
+end
+
 -- The ids of `kind` on origin/main, after a quiet fetch, when publishing is on; otherwise none (no network).
 -- Local-only creations (emergent issues, PICKMAN_PUBLISH=0 aside) then still number above what origin holds.
 local function originIds(kind: string): { string }
@@ -271,8 +278,8 @@ local function originIds(kind: string): { string }
 		return {}
 	end
 	sh.run("git", { "fetch", "-q", "origin", "main" })
-	local r = sh.run("git", { "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" })
-	return if r.ok then idsOf(string.split(r.stdout, "\n"), kind) else {}
+	local _, paths = originTree()
+	return idsOf(paths, kind)
 end
 
 local function activeRaft(): store.Item
@@ -753,24 +760,14 @@ function cmd.check(pos: { string })
 	end
 end
 
--- Ids of items on origin/main (any state), read from the git tree as it is: the local tree may be behind. Unlike
--- originIds (used by `new`), it never fetches and refuses when origin/main can't be read: renumber must not guess.
-local function originMainIds(): { string }
-	local args = { "ls-tree", "-d", "--name-only", "origin/main" }
-	for _, kind in { "issues", "rafts" } do
-		for _, state in { "", "active/", "done/" } do
-			table.insert(args, `{store.ROOT}/{kind}/{state}`)
-		end
-	end
-	local r = sh.run("git", args)
-	if not r.ok then
+-- Ids of `kind` on origin/main (any state) as it is: the local tree may be behind. Unlike originIds (used by `new`),
+-- it never fetches and refuses when origin/main can't be read: renumber must not guess.
+local function originMainIds(kind: string): { string }
+	local ok, paths = originTree()
+	if not ok then
 		fail("cannot read origin/main (run `git fetch origin main`), or pass <new> explicitly")
 	end
-	local ids: { string } = {}
-	for line in string.gmatch(r.stdout, "[^\n]+") do
-		table.insert(ids, (string.match(line, "[^/]+$")) :: string)
-	end
-	return ids
+	return idsOf(paths, kind)
 end
 
 function cmd.renumber(pos: { string })
@@ -780,7 +777,8 @@ function cmd.renumber(pos: { string })
 		fail("usage: renumber <old> [<new>] (same type prefix)")
 	end
 	if not new then
-		local n = store.nextAbove(store.get(old).kind, originMainIds())
+		local kind = store.get(old).kind
+		local n = store.nextAbove(kind, originMainIds(kind))
 		if n > 9999 then
 			fail("no number above 9999 is free")
 		end
