@@ -58,3 +58,15 @@ pickman_fence() {
   fi
   export GIT_CONFIG_COUNT=$n
 }
+
+# Exits 0 when the repository holding <dir> is one these guards protect: a check is running there. The tracker's
+# publisher asks this instead of reading the guards' variables itself (c0650).
+pickman_guarded() {
+  local common
+  common=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  common=$(cd "$common" && pwd -P) || return 1
+  case ":${PICKMAN_FENCE_REAL_GIT:-}:" in
+  *":$common:"*) return 0 ;;
+  esac
+  return 1
+}

@@ -38,19 +38,23 @@ local NAMES = {
 -- Names a file may use for a stated reason, each reviewed (review skill, Repository safety). Nothing else in
 -- the file may name them.
 local ALLOWED: { [string]: { [string]: string } } = {
-	-- c0510 (R0200, landed first): its fixture hooks unset what git exports to a hook, so that their own git calls
-	-- reach the right repository; and until c0650 its specs set their own ceiling, from before these guards
+	-- c0650: its spec proves the scan refuses these names
+	["tests/acceptance/c0650/adapt.spec.luau"] = {
+		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
+		GIT_CONFIG_ = "planted to prove the scan flags it",
+		PICKMAN_TEST_FENCE = "runs the copied gate as a top-level run",
+	},
+	-- c0510 (R0200): its fixture hooks unset what git exports to a hook, so that their own git calls reach the right
+	-- repository
 	["tests/acceptance/c0510/commands.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
-		GIT_CEILING_DIRECTORIES = "own fence, removed by c0650",
 	},
 	["tests/acceptance/c0510/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
-		GIT_CEILING_DIRECTORIES = "own fence, removed by c0650",
 	},
 }
 local EXEMPT: { [string]: boolean } = {

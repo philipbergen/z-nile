@@ -164,9 +164,28 @@ local function guardRepoRoot()
 	end
 end
 
+-- A check run protects this repository (the repository guards, c0640): tracker state is never published from
+-- inside one (c0650). Asked once per command; the guards' own script answers, so no variable is named here.
+local guardedRun: boolean? = nil
+local function guarded(): boolean
+	if guardedRun == nil then
+		local r = process.exec("bash", {
+			"-c",
+			'[ -f scripts/lib/fence.sh ] && source scripts/lib/fence.sh && pickman_guarded "$PWD"',
+		})
+		guardedRun = r.ok
+		if r.ok then
+			stdio.ewrite(
+				`not publishing: {process.cwd} is protected by the repository guards (a check run)\n`
+			)
+		end
+	end
+	return guardedRun == true
+end
+
 local function publishing(): boolean
 	local v = process.env.PICKMAN_PUBLISH
-	return hasOrigin() and (v == nil or v == "" or v ~= "0")
+	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
 end
 
 local function frontOf(text: string): { [string]: string }

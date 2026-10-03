@@ -15,16 +15,9 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 local base = `{root}/.cache/c0510-commands`
 local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 
--- git never looks for a repository above .cache: a fixture that loses its own .git fails instead of
--- falling through to the real repository (the incident c0640 and R0200 describe)
+-- The runner's guards (c0640) fence git inside .cache for every spec: this only copies the environment.
 local function fenced(env: { [string]: string }?): { [string]: string }
-	local out = { GIT_CEILING_DIRECTORIES = `{root}/.cache` }
-	if env then
-		for k, v in env do
-			out[k] = v
-		end
-	end
-	return out
+	return table.clone(env or {})
 end
 
 local function run(cwd: string, cmd: string, args: { string }, env: { [string]: string }?): Result
