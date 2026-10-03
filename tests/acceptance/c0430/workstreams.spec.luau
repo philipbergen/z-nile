@@ -22,14 +22,10 @@ local main = `{base}/main`
 local wt1 = `{main}/.worktree/R0010`
 local stream = `{main}/.worktree/ws-f0010`
 
--- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
-local NO_GC = {
-	GIT_CONFIG_COUNT = "2",
-	GIT_CONFIG_KEY_0 = "gc.auto",
-	GIT_CONFIG_VALUE_0 = "0",
-	GIT_CONFIG_KEY_1 = "maintenance.auto",
-	GIT_CONFIG_VALUE_1 = "false",
-}
+-- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
+-- runner's guard (scripts/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
+-- git config through the environment, which would replace the guard's (testing skill).
+local NO_GC: { [string]: string } = {}
 
 local function run(cwd: string, cmd: string, args: { string }): Result
 	return process.exec(cmd, args, { cwd = cwd, env = NO_GC })

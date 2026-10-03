@@ -112,6 +112,7 @@ Stop and report if any of these happen:
 - A tool is missing and `SETUP.md` doesn't fix it.
 - Round 3 of review is still unresolved.
 - An action would require a secret or credential you don't have.
+- A test run prints `REPOSITORY CHANGED` or refuses a fixture identity, or the shared repository's remotes, branches, worktrees or identity look wrong: stop at once, and never repair the shared git configuration yourself (testing skill, "Specs never touch the real repository").
 
 To escalate:
 1. Commit whatever is green.

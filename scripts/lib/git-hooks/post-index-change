@@ -1,0 +1,9 @@
+#!/bin/sh
+# Runs the repository's own hook of the name it is called by. scripts/lib/fence.sh points git at this directory
+# (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+# fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+# working directory: git clone, for one, runs hooks while still in the repository it clones from (.repo.sh).
+. "${0%/*}/.repo.sh"
+own="$(repo_common)/hooks/${0##*/}"
+[ -x "$own" ] && exec "$own" "$@"
+exit 0

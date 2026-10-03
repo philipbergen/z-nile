@@ -106,13 +106,47 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		if not (listing and runnerRefuses) then
 			error("AC_LIST list mode is not safe (ac.sh or tests/run): not running tracker.sh check under it")
 		end
+		-- In a fixture holding the tracker, never the real repository: `done` pushes and resets when it gets
+		-- past its refusals (testing skill, "Specs never touch the real repository").
+		local repo = `{base}/tracker`
+		if fs.isDir(repo) then
+			fs.removeDir(repo)
+		end
+		fs.writeDir(repo)
+		local listed = process.exec(
+			"git",
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", "rokit.toml" },
+			{ cwd = root }
+		)
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if fs.isFile(`{root}/{path}`) then
+				local parent = string.match(path, "^(.*)/[^/]+$")
+				if parent then
+					fs.writeDir(`{repo}/{parent}`)
+				end
+				fs.writeFile(`{repo}/{path}`, fs.readFile(`{root}/{path}`))
+			end
+		end
+		t.expect(process.exec("git", { "init", "-q", repo }).ok).toBe(true)
+		t.expect(
+			process.exec("bash", { "scripts/tracker.sh", "new", "issue", "c", "probe" }, { cwd = repo }).ok
+		)
+			.toBe(true)
 		local env = { AC_LIST = "1" }
-		local checked = process.exec("scripts/tracker.sh", { "check", "c0090" }, { cwd = root, env = env })
+		local checked = process.exec(
+			"bash",
+			{ "scripts/tracker.sh", "check", "c0010" },
+			{ cwd = repo, env = env }
+		)
 		t.expect(checked.ok).toBe(false)
 		t.expect(string.find(checked.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(checked.stdout, "criteria", 1, true))).toBe(nil)
 		-- `done` refuses before it looks at anything else (R9999 does not exist)
-		local finished = process.exec("scripts/tracker.sh", { "done", "R9999" }, { cwd = root, env = env })
+		local finished = process.exec(
+			"bash",
+			{ "scripts/tracker.sh", "done", "R9999" },
+			{ cwd = repo, env = env }
+		)
 		t.expect(finished.ok).toBe(false)
 		t.expect(string.find(finished.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
 	end)

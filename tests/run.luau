@@ -32,6 +32,9 @@ if listMode ~= nil and listMode ~= "" then
 	process.exit(1)
 end
 
+-- Guard the repository this runs in (tests/lib/fence.luau): lock, fence and ref guard, tripwire.
+require("./lib/fence").enter()
+
 -- Browser guard: no spec may start a real browser (`tracker.sh board` opens one unless given -O). The outermost runner
 -- puts recording `open` and `xdg-open` stubs first on PATH and runs itself again as a child with that PATH (Lune can't
 -- change its own environment for children). Workers and nested runners see PICKMAN_OPEN_GUARD and run normally, so

@@ -6,6 +6,12 @@
 # Each check prints PASS/FAIL; finish exits non-zero if any failed.
 # With AC_LIST set (non-empty), check only prints LIST <label> and runs nothing; finish says "listed".
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+# Guard git for everything this check.sh runs (testing skill, "Specs never touch the real repository").
+# (a fixture holding only ac.sh runs inside an already-guarded spec run)
+if [[ -f scripts/lib/fence.sh ]]; then
+  source scripts/lib/fence.sh
+  pickman_fence "$(pwd -P)"
+fi
 export PATH="$HOME/.rokit/bin:$PATH"
 _ac_failed=0
 _ac_total=0
