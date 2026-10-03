@@ -8,6 +8,7 @@
 | 4 | 2026-10-03 08:27 | c0640: verification log | 0 | 0 | 2.0 | focus |
 | 5 | 2026-10-03 16:36 | R0210: review 001 fixes (jail denies IP networking and every ancestor; scan bans network/credential overrides and reads env identities; helper refuses core.worktree and env config; outer guard must exist) | 174 | 9 | 45.0 | explicit |
 | 6 | 2026-10-03 16:38 | c0640: testing skill states the stronger jail and scan; verification log | 2 | 2 | 5.0 | focus |
+| 7 | 2026-10-03 16:39 | R0210: refute-001 | 0 | 0 | 5.0 | focus |
 
-**Total:** +1316 / -54 lines, 82.0 agent-minutes over 6 commits
-<!-- totals: added=1316 removed=54 minutes=82.0 commits=6 -->
+**Total:** +1316 / -54 lines, 87.0 agent-minutes over 7 commits
+<!-- totals: added=1316 removed=54 minutes=87.0 commits=7 -->
