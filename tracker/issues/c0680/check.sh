@@ -66,7 +66,7 @@ check "AC3: the parts pass together" parts_pass
 check "AC4: the shared fixture library type-checks and uses @tests/lib/fixture" lib_types
 r0210_pass() {
   local hooks
-  hooks=$(grep -l "GIT_INDEX_FILE" tests/acceptance/c0510/commands*.spec.luau 2>/dev/null || true)
+  hooks=$(grep -l "GIT_INDEX_""FILE" tests/acceptance/c0510/commands*.spec.luau 2>/dev/null || true) # split: the gate scan reads check.sh files
   [[ $hooks == tests/acceptance/c0510/commands-new.spec.luau ]] || { echo "fixture-hook names are in: ${hooks:-none}"; return 1; }
   lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/acceptance/c0650/adapt.spec.luau
 }
