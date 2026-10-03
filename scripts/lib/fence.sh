@@ -20,7 +20,11 @@ pickman_fence() {
   real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
   export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"
   mkdir -p "$here/.cache"
-  [[ -e $here/.cache/.git ]] || printf 'gitdir: /nonexistent/pickman-fence\n' >"$here/.cache/.git"
+  # rewritten every time: a spec could have repointed it at the real .git (review 002 F7); a symlink is removed
+  # first so the write can't follow it, and a directory (a fixture repository made in .cache itself) is left alone
+  local sentinel="$here/.cache/.git"
+  [[ -L $sentinel ]] && rm -f "$sentinel"
+  [[ -d $sentinel ]] || printf 'gitdir: /nonexistent/pickman-fence\n' >"$sentinel"
   if [[ -n $real ]]; then
     export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
   fi
@@ -44,6 +48,10 @@ pickman_fence() {
     # gitconfig may name the keychain), no ssh agent and no ssh at all
     export PICKMAN_FENCE_SPECS=1
     unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN SSH_AUTH_SOCK
+    # no proxy (loopback is open in the jail, a local proxy would reach the network), and git's own protocol
+    # allowlist, which overrides protocol.allow, pinned to local paths (review 002 F2, F5)
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY GIT_PROXY_COMMAND
+    export GIT_ALLOW_PROTOCOL=file
     mkdir -p "$here/.cache/gh-none"
     export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0
     export GIT_SSH_COMMAND='echo "fence: a spec tried to use ssh; refused" >&2; exit 1; :'

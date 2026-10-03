@@ -3,7 +3,6 @@
 -- tests/lib/fence.luau and scripts/lib/fence.sh enforce it for every run; this spec proves, on every gate
 -- run, that the guards are on here, and that no spec, check.sh or script switches them off. It never tries
 -- a write against this repository: the ref guard is proven by running its hook the way git would.
-local fence = require("@tests/lib/fence")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -45,6 +44,12 @@ local NAMES = {
 	"GIT_SSH_COMMAND",
 	"GIT_ASKPASS",
 	"SSH_ASKPASS",
+	-- git's own protocol allowlist overrides protocol.allow, and a proxy would reach the network through the
+	-- jail's open loopback (review 002 F2, F5)
+	"GIT_ALLOW_PROTOCOL",
+	"_proxy",
+	"http.proxy",
+	"gitproxy",
 }
 
 -- The banned names `text` contains, except those `allowed` lists (case-insensitive: git config keys are).
@@ -59,11 +64,13 @@ local function bannedIn(text: string, allowed: { [string]: string }): { string }
 	return out
 end
 
--- Every commit identity `text` sets: `user.email` (config or `-c`) and the author, committer or EMAIL variables.
+-- Every commit identity `text` sets, in any case (config keys and many environments are case-insensitive):
+-- `user.email` (config or `-c`), the author, committer or EMAIL variables, and `--author`.
 local function identitiesIn(text: string): { string }
 	local out: { string } = {}
-	for _, pattern in { "user%.email[^@\n]-([%w%.%-_]+@[%w%.%-]+)", "EMAIL[^@\n]-([%w%.%-_]+@[%w%.%-]+)" } do
-		for email in string.gmatch(text, pattern) do
+	local lower = string.lower(text)
+	for _, pattern in { "email[^@\n]-([%w%.%-_]+@[%w%.%-]+)", "%-%-author[^@\n]-([%w%.%-_]+@[%w%.%-]+)" } do
+		for email in string.gmatch(lower, pattern) do
 			table.insert(out, email)
 		end
 	end
@@ -255,26 +262,41 @@ return t.spec("repository fence", function(it)
 		end
 		t.expect((pcall(fs.writeFile, `{here}/.cache/repo-fence-jail-{tag}`, ""))).toBe(true)
 		pcall(fs.removeFile, `{here}/.cache/repo-fence-jail-{tag}`)
-		-- the profile also denies every ancestor of the checkout (renaming one away, writing inside and renaming it
-		-- back would escape the subpath rule) and all IP networking (a spec's `-c protocol.allow=always` would
-		-- undo git's own refusal); a real rename probe would move the checkout if it were allowed, so the rule is read
-		local rules = fence.profile(here, `{here}/.cache`)
-		t.expect(string.find(rules, "(deny network-outbound (remote ip))", 1, true) ~= nil).toBe(true)
+		-- live probes, each harmless if the jail were broken: a file in the person's home (removed at once); `touch -c
+		-- -r d d` on every ancestor of the checkout (it would set a folder's times to their own values); a connect to
+		-- TEST-NET, where nothing listens; and loopback, which local test servers need, must still work
+		local escaped: { string } = {}
+		if home ~= "" then
+			local probe = `{home}/.pickman-jail-probe-{tag}`
+			if pcall(fs.writeFile, probe, "") then
+				pcall(fs.removeFile, probe)
+				table.insert(escaped, `a file in {home}`)
+			end
+		end
 		local up = string.match(here, "^(.*)/[^/]+$")
 		while up and up ~= "" do
-			if not string.find(rules, `(deny file-write* (literal "{up}"))`, 1, true) then
-				error(`the jail does not deny writes to {up}, an ancestor of the checkout`)
+			if process.exec("touch", { "-c", "-r", up, up }).ok then
+				table.insert(escaped, `the folder {up}, above the checkout`)
 			end
 			up = string.match(up, "^(.*)/[^/]+$")
 		end
-		if jail == "sandbox-exec" then
-			-- a connect to TEST-NET (nothing listens there) is refused at once inside the jail, and times out outside
-			local net = process.exec("perl", {
-				"-MIO::Socket::INET",
-				"-e",
-				'my $s = IO::Socket::INET->new(PeerAddr => "192.0.2.1", PeerPort => 9, Timeout => 2); print $s ? "connected" : "$!"',
-			})
-			t.expect(net.stdout).toBe("Operation not permitted")
+		local net = process.exec("perl", {
+			"-MIO::Socket::INET",
+			"-e",
+			'my $s = IO::Socket::INET->new(PeerAddr => "192.0.2.1", PeerPort => 9, Timeout => 2); print $s ? "connected" : "$!"',
+		})
+		if net.stdout ~= "Operation not permitted" then
+			table.insert(escaped, `the network ({net.stdout})`)
+		end
+		local loop = process.exec("perl", {
+			"-MIO::Socket::INET",
+			"-e",
+			'my $l = IO::Socket::INET->new(Listen => 1, LocalAddr => "127.0.0.1", LocalPort => 0) or die "$!"; '
+				.. 'my $c = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $l->sockport, Timeout => 2); print $c ? "ok" : "$!"',
+		})
+		t.expect(loop.stdout).toBe("ok")
+		if #escaped > 0 then
+			error(`the jail lets specs reach {table.concat(escaped, ", ")}: {jail}`)
 		end
 	end)
 
@@ -331,6 +353,9 @@ return t.spec("repository fence", function(it)
 			"git -c credential." .. "helper=osxkeychain push",
 			"git -c http." .. "extraheader=x push",
 			"GIT_SSH_" .. "COMMAND=ssh git push",
+			"GIT_ALLOW_" .. "PROTOCOL=https git push",
+			"HTTPS_" .. "PROXY=http://127.0.0.1:3128 git push",
+			"git -c http." .. "proxy=http://127.0.0.1:3128 push",
 		}
 		for _, text in planted do
 			if #bannedIn(text, {}) == 0 then
@@ -356,8 +381,15 @@ return t.spec("repository fence", function(it)
 		end
 		-- identities set in the environment are read too (review 001 F3)
 		local ids = identitiesIn(
-			"{ GIT_AUTHOR_" .. 'EMAIL = "dev@example.com" }\ngit -c user.' .. "email=e2e@example.invalid"
+			"{ GIT_AUTHOR_"
+				.. 'EMAIL = "dev@example.com" }\ngit -c user.'
+				.. "email=e2e@example.invalid"
+				.. "\ngit -c User."
+				.. "Email=boss@example.org\ngit commit --"
+				.. 'author="X <x@example.net>"'
 		)
+		t.expect(table.find(ids, "boss@example.org") ~= nil).toBe(true)
+		t.expect(table.find(ids, "x@example.net") ~= nil).toBe(true)
 		t.expect(table.find(ids, "dev@example.com") ~= nil).toBe(true)
 		t.expect(table.find(ids, "e2e@example.invalid") ~= nil).toBe(true)
 		if #bad > 0 then

@@ -275,48 +275,39 @@ local function protectedPaths(here: string): { string }
 end
 
 -- The jail's profile: no write to the protected paths or the person's git configuration, except .cache.
--- Every directory above `path`, up to the root: a protected tree must not be moved away from above (renamed,
--- written, renamed back), so each ancestor itself is denied. Its other children stay writable.
-local function ancestors(path: string): { string }
+-- The temporary folder, as written and resolved (the sandbox matches resolved paths).
+local function tempDirs(): { string }
 	local out: { string } = {}
-	local p = string.match(path, "^(.*)/[^/]+$")
-	while p and p ~= "" do
-		table.insert(out, p)
-		p = string.match(p, "^(.*)/[^/]+$")
+	for _, dir in { process.env.TMPDIR or "", "/tmp", "/private/tmp" } do
+		dir = (string.gsub(dir, "/+$", ""))
+		if dir ~= "" then
+			table.insert(out, dir)
+			table.insert(out, resolved(dir))
+		end
 	end
 	return out
 end
 
-local function profile(here: string, cache: string): string
-	-- no network at all for specs (IP): git's own refusals can be overridden on a command line (`-c`); local
-	-- sockets stay open
-	local rules = { "(version 1)", "(allow default)", "(deny network-outbound (remote ip))" }
-	local guarded: { string } = {}
-	for _, path in protectedPaths(here) do
-		table.insert(rules, `(deny file-write* (subpath "{path}"))`)
-		table.insert(guarded, path)
+-- The jail's profile. Specs may write only this checkout's .cache, the temporary folder and /dev: the repository,
+-- every directory above it (renaming one away, writing inside and renaming it back would escape a narrower rule),
+-- and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, all run
+-- later without the jail) are denied. No IP networking except loopback: a spec's `-c protocol.allow=always` reaches
+-- nothing, while local test servers still work (review 001 F1 and F2, review 002 F2 and F3).
+local function profile(cache: string): string
+	local rules = {
+		"(version 1)",
+		"(allow default)",
+		"(deny network-outbound (remote ip))",
+		'(allow network-outbound (remote ip "localhost:*"))',
+		'(deny file-write* (subpath "/"))',
+		'(allow file-write* (subpath "/dev"))',
+	}
+	for _, dir in { cache, resolved(cache) } do
+		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
-	local home = process.env.HOME or ""
-	if home ~= "" then
-		for _, file in { `{home}/.gitconfig`, resolved(`{home}/.gitconfig`) } do
-			table.insert(rules, `(deny file-write* (literal "{file}"))`)
-			table.insert(guarded, file)
-		end
-		for _, dir in { `{home}/.config/git`, resolved(`{home}/.config/git`) } do
-			table.insert(rules, `(deny file-write* (subpath "{dir}"))`)
-			table.insert(guarded, dir)
-		end
+	for _, dir in tempDirs() do
+		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
-	local seen: { [string]: boolean } = {}
-	for _, path in guarded do
-		for _, up in ancestors(path) do
-			if not seen[up] then
-				seen[up] = true
-				table.insert(rules, `(deny file-write* (literal "{up}"))`)
-			end
-		end
-	end
-	table.insert(rules, `(allow file-write* (subpath "{cache}"))`)
 	return table.concat(rules, "")
 end
 
@@ -332,6 +323,51 @@ local function writable(here: string): { string }
 		end
 	end
 	return open
+end
+
+-- What an outer sandbox leaves open that the jail would close (review 002 F4): a file in the person's home, a
+-- folder above the checkout (outside any checkout's .cache named in the ceiling, which an outer jail allows), and
+-- the network. Each probe is harmless if it succeeds: the file is removed at once, `touch -c -r d d` sets a folder's
+-- times to their own values, and the connect goes to TEST-NET, where nothing listens.
+local function escapes(here: string): { string }
+	local out: { string } = {}
+	local home = process.env.HOME or ""
+	if home ~= "" then
+		local probe = `{home}/.pickman-jail-probe-{myPid()}`
+		if pcall(fs.writeFile, probe, "") then
+			pcall(fs.removeFile, probe)
+			table.insert(out, `the home folder {home}`)
+		end
+	end
+	local caches: { string } = {}
+	for entry in string.gmatch(process.env.GIT_CEILING_DIRECTORIES or "", "[^:]+") do
+		if string.sub(entry, -7) == "/.cache" then
+			table.insert(caches, entry)
+		end
+	end
+	local up = string.match(here, "^(.*)/[^/]+$")
+	while up and up ~= "" do
+		local inCache = false
+		for _, c in caches do
+			if up == c or string.sub(up, 1, #c + 1) == c .. "/" then
+				inCache = true
+			end
+		end
+		if not inCache and process.exec("touch", { "-c", "-r", up, up }).ok then
+			table.insert(out, `the folder {up}`)
+			break
+		end
+		up = string.match(up, "^(.*)/[^/]+$")
+	end
+	local net = process.exec("perl", {
+		"-MIO::Socket::INET",
+		"-e",
+		'my $s = IO::Socket::INET->new(PeerAddr => "192.0.2.1", PeerPort => 9, Timeout => 2); print $s ? "connected" : "$!"',
+	})
+	if net.stdout ~= "Operation not permitted" then
+		table.insert(out, "the network")
+	end
+	return out
 end
 
 -- Whether this unjailed run is a fixture of a jailed outer run, proven by probes rather than read from the
@@ -377,7 +413,7 @@ local function jail(here: string, cache: string): ({ string }, string)
 	if process.os ~= "macos" then
 		return {}, "none (not macOS: environment guards only)"
 	end
-	local rules = profile(here, cache)
+	local rules = profile(cache)
 	local started, trial = pcall(process.exec, "sandbox-exec", { "-p", rules, "/usr/bin/true" })
 	if started and trial.ok then
 		return { "sandbox-exec", "-p", rules }, "sandbox-exec"
@@ -386,16 +422,20 @@ local function jail(here: string, cache: string): ({ string }, string)
 		then "already inside a sandbox, and macOS can't nest them"
 		else "sandbox-exec is missing"
 	local open = writable(here)
-	if #open == 0 then
+	local leaks = escapes(here)
+	if #open == 0 and #leaks == 0 then
 		stdio.ewrite(`note: not jailed ({why}); the outer sandbox protects the repository\n`)
 		return {}, "outer sandbox (protects the repository)"
 	end
-	if fixtureOfGuarded(here, open) then
+	if #leaks == 0 and fixtureOfGuarded(here, open) then
 		stdio.ewrite(`note: not jailed ({why}); this is a fixture of a guarded checkout\n`)
 		return {}, "outer sandbox (a fixture of a guarded checkout)"
 	end
 	stdio.ewrite(
-		`cannot jail this run ({why}), and it could write the repository ({table.concat(open, ", ")}). `
+		`cannot jail this run ({why}), and it could write the repository or reach past the jail ({table.concat(
+			open,
+			", "
+		)}{if #open > 0 and #leaks > 0 then ", " else ""}{table.concat(leaks, ", ")}). `
 			.. 'Run specs outside the sandbox you are in (testing skill, "Specs never touch the real repository").\n'
 	)
 	process.exit(1)
@@ -466,8 +506,5 @@ function fence.enter()
 	end
 	process.exit(code)
 end
-
--- The jail's profile, for the gate spec's check of its rules.
-fence.profile = profile
 
 return fence
