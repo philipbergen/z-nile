@@ -3,6 +3,7 @@
 -- tests/lib/fence.luau and scripts/lib/fence.sh enforce it for every run; this spec proves, on every gate
 -- run, that the guards are on here, and that no spec, check.sh or script switches them off. It never tries
 -- a write against this repository: the ref guard is proven by running its hook the way git would.
+local fence = require("@tests/lib/fence")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -33,13 +34,48 @@ local NAMES = {
 	"GH_CONFIG_DIR",
 	"osascript",
 	"launchctl",
+	-- settings a command line (`-c`) or an environment could use to undo the fence's no-network and no-credential
+	-- config where there is no jail (Linux, review 001 F1)
+	"protocol.allow",
+	"protocol.http",
+	"protocol.ssh",
+	"protocol.git",
+	"credential.",
+	"extraheader",
+	"GIT_SSH_COMMAND",
+	"GIT_ASKPASS",
+	"SSH_ASKPASS",
 }
+
+-- The banned names `text` contains, except those `allowed` lists (case-insensitive: git config keys are).
+local function bannedIn(text: string, allowed: { [string]: string }): { string }
+	local lower = string.lower(text)
+	local out: { string } = {}
+	for _, name in NAMES do
+		if not allowed[name] and string.find(lower, string.lower(name), 1, true) then
+			table.insert(out, name)
+		end
+	end
+	return out
+end
+
+-- Every commit identity `text` sets: `user.email` (config or `-c`) and the author, committer or EMAIL variables.
+local function identitiesIn(text: string): { string }
+	local out: { string } = {}
+	for _, pattern in { "user%.email[^@\n]-([%w%.%-_]+@[%w%.%-]+)", "EMAIL[^@\n]-([%w%.%-_]+@[%w%.%-]+)" } do
+		for email in string.gmatch(text, pattern) do
+			table.insert(out, email)
+		end
+	end
+	return out
+end
 -- The guards themselves and their own specs, which must name them, wherever they are in their lifecycle.
 -- Names a file may use for a stated reason, each reviewed (review skill, Repository safety). Nothing else in
 -- the file may name them.
 local ALLOWED: { [string]: { [string]: string } } = {
 	-- c0660: the fixture helper names these to refuse them, and its spec proves it
 	["tests/lib/fixture.luau"] = {
+		GIT_CONFIG_ = "refused (config in env)",
 		GIT_DIR = "refused",
 		GIT_WORK_TREE = "refused",
 		GIT_INDEX_FILE = "refused",
@@ -219,6 +255,27 @@ return t.spec("repository fence", function(it)
 		end
 		t.expect((pcall(fs.writeFile, `{here}/.cache/repo-fence-jail-{tag}`, ""))).toBe(true)
 		pcall(fs.removeFile, `{here}/.cache/repo-fence-jail-{tag}`)
+		-- the profile also denies every ancestor of the checkout (renaming one away, writing inside and renaming it
+		-- back would escape the subpath rule) and all IP networking (a spec's `-c protocol.allow=always` would
+		-- undo git's own refusal); a real rename probe would move the checkout if it were allowed, so the rule is read
+		local rules = fence.profile(here, `{here}/.cache`)
+		t.expect(string.find(rules, "(deny network-outbound (remote ip))", 1, true) ~= nil).toBe(true)
+		local up = string.match(here, "^(.*)/[^/]+$")
+		while up and up ~= "" do
+			if not string.find(rules, `(deny file-write* (literal "{up}"))`, 1, true) then
+				error(`the jail does not deny writes to {up}, an ancestor of the checkout`)
+			end
+			up = string.match(up, "^(.*)/[^/]+$")
+		end
+		if jail == "sandbox-exec" then
+			-- a connect to TEST-NET (nothing listens there) is refused at once inside the jail, and times out outside
+			local net = process.exec("perl", {
+				"-MIO::Socket::INET",
+				"-e",
+				'my $s = IO::Socket::INET->new(PeerAddr => "192.0.2.1", PeerPort => 9, Timeout => 2); print $s ? "connected" : "$!"',
+			})
+			t.expect(net.stdout).toBe("Operation not permitted")
+		end
 	end)
 
 	it("specs have no GitHub credentials and push only into fixtures", function()
@@ -261,13 +318,23 @@ return t.spec("repository fence", function(it)
 		local bad: { string } = {}
 		for _, path in all do
 			if not exempt(path) then
-				local text = string.lower(fs.readFile(path)) -- git config keys are case-insensitive: core.hookspath
-				local allowed = ALLOWED[path] or {}
-				for _, name in NAMES do
-					if not allowed[name] and string.find(text, string.lower(name), 1, true) then
-						table.insert(bad, `{path} names {name}`)
-					end
+				for _, name in bannedIn(fs.readFile(path), ALLOWED[path] or {}) do
+					table.insert(bad, `{path} names {name}`)
 				end
+			end
+		end
+		-- the scan itself catches the overrides it bans (review 001 F1)
+		-- planted text, built by concatenation so this file names none of it
+		local planted = {
+			"git -c protocol." .. "allow=always push",
+			"git -c protocol." .. "https.allow=always push",
+			"git -c credential." .. "helper=osxkeychain push",
+			"git -c http." .. "extraheader=x push",
+			"GIT_SSH_" .. "COMMAND=ssh git push",
+		}
+		for _, text in planted do
+			if #bannedIn(text, {}) == 0 then
+				error(`the scan misses: {text}`)
 			end
 		end
 		if #bad > 0 then
@@ -281,12 +348,18 @@ return t.spec("repository fence", function(it)
 			if exempt(path) then
 				continue
 			end
-			for email in string.gmatch(fs.readFile(path), "user%.email[^@\n]-([%w%.%-_]+@[%w%.%-]+)") do
+			for _, email in identitiesIn(fs.readFile(path)) do
 				if not string.match(email, "@example%.invalid$") then
 					table.insert(bad, `{path}: {email}`)
 				end
 			end
 		end
+		-- identities set in the environment are read too (review 001 F3)
+		local ids = identitiesIn(
+			"{ GIT_AUTHOR_" .. 'EMAIL = "dev@example.com" }\ngit -c user.' .. "email=e2e@example.invalid"
+		)
+		t.expect(table.find(ids, "dev@example.com") ~= nil).toBe(true)
+		t.expect(table.find(ids, "e2e@example.invalid") ~= nil).toBe(true)
 		if #bad > 0 then
 			error(
 				"fixture identities must be <name>@example.invalid (the tripwire relies on it):\n  "

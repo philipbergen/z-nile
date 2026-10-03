@@ -275,18 +275,45 @@ local function protectedPaths(here: string): { string }
 end
 
 -- The jail's profile: no write to the protected paths or the person's git configuration, except .cache.
+-- Every directory above `path`, up to the root: a protected tree must not be moved away from above (renamed,
+-- written, renamed back), so each ancestor itself is denied. Its other children stay writable.
+local function ancestors(path: string): { string }
+	local out: { string } = {}
+	local p = string.match(path, "^(.*)/[^/]+$")
+	while p and p ~= "" do
+		table.insert(out, p)
+		p = string.match(p, "^(.*)/[^/]+$")
+	end
+	return out
+end
+
 local function profile(here: string, cache: string): string
-	local rules = { "(version 1)", "(allow default)" }
+	-- no network at all for specs (IP): git's own refusals can be overridden on a command line (`-c`); local
+	-- sockets stay open
+	local rules = { "(version 1)", "(allow default)", "(deny network-outbound (remote ip))" }
+	local guarded: { string } = {}
 	for _, path in protectedPaths(here) do
 		table.insert(rules, `(deny file-write* (subpath "{path}"))`)
+		table.insert(guarded, path)
 	end
 	local home = process.env.HOME or ""
 	if home ~= "" then
 		for _, file in { `{home}/.gitconfig`, resolved(`{home}/.gitconfig`) } do
 			table.insert(rules, `(deny file-write* (literal "{file}"))`)
+			table.insert(guarded, file)
 		end
 		for _, dir in { `{home}/.config/git`, resolved(`{home}/.config/git`) } do
 			table.insert(rules, `(deny file-write* (subpath "{dir}"))`)
+			table.insert(guarded, dir)
+		end
+	end
+	local seen: { [string]: boolean } = {}
+	for _, path in guarded do
+		for _, up in ancestors(path) do
+			if not seen[up] then
+				seen[up] = true
+				table.insert(rules, `(deny file-write* (literal "{up}"))`)
+			end
 		end
 	end
 	table.insert(rules, `(allow file-write* (subpath "{cache}"))`)
@@ -321,7 +348,7 @@ local function fixtureOfGuarded(here: string, open: { string }): boolean
 	end
 	local outer = false
 	for real in string.gmatch(process.env.PICKMAN_FENCE_REAL_GIT or "", "[^:]+") do
-		if real ~= own then
+		if real ~= own and fs.isDir(real) then -- a stale or made-up entry proves no outer guard
 			outer = true
 		end
 	end
@@ -439,5 +466,8 @@ function fence.enter()
 	end
 	process.exit(code)
 end
+
+-- The jail's profile, for the gate spec's check of its rules.
+fence.profile = profile
 
 return fence

@@ -6,6 +6,7 @@
 | 2 | 2026-10-03 07:38 | R0210: experiments (E30 on the landed c0510 code) | 0 | 0 | 5.0 | focus |
 | 3 | 2026-10-03 08:26 | R0210: case lookups in c0640/c0660 check.sh ignore line breaks (user-approved fix of sequestered checks) | 0 | 0 | 5.0 | focus |
 | 4 | 2026-10-03 08:27 | c0640: verification log | 0 | 0 | 2.0 | focus |
+| 5 | 2026-10-03 16:36 | R0210: review 001 fixes (jail denies IP networking and every ancestor; scan bans network/credential overrides and reads env identities; helper refuses core.worktree and env config; outer guard must exist) | 174 | 9 | 45.0 | explicit |
 
-**Total:** +1140 / -43 lines, 32.0 agent-minutes over 4 commits
-<!-- totals: added=1140 removed=43 minutes=32.0 commits=4 -->
+**Total:** +1314 / -52 lines, 77.0 agent-minutes over 5 commits
+<!-- totals: added=1314 removed=52 minutes=77.0 commits=5 -->

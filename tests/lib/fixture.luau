@@ -59,6 +59,14 @@ local function pointsElsewhere(cmd: string, args: { string }, env: { [string]: s
 			return name
 		end
 	end
+	-- config handed in through the environment can set core.worktree and the like (review 001 F4)
+	if env then
+		for name in env do
+			if string.sub(name, 1, 11) == "GIT_CONFIG_" then
+				return name
+			end
+		end
+	end
 	if cmd ~= "git" then
 		return nil
 	end
@@ -67,6 +75,9 @@ local function pointsElsewhere(cmd: string, args: { string }, env: { [string]: s
 		local a = args[i]
 		if a == "-C" or string.match(a, "^%-%-git%-dir") or string.match(a, "^%-%-work%-tree") then
 			return a
+		end
+		if a == "-c" and string.match(string.lower(args[i + 1] or ""), "^core%.worktree") then
+			return "-c " .. args[i + 1]
 		end
 		i += if a == "-c" then 2 else 1
 	end
