@@ -11,7 +11,7 @@ A="$HERE/acceptance"
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the pure status rules hold" lune run tests/run -- "$A/status.spec.luau"
 check "AC2: the publisher pushes only whitelisted files on top of origin/main and retries a lost race" lune run tests/run -- "$A/publish.spec.luau"
-check "AC3: the CLI publishes, claims, starts, syncs and stays local when asked" lune run tests/run -- "$A/commands.spec.luau"
+check "AC3: the CLI publishes, claims, starts, syncs and stays local when asked" lune run tests/run -- "$A"/commands*.spec.luau # R0250 c0680 splits the spec
 existing_specs_pass() { # the runner takes files, not directories
   local files
   files=$(find tests/acceptance tests/tooling -name '*.spec.luau' | sort)
@@ -33,7 +33,7 @@ check "AC5: check.yml ignores tracker/** on push, and only on push" workflow_ign
 skills_carry_sync_and_claim() {
   local s merging='tracker\.sh sync([^ -]|$)'
   # the working skills run the merging form; reviewers, stream agents and metrics fetch only
-  for s in tracker ticket-prep make-prompt execute-raft make-issue; do
+  for s in tracker ticket-prep ready-raft execute-raft make-issue; do
     grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill has no 'tracker.sh sync' (merging) step"; return 1; }
   done
   for s in review metrics; do

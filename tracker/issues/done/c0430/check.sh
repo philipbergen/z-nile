@@ -31,8 +31,7 @@ check "AC1: the plan: waves, overlaps, no-modules warning, parallel line, cycle 
 check "AC2: worktree --from bases on the ref; unknown ref and raft id rejected" cases_pass \
   "worktree --from bases" "worktree --from rejects"
 check "AC3: stream review files are not review rounds" cases_pass "stream review files are not review rounds"
-check "AC4: the prompt embeds the plan, or the error when it can't be built" cases_pass \
-  "prompt embeds the workstreams plan" "prompt embeds the error"
+# AC4 (the prompt embeds the plan, or its error) moved to c0730's ready.spec in R0250: prompt is now a reader
 check "AC5: tracker.sh commit refuses while merge conflicts are unresolved" cases_pass "tracker.sh commit refuses"
 check "AC6: skills and template carry the parallel protocol" bash -c '
   e=.claude/skills/execute-raft/SKILL.md
@@ -42,7 +41,7 @@ check "AC6: skills and template carry the parallel protocol" bash -c '
   grep -qiE "^#+ +stream mode" .claude/skills/review/SKILL.md || { echo "review: no Stream mode section"; exit 1; }
   grep -qF "tracker.sh workstreams" .claude/skills/tracker/SKILL.md || { echo "tracker skill: workstreams"; exit 1; }
   grep -qF -- "--from" .claude/skills/tracker/SKILL.md || { echo "tracker skill: --from"; exit 1; }
-  grep -qF "parallel:" .claude/skills/make-prompt/SKILL.md || { echo "make-prompt: parallel line"; exit 1; }
+  grep -qF "parallel:" .claude/skills/ready-raft/SKILL.md || { echo "ready-raft: parallel line"; exit 1; }
   grep -qF "## Workstreams plan" tracker/templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
   grep -qF "{{WORKSTREAMS}}" tracker/templates/prompt.md || { echo "prompt template: variable"; exit 1; }
   grep -qF "stream branches are committed with plain git" tracker/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
