@@ -4,7 +4,14 @@
 --
 -- Tick contract: step k takes time k to k + 1. Intents submitted before step k act in step k, and
 -- the events it returns are visible at time k + 1, which is the new `tick`.
+--
+-- Order inside one step, per player (a contract): Game.step (a Ready event resets the ghosts), then, if the run
+-- is in play, the player's movement and eating, then the ghosts (the pellets eaten reach the house, the ghosts
+-- walk, then a power pellet eaten this tick turns them blue, so their blue clock equals the run's), then, only
+-- if the run is still in play (a cleared level wins), the contacts: a kill beats an eating, and eatings pay along
+-- the chain.
 local Game = require("./Game")
+local Ghosts = require("./Ghosts")
 local Levels = require("./Levels")
 local Maze = require("./Maze")
 local Movement = require("./Movement")
@@ -16,6 +23,7 @@ export type Config = {
 	maxIntentsPerTick: number,
 	play: Game.Config?, -- the run's rules; nil means no pauses (a run in play from tick 0)
 	eatSlowdown: boolean?, -- eating stops the player for a moment, as in the arcade
+	ghosts: boolean?, -- the four ghosts hunt the player (mazes with ghost data only)
 }
 export type PlayerSnapshot = {
 	x: number,
@@ -24,7 +32,23 @@ export type PlayerSnapshot = {
 	moving: boolean,
 	jumpTick: number, -- tick of the latest position discontinuity, -1 if none
 }
-export type Snapshot = { v: number, tick: number, maze: string, player: PlayerSnapshot }
+export type Look = Ghosts.Look
+export type GhostSnapshot = {
+	name: Ghosts.Name,
+	x: number,
+	y: number, -- continuous tile coordinates
+	heading: Maze.Heading,
+	look: Look,
+	flash: boolean, -- the white half of a blinking flash
+	jumpTick: number, -- tick of the latest position discontinuity, -1 if none
+}
+export type Snapshot = {
+	v: number,
+	tick: number,
+	maze: string,
+	player: PlayerSnapshot,
+	ghosts: { GhostSnapshot }?, -- present when the session has ghosts
+}
 export type PlayFrame = {
 	phase: Game.Phase,
 	level: number,
@@ -40,6 +64,7 @@ export type Frame = {
 	player: PlayerSnapshot,
 	play: PlayFrame,
 	pellets: string, -- Pellets.encode of what the player has left to eat
+	ghosts: { GhostSnapshot }?, -- the ghosts of a session that has them
 }
 export type Event = {
 	kind: string,
@@ -53,6 +78,7 @@ export type Event = {
 	ticks: number?,
 	reason: string?,
 	item: string?,
+	ghost: Ghosts.Name?,
 }
 export type Clock = { rate: number, maxSteps: number, acc: number }
 
@@ -63,6 +89,8 @@ type Member = {
 	play: Game.Game,
 	pellets: Pellets.Pellets,
 	stall: number, -- units of eating pause still owed
+	ghosts: Ghosts.Set?,
+	ghostJump: { [string]: number }, -- per ghost: tick of its latest position discontinuity
 }
 export type Session = {
 	tick: number, -- steps completed
@@ -91,6 +119,7 @@ local GAME_CONFIG: Config = {
 	maxIntentsPerTick = 4,
 	play = Game.CLASSIC_CONFIG,
 	eatSlowdown = true,
+	ghosts = true,
 }
 Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
 
@@ -133,6 +162,8 @@ function Session.join(s: Session, id: PlayerId)
 		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
 		pellets = Pellets.new(s.maze),
 		stall = 0,
+		ghosts = if s.config.ghosts and Ghosts.available(s.maze) then Ghosts.new(s.maze, s.seed) else nil,
+		ghostJump = {},
 	}
 end
 
@@ -185,6 +216,22 @@ local function tagged(id: PlayerId, e: Game.Event): Event
 	}
 end
 
+-- Every ghost back at its start (and a camera cut for each): after a death, on a new level, on a new run.
+local function resetGhosts(member: Member, reason: string?, tick: number)
+	local set = member.ghosts
+	if set == nil then
+		return
+	end
+	local why: "respawn" | "level" | "run" = if reason == "respawn"
+		then "respawn"
+		elseif reason == "again" then "run"
+		else "level"
+	Ghosts.reset(set, why, member.play.level)
+	for _, name: Ghosts.Name in Ghosts.NAMES do
+		member.ghostJump[name] = tick
+	end
+end
+
 -- The player entered a tile: eat what is on it, score it, owe the eating pause, and clear the level
 -- when the last pellet goes. Appends to `out`.
 local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, speed: number, out: { Event })
@@ -215,6 +262,80 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
 	end
 end
 
+-- The ghosts take their step after the player, then meet the player. A pellet eaten this tick counts for the
+-- house first; a power pellet turns the ghosts blue after they have moved (so the clock matches the run's).
+local function stepGhosts(
+	s: Session,
+	id: PlayerId,
+	member: Member,
+	playerPrev: Maze.Tile,
+	ghostsPrev: { Maze.Tile },
+	from: number,
+	out: { Event }
+)
+	local set = member.ghosts :: Ghosts.Set
+	local power: number? = nil
+	for i = from + 1, #out do
+		local e = out[i]
+		if e.kind == "PelletEaten" then
+			for _, g in Ghosts.pelletEaten(set) do
+				local kind: string = g.kind
+				table.insert(out, { kind = kind, player = id, ghost = g.ghost })
+			end
+		elseif e.kind == "PowerStarted" then
+			power = e.ticks
+		end
+	end
+	local playerNow = Movement.occupied(s.maze, member.move)
+	local input: Ghosts.Input = {
+		player = playerNow,
+		heading = member.move.heading,
+		level = member.play.level,
+		baseSpeed = s.config.movement.speed,
+		tickRate = Session.TICK_RATE,
+	}
+	for _, g in Ghosts.step(set, input) do
+		local kind: string = g.kind
+		if kind == "Wrapped" and g.ghost then
+			member.ghostJump[g.ghost] = s.tick
+		elseif kind ~= "Entered" then
+			local event: Event = { kind = kind, player = id, ghost = g.ghost }
+			table.insert(out, event)
+		end
+	end
+	if power then
+		Ghosts.power(set, power)
+	end
+	-- the last pellet clearing the level this very tick wins over a ghost that arrives at the same time
+	if not Game.canMove(member.play) then
+		return
+	end
+	local kill = false
+	local eaten: { Ghosts.Name } = {}
+	for _, c in Ghosts.contacts(set, ghostsPrev, playerPrev, playerNow) do
+		if c.kind == "kill" then
+			kill = true
+			table.insert(out, { kind = "Caught", player = id, ghost = c.name })
+		else
+			table.insert(eaten, c.name)
+		end
+	end
+	if kill then
+		for _, e in Game.died(member.play) do
+			table.insert(out, tagged(id, e))
+		end
+		return
+	end
+	for _, name: Ghosts.Name in eaten do
+		local points = Ghosts.eat(set, name)
+		local event: Event = { kind = "GhostEaten", player = id, ghost = name, points = points }
+		table.insert(out, event)
+		for _, e in Game.addScore(member.play, points) do
+			table.insert(out, tagged(id, e))
+		end
+	end
+end
+
 function Session.step(s: Session): { Event }
 	s.tick += 1
 	local out: { Event } = {}
@@ -232,6 +353,7 @@ function Session.step(s: Session): { Event }
 				if e.reason ~= "respawn" then
 					Pellets.reset(member.pellets) -- a new level or a new run: every pellet is back
 				end
+				resetGhosts(member, e.reason, s.tick)
 			end
 		end
 		if not moving then
@@ -243,6 +365,9 @@ function Session.step(s: Session): { Event }
 		member.stall -= owed
 		local config: Movement.Config =
 			{ speed = speed - owed, turnBufferTicks = s.config.movement.turnBufferTicks }
+		local before = #out
+		local playerPrev = Movement.occupied(s.maze, member.move)
+		local ghostsPrev = if member.ghosts then Ghosts.occupiedTiles(member.ghosts) else {}
 		for _, e in Movement.step(s.maze, member.move, queue, config) do
 			local event: Event = { kind = e.kind, player = id }
 			if e.kind == "Entered" or e.kind == "Stopped" then
@@ -254,6 +379,9 @@ function Session.step(s: Session): { Event }
 			if e.kind == "Entered" then
 				eat(s, id, member, { x = e.x, y = e.y }, speed, out)
 			end
+		end
+		if member.ghosts then
+			stepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)
 		end
 	end
 	return out
@@ -288,8 +416,31 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
 	if ok then
 		teleport(s, member, s.tick + 1)
 		Pellets.reset(member.pellets)
+		resetGhosts(member, "again", s.tick + 1)
 	end
 	return out, ok
+end
+
+local function ghostSnapshots(member: Member): { GhostSnapshot }?
+	local set = member.ghosts
+	if set == nil then
+		return nil
+	end
+	local out: { GhostSnapshot } = {}
+	local flash = Ghosts.flash(set)
+	for _, g in set.ghosts do
+		local x, y = Ghosts.position(g)
+		table.insert(out, {
+			name = g.name,
+			x = x,
+			y = y,
+			heading = g.heading,
+			look = Ghosts.look(set, g),
+			flash = flash and Ghosts.look(set, g) == "blinking",
+			jumpTick = member.ghostJump[g.name] or -1,
+		})
+	end
+	return out
 end
 
 function Session.snapshot(s: Session, id: PlayerId): Snapshot
@@ -306,6 +457,7 @@ function Session.snapshot(s: Session, id: PlayerId): Snapshot
 			moving = member.move.moving,
 			jumpTick = member.jumpTick,
 		},
+		ghosts = ghostSnapshots(member),
 	}
 end
 
@@ -319,6 +471,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
 		tick = snap.tick,
 		maze = snap.maze,
 		player = snap.player,
+		ghosts = snap.ghosts,
 		play = {
 			phase = play.phase,
 			level = play.level,

@@ -74,4 +74,14 @@ return t.spec("Session extras", function(it)
 		Session.join(s, "p")
 		t.expect(Session.frame(s, "p").pellets).toBe(string.rep("_", 40) .. "P")
 	end)
+
+	it("each session's ghosts are seeded from the session's seed", function()
+		local function rng(seed: number): number
+			local s = Session.new(classic, seed, Session.GAME_CONFIG)
+			Session.join(s, "p")
+			return (s.members.p.ghosts :: any).rng
+		end
+		t.expect(rng(1)).toBe(rng(1))
+		t.expect(rng(1) ~= rng(2)).toBe(true)
+	end)
 end)

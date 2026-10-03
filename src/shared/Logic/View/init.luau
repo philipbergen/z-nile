@@ -112,6 +112,31 @@ function View.interpolate(prev: Session.Snapshot?, latest: Session.Snapshot, alp
 	return { x = from.x + (to.x - from.x) * a, y = from.y + (to.y - from.y) * a }
 end
 
+export type GhostPose = { x: number, y: number, heading: Maze.Heading, look: Session.Look, flash: boolean }
+
+-- Where each ghost is drawn between the previous and the latest snapshot, in the latest snapshot's order.
+-- A ghost that jumped (a tunnel wrap or a reset) between the two is not blended across the jump.
+function View.interpolateGhosts(
+	prev: Session.Snapshot?,
+	latest: Session.Snapshot,
+	alpha: number
+): { GhostPose }
+	local out: { GhostPose } = {}
+	local a = if alpha ~= alpha then 1 else math.clamp(alpha, 0, 1)
+	local before: Session.Snapshot? = if prev and prev.tick < latest.tick then prev else nil
+	local ghosts: { Session.GhostSnapshot } = latest.ghosts or {}
+	for i, g in ghosts do
+		local x, y = g.x, g.y
+		local fromList: { Session.GhostSnapshot } = if before and before.ghosts then before.ghosts else {}
+		local from = fromList[i]
+		if before and from and from.name == g.name and g.jumpTick <= before.tick then
+			x, y = from.x + (g.x - from.x) * a, from.y + (g.y - from.y) * a
+		end
+		table.insert(out, { x = x, y = y, heading = g.heading, look = g.look, flash = g.flash })
+	end
+	return out
+end
+
 function View.approachYaw(current: number, target: number, maxDelta: number): number
 	local diff = wrap(target - current)
 	if math.abs(diff) <= maxDelta then
