@@ -6,6 +6,7 @@
 | 2 | 2026-10-03 08:40 | c0660: testing-skill fixture rule; c0010/c0070 carry the fixture identity in env; runner comment keeps the guard line alone | 30 | 9 | 20.0 | focus |
 | 3 | 2026-10-03 08:42 | c0660: verification log | 0 | 0 | 3.0 | focus |
 | 4 | 2026-10-03 08:49 | R0210: verification logs (raft check, gate speed) | 0 | 0 | 3.0 | focus |
+| 5 | 2026-10-03 16:38 | c0640: testing skill states the stronger jail and scan; verification log | 0 | 0 | 5.0 | focus |
 
-**Total:** +207 / -71 lines, 66.0 agent-minutes over 4 commits
-<!-- totals: added=207 removed=71 minutes=66.0 commits=4 -->
+**Total:** +207 / -71 lines, 71.0 agent-minutes over 5 commits
+<!-- totals: added=207 removed=71 minutes=71.0 commits=5 -->
