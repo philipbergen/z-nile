@@ -32,7 +32,8 @@ if listMode ~= nil and listMode ~= "" then
 	process.exit(1)
 end
 
--- Guard the repository this runs in (tests/lib/fence.luau): lock, fence and ref guard, tripwire.
+-- Guard the repository this runs in (the fence module, fence.luau in tests' lib folder): lock, fence and ref guard,
+-- tripwire. This call stays alone on its line: c0660's check removes exactly that line to run specs unguarded.
 require("./lib/fence").enter()
 
 -- Browser guard: no spec may start a real browser (`tracker.sh board` opens one unless given -O). The outermost runner

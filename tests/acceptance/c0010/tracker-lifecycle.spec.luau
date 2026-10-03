@@ -12,8 +12,17 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local dir = `{root}/.cache/tracker-e2e`
 
+-- The fixture's identity rides in the environment, not in its git config: a run of the spec runner nested in
+-- the fixture (tracker.sh done runs one) refuses a repository whose own identity is a fixture's (c0640).
+local ID: { [string]: string } = {
+	GIT_AUTHOR_NAME = "e2e",
+	GIT_AUTHOR_EMAIL = "e2e@example.invalid",
+	GIT_COMMITTER_NAME = "e2e",
+	GIT_COMMITTER_EMAIL = "e2e@example.invalid",
+}
+
 local function run(cmd: string, args: { string }): Result
-	return fixture.exec(dir, cmd, args)
+	return fixture.exec(dir, cmd, args, { env = ID })
 end
 
 local function must(r: Result, what: string): string
@@ -72,8 +81,6 @@ return t.spec("tracker lifecycle", function(it)
 				fs.writeFile(`{dir}/{path}`, fs.readFile(`{root}/{path}`))
 			end
 		end
-		git({ "config", "user.name", "e2e" })
-		git({ "config", "user.email", "e2e@example.invalid" })
 		-- start from an empty tracker so ids are predictable regardless of the real backlog
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/", "done/" } do
