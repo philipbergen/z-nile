@@ -4,6 +4,7 @@
 -- tooling overlaid, tracker emptied) where rafts and issues are created; then a bare `origin.git`
 -- cloned from the seed and a clone `main/` for the worktree cases.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -28,7 +29,7 @@ local stream = `{main}/.worktree/ws-f0010`
 local NO_GC: { [string]: string } = {}
 
 local function run(cwd: string, cmd: string, args: { string }): Result
-	return process.exec(cmd, args, { cwd = cwd, env = NO_GC })
+	return fixture.exec(cwd, cmd, args, { env = NO_GC })
 end
 
 local function must(r: Result, what: string): string
@@ -105,10 +106,10 @@ return t.spec("workstreams", function(it)
 		identity(seed)
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })
-		local listed = run(
-			root,
+		local listed = process.exec(
 			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
+			{ cwd = root }
 		)
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then

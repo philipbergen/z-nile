@@ -4,6 +4,7 @@
 -- branch, no `origin` (so every tracker command runs freely), the working tree's tooling overlaid,
 -- and the tracker emptied. The spec passes from any branch and from a detached HEAD.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -24,7 +25,7 @@ local seed = `{base}/seed`
 local NO_GC: { [string]: string } = {}
 
 local function run(cwd: string, cmd: string, args: { string }): Result
-	return process.exec(cmd, args, { cwd = cwd, env = NO_GC })
+	return fixture.exec(cwd, cmd, args, { env = NO_GC })
 end
 
 local function must(r: Result, what: string): string
@@ -87,10 +88,10 @@ return t.spec("document naming", function(it)
 		git({ "checkout", "-q", "-B", "main" })
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
-		local listed = run(
-			root,
+		local listed = process.exec(
 			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
+			{ cwd = root }
 		)
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then

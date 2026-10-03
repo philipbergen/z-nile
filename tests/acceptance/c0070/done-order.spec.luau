@@ -3,6 +3,7 @@
 -- drafts) runs on the final head. Driven for real in a throwaway clone whose origin is a local bare
 -- repository under a `github.com` path (so `done` takes its GitHub branch), with a fake `gh` that
 -- records the branch head on origin at the moment `gh pr ready` is called.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -27,11 +28,11 @@ local function must(r: Result, what: string): string
 end
 
 local function git(args: { string }): string
-	return must(process.exec("git", args, { cwd = work }), "git " .. table.concat(args, " "))
+	return must(fixture.exec(work, "git", args), "git " .. table.concat(args, " "))
 end
 
 local function tr(args: { string }, env: { [string]: string }?): Result
-	return process.exec("bash", { "scripts/tracker.sh", table.unpack(args) }, { cwd = work, env = env })
+	return fixture.exec(work, "bash", { "scripts/tracker.sh", table.unpack(args) }, { env = env })
 end
 
 local function read(path: string): string
@@ -222,12 +223,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local atReady = (string.gsub(fs.readFile(`{base}/ready-head`), "%s+$", ""))
 		t.expect(atReady).toBe(before)
 		-- and afterwards origin has the final head, which is what CI must test
-		t.expect(
-			must(
-				process.exec("git", { "--git-dir", bare, "rev-parse", "refs/heads/R0010-demo" }),
-				"origin head"
-			)
-		).toBe(after)
+		t.expect(must(fixture.exec(bare, "git", { "rev-parse", "refs/heads/R0010-demo" }), "origin head"))
+			.toBe(after)
 	end)
 
 	it("cleans up", function()

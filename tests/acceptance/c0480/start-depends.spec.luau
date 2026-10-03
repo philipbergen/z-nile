@@ -2,6 +2,7 @@
 -- c0480: `tracker.sh start` refuses a raft whose member issue depends on an item outside the raft that is not done.
 -- Driven for real in a throwaway clone (no remote, so start skips push and gh), like the lifecycle spec.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -12,7 +13,7 @@ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }
 local dir = `{root}/.cache/c0480-start-depends`
 
 local function run(cmd: string, args: { string }): Result
-	return process.exec(cmd, args, { cwd = dir })
+	return fixture.exec(dir, cmd, args)
 end
 
 local function must(r: Result, what: string): string

@@ -38,6 +38,18 @@ local NAMES = {
 -- Names a file may use for a stated reason, each reviewed (review skill, Repository safety). Nothing else in
 -- the file may name them.
 local ALLOWED: { [string]: { [string]: string } } = {
+	-- c0660: the fixture helper names these to refuse them, and its spec proves it
+	["tests/lib/fixture.luau"] = {
+		GIT_DIR = "refused",
+		GIT_WORK_TREE = "refused",
+		GIT_INDEX_FILE = "refused",
+		GIT_COMMON_DIR = "refused",
+		GIT_OBJECT_DIRECTORY = "refused",
+	},
+	["tests/acceptance/c0660/fixture.spec.luau"] = {
+		GIT_DIR = "proves the helper refuses it",
+		GIT_WORK_TREE = "proves the helper refuses it",
+	},
 	-- c0650: its spec proves the scan refuses these names
 	["tests/acceptance/c0650/adapt.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",

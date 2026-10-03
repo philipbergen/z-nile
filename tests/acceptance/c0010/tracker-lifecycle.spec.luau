@@ -2,6 +2,7 @@
 -- c0010 AC1: the tracker CLI lifecycle works end to end, driven for real in a throwaway clone
 -- of the committed HEAD (no remote, so start/done skip push and gh).
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -12,7 +13,7 @@ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }
 local dir = `{root}/.cache/tracker-e2e`
 
 local function run(cmd: string, args: { string }): Result
-	return process.exec(cmd, args, { cwd = dir })
+	return fixture.exec(dir, cmd, args)
 end
 
 local function must(r: Result, what: string): string

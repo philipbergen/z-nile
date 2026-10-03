@@ -5,6 +5,7 @@
 -- tree's tooling overlaid, tracker emptied) with raft R0010, a done raft R0020 and issues f0010,
 -- f0020; then a bare origin and a clone `main/`.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -45,11 +46,7 @@ local function run(
 			merged[k] = v
 		end
 	end
-	local opts: any = { cwd = cwd, env = merged }
-	if stdin then
-		opts.stdio = { stdin = stdin }
-	end
-	return process.exec(cmd, args, opts)
+	return fixture.exec(cwd, cmd, args, { env = merged, stdin = stdin })
 end
 
 local function must(r: Result, what: string): string
@@ -114,10 +111,10 @@ return t.spec("launch", function(it)
 		git(seed, { "config", "user.email", "e2e@example.invalid" })
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })
-		local listed = run(
-			root,
+		local listed = process.exec(
 			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
+			{ cwd = root }
 		)
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then

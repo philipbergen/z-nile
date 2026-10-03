@@ -3,6 +3,7 @@
 -- throwaway clone can never damage (or be damaged through) the real object store, and SETUP.md
 -- warns against checkouts in cloud-synced folders.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -32,7 +33,7 @@ local function specs(dir: string, out: { string })
 end
 
 local function git(args: { string }, cwd: string)
-	local r = process.exec("git", args, { cwd = cwd })
+	local r = fixture.exec(cwd, "git", args)
 	if not r.ok then
 		error(`git {table.concat(args, " ")} failed: {r.stderr}`, 2)
 	end
@@ -46,7 +47,7 @@ return t.spec("c0050 isolated clones", function(it)
 		-- a throwaway source repository, so that this spec never hardlinks the real object store itself
 		local source = `{base}/source`
 		fs.writeDir(source)
-		git({ "init", "-q" }, source)
+		assert(process.exec("git", { "init", "-q", source }).ok, "git init source") -- creating a fixture names its path
 		git({ "config", "user.name", "e2e" }, source)
 		git({ "config", "user.email", "e2e@example.invalid" }, source)
 		fs.writeFile(`{source}/file.txt`, "one\n")
