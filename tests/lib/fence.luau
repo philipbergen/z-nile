@@ -275,26 +275,14 @@ local function protectedPaths(here: string): { string }
 end
 
 -- The jail's profile: no write to the protected paths or the person's git configuration, except .cache.
--- The per-user system temp folder, as written and resolved (the sandbox matches resolved paths). macOS `mktemp`
--- always uses it, whatever TMPDIR says, and specs call `mktemp -d`. Shared temp folders (/tmp, /private/tmp, or
--- whatever TMPDIR named) are not allowed: programs outside the jail run and copy files from them (review 003 F1, F3).
-local function userTemp(): { string }
-	local r = process.exec("getconf", { "DARWIN_USER_TEMP_DIR" })
-	local dir = if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ""
-	dir = (string.gsub(dir, "/+$", ""))
-	if dir == "" then
-		return {}
-	end
-	return { dir, resolved(dir) }
-end
-
--- The jail's profile. Specs may write only this checkout's .cache (TMPDIR points into it), the per-user system
--- temp folder that `mktemp` uses, and /dev: the repository,
+-- The jail's profile. Specs may write only inside this checkout's .cache (not the .cache entry itself: replaced by a
+-- symlink, it would turn later writes into writes elsewhere, review 004 F1), the run's own temp folder (TMPDIR; macOS
+-- `mktemp` is pointed there too, review 004 F2), and /dev: the repository,
 -- every directory above it (renaming one away, writing inside and renaming it back would escape a narrower rule),
 -- and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, all run
 -- later without the jail) are denied. No IP networking except loopback: a spec's `-c protocol.allow=always` reaches
 -- nothing, while local test servers still work (review 001 F1 and F2, review 002 F2 and F3).
-local function profile(cache: string): string
+local function profile(cache: string, runTemp: string): string
 	local rules = {
 		"(version 1)",
 		"(allow default)",
@@ -306,8 +294,11 @@ local function profile(cache: string): string
 	for _, dir in { cache, resolved(cache) } do
 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
-	for _, dir in userTemp() do
+	for _, dir in { runTemp, resolved(runTemp) } do
 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
+	end
+	for _, dir in { cache, resolved(cache) } do
+		table.insert(rules, `(deny file-write* (literal "{dir}"))`) -- later rules win
 	end
 	return table.concat(rules, "")
 end
@@ -344,6 +335,15 @@ local function escapes(here: string): { string }
 	if pcall(fs.writeFile, shared, "") then
 		pcall(fs.removeFile, shared)
 		table.insert(out, "the shared temp folder /private/tmp")
+	end
+	local ut = process.exec("getconf", { "DARWIN_USER_TEMP_DIR" })
+	local userTemp = if ut.ok then (string.gsub(ut.stdout, "/*%s*$", "")) else ""
+	if userTemp ~= "" then
+		local probe = `{userTemp}/pickman-jail-probe-{myPid()}`
+		if pcall(fs.writeFile, probe, "") then
+			pcall(fs.removeFile, probe)
+			table.insert(out, `the user temp folder {userTemp}`)
+		end
 	end
 	local caches: { string } = {}
 	for entry in string.gmatch(process.env.GIT_CEILING_DIRECTORIES or "", "[^:]+") do
@@ -415,11 +415,11 @@ end
 -- (environment guards only). On macOS a run that can't be jailed (inside another sandbox, which can't be
 -- nested, or without sandbox-exec) goes on only if it provably can't write the repository, or if it is a
 -- fixture of a guarded checkout (whose own jail then protects the real repository); otherwise it refuses.
-local function jail(here: string, cache: string): ({ string }, string)
+local function jail(here: string, cache: string, runTemp: string): ({ string }, string)
 	if process.os ~= "macos" then
 		return {}, "none (not macOS: environment guards only)"
 	end
-	local rules = profile(cache)
+	local rules = profile(cache, runTemp)
 	local started, trial = pcall(process.exec, "sandbox-exec", { "-p", rules, "/usr/bin/true" })
 	if started and trial.ok then
 		return { "sandbox-exec", "-p", rules }, "sandbox-exec"
@@ -444,6 +444,7 @@ local function jail(here: string, cache: string): ({ string }, string)
 		)}{if #open > 0 and #leaks > 0 then ", " else ""}{table.concat(leaks, ", ")}). `
 			.. 'Run specs outside the sandbox you are in (testing skill, "Specs never touch the real repository").\n'
 	)
+	pcall(fs.removeDir, runTemp)
 	process.exit(1)
 	return {}, ""
 end
@@ -458,6 +459,11 @@ function fence.enter()
 		return
 	end
 	local cache = `{here}/.cache`
+	-- a symlink or a file there would turn every guard write into a write elsewhere (review 004 F1)
+	if process.exec("test", { "-L", cache }).ok or (fs.isFile(cache)) then
+		stdio.ewrite(`{cache} is not a plain folder (a symlink or a file); refusing. Stop and report this.\n`)
+		process.exit(1)
+	end
 	fs.writeDir(cache)
 	-- the tripwire tells fixture writes by their author; that only works while this repository has a real identity
 	local email = git({ "config", "user.email" }) or ""
@@ -470,16 +476,37 @@ function fence.enter()
 		process.exit(1)
 	end
 	-- decide the jail first: a run that must refuse does so before it takes the lock
-	local prefix, jailed = jail(here, cache)
+	-- the run's own temp folder, outside the checkout (a spec's `mktemp -d` must land outside .cache) and fresh,
+	-- so nothing outside the jail runs from it; removed when the run ends
+	local base = (string.gsub(process.env.TMPDIR or "", "/+$", ""))
+	local made = process.exec("mktemp", { "-d", `{if base == "" then "/tmp" else base}/pickman-run.XXXXXX` })
+	if not made.ok then
+		stdio.ewrite(`tests/run: could not make the run's temp folder: {made.stderr}\n`)
+		process.exit(1)
+	end
+	local runTemp = resolved((string.gsub(made.stdout, "%s+$", "")))
+	if process.os == "macos" then
+		-- macOS mktemp ignores TMPDIR without a template and uses the user temp folder, which the jail closes
+		fs.writeDir(`{runTemp}/bin`)
+		fs.writeFile(
+			`{runTemp}/bin/mktemp`,
+			"#!/bin/sh\n# the run's mktemp: with no template, into the run's own TMPDIR (the jail closes the user temp folder)\n"
+				.. 'for a in "$@"; do case $a in -*) ;; *) exec /usr/bin/mktemp "$@" ;; esac; done\n'
+				.. 'exec /usr/bin/mktemp "$@" "$TMPDIR/tmp.XXXXXXXXXX"\n'
+		)
+		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
+	end
+	local prefix, jailed = jail(here, cache, runTemp)
 	local lock = `{cache}/tests-run.lock`
 	takeLock(lock)
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'. scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$1/.cache/tmp" && mkdir -p "$TMPDIR" && shift 2 && exec lune run tests/run -- "$@"',
+		'. scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
+		runTemp,
 	}
 	for _, a in process.args do
 		if a ~= "--" then
@@ -499,6 +526,7 @@ function fence.enter()
 	local r = process.exec(command, argv, { stdio = "forward" })
 	local after = snapshot(cache)
 	pcall(fs.removeDir, lock)
+	pcall(fs.removeDir, runTemp)
 	local code = r.code
 	local changed = changes(before, after)
 	if #changed > 0 then

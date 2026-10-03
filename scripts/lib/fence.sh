@@ -19,12 +19,23 @@ pickman_fence() {
   unset GIT_NAMESPACE GIT_PREFIX GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
   real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
   export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"
+  # .cache must be a plain folder of this checkout: a symlink there would turn every write below into a write
+  # elsewhere, the real repository included (review 004 F1). Nothing here ever deletes recursively.
+  if [[ -L $here/.cache || ( -e $here/.cache && ! -d $here/.cache ) ]]; then
+    echo "fence: $here/.cache is not a plain folder (a symlink or a file); refusing. Stop and report this." >&2
+    return 1
+  fi
   mkdir -p "$here/.cache"
-  # rewritten every time: a spec could have repointed it at the real .git (review 002 F7)
+  # the sentinel is rewritten every time: a spec could have repointed it at the real .git (review 002 F7). A
+  # symlink there is unlinked (never followed); a folder there (it could hold a commondir leading to the real
+  # repository, review 003 F2) is refused, not deleted
   local sentinel="$here/.cache/.git"
-  # a symlink or a directory there is replaced too: a directory with a commondir file would also lead to the real
-  # repository (review 003 F2), and nothing under .cache is kept
-  if [[ -L $sentinel || -d $sentinel ]]; then rm -rf "$here/.cache/.git"; fi
+  if [[ -L $sentinel ]]; then
+    rm -f "$sentinel"
+  elif [[ -d $sentinel ]]; then
+    echo "fence: $sentinel is a folder; refusing (remove it yourself after checking it). Stop and report this." >&2
+    return 1
+  fi
   printf 'gitdir: /nonexistent/pickman-fence\n' >"$sentinel"
   if [[ -n $real ]]; then
     export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"

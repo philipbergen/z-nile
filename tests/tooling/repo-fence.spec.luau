@@ -93,6 +93,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_DIR = "proves the helper refuses it",
 		GIT_WORK_TREE = "proves the helper refuses it",
 	},
+	-- review 004 F1: its runner case clears the marker so a copied runner acts as a top-level run
+	["tests/tooling/fence-cache-entry.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- c0650: its spec proves the scan refuses these names
 	["tests/acceptance/c0650/adapt.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
@@ -273,6 +277,26 @@ return t.spec("repository fence", function(it)
 				table.insert(escaped, `a file in {home}`)
 			end
 		end
+		-- the user temp folder (the ordinary shell's TMPDIR, review 004 F2) is closed too: specs get their own
+		local ut = trim(process.exec("getconf", { "DARWIN_USER_TEMP_DIR" }).stdout)
+		ut = (string.gsub(ut, "/+$", ""))
+		if ut ~= "" then
+			local probe = `{ut}/pickman-jail-probe-{tag}`
+			if pcall(fs.writeFile, probe, "") then
+				pcall(fs.removeFile, probe)
+				table.insert(escaped, `the user temp folder {ut}`)
+			end
+		end
+		-- the .cache entry itself can't be replaced (a symlink there would redirect later writes, review 004 F1)
+		if process.exec("touch", { "-c", "-r", `{here}/.cache`, `{here}/.cache` }).ok then
+			table.insert(escaped, "the .cache entry itself")
+		end
+		-- the run's TMPDIR lies outside the checkout, and a plain `mktemp -d` lands in it
+		local tmp = env.TMPDIR or ""
+		t.expect(tmp ~= "" and string.sub(tmp .. "/", 1, #here + 1) ~= here .. "/").toBe(true)
+		local made = trim(process.exec("mktemp", { "-d" }).stdout)
+		t.expect(made ~= "" and string.sub(made, 1, #tmp) == tmp).toBe(true)
+		pcall(fs.removeDir, made)
 		-- the shared temp folder: programs outside the jail run and copy files from it (review 003 F1)
 		local shared = `/private/tmp/pickman-jail-probe-{tag}`
 		if pcall(fs.writeFile, shared, "") then

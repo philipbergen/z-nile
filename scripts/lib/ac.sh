@@ -10,7 +10,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 # (a fixture holding only ac.sh runs inside an already-guarded spec run)
 if [[ -f scripts/lib/fence.sh ]]; then
   source scripts/lib/fence.sh
-  pickman_fence "$(pwd -P)"
+  pickman_fence "$(pwd -P)" || exit 1
 fi
 export PATH="$HOME/.rokit/bin:$PATH"
 _ac_failed=0
