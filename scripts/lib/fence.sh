@@ -20,11 +20,12 @@ pickman_fence() {
   real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
   export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"
   mkdir -p "$here/.cache"
-  # rewritten every time: a spec could have repointed it at the real .git (review 002 F7); a symlink is removed
-  # first so the write can't follow it, and a directory (a fixture repository made in .cache itself) is left alone
+  # rewritten every time: a spec could have repointed it at the real .git (review 002 F7)
   local sentinel="$here/.cache/.git"
-  [[ -L $sentinel ]] && rm -f "$sentinel"
-  [[ -d $sentinel ]] || printf 'gitdir: /nonexistent/pickman-fence\n' >"$sentinel"
+  # a symlink or a directory there is replaced too: a directory with a commondir file would also lead to the real
+  # repository (review 003 F2), and nothing under .cache is kept
+  if [[ -L $sentinel || -d $sentinel ]]; then rm -rf "$here/.cache/.git"; fi
+  printf 'gitdir: /nonexistent/pickman-fence\n' >"$sentinel"
   if [[ -n $real ]]; then
     export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
   fi

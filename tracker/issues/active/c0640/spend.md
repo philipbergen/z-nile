@@ -12,6 +12,7 @@
 | 8 | 2026-10-03 16:56 | R0210: review 002 fixes (jail writes only .cache and the temp folder, loopback open, no proxies; outer sandboxes must prove home, folders and network closed; GIT_ALLOW_PROTOCOL pinned; sentinel rewritten; identities read in any case) | 140 | 63 | 50.0 | explicit |
 | 9 | 2026-10-03 16:59 | c0640: testing skill states the write allowlist; verification log | 1 | 1 | 5.0 | focus |
 | 10 | 2026-10-03 17:00 | R0210: refute-002 | 0 | 0 | 5.0 | focus |
+| 11 | 2026-10-03 21:48 | R0210: jail writes only .cache and the user temp mktemp uses (no shared /tmp, TMPDIR inside .cache); sentinel replaces a directory too (review 003, user's choice) | 31 | 18 | 25.0 | explicit |
 
-**Total:** +1457 / -118 lines, 147.0 agent-minutes over 10 commits
-<!-- totals: added=1457 removed=118 minutes=147.0 commits=10 -->
+**Total:** +1488 / -136 lines, 172.0 agent-minutes over 11 commits
+<!-- totals: added=1488 removed=136 minutes=172.0 commits=11 -->

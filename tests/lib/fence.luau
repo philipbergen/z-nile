@@ -275,20 +275,21 @@ local function protectedPaths(here: string): { string }
 end
 
 -- The jail's profile: no write to the protected paths or the person's git configuration, except .cache.
--- The temporary folder, as written and resolved (the sandbox matches resolved paths).
-local function tempDirs(): { string }
-	local out: { string } = {}
-	for _, dir in { process.env.TMPDIR or "", "/tmp", "/private/tmp" } do
-		dir = (string.gsub(dir, "/+$", ""))
-		if dir ~= "" then
-			table.insert(out, dir)
-			table.insert(out, resolved(dir))
-		end
+-- The per-user system temp folder, as written and resolved (the sandbox matches resolved paths). macOS `mktemp`
+-- always uses it, whatever TMPDIR says, and specs call `mktemp -d`. Shared temp folders (/tmp, /private/tmp, or
+-- whatever TMPDIR named) are not allowed: programs outside the jail run and copy files from them (review 003 F1, F3).
+local function userTemp(): { string }
+	local r = process.exec("getconf", { "DARWIN_USER_TEMP_DIR" })
+	local dir = if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ""
+	dir = (string.gsub(dir, "/+$", ""))
+	if dir == "" then
+		return {}
 	end
-	return out
+	return { dir, resolved(dir) }
 end
 
--- The jail's profile. Specs may write only this checkout's .cache, the temporary folder and /dev: the repository,
+-- The jail's profile. Specs may write only this checkout's .cache (TMPDIR points into it), the per-user system
+-- temp folder that `mktemp` uses, and /dev: the repository,
 -- every directory above it (renaming one away, writing inside and renaming it back would escape a narrower rule),
 -- and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, all run
 -- later without the jail) are denied. No IP networking except loopback: a spec's `-c protocol.allow=always` reaches
@@ -305,7 +306,7 @@ local function profile(cache: string): string
 	for _, dir in { cache, resolved(cache) } do
 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
-	for _, dir in tempDirs() do
+	for _, dir in userTemp() do
 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
 	return table.concat(rules, "")
@@ -338,6 +339,11 @@ local function escapes(here: string): { string }
 			pcall(fs.removeFile, probe)
 			table.insert(out, `the home folder {home}`)
 		end
+	end
+	local shared = `/private/tmp/pickman-jail-probe-{myPid()}`
+	if pcall(fs.writeFile, shared, "") then
+		pcall(fs.removeFile, shared)
+		table.insert(out, "the shared temp folder /private/tmp")
 	end
 	local caches: { string } = {}
 	for entry in string.gmatch(process.env.GIT_CEILING_DIRECTORIES or "", "[^:]+") do
@@ -470,7 +476,7 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'. scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" && shift 2 && exec lune run tests/run -- "$@"',
+		'. scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$1/.cache/tmp" && mkdir -p "$TMPDIR" && shift 2 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,

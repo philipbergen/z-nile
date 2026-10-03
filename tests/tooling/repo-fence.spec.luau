@@ -273,6 +273,12 @@ return t.spec("repository fence", function(it)
 				table.insert(escaped, `a file in {home}`)
 			end
 		end
+		-- the shared temp folder: programs outside the jail run and copy files from it (review 003 F1)
+		local shared = `/private/tmp/pickman-jail-probe-{tag}`
+		if pcall(fs.writeFile, shared, "") then
+			pcall(fs.removeFile, shared)
+			table.insert(escaped, "the shared temp folder /private/tmp")
+		end
 		local up = string.match(here, "^(.*)/[^/]+$")
 		while up and up ~= "" do
 			if process.exec("touch", { "-c", "-r", up, up }).ok then
