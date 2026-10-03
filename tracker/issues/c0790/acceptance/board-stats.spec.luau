@@ -44,12 +44,12 @@ return t.spec("tracker board statistics", function(it)
 			"tracker/issues/done/d0020/spend.md",
 			SPEND_HEAD .. "| 1 | 2025-06-12 10:00 | def5678 | 10 | 5 | 10 | explicit |\n"
 		)
-		m = board.collect(tree)
+		m = board.collect(tree .. "/tracker") -- collect takes the tracker directory
 		local s = m.stats
 		t.expect(s ~= nil).toBe(true)
 		t.expect(s.history).toBe(false)
 		t.expect(s.today).toBe("2025-06-12") -- the latest date in the data, not the clock
-		t.expect(#s.views.month).toBe(31)
+		t.expect(#s.views.month).toBe(32) -- 2025-05-12 through 2025-06-12
 		local byStart: { [string]: any } = {}
 		for _, row in s.views.month do
 			byStart[row.bucket.start] = row
@@ -75,8 +75,28 @@ return t.spec("tracker board statistics", function(it)
 
 	it("builds of one tree are identical", function()
 		local marked = fs.readFile(board.MARKED_PATH)
-		t.expect(board.render(board.collect(tree), marked) == board.render(board.collect(tree), marked))
-			.toBe(true)
+		t.expect(
+			board.render(board.collect(tree .. "/tracker"), marked)
+				== board.render(board.collect(tree .. "/tracker"), marked)
+		).toBe(true)
+	end)
+
+	it("an undated tree collects without error and shows no dated data", function()
+		local bare = `{tree}-undated`
+		if fs.isDir(bare) then
+			fs.removeDir(bare)
+		end
+		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+			fs.writeDir(`{bare}/tracker/{d}`)
+		end
+		fs.writeDir(`{bare}/tracker/issues/c0010`)
+		fs.writeFile(`{bare}/tracker/issues/c0010/c0010.md`, "---\nid: c0010\ntype: chore\ntitle: x\n---\n")
+		local u = board.collect(`{bare}/tracker`)
+		t.expect(u.stats.today).toBe("")
+		t.expect(#u.stats.views.month).toBe(0)
+		local html = board.render(u, fs.readFile(board.MARKED_PATH))
+		t.expect(string.find(html, "no dated data", 1, true) ~= nil).toBe(true)
+		fs.removeDir(bare)
 	end)
 
 	it("the real tracker's board has history and non-empty views", function()
@@ -88,6 +108,11 @@ return t.spec("tracker board statistics", function(it)
 			opened += row.opened.all
 		end
 		t.expect(opened > 0).toBe(true)
+		local closed = 0
+		for _, row in real.stats.views.year do
+			closed += row.closed.all
+		end
+		t.expect(closed > 0).toBe(true)
 	end)
 
 	it("the board workflow checks out full history", function()

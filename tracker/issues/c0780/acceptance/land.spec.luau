@@ -92,7 +92,8 @@ return t.spec("tracker land", function(it)
 		function()
 			local wt, id = capture("capture-a", "alpha")
 			local before = tip() -- the stub is already on origin (new issue published it)
-			trOk(wt, { "land" })
+			local out = trOk(wt, { "land" })
+			t.expect(has(out, "gate overridden")).toBe(true) -- PICKMAN_LAND_GATE is never silent
 			t.expect(git(origin, { "rev-parse", "main^" })).toBe(before)
 			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 			t.expect(git(origin, { "diff", "--name-only", before, "main" }))
@@ -138,6 +139,50 @@ return t.spec("tracker land", function(it)
 		t.expect(tip()).toBe(before)
 	end)
 
+	it("land refuses anything but new or edited draft issue documents and new check.sh files", function()
+		-- a ready issue on origin, as a merged prep would have left it
+		git(other, { "pull", "-q", "origin", "main" })
+		write(
+			`{other}/tracker/issues/f0600/f0600.md`,
+			"---\nid: f0600\ntype: feature\ntitle: Ready\ndesign: ready\n---\n"
+		)
+		git(other, { "add", "-A" })
+		git(other, { "commit", "-q", "-m", "prep f0600" })
+		git(other, { "push", "-q", "origin", "HEAD:main" })
+		local wt, id = capture("capture-h", "eta")
+		git(wt, { "merge", "-q", "--no-edit", "origin/main" })
+		local function refused(change: () -> (), path: string)
+			change()
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-q", "-m", "attempt" })
+			local before = tip()
+			local r = tr(wt, { "land" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, path)).toBe(true)
+			t.expect(tip()).toBe(before)
+			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
+		end
+		local alpha =
+			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) alpha") :: string
+		refused(function() -- a deletion
+			fs.removeFile(`{wt}/tracker/issues/{alpha}/{alpha}.md`)
+		end, `tracker/issues/{alpha}/{alpha}.md`)
+		refused(function() -- an acceptance file
+			write(`{wt}/tracker/issues/{id}/acceptance/x.spec.luau`, "return nil\n")
+		end, `tracker/issues/{id}/acceptance/x.spec.luau`)
+		refused(function() -- a done item
+			write(`{wt}/tracker/issues/done/c0990/c0990.md`, "---\nid: c0990\n---\n")
+		end, "tracker/issues/done/c0990/c0990.md")
+		refused(function() -- an existing check.sh (sequestered once written)
+			local p = `{wt}/tracker/issues/{id}/check.sh`
+			fs.writeFile(p, fs.readFile(p) .. "# edited\n")
+		end, `tracker/issues/{id}/check.sh`)
+		refused(function() -- an issue whose design is past draft
+			local p = `{wt}/tracker/issues/f0600/f0600.md`
+			fs.writeFile(p, fs.readFile(p) .. "\nEdited after prep.\n")
+		end, "tracker/issues/f0600/f0600.md")
+	end)
+
 	it("land refuses when the gate fails, and pushes nothing", function()
 		local wt = capture("capture-d", "delta")
 		local before = tip()
@@ -148,13 +193,13 @@ return t.spec("tracker land", function(it)
 	end)
 
 	it("land refuses outside a capture worktree, on a dirty tree, and with nothing to land", function()
-		local before = tip()
 		local named = trOk(main, { "worktree", "edit-skills" })
 		identity(named)
 		local r = tr(named, { "land" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "capture")).toBe(true)
-		local wt = capture("capture-e", "epsilon")
+		local wt = capture("capture-e", "epsilon") -- publishes its stub: count from here
+		local before = tip()
 		fs.writeFile(`{wt}/stray.txt`, "x")
 		local dirty = tr(wt, { "land" })
 		fs.removeFile(`{wt}/stray.txt`)
@@ -169,7 +214,8 @@ return t.spec("tracker land", function(it)
 	it("land retries a lost race", function()
 		local wt, id = capture("capture-g", "zeta")
 		-- the gate runs between land's fetch and its push: on its first run it pushes from another clone, so the
-		-- first push is rejected and land must sync, gate again and push again
+		-- first push is rejected and land must sync, gate again and push again. Reviewed exception to the fixture
+		-- rule: this gate script runs raw git, only in `other`, a fixture clone under this spec's .cache directory.
 		local marker = `{base}/raced`
 		local gate = `{base}/racing-gate`
 		write(

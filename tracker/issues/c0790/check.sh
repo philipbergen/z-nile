@@ -29,9 +29,11 @@ check "AC2: rows count opened, closed, net, minutes and lines per type, half-ope
 check "AC3: defect and chore ratios by count and time, nil when empty" cases_pass stats "ratios are percentages"
 check "AC4: time in state counts only closed spells, per type, mean and median" cases_pass stats "durations count only closed spells"
 check "AC5: history.parse derives spells, close days and today from git log" cases_pass history \
-  "parse turns status stamps into spells" "a legacy start's move to active" "today is the last commit's day"
+  "parse turns status stamps into spells" "a legacy start's move to active" "a move whose status changes" \
+  "a close day is the first add" "today is the last commit's day"
 check "AC6: the board carries stats, has a Stats section beside the tabs, and builds deterministically" cases_pass board-stats \
-  "the model carries stats" "the page has the Stats button" "builds of one tree are identical" "the real tracker's board has history"
+  "the model carries stats" "the page has the Stats button" "builds of one tree are identical" \
+  "an undated tree collects without error" "the real tracker's board has history"
 check "AC7: board.yml fetches full history, and the overridden c0460 case passes" bash -c '
   lune run tests/run -- '"$A"'/board-stats.spec.luau tests/acceptance/c0460/board-workflow.spec.luau'
 

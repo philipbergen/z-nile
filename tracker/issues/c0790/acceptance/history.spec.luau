@@ -61,6 +61,29 @@ return t.spec("tracker history", function(it)
 		commit("2026-10-02T12:00:00Z", "c0020 done")
 		move("tracker/issues/f0010", "tracker/issues/done/f0010")
 		commit("2026-10-02T22:00:00Z", "f0010 done")
+		-- an emergent issue reaches main already done (a squash adds it straight into done/)
+		write("tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o"))
+		commit("2026-10-02T23:00:00Z", "R0010 merged with emergent c0040")
+		-- c0030 is readied, stopped, readied again and finished (status changes with each move);
+		-- c0050 has a legacy slug-named document, later renamed inside done/
+		write("tracker/issues/c0030/c0030.md", doc("c0030", "prepared-p-q-r"))
+		write("tracker/issues/c0050/c0050-legacy-slug.md", doc("c0050", "new-s-t-u"))
+		commit("2026-10-03T00:00:00Z", "c0030 prepared, c0050 new")
+		move("tracker/issues/c0050", "tracker/issues/done/c0050")
+		commit("2026-10-03T06:00:00Z", "c0050 done (legacy name)")
+		move("tracker/issues/c0030", "tracker/issues/active/c0030")
+		write("tracker/issues/active/c0030/c0030.md", doc("c0030", "active-v-w-x"))
+		commit("2026-10-03T12:00:00Z", "ready c0030")
+		move("tracker/issues/active/c0030", "tracker/issues/c0030")
+		write("tracker/issues/c0030/c0030.md", doc("c0030", "prepared-y-z-a"))
+		commit("2026-10-04T00:00:00Z", "stop c0030")
+		move("tracker/issues/done/c0050/c0050-legacy-slug.md", "tracker/issues/done/c0050/c0050.md")
+		commit("2026-10-04T09:00:00Z", "migrate c0050 to <ID>.md")
+		move("tracker/issues/c0030", "tracker/issues/active/c0030")
+		write("tracker/issues/active/c0030/c0030.md", doc("c0030", "active-b-c-d"))
+		commit("2026-10-04T12:00:00Z", "ready c0030 again")
+		move("tracker/issues/active/c0030", "tracker/issues/done/c0030")
+		commit("2026-10-05T12:00:00Z", "c0030 done")
 		parsed = history.parse(fixture.git(repo, history.LOG_ARGS))
 	end)
 
@@ -100,7 +123,27 @@ return t.spec("tracker history", function(it)
 		t.expect(d.active.all).toEqual({ n = 1, mean = 1.0, median = 1.0 }) -- 10-01 12:00 to 10-02 12:00
 	end)
 
+	it("a move whose status changes starts a spell of the new status (ready, stop, ready, done)", function()
+		t.expect(parsed.closed.c0030).toBe("2026-10-05")
+		local d = stats.durations({
+			{
+				id = "c0030",
+				type = "chore",
+				opened = "2026-10-03",
+				closed = "2026-10-05",
+				spells = parsed.spells.c0030,
+			},
+		})
+		t.expect(d.prepared.all).toEqual({ n = 2, mean = 0.5, median = 0.5 }) -- 10-03 00:00-12:00, 10-04 00:00-12:00
+		t.expect(d.active.all).toEqual({ n = 2, mean = 0.75, median = 0.75 }) -- 12 h, then 10-04 12:00 to 10-05 12:00
+	end)
+
+	it("a close day is the first add of an item's document into done/, however it got there", function()
+		t.expect(parsed.closed.c0040).toBe("2026-10-02") -- added straight into done/
+		t.expect(parsed.closed.c0050).toBe("2026-10-03") -- the later rename inside done/ does not move it
+	end)
+
 	it("today is the last commit's day", function()
-		t.expect(parsed.today).toBe("2026-10-02")
+		t.expect(parsed.today).toBe("2026-10-05")
 	end)
 end)
