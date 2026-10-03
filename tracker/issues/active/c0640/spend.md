@@ -14,6 +14,7 @@
 | 10 | 2026-10-03 17:00 | R0210: refute-002 | 0 | 0 | 5.0 | focus |
 | 11 | 2026-10-03 21:48 | R0210: jail writes only .cache and the user temp mktemp uses (no shared /tmp, TMPDIR inside .cache); sentinel replaces a directory too (review 003, user's choice) | 31 | 18 | 25.0 | explicit |
 | 12 | 2026-10-03 21:51 | c0640: testing skill and verification log for the narrowed temp folder | 1 | 1 | 3.0 | focus |
+| 13 | 2026-10-03 21:52 | R0210: refute-003 | 0 | 0 | 3.0 | focus |
 
-**Total:** +1489 / -137 lines, 175.0 agent-minutes over 12 commits
-<!-- totals: added=1489 removed=137 minutes=175.0 commits=12 -->
+**Total:** +1489 / -137 lines, 178.0 agent-minutes over 13 commits
+<!-- totals: added=1489 removed=137 minutes=178.0 commits=13 -->
