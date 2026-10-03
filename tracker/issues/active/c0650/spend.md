@@ -3,6 +3,7 @@
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-03 08:29 | c0650: c0510's specs drop their own fence, allowlist narrowed, check runs never publish (pickman_guarded), testing skill | 44 | 16 | 15.0 | focus |
+| 2 | 2026-10-03 08:30 | c0650: verification log | 0 | 0 | 2.0 | focus |
 
-**Total:** +44 / -16 lines, 15.0 agent-minutes over 1 commits
-<!-- totals: added=44 removed=16 minutes=15.0 commits=1 -->
+**Total:** +44 / -16 lines, 17.0 agent-minutes over 2 commits
+<!-- totals: added=44 removed=16 minutes=17.0 commits=2 -->
