@@ -128,6 +128,23 @@ function store.nextNumber(kind: Kind, extra: { string }?): number
 	return statusLib.nextNumber(ids)
 end
 
+-- Number-space rule for `renumber`: one above the highest number of `kind` in the local tree (read through
+-- `store.all`, so it fails like `tracker.sh list` on a malformed tree) and in `otherIds` (ids seen elsewhere,
+-- such as origin/main). Ids of the other kind are ignored.
+function store.nextAbove(kind: Kind, otherIds: { string }): number
+	local max = 0
+	for _, item in store.all(kind) do
+		max = math.max(max, tonumber(string.sub(item.id, 2)) :: number)
+	end
+	for _, id in otherIds do
+		local ok = if kind == "raft" then store.isRaftId(id) else store.isIssueId(id)
+		if ok then
+			max = math.max(max, tonumber(string.sub(id, 2)) :: number)
+		end
+	end
+	return max + 1
+end
+
 function store.formatId(prefix: string, n: number): string
 	return string.format("%s%04d", prefix, n)
 end
