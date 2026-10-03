@@ -287,6 +287,16 @@ return t.spec("repository fence", function(it)
 				table.insert(escaped, `the user temp folder {ut}`)
 			end
 		end
+		-- no symlink can be made at the top of .cache (unjailed writers would follow it, review 005 F1)
+		local link = `{here}/.cache/pickman-link-probe-{tag}`
+		if process.exec("ln", { "-s", "/nonexistent", link }).ok then
+			process.exec("rm", { "-f", link })
+			table.insert(escaped, "a symlink at the top of .cache")
+		end
+		-- the run's mktemp honours -t too
+		local named = trim(process.exec("mktemp", { "-t", "pickman" }).stdout)
+		t.expect(named ~= "" and string.sub(named, 1, #(env.TMPDIR or "")) == env.TMPDIR).toBe(true)
+		pcall(fs.removeFile, named)
 		-- the .cache entry itself can't be replaced (a symlink there would redirect later writes, review 004 F1)
 		if process.exec("touch", { "-c", "-r", `{here}/.cache`, `{here}/.cache` }).ok then
 			table.insert(escaped, "the .cache entry itself")

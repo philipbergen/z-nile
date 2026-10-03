@@ -299,6 +299,13 @@ local function profile(cache: string, runTemp: string): string
 	end
 	for _, dir in { cache, resolved(cache) } do
 		table.insert(rules, `(deny file-write* (literal "{dir}"))`) -- later rules win
+		-- no symlink at the top of .cache, made or renamed there: unjailed writers (the gate's rojo build, the
+		-- tracker's focus and claim files, the board) would write through it into the repository (review 005 F1)
+		local pattern = string.gsub(dir, "[%.%[%]%*%^%$%(%)%+%?%{%}%|\\]", "\\%0")
+		table.insert(
+			rules,
+			`(deny file-write-create (require-all (vnode-type SYMLINK) (regex #"^{pattern}/[^/]+$")))`
+		)
 	end
 	return table.concat(rules, "")
 end
@@ -465,6 +472,12 @@ function fence.enter()
 		process.exit(1)
 	end
 	fs.writeDir(cache)
+	-- a symlink at the top of .cache, left from before the jail closed it, is unlinked (never followed)
+	for _, name in fs.readDir(cache) do
+		if process.exec("test", { "-L", `{cache}/{name}` }).ok then
+			process.exec("rm", { "-f", `{cache}/{name}` })
+		end
+	end
 	-- the tripwire tells fixture writes by their author; that only works while this repository has a real identity
 	local email = git({ "config", "user.email" }) or ""
 	if string.find(email, FIXTURE_EMAIL, 1, true) then
@@ -491,8 +504,9 @@ function fence.enter()
 		fs.writeFile(
 			`{runTemp}/bin/mktemp`,
 			"#!/bin/sh\n# the run's mktemp: with no template, into the run's own TMPDIR (the jail closes the user temp folder)\n"
-				.. 'for a in "$@"; do case $a in -*) ;; *) exec /usr/bin/mktemp "$@" ;; esac; done\n'
-				.. 'exec /usr/bin/mktemp "$@" "$TMPDIR/tmp.XXXXXXXXXX"\n'
+				.. "f=; p=tmp\n"
+				.. 'while [ $# -gt 0 ]; do case $1 in -t) p=$2; shift 2 ;; -*) f="$f $1"; shift ;; *) exec /usr/bin/mktemp $f "$@" ;; esac; done\n'
+				.. 'exec /usr/bin/mktemp $f "$TMPDIR/$p.XXXXXXXXXX"\n'
 		)
 		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
 	end
