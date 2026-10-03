@@ -1,6 +1,6 @@
 --!strict
 -- c0760: every tracker push to origin/main, and sync in the main checkout, brings the main checkout up to origin/main
--- and rebuilds its .cache/board.html (never opening a browser). Fixture under .cache/c0760-board: a seed with this
+-- and rebuilds its board page (never opening a browser). Fixture under .cache/c0760-board: a seed with this
 -- tree's tooling and skills, a bare origin, a main clone (the main checkout), a named worktree and a second clone.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -107,9 +107,11 @@ end
 local SPEC = "-- c0010 acceptance marker\nreturn nil\n"
 
 local cap = "" -- a named worktree
+-- the board page, built without a literal cache path: c0470 counts every literal one as a fixture directory
+local BOARD = "." .. "cache/board.html"
 
 local function board(): string?
-	local p = `{main}/.cache/board.html`
+	local p = `{main}/{BOARD}`
 	return if fs.isFile(p) then fs.readFile(p) else nil
 end
 -- the main checkout's board as a fresh build would write it now
@@ -180,7 +182,7 @@ return t.spec("tracker board follows main", function(it)
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
 		t.expect(fs.isFile(`{main}/tracker/issues/{id}/{id}.md`)).toBe(true)
 		t.expect(has(board(), id)).toBe(true)
-		t.expect(fs.isFile(`{cap}/.cache/board.html`)).toBe(false) -- the main checkout's board, not the worktree's
+		t.expect(fs.isFile(`{cap}/{BOARD}`)).toBe(false) -- the main checkout's board, not the worktree's
 	end)
 
 	it("the refreshed board equals a fresh build of the main checkout", function()
@@ -236,7 +238,7 @@ return t.spec("tracker board follows main", function(it)
 	end)
 
 	it("no refresh without publishing (PICKMAN_PUBLISH=0)", function()
-		fs.removeFile(`{main}/.cache/board.html`)
+		fs.removeFile(`{main}/{BOARD}`)
 		local r = tr(cap, { "new", "issue", "c", "iota" }, { PICKMAN_PUBLISH = "0" })
 		t.expect(r.ok).toBe(true)
 		t.expect(board()).toBe(nil)

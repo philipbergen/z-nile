@@ -22,7 +22,7 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec and not appe
   done
 }
 
-check "AC1: paths.rewrite and paths.normalize" lune run tests/run -- "$A/paths.spec.luau"
+check "AC1: paths.rewrite moves only the listed ids state segments" lune run tests/run -- "$A/paths.spec.luau"
 check "AC2: publish validates whole-directory moves; non-move rules unchanged" lune run tests/run -- "$A/publish-move.spec.luau"
 check "AC3: ready refuses outside the main checkout, without origin, unprepared, dirty, blocked, unchecked, raftless" cases_pass \
   "ready refuses outside the main checkout" "ready refuses a raft that is not prepared" "ready refuses a dirty main checkout" \
@@ -33,8 +33,8 @@ check "AC5: the main checkout is pulled, prompt.md is written and ignored, no cl
   "ready pulls the main checkout" "ready never calls pbcopy" "prompt.md embeds the workstreams plan"
 check "AC6: ready on an active raft regenerates the prompt without a commit" cases_pass \
   "ready on an active raft regenerates"
-check "AC7: start on a readied raft branches with an empty commit and moves nothing" cases_pass \
-  "start on a readied raft"
+check "AC7: start on a readied raft branches with an empty commit and moves nothing; a pre-ready worktree is told to sync" cases_pass \
+  "start on a readied raft" "start in a worktree made before ready says to sync first"
 check "AC8: the current raft is found by branch; emergent issues only on the raft's branch" cases_pass \
   "commit works on a raft branch" "new issue --raft needs the raft's branch" "done rewrites check.sh paths"
 check "AC9: done rewrites check.sh paths to done/" cases_pass "done rewrites check.sh paths"
@@ -67,7 +67,12 @@ check "AC11: the overridden c0450 spec passes; no done check.sh names make-promp
   grep -qF "ready-raft/SKILL.md" tests/acceptance/c0450/override-check.spec.luau || { echo "c0450 spec: not repointed"; exit 1; }
   bad=$(grep -rlF "make-prompt" tracker/issues/done tracker/rafts/done --include=check.sh || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC12: sync in the main checkout sweeps stale prompts and keeps readied ones" cases_pass \
-  "sync in the main checkout sweeps the prompt"
+check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
+  "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
+check "AC13: CI dispatched gate runs only the acceptance specs of the branch raft" bash -c '
+  w=.github/workflows/check.yml
+  grep -qF "*/active/*/acceptance/*.spec.luau" "$w" || { echo "check.yml: the active acceptance glob is gone (c0010 pins it)"; exit 1; }
+  grep -qF "tracker.sh members" "$w" || { echo "check.yml: the dispatched step does not select the raft members"; exit 1; }
+  grep -qF "GITHUB_REF_NAME" "$w" || { echo "check.yml: the raft is not taken from the dispatched ref"; exit 1; }'
 
 finish

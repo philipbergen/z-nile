@@ -115,6 +115,13 @@ return t.spec("tracker publish moves", function(it)
 		write(`{FROM}/experiments/out.txt`, CRLF)
 		write("tracker/issues/c0020/c0020.md", "---\nid: c0020\nstatus: new\n---\n")
 		write("tracker/issues/c0020/check.sh", "#!/bin/sh\n", true)
+		-- c0040 is done: a published move may not take it out of done/
+		write("tracker/issues/done/c0040/c0040.md", "---\nid: c0040\nstatus: done\n---\n")
+		write(
+			"tracker/issues/done/c0040/check.sh",
+			"#!/bin/sh\ntest -f tracker/issues/done/c0040/c0040.md\n",
+			true
+		)
 		-- c0030 exists in both places: a move onto it must be refused
 		write("tracker/issues/c0030/c0030.md", "---\nid: c0030\nstatus: prepared\n---\n")
 		write("tracker/issues/active/c0030/c0030.md", "---\nid: c0030\nstatus: active\n---\n")
@@ -268,6 +275,26 @@ return t.spec("tracker publish moves", function(it)
 			return out
 		end, "tracker: to done")
 		refused(r, before)
+		-- and out of done/, consistent in every other respect: only the source side is wrong
+		local out = publish.commit(work, function(_list, read)
+			local doc = read("tracker/issues/done/c0040/c0040.md") :: string
+			local check = read("tracker/issues/done/c0040/check.sh") :: string
+			return {
+				{
+					path = "tracker/issues/c0040/c0040.md",
+					from = "tracker/issues/done/c0040/c0040.md",
+					content = (string.gsub(doc, "status: done", "status: prepared-quiet-copper-falcon")),
+				},
+				{
+					path = "tracker/issues/c0040/check.sh",
+					from = "tracker/issues/done/c0040/check.sh",
+					content = paths.rewrite(check, { c0040 = "tracker/issues/c0040" }),
+				},
+			}
+		end, "tracker: out of done")
+		refused(out, before)
+		t.expect(git(origin, { "ls-tree", "--name-only", "main", "tracker/issues/done/c0040/c0040.md" }))
+			.toBe("tracker/issues/done/c0040/c0040.md")
 	end)
 
 	it("a from outside an item directory is refused, and that file stays on origin", function()

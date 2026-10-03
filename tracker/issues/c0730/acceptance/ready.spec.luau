@@ -109,6 +109,7 @@ local SPEC = "-- c0010 acceptance marker\nreturn nil\n"
 
 local wt = "" -- R0010's worktree
 local cap = "" -- a named worktree
+local early = "" -- R0060's worktree, made before R0060 is readied
 local readiedStamp = ""
 
 return t.spec("tracker ready", function(it)
@@ -246,6 +247,9 @@ return t.spec("tracker ready", function(it)
 		git(main, { "config", "user.name", "t" })
 		git(main, { "config", "user.email", "t@example.invalid" })
 		cap = trOk(main, { "worktree", "cap-a" })
+		early = trOk(main, { "worktree", "R0060" })
+		-- Finder litter, ignored as a Mac's global gitignore would: it must never block or break ready
+		fs.writeFile(`{main}/.git/info/exclude`, ".DS_Store\n")
 		t.expect(trOk(main, { "status", "R0010" })).toBe("prepared")
 	end)
 
@@ -334,7 +338,13 @@ return t.spec("tracker ready", function(it)
 				end
 			end
 			t.expect(#moving).toBe(8)
+			-- untracked litter in directories the move empties: the pull leaves them, the sweep removes them
+			fs.writeFile(`{main}/tracker/issues/c0010/.DS_Store`, "finder")
+			fs.writeFile(`{main}/tracker/rafts/R0010/.DS_Store`, "finder")
 			trOk(main, { "ready", "R0010" })
+			t.expect(fs.isDir(`{main}/tracker/issues/c0010`)).toBe(false)
+			t.expect(fs.isDir(`{main}/tracker/rafts/R0010`)).toBe(false)
+			t.expect(tr(main, { "list" }).ok).toBe(true)
 			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 			local changed =
 				string.split(git(origin, { "diff", "--name-only", "--no-renames", before, "main" }), "\n")
@@ -435,6 +445,14 @@ return t.spec("tracker ready", function(it)
 		t.expect(has(cyclic, "parallel: no")).toBe(true)
 	end)
 
+	it("start in a worktree made before ready says to sync first", function()
+		local r = tr(early, { "start", "R0060" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "sync")).toBe(true)
+		t.expect(git(early, { "branch", "--show-current" })).toBe("R0060-cyclic")
+		t.expect(git(early, { "log", "-1", "--format=%s" })).toBe("seed")
+	end)
+
 	it("ready on an active raft regenerates the prompt without a new commit", function()
 		local before = tip()
 		local path = `{main}/tracker/rafts/active/R0010/prompt.md`
@@ -507,16 +525,18 @@ return t.spec("tracker ready", function(it)
 			.toBe(simpleCheck("R0040", "rafts", "done/"))
 	end)
 
-	it("sync in the main checkout sweeps the prompt of a raft that left active/", function()
+	it("sync in the main checkout sweeps what a raft that left active/ left behind", function()
 		local wt4 = trOk(main, { "worktree", "R0040" })
 		-- the PR merges: R0040's branch, now done, lands on origin/main
 		git(wt4, { "push", "-q", "origin", "HEAD:main" })
 		local stale = `{main}/tracker/rafts/active/R0040`
 		t.expect(fs.isFile(`{stale}/prompt.md`)).toBe(true)
-		fs.writeFile(`{stale}/.DS_Store`, "finder") -- ignored by a global gitignore on a Mac, untracked here
+		fs.writeFile(`{stale}/.DS_Store`, "finder")
+		fs.writeFile(`{main}/tracker/issues/active/c0040/.DS_Store`, "finder")
 		trOk(main, { "sync" })
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
 		t.expect(fs.isDir(stale)).toBe(false)
+		t.expect(fs.isDir(`{main}/tracker/issues/active/c0040`)).toBe(false)
 		t.expect(fs.isFile(`{main}/tracker/rafts/done/R0040/R0040.md`)).toBe(true)
 		-- a raft that is still readied keeps its prompt
 		t.expect(fs.isFile(`{main}/tracker/rafts/active/R0010/prompt.md`)).toBe(true)

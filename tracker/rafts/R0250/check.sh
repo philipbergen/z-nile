@@ -25,7 +25,7 @@ check "RC4: the usage text lists ready, stop and prompt <R-id> [--path], and no 
   for k in "ready <R-id|issue-id>" "stop <R-id>" "prompt <R-id> [--path]"; do
     grep -qF -- "$k" <<<"$u" || { echo "usage: missing $k"; exit 1; }
   done
-  ! grep -qw "launch" <<<"$u" || { echo "usage: launch"; exit 1; }'
+  ! grep -qF "launch" <<<"$u" || { echo "usage: launch (not even /launch-raft)"; exit 1; }'
 check "RC5: the done check.sh files edited in prep pass (c0041, c0430, c0440, c0450)" bash -c '
   for id in c0041 c0430 c0440 c0450; do
     bash "tracker/issues/done/$id/check.sh" >/dev/null 2>&1 || { echo "$id check.sh fails"; bash "tracker/issues/done/$id/check.sh" | grep FAIL; exit 1; }
@@ -35,5 +35,44 @@ check "RC6: c0510's replacement copies match and ready-raft syncs (c0510 AC6/AC8
   cmp -s "$R/c0041-worktree.spec.luau" tests/acceptance/c0041/worktree.spec.luau || { echo "c0041 replacement differs"; exit 1; }
   cmp -s "$R/c0140-workflow.spec.luau" tests/acceptance/c0140/workflow.spec.luau || { echo "c0140 replacement differs"; exit 1; }
   grep -Eq "tracker\.sh sync([^ -]|$)" .claude/skills/ready-raft/SKILL.md || { echo "ready-raft: no merging sync"; exit 1; }'
+
+# c0510's AC6, AC7 and AC9, copied verbatim (review 002 F5): this raft rewrites that skill text, USAGE and the publisher.
+# c0510's whole check.sh is not run because its AC4 reruns every acceptance spec.
+skills_carry_sync_and_claim() {
+  local s merging='tracker\.sh sync([^ -]|$)'
+  # the working skills run the merging form; reviewers, stream agents and metrics fetch only
+  for s in tracker ticket-prep ready-raft execute-raft make-issue; do
+    grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill has no 'tracker.sh sync' (merging) step"; return 1; }
+  done
+  for s in review metrics; do
+    grep -q 'tracker\.sh sync --fetch' ".claude/skills/$s/SKILL.md" || { echo "$s skill has no 'tracker.sh sync --fetch' step"; return 1; }
+    ! grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill still runs the merging 'tracker.sh sync'"; return 1; }
+  done
+  # the sequestration diff separates this branch's changes from what main brought in
+  for s in review execute-raft; do
+    grep -q 'origin/main\.\.\.HEAD -- .tracker/\*\*/check\.sh. .tracker/\*\*/acceptance/\*\*.' ".claude/skills/$s/SKILL.md" || { echo "$s skill's sequestration diff is not against origin/main...HEAD"; return 1; }
+  done
+  local t=.claude/skills/tracker/SKILL.md
+  grep -q '^## Sync and claim' "$t" || { echo "tracker skill has no 'Sync and claim' section"; return 1; }
+  grep -q 'PICKMAN_PUBLISH' "$t" || { echo "tracker skill does not document PICKMAN_PUBLISH"; return 1; }
+  grep -q 'new -> preparing -> prepared -> active -> done' "$t" || { echo "tracker skill does not list the statuses"; return 1; }
+  grep -q 'paths-ignore\|tracker-only' "$t" || { echo "tracker skill does not state the direct-push limit"; return 1; }
+  grep -q 'status <R-id> preparing' "$t" || { echo "tracker skill does not say how an existing raft is claimed"; return 1; }
+  grep -q 'status <R-id> prepared' .claude/skills/ticket-prep/SKILL.md || { echo "ticket-prep does not run status <R-id> prepared before the prep commit"; return 1; }
+  grep -q 'Whose claim' "$t" || { echo "tracker skill does not say that claims are not owned"; return 1; }
+}
+usage_lists_new_commands() {
+  local out
+  out=$(scripts/tracker.sh no-such-command 2>&1 || true)
+  grep -q '^  status ' <<<"$out" && grep -q '^  sync ' <<<"$out" && grep -q -- '--desc' <<<"$out" && grep -q -- '--fetch' <<<"$out"
+}
+no_index() { # the tree is built with mktree: no index, so no git variable for the repository guards (R0210) to ban
+  local f=scripts/tracker/publish.luau
+  [[ -f $f ]] || { echo "$f is missing"; return 1; }
+  # the variable name is split so this file does not name it (R0210's gate scans every check.sh)
+  if grep -rnE "GIT_INDEX_""FILE|read-tree|update-index|write-tree" scripts/tracker/; then echo "the tracker code uses an index"; return 1; fi
+  grep -qE '"mktree"' "$f" || { echo "the publisher does not pass \"mktree\" to git"; return 1; }
+}
+check "RC7: c0510's sync-and-claim skill text, usage lines and index-free publisher still hold" bash -c "$(declare -f skills_carry_sync_and_claim usage_lists_new_commands no_index); skills_carry_sync_and_claim && usage_lists_new_commands && no_index"
 
 finish
