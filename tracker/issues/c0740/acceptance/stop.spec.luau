@@ -3,6 +3,7 @@
 -- active/ on origin/main with their check.sh paths rewritten back, removes prompt.md and leaves the branch and PR.
 -- Fixture under .cache/c0740-stop: a seed with this tree's tooling and skills, a bare origin, a main clone (the main
 -- checkout) and worktrees made by `tracker.sh worktree`. Cases share the fixture and run in order.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -19,7 +20,6 @@ local bin = `{base}/bin`
 
 local function env(extra: { [string]: string }?): { [string]: string }
 	local out = {
-		GIT_CEILING_DIRECTORIES = `{root}/.cache`,
 		PATH = `{bin}:{process.env.PATH or ""}`,
 	}
 	if extra then
@@ -30,7 +30,7 @@ local function env(extra: { [string]: string }?): { [string]: string }
 	return out
 end
 local function run(cwd: string, cmd: string, args: { string }, extra: { [string]: string }?): Result
-	return process.exec(cmd, args, { cwd = cwd, env = env(extra) })
+	return fixture.exec(cwd, cmd, args, { env = env(extra) }) -- R0210: git and tracker.sh in a fixture only through the helper
 end
 local function git(cwd: string, args: { string }): string
 	local r = run(cwd, "git", args)
@@ -138,7 +138,7 @@ return t.spec("tracker stop", function(it)
 		fs.writeDir(bin)
 		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
 		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
-		git(seed, { "init", "-q", "-b", "main" })
+		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		git(seed, { "config", "user.name", "t" })
 		git(seed, { "config", "user.email", "t@example.invalid" })
 		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
@@ -184,8 +184,8 @@ return t.spec("tracker stop", function(it)
 		write(seed, "tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
-		git(base, { "clone", "-q", "--bare", seed, origin })
-		git(base, { "clone", "-q", origin, main })
+		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+		process.exec("git", { "clone", "-q", origin, main })
 		git(main, { "config", "user.name", "t" })
 		git(main, { "config", "user.email", "t@example.invalid" })
 		cap = trOk(main, { "worktree", "cap-a" })

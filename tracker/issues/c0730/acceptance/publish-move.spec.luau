@@ -1,6 +1,7 @@
 --!strict
 -- c0730: publish moves whole item directories (Change.from) as one tracker-only commit on origin/main, and validates
 -- every moved file. A bare origin and a clone in .cache/c0730-publish; cases share the fixture and run in order.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local paths = require("@scripts/tracker/paths")
 local process = require("@lune/process")
@@ -17,12 +18,7 @@ local base = `{root}/.cache/c0730-publish`
 local origin, work = `{base}/origin.git`, `{base}/work`
 
 local function git(cwd: string, args: { string }): string
-	local r: Result =
-		process.exec("git", args, { cwd = cwd, env = { GIT_CEILING_DIRECTORIES = `{root}/.cache` } })
-	if not r.ok then
-		error(`git {table.concat(args, " ")} failed: {r.stderr}{r.stdout}`, 2)
-	end
-	return trim(r.stdout)
+	return fixture.git(cwd, args) -- R0210: git in a fixture only through the helper
 end
 local function tip(): string
 	return git(origin, { "rev-parse", "main" })
@@ -102,7 +98,7 @@ return t.spec("tracker publish moves", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(`{base}/seed`)
-		git(`{base}/seed`, { "init", "-q", "-b", "main" })
+		process.exec("git", { "init", "-q", "-b", "main", `{base}/seed` }) -- raw: init to a named path
 		git(`{base}/seed`, { "config", "user.name", "t" })
 		git(`{base}/seed`, { "config", "user.email", "t@example.invalid" })
 		write("src/x.luau", "return 1\n")
@@ -127,8 +123,8 @@ return t.spec("tracker publish moves", function(it)
 		write("tracker/issues/active/c0030/c0030.md", "---\nid: c0030\nstatus: active\n---\n")
 		git(`{base}/seed`, { "add", "-A" })
 		git(`{base}/seed`, { "commit", "-q", "-m", "seed" })
-		git(base, { "clone", "-q", "--bare", `{base}/seed`, origin })
-		git(base, { "clone", "-q", origin, work })
+		process.exec("git", { "clone", "-q", "--bare", `{base}/seed`, origin }) -- raw: clone to a named path
+		process.exec("git", { "clone", "-q", origin, work })
 		git(work, { "config", "user.name", "t" })
 		git(work, { "config", "user.email", "t@example.invalid" })
 	end)
@@ -371,11 +367,7 @@ return t.spec("tracker publish moves", function(it)
 			.toBe("tracker/issues/active/.gitkeep")
 		t.expect(git(origin, { "show", `main:{TO}/acceptance/a.spec.luau` }) .. "\n").toBe(SPEC)
 		t.expect(git(origin, { "show", `main:{TO}/experiments/run.sh` }) .. "\n").toBe(RUN)
-		local crlf = process.exec(
-			"git",
-			{ "show", `main:{TO}/experiments/out.txt` },
-			{ cwd = origin, env = { GIT_CEILING_DIRECTORIES = `{root}/.cache` } }
-		)
+		local crlf = fixture.exec(origin, "git", { "show", `main:{TO}/experiments/out.txt` })
 		t.expect(crlf.stdout).toBe(CRLF)
 		t.expect(string.sub(git(origin, { "ls-tree", "main", `{TO}/experiments/run.sh` }), 1, 6))
 			.toBe("100755")

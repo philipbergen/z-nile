@@ -27,7 +27,7 @@ check "AC2: execute-raft caps code review at 5, prefers 3, blocks on the final r
   grep -qF 'Cap: 5 rounds, prefer 3' <<<\"\$p\" || { echo 'execute-raft: no Cap: 5 rounds, prefer 3'; exit 1; }
   grep -qE 'review-NNN\\.md. contains any' <<<\"\$p\" || { echo 'execute-raft: final-round blocking rule'; exit 1; }
   grep -qi 'final round' <<<\"\$p\" || { echo 'execute-raft: no final round'; exit 1; }
-  bad=\$(grep -rnF -e 'review-003' -e 'Cap: 3 rounds' -e 'after round 3' .claude/skills || true)
+  bad=\$(grep -rnF -e 'review-003' -e 'refute-003' -e 'Cap: 3 rounds' .claude/skills || true)
   [ -z \"\$bad\" ] || { echo \"\$bad\"; exit 1; }"
 check "AC3: Merging names the final round's review and keeps significant" bash -c "
   $(declare -f merging); T=$T
@@ -39,6 +39,11 @@ check "AC4: both skills define minor concretely" bash -c '
       grep -i minor "$f" | grep -qiF -- "$k" || { echo "$f: minor is not defined with: $k"; exit 1; }
     done
   done'
+check "AC6: ticket-prep step 5.5 sets design: ready from the final round" bash -c "
+  $(declare -f review); P=$P
+  r=\$(review)
+  grep -i 'design: ready' <<<\"\$r\" | grep -qi 'final round' || { echo 'step 5.5: design: ready is not tied to the final round'; exit 1; }
+  grep -qF 'status <R-id> prepared' <<<\"\$r\" || { echo 'step 5.5: status <R-id> prepared lost'; exit 1; }"
 check "AC5: c0360's skill-doc check still passes" bash -c 'bash tracker/issues/done/c0360/check.sh 2>&1 | grep -F "AC3" | grep -q "^PASS"'
 
 finish

@@ -55,6 +55,7 @@ own_fixtures() {
 parts_pass() { lune run tests/run -- tests/acceptance/c0510/commands-*.spec.luau; }
 lib_types() {
   [[ -f tests/lib/trackerfix.luau ]] || { echo "no tests/lib/trackerfix.luau"; return 1; }
+  grep -qF 'require("@tests/lib/fixture")' tests/lib/trackerfix.luau || { echo "trackerfix does not use @tests/lib/fixture"; return 1; }
   luau-lsp analyze --base-luaurc=.luaurc tests/lib/trackerfix.luau 2>&1 | grep -v "^\[" | grep -E "Error" && return 1
   return 0
 }
@@ -62,6 +63,13 @@ lib_types() {
 check "AC1: all 23 cases survive the split exactly once; the single file is gone" cases_kept
 check "AC2: at least four parts, each with its own fixture" own_fixtures
 check "AC3: the parts pass together" parts_pass
-check "AC4: the shared fixture library type-checks" lib_types
+check "AC4: the shared fixture library type-checks and uses @tests/lib/fixture" lib_types
+r0210_pass() {
+  local hooks
+  hooks=$(grep -l "GIT_INDEX_FILE" tests/acceptance/c0510/commands*.spec.luau 2>/dev/null || true)
+  [[ $hooks == tests/acceptance/c0510/commands-new.spec.luau ]] || { echo "fixture-hook names are in: ${hooks:-none}"; return 1; }
+  lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/acceptance/c0650/adapt.spec.luau
+}
+check "AC5: R0210's gate scan and c0650's adapt spec pass with the parts" r0210_pass
 
 finish

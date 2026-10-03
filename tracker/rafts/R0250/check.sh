@@ -74,5 +74,15 @@ no_index() { # the tree is built with mktree: no index, so no git variable for t
   grep -qE '"mktree"' "$f" || { echo "the publisher does not pass \"mktree\" to git"; return 1; }
 }
 check "RC7: c0510's sync-and-claim skill text, usage lines and index-free publisher still hold" bash -c "$(declare -f skills_carry_sync_and_claim usage_lists_new_commands no_index); skills_carry_sync_and_claim && usage_lists_new_commands && no_index"
+check "RC8: no member acceptance spec names what R0210's gate scan bans, or runs a shell string" bash -c '
+  bad=""
+  for d in $(scripts/tracker.sh members R0250); do
+    [ -d "$d/acceptance" ] || continue
+    hit=$(grep -rniF -e GIT_CEILING_DIRECTORIES -e GIT_DIR -e GIT_WORK_TREE -e GIT_INDEX_FILE -e GIT_COMMON_DIR \
+      -e GIT_CONFIG_ -e hooksPath -e --no-verify -e "env -i" -e sandbox-exec -e GH_CONFIG_DIR -e GIT_SSH_COMMAND \
+      -e "\"sh\", { \"-c\"" -e process.create "$d/acceptance" || true)
+    bad="$bad$hit"
+  done
+  [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 
 finish
