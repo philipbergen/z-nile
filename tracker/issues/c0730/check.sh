@@ -65,7 +65,8 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
 check "AC11: the overridden c0450 spec passes; no done check.sh names make-prompt (edited in prep)" bash -c '
   lune run tests/run -- tests/acceptance/c0450/override-check.spec.luau || exit 1
   grep -qF "ready-raft/SKILL.md" tests/acceptance/c0450/override-check.spec.luau || { echo "c0450 spec: not repointed"; exit 1; }
-  bad=$(grep -rlF "make-prompt" tracker/issues/done tracker/rafts/done --include=check.sh || true)
+  # only the five done checks prep edited: c0730 and R0250 name make-prompt themselves (review 003 F1)
+  bad=$(grep -lF "make-prompt" tracker/issues/done/{c0041,c0430,c0440,c0450,c0510}/check.sh || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
   "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
