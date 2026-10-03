@@ -5,6 +5,7 @@
 | 1 | 2026-10-03 08:35 | c0660: fixture helper; the twelve older fixture specs run git and tracker.sh only through it | 177 | 62 | 40.0 | focus |
 | 2 | 2026-10-03 08:40 | c0660: testing-skill fixture rule; c0010/c0070 carry the fixture identity in env; runner comment keeps the guard line alone | 30 | 9 | 20.0 | focus |
 | 3 | 2026-10-03 08:42 | c0660: verification log | 0 | 0 | 3.0 | focus |
+| 4 | 2026-10-03 08:49 | R0210: verification logs (raft check, gate speed) | 0 | 0 | 3.0 | focus |
 
-**Total:** +207 / -71 lines, 63.0 agent-minutes over 3 commits
-<!-- totals: added=207 removed=71 minutes=63.0 commits=3 -->
+**Total:** +207 / -71 lines, 66.0 agent-minutes over 4 commits
+<!-- totals: added=207 removed=71 minutes=66.0 commits=4 -->
