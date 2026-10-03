@@ -456,6 +456,20 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 	return {}, ""
 end
 
+-- Runs the specs in a process group of their own, and stops whatever is left in it when they end (review 005 F2:
+-- a background process a spec left would outlive the run). The launcher stays in the terminal's group and passes on
+-- INT, TERM and HUP, so Ctrl-C still stops a run. A process that leaves the group on purpose (setsid) is not
+-- reaped: the testing skill lists it under "Caught only by review".
+local REAPER = table.concat({
+	'my $pid = fork; die "fork: $!" unless defined $pid;',
+	'if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV or die "exec: $!"; }',
+	"setpgrp($pid, $pid);",
+	"for my $s (qw(INT TERM HUP)) { $SIG{$s} = sub { kill $s, -$pid } }",
+	"waitpid($pid, 0); my $st = $?;",
+	"kill 'KILL', -$pid;",
+	"exit($st & 127 ? 128 + ($st & 127) : $st >> 8);",
+}, " ")
+
 function fence.enter()
 	local here = shell("pwd -P")
 	if guarded(here) then
@@ -537,7 +551,13 @@ function fence.enter()
 		end
 		argv = rest
 	end
-	local r = process.exec(command, argv, { stdio = "forward" })
+	-- through the launcher: the specs get their own process group, which is stopped when they end, before the
+	-- second snapshot, so nothing they left behind changes the repository after it
+	local launched = { "-e", REAPER, command }
+	for _, a in argv do
+		table.insert(launched, a)
+	end
+	local r = process.exec("perl", launched, { stdio = "forward" })
 	local after = snapshot(cache)
 	pcall(fs.removeDir, lock)
 	pcall(fs.removeDir, runTemp)

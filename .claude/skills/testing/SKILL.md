@@ -151,6 +151,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
   - **Linux (CI)**: specs there are unjailed, so a write to the real checkout's index or files (`git add`, `checkout`, `reset --hard`, `worktree remove`, `remote set-url`, a plain file write) is stopped by nothing; CI's checkout is disposable, but the same spec runs on developers' Macs, where the jail stops it.
   - **`check.sh` files' own commands**: anything they run outside `tests/run`, including config writes and network actions.
   - **Handing work to a process outside the jail**: `open`, `osascript`, `launchctl`, or a daemon. The gate scan flags `osascript` and `launchctl`.
+  - **A process that leaves the run's process group** (`setsid`, a double fork into a new session): the runner stops what is left in the specs' group when they end, but not this. It stays jailed, yet it outlives the run and could change files in `.cache` that an unjailed `check.sh` later copies and runs (a copy of the tree under `.cache`).
 - **Running specs against unguarded code**: only in a clone under `$TMPDIR`, outside every repository (`git clone --no-hardlinks . "$(mktemp -d)/repo"`). That applies when prototyping the guards themselves, or on a branch from before them. A broken fixture there can only reach the clone.
 - **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it.
 

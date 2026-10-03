@@ -18,6 +18,7 @@
 | 14 | 2026-10-03 22:13 | R0210: review 004 fixes (no recursive deletes, .cache must be a plain folder and is unchangeable in the jail; run-private temp folder with a mktemp stub instead of the user temp folder) | 204 | 27 | 45.0 | explicit |
 | 15 | 2026-10-03 22:14 | R0210: refute-004 | 0 | 0 | 5.0 | focus |
 | 16 | 2026-10-03 22:27 | R0210: review 005 F1/F3 (jail forbids symlinks at the top of .cache, leftovers unlinked; mktemp stub honours -t) | 26 | 2 | 20.0 | explicit |
+| 17 | 2026-10-03 23:36 | R0210: review 005 F2 (specs run in their own process group, reaped when they end; setsid listed as review-only); verification log | 133 | 1 | 40.0 | explicit |
 
-**Total:** +1719 / -166 lines, 248.0 agent-minutes over 16 commits
-<!-- totals: added=1719 removed=166 minutes=248.0 commits=16 -->
+**Total:** +1852 / -167 lines, 288.0 agent-minutes over 17 commits
+<!-- totals: added=1852 removed=167 minutes=288.0 commits=17 -->

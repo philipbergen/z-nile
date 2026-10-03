@@ -93,6 +93,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_DIR = "proves the helper refuses it",
 		GIT_WORK_TREE = "proves the helper refuses it",
 	},
+	-- review 005 F2: clears the marker so a copied runner acts as a top-level run
+	["tests/tooling/fence-leftovers.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- review 004 F1: its runner case clears the marker so a copied runner acts as a top-level run
 	["tests/tooling/fence-cache-entry.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
