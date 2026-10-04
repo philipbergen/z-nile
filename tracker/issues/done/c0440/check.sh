@@ -7,7 +7,7 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to 
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0440"
 
-# AC1-AC5 are cases of one end-to-end spec (shared fixture). It runs once; each check then requires
+# AC5 is a case of one end-to-end spec (shared fixture). It runs once; each check then requires
 # its own named cases to exist in the spec and not fail, and that the spec loaded at all.
 spec="$A/launch.spec.luau"
 spec_out=$(lune run tests/run -- "$spec" 2>&1)
@@ -25,32 +25,21 @@ all_cases_pass() {
   grep -Eq "^[0-9]+ passed, 0 failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out"; return 1; }
 }
 
-check "AC1: launch runs the command in the target's worktree, creating or reusing it" cases_pass \
-  "launch runs the command inside"
-check "AC2: arguments after -- pass through untouched, stdin reaches the command; the default is claude" cases_pass \
-  "launch defaults to claude" "launch forwards stdin"
-check "AC3: launch returns the exit code and reports a command that can't start" cases_pass \
-  "launch returns the command's exit code"
-check "AC4: an invalid target, stray argument or bad command starts nothing; an unusable worktree path stops the launch" cases_pass \
-  "launch rejects an unknown target" "launch stops when the worktree step"
+# AC1-AC4 (the launch command) were removed with the command in R0250 (c0750)
 check "AC5: worktree-prune warns about worktrees outside .worktree/" cases_pass \
   "worktree-prune warns about a worktree outside"
-check "AC6: the skills state the inside-the-repo rule and the launch line; no sibling or .worktrees/ path" bash -c '
+check "AC6: the skills state the inside-the-repo rule; no sibling or .worktrees/ path" bash -c '
   t=.claude/skills/tracker/SKILL.md
-  grep -qF "scripts/tracker.sh launch" "$t" || { echo "tracker skill: launch"; exit 1; }
   grep -qF ".worktree/" "$t" || { echo "tracker skill: .worktree/"; exit 1; }
   grep -qiE "never outside" "$t" || { echo "tracker skill: no \"never outside\" rule"; exit 1; }
-  for f in .claude/skills/make-prompt/SKILL.md SETUP.md AGENTS.md; do
-    grep -qF "scripts/tracker.sh launch" "$f" || { echo "$f: launch line"; exit 1; }
-  done
   grep -qF ".worktree/" tracker/templates/prompt.md || { echo "prompt template: .worktree/"; exit 1; }
   # the c0041 AC5 markers must survive: done reruns every member check.sh
-  for f in execute-raft tracker make-issue ticket-prep make-prompt; do
+  for f in execute-raft tracker make-issue ticket-prep ready-raft; do
     grep -qF "scripts/tracker.sh worktree" ".claude/skills/$f/SKILL.md" || { echo "$f: c0041 marker lost"; exit 1; }
   done
   grep -qF "scripts/tracker.sh worktree {{RAFT_ID}}" tracker/templates/prompt.md || { echo "prompt template: c0041 marker lost"; exit 1; }
   bad=$(grep -rnE -e "\.worktrees/" -e "\.\./pickman" .claude/skills tracker/templates SETUP.md AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC1-AC5: every case of the launch spec passes" all_cases_pass
+check "AC5: every case of the launch spec passes" all_cases_pass
 
 finish

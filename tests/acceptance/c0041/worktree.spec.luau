@@ -212,10 +212,9 @@ return t.spec("worktrees", function(it)
 	end)
 
 	it("prompt does not create a placeholder raft in the main checkout", function()
-		-- f0050 has no raft: `prompt` would wrap it in a placeholder raft
+		-- f0050 has no raft: `prompt` refuses it and changes nothing (R0250: the refusal's wording is c0750's)
 		local r = tr(main, { "prompt", "f0050", "--stdout" })
 		t.expect(r.ok).toBe(false)
-		t.expect(string.find(r.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
 
