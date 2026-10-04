@@ -21,6 +21,7 @@
 | 17 | 2026-10-03 23:36 | R0210: review 005 F2 (specs run in their own process group, reaped when they end; setsid listed as review-only); verification log | 133 | 1 | 40.0 | explicit |
 | 18 | 2026-10-03 23:36 | R0210: refute-005 | 0 | 0 | 5.0 | focus |
 | 19 | 2026-10-04 06:59 | R0210: review 006 fixes (top-of-.cache writers rename into place; post-run link cleanup; outer sandboxes must refuse links; watchdog kills the specs' group if the launcher dies; luau-lsp pattern) | 65 | 13 | 45.0 | explicit |
+| 20 | 2026-10-04 06:59 | R0210: refute-006 | 0 | 0 | 5.0 | focus |
 
-**Total:** +1917 / -180 lines, 338.0 agent-minutes over 19 commits
-<!-- totals: added=1917 removed=180 minutes=338.0 commits=19 -->
+**Total:** +1917 / -180 lines, 343.0 agent-minutes over 20 commits
+<!-- totals: added=1917 removed=180 minutes=343.0 commits=20 -->
