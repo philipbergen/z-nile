@@ -115,7 +115,7 @@ return t.spec("tracker land", function(it)
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
 			`{other}/tracker/issues/f0500/f0500.md`,
-			"---\nid: f0500\ntype: feature\ntitle: Elsewhere\n---\n"
+			"---\nid: f0500\ntype: feature\ntitle: Elsewhere\nslug: elsewhere\n---\n"
 		)
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "other f0500" })
@@ -144,12 +144,12 @@ return t.spec("tracker land", function(it)
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
 			`{other}/tracker/issues/f0600/f0600.md`,
-			"---\nid: f0600\ntype: feature\ntitle: Ready\ndesign: ready\nstatus: prepared-a-b-c\n---\n"
+			"---\nid: f0600\ntype: feature\ntitle: Ready\nslug: ready\ndesign: ready\nstatus: prepared-a-b-c\n---\n"
 		)
 		-- a draft raft document: draft frontmatter, but not an issue document
 		write(
 			`{other}/tracker/rafts/R0900/R0900.md`,
-			"---\nid: R0900\ntype: chore\ntitle: Draft raft\ndesign: draft\n---\n"
+			"---\nid: R0900\ntype: chore\ntitle: Draft raft\nslug: draft-raft\ndesign: draft\n---\n"
 		)
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "prep f0600" })
