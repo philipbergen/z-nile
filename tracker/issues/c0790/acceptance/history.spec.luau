@@ -140,6 +140,7 @@ return t.spec("tracker history", function(it)
 
 	it("a close day is the first add of an item's document into done/, however it got there", function()
 		t.expect(parsed.closed.c0040).toBe("2026-10-02") -- added straight into done/
+		t.expect(#(parsed.spells.c0040 or {})).toBe(0) -- first seen in done/: a close day, no spell
 		t.expect(parsed.closed.c0050).toBe("2026-10-03") -- the later rename inside done/ does not move it
 	end)
 

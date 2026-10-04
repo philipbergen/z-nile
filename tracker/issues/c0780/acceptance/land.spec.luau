@@ -144,7 +144,12 @@ return t.spec("tracker land", function(it)
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
 			`{other}/tracker/issues/f0600/f0600.md`,
-			"---\nid: f0600\ntype: feature\ntitle: Ready\ndesign: ready\n---\n"
+			"---\nid: f0600\ntype: feature\ntitle: Ready\ndesign: ready\nstatus: prepared-a-b-c\n---\n"
+		)
+		-- a draft raft document: draft frontmatter, but not an issue document
+		write(
+			`{other}/tracker/rafts/R0900/R0900.md`,
+			"---\nid: R0900\ntype: chore\ntitle: Draft raft\ndesign: draft\n---\n"
 		)
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "prep f0600" })
@@ -181,6 +186,21 @@ return t.spec("tracker land", function(it)
 			local p = `{wt}/tracker/issues/f0600/f0600.md`
 			fs.writeFile(p, fs.readFile(p) .. "\nEdited after prep.\n")
 		end, "tracker/issues/f0600/f0600.md")
+		refused(function() -- demoting a prepared issue to draft, then rewriting it (status untouched)
+			local p = `{wt}/tracker/issues/f0600/f0600.md`
+			fs.writeFile(
+				p,
+				(string.gsub(fs.readFile(p), "design: ready", "design: draft")) .. "\nRewritten.\n"
+			)
+		end, "tracker/issues/f0600/f0600.md")
+		refused(function() -- an edit to a draft raft document (the path decides, not the frontmatter)
+			local p = `{wt}/tracker/rafts/R0900/R0900.md`
+			fs.writeFile(p, fs.readFile(p) .. "\nEdited.\n")
+		end, "tracker/rafts/R0900/R0900.md")
+		refused(function() -- an edit to the issue template, which carries `design: draft` too
+			local p = `{wt}/tracker/templates/issue/doc.md`
+			fs.writeFile(p, fs.readFile(p) .. "\n<!-- edited -->\n")
+		end, "tracker/templates/issue/doc.md")
 		refused(function() -- a capture promoting its own issue past draft, with no prep
 			local p = `{wt}/tracker/issues/{id}/{id}.md`
 			fs.writeFile(p, (string.gsub(fs.readFile(p), "design: draft", "design: ready")))
