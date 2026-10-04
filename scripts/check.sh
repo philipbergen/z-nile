@@ -29,10 +29,17 @@ LUAU_DIRS=(src tests scripts tracker)
 # prerequisites the static stages read: serial and fast
 mkdir -p .cache
 defs=.cache/globalTypes.d.luau
-if [[ ! -s $defs ]]; then
-  curl -fsSL -o "$defs" \
-    https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.None.d.luau
+# Files at the top of .cache are written outside the checkout and renamed into place: a spec could have swapped a
+# symlink in there, and a rename replaces it instead of writing through it (R0210 review 006 F1).
+if [[ ! -s $defs || -L $defs ]]; then
+  t=$(mktemp)
+  curl -fsSL -o "$t" \
+    https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.None.d.luau && mv -f "$t" "$defs"
 fi
+build_place() { # rojo writes through a symlink at its output path, so it builds outside and the result is renamed in
+  local d
+  d=$(mktemp -d) && rojo build default.project.json -o "$d/check.rbxl" && mv -f "$d/check.rbxl" .cache/check.rbxl
+}
 rojo sourcemap default.project.json -o sourcemap.json
 lune_version=$(lune --version | awk '{print $2}')
 [[ -d "$HOME/.lune/.typedefs/$lune_version" ]] || lune setup >/dev/null
@@ -47,7 +54,7 @@ par_start "types (luau-lsp analyze, src with Roblox definitions)" \
   --ignore='**/_Index/**' src
 par_start "types (luau-lsp analyze, tests + scripts with Lune definitions)" \
   luau-lsp analyze --base-luaurc=.luaurc --platform=standard tests scripts
-par_start "build (rojo)" rojo build default.project.json -o .cache/check.rbxl
+par_start "build (rojo)" build_place
 par_wait || exit 1
 
 stage "tests ($mode)"

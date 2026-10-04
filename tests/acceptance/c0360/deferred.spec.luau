@@ -2,6 +2,7 @@
 -- c0360 AC1: `tracker.sh done` accepts `- F<n>: deferred <id>: <why>` for a medium or low finding
 -- when <id> is an existing backlog issue, and refuses it in every other case. Driven for real in a
 -- throwaway clone (no remote, so done skips push and gh).
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -28,11 +29,11 @@ local function must(r: Result, what: string): string
 end
 
 local function git(args: { string }): string
-	return must(process.exec("git", args, { cwd = work }), "git " .. table.concat(args, " "))
+	return must(fixture.exec(work, "git", args), "git " .. table.concat(args, " "))
 end
 
 local function tr(args: { string }): Result
-	return process.exec("bash", { "scripts/tracker.sh", table.unpack(args) }, { cwd = work })
+	return fixture.exec(work, "bash", { "scripts/tracker.sh", table.unpack(args) })
 end
 
 local function read(path: string): string

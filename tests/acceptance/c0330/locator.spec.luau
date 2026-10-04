@@ -3,6 +3,7 @@
 -- `tracker.sh done` promotes the acceptance specs. The template does, every done item's check.sh
 -- does, and scripts/lib/ac.sh can list an item's checks without running them (AC_LIST=1), which is
 -- how this spec proves the other two cheaply.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -29,22 +30,31 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		end
 		fs.writeDir(base)
 		local marker = `{base}/ran`
+		-- the scripts run in a fixture repository of their own (testing skill, Fixtures)
+		local fx = `{base}/ac`
+		assert(process.exec("git", { "init", "-q", fx }).ok, "git init")
 		local script = 'source "$1"; check "AC1: touches a file" touch "$2"; finish'
 		local ac = `{root}/scripts/lib/ac.sh`
-		local listed = process.exec("bash", { "-c", script, "_", ac, marker }, { env = { AC_LIST = "1" } })
+		local listed = fixture.exec(
+			fx,
+			"bash",
+			{ "-c", script, "_", ac, marker },
+			{ env = { AC_LIST = "1" } }
+		)
 		t.expect(listed.ok).toBe(true)
 		t.expect(string.find(listed.stdout, "AC1: touches a file", 1, true) ~= nil).toBe(true)
 		-- listing is not passing: the summary must not claim that criteria passed
 		t.expect(string.find(listed.stdout, "1 criteria listed", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(listed.stdout, "criteria passed", 1, true))).toBe(nil)
 		t.expect(fs.isFile(marker)).toBe(false)
-		local ran = process.exec("bash", { "-c", script, "_", ac, marker })
+		local ran = fixture.exec(fx, "bash", { "-c", script, "_", ac, marker })
 		t.expect(ran.ok).toBe(true)
 		t.expect(string.find(ran.stdout, "1/1 criteria passed", 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(marker)).toBe(true) -- without AC_LIST the check runs as before
 		fs.removeFile(marker)
 		-- an empty check.sh still never passes, listed or not
-		local empty = process.exec(
+		local empty = fixture.exec(
+			fx,
 			"bash",
 			{ "-c", 'source "$1"; finish', "_", ac },
 			{ env = { AC_LIST = "1" } }
@@ -106,13 +116,37 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		if not (listing and runnerRefuses) then
 			error("AC_LIST list mode is not safe (ac.sh or tests/run): not running tracker.sh check under it")
 		end
+		-- In a fixture holding the tracker, never the real repository: `done` pushes and resets when it gets
+		-- past its refusals (testing skill, "Specs never touch the real repository").
+		local repo = `{base}/tracker`
+		if fs.isDir(repo) then
+			fs.removeDir(repo)
+		end
+		fs.writeDir(repo)
+		local listed = process.exec(
+			"git",
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", "rokit.toml" },
+			{ cwd = root }
+		)
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if fs.isFile(`{root}/{path}`) then
+				local parent = string.match(path, "^(.*)/[^/]+$")
+				if parent then
+					fs.writeDir(`{repo}/{parent}`)
+				end
+				fs.writeFile(`{repo}/{path}`, fs.readFile(`{root}/{path}`))
+			end
+		end
+		t.expect(process.exec("git", { "init", "-q", repo }).ok).toBe(true)
+		t.expect(fixture.exec(repo, "bash", { "scripts/tracker.sh", "new", "issue", "c", "probe" }).ok)
+			.toBe(true)
 		local env = { AC_LIST = "1" }
-		local checked = process.exec("scripts/tracker.sh", { "check", "c0090" }, { cwd = root, env = env })
+		local checked = fixture.exec(repo, "bash", { "scripts/tracker.sh", "check", "c0010" }, { env = env })
 		t.expect(checked.ok).toBe(false)
 		t.expect(string.find(checked.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(checked.stdout, "criteria", 1, true))).toBe(nil)
 		-- `done` refuses before it looks at anything else (R9999 does not exist)
-		local finished = process.exec("scripts/tracker.sh", { "done", "R9999" }, { cwd = root, env = env })
+		local finished = fixture.exec(repo, "bash", { "scripts/tracker.sh", "done", "R9999" }, { env = env })
 		t.expect(finished.ok).toBe(false)
 		t.expect(string.find(finished.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
 	end)

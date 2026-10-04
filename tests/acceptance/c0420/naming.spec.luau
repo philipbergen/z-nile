@@ -4,6 +4,7 @@
 -- branch, no `origin` (so every tracker command runs freely), the working tree's tooling overlaid,
 -- and the tracker emptied. The spec passes from any branch and from a detached HEAD.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -18,17 +19,13 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 local base = `{root}/.cache/naming-e2e`
 local seed = `{base}/seed`
 
--- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
-local NO_GC = {
-	GIT_CONFIG_COUNT = "2",
-	GIT_CONFIG_KEY_0 = "gc.auto",
-	GIT_CONFIG_VALUE_0 = "0",
-	GIT_CONFIG_KEY_1 = "maintenance.auto",
-	GIT_CONFIG_VALUE_1 = "false",
-}
+-- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
+-- runner's guard (scripts/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
+-- git config through the environment, which would replace the guard's (testing skill).
+local NO_GC: { [string]: string } = {}
 
 local function run(cwd: string, cmd: string, args: { string }): Result
-	return process.exec(cmd, args, { cwd = cwd, env = NO_GC })
+	return fixture.exec(cwd, cmd, args, { env = NO_GC })
 end
 
 local function must(r: Result, what: string): string
@@ -91,10 +88,10 @@ return t.spec("document naming", function(it)
 		git({ "checkout", "-q", "-B", "main" })
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
-		local listed = run(
-			root,
+		local listed = process.exec(
 			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
+			{ cwd = root }
 		)
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then

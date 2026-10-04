@@ -6,6 +6,7 @@
 local OpenCloud = require("@scripts/lib/opencloud")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local sh = require("@scripts/lib/sh")
 
 local cfg = OpenCloud.configFromEnv(process.env)
 if cfg == nil then
@@ -16,8 +17,8 @@ if cfg == nil then
 end
 
 assert(cfg, "unreachable: process.exit above ended a missing config")
-local out = ".cache/beta.rbxl"
-fs.writeDir(".cache")
+-- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1)
+local out = sh.must("mktemp", { "-d" }) .. "/beta.rbxl"
 local built = process.exec("rojo", { "build", "-o", out })
 if not built.ok then
 	print(`rojo build failed:\n{built.stderr}{built.stdout}`)

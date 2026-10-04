@@ -5,6 +5,7 @@
 -- tree's tooling overlaid, tracker emptied) with raft R0010, a done raft R0020 and issues f0010,
 -- f0020; then a bare origin and a clone `main/`.
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -15,14 +16,10 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 
--- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
-local NO_GC = {
-	GIT_CONFIG_COUNT = "2",
-	GIT_CONFIG_KEY_0 = "gc.auto",
-	GIT_CONFIG_VALUE_0 = "0",
-	GIT_CONFIG_KEY_1 = "maintenance.auto",
-	GIT_CONFIG_VALUE_1 = "false",
-}
+-- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
+-- runner's guard (scripts/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
+-- git config through the environment, which would replace the guard's (testing skill).
+local NO_GC: { [string]: string } = {}
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 local base = `{root}/.cache/launch-e2e`
@@ -49,11 +46,7 @@ local function run(
 			merged[k] = v
 		end
 	end
-	local opts: any = { cwd = cwd, env = merged }
-	if stdin then
-		opts.stdio = { stdin = stdin }
-	end
-	return process.exec(cmd, args, opts)
+	return fixture.exec(cwd, cmd, args, { env = merged, stdin = stdin })
 end
 
 local function must(r: Result, what: string): string
@@ -118,10 +111,10 @@ return t.spec("launch", function(it)
 		git(seed, { "config", "user.email", "e2e@example.invalid" })
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })
-		local listed = run(
-			root,
+		local listed = process.exec(
 			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
+			{ cwd = root }
 		)
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then

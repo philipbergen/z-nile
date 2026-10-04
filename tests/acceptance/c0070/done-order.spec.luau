@@ -3,6 +3,7 @@
 -- drafts) runs on the final head. Driven for real in a throwaway clone whose origin is a local bare
 -- repository under a `github.com` path (so `done` takes its GitHub branch), with a fake `gh` that
 -- records the branch head on origin at the moment `gh pr ready` is called.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -26,12 +27,27 @@ local function must(r: Result, what: string): string
 	return (string.gsub(r.stdout, "%s+$", ""))
 end
 
+-- The fixture's identity rides in the environment, not in its git config: a run of the spec runner nested in
+-- the fixture (tracker.sh done runs one) refuses a repository whose own identity is a fixture's (c0640).
+local ID: { [string]: string } = {
+	GIT_AUTHOR_NAME = "e2e",
+	GIT_AUTHOR_EMAIL = "e2e@example.invalid",
+	GIT_COMMITTER_NAME = "e2e",
+	GIT_COMMITTER_EMAIL = "e2e@example.invalid",
+}
+
 local function git(args: { string }): string
-	return must(process.exec("git", args, { cwd = work }), "git " .. table.concat(args, " "))
+	return must(fixture.exec(work, "git", args, { env = ID }), "git " .. table.concat(args, " "))
 end
 
 local function tr(args: { string }, env: { [string]: string }?): Result
-	return process.exec("bash", { "scripts/tracker.sh", table.unpack(args) }, { cwd = work, env = env })
+	local merged = table.clone(ID)
+	if env then
+		for k, v in env do
+			merged[k] = v
+		end
+	end
+	return fixture.exec(work, "bash", { "scripts/tracker.sh", table.unpack(args) }, { env = merged })
 end
 
 local function read(path: string): string
@@ -71,8 +87,6 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				fs.writeFile(`{work}/{path}`, fs.readFile(`{root}/{path}`))
 			end
 		end
-		git({ "config", "user.name", "e2e" })
-		git({ "config", "user.email", "e2e@example.invalid" })
 		git({ "config", "gc.auto", "0" })
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/", "done/" } do
@@ -222,12 +236,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local atReady = (string.gsub(fs.readFile(`{base}/ready-head`), "%s+$", ""))
 		t.expect(atReady).toBe(before)
 		-- and afterwards origin has the final head, which is what CI must test
-		t.expect(
-			must(
-				process.exec("git", { "--git-dir", bare, "rev-parse", "refs/heads/R0010-demo" }),
-				"origin head"
-			)
-		).toBe(after)
+		t.expect(must(fixture.exec(bare, "git", { "rev-parse", "refs/heads/R0010-demo" }), "origin head"))
+			.toBe(after)
 	end)
 
 	it("cleans up", function()

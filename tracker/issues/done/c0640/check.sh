@@ -18,7 +18,7 @@ cases_in() { # $1: spec file, $2: its output, $3...: case-name prefixes that mus
   if grep -q "could not load spec" <<<"$out"; then echo "$out"; return 1; fi
   grep -Eq "^[0-9]+ passed, [0-9]+ failed, 1 spec files$" <<<"$out" || { echo "$out" | tail -20; return 1; }
   for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "$spec has no case starting \"$c\""; return 1; }
+    tr -d "\n\t" < "$spec" | grep -qF "it(\"$c" || { echo "$spec has no case starting \"$c\""; return 1; }
     if grep -F "FAIL" <<<"$out" | grep -qF ":: $c"; then grep -F -A3 ":: $c" <<<"$out"; return 1; fi
   done
 }

@@ -71,6 +71,7 @@ Attack all of the following:
 6. **Scalability, maintainability and usability**: are they addressed concretely?
 7. **Raft coherence**: do the issue designs agree with the whole-raft design and with each other, and is the order right?
 8. **Executability**: could an agent that has never seen this repo deliver it from the documents alone, without asking a question?
+9. **Repository safety**: could any spec, `check.sh` or script in this raft change the real repository (testing skill, "Specs never touch the real repository")? Every command that changes anything must run in a fixture under `.cache/<unique name>` with its own repository, committing as `@example.invalid`. Check especially what the runner can't enforce (that section's "Caught only by review" list). Any path to the real repository, or any weakening of its guards, is **high**.
 
 ## Stream mode (execute-raft Phase 2B)
 A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
@@ -88,3 +89,4 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh` 
 5. **Architecture rules** from the skill, including thin adapters and server authority.
 6. **Performance**: per-frame allocations, O(n²) work in a tick, and replication volume.
 7. **Judged criteria**: give a ruling on each against its rubric.
+8. **Repository safety**: no spec, `check.sh` or script in the diff may change the real repository, run a command that changes anything outside a `.cache` fixture, or weaken a guard: `tests/lib/fence.luau`, `scripts/lib/fence.sh`, `scripts/lib/git-hooks/`, the fence in `scripts/lib/ac.sh`, `tests/tooling/repo-fence.spec.luau`. Check the "Caught only by review" list in the testing skill's "Specs never touch the real repository" section line by line. Any such path is **high**.

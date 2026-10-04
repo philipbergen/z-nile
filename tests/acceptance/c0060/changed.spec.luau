@@ -4,6 +4,7 @@
 -- both paths (no rename detection), changes made on the base after the fork do not, and the default
 -- base is origin/main when it exists, main otherwise.
 local changed = require("@scripts/lib/changed")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -14,7 +15,7 @@ local repo = `{base}/repo`
 local origin = `{base}/origin.git`
 
 local function git(args: { string }, cwd: string?): string
-	local r = process.exec("git", args, { cwd = cwd or repo })
+	local r = fixture.exec(cwd or repo, "git", args)
 	if not r.ok then
 		error(`git {table.concat(args, " ")} failed: {r.stderr}{r.stdout}`, 2)
 	end
@@ -50,7 +51,7 @@ return t.spec("c0060 changed files", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(repo)
-		git({ "init", "-q", "-b", "main" })
+		assert(process.exec("git", { "init", "-q", "-b", "main", repo }).ok, "git init repo") -- creating a fixture names its path
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
 		git({ "config", "gc.auto", "0" })
@@ -107,7 +108,7 @@ return t.spec("c0060 changed files", function(it)
 		git({ "checkout", "-q", "-B", "feature2" })
 		write("src/feature2.luau", "return 'f2'\n")
 		commit("feature2 work")
-		git({ "init", "-q", "--bare", origin }, base)
+		assert(process.exec("git", { "init", "-q", "--bare", origin }).ok, "git init origin")
 		git({ "remote", "add", "origin", origin })
 		git({ "push", "-q", "origin", `{f1}:refs/heads/main` })
 		git({ "fetch", "-q", "origin" })

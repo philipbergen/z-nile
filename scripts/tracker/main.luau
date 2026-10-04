@@ -164,9 +164,28 @@ local function guardRepoRoot()
 	end
 end
 
+-- A check run protects this repository (the repository guards, c0640): tracker state is never published from
+-- inside one (c0650). Asked once per command; the guards' own script answers, so no variable is named here.
+local guardedRun: boolean? = nil
+local function guarded(): boolean
+	if guardedRun == nil then
+		local r = process.exec("bash", {
+			"-c",
+			'[ -f scripts/lib/fence.sh ] && source scripts/lib/fence.sh && pickman_guarded "$PWD"',
+		})
+		guardedRun = r.ok
+		if r.ok then
+			stdio.ewrite(
+				`not publishing: {process.cwd} is protected by the repository guards (a check run)\n`
+			)
+		end
+	end
+	return guardedRun == true
+end
+
 local function publishing(): boolean
 	local v = process.env.PICKMAN_PUBLISH
-	return hasOrigin() and (v == nil or v == "" or v ~= "0")
+	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
 end
 
 local function frontOf(text: string): { [string]: string }
@@ -926,7 +945,7 @@ function cmd.start(pos: { string })
 		local mine = if fs.isFile(claimFile(raft.id)) then sh.trim(fs.readFile(claimFile(raft.id))) else ""
 		local claim = stamp("active")
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
-		fs.writeFile(claimFile(raft.id), claim)
+		sh.writeReplacing(claimFile(raft.id), claim)
 		local raftPath: string? = nil
 		local r = publish.commit(".", function(paths, read)
 			local changes: { publish.Change } = {}
@@ -963,7 +982,7 @@ function cmd.start(pos: { string })
 		if not r.ok or not r.sha then
 			-- refused, or nothing to claim (a resumed claim): keep or restore the file accordingly
 			if mine ~= "" then
-				fs.writeFile(claimFile(raft.id), mine)
+				sh.writeReplacing(claimFile(raft.id), mine)
 			elseif fs.isFile(claimFile(raft.id)) then
 				fs.removeFile(claimFile(raft.id))
 			end
@@ -1270,7 +1289,7 @@ end
 function cmd.focus(pos: { string })
 	local issue = store.get(pos[1] or fail("usage: focus <issue-id>"))
 	fs.writeDir(".cache")
-	fs.writeFile(FOCUS_FILE, issue.id)
+	sh.writeReplacing(FOCUS_FILE, issue.id)
 	print(`focus: {issue.id}`)
 end
 
@@ -1660,7 +1679,7 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
-	fs.writeFile(out, board.build())
+	sh.writeReplacing(out, board.build())
 	-- tracker.sh runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out

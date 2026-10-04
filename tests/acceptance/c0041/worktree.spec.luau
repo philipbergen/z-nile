@@ -5,6 +5,7 @@
 -- tree's tooling overlaid. The fixture pins its own `main` branch, so this spec passes from any
 -- branch and from a detached HEAD (CI's pull_request checkout).
 local clone = require("@tests/lib/clone")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -28,14 +29,10 @@ local wt3 = `{main}/.worktree/R0030`
 local wt4 = `{main}/.worktree/R0040`
 local named = `{main}/.worktree/capture-demo`
 
--- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture.
-local NO_GC = {
-	GIT_CONFIG_COUNT = "2",
-	GIT_CONFIG_KEY_0 = "gc.auto",
-	GIT_CONFIG_VALUE_0 = "0",
-	GIT_CONFIG_KEY_1 = "maintenance.auto",
-	GIT_CONFIG_VALUE_1 = "false",
-}
+-- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
+-- runner's guard (scripts/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
+-- git config through the environment, which would replace the guard's (testing skill).
+local NO_GC: { [string]: string } = {}
 
 local function run(
 	cwd: string,
@@ -44,18 +41,13 @@ local function run(
 	stdin: string?,
 	env: { [string]: string }?
 ): Result
-	local opts: any = { cwd = cwd }
-	if stdin then
-		opts.stdio = { stdin = stdin }
-	end
 	local merged = table.clone(NO_GC)
 	if env then
 		for k, v in env do
 			merged[k] = v
 		end
 	end
-	opts.env = merged
-	return process.exec(cmd, args, opts)
+	return fixture.exec(cwd, cmd, args, { env = merged, stdin = stdin })
 end
 
 local function must(r: Result, what: string): string
@@ -72,10 +64,11 @@ end
 -- c0510: the commands publish to origin/main when there is an origin. These fixtures test worktrees,
 -- not publishing (c0510's commands spec does), and one of them fakes a GitHub URL it cannot fetch.
 local function tr(cwd: string, args: { string }): Result
-	return process.exec(
+	return fixture.exec(
+		cwd,
 		"bash",
 		{ "scripts/tracker.sh", table.unpack(args) },
-		{ cwd = cwd, env = { PICKMAN_PUBLISH = "0" } }
+		{ env = { PICKMAN_PUBLISH = "0" } }
 	)
 end
 
@@ -133,10 +126,10 @@ return t.spec("worktrees", function(it)
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
-		local listed = run(
-			root,
+		local listed = process.exec(
 			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" }
+			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
+			{ cwd = root }
 		)
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then

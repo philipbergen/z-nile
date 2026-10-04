@@ -16,7 +16,7 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec and not appe
   grep -Eq "^[0-9]+ passed, [0-9]+ failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out"; return 1; }
   local c
   for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
+    tr -d "\n\t" < "$spec" | grep -qF "it(\"$c" || { echo "the spec has no case starting \"$c\""; return 1; }
     if grep -F "FAIL" <<<"$spec_out" | grep -qF ":: $c"; then grep -F -A3 ":: $c" <<<"$spec_out"; return 1; fi
   done
 }

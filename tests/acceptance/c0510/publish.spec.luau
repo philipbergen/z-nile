@@ -16,8 +16,7 @@ local base = `{root}/.cache/c0510-publish`
 local origin, work, other = `{base}/origin.git`, `{base}/work`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
-	local r: Result =
-		process.exec("git", args, { cwd = cwd, env = { GIT_CEILING_DIRECTORIES = `{root}/.cache` } })
+	local r: Result = process.exec("git", args, { cwd = cwd }) -- the runner fences git inside .cache (c0640)
 	if not r.ok then
 		error(`git {table.concat(args, " ")} failed: {r.stderr}{r.stdout}`, 2)
 	end

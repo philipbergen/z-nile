@@ -1,0 +1,16 @@
+# Refute 002: R0210
+
+- F1: fixed: the shadowing local is gone; the profile was rewritten (F3), and `profile` takes only the cache. The cause was the author's lint step, `selene --quiet … | tail -1`, which shows only the parse-error count. Lint is now read from selene's full summary (0 errors, 0 warnings), and the full gate was run before this round's review: 936 passed, 140 files, 42.7 s. The raft check passes 7/7, c0650's AC3 included.
+- F2: fixed: the profile allows `(remote ip "localhost:*")` after its IP deny. c0030's `runner-e2e` and c0140's `deploy-e2e` pass (part of the 936). The gate's jail case now opens a loopback listener and requires a connect to it to succeed, so J10 (loopback blocked) is killed. As the review asked, spec runs strip `http_proxy`, `https_proxy`, `all_proxy` (both cases) and `GIT_PROXY_COMMAND`, and the scan bans `_proxy`, `http.proxy` and `gitproxy`, with planted cases.
+- F3: fixed: the jail is now a write allowlist: `(deny file-write* (subpath "/"))`, then allows for this checkout's `.cache`, the temporary folder (`$TMPDIR`, `/tmp`, as written and resolved) and `/dev`.
+  - **What it closes:** `~/.rokit/bin`, shell start-up files, `~/.claude`, LaunchAgents, every folder above the repository, and anything else outside those.
+  - **Proven:** the full gate passes under it (936). The gate's jail case probes live, all harmless if they succeed: a file in `$HOME` (removed at once), and `touch -c -r d d` on every ancestor of the checkout. J9 (no deny of `/`) is killed.
+  - **Docs:** the testing skill's Jail bullet says the same.
+- F4: fixed: before accepting an outer sandbox, or a fixture of a guarded run, the runner now runs the same three probes (`escapes`): a file in `$HOME`; the folders above the checkout, skipping those inside a checkout's `.cache` named in the ceiling, which an outer jail allows by design; and a TEST-NET connect that must fail with `Operation not permitted`. Any open probe refuses the run, named in the message (`… or reach past the jail (…)`).
+  - **Checked by hand** outside the gate, since inside a jail every probe is closed: an outer sandbox that protects the repository but allows home and the network was refused, naming `the home folder`, the folder above the checkout and `the network`, and left no lock (J11).
+  - **No regression:** c0640's sandbox cases (inner runs inside this run's jail) and AC10 still pass (10/10 within RC0).
+- F5: fixed: spec runs export `GIT_ALLOW_PROTOCOL=file`, which wins over any `-c protocol.allow`. The scan bans `GIT_ALLOW_PROTOCOL`, with a planted case. On macOS the jail's IP deny also covers it.
+- F6: fixed: `identitiesIn` lowercases the text, then reads every `email … <address>` (so `user.email`, `User.Email` and any `*_EMAIL` variable) and `--author … <address>`. Planted `User.Email=…` and `--author="X <…>"` are caught (folded into the identity case, since AC6 pins seven cases).
+- F7: fixed: `pickman_fence` rewrites the `.cache/.git` sentinel every time. A symlink there is removed first, so the write can't follow it into the real `.git`. A directory there, a fixture repository made in `.cache` itself, is left alone.
+
+Four high findings were fixed, so review 003 follows. It is the last round.
