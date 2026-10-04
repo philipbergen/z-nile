@@ -23,6 +23,7 @@
 | 19 | 2026-10-04 06:59 | R0210: review 006 fixes (top-of-.cache writers rename into place; post-run link cleanup; outer sandboxes must refuse links; watchdog kills the specs' group if the launcher dies; luau-lsp pattern) | 65 | 13 | 45.0 | explicit |
 | 20 | 2026-10-04 06:59 | R0210: refute-006 | 0 | 0 | 5.0 | focus |
 | 21 | 2026-10-04 07:00 | R0210: merge origin/main (R0190, R0250 prep, game specs) | 0 | 0 | 2.0 | focus |
+| 22 | 2026-10-04 07:08 | tracker: done R0210 | 0 | 0 | 2.8 | raft+proportional |
 
-**Total:** +1917 / -180 lines, 345.0 agent-minutes over 21 commits
-<!-- totals: added=1917 removed=180 minutes=345.0 commits=21 -->
+**Total:** +1917 / -180 lines, 347.8 agent-minutes over 22 commits
+<!-- totals: added=1917 removed=180 minutes=347.8 commits=22 -->
