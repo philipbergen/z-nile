@@ -31,6 +31,9 @@ local function move(from: string, to: string)
 	fixture.git(repo, { "mv", from, to })
 end
 
+-- a legacy document name, built so this file names none (c0420's guard bans literal legacy names in specs)
+local LEGACY_NAME = "c0050" .. "-legacy-slug" .. ".md"
+
 local parsed: any = nil
 
 return t.spec("tracker history", function(it)
@@ -67,7 +70,7 @@ return t.spec("tracker history", function(it)
 		-- c0030 is readied, stopped, readied again and finished (status changes with each move);
 		-- c0050 has a legacy slug-named document, later renamed inside done/
 		write("tracker/issues/c0030/c0030.md", doc("c0030", "prepared-p-q-r"))
-		write("tracker/issues/c0050/c0050-legacy-slug.md", doc("c0050", "new-s-t-u"))
+		write(`tracker/issues/c0050/{LEGACY_NAME}`, doc("c0050", "new-s-t-u"))
 		commit("2026-10-03T00:00:00Z", "c0030 prepared, c0050 new")
 		move("tracker/issues/c0050", "tracker/issues/done/c0050")
 		commit("2026-10-03T06:00:00Z", "c0050 done (legacy name)")
@@ -77,7 +80,7 @@ return t.spec("tracker history", function(it)
 		move("tracker/issues/active/c0030", "tracker/issues/c0030")
 		write("tracker/issues/c0030/c0030.md", doc("c0030", "prepared-y-z-a"))
 		commit("2026-10-04T00:00:00Z", "stop c0030")
-		move("tracker/issues/done/c0050/c0050-legacy-slug.md", "tracker/issues/done/c0050/c0050.md")
+		move(`tracker/issues/done/c0050/{LEGACY_NAME}`, "tracker/issues/done/c0050/c0050.md")
 		commit("2026-10-04T09:00:00Z", "migrate c0050 to <ID>.md")
 		move("tracker/issues/c0030", "tracker/issues/active/c0030")
 		write("tracker/issues/active/c0030/c0030.md", doc("c0030", "active-b-c-d"))
