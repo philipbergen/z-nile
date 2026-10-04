@@ -58,7 +58,7 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(byStart["2025-06-11"].opened.defect).toBe(1)
 		t.expect(byStart["2025-06-11"].minutes.all).toBe(30)
 		t.expect(byStart["2025-06-12"].netLines.defect).toBe(5)
-		t.expect(s.periods.week.closed.all).toBe(0) -- no history: close days are unknown
+		t.expect(assert(s.periods).week.closed.all).toBe(0) -- no history: close days are unknown
 	end)
 
 	it("the page has the Stats button and section, and keeps the three tabs", function()
@@ -94,6 +94,7 @@ return t.spec("tracker board statistics", function(it)
 		local u = board.collect(`{bare}/tracker`)
 		t.expect(u.stats.today).toBe("")
 		t.expect(#u.stats.views.month).toBe(0)
+		t.expect(u.stats.periods).toBe(nil)
 		local html = board.render(u, fs.readFile(board.MARKED_PATH))
 		t.expect(string.find(html, "no dated data", 1, true) ~= nil).toBe(true)
 		fs.removeDir(bare)

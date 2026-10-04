@@ -139,7 +139,7 @@ return t.spec("tracker land", function(it)
 		t.expect(tip()).toBe(before)
 	end)
 
-	it("land refuses anything but new or edited draft issue documents and new check.sh files", function()
+	it("land refuses anything but edits to draft issue documents", function()
 		-- a ready issue on origin, as a merged prep would have left it
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
@@ -181,6 +181,18 @@ return t.spec("tracker land", function(it)
 			local p = `{wt}/tracker/issues/f0600/f0600.md`
 			fs.writeFile(p, fs.readFile(p) .. "\nEdited after prep.\n")
 		end, "tracker/issues/f0600/f0600.md")
+		refused(function() -- a capture promoting its own issue past draft, with no prep
+			local p = `{wt}/tracker/issues/{id}/{id}.md`
+			fs.writeFile(p, (string.gsub(fs.readFile(p), "design: draft", "design: ready")))
+		end, `tracker/issues/{id}/{id}.md`)
+		refused(function() -- a capture changing its own status line
+			local p = `{wt}/tracker/issues/{id}/{id}.md`
+			fs.writeFile(p, (string.gsub(fs.readFile(p), "status: [^\n]*", "status: prepared-a-b-c")))
+		end, `tracker/issues/{id}/{id}.md`)
+		refused(function() -- an issue added locally instead of published by new issue
+			write(`{wt}/tracker/issues/c0980/c0980.md`, "---\nid: c0980\ntype: chore\ndesign: draft\n---\n")
+			write(`{wt}/tracker/issues/c0980/check.sh`, "#!/bin/sh\n", true)
+		end, "tracker/issues/c0980/c0980.md")
 	end)
 
 	it("land refuses when the gate fails, and pushes nothing", function()

@@ -21,8 +21,8 @@ cases_pass() { # $@: case-name prefixes that must exist in the spec; the whole s
 
 check "AC1: land pushes one linear commit on top of origin/main, merges others first, retries a race, updates the main checkout" cases_pass \
   "land pushes one commit" "land brings the main checkout up" "land merges what others pushed" "land retries a lost race"
-check "AC2: land refuses changes outside new or edited draft backlog documents and new check.sh files" cases_pass \
-  "land refuses a change outside" "land refuses anything but new or edited draft"
+check "AC2: land carries only edits to draft backlog issue documents, status and design unchanged" cases_pass \
+  "land refuses a change outside" "land refuses anything but edits to draft"
 check "AC3: land refuses when the gate fails" cases_pass "land refuses when the gate fails"
 check "AC4: land refuses outside a capture worktree, dirty, or with nothing to land" cases_pass "land refuses outside a capture worktree"
 check "AC5: make-issue lands with tracker.sh land (no PR); the tracker skill names land" bash -c '

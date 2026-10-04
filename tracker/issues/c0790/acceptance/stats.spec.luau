@@ -154,8 +154,9 @@ return t.spec("tracker stats", function(it)
 		t.expect(#s.views.month).toBe(31)
 		t.expect(#s.views.quarter).toBe(14)
 		t.expect(#s.views.year).toBe(13)
-		t.expect(s.periods.week.bucket.start).toBe("2026-09-28")
-		t.expect(s.periods.week.opened).toEqual(counts(3, 1, 1, 1))
+		local periods = assert(s.periods, "a today gives periods")
+		t.expect(periods.week.bucket.start).toBe("2026-09-28")
+		t.expect(periods.week.opened).toEqual(counts(3, 1, 1, 1))
 		t.expect(s.views.year[13].opened).toEqual(counts(2, 0, 1, 1)) -- October 2026: d0020, c0030
 		t.expect(s.views.year[12].opened).toEqual(counts(3, 2, 1, 0)) -- September: f0010, f0040, d0050
 		t.expect(s.durations.new.all.n).toBe(3)
