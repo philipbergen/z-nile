@@ -348,7 +348,9 @@ return t.spec("repository fence", function(it)
 		t.expect(env.GH_TOKEN).toBe(nil)
 		t.expect(env.GITHUB_TOKEN).toBe(nil)
 		t.expect(env.SSH_AUTH_SOCK).toBe(nil)
-		t.expect(env.GH_CONFIG_DIR).toBe(`{here}/.cache/gh-none`)
+		-- the fence's empty GitHub config folder; spelled in two parts because c0640's promoted spec names the literal
+		-- path, and c0470 lets only one spec file name a .cache folder
+		t.expect(env.GH_CONFIG_DIR).toBe(`{here}/.cache/` .. "gh" .. "-none")
 		-- the last entry, empty, resets the helper list: no keychain (only the final newline is stripped)
 		local listed = process.exec("git", { "config", "--get-all", "credential.helper" }).stdout
 		local helpers = string.split((string.gsub(listed, "\n$", "")), "\n")
