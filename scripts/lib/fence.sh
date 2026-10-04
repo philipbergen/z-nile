@@ -36,7 +36,10 @@ pickman_fence() {
     echo "fence: $sentinel is a folder; refusing (remove it yourself after checking it). Stop and report this." >&2
     return 1
   fi
-  printf 'gitdir: /nonexistent/pickman-fence\n' >"$sentinel"
+  # written elsewhere and renamed in: a rename replaces whatever is there instead of writing through it
+  local fresh
+  fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs
+  printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" && mv -f "$fresh" "$sentinel" || return 1
   if [[ -n $real ]]; then
     export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
   fi

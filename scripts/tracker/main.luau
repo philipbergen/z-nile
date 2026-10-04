@@ -920,7 +920,7 @@ function cmd.start(pos: { string })
 		local mine = if fs.isFile(claimFile(raft.id)) then sh.trim(fs.readFile(claimFile(raft.id))) else ""
 		local claim = stamp("active")
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
-		fs.writeFile(claimFile(raft.id), claim)
+		sh.writeReplacing(claimFile(raft.id), claim)
 		local raftPath: string? = nil
 		local r = publish.commit(".", function(paths, read)
 			local changes: { publish.Change } = {}
@@ -957,7 +957,7 @@ function cmd.start(pos: { string })
 		if not r.ok or not r.sha then
 			-- refused, or nothing to claim (a resumed claim): keep or restore the file accordingly
 			if mine ~= "" then
-				fs.writeFile(claimFile(raft.id), mine)
+				sh.writeReplacing(claimFile(raft.id), mine)
 			elseif fs.isFile(claimFile(raft.id)) then
 				fs.removeFile(claimFile(raft.id))
 			end
@@ -1264,7 +1264,7 @@ end
 function cmd.focus(pos: { string })
 	local issue = store.get(pos[1] or fail("usage: focus <issue-id>"))
 	fs.writeDir(".cache")
-	fs.writeFile(FOCUS_FILE, issue.id)
+	sh.writeReplacing(FOCUS_FILE, issue.id)
 	print(`focus: {issue.id}`)
 end
 
@@ -1654,7 +1654,7 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
-	fs.writeFile(out, board.build())
+	sh.writeReplacing(out, board.build())
 	-- tracker.sh runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out

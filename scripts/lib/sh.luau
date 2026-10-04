@@ -1,5 +1,6 @@
 --!strict
 -- Subprocess helpers for Lune scripts.
+local fs = require("@lune/fs")
 local process = require("@lune/process")
 
 local sh = {}
@@ -35,6 +36,14 @@ end
 
 function sh.git(args: { string }): string
 	return sh.must("git", args)
+end
+
+-- Writes `text` to `path` by writing a fresh file outside the checkout and renaming it into place, so a symlink a
+-- spec swapped in at `path` is replaced, never followed into whatever it points at (R0210 review 006 F1).
+function sh.writeReplacing(path: string, text: string)
+	local tmp = sh.must("mktemp", {})
+	fs.writeFile(tmp, text)
+	sh.must("mv", { "-f", tmp, path })
 end
 
 return sh

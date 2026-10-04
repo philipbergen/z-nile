@@ -4,6 +4,7 @@
 -- deleted; a .cache/.git symlink is unlinked, never followed. Every repository here is a stand-in under .cache.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local sh = require("@scripts/lib/sh")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -106,6 +107,18 @@ return t.spec("the guards never delete through .cache", function(it)
 		t.expect(fs.readFile(`{victim}/.git/marker`)).toBe("keep")
 		t.expect(fs.isDir(`{victim}/tests-run.lock`)).toBe(false)
 		t.expect(stamp()).toBe(before)
+	end)
+
+	it("a tracker write replaces a symlink at its path instead of writing through it", function()
+		local dir = `{base}/writer`
+		fs.writeDir(dir)
+		local victim = `{base}/victim-d`
+		fs.writeFile(victim, "keep")
+		t.expect(process.exec("ln", { "-s", victim, `{dir}/tracker-focus` }).ok).toBe(true)
+		sh.writeReplacing(`{dir}/tracker-focus`, "c0010")
+		t.expect(process.exec("test", { "-L", `{dir}/tracker-focus` }).ok).toBe(false)
+		t.expect(fs.readFile(`{dir}/tracker-focus`)).toBe("c0010")
+		t.expect(fs.readFile(victim)).toBe("keep")
 	end)
 
 	it("cleans up", function()

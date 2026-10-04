@@ -301,7 +301,7 @@ local function profile(cache: string, runTemp: string): string
 		table.insert(rules, `(deny file-write* (literal "{dir}"))`) -- later rules win
 		-- no symlink at the top of .cache, made or renamed there: unjailed writers (the gate's rojo build, the
 		-- tracker's focus and claim files, the board) would write through it into the repository (review 005 F1)
-		local pattern = string.gsub(dir, "[%.%[%]%*%^%$%(%)%+%?%{%}%|\\]", "\\%0")
+		local pattern = string.gsub(dir, "[%.%[%]%*%^%$%(%)%+%?{}|\\]", "\\%0")
 		table.insert(
 			rules,
 			`(deny file-write-create (require-all (vnode-type SYMLINK) (regex #"^{pattern}/[^/]+$")))`
@@ -436,6 +436,14 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 		else "sandbox-exec is missing"
 	local open = writable(here)
 	local leaks = escapes(here)
+	-- an outer sandbox must also refuse a symlink at the top of .cache (unjailed writers would follow one)
+	local linkProbe = `{cache}/pickman-link-probe-{myPid()}`
+	if process.exec("ln", { "-s", "/nonexistent", linkProbe }).ok then
+		process.exec("rm", { "-f", linkProbe })
+		if #open == 0 then
+			table.insert(leaks, "a symlink at the top of .cache")
+		end
+	end
 	if #open == 0 and #leaks == 0 then
 		stdio.ewrite(`note: not jailed ({why}); the outer sandbox protects the repository\n`)
 		return {}, "outer sandbox (protects the repository)"
@@ -462,7 +470,12 @@ end
 -- reaped: the testing skill lists it under "Caught only by review".
 local REAPER = table.concat({
 	'my $pid = fork; die "fork: $!" unless defined $pid;',
-	'if (!$pid) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV or die "exec: $!"; }',
+	-- a watchdog in the specs' group kills the group if the launcher dies (a SIGKILL to the launcher's group would
+	-- otherwise leave the specs running and holding the lock, review 006 F2)
+	"if (!$pid) { setpgrp(0, 0); my $launcher = getppid();",
+	"if (!fork) { open STDIN, '<', '/dev/null'; open STDOUT, '>', '/dev/null'; open STDERR, '>', '/dev/null';",
+	"while (kill 0, $launcher) { sleep 1 } kill 'KILL', -getpgrp(); exit }",
+	'exec { $ARGV[0] } @ARGV or die "exec: $!"; }',
 	"setpgrp($pid, $pid);",
 	"for my $s (qw(INT TERM HUP)) { $SIG{$s} = sub { kill $s, -$pid } }",
 	"waitpid($pid, 0); my $st = $?;",
@@ -558,6 +571,12 @@ function fence.enter()
 		table.insert(launched, a)
 	end
 	local r = process.exec("perl", launched, { stdio = "forward" })
+	-- with the specs stopped, unlink any symlink one swapped in at the top of .cache (review 006 F1)
+	for _, name in fs.readDir(cache) do
+		if process.exec("test", { "-L", `{cache}/{name}` }).ok then
+			process.exec("rm", { "-f", `{cache}/{name}` })
+		end
+	end
 	local after = snapshot(cache)
 	pcall(fs.removeDir, lock)
 	pcall(fs.removeDir, runTemp)
