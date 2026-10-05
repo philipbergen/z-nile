@@ -43,8 +43,8 @@ return t.spec("tracker skill: Conflicts bullet", function(it)
 		end
 	)
 
-	it("the Numbering bullet still says new picks multiples of 10", function()
+	it("the Numbering bullet says new takes its number from tracker/next (c0870)", function()
 		local text = fs.readFile(".claude/skills/tracker/SKILL.md")
-		t.expect(says(text, "`tracker.sh new` always picks the **next multiple of 10**")).toBe(true)
+		t.expect(says(text, "`tracker/next` holds the next number")).toBe(true)
 	end)
 end)

@@ -1,7 +1,10 @@
 --!strict
 -- Tracker CLI. Run through scripts/tracker.sh. See .claude/skills/tracker/SKILL.md.
+local audit = require("./audit")
 local board = require("./board")
+local compactLib = require("./compact")
 local fs = require("@lune/fs")
+local idsLib = require("./ids")
 local process = require("@lune/process")
 local publish = require("./publish")
 local sh = require("../lib/sh")
@@ -314,6 +317,112 @@ local function activeRaft(): store.Item
 	return rafts[1]
 end
 
+-- A tree from before a compaction on origin/main never acts on origin (c0870): its old-scheme ids would push the
+-- counter back up, and old ids name other items there now. Asked before every publish, and by every allocating
+-- command; `remap` is the way out, so it does not ask.
+local function refuseStale()
+	if publishing() then
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+	end
+	local theirs = sh.run("git", { "show", `origin/main:{idsLib.MAP_FILE}` })
+	if not theirs.ok then
+		return
+	end
+	local mine = if fs.isFile(idsLib.MAP_FILE) then fs.readFile(idsLib.MAP_FILE) else nil
+	if mine ~= theirs.stdout then
+		fail(
+			"this tree predates the compaction on origin/main: a branch that changed tracker/ runs tracker.sh remap; any other merges origin/main"
+		)
+	end
+end
+
+-- publish.commit for every command but remap: a stale tree is refused first.
+local function publishFresh(build: publish.Build, message: string | () -> string): publish.Result
+	refuseStale()
+	return publish.commit(".", build, message)
+end
+
+-- The three words of a fresh stamp: the phrase that makes every write of tracker/next differ (c0870).
+local function phrase(): string
+	return (string.match(stamp("new"), "^%a+%-(.+)$")) :: string
+end
+
+-- Ids of `space` in the local tree, read without store.find, so a malformed tree still yields them.
+local function localIds(space: string): { string }
+	local out: { string } = {}
+	for _, f in audit.scan(".") do
+		if idsLib.spaceOf(f.id) == space then
+			table.insert(out, f.id)
+		end
+	end
+	return out
+end
+
+local function localCounters(): idsLib.Counters?
+	return if fs.isFile(idsLib.FILE) then idsLib.parse(fs.readFile(idsLib.FILE)) else nil
+end
+
+-- The next number of `space` from origin's tracker/next (as `read` returns it), and the change that raises it.
+-- Both nil when origin has no counter: the old numbering applies. The third result is an error.
+local function reserve(
+	space: string,
+	used: { string },
+	read: (string) -> string?
+): (number?, publish.Change?, string?)
+	local text = read(idsLib.FILE)
+	if not text then
+		return nil, nil, nil
+	end
+	local c = idsLib.parse(text)
+	if not c then
+		return nil, nil, `{idsLib.FILE} on origin/main does not parse`
+	end
+	local n = idsLib.nextFree(space, c, used)
+	if n > 9999 then
+		return nil, nil, "no number above 9999 is free"
+	end
+	local raised: idsLib.Counters = { issue = c.issue, raft = c.raft }
+	if space == "raft" then
+		raised.raft = n + 1
+	else
+		raised.issue = n + 1
+	end
+	return n, { path = idsLib.FILE, content = idsLib.format(raised, phrase()) }, nil
+end
+
+-- Reserves the next number of `space` on origin/main by pushing only the raised counter; nil when origin/main has
+-- no tracker/next. `extra`: ids that count besides origin's (the local tree's).
+local function reserveOnOrigin(space: string, extra: { string }): number?
+	local chosen: number? = nil
+	local r = publishFresh(function(paths, read)
+		local used = idsOf(paths, space)
+		for _, id in extra do
+			table.insert(used, id)
+		end
+		local n, change, err = reserve(space, used, read)
+		if err then
+			return err
+		end
+		chosen = n
+		return if change then { change :: publish.Change } else {}
+	end, function()
+		return `tracker: reserve {space} number {chosen or "?"}`
+	end)
+	if not r.ok then
+		fail(`could not reserve a number on origin/main: {r.reason}`)
+	end
+	return chosen
+end
+
+-- Offline: the local counter when there is one (never written), else the old rule.
+local function localNumber(space: string, legacy: () -> number): number
+	local c = localCounters()
+	if c then
+		return idsLib.nextFree(space, c, localIds(space))
+	end
+	return legacy()
+end
+
 local function flags(args: { string }): ({ string }, { [string]: { string } })
 	local pos: { string } = {}
 	local opts: { [string]: { string } } = {}
@@ -326,6 +435,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--include-active"
 			or a == "--open"
 			or a == "--fetch"
+			or a == "--force"
 			or a == "-O"
 		then
 			opts[a] = { "true" }
@@ -365,6 +475,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
+		refuseStale()
 		local raftId = opts["--raft"] and opts["--raft"][1]
 		local raft = raftId and store.get(raftId)
 		local state: store.State = if raft and raft.state == "active" then "active" else "backlog"
@@ -373,12 +484,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		end
 		if state == "backlog" and publishing() then
 			local chosen = ""
-			local r = publish.commit(".", function(paths)
+			local r = publishFresh(function(paths, read)
 				local ids = idsOf(paths, "issue")
-				for _, i in store.all("issue") do
-					table.insert(ids, i.id)
+				for _, id in localIds("issue") do
+					table.insert(ids, id)
 				end
-				chosen = store.formatId(prefix, statusLib.nextNumber(ids))
+				local n, counter, err = reserve("issue", ids, read)
+				if err then
+					return err
+				end
+				chosen = store.formatId(prefix, n or statusLib.nextNumber(ids))
 				local vars = {
 					ID = chosen,
 					TYPE = store.TYPES[prefix],
@@ -389,7 +504,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					DATE = today(),
 				}
 				local doc = withDesc(render("tracker/templates/issue/doc.md", vars), opts)
-				return {
+				local changes: { publish.Change } = {
 					{
 						path = `tracker/issues/{chosen}/{chosen}.md`,
 						content = withFront(doc, "status", stamp("new")),
@@ -400,6 +515,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 						mode = "100755",
 					},
 				}
+				if counter then
+					table.insert(changes, counter)
+				end
+				return changes
 			end, function()
 				return `tracker: new {chosen} {slug}`
 			end)
@@ -415,7 +534,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			print(`tracker/issues/{chosen}/{chosen}.md`)
 			return
 		end
-		local id = store.formatId(prefix, store.nextNumber("issue", originIds("issue")))
+		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
+		local reserved = if publishing() then reserveOnOrigin("issue", localIds("issue")) else nil
+		local n = reserved
+			or localNumber("issue", function()
+				return store.nextNumber("issue", originIds("issue"))
+			end)
+		local id = store.formatId(prefix, n)
 		local dir = store.dirFor("issue", state, id)
 		fs.writeDir(dir)
 		local vars = {
@@ -436,6 +561,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if not (rtype and store.PREFIX[rtype] and slug) then
 			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single]")
 		end
+		refuseStale()
 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
@@ -453,12 +579,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				fail("a raft needs at least one issue")
 			end
 			local chosen = ""
-			local r = publish.commit(".", function(paths, read)
+			local r = publishFresh(function(paths, read)
 				local known = idsOf(paths, "raft")
 				for _, raft in store.all("raft") do
 					table.insert(known, raft.id)
 				end
-				chosen = store.formatId("R", statusLib.nextNumber(known))
+				local n, counter, err = reserve("raft", known, read)
+				if err then
+					return err
+				end
+				chosen = store.formatId("R", n or statusLib.nextNumber(known))
 				local claim = stamp("preparing")
 				local changes: { publish.Change } = {}
 				for _, id in ids do
@@ -499,6 +629,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					content = render("tracker/templates/raft/check.sh", vars),
 					mode = "100755",
 				})
+				if counter then
+					table.insert(changes, counter)
+				end
 				return changes
 			end, function()
 				return `tracker: new raft {chosen} {slug}`
@@ -532,7 +665,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if #members == 0 then
 			fail("a raft needs at least one issue")
 		end
-		local id = store.formatId("R", store.nextNumber("raft", originIds("raft")))
+		local id = store.formatId(
+			"R",
+			localNumber("raft", function()
+				return store.nextNumber("raft", originIds("raft"))
+			end)
+		)
 		local dir = store.dirFor("raft", "backlog", id)
 		fs.writeDir(dir)
 		local ids: { string } = {}
@@ -611,7 +749,7 @@ function cmd.status(pos: { string })
 	end
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
-	local r = publish.commit(".", function(paths, read)
+	local r = publishFresh(function(paths, read)
 		moved = {}
 		local path = docPath(paths, id)
 		local text = path and read(path)
@@ -721,23 +859,46 @@ function cmd.members(pos: { string })
 	end
 end
 
+-- Prints every item it can read, both copies of a duplicated id included, then fails on the problems that stop
+-- store.find (c0880): the other commands refuse such a tree, so `list` says where the trouble is.
 function cmd.list(pos: { string })
+	local found = audit.scan(".")
+	table.sort(found, function(a, b)
+		return if a.id == b.id then a.path < b.path else a.id < b.id
+	end)
 	for _, kind in { "raft", "issue" } do
-		for _, item in store.all(kind) do
-			if not pos[1] or pos[1] == item.state then
-				local f = store.readFront(item.doc)
-				print(
-					string.format(
-						"%-6s %-8s %-8s %-7s %s",
-						item.id,
-						item.state,
-						store.typeOf(item),
-						f.raft or "",
-						f.title or item.slug
+		for _, f in found do
+			local doc = `{f.path}/{f.id}.md`
+			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
+				local state = stateOfPath(f.path .. "/")
+				if not pos[1] or pos[1] == state then
+					local fm = store.readFront(doc)
+					local ftype = if kind == "issue"
+						then store.TYPES[string.sub(f.id, 1, 1)]
+						else (fm.type or "?")
+					print(
+						string.format(
+							"%-6s %-8s %-8s %-7s %s",
+							f.id,
+							state,
+							ftype,
+							fm.raft or "",
+							fm.title or fm.slug or ""
+						)
 					)
-				)
+				end
 			end
 		end
+	end
+	local broken = 0
+	for _, p in audit.run(".") do
+		if audit.ITEM_CODES[p.code] then
+			stdio.ewrite(audit.format(p) .. "\n")
+			broken += 1
+		end
+	end
+	if broken > 0 then
+		process.exit(1)
 	end
 	-- f0420 and c0420 share a number (issues have one number space): harmless, but worth a warning
 	local byNumber: { [string]: { string } } = {}
@@ -755,6 +916,19 @@ function cmd.list(pos: { string })
 	table.sort(shared)
 	for _, n in shared do
 		stdio.ewrite(`warning: number {n} is used by {table.concat(byNumber[n], ", ")}\n`)
+	end
+end
+
+-- Every problem in the tracker tree (c0880); fails when any is an error. Read-only.
+function cmd.audit()
+	local problems = audit.run(".")
+	for _, p in problems do
+		print(audit.format(p))
+	end
+	local errors = audit.errors(problems)
+	print(`audit: {errors} errors, {#problems - errors} warnings`)
+	if errors > 0 then
+		process.exit(1)
 	end
 end
 
@@ -789,25 +963,103 @@ local function originMainIds(kind: string): { string }
 	return idsOf(paths, kind)
 end
 
+-- Rewrites `old` to `new` as a whole id in every .md and .sh file under `dir`.
+local function rewriteUnder(dir: string, old: string, new: string)
+	for _, name in fs.readDir(dir) do
+		local p = `{dir}/{name}`
+		if fs.isDir(p) then
+			rewriteUnder(p, old, new)
+		elseif string.match(name, "%.md$") or string.match(name, "%.sh$") then
+			local text = fs.readFile(p)
+			local replaced, n = string.gsub(text, `%f[%w]{old}%f[^%w]`, new)
+			if n > 0 then
+				fs.writeFile(p, replaced)
+			end
+		end
+	end
+end
+
+-- `renumber <old> [<new>]`, or `renumber <item directory> [<new>]` for one copy of a duplicated id: only that folder
+-- moves, and ids are rewritten only inside it, because every other reference means the other copy (c0880).
 function cmd.renumber(pos: { string })
 	refuseInMainCheckout("renumber")
-	local old, new = pos[1], pos[2]
-	if not old or (new and string.sub(old, 1, 1) ~= string.sub(new, 1, 1)) then
+	local arg, new = pos[1], pos[2]
+	if not arg then
 		fail("usage: renumber <old> [<new>] (same type prefix)")
 	end
-	if not new then
-		local kind = store.get(old).kind
-		local n = store.nextAbove(kind, originMainIds(kind))
-		if n > 9999 then
-			fail("no number above 9999 is free")
+	local item: store.Item
+	local byDir = string.find(arg, "/", 1, true) ~= nil
+	if byDir then
+		local path = string.gsub(arg, "/+$", "")
+		local kindDir, state, id = string.match(path, "^tracker/(%a+)/(%a+)/([^/]+)$")
+		if not kindDir then
+			kindDir, id = string.match(path, "^tracker/(%a+)/([^/]+)$")
+			state = nil
 		end
-		new = store.formatId(string.sub(old, 1, 1), n)
+		local space = id and idsLib.spaceOf(id)
+		local want = if kindDir == "issues" then "issue" elseif kindDir == "rafts" then "raft" else nil
+		local okState = state == nil or state == "active" or state == "done"
+		if not (id and space and space == want and okState and fs.isFile(`{path}/{id}.md`)) then
+			fail(`renumber: {arg} is not an item directory (tracker/<issues|rafts>/[active/|done/]<id>)`)
+		end
+		if state == "done" then
+			local others: { string } = {}
+			for _, f in audit.scan(".") do
+				if f.id == id and f.path ~= path then
+					table.insert(others, f.path)
+				end
+			end
+			fail(
+				`renumber: {path} is done (its specs are promoted under its id); renumber the copy that is not in done/: {table.concat(
+					others,
+					", "
+				)}`
+			)
+		end
+		local st: store.State = if state then state :: string else "backlog"
+		item = {
+			id = id :: string,
+			kind = space :: string,
+			state = st,
+			dir = path,
+			doc = `{path}/{id}.md`,
+			slug = "",
+		}
+	else
+		item = store.get(arg)
 	end
-	if store.find(new) then
+	local old = item.id
+	if new and string.sub(old, 1, 1) ~= string.sub(new, 1, 1) then
+		fail("usage: renumber <old> [<new>] (same type prefix)")
+	end
+	if new and store.find(new) then
 		fail(`{new} already exists`)
 	end
-	local item = store.get(old)
-	local dest = store.dirFor(item.kind, item.state, new)
+	if not new then
+		refuseStale()
+		local kind = item.kind
+		local n: number? = nil
+		if publishing() then
+			n = reserveOnOrigin(kind, localIds(kind))
+		elseif localCounters() then
+			local used = localIds(kind)
+			for _, id in originMainIds(kind) do
+				table.insert(used, id)
+			end
+			n = idsLib.nextFree(kind, localCounters() :: idsLib.Counters, used)
+		end
+		if not n then
+			n = store.nextAbove(kind, originMainIds(kind))
+		end
+		if (n :: number) > 9999 then
+			fail("no number above 9999 is free")
+		end
+		new = store.formatId(string.sub(old, 1, 1), n :: number)
+	end
+	local dest = store.dirFor(item.kind, item.state, new :: string)
+	if fs.isDir(dest) then
+		fail(`{new} already exists`)
+	end
 	local tracked = sh.run("git", { "ls-files", "--error-unmatch", item.doc }).ok
 	if tracked then
 		sh.git({ "mv", item.dir, dest })
@@ -816,23 +1068,208 @@ function cmd.renumber(pos: { string })
 		fs.move(item.dir, dest)
 		fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
 	end
-	-- rewrite references everywhere in the tracker
-	local function walk(dir: string)
-		for _, name in fs.readDir(dir) do
-			local p = `{dir}/{name}`
-			if fs.isDir(p) then
-				walk(p)
-			elseif string.match(name, "%.md$") or string.match(name, "%.sh$") then
-				local text = fs.readFile(p)
-				local replaced, n = string.gsub(text, `%f[%w]{old}%f[^%w]`, new)
-				if n > 0 then
-					fs.writeFile(p, replaced)
-				end
-			end
+	rewriteUnder(if byDir then dest else store.ROOT, old, new :: string)
+	print(`{old} -> {new}`)
+end
+
+local function refuseDirty(what: string)
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail(`{what}: the working tree is not clean`)
+	end
+end
+
+local function auditErrors(skip: (string) -> boolean): { string }
+	local out: { string } = {}
+	for _, p in audit.run(".") do
+		if p.level == "error" and not skip(p.code) then
+			table.insert(out, audit.format(p))
 		end
 	end
-	walk(store.ROOT)
-	print(`{old} -> {new}`)
+	return out
+end
+
+local function noSkip(_: string): boolean
+	return false
+end
+
+-- `compact [--force]`: renumbers every item from 0001 (c0870), as one local commit in a worktree cut from origin/main.
+function cmd.compact(_: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("compact")
+	refuseDirty("compact")
+	sh.git({ "fetch", "-q", "--prune", "origin" })
+	local base = sh.git({ "rev-parse", "origin/main" })
+	if sh.git({ "rev-parse", "HEAD" }) ~= base then
+		fail(
+			"compact runs on a branch cut from origin/main with no commits of its own: HEAD is not origin/main"
+		)
+	end
+	local busy = compactLib.busyRefs(sh.git({ "branch", "--show-current" }))
+	if #busy > 0 and not opts["--force"] then
+		fail(
+			`compact: these branches change tracker/ or tests/acceptance/: {table.concat(busy, ", ")}\n`
+				.. "land or delete them first, or pass --force and run tracker.sh remap on each"
+		)
+	end
+	local before = auditErrors(noSkip)
+	if #before > 0 then
+		fail("compact: the tracker tree has problems; fix them first:\n" .. table.concat(before, "\n"))
+	end
+	local found = audit.scan(".")
+	local all: { string } = {}
+	local counts = { issue = 0, raft = 0 }
+	for _, f in found do
+		table.insert(all, f.id)
+		local space = idsLib.spaceOf(f.id) :: string
+		counts[space] += 1
+	end
+	local map = idsLib.plan(all)
+	compactLib.apply(map, found)
+	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
+	fs.writeFile(
+		idsLib.MAP_FILE,
+		idsLib.formatMap(map, `tracker.sh compact, {today()}, from origin/main {base}`)
+	)
+	local after = auditErrors(noSkip)
+	if #after > 0 then
+		fail(
+			"compact: the result fails the audit (discard it with git reset --hard HEAD):\n"
+				.. table.concat(after, "\n")
+		)
+	end
+	sh.git({ "add", "-A" })
+	sh.git({ "commit", "--quiet", "-m", "tracker: compact ids" })
+	print(`compacted {counts.issue} issues and {counts.raft} rafts; the map is in {idsLib.MAP_FILE}`)
+	if #busy > 0 then
+		print(
+			`in flight: {table.concat(busy, ", ")}: on each, run tracker.sh remap before merging origin/main`
+		)
+	end
+end
+
+-- `remap`: a branch that was in flight during a compaction takes the new ids (c0870): origin/main's map, plus numbers
+-- from origin's counter for the branch's own items, then one commit. Merge origin/main afterwards.
+function cmd.remap()
+	refuseInMainCheckout("remap")
+	refuseDirty("remap")
+	sh.git({ "fetch", "-q", "origin", "main" })
+	local shown = sh.run("git", { "show", `origin/main:{idsLib.MAP_FILE}` })
+	if not shown.ok then
+		fail(`remap: origin/main has no {idsLib.MAP_FILE}: nothing was compacted`)
+	end
+	if fs.isFile(idsLib.MAP_FILE) and fs.readFile(idsLib.MAP_FILE) == shown.stdout then
+		fail("remap: this branch already has origin/main's compaction")
+	end
+	local map = idsLib.parseMap(shown.stdout)
+	if not map then
+		fail(`remap: origin/main's {idsLib.MAP_FILE} does not parse`)
+	end
+	local m = map :: { [string]: string }
+	local found = audit.scan(".")
+	local unmapped: { string } = {}
+	for _, f in found do
+		if not m[f.id] and not table.find(unmapped, f.id) then
+			table.insert(unmapped, f.id)
+		end
+	end
+	-- The branch's own items, in plan order (number, then prefix), take consecutive numbers from origin's counter,
+	-- which one publish raises past the last of them. Only origin's ids count: the branch's are in the old scheme.
+	local order = idsLib.plan(unmapped)
+	table.sort(unmapped, function(a, b)
+		return order[a] < order[b]
+	end)
+	local function number(c: idsLib.Counters, used: { string }): idsLib.Counters
+		local raised: idsLib.Counters = { issue = c.issue, raft = c.raft }
+		for _, space in { "issue", "raft" } do
+			local n = idsLib.nextFree(space, c, used)
+			for _, id in unmapped do
+				if idsLib.spaceOf(id) == space then
+					m[id] = store.formatId(string.sub(id, 1, 1), n)
+					n += 1
+				end
+			end
+			if space == "raft" then
+				raised.raft = n
+			else
+				raised.issue = n
+			end
+		end
+		return raised
+	end
+	if #unmapped > 0 then
+		if publishing() then
+			local r = publish.commit(".", function(paths, read)
+				local c = idsLib.parse(read(idsLib.FILE) or "")
+				if not c then
+					return `origin/main has no usable {idsLib.FILE}`
+				end
+				local used = idsOf(paths, "issue")
+				for _, id in idsOf(paths, "raft") do
+					table.insert(used, id)
+				end
+				return { { path = idsLib.FILE, content = idsLib.format(number(c, used), phrase()) } }
+			end, "tracker: reserve numbers for a remap")
+			if not r.ok then
+				fail(`remap: could not reserve numbers on origin/main: {r.reason}`)
+			end
+		else
+			local _, paths = originTree()
+			local c = idsLib.parse(sh.run("git", { "show", `origin/main:{idsLib.FILE}` }).stdout)
+			if not c then
+				fail(`remap: origin/main has no usable {idsLib.FILE}`)
+			end
+			local used = idsOf(paths, "issue")
+			for _, id in idsOf(paths, "raft") do
+				table.insert(used, id)
+			end
+			number(c :: idsLib.Counters, used)
+		end
+	end
+	compactLib.apply(m, found)
+	sh.git({ "add", "-A" })
+	sh.git({ "commit", "--quiet", "-m", "tracker: remap ids" })
+	-- Then merge origin/main against the merge base with the same map applied: every path then matches on all three
+	-- sides, so git never has to guess a rename (similar documents, such as stubs, get paired wrongly).
+	local mb = sh.git({ "merge-base", "HEAD", "origin/main" })
+	local scratch = ".cache/tracker-remap-base"
+	fs.writeDir(".cache")
+	sh.run("git", { "worktree", "remove", "--force", scratch })
+	sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
+	compactLib.apply(m, audit.scan(scratch), scratch)
+	local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
+	local baseTree = process.exec("git", { "write-tree" }, { cwd = scratch })
+	sh.run("git", { "worktree", "remove", "--force", scratch })
+	if not addBase.ok or not baseTree.ok then
+		fail("remap committed, but the remapped merge base could not be built: git merge origin/main by hand")
+	end
+	local mt = sh.run(
+		"git",
+		{ "merge-tree", "--write-tree", `--merge-base={sh.trim(baseTree.stdout)}`, "HEAD", "origin/main" }
+	)
+	if not mt.ok then
+		fail(
+			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve\n{mt.stdout}`
+		)
+	end
+	local tree = string.match(mt.stdout, "^(%x+)") :: string
+	local merge = sh.git({
+		"commit-tree",
+		tree,
+		"-p",
+		"HEAD",
+		"-p",
+		"origin/main",
+		"-m",
+		"Merge origin/main after remap",
+	})
+	sh.git({ "merge", "--quiet", "--ff-only", merge })
+	local lines: { string } = {}
+	for _, f in found do
+		if m[f.id] ~= f.id then
+			table.insert(lines, `{f.id} -> {m[f.id]}`)
+		end
+	end
+	table.sort(lines)
+	print(table.concat(lines, "\n"))
 end
 
 -- Converts documents that still carry their slug in the filename (legacy layout) to `<ID>.md` with
@@ -937,6 +1374,7 @@ function cmd.start(pos: { string })
 		end
 	end
 	if publishing() then
+		refuseStale() -- before the claim file is written
 		local ids = { raft.id }
 		for _, m in members do
 			table.insert(ids, m.id)
@@ -947,7 +1385,7 @@ function cmd.start(pos: { string })
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
 		sh.writeReplacing(claimFile(raft.id), claim)
 		local raftPath: string? = nil
-		local r = publish.commit(".", function(paths, read)
+		local r = publishFresh(function(paths, read)
 			local changes: { publish.Change } = {}
 			for _, id in ids do
 				local path = docPath(paths, id)
@@ -1709,6 +2147,7 @@ end
 -- sandboxes on purpose (specs do), so they alone are exempt.
 local READ_ONLY: { [string]: boolean } = {
 	list = true,
+	audit = true,
 	find = true,
 	members = true,
 	metrics = true,

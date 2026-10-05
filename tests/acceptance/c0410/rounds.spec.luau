@@ -3,6 +3,7 @@
 -- effect of second-order reviews can be measured. Done rafts never change, so their counts are fixed.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local renamed = require("@tests/lib/renamed")
 local t = require("@tests/lib/t")
 
 local function metrics(cwd: string?): string
@@ -90,10 +91,13 @@ return t.spec("c0410 review rounds in metrics", function(it)
 		for _, r in got do
 			by[r[1]] = r
 		end
-		t.expect(by.R0010).toEqual({ "R0010", "3", "2", "classic" })
-		t.expect(by.R0030).toEqual({ "R0030", "3", "2", "classic" })
-		t.expect(by.R0050).toEqual({ "R0050", "4", "1", "classic" })
-		t.expect(by.R0070[4]).toBe("second-order") -- its first design review used the new format
+		-- real rafts, by the ids they have now (c0870: the user's compaction renumbers them)
+		local r10, r30, r50, r70 =
+			renamed.id("R0010"), renamed.id("R0030"), renamed.id("R0050"), renamed.id("R0070")
+		t.expect(by[r10]).toEqual({ r10, "3", "2", "classic" })
+		t.expect(by[r30]).toEqual({ r30, "3", "2", "classic" })
+		t.expect(by[r50]).toEqual({ r50, "4", "1", "classic" })
+		t.expect(by[r70][4]).toBe("second-order") -- its first design review used the new format
 	end)
 
 	it("prints after the per-type table and before the rework lines", function()

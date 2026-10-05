@@ -151,6 +151,10 @@ return t.spec("worktrees", function(it)
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{seed}/tracker/next`) then
+			fs.removeFile(`{seed}/tracker/next`)
+		end
 		local rafts =
 			{ { "alpha", "demo" }, { "beta", "other" }, { "gamma", "third" }, { "delta", "fourth" } }
 		for _, pair in rafts do

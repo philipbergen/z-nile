@@ -132,6 +132,10 @@ return t.spec("workstreams", function(it)
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{seed}/tracker/next`) then
+			fs.removeFile(`{seed}/tracker/next`)
+		end
 		-- twenty issues f0010..f0200
 		for _, slug in
 			{
