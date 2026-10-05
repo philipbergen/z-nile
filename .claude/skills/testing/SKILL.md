@@ -46,6 +46,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
 - **Deterministic**: no wall-clock time and no unseeded randomness. Pass `dt` and a seeded RNG instead. The one timing exception is `sim.bench` budgets (see Simulations).
 - **One behavior per case**, with a name that states it.
 - **Assert on public API results**, never on internals.
+- **Survive a compaction** (`tracker.sh compact` renumbers every item): a spec that pins a real tracker item maps its id through `tests/lib/renamed.luau` (`renamed.id("R0010")`), and test data that names a `tests/acceptance/<id>` path spells it in two parts (`"tests/" .. "acceptance/"`), or the compaction rewrites it.
 - **Hard to fake.** An acceptance spec must fail for plausible wrong implementations: an off-by-one, a missing edge case, a hard-coded value. Include at least one case that a hard-coded or partial implementation would fail.
 - **No browsers.** `tests/run` puts recording `open` and `xdg-open` stubs first on `PATH` for the whole run (workers and nested runners included, through `PICKMAN_OPEN_GUARD`) and fails the run if any is called. Run `tracker.sh board` with `-O`; a spec that tests opening puts its own stubs first on `PATH`. A spec that sets `PATH` for a child prepends to it, never replaces it, or the guard's stubs are lost.
 

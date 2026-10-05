@@ -77,6 +77,10 @@ return t.spec("c0480 start checks depends_on", function(it)
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{dir}/tracker/next`) then
+			fs.removeFile(`{dir}/tracker/next`)
+		end
 		for _, slug in { "base", "needs-base", "pair-a", "pair-b", "ghost", "late-a", "late-b" } do
 			must(tr({ "new", "issue", "f", slug }), "new issue " .. slug)
 		end

@@ -98,6 +98,10 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{work}/tracker/next`) then
+			fs.removeFile(`{work}/tracker/next`)
+		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha" }), "new issue")

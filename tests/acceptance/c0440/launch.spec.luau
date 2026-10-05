@@ -137,6 +137,10 @@ return t.spec("launch", function(it)
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{seed}/tracker/next`) then
+			fs.removeFile(`{seed}/tracker/next`)
+		end
 		must(tr(seed, { "new", "issue", "f", "alpha" }), "new f0010")
 		must(tr(seed, { "new", "issue", "f", "beta" }), "new f0020")
 		must(tr(seed, { "new", "raft", "feature", "demo", "f0010" }), "raft demo")

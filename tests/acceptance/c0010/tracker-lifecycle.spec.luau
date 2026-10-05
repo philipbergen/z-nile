@@ -92,6 +92,10 @@ return t.spec("tracker lifecycle", function(it)
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{dir}/tracker/next`) then
+			fs.removeFile(`{dir}/tracker/next`)
+		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new f")).toBe("tracker/issues/f0010/f0010.md")

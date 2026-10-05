@@ -1,6 +1,7 @@
 --!strict
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
+local ids = require("./ids")
 local process = require("@lune/process")
 local task = require("@lune/task")
 
@@ -15,7 +16,11 @@ local function trim(s: string): string
 end
 
 -- tracker/(issues|rafts)/[active/ | done/]<ID>/(<ID>.md | check.sh), the id's prefix matching the kind.
+-- Also the counter file, tracker/next (c0870).
 function publish.allowed(path: string): boolean
+	if path == ids.FILE then
+		return true
+	end
 	if string.find(path, "..", 1, true) or string.sub(path, 1, 1) == "/" then
 		return false
 	end
@@ -161,6 +166,21 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			local existing = read(c.path)
 			if existing and string.sub(c.path, -9) == "/check.sh" then
 				return fail(`{c.path} already exists on origin/main: check.sh is never rewritten`)
+			end
+			if c.path == ids.FILE then
+				-- the counter only goes up: a lower value would hand out numbers already given
+				local new = ids.parse(c.content)
+				local old = if existing then ids.parse(existing) else nil
+				if not new then
+					return fail(`{c.path}: not two counter lines (issue <n> <phrase>, raft <n> <phrase>)`)
+				end
+				if existing and not old then
+					return fail(`{c.path} on origin/main does not parse; fix it by pull request`)
+				end
+				if old and (new.issue < old.issue or new.raft < old.raft) then
+					return fail(`{c.path}: a published counter may only go up`)
+				end
+				continue
 			end
 			if string.find(c.content, "\r", 1, true) then
 				return fail(`{c.path}: carriage returns are not allowed in a published change`)

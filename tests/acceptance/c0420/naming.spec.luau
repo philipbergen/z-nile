@@ -111,6 +111,10 @@ return t.spec("document naming", function(it)
 				end
 			end
 		end
+		-- and its counter: without tracker/next ids follow the old rule (c0870)
+		if fs.isFile(`{seed}/tracker/next`) then
+			fs.removeFile(`{seed}/tracker/next`)
+		end
 
 		local out = must(tr({ "new", "issue", "f", "alpha" }), "new issue")
 		t.expect(out).toBe("tracker/issues/f0010/f0010.md")

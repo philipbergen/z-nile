@@ -5,6 +5,7 @@
 -- a write against this repository: the ref guard is proven by running its hook the way git would.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local renamed = require("@tests/lib/renamed")
 local t = require("@tests/lib/t")
 
 local function trim(s: string): string
@@ -120,14 +121,21 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_WORK_TREE = "fixture hook",
 	},
 }
+-- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
+-- rewrite never maps it a second time
+local C0640 = renamed.id("c0640")
 local EXEMPT: { [string]: boolean } = {
 	["tests/lib/fence.luau"] = true,
 	["scripts/lib/fence.sh"] = true,
 	["tests/tooling/repo-fence.spec.luau"] = true,
-	["tracker/issues/done/c0640/check.sh"] = true,
+	[`tracker/issues/done/{C0640}/check.sh`] = true,
 }
 for _, dir in
-	{ "tracker/issues/c0640/acceptance", "tracker/issues/active/c0640/acceptance", "tests/acceptance/c0640" }
+	{
+		`tracker/issues/{C0640}/acceptance`,
+		`tracker/issues/active/{C0640}/acceptance`,
+		"tests/acceptance/" .. C0640,
+	}
 do
 	EXEMPT[`{dir}/fence.spec.luau`] = true
 	EXEMPT[`{dir}/lock.spec.luau`] = true
