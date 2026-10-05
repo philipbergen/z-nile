@@ -1,2 +1,6 @@
-- F1: fixed: c0430's prompt edit now names the right rule: the sentence "One branch and one PR for this whole prompt" is in hard rule 2, which becomes "One raft branch and one PR…" with the amended commit rule, and hard rule 1 ("Follow the `execute-raft` skill") is stated to be untouched; AC6 checks both the new rule 2 wording and that rule 1 still exists (I confirmed the sentence and rule 1 in `tracker/templates/prompt.md` and ran `bash -n` on `check.sh`); consequences: none.
-- F2: fixed: c0420 step 1 now says its naming-spec cases can't pass until the layout switch (shared fixture, and the migrate case's `find` needs the new store), so `migrate` is checked by hand on a scratch legacy tracker first, and the spec is expected to fail until step 2; R0020's paragraph about R0060 now mentions the `depends_on: [c0420]` edit (the reviewer's note); consequences: none.
+# Refutations 006: R0020 (design mode)
+
+Verdict of round 6: approve, with two low findings.
+
+- F1: fixed: the raft-move case now first runs `status <raft> prepared` while the raft's own design is a draft and expects a refusal naming the raft and `design: ready`; a version that skips the raft's own design (`t ~= id` in the check) is killed (`run`). Consequences: none.
+- F2: fixed: the spec's read-only probe now includes `stamp` (a version that guards `stamp` fails `commands :: a tracker command in a directory that lost its .git refuses ...`, `run`); the garbled Repo-root guard sentence in c0053 is rewritten.

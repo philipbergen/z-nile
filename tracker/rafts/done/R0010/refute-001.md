@@ -1,6 +1,5 @@
-- F1: fixed 03cb086: the work continues from a fresh clone at ~/code/pickman, outside iCloud-synced ~/Documents. `git fsck` is clean there, and R0010's check.sh is re-run there by `tracker.sh done`. The follow-up (clone with --no-hardlinks, SETUP.md warning) is filed as backlog chore c0050, because the lifecycle spec is sequestered.
-- F2: fixed 03cb086: resolveRequire rejects an empty path, empty or "." segments, and ".." outside the leading "../" run. New tests/place/resolver.spec.luau failed 3/3 before the fix.
-- F3: fixed 03cb086: place.load() builds to a per-process .cache/place-test-<time>-<rand>.rbxl and removes it after loading.
-- F4: fixed 03cb086: scripts/affected.luau passes --no-renames to both git diffs.
-- F5: fixed (this commit): check.yml has a workflow-level `permissions: contents: read`.
-- F6: fixed (this commit): c0040 is listed under R0010's "Addressed during execution", and c0040's log records the understated spend and why AC1 only discriminates on bash < 4.4 (the only place the bug exists). The check.sh itself is left as committed, because check files are never edited during execution.
+# Refutations 001: R0010 (code mode)
+
+- F1: fixed: `tests/unit/Awareness` pins that size and brightness follow the distance along the maze: the player at (12,1) facing south and a ghost at (15,1) behind the top-middle wall get distance 11 and the size and brightness of 11 tiles, against an arrow for a ghost 3 tiles away in an open corridor that is bigger.
+- F2: fixed: a `tests/unit/Ghosts` case pins that a ghost leaves the house heading west, and a `tests/unit/Session` case pins that a session seeds its ghosts from its own seed (same seed, same generator state; another seed, another).
+- F3: fixed: `Levels.schedule` is memoised per level and tick rate and returns a frozen table (a unit case pins it); the step no longer builds a table every tick.

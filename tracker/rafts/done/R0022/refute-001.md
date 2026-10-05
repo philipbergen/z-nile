@@ -1,0 +1,1 @@
+- F1: fixed b357d24: the guard's re-run is wrapped in pcall; on failure it removes its guard directory, prints 'tests/run: could not re-run itself with the browser guard (is lune on PATH?)' and exits 1; new tooling spec tests/tooling/run-guard-relaunch.spec.luau pins it (fails without the fix). Ctrl-C leaving the directory is accepted (noted in c0057's Verification log).

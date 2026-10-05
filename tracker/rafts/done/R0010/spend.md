@@ -1,10 +1,13 @@
-# Spend: R0010 Foundation
+# Spend: R0010 Ghosts
 
 | issue | type | emergent | +lines | -lines | minutes | commits |
 |---|---|---|---|---|---|---|
-| c0010 | chore |  | 70 | 9 | 41.2 | 7 |
-| c0020 | chore |  | 243 | 18 | 37.1 | 3 |
-| c0040 | chore | yes | 1 | 1 | 0.3 | 2 |
+| f0020 | feature |  | 197 | 0 | 10.3 | 4 |
+| f0021 | feature |  | 247 | 2 | 13.9 | 4 |
+| f0022 | feature |  | 247 | 2 | 13.9 | 4 |
+| f0023 | feature |  | 279 | 0 | 14.4 | 4 |
+| f0032 | feature |  | 225 | 0 | 11.4 | 4 |
+| f0033 | feature |  | 443 | 0 | 22.5 | 4 |
 
-**Total:** +314 / -28 lines, 78.6 agent-minutes over 7 commits
-<!-- totals: added=314 removed=28 minutes=78.6 commits=7 -->
+**Total:** +1638 / -4 lines, 86.4 agent-minutes over 4 commits
+<!-- totals: added=1638 removed=4 minutes=86.4 commits=4 -->

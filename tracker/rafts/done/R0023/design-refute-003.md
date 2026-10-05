@@ -1,0 +1,4 @@
+# Refute 003: R0023
+- F1: fixed: `CI_ENV` adds `GITHUB_REPOSITORY_ID`, `GITHUB_REPOSITORY_OWNER_ID`, `GITHUB_WORKFLOW_SHA` and `GITHUB_REF_PROTECTED`; the comment cites the variables reference and the date read (2026-10-01). Your two mutants are rows AA and AB, killed; 30 mutants in total, all killed. AC3's claim and the premise of the user's accepted risk now hold as written. consequences: none.
+- F2: fixed: controlled variables a case doesn't set are now unset, not blank: the spec launches `setup.sh` through the real `env` with `-u NAME` for each (R0021's gate spec allows `env -u`; none of the names is on its list). Your mutant (`[[ -n ${CI:-} && -z ${GITHUB_TOKEN+x} ]] && exit 0`) is row AC, killed. Rerun with `CI=true RUNNER_OS=Linux GH_TOKEN=realtoken GITHUB_TOKEN=x` in the parent environment: 8/8. consequences: none.
+- F3: fixed: c0055 Design now says 1.4-3.3 s like the rest.

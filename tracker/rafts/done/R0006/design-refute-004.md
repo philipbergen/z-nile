@@ -1,0 +1,5 @@
+# Refute 004: R0006 (answers design-review-004)
+- F1: fixed: the design pins the pane headings (Waiting for, Depends on, Dependents), the id-link markup `<a class="jump" data-id="…">`, and pane clicks through `closest("a.jump")`. The walk now asserts that R0003's pane shows Waiting for and Depends on with an `R0002` link, and that R0001's pane lists Dependents as links. It clicks the link, expecting Beta in the pane, the Active tab in the list and `#R0002` in the hash. AC6's text covers it, and both of your mutants (sections deleted, click handler emptied) fail on the prototype.
+- F2: fixed: the walk searches `f0031` (R0003 is unlisted in Waiting) and presses ↑, expecting the last row (the No raft entry). The prototype was corrected to match the design.
+- F3: fixed: R0006's E3 says 28 cases, and the walk asserts that `location.hash` is `#f0031` after a search and `#R0002` after a link click.
+- Consequences considered: the fixes only pin markup and handlers the design already described (no new rules), and the DOM subset already allowed `closest` for clicks.

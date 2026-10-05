@@ -1,11 +1,13 @@
-# Spend: c0041 Worktrees by default
+# Spend: c0041 Game alias requires
 
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
-| 1 | 2026-09-30 21:38 | c0041: worktree and worktree-prune, main-checkout guards, duplicate-id error, shared-number warning, hooks, settings | 189 | 6 | 1.5 | explicit |
-| 2 | 2026-09-30 21:39 | c0041: worktree rule in the skills, prompt template, AGENTS.md and SETUP.md; verification logs | 36 | 25 | 1.0 | explicit |
-| 3 | 2026-09-30 21:53 | R0020: review-001 fixes: fetch --prune and gone-upstream warning (F1), list warning after the table and Environment sentence (F2), migrate on odd documents (F3), make-issue step order (F4) | 112 | 12 | 1.2 | explicit |
-| 4 | 2026-09-30 21:55 | tracker: done R0020 | 0 | 0 | 0.2 | raft+proportional |
+| 1 | 2026-09-30 05:57 | c0041: graph @game resolution | 114 | 3 | 0.6 | focus |
+| 2 | 2026-09-30 05:57 | c0041: fix @game prefix length | 1 | 1 | 0.1 | focus |
+| 3 | 2026-09-30 06:05 | c0041: place resolves @game from tree root | 10 | 3 | 7.8 | focus |
+| 4 | 2026-09-30 06:06 | c0041: meta rule, skill docs, tooling spec, log | 36 | 2 | 0.3 | focus |
+| 5 | 2026-09-30 06:08 | c0041: review-001 fixes (init segment, frozen roots, tie-break test) | 15 | 0 | 2.4 | focus |
+| 6 | 2026-09-30 06:08 | tracker: done R0005 | 0 | 0 | 0.3 | raft |
 
-**Total:** +337 / -43 lines, 3.9 agent-minutes over 4 commits
-<!-- totals: added=337 removed=43 minutes=3.9 commits=4 -->
+**Total:** +176 / -9 lines, 11.5 agent-minutes over 6 commits
+<!-- totals: added=176 removed=9 minutes=11.5 commits=6 -->

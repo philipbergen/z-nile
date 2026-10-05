@@ -1,0 +1,4 @@
+- F1: fixed 688956b: `worktree` and `worktree-prune` fetch with `--prune`, and resuming a local branch whose upstream is `[gone]` warns; three cases in `tests/tooling/worktree-fetch.spec.luau`, two of which fail without `--prune`.
+- F2: fixed 688956b: `list` prints its shared-number warning after the table, and the prompt template's Environment section says never to edit the main checkout (it is also in hard rule 2).
+- F3: fixed 688956b: `migrate` reports a document with no frontmatter and leaves it alone (exit 1), fills an empty `slug:`, and the missing-slug error no longer tells you to run `migrate`; two cases in `tests/tooling/migrate-odd.spec.luau`.
+- F4: fixed 688956b: make-issue opens the capture worktree as step 0, and step 6 only commits and lands.

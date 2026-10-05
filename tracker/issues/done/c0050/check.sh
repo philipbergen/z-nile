@@ -7,25 +7,13 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to 
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0050"
 
-spec="$A/clone.spec.luau"
-# The spec's cases share one fixture, so it runs once; each check then requires its own named cases to
-# exist in the spec and not fail, and that the spec loaded at all.
-spec_out=$(lune run tests/run -- "$spec" 2>&1)
-cases_pass() { # $@: case-name prefixes that must exist in the spec and not appear in a FAIL line
-  if grep -q "could not load spec" <<<"$spec_out"; then echo "$spec_out"; return 1; fi
-  grep -Eq "^[0-9]+ passed, [0-9]+ failed, 1 spec files$" <<<"$spec_out" || { echo "$spec_out"; return 1; }
-  local c
-  for c in "$@"; do
-    grep -qF "it(\"$c" "$spec" || { echo "the spec has no case starting \"$c\""; return 1; }
-    if grep -F "FAIL" <<<"$spec_out" | grep -qF ":: $c"; then grep -F ":: $c" <<<"$spec_out"; return 1; fi
-  done
-}
-
-check "AC1: clone.isolated shares no object file with the repository, and a failed clone names its source" cases_pass \
-  "an isolated clone shares no object file with the repo" "a failed clone is an error that names the source"
-check "AC2: no spec clones the repository with a plain git clone" cases_pass \
-  "no spec clones the repository with a plain git clone"
-check "AC3: SETUP.md warns against a cloud-synced checkout" cases_pass \
-  "SETUP.md warns against a checkout in a cloud-synced folder"
+# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
+# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+check "AC1: start refuses an issue whose dependency outside the raft is unknown, in the backlog or active, naming both ids" lune run tests/run -- "$A/start-depends.spec.luau"
+check "AC2: a refused start changes nothing" lune run tests/run -- "$A/start-depends.spec.luau"
+check "AC3: start proceeds once the dependency is done, and for a dependency on a raft-mate" lune run tests/run -- "$A/start-depends.spec.luau"
+check "AC4: the tracker skill's start row documents the rule" lune run tests/run -- "$A/start-depends.spec.luau"
+check "AC5: the acceptance spec is formatted and linted" bash -c 'stylua --check "$0" && selene --quiet "$0"' "$A"
+check "AC6: the full gate passes" scripts/check.sh --full
 
 finish

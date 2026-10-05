@@ -1,0 +1,11 @@
+# Spend: c0006 Lifecycle spec clone isolation
+
+| # | when | commit | +lines | -lines | minutes | attribution |
+|---|---|---|---|---|---|---|
+| 1 | 2026-10-01 01:33 | c0006: isolated clones for specs, SETUP.md cloud-sync row (stream, reviewed) | 28 | 6 | 25.0 | explicit |
+| 2 | 2026-10-01 01:43 | c0006: clone.isolated returns dest so the promoted spec type-checks (found by promote-check) | 4 | 2 | 3.0 | explicit |
+| 3 | 2026-10-01 01:50 | R0013: addressed during execution | 0 | 0 | 0.2 | raft+proportional |
+| 4 | 2026-10-01 01:51 | tracker: done R0013 | 0 | 0 | 0.2 | raft+proportional |
+
+**Total:** +32 / -8 lines, 28.4 agent-minutes over 4 commits
+<!-- totals: added=32 removed=8 minutes=28.4 commits=4 -->

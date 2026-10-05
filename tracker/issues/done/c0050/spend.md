@@ -1,11 +1,10 @@
-# Spend: c0050 Lifecycle spec clone isolation
+# Spend: c0050 Start refuses unfinished dependencies
 
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
-| 1 | 2026-10-01 01:33 | c0050: isolated clones for specs, SETUP.md cloud-sync row (stream, reviewed) | 28 | 6 | 25.0 | explicit |
-| 2 | 2026-10-01 01:43 | c0050: clone.isolated returns dest so the promoted spec type-checks (found by promote-check) | 4 | 2 | 3.0 | explicit |
-| 3 | 2026-10-01 01:50 | R0130: addressed during execution | 0 | 0 | 0.2 | raft+proportional |
-| 4 | 2026-10-01 01:51 | tracker: done R0130 | 0 | 0 | 0.2 | raft+proportional |
+| 1 | 2026-10-01 05:38 | c0050: start refuses unfinished dependencies | 18 | 1 | 10.0 | explicit |
+| 2 | 2026-10-01 06:46 | R0016: addressed during execution | 0 | 0 | 3.0 | focus |
+| 3 | 2026-10-01 06:55 | tracker: done R0016 | 0 | 0 | 3.1 | raft+proportional |
 
-**Total:** +32 / -8 lines, 28.4 agent-minutes over 4 commits
-<!-- totals: added=32 removed=8 minutes=28.4 commits=4 -->
+**Total:** +18 / -1 lines, 16.1 agent-minutes over 3 commits
+<!-- totals: added=18 removed=1 minutes=16.1 commits=3 -->

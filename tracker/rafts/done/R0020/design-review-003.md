@@ -1,81 +1,110 @@
 # Review 003: R0020 (design mode)
-Inputs: prep-c0041-scope @ 5f44f2c: R0020 doc + check.sh; c0041 doc, check.sh, acceptance/worktree.spec.luau; design-review-001/002 and design-refute-001/002; skills (review, tracker, execute-raft, make-issue, ticket-prep, make-prompt, testing, architecture, metrics), AGENTS.md, SETUP.md, tracker/templates/{prompt.md,raft/check.sh}, .claude/settings.json, .gitignore, .github/workflows/check.yml, scripts/tracker/{main,store}.luau, scripts/tracker.sh, scripts/hooks/*.sh, scripts/lib/ac.sh, scripts/check.sh, tests/run.luau, tests/acceptance/c0010 and (on main @ 61c6a64) tests/acceptance/c0410 and tests/tooling/metrics-rounds. Scratch git experiments ran only in the session scratchpad; nothing was written in the repo except this file.
-Dropped from design-review-002 (the fixes are real in the design, spec and check.sh): F1 (spec:244-261), F3 (the `prep-<slug>` rule), F4 (prune first, plus spec:302), F5 (except the leftover in F4 below), F6, F7 (except the leftover in F4 below), F9, F10 (spec:180), F12 (spec:165), F13 (AC5 settings grep), F14 (Test plan says four; spec:214; spec:234). F2, F8 and F11 are repeated below because their fixes don't work as written.
+Inputs: worktree prep-publish-state-to-main at a3ac240 plus uncommitted prep files: `tracker/rafts/R0020/{R0020.md,check.sh,design-review-001.md,design-refute-001.md,design-review-002.md,design-refute-002.md}`; `tracker/issues/c0053/{c0053.md,check.sh}`, `acceptance/{status,publish,commands}.spec.luau`, `replacements/c0005-worktree.spec.luau`, `experiments/{status.luau.txt,publish.luau.txt,prototype.patch}`; `scripts/tracker/main.luau`, `store.luau`, `scripts/tracker.sh`, `tests/run.luau`, `.github/workflows/check.yml`; the promoted specs that read touched files; review, tracker, testing and ticket-prep skills (worktree and `origin/main`); `origin/main` at 55e94b3. All runs were made in a scratch clone outside the repo with its own `.git` and its own bare origin (removed afterwards):
+- Unpatched copy with the prep files: `tracker.sh check c0053` gives 1/8. AC4 passes; AC3 fails (1 passed, 21 failed); AC5-AC8 fail with their own messages. These are the right reasons.
+- Prototype plus the c0005 replacement at a3ac240: the three c0053 specs give 45 passed, and `check.sh --full` gives 574 passed in 94 spec files. This reproduces E7.
+- The same, merged with `origin/main` 55e94b3 (R0016): the patch merges cleanly, `check.sh --full` gives 604 passed in 99 spec files, and the c0053 specs give 45 passed.
+- The same with `GIT_CEILING_DIRECTORIES=<root>/.cache`: 604 passed in 99 spec files, and the c0053 specs give 45 passed (see F3).
 
-### F1 [high] (repeat of design-review-002 F11) The Bootstrap for executing R0020 fails at its first two protocol steps
-Where: R0020 "Order & dependencies", Bootstrap bullet; execute-raft Phase 0 steps 1-2 as inlined in R0020's prompt (today's text)
-Evidence: the Bootstrap creates the branch by hand with `git -C <root> worktree add -b R0020-worktrees-by-default ../pickman-R0020 origin/main`, then says the executor runs `start`, and that "today's `start` would also work". It doesn't:
-- `start` runs in Phase 0, before any code is written, so it is today's `cmd.start`, which calls `git switch -c R0020-worktrees-by-default` unconditionally (main.luau:269-270). The branch already exists, so it fails. Reproduced in the scratchpad on git 2.54: `fatal: a branch named 'R0020-worktrees-by-default' already exists`, rc=128. The "branch already current" path only exists after implementation step 1.
-- Before `start`, the inlined execute-raft Phase 0 step 1 says `git switch main && git pull --ff-only`. In a linked worktree that fails because `main` is checked out in the root: reproduced, `fatal: 'main' is already used by worktree at '<root>'`, rc=128. The prompt's hard rule 2 and the whole of Phase 0 are the executor's binding protocol, and the Bootstrap doesn't say to skip or replace them.
+Dropped from review-002: F1 (renumbered; the base is stale again, see F2), F4, F5, F6, F7, F8, F9. Their fixes are in the documents and the prototype, and the spot checks hold.
 
-A context-free executor therefore either stops on a failed first command or improvises (switching branches, recreating the worktree) in exactly the checkout-mutating way this raft exists to prevent.
-Fix: make the Bootstrap work with today's code and say which protocol steps it replaces:
-1. `git -C <root> fetch origin && git -C <root> worktree add --detach ../pickman-R0020 origin/main`. Detached, so no branch exists yet.
-2. Launch the agent there.
-3. Tell the executor: "Phase 0 step 1 is replaced by `scripts/check.sh --full` in this worktree (don't `git switch main`). Step 2 is today's `scripts/tracker.sh start R0020`, which creates the branch from the detached HEAD."
+The user decisions (the c0005 rewrite in prep, and three-word stamps) are not reopened. F1 and F2 are about how they were implemented.
 
-Re-run that sequence in a scratch clone to prove it.
-
-### F2 [high] (repeat of design-review-002 F2) The designed id-collision handling can neither detect nor resolve the collision it targets
-Where: c0041 Design, "The worktree rule" 3.0 (landing step 0), `store.luau` paragraph, Usability; tracker skill "Conflicts"; `cmd.renumber` (main.luau:215-250)
+### F1 [high] Every stamp the CLI writes is the same phrase, so the user's "identical concurrent moves conflict" decision is not implemented, and claim ownership is decided by a constant
+Where: `prototype.patch` `stamp()` in main.luau: `math.randomseed(os.time() + math.floor(os.clock() * 1e6))`. c0053 The model ("Every published or carried write is a fresh stamp"). Test plan AC1 row, and the Rules row "Every write is a fresh `<state>-<three words>` stamp" (`reasoned`). `status.spec.luau`.
 Evidence:
-- **Resolution is impossible after the merge.** Step 0 merges `origin/main` first, then says to "`tracker.sh renumber` yours". By then the two items share one directory (E7) and one `check.sh`, and for preps also one `acceptance/`. `renumber` can't separate them:
-  - Under the design, `renumber` calls `store.get(old)` → `store.find(old)`, which now errors `duplicate id`. So the command meant to fix the duplicate dies on it.
-  - Without the new error (today's code) it is worse. Scratchpad run on a clone of this branch: `new issue c alpha` gave `c0420/c0420-alpha.md`, and I added `c0420-beta.md` beside it. `renumber c0420 c9991` then exited 0, moved the *whole* directory, renamed only the alpha doc, and rewrote `id:` in both docs: `tracker/issues/c9991/{c0420-beta.md, c9991-alpha.md, check.sh}`, both with `id: c9991`. The global reference rewrite (`walk(store.ROOT)`) also renames every mention of the other item's id.
-  - The same applies to "same id in two state directories": `walk` rewrites both items' references.
-- **Detection isn't wired in.** Step 0's detector is "run `scripts/check.sh --full` … if `store.find` reports `duplicate id`". But `scripts/check.sh` never calls the tracker on the real tree: its only tracker mentions are the lint dirs (check.sh:24). No spec in `tests/` reads the real `tracker/` through `store`: the c0010 and c0041 specs use their own fixture trackers. CI runs the same gate. So for a capture or prep landing (no `done`, no `members`), nothing in the procedure or in the Merging conditions ever calls `store.find`, and the colliding PR merges green.
+- In Luau, `os.clock()` is seconds since boot (`1933702.97` here), so the seed is about 1.9e12. `math.randomseed` saturates any seed of 2^31 or more: in Lune 0.10.5, seeds `2147483647`, `2147483648`, `1.9e12` and `1.9e12+7` all give the same draws `1 17 23`.
+- 30 pairs of concurrent `lune` processes running the prototype's seeding and `status.stamp` gave `active-raging-silver-marble` 60 times out of 60, with different `os.clock` values each time.
+- In the commands-spec fixture's origin, every first stamp from the CLI is `raging-silver-marble`: 154 `preparing-raging-silver-marble`, 142 `new-…`, 62 `active-…`. The only other phrase is the deterministic second draw (`plucky-raging-crimson`).
+- Both worktrees' `.cache/tracker-claim-*` files contain `active-raging-silver-marble`. Review-002's own evidence shows `preparing-raging-silver-marble` too.
 
-AC7 tests only the error message, not the documented recovery, so the spec can't catch this.
-Fix: resolve before merging, and detect with a real command.
-- Rewrite landing step 0: `git fetch origin main`. For each item id your branch adds (`git diff --name-only --diff-filter=A origin/main...HEAD -- tracker/`), if `git ls-tree -r --name-only origin/main tracker/` already has that id in any state directory, run `tracker.sh renumber <id> <next free>` on your branch *before* `git merge origin/main`. Then run `scripts/tracker.sh list >/dev/null` (it must succeed) and the full gate.
-- Update the tracker skill's "Conflicts" rule the same way.
-- Optionally make the detector unconditional: a `tests/meta` spec, or a gate line, that runs `store.all` over the real tracker.
-- Add a spec case: two worktrees each `new issue`, one lands, the other follows step 0 and ends with two distinct ids and `list` succeeding.
+What this breaks:
+- Two prep branches carrying `prepared` write the same line, and git merges them silently. This is exactly what the user's decision was meant to prevent.
+- `start`'s ownership test (`raw == mine`) is true for any worktree that holds an old claim file for that raft. The file is never removed after a successful start or a give-back. A worktree that once started R0001 and gave it back (`status R0001 prepared`) therefore "resumes" another terminal's later claim: it skips the publish and creates a second branch and PR.
 
-### F3 [medium] (repeat of design-review-002 F8) JC1's Pass clause contradicts the rule-1 whitelist, so JC1 still can't be ruled consistently
-Where: c0041 JC1 Pass; Design rule 1 (whitelist)
-Evidence: rule 1 whitelists two commands that run a gate in the main checkout:
-- `scripts/setup.sh`, whose last stage is `scripts/check.sh --full` (SETUP.md step 4, and SETUP.md:5-8 runs it right after `git clone … && cd pickman`);
-- `tracker.sh check`, whose raft `check.sh` runs `scripts/check.sh --full` as RC0 (tracker/templates/raft/check.sh).
+No spec can see any of this:
+- `status.spec.luau` has no stamp case. The Test plan's `status :: a stamp is the state plus three words ...` and `two stamps made with different picks conflict ...` do not exist, and `status.stamp` and `status.phrase` are never called by a spec.
+- The commands spec checks only the format (`^active%-%a+%-%a+%-%a+$`).
+- The prototype *is* the "fixed suffix" mutant that the Rules row lists, and it passes.
 
-JC1 Pass then additionally requires that "every instruction that edits, stages, commits, switches branches **or runs a gate** does so in a worktree". So SETUP.md's bootstrap line fails JC1 under the second clause and passes it under the first. A strict round-3 code reviewer who quotes SETUP.md:7 blocks the merge (execute-raft Phase 4 step 7), and a lenient one can wave through anything. The rubric is still not decidable.
-Fix: drop "or runs a gate" from the Pass clause. The whitelist is the single test: "every command the named documents run in the main checkout is on rule 1's whitelist, and nothing else in them edits, stages, commits or switches branches there; quote any line that isn't". Alternatively, remove `check` from the whitelist and say setup's gate is the one exception.
+Critique: the tempting fix is `math.randomseed(os.time())`. That stops the saturation, but two terminals started in the same second still write the same stamp.
 
-### F4 [medium] Documents the Docs list leaves untouched still say `prompt <issue>` wraps a raftless issue, contradicting make-prompt's new rule (a JC1 "two documents disagree" failure)
-Where: c0041 Docs list (make-prompt, tracker skill bullets); `.claude/skills/tracker/SKILL.md:36`; `.claude/skills/make-prompt/SKILL.md:3` (frontmatter description); `scripts/tracker/main.luau:255` (start's error text)
-Evidence: the design makes make-prompt never create a raft ("a raftless issue goes back to ticket-prep"), and `prompt` refuses to create one in the main checkout. These still say the opposite, and none of them is named in the Docs list or caught by AC5's grep:
-- tracker skill:36: "Running a single issue means wrapping it in a placeholder raft …; `tracker.sh prompt <issue>` does this automatically."
-- make-prompt description: "for a raft (or a single issue, which gets a placeholder raft)". This is the text the harness uses to trigger the skill.
-- `start`'s failure message: "wrap a single issue with `prompt <issue>` or `new raft ... --single`".
+Consequences: the entropy source has to differ between processes started together and fit in 31 bits. Ownership also depends on the stamp, so it inherits any weakness in that source.
 
-An executor edits what the Docs list names. JC1 Fail includes "two documents that disagree about the procedure", so this surfaces only at code review, as rework, or as a round-3 blocker.
-Fix: add three bullets to the Docs list. tracker:36 becomes "…wrap it with `new raft … --single` in ticket-prep". The make-prompt description drops the placeholder clause. `start`'s message names ticket-prep. Add `-e "does this automatically"` and `-e "which gets a placeholder raft"` to AC5's negative grep.
+Recommendation:
+- Seed from a real entropy source, reduced into [0, 2^31). For example, read 4 bytes with `od -An -N4 -tu4 /dev/urandom` through `process.exec`, or fold `os.clock()` fractions together with `os.time()` modulo 2^31.
+- Add the missing status cases:
+  - `status :: a stamp is the state plus three words from the list, and parse/phrase read it back`;
+  - `status :: two stamps made with different picks differ`.
+- Add a commands case: the stub stamps of two `new issue` runs in **separate processes** (for example `c0001` and `c0210`) have different phrases. This kills the constant-seed mutant. A collision chance of 1 in 13,824 is acceptable.
+- Remove `.cache/tracker-claim-<R>` when `start` finishes and when `status <R> prepared` gives the claim back. Add a case: a worktree whose earlier claim was given back is refused when another terminal starts the raft.
+- Change the Rules row to `run`.
 
-### F5 [medium] The prep is based on pre-R0070 main: c0041 lacks the now-mandatory Rules and mutants table, and R0020 says R0070 is still in flight
-Where: R0020 "Order & dependencies" ("R0070 (review second order, in flight)"); c0041 Test plan; branch base 1d9a5d1 vs main 61c6a64
-Evidence: main has merged R0070 (61c6a64, "R0070: Review second order (#8)"). On main:
-- ticket-prep §3 requires a "Rules and mutants" table in every issue (one row per behavioural rule, with `run`/`reasoned`), and `tracker/templates/issue/doc.md` carries it. c0041 has no such section.
-- review design-mode item 0 audits that table, so no reviewer on main can complete a design review of c0041 as it stands.
-- design-refute lines take the form `fixed: <what>; consequences: <…>`.
-- The review format replaces `Fix:` with Critique/Consequences/Recommendation. This file follows the Where/Evidence/Fix format I was instructed to use.
-- R0070 also added 20 lines to `scripts/tracker/main.luau`, one of this raft's touched files.
-
-The prep PR must merge origin/main anyway (the design's own landing step 0). After that merge, c0041 is non-conforming, and R0020's "whoever merges second rebases" note is stale.
-Fix: merge origin/main into the prep branch now. Add c0041's Rules and mutants table: the ten E6 planted mistakes are already `run` rows. Add `reasoned` rows for the rules without a mutant case: the `renumber`/`prompt` guards, `done`'s `onGitHub` gating, and the 40-character cap. Update the R0020 note to "R0070 has merged".
-
-### F6 [low] Loose ends in names, lookups and records
-Where: c0041 `cmd.worktree` steps 1-2 and 5; R0020 "Experiments phase"
+### F2 [high] AC5's `check.yml` change breaks the promoted c0015 spec, which no override names; the prep is again behind `origin/main`, whose skills now require an `Overrides:` line
+Where: c0053 CI section, AC5, Implementation step 6, Regression guard (no `Overrides:` line), and E7 ("c0045 and the others pass unchanged"). `tests/acceptance/c0015/workflow.spec.luau:118`. On `origin/main` 55e94b3 (R0016): ticket-prep "Override check" and review Design mode item 4.
 Evidence:
-- The name cap of 40 characters rejects a real capture name. This repo's longest issue slug, `check-affected-empty-array-bash32`, gives `capture-check-affected-empty-array-bash32` (41 characters), so make-issue's first command fails with `invalid worktree name` and nothing says to shorten the slug.
-- Raft targets are looked up with `store.get` in the *invoking* tree. From a main checkout that hasn't been pulled since the prep PR merged, `worktree R0080` fails with `no such tracker item`, and a raft that is done only on `origin/main` isn't refused. The branch-exists path also uses a stale local branch rather than fast-forwarding it to `origin/<branch>`.
-- R0020 says E6 caught "four planted mistakes", but c0041's Verification log records ten.
-Fix: raise the cap to 64, or have make-issue say to shorten the slug. Have `worktree` read the raft from `origin/main` (`git ls-tree` over `tracker/rafts`), or state that the main checkout must be pulled first. Sync R0020's E6 sentence with the log.
+- `tests/acceptance/c0015/workflow.spec.luau:118` asserts `t.expect(on.push).toEqual({ branches = { "main" } })`. In the scratch prototype I added the designed `paths-ignore: ['tracker/**']` under `on.push`. The c0015, c0001 and c0003 workflow specs then gave `22 passed, 1 failed`: `FAIL c0015/workflow.spec.luau :: the workflow's triggers and the gate job are unchanged ...`. The executor may not edit that spec, so AC5 and RC0 cannot both pass. This is a guaranteed stop condition.
+- E7 missed it because the prototype contains no `check.yml` change, and no skill changes either.
+- Seven promoted specs read skill text as plain strings, and c0053 rewrites parts of those skills without a prototype: c0003/pipeline (tracker `## Merging`), c0043/{review-skill, format, ticket-prep}, c0047/override-check, c0048/board-docs and c0050/start-depends.
+- `origin/main` moved to 55e94b3 after the round-2 renumber. It adds an `Overrides:` placeholder to the issue template and makes "an unnamed override, a missing line or an unfilled placeholder" a **high** in design review. c0053 has no `Overrides:` line, although it already rewrites `c0005/worktree.spec.luau` and now must also rewrite `c0015/workflow.spec.luau`.
 
-### F7 [low] Promoted-spec couplings and small coverage gaps
-Where: worktree.spec.luau:380-394; c0041 AC6 and the `refuseInMainCheckout` callers
+Critique: the tempting fix is to let the executor "adjust" c0015. That breaks sequestration, which is why review-001 F1 led to `replacements/`.
+
+Consequences: c0053 is a chore, so it may change promoted specs in its own raft (R0016's ticket-prep rule), but only if they are prepared and named now. Each new replacement needs an AC8 `cmp`. Skill edits that pinned specs read must keep the pinned phrases.
+
+Recommendation:
+- Merge `origin/main` (55e94b3) into the prep branch. With the prototype it passes 604 cases in 99 spec files; record that as E7.
+- Add `replacements/c0015-workflow.spec.luau`, whose only change is `on.push` = `{ branches = { "main" }, ["paths-ignore"] = { "tracker/**" } }`. Extend AC8 to `cmp` it. Name both rewritten specs on an `Overrides:` line in Regression guard.
+- Re-run E7 with the `check.yml` change applied.
+- Either prototype the skill edits and run the seven skill-reading specs against them, or list those specs and their pinned phrases in Implementation step 7 as "keep verbatim".
+- Fix the stale counts ("all 91 other spec files").
+
+### F3 [high] The repo-root guard does not cover the incident it was added for, and c0053's own spec can push a real worktree's uncommitted work to its origin's `main` (repeat of review-002 F2)
+Where: `publishing()` and `cmd.sync` in `prototype.patch` (the only callers of `guardRepoRoot`); R0020 Risks ("A tracker command runs in a directory that lost its `.git`"); E9; `commands.spec.luau` `elsewhere()` and `git()`; the c0005 replacement (`PICKMAN_PUBLISH=0`).
+Evidence, from a scratch outer repository with a bare origin and a `.git`-less directory inside it holding the prototype's `scripts/`:
+- `scripts/tracker.sh worktree zz` succeeded and registered `outer/repo/.worktree/zz [zz]` in the **enclosing** repository. That is the stray-worktree half of the incident E9 records. `worktree` never calls `publishing()`.
+- `publishing()` calls the guard only when publishing is on. Under `PICKMAN_PUBLISH=0` every command skips it, and that is exactly how the c0005 replacement (the spec behind the incident) runs its fixtures. Unguarded commands that write include `worktree`, `start` (`switch -c`, branch push, `gh pr create`), `done`, `commit` and `worktree-prune`.
+- The spec's own `elsewhere()` runs plain `git pull`, `add -A`, `commit` and `push origin HEAD:main` in `{base}/other`. I ran that sequence in `outer/repo/.cache/c0053-commands/other` with no `.git` there. It committed the outer worktree's uncommitted `wip.txt` as "other f0011" and pushed it to the outer origin's `main` (`b97ccd0 other f0011, wip.txt | 1 +`). In the real repository that origin is GitHub. The commands spec runs five times per gate (AC3, RC1, and RC2 three times). It deletes and rebuilds `{base}` at setup, so two overlapping runs in one worktree recreate the incident's window.
+
+Critique: the tempting fix is to call `guardRepoRoot()` in more commands. That still leaves every raw `git` call in every spec, including this raft's own, falling through to the real repository.
+
+Consequences:
+- The cheap, general guard is git's own: `GIT_CEILING_DIRECTORIES=<root>/.cache` stops discovery from walking out of the fixture area. I ran the full gate with it (604 passed in 99 spec files) and the c0053 specs (45 passed), so no existing spec depends on the fall-through. `tests/run.luau` is not sequestered.
+- The tracker guard should then key on "does this command write", not on "is publishing on".
+
+Recommendation:
+- `tests/run.luau` sets `process.env.GIT_CEILING_DIRECTORIES` to `<root>/.cache` before it loads specs. Add a tooling case: `git rev-parse` in a `.git`-less directory under `.cache` fails.
+- `guardRepoRoot()` runs for every command except an explicit read-only list (`list`, `find`, `members`, `metrics`, `board`, `workstreams`, `promote-check`, `prompt`), whatever `PICKMAN_PUBLISH` says.
+- Extend the lost-`.git` case to `worktree zz` (no worktree registered in the outer repository) and to `new issue` under `PICKMAN_PUBLISH=0`.
+- Add Rules rows for both guards (mutants: ceiling removed; guard only when publishing). Correct R0020 Risks and E9 to match.
+
+### F4 [medium] Preps already in flight when c0053 lands stay invisible: their raft ids and members can be taken again, and two worktrees hold R0018 today
+Where: R0020 Risks (it covers only draft rafts already on `origin`, R0010-R0015) and Order & dependencies; c0053 Effective status (a member's `raft:` exists only on the prep branch).
+Evidence: `git worktree list` shows `prep-beta-poll-transient-errors` and `prep-tracker-hardening` **both** holding `tracker/rafts/R0018` (`issues: [c0051]` and `issues: [c0055, …, c0630]`), and `prep-renumber-step-one` holding R0019 with c0052. On `origin/main`, c0052 has `raft: ` (empty) and `design: draft` and no `status:`, so after c0053 `tracker.sh status c0052` prints `new`. `new raft … c0052` then succeeds, and its id is allocated from origin plus the local tree, which in any other worktree does not contain R0018 or R0019. No command publishes a raft that exists only locally: `status <R-id> preparing` requires the document on origin.
+
+Critique: the tempting fix is to publish the local raft from `status`. That is a new creation path through the publisher, with its own id-clash rules and spec cases.
+
+Consequences: this is a one-time cutover, so a documented manual step decided with the user is cheaper than a tool path.
+
+Recommendation:
+- Add a cutover step to R0020 Order & dependencies and to the tracker skill's Sync and claim section, and confirm it with the user. Before c0053's PR merges, list the open `prep-*` worktrees and branches. Each one either lands first, or, after c0053 lands, runs `tracker.sh sync`, claims its members with `status <id> preparing`, and checks its raft id against `tracker.sh status`, renumbering (c0052) on a clash.
+- Report the current R0018 double allocation to the user now.
+
+### F5 [low] Claim rules that bypass their owners: `canClaim` stamps a lone issue of a draft raft, and `status <R> active` takes the `start` lock without `start`'s checks
+Where: `status.canClaim(from, to, stored)` (no kind); `cmd.status` (allows `prepared>active`); `cmd.start` (local preconditions, including R0016's `depends_on` rule).
 Evidence:
-- "post-edit hook lints with the edited file's worktree config" depends on the committed `selene.toml` containing the literal `unused_variable = "deny"` (`edit` asserts the pattern). Once the spec is promoted, it runs in every raft's gate, and any later chore that reformats or relaxes that line fails c0041's spec with `pattern … not found`, far from the change.
-- The design guards `renumber` and a raft-creating `prompt` too, but no case exercises either. An implementation that guards only `new` and `start` passes.
-Fix: have the case write its own minimal `selene.toml` into both trees (`std = "roblox"`, deny in the main checkout, allow in wt2) instead of editing the repo's. Extend "start and new are refused in the main checkout" with `renumber f0020 f0021` and `prompt f0050` on a raftless issue added to the fixture seed, each refused and leaving `status --porcelain` empty.
+- `status f0020 preparing` on a member of draft R0010 is allowed (derived `preparing`, nothing stored), so it stamps the issue alone. A later `status R0010 preparing` then refuses with `f0020 is preparing on origin/main: cannot move to preparing`. The way out (`status f0020 new`, then claim the raft) is not documented.
+- `status R0001 active` publishes `active` without the clean-tree, `design: ready` and `depends_on` checks, and without a claim file, so nobody can `start` the raft until someone moves it back. The commands spec uses this as a stand-in for a crashed start.
+
+Recommendation:
+- `canClaim` applies only to rafts (pass `isRaft`).
+- `status` refuses `active` as a target ("only `start` claims active"). In the resume case, simulate the crash differently, for example with a `pre-push` hook on the raft branch push that fails after the claim.
+- Spec cases for both.
+
+### F6 [low] Smaller document inconsistencies
+Where: `status.spec.luau` case "only preparing>prepared and active>done ride a pull request"; c0053 Test plan AC1 and AC2 rows.
+Evidence:
+- The status case's name and its `or (from == "active" and to == "done")` branch contradict "`done` is never a move target". The branch is dead because `active>done` is not in the table.
+- The Test plan's AC2 row still names `an existing document may change its frontmatter, never its body`, but the spec's case is `an existing document may change its status: line and nothing else`.
+Recommendation: rename the status case and drop its dead branch, and align the Test plan's case names with the specs. Do this together with F1's new stamp cases.
 
 Verdict: changes

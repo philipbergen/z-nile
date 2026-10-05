@@ -1,0 +1,21 @@
+# Answers to design review 004 (R0021)
+
+- F1: fixed:
+  - **The trial uses the real profile**, so a trial that passes means the jail will apply.
+  - **When the jail can't apply** (inside another sandbox, or without `sandbox-exec`), the run probes harmless writes into every protected path and goes on only if one of two things holds. Either every probe is denied (an outer sandbox already protects the repository), or the checkout lies under an outer guard's `.cache` (a fixture of a guarded checkout, which covers c0058's own inner runs). Otherwise it refuses, naming the writable paths, before any spec runs.
+  - **The jail is decided before the lock**, so a refusal leaves no lock behind.
+  - **Cases**: `fence :: a run that can't be jailed and could write its repository refuses to start` and a new AC10, which runs this checkout's runner inside a permissive outer `sandbox-exec`: it must refuse, run no spec, and leave no lock.
+  - **Mutants**: K2 (it proceeds anyway) is killed by the case. K3 (a permissive trial) is killed by AC10.
+  - **Documents**: this moved from "Caught only by review" to "Enforced", and the testing skill and AGENTS.md say that agents with a sandboxed shell must run specs with that sandbox off. Consequences: that last point is a constraint on the person's tooling, and it is raised in R0021's report.
+- F2: fixed: an inherited `PICKMAN_FENCE_SPECS=1` makes any nested `pickman_fence` a specs-mode guard, so a `check.sh` started inside a spec run keeps the reset credential helper and the fetch refusal. Case: `fence :: a check.sh started inside a spec run keeps the spec's limits`. N6 is killed.
+- F3: fixed:
+  - **"Repair" wording**: Risks and Usability no longer speak of a repair command; they say "stop and report".
+  - **A missing `sandbox-exec`** is now handled explicitly, and fails closed with a clear message (Risks says so).
+  - **AGENTS.md** names the refusal inside another sandbox and work handed outside the jail.
+  - **The Linux list** in c0058's documents section now matches the skill's.
+  - **The gate time** is 20.5 s on `9fa1499`.
+- F4: fixed:
+  - **Work handed outside the jail**: `open`, `osascript`, `launchctl` and daemons are on the "Caught only by review" list, and the scan flags `osascript` and `launchctl`. The planted-bypass case plants an `osascript` script; S6 is killed.
+  - **Symlinked home paths**: `~/.gitconfig` and `~/.config/git` are denied both as written and as resolved with `realpath`.
+- F5: fixed: the raft branch's first commit after `start` brings in the guard files from the prototype, and no suite or gate runs in the raft worktree before it, except in a clone under `$TMPDIR` (c0058 Implementation steps, R0021 Order).
+- Found while answering: a waiter could crash when the holder released the lock while the waiter was reading it, a pid file vanishing between the listing and the read. It happened in 2 of 14 lock-spec runs under load. Every lock read now tolerates a missing file; 10 of 10 loaded runs then passed (c0058 E21).

@@ -1,0 +1,6 @@
+- F1: fixed 03cb086: the work continues from a fresh clone at ~/code/pickman, outside iCloud-synced ~/Documents. `git fsck` is clean there, and R0001's check.sh is re-run there by `tracker.sh done`. The follow-up (clone with --no-hardlinks, SETUP.md warning) is filed as backlog chore c0006, because the lifecycle spec is sequestered.
+- F2: fixed 03cb086: resolveRequire rejects an empty path, empty or "." segments, and ".." outside the leading "../" run. New tests/place/resolver.spec.luau failed 3/3 before the fix.
+- F3: fixed 03cb086: place.load() builds to a per-process .cache/place-test-<time>-<rand>.rbxl and removes it after loading.
+- F4: fixed 03cb086: scripts/affected.luau passes --no-renames to both git diffs.
+- F5: fixed (this commit): check.yml has a workflow-level `permissions: contents: read`.
+- F6: fixed (this commit): c0004 is listed under R0001's "Addressed during execution", and c0004's log records the understated spend and why AC1 only discriminates on bash < 4.4 (the only place the bug exists). The check.sh itself is left as committed, because check files are never edited during execution.

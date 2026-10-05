@@ -90,7 +90,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_COMMON_DIR = "refused",
 		GIT_OBJECT_DIRECTORY = "refused",
 	},
-	["tests/acceptance/c0660/fixture.spec.luau"] = {
+	["tests/acceptance/c0060/fixture.spec.luau"] = {
 		GIT_DIR = "proves the helper refuses it",
 		GIT_WORK_TREE = "proves the helper refuses it",
 	},
@@ -103,19 +103,19 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
 	-- c0650: its spec proves the scan refuses these names
-	["tests/acceptance/c0650/adapt.spec.luau"] = {
+	["tests/acceptance/c0059/adapt.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
 		GIT_CONFIG_ = "planted to prove the scan flags it",
 		PICKMAN_TEST_FENCE = "runs the copied gate as a top-level run",
 	},
 	-- c0510 (R0200): its fixture hooks unset what git exports to a hook, so that their own git calls reach the right
 	-- repository
-	["tests/acceptance/c0510/commands.spec.luau"] = {
+	["tests/acceptance/c0053/commands.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
 	},
-	["tests/acceptance/c0510/publish.spec.luau"] = {
+	["tests/acceptance/c0053/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",

@@ -1,8 +1,0 @@
-- F1: fixed: the interim answer is limited to medium/low findings, never a high or Judged criterion, must quote each line in the PR comment, and is declared the sole exception to "refute only when wrong"; the real fix (a `deferred <id>` answer that `tracker.sh done` validates) is filed as c0360.
-- F2: fixed: Merging says there may be no branch protection so the agent enforces the gate, requires `MERGEABLE` and `CLEAN`, and lists the non-mergeable states. Recommending branch protection to the human is in the PR comment, not the skill.
-- F3: fixed: an empty `gh pr checks` list is not green; the run sha must equal HEAD; `ci-verify.sh` dispatch is the fallback after about 5 minutes and needs HEAD pushed. The reviewer's point that the dispatch run's sequestered-spec step misbehaves once `done` has moved the raft was not verified here; a dispatched failure is treated as red.
-- F4: fixed: `<root>` defined; ExitWorktree `remove` or `git -C <root> worktree remove` with unlock for locked worktrees; fetch-refused fallback; `MERGED` value named.
-- F5: fixed: Phase 5 ends with a "Ready to merge" comment; the final report moves to Phase 6 after the merge and carries the sha.
-- F6: fixed: code changes needed to bring the branch up to date (beyond tracker renumbering) trigger a new clean review round before merging.
-- F7: fixed: c0340 non-goal rewritten; ACs added to c0350. Design sections are left minimal for a docs-only chore.
-- F8: fixed: AC2 now matches several phrasings in both skills, and AC5-AC7 pin the new rules.

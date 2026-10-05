@@ -1,55 +1,138 @@
 # Review 005: R0020 (design mode)
-Inputs: prep-c0041-scope at c218f72. Files: `tracker/rafts/R0020/{R0020-worktrees-by-default.md,check.sh,design-review-00{1..4}.md,design-refute-00{1..4}.md}`, `tracker/issues/{c0041,c0420,c0430}/{*.md,check.sh,acceptance/*.spec.luau}`, `tracker/issues/c0400/{c0400-raft-browser.md,acceptance/*.spec.luau}`, `tracker/rafts/R0060/R0060-raft-browser.md`, `scripts/tracker/{main,store,spend}.luau`, `scripts/check.sh`, `tracker/templates/prompt.md`, `tests/tooling/spend.spec.luau`, `.github/workflows/check.yml`, the review, ticket-prep, testing and make-prompt skills. Ran: the guard spec on the tree (it fails on exactly the three specs c0420 updates: `tests/tooling/metrics-rounds.spec.luau`, `tests/acceptance/c0010/tracker-lifecycle.spec.luau`, `tests/acceptance/c0410/rounds.spec.luau`, 18 lines, nothing else); the guard on a `git archive` copy in the scratchpad with `origin/main`'s legacy `c0400/acceptance/model.spec.luau` restored (it flags all 16 paths under `tracker/`, so it does scan `tracker/`); `git diff origin/main...HEAD` on c0400/R0060 (44 path strings and the two layout lines only, no assertion changed, and no c0400 assertion depends on a slug); Lune 0.10.5 `process.exec` with `env` (it merges into the inherited environment: `HOME` and `PATH` survive, and `git config --get gc.auto` sees the override. Rust's `Command::envs` behaves the same way on Linux); `git worktree remove` of a worktree that holds only an ignored `.cache/` (exit 0, so the stream and landing cleanup commands work after a gate run); a merge of a branch that flips `design:` on a legacy document with a migrated `main` that appended `slug:` (clean, rename followed). Hand-evaluated the c0430 plan mutants against every expected output and RC1.
-Dropped from design-review-004: F1, F2, F3, F4, F5, F6, F7 (each fix is present in the documents, specs and check.sh as design-refute-004 describes: c0400/R0060 updated in place and the guard (AC10) verified as above; only `CONFLICT (add/add)` means renumber, in c0420's Docs, c0041's landing step 0 and AC9's grep, with the new naming case in AC4; the `recordAndCommit` guard sits before `git add -A`, so no spend row is written on refusal, and it has a case (AC5), the Phase 2B conflict step and the containment check; the brief's restrictions, hard rule 2's amendment (AC6 grep) and blocked-stream cleanup; the chain, `src/a` vs `src/ab` and reason-precedence fixtures with exact outputs; the ticket-prep line and `-slug.md` grep; c0370, the Non-goal, the `migrate` guard (M16), `prompt`'s plan error, the parser note and the Bootstrap fetch). Also from earlier rounds: all of design-review-001..003 stay dropped.
+Inputs: worktree prep-publish-state-to-main at ef78339 (clean). Files read:
+- `tracker/rafts/R0020/{R0020.md,check.sh}`, `design-review-001..004.md`, `design-refute-001..004.md`;
+- `tracker/issues/c0053/{c0053.md,check.sh}`, `acceptance/{status,publish,commands}.spec.luau`, `replacements/*`, `experiments/{status.luau.txt,publish.luau.txt,prototype.patch,skills.patch}`;
+- `scripts/tracker.sh`;
+- the review, tracker, testing and ticket-prep skills;
+- `main` at 3af8ddf: R0019/c0052 and its sequestered specs, R0018/c0051;
+- `prep-check-isolation` (c0058) and `prep-tracker-hardening`, read only.
 
-### F1 [medium] c0420's implementation steps and R0020's "commit the tooling before running `migrate`" can't be followed with `tracker.sh commit`, the only commit command the prompt allows
-Where: c0420 Implementation steps 1 to 4; R0020 Order & dependencies item 1 ("Commit the tooling before running `tracker.sh migrate`, and commit the migration separately"); `scripts/tracker/main.luau` `activeRaft` (line 68) and `recordAndCommit` (line 302); `tracker/templates/prompt.md` hard rule 2
-Evidence: `tracker.sh commit` calls `recordAndCommit(activeRaft(), …)`, and `activeRaft` calls `store.all("raft")`, which reads every raft document through `store.find`. After step 1 (the new `docIn`), `store.find` raises `… uses the legacy document name; run scripts/tracker.sh migrate` for every directory that still holds a legacy document, and at steps 1 to 3 that is the whole repo, including `tracker/rafts/active/R0020/R0020-worktrees-by-default.md`. So the "Commit." at the end of steps 1, 2 and 3 fails. The reverse order fails too: today's `docIn` matches only `^{id}%-(.+)%.md$`, so if the executor runs `migrate` before changing the store, the old store raises `has no <id>-<slug>.md` on every migrated directory. The store change and the renames must therefore be in the same working tree whenever `tracker.sh commit` runs. That rules out a separate tooling commit before the migration. The prototype runs didn't hit this, because they were never committed (Verification logs: "reverted, never committed").
-Critique: a context-free executor that follows steps 1 to 3 hits a tracker error on its first commit. It then either uses plain `git commit`, which breaks hard rule 2 (and c0041's JC1 language), or reorders the steps on its own and ignores the raft doc, or it treats this as a stop condition and escalates. The tempting fix is "commit with plain git until the migration is done", which adds a second exception to hard rule 2 and skips spend recording for those commits.
-Consequences: the steps have to be reordered so that every commit sees a store and a document layout that agree. `cmd.migrate` scans directories directly and doesn't depend on the store, so it can land first. `new` must not write `<ID>.md` while the old store is live: an emergent issue filed in that window would be unreadable. The migration can no longer be a separate commit from the store change. The PR is squash-merged anyway, so the only loss is a split in the branch history, and git still records the renames as `R` in that commit.
-Recommendation: rewrite c0420's steps.
-1. `cmd.migrate` and USAGE, with store, `new` and templates unchanged. Commit with `tracker.sh commit --issue c0420`; the old store still reads the legacy tree.
-2. `store.luau` (`docIn`, `find`, slug from frontmatter), `new` (slug validation, `<ID>.md`), `renumber` and the two templates. Then run `scripts/tracker.sh migrate` in the same tree and update the three specs' paths. Commit all of it at once with `tracker.sh commit --issue c0420`.
-3. Tracker and ticket-prep skill text, checks, full gate.
-In R0020's Order & dependencies item 1, replace the sentence with "the store change and the migration are one commit (the tracker CLI can read only one layout at a time)". Add a sentence that no `tracker.sh new` runs between steps 1 and 2. No spec change is needed.
+Dropped from review-004: F1, F2, F3, F4, F5, F6 and F7. Each fix holds, or follows a recorded user decision. Some fixes introduced the new gaps listed below.
 
-### F2 [medium] R0060 (c0400) is `design: ready` but can't pass its own acceptance until R0020 merges, and no data records the dependency
-Where: `tracker/issues/c0400/c0400-raft-browser.md` frontmatter (`depends_on: []`) and design line 111; `tracker/issues/c0400/acceptance/cli.spec.luau` case "the real tracker's page shows every raft and issue"; `tracker/rafts/R0060/R0060-raft-browser.md`; R0020 "Transition policy"
-Evidence: after the in-place update, c0400's design says `collect` walks `<ID>/<ID>.md`. The cli case runs `board.collect()` on the real tracker and requires `rafts == onDisk` (the count of `R%d%d%d%d` directories) and a `home` entry for every issue directory. On today's `main` every document is legacy-named, so a `collect` that follows the design finds none, and the case fails. So R0060 now hard-depends on R0020. That's recorded only in R0020's and c0420's prose (the Transition policy). c0400 has `depends_on: []`, R0060's Order section doesn't mention it, and make-prompt's readiness check (`design: ready` on the raft and its members) passes. `/make-prompt R0060` produces a prompt today, and its executor meets a failing sequestered spec, which is a stop condition. The prompt only inlines R0060's own documents, so the policy never reaches it.
-Critique: the policy is right, but it lives only in the raft it protects. The tempting fix is a sentence in R0060's doc. That helps a human reader, but not the tooling or the board that c0400 itself builds.
-Consequences: `depends_on: [c0420]` is a dependency across rafts. `workstreams R0060` ignores out-of-raft dependencies by design (c0430), so nothing breaks there. c0400's own model derives raft dependencies from members' `depends_on`, so the board will show R0060 blocked by R0020 until it's done, which is the intent. The edit is frontmatter only: no spec, fixture or assertion changes, and `migrate` later adds c0400's `slug:` without touching `depends_on`.
-Recommendation: in this prep PR, set c0400's `depends_on: [c0420]` and add one line to R0060's Order & dependencies: "Execute only after R0020 has merged: c0400's design and its real-tracker case assume the `<ID>.md` layout." Mention both edits in R0020's paragraph about R0060. There are no new spec cases, because no tooling enforces `depends_on` at `start` or `prompt` today, and adding that enforcement is out of scope.
+All runs were made in a scratch clone outside the repository, with its own bare origin, and the clone was removed afterwards:
+- **Prototype as instructed** (both modules, both patches, both replacements): `scripts/check.sh --full` gave 633 passed, 0 failed, in 103 spec files. `tracker.sh check c0053` gave 8/8 PASS, and the three c0053 specs gave 48 passed. This reproduces the author's numbers.
+- **The same tree merged with `main` at 3af8ddf** (R0009 game code, a `c0015/publish.spec` change, the R0018 and R0019 preps): the full gate passed and AC1-AC8 passed.
+- **c0052 (R0019 on `main`) together with c0053**: c0052's `prototype.diff` applies cleanly on top of the c0053 prototype. Its three sequestered specs gave 28/28, and c0053's specs gave 48/48. Without c0052's code, c0052's specs give 9 passed and 19 failed both with and without c0053, so c0053 breaks none of them.
+- **Mutants**:
+  - "design check only on the moved item, not on the raft's members": commands spec 23/23 pass (F2);
+  - "writes seeded with `os.time()`, only `stamp` seeded from `/dev/urandom`": status and commands specs 34/34 pass (F3).
 
-### F3 [low] The permanent guard only catches literal names, but R0020 says it catches "any later legacy path"
-Where: `tracker/issues/c0420/acceptance/guard.spec.luau` (`LEGACY`, `EXEMPT`); R0020 Risks ("the permanent guard spec catches any later legacy path"); c0420 Regression guard
-Evidence: the pattern needs a literal `[fdcR]dddd-<lowercase>…md`. A spec that builds the name, which is the common style in these specs, passes the guard. `tests/tooling/spend.spec.luau:12` already does it (`` doc = `tests/fixtures/spend/{id}-{slug}.md` ``), backed by legacy-named files `tests/fixtures/spend/f9990-add.md` and `f9991-mul.md`. That one is harmless, because spend reads `issue.doc` directly and never goes through `store`, but a future fixture written the same way that `store` does read would pass the guard and fail at runtime. Two more gaps: only `*.spec.luau` files are scanned, not helper modules or `.md` fixtures, and the exemption matches the basename `naming.spec.luau` anywhere in `tests/` or `tracker/`, not only c0420's.
-Critique: the guard is still worth having, since it caught R0060. The tempting fix is a second pattern for interpolated names (`}%-…%.md`), but that gives false positives on legitimate names such as `` `{dir}/stream-review-{id}-001.md` `` in c0430's spec.
-Consequences: narrowing the exemption changes only which file is skipped. The claim in the docs becomes accurate, not broader.
-Recommendation: reword R0020's Risk and c0420's Regression guard to say what the guard checks: "literal legacy document paths in spec files". Scope the exemption to c0420's own copies by path suffix (`c0420/acceptance/naming.spec.luau` or `acceptance/c0420/naming.spec.luau`), and rerun the guard to confirm it still fails on exactly the three specs. Leave `spend.spec`'s fixtures alone (they aren't tracker documents), or note them as intentionally legacy.
+User decisions are not reopened: the prepared rewrites of promoted specs, a stamp on every write, c0053 before the repository fence, claims documented rather than checked, and in-flight preps landing first. F1 is about stating the third and fifth decisions against today's `main`.
 
-### F4 [low] A plausible wave mutant, "the last member of the after set decides", survives the promoted spec and is caught only by RC1
-Where: c0430 Rules and mutants row "A wave is one more than the latest wave it must follow"; `workstreams.spec.luau` fixtures; R0020 `check.sh` RC1
-Evidence: `for _, a in after do wave = waves[a] + 1 end` over the after set, sorted by id, is a common way to get the maximum wrong. It gives the same output as `1 + max` wherever the member with the highest id also has the highest wave. That holds in every fixture:
-- R0030: f0080's after set is f0060 (wave 1) then f0070 (wave 2);
-- R0050: every after set has one member;
-- R0010 and R0060: every after set has one member.
-Only RC1 separates the two. c0430's after set is c0041 (wave 2) then c0420 (wave 1), so the mutant gives wave 2. RC1 lives in the raft's `check.sh`, which is never promoted, so after R0020 lands no permanent spec guards the formula against this regression.
-Critique: the recorded mutant (`1 + #after`) is killed, but the Rules table asks for the plausible wrong implementations, and this is one.
-Consequences: a new fixture raft adds issues and changes the fixture's issue count, but the exact outputs of the existing cases don't change if the new ids come after f0160.
-Recommendation: add a raft `R0070` (`mix`) in which a higher-id member of the after set sits in an earlier wave: f0170 (`src/r`), f0180 depending on f0170 (`src/s`), f0190 (`src/t`), and f0200 depending on f0180 and f0190 (`src/u`). The expected waves are 1, 2, 1 and 3, and `parallel: yes (wave 1: f0170 f0190)`. Extend the wave row's mutant column with "the last member of the after set decides", run it on the prototype and mark it `run`.
+### F1 [medium] Order & dependencies are out of date against `main`, so the one open handoff goes to the wrong raft
+Where:
+- R0020 Order & dependencies, bullets 1-3;
+- R0020 Theme and Risks, where "repository-fence raft (R0019, c0058)" appears;
+- c0053 Design, Skills: "corrected Conflicts and Landing text";
+- `main` at 3af8ddf.
 
-### F5 [low] "`renumber <ID> <next free>` on your own branch" picks the next free number from the wrong tree
-Where: c0041 landing step 0; c0420 Docs (the tracker skill's "Conflicts" text)
-Evidence: after `git merge --abort`, the branch sees only its own base. If `origin/main` has since gained c0420 and c0430, and the branch created c0420, then the branch's "next free" is c0430, which collides again on the next merge (a second `add/add`). It stays loud, so it's safe, but an agent can loop.
-Critique: the tempting fix is "retry until it merges".
-Consequences: one sentence. No tooling or spec change.
-Recommendation: define it in both texts: "the next multiple of 10 above the highest number on both your branch and `origin/main` (for example `git ls-tree -d --name-only origin/main tracker/issues/ tracker/issues/active/ tracker/issues/done/`)".
+Evidence:
+- **R0019 and R0018 are taken on `origin/main`.**
+  - `3af8ddf tracker: prep R0019 Renumber step one (#33)` gives R0019 to c0052.
+  - `7b925ac tracker: prep R0018 Beta poll transient errors (#32)` gives R0018 to c0051.
+  - R0020 still says "Two preps hold R0019 today" and "R0018 is also held twice", and counts five open preps. `git worktree list` now shows three: check-isolation, publish-state-to-main and tracker-hardening.
+  - The fence raft is still `R0019` in `prep-check-isolation` (3a03bf2), so it must take a new id.
+  - "a handoff to the R0019 owner" now names the renumber raft, which has nothing to do with the fence. The handoff exists to make the fence exempt `publish.luau` and chain to a fixture's own `pre-push`. That change has not been made: c0058.md lines 108-109 still ban `GIT_INDEX_FILE`, `hooksPath` and `env -u`.
+- **Unreserved issue ids, not only raft ids.** These issues exist only on prep branches; nothing on `origin/main` holds their ids:
+  - c0058 is only on `prep-check-isolation`;
+  - c0560 to c0630 are only on `prep-tracker-hardening`, whose R0018 is a template-only draft.
 
-### F6 [low] Prompt hard rule 2 still says "One branch", which Phase 2B contradicts
-Where: `tracker/templates/prompt.md` hard rule 2 ("**One branch and one PR for this whole prompt.**"); c0430 "Other documents" (amends only the commit sentence); c0430 JC1 ("a missing or contradictory step")
-Evidence: Phase 2B creates one `ws-<issue>` branch per stream. After both c0041's prefix and c0430's suffix, rule 2 reads "…first action is `cd …`. One branch and one PR for this whole prompt. … Commit only with `scripts/tracker.sh commit` (in Phase 2B, stream branches are committed with plain git; …)". A literal reader sees two claims that conflict, and the Phase 4 reviewer could rule JC1 a fail.
-Critique: this is cosmetic, but JC1 is judged on exactly this kind of wording.
-Consequences: none beyond the template wording and, optionally, the AC6 grep.
-Recommendation: in c0430's Docs list, reword the rule's first sentence to "One raft branch and one PR for this whole prompt (Phase 2B's stream branches are short-lived, squash-merged into it and deleted)".
+  Once c0053 lands, the first `new issue c` allocates c0560, because the union of local and origin ids tops out at c0057. Bullet 3 covers this case only for raft ids.
+- **c0052 now overlaps c0053 in a sequestered spec, not only in code.** The code composes (run above). But c0052's `skill-doc.spec.luau` pins three things in the tracker skill:
+  - the Conflicts bullet keeps `git fetch origin main` and `never renumber`;
+  - the Numbering bullet keeps "`tracker.sh new` always picks the **next multiple of 10**".
+
+  c0053's Design asks for "corrected Conflicts ... text", but `skills.patch` never touches Conflicts. An executor who follows the Design and rewrites Conflicts around `tracker.sh sync` breaks c0052. If c0052 lands first, its promoted spec turns c0053's AC4 red. If c0053 lands first, c0052 hits a sequestration stop. R0019's own Risks say to stop and ask the user if c0053 touches that bullet.
+- The prep is three commits behind `main`, and E7 is recorded on 01395fc. The re-run above passed, but the documents still give the old base.
+
+Critique: the tempting fix is to replace "R0019" with "the fence raft" everywhere. That alone leaves the unreserved issue ids and the Conflicts trap.
+
+Consequences: the fence prep must renumber its raft id before it lands, and it must land before c0053 merges (decision 5). It must carry the exemption before that (decision 3). The documents should say this sequence, because it is now a precondition with a hard order.
+
+Recommendation:
+- Merge `origin/main`, re-run E7 there, and record the new base and counts.
+- Rewrite Order & dependencies:
+  - R0019 is c0052 (renumber) and R0018 is c0051 on `main`;
+  - the fence raft (c0058, `prep-check-isolation`) and `prep-tracker-hardening` must renumber;
+  - the order is: fence prep, updated with the exemption and the hook chaining, lands; then c0053 lands; then the fence executes;
+  - add a line on c0052: the code composes, verified; c0053 leaves the Conflicts and Numbering bullets alone because c0052's spec pins them.
+- Name the issue ids that live only on branches (c0560-c0058) under "renumber on a clash".
+- In c0053, replace "corrected Conflicts and Landing text" with "Landing text (the Conflicts and Numbering bullets are untouched: c0052 pins them)".
+- Address the handoff to the fence raft's owner by worktree name, not by id.
+
+### F2 [medium] The carried `prepared` checks members' `design: ready`, but no case can tell
+Where: `cmd.status` in `prototype.patch` (`if carried then ... store.readFront(localItem.doc).design ~= "ready"` inside the per-target loop); the Rules row "The carried `prepared` refuses unless the raft and its listed members are `design: ready`" (`run`, mutant "no design check"); `commands :: a move to prepared is carried ...` and `... a raft move follows the local member list ...`.
+
+Evidence:
+- The only refused-for-design case moves the lone issue c0240, so the moved item is itself the target.
+- Every raft move readies all of its members first. The raft-move case claims `cnew` and readies it in the same step, before the move.
+- With the check changed to `if carried and t == id then`, which checks only the raft's own design, the commands spec gives 23/23 pass.
+- So ticket-prep can set `design: ready` on the raft, forget a member, and carry `prepared` onto a member whose design is still a draft. Those are exactly the two fields that review-004 F1's fix was meant to tie together. The mistake surfaces later, as `start`'s local design refusal, after the prep PR has merged, and then needs a second PR.
+
+Critique: the tempting fix is to assert on the message only, which would still pass if the raft's design were the one checked.
+
+Consequences: none beyond one more refusal step in an existing case.
+
+Recommendation:
+- In the raft-move case, after `trOk(cap, { "status", cnew, "preparing" })` and before `ready(cnew)`, run `status rz prepared`. Expect it to fail, with stderr naming `cnew` and `design: ready`, and with origin and every local document unchanged. Then ready `cnew` and continue.
+- Add "only the moved item's design checked" to the row's mutants.
+
+### F3 [medium] The `stamp` command proves only its own seeding, not the seeding that every write uses
+Where:
+- `cmd.stamp` and the `stamp()` helper in `prototype.patch`;
+- `commands :: stamps from processes started together differ ...`;
+- the Rules row "Stamps come from real entropy ..." (`run`, mutant "a time-based seed (`os.time()`)");
+- c0053 Commands, which never describes `stamp`: it appears only inside the guard's parenthesis.
+
+Evidence:
+- Two changes together make the mutant:
+  - the shared helper seeds with `math.randomseed(os.time())`;
+  - `cmd.stamp` seeds itself from `entropy()` before calling the helper.
+
+  With that mutant, the status and commands specs give 34/34 pass.
+- The only multi-process assertion goes through `tracker.sh stamp`. The published stubs are checked for format only. So review-003 F1's original bug, two terminals writing the same phrase in the same second, can come back in `new`, `new raft`, `status` and `start` with every check green.
+- The design gives `stamp` no interface: no arguments, output, guard status or "same helper" rule. An executor who re-derives it from the Design text alone has nothing that binds it to the write path.
+
+Critique: the tempting fix is a spec that runs concurrent `new issue` processes. Publish races make the loser draw again, so that spec cannot see equal seeds (the reason `stamp` was added).
+
+Consequences: the binding becomes a code-review rule, because no black-box case can see it.
+
+Recommendation:
+- Add a Commands bullet: "`stamp <state>` (read-only, diagnostics) prints `stamp(state)`. `stamp()` is the only function that makes a stamp. It seeds once per process from `entropy()`, and every write (`new issue`, `new raft`, `status`, `start`) calls it."
+- Add a Rules row: "every write and `stamp` use the one `stamp()` helper". Mark it as a code-review row (`reasoned`), with the mutant "a second seeding site".
+
+### F4 [low] Read-only list, usage and case names still disagree across code, docs and spec
+Where: the Rules row "Every command that is not read-only ..."; the guard case in `commands.spec.luau`; `READ_ONLY` and `USAGE` in `prototype.patch`; tracker skill Worktrees rule 1 in `skills.patch`; the c0053 Test plan and Rules rows.
+Evidence:
+- **The read-only list.** The code exempts eight commands: `list`, `find`, `members`, `metrics`, `board`, `workstreams`, `promote-check` and `stamp`. c0053 Commands names the same eight.
+  - The Rules row lists seven and says "the whole usage table minus" them. `stamp` is in the usage table, so by that wording it is guarded.
+  - The spec probes the same seven, so neither guarding nor exempting `stamp` is pinned.
+  - The 13 guarded commands (14 calls, with `new` twice) plus these 8 are exactly the 21 handlers, which is consistent. `launch` goes through the guarded `worktree`.
+- **The tracker skill.** Worktrees rule 1 calls `status` (without a target) and `sync` "read-only tracker commands", but the code guards both. Its "The tracker enforces part of this" list omits `status <id> <to>`, which now refuses in the main checkout.
+- **The usage text.** It offers `status ... move one (new|preparing|prepared|active)`, but `status <id> active` is always refused.
+- **Case names** that do not exist in the specs:
+  - Test plan: `stamps from separate processes differ ...`. The spec has `stamps from processes started together differ ...`.
+  - Rules rows: `a claim made by this terminal can be resumed ...`. The spec has `a start that dies after its claim is resumed ...`.
+  - Rules rows: `two stamps ...` and `status :: six transitions`.
+
+Recommendation:
+- Add `stamp` to the row's list and to the spec's read-only probes (`{ "stamp", "new" }`).
+- Call `status` and `sync` "allowed" (not read-only) in Worktrees rule 1, and add `status <id> <to>` to the enforced list.
+- Drop `active` from the usage text's targets.
+- Align the four case names with the specs.
+
+### F5 [low] Smaller stale or unreachable text
+Where: R0020 Whole-raft design and Risks; the tracker skill's Cutover bullet; ticket-prep step 5.
+Evidence:
+- **R0020 lags the c0015 replacement.**
+  - The module map says "tests/acceptance/c0005/ one promoted spec replaced" and "first step in six skills". In fact two specs are replaced, and seven skills change: five sync and two fetch.
+  - The Risks bullet "A promoted spec changes" names only c0005.
+- **The Cutover bullet is unreachable.** It lives in a skill that exists only after c0053 merges, yet it says "Land such preps before this one merges". It gives no instruction to a prep that is still open after the merge: land it, renumber on a clash, never stamp its members.
+- **Step 5 fails offline.** ticket-prep step 5 runs `status <R-id> prepared` unconditionally, but `cmd.status` fails without publishing (`status needs an origin remote`). Under `PICKMAN_PUBLISH=0` the step is impossible. An unstamped raft then needs no carried move, but a stamped one stays `preparing`.
+
+Recommendation:
+- Update the module map and Risks to cover both replacements and seven skills.
+- Reword Cutover: "A prep opened before c0053 merged: land it as soon as possible, renumber on a clash, and never stamp its members."
+- Add to step 5: "with publishing off, skip this step (an item without `status:` derives `prepared` from `design: ready`); a raft that was already stamped needs publishing on for this step."
 
 Verdict: changes
