@@ -9,6 +9,11 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: audit.run reports every problem of every kind in one run, at the right level, sorted" \
+  lune run tests/run -- "$A/audit.spec.luau"
+check "AC2: tracker.sh audit, list on a duplicate, renumber <directory>, and the skill text" \
+  lune run tests/run -- "$A/cli.spec.luau"
+check "AC3: the real tracker tree has no audit errors" \
+  lune run tests/run -- "$A/real-tree.spec.luau"
 
 finish

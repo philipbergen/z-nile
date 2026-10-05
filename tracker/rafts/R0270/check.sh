@@ -11,6 +11,9 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0270
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the real tracker tree passes tracker.sh audit" scripts/tracker.sh audit
+check "RC2: tracker.sh list succeeds on the real tracker tree" scripts/tracker.sh list
+check "RC3: the real tracker/next is above every number in use" \
+  bash -c '! scripts/tracker.sh audit | grep -q "next-behind"'
 
 finish
