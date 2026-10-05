@@ -39,10 +39,11 @@ check "AC7: board.yml fetches full history, and the overridden c0460 case passes
   lune run tests/run -- '"$A"'/board-stats.spec.luau tests/acceptance/c0460/board-workflow.spec.luau'
 check "AC8: chart.svg draws marks with tooltips, stacks, baselines, nil gaps, one covering axis, empty frames, deterministically" cases_pass chart \
   "a bar per non-zero value" "stacked segments sit on each other" "mirror draws its below series" "a nil value breaks a line" \
-  "one axis whose top tick" "no data draws an empty frame" "the same input gives the same bytes"
+  "one axis whose top tick" "no data draws an empty frame" "the same input gives the same bytes" \
+  "x labels thin to at most 8" "hbars draws one horizontal bar"
 check "AC9: a legend for two or more series; colors are classes, never inline" cases_pass chart \
   "a legend for two or more series" "colors are classes"
-check "AC10: every view x type x metric chart on the page, themed colors, page under 1.5 MB" cases_pass board-stats \
-  "the page has every chart" "the real tracker's page stays under"
+check "AC10: figure-wrapped charts for every view x type x metric, eight visible at first, themed colors, tables, Stats under 450 KB" cases_pass board-stats \
+  "the page has every chart" "the Table view has one table per view" "the Stats section stays under 450 KB"
 
 finish

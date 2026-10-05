@@ -32,6 +32,14 @@ local function count(s: string, needle: string): number
 		i = (b :: number) + 1
 	end
 end
+local function ticks(svg: string): { number }
+	local out: { number } = {}
+	for v in string.gmatch(svg, '<text class="tick"[^>]*>([%-%d%.]+)</text>') do
+		table.insert(out, tonumber(v) :: number)
+	end
+	table.sort(out)
+	return out
+end
 local function opts(kind: any, labels: { string }, below: any?): chart.Options
 	return {
 		id = "test/chart",
@@ -65,7 +73,7 @@ return t.spec("tracker chart", function(it)
 		}, opts("stacked", { "a" }))
 		local m = marks(svg)
 		t.expect(#m).toBe(2)
-		local feature = if string.find(m[1].cls, "s-feature", 1, true) then m[1] else m[2]
+		local feature = if string.find(m[1].cls, "ser-feature", 1, true) then m[1] else m[2]
 		local defect = if feature == m[1] then m[2] else m[1]
 		t.expect(feature.y + feature.height <= baseline(svg) + 0.01).toBe(true) -- feature rests on the baseline
 		t.expect(defect.y + defect.height <= feature.y + 0.01).toBe(true) -- defect stacks above it
@@ -74,6 +82,7 @@ return t.spec("tracker chart", function(it)
 		local nm = marks(neg)
 		t.expect(nm[1].y >= baseline(neg) - 0.01).toBe(true) -- -3 hangs below
 		t.expect(nm[2].y + nm[2].height <= baseline(neg) + 0.01).toBe(true) -- 4 stands above
+		t.expect(ticks(neg)[1] <= -3).toBe(true) -- a tick below zero, signed with an ASCII "-"
 	end)
 
 	it("mirror draws its below series under the baseline", function()
@@ -88,16 +97,18 @@ return t.spec("tracker chart", function(it)
 		t.expect(added.y + added.height <= baseline(svg) + 0.01).toBe(true)
 		t.expect(removed.y >= baseline(svg) - 0.01).toBe(true)
 		t.expect(removed.title).toBe("Removed, a: 2 issues")
+		t.expect(ticks(svg)[1] <= -2).toBe(true)
 	end)
 
 	it("a nil value breaks a line", function()
 		local svg = chart.svg(
-			{ { key = "count", label = "Defect %", values = { 10, nil, 30, 40 } } },
+			{ { key = "defect", label = "Defect %", values = { 10, nil, 30, 40 } } },
 			{ id = "x", title = "Ratios", unit = "%", labels = { "a", "b", "c", "d" }, kind = "lines" }
 		)
-		local d = string.match(svg, '<path class="line s%-count"[^>]* d="([^"]*)"') or ""
+		local d = string.match(svg, '<path class="line ser%-defect"[^>]* d="([^"]*)"') or ""
 		t.expect(count(d, "M")).toBe(2)
-		t.expect(count(svg, "<circle")).toBe(3)
+		t.expect(count(svg, '<circle class="point ser-defect"')).toBe(3)
+		t.expect(count(svg, "<circle")).toBe(3) -- one per non-nil point, nothing else
 	end)
 
 	it("one axis whose top tick covers the largest total", function()
@@ -105,12 +116,19 @@ return t.spec("tracker chart", function(it)
 			{ key = "feature", label = "Feature", values = { 7, 1 } },
 			{ key = "defect", label = "Defect", values = { 6, 1 } },
 		}, opts("stacked", { "a", "b" }))
-		local top = -math.huge
-		for v in string.gmatch(svg, '<text class="tick"[^>]*>([%-%d%.]+)</text>') do
-			top = math.max(top, tonumber(v) :: number)
-		end
+		local tk = ticks(svg)
+		local top = tk[#tk]
 		t.expect(top >= 13).toBe(true) -- the stacked total, not the largest single value
 		t.expect(top <= 20).toBe(true) -- a nice number, not a far-off one
+		t.expect(#tk >= 3 and #tk <= 6).toBe(true)
+		t.expect(tk[1]).toBe(0)
+		local step = tk[2] - tk[1]
+		local mant = step / 10 ^ math.floor(math.log10(step))
+		t.expect(math.abs(mant - 1) < 1e-9 or math.abs(mant - 2) < 1e-9 or math.abs(mant - 5) < 1e-9)
+			.toBe(true)
+		for i = 2, #tk do
+			t.expect(math.abs(tk[i] - tk[i - 1] - step) < 1e-9).toBe(true) -- 0, s, 2s, …
+		end
 		t.expect(count(svg, 'class="baseline"')).toBe(1)
 	end)
 
@@ -125,6 +143,20 @@ return t.spec("tracker chart", function(it)
 		local one =
 			chart.svg({ { key = "feature", label = "Feature", values = { 1 } } }, opts("stacked", { "a" }))
 		t.expect(string.find(one, 'class="legend"', 1, true)).toBe(nil)
+		-- mirror: one legend entry per type, not one per side
+		local mirror = chart.svg(
+			{
+				{ key = "feature", label = "Feature", values = { 3 } },
+				{ key = "chore", label = "Chore", values = { 1 } },
+			},
+			opts("mirror", { "a" }, {
+				{ key = "feature", label = "Feature", values = { 1 } },
+				{ key = "chore", label = "Chore", values = { 2 } },
+			})
+		)
+		local ml = string.match(mirror, '<g class="legend".-</g>') or ""
+		t.expect(count(ml, "Feature")).toBe(1)
+		t.expect(count(ml, "Chore")).toBe(1)
 	end)
 
 	it("colors are classes, never inline", function()
@@ -132,10 +164,11 @@ return t.spec("tracker chart", function(it)
 			{ key = "feature", label = "Feature", values = { 1, 2 } },
 			{ key = "defect", label = "Defect", values = { 2, 1 } },
 		}, opts("stacked", { "a", "b" }))
-		t.expect(string.find(svg, "s-feature", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(svg, "s-defect", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(svg, 'fill="#', 1, true)).toBe(nil)
-		t.expect(string.find(svg, 'stroke="#', 1, true)).toBe(nil)
+		t.expect(string.find(svg, "ser-feature", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(svg, "ser-defect", 1, true) ~= nil).toBe(true)
+		-- no paint in the markup at all: not hex, rgb(), named colors or var(); the page CSS paints by class
+		t.expect(string.find(svg, " fill=", 1, true)).toBe(nil)
+		t.expect(string.find(svg, " stroke=", 1, true)).toBe(nil)
 		t.expect(string.find(svg, "style=", 1, true)).toBe(nil)
 	end)
 
@@ -160,6 +193,81 @@ return t.spec("tracker chart", function(it)
 			}, opts("stacked", { "a", "b", "c" }))
 		end
 		t.expect(draw()).toBe(draw())
-		t.expect(string.find(draw(), "%d%.%d%d") == nil).toBe(true) -- at most one decimal anywhere
+		local thirds = chart.svg(
+			{ { key = "chore", label = "Chore %", values = { 1 / 3, nil, 2 / 3 } } },
+			{ id = "x", title = "T", unit = "%", labels = { "a", "b", "c" }, kind = "lines" }
+		)
+		local mirror = chart.svg(
+			{ { key = "feature", label = "Added", values = { 1 / 3, 7 } } },
+			opts("mirror", { "a", "b" }, { { key = "feature", label = "Removed", values = { 2 / 3, 1 } } })
+		)
+		for _, svg in { draw(), thirds, mirror } do
+			t.expect(string.find(svg, "%d%.%d%d") == nil).toBe(true) -- no literal has more than one decimal
+		end
+	end)
+
+	it("x labels thin to at most 8, evenly, keeping the first and the last", function()
+		local labels: { string } = {}
+		local values: { number? } = {}
+		for i = 1, 32 do
+			table.insert(labels, `L{i}`)
+			table.insert(values, i)
+		end
+		local svg = chart.svg({ { key = "net", label = "Net", values = values } }, opts("bars", labels))
+		local shown: { number } = {}
+		for v in string.gmatch(svg, '<text class="x"[^>]*>L(%d+)</text>') do
+			table.insert(shown, tonumber(v) :: number)
+		end
+		table.sort(shown)
+		t.expect(#shown <= 8).toBe(true)
+		t.expect(shown[1]).toBe(1)
+		t.expect(shown[#shown]).toBe(32)
+		local lo, hi = math.huge, -math.huge
+		for i = 2, #shown do
+			lo = math.min(lo, shown[i] - shown[i - 1])
+			hi = math.max(hi, shown[i] - shown[i - 1])
+		end
+		t.expect(hi - lo <= 1).toBe(true) -- evenly spread
+		local few = chart.svg(
+			{ { key = "net", label = "Net", values = { 1, 2, 3 } } },
+			opts("bars", { "a", "b", "c" })
+		)
+		t.expect(count(few, '<text class="x"')).toBe(3)
+	end)
+
+	it("hbars draws one horizontal bar per non-nil mean, with n in its tooltip", function()
+		local svg = chart.svg(
+			{
+				{ key = "feature", label = "Feature", values = { 1.5, 3 }, notes = { "n=4", "n=2" } },
+				{ key = "defect", label = "Defect", values = { nil, 0.5 }, notes = { nil, "n=1" } },
+			},
+			{
+				id = "durations",
+				title = "Time in state",
+				unit = "days",
+				labels = { "active", "new" },
+				kind = "hbars",
+			}
+		)
+		local m = marks(svg)
+		t.expect(#m).toBe(3)
+		local titles: { [string]: boolean } = {}
+		for _, r in m do
+			titles[r.title] = true
+		end
+		t.expect(titles["Feature, active: 1.5 days (n=4)"]).toBe(true)
+		t.expect(titles["Feature, new: 3 days (n=2)"]).toBe(true)
+		t.expect(titles["Defect, new: 0.5 days (n=1)"]).toBe(true)
+		local x0 = tonumber(
+			string.match(string.match(svg, '<line class="baseline"[^>]*>') or "", ' x1="([%-%d%.]+)"')
+		)
+		local widths: { [string]: number } = {}
+		for tag, title in string.gmatch(svg, '(<rect class="mark [^"]*"[^>]*>)%s*<title>(.-)</title>') do
+			local x = tonumber(string.match(tag, ' x="([%-%d%.]+)"')) :: number
+			t.expect(x >= (x0 :: number) - 0.01).toBe(true)
+			widths[title] = tonumber(string.match(tag, ' width="([%-%d%.]+)"')) :: number
+		end
+		local w15, w3 = widths["Feature, active: 1.5 days (n=4)"], widths["Feature, new: 3 days (n=2)"]
+		t.expect(math.abs(w3 / w15 - 2) < 0.1).toBe(true) -- widths proportional to the values
 	end)
 end)
