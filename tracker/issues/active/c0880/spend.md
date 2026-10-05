@@ -9,6 +9,7 @@ round-4 skill text it predates: the ORIG_HEAD way back from a plain merge, and
 the counter-only commits in Published or carried. | 417 | 24 | 9.8 | raft+proportional |
 | 2 | 2026-10-05 15:01 | R0270: tracker/next at 901/271 (c0900 landed since prep); verification logs | 0 | 0 | 2.5 | raft+proportional |
 | 3 | 2026-10-05 15:18 | R0270: review 001 fixes (remap once after a conflicting merge, scratch cleanup, templates untouched, usage, duplicate hint, space and level unions) | 101 | 13 | 10.1 | raft+proportional |
+| 4 | 2026-10-05 15:18 | R0270: refute-001 | 0 | 0 | 1.5 | raft+proportional |
 
-**Total:** +518 / -37 lines, 22.4 agent-minutes over 3 commits
-<!-- totals: added=518 removed=37 minutes=22.4 commits=3 -->
+**Total:** +518 / -37 lines, 23.9 agent-minutes over 4 commits
+<!-- totals: added=518 removed=37 minutes=23.9 commits=4 -->
