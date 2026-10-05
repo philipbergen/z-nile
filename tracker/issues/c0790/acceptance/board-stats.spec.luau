@@ -116,6 +116,29 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(closed > 0).toBe(true)
 	end)
 
+	it("the page has every chart for every view and type filter, with themed series colors", function()
+		local html = board.render(m, fs.readFile(board.MARKED_PATH))
+		for _, v in { "month", "quarter", "year" } do
+			for _, ty in { "all", "feature", "defect", "chore" } do
+				for _, metric in { "opened", "closed", "net", "minutes", "lines" } do
+					t.expect(string.find(html, `data-chart="{v}/{ty}/{metric}"`, 1, true) ~= nil).toBe(true)
+				end
+			end
+			t.expect(string.find(html, `data-chart="{v}/ratios-count"`, 1, true) ~= nil).toBe(true)
+			t.expect(string.find(html, `data-chart="{v}/ratios-time"`, 1, true) ~= nil).toBe(true)
+		end
+		t.expect(string.find(html, 'data-chart="durations"', 1, true) ~= nil).toBe(true)
+		-- series colors are themed: defined for light, and again for dark under both scopes
+		local dark = string.match(html, "@media %(prefers%-color%-scheme: dark%).-\n}") or ""
+		t.expect(string.find(dark, "--series-feature", 1, true) ~= nil).toBe(true)
+		t.expect(select(2, string.gsub(html, "%-%-series%-feature:", "")) >= 3).toBe(true)
+		t.expect(string.find(html, '[data-theme="dark"]', 1, true) ~= nil).toBe(true)
+	end)
+
+	it("the real tracker's page stays under 1.5 MB", function()
+		t.expect(#board.build() < 1.5 * 1024 * 1024).toBe(true)
+	end)
+
 	it("the board workflow checks out full history", function()
 		local wf = serde.decode("yaml", fs.readFile(".github/workflows/board.yml"))
 		local steps = wf.jobs.board.steps

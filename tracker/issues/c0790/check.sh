@@ -11,9 +11,10 @@ A="$HERE/acceptance"
 out_stats=$(lune run tests/run -- "$A/stats.spec.luau" 2>&1)
 out_history=$(lune run tests/run -- "$A/history.spec.luau" 2>&1)
 out_board=$(lune run tests/run -- "$A/board-stats.spec.luau" 2>&1)
-cases_pass() { # $1: stats | history | board-stats; then case-name prefixes (bash 3.2: no associative arrays)
+out_chart=$(lune run tests/run -- "$A/chart.spec.luau" 2>&1)
+cases_pass() { # $1: stats | history | chart | board-stats; then case-name prefixes (bash 3.2: no associative arrays)
   local s=$1 out c; shift
-  case $s in stats) out=$out_stats ;; history) out=$out_history ;; *) out=$out_board ;; esac
+  case $s in stats) out=$out_stats ;; history) out=$out_history ;; chart) out=$out_chart ;; *) out=$out_board ;; esac
   if grep -q "could not load spec" <<<"$out"; then echo "$out"; return 1; fi
   grep -Eq "^[0-9]+ passed, 0 failed, 1 spec files$" <<<"$out" || { echo "$out" | tail -n 40; return 1; }
   for c in "$@"; do
@@ -36,5 +37,12 @@ check "AC6: the board carries stats, has a Stats section beside the tabs, and bu
   "an undated tree collects without error" "the real tracker's board has history"
 check "AC7: board.yml fetches full history, and the overridden c0460 case passes" bash -c '
   lune run tests/run -- '"$A"'/board-stats.spec.luau tests/acceptance/c0460/board-workflow.spec.luau'
+check "AC8: chart.svg draws marks with tooltips, stacks, baselines, nil gaps, one covering axis, empty frames, deterministically" cases_pass chart \
+  "a bar per non-zero value" "stacked segments sit on each other" "mirror draws its below series" "a nil value breaks a line" \
+  "one axis whose top tick" "no data draws an empty frame" "the same input gives the same bytes"
+check "AC9: a legend for two or more series; colors are classes, never inline" cases_pass chart \
+  "a legend for two or more series" "colors are classes"
+check "AC10: every view x type x metric chart on the page, themed colors, page under 1.5 MB" cases_pass board-stats \
+  "the page has every chart" "the real tracker's page stays under"
 
 finish
