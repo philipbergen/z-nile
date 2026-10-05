@@ -116,6 +116,112 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(closed > 0).toBe(true)
 	end)
 
+	it("the page has every chart for every view and type filter, with themed series colors", function()
+		local html = board.render(m, fs.readFile(board.MARKED_PATH))
+		local section = string.match(html, '<section id="stats".-</section>') or ""
+		local figures: { [string]: string } = {}
+		for tag, id in
+			string.gmatch(
+				section,
+				'(<figure class="chart%-fig"[^>]*>)%s*<svg class="chart" data%-chart="([^"]+)"'
+			)
+		do
+			figures[id] = tag
+		end
+		local function visible(id: string): boolean
+			return string.find(figures[id], " hidden", 1, true) == nil
+		end
+		local shown = 0
+		for _, v in { "month", "quarter", "year" } do
+			for _, ty in { "all", "feature", "defect", "chore" } do
+				for _, metric in { "opened", "closed", "net", "minutes", "lines" } do
+					local id = `{v}/{ty}/{metric}`
+					t.expect(figures[id] ~= nil).toBe(true)
+					t.expect(string.find(figures[id], `data-view="{v}"`, 1, true) ~= nil).toBe(true)
+					t.expect(string.find(figures[id], `data-type="{ty}"`, 1, true) ~= nil).toBe(true)
+					if visible(id) then
+						shown += 1
+						t.expect(v == "month" and ty == "all").toBe(true) -- only month/all starts visible
+					end
+				end
+			end
+			for _, r in { "ratios-count", "ratios-time" } do
+				local id = `{v}/{r}`
+				t.expect(figures[id] ~= nil).toBe(true)
+				local at = string.find(section, `data-chart="{v}/{r}"`, 1, true) or 1 -- plain find: ids hold hyphens
+				local stop = string.find(section, "</svg>", at, true) or at
+				local svg = string.sub(section, at, stop)
+				t.expect(
+					string.find(svg, "ser-defect", 1, true) ~= nil
+						and string.find(svg, "ser-chore", 1, true) ~= nil
+				).toBe(true) -- defect % and chore % are two distinct series
+				if visible(id) then
+					shown += 1
+				end
+			end
+		end
+		t.expect(figures.durations ~= nil).toBe(true)
+		if visible("durations") then
+			shown += 1
+		end
+		t.expect(shown).toBe(8) -- month/all's five, month's two ratio charts and the durations
+		for _, id in { "stats-view", "stats-type", "stats-table-toggle", "stats-tables" } do
+			t.expect(string.find(section, `id="{id}"`, 1, true) ~= nil).toBe(true)
+		end
+		-- series tokens: light in :root, dark in the dark media block, different, and every class painted from them
+		local light = string.match(html, ":root%s*{[^}]*}") or ""
+		local dark = string.match(html, "@media %(prefers%-color%-scheme: dark%)%s*{%s*:root%s*{[^}]*}") or ""
+		for _, key in { "feature", "defect", "chore", "net" } do
+			local lv = string.match(light, `%-%-ser%-{key}:%s*([^;]+);`)
+			local dv = string.match(dark, `%-%-ser%-{key}:%s*([^;]+);`)
+			t.expect(lv ~= nil and dv ~= nil and lv ~= dv).toBe(true)
+			t.expect(string.find(html, `.ser-{key}`, 1, true) ~= nil).toBe(true)
+			t.expect(string.find(html, `var(--ser-{key})`, 1, true) ~= nil).toBe(true)
+		end
+	end)
+
+	it(
+		"the Table view has one table per view, the periods and the time in state, with units in the headers",
+		function()
+			local html = board.render(m, fs.readFile(board.MARKED_PATH))
+			local tables = string.match(html, '<div id="stats%-tables".-</div>') or ""
+			local _, n = string.gsub(tables, "<table", "")
+			t.expect(n >= 5).toBe(true) -- month, quarter, year, the periods, time in state
+			for _, unit in { "minutes", "+lines", "−lines", "days", "%" } do
+				t.expect(string.find(tables, unit, 1, true) ~= nil).toBe(true)
+			end
+		end
+	)
+
+	it("the Stats section stays under 450 KB for a busy year", function()
+		local busy = `{tree}-busy`
+		if fs.isDir(busy) then
+			fs.removeDir(busy)
+		end
+		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+			fs.writeDir(`{busy}/tracker/{d}`)
+		end
+		local kinds = { "feature", "defect", "chore" }
+		for i = 1, 240 do
+			local id = string.format("%s%04d", string.sub(kinds[(i % 3) + 1], 1, 1), i)
+			local month = (i % 12) + 1
+			local day = (i % 27) + 1
+			local created = string.format("2025-%02d-%02d", month, day)
+			local dir = `{busy}/tracker/issues/{id}`
+			fs.writeDir(dir)
+			fs.writeFile(`{dir}/{id}.md`, issue(id, kinds[(i % 3) + 1], created))
+			fs.writeFile(
+				`{dir}/spend.md`,
+				SPEND_HEAD .. `| 1 | {created} 10:00 | abc1234 | {i * 3} | {i} | {i % 50 + 5} | explicit |\n`
+			)
+		end
+		local html = board.render(board.collect(`{busy}/tracker`), fs.readFile(board.MARKED_PATH))
+		local section = string.match(html, '<section id="stats".-</section>') or ""
+		t.expect(#section > 0).toBe(true)
+		t.expect(#section < 450 * 1024).toBe(true)
+		fs.removeDir(busy)
+	end)
+
 	it("the board workflow checks out full history", function()
 		local wf = serde.decode("yaml", fs.readFile(".github/workflows/board.yml"))
 		local steps = wf.jobs.board.steps
