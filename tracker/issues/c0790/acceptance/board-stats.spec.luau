@@ -148,7 +148,9 @@ return t.spec("tracker board statistics", function(it)
 			for _, r in { "ratios-count", "ratios-time" } do
 				local id = `{v}/{r}`
 				t.expect(figures[id] ~= nil).toBe(true)
-				local svg = string.match(section, `data%-chart="{v}/{r}".-</svg>`) or ""
+				local at = string.find(section, `data-chart="{v}/{r}"`, 1, true) or 1 -- plain find: ids hold hyphens
+				local stop = string.find(section, "</svg>", at, true) or at
+				local svg = string.sub(section, at, stop)
 				t.expect(
 					string.find(svg, "ser-defect", 1, true) ~= nil
 						and string.find(svg, "ser-chore", 1, true) ~= nil

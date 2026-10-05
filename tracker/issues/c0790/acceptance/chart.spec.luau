@@ -183,6 +183,17 @@ return t.spec("tracker chart", function(it)
 			t.expect(string.find(svg, '<text class="empty"', 1, true) ~= nil).toBe(true)
 			t.expect(string.find(svg, "no data", 1, true) ~= nil).toBe(true)
 		end
+		-- an empty chart with two or more series keeps its legend (a ratio chart before any history)
+		local twoEmpty = chart.svg({
+			{ key = "defect", label = "Defect %", values = { nil, nil } },
+			{ key = "chore", label = "Chore %", values = { nil, nil } },
+		}, { id = "r", title = "Ratios", unit = "%", labels = { "a", "b" }, kind = "lines" })
+		t.expect(string.find(twoEmpty, "no data", 1, true) ~= nil).toBe(true)
+		local legend = string.match(twoEmpty, '<g class="legend".-</g>') or ""
+		t.expect(
+			string.find(legend, "ser-defect", 1, true) ~= nil
+				and string.find(legend, "ser-chore", 1, true) ~= nil
+		).toBe(true)
 	end)
 
 	it("the same input gives the same bytes", function()
@@ -236,19 +247,16 @@ return t.spec("tracker chart", function(it)
 	end)
 
 	it("hbars draws one horizontal bar per non-nil mean, with n in its tooltip", function()
-		local svg = chart.svg(
-			{
-				{ key = "feature", label = "Feature", values = { 1.5, 3 }, notes = { "n=4", "n=2" } },
-				{ key = "defect", label = "Defect", values = { nil, 0.5 }, notes = { nil, "n=1" } },
-			},
-			{
-				id = "durations",
-				title = "Time in state",
-				unit = "days",
-				labels = { "active", "new" },
-				kind = "hbars",
-			}
-		)
+		local svg = chart.svg({
+			{ key = "feature", label = "Feature", values = { 1.5, 3 }, notes = { "n=4", "n=2" } },
+			{ key = "defect", label = "Defect", values = { nil, 0.5 }, notes = { nil, "n=1" } },
+		}, {
+			id = "durations",
+			title = "Time in state",
+			unit = "days",
+			labels = { "active", "new" },
+			kind = "hbars",
+		})
 		local m = marks(svg)
 		t.expect(#m).toBe(3)
 		local titles: { [string]: boolean } = {}
