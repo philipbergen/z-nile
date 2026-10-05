@@ -41,7 +41,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
    - `scripts/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
    - the read-only tracker commands `list`, `audit`, `find`, `members`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>`, and the worktree commands `worktree`, `worktree-prune` and `launch`. (`tracker.sh check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
-   The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
+   The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>`, `compact`, `remap` and a raft-creating `prompt` refuse to run in the main checkout of a repo that has an `origin`.
 2. **Every change starts with a worktree**: `cd "$(scripts/tracker.sh worktree <target>)"`.
 
    | work | target | path and branch |

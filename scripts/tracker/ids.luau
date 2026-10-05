@@ -3,7 +3,7 @@
 -- See c0870.
 local ids = {}
 
-export type Space = string -- "issue" | "raft"
+export type Space = "issue" | "raft"
 export type Counters = { issue: number, raft: number }
 
 ids.FILE = "tracker/next"

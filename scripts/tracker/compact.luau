@@ -24,12 +24,12 @@ local function moveAll(root: string, moves: { { from: string, to: string } })
 	for _, m in moves do
 		local parent = string.match(m.to, "^(.*)/[^/]+$") :: string
 		local name = string.match(m.to, "([^/]+)$") :: string
-		gitIn(root, { "mv", m.from, `{parent}/.compact-{name}` })
+		gitIn(root, { "mv", m.from, `{parent}/{name}.compacting` })
 	end
 	for _, m in moves do
 		local parent = string.match(m.to, "^(.*)/[^/]+$") :: string
 		local name = string.match(m.to, "([^/]+)$") :: string
-		gitIn(root, { "mv", `{parent}/.compact-{name}`, m.to })
+		gitIn(root, { "mv", `{parent}/{name}.compacting`, m.to })
 	end
 end
 
@@ -67,7 +67,8 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 	end
 	for path in string.gmatch(gitIn(root, { "ls-files" }), "[^\n]+") do
 		local abs = `{root}/{path}`
-		if path ~= ids.FILE and path ~= ids.MAP_FILE and fs.isFile(abs) then
+		local template = string.sub(path, 1, 18) == "tracker/templates/" -- never rewritten (R0270 review 001 F3)
+		if path ~= ids.FILE and path ~= ids.MAP_FILE and not template and fs.isFile(abs) then
 			local text = fs.readFile(abs)
 			if not string.find(text, "\0", 1, true) then
 				local out = if rewritesIds(path) then ids.rewrite(text, map) else ids.rewritePaths(text, map)

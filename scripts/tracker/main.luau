@@ -13,6 +13,11 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 
+-- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
+local function asSpace(s: string): idsLib.Space
+	return if s == "raft" then "raft" else "issue"
+end
+
 local USAGE = [[
 usage: scripts/tracker.sh <command> ...
   new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"]   create an issue (emergent if the raft is active)
@@ -24,7 +29,11 @@ usage: scripts/tracker.sh <command> ...
   list [backlog|active|done]                    list items
   members <R-id>                                print directories of every issue in the raft
   check <id>                                    run an item's check.sh (a raft runs its own)
-  renumber <old> [<new>]                        step an id (conflict resolution); <new> defaults to one above the highest
+  renumber <old|item directory> [<new>]         step an id (conflict resolution), or one copy of a duplicated id;
+                                                <new> defaults to the next free number (tracker/next, by one)
+  audit                                         check the whole tracker tree: duplicates, documents, the counter
+  compact [--force]                             renumber every item from 0001 (a fresh worktree on origin/main)
+  remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   start <R-id>                                  branch, move to active, commit, push, draft PR
   focus <issue-id>                              attribute following commits to this issue
@@ -377,7 +386,7 @@ local function reserve(
 	if not c then
 		return nil, nil, `{idsLib.FILE} on origin/main does not parse`
 	end
-	local n = idsLib.nextFree(space, c, used)
+	local n = idsLib.nextFree(asSpace(space), c, used)
 	if n > 9999 then
 		return nil, nil, "no number above 9999 is free"
 	end
@@ -418,7 +427,7 @@ end
 local function localNumber(space: string, legacy: () -> number): number
 	local c = localCounters()
 	if c then
-		return idsLib.nextFree(space, c, localIds(space))
+		return idsLib.nextFree(asSpace(space), c, localIds(space))
 	end
 	return legacy()
 end
@@ -1026,7 +1035,17 @@ function cmd.renumber(pos: { string })
 			slug = "",
 		}
 	else
-		item = store.get(arg)
+		local ok, got = pcall(store.get, arg)
+		if not ok then
+			local why = tostring(got)
+			if string.find(why, "duplicate id", 1, true) then
+				fail(
+					`{why}\nrenumber one copy by its directory: tracker.sh renumber <directory> (not the one in done/)`
+				)
+			end
+			fail(why)
+		end
+		item = got
 	end
 	local old = item.id
 	if new and string.sub(old, 1, 1) ~= string.sub(new, 1, 1) then
@@ -1046,7 +1065,7 @@ function cmd.renumber(pos: { string })
 			for _, id in originMainIds(kind) do
 				table.insert(used, id)
 			end
-			n = idsLib.nextFree(kind, localCounters() :: idsLib.Counters, used)
+			n = idsLib.nextFree(asSpace(kind), localCounters() :: idsLib.Counters, used)
 		end
 		if not n then
 			n = store.nextAbove(kind, originMainIds(kind))
@@ -1119,7 +1138,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	local counts = { issue = 0, raft = 0 }
 	for _, f in found do
 		table.insert(all, f.id)
-		local space = idsLib.spaceOf(f.id) :: string
+		local space: string = idsLib.spaceOf(f.id) or "issue"
 		counts[space] += 1
 	end
 	local map = idsLib.plan(all)
@@ -1159,6 +1178,16 @@ function cmd.remap()
 	if fs.isFile(idsLib.MAP_FILE) and fs.readFile(idsLib.MAP_FILE) == shown.stdout then
 		fail("remap: this branch already has origin/main's compaction")
 	end
+	-- a remap whose merge conflicted kept its commit but has no local map yet: its ids are already the new ones, and a
+	-- second remap would renumber them again (R0270 review 001 F6)
+	local since = sh.git({ "log", "--format=%s", `{sh.git({ "merge-base", "HEAD", "origin/main" })}..HEAD` })
+	for subject in string.gmatch(since, "[^\n]+") do
+		if subject == "tracker: remap ids" then
+			fail(
+				"remap: this branch already ran remap; finish it with git merge origin/main and resolve by hand"
+			)
+		end
+	end
 	local map = idsLib.parseMap(shown.stdout)
 	if not map then
 		fail(`remap: origin/main's {idsLib.MAP_FILE} does not parse`)
@@ -1180,7 +1209,7 @@ function cmd.remap()
 	local function number(c: idsLib.Counters, used: { string }): idsLib.Counters
 		local raised: idsLib.Counters = { issue = c.issue, raft = c.raft }
 		for _, space in { "issue", "raft" } do
-			local n = idsLib.nextFree(space, c, used)
+			local n = idsLib.nextFree(asSpace(space), c, used)
 			for _, id in unmapped do
 				if idsLib.spaceOf(id) == space then
 					m[id] = store.formatId(string.sub(id, 1, 1), n)
@@ -1225,6 +1254,14 @@ function cmd.remap()
 		end
 	end
 	compactLib.apply(m, found)
+	local problems = audit.run(".")
+	if audit.errors(problems) > 0 then
+		for _, p in problems do
+			stdio.ewrite(audit.format(p) .. "\n")
+		end
+		sh.git({ "reset", "--quiet", "--hard", "HEAD" })
+		fail("remap: the remapped tree fails the audit (above); nothing was committed")
+	end
 	sh.git({ "add", "-A" })
 	sh.git({ "commit", "--quiet", "-m", "tracker: remap ids" })
 	-- Then merge origin/main against the merge base with the same map applied: every path then matches on all three
@@ -1233,18 +1270,26 @@ function cmd.remap()
 	local scratch = ".cache/tracker-remap-base"
 	fs.writeDir(".cache")
 	sh.run("git", { "worktree", "remove", "--force", scratch })
-	sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
-	compactLib.apply(m, audit.scan(scratch), scratch)
-	local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
-	local baseTree = process.exec("git", { "write-tree" }, { cwd = scratch })
+	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
+	local built, baseTree = pcall(function(): string
+		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
+		compactLib.apply(m, audit.scan(scratch), scratch)
+		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
+		local tree = process.exec("git", { "write-tree" }, { cwd = scratch })
+		if not addBase.ok or not tree.ok then
+			error(addBase.stderr .. tree.stderr, 0)
+		end
+		return sh.trim(tree.stdout)
+	end)
 	sh.run("git", { "worktree", "remove", "--force", scratch })
-	if not addBase.ok or not baseTree.ok then
-		fail("remap committed, but the remapped merge base could not be built: git merge origin/main by hand")
+	sh.run("git", { "worktree", "prune" })
+	if not built then
+		fail(
+			`remap committed, but the remapped merge base could not be built ({baseTree}): git merge origin/main and resolve by hand`
+		)
 	end
-	local mt = sh.run(
-		"git",
-		{ "merge-tree", "--write-tree", `--merge-base={sh.trim(baseTree.stdout)}`, "HEAD", "origin/main" }
-	)
+	local mt =
+		sh.run("git", { "merge-tree", "--write-tree", `--merge-base={baseTree}`, "HEAD", "origin/main" })
 	if not mt.ok then
 		fail(
 			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve\n{mt.stdout}`

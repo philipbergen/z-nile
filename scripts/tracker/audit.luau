@@ -4,7 +4,8 @@
 local fs = require("@lune/fs")
 local ids = require("./ids")
 
-export type Problem = { level: string, code: string, path: string, message: string }
+export type Level = "error" | "warning"
+export type Problem = { level: Level, code: string, path: string, message: string }
 
 local audit = {}
 
@@ -54,7 +55,7 @@ end
 
 function audit.run(root: string): { Problem }
 	local problems: { Problem } = {}
-	local function add(level: string, code: string, path: string, message: string)
+	local function add(level: Level, code: string, path: string, message: string)
 		table.insert(problems, { level = level, code = code, path = path, message = message })
 	end
 	local found = audit.scan(root)
@@ -136,13 +137,15 @@ function audit.run(root: string): { Problem }
 		if not c then
 			add("error", "next-malformed", ids.FILE, "expected `issue <n> <phrase>` and `raft <n> <phrase>`")
 		else
-			for _, space in { "issue", "raft" } do
-				local n = if space == "raft" then c.raft else c.issue
+			-- a counter at or below the highest number in use in its space (a warning: allocation skips used numbers)
+			local function behind(space: ids.Space, n: number)
 				local high = ids.highest(space, used)
 				if high >= n then
 					add("warning", "next-behind", ids.FILE, `{space} counter {n} is not above {high}, in use`)
 				end
 			end
+			behind("issue", c.issue)
+			behind("raft", c.raft)
 		end
 	end
 	table.sort(problems, function(a, b)
