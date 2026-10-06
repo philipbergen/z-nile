@@ -1,0 +1,747 @@
+diff --git a/default.project.json b/default.project.json
+index 4b0c8e8..2904b52 100644
+--- a/default.project.json
++++ b/default.project.json
+@@ -12,10 +12,12 @@
+         "Ready": { "$className": "RemoteEvent" },
+         "Intent": { "$className": "RemoteEvent" },
+         "Snapshot": { "$className": "RemoteEvent" },
+-        "PlayAgain": { "$className": "RemoteEvent" }
++        "ToLobby": { "$className": "RemoteEvent" },
++        "LobbyStatus": { "$className": "RemoteEvent" }
+       }
+     },
+     "ServerScriptService": {
++      "$attributes": { "LobbyPlaceId": 0 },
+       "Server": { "$path": "src/server" }
+     },
+     "StarterPlayer": {
+diff --git a/src/client/FlowView.luau b/src/client/FlowView.luau
+index 9248f13..8c4bf0e 100644
+--- a/src/client/FlowView.luau
++++ b/src/client/FlowView.luau
+@@ -1,6 +1,7 @@
+ --!strict
+--- Client adapter: the run's overlay (READY!, the dying fade, GAME OVER and the play-again prompt) and
+--- the play-again request. Flow decides what shows; the server decides whether a new run starts.
++-- Client adapter: the run's overlay (READY!, the dying fade, GAME OVER with the results and the prompt) and the
++-- request to go back to the lobby. Flow decides what shows and whether a tap asks; the server decides whether
++-- the player leaves, and reports how the trip stands on LobbyStatus.
+ local ContextActionService = game:GetService("ContextActionService")
+ local Players = game:GetService("Players")
+ local ReplicatedStorage = game:GetService("ReplicatedStorage")
+@@ -9,15 +10,16 @@ local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
+ 
+ local YELLOW = Color3.fromRGB(255, 255, 0)
+ local BLACK = Color3.fromRGB(0, 0, 0)
+-local BUTTON_HEIGHT = 48 -- pixels: above the 44 pt touch target
+ 
+ local FlowView = {}
+ 
+ local fade: Frame? = nil
+ local banner: TextLabel? = nil
+ local detail: TextLabel? = nil
+-local button: TextButton? = nil
+-local live = false -- the latest overlay's playAgain: only then is a request sent
++local prompt: TextLabel? = nil
++local catcher: TextButton? = nil
++local live = false -- the latest overlay's tap: only then is a request sent
++local trip: Flow.Trip? = nil -- the server's latest report, nil until the first
+ 
+ local function text(name: string, parent: Instance, height: number, y: number): TextLabel
+ 	local l = Instance.new("TextLabel")
+@@ -34,7 +36,9 @@ local function text(name: string, parent: Instance, height: number, y: number):
+ end
+ 
+ function FlowView.start()
+-	local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("PlayAgain") :: RemoteEvent
++	local remotes = ReplicatedStorage:WaitForChild("Remotes")
++	local toLobby = remotes:WaitForChild("ToLobby") :: RemoteEvent
++	local status = remotes:WaitForChild("LobbyStatus") :: RemoteEvent
+ 	local gui = Instance.new("ScreenGui")
+ 	gui.Name = "Flow"
+ 	gui.ResetOnSpawn = false
+@@ -51,36 +55,38 @@ function FlowView.start()
+ 	fade = f
+ 	banner = text("Banner", gui, 0.12, 0.34)
+ 	detail = text("Detail", gui, 0.05, 0.47)
++	prompt = text("Prompt", gui, 0.05, 0.58)
+ 
++	-- a tap anywhere: an invisible button over the whole screen, shown only while a tap asks
+ 	local b = Instance.new("TextButton")
+-	b.Name = "PlayAgain"
+-	b.Text = "PLAY AGAIN (Enter)"
+-	b.Font = Enum.Font.Arcade
+-	b.TextScaled = true
+-	b.TextColor3 = BLACK
+-	b.BackgroundColor3 = YELLOW
+-	b.Size = UDim2.new(0.3, 0, 0, BUTTON_HEIGHT)
+-	b.Position = UDim2.fromScale(0.35, 0.58)
++	b.Name = "Continue"
++	b.Text = ""
++	b.BackgroundTransparency = 1
++	b.Size = UDim2.fromScale(1, 1)
+ 	b.Visible = false
+ 	b.Parent = gui
+-	button = b
++	catcher = b
+ 	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
+ 
++	status.OnClientEvent:Connect(function(phase: any, configured: any)
++		trip = { phase = phase, configured = configured == true }
++	end)
++
+ 	local function ask()
+ 		if live then
+-			remote:FireServer()
++			toLobby:FireServer()
+ 		end
+ 	end
+ 	b.Activated:Connect(ask)
+ 
+ 	local keys: { EnumItem } = {}
+-	for _, name in Flow.PLAY_AGAIN_KEYS do
++	for _, name in Flow.CONTINUE_KEYS do
+ 		table.insert(keys, (Enum.KeyCode :: any)[name])
+ 	end
+ 	ContextActionService:BindAction(
+-		"PickmanPlayAgain",
++		"PickmanContinue",
+ 		function(_name: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
+-			if state == Enum.UserInputState.Begin and Flow.isPlayAgainKey(input.KeyCode.Name) then
++			if state == Enum.UserInputState.Begin and Flow.isContinueKey(input.KeyCode.Name) then
+ 				ask()
+ 			end
+ 			return Enum.ContextActionResult.Pass
+@@ -90,8 +96,13 @@ function FlowView.start()
+ 	)
+ end
+ 
++-- The server's latest report on the way back to the lobby, for Flow.overlay (nil until the first).
++function FlowView.trip(): Flow.Trip?
++	return trip
++end
++
+ function FlowView.show(o: Flow.Overlay)
+-	live = o.playAgain
++	live = o.tap
+ 	if fade then
+ 		fade.BackgroundTransparency = 1 - o.fade
+ 	end
+@@ -103,8 +114,12 @@ function FlowView.show(o: Flow.Overlay)
+ 		detail.Text = o.detail or ""
+ 		detail.Visible = o.detail ~= nil
+ 	end
+-	if button then
+-		button.Visible = o.playAgain
++	if prompt then
++		prompt.Text = o.prompt or ""
++		prompt.Visible = o.prompt ~= nil
++	end
++	if catcher then
++		catcher.Visible = o.tap
+ 	end
+ end
+ 
+diff --git a/src/client/Main.client.luau b/src/client/Main.client.luau
+index 6395229..f8ac819 100644
+--- a/src/client/Main.client.luau
++++ b/src/client/Main.client.luau
+@@ -42,13 +42,13 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+ 	GhostView.push(snap)
+ 	DangerHud.push(snap, Maze.layout(snap.maze))
+ 	HudView.show(frame.play)
+-	local overlay = Flow.overlay(frame.play, RULES)
++	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
+ 	FlowView.show(overlay)
+ 	if model and overlay.flash ~= lit then
+ 		lit = overlay.flash
+ 		MazeView.flash(model, overlay.flash)
+ 	end
+-	Camera.setCursor(overlay.playAgain)
++	Camera.setCursor(overlay.cursor)
+ 	-- last: a code that fails to decode can't stop the rest of the frame
+ 	if pellets then
+ 		PelletView.show(pellets, frame.pellets)
+diff --git a/src/server/Main.server.luau b/src/server/Main.server.luau
+index 490c141..2f2ccdc 100644
+--- a/src/server/Main.server.luau
++++ b/src/server/Main.server.luau
+@@ -1,4 +1,6 @@
+ --!strict
+ -- Server entry point. Boots server-side adapters; holds no game logic itself.
+-require("./Sessions").start()
++local Sessions = require("./Sessions")
++Sessions.start()
++require("./Returns").start(Sessions.isOver)
+ print("[pickman] server started")
+diff --git a/src/server/Returns.luau b/src/server/Returns.luau
+new file mode 100644
+index 0000000..a2a233a
+--- /dev/null
++++ b/src/server/Returns.luau
+@@ -0,0 +1,90 @@
++--!strict
++-- Server adapter: at the end of a run, a player's request to leave becomes a teleport back to the lobby. It only
++-- relays the request, the clock and the engine's answer to Travel; whether the run is over is Logic (through
++-- `isOver`), and whether a request may go is Travel. The lobby's place id is configuration (an attribute the
++-- publisher sets), never something the client sends.
++local Players = game:GetService("Players")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local RunService = game:GetService("RunService")
++local ServerScriptService = game:GetService("ServerScriptService")
++local TeleportService = game:GetService("TeleportService")
++
++local Travel = require("@game/ReplicatedStorage/Shared/Logic/Travel")
++
++local Returns = {}
++
++function Returns.start(isOver: (Player) -> boolean)
++	local remotes = ReplicatedStorage:WaitForChild("Remotes")
++	local toLobby = remotes:WaitForChild("ToLobby") :: RemoteEvent
++	local status = remotes:WaitForChild("LobbyStatus") :: RemoteEvent
++
++	local destination = Travel.destination(ServerScriptService:GetAttribute("LobbyPlaceId"))
++	local travel = Travel.new()
++	local shown: { [Player]: string } = {}
++
++	local function push(player: Player, phase: Travel.Phase)
++		-- a report can arrive after the player has gone
++		if player.Parent == nil then
++			return
++		end
++		if shown[player] ~= phase then
++			shown[player] = phase
++			status:FireClient(player, phase, destination ~= nil)
++		end
++	end
++
++	-- tell the player what Travel says now (a report from the engine may have changed nothing)
++	local function sync(player: Player)
++		push(player, Travel.status(travel, tostring(player.UserId), os.clock()))
++	end
++
++	-- only the sender, only once its run is over; anything the client sends is ignored
++	toLobby.OnServerEvent:Connect(function(player: Player)
++		if not isOver(player) then
++			return
++		end
++		local id = tostring(player.UserId)
++		if destination == nil then
++			push(player, "idle")
++			return
++		end
++		local answer, ticket = Travel.request(travel, id, os.clock())
++		if answer == "go" then
++			push(player, "going")
++			local ok = pcall(TeleportService.TeleportAsync, TeleportService, destination, { player })
++			if ok then
++				Travel.answered(travel, id, os.clock(), ticket)
++			else
++				Travel.failed(travel, id, os.clock(), ticket)
++				sync(player)
++			end
++		end
++	end)
++
++	TeleportService.TeleportInitFailed:Connect(function(player: Player)
++		Travel.failed(travel, tostring(player.UserId), os.clock())
++		sync(player)
++	end)
++
++	Players.PlayerAdded:Connect(function(player: Player)
++		push(player, "idle")
++	end)
++	Players.PlayerRemoving:Connect(function(player: Player)
++		Travel.left(travel, tostring(player.UserId))
++		shown[player] = nil
++	end)
++
++	-- a cool-down or a timeout ends by itself: tell the player once a second
++	local last = 0
++	RunService.Heartbeat:Connect(function()
++		local now = os.clock()
++		if now - last >= 1 then
++			last = now
++			for _, player in Players:GetPlayers() do
++				push(player, Travel.status(travel, tostring(player.UserId), now))
++			end
++		end
++	end)
++end
++
++return Returns
+diff --git a/src/server/Sessions.luau b/src/server/Sessions.luau
+index 48b8f2c..980e312 100644
+--- a/src/server/Sessions.luau
++++ b/src/server/Sessions.luau
+@@ -10,14 +10,20 @@ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+ 
+ local Sessions = {}
+ 
++local sessions: { [Player]: Session.Session } = {}
++
++-- Whether this player's run is over, as Logic says; a player with no session has no run.
++function Sessions.isOver(player: Player): boolean
++	local s = sessions[player]
++	return s ~= nil and Session.isOver(s, tostring(player.UserId))
++end
++
+ function Sessions.start()
+ 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+ 	local ready = remotes:WaitForChild("Ready") :: RemoteEvent
+ 	local intent = remotes:WaitForChild("Intent") :: RemoteEvent
+ 	local snapshot = remotes:WaitForChild("Snapshot") :: RemoteEvent
+-	local playAgain = remotes:WaitForChild("PlayAgain") :: RemoteEvent
+ 
+-	local sessions: { [Player]: Session.Session } = {}
+ 	local clock = Session.newClock(Session.STEP_RATE)
+ 
+ 	-- the client is listening for snapshots once it signals Ready; a repeat signal is ignored
+@@ -36,14 +42,6 @@ function Sessions.start()
+ 		end
+ 	end)
+ 
+-	-- only the sender's own run, and only if Logic says the run is over; anything the client sends is ignored
+-	playAgain.OnServerEvent:Connect(function(player: Player)
+-		local s = sessions[player]
+-		if s then
+-			Session.playAgain(s, tostring(player.UserId))
+-		end
+-	end)
+-
+ 	Players.PlayerRemoving:Connect(function(player: Player)
+ 		sessions[player] = nil
+ 	end)
+diff --git a/src/shared/Logic/Flow/init.luau b/src/shared/Logic/Flow/init.luau
+index 226b71e..a8126c2 100644
+--- a/src/shared/Logic/Flow/init.luau
++++ b/src/shared/Logic/Flow/init.luau
+@@ -1,49 +1,80 @@
+ --!strict
+ -- Flow: what the screen shows over the maze in each phase of a run, engine-free. The client draws it;
+--- only the server moves a run from phase to phase.
++-- only the server moves a run from phase to phase, and only the server sends a player back to the lobby.
+ local Game = require("./Game")
+ local Session = require("./Session")
++local Travel = require("./Travel")
++
++-- How the way back to the lobby stands, as the server last reported it.
++export type Trip = { phase: Travel.Phase, configured: boolean }
+ 
+ export type Overlay = {
+ 	banner: string?, -- "READY!" or "GAME OVER"
+ 	detail: string?, -- the line under the banner
+ 	fade: number, -- 0..FADE_MAX: how dark the screen is
+ 	flash: boolean, -- the walls are lit in this frame
+-	playAgain: boolean, -- the play-again prompt is up and its keys are live
++	prompt: string?, -- under the results: what a tap does now, or why it does nothing
++	tap: boolean, -- a tap, a click or a continue key asks the server for the lobby now
++	cursor: boolean, -- the mouse is free and shown
+ }
+ 
+ local Flow = {}
+ Flow.FADE_MAX = 0.6
+ Flow.FLASH_TICKS = 6
+-Flow.PLAY_AGAIN_KEYS = table.freeze({ "Return", "KeypadEnter" })
++Flow.CONTINUE_KEYS = table.freeze({ "Return", "KeypadEnter" })
++Flow.PROMPT = table.freeze({
++	idle = "TAP TO RETURN TO THE LOBBY",
++	going = "RETURNING TO THE LOBBY...",
++	cooling = "Could not return. Try again in a moment.",
++	unset = "The lobby is not set up yet.",
++})
++-- before the server has said anything: the request may go, and the server answers with the truth
++Flow.NO_REPORT = table.freeze({ phase = "idle", configured = true } :: Trip)
++
++local function prompt(trip: Trip): string
++	if not trip.configured then
++		return Flow.PROMPT.unset
++	end
++	return Flow.PROMPT[trip.phase]
++end
+ 
+-function Flow.overlay(play: Session.PlayFrame, rules: Game.Config): Overlay
++function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?): Overlay
+ 	local phase = play.phase
+ 	if phase == "ready" then
+-		return { banner = "READY!", detail = `LEVEL {play.level}`, fade = 0, flash = false, playAgain = false }
++		return {
++			banner = "READY!",
++			detail = `LEVEL {play.level}`,
++			fade = 0,
++			flash = false,
++			tap = false,
++			cursor = false,
++		}
+ 	elseif phase == "dying" then
+ 		-- from nothing at the moment of death to FADE_MAX at the end of the pause
+ 		local total = rules.dyingTicks
+ 		local fade = if total > 0
+ 			then Flow.FADE_MAX * math.clamp((total - play.timer) / total, 0, 1)
+ 			else Flow.FADE_MAX
+-		return { fade = fade, flash = false, playAgain = false }
++		return { fade = fade, flash = false, tap = false, cursor = false }
+ 	elseif phase == "levelclear" then
+-		return { fade = 0, flash = (play.timer // Flow.FLASH_TICKS) % 2 == 1, playAgain = false }
++		return { fade = 0, flash = (play.timer // Flow.FLASH_TICKS) % 2 == 1, tap = false, cursor = false }
+ 	elseif phase == "gameover" then
++		local now = trip or Flow.NO_REPORT
+ 		return {
+ 			banner = "GAME OVER",
+ 			detail = `SCORE {string.format("%d", play.score)}   LEVEL {play.level}`,
+ 			fade = Flow.FADE_MAX,
+ 			flash = false,
+-			playAgain = true,
++			prompt = prompt(now),
++			tap = now.configured and now.phase == "idle",
++			cursor = true,
+ 		}
+ 	end
+-	return { fade = 0, flash = false, playAgain = false }
++	return { fade = 0, flash = false, tap = false, cursor = false }
+ end
+ 
+-function Flow.isPlayAgainKey(keyName: string): boolean
+-	return table.find(Flow.PLAY_AGAIN_KEYS, keyName) ~= nil
++function Flow.isContinueKey(keyName: string): boolean
++	return table.find(Flow.CONTINUE_KEYS, keyName) ~= nil
+ end
+ 
+ return Flow
+diff --git a/src/shared/Logic/Session/init.luau b/src/shared/Logic/Session/init.luau
+index 711ff0a..d1d05f4 100644
+--- a/src/shared/Logic/Session/init.luau
++++ b/src/shared/Logic/Session/init.luau
+@@ -405,6 +405,12 @@ function Session.kill(s: Session, id: PlayerId): { Event }
+ 	return out
+ end
+ 
++-- Whether this player's run is over (the results are up). A player the session doesn't know has no run.
++function Session.isOver(s: Session, id: PlayerId): boolean
++	local member = s.members[id]
++	return member ~= nil and member.play.phase == "gameover"
++end
++
+ -- A new run, only once the run is over. Made between steps, so the first frame at the spawn is the next tick's.
+ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
+ 	local member = memberOf(s, id)
+diff --git a/tests/lib/fakeengine.luau b/tests/lib/fakeengine.luau
+index 54de897..17e576b 100644
+--- a/tests/lib/fakeengine.luau
++++ b/tests/lib/fakeengine.luau
+@@ -19,7 +19,10 @@
+ -- keep failing: the mutants in f0061's Rules and mutants table that depend on it are re-run, as exact
+ -- substitutions, whenever it changes).
+ -- It models nothing about what the real engine does with TeleportAsync (E7 in f0061).
++local Flow = require("@logic/Flow")
+ local Lobby = require("@logic/Lobby")
++local Maze = require("@logic/Maze")
++local Session = require("@logic/Session")
+ local Travel = require("@logic/Travel")
+ local luau = require("@lune/luau")
+ 
+@@ -51,15 +54,27 @@ function fake.signal(): Signal
+ 	return s
+ end
+ 
+-local LOGIC: { [string]: any } = { Travel = Travel, Lobby = Lobby }
++local LOGIC: { [string]: any } =
++	{ Travel = Travel, Lobby = Lobby, Flow = Flow, Maze = Maze, Session = Session }
+ 
+-local function fakeRequire(spec: string): any
+-	local name = string.match(spec, "^@game/ReplicatedStorage/Shared/Logic/(%w+)$")
+-	local found = name and LOGIC[name]
+-	if found == nil then
+-		error(`fake engine: no module for require("{spec}")`, 0)
++-- The require an adapter gets: the real Logic modules, or `overrides` for some of them (a spy on Session, say);
++-- an override can only replace a module the fake already serves.
++local function requirer(overrides: { [string]: any }?): (string) -> any
++	if overrides then
++		for name in overrides do
++			if LOGIC[name] == nil then
++				error(`fake engine: no Logic module "{name}" to override`, 0)
++			end
++		end
++	end
++	return function(spec: string): any
++		local name = string.match(spec, "^@game/ReplicatedStorage/Shared/Logic/(%w+)$")
++		local found = name and ((overrides and overrides[name]) or LOGIC[name])
++		if found == nil then
++			error(`fake engine: no module for require("{spec}")`, 0)
++		end
++		return found
+ 	end
+-	return found
+ end
+ 
+ local function load(source: string, env: { [string]: any }, name: string): any
+@@ -157,7 +172,12 @@ end
+ 
+ -- ReplicatedStorage.Remotes with the RemoteEvents the built place has. Each remote has both ends: the
+ -- server's (OnServerEvent, FireClient) and the client's (OnClientEvent, FireServer).
+-local function replicatedStorage(lobbyPlace: any, sent: { Fired }, fired: { { any } }): any
++local function replicatedStorage(
++	lobbyPlace: any,
++	sent: { Fired },
++	fired: { { any } },
++	firedOn: { FiredOn }
++): any
+ 	local rs = fake.node("ReplicatedStorage")
+ 	local remotes = child(rs, "Folder", "Remotes")
+ 	for _, built in lobbyPlace.ReplicatedStorage.Remotes:GetChildren() do
+@@ -165,18 +185,20 @@ local function replicatedStorage(lobbyPlace: any, sent: { Fired }, fired: { { an
+ 		r.OnServerEvent = fake.signal()
+ 		r.OnClientEvent = fake.signal()
+ 		r.FireClient = function(_: any, player: any, ...: any)
+-			table.insert(sent, { player = player, args = { ... } })
++			table.insert(sent, { player = player, args = { ... }, remote = built.Name })
+ 		end
+ 		r.FireServer = function(_: any, ...: any)
+ 			table.insert(fired, { ... })
++			table.insert(firedOn, { remote = built.Name, args = { ... } })
+ 		end
+ 	end
+ 	return rs
+ end
+ 
+-export type Fired = { player: any, args: { any } }
++export type Fired = { player: any, args: { any }, remote: string }
++export type FiredOn = { remote: string, args: { any } }
+ 
+-local function standardEnv(services: { [string]: any }): { [string]: any }
++local function standardEnv(services: { [string]: any }, overrides: { [string]: any }?): { [string]: any }
+ 	return {
+ 		game = {
+ 			GetService = function(_: any, name: string): any
+@@ -187,7 +209,7 @@ local function standardEnv(services: { [string]: any }): { [string]: any }
+ 				return found
+ 			end,
+ 		},
+-		require = fakeRequire,
++		require = requirer(overrides),
+ 		Enum = setmetatable({}, {
+ 			__index = function(_: any, group: string): any
+ 				return setmetatable({}, {
+@@ -236,8 +258,10 @@ export type Server = {
+ 	clock: { now: number },
+ 	engine: { calls: { { destination: any, players: any, options: any } }, mode: string, held: { thread } },
+ 	sent: { Fired },
+-	boot: (source: string) -> (),
++	boot: (source: string, ...any) -> any,
+ 	press: (player: any, ...any) -> (),
++	fire: (remote: string, player: any, ...any) -> (),
++	reports: (remote: string, player: any) -> { { any } },
+ 	tick: (seconds: number) -> (),
+ 	here: (player: any) -> (),
+ 	join: (player: any) -> (),
+@@ -249,11 +273,11 @@ export type Server = {
+ 
+ -- The lobby's server side, over `lobbyPlace` (place.load("lobby.project.json")). `attributes` overrides the
+ -- values of attributes the built ServerScriptService carries (naming one it does not carry is an error).
+-function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
++function fake.server(lobbyPlace: any, attributes: { [string]: any }, logic: { [string]: any }?): Server
+ 	local clock = { now = 0 }
+ 	local sent: { Fired } = {}
+ 	local fired: { { any } } = {}
+-	local storage = replicatedStorage(lobbyPlace, sent, fired)
++	local storage = replicatedStorage(lobbyPlace, sent, fired, {})
+ 	local scripts = fake.node("ServerScriptService")
+ 	local builtAttributes = lobbyPlace.ServerScriptService:GetAttributes()
+ 	for name, value in builtAttributes do
+@@ -336,7 +360,7 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
+ 		ServerScriptService = scripts,
+ 		TeleportService = teleport,
+ 	}
+-	local env = standardEnv(services)
++	local env = standardEnv(services, logic)
+ 	env.os = {
+ 		clock = function(): number
+ 			return clock.now
+@@ -350,13 +374,20 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
+ 		clock = clock,
+ 		engine = engine,
+ 		sent = sent,
+-		boot = checked(function(source: string)
+-			local module = load(source, env, "fake lobby server")
+-			module.start()
+-		end),
++		boot = function(source: string, ...: any): any
++			local module = load(source, env, "fake server")
++			checked(function(...: any)
++				module.start(...)
++			end)(...)
++			return module
++		end,
+ 		press = checked(function(player: any, ...: any)
+ 			startGame.OnServerEvent:fire(player, ...)
+ 		end),
++		-- a client's request on any remote the built place has (`press` is the lobby's StartGame)
++		fire = checked(function(remote: string, player: any, ...: any)
++			storage.Remotes:WaitForChild(remote).OnServerEvent:fire(player, ...)
++		end),
+ 		tick = checked(function(seconds: number)
+ 			clock.now += seconds
+ 			for i = #timers, 1, -1 do
+@@ -395,6 +426,16 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
+ 				error(err, 0)
+ 			end
+ 		end),
++		-- what the server sent this player on one remote, in order
++		reports = function(remote: string, player: any): { { any } }
++			local out: { { any } } = {}
++			for _, f in sent do
++				if f.player == player and f.remote == remote then
++					table.insert(out, f.args)
++				end
++			end
++			return out
++		end,
+ 		statuses = function(player: any): { { any } }
+ 			local out: { { any } } = {}
+ 			for _, f in sent do
+@@ -418,25 +459,43 @@ end
+ -- The client ------------------------------------------------------------------------------------------------
+ 
+ export type Client = {
+-	boot: (source: string) -> (),
++	boot: (source: string, ...any) -> any,
+ 	find: (name: string) -> any,
+ 	status: (phase: string, configured: boolean) -> (),
+ 	activate: () -> (),
+ 	fired: { { any } },
++	firedOn: { FiredOn },
++	receive: (remote: string, ...any) -> (),
++	click: (name: string) -> (),
++	key: (keyName: string, state: string?) -> { any },
++	bindings: { Binding },
+ }
+ 
++-- a ContextActionService binding: its handler, its key codes ("KeyCode.<name>") and whether it asked for an
++-- on-screen touch button
++export type Binding = { fn: (...any) -> any, keys: { any }, touch: boolean }
++
+ -- The lobby's client side over `lobbyPlace`: whatever the view builds is found only if it ends up, through
+ -- its Parent links, under the PlayerGui.
+ function fake.client(lobbyPlace: any): Client
+ 	local sent: { Fired } = {}
+ 	local fired: { { any } } = {}
+-	local storage = replicatedStorage(lobbyPlace, sent, fired)
++	local firedOn: { FiredOn } = {}
++	local storage = replicatedStorage(lobbyPlace, sent, fired, firedOn)
++	-- ContextActionService: BindAction records the handler and its key codes ("KeyCode.<name>")
++	local bound: { Binding } = {}
++	local actions = {
++		BindAction = function(_: any, _name: string, fn: (...any) -> any, touch: boolean, ...: any)
++			table.insert(bound, { fn = fn, keys = { ... }, touch = touch })
++		end,
++	}
+ 	local playerGui = fake.node("PlayerGui")
+ 	local localPlayer = fake.node("Player", "LocalPlayer")
+ 	playerGui.Parent = localPlayer
+ 	local services: { [string]: any } = {
+ 		Players = { LocalPlayer = localPlayer },
+ 		ReplicatedStorage = storage,
++		ContextActionService = actions,
+ 	}
+ 	local env = standardEnv(services)
+ 	local function find(name: string): any
+@@ -448,9 +507,10 @@ function fake.client(lobbyPlace: any): Client
+ 		return nil
+ 	end
+ 	return {
+-		boot = function(source: string)
+-			local module = load(source, env, "fake lobby client")
+-			module.start()
++		boot = function(source: string, ...: any): any
++			local module = load(source, env, "fake client")
++			module.start(...)
++			return module
+ 		end,
+ 		find = find,
+ 		status = function(phase: string, configured: boolean)
+@@ -460,6 +520,33 @@ function fake.client(lobbyPlace: any): Client
+ 			find("Start").Activated:fire()
+ 		end,
+ 		fired = fired,
++		firedOn = firedOn,
++		bindings = bound,
++		-- the server sends this client something on a remote the built place has
++		receive = function(remote: string, ...: any)
++			storage.Remotes:WaitForChild(remote).OnClientEvent:fire(...)
++		end,
++		-- a tap or click on a button the view put under the PlayerGui; a hidden button gets nothing
++		click = function(name: string)
++			local b = find(name)
++			if b == nil then
++				error(`fake engine: no {name} under the PlayerGui`, 0)
++			end
++			if b.Visible ~= false then
++				b.Activated:fire()
++			end
++		end,
++		-- a key event (state "Begin" unless given) to every handler bound to that key; returns their results
++		key = function(keyName: string, state: string?): { any }
++			local out: { any } = {}
++			for _, b in bound do
++				if table.find(b.keys, `KeyCode.{keyName}`) then
++					local input = { KeyCode = { Name = keyName } }
++					table.insert(out, b.fn("action", `UserInputState.{state or "Begin"}`, input))
++				end
++			end
++			return out
++		end,
+ 	}
+ end
+ 
+diff --git a/tests/runtime/structure.luau b/tests/runtime/structure.luau
+index 77b49e6..75465bc 100644
+--- a/tests/runtime/structure.luau
++++ b/tests/runtime/structure.luau
+@@ -8,8 +8,10 @@ assert(server, "ServerScriptService.Server is missing")
+ assert(server:FindFirstChild("Main"), "Server.Main is missing")
+ local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+ assert(remotes, "ReplicatedStorage.Remotes is missing")
+-for _, name in { "Ready", "Intent", "Snapshot", "PlayAgain" } do
++for _, name in { "Ready", "Intent", "Snapshot", "ToLobby", "LobbyStatus" } do
+ 	assert(remotes:FindFirstChild(name), "Remotes." .. name .. " is missing")
+ end
++local lobby = game:GetService("ServerScriptService"):GetAttribute("LobbyPlaceId")
++assert(type(lobby) == "number", "ServerScriptService.LobbyPlaceId must be a number")
+ assert(game:GetService("Players").CharacterAutoLoads == false, "CharacterAutoLoads must be false")
+ return "PASS"
+diff --git a/tests/unit/Flow/flow.spec.luau b/tests/unit/Flow/flow.spec.luau
+index 558844b..d173f43 100644
+--- a/tests/unit/Flow/flow.spec.luau
++++ b/tests/unit/Flow/flow.spec.luau
+@@ -9,12 +9,13 @@ local function play(phase: string, timer: number): any
+ end
+ 
+ return t.spec("Flow extras", function(it)
+-	it("every phase gets a fresh overlay with all three always-present fields", function()
++	it("every phase gets a fresh overlay with all its always-present fields", function()
+ 		for _, phase in { "ready", "playing", "dying", "levelclear", "gameover" } do
+ 			local o = Flow.overlay(play(phase, 10), Game.CLASSIC_CONFIG)
+ 			t.expect(type(o.fade)).toBe("number")
+ 			t.expect(type(o.flash)).toBe("boolean")
+-			t.expect(type(o.playAgain)).toBe("boolean")
++			t.expect(type(o.tap)).toBe("boolean")
++			t.expect(type(o.cursor)).toBe("boolean")
+ 		end
+ 	end)
+ 
+@@ -22,9 +23,12 @@ return t.spec("Flow extras", function(it)
+ 		t.expect(Flow.overlay(play("dying", 22.5), Game.CLASSIC_CONFIG).fade).toBeNear(0.3, 1e-9)
+ 	end)
+ 
+-	it("the play-again keys can't be changed", function()
++	it("the continue keys and the prompts can't be changed", function()
+ 		t.expect(function()
+-			(Flow.PLAY_AGAIN_KEYS :: any)[1] = "Space"
++			(Flow.CONTINUE_KEYS :: any)[1] = "Space"
++		end).toThrow()
++		t.expect(function()
++			(Flow.PROMPT :: any).idle = "PLAY AGAIN"
+ 		end).toThrow()
+ 	end)
+ end)

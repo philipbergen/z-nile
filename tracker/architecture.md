@@ -19,7 +19,7 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0004, f0013) |
 | Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout (R0015, f0019) |
-| Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER and the play-again prompt and keys (R0015, f0031) |
+| Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065) |
 | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030) |
 
 ## Allowed dependencies
@@ -30,6 +30,7 @@ One `Consumer -> Provider` per line.
 Awareness -> Maze
 Flow -> Game
 Flow -> Session
+Flow -> Travel
 Game -> Levels
 Ghosts -> Levels
 Ghosts -> Maze
