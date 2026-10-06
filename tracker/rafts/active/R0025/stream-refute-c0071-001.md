@@ -1,0 +1,5 @@
+- F1: fixed: ticket-prep's round 1-2 trigger now also runs another round when a high was refuted (a new reviewer rules on it), as execute-raft step 6 does. So no round 1 or 2 holding a high can be final.
+- F2: fixed: 5.5 sets design: ready only when the final round has no high finding (or Verdict: approve). A final round with a high, which only round 5 can be, goes to the user whatever was answered, as in code mode.
+- F3: fixed: both skills define the final round as the round after which the rule runs no further round: any round 1 to 4 where it says stop, or round 5.
+- F4: fixed: execute-raft step 6 now applies after round 1 or 2, and from round 3 on step 7 decides.
+- F5: refuted: the reviewer itself rules JC1 a pass. "Single assertions" and the 15% threshold are the Design's own wording (c0071 Design and execute-raft step 6), and a sharper bound is a design change, not a fix.
