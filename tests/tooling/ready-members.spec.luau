@@ -154,4 +154,34 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 		trackerfix.elsewhere(f, { ["tracker/rafts/active/R0040/R0040.md"] = doc }, "unstamped")
 		refusedNaming({ "stop", "R0040" }, "R0040", "claim stamp", "by hand")
 	end)
+	it("a resumed legacy start claims a member published meanwhile with the raft's own stamp", function()
+		trackerfix.elsewhere(f, {
+			["tracker/rafts/R0050/R0050.md"] = raftDoc("R0050", "c0070"),
+			["tracker/rafts/R0050/check.sh"] = CHECK,
+			["tracker/issues/c0070/c0070.md"] = issue("c0070", "R0050"),
+			["tracker/issues/c0070/check.sh"] = CHECK,
+		}, "R0050")
+		trackerfix.trOk(f, f.main, { "sync" })
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "R0050" })
+		-- a local edit of the raft's status line makes the merge of origin's claim conflict: start dies after it
+		local doc = `{wt}/tracker/rafts/R0050/R0050.md`
+		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nstatus: [^\n]*", "\nstatus: prepared-zz-zz-zz")))
+		fixture.git(wt, { "commit", "-q", "-am", "local edit of the status line" })
+		t.expect(trackerfix.tr(f, wt, { "start", "R0050" }).ok).toBe(false)
+		-- meanwhile another terminal adds a member; this terminal resolves the conflict and starts again
+		trackerfix.elsewhere(f, {
+			["tracker/issues/c0080/c0080.md"] = issue("c0080", "R0050"),
+			["tracker/issues/c0080/check.sh"] = CHECK,
+		}, "a member meanwhile")
+		fixture.git(wt, { "reset", "-q", "--hard", "HEAD~1" })
+		trackerfix.trOk(f, wt, { "sync" })
+		trackerfix.trOk(f, wt, { "start", "R0050" })
+		local claim = string.match(originText("tracker/rafts/R0050/R0050.md"), "\nstatus: (%S+)")
+		t.expect(string.match(originText("tracker/issues/c0080/c0080.md"), "\nstatus: (%S+)")).toBe(claim)
+		t.expect(string.match(originText("tracker/issues/c0070/c0070.md"), "\nstatus: (%S+)")).toBe(claim)
+		local r = trackerfix.tr(f, f.main, { "stop", "R0050" })
+		t.expect(r.ok).toBe(true)
+		t.expect(string.find(r.stderr, "warning", 1, true) == nil).toBe(true)
+		t.expect(string.find(r.stdout, "stopped R0050 (c0070, c0080)", 1, true) ~= nil).toBe(true)
+	end)
 end)

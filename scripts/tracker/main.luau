@@ -2,6 +2,7 @@
 -- Tracker CLI. Run through scripts/tracker.sh. See .claude/skills/tracker/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
+local claimsLib = require("./claims")
 local compactLib = require("./compact")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
@@ -455,7 +456,11 @@ local function claimStamp(): string
 	local value = statusLib.fresh(function()
 		return stamp("active")
 	end, function(v: string): boolean
-		return sh.run("git", { "grep", "-q", "-F", "-x", `status: {v}`, "origin/main", "--", "tracker/" }).ok
+		local taken, err = claimsLib.taken(".", v)
+		if taken == nil then
+			fail(`cannot check a claim stamp against origin/main: {err}`)
+		end
+		return taken == true
 	end)
 	return value or fail("could not draw a claim stamp that origin/main does not already carry")
 end
@@ -1875,9 +1880,13 @@ function cmd.start(pos: { string })
 		end
 		fs.writeDir(".cache")
 		local mine = if fs.isFile(claimFile(raft.id)) then sh.trim(fs.readFile(claimFile(raft.id))) else ""
-		-- a resumed start keeps this terminal's earlier claim, so every member it claims now carries the raft's value
-		-- (review 004 F2); a fresh claim is new on origin/main
-		local claim = if mine ~= "" then mine else claimStamp()
+		-- a resumed start keeps this terminal's earlier claim while the raft on origin/main still carries it, so every
+		-- member it claims now carries the raft's value (review 004 F2); any other claim is new on origin/main
+		local raftOnOrigin = docPath(select(2, originTree()), raft.id)
+		local carried = if raftOnOrigin
+			then frontOf(sh.run("git", { "show", `origin/main:{raftOnOrigin}` }).stdout).status
+			else nil
+		local claim = if mine ~= "" and carried == mine then mine else claimStamp()
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
 		sh.writeReplacing(claimFile(raft.id), claim)
 		local raftPath: string? = nil
