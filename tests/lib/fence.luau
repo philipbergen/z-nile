@@ -464,21 +464,28 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 	return {}, ""
 end
 
--- Runs the specs in a process group of their own, and stops whatever is left in it when they end (review 005 F2:
--- a background process a spec left would outlive the run). The launcher stays in the terminal's group and passes on
--- INT, TERM and HUP, so Ctrl-C still stops a run. A process that leaves the group on purpose (setsid) is not
--- reaped: the testing skill lists it under "Caught only by review".
+-- The launcher: runs the specs in a process group of their own, and stops whatever is left in it when they end (review
+-- 005 F2: a background process a spec left would outlive the run). It stays in the terminal's group and passes on
+-- INT, TERM and HUP, so Ctrl-C still stops a run. A watchdog in the specs' group stops that group if the launcher dies,
+-- however it died (c0079). A process that leaves the group on purpose (setsid) is the jail's sweeper's (c0076).
 local REAPER = table.concat({
+	-- the watchdog's pipe: the launcher holds the only write end, so a read sees end-of-file exactly when it is gone
+	'pipe(my $r, my $w) or die "pipe: $!";',
 	'my $pid = fork; die "fork: $!" unless defined $pid;',
-	-- a watchdog in the specs' group kills the group if the launcher dies (a SIGKILL to the launcher's group would
-	-- otherwise leave the specs running and holding the lock, review 006 F2)
-	"if (!$pid) { setpgrp(0, 0); my $launcher = getppid();",
-	"if (!fork) { open STDIN, '<', '/dev/null'; open STDOUT, '>', '/dev/null'; open STDERR, '>', '/dev/null';",
-	"while (kill 0, $launcher) { sleep 1 } kill 'KILL', -getpgrp(); exit }",
-	'exec { $ARGV[0] } @ARGV or die "exec: $!"; }',
-	"setpgrp($pid, $pid);",
+	-- the specs' process: a group of its own, the watchdog, then the command
+	"if ($pid == 0) { setpgrp(0, 0);",
+	'my $wd = fork; die "fork: $!" unless defined $wd;',
+	-- the watchdog: ignores the signals the launcher forwards, waits for end-of-file, then kills its group
+	"if ($wd == 0) { close $w; $SIG{$_} = 'IGNORE' for qw(INT TERM HUP);",
+	"open STDIN, '<', '/dev/null'; open STDOUT, '>', '/dev/null'; open STDERR, '>', '/dev/null';",
+	"sysread($r, my $eof, 1); kill 'KILL', -getpgrp(); exit 0; }",
+	-- the command holds neither end, so it can't keep the watchdog waiting
+	'close $r; close $w; exec { $ARGV[0] } @ARGV or die "exec: $!"; }',
+	-- the launcher keeps $w open until it exits
+	"close $r; setpgrp($pid, $pid);",
 	"for my $s (qw(INT TERM HUP)) { $SIG{$s} = sub { kill $s, -$pid } }",
 	"waitpid($pid, 0); my $st = $?;",
+	-- whatever is left in the group, the watchdog included
 	"kill 'KILL', -$pid;",
 	-- with the specs stopped, unlink every symlink at the top of the cache folder it was given, never following one
 	-- and never recursing: a spec may have swapped one in, and unjailed writers run next (c0077). Here, not in the top
