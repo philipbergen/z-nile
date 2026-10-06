@@ -44,10 +44,9 @@ usage: scripts/tracker.sh <command> ...
   done <R-id>                                   verify checks + review resolution, move to done, ready PR
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
-  launch <R-id|name> [-- cmd...]                run a command (default claude) in the target's worktree (scripts/tracker.sh)
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
-  prompt <R-id|issue-id> --stdout               print the execution prompt
+  prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   metrics [--include-active]                    cost per issue and rework %
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it]]
@@ -547,7 +546,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 		local a = args[i]
 		if
 			a == "--single"
-			or a == "--stdout"
+			or a == "--path"
 			or a == "--include-active"
 			or a == "--open"
 			or a == "--fetch"
@@ -2257,26 +2256,41 @@ local function promptPath(raftId: string): string
 	return `{mainRoot()}/tracker/rafts/active/{raftId}/prompt.md`
 end
 
--- Until `prompt` becomes the reader of a readied raft's prompt.md, it prints a fresh render.
+-- The reader of a readied raft's prompt.md (the launch-raft skill's input). The decision is made from origin/main's
+-- tree, never from the local store; nothing is written.
 function cmd.prompt(pos: { string }, opts: { [string]: { string } })
-	local target = store.get(pos[1] or fail("usage: prompt <R-id|issue-id> --stdout"))
-	local raft = target
-	if target.kind == "issue" then
-		local raftId = store.readFront(target.doc).raft
-		if raftId and raftId ~= "" then
-			raft = store.get(raftId)
-		else
-			cmd.new({ "raft", store.typeOf(target), target.slug, target.id }, { ["--single"] = { "true" } })
-			raft = store.get(store.readFront(target.doc).raft)
-			stdio.ewrite(
-				`created placeholder raft {raft.id}; land it (tracker skill, Landing a change) before handing out the prompt\n`
-			)
-		end
+	local id = pos[1]
+	if not id or #pos > 1 or not string.match(id, "^R%d%d%d%d$") then
+		fail("prompt takes a raft id (an issue's raft: tracker.sh find <id>)")
 	end
-	if not opts["--stdout"] then
-		fail(`prompt: pass --stdout; a readied raft's prompt is {promptPath(raft.id)}`)
+	local notReadied =
+		`{id} is not readied: run /ready-raft {id} (tracker.sh ready {id}) in the main checkout`
+	if not hasOrigin() then
+		fail(notReadied)
 	end
-	print(renderPrompt(raft))
+	sh.git({ "fetch", "--quiet", "origin", "main" })
+	local readTree, files = originTree()
+	local theirs = if readTree then docPath(files, id) else nil
+	local shown = if theirs then sh.run("git", { "show", `origin/main:{theirs}` }) else nil
+	if
+		not (
+			shown
+			and shown.ok
+			and stateOfPath(theirs :: string) == "active"
+			and statusLib.effective(frontOf(shown.stdout), "active") == "active"
+		)
+	then
+		fail(notReadied)
+	end
+	local path = promptPath(id)
+	if not fs.isFile(path) then
+		fail(`no prompt for {id}: run tracker.sh ready {id} in the main checkout to regenerate it`)
+	end
+	if opts["--path"] then
+		print(path)
+	else
+		stdio.write(fs.readFile(path))
+	end
 end
 
 -- Whether `text` has a line that runs a check (`check "AC1: ..."`), not a commented one.
