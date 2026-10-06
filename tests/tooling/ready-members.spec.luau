@@ -133,15 +133,9 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 			),
 		}, "relist")
 		-- after the claim: c0060 is filed naming R0030; it carries no claim of R0030, so stop leaves it
-		trackerfix.elsewhere(
-			f,
-			{
-				["tracker/issues/c0060/c0060.md"] = (
-					string.gsub(issue("c0060", "R0030"), PREPARED, "new-a-b-c")
-				),
-			},
-			"late member"
-		)
+		trackerfix.elsewhere(f, {
+			["tracker/issues/c0060/c0060.md"] = (string.gsub(issue("c0060", "R0030"), PREPARED, "new-a-b-c")),
+		}, "late member")
 		local c0030 = originText("tracker/issues/c0030/c0030.md")
 		local c0060 = originText("tracker/issues/c0060/c0060.md")
 		local r = trackerfix.tr(f, f.main, { "stop", "R0030" })

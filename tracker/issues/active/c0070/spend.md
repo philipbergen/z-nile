@@ -10,6 +10,7 @@
 | 6 | 2026-10-06 15:01 | R0025: promote-check fixes (spec type correction, cleanup return type, c0077 reviewed .cache lines) | 0 | 0 | 0.7 | raft+proportional |
 | 7 | 2026-10-06 15:30 | R0025: refute-001 | 0 | 0 | 0.6 | raft+proportional |
 | 8 | 2026-10-06 15:47 | R0025: refute-002 | 0 | 0 | 0.3 | raft+proportional |
+| 9 | 2026-10-06 16:03 | R0025: format | 0 | 1 | 0.1 | raft+proportional |
 
-**Total:** +670 / -104 lines, 75.5 agent-minutes over 8 commits
-<!-- totals: added=670 removed=104 minutes=75.5 commits=8 -->
+**Total:** +670 / -105 lines, 75.6 agent-minutes over 9 commits
+<!-- totals: added=670 removed=105 minutes=75.6 commits=9 -->
