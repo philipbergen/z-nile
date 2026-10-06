@@ -16,6 +16,7 @@
 | 12 | 2026-10-06 16:24 | R0025: refute-004 | 0 | 0 | 0.3 | raft+proportional |
 | 13 | 2026-10-06 16:39 | R0025: refute-005 | 0 | 0 | 0.3 | raft+proportional |
 | 14 | 2026-10-06 16:56 | R0025: final verification log entries | 0 | 0 | 0.6 | raft+proportional |
+| 15 | 2026-10-06 17:04 | tracker: done R0025 | 0 | 0 | 0.9 | raft+proportional |
 
-**Total:** +566 / -26 lines, 36.3 agent-minutes over 14 commits
-<!-- totals: added=566 removed=26 minutes=36.3 commits=14 -->
+**Total:** +566 / -26 lines, 37.2 agent-minutes over 15 commits
+<!-- totals: added=566 removed=26 minutes=37.2 commits=15 -->

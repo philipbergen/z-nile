@@ -20,6 +20,7 @@
 | 16 | 2026-10-06 16:33 | R0025: review 005 fixes (claims.taken with a real git grep and strict exit codes; resumed start reuses its claim only while origin carries it) | 63 | 2 | 15.0 | explicit |
 | 17 | 2026-10-06 16:39 | R0025: refute-005 | 0 | 0 | 0.3 | raft+proportional |
 | 18 | 2026-10-06 16:56 | R0025: final verification log entries | 0 | 0 | 0.6 | raft+proportional |
+| 19 | 2026-10-06 17:04 | tracker: done R0025 | 0 | 0 | 0.9 | raft+proportional |
 
-**Total:** +1557 / -213 lines, 182.9 agent-minutes over 18 commits
-<!-- totals: added=1557 removed=213 minutes=182.9 commits=18 -->
+**Total:** +1557 / -213 lines, 183.8 agent-minutes over 19 commits
+<!-- totals: added=1557 removed=213 minutes=183.8 commits=19 -->
