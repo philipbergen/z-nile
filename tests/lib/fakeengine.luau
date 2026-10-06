@@ -11,12 +11,14 @@
 --   * signals whose handlers run in their own coroutine (a handler that yields stays suspended while the
 --     spec carries on); `pcall` across a yield works;
 --   * `task.spawn`, `task.defer`, `task.delay` and `task.wait`, driven by the fake clock (`tick`);
+--   * an error in a thread the fake resumes later (a spawned or deferred function, a timer, a waiter) does not
+--     unwind whoever started it, as in Roblox, but the server call the spec made fails with it afterwards;
 --   * `os.clock`, `Instance.new`, `Enum`, `UDim2`, `Vector2` and `Color3` as plain data.
 -- The fake must stay exact in both directions: it must not accept less than it does now (a correct idiom
 -- that works today must keep working), and it must not accept more (a wrong adapter that fails today must
--- keep failing: the mutants in f0670's Rules and mutants table that depend on it are re-run, as exact
+-- keep failing: the mutants in f0061's Rules and mutants table that depend on it are re-run, as exact
 -- substitutions, whenever it changes).
--- It models nothing about what the real engine does with TeleportAsync (E7 in f0670).
+-- It models nothing about what the real engine does with TeleportAsync (E7 in f0061).
 local Lobby = require("@logic/Lobby")
 local Travel = require("@logic/Travel")
 local luau = require("@lune/luau")
@@ -291,14 +293,32 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
 	end
 	local runService = fake.node("RunService")
 	runService.Heartbeat = fake.signal()
+	-- errors from threads the fake resumed, raised by the spec-facing call once its own work is done
+	local failures: { string } = {}
+	local function resume(co: thread, ...: any)
+		local ok, err = coroutine.resume(co, ...)
+		if not ok then
+			table.insert(failures, debug.traceback(co, tostring(err)))
+		end
+	end
+	local function checked<A...>(fn: (A...) -> ()): (A...) -> ()
+		return function(...: A...)
+			fn(...)
+			if #failures > 0 then
+				local first = failures[1]
+				table.clear(failures)
+				error(`fake engine: an adapter thread failed: {first}`, 0)
+			end
+		end
+	end
 	local waiting: { { co: thread, due: number } } = {}
 	local timers: { { due: number, fn: (...any) -> (), args: { any } } } = {}
 	local task = {
 		spawn = function(fn: (...any) -> (), ...: any)
-			coroutine.resume(coroutine.create(fn), ...)
+			resume(coroutine.create(fn), ...)
 		end,
 		defer = function(fn: (...any) -> (), ...: any)
-			coroutine.resume(coroutine.create(fn), ...)
+			resume(coroutine.create(fn), ...)
 		end,
 		delay = function(seconds: number, fn: (...any) -> (), ...: any)
 			table.insert(timers, { due = clock.now + seconds, fn = fn, args = { ... } })
@@ -330,51 +350,51 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
 		clock = clock,
 		engine = engine,
 		sent = sent,
-		boot = function(source: string)
+		boot = checked(function(source: string)
 			local module = load(source, env, "fake lobby server")
 			module.start()
-		end,
-		press = function(player: any, ...: any)
+		end),
+		press = checked(function(player: any, ...: any)
 			startGame.OnServerEvent:fire(player, ...)
-		end,
-		tick = function(seconds: number)
+		end),
+		tick = checked(function(seconds: number)
 			clock.now += seconds
 			for i = #timers, 1, -1 do
 				local timer = timers[i]
 				if timer.due <= clock.now then
 					table.remove(timers, i)
-					coroutine.resume(coroutine.create(timer.fn), table.unpack(timer.args))
+					resume(coroutine.create(timer.fn), table.unpack(timer.args))
 				end
 			end
 			for i = #waiting, 1, -1 do
 				local w = waiting[i]
 				if w.due <= clock.now then
 					table.remove(waiting, i)
-					coroutine.resume(w.co)
+					resume(w.co)
 				end
 			end
 			runService.Heartbeat:fire(seconds)
-		end,
+		end),
 		here = function(player: any)
 			player.Parent = playersService
 		end,
-		join = function(player: any)
+		join = checked(function(player: any)
 			player.Parent = playersService
 			playersService.PlayerAdded:fire(player)
-		end,
-		leave = function(player: any)
+		end),
+		leave = checked(function(player: any)
 			playersService.PlayerRemoving:fire(player)
 			player.Parent = nil
-		end,
-		initFailed = function(player: any)
+		end),
+		initFailed = checked(function(player: any)
 			init:fire(player, "Failure", "fake init failure")
-		end,
-		release = function(index: number, failure: boolean)
+		end),
+		release = checked(function(index: number, failure: boolean)
 			local ok, err = coroutine.resume(engine.held[index], failure)
 			if not ok then
 				error(err, 0)
 			end
-		end,
+		end),
 		statuses = function(player: any): { { any } }
 			local out: { { any } } = {}
 			for _, f in sent do
