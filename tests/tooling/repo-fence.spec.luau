@@ -125,6 +125,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
 	},
+	-- c0074: doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard; its
+	-- spec names it only as a table key passed to that pure function, never in a process's environment
+	["scripts/tracker/gate.luau"] = {
+		PICKMAN_FENCE_ = "doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard (c0074)",
+	},
+	["tests/acceptance/c0074/done-gate.spec.luau"] = {
+		PICKMAN_FENCE_ = "names PICKMAN_FENCE_SPECS only as a table key passed to the pure doneGate, never in a process's environment (c0074)",
+	},
 }
 -- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
 -- rewrite never maps it a second time

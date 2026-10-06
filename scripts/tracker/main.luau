@@ -4,6 +4,7 @@ local audit = require("./audit")
 local board = require("./board")
 local compactLib = require("./compact")
 local fs = require("@lune/fs")
+local gateLib = require("./gate")
 local idsLib = require("./ids")
 local process = require("@lune/process")
 local publish = require("./publish")
@@ -1972,11 +1973,41 @@ function cmd.done(pos: { string })
 			end
 		end
 	end
-	if #promoted > 0 then
-		print("\n=== promoted acceptance specs: type check + meta + run")
-		if not promotedChecks(promoted, true) then
-			sh.git({ "reset", "-q", "--hard", "HEAD" })
-			fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
+	-- Move everything to done/ now, so the gate sees the final tree. A rollback (git reset --hard HEAD) undoes
+	-- both the promotion and the moves, since nothing is committed yet.
+	local members = store.members(raft.id)
+	local movedDirs: { string } = {}
+	for _, m in members do
+		table.insert(movedDirs, store.dirFor(m.kind, "done", m.id))
+	end
+	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id))
+	local function rollback()
+		sh.git({ "reset", "-q", "--hard", "HEAD" })
+		-- git removes the folders it empties; if one is left, store.find would see a duplicate id
+		for _, dir in movedDirs do
+			if fs.isDir(dir) and #fs.readDir(dir) == 0 then
+				fs.removeDir(dir)
+			end
+		end
+	end
+	for _, m in members do
+		move(m, "done")
+	end
+	raft = move(raft, "done")
+	if gateLib.doneGate(process.env) == "promoted" then
+		print("done: inside a spec run, so the full gate is skipped; checking the promoted specs")
+		if #promoted > 0 then
+			print("\n=== promoted acceptance specs: type check + meta + run")
+			if not promotedChecks(promoted, true) then
+				rollback()
+				fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
+			end
+		end
+	else
+		print("\n=== full gate on the done tree")
+		if not sh.stream("bash", { "scripts/check.sh", "--full" }) then
+			rollback()
+			fail("the full gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
 	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
@@ -1984,14 +2015,10 @@ function cmd.done(pos: { string })
 		-- pcall: process.exec throws when gh can't be spawned at all (not on PATH)
 		local ok, r = pcall(sh.run, "gh", { "pr", "ready" })
 		if not (ok and r.ok) then
-			sh.git({ "reset", "-q", "--hard", "HEAD" })
+			rollback()
 			fail("could not mark the PR ready (rolled back); fix gh and retry done")
 		end
 	end
-	for _, m in store.members(raft.id) do
-		move(m, "done")
-	end
-	raft = move(raft, "done")
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
