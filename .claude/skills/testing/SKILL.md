@@ -24,7 +24,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
 | `tests/tooling/` | the scripts in `scripts/` | scripts |
 | `tests/runtime/` | scripts that run inside a real Roblox server of the published Beta place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`, run by CI after a publish; skipped when no key is configured). Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
-| `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/` or `default.project.json` change | `@tests/lib/place` |
+| `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/`, `default.project.json` or `lobby.project.json` change. `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
 | `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
 | `tests/meta/` | the structural rules from the architecture skill | the graph library |
 
@@ -41,6 +41,8 @@ return t.spec("Maze.parse", function(it)
 end)
 ```
 The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThrow(pattern?)`.
+
+**Running an adapter's real source**: `@tests/lib/fakeengine` loads an adapter from a built place (`luau.load` with a fake environment) and runs it against a fake engine: instances whose remotes and attributes come from that place, signals whose handlers run in coroutines, `task.*` on a fake clock, and the real Logic. It covers what the lobby adapters use (f0061's design lists the surface). A spec that needs more extends the fake, without making it accept less, or more, than it does now.
 
 **Good specs**:
 - **Deterministic**: no wall-clock time and no unseeded randomness. Pass `dt` and a seeded RNG instead. The one timing exception is `sim.bench` budgets (see Simulations).

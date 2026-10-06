@@ -2,7 +2,7 @@
 -- The Rojo-built place, loaded headlessly with @lune/roblox, for tests/place specs.
 -- graph.luau resolves requires on the filesystem (what Lune does); resolveRequire resolves them
 -- on the instance tree (what Roblox does). Specs that require this file are selected by
--- scripts/affected for every src/ or default.project.json change (graph.PLACE_LIB).
+-- scripts/affected for every src/ or project file change (graph.PLACE_LIB).
 local fs = require("@lune/fs")
 local graph = require("@scripts/lib/graph")
 local process = require("@lune/process")
@@ -15,33 +15,39 @@ local SCRIPT_ROOTS = {
 	{ "ReplicatedStorage", "Shared" },
 	{ "ServerScriptService", "Server" },
 	{ "StarterPlayer", "StarterPlayerScripts", "Client" },
+	{ "ServerScriptService", "Lobby" },
+	{ "StarterPlayer", "StarterPlayerScripts", "Lobby" },
 }
 
 local place = {}
 
-local cached: Instance? = nil
+local cached: { [string]: Instance } = {}
 
--- Builds default.project.json once per process and returns the deserialized DataModel.
-function place.load(): Instance
-	if cached == nil then
+-- Builds a Rojo project (default: default.project.json, the game place) once per process and returns the
+-- deserialized DataModel. place.load("lobby.project.json") is the lobby place.
+function place.load(project: string?): Instance
+	local file = project or "default.project.json"
+	local loaded = cached[file]
+	if loaded == nil then
 		fs.writeDir(".cache")
 		-- per-process file, so concurrent test processes never read each other's partial builds
 		local out = `{OUT_PREFIX}-{os.time()}-{math.random(1, 1e9)}.rbxl`
-		local r = process.exec("rojo", { "build", "default.project.json", "-o", out })
+		local r = process.exec("rojo", { "build", file, "-o", out })
 		if not r.ok then
 			error(`rojo build failed ({r.code}): {r.stderr}{r.stdout}`)
 		end
-		local ok, loaded = pcall(roblox.deserializePlace, fs.readFile(out))
+		local ok, result = pcall(roblox.deserializePlace, fs.readFile(out))
 		fs.removeFile(out)
 		if not ok then
-			error(`could not load {out}: {loaded}`)
+			error(`could not load {out}: {result}`)
 		end
-		cached = loaded
+		cached[file] = result
+		loaded = result
 	end
-	return cached
+	return loaded
 end
 
--- Every LuaSourceContainer under the three script roots, in GetFullName order.
+-- Every LuaSourceContainer under the script roots of both places, in GetFullName order.
 function place.scripts(game: Instance): { Instance }
 	local out: { Instance } = {}
 	for _, path in SCRIPT_ROOTS do
