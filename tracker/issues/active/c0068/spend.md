@@ -12,6 +12,7 @@
 | 8 | 2026-10-06 15:30 | R0025: refute-001 | 0 | 0 | 0.6 | raft+proportional |
 | 9 | 2026-10-06 15:41 | R0025: review 002 fixes (one member set for every move; ready-members spec both directions) | 73 | 28 | 17.4 | explicit |
 | 10 | 2026-10-06 15:47 | R0025: refute-002 | 0 | 0 | 0.3 | raft+proportional |
+| 11 | 2026-10-06 15:59 | R0025: review 003 fixes (stop gives back by claim stamp; specs for late members, raft: drift and PR reuse) | 83 | 25 | 17.5 | explicit |
 
-**Total:** +864 / -126 lines, 72.8 agent-minutes over 10 commits
-<!-- totals: added=864 removed=126 minutes=72.8 commits=10 -->
+**Total:** +947 / -151 lines, 90.3 agent-minutes over 11 commits
+<!-- totals: added=947 removed=151 minutes=90.3 commits=11 -->

@@ -2748,54 +2748,49 @@ function cmd.stop(pos: { string })
 	end
 	local raft = store.get(target.id) -- the tree is now origin/main
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
-	-- One source of truth for who moves (review 002 F1): the members are the items whose raft: field names this
-	-- raft, the set `ready` and `start` claimed. The issues: list is never used here, so an item that is merely
-	-- listed, or that another raft owns, is never touched.
+	-- Who is given back is decided by the claim, not by membership fields (review 003 F3, the third finding on
+	-- membership): `ready` and `start` stamp the raft and every issue they claim with one fresh `active-…` value, so
+	-- the claimed set is exactly the issues carrying the raft's own stamp. Neither the issues: list nor a raft: edit
+	-- made since can add or drop one. An issue that names the raft but carries another status was never claimed
+	-- with it (filed after the claim, say): it is left as it is and named in a warning.
+	local claim = frontOf(fs.readFile(raft.doc)).status
 	local ids: { string } = {}
 	local left: { string } = {}
 	local rtitle = store.readFront(raft.doc).title or raft.slug
 	local value = stamp("prepared")
 	local r: publish.Result
-	if raft.state == "active" then
-		for _, m in store.members(raft.id) do
-			if m.state == "done" then
-				fail(`{m.id} is in {m.dir} on origin/main, not active/: stop does not move it back`)
-			elseif m.state == "active" then
-				table.insert(ids, m.id)
-			else
-				table.insert(left, m.id) -- named raft: later, never readied: nothing to move back
-			end
-		end
-		local all = { raft.id }
-		for _, id in ids do
-			table.insert(all, id)
-		end
-		-- checked again inside the build: an item that left `active` since the pull (merged, done) is never moved back
-		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle}`, function(id, now)
-			return if now == "active"
-				then nil
-				else `{id} is {now} on origin/main, not active: nothing to stop`
-		end)
-	elseif raft.state == "backlog" and st == "active" then
-		-- the legacy start claimed the raft and its members by their raft: fields: give back exactly those
-		for _, m in store.members(raft.id) do
-			if statusLib.effective(frontOf(fs.readFile(m.doc)), m.state) == "active" then
-				table.insert(ids, m.id)
-			else
-				table.insert(left, m.id)
-			end
-		end
-		local all = { raft.id }
-		for _, id in ids do
-			table.insert(all, id)
-		end
-		r = restampOnOrigin(all, value, `tracker: {raft.id} prepared`, function(id, now)
-			return if now == "active"
-				then nil
-				else `{id} is {now} on origin/main, not active: nothing to give back`
-		end)
-	else
+	if not ((raft.state == "active" or raft.state == "backlog") and st == "active") then
 		fail(`{raft.id} is {st} in {raft.dir} on origin/main: only a readied or started raft is stopped`)
+	end
+	if not claim or not string.match(claim, "^active%-") then
+		fail(`{raft.id} has no claim stamp on origin/main (status: {claim or "none"}): give it back by hand`)
+	end
+	for _, issue in store.all("issue") do
+		local raw = frontOf(fs.readFile(issue.doc)).status
+		if raw == claim then
+			if issue.state ~= raft.state then
+				fail(
+					`{issue.id} is in {issue.dir} on origin/main, not beside {raft.id}: stop does not move it back`
+				)
+			end
+			table.insert(ids, issue.id)
+		elseif store.readFront(issue.doc).raft == raft.id and issue.state ~= "done" then
+			table.insert(left, issue.id)
+		end
+	end
+	local all = { raft.id }
+	for _, id in ids do
+		table.insert(all, id)
+	end
+	-- checked again inside the build: an item that left `active` since the pull (merged, done) is never touched
+	local function stillActive(id: string, now: string): string?
+		return if now == "active" then nil else `{id} is {now} on origin/main, not active: nothing to stop`
+	end
+	if raft.state == "active" then
+		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle}`, stillActive)
+	else
+		-- a legacy start claimed in place (backlog, status active): a status-only give-back, no move
+		r = restampOnOrigin(all, value, `tracker: {raft.id} prepared`, stillActive)
 	end
 	if not r.ok then
 		fail(`stop: {r.reason}`)

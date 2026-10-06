@@ -1,8 +1,9 @@
 --!strict
--- R0025 review 001 F1, review 002 F1-F2: a raft's members, for every move, are the items whose raft: field names it
--- (what `ready` and `start` claim). `ready` refuses a raft whose issues: list disagrees with that set, either way;
--- `stop`, readied or legacy, gives back exactly that set and never touches an item that is only listed, or that
--- another raft owns. Fixture under .cache/ready-members (tests/lib/trackerfix).
+-- R0025 review 001 F1, review 002 F1-F2, review 003 F1/F3: `ready` refuses a raft whose issues: list disagrees with
+-- its members' raft: fields, either way; `ready` and `start` stamp the raft and its members with one claim, and
+-- `stop`, readied or legacy, gives back exactly the issues carrying that claim. An issue only listed, owned by another
+-- raft, or filed naming the raft after the claim is never touched (the last is named in a warning), and a claimed
+-- issue whose raft: was edited since still comes back. Fixture under .cache/ready-members (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
@@ -78,7 +79,7 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 		end
 	)
 
-	it("stop moves back every member that names the raft, even one its issues: list dropped later", function()
+	it("stop moves back every claimed issue, whatever its list or raft: field says since", function()
 		trackerfix.elsewhere(
 			f,
 			{ ["tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0010, c0020") },
@@ -94,8 +95,21 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 			{ [doc] = (string.gsub(text, "issues: %[c0010, c0020%]", "issues: [c0010, c0030]")) },
 			"drift"
 		)
+		-- after the claim: c0050 is filed naming R0010 (never claimed), and c0020's raft: is edited away (still claimed)
+		local claimedC0020 = originText("tracker/issues/active/c0020/c0020.md")
+		trackerfix.elsewhere(f, {
+			["tracker/issues/c0050/c0050.md"] = (string.gsub(issue("c0050", "R0010"), PREPARED, "new-a-b-c")),
+			["tracker/issues/active/c0020/c0020.md"] = (
+				string.gsub(claimedC0020, "raft: R0010", "raft: R0099")
+			),
+		}, "after the claim")
 		local c0030 = originText("tracker/issues/c0030/c0030.md")
-		local out = trackerfix.trOk(f, f.main, { "stop", "R0010" })
+		local c0050 = originText("tracker/issues/c0050/c0050.md")
+		local r = trackerfix.tr(f, f.main, { "stop", "R0010" })
+		t.expect(r.ok).toBe(true)
+		local out = r.stdout
+		t.expect(string.find(r.stderr, "c0050", 1, true) ~= nil).toBe(true) -- named in the warning
+		t.expect(originText("tracker/issues/c0050/c0050.md")).toBe(c0050) -- never claimed: untouched
 		for _, id in { "c0010", "c0020" } do
 			t.expect(onOrigin(`tracker/issues/active/{id}/{id}.md`)).toBe(false)
 			t.expect(onOrigin(`tracker/issues/{id}/{id}.md`)).toBe(true)
@@ -105,7 +119,7 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 		t.expect(string.find(out, "stopped R0010 (c0010, c0020)", 1, true) ~= nil).toBe(true)
 	end)
 
-	it("stop gives back a legacy claim by the members' raft: fields, never an item only listed", function()
+	it("stop gives back a legacy claim to exactly the claimed issues", function()
 		-- R0030 started the legacy way: start claims R0030 and c0040 (its raft: members), not the listed c0030
 		trackerfix.elsewhere(f, { ["tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "c0040") }, "agree")
 		local wt = trackerfix.trOk(f, f.main, { "worktree", "R0030" })
@@ -118,8 +132,23 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 				string.gsub(claimed, "issues: %[c0040%]", "issues: [c0040, c0030]")
 			),
 		}, "relist")
+		-- after the claim: c0060 is filed naming R0030; it carries no claim of R0030, so stop leaves it
+		trackerfix.elsewhere(
+			f,
+			{
+				["tracker/issues/c0060/c0060.md"] = (
+					string.gsub(issue("c0060", "R0030"), PREPARED, "new-a-b-c")
+				),
+			},
+			"late member"
+		)
 		local c0030 = originText("tracker/issues/c0030/c0030.md")
-		local out = trackerfix.trOk(f, f.main, { "stop", "R0030" })
+		local c0060 = originText("tracker/issues/c0060/c0060.md")
+		local r = trackerfix.tr(f, f.main, { "stop", "R0030" })
+		t.expect(r.ok).toBe(true)
+		local out = r.stdout
+		t.expect(string.find(r.stderr, "c0060", 1, true) ~= nil).toBe(true)
+		t.expect(originText("tracker/issues/c0060/c0060.md")).toBe(c0060)
 		t.expect(trackerfix.trOk(f, f.main, { "status", "R0030" })).toBe("prepared")
 		t.expect(trackerfix.trOk(f, f.main, { "status", "c0040" })).toBe("prepared")
 		t.expect(originText("tracker/issues/c0030/c0030.md")).toBe(c0030)
