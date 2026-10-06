@@ -1,0 +1,4 @@
+- F1: fixed: the overridden c0081 publish-guard now requires `refuseStale()` on the code line right before each publish.commit (blank and comment lines skipped), and its sanity case pins a function whose refuseStale() is earlier but not adjacent. This is stricter than the user-approved Override and keeps its intent.
+- F2: fixed: three alternating same-machine runs of c0053's commands spec gave 54/42/32 s before and 64/56/39 s after (median +33%), so the fallback applies: the board is now built in-process (board.build on the main checkout's tracker/, written to its .cache/board.html). After it: 33/33/32 s before, 36/37/37 s after (+12%).
+- F3: refuted: no defect. `merge --ff-only` refuses a dirty overlapping tree and the refresh only warns. The missing spec case belongs to the sequestered spec, and the raft review is told.
+- F4: fixed: cmd.worktree's hint says `<root>/scripts/tracker.sh sync`, and a detached main checkout is named "a detached HEAD".

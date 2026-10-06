@@ -361,66 +361,6 @@ local function refuseStale()
 	end
 end
 
--- publish.commit for every command but remap: a stale tree is refused first.
-local function publishFresh(build: publish.Build, message: string | () -> string): publish.Result
-	refuseStale()
-	return publish.commit(".", build, message)
-end
-
--- The three words of a fresh stamp: the phrase that makes every write of tracker/next differ (c0870).
-local function phrase(): string
-	return (string.match(stamp("new"), "^%a+%-(.+)$")) :: string
-end
-
--- Moves whole item directories (every file of each id) to state `to` as one tracker-only commit on origin/main: the
--- document gets `status`, check.sh goes through paths.rewrite for every id moved here, every other file is unchanged.
--- `verify` may refuse an id from its effective status on origin/main. A string result is a refusal, as publish.commit's.
-local function moveOnOrigin(
-	ids: { string },
-	to: store.State,
-	status: string,
-	message: string,
-	verify: ((id: string, st: string) -> string?)?
-): publish.Result
-	return publishFresh(function(paths, read)
-		local dirs: { [string]: string } = {}
-		local sources: { [string]: string } = {}
-		for _, id in ids do
-			local doc = docPath(paths, id)
-			if not doc then
-				return `{id} is not on origin/main`
-			end
-			sources[id] = string.sub(doc, 1, #doc - #id - 4) -- ".../<ID>/<ID>.md" -> ".../<ID>"
-			dirs[id] = store.dirFor(if store.isRaftId(id) then "raft" else "issue", to, id)
-			if verify then
-				local text = read(doc) :: string
-				local refusal = verify(id, statusLib.effective(frontOf(text), stateOfPath(doc)))
-				if refusal then
-					return refusal
-				end
-			end
-		end
-		local changes: { publish.Change } = {}
-		for _, p in paths do
-			local fid, rel = publish.itemPath(p)
-			if not fid or not rel or sources[fid] ~= string.sub(p, 1, #p - #rel - 1) then
-				continue
-			end
-			local text = read(p)
-			if not text then
-				return `cannot read {p} on origin/main`
-			end
-			if rel == `{fid}.md` then
-				text = withFront(text, "status", status)
-			elseif rel == "check.sh" then
-				text = pathsLib.rewrite(text, dirs)
-			end
-			table.insert(changes, { path = `{dirs[fid]}/{rel}`, from = p, content = text })
-		end
-		return changes
-	end, message)
-end
-
 -- A pull that moves an item directory away leaves its ignored and untracked files behind (a raft's prompt.md, a
 -- Finder .DS_Store): the main checkout would then hold one id in two directories. Every item directory under `root`
 -- with nothing tracked at HEAD loses its ignored files and is removed; untracked files that are not ignored are kept,
@@ -460,6 +400,105 @@ local function sweepStale(root: string)
 			end
 		end
 	end
+end
+
+-- Rebuilds `root`'s .cache/board.html, never opening a browser; a failure is one warning.
+-- In-process, not a second tracker.sh (c0070's fallback: a second Lune process per publish cost c0053's commands spec
+-- about a third more). The page is built from root's tracker/ with this tooling's template, as `board -O` writes it.
+local function buildBoard(root: string)
+	local ok, err = pcall(function()
+		local page = board.build(`{root}/{store.ROOT}`)
+		fs.writeDir(`{root}/.cache`)
+		sh.writeReplacing(`{root}/.cache/board.html`, page)
+	end)
+	if not ok then
+		stdio.ewrite(`warning: board: could not rebuild ({string.match(tostring(err), "^[^\n]*") or ""})\n`)
+	end
+end
+
+-- After origin/main moved: bring the main checkout up to it and rewrite its .cache/board.html. Never fails the caller:
+-- each problem is one `warning: board: …` line on stderr.
+local function refreshBoard()
+	local root = mainRoot()
+	local branch = sh.trim(sh.run("git", { "-C", root, "branch", "--show-current" }).stdout)
+	if branch == "main" then
+		local m = sh.run("git", { "-C", root, "merge", "--ff-only", "--quiet", "origin/main" })
+		if m.ok then
+			sweepStale(root)
+		else
+			local first = string.match(sh.trim(m.stderr .. m.stdout), "^[^\n]*") or ""
+			stdio.ewrite(`warning: board: the main checkout was not updated ({first})\n`)
+		end
+	else
+		stdio.ewrite(
+			`warning: board: the main checkout is on {if branch == "" then "a detached HEAD" else branch}, not main; not updated\n`
+		)
+	end
+	buildBoard(root)
+end
+
+-- Every publish.commit call site goes through this: it fails like before on a refusal, and refreshes the board when a
+-- commit was pushed (r.sha set). It returns r unchanged.
+local function published(r: publish.Result): publish.Result
+	if r.ok and r.sha then
+		refreshBoard()
+	end
+	return r
+end
+
+-- The three words of a fresh stamp: the phrase that makes every write of tracker/next differ (c0870).
+local function phrase(): string
+	return (string.match(stamp("new"), "^%a+%-(.+)$")) :: string
+end
+
+-- Moves whole item directories (every file of each id) to state `to` as one tracker-only commit on origin/main: the
+-- document gets `status`, check.sh goes through paths.rewrite for every id moved here, every other file is unchanged.
+-- `verify` may refuse an id from its effective status on origin/main. A string result is a refusal, as publish.commit's.
+local function moveOnOrigin(
+	ids: { string },
+	to: store.State,
+	status: string,
+	message: string,
+	verify: ((id: string, st: string) -> string?)?
+): publish.Result
+	refuseStale()
+	return published(publish.commit(".", function(paths, read)
+		local dirs: { [string]: string } = {}
+		local sources: { [string]: string } = {}
+		for _, id in ids do
+			local doc = docPath(paths, id)
+			if not doc then
+				return `{id} is not on origin/main`
+			end
+			sources[id] = string.sub(doc, 1, #doc - #id - 4) -- ".../<ID>/<ID>.md" -> ".../<ID>"
+			dirs[id] = store.dirFor(if store.isRaftId(id) then "raft" else "issue", to, id)
+			if verify then
+				local text = read(doc) :: string
+				local refusal = verify(id, statusLib.effective(frontOf(text), stateOfPath(doc)))
+				if refusal then
+					return refusal
+				end
+			end
+		end
+		local changes: { publish.Change } = {}
+		for _, p in paths do
+			local fid, rel = publish.itemPath(p)
+			if not fid or not rel or sources[fid] ~= string.sub(p, 1, #p - #rel - 1) then
+				continue
+			end
+			local text = read(p)
+			if not text then
+				return `cannot read {p} on origin/main`
+			end
+			if rel == `{fid}.md` then
+				text = withFront(text, "status", status)
+			elseif rel == "check.sh" then
+				text = pathsLib.rewrite(text, dirs)
+			end
+			table.insert(changes, { path = `{dirs[fid]}/{rel}`, from = p, content = text })
+		end
+		return changes
+	end, message))
 end
 
 -- Ids of `space` in the local tree, read without store.find, so a malformed tree still yields them.
@@ -509,7 +548,8 @@ end
 -- no tracker/next. `extra`: ids that count besides origin's (the local tree's).
 local function reserveOnOrigin(space: string, extra: { string }): number?
 	local chosen: number? = nil
-	local r = publishFresh(function(paths, read)
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
 		local used = idsOf(paths, space)
 		for _, id in extra do
 			table.insert(used, id)
@@ -522,7 +562,7 @@ local function reserveOnOrigin(space: string, extra: { string }): number?
 		return if change then { change :: publish.Change } else {}
 	end, function()
 		return `tracker: reserve {space} number {chosen or "?"}`
-	end)
+	end))
 	if not r.ok then
 		fail(`could not reserve a number on origin/main: {r.reason}`)
 	end
@@ -604,7 +644,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		local state: store.State = if raftId then "active" else "backlog"
 		if state == "backlog" and publishing() then
 			local chosen = ""
-			local r = publishFresh(function(paths, read)
+			refuseStale()
+			local r = published(publish.commit(".", function(paths, read)
 				local ids = idsOf(paths, "issue")
 				for _, id in localIds("issue") do
 					table.insert(ids, id)
@@ -641,7 +682,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				return changes
 			end, function()
 				return `tracker: new {chosen} {slug}`
-			end)
+			end))
 			if not r.ok then
 				fail(
 					`new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
@@ -699,7 +740,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				fail("a raft needs at least one issue")
 			end
 			local chosen = ""
-			local r = publishFresh(function(paths, read)
+			refuseStale()
+			local r = published(publish.commit(".", function(paths, read)
 				local known = idsOf(paths, "raft")
 				for _, raft in store.all("raft") do
 					table.insert(known, raft.id)
@@ -755,7 +797,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				return changes
 			end, function()
 				return `tracker: new raft {chosen} {slug}`
-			end)
+			end))
 			if not r.ok then
 				fail(`new raft: {r.reason}`)
 			end
@@ -829,7 +871,8 @@ end
 local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
-	local r = publishFresh(function(paths, read)
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
 		local path = docPath(paths, id)
 		local text = path and read(path)
@@ -893,7 +936,7 @@ local function setStatus(id: string, to: string)
 		return changes
 	end, function()
 		return `tracker: {id} {to}`
-	end)
+	end))
 	if not r.ok then
 		fail(r.reason or "publish failed")
 	end
@@ -976,6 +1019,7 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 		if sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot() then
 			sh.git({ "pull", "--quiet", "--ff-only" })
 			sweepStale(mainRoot())
+			buildBoard(mainRoot())
 		else
 			mergeOrigin()
 		end
@@ -1351,7 +1395,7 @@ function cmd.remap()
 	end
 	if #unmapped > 0 then
 		if publishing() then
-			local r = publish.commit(".", function(paths, read)
+			local r = published(publish.commit(".", function(paths, read)
 				local c = idsLib.parse(read(idsLib.FILE) or "")
 				if not c then
 					return `origin/main has no usable {idsLib.FILE}`
@@ -1361,7 +1405,7 @@ function cmd.remap()
 					table.insert(used, id)
 				end
 				return { { path = idsLib.FILE, content = idsLib.format(number(c, used), phrase()) } }
-			end, "tracker: reserve numbers for a remap")
+			end, "tracker: reserve numbers for a remap"))
 			if not r.ok then
 				fail(`remap: could not reserve numbers on origin/main: {r.reason}`)
 			end
@@ -1631,7 +1675,8 @@ function cmd.start(pos: { string })
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
 		sh.writeReplacing(claimFile(raft.id), claim)
 		local raftPath: string? = nil
-		local r = publishFresh(function(paths, read)
+		refuseStale()
+		local r = published(publish.commit(".", function(paths, read)
 			local changes: { publish.Change } = {}
 			for _, id in ids do
 				local path = docPath(paths, id)
@@ -1653,7 +1698,7 @@ function cmd.start(pos: { string })
 				table.insert(changes, { path = path, content = withFront(text, "status", claim) })
 			end
 			return changes
-		end, `tracker: start {raft.id}`)
+		end, `tracker: start {raft.id}`))
 		-- a push that reached origin but reported failure (the connection dropped after it): origin already
 		-- carries this claim, so it is ours and start goes on
 		if not r.ok and raftPath then
@@ -1845,7 +1890,7 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local dirName: string
 	if string.match(target, "^R%d%d%d%d$") then
 		local missing =
-			`{target} is not in this tree; if it was just merged, run git -C {mainRoot()} pull --ff-only`
+			`{target} is not in this tree; if it was just merged, run {mainRoot()}/scripts/tracker.sh sync`
 		local raft = store.find(target) or fail(missing)
 		if raft.state == "done" then
 			fail(`{target} is done`)

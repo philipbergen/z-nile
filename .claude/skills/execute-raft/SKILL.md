@@ -101,7 +101,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 ## Phase 6: Merge and clean up
 1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`scripts/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
-3. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main`, removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
+3. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main` (`"<root>/scripts/tracker.sh" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
