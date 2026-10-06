@@ -62,9 +62,21 @@ local function shell(script: string): string
 	return trim(r.stdout)
 end
 
-local function alive(pid: string): boolean
-	return string.match(pid, "^%d+$") ~= nil and process.exec("kill", { "-0", pid }).ok
+-- Whether a process exists. Inside the jail a signal to a process outside it is refused (the jail's signal rule,
+-- c0078), so there `Operation not permitted` means it exists outside. Unjailed it means another user's process, which
+-- can't hold this user's lock: dead, so a stale lock naming a reused pid can still be taken over.
+function fence.alive(pid: string): boolean
+	if string.match(pid, "^%d+$") == nil then
+		return false
+	end
+	local r = process.exec("kill", { "-0", pid })
+	if r.ok then
+		return true
+	end
+	return process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
+		and string.find(r.stderr, "Operation not permitted", 1, true) ~= nil
 end
+local alive = fence.alive
 
 -- The pid of this Lune process: the parent of the shell that prints it.
 local function myPid(): string
@@ -307,6 +319,11 @@ local function profile(cache: string, runTemp: string): string
 			`(deny file-write-create (require-all (vnode-type SYMLINK) (regex #"^{pattern}/[^/]+$")))`
 		)
 	end
+	-- no signal leaves the jail: a spec can signal (and probe with kill -0) only processes of its own sandbox, never
+	-- the runner's top process, the launcher or its watchdog; the sweeper relies on it (c0078, c0076). Later rules win;
+	-- no-log keeps the sweeper's refused probes out of the system log
+	table.insert(rules, "(deny signal (with no-log))")
+	table.insert(rules, "(allow signal (target same-sandbox))")
 	return table.concat(rules, "")
 end
 
@@ -418,6 +435,62 @@ local function fixtureOfGuarded(here: string, open: { string }): boolean
 	return false
 end
 
+-- Whether links can be made in `dir`, probed at a fresh, unpredictable name: "made" (and removed at once), "refused"
+-- (only for `Operation not permitted`, a sandbox's refusal), or "error" and ln's message (a missing folder, ...). A
+-- file a spec left at a predictable name can't turn a permissive sandbox into a refusing one (c0078).
+function fence.linkProbe(dir: string): (string, string)
+	local letters = shell("LC_ALL=C tr -dc a-z0-9 </dev/urandom 2>/dev/null | head -c 8")
+	local probe = `{dir}/pickman-link-probe-{myPid()}-{letters}`
+	local r = process.exec("ln", { "-s", "/nonexistent", probe })
+	if r.ok then
+		process.exec("rm", { "-f", probe })
+		return "made", ""
+	end
+	if string.find(r.stderr, "Operation not permitted", 1, true) then
+		return "refused", trim(r.stderr)
+	end
+	return "error", trim(r.stderr)
+end
+
+-- The jail's root (c0076): runs the specs, waits, then kills every process it can signal. Under the jail's signal rule
+-- that is exactly the run's leftovers, whatever session or group they moved to. Run as
+--   perl -e SWEEPER <outside-pid | -> <command> <args...>
+-- It exits with the command's status (a signal death as 128+n); 70 without sweeping unless a signal to the outside pid
+-- (`-`: its parent, the launcher) is refused with EPERM; 71 if processes keep appearing. PICKMAN_SWEEP_ONLY, a file of
+-- pids, narrows the candidates (a test seam; the runner removes it with `env -u`).
+fence.SWEEPER = table.concat({
+	"use Errno;",
+	-- a Ctrl-C or a forwarded signal stops the specs, not the sweeper
+	"$SIG{$_} = 'IGNORE' for qw(INT TERM HUP);",
+	"my $outside = shift @ARGV; my $form = $outside eq '-'; my $parent = getppid();",
+	-- the launcher form watches its parent, read once now: the launcher outlives a Ctrl-C to the top process
+	'if ($form) { if ($parent == 1) { print STDERR "sweeper: no launcher above me (parent 1); nothing swept\n"; exit 70 }',
+	"$outside = $parent }",
+	'my $pid = fork; die "fork: $!" unless defined $pid;',
+	"if ($pid == 0) { $SIG{$_} = 'DEFAULT' for qw(INT TERM HUP); exec { $ARGV[0] } @ARGV or die \"exec: $!\"; }",
+	"waitpid($pid, 0); my $st = $?; my $code = $st & 127 ? 128 + ($st & 127) : $st >> 8;",
+	-- interlock: sweep only where a signal to a live process outside is refused, or kill 0 would reach every process
+	-- the user owns
+	"my $jailed = $outside =~ /^\\d+$/ && (!$form || getppid() == $parent) && !kill(0, $outside) && $!{EPERM};",
+	'unless ($jailed) { print STDERR "sweeper: not in a jail that refuses signals to other processes (pid $outside answered); nothing swept\n"; exit 70 }',
+	-- candidates: every pid (macOS PID_MAX is 99999), or those PICKMAN_SWEEP_ONLY lists
+	"my @cand = 2 .. 99999; my $only = $ENV{PICKMAN_SWEEP_ONLY};",
+	"if (defined $only && $only ne '' && open(my $f, '<', $only)) { local $/; my $t = <$f>; @cand = grep { /^\\d+$/ } split /\\s+/, ($t // '') }",
+	-- kept: itself and its ancestors among what it can signal (pgrep -a: BSD pgrep hides its own ancestors otherwise)
+	"my %keep = ($$ => 1); my %up; my @can = grep { $_ != $$ && kill(0, $_) } @cand;",
+	"for my $p (@can, $$) { for my $c (split /\\s+/, `pgrep -a -P $p 2>/dev/null`) { $up{$c} = $p if $c =~ /^\\d+$/ } }",
+	"my %can = map { $_ => 1 } @can; my $anc = getppid(); while ($can{$anc} && !$keep{$anc}) { $keep{$anc} = 1; $anc = $up{$anc} // 0 }",
+	-- passes: stop then kill what is left (stopped first, so none can fork while the others die), until nothing is
+	"my %gone; for my $pass (1 .. 50) { 1 while waitpid(-1, 1) > 0;",
+	-- a process that just ended can linger a moment as a zombie (kill 0 still answers) until launchd reaps it: what
+	-- is found is probed again after a short pause, so only what still lives is stopped and counted
+	"my @found = grep { !$keep{$_} && kill(0, $_) } @cand;",
+	"if (@found) { select(undef, undef, undef, 0.05); @found = grep { kill(0, $_) } @found }",
+	'unless (@found) { my $n = keys %gone; print STDERR "sweeper: stopped $n process(es) the specs left running\n" if $n; exit $code }',
+	"kill 'STOP', @found; kill 'KILL', @found; $gone{$_} = 1 for @found; select(undef, undef, undef, 0.05) }",
+	'print STDERR "sweeper: processes keep appearing; this run is not clean\n"; exit 71;',
+}, " ")
+
 -- The jail (macOS). It returns the command prefix and what the run is told. Off macOS there is no jail
 -- (environment guards only). On macOS a run that can't be jailed (inside another sandbox, which can't be
 -- nested, or without sandbox-exec) goes on only if it provably can't write the repository, or if it is a
@@ -429,7 +502,20 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 	local rules = profile(cache, runTemp)
 	local started, trial = pcall(process.exec, "sandbox-exec", { "-p", rules, "/usr/bin/true" })
 	if started and trial.ok then
-		return { "sandbox-exec", "-p", rules }, "sandbox-exec"
+		-- the jail's root is the sweeper, in the launcher form, without the caller's test seam (c0076)
+		return {
+			"sandbox-exec",
+			"-p",
+			rules,
+			"env",
+			"-u",
+			"PICKMAN_SWEEP_ONLY",
+			"perl",
+			"-e",
+			fence.SWEEPER,
+			"-",
+		},
+			"sandbox-exec"
 	end
 	local why = if started
 		then "already inside a sandbox, and macOS can't nest them"
@@ -437,12 +523,13 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 	local open = writable(here)
 	local leaks = escapes(here)
 	-- an outer sandbox must also refuse a symlink at the top of .cache (unjailed writers would follow one)
-	local linkProbe = `{cache}/pickman-link-probe-{myPid()}`
-	if process.exec("ln", { "-s", "/nonexistent", linkProbe }).ok then
-		process.exec("rm", { "-f", linkProbe })
-		if #open == 0 then
-			table.insert(leaks, "a symlink at the top of .cache")
-		end
+	local verdict, detail = fence.linkProbe(cache)
+	if verdict == "error" then
+		stdio.ewrite(`cannot probe the outer sandbox for links at the top of .cache: {detail}\n`)
+		pcall(fs.removeDir, runTemp)
+		process.exit(1)
+	elseif verdict == "made" and #open == 0 then
+		table.insert(leaks, "a symlink at the top of .cache")
 	end
 	if #open == 0 and #leaks == 0 then
 		stdio.ewrite(`note: not jailed ({why}); the outer sandbox protects the repository\n`)
@@ -492,6 +579,10 @@ local REAPER = table.concat({
 	-- Lune: the launcher survives a Ctrl-C or a TERM to the top process alone, so nothing skips this
 	"my $c = $ENV{PICKMAN_REAP_CACHE}; if (defined $c && $c ne '' && opendir(my $dh, $c)) {",
 	"for my $e (readdir $dh) { unlink \"$c/$e\" if $e ne '.' && $e ne '..' && -l \"$c/$e\" } closedir $dh }",
+	-- a spec can kill the jail's sweeper (same sandbox): then its leftovers may live on, so the run fails (c0076)
+	"if (($ENV{PICKMAN_REAP_SWEPT} // '') eq '1' && ($st & 127)) { printf STDERR",
+	'"tests/run: the jail\'s sweeper was killed (signal %d): processes the specs left may still run. Stop and report this.\\n",',
+	"$st & 127; exit 1 }",
 	"exit($st & 127 ? 128 + ($st & 127) : $st >> 8);",
 }, " ")
 fence.REAPER = REAPER
@@ -584,7 +675,13 @@ function fence.enter()
 		table.insert(launched, a)
 	end
 	-- the launcher's own settings (PICKMAN_REAP_*) reach it alone: the bash line above unsets them for the specs
-	local r = process.exec("perl", launched, { stdio = "forward", env = { PICKMAN_REAP_CACHE = cache } })
+	local r = process.exec("perl", launched, {
+		stdio = "forward",
+		env = {
+			PICKMAN_REAP_CACHE = cache,
+			PICKMAN_REAP_SWEPT = if prefix[1] == "sandbox-exec" then "1" else "",
+		},
+	})
 	-- with the specs stopped, unlink any symlink one swapped in at the top of .cache (review 006 F1); the launcher
 	-- did so already, this is belt and braces
 	for _, name in fs.readDir(cache) do

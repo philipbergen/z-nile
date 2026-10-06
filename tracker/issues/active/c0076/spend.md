@@ -3,6 +3,7 @@
 | # | when | commit | +lines | -lines | minutes | attribution |
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-06 04:08 | R0026: experiments | 0 | 0 | 0.8 | raft+proportional |
+| 2 | 2026-10-06 04:20 | c0076, c0078: the jail's sweeper, the signal rule, fence.alive and fence.linkProbe | 54 | 5 | 25.0 | explicit |
 
-**Total:** +0 / -0 lines, 0.8 agent-minutes over 1 commits
-<!-- totals: added=0 removed=0 minutes=0.8 commits=1 -->
+**Total:** +54 / -5 lines, 25.8 agent-minutes over 2 commits
+<!-- totals: added=54 removed=5 minutes=25.8 commits=2 -->
