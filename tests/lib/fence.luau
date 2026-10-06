@@ -63,8 +63,9 @@ local function shell(script: string): string
 end
 
 -- Whether a process exists. Inside the jail a signal to a process outside it is refused (the jail's signal rule,
--- c0078), so there `Operation not permitted` means it exists outside. Unjailed it means another user's process, which
--- can't hold this user's lock: dead, so a stale lock naming a reused pid can still be taken over.
+-- c0078), and inside an outer sandbox too (Claude Code's own allows signals only within it), so there `Operation not
+-- permitted` means it exists outside. Otherwise it means another user's process, which can't hold this user's lock:
+-- dead, so a stale lock naming a reused pid can still be taken over.
 function fence.alive(pid: string): boolean
 	if string.match(pid, "^%d+$") == nil then
 		return false
@@ -73,8 +74,10 @@ function fence.alive(pid: string): boolean
 	if r.ok then
 		return true
 	end
-	return process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
-		and string.find(r.stderr, "Operation not permitted", 1, true) ~= nil
+	local jail = process.env.PICKMAN_TEST_JAIL or ""
+	-- an outer sandbox (Claude Code's own) refuses signals outside it too (R0026 review 001 F3)
+	local confined = jail == "sandbox-exec" or string.sub(jail, 1, 14) == "outer sandbox "
+	return confined and string.find(r.stderr, "Operation not permitted", 1, true) ~= nil
 end
 local alive = fence.alive
 
@@ -470,12 +473,19 @@ fence.SWEEPER = table.concat({
 	"if ($pid == 0) { $SIG{$_} = 'DEFAULT' for qw(INT TERM HUP); exec { $ARGV[0] } @ARGV or die \"exec: $!\"; }",
 	"waitpid($pid, 0); my $st = $?; my $code = $st & 127 ? 128 + ($st & 127) : $st >> 8;",
 	-- interlock: sweep only where a signal to a live process outside is refused, or kill 0 would reach every process
-	-- the user owns
-	"my $jailed = $outside =~ /^\\d+$/ && (!$form || getppid() == $parent) && !kill(0, $outside) && $!{EPERM};",
-	'unless ($jailed) { print STDERR "sweeper: not in a jail that refuses signals to other processes (pid $outside answered); nothing swept\n"; exit 70 }',
-	-- candidates: every pid (macOS PID_MAX is 99999), or those PICKMAN_SWEEP_ONLY lists
-	"my @cand = 2 .. 99999; my $only = $ENV{PICKMAN_SWEEP_ONLY};",
-	"if (defined $only && $only ne '' && open(my $f, '<', $only)) { local $/; my $t = <$f>; @cand = grep { /^\\d+$/ } split /\\s+/, ($t // '') }",
+	-- the user owns. One probe can be fooled (an EPERM from root's or another user's pid), so: only on macOS, where the
+	-- jail is; an explicit pid only inside a jailed spec run (explicit pids are for specs); the launcher form only
+	-- while its parent is the one it started under (R0026 review 001 F1)
+	"my $refuse = $^O ne 'darwin' ? \"no jail on $^O\" : (!$form && ($ENV{PICKMAN_TEST_JAIL} // '') ne 'sandbox-exec')",
+	"? 'an explicit pid outside a jailed spec run' : undef;",
+	'$refuse //= "not in a jail that refuses signals to other processes (pid $outside answered)"',
+	"unless $outside =~ /^\\d+$/ && (!$form || getppid() == $parent) && !kill(0, $outside) && $!{EPERM};",
+	'if (defined $refuse) { print STDERR "sweeper: $refuse; nothing swept\n"; exit 70 }',
+	-- candidates: every pid (macOS PID_MAX is 99999), or those PICKMAN_SWEEP_ONLY lists; a seam that can't be read
+	-- refuses, never widens the sweep
+	"my @cand = 2 .. 99999; my $only = $ENV{PICKMAN_SWEEP_ONLY}; if (defined $only && $only ne '') {",
+	"open(my $f, '<', $only) or do { print STDERR \"sweeper: test seam $only unreadable ($!); nothing swept\n\"; exit 70 };",
+	"local $/; my $t = <$f>; @cand = grep { /^\\d+$/ } split /\\s+/, ($t // '') }",
 	-- kept: itself and its ancestors among what it can signal (pgrep -a: BSD pgrep hides its own ancestors otherwise)
 	"my %keep = ($$ => 1); my %up; my @can = grep { $_ != $$ && kill(0, $_) } @cand;",
 	"for my $p (@can, $$) { for my $c (split /\\s+/, `pgrep -a -P $p 2>/dev/null`) { $up{$c} = $p if $c =~ /^\\d+$/ } }",
@@ -642,6 +652,10 @@ function fence.enter()
 		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
 	end
 	local prefix, jailed = jail(here, cache, runTemp)
+	if string.sub(jailed, 1, 14) == "outer sandbox " then
+		-- the lock code runs here, inside that sandbox: fence.alive must read its refusals as "alive" (review 001 F3)
+		process.env.PICKMAN_TEST_JAIL = jailed
+	end
 	local lock = `{cache}/tests-run.lock`
 	takeLock(lock)
 	local before = snapshot(cache)

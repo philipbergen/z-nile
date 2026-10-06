@@ -139,6 +139,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
 		["sandbox-exec"] = "tests whether it runs jailed",
 	},
+	["tests/tooling/sweeper-interlock.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
+		["sandbox-exec"] = "tests whether it runs jailed, and clears that for one sweeper",
+	},
 	["tests/acceptance/c0078/jail-signals.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
 		["sandbox-exec"] = "tests whether it runs jailed",
