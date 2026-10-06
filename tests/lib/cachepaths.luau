@@ -48,7 +48,6 @@ function cachepaths.scan(files: { [string]: string }, allowed: { [string]: { [st
 end
 
 local RENAMED = "written through replace-file.pl (a rename onto the path, never through a link)"
-local UNLINKED = "check.sh and the launcher unlink links at the top of .cache first"
 
 local ALLOWED: { [string]: { [string]: string } } = {
 	["scripts/check.sh"] = {
@@ -71,7 +70,6 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",
 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,
 		["return `.cache/tracker-claim-{raftId}`"] = `the claim file, written with sh.writeReplacing: {RENAMED}`,
-		['local scratch = ".cache/tracker-remap-base"'] = `a scratch worktree: git refuses to add one over an existing path; {UNLINKED}`,
 		['fs.writeDir(".cache")'] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 	},

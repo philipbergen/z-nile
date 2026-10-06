@@ -1268,9 +1268,13 @@ function cmd.remap()
 	-- Then merge origin/main against the merge base with the same map applied: every path then matches on all three
 	-- sides, so git never has to guess a rename (similar documents, such as stubs, get paired wrongly).
 	local mb = sh.git({ "merge-base", "HEAD", "origin/main" })
-	local scratch = ".cache/tracker-remap-base"
-	fs.writeDir(".cache")
-	sh.run("git", { "worktree", "remove", "--force", scratch })
+	-- in a fresh temporary folder, never at a fixed name under .cache: a spec may have swapped a link in there, and git
+	-- would build (and remove) the worktree through it (R0026 review 001 F2)
+	local tmpBase = string.gsub(process.env.TMPDIR or "", "/+$", "")
+	local scratch = `{sh.must(
+		"mktemp",
+		{ "-d", `{if tmpBase == "" then "/tmp" else tmpBase}/tracker-remap-base.XXXXXX` }
+	)}/base`
 	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
 	local built, baseTree = pcall(function(): string
 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
@@ -1284,6 +1288,7 @@ function cmd.remap()
 	end)
 	sh.run("git", { "worktree", "remove", "--force", scratch })
 	sh.run("git", { "worktree", "prune" })
+	pcall(fs.removeDir, (string.gsub(scratch, "/base$", "")))
 	if not built then
 		fail(
 			`remap committed, but the remapped merge base could not be built ({baseTree}): git merge origin/main and resolve by hand`
