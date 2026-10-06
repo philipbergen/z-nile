@@ -42,11 +42,13 @@ local function sweep(outside: string, env: { [string]: string }): Result
 	return process.exec("perl", { "-e", fence.SWEEPER, outside, "sh", "-c", "exit 0" }, { env = env })
 end
 
-local function refused(r: Result, pid: string)
+-- refused with exit 70, by the rule whose message holds `why`, and the listed process lived
+local function refused(r: Result, pid: string, why: string)
 	local lived = alive(pid)
 	process.exec("kill", { "-KILL", pid })
 	t.expect(r.code).toBe(70)
 	t.expect(string.find(r.stderr, "nothing swept", 1, true) ~= nil).toBe(true)
+	t.expect(string.find(r.stderr, why, 1, true) ~= nil).toBe(true)
 	t.expect(lived).toBe(true)
 end
 
@@ -61,13 +63,19 @@ return t.spec("the sweeper's interlock", function(it)
 	it("an explicit pid outside a jailed spec run is refused, even one whose probe says EPERM", function()
 		local pid, only = survivor("only-unjailed")
 		-- pid 1 is root's: kill 0 on it fails with EPERM everywhere, jail or not
-		refused(sweep("1", { PICKMAN_SWEEP_ONLY = only, PICKMAN_TEST_JAIL = "" }), pid)
+		refused(
+			sweep("1", { PICKMAN_SWEEP_ONLY = only, PICKMAN_TEST_JAIL = "" }),
+			pid,
+			if process.os == "macos" then "explicit pid" else "no jail"
+		)
 	end)
 
 	it("a test seam that can't be read is refused, never a wider sweep", function()
+		if not jailed then
+			return -- unjailed, an earlier rule (no jail, or an explicit pid outside a jailed run) refuses first
+		end
 		local pid = survivor("only-unused")
-		local outside = if jailed then topPid() else "1"
-		refused(sweep(outside, { PICKMAN_SWEEP_ONLY = `{base}/no-such-file` }), pid)
+		refused(sweep(topPid(), { PICKMAN_SWEEP_ONLY = `{base}/no-such-file` }), pid, "unreadable")
 	end)
 
 	it("inside an outer sandbox, a refused liveness probe reads as alive", function()
