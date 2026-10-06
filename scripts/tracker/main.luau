@@ -1912,7 +1912,16 @@ local function reviewProblem(raft: store.Item): string?
 	local invalid = {}
 	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if line and (string.find(line, "^fixed") or string.find(line, "^refuted")) then
+		if line and string.find(line, "^fixed") then
+			if not string.find(line, "consequences:%s*%S", 6) then
+				table.insert(
+					invalid,
+					`{id}: a fixed answer needs "; consequences: <what the fix could break, and how that was checked, or none>"`
+				)
+			end
+			continue
+		end
+		if line and string.find(line, "^refuted") then
 			continue
 		end
 		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
