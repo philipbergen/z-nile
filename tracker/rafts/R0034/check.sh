@@ -11,6 +11,28 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0034
 
-# check "RC1: <end-to-end statement>" <command>
+# a sequestered issue spec before `tracker.sh done`, its promoted copy after it
+spec() { # $1 issue id, $2 spec name
+  local f
+  f="$(scripts/tracker.sh find "$1")/acceptance/$2.spec.luau"
+  [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
+  echo "$f"
+}
+
+way_back_end_to_end() {
+  local i
+  for i in 1 2 3; do
+    lune run tests/run -- "$(spec f0065 run)" "$(spec f0065 returns)" "$(spec f0065 sessions)" "$(spec f0065 place)" "$(spec f0065 client)" \
+      tests/acceptance/f0031/*.spec.luau tests/acceptance/f0061/*.spec.luau >/dev/null 2>&1 \
+      || { echo "the way-back specs fail on repeat $i"; return 1; }
+  done
+}
+check "RC1: from game over back to the lobby, end to end, three times in a row, beside f0031's narrowed and f0061's lobby specs" way_back_end_to_end
+
+lobby_untouched() {
+  git diff --quiet "$(git merge-base origin/main HEAD)" -- lobby.project.json src/lobby src/shared/Logic/Travel \
+    || { echo "the lobby or Travel changed"; return 1; }
+}
+check "RC2: the lobby and Travel are untouched" lobby_untouched
 
 finish
