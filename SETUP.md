@@ -31,6 +31,7 @@ scripts/setup.sh
 1. Install Roblox Studio.
 2. Install the Rojo plugin with `rojo plugin install`, or from the Studio plugin marketplace.
 3. `rojo serve`, then Connect in Studio. You should see `ReplicatedStorage.Shared`, `ServerScriptService.Server` and `StarterPlayer.StarterPlayerScripts.Client`. Play prints `[pickman] server started` and `[pickman] client started`.
+4. The lobby place: `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
 
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
