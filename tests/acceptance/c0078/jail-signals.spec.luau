@@ -9,7 +9,7 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0840-signals`
+local base = `{root}/.cache/c0078-signals`
 local jailed = process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
 
 local function trim(s: string): string

@@ -5,13 +5,14 @@
 -- use. (`.cache/sim` is the sim library's replay directory: its files are named per model,
 -- seed and tick, and are only written when a simulation fails. Model names are not unique across
 -- spec files, so a collision is possible in principle; it would only rewrite a replay file, never
--- change a result. That is why it is exempt.)
+-- change a result. That is why it is exempt. `.cache/tests-run.lock` is the runner's own lock, not a fixture: specs only
+-- read it, to find the run's top process (c0097).)
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local PATTERN = "%." .. "cache/([%w_%-]+)" -- built by concatenation so this file never matches itself
-local SHARED_BY_DESIGN: { [string]: boolean } = { sim = true }
+local SHARED_BY_DESIGN: { [string]: boolean } = { sim = true, ["tests-run"] = true }
 
 -- returns "<dir> used by <fileA>, <fileB>" lines, sorted, for every non-exempt dir used by 2+ files
 local function sharedDirs(texts: { [string]: string }): { string }
@@ -71,6 +72,14 @@ return t.spec("spec fixture directories are not shared", function(it)
 		local found = sharedDirs({
 			["tests/a.spec.luau"] = '".' .. 'cache/own" and ".' .. 'cache/own/x" and ".' .. 'cache/sim"',
 			["tests/b.spec.luau"] = '".' .. 'cache/sim"',
+		})
+		t.expect(found).toEqual({})
+	end)
+
+	it("ignores the runner's lock, which specs only read", function()
+		local found = sharedDirs({
+			["tests/a.spec.luau"] = '".' .. 'cache/tests-run.lock/pid"',
+			["tests/b.spec.luau"] = '".' .. 'cache/tests-run.lock/pid"',
 		})
 		t.expect(found).toEqual({})
 	end)

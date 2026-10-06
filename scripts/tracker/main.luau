@@ -4,6 +4,7 @@ local audit = require("./audit")
 local board = require("./board")
 local compactLib = require("./compact")
 local fs = require("@lune/fs")
+local gateLib = require("./gate")
 local idsLib = require("./ids")
 local process = require("@lune/process")
 local publish = require("./publish")
@@ -1267,9 +1268,13 @@ function cmd.remap()
 	-- Then merge origin/main against the merge base with the same map applied: every path then matches on all three
 	-- sides, so git never has to guess a rename (similar documents, such as stubs, get paired wrongly).
 	local mb = sh.git({ "merge-base", "HEAD", "origin/main" })
-	local scratch = ".cache/tracker-remap-base"
-	fs.writeDir(".cache")
-	sh.run("git", { "worktree", "remove", "--force", scratch })
+	-- in a fresh temporary folder, never at a fixed name under .cache: a spec may have swapped a link in there, and git
+	-- would build (and remove) the worktree through it (R0026 review 001 F2)
+	local tmpBase = string.gsub(process.env.TMPDIR or "", "/+$", "")
+	local scratch = `{sh.must(
+		"mktemp",
+		{ "-d", `{if tmpBase == "" then "/tmp" else tmpBase}/tracker-remap-base.XXXXXX` }
+	)}/base`
 	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
 	local built, baseTree = pcall(function(): string
 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
@@ -1283,6 +1288,7 @@ function cmd.remap()
 	end)
 	sh.run("git", { "worktree", "remove", "--force", scratch })
 	sh.run("git", { "worktree", "prune" })
+	pcall(fs.removeDir, (string.gsub(scratch, "/base$", "")))
 	if not built then
 		fail(
 			`remap committed, but the remapped merge base could not be built ({baseTree}): git merge origin/main and resolve by hand`
@@ -1911,7 +1917,16 @@ local function reviewProblem(raft: store.Item): string?
 	local invalid = {}
 	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if line and (string.find(line, "^fixed") or string.find(line, "^refuted")) then
+		if line and string.find(line, "^fixed") then
+			if not string.find(line, "consequences:%s*%S", 6) then
+				table.insert(
+					invalid,
+					`{id}: a fixed answer needs "; consequences: <what the fix could break, and how that was checked, or none>"`
+				)
+			end
+			continue
+		end
+		if line and string.find(line, "^refuted") then
 			continue
 		end
 		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
@@ -1972,11 +1987,41 @@ function cmd.done(pos: { string })
 			end
 		end
 	end
-	if #promoted > 0 then
-		print("\n=== promoted acceptance specs: type check + meta + run")
-		if not promotedChecks(promoted, true) then
-			sh.git({ "reset", "-q", "--hard", "HEAD" })
-			fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
+	-- Move everything to done/ now, so the gate sees the final tree. A rollback (git reset --hard HEAD) undoes
+	-- both the promotion and the moves, since nothing is committed yet.
+	local members = store.members(raft.id)
+	local movedDirs: { string } = {}
+	for _, m in members do
+		table.insert(movedDirs, store.dirFor(m.kind, "done", m.id))
+	end
+	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id))
+	local function rollback()
+		sh.git({ "reset", "-q", "--hard", "HEAD" })
+		-- git removes the folders it empties; if one is left, store.find would see a duplicate id
+		for _, dir in movedDirs do
+			if fs.isDir(dir) and #fs.readDir(dir) == 0 then
+				fs.removeDir(dir)
+			end
+		end
+	end
+	for _, m in members do
+		move(m, "done")
+	end
+	raft = move(raft, "done")
+	if gateLib.doneGate(process.env) == "promoted" then
+		print("done: inside a spec run, so the full gate is skipped; checking the promoted specs")
+		if #promoted > 0 then
+			print("\n=== promoted acceptance specs: type check + meta + run")
+			if not promotedChecks(promoted, true) then
+				rollback()
+				fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
+			end
+		end
+	else
+		print("\n=== full gate on the done tree")
+		if not sh.stream("bash", { "scripts/check.sh", "--full" }) then
+			rollback()
+			fail("the full gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
 	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
@@ -1984,14 +2029,10 @@ function cmd.done(pos: { string })
 		-- pcall: process.exec throws when gh can't be spawned at all (not on PATH)
 		local ok, r = pcall(sh.run, "gh", { "pr", "ready" })
 		if not (ok and r.ok) then
-			sh.git({ "reset", "-q", "--hard", "HEAD" })
+			rollback()
 			fail("could not mark the PR ready (rolled back); fix gh and retry done")
 		end
 	end
-	for _, m in store.members(raft.id) do
-		move(m, "done")
-	end
-	raft = move(raft, "done")
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end

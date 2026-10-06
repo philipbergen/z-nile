@@ -103,7 +103,15 @@ return t.spec("remap runs once, even after a conflicting merge", function(it)
 	end)
 
 	it("the remap commits, then its merge of origin/main conflicts", function()
+		-- R0026 review 001 F2: the remapped merge base is built outside .cache, so a link at the old fixed name there
+		-- (a spec can swap one in) leads nowhere: its target stays empty
+		local victim = `{base}/remap-victim`
+		fs.writeDir(victim)
+		fs.writeDir(`{branch}/.cache`)
+		t.expect(process.exec("ln", { "-s", victim, `{branch}/.cache/tracker-remap-base` }).ok).toBe(true)
 		local r = tr(branch, { "remap" })
+		t.expect(#fs.readDir(victim)).toBe(0)
+		process.exec("rm", { "-f", `{branch}/.cache/tracker-remap-base` })
 		t.expect(r.ok).toBe(false)
 		t.expect(git(branch, { "log", "-1", "--format=%s" })).toBe("tracker: remap ids")
 		t.expect(fs.isFile(`{branch}/tracker/issues/c0001/c0001.md`)).toBe(true)
