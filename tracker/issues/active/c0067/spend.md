@@ -11,6 +11,7 @@
 | 7 | 2026-10-06 15:24 | R0025: review 001 fixes (membership agreement, CI raft branch, PR reuse, wording, guard pin, design-round rule) | 73 | 5 | 15.9 | explicit |
 | 8 | 2026-10-06 15:30 | R0025: refute-001 | 0 | 0 | 0.6 | raft+proportional |
 | 9 | 2026-10-06 15:41 | R0025: review 002 fixes (one member set for every move; ready-members spec both directions) | 74 | 30 | 17.6 | explicit |
+| 10 | 2026-10-06 15:47 | R0025: refute-002 | 0 | 0 | 0.3 | raft+proportional |
 
-**Total:** +1363 / -180 lines, 133.7 agent-minutes over 9 commits
-<!-- totals: added=1363 removed=180 minutes=133.7 commits=9 -->
+**Total:** +1363 / -180 lines, 134.0 agent-minutes over 10 commits
+<!-- totals: added=1363 removed=180 minutes=134.0 commits=10 -->

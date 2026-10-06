@@ -9,6 +9,7 @@
 | 5 | 2026-10-06 14:53 | Merge origin/main (R0026, R0033 and preps) into R0025 | 523 | 20 | 1.1 | raft+proportional |
 | 6 | 2026-10-06 15:01 | R0025: promote-check fixes (spec type correction, cleanup return type, c0077 reviewed .cache lines) | 0 | 0 | 0.7 | raft+proportional |
 | 7 | 2026-10-06 15:30 | R0025: refute-001 | 0 | 0 | 0.6 | raft+proportional |
+| 8 | 2026-10-06 15:47 | R0025: refute-002 | 0 | 0 | 0.3 | raft+proportional |
 
-**Total:** +670 / -104 lines, 75.2 agent-minutes over 7 commits
-<!-- totals: added=670 removed=104 minutes=75.2 commits=7 -->
+**Total:** +670 / -104 lines, 75.5 agent-minutes over 8 commits
+<!-- totals: added=670 removed=104 minutes=75.5 commits=8 -->
