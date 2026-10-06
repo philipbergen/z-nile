@@ -25,6 +25,7 @@ usage: scripts/tracker.sh <command> ...
   new raft <feature|defect|chore> <slug> <issue>... [--single]
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
+  land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
   stamp <state>                                 print a fresh status stamp (diagnostics)
   find <id>                                     print the item's current directory
   list [backlog|active|done]                    list items
@@ -1025,6 +1026,147 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 		end
 	end
 	print(`synced to {sh.git({ "rev-parse", "--short", "origin/main" })}`)
+end
+
+-- What a capture may change, from `git diff --name-status --no-renames origin/main HEAD`: only edits (M) to backlog
+-- issue documents `tracker/issues/<ID>/<ID>.md` that say `design: draft` on both sides, with the status line unchanged.
+-- Returns the first refusal (naming the path), or nil.
+-- The frontmatter keys in order, or nil when one repeats: frontOf reads the last copy of a key, store.withFront
+-- rewrites the first, so a document with two is refused rather than read two ways.
+local function frontKeys(text: string): { string }?
+	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
+	local keys: { string } = {}
+	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
+		local k = string.match(line, "^([%w_]+):")
+		if k then
+			if table.find(keys, k) then
+				return nil
+			end
+			table.insert(keys, k)
+		end
+	end
+	return keys
+end
+
+-- what a capture may change in an issue's frontmatter: its title and its dependencies; everything else stays
+local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true }
+
+local function captureScope(diff: string, base: string): string?
+	local seen = false
+	for line in string.gmatch(diff, "[^\n]+") do
+		seen = true
+		local kind, path = string.match(line, "^(%a)\t(.+)$")
+		if not kind or not path then
+			return `cannot read the diff line "{line}"`
+		end
+		local a, b = string.match(path, "^tracker/issues/([^/]+)/([^/]+)%.md$")
+		if kind ~= "M" or not a or a ~= b or not store.isIssueId(a) then
+			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents; land that through a pull request)`
+		end
+		local theirs = sh.run("git", { "show", `{base}:{path}` })
+		local mine = sh.run("git", { "show", `HEAD:{path}` })
+		if not theirs.ok or not mine.ok then
+			return `cannot read {path} on both sides`
+		end
+		local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
+		if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
+			return `not a capture change: {path} must stay a plain file (mode 100644)`
+		end
+		local wasKeys, nowKeys = frontKeys(theirs.stdout), frontKeys(mine.stdout)
+		if not wasKeys or not nowKeys then
+			return `not a capture change: {path} repeats a frontmatter key`
+		end
+		local was, now = frontOf(theirs.stdout), frontOf(mine.stdout)
+		if now.id ~= a then
+			return `not a capture change: {path} must keep id: {a}`
+		end
+		for _, keys in { wasKeys, nowKeys } do
+			for _, k in keys do
+				if not CAPTURE_KEYS[k] and was[k] ~= now[k] then
+					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on and the sections)`
+				end
+			end
+		end
+		if was.design ~= "draft" or now.design ~= "draft" then
+			return `not a capture change: {path} is not design: draft on both sides (design moves only through prep)`
+		end
+		if was.status ~= now.status then
+			return `not a capture change: {path} changes its status line (tracker.sh status moves it)`
+		end
+	end
+	if not seen then
+		return "nothing to land: this branch has no change against origin/main"
+	end
+	return nil
+end
+
+-- c0072: lands a capture without a pull request. Merge origin/main, check the scope, run the gate, push one commit
+-- made on top of origin/main (never a force), and retry a lost race (up to 3 tries).
+function cmd.land(_: { string }, opts: { [string]: { string } })
+	local branch = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
+	if string.sub(branch, 1, 8) ~= "capture-" then
+		fail("land is for capture worktrees (capture-<slug>)")
+	end
+	if sh.trim(sh.must("git", { "status", "--porcelain" })) ~= "" then
+		fail("the tree is not clean: commit everything first")
+	end
+	if not publishing() then
+		fail("land needs publishing: an origin, and PICKMAN_PUBLISH not 0")
+	end
+	local root = sh.git({ "rev-parse", "--show-toplevel" })
+	local raw = process.env.PICKMAN_LAND_GATE
+	local override = if raw and string.match(raw, "%S") then raw else nil
+	local gate = override or "scripts/check.sh --full"
+	local given = opts["-m"]
+	for _ = 1, 3 do
+		sh.git({ "fetch", "--quiet", "origin", "main" })
+		-- one origin/main per try: the merge, the scope, the commit's parent and the race test all name this sha, so
+		-- a push elsewhere during the gate (or a later fetch) can never become the parent of a tree it isn't in
+		local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
+		local merged = sh.run("git", { "merge", "--no-edit", base })
+		if not merged.ok then
+			sh.run("git", { "merge", "--abort" })
+			fail(
+				`merging origin/main failed (merge aborted): {merged.stderr}{merged.stdout}\nresolve it with: git merge origin/main, then run land again`
+			)
+		end
+		refuseStale()
+		local diff = sh.must("git", { "diff", "--name-status", "--no-renames", base, "HEAD" })
+		local refusal = captureScope(diff, base)
+		if refusal then
+			fail(refusal)
+		end
+		print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
+		if not sh.stream("bash", { "-c", gate }) then
+			fail("the gate failed: nothing was pushed")
+		end
+		local parent = base
+		local message = if given and given[1] and given[1] ~= "" then given[1] else nil
+		if not message then
+			local subjects = sh.git({ "log", "--reverse", "--no-merges", "--format=%s", `{base}..HEAD` })
+			local bodies = sh.git({ "log", "--reverse", "--no-merges", "--format=%b", `{base}..HEAD` })
+			local subject = string.match(subjects, "^[^\n]*") or "tracker: capture"
+			message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
+		end
+		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
+		local pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
+		if pushed.ok then
+			sh.git({ "reset", "--hard", "--quiet", sha })
+			sh.run("git", { "fetch", "--quiet", "origin", "main" })
+			refreshBoard()
+			local suffix = if override then " (gate overridden)" else ""
+			print(
+				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
+			)
+			return
+		end
+		sh.run("git", { "fetch", "--quiet", "origin", "main" })
+		if sh.git({ "rev-parse", "--verify", "origin/main^{commit}" }) == parent then
+			fail(`the push failed (origin/main did not move): {pushed.stderr}{pushed.stdout}`)
+		end
+		-- origin/main moved: a lost race; sync, scope and gate again
+	end
+	fail("lost the race to main 3 times: run land again")
 end
 
 function cmd.find(pos: { string })
