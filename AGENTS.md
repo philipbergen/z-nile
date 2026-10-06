@@ -14,6 +14,7 @@ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune 
 | `.claude/skills/make-issue/SKILL.md` | capturing a new feature, defect or chore |
 | `.claude/skills/ticket-prep/SKILL.md` | grouping issues into a raft and designing it (includes the design review) |
 | `.claude/skills/ready-raft/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
+| `.claude/skills/stop-raft/SKILL.md` | undoing ready-raft or aborting a raft |
 | `.claude/skills/execute-raft/SKILL.md` | implementing a raft: one branch, one PR |
 | `.claude/skills/review/SKILL.md` | acting as, or launching, the adversarial reviewer |
 | `.claude/skills/metrics/SKILL.md` | cost and rework reporting |

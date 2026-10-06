@@ -309,7 +309,7 @@ return t.spec("tracker stop", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "c0020")).toBe(true)
 		t.expect(tip()).toBe(before)
-		git(main, { "revert", "--no-edit", "-q", "HEAD" })
+		git(main, { "revert", "--no-edit", "HEAD" })
 		git(main, { "push", "-q", "origin", "HEAD:main" })
 	end)
 

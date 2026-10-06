@@ -37,6 +37,7 @@ usage: scripts/tracker.sh <command> ...
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write tracker/rafts/active/<R>/prompt.md
+  stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>]   stage all, record spend, commit, push
@@ -824,49 +825,9 @@ local function originPaths(): { string }
 	)
 end
 
--- `status` lists what origin/main says about every item that is not done; `status <id>` prints one
--- item's status; `status <id> <to>` moves it (checked against origin/main, not the local file).
--- A move of a raft moves its members too. Published moves are pushed at once; the move to
--- `prepared` is carried by the prep PR and only edits the local documents.
-function cmd.status(pos: { string })
-	local id, to = pos[1], pos[2]
-	if to then
-		refuseInMainCheckout("status")
-	end
-	if not publishing() then
-		fail("status needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
-	end
-	if not id then
-		for _, p in originPaths() do
-			if publish.allowed(p) and string.match(p, "/[^/]+%.md$") and stateOfPath(p) ~= "done" then
-				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				local fid = string.match(p, "/([fdcR]%d%d%d%d)/[^/]+$") :: string
-				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
-			end
-		end
-		return
-	end
-	if not to then
-		local p = docPath(originPaths(), id)
-		if not p then
-			fail(`{id} is not on origin/main`)
-		end
-		print(
-			statusLib.effective(
-				frontOf(sh.git({ "show", `origin/main:{p :: string}` })),
-				stateOfPath(p :: string)
-			)
-		)
-		return
-	end
-	if not statusLib.parse(to) then
-		fail(`unknown status {to} (new, preparing, prepared, active, done)`)
-	end
-	if to == "active" then
-		fail(
-			"only tracker.sh start or tracker.sh ready claims active: it checks the tree, the designs and the dependencies first"
-		)
-	end
+-- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
+-- `status` and by `stop`'s give-back of a legacy-started raft.
+local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
 	local r = publishFresh(function(paths, read)
@@ -899,6 +860,12 @@ function cmd.status(pos: { string })
 				return `{t} is not on origin/main`
 			end
 			local tf = frontOf(tt)
+			if stateOfPath(tp) == "active" then
+				local raftId = if store.isRaftId(id) then id else (tf.raft or "")
+				return `{t} is readied (in active/): use tracker.sh stop {if raftId ~= ""
+					then raftId
+					else "<R-id>"}`
+			end
 			local cur = statusLib.effective(tf, stateOfPath(tp))
 			if carried and t ~= id and cur ~= "preparing" then
 				return `{t} is {cur} on origin/main: claim it first with tracker.sh status {t} preparing`
@@ -943,6 +910,53 @@ function cmd.status(pos: { string })
 	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
 		fs.removeFile(claimFile(id))
 	end
+end
+
+-- `status` lists what origin/main says about every item that is not done; `status <id>` prints one
+-- item's status; `status <id> <to>` moves it (checked against origin/main, not the local file).
+-- A move of a raft moves its members too. Published moves are pushed at once; the move to
+-- `prepared` is carried by the prep PR and only edits the local documents. A readied item (in active/) is not
+-- moved here: `stop` gives it back.
+function cmd.status(pos: { string })
+	local id, to = pos[1], pos[2]
+	if to then
+		refuseInMainCheckout("status")
+	end
+	if not publishing() then
+		fail("status needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	if not id then
+		for _, p in originPaths() do
+			if publish.allowed(p) and string.match(p, "/[^/]+%.md$") and stateOfPath(p) ~= "done" then
+				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
+				local fid = string.match(p, "/([fdcR]%d%d%d%d)/[^/]+$") :: string
+				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
+			end
+		end
+		return
+	end
+	if not to then
+		local p = docPath(originPaths(), id)
+		if not p then
+			fail(`{id} is not on origin/main`)
+		end
+		print(
+			statusLib.effective(
+				frontOf(sh.git({ "show", `origin/main:{p :: string}` })),
+				stateOfPath(p :: string)
+			)
+		)
+		return
+	end
+	if not statusLib.parse(to) then
+		fail(`unknown status {to} (new, preparing, prepared, active, done)`)
+	end
+	if to == "active" then
+		fail(
+			"only tracker.sh start or tracker.sh ready claims active: it checks the tree, the designs and the dependencies first"
+		)
+	end
+	setStatus(id, to)
 end
 
 -- Prints a fresh stamp for a state (diagnostics, and how specs prove that stamps differ between processes).
@@ -2275,6 +2289,36 @@ local function hasCheckLine(text: string): boolean
 	return false
 end
 
+-- The guards of the commands that publish from the main checkout (`ready`, `stop`): it is the main checkout, the repo
+-- has an origin, `main` is checked out and clean.
+local function mainCheckoutGuards(name: string)
+	if not inMainCheckout() then
+		fail(`{name} runs in the main checkout`)
+	end
+	if not publishing() then
+		fail(`{name} needs an origin remote`)
+	end
+	local branch = sh.git({ "branch", "--show-current" })
+	if branch ~= "main" then
+		fail(`the main checkout is on {if branch == "" then "a detached HEAD" else branch}, not main`)
+	end
+	local dirty = sh.git({ "status", "--porcelain" })
+	if dirty ~= "" then
+		fail(`the main checkout is not clean: {dirty}`)
+	end
+end
+
+-- Fast-forwards the main checkout to origin/main and sweeps what the pull left behind. A string is the failure.
+local function pullMain(): string?
+	sh.git({ "fetch", "--quiet", "origin", "main" })
+	local r = sh.run("git", { "pull", "--ff-only", "--quiet" })
+	if not r.ok then
+		return sh.trim(r.stderr .. r.stdout)
+	end
+	sweepStale(mainRoot())
+	return nil
+end
+
 -- `ready <R-id|issue-id>`: claims a prepared raft, moves it and its members to active/ on origin/main (one tracker-only
 -- commit, check.sh paths rewritten), pulls the main checkout and writes the ignored prompt.md. On a raft that is
 -- already active it only regenerates the prompt.
@@ -2291,31 +2335,8 @@ function cmd.ready(pos: { string })
 	if raft.kind ~= "raft" then
 		fail(`{raft.id} is not a raft`)
 	end
-	if not inMainCheckout() then
-		fail("ready runs in the main checkout")
-	end
-	if not publishing() then
-		fail("ready needs an origin remote")
-	end
-	local branch = sh.git({ "branch", "--show-current" })
-	if branch ~= "main" then
-		fail(`the main checkout is on {if branch == "" then "a detached HEAD" else branch}, not main`)
-	end
-	local dirty = sh.git({ "status", "--porcelain" })
-	if dirty ~= "" then
-		fail(`the main checkout is not clean: {dirty}`)
-	end
-	local root = mainRoot()
-	local function pull(): string?
-		sh.git({ "fetch", "--quiet", "origin", "main" })
-		local r = sh.run("git", { "pull", "--ff-only", "--quiet" })
-		if not r.ok then
-			return sh.trim(r.stderr .. r.stdout)
-		end
-		sweepStale(root)
-		return nil
-	end
-	local pulled = pull()
+	mainCheckoutGuards("ready")
+	local pulled = pullMain()
 	if pulled then
 		fail(`ready: cannot fast-forward the main checkout: {pulled}`)
 	end
@@ -2382,7 +2403,7 @@ function cmd.ready(pos: { string })
 		if not r.ok then
 			fail(`ready: {r.reason}`)
 		end
-		local failed = pull()
+		local failed = pullMain()
 		if failed then
 			fail(
 				`readied on origin/main, but pulling the main checkout failed: {failed}; fix it and run ready again (it regenerates the prompt)`
@@ -2398,6 +2419,91 @@ function cmd.ready(pos: { string })
 	print(`{if reissue then "regenerated" else "readied"} {raft.id}`)
 	print(`prompt for {raft.id} ({table.concat(ids, ", ")}): {#text} chars -> {path}`)
 	print(parallel)
+end
+
+-- `stop <R-id>`: gives back a readied raft (moves it and its members to the backlog on origin/main, stamped prepared,
+-- check.sh paths rewritten back) or a raft claimed by the legacy `start` (a status-only publish). Removes prompt.md,
+-- pulls the main checkout and names the raft's branch and PR, which are left as they are.
+function cmd.stop(pos: { string })
+	local target = store.get(pos[1] or fail("usage: stop <R-id>"))
+	if target.kind ~= "raft" then
+		fail(`{target.id} is not a raft`)
+	end
+	mainCheckoutGuards("stop")
+	local pulled = pullMain()
+	if pulled then
+		fail(`stop: cannot fast-forward the main checkout: {pulled}`)
+	end
+	local raft = store.get(target.id) -- the tree is now origin/main
+	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
+	local ids: { string } = {}
+	for _, id in store.idList(store.readFront(raft.doc).issues) do
+		if store.find(id) then
+			table.insert(ids, id)
+		end
+	end
+	local rtitle = store.readFront(raft.doc).title or raft.slug
+	if raft.state == "active" then
+		for _, id in ids do
+			local m = store.get(id)
+			if m.state ~= "active" then
+				fail(`{id} is in {m.dir} on origin/main, not active/: stop does not move it back`)
+			end
+		end
+		local all = { raft.id }
+		for _, id in ids do
+			table.insert(all, id)
+		end
+		-- checked again inside the build: an item that left `active` since the pull (merged, done) is never moved back
+		local r = moveOnOrigin(
+			all,
+			"backlog",
+			stamp("prepared"),
+			`tracker: stop {raft.id} {rtitle}`,
+			function(id, now)
+				return if now == "active"
+					then nil
+					else `{id} is {now} on origin/main, not active: nothing to stop`
+			end
+		)
+		if not r.ok then
+			fail(`stop: {r.reason}`)
+		end
+	elseif raft.state == "backlog" and st == "active" then
+		setStatus(raft.id, "prepared")
+	else
+		fail(`{raft.id} is {st} in {raft.dir} on origin/main: only a readied or started raft is stopped`)
+	end
+	local prompt = promptPath(raft.id)
+	if fs.isFile(prompt) then
+		fs.removeFile(prompt)
+	end
+	local failed = pullMain()
+	if failed then
+		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
+	end
+	if fs.isFile(claimFile(raft.id)) then
+		fs.removeFile(claimFile(raft.id))
+	end
+	local branch = raftBranch(raft)
+	sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
+	local exists = sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok
+		or sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	if exists then
+		local pr = "its pull request, if any"
+		if onGitHub() then
+			local g = sh.run(
+				"gh",
+				{ "pr", "list", "--head", branch, "--state", "open", "--json", "url", "-q", ".[0].url" }
+			)
+			local url = if g.ok then sh.trim(g.stdout) else ""
+			if url ~= "" and url ~= "null" then
+				pr = `its pull request {url}`
+			end
+		end
+		print(`{branch} and {pr} are left as they are: close or keep them yourself`)
+	end
+	print(`stopped {raft.id} ({table.concat(ids, ", ")})`)
 end
 
 function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
