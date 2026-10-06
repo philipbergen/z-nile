@@ -1274,10 +1274,20 @@ function cmd.remap()
 	local built, baseTree = pcall(function(): string
 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
 		compactLib.apply(m, audit.scan(scratch), scratch)
+		-- the scratch worktree's tracked state as a commit object, with no ref moved: empty when nothing changed
 		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
-		local tree = process.exec("git", { "write-tree" }, { cwd = scratch })
-		if not addBase.ok or not tree.ok then
-			error(addBase.stderr .. tree.stderr, 0)
+		local saved = process.exec("git", { "stash", "create" }, { cwd = scratch })
+		if not addBase.ok or not saved.ok then
+			error(addBase.stderr .. saved.stderr, 0)
+		end
+		local commit = sh.trim(saved.stdout)
+		local tree = process.exec(
+			"git",
+			{ "rev-parse", (if commit == "" then mb else commit) .. "^{tree}" },
+			{ cwd = scratch }
+		)
+		if not tree.ok then
+			error(tree.stderr, 0)
 		end
 		return sh.trim(tree.stdout)
 	end)
@@ -1288,8 +1298,7 @@ function cmd.remap()
 			`remap committed, but the remapped merge base could not be built ({baseTree}): git merge origin/main and resolve by hand`
 		)
 	end
-	local mt =
-		sh.run("git", { "merge-tree", "--write-tree", `--merge-base={baseTree}`, "HEAD", "origin/main" })
+	local mt = sh.run("git", { "merge-tree", `--merge-base={baseTree}`, "HEAD", "origin/main" }) -- writes a tree (two commits)
 	if not mt.ok then
 		fail(
 			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve\n{mt.stdout}`

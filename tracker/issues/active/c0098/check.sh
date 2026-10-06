@@ -6,7 +6,7 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to 
 
 # the variable name is split so this file does not name it (R0021's gate scans every check.sh)
 check "AC1: the tracker code uses no index plumbing" bash -c '
-  ! grep -rnE "GIT_INDEX_""FILE|read-tree|update-index|write-tree" scripts/tracker/ | grep -v -- "--write-tree"'
+  ! grep -rnE "GIT_INDEX_""FILE|read-tree|update-index|write-tree" scripts/tracker/'
 check "AC2: the remap specs pass" lune run tests/run -- tests/acceptance/c0081/remap.spec.luau tests/tooling/remap-once.spec.luau
 
 finish
