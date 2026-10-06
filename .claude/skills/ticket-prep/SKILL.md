@@ -50,7 +50,7 @@ Fill every section of the issue template. Requirements:
 
 ## 4. Write the executable acceptance
 - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
-- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines.
+- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines. A raft check finds its members with `tracker.sh find <id>` (or `members`), never a hard-coded backlog path: the directories move when the raft is readied. `tracker.sh ready` rewrites only the moved items' own literal paths in their `check.sh` files.
 - **Write the acceptance specs now** in `tracker/issues/<id>/acceptance/`, as real spec files with the cases that pin the behavior. Require only through aliases, and see the testing skill for where these live.
   - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
   - This is what makes the checks unfakeable and sequestered.
@@ -77,4 +77,4 @@ Fill every section of the issue template. Requirements:
   - experiment results;
   - review rounds, and what changed because of them;
   - anything left for Observed.
-- **Next step**: `/make-prompt R0010`.
+- **Next step**: `/ready-raft R0010`.

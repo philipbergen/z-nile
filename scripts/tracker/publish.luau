@@ -2,12 +2,13 @@
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
 local ids = require("./ids")
+local pathsLib = require("./paths")
 local process = require("@lune/process")
 local task = require("@lune/task")
 
 local publish = {}
 
-export type Change = { path: string, content: string, mode: string? }
+export type Change = { path: string, content: string, mode: string?, from: string? }
 export type Result = { ok: boolean, sha: string?, reason: string? }
 export type Build = (paths: { string }, read: (string) -> string?) -> { Change } | string
 
@@ -37,6 +38,41 @@ function publish.allowed(path: string): boolean
 		then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
 		else (kind == "rafts" and string.match(id, "^R%d%d%d%d$") ~= nil)
 	return okId and (file == `{id}.md` or file == "check.sh")
+end
+
+-- The id and the path relative to the item directory of any file inside an item directory,
+-- tracker/(issues|rafts)/[active/ | done/]<ID>/<rel>; nil for anything else. `rel` is one or more segments of
+-- [%w._-] that are not `.` or `..`.
+function publish.itemPath(path: string): (string?, string?)
+	if string.sub(path, 1, 1) == "/" then
+		return nil, nil
+	end
+	local kind, rest = string.match(path, "^tracker/(%a+)/(.+)$")
+	if not kind or not rest or (kind ~= "issues" and kind ~= "rafts") then
+		return nil, nil
+	end
+	local stripped: string = string.match(rest, "^active/(.+)$") or string.match(rest, "^done/(.+)$") or rest
+	local id, rel = string.match(stripped, "^(%w+)/(.+)$")
+	if not id or not rel then
+		return nil, nil
+	end
+	local okId = if kind == "issues"
+		then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
+		else string.match(id, "^R%d%d%d%d$") ~= nil
+	if not okId then
+		return nil, nil
+	end
+	for _, seg in string.split(rel, "/") do
+		if seg == "." or seg == ".." or not string.match(seg, "^[%w%._%-]+$") then
+			return nil, nil
+		end
+	end
+	return id, rel
+end
+
+-- The directory of an item file: `path` without its `/<rel>`.
+local function itemDir(path: string, rel: string): string
+	return string.sub(path, 1, #path - #rel - 1)
 end
 
 -- The document with its single `status:` frontmatter line removed, or nil when it has no well-formed
@@ -74,12 +110,18 @@ local function fail(reason: string): Result
 	return { ok = false, reason = reason }
 end
 
-type Node = { blob: string?, mode: string?, children: { [string]: Node } }
+type Node = { blob: string?, mode: string?, remove: boolean?, children: { [string]: Node } }
 type Step = (args: { string }, stdin: string?) -> (string?, string?)
 
 -- The tree `treeish` (nil for none) with `node`'s changes applied, as a new tree object; each level is one
--- `ls-tree -z` and one `mktree -z`, and only the trees on a changed path are rebuilt.
-local function makeTree(step: Step, treeish: string?, node: Node, prefix: string): (string?, string?)
+-- `ls-tree -z` and one `mktree -z`, and only the trees on a changed path are rebuilt. A removed entry is dropped, and
+-- a subtree left with no entries is dropped from its parent (the third result says the tree is empty).
+local function makeTree(
+	step: Step,
+	treeish: string?,
+	node: Node,
+	prefix: string
+): (string?, string?, boolean?)
 	local entries: { [string]: string } = {} -- name -> "<mode> <type> <object>"
 	if treeish then
 		local listed, le = step({ "ls-tree", "-z", treeish })
@@ -98,7 +140,9 @@ local function makeTree(step: Step, treeish: string?, node: Node, prefix: string
 		end
 	end
 	for name, child in node.children do
-		if child.blob then
+		if child.remove then
+			entries[name] = nil
+		elseif child.blob then
 			entries[name] = `{child.mode} blob {child.blob}`
 		else
 			local existing = entries[name]
@@ -106,11 +150,15 @@ local function makeTree(step: Step, treeish: string?, node: Node, prefix: string
 			if existing and not sub then
 				return nil, `{prefix}{name} is a file on origin/main, not a folder`
 			end
-			local made, me = makeTree(step, sub, child, `{prefix}{name}/`)
+			local made, me, emptied = makeTree(step, sub, child, `{prefix}{name}/`)
 			if not made then
 				return nil, me
 			end
-			entries[name] = `040000 tree {made}`
+			if emptied then
+				entries[name] = nil
+			else
+				entries[name] = `040000 tree {made}`
+			end
 		end
 	end
 	local input: { string } = {}
@@ -122,7 +170,117 @@ local function makeTree(step: Step, treeish: string?, node: Node, prefix: string
 	if not tree or not string.match(tree, "^%x+$") then
 		return nil, te or "mktree failed"
 	end
-	return tree
+	return tree, nil, #input == 0
+end
+
+-- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
+-- active/, files carried byte for byte (the document may change its status, check.sh its item paths). Returns the
+-- source directories of the moves, or a reason. A move's mode is set to its source's. See c0067.
+local function validateMoves(
+	out: { Change },
+	onOrigin: { [string]: string },
+	read: (string) -> string?
+): ({ string }, string?)
+	local sources: { string } = {}
+	local targets: { [string]: boolean } = {}
+	local froms: { [string]: boolean } = {}
+	local dirs: { [string]: string } = {} -- every id this publish moves -> its target directory
+	local srcOf: { [string]: string } = {}
+	for _, c in out do
+		if targets[c.path] then
+			return sources, `{c.path} is written twice in one publish`
+		end
+		targets[c.path] = true
+		local from = c.from
+		if from then
+			if froms[from] then
+				return sources, `{from} is moved twice in one publish`
+			end
+			froms[from] = true
+			local fid, frel = publish.itemPath(from)
+			local pid, prel = publish.itemPath(c.path)
+			if not fid or not frel or not pid or not prel then
+				return sources, `{from} -> {c.path}: both sides of a move must be item files`
+			end
+			if fid ~= pid or frel ~= prel then
+				return sources, `{from} -> {c.path}: a move keeps the id and the relative path`
+			end
+			if not onOrigin[from] then
+				return sources, `{from} does not exist on origin/main`
+			end
+			local src, dst = itemDir(from, frel), itemDir(c.path, prel)
+			if src == dst then
+				return sources, `{from} -> {c.path}: a move changes the directory`
+			end
+			if string.find(src .. "/", "/done/", 1, true) or string.find(dst .. "/", "/done/", 1, true) then
+				return sources, `{from} -> {c.path}: published moves never touch done/`
+			end
+			if (srcOf[fid] and srcOf[fid] ~= src) or (dirs[fid] and dirs[fid] ~= dst) then
+				return sources, `{fid} is moved between different directories in one publish`
+			end
+			srcOf[fid], dirs[fid] = src, dst
+			if not table.find(sources, src) then
+				table.insert(sources, src)
+			end
+		end
+	end
+	if #sources == 0 then
+		return sources, nil
+	end
+	for _, c in out do
+		local from = c.from
+		if not from then
+			continue
+		end
+		local id, rel = publish.itemPath(from)
+		local dir = itemDir(c.path, rel :: string)
+		if table.find(sources, dir) then
+			return sources, `{c.path} is inside {dir}, which this publish moves away`
+		end
+		if onOrigin[c.path] then
+			return sources, `{c.path} already exists on origin/main`
+		end
+		local old = read(from)
+		if not old then
+			return sources, `cannot read {from} on origin/main`
+		end
+		local want = old
+		if rel == `{id}.md` then
+			local before, after = withoutStatus(old), withoutStatus(c.content)
+			if not before or not after or before ~= after then
+				return sources, `{c.path}: a moved document may only change its status: line`
+			end
+			want = c.content
+		elseif rel == "check.sh" then
+			want = pathsLib.rewrite(old, dirs)
+		end
+		if c.content ~= want then
+			return sources,
+				`{c.path}: a moved file must equal {from} on origin/main (check.sh: with its item paths rewritten)`
+		end
+		local mode = onOrigin[from]
+		if c.mode and c.mode ~= mode then
+			return sources, `{c.path}: a move keeps the mode of {from} ({mode})`
+		end
+		c.mode = mode
+	end
+	-- whole directories: every file on origin under a source directory moves in this publish
+	for _, src in sources do
+		for p in onOrigin do
+			if string.sub(p, 1, #src + 1) == src .. "/" and not froms[p] then
+				return sources, `{src}: {p} is not moved with it (a move carries the whole directory)`
+			end
+		end
+	end
+	-- and into a new directory: nothing on origin under a target, so a move never merges into another copy
+	for _, dst in dirs do
+		for p in onOrigin do
+			if string.sub(p, 1, #dst + 1) == dst .. "/" then
+				return sources, `{dst} already holds {p} on origin/main: a move goes to a new directory`
+			end
+		end
+	end
+	return sources, nil
 end
 
 function publish.commit(cwd: string, build: Build, message: string | () -> string, tries: number?): Result
@@ -141,14 +299,19 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if not rev.ok or not string.match(base, "^%x+$") then
 			return fail("cannot resolve origin/main: " .. trim(rev.stderr))
 		end
-		local listing = git(cwd, { "ls-tree", "-r", "--name-only", "--full-tree", base, "tracker/" })
+		local listing = git(cwd, { "ls-tree", "-r", "-z", "--full-tree", base, "tracker/" })
 		if not listing.ok then
 			return fail("cannot list origin/main: " .. trim(listing.stderr))
 		end
 		local paths: { string } = {}
-		for p in string.gmatch(listing.stdout, "[^\n]+") do
-			if publish.allowed(p) then
-				table.insert(paths, p)
+		local onOrigin: { [string]: string } = {} -- every file under tracker/ -> its mode
+		for _, rec in string.split(listing.stdout, "\0") do
+			local mode, p = string.match(rec, "^(%d+) %a+ %x+\t(.+)$")
+			if mode and p then
+				onOrigin[p] = mode
+				if publish.allowed(p) or publish.itemPath(p) then
+					table.insert(paths, p)
+				end
 			end
 		end
 		local function read(p: string): string?
@@ -159,9 +322,21 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if type(out) == "string" then
 			return fail(out)
 		end
+		local moved, why = validateMoves(out, onOrigin, read)
+		if why then
+			return fail(why)
+		end
 		for _, c in out do
+			if c.from then
+				continue -- validated above, byte for byte against origin
+			end
 			if not publish.allowed(c.path) then
 				return fail(`{c.path} is not a tracker item file`)
+			end
+			for _, dir in moved do
+				if string.sub(c.path, 1, #dir + 1) == dir .. "/" then
+					return fail(`{c.path} is inside {dir}, which this publish moves away`)
+				end
 			end
 			local existing = read(c.path)
 			if existing and string.sub(c.path, -9) == "/check.sh" then
@@ -226,6 +401,16 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 					node = child
 				end
 				node.children[parts[#parts]] = { blob = blob, mode = c.mode or "100644", children = {} }
+				if c.from then
+					local fromNode = rootNode
+					local fromParts = string.split(c.from, "/")
+					for i = 1, #fromParts - 1 do
+						local child = fromNode.children[fromParts[i]] or { children = {} }
+						fromNode.children[fromParts[i]] = child
+						fromNode = child
+					end
+					fromNode.children[fromParts[#fromParts]] = { remove = true, children = {} }
+				end
 			end
 			if bad then
 				break
@@ -251,6 +436,9 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			local wanted: { [string]: boolean } = {}
 			for _, c in out do
 				wanted[c.path] = true
+				if c.from then
+					wanted[c.from] = true
+				end
 			end
 			for _, p in string.split(diff, "\0") do
 				if p ~= "" and not wanted[p] then

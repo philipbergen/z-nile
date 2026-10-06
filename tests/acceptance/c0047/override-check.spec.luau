@@ -80,9 +80,9 @@ return t.spec("c0450 override check", function(it)
 		end
 	end)
 
-	it("make-prompt's readiness check refuses a raft whose issue depends on an unfinished item", function()
-		local prompt = fs.readFile(".claude/skills/make-prompt/SKILL.md")
-		local ready = section(prompt, "2. **Check readiness", "3. ")
+	it("ready-raft's readiness check refuses a raft whose issue depends on an unfinished item", function()
+		local skill = fs.readFile(".claude/skills/ready-raft/SKILL.md")
+		local ready = section(skill, "2. **Check readiness", "3. ")
 		for _, token in { "depends_on", "isn't a member", "done/", "stop" } do
 			t.expect(has(ready, token)).toBe(true)
 		end

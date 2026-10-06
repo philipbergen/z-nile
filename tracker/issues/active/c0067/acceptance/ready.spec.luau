@@ -318,7 +318,7 @@ return t.spec("tracker ready", function(it)
 		t.expect(loose.ok).toBe(false)
 		t.expect(has(loose.stderr, "no raft")).toBe(true)
 		t.expect(tip()).toBe(before)
-		t.expect(onOrigin("tracker/rafts/R0060/R0060.md")).toBe(nil) -- no placeholder raft
+		t.expect(onOrigin("tracker/rafts/R0080/R0080.md")).toBe(nil) -- no placeholder raft
 	end)
 
 	it(
