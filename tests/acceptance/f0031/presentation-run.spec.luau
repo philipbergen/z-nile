@@ -1,7 +1,8 @@
 --!strict
 -- f0300 AC4 (and R0150 RC1): a whole run as the client presents it. Every frame the server would send is
 -- turned into what the screen shows, by Hud.model, Flow.overlay and Pellets.decode, from the countdown
--- through eating, a level clear and the next level, deaths, game over and playing again.
+-- through eating, a level clear and the next level, deaths, game over and a new run from Logic.
+-- Narrowed by c0063: the game-over prompt is f0065's, not pinned here.
 local Flow = require("@logic/Flow")
 local Game = require("@logic/Game")
 local Hud = require("@logic/Hud")
@@ -117,19 +118,19 @@ return t.spec("f0300 a whole run on screen", function(it)
 				end
 			end
 
-			-- game over: the final score and level, fully faded, the prompt up
+			-- game over: the final score and level, fully faded
 			local over = screen(s)
 			t.expect(over.overlay.banner).toBe("GAME OVER")
 			t.expect(over.overlay.detail).toBe("SCORE 70   LEVEL 2")
 			t.expect(over.overlay.fade).toBe(0.6)
-			t.expect(over.overlay.playAgain).toBe(true)
 			t.expect(over.hud.lives).toBe(0)
 
-			-- the prompt stays until the player asks
+			-- the results stay up
 			for _ = 1, 30 do
 				Session.step(s)
 			end
-			t.expect(screen(s).overlay.playAgain).toBe(true)
+			t.expect(screen(s).overlay.banner).toBe("GAME OVER")
+			t.expect(screen(s).overlay.detail).toBe("SCORE 70   LEVEL 2")
 
 			-- playing again: a fresh run on screen at once
 			local _, ok = Session.playAgain(s, "p")
@@ -137,7 +138,6 @@ return t.spec("f0300 a whole run on screen", function(it)
 			local again = screen(s)
 			t.expect(again.overlay.banner).toBe("READY!")
 			t.expect(again.overlay.detail).toBe("LEVEL 1")
-			t.expect(again.overlay.playAgain).toBe(false)
 			t.expect(again.overlay.fade).toBe(0)
 			t.expect(again.hud).toEqual({ score = "0", level = "LEVEL 1", lives = 3, power = 0 })
 			t.expect(again.pellets).toEqual({ true, true, true })
