@@ -1,56 +1,96 @@
 # Review 007: R0020 (design mode)
-Inputs: prep-inside-repo at b4b62b7; `git diff 23c3d71 HEAD`. Files: `tracker/rafts/R0020/{R0020-worktrees-by-default.md,check.sh,design-review-006.md,design-refute-006.md}`, `tracker/issues/c0440/{c0440-inside-repo-worktrees.md,check.sh,acceptance/launch.spec.luau}`, `tracker/issues/c0041/{c0041-worktrees-by-default.md,check.sh,acceptance/worktree.spec.luau}`, `tracker/issues/c0430/{c0430-parallel-workstreams.md,check.sh,acceptance/workstreams.spec.luau}`, `tracker/issues/c0420/check.sh`, `scripts/tracker.sh`, `scripts/tracker/main.luau`, `~/.lune/.typedefs/0.10.5/process.luau`. Ran, all in the scratchpad, outside the repo: Lune 0.10.5 argument passing through a copy of the `exec lune run … -- "$@"` wrapper; `process.exec` under a pty (`script -q /dev/null`) with `stdio` = default, `inherit`, `forward` and the table form; SIGINT to the process group of a Lune parent running `process.exec`; `git worktree add` through a symlinked path and a case-variant path; the Bootstrap commands in a scratch clone of a bare copy of this repo; a bash `exec` launcher on macOS `/bin/bash` 3.2. Computed `workstreams R0020` by hand from c0430's algorithm and the four Touched-modules lists: `c0420 wave 1`, `c0041 wave 2 after c0420 (depends_on)`, `c0440 wave 3 after c0041 (depends_on), c0420 (overlap)`, `c0430 wave 4 after c0041 (depends_on), c0420 (depends_on), c0440 (depends_on)`, `parallel: no`. RC1's four regexes match this.
-Dropped from design-review-006: F1, F2 (both fixed as the refutation says: the template's hard rules and c0420's step 1 read correctly now). Checked and not raised: the Bootstrap works as written (`echo '.worktree/' >> .git/info/exclude`, then `git worktree add --detach .worktree/R0020 origin/main` from the repo root; the main checkout's `git status` stays empty and it stays on `main`; inside the worktree `git switch -c R0020-worktrees-by-default` succeeds from the detached HEAD; `info/exclude` lives in the common dir, so it applies inside the worktree too). Symlinks aren't a problem for the stray warning: git records the real path for every worktree, including the main one, so the prefix test compares like with like. Lune passes every token after the wrapper's `--` through untouched, including a second `--`, empty strings, spaces and quotes (main.luau strips only the leading `--`). The gate's root scans use explicit roots, and `affected`/`stop.sh` use `--exclude-standard`, so a nested `.worktree/` is invisible once it is excluded.
+Inputs: prep worktree `prep-r0200-mktree` at 98984ee (`git diff 5f7868f..HEAD`: c0053.md, check.sh, `acceptance/commands.spec.luau`, `experiments/publish.luau.txt`, R0020.md). I also read: design-review/refute-006; the prototype `proto-r0200-mktree` at a4c4ee7 (`scripts/tracker/publish.luau`); c0058, c0059 and R0021 on `prep-check-isolation` at 30cb08b (read only).
 
-### F1 [high] `launch` built on Lune's `process.exec` can't give the agent a terminal: stdin is never forwarded, and Ctrl-C kills the launcher while the agent keeps running. The spec can't detect either problem.
-Where: c0440 Design, `cmd.launch` step 3 ("stdin, stdout and stderr forwarded"); Rules and mutants; `launch.spec.luau` (the fake agent never reads stdin); `~/.lune/.typedefs/0.10.5/process.luau` (`ExecStdioOptions.stdin: (buffer | string)?`)
-Evidence: Lune 0.10.5 has no stdin passthrough. `ExecStdioKind` covers only stdout and stderr, and `stdin` can only be a string or buffer to write. Under a pty, `process.exec("bash", {"-c", "[ -t 0 ] …; read -t 2 line"}, {stdio = "forward"})` gives `fd0 notty, fd1 tty, fd2 tty, read failed`. The table form `{stdin = "forward", …}` and `"inherit"` behave the same (with `inherit`, stdout isn't a tty either). Claude Code's interactive UI needs a TTY on stdin, so `scripts/tracker.sh launch R0020` would not give an interactive session. Signals: when SIGINT goes to the process group of a Lune parent blocked in `process.exec` on a child that traps INT (as Claude Code does: Ctrl-C interrupts a turn), Lune dies immediately and the child keeps running and writing (`lune alive? no`; the child logged `child-got-INT` and then `child-finished`). The shell gets the prompt back while an orphaned agent still owns the terminal. The prototype's five passing cases don't show any of this, because the fake agent only records `pwd -P` and its arguments.
-Critique: this is the main use of the command (Usability: "`launch R0020` replaces a two-step incantation"), and it fails the first time a human runs it. The tempting fix is to pump stdin through `process.create`'s writer. That still isn't a TTY (no raw mode, no job control), and it doesn't fix SIGINT.
-Consequences: the robust fix is to have `scripts/tracker.sh` handle `launch` in bash and `exec` the command. That brings: (a) the worktree is ensured by calling `lune run scripts/tracker/main -- worktree "$target"` inside `$(…)`, so `ensureWorktree` doesn't need to be extracted, and c0430's `--from` extends `cmd.worktree` exactly as c0430 already says; (b) argument errors (no target, a token after the target that isn't `--`) are reported by bash with a usage line, so `set -u` must not turn a missing `$1` into `unbound variable`; (c) "cannot run <command>" needs `command -v "$1"` before `exec`, because a failed `exec` prints bash's own message and exits 127; (d) exit codes, signals (`128+n`) and the TTY are native; (e) it must work on macOS `/bin/bash` 3.2. I ran a prototype under 3.2 with `set -euo pipefail`: it handled `"" "a b" '"q"' -- '*'` untouched, gave `cannot run nope-xyz: not found` with exit 1, a tty on fd0 under a pty, and exit 44 for `exit 300`; (f) `USAGE` in main.luau still gains the `launch` line, and main.luau gets no `cmd.launch` (or gets one that tells the user to use the wrapper).
-Recommendation: move `launch` into `scripts/tracker.sh` as above, and state (a) to (f) in the Design. Add a spec case, `launch forwards stdin to the command`: call `process.exec("bash", {"scripts/tracker.sh", "launch", "capture-demo", "--", "agent"}, {stdin = "hello\n", …})`, with the fake agent running `read -r line` and recording `stdin:$line`, and assert that line. It fails on any Lune-`process.exec` implementation and passes with `exec`. Add Rules rows "stdin reaches the command" (mutant: `process.exec` with `stdio = "forward"`) and "the launcher is replaced by the command" (reasoned; OC1 step: press Ctrl-C once in the launched agent; the agent interrupts its turn and the shell prompt does not come back). Re-run the mutation rows on the new prototype.
+Round 6 was approved, and refute-006 fixed both of its low findings. Nothing is carried over.
 
-### F2 [high] AC5's case passes a stray check that tests "outside the repo directory" instead of "outside `.worktree/`", so a worktree in `.claude/worktrees/`, the stray the Problem names, goes unflagged
-Where: c0440 Design, `worktree-prune` bullet; AC5; `launch.spec.luau:206-216` (`stray = {base}/outside`)
-Evidence: the only stray in the fixture is `{base}/outside`, which is outside `{main}` altogether. Take a mutant that warns only for worktrees whose path doesn't start with `mainRoot() .. "/"`. It warns about `{base}/outside` (1 warning), stays silent for `{main}/.worktree/R0010` and `{main}/.worktree/capture-demo`, and so passes all four assertions. It doesn't flag `{main}/.claude/worktrees/x`, the harness location that c0440's Problem and the tracker-skill sentence it prescribes both call out. "Inside the repo" is the headline wording of the user's rule, so this mutant is the likely misreading. A second mutant, a prefix test without the trailing slash (`.worktree` matching `{main}/.worktree-old/x`), also passes.
-Critique: an acceptance criterion that a wrong implementation passes. The tempting fix is to add one `.claude/worktrees` stray and bump the warning count to 2.
-Consequences: a stray inside `{main}` shows up as untracked in the fixture main clone's `git status`. No later case in this spec checks that clone's cleanliness, but the fixture comment should say so. The `.worktree-old` case pins the separator rule. On a case-insensitive filesystem, a worktree registered as `{main}/.Worktree/x` is the same directory but gets warned about. That's harmless (a warning only), and it should be documented, not coded around.
-Recommendation: in the same case, add strays at `{main}/.claude/worktrees/x` and `{main}/.worktree-old/x` (both `git worktree add -b …`). Assert a warning naming each of the three, a warning count of 3, all three directories still present, and no warning containing `{main}/.worktree/`. Add a Rules row: "inside the repo but outside `.worktree/` is a stray" (mutants: prefix `mainRoot()`, prefix without the slash).
+How I ran things:
+- **Specs**: every spec ran through `tmprun.sh`, in a clone with no origin under `$TMPDIR`, one suite at a time.
+- **Mutants**: each was applied to the prototype file, then restored from a byte copy. `git diff --quiet` was clean after each one.
+- **Scratch repo** (under `$TMPDIR`, real lune binary): a seed whose root holds `root file.txt` (100755), a tab name, `naïve.md`, `quote"q` and a symlink. `tracker/issues/` holds `odd name/` and an `x<TAB>y` file. There is an `active/c0002/` folder with a sibling `notes.txt`, and an R0001 raft. One `publish.commit` then changed or added five paths across every depth: `issues/<id>`, `issues/active/<id>`, a new `issues/c0003/` (with a 100755 `check.sh`) and a new `rafts/done/R0002/`. **The reference prototype is correct on all of it.** The diff is exactly the 5 paths, every other entry keeps its name, mode and blob (symlink and odd names included), `git fsck --strict` is clean, and the caller's index and status are untouched. Pinned base sha, lease push, and caller HEAD and index are unchanged from round 6, and still hold.
 
-### F3 [high] c0440's make-prompt edit removes the only `scripts/tracker.sh worktree` that c0041 puts there, so c0041's AC5 fails when the raft's `done` reruns it
-Where: c0041 Design, Docs, make-prompt ("The report ends with the launch line `cd "$(scripts/tracker.sh worktree R…)" && claude`"); c0041 `check.sh` AC5 (`for f in execute-raft tracker make-issue ticket-prep make-prompt; do grep -qF "scripts/tracker.sh worktree" …`); c0440 Docs ("make-prompt: the report ends with `scripts/tracker.sh launch R…`, replacing `cd "$(scripts/tracker.sh worktree R…)" && claude`")
-Evidence: make-prompt contains no `tracker.sh worktree` today. c0041's design adds exactly one occurrence, the launch line, and c0440 replaces that line with `scripts/tracker.sh launch R…`. After c0440, `grep -qF "scripts/tracker.sh worktree" .claude/skills/make-prompt/SKILL.md` fails, and c0041's AC5 prints `make-prompt: no worktree command`. c0440's step 5 runs `check c0440` and the gate, not `check c0041`, so the break first appears in RC0 at `done`, when the executor may no longer see the cause.
-Critique: a regression between members that the designed end state hits. The executor's tempting fix is to keep a stray mention to satisfy the grep, or to escalate because the check is sequestered.
-Consequences: make-prompt needs a real reason to mention `worktree`. Its readiness step runs in the main checkout, and an agent that is already running uses `cd "$(scripts/tracker.sh worktree R…)"`, which is the same sentence the tracker skill gets. Making every member's `check.sh` run after each issue is the general guard.
-Recommendation: in c0440's make-prompt bullet, keep one sentence: "An agent that is already running enters the worktree with `cd "$(scripts/tracker.sh worktree R…)"`". Add to c0440 step 5, and to execute-raft's per-issue rhythm if it isn't already there, "run `scripts/tracker.sh check` for every earlier member (c0420, c0041) too". Optionally, c0440's AC6 can grep make-prompt for `scripts/tracker.sh worktree`, so both checks agree.
+Mutants run, one at a time:
+- **MK1** (`makeTree(step, nil, child)`): publish spec 10/14. It is killed, which confirms the E9 record.
+- **Existing 100755 entries rewritten as 100644**: publish 14/14, commands 21/23. It is killed by the commands spec only.
+- **The ls-tree name parsed as `(%S+)`**: publish 14/14, commands 23/23. **It survives.** See F1.
 
-### F4 [medium] The tracker-skill sentence c0440 prescribes contains `../pickman-R0040`, which c0440's own AC6 grep rejects
-Where: c0440 Design, Docs, tracker skill ("no sibling directories such as `../pickman-R0040`"); c0440 `check.sh` AC6 (`grep -rnE -e "\.worktrees/" -e "\.\./pickman" .claude/skills …`)
-Evidence: the quoted sentence goes into `.claude/skills/tracker/SKILL.md`, and the AC6 grep matches `\.\./pickman` in it, so an executor who copies the Design exactly fails AC6. The executor must then either deviate from the Design or edit a sequestered check.
-Critique: a contradiction between the Design and its check. The fix is wording, but as written the executor has to decide it without guidance.
-Consequences: none beyond the wording. Other examples a writer might reach for, such as `../pickman-c0041`, fail the same way.
-Recommendation: change the sentence to "no sibling directories (a worktree next to the repo instead of inside it)", with no literal `../pickman` path, and add to the Docs bullet: "don't quote a sibling path; AC6 rejects `../pickman` anywhere in the skills".
+### F1 [medium] An `ls-tree` record that doesn't parse is dropped without a word, and no fixture has a name that would show it, so a whitespace-splitting parser that deletes files from `main` passes every case
+Where:
+- `experiments/publish.luau.txt` `makeTree`: `local meta, name = string.match(rec, "^([^\t]+)\t(.+)$")` then `if meta and name then entries[name] = meta end`;
+- c0053 Rules row "The tree is built with `mktree` from the base tree, keeping every untouched entry at every level";
+- the fixtures: the publish spec seeds only `src/x.luau`, and the commands spec seeds `scripts/`, `tracker/templates/`, `.gitignore` and `.gitkeep`s.
 
-### F5 [medium] AC2's pass-through case uses only single-word tokens, so an implementation that joins the arguments into a shell string passes
-Where: `launch.spec.luau:163-182`; AC2; Rules row "Arguments after `--` pass through untouched"
-Evidence: the arguments tested are `--from origin/main --model x -- y`, which contain no spaces, empty strings, quotes or glob characters. `process.exec(table.concat(args, " "), {}, {shell = true})`, a Lune implementation with `shell = true`, or a bash wrapper that uses `$*` or unquoted `$@` (a likely slip in F1's bash fix) records the same seven lines and passes. A real invocation with a quoted prompt, `launch R0020 -- claude "Execute R0020 per the prompt"`, would reach the agent as four words.
-Critique: this is a missing edge case on the one property AC2 names ("untouched"). The tempting fix is to add a single argument with a space.
-Consequences: an empty string and a `*` catch different mutants (an empty argument dropped, a glob expanded in the worktree). The fake agent's `echo "$a"` already records each on its own line (an empty argument becomes an empty line), so `recorded()` must not drop interior empty lines. It drops only the trailing one today, which is correct.
-Recommendation: extend the case with `"two words"`, `""`, `"*"` and `'say "hi"'` after `agent`, and assert them in order in `recorded()`. Add the mutants "join into a shell string" and "unquoted `$@`" to the row, and run them.
+Evidence:
+- **The mutant.** I changed only the name capture to `(%S+)`. Publish gave 14/14 and commands 23/23.
+- **What it does.** In that mutant, any entry whose name has a space, at any level on a changed path, fails the match. The `if` then skips it, so it's left out of the rebuilt tree, and the push deletes it from `origin/main`.
+- **Where that can happen.** The rebuilt levels are the repository root, `tracker/`, `tracker/issues|rafts/`, `active|done/` and `<ID>/`. Today none of them has such a name. But any future root file like `Design Notes.md` would be deleted silently by a tracker `status` move. That push goes straight to `main`, past PR review and CI.
+- **The design invites it.** The same "skip what doesn't match" shape turns any parse slip into a deletion: a `trim` on the listing, a `\n` split, a changed regex, a name with a newline. A non-`-z` round trip is not the risk; it would quote and unquote correctly.
+- **What isn't covered.** The row's spec cases and E9's MK1/MK2 only kill mutants that drop whole levels. No case keeps an awkward name alive.
 
-### F6 [medium] E3 is left to OC1, but one part of it is already known, and it affects every job the new rule starts: an agent in `.worktree/<id>` also loads the main checkout's `CLAUDE.md`, and it may lose the user's auto-memory
-Where: c0440 Unknowns E3, OC1; R0020 Risks ("a session's project memory is keyed by its directory")
-Evidence: Claude Code reads `CLAUDE.md` files recursively, from the working directory up toward `/` (its documented memory lookup). A session started in `<repo>/.worktree/R0020` therefore loads `.worktree/R0020/CLAUDE.md` and also `<repo>/CLAUDE.md`, and each `@AGENTS.md` resolves beside its own file. The agent reads two versions of `AGENTS.md`: the branch's and the main checkout's. They differ exactly when a raft edits `AGENTS.md`, which c0041 and c0440 both do in this raft. That's the nested layout's cost, and the sibling layout didn't have it. Separately, the user's auto-memory lives under a per-project key (this session's is `~/.claude/projects/-Users-philipbergen-code-pickman/memory/`). It currently holds working rules such as "ask before new work", "CI work is chore" and "reviewer on opus". If launched sessions get a different key, those rules stop applying to every job, and after c0440 every job is launched this way. The design calls this "worth a follow-up; it doesn't change this design".
-Critique: E3 is cheap to run now: one `claude -p` from a scratch `.worktree/x`, asking which memory files are loaded and where the auto-memory directory is (or `/memory` interactively). Its answer could change the docs, or need a user decision, before execution rather than after the first real raft.
-Consequences: if both `CLAUDE.md` files load, the tracker skill needs one sentence saying the branch's `AGENTS.md` and skills are authoritative, plus an OC1 check. If memory isn't shared, the user decides whether to move durable rules from memory into `AGENTS.md` or the skills. That is a product decision, so put it to the user now, together with any other questions.
-Recommendation: run E3 in prep and record the loaded memory files and the memory directory for a session started in a nested worktree. Add the authoritative-copy sentence to c0440's tracker-skill bullet (and a JC1 rubric line). If memory isn't shared, ask the user now whether to promote the memory rules into `AGENTS.md` or the skills. Keep OC1 for confirmation only.
+Critique: the rule "keeping every untouched entry" has a spec case that can't fail for a plausible mutant. The fix the author will reach for is a fixture file with a space in its name. That pins one parser and leaves the skip-on-mismatch branch in place.
 
-### F7 [low] Loose ends
-Where: c0430 Design and Verification log; c0440 Test plan; c0041 Design, `worktree-prune` step 4, and rule 4
-Evidence and Recommendation, item by item:
-- c0430 says `--from` is added to `cmd.worktree`, but after c0440 as designed the body lives in `ensureWorktree(target)`, which takes no `from` parameter. Its prototype log says it was stacked "on the prototypes of c0420 and c0041" (not c0440). If F1 is fixed by moving `launch` into bash, this goes away; otherwise say `ensureWorktree(target, from: string?)`.
-- c0440's Test plan describes the fixture as `R0010` and `f0010` only, but the spec also builds the done raft `R0020` with `f0020`, which AC4 relies on. Mention it.
-- `launch R0010 agent`, an extra token without `--`, is refused by the Design ("exactly one" target), but no case covers it. Add it to the AC4 case (nothing runs, and the error names the usage).
-- Prune reads a raft's branch from git. The documented Bootstrap leaves `.worktree/R0020` detached until `start`, and any raft worktree can be detached later. Say what happens then: `git worktree remove` only, with no `branch -D` of an empty name.
-- c0041 rule 4 in the tracker skill still says to launch with `cd "$(scripts/tracker.sh worktree R0010)" && claude`, next to c0440's "humans start an agent with `launch`". Have c0440 rewrite rule 4 so the skill gives one way for humans.
+Consequences:
+- A loud parse failure adds one more refusal path, with its own message.
+- A post-condition costs one more git call. Under "every git call is checked", it must be checked too.
+- A change identical to origin's content doesn't show in a diff. So the post-condition must be "changed paths ⊆ the change list", not "equal to" it. An empty diff is already the no-op branch (`tree == baseTree`).
+
+Recommendation:
+- **Fail on an unparsable record.** In `makeTree`, a non-empty record that doesn't match `^(%d+) (%a+) (%x+)\t(.+)$` returns `nil, "cannot read origin tree <path>: <record>"`, and nothing is pushed.
+- **Check the result before `commit-tree`.** Run `git diff-tree -r --no-renames --name-only -z <baseTree> <tree>`, and check its exit status. Every path it lists must be one of `out`'s paths; any other path fails with `<path> would change: refusing`. This one check also catches MK1, MK2 and any future tree-walk bug, without the specs having to guess the bug's shape.
+- **New publish spec case** ("untouched entries keep their names, modes and objects"):
+  - the seed gains, at the root, `a b.txt` (100755), a tab name, `naïve.md` and a symlink; and at `tracker/issues/`, a folder `odd name/` with one file;
+  - publish one new doc and one status edit under `tracker/issues/active/`;
+  - assert that `ls-tree -r -z` of the base and the new commit, minus the two changed paths, are byte-identical.
+- **Rules and mutants**: add these mutants to the mktree row and mark them `run`: "names split at whitespace" (killed by the case and by the post-condition) and "an unparsed record skipped".
+
+### F2 [low] "A path whose folder is a file on `origin/main` refuses" has no Rules row and no case, and its message names only the last part of the path
+Where:
+- c0053 Publisher bullet: "A path whose folder is a file on `origin/main` refuses";
+- `makeTree`: `return nil, \`{name} is a file on origin/main, not a folder\``.
+
+Evidence:
+- **No row, no case.** No row in the table and no case in either spec covers this rule. Without the check, `sub` is nil and a new subtree replaces the file, so the file is deleted on `main`. Deleting the `if existing and not sub` branch would pass every case.
+- **The reverse case is already handled.** When the change path itself is a folder on origin, the existing `read`/`withoutStatus` checks refuse it already.
+- **The message.** `name` is one path part (for example `c0010`), not `tracker/issues/c0010`.
+
+Critique: the case is unlikely, since `allowed` fixes the folder names. But it is a stated Design rule with no row, which the Design-mode audit counts as a gap. F1's post-condition would also catch a regression here, as a second line of defence.
+
+Consequences: `makeTree` needs the path so far, which is one more parameter.
+
+Recommendation:
+- Pass the folder path down, so the message reads `tracker/issues/c0010 is a file on origin/main, not a folder`.
+- Add a publish case: `other` pushes a plain file `tracker/issues/c0010`, and a build returns `tracker/issues/c0010/c0010.md`. Expect `ok = false`, a reason naming the full path, and origin unchanged.
+- Add a row with the mutant "the refusal removed (a folder silently replaces the file)".
+
+### F3 [low] `rev-parse <base>^{tree}` is the one git call whose exit status isn't checked, and it is now the input to the tree build
+Where: `publish.luau.txt`, `local baseTree = trim(git(cwd, { "rev-parse", base .. "^{tree}" }).stdout)`; c0053: "**Every git call's exit status is checked** and the result must be a hex object name of 40 or 64 digits".
+
+Evidence:
+- Before the re-prep, `baseTree` was only compared against the new tree. Now `makeTree(step, baseTree, ...)` lists it.
+- A failed call yields `""` or an echoed argument. Today the error shows up only indirectly, as `ls-tree`'s "not a valid object name", so the documented rule doesn't describe the code.
+
+Consequences: none.
+
+Recommendation: check `ok` and the 40/64-hex shape, and fail with `cannot resolve the tree of <base>: <stderr>`. The alternative is to start `makeTree` from `base` itself (`ls-tree` accepts a commit) and compare against a checked tree id. Mark it `reasoned` in the "every git step is checked" row: `base` was just verified as a commit, so no spec can make this call fail.
+
+### F4 [low] AC9 can be passed by a comment, or by putting the index code in a helper module
+Where: `tracker/issues/c0053/check.sh`, `no_index()`.
+
+Evidence:
+- `grep -q "mktree"` matches the word in a comment.
+- The ban is scanned in `scripts/tracker/publish.luau` only. A `publish.luau` that requires `scripts/tracker/plumbing.luau`, and builds the tree there with a private `GIT_INDEX_FILE`, passes AC9.
+- R0021's gate scan would catch the variable later. But AC9 exists to prove now that the publisher needs no exception, and a helper module would need one.
+- Today nothing else in `scripts/` names `GIT_INDEX_FILE`, `read-tree`, `update-index`, `write-tree` or `mktree` (grep on the prototype). So a wider scan costs nothing.
+
+Recommendation: scan `scripts/tracker/` (recursively) for the banned names. Require `mktree` as a quoted git argument (`grep -qE '"mktree"' scripts/tracker/publish.luau`). Update AC9's text to say so.
+
+### F5 [low] R0020's Order section still calls the fence prep "still R0019"
+Where: R0020.md, Order & dependencies, "Where the ids stand".
+
+Evidence:
+- The bullet says "The repository fence raft is R0021 (c0058, c0059, c0060), prepped on `prep-check-isolation`".
+- The next sentence says that same branch is "the repository fence, c0058, still R0019".
+- On `prep-check-isolation` at 30cb08b, the fence is `tracker/rafts/R0021/R0021.md`, and `R0019` there is `main`'s "Renumber step one".
+
+Recommendation: drop `prep-check-isolation` from the "old numbers" list. Re-check `prep-tracker-hardening` against `main`'s R0018 (beta poll), and say what is still pending.
 
 Verdict: changes

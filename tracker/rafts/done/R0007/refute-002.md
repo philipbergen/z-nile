@@ -1,0 +1,4 @@
+# Refute 002: R0007 (answers review-002)
+- F1: fixed 13be802: the undercount is recorded in c0043's Verification log and the raft's "Addressed during execution" (about 89 lines from the own spec, committed by another session outside `tracker.sh commit`; read c0043's lines added as about +125, not +36). `spend.md` is written only by the tracker, so it was not hand-edited. consequences: none.
+- F2: fixed 13be802: `reasoned` means "the mutant wasn't run, with the reason recorded in Unknowns & experiments", in ticket-prep step 4, review item 0 and c0043's Design. AC3 and AC4 still pass (item 0 keeps `missing row` and `reasoned`, and precedes item 1).
+- F3: fixed 13be802: c0043's Touched modules lists the metrics skill, the tracker skill line and the own spec, and its Affected specs names the five acceptance specs plus the own spec.

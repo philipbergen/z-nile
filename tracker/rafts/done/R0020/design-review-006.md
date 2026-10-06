@@ -1,19 +1,64 @@
 # Review 006: R0020 (design mode)
-Inputs: prep-c0041-scope at e931e0a; `git diff c218f72 e931e0a`. Files: `tracker/rafts/R0020/{R0020-worktrees-by-default.md,design-review-005.md,design-refute-005.md}`, `tracker/issues/c0420/{c0420-doc-filename-without-slug.md,acceptance/guard.spec.luau,acceptance/naming.spec.luau}`, `tracker/issues/c0041/c0041-worktrees-by-default.md`, `tracker/issues/c0400/c0400-raft-browser.md`, `tracker/rafts/R0060/R0060-raft-browser.md`, `tracker/issues/c0430/{c0430-parallel-workstreams.md,check.sh,acceptance/workstreams.spec.luau}`, `tracker/templates/prompt.md`, `scripts/tracker/{main,store,spend}.luau`, `scripts/hooks/{post-edit,stop}.sh`, `.claude/settings.json`. Ran: `scripts/tracker.sh promote-check R0020` (OK); `bash -n` on the three member `check.sh` files (all OK); the guard spec on the tree (fails on exactly the three specs c0420 updates: c0010 lifecycle 11 lines, c0410 rounds 4, metrics-rounds 2; c0420's own `naming.spec.luau` is exempt by its full path). Hand-evaluated the R0070 fixture plan and the "last member by id" mutant.
-Dropped from design-review-005: F1, F2, F3, F4, F5, F6. F1: step 1 (`migrate` alone) is committed while the old store still reads the legacy tree (`activeRaft` → `store.all` → `store.find`, and `recordAndCommit`'s focus/`--issue` lookups all see legacy documents that the old `docIn` accepts). Step 2 puts the store, `new`, `renumber`, templates, the migration and the spec paths in one working tree before the single `tracker.sh commit`, and the doc forbids other tracker commands in between. No hook runs the tracker: `post-edit.sh` only runs stylua and selene, and `stop.sh` runs the affected gate only when a turn ends. `done` `git mv`s `acceptance/` out, so no `done/c0420/acceptance/naming.spec.luau` path exists for the guard to need to exempt. F2: c0400 `depends_on: [c0420]`. Current tooling never reads `depends_on`. c0430's `workstreams`/`prompt` restrict it to raft members, so R0060's plan is unaffected, and c0400's board shows R0060 blocked only until R0020 is done. (R0020's R0060 paragraph still doesn't mention the `depends_on` edit, but the edit is recorded in the documents that R0060's prompt inlines.) F3: the wording and the full-path exemption are in place, and the guard results are above. F4: R0070 by hand: f0170 wave 1; f0180 wave 2 after f0170; f0190 wave 1 (no deps, `src/s3` overlaps nothing); f0200 wave 1+max(2,1)=3; lowest wave with two issues is 1 → `parallel: yes (wave 1: f0170 f0190)`. This matches the spec exactly, the mutant gives f0200 wave 2 and is killed, and AC1 names the case. F5 and F6: present in both texts and in AC6.
+Inputs: worktree prep-publish-state-to-main at e788335 (clean). Files read:
+- `tracker/rafts/R0020/{R0020.md,check.sh}`, `design-review-001..005.md`, `design-refute-001..005.md`;
+- `tracker/issues/c0053/{c0053.md,check.sh}`, `acceptance/{status,publish,commands}.spec.luau`, `replacements/*`, `experiments/{status.luau.txt,publish.luau.txt,prototype.patch,skills.patch}`;
+- `tracker/issues/c0052/acceptance/skill-doc.spec.luau` on this base;
+- `prep-check-isolation` at 4df78fd (c0058, still R0019), read only.
 
-### F1 [low] c0430 tells the executor to rewrite "hard rule 1", but the quoted sentence is hard rule 2, and hard rule 1 is "Follow the execute-raft skill"
-Where: `tracker/issues/c0430/c0430-parallel-workstreams.md` Other documents, `tracker/templates/prompt.md` bullet; `tracker/templates/prompt.md:17-18`; c0430 `check.sh` AC6 (the message `prompt template: hard rule 1`); design-refute-005 F6
-Evidence: the template numbers the rules like this: `1. **Follow the \`execute-raft\` skill below, step by step.** It is your protocol.` and `2. **One branch and one PR for this whole prompt.** … Commit only with \`scripts/tracker.sh commit\`.` c0430 says: 'Hard rule 1 ("One branch and one PR for this whole prompt") becomes "One raft branch and one PR …", and hard rule 2 ("Commit only with …") gains …'. Both quoted sentences are in rule 2. An executor that goes by the number overwrites rule 1, which drops the "follow execute-raft" rule from every future prompt. AC6 still passes, because it only greps for the new sentence.
-Critique: the quote makes the intent recoverable, but the check can't tell the two readings apart. The obvious fix is to change the number to "2", which leaves the doc naming "hard rule 2" twice for two different sentences.
-Consequences: none beyond wording and one grep. c0041 also prefixes rule 2 ("your first action is `cd …`"), so the final rule 2 carries three edits from two issues. The text should say which sentence each edit touches.
-Recommendation: in c0430's bullet, write "hard rule 2's first sentence ("One branch and one PR for this whole prompt") becomes … and its last sentence ("Commit only with …") gains …". Fix the AC6 message to `hard rule 2`. Add `grep -qF "Follow the \`execute-raft\` skill" tracker/templates/prompt.md` to AC6 so that a wrong edit to rule 1 fails.
+Dropped from review-005: F1, F2, F3 and F5. Each fix holds:
+- **F1**: R0020 now states the real ids, the order (fence prep with the exemption, then c0053, then the fence executes) and the open handoff. c0058 at 4df78fd still strips and bans `GIT_INDEX_FILE` and has no exemption, which matches the "open handoff" R0020 records. `skills.patch` leaves the Conflicts and Numbering bullets alone, as c0052's spec requires.
+- **F2**: the new refusal step kills "only the moved item's design is checked".
+- **F3**: the design now has a Commands bullet and a `reasoned` code-review row.
+- **F5**: the module map, Risks, Cutover and ticket-prep step 5 are updated.
 
-### F2 [low] c0420 step 1's "Run its cases against the old store" can't produce a meaningful result
-Where: `tracker/issues/c0420/c0420-doc-filename-without-slug.md` Implementation steps, step 1; `tracker/issues/c0420/acceptance/naming.spec.luau` (shared fixture, cases 1 to 9)
-Evidence: the naming spec is one sequential fixture. Case 1 (`new issue writes <ID>.md …`) builds the scratch tracker with the new `new`. The `migrate converts …` case ends with `tr({ "find", "d0030" }).ok == true` (line 221), which the old store rejects (it has no `d0030-*.md` after migration). So at step 1 every migrate case fails, or runs on a fixture that earlier failed cases left broken. An executor told to "run its cases" before committing either commits red cases without comment or takes this for a stop condition.
-Critique: this is the tests-first rhythm, and the failure is expected, but the doc doesn't say so. The tempting fix is to make the migrate cases independent of `new` and `find`, which would change a reviewed, sequestered spec for no gain.
-Consequences: none; wording only.
-Recommendation: in step 1, replace "Run its cases against the old store." with "Its spec cases can't pass until step 2 (they use the new `new` and `find`); check `migrate` by hand on a scratch copy of the tree, or only confirm that it doesn't call `store.find`." Leave the spec unchanged.
+F4 is only partly fixed (see F2 below).
+
+How I ran the prototype: in a scratch clone outside the repository, with its origin replaced by a fresh bare repository, the clone deleted afterwards.
+- **Prototype as instructed** (both modules, both patches, both replacements): `scripts/check.sh --full` gave 744 passed, 0 failed, in 118 spec files. `scripts/tracker.sh check c0053` gave 8/8 PASS. This reproduces the author's numbers.
+- **Mutants**, one at a time, prototype restored after each:
+  - (a) the carried `prepared` checks `design: ready` on members and lone issues but skips the raft's own document (`if carried and (t ~= id or not store.isRaftId(id)) then`): commands spec 23/23 pass (F1);
+  - (b) `stamp` removed from `READ_ONLY`, so it is guarded: commands and status specs 34/34 pass (F2).
+
+User decisions are not reopened. Their consequences are stated in R0020: the prepared rewrites, a stamp on every write, c0053 before the fence (the handoff is open and named), claims documented, and in-flight preps landing first.
+
+### F1 [low] The carried `prepared` never has its raft-design check exercised
+Where:
+- c0053 Rules row "The carried `prepared` refuses unless the raft and its listed members are `design: ready`" (`run`);
+- `cmd.status` in `prototype.patch`, the `if carried then ... design ~= "ready"` branch;
+- `commands :: a raft move follows the local member list ...`.
+
+Evidence:
+- Every case that carries a raft to `prepared` sets `design: ready` on the raft document first: `ready(doc)` in the raft-move case, and the loop in `a prepared raft starts once`.
+- Mutant (a), which skips the check for the raft itself, passes 23/23.
+- Downstream, nothing catches it either:
+  - `start` (line ~820) and `prompt` (line ~1474) check only the members' `design:`;
+  - only make-prompt's skill text checks the raft's.
+
+  So a prep PR can land a raft that is `prepared` while its design is still `reviewed`, and the raft can be started.
+- This is the mirror of review-005 F2: that fix pinned the members' check, not the raft's.
+
+Critique: the gap is small, because ticket-prep step 5 sets both fields. But the row claims `run` for a half that no case can fail.
+
+Consequences: none beyond one more refusal step in an existing case.
+
+Recommendation:
+- In the raft-move case, call `ready(doc)` only after one refused `status rz prepared`. The refusal's stderr must name `rz` and `design: ready`, and origin must be unchanged.
+- Add "the raft's own design unchecked" to the row's mutants.
+
+### F2 [low] `stamp` is still not among the spec's read-only probes, and one c0053 sentence is broken (partial repeat of review-005 F4)
+Where:
+- `commands :: a tracker command in a directory that lost its .git refuses ...`, the read-only probe list;
+- c0053 Rules row "Every command that is not read-only ...", which says "8 read-only ones including `stamp`";
+- `design-refute-005.md` F4, which says "the spec probes all eight";
+- c0053 Commands, the "Repo-root guard" bullet.
+
+Evidence:
+- **The probes.** The spec probes seven commands: `list`, `find`, `members`, `metrics`, `board`, `workstreams` and `promote-check`. `stamp` is not among them, and `git diff ef78339 HEAD` shows the spec changed only in the F2 case.
+- **Mutant (b) survives** (34/34), so neither exempting nor guarding `stamp` is pinned. The refutation and the Rules row both claim otherwise.
+- **The broken sentence.** The guard bullet reads: "**Every command except the read-only ones** (`list`, ... eight handlers in all; not `prompt`, which can create a raft). The other 13 handlers, including `status` and `sync`, are guarded first compares `git rev-parse --show-toplevel` with `pwd -P` ...". The parenthesis closes the sentence early, and the next one has two main verbs, so the rule cannot be read as written.
+
+Recommendation:
+- Add `{ "stamp", "new" }` to the read-only probes, or correct the row and refute text to say seven are probed.
+- Rewrite the bullet as two sentences: "The eight read-only handlers (...) are exempt; `prompt` is not, since it can create a raft. Every other handler (13, including `status` and `sync`) first compares `git rev-parse --show-toplevel` with `pwd -P` and refuses when they differ (...), whatever `PICKMAN_PUBLISH` says."
 
 Verdict: approve

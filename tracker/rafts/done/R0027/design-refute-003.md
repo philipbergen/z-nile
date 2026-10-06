@@ -1,0 +1,10 @@
+# Refute 003: R0027 (answers to design-review-003)
+
+The user decided F4 and F2 after this round (R0027 Theme): count **strictly by one**, because the compaction is a one-off clean slate from 1; leave `tracker.sh sync` alone. They also asked for one more review round after these fixes.
+
+- F1: refuted, the rule is withdrawn: the retired-number skip is removed (the user's decision under F4), so no allocation path needs a skip spec. With the skip gone, the `retired-id` audit error from review 002 F1 goes too: without the skip it would fire on legitimate items whose numbers reach old ids (a new c0010), which would turn every gate red. `ids.retiredIds`, the `retired` parameter, their spec cases and Rules rows, and remap.spec's plain-merge case are removed. consequences: a busy branch that plain-merges `origin/main` without `remap` is no longer detected. The user accepted that ("the IDs will be remapped completely this one time"); R0027 Risks says so, and the skill rule still says to remap before merging.
+- F2: refuted by the user's decision: `sync` stays as it is. The stale-tree refusal's message now gives one way out per case ("a branch that changed tracker/ runs tracker.sh remap; any other merges origin/main"), so it no longer offers the forbidden merge to a busy branch.
+- F3: refuted, now moot: with no retired numbers, an explicit `renumber … <new>` has no retired number to pick; the existing rules (same prefix, not taken) stand.
+- F4: decided by the user (strictly by one); the skip is removed. See F1.
+- F5: fixed: the stale check is the helper `publishFresh`, named in c0081's Design, and new `publish-guard.spec` fails if `main.luau` calls `publish.commit(` in any top-level function other than `publishFresh` and `cmd.remap` (comments ignored; a second case pins the finder). It runs under AC4. R0027 Risks covers R0025's new publishing commands in either landing order. consequences: a static check that names two function names. Renaming either is a deliberate spec change.
+- F6: fixed: AC4's text and its check.sh label now say "a stale tree never publishes; remap brings a busy branch onto the new ids and merges origin/main".

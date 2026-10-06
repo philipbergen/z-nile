@@ -1,0 +1,146 @@
+diff --git a/.claude/skills/testing/SKILL.md b/.claude/skills/testing/SKILL.md
+index 785e658..bc11696 100644
+--- a/.claude/skills/testing/SKILL.md
++++ b/.claude/skills/testing/SKILL.md
+@@ -136,6 +136,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+   - **Overrides stripped**: an inherited `GIT_DIR`, `GIT_INDEX_FILE` or the like (git hooks run with them set) is unset before any spec runs.
+   - **Ref guard**: every git a check runs has a `reference-transaction` hook (`scripts/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch (create or move refs under `refs/remotes/`), as `scripts/ci-verify.sh` does. On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards.
+   - **No network for specs**: a `pre-push` hook refuses pushes into the real repository by any local URL. During spec runs it allows a push only into an existing local repository that isn't protected, so https, ssh, `host:path` and ssh aliases are all refused. With or without hooks, spec runs also allow git no network transport at all (`protocol.allow=never`, local paths and `file://` only), however a URL is spelled or aliased. Specs also get no credentials: `GH_TOKEN` and the like are unset, `GH_CONFIG_DIR` is empty, the git credential helper list is reset (no keychain), and there is no ssh agent and no ssh. A `check.sh` started from inside a spec run keeps these limits.
++  - **No publishing from checks**: a tracker command run by a check never publishes tracker state: the publisher asks `pickman_guarded` (`scripts/lib/fence.sh`), says `not publishing`, and goes on as with `PICKMAN_PUBLISH=0`.
+   - **Lock**: one run at a time per checkout (`.cache/tests-run.lock`), because runs share the `.cache` fixtures. Separate worktrees still run in parallel. A second run prints `waiting for another test run (pid N)` and waits up to `PICKMAN_TEST_LOCK_WAIT` seconds (default 240). A lock whose every process is gone is taken over.
+   - **Tripwire**: a run refuses to start while the repository's identity is a fixture's. It fails with `REPOSITORY CHANGED`, even when every case passed, if any of these happened during it:
+     - remote, core or user config changed (gh's `gh-resolved` aside);
+diff --git a/scripts/lib/fence.sh b/scripts/lib/fence.sh
+index dd2b57f..7485786 100644
+--- a/scripts/lib/fence.sh
++++ b/scripts/lib/fence.sh
+@@ -58,3 +58,15 @@ pickman_fence() {
+   fi
+   export GIT_CONFIG_COUNT=$n
+ }
++
++# Exits 0 when the repository holding <dir> is one these guards protect: a check is running there. The tracker's
++# publisher asks this instead of reading the guards' variables itself (c0650).
++pickman_guarded() {
++  local common
++  common=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
++  common=$(cd "$common" && pwd -P) || return 1
++  case ":${PICKMAN_FENCE_REAL_GIT:-}:" in
++  *":$common:"*) return 0 ;;
++  esac
++  return 1
++}
+diff --git a/scripts/tracker/main.luau b/scripts/tracker/main.luau
+index cdca2c7..e112a33 100644
+--- a/scripts/tracker/main.luau
++++ b/scripts/tracker/main.luau
+@@ -137,9 +137,28 @@ local function guardRepoRoot()
+ 	end
+ end
+ 
++-- A check run protects this repository (the repository guards, c0640): tracker state is never published from
++-- inside one (c0650). Asked once per command; the guards' own script answers, so no variable is named here.
++local guardedRun: boolean? = nil
++local function guarded(): boolean
++	if guardedRun == nil then
++		local r = process.exec("bash", {
++			"-c",
++			'[ -f scripts/lib/fence.sh ] && source scripts/lib/fence.sh && pickman_guarded "$PWD"',
++		})
++		guardedRun = r.ok
++		if r.ok then
++			stdio.ewrite(
++				`not publishing: {process.cwd} is protected by the repository guards (a check run)\n`
++			)
++		end
++	end
++	return guardedRun == true
++end
++
+ local function publishing(): boolean
+ 	local v = process.env.PICKMAN_PUBLISH
+-	return hasOrigin() and (v == nil or v == "" or v ~= "0")
++	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
+ end
+ 
+ local function frontOf(text: string): { [string]: string }
+diff --git a/tests/acceptance/c0510/commands.spec.luau b/tests/acceptance/c0510/commands.spec.luau
+index dfb3478..43cb8a9 100644
+--- a/tests/acceptance/c0510/commands.spec.luau
++++ b/tests/acceptance/c0510/commands.spec.luau
+@@ -15,16 +15,9 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
+ local base = `{root}/.cache/c0510-commands`
+ local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
+ 
+--- git never looks for a repository above .cache: a fixture that loses its own .git fails instead of
+--- falling through to the real repository (the incident c0640 and R0200 describe)
++-- The runner's guards (c0640) fence git inside .cache for every spec: this only copies the environment.
+ local function fenced(env: { [string]: string }?): { [string]: string }
+-	local out = { GIT_CEILING_DIRECTORIES = `{root}/.cache` }
+-	if env then
+-		for k, v in env do
+-			out[k] = v
+-		end
+-	end
+-	return out
++	return table.clone(env or {})
+ end
+ 
+ local function run(cwd: string, cmd: string, args: { string }, env: { [string]: string }?): Result
+diff --git a/tests/acceptance/c0510/publish.spec.luau b/tests/acceptance/c0510/publish.spec.luau
+index eea46ea..435974e 100644
+--- a/tests/acceptance/c0510/publish.spec.luau
++++ b/tests/acceptance/c0510/publish.spec.luau
+@@ -16,8 +16,7 @@ local base = `{root}/.cache/c0510-publish`
+ local origin, work, other = `{base}/origin.git`, `{base}/work`, `{base}/other`
+ 
+ local function git(cwd: string, args: { string }): string
+-	local r: Result =
+-		process.exec("git", args, { cwd = cwd, env = { GIT_CEILING_DIRECTORIES = `{root}/.cache` } })
++	local r: Result = process.exec("git", args, { cwd = cwd }) -- the runner fences git inside .cache (c0640)
+ 	if not r.ok then
+ 		error(`git {table.concat(args, " ")} failed: {r.stderr}{r.stdout}`, 2)
+ 	end
+diff --git a/tests/tooling/repo-fence.spec.luau b/tests/tooling/repo-fence.spec.luau
+index f9fc59d..db9406b 100644
+--- a/tests/tooling/repo-fence.spec.luau
++++ b/tests/tooling/repo-fence.spec.luau
+@@ -38,6 +38,16 @@ local NAMES = {
+ -- Names a file may use for a stated reason, each reviewed (review skill, Repository safety). Nothing else in
+ -- the file may name them.
+ local ALLOWED: { [string]: { [string]: string } } = {
++	-- c0650 and c0660: specs that prove the scan and the fixture helper refuse these names
++	["tests/acceptance/c0059/adapt.spec.luau"] = {
++		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
++		GIT_CONFIG_ = "planted to prove the scan flags it",
++		PICKMAN_TEST_FENCE = "runs the copied gate as a top-level run",
++	},
++	["tests/acceptance/c0060/fixture.spec.luau"] = {
++		GIT_DIR = "proves the helper refuses it",
++		GIT_WORK_TREE = "proves the helper refuses it",
++	},
+ 	-- c0660: the fixture helper names these to refuse them
+ 	["tests/lib/fixture.luau"] = {
+ 		GIT_DIR = "refused",
+@@ -46,19 +56,17 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		GIT_COMMON_DIR = "refused",
+ 		GIT_OBJECT_DIRECTORY = "refused",
+ 	},
+-	-- c0510 (R0200, landed first): its fixture hooks unset what git exports to a hook, so that their own git calls
+-	-- reach the right repository; and until c0650 its specs set their own ceiling, from before these guards
++	-- c0510 (R0200): its fixture hooks unset what git exports to a hook, so that their own git calls reach the right
++	-- repository
+ 	["tests/acceptance/c0053/commands.spec.luau"] = {
+ 		GIT_DIR = "fixture hook",
+ 		GIT_INDEX_FILE = "fixture hook",
+ 		GIT_WORK_TREE = "fixture hook",
+-		GIT_CEILING_DIRECTORIES = "own fence, removed by c0650",
+ 	},
+ 	["tests/acceptance/c0053/publish.spec.luau"] = {
+ 		GIT_DIR = "fixture hook",
+ 		GIT_INDEX_FILE = "fixture hook",
+ 		GIT_WORK_TREE = "fixture hook",
+-		GIT_CEILING_DIRECTORIES = "own fence, removed by c0650",
+ 	},
+ }
+ local EXEMPT: { [string]: boolean } = {

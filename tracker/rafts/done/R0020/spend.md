@@ -1,11 +1,8 @@
-# Spend: R0020 Worktrees by default
+# Spend: R0020 Publish state to main
 
 | issue | type | emergent | +lines | -lines | minutes | commits |
 |---|---|---|---|---|---|---|
-| c0041 | chore |  | 337 | 43 | 3.9 | 4 |
-| c0420 | chore |  | 237 | 65 | 3.6 | 5 |
-| c0430 | chore |  | 201 | 9 | 1.8 | 4 |
-| c0440 | chore |  | 42 | 7 | 1.0 | 2 |
+| c0053 | chore |  | 1111 | 56 | 64.4 | 8 |
 
-**Total:** +817 / -124 lines, 10.3 agent-minutes over 5 commits
-<!-- totals: added=817 removed=124 minutes=10.3 commits=5 -->
+**Total:** +1111 / -56 lines, 64.4 agent-minutes over 8 commits
+<!-- totals: added=1111 removed=56 minutes=64.4 commits=8 -->

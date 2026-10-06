@@ -1,0 +1,6 @@
+- F1: fixed 038a433: model name validated against [%w_-]+ before the run
+- F2: refuted: the design scopes failure reporting to expectations and step errors ("Failures (expectation, never-reached expectation, or an error raised by step)"); errors in new/observe/stopWhen propagate as plain errors with a stack trace, which is the intended behavior.
+- F3: fixed 038a433: events bucketed by tick once per run
+- F4: fixed 038a433: skill example now requires @tests/lib/t
+- F5: fixed 038a433: spec comment says leak detection lives in the c0010 acceptance specs
+- F6: refuted: process record only; the five steps were verified together by AC1-AC7 and the dates are the harness clock, no code impact.

@@ -1,2 +1,0 @@
-- F1: fixed 4148b8d: `wrapped = wrapped ~= w` at both sites in Movement.step (each seam crossing flips the side); two unit specs added that fail without the fix; deviation logged in f0110.
-- F2: fixed 4148b8d: Main.client keeps the built Model and destroys it before building a layout with a new maze id.

@@ -1,1 +1,0 @@
-- F1: fixed 9ca09c3: originTree() is the one reader of origin/main's tracker paths; originIds (new: fetch, none on failure) and originMainIds(kind) (renumber: no fetch, refuse on failure) both use it and c0510's idsOf, so a new state directory is seen by both. c0500 3/3, full gate PASSED.

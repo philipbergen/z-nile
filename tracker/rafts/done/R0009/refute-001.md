@@ -1,0 +1,5 @@
+- F1: fixed 4d9cd8d: merged `origin/main`, took main's `check.sh` unchanged (RC1/RC2 pass with it), dropped the fourth fix from the c0056 document and its Touched modules; `main` had also taken c0055, so my emergent chore is renumbered c0056 (no tool path for an ambiguous id: renamed with `git mv` and a sed over c0056's and the raft's own files).
+- F2: fixed 6ca5e85: c0056's check.sh resolves each spec in `tests/acceptance/<id>` or via `tracker.sh find`; passes now.
+- F3: fixed: Touched modules filled in; later c0056 work was committed with `--issue c0056`; the 15 misattributed minutes are recorded in the raft document and go in the final report; `spend.md` untouched.
+- F4: fixed 6ca5e85: a `tests/unit/Session` case at base speed 90 (x = 5.125 at tick 9); it fails against the `speed - owed` mutant.
+- F5: fixed 6ca5e85: the comment moved above `Pellets.eat`.

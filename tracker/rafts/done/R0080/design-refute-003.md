@@ -1,3 +1,0 @@
-- F1: fixed as documentation (the review's recommendation): R0080 Risks says an unconfigured Beta is green by design and that a deleted secret silently disables the runtime-test gate inside this repo, visible only as the warning.
-- F2: fixed: `workflow.spec` compares the comment step's `run` exactly (whitespace collapsed), so a commented-out or altered `gh pr comment` fails.
-- F3: fixed: the Merging text says the 60 minutes count from the first ready event and re-firing it does not restart the count; the spec needle keeps its phrase.
