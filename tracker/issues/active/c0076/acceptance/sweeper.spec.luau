@@ -14,7 +14,7 @@ local task = require("@lune/task")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0820-sweeper`
+local base = `{root}/.cache/c0076-sweeper`
 local jailed = process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
 
 local function trim(s: string): string
