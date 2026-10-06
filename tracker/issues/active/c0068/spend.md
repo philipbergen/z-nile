@@ -16,6 +16,7 @@
 | 12 | 2026-10-06 16:03 | R0025: format | 0 | 1 | 0.1 | raft+proportional |
 | 13 | 2026-10-06 16:09 | R0025: refute-003 | 0 | 0 | 0.3 | raft+proportional |
 | 14 | 2026-10-06 16:18 | R0025: review 004 fixes (unique claim stamps, resumed start keeps its claim, no-stamp refusal pinned; stop looks up after its pull) | 47 | 5 | 15.2 | explicit |
+| 15 | 2026-10-06 16:24 | R0025: refute-004 | 0 | 0 | 0.3 | raft+proportional |
 
-**Total:** +994 / -157 lines, 105.9 agent-minutes over 14 commits
-<!-- totals: added=994 removed=157 minutes=105.9 commits=14 -->
+**Total:** +994 / -157 lines, 106.2 agent-minutes over 15 commits
+<!-- totals: added=994 removed=157 minutes=106.2 commits=15 -->
