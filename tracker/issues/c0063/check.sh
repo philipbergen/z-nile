@@ -7,8 +7,7 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to 
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0063"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: f0031's specs no longer pin the play-again surface, and keep (narrowed) everything that stays true" lune run tests/run -- "$A/narrowed.spec.luau"
+check "AC2: f0031's acceptance checks pass on the code as it is" bash "$(scripts/tracker.sh find f0031)/check.sh"
 
 finish

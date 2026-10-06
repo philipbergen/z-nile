@@ -18,7 +18,9 @@ step() {
 has() { grep -q -- "$1"; }
 
 ac1() { step 1 | has 'Review NNN started at' && step 1 | has 'tracker.sh commit' && step 1 | has 'comment'; }
-ac2() { step 3 | has 'tracker.sh commit -m "R0001: review-NNN" --time 0' && step 3 | has 'finding count by severity'; }
+# c0084 (prep): the review commit records its spend as the code-review phase (it was `--time 0`); either form
+# holds, and any raft id in the example (a compaction rewrote it once).
+ac2() { step 3 | grep -Eq 'tracker\.sh commit -m "R[0-9]+: review-NNN" (--time 0|--phase code-review)' && step 3 | has 'finding count by severity'; }
 ac3() { step 5 | has 'tracker.sh commit' && step 5 | has 'Review NNN addressed' && step 5 | has 'refute'; }
 ac4() { grep -q '^## The PR is the visible record' "$S/tracker/SKILL.md" && grep -q 'BLOCKED' "$S/tracker/SKILL.md" && grep -q '^## Visible record' "$S/review/SKILL.md"; }
 ac5() {
