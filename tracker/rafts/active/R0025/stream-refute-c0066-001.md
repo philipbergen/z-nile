@@ -1,0 +1,1 @@
+- F1: refuted: not a code defect; the code sorts each directory (`table.sort(sorted)` in leftBehind), and the gap is in the sequestered cleanup.spec, which a stream can't edit. Not worth a follow-up chore: the listing is diagnostic output only.
