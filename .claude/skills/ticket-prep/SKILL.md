@@ -37,7 +37,7 @@ Fill every section of the issue template. Requirements:
   - For each Touched path, run `lune run scripts/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.
   - For each promoted spec S whose pinned behavior the issue deliberately changes, name S on an `Overrides:` line in **Regression guard**.
     - A chore changes S in its own raft.
-    - Any other type: file a chore c that only has to remove or narrow S (prefer narrowing; if S must go, c also drops the line naming it from the owning item's `check.sh`), so `main` stays green (a spec that asserts behavior `main` doesn't have yet can't land). c names S on its own `Overrides:` line, which satisfies the check for c. The issue's Test plan gets a case that pins the new behavior, its `Overrides:` line names S and c, `depends_on: [c]` goes in its frontmatter, and its raft's **Order & dependencies** says c must be in `done/` before `start` (make-prompt refuses otherwise). A product decision behind the change goes to the user now.
+    - Any other type: file a chore c that only has to remove or narrow S (prefer narrowing; if S must go, c also drops the line naming it from the owning item's `check.sh`), so `main` stays green (a spec that asserts behavior `main` doesn't have yet can't land). c names S on its own `Overrides:` line, which satisfies the check for c. The issue's Test plan gets a case that pins the new behavior, its `Overrides:` line names S and c, `depends_on: [c]` goes in its frontmatter, and its raft's **Order & dependencies** says c must be in `done/` before `start` (ready-raft refuses otherwise). A product decision behind the change goes to the user now.
   - If there is none, write `Overrides: none`.
 - **Test plan**: `spec file :: case → ACn`.
 - **Rules and mutants**: a table with one row per behavioural rule in the Design: `| rule | spec :: case | mutant it kills | checked |`. The mutant is a plausible wrong implementation, and the spec case must fail for it. `checked` is `run` if prep's mutation check ran it, else `reasoned`. When you prototype, fill the table from the mutation check.
@@ -50,7 +50,7 @@ Fill every section of the issue template. Requirements:
 
 ## 4. Write the executable acceptance
 - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
-- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines.
+- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines. A raft check finds its members with `tracker.sh find <id>` (or `members`), never a hard-coded backlog path: the directories move when the raft is readied. `tracker.sh ready` rewrites only the moved items' own literal paths in their `check.sh` files.
 - **Write the acceptance specs now** in `tracker/issues/<id>/acceptance/`, as real spec files with the cases that pin the behavior. Require only through aliases, and see the testing skill for where these live.
   - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
   - This is what makes the checks unfakeable and sequestered.
@@ -65,8 +65,12 @@ Fill every section of the issue template. Requirements:
 3. Answer every finding. Before editing, run the **consequence step** on your own fix: what new rules, state, edge cases or user decisions does it bring? Add their Rules and mutants rows and spec cases in the same change, and put any decisions to the user now, all at once.
    - Fix it in the documents, specs or `check.sh`.
    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`).
-4. Run another round with a new clean reviewer if any high finding was fixed or the design changed materially. Stop after 3 rounds and bring the open questions to the user.
-5. When the latest round has `Verdict: approve`, or only low findings remain and all are answered, set `design: ready` on the raft and every member, **then run `scripts/tracker.sh status <R-id> prepared`** (carried: it edits the local documents, and refuses unless the raft and its members are `design: ready` and `preparing` on `origin/main`), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` lines by hand to `prepared-<three words>` instead). Without it the members keep their `preparing` stamp and the raft can be neither started nor prompted.
+4. **Rounds: up to 5 rounds, prefer 3.** One rule decides, from the round's `design-review-NNN.md` severities and the diff of your answers:
+   - After round 1 or 2, run another round with a new clean reviewer if any high finding was fixed or refuted (a new reviewer rules on a refutation), or answering the round was more than minor (defined below).
+   - After round 3 or 4, run the next round only if that round was **major**: it had a **high** finding, or answering it was more than minor.
+   - Minor means the answers changed only wording, labels, comments or single assertions, and added no rule, interface, state, spec case, Rules and mutants row or public API change.
+   - The **final round** is the round after which this rule runs no further round: any round 1 to 4 where it says stop, or round 5, which is always final. A final round holds a high only in round 5, and such a round goes to the user, whatever you answered to it.
+5. When the final round has `Verdict: approve`, or it has no high finding and every finding in it is answered `fixed` or `refuted`, set `design: ready` (a final round with a high, which only round 5 can be, or with an unanswered finding goes to the user instead) on the raft and every member, **then run `scripts/tracker.sh status <R-id> prepared`** (carried: it edits the local documents, and refuses unless the raft and its members are `design: ready` and `preparing` on `origin/main`), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` lines by hand to `prepared-<three words>` instead). Without it the members keep their `preparing` stamp and the raft can be neither started nor prompted. Before the prep commit, check that the raft's `issues:` list names exactly the issues whose `raft:` is that raft: `tracker.sh ready` refuses a raft where they disagree, `ready` and `start` claim the issues whose `raft:` names it, and `stop` gives back exactly what the claim stamped.
 
 ## 6. Commit and hand off
 - **Commit** the prepared tracker items, acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep R0010 <title>`, then follow Landing a change (tracker skill): push, PR, merge, pull the main checkout, remove the worktree.
@@ -77,4 +81,4 @@ Fill every section of the issue template. Requirements:
   - experiment results;
   - review rounds, and what changed because of them;
   - anything left for Observed.
-- **Next step**: `/make-prompt R0010`.
+- **Next step**: `/ready-raft R0010`.

@@ -2,6 +2,7 @@
 -- c0360 AC1: `tracker.sh done` accepts `- F<n>: deferred <id>: <why>` for a medium or low finding
 -- when <id> is an existing backlog issue, and refuses it in every other case. Driven for real in a
 -- throwaway clone (no remote, so done skips push and gh).
+local cleanup = require("@tests/lib/cleanup")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -245,6 +246,6 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 	end)
 
 	it("cleans up", function()
-		fs.removeDir(work)
+		cleanup.removeTree(work)
 	end)
 end)

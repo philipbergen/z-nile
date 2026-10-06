@@ -1,0 +1,1 @@
+- F1: refuted: a deferral path in design mode is out of scope. c0071 Non-goals keep the review mechanics, and the Design gives deferral to code review only. An unfixable design finding goes to the user.

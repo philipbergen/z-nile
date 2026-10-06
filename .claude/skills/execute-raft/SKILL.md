@@ -1,6 +1,6 @@
 ---
 name: execute-raft
-description: The autonomous execution protocol for one raft - one branch, one PR, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when implementing a raft (or when handed a prompt from make-prompt).
+description: The autonomous execution protocol for one raft - one branch, one PR, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when implementing a raft (or when handed a prompt by launch-raft or ready-raft).
 ---
 
 # Execute a raft
@@ -13,7 +13,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
 ## Phase 0: Claim (in the first minutes)
 1. Work in the raft's worktree: `cd "$(scripts/tracker.sh worktree R0010)"` (tracker skill, Worktrees), then run `scripts/tracker.sh sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `scripts/check.sh --full` passes here.
    - **If main is red, stop.** Report it; don't fix main inside this raft.
-2. `scripts/tracker.sh start R0010`. It claims the raft and its members on `origin/main` first (refused if another terminal started it); if a later step fails, see the tracker skill, Sync and claim, A failed start. This creates the branch (if the worktree isn't already on it), moves the items to `active/`, commits, pushes, and opens a **draft** PR.
+2. `scripts/tracker.sh start R0010`. The claim was made by ready-raft: the raft and its members are already in `active/` on `origin/main`, so `start` only creates the branch (if the worktree isn't already on it), makes an empty `tracker: start` commit, pushes, and opens a **draft** PR. If it refuses with `run tracker.sh sync first`, sync and retry. A raft that was never readied (a legacy start) is claimed and moved by `start` itself; if a step after that claim fails, see the tracker skill, Sync and claim, A failed start.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 
@@ -64,7 +64,7 @@ When the steps below pass, post a PR comment with the RC results.
 1. `bash "$(scripts/tracker.sh find R0010)/check.sh"`. Every RC line must PASS.
 2. Double-check that `scripts/check.sh --full` passes as well, and that `scripts/tracker.sh promote-check R0010` passes. It dry-runs the move of the acceptance specs into `tests/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
 3. **Gate speed**: record the **gate wall time** and the `slowest:` specs from a `scripts/check.sh --full` run in each issue's Verification log. If a stage or spec dominates or the time regressed, fix it or file the chore, per the testing skill's Speed section.
-4. **Sequestration check**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/` done by `start`). The three-dot form separates what this branch changed from what `main` brought in, so other terminals' new stubs are not false positives.
+4. **Sequestration check**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (a raft started the legacy way moves its items on the branch). The three-dot form separates what this branch changed from what `main` brought in, so other terminals' new stubs are not false positives.
 
 ## Phase 4: Adversarial code review (a clean reviewer)
 The PR is the visible record of the work. Push and post a PR comment (`gh pr comment --body-file -`) at each step below, so a human watching sees the review start, its findings, and how they were answered. Never hold review state locally. If a push or `gh` call fails, retry once, then carry on and mention the failure in your next comment; don't block on it. `tracker.sh commit` skips the push when there is no upstream, so check that `git status -sb` shows no `ahead`.
@@ -81,17 +81,18 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 4. **If the verdict is `approve` with no findings, go to Phase 5**: there is no refute file, and the verdict comment is the record. Otherwise respond in `refute-NNN.md`, with one line per finding:
    - `- F3: fixed <short sha>: <what changed>; consequences: <what the fix could break or open, and how you checked it, or none>`, or
    - `- F3: refuted: <argument with evidence>`, or
-   - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left after round 3).
+   - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left in the final round).
    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as ticket-prep's consequence step does; `tracker.sh done` refuses a fixed answer without `consequences:`.
    4a. **Question a twice-hit mechanism.** When a finding is the second in two rounds against the same mechanism (the same guard, module or rule), stop patching. Before the next round, question the mechanism (a deny-list or an allowlist? a patch or a redesign?) and say which you chose, and why, in the refute file.
 5. Commit each fix as you make it (pushed by `tracker.sh commit`), then commit the refute file. Post a comment `Review NNN addressed`, pasting the refute file's lines.
-6. **Re-review** with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1):
+6. **Re-review** after round 1 or 2 with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1); from round 3 on, step 7 decides instead:
    - any high-severity finding was fixed;
    - the fixes changed a public API or the design;
    - the fixes are more than about 15% of the PR's lines;
    - a Judged criterion was ruled fail;
    - you refuted (rather than fixed) any high finding or failed Judged criterion, so a new reviewer rules on the refutation.
-7. **Cap: 3 rounds.** The reviewer's own file decides what is significant, not your answer to it. If `review-003.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds 1-2 need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in `review-003.md` do not block, and you can't downgrade the severity the reviewer wrote. Fix them (answer `fixed`) if the fix is small; otherwise file each with `tracker.sh new issue`, answer it in `refute-003.md` as `- F<n>: deferred <id>: <why>` (`<id>` is the new backlog issue; `tracker.sh done` accepts it only for a medium or low finding), and quote every such line in the round's PR comment. A deferral is honest, not a refutation, so it is no exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
+7. **Cap: 5 rounds, prefer 3.** One rule decides, from the round's `review-NNN.md` severities and the diff of your answers. After round 1 or 2, step 6 decides. After round 3 or 4, run the next round only if that round was **major**: it had a **high** finding or a Judged criterion ruled fail, or answering it was more than minor. The **final round** is the round after which this rule runs no further round: any round 1 to 4 where it says stop, or round 5, which is always final. Minor means the answers changed only wording, labels, comments or single assertions, and added no rule, interface, state, spec case, Rules and mutants row or public API change, and the fixes stay under about 15% of the PR's lines.
+   The reviewer's own file decides what is significant, not your answer to it. If the final round's `review-NNN.md` contains any **high** finding or any Judged criterion ruled fail, the merge is blocked and the human is engaged, whether or not you fixed it, because no reviewer remains to verify the fix or a refutation. Stop and escalate. (Rounds before the final one need no such rule: a fresh reviewer in the next round rules on every refutation.) Medium and low findings in the final round's `review-NNN.md` do not block, and you can't downgrade the severity the reviewer wrote. Fix them (answer `fixed`) if the fix is small; otherwise file each with `tracker.sh new issue`, answer it in the final round's `refute-NNN.md` as `- F<n>: deferred <id>: <why>` (`<id>` is the new backlog issue; `tracker.sh done` accepts it only for a medium or low finding), and quote every such line in the round's PR comment. A deferral is honest, not a refutation, so it is no exception to "only refute when the reviewer is wrong". Then continue to Phase 5.
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit.
@@ -102,7 +103,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 ## Phase 6: Merge and clean up
 1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`scripts/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
-3. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main`, removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
+3. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main` (`"<root>/scripts/tracker.sh" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
@@ -111,7 +112,7 @@ Stop and report if any of these happen:
 - A `check.sh` or acceptance spec is wrong or can't be satisfied.
 - Main is red.
 - A tool is missing and `SETUP.md` doesn't fix it.
-- Round 3 of review is still unresolved.
+- The final round of review is still unresolved.
 - An action would require a secret or credential you don't have.
 - A test run prints `REPOSITORY CHANGED` or refuses a fixture identity, or the shared repository's remotes, branches, worktrees or identity look wrong: stop at once, and never repair the shared git configuration yourself (testing skill, "Specs never touch the real repository").
 

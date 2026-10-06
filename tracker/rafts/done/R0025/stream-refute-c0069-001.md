@@ -1,0 +1,1 @@
+- F1: refuted: the two promoted specs are deliberately unchanged. c0005's worktree.spec must stay byte-identical to c0053's replacement copy (c0053 AC8, c0069 AC6, RC6), and both cases still pin a refusal. A spare flag only goes into `opts`, and they still exercise the refusal paths they name.

@@ -14,7 +14,19 @@ local repo = `{base}/scan` -- the runner, the guards, the gate spec and c0510's 
 local work = `{base}/work` -- a tracker clone with an origin
 local wt = `{base}/wt` -- a linked worktree of it: tracker.sh new refuses to run in a main checkout with an origin
 local origin = `{base}/origin.git`
-local C0510 = { "tests/acceptance/c0053/commands.spec.luau", "tests/acceptance/c0053/publish.spec.luau" }
+-- c0062 split the commands spec into parts: every `commands-*.spec.luau`, then the publish spec
+local function c0510Specs(): { string }
+	local out: { string } = {}
+	for _, name in fs.readDir(`{root}/tests/acceptance/c0053`) do
+		if string.match(name, "^commands%-.+%.spec%.luau$") then
+			table.insert(out, `tests/acceptance/c0053/{name}`)
+		end
+	end
+	table.sort(out)
+	table.insert(out, "tests/acceptance/c0053/publish.spec.luau")
+	return out
+end
+local C0510 = c0510Specs()
 local ID = { "-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid" }
 
 local function must(r: Result, what: string): string

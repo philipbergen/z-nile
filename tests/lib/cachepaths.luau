@@ -72,6 +72,8 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["return `.cache/tracker-claim-{raftId}`"] = `the claim file, written with sh.writeReplacing: {RENAMED}`,
 		['fs.writeDir(".cache")'] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
+		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
+		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 	},
 }
 

@@ -55,6 +55,18 @@ function status.stamp(state: string, pick: (number) -> number): string
 	return `{state}-{WORDS[pick(#WORDS)]}-{WORDS[pick(#WORDS)]}-{WORDS[pick(#WORDS)]}`
 end
 
+-- A stamp from `draw` that `taken` rejects for no value, redrawn up to `tries` times (default 50); nil when every
+-- draw was taken. A claim stamp names the raft's claimed set, so it must be new on origin/main (R0025 review 004 F1).
+function status.fresh(draw: () -> string, taken: (string) -> boolean, tries: number?): string?
+	for _ = 1, tries or 50 do
+		local value = draw()
+		if not taken(value) then
+			return value
+		end
+	end
+	return nil
+end
+
 -- The state of a stored value: `active` or `active-quiet-copper-falcon`; nil for anything else.
 function status.parse(value: string?): string?
 	if not value then

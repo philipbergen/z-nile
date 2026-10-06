@@ -1,0 +1,7 @@
+- F1: fixed: land pins `base` (origin/main's sha) right after each try's fetch. The merge, the scope diff and its reads, the message log, the commit's parent and the race test all name it, so a push elsewhere during the gate is never silently reverted: the plain (non-force) push of a commit on the old tip is then a non-fast-forward and is refused, and the race path re-merges. The extra spec case would go in the sequestered land.spec. The raft's code review is told it's missing.
+- F2: fixed: id must equal the directory name, and every frontmatter key other than `title` and `depends_on` must be unchanged (raft, slug, status, design, type, emergent, created, …), on both sides' key sets.
+- F3: fixed: a document whose frontmatter repeats a key, on either side, is refused.
+- F4: fixed: the document must stay mode 100644 at HEAD.
+- F5: fixed: Landing step 3 is about PRs, with the capture case put plainly. The exception bullet's status clause names `status`, `new raft` and `start`, and the land clause names what may change. Still one line, with `tracker-only`.
+- F6: refuted: the spec and its fixture name are sequestered and use the pre-compaction id c0780 consistently. The `.cache/c0780-land` directory is unique, so nothing is wrong, only stale.
+- F7: fixed: a blank or whitespace-only PICKMAN_LAND_GATE counts as unset, and the override is named on the `gate:` line before the gate runs, as well as on the final line.

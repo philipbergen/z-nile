@@ -35,8 +35,8 @@ scripts/setup.sh
 
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
-- **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt from `scripts/tracker.sh prompt <id>`, which is self-contained.
-- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start an agent inside it with `scripts/tracker.sh launch R0010`; every job starts in a worktree directory inside the repo, never outside it. After a PR merges, the agent removes its worktree; `scripts/tracker.sh worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+- **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `scripts/tracker.sh prompt <R-id>` (`/ready-raft` writes it), which is self-contained.
+- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/launch-raft R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. After a PR merges, the agent removes its worktree; `scripts/tracker.sh worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
 `.github/workflows/check.yml` bootstraps the runner with `scripts/setup.sh`, the same script as a new host, so every CI run also proves this document on a clean Linux machine. setup.sh ends with `scripts/check.sh --full`.

@@ -1,0 +1,4 @@
+- F1: fixed: "A failed start" and "Whose claim" now say `status <R-id> prepared` gives back only a legacy claim; a readied raft is given back only by `tracker.sh stop`.
+- F2: fixed: Worktrees item 1 says `ready` writes the ignored prompt.md and `stop` removes it.
+- F3: fixed: stop passes a verify callback to moveOnOrigin, so every id must still be `active` on origin inside the build.
+- F4: fixed: a literal `null` from `gh pr list` counts as no URL.

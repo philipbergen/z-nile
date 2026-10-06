@@ -6,3 +6,4 @@ sourcemap.json
 *.rbxlx.lock
 .DS_Store
 .worktree/
+/tracker/rafts/active/*/prompt.md

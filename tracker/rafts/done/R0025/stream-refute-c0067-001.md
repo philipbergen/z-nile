@@ -1,0 +1,5 @@
+- F1: fixed: sweepStale now skips any directory with a file tracked at HEAD (`ls-tree -r HEAD -- <dir>`, as the Design says, not the index). It cleans only ignored files (`git clean -ffdXq`), removes the directory when that empties it, and otherwise leaves it with a warning naming the untracked files. ready.spec's AC12 cases (prompt.md, and .DS_Store ignored through info/exclude) still pass.
+- F2: fixed: docPath and idsOf go through publish.itemPath and require rel == "<ID>.md", so a nested file of that name never counts.
+- F3: refuted: Lune strings are byte strings. `git show` stdout is the blob's exact bytes (no decoding), and c0067's publish-move spec pins this with its CRLF file, which must survive byte for byte.
+- F4: fixed: move validation now refuses a target directory that already holds any file on origin/main ("a move goes to a new directory").
+- F5: fixed: the ready-raft skill says `ready` does not check that the acceptance specs exist, so the human looks first.

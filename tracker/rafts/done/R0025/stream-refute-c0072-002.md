@@ -1,0 +1,2 @@
+- F1: refuted: no contradiction. make-issue runs when the user asks for a capture, so step 6 lands what the user asked for. The clause keeps the existing rule ("Prep or capture that the user didn't ask for is not merged without asking") for a capture an agent files on its own, such as a follow-up (the ask-before-new-work rule).
+- F2: refuted: as the finding says, every tracker reader (store.readFront, frontOf, publish) stops at the first closing `---`, so such a line is body text everywhere and changes no item's state.
