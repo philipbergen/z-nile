@@ -11,6 +11,13 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0033
 
-# check "RC1: <end-to-end statement>" <command>
+only_specs_changed() {
+  local base changed
+  base="$(git merge-base origin/main HEAD)"
+  changed="$(git diff --name-only "$base" -- . ':!tracker' ':!tests/acceptance/f0031' ':!tests/acceptance/c0063')"
+  [[ -z $changed ]] || { echo "changed outside the f0031 specs: $changed"; return 1; }
+  [[ -z "$(git diff --name-only --diff-filter=D "$base" -- tests/acceptance/f0031)" ]] || { echo "an f0031 spec was deleted"; return 1; }
+}
+check "RC1: only f0031's promoted specs (plus tracker files and c0063's own promoted spec) changed, and none was deleted" only_specs_changed
 
 finish
