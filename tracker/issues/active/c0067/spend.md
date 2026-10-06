@@ -15,6 +15,7 @@
 | 11 | 2026-10-06 15:59 | R0025: review 003 fixes (stop gives back by claim stamp; specs for late members, raft: drift and PR reuse) | 84 | 26 | 17.5 | explicit |
 | 12 | 2026-10-06 16:03 | R0025: format | 1 | 1 | 0.1 | raft+proportional |
 | 13 | 2026-10-06 16:09 | R0025: refute-003 | 0 | 0 | 0.3 | raft+proportional |
+| 14 | 2026-10-06 16:18 | R0025: review 004 fixes (unique claim stamps, resumed start keeps its claim, no-stamp refusal pinned; stop looks up after its pull) | 46 | 4 | 14.8 | explicit |
 
-**Total:** +1448 / -207 lines, 151.9 agent-minutes over 13 commits
-<!-- totals: added=1448 removed=207 minutes=151.9 commits=13 -->
+**Total:** +1494 / -211 lines, 166.7 agent-minutes over 14 commits
+<!-- totals: added=1494 removed=211 minutes=166.7 commits=14 -->

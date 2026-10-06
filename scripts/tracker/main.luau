@@ -449,6 +449,17 @@ local function published(r: publish.Result): publish.Result
 end
 
 -- The three words of a fresh stamp: the phrase that makes every write of tracker/next differ (c0870).
+-- A claim stamp (`active-…`) that no item on origin/main carries, done/ included: `stop` gives back exactly the
+-- issues that carry the raft's stamp, so two claims must never share one. One `git grep` over the fetched tree.
+local function claimStamp(): string
+	local value = statusLib.fresh(function()
+		return stamp("active")
+	end, function(v: string): boolean
+		return sh.run("git", { "grep", "-q", "-F", "-x", `status: {v}`, "origin/main", "--", "tracker/" }).ok
+	end)
+	return value or fail("could not draw a claim stamp that origin/main does not already carry")
+end
+
 local function phrase(): string
 	return (string.match(stamp("new"), "^%a+%-(.+)$")) :: string
 end
@@ -1864,7 +1875,9 @@ function cmd.start(pos: { string })
 		end
 		fs.writeDir(".cache")
 		local mine = if fs.isFile(claimFile(raft.id)) then sh.trim(fs.readFile(claimFile(raft.id))) else ""
-		local claim = stamp("active")
+		-- a resumed start keeps this terminal's earlier claim, so every member it claims now carries the raft's value
+		-- (review 004 F2); a fresh claim is new on origin/main
+		local claim = if mine ~= "" then mine else claimStamp()
 		-- written before the push: a start that dies right after it can then be resumed by this terminal
 		sh.writeReplacing(claimFile(raft.id), claim)
 		local raftPath: string? = nil
@@ -2703,7 +2716,7 @@ function cmd.ready(pos: { string })
 		local r = moveOnOrigin(
 			all,
 			"active",
-			stamp("active"),
+			claimStamp(),
 			`tracker: ready {raft.id} {store.readFront(raft.doc).title or raft.slug}`,
 			function(id: string, cur: string): string?
 				if not statusLib.canMove(cur, "active") then
@@ -2737,16 +2750,16 @@ end
 -- check.sh paths rewritten back) or a raft claimed by the legacy `start` (a status-only publish). Removes prompt.md,
 -- pulls the main checkout and names the raft's branch and PR, which are left as they are.
 function cmd.stop(pos: { string })
-	local target = store.get(pos[1] or fail("usage: stop <R-id>"))
-	if target.kind ~= "raft" then
-		fail(`{target.id} is not a raft`)
+	local raftId = pos[1] or fail("usage: stop <R-id>")
+	if not store.isRaftId(raftId) then
+		fail(`{raftId} is not a raft`)
 	end
 	mainCheckoutGuards("stop")
 	local pulled = pullMain()
 	if pulled then
 		fail(`stop: cannot fast-forward the main checkout: {pulled}`)
 	end
-	local raft = store.get(target.id) -- the tree is now origin/main
+	local raft = store.get(raftId) -- looked up after the pull: the tree is now origin/main
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
 	-- Who is given back is decided by the claim, not by membership fields (review 003 F3, the third finding on
 	-- membership): `ready` and `start` stamp the raft and every issue they claim with one fresh `active-…` value, so
@@ -2767,7 +2780,9 @@ function cmd.stop(pos: { string })
 	end
 	for _, issue in store.all("issue") do
 		local raw = frontOf(fs.readFile(issue.doc)).status
-		if raw == claim then
+		-- a done issue of another raft that once carried this value (claims are unique only since R0025) is not ours
+		local foreignDone = issue.state == "done" and store.readFront(issue.doc).raft ~= raft.id
+		if raw == claim and not foreignDone then
 			if issue.state ~= raft.state then
 				fail(
 					`{issue.id} is in {issue.dir} on origin/main, not beside {raft.id}: stop does not move it back`
