@@ -10,6 +10,7 @@
 | 6 | 2026-10-06 15:01 | R0025: promote-check fixes (spec type correction, cleanup return type, c0077 reviewed .cache lines) | 0 | 0 | 0.7 | raft+proportional |
 | 7 | 2026-10-06 15:24 | R0025: review 001 fixes (membership agreement, CI raft branch, PR reuse, wording, guard pin, design-round rule) | 69 | 4 | 14.9 | explicit |
 | 8 | 2026-10-06 15:30 | R0025: refute-001 | 0 | 0 | 0.6 | raft+proportional |
+| 9 | 2026-10-06 15:41 | R0025: review 002 fixes (one member set for every move; ready-members spec both directions) | 73 | 28 | 17.4 | explicit |
 
-**Total:** +791 / -98 lines, 55.1 agent-minutes over 8 commits
-<!-- totals: added=791 removed=98 minutes=55.1 commits=8 -->
+**Total:** +864 / -126 lines, 72.5 agent-minutes over 9 commits
+<!-- totals: added=864 removed=126 minutes=72.5 commits=9 -->

@@ -503,6 +503,33 @@ local function moveOnOrigin(
 	end, message))
 end
 
+-- A status-only publish: every id's document on origin/main gets `status` (no move). `verify(id, effectiveStatus)`
+-- refuses an id, inside the build, with a reason.
+local function restampOnOrigin(
+	ids: { string },
+	status: string,
+	message: string,
+	verify: (id: string, st: string) -> string?
+): publish.Result
+	refuseStale()
+	return published(publish.commit(".", function(paths, read)
+		local changes: { publish.Change } = {}
+		for _, id in ids do
+			local doc = docPath(paths, id)
+			local text = doc and read(doc)
+			if not doc or not text then
+				return `{id} is not on origin/main`
+			end
+			local refusal = verify(id, statusLib.effective(frontOf(text), stateOfPath(doc)))
+			if refusal then
+				return refusal
+			end
+			table.insert(changes, { path = doc, content = withFront(text, "status", status) })
+		end
+		return changes
+	end, message))
+end
+
 -- Ids of `space` in the local tree, read without store.find, so a malformed tree still yields them.
 local function localIds(space: string): { string }
 	local out: { string } = {}
@@ -2721,24 +2748,22 @@ function cmd.stop(pos: { string })
 	end
 	local raft = store.get(target.id) -- the tree is now origin/main
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
-	-- every item that names this raft, by its issues: list or by its own raft: field: whatever `ready` moved
+	-- One source of truth for who moves (review 002 F1): the members are the items whose raft: field names this
+	-- raft, the set `ready` and `start` claimed. The issues: list is never used here, so an item that is merely
+	-- listed, or that another raft owns, is never touched.
 	local ids: { string } = {}
-	for _, id in store.idList(store.readFront(raft.doc).issues) do
-		if store.find(id) and not table.find(ids, id) then
-			table.insert(ids, id)
-		end
-	end
-	for _, m in store.members(raft.id) do
-		if not table.find(ids, m.id) then
-			table.insert(ids, m.id)
-		end
-	end
+	local left: { string } = {}
 	local rtitle = store.readFront(raft.doc).title or raft.slug
+	local value = stamp("prepared")
+	local r: publish.Result
 	if raft.state == "active" then
-		for _, id in ids do
-			local m = store.get(id)
-			if m.state ~= "active" then
-				fail(`{id} is in {m.dir} on origin/main, not active/: stop does not move it back`)
+		for _, m in store.members(raft.id) do
+			if m.state == "done" then
+				fail(`{m.id} is in {m.dir} on origin/main, not active/: stop does not move it back`)
+			elseif m.state == "active" then
+				table.insert(ids, m.id)
+			else
+				table.insert(left, m.id) -- named raft: later, never readied: nothing to move back
 			end
 		end
 		local all = { raft.id }
@@ -2746,24 +2771,39 @@ function cmd.stop(pos: { string })
 			table.insert(all, id)
 		end
 		-- checked again inside the build: an item that left `active` since the pull (merged, done) is never moved back
-		local r = moveOnOrigin(
-			all,
-			"backlog",
-			stamp("prepared"),
-			`tracker: stop {raft.id} {rtitle}`,
-			function(id, now)
-				return if now == "active"
-					then nil
-					else `{id} is {now} on origin/main, not active: nothing to stop`
-			end
-		)
-		if not r.ok then
-			fail(`stop: {r.reason}`)
-		end
+		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle}`, function(id, now)
+			return if now == "active"
+				then nil
+				else `{id} is {now} on origin/main, not active: nothing to stop`
+		end)
 	elseif raft.state == "backlog" and st == "active" then
-		setStatus(raft.id, "prepared")
+		-- the legacy start claimed the raft and its members by their raft: fields: give back exactly those
+		for _, m in store.members(raft.id) do
+			if statusLib.effective(frontOf(fs.readFile(m.doc)), m.state) == "active" then
+				table.insert(ids, m.id)
+			else
+				table.insert(left, m.id)
+			end
+		end
+		local all = { raft.id }
+		for _, id in ids do
+			table.insert(all, id)
+		end
+		r = restampOnOrigin(all, value, `tracker: {raft.id} prepared`, function(id, now)
+			return if now == "active"
+				then nil
+				else `{id} is {now} on origin/main, not active: nothing to give back`
+		end)
 	else
 		fail(`{raft.id} is {st} in {raft.dir} on origin/main: only a readied or started raft is stopped`)
+	end
+	if not r.ok then
+		fail(`stop: {r.reason}`)
+	end
+	if #left > 0 then
+		stdio.ewrite(
+			`warning: {table.concat(left, ", ")} name {raft.id} but were not claimed with it; left as they are\n`
+		)
 	end
 	local prompt = promptPath(raft.id)
 	if fs.isFile(prompt) then
