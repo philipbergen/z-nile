@@ -59,7 +59,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
 ## Lifecycle: the directory and the status
 - **Paths**: `tracker/{issues,rafts}/<ID>` is backlog, `…/active/<ID>` is in progress, and `…/done/<ID>` is finished. On `main`, `active/` holds the rafts that `ready` has handed out (and their issues), not only the branch you are on: the current raft is the active raft whose branch is the current branch.
 - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`, and only `ticket-prep` sets it.
-- **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. A lone issue gets a `single: true` raft made by ticket-prep in its prep worktree; `tracker.sh prompt <issue>` refuses to create one in the main checkout.
+- **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. A lone issue gets a `single: true` raft made by ticket-prep in its prep worktree; `tracker.sh ready <issue>` refuses a raftless issue, and `prompt` takes only a raft id.
 - **One raft = one branch (`R0010-<slug>`) = one PR.** In Phase 2B, temporary stream branches (`ws-<issue>`) feed the raft branch and are deleted.
 
 | step | command | effect |

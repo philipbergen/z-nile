@@ -29,8 +29,11 @@ jobs:
       # (main holds other readied rafts, whose code does not exist on this branch)
       - if: github.event_name == 'workflow_dispatch'
         run: |
-          r=${GITHUB_REF_NAME%%-*}   # R0025-ready-raft -> R0025
-          dirs=$(scripts/tracker.sh members "$r" 2>/dev/null) || dirs=
+          # only a raft branch (R0025-ready-raft) has a raft: there, a failing `members` fails the step
+          case $GITHUB_REF_NAME in
+            R[0-9][0-9][0-9][0-9]-*) r=${GITHUB_REF_NAME%%-*}; scripts/tracker.sh find "$r" >/dev/null; dirs=$(scripts/tracker.sh members "$r") ;;
+            *) echo "not a raft branch: no sequestered acceptance specs to run"; dirs= ;;
+          esac
           files=$(for d in $dirs; do find "$d" -path '*/active/*/acceptance/*.spec.luau'; done | sort)
           if [ -n "$files" ]; then lune run tests/run -- $files; fi
 

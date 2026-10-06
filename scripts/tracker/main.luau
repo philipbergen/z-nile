@@ -1702,7 +1702,13 @@ function cmd.migrate()
 end
 
 -- Pushes the raft's branch and opens its draft PR (when the origin is on GitHub): the end of every start.
-local function pushAndOpenPr(raft: store.Item, members: { store.Item }, branch: string, ftitle: string)
+local function pushAndOpenPr(
+	raft: store.Item,
+	members: { store.Item },
+	branch: string,
+	ftitle: string,
+	reuse: boolean?
+)
 	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
 		if not onGitHub() then
@@ -1716,6 +1722,18 @@ local function pushAndOpenPr(raft: store.Item, members: { store.Item }, branch: 
 		end
 		body ..= table.concat(ids, ", ")
 		body ..= `\n\nDocuments: \`{raft.dir}/\`. Draft until all code is written, every check.sh passes, and the adversarial review is resolved.\n`
+		-- a readied raft that was stopped and readied again keeps its branch and open PR: reuse it (review 001 F3)
+		local open = if not reuse
+			then { ok = false, stdout = "" }
+			else sh.run(
+				"gh",
+				{ "pr", "list", "--head", branch, "--state", "open", "--json", "url", "-q", ".[0].url" }
+			)
+		local existing = if open.ok then sh.trim(open.stdout) else ""
+		if existing ~= "" and existing ~= "null" then
+			print(`draft PR (already open): {existing}`)
+			return
+		end
 		local url =
 			sh.must("gh", { "pr", "create", "--draft", "--title", `{raft.id}: {ftitle}`, "--body", body })
 		print(`draft PR: {url}`)
@@ -1761,7 +1779,7 @@ function cmd.start(pos: { string })
 		local ftitle = store.readFront(raft.doc).title or raft.slug
 		sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: start {raft.id} {ftitle}` })
 		print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
-		pushAndOpenPr(raft, members, branch, ftitle)
+		pushAndOpenPr(raft, members, branch, ftitle, true)
 		return
 	end
 	if raft.state ~= "backlog" then
@@ -2597,6 +2615,31 @@ function cmd.ready(pos: { string })
 		if #members == 0 then
 			fail(`{raft.id} has no member issues`)
 		end
+		-- the raft's issues: list and its members' raft: fields name one set, or `stop` could not move back what
+		-- `ready` moved (review 001 F1)
+		local listed: { [string]: boolean } = {}
+		for _, id in store.idList(store.readFront(raft.doc).issues) do
+			listed[id] = true
+		end
+		local unlisted, missing = {}, {}
+		for _, m in members do
+			if not listed[m.id] then
+				table.insert(unlisted, m.id)
+			end
+			listed[m.id] = nil
+		end
+		for id in listed do
+			table.insert(missing, id)
+		end
+		table.sort(missing)
+		if #unlisted > 0 or #missing > 0 then
+			fail(
+				`{raft.id}'s issues: list and its members' raft: fields disagree (raft: {raft.id} but not listed: {table.concat(
+					unlisted,
+					", "
+				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (ticket-prep) and ready again`
+			)
+		end
 		local everyone: { store.Item } = { raft }
 		for _, m in members do
 			table.insert(everyone, m)
@@ -2678,10 +2721,16 @@ function cmd.stop(pos: { string })
 	end
 	local raft = store.get(target.id) -- the tree is now origin/main
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
+	-- every item that names this raft, by its issues: list or by its own raft: field: whatever `ready` moved
 	local ids: { string } = {}
 	for _, id in store.idList(store.readFront(raft.doc).issues) do
-		if store.find(id) then
+		if store.find(id) and not table.find(ids, id) then
 			table.insert(ids, id)
+		end
+	end
+	for _, m in store.members(raft.id) do
+		if not table.find(ids, m.id) then
+			table.insert(ids, m.id)
 		end
 	end
 	local rtitle = store.readFront(raft.doc).title or raft.slug

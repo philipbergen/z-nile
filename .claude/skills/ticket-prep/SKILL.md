@@ -66,7 +66,7 @@ Fill every section of the issue template. Requirements:
    - Fix it in the documents, specs or `check.sh`.
    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`).
 4. **Rounds: up to 5 rounds, prefer 3.** One rule decides, from the round's `design-review-NNN.md` severities and the diff of your answers:
-   - After round 1 or 2, run another round with a new clean reviewer if any high finding was fixed or refuted (a new reviewer rules on a refutation) or the design changed materially.
+   - After round 1 or 2, run another round with a new clean reviewer if any high finding was fixed or refuted (a new reviewer rules on a refutation), or answering the round was more than minor (defined below).
    - After round 3 or 4, run the next round only if that round was **major**: it had a **high** finding, or answering it was more than minor.
    - Minor means the answers changed only wording, labels, comments or single assertions, and added no rule, interface, state, spec case, Rules and mutants row or public API change.
    - The **final round** is the round after which this rule runs no further round: any round 1 to 4 where it says stop, or round 5, which is always final. A final round holds a high only in round 5, and such a round goes to the user, whatever you answered to it.
