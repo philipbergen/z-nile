@@ -8,6 +8,7 @@
 | 4 | 2026-10-06 06:01 | c0069: prompt reads prompt.md, launch-raft skill, tracker.sh launch removed | 59 | 214 | 25.0 | explicit |
 | 5 | 2026-10-06 14:53 | Merge origin/main (R0026, R0033 and preps) into R0025 | 523 | 21 | 1.1 | raft+proportional |
 | 6 | 2026-10-06 15:01 | R0025: promote-check fixes (spec type correction, cleanup return type, c0077 reviewed .cache lines) | 0 | 0 | 0.7 | raft+proportional |
+| 7 | 2026-10-06 15:30 | R0025: refute-001 | 0 | 0 | 0.6 | raft+proportional |
 
-**Total:** +582 / -235 lines, 29.6 agent-minutes over 6 commits
-<!-- totals: added=582 removed=235 minutes=29.6 commits=6 -->
+**Total:** +582 / -235 lines, 30.2 agent-minutes over 7 commits
+<!-- totals: added=582 removed=235 minutes=30.2 commits=7 -->
