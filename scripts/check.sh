@@ -40,10 +40,12 @@ if [[ ! -s $defs || -L $defs ]]; then
   perl scripts/lib/replace-file.pl "$defs" "$t" || { rm -f "$t"; exit 1; }
   rm -f "$t"
 fi
-build_place() { # rojo writes through a symlink at its output path, so it builds outside and the result is renamed in
-  local d rc
+build_place() { # $1 the output file's name, then the build command. rojo writes through a symlink at its output path,
+  # so it builds in a fresh folder outside and the result is renamed in (replace-file.pl); the folder always goes
+  local out=$1 d rc
+  shift
   d=$(mktemp -d "${TMPDIR:-/tmp}/check-build.XXXXXX") || return 1
-  rojo build default.project.json -o "$d/check.rbxl" && perl scripts/lib/replace-file.pl .cache/check.rbxl "$d/check.rbxl"
+  "$@" -o "$d/$out" && perl scripts/lib/replace-file.pl ".cache/$out" "$d/$out"
   rc=$?
   rm -rf "$d"
   return $rc
@@ -52,7 +54,7 @@ rojo sourcemap default.project.json -o sourcemap.json
 lune_version=$(lune --version | awk '{print $2}')
 [[ -d "$HOME/.lune/.typedefs/$lune_version" ]] || lune setup >/dev/null
 
-# the five static stages run concurrently; each is reported (timed) whether or not it passes
+# the six static stages run concurrently; each is reported (timed) whether or not it passes
 # tracker/**/acceptance specs are not type-checked here: they target code that may not exist yet.
 # They are checked once `tracker.sh done` promotes them into tests/acceptance/.
 par_start "format (stylua --check)" stylua --check "${LUAU_DIRS[@]}"
@@ -62,7 +64,8 @@ par_start "types (luau-lsp analyze, src with Roblox definitions)" \
   --ignore='**/_Index/**' src
 par_start "types (luau-lsp analyze, tests + scripts with Lune definitions)" \
   luau-lsp analyze --base-luaurc=.luaurc --platform=standard tests scripts
-par_start "build (rojo)" build_place
+par_start "build (rojo)" build_place check.rbxl rojo build default.project.json
+par_start "build lobby (rojo)" build_place check-lobby.rbxl rojo build lobby.project.json
 par_wait || exit 1
 
 stage "tests ($mode)"

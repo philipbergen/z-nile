@@ -13,7 +13,8 @@ check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker
 
 # a sequestered issue spec before `tracker.sh done`, its promoted copy after it
 spec() { # $1 issue id, $2 spec name
-  local f="tracker/issues/$1/acceptance/$2.spec.luau"
+  local f
+  f="$(scripts/tracker.sh find "$1")/acceptance/$2.spec.luau"
   [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
   echo "$f"
 }

@@ -5,13 +5,17 @@ description: Code structure rules for pickman (strict Luau, pure Logic features 
 
 # Architecture
 
-## Layout (Rojo, `default.project.json`)
+## Layout (Rojo: `default.project.json` is the game place, `lobby.project.json` the lobby)
 | path | Roblox location | contains |
 |---|---|---|
 | `src/shared/Logic/<Feature>/` | ReplicatedStorage.Shared.Logic | **pure game logic**: no engine access, fully unit-tested in Lune |
 | `src/shared/` (outside Logic) | ReplicatedStorage.Shared | shared adapters: types, remotes, config tables. ModuleScripts only: `tests/place` enforces no Script or LocalScript under ReplicatedStorage |
 | `src/server/` | ServerScriptService.Server | server adapters. `Main.server.luau` boots them |
 | `src/client/` | StarterPlayerScripts.Client | client adapters: camera, input, rendering, HUD. `Main.client.luau` boots them |
+| `src/lobby/server/` | ServerScriptService.Lobby (lobby place) | the lobby's server adapters: the start request and the teleport. `Main.server.luau` boots them |
+| `src/lobby/client/` | StarterPlayerScripts.Lobby (lobby place) | the lobby's screen. `Main.client.luau` boots it |
+
+Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is a further `<name>.project.json` and `src/<name>/`; `tests/lib/place.luau` (`place.load(project)`, its script roots) and the selector in `scripts/lib/graph.luau` must learn it too.
 
 ## Rules (most are enforced by `tests/meta/architecture.spec.luau`)
 1. **`--!strict` is the first line of every Luau file.**

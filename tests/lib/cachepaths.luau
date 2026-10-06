@@ -54,7 +54,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
 		["find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +"] = "unlinks top-level links, never follows one",
 		["defs=.cache/globalTypes.d.luau"] = `downloaded to the user temp folder, then {RENAMED}`,
-		['rojo build default.project.json -o "$d/check.rbxl" && perl scripts/lib/replace-file.pl .cache/check.rbxl "$d/check.rbxl"'] = `built in the user temp folder, then {RENAMED}`,
+		['"$@" -o "$d/$out" && perl scripts/lib/replace-file.pl ".cache/$out" "$d/$out"'] = `built in the user temp folder, then {RENAMED}`,
 	},
 	["scripts/lib/fence.sh"] = {
 		['export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"'] = "a path in an environment variable; writes nothing",
