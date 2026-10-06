@@ -28,17 +28,25 @@ LUAU_DIRS=(src tests scripts tracker)
 
 # prerequisites the static stages read: serial and fast
 mkdir -p .cache
+# A spec may have swapped a symlink in at the top of .cache (the jail can't refuse a swap, c0077 E1): unlink every
+# one, never following it, before anything here writes there. Writes under .cache then go through replace-file.pl,
+# which renames a fresh file into place, so a link swapped in later is replaced instead of written through.
+find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +
 defs=.cache/globalTypes.d.luau
-# Files at the top of .cache are written outside the checkout and renamed into place: a spec could have swapped a
-# symlink in there, and a rename replaces it instead of writing through it (R0210 review 006 F1).
 if [[ ! -s $defs || -L $defs ]]; then
-  t=$(mktemp)
-  curl -fsSL -o "$t" \
-    https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.None.d.luau && mv -f "$t" "$defs"
+  t=$(mktemp "${TMPDIR:-/tmp}/globalTypes.XXXXXX")
+  curl -fsSL -o "$t" https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.None.d.luau ||
+    { rm -f "$t"; echo "check.sh: could not download the Luau global types (globalTypes.d.luau)" >&2; exit 1; }
+  perl scripts/lib/replace-file.pl "$defs" "$t" || { rm -f "$t"; exit 1; }
+  rm -f "$t"
 fi
 build_place() { # rojo writes through a symlink at its output path, so it builds outside and the result is renamed in
-  local d
-  d=$(mktemp -d) && rojo build default.project.json -o "$d/check.rbxl" && mv -f "$d/check.rbxl" .cache/check.rbxl
+  local d rc
+  d=$(mktemp -d "${TMPDIR:-/tmp}/check-build.XXXXXX") || return 1
+  rojo build default.project.json -o "$d/check.rbxl" && perl scripts/lib/replace-file.pl .cache/check.rbxl "$d/check.rbxl"
+  rc=$?
+  rm -rf "$d"
+  return $rc
 }
 rojo sourcemap default.project.json -o sourcemap.json
 lune_version=$(lune --version | awk '{print $2}')

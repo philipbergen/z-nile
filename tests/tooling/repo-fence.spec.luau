@@ -115,6 +115,11 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
 	},
+	-- c0077: the reviewed list of .cache lines quotes fence.sh lines that name these
+	["tests/lib/cachepaths.luau"] = {
+		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
+		GH_CONFIG_DIR = "quotes a fence.sh line in the reviewed .cache list",
+	},
 	["tests/acceptance/c0053/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",

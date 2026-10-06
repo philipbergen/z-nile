@@ -480,8 +480,14 @@ local REAPER = table.concat({
 	"for my $s (qw(INT TERM HUP)) { $SIG{$s} = sub { kill $s, -$pid } }",
 	"waitpid($pid, 0); my $st = $?;",
 	"kill 'KILL', -$pid;",
+	-- with the specs stopped, unlink every symlink at the top of the cache folder it was given, never following one
+	-- and never recursing: a spec may have swapped one in, and unjailed writers run next (c0077). Here, not in the top
+	-- Lune: the launcher survives a Ctrl-C or a TERM to the top process alone, so nothing skips this
+	"my $c = $ENV{PICKMAN_REAP_CACHE}; if (defined $c && $c ne '' && opendir(my $dh, $c)) {",
+	"for my $e (readdir $dh) { unlink \"$c/$e\" if $e ne '.' && $e ne '..' && -l \"$c/$e\" } closedir $dh }",
 	"exit($st & 127 ? 128 + ($st & 127) : $st >> 8);",
 }, " ")
+fence.REAPER = REAPER
 
 function fence.enter()
 	local here = shell("pwd -P")
@@ -543,7 +549,7 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'. scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
@@ -570,8 +576,10 @@ function fence.enter()
 	for _, a in argv do
 		table.insert(launched, a)
 	end
-	local r = process.exec("perl", launched, { stdio = "forward" })
-	-- with the specs stopped, unlink any symlink one swapped in at the top of .cache (review 006 F1)
+	-- the launcher's own settings (PICKMAN_REAP_*) reach it alone: the bash line above unsets them for the specs
+	local r = process.exec("perl", launched, { stdio = "forward", env = { PICKMAN_REAP_CACHE = cache } })
+	-- with the specs stopped, unlink any symlink one swapped in at the top of .cache (review 006 F1); the launcher
+	-- did so already, this is belt and braces
 	for _, name in fs.readDir(cache) do
 		if process.exec("test", { "-L", `{cache}/{name}` }).ok then
 			process.exec("rm", { "-f", `{cache}/{name}` })
