@@ -1,8 +1,7 @@
 --!strict
--- f0300 AC2: playing again goes through the server. The place has a PlayAgain RemoteEvent; the Sessions
--- adapter relays it to Session.playAgain for the sending player's own session, and leaves the decision
--- (only at game over) to Logic. The runtime structure check on Beta knows the new remote.
-local fs = require("@lune/fs")
+-- f0300 AC2: the server stays thin. Any call the Sessions adapter makes to Session.playAgain is for the
+-- sending player's own session, and it leaves the decision (only at game over) to Logic.
+-- Narrowed by c0063: the PlayAgain remote and its handler are no longer required (f0065 replaces them).
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -23,21 +22,14 @@ local function sessions(): string
 end
 
 return t.spec("f0300 play again on the server", function(it)
-	it("the place has a PlayAgain RemoteEvent beside the other remotes", function()
-		t.expect(find({ "ReplicatedStorage", "Remotes", "PlayAgain" }).ClassName).toBe("RemoteEvent")
+	it("the place keeps its Ready, Intent and Snapshot RemoteEvents", function()
 		for _, name in { "Ready", "Intent", "Snapshot" } do
 			t.expect(find({ "ReplicatedStorage", "Remotes", name }).ClassName).toBe("RemoteEvent")
 		end
 	end)
 
-	it("Sessions listens to PlayAgain on the server", function()
-		local src = sessions()
-		t.expect(string.find(src, '"PlayAgain"', 1, true) ~= nil).toBe(true)
-		t.expect(string.find(src, "OnServerEvent", 1, true) ~= nil).toBe(true)
-	end)
-
 	it(
-		"Sessions calls Session.playAgain for the sending player's own id, and nothing the client sent",
+		"any Session.playAgain call in Sessions is for the sending player's own id, and nothing the client sent",
 		function()
 			local calls = 0
 			for call in string.gmatch(sessions(), "Session%.playAgain%b()") do
@@ -49,12 +41,12 @@ return t.spec("f0300 play again on the server", function(it)
 					) ~= nil
 				).toBe(true)
 			end
-			t.expect(calls).toBe(1)
+			t.expect(calls <= 1).toBe(true)
 		end
 	)
 
 	it(
-		"the PlayAgain handler takes only the sending player, and uses it for both the session and the id",
+		"a handler that plays again takes only the sending player, and uses it for both the session and the id",
 		function()
 			local found = 0
 			for rawParams, rawBody in
@@ -70,7 +62,7 @@ return t.spec("f0300 play again on the server", function(it)
 					t.expect(string.find(body, "tostring%(%s*" .. who .. "%.UserId%s*%)") ~= nil).toBe(true)
 				end
 			end
-			t.expect(found).toBe(1)
+			t.expect(found <= 1).toBe(true)
 		end
 	)
 
@@ -78,10 +70,5 @@ return t.spec("f0300 play again on the server", function(it)
 		local src = sessions()
 		t.expect((string.find(src, "gameover", 1, true))).toBe(nil)
 		t.expect((string.find(src, ".phase", 1, true))).toBe(nil)
-	end)
-
-	it("the Beta runtime structure check asserts the PlayAgain remote", function()
-		local text = fs.readFile("tests/runtime/structure.luau")
-		t.expect(string.find(text, '"PlayAgain"', 1, true) ~= nil).toBe(true)
 	end)
 end)
