@@ -1,0 +1,491 @@
+diff --git a/.claude/skills/testing/SKILL.md b/.claude/skills/testing/SKILL.md
+index a704a5a..068ee9c 100644
+--- a/.claude/skills/testing/SKILL.md
++++ b/.claude/skills/testing/SKILL.md
+@@ -23,7 +23,7 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
+ | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
+ | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
+ | `tests/tooling/` | the scripts in `scripts/` | scripts |
+-| `tests/runtime/` | scripts that run inside a real Roblox server of the published Beta place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`, run by CI after a publish; skipped when no key is configured). Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
++| `tests/runtime/` | scripts that run inside a real Roblox server of the published Beta game place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`, run by CI after a publish; skipped when no key is configured); `tests/runtime/lobby/` holds the lobby's, run in the lobby with `--lobby <version>` once both places are published (c0064). Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
+ | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/`, `default.project.json` or `lobby.project.json` change. `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
+ | `tests/acceptance/<id>/` | acceptance specs promoted by `tracker.sh done`. Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
+ | `tests/meta/` | the structural rules from the architecture skill | the graph library |
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index ba93d47..3d0251a 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -60,6 +60,7 @@ jobs:
+           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+           ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+           ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
++          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
+       - if: steps.deploy.outputs.version != ''
+         run: |
+           gh pr comment "$PR" --edit-last --create-if-none \
+@@ -76,3 +77,13 @@ jobs:
+           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+           ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+           ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
++          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
++      # the lobby (c0064): published only once ROBLOX_BETA_GAME_PLACE_ID is set
++      - if: steps.deploy.outputs.lobby_version != ''
++        run: lune run scripts/runtime-test -- --lobby "$LOBBY_VERSION"
++        env:
++          LOBBY_VERSION: ${{ steps.deploy.outputs.lobby_version }}
++          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
++          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
++          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
++          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
+diff --git a/SETUP.md b/SETUP.md
+index 887ab40..5e6d3da 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -57,10 +57,16 @@ scripts/setup.sh
+ ## Beta publishing (Pickman Beta)
+ Every PR that is ready for review is published to the private **Pickman (Beta)** experience by the `beta` job in `.github/workflows/check.yml`, after the gate is green. A PR comment names the published version and commit, and a later push edits that comment.
+ - **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write. It only exists in CI.
+-- **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits.
++- **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits. `ROBLOX_BETA_PLACE_ID` is the experience's start place.
++- **Two places** (c0064): the repo variable `ROBLOX_BETA_GAME_PLACE_ID` is the id of the game place. With it set, the deploy publishes `default.project.json` (the game) to it and `lobby.project.json` (the lobby) to `ROBLOX_BETA_PLACE_ID`, with the game place's id written into the lobby's `GamePlaceId` (in a copy of the project built outside the checkout; the checked-in value stays 0). Both are built before either is published. Without it, the deploy warns and publishes the game to `ROBLOX_BETA_PLACE_ID` as before, and the lobby is not live.
++- **Setting up the game place** (once, by the owner of the experience; nothing in the repo can do it):
++  1. Creator Dashboard, Pickman (Beta), Places: create a new place (for example "Pickman Game") and copy its place id (the digits in its URL). Leave the existing place as the start place: it becomes the lobby.
++  2. GitHub, Settings, Secrets and variables, Actions, Variables: add the repository variable `ROBLOX_BETA_GAME_PLACE_ID` with that id.
++  3. Check the key: `ROBLOX_API_KEY` must cover the new place too (`universe-places` write and `luau-execution-sessions` read and write for the experience, not for one place). A key limited to the old place fails the game publish with HTTP 403.
++  4. Mark any PR ready for review: the `beta` job publishes both places and runs both runtime suites; its log names both versions.
+ - If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
+ - Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
+ - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
+ - The job installs only the tools (`scripts/setup.sh --tools`); the gate has already run.
+-- By hand: export the three settings and run `lune run scripts/deploy-beta`. That publishes to Beta.
+-- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version: `lune run scripts/runtime-test -- <version>`. They skip with a warning when the settings are missing.
++- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta`. That publishes to Beta.
++- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.
+diff --git a/scripts/deploy-beta.luau b/scripts/deploy-beta.luau
+index eb85c3d..85ccf19 100644
+--- a/scripts/deploy-beta.luau
++++ b/scripts/deploy-beta.luau
+@@ -1,37 +1,80 @@
+ --!strict
+--- Builds the place with Rojo and publishes it to the Pickman Beta experience. Configured by the
+--- environment (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID); when it isn't configured it
+--- says so and succeeds, so a fork or a fresh clone isn't red. Prints `version=N` and, under GitHub
+--- Actions, appends it to $GITHUB_OUTPUT.
++-- Builds the places with Rojo and publishes them to the Pickman Beta experience (c0064: the plan is
++-- scripts/lib/beta). Configured by the environment (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID,
++-- and ROBLOX_BETA_GAME_PLACE_ID for the game place once the lobby is the start place); when it isn't
++-- configured it says so and succeeds, so a fork or a fresh clone isn't red. Every place is built before any
++-- is published. Prints `version=N` (the game place) and, with the lobby, `lobby_version=N`, and under GitHub
++-- Actions appends them to $GITHUB_OUTPUT, only once every publish succeeded.
++local Beta = require("@scripts/lib/beta")
+ local OpenCloud = require("@scripts/lib/opencloud")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local sh = require("@scripts/lib/sh")
+ 
+-local cfg = OpenCloud.configFromEnv(process.env)
+-if cfg == nil then
++local okPlan, planned = pcall(Beta.plan, process.env)
++if not okPlan then
++	print(tostring(planned))
++	process.exit(1)
++end
++if planned == nil then
+ 	print(
+ 		"::warning::beta publish is not configured (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID); skipped"
+ 	)
+ 	process.exit(0)
+ end
++local plan = planned :: Beta.Plan
++local cfg = OpenCloud.configFromEnv(process.env) :: OpenCloud.Config
++if plan.notice then
++	print(`::warning::{plan.notice}`)
++end
+ 
+-assert(cfg, "unreachable: process.exit above ended a missing config")
+--- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1)
+-local out = sh.must("mktemp", { "-d" }) .. "/beta.rbxl"
+-local built = process.exec("rojo", { "build", "-o", out })
+-if not built.ok then
+-	print(`rojo build failed:\n{built.stderr}{built.stdout}`)
+-	process.exit(1)
++-- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
++-- project copies must not be left in the checkout
++local tmp = sh.must("mktemp", { "-d" })
++local root = process.cwd
++local files: { string } = {}
++for _, target in plan.targets do
++	local source = `{root}/{target.project}`
++	if not fs.isFile(source) then
++		print(`rojo build failed ({target.project}): the project file is missing`)
++		process.exit(1)
++	end
++	local okCopy, copy = pcall(Beta.project, fs.readFile(source), root, target.attributes)
++	if not okCopy then
++		print(`rojo build failed ({target.project}): {copy}`)
++		process.exit(1)
++	end
++	local projectCopy = `{tmp}/{target.place}.project.json`
++	fs.writeFile(projectCopy, copy)
++	local out = `{tmp}/{target.place}.rbxl`
++	local built = process.exec("rojo", { "build", projectCopy, "-o", out })
++	if not built.ok then
++		print(`rojo build failed ({target.project}):\n{built.stderr}{built.stdout}`)
++		process.exit(1)
++	end
++	table.insert(files, out)
+ end
+-local ok, result = pcall(OpenCloud.publish, cfg, fs.readFile(out))
+-if not ok then
+-	print(tostring(result))
+-	process.exit(1)
++
++local lines: { string } = {}
++for i, target in plan.targets do
++	local placeCfg = table.clone(cfg)
++	placeCfg.placeId = target.placeId
++	local ok, result = pcall(OpenCloud.publish, placeCfg, fs.readFile(files[i]))
++	if not ok then
++		print(tostring(result))
++		if #lines > 0 then
++			print(`published before the failure: {table.concat(lines, ", ")}`)
++		end
++		process.exit(1)
++	end
++	print(`published the {target.place} place ({target.placeId}): version {result}`)
++	table.insert(lines, `{target.output}={result}`)
++end
++for _, line in lines do
++	print(line)
+ end
+-print(`version={result}`)
+ local github = process.env.GITHUB_OUTPUT
+ if github and github ~= "" then
+ 	local existing = if fs.isFile(github) then fs.readFile(github) else ""
+-	fs.writeFile(github, `{existing}version={result}\n`)
++	fs.writeFile(github, `{existing}{table.concat(lines, "\n")}\n`)
+ end
+diff --git a/scripts/lib/beta.luau b/scripts/lib/beta.luau
+new file mode 100644
+index 0000000..bee550c
+--- /dev/null
++++ b/scripts/lib/beta.luau
+@@ -0,0 +1,141 @@
++--!strict
++-- What the Beta publish does, as pure data (c0064): which places get which build, and the copy of a Rojo
++-- project with place ids written into it. scripts/deploy-beta and scripts/runtime-test act on the plan; this
++-- file decides it and is tested without Rojo or a network.
++local OpenCloud = require("@scripts/lib/opencloud")
++local serde = require("@lune/serde")
++
++export type Place = "game" | "lobby"
++export type Target = {
++	place: Place,
++	project: string, -- the Rojo project file, relative to the checkout
++	placeId: string, -- digits: where it is published
++	attributes: { [string]: number }, -- written on ServerScriptService in the copy that is built
++	output: string, -- the name of the version in the deploy's output
++	runtime: string, -- the directory of its runtime scripts
++}
++export type Plan = { split: boolean, targets: { Target }, notice: string? }
++
++local Beta = {}
++Beta.GAME_PLACE_VAR = "ROBLOX_BETA_GAME_PLACE_ID"
++Beta.MAX_PLACE_ID = 2 ^ 53 - 1
++
++local function placeId(value: string, name: string): number
++	local n = tonumber(value)
++	if not string.match(value, "^[1-9]%d*$") or n == nil or n > Beta.MAX_PLACE_ID then
++		error(`beta: {name} must be a place id: digits, 1 to 2^53-1`, 0)
++	end
++	return n
++end
++
++-- The publish plan from the environment, or nil when publishing is not configured (OpenCloud.configFromEnv).
++-- Without ROBLOX_BETA_GAME_PLACE_ID the game place goes to ROBLOX_BETA_PLACE_ID as before c0064 and the lobby
++-- is not published (`notice` says so); with it, the game place goes there, told the lobby's id (LobbyPlaceId,
++-- f0065), and the lobby, told the game place's id (GamePlaceId), to ROBLOX_BETA_PLACE_ID, the start place. Raises, naming the variable and
++-- never the key, on an id that is not a place id or a game place that is the start place.
++function Beta.plan(env: { [string]: string? }): Plan?
++	local cfg = OpenCloud.configFromEnv(env)
++	if cfg == nil then
++		return nil
++	end
++	local start = (cfg :: OpenCloud.Config).placeId
++	local game = env[Beta.GAME_PLACE_VAR]
++	local gameTarget: Target = {
++		place = "game",
++		project = "default.project.json",
++		placeId = start,
++		attributes = {},
++		output = "version",
++		runtime = "tests/runtime",
++	}
++	if game == nil or game == "" then
++		return {
++			split = false,
++			targets = { gameTarget },
++			notice = `the lobby is not published: set {Beta.GAME_PLACE_VAR} to the game place's id`,
++		}
++	end
++	local id = placeId(game :: string, Beta.GAME_PLACE_VAR)
++	if id == placeId(start, "ROBLOX_BETA_PLACE_ID") then
++		error(
++			`beta: {Beta.GAME_PLACE_VAR} must differ from ROBLOX_BETA_PLACE_ID (the lobby, the start place)`,
++			0
++		)
++	end
++	gameTarget.placeId = game :: string
++	-- the way back (f0065): the game place is told the lobby's id, as the lobby is told the game's
++	gameTarget.attributes = { LobbyPlaceId = placeId(start, "ROBLOX_BETA_PLACE_ID") }
++	return {
++		split = true,
++		targets = {
++			gameTarget,
++			{
++				place = "lobby",
++				project = "lobby.project.json",
++				placeId = start,
++				attributes = { GamePlaceId = id },
++				output = "lobby_version",
++				runtime = "tests/runtime/lobby",
++			},
++		},
++		notice = nil,
++	}
++end
++
++-- The target for one place, or nil when the plan does not publish it.
++function Beta.target(plan: Plan, place: Place): Target?
++	for _, target in plan.targets do
++		if target.place == place then
++			return target
++		end
++	end
++	return nil
++end
++
++local function absolute(dir: string, path: string): string
++	if string.sub(path, 1, 1) == "/" then
++		return path
++	end
++	return `{dir}/{path}`
++end
++
++local function rewrite(node: any, dir: string)
++	for key, value in node do
++		if key == "$path" and type(value) == "string" then
++			node[key] = absolute(dir, value)
++		elseif key == "$path" and type(value) == "table" and type(value.optional) == "string" then
++			value.optional = absolute(dir, value.optional)
++		elseif type(value) == "table" and string.sub(tostring(key), 1, 1) ~= "$" then
++			rewrite(value, dir)
++		end
++	end
++end
++
++-- A copy of a Rojo project (its JSON text) that builds the same place from anywhere: every `$path` made
++-- absolute against `dir` (the project file's directory, absolute), and `attributes` set on ServerScriptService
++-- beside the ones it has. The text given is not changed.
++function Beta.project(text: string, dir: string, attributes: { [string]: number }): string
++	local project: any = serde.decode("json" :: "json", text)
++	if type(project) ~= "table" or type(project.tree) ~= "table" then
++		error("beta: not a Rojo project (no tree)", 0)
++	end
++	rewrite(project.tree, dir)
++	if next(attributes) ~= nil then
++		local sss = project.tree.ServerScriptService
++		if sss == nil then
++			sss = {}
++			project.tree.ServerScriptService = sss
++		end
++		local attrs = sss["$attributes"]
++		if attrs == nil then
++			attrs = {}
++			sss["$attributes"] = attrs
++		end
++		for name, value in attributes do
++			attrs[name] = value
++		end
++	end
++	return serde.encode("json" :: "json", project, true)
++end
++
++return Beta
+diff --git a/scripts/runtime-test.luau b/scripts/runtime-test.luau
+index 41f9693..76509e8 100644
+--- a/scripts/runtime-test.luau
++++ b/scripts/runtime-test.luau
+@@ -1,8 +1,11 @@
+ --!strict
+ -- Runs each tests/runtime/*.luau in a real Roblox server of a published version, through Open Cloud's
+ -- Luau Execution API. A script passes when it returns "PASS"; anything else, or an error, fails.
+--- Usage: lune run scripts/runtime-test -- <version> [script files...]
+--- Not configured (no key or ids): says so and succeeds.
++-- Usage: lune run scripts/runtime-test -- [--lobby] <version> [script files...]
++-- Without --lobby the scripts (default tests/runtime/*.luau) run in the game place, ROBLOX_BETA_GAME_PLACE_ID once
++-- it is set, else ROBLOX_BETA_PLACE_ID; with --lobby (default tests/runtime/lobby/*.luau) in the lobby, the start
++-- place (scripts/lib/beta, c0064). Not configured (no key or ids, or --lobby with no lobby): says so and succeeds.
++local Beta = require("@scripts/lib/beta")
+ local OpenCloud = require("@scripts/lib/opencloud")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+@@ -15,28 +18,44 @@ for i, a in process.args do
+ 	end
+ end
+ 
++local place: Beta.Place = "game"
++if args[1] == "--lobby" then
++	place = "lobby"
++	table.remove(args, 1)
++end
+ local version = tonumber(args[1])
+ if version == nil or version ~= math.floor(version) or version < 1 then
+-	print("usage: lune run scripts/runtime-test -- <version> [script files...]")
++	print("usage: lune run scripts/runtime-test -- [--lobby] <version> [script files...]")
+ 	process.exit(2)
+ end
+-local cfg = OpenCloud.configFromEnv(process.env)
+-if cfg == nil then
++local okPlan, planned = pcall(Beta.plan, process.env)
++if not okPlan then
++	print(tostring(planned))
++	process.exit(1)
++end
++if planned == nil then
+ 	print(
+ 		"::warning::runtime tests are not configured (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID); skipped"
+ 	)
+ 	process.exit(0)
+ end
++local target = Beta.target(planned :: Beta.Plan, place)
++if target == nil then
++	print(`::warning::runtime tests of the {place} place are not configured ({Beta.GAME_PLACE_VAR}); skipped`)
++	process.exit(0)
++end
+ 
+-assert(cfg and version, "unreachable: the checks above exit")
++assert(version and target, "unreachable: the checks above exit")
++local cfg = OpenCloud.configFromEnv(process.env) :: OpenCloud.Config
++cfg.placeId = target.placeId
+ local files: { string } = {}
+ for i = 2, #args do
+ 	table.insert(files, args[i])
+ end
+ if #files == 0 then
+-	for _, name in fs.readDir("tests/runtime") do
+-		if string.match(name, "%.luau$") then
+-			table.insert(files, `tests/runtime/{name}`)
++	for _, name in fs.readDir(target.runtime) do
++		if string.match(name, "%.luau$") and fs.isFile(`{target.runtime}/{name}`) then
++			table.insert(files, `{target.runtime}/{name}`)
+ 		end
+ 	end
+ 	table.sort(files)
+diff --git a/tests/acceptance/c0003/pipeline.spec.luau b/tests/acceptance/c0003/pipeline.spec.luau
+index d7ea422..a5f4952 100644
+--- a/tests/acceptance/c0003/pipeline.spec.luau
++++ b/tests/acceptance/c0003/pipeline.spec.luau
+@@ -52,12 +52,17 @@ return t.spec("c0030 runtime tests in the pipeline and docs", function(it)
+ 			table.sort(keys)
+ 			t.expect(keys).toEqual({ "env", "if", "run" })
+ 			t.expect(step.run).toBe('lune run scripts/runtime-test -- "$VERSION"')
+-			t.expect(step.env).toEqual({
+-				VERSION = "${{ steps.deploy.outputs.version }}",
+-				ROBLOX_API_KEY = "${{ secrets.ROBLOX_API_KEY }}",
+-				ROBLOX_BETA_UNIVERSE_ID = "${{ vars.ROBLOX_BETA_UNIVERSE_ID }}",
+-				ROBLOX_BETA_PLACE_ID = "${{ vars.ROBLOX_BETA_PLACE_ID }}",
+-			})
++			-- these four at least; c0064's workflow spec pins the whole env with the game place's variable
++			for name, value in
++				{
++					VERSION = "${{ steps.deploy.outputs.version }}",
++					ROBLOX_API_KEY = "${{ secrets.ROBLOX_API_KEY }}",
++					ROBLOX_BETA_UNIVERSE_ID = "${{ vars.ROBLOX_BETA_UNIVERSE_ID }}",
++					ROBLOX_BETA_PLACE_ID = "${{ vars.ROBLOX_BETA_PLACE_ID }}",
++				}
++			do
++				t.expect(step.env[name]).toBe(value)
++			end
+ 		end
+ 	)
+ 
+diff --git a/tests/acceptance/c0015/workflow.spec.luau b/tests/acceptance/c0015/workflow.spec.luau
+index fe354d8..4e063a6 100644
+--- a/tests/acceptance/c0015/workflow.spec.luau
++++ b/tests/acceptance/c0015/workflow.spec.luau
+@@ -81,7 +81,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
+ 		"every step has exactly the keys designed: no with, shell, working-directory, continue-on-error or extra if",
+ 		function()
+ 			local steps: any = beta.steps
+-			t.expect(#steps == 4 or #steps == 5).toBe(true) -- 5 once c0030 adds the runtime step
++			t.expect(#steps >= 4 and #steps <= 6).toBe(true) -- 5 once c0030 adds the runtime step, 6 with c0064's lobby
+ 			t.expect(keysOf(steps[1])).toEqual({ "uses" })
+ 			t.expect(steps[1].uses).toBe("actions/checkout@v4")
+ 			t.expect(keysOf(steps[2])).toEqual({ "env", "run" })
+@@ -95,8 +95,8 @@ return t.spec("c0140 beta job in check.yml", function(it)
+ 				VERSION = "${{ steps.deploy.outputs.version }}",
+ 				SHA = "${{ github.event.pull_request.head.sha }}",
+ 			})
+-			if #steps == 5 then
+-				-- exactly the runtime step c0030 adds, and nothing else
++			if #steps >= 5 then
++				-- exactly the runtime step c0030 adds, and nothing else (c0064 pins the lobby's sixth)
+ 				t.expect(keysOf(steps[5])).toEqual({ "env", "if", "run" })
+ 				t.expect(steps[5].run).toBe('lune run scripts/runtime-test -- "$VERSION"')
+ 				t.expect(steps[5]["if"]).toBe("steps.deploy.outputs.version != ''")
+@@ -147,21 +147,22 @@ return t.spec("c0140 beta job in check.yml", function(it)
+ 			return s.id == "deploy"
+ 		end)
+ 		t.expect(deploy.run).toBe("lune run scripts/deploy-beta")
+-		t.expect(deploy.env).toEqual({
+-			ROBLOX_API_KEY = KEY,
+-			ROBLOX_BETA_UNIVERSE_ID = UNIVERSE,
+-			ROBLOX_BETA_PLACE_ID = PLACE,
+-		})
++		-- these three at least; c0064's workflow spec pins the whole env with the game place's variable
++		for name, value in
++			{ ROBLOX_API_KEY = KEY, ROBLOX_BETA_UNIVERSE_ID = UNIVERSE, ROBLOX_BETA_PLACE_ID = PLACE }
++		do
++			t.expect(deploy.env[name]).toBe(value)
++		end
+ 		-- nowhere else: not the job, not the gate, not the other steps of the beta job (but the runtime step)
+ 		t.expect(beta.env).toBe(nil)
+ 		t.expect(has(serde.encode("json" :: "json", gate), "secrets.")).toBe(false)
+ 		for i, step in beta.steps do
+-			local isRuntime = i == 5 and step.run == 'lune run scripts/runtime-test -- "$VERSION"'
++			local isRuntime = i >= 5 and has(step.run, "lune run scripts/runtime-test -- ")
+ 			if step.id ~= "deploy" and not isRuntime then
+ 				t.expect(has(serde.encode("json" :: "json", step), "ROBLOX")).toBe(false)
+ 			end
+ 		end
+-		t.expect(count(text, "secrets.ROBLOX_API_KEY") <= 2).toBe(true)
++		t.expect(count(text, "secrets.ROBLOX_API_KEY") <= 3).toBe(true) -- deploy, game and lobby runtime (c0064)
+ 		t.expect(has(text, 'echo "$ROBLOX_API_KEY')).toBe(false)
+ 		t.expect(has(text, "set -x")).toBe(false)
+ 	end)
+diff --git a/tests/runtime/lobby/structure.luau b/tests/runtime/lobby/structure.luau
+new file mode 100644
+index 0000000..21a6ea5
+--- /dev/null
++++ b/tests/runtime/lobby/structure.luau
+@@ -0,0 +1,19 @@
++--!strict
++-- Runs inside a real Roblox server of the published lobby place (Open Cloud Luau Execution, c0064), not under
++-- Lune. Returns "PASS"; anything else, or an error, fails.
++local game: any = (getfenv() :: any).game -- Roblox's global; the Lune type definitions don't declare it
++
++local sss = game:GetService("ServerScriptService")
++local lobby = sss:FindFirstChild("Lobby")
++assert(lobby, "ServerScriptService.Lobby is missing")
++assert(lobby:FindFirstChild("Main"), "Lobby.Main is missing")
++assert(sss:FindFirstChild("Server") == nil, "the game's ServerScriptService.Server is in the lobby")
++local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
++assert(remotes, "ReplicatedStorage.Remotes is missing")
++for _, name in { "StartGame", "Status" } do
++	assert(remotes:FindFirstChild(name), "Remotes." .. name .. " is missing")
++end
++assert(game:GetService("Players").CharacterAutoLoads == false, "CharacterAutoLoads must be false")
++local id = sss:GetAttribute("GamePlaceId")
++assert(type(id) == "number" and id >= 1 and id == math.floor(id), "GamePlaceId is not set to a place id")
++return "PASS"

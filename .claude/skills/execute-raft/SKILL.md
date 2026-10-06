@@ -69,7 +69,7 @@ When the steps below pass, post a PR comment with the RC results.
 ## Phase 4: Adversarial code review (a clean reviewer)
 The PR is the visible record of the work. Push and post a PR comment (`gh pr comment --body-file -`) at each step below, so a human watching sees the review start, its findings, and how they were answered. Never hold review state locally. If a push or `gh` call fails, retry once, then carry on and mention the failure in your next comment; don't block on it. `tracker.sh commit` skips the push when there is no upstream, so check that `git status -sb` shows no `ahead`.
 
-1. **Before launching**: commit any pending work with `tracker.sh commit` so the reviewer sees exactly what the PR shows, and post the comment `Review NNN started at <short sha> (code mode)`.
+1. **Before launching**: commit any pending work with `tracker.sh commit` so the reviewer sees exactly what the PR shows. Run `scripts/check.sh --full` and read the whole lint summary (the `errors`/`warnings` lines, never just the last line); a red gate is fixed before a reviewer is launched. Then post the comment `Review NNN started at <short sha> (code mode)`.
 2. Start a **clean** reviewer. It has none of your context and gets only these inputs:
    - the `review` skill (code mode);
    - `git fetch origin main && git diff origin/main...HEAD` (the local `main` isn't kept current);
@@ -79,10 +79,11 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
    Run the reviewer on **Opus 5.5**, even if you run on a cheaper model: a reviewer on the author's model shares its blind spots, and review is a small share of the spend. In Claude Code, pass `model: "opus"` to the Agent tool. Don't substitute another model, such as Fable or Sonnet. Outside Claude Code, use Opus 5.5 if the harness offers it; otherwise say which model reviewed in the review PR comment. Tell the reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files.
 3. The reviewer writes `review-NNN.md` in the raft directory (starting at 001), including a ruling on every Judged criterion. **When the reviewer finishes**, you commit it: `scripts/tracker.sh commit -m "R0010: review-NNN" --time 0` (this pushes; `--time 0` keeps the reviewer's runtime out of author spend). Then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`.
 4. **If the verdict is `approve` with no findings, go to Phase 5**: there is no refute file, and the verdict comment is the record. Otherwise respond in `refute-NNN.md`, with one line per finding:
-   - `- F3: fixed <short sha>: <what changed>`, or
+   - `- F3: fixed <short sha>: <what changed>; consequences: <what the fix could break or open, and how you checked it, or none>`, or
    - `- F3: refuted: <argument with evidence>`, or
    - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left in the final round).
-   Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed.
+   Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as ticket-prep's consequence step does; `tracker.sh done` refuses a fixed answer without `consequences:`.
+   4a. **Question a twice-hit mechanism.** When a finding is the second in two rounds against the same mechanism (the same guard, module or rule), stop patching. Before the next round, question the mechanism (a deny-list or an allowlist? a patch or a redesign?) and say which you chose, and why, in the refute file.
 5. Commit each fix as you make it (pushed by `tracker.sh commit`), then commit the refute file. Post a comment `Review NNN addressed`, pasting the refute file's lines.
 6. **Re-review** after round 1 or 2 with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1); from round 3 on, step 7 decides instead:
    - any high-severity finding was fixed;

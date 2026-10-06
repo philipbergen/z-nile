@@ -50,6 +50,7 @@ Don't pad the review. Zero findings with `Verdict: approve` is a valid result. U
 On a re-review round, first read the previous `review-NNN.md` and `refute-NNN.md`.
 - If a refutation is right, drop that finding.
 - If it's wrong, repeat it with the new evidence.
+- If this round finds a hole in a mechanism a previous round already found one in, the Recommendation questions the mechanism, not just the hole.
 
 ## Visible record
 In code mode the PR shows the review as it happens: the author pushes and posts a "started" comment before you begin, and commits, pushes and summarizes `review-NNN.md` when you finish. So:
@@ -90,3 +91,4 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh` 
 6. **Performance**: per-frame allocations, O(n²) work in a tick, and replication volume.
 7. **Judged criteria**: give a ruling on each against its rubric.
 8. **Repository safety**: no spec, `check.sh` or script in the diff may change the real repository, run a command that changes anything outside a `.cache` fixture, or weaken a guard: `tests/lib/fence.luau`, `scripts/lib/fence.sh`, `scripts/lib/git-hooks/`, the fence in `scripts/lib/ac.sh`, `tests/tooling/repo-fence.spec.luau`. Check the "Caught only by review" list in the testing skill's "Specs never touch the real repository" section line by line. Any such path is **high**.
+9. **Fix delta** (re-review rounds): review the fix delta as well as the whole diff: `git diff <the previous review's commit>..HEAD` (the commit that added the previous `review-NNN.md`). For each fix, what new behaviour does it add, and what does that break or open? A defect in a fix is a finding like any other.

@@ -1,0 +1,1 @@
+- F1: fixed e611c4a: c0063's Verification log now gives the gate count after the narrowing (1371, five deleted cases) next to the pre-patch 1376.

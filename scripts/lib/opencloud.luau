@@ -1,6 +1,7 @@
 --!strict
 -- Roblox Open Cloud, the calls pickman needs: publish a built place to an experience (and, from c0030,
--- run a Luau script in a server of a published version). The HTTP call and the sleep are injected so the
+-- run a Luau script in a server of a published version). Roblox's transient failures (HTTP 429 and 5xx)
+-- are retried a bounded number of times (c0051). The HTTP call and the sleep are injected so the
 -- logic is tested without a network. The API key only ever appears in the `x-api-key` header, never in a
 -- message or an error.
 local net = require("@lune/net")
@@ -18,7 +19,9 @@ export type Config = {
 	base: string?, -- default https://apis.roblox.com
 	request: Http?,
 	sleep: ((seconds: number) -> ())?,
-	retrySeconds: number?, -- wait between "Roblox busy" (HTTP 409) retries; default 60
+	retrySeconds: number?, -- wait between "Roblox busy" (HTTP 409) publish retries; default 60
+	transientSeconds: number?, -- wait between retries of a transient failure (HTTP 429, 5xx); default 5
+	transientBudgetSeconds: number?, -- the most one execute pauses for transient retries in all; default 60
 }
 
 local OpenCloud = {}
@@ -54,6 +57,33 @@ local function headers(cfg: Config, contentType: string?): { [string]: string }
 	return h
 end
 
+-- Whether an HTTP status is a transient Roblox failure worth asking again: 429 and every 5xx.
+function OpenCloud.isTransient(statusCode: number): boolean
+	return statusCode == 429 or (statusCode >= 500 and statusCode <= 599)
+end
+
+-- Makes a task request, asking again while the answer is transient: at most MAX_ATTEMPTS requests,
+-- pausing transientSeconds between them, and never taking `spent` (the pause seconds of this execute so
+-- far) above transientBudgetSeconds. Returns the last response; the caller judges it.
+local function send(cfg: Config, request: Request, spent: { seconds: number }): Response
+	local pause = cfg.transientSeconds or 5
+	local budget = cfg.transientBudgetSeconds or 60
+	local attempt = 1
+	while true do
+		local res = http(cfg)(request)
+		if
+			not OpenCloud.isTransient(res.statusCode)
+			or attempt >= OpenCloud.MAX_ATTEMPTS
+			or spent.seconds + pause > budget
+		then
+			return res
+		end
+		nap(cfg, pause)
+		spent.seconds += pause
+		attempt += 1
+	end
+end
+
 -- A configuration from environment variables, or nil when publishing isn't configured (a green skip).
 -- Ids must be plain digits: they go into a URL.
 function OpenCloud.configFromEnv(env: { [string]: string? }): Config?
@@ -86,7 +116,8 @@ function OpenCloud.configFromEnv(env: { [string]: string? }): Config?
 end
 
 -- Publishes a built place file to the experience. Returns the new version number. Roblox answers 409
--- while it is busy: that is retried up to MAX_ATTEMPTS times; any other failure is final.
+-- while it is busy (retried after retrySeconds) and 429 or 5xx when it blips (retried after
+-- transientSeconds); both share one budget of MAX_ATTEMPTS requests. Any other failure is final.
 function OpenCloud.publish(cfg: Config, place: string): number
 	local url =
 		`{base(cfg)}/universes/v1/{cfg.universeId}/places/{cfg.placeId}/versions?versionType=Published`
@@ -105,8 +136,12 @@ function OpenCloud.publish(cfg: Config, place: string): number
 			end
 			return version
 		end
-		if res.statusCode == 409 and attempt < OpenCloud.MAX_ATTEMPTS then
-			nap(cfg, cfg.retrySeconds or 60)
+		local pause = if res.statusCode == 409
+			then cfg.retrySeconds or 60
+			elseif OpenCloud.isTransient(res.statusCode) then cfg.transientSeconds or 5
+			else nil
+		if pause and attempt < OpenCloud.MAX_ATTEMPTS then
+			nap(cfg, pause)
 		else
 			error(`opencloud: publish failed with HTTP {res.statusCode}: {res.body}`, 0)
 		end
@@ -117,7 +152,8 @@ end
 export type Run = { ok: boolean, state: string, results: { any }, detail: string }
 
 -- Runs a Luau script in a server of a published version and waits for it. `ok` is true when the task
--- completed; `results` are the script's return values. HTTP failures creating or polling raise.
+-- completed; `results` are the script's return values. Transient failures creating or polling are retried
+-- (see `send`; the pauses don't count toward timeoutSeconds), and any other HTTP failure raises.
 function OpenCloud.execute(
 	cfg: Config,
 	version: number,
@@ -126,12 +162,13 @@ function OpenCloud.execute(
 ): Run
 	local timeout = opts and opts.timeoutSeconds or 120
 	local poll = opts and opts.pollSeconds or 3
-	local create = http(cfg)({
+	local spent = { seconds = 0 }
+	local create = send(cfg, {
 		url = `{base(cfg)}/cloud/v2/universes/{cfg.universeId}/places/{cfg.placeId}/versions/{version}/luau-execution-session-tasks`,
 		method = "POST",
 		headers = headers(cfg, "application/json"),
 		body = serde.encode("json" :: "json", { script = source }),
-	})
+	}, spent)
 	if create.statusCode ~= 200 then
 		error(`opencloud: creating the task failed with HTTP {create.statusCode}: {create.body}`, 0)
 	end
@@ -142,12 +179,12 @@ function OpenCloud.execute(
 	end
 	local waited = 0
 	while true do
-		local res = http(cfg)({
+		local res = send(cfg, {
 			url = `{base(cfg)}/cloud/v2/{path}`,
 			method = "GET",
 			headers = headers(cfg),
 			body = nil,
-		})
+		}, spent)
 		if res.statusCode ~= 200 then
 			error(`opencloud: polling the task failed with HTTP {res.statusCode}: {res.body}`, 0)
 		end

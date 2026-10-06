@@ -36,10 +36,12 @@ pickman_fence() {
     echo "fence: $sentinel is a folder; refusing (remove it yourself after checking it). Stop and report this." >&2
     return 1
   fi
-  # written elsewhere and renamed in: a rename replaces whatever is there instead of writing through it
+  # written beside it and renamed in with rename(2): a rename replaces whatever is there (a link to a file or to a
+  # directory) instead of writing through it. Inline, not scripts/lib/replace-file.pl: fixtures copy this file alone
   local fresh
   fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs
-  printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" && mv -f "$fresh" "$sentinel" || return 1
+  printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" || { rm -f "$fresh"; return 1; }
+  perl -e 'rename $ARGV[0], $ARGV[1] or die "rename: $!\n"' "$fresh" "$sentinel" || { rm -f "$fresh"; return 1; }
   if [[ -n $real ]]; then
     export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
   fi

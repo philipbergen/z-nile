@@ -1,6 +1,7 @@
 --!strict
 -- f0300 AC3: the client presents the flow with a thin FlowView adapter: Main computes Flow.overlay of each
 -- frame with the server's rules and hands its parts to FlowView, MazeView (the flash) and Camera (the cursor).
+-- Narrowed by c0063: which remote, keys and field drive the request and the cursor is f0065's.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -61,7 +62,7 @@ return t.spec("f0300 client flow adapter", function(it)
 		local src = source(client("Main"))
 		t.expect(string.find(src, "FlowView%.show%(") ~= nil).toBe(true)
 		t.expect(string.find(src, "MazeView%.flash%([^)]*%.flash%s*%)") ~= nil).toBe(true)
-		t.expect(string.find(src, "Camera%.setCursor%(%s*[%w_]+%.playAgain%s*%)") ~= nil).toBe(true)
+		t.expect(string.find(src, "Camera%.setCursor%(%s*[%w_]+%.[%w_]+%s*%)") ~= nil).toBe(true)
 	end)
 
 	it("MazeView can light its walls and Camera can free the mouse", function()
@@ -100,12 +101,10 @@ return t.spec("f0300 client flow adapter", function(it)
 		end
 	end)
 
-	it("FlowView fires the PlayAgain remote, on Flow's keys", function()
+	it("FlowView uses the Flow feature and sends a request to the server", function()
 		t.expect(includes(resolved(client("FlowView")), logic("Flow"))).toBe(true)
 		local src = source(client("FlowView"))
-		t.expect(string.find(src, '"PlayAgain"', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(src, ":FireServer(", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(src, "Flow.PLAY_AGAIN_KEYS", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("FlowView sends the request with no arguments: the server knows who asked", function()

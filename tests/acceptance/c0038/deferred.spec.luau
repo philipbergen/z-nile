@@ -128,7 +128,11 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 
 	it("refuses to defer a high finding", function()
 		refused(
-			attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: deferred c0020: later",
+				"- F2: fixed abc: ok; consequences: none",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F1",
 			"high"
 		)
@@ -136,7 +140,11 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 
 	it("refuses to defer to an issue that does not exist", function()
 		refused(
-			attempt({ "- F1: fixed abc: ok", "- F2: deferred c0999: later", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred c0999: later",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F2",
 			"c0999"
 		)
@@ -144,7 +152,11 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 
 	it("refuses to defer to an issue that is not in the backlog", function()
 		refused(
-			attempt({ "- F1: fixed abc: ok", "- F2: deferred f0010: later", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred f0010: later",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F2",
 			"f0010"
 		)
@@ -152,17 +164,29 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 
 	it("refuses a deferral that names no issue or gives no reason", function()
 		refused(
-			attempt({ "- F1: fixed abc: ok", "- F2: deferred", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F2",
 			"deferred needs"
 		)
 		refused(
-			attempt({ "- F1: fixed abc: ok", "- F2: deferred c0020", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred c0020",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F2",
 			"deferred needs"
 		)
 		refused(
-			attempt({ "- F1: fixed abc: ok", "- F2: deferred c0020:   ", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred c0020:   ",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F2",
 			"deferred needs"
 		)
@@ -172,17 +196,36 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		-- the unrated finding is followed by a rated one: its severity must not be borrowed
 		local review = "# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
 			.. "### F2 [low] a rated finding\nEvidence: y\n\nVerdict: changes requested\n"
-		refused(attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok" }, review), "F1", "unrated")
+		refused(
+			attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok; consequences: none" }, review),
+			"F1",
+			"unrated"
+		)
 	end)
 
 	it("still accepts fixed and refuted for any severity, and rejects other words", function()
-		refused(attempt({ "- F1: ignored", "- F2: fixed abc: ok", "- F3: fixed abc: ok" }), "F1")
 		refused(
-			attempt({ "- F1: fixed abc: ok", "- F2: deferred-ish c0020: later", "- F3: fixed abc: ok" }),
+			attempt({
+				"- F1: ignored",
+				"- F2: fixed abc: ok; consequences: none",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F1"
+		)
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred-ish c0020: later",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
 			"F2"
 		)
 		-- an unanswered finding is reported on its own, before any invalid deferral
-		local mixed = attempt({ "- F1: ignored", "- F2: deferred c0999: later", "- F3: fixed abc: ok" })
+		local mixed = attempt({
+			"- F1: ignored",
+			"- F2: deferred c0999: later",
+			"- F3: fixed abc: ok; consequences: none",
+		})
 		refused(mixed, "F1", "not answered")
 		t.expect((string.find(mixed.stderr, "c0999", 1, true))).toBe(nil)
 	end)

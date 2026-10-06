@@ -1,0 +1,1 @@
+- F1: fixed a0e8eba: the beta recovery line now names an exhausted publish HTTP 409 (Roblox busy) as rerunnable (at most 3 times, then BLOCKED:) and excludes it from "another 4xx"; AC9 still PASS.
