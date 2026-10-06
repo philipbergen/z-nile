@@ -211,7 +211,7 @@ return t.spec("tracker lifecycle", function(it)
 			"tracker/rafts/active/R0010/review-001.md",
 			"# Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
 		)
-		write("tracker/rafts/active/R0010/refute-001.md", "- F1: fixed abc: done\n")
+		write("tracker/rafts/active/R0010/refute-001.md", "- F1: fixed abc: done; consequences: none\n")
 		local dirty = tr({ "done", "R0010" })
 		t.expect(dirty.ok).toBe(false)
 		t.expect(string.find(dirty.stderr, "clean tree", 1, true) ~= nil).toBe(true)
@@ -223,7 +223,10 @@ return t.spec("tracker lifecycle", function(it)
 	end)
 
 	it("done rolls back when a promoted acceptance spec fails", function()
-		write("tracker/rafts/active/R0010/refute-001.md", "- F1: fixed abc: done\n- F2: refuted: by design\n")
+		write(
+			"tracker/rafts/active/R0010/refute-001.md",
+			"- F1: fixed abc: done; consequences: none\n- F2: refuted: by design\n"
+		)
 		local good = read("tracker/issues/active/f0010/acceptance/alpha.spec.luau")
 		write(
 			"tracker/issues/active/f0010/acceptance/alpha.spec.luau",

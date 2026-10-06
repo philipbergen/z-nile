@@ -115,10 +115,37 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
 	},
+	-- c0077: the reviewed list of .cache lines quotes fence.sh lines that name these
+	["tests/lib/cachepaths.luau"] = {
+		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
+		GH_CONFIG_DIR = "quotes a fence.sh line in the reviewed .cache list",
+	},
 	["tests/acceptance/c0053/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
+	},
+	-- c0074: doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard; its
+	-- spec names it only as a table key passed to that pure function, never in a process's environment
+	["scripts/tracker/gate.luau"] = {
+		PICKMAN_FENCE_ = "doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard (c0074)",
+	},
+	["tests/acceptance/c0074/done-gate.spec.luau"] = {
+		PICKMAN_FENCE_ = "names PICKMAN_FENCE_SPECS only as a table key passed to the pure doneGate, never in a process's environment (c0074)",
+	},
+	-- c0076, c0078: the jail's own specs read the run's lock (through the marker, to find the top process outside the
+	-- jail) and test whether they run jailed (PICKMAN_TEST_JAIL == "sandbox-exec"); neither sets either
+	["tests/acceptance/c0076/sweeper.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
+		["sandbox-exec"] = "tests whether it runs jailed",
+	},
+	["tests/tooling/sweeper-interlock.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
+		["sandbox-exec"] = "tests whether it runs jailed, and clears that for one sweeper",
+	},
+	["tests/acceptance/c0078/jail-signals.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
+		["sandbox-exec"] = "tests whether it runs jailed",
 	},
 }
 -- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
@@ -349,6 +376,20 @@ return t.spec("repository fence", function(it)
 		t.expect(loop.stdout).toBe("ok")
 		if #escaped > 0 then
 			error(`the jail lets specs reach {table.concat(escaped, ", ")}: {jail}`)
+		end
+	end)
+
+	it("when jailed, a spec can't signal the run's top process", function()
+		if env.PICKMAN_TEST_JAIL ~= "sandbox-exec" then
+			return -- no jail, so no signal rule (Linux, an outer sandbox): the testing skill's "Caught only by review"
+		end
+		local top = trim(fs.readFile(`{env.PICKMAN_TEST_FENCE or ""}/.cache/tests-run.lock/pid`))
+		t.expect(string.match(top, "^%d+$") ~= nil).toBe(true)
+		-- kill -0 and URG, which the top process ignores anyway: harmless if the rule were missing
+		for _, sig in { "-0", "-URG" } do
+			local r = process.exec("kill", { sig, top })
+			t.expect(r.ok).toBe(false)
+			t.expect(string.find(r.stderr, "Operation not permitted", 1, true) ~= nil).toBe(true)
 		end
 	end)
 

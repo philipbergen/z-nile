@@ -1,6 +1,5 @@
 --!strict
 -- Subprocess helpers for Lune scripts.
-local fs = require("@lune/fs")
 local process = require("@lune/process")
 
 local sh = {}
@@ -38,12 +37,15 @@ function sh.git(args: { string }): string
 	return sh.must("git", args)
 end
 
--- Writes `text` to `path` by writing a fresh file outside the checkout and renaming it into place, so a symlink a
--- spec swapped in at `path` is replaced, never followed into whatever it points at (R0210 review 006 F1).
+-- Writes `text` to `path` through scripts/lib/replace-file.pl: a sibling temporary file, created exclusively and never
+-- followed, renamed onto `path`. A symlink a spec swapped in at `path` (to a file or to a directory) is replaced,
+-- never followed; a real directory there is an error (c0077). `path` is relative to the repository root, the cwd of
+-- every tracker command and spec, or absolute.
 function sh.writeReplacing(path: string, text: string)
-	local tmp = sh.must("mktemp", {})
-	fs.writeFile(tmp, text)
-	sh.must("mv", { "-f", tmp, path })
+	local r = process.exec("perl", { "scripts/lib/replace-file.pl", path }, { stdio = { stdin = text } })
+	if not r.ok then
+		error(`writeReplacing {path}: {trim(r.stderr)}`, 0)
+	end
 end
 
 return sh

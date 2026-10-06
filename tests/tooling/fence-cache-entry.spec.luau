@@ -121,6 +121,19 @@ return t.spec("the guards never delete through .cache", function(it)
 		t.expect(fs.readFile(victim)).toBe("keep")
 	end)
 
+	it("a tracker write replaces a symlink to a directory instead of dropping a file into it", function()
+		local dir = `{base}/writer-dir`
+		fs.writeDir(dir)
+		local victim = `{base}/victim-e`
+		fs.writeDir(victim)
+		fs.writeFile(`{victim}/keep`, "keep")
+		t.expect(process.exec("ln", { "-s", victim, `{dir}/tracker-focus` }).ok).toBe(true)
+		sh.writeReplacing(`{dir}/tracker-focus`, "c0010")
+		t.expect(process.exec("test", { "-L", `{dir}/tracker-focus` }).ok).toBe(false)
+		t.expect(fs.readFile(`{dir}/tracker-focus`)).toBe("c0010")
+		t.expect(#fs.readDir(victim)).toBe(1)
+	end)
+
 	it("cleans up", function()
 		fs.removeDir(base)
 	end)

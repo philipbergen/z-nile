@@ -89,7 +89,7 @@ local function gateCopy(name: string): string
 		`{dir}/bin/rojo`,
 		'#!/bin/sh\nif [ -z "$STUB_ROJO_OK" ]; then echo "rojo: stub" >&2; exit 1; fi\n'
 			.. 'o=; for a; do [ "$prev" = -o ] && o=$a; prev=$a; done\n'
-			.. 'if [ "$1" = build ]; then rm -f .cache/check.rbxl; ln -s "$STUB_VICTIM" .cache/check.rbxl; fi\n'
+			.. 'if [ "$1" = build ] && [ "$2" = default.project.json ]; then rm -f .cache/check.rbxl; ln -s "$STUB_VICTIM" .cache/check.rbxl; fi\n'
 			.. 'echo "built by $1" > "$o"\n'
 	)
 	-- the other tools pass, and lune fails at the tests stage, which comes after the build
