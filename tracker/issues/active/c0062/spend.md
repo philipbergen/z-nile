@@ -5,6 +5,7 @@
 | 1 | 2026-10-06 04:02 | R0025: experiments | 0 | 0 | 2.5 | raft+proportional |
 | 2 | 2026-10-06 05:34 | R0025: addressed during execution | 0 | 0 | 0.2 | raft+proportional |
 | 3 | 2026-10-06 05:42 | R0025: record the sequestered-fix rule | 0 | 0 | 0.1 | raft+proportional |
+| 4 | 2026-10-06 14:47 | c0062: split c0053's commands spec into five concurrent parts on tests/lib/trackerfix | 931 | 633 | 55.0 | explicit |
 
-**Total:** +0 / -0 lines, 2.8 agent-minutes over 3 commits
-<!-- totals: added=0 removed=0 minutes=2.8 commits=3 -->
+**Total:** +931 / -633 lines, 57.8 agent-minutes over 4 commits
+<!-- totals: added=931 removed=633 minutes=57.8 commits=4 -->

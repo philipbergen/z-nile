@@ -110,7 +110,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	},
 	-- c0510 (R0200): its fixture hooks unset what git exports to a hook, so that their own git calls reach the right
 	-- repository
-	["tests/acceptance/c0053/commands.spec.luau"] = {
+	["tests/acceptance/c0053/commands-new.spec.luau"] = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",

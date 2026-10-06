@@ -1,0 +1,3 @@
+- F1: fixed: interleaved runs on one machine at equal load (the original spec on the raft branch, then all parts with `--jobs 4` on this branch, three times) gave 39/39/37 s before and 14/14/13 s after, about 36%. Recorded in the Verification log.
+- F2: fixed: each spawned stamp call runs under pcall, and its error is collected and asserted empty, so a raise fails the case instead of hanging it.
+- F3: refuted: c0062's check.sh AC2 requires at least four parts, and AC5 runs adapt.spec in the same check, so an empty glob cannot pass unnoticed.
