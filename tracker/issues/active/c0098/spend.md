@@ -7,6 +7,7 @@
 | 3 | 2026-10-06 05:34 | R0025: addressed during execution | 0 | 0 | 0.2 | raft+proportional |
 | 4 | 2026-10-06 05:42 | R0025: record the sequestered-fix rule | 0 | 0 | 0.1 | raft+proportional |
 | 5 | 2026-10-06 14:53 | Merge origin/main (R0026, R0033 and preps) into R0025 | 521 | 20 | 1.1 | raft+proportional |
+| 6 | 2026-10-06 15:01 | R0025: promote-check fixes (spec type correction, cleanup return type, c0077 reviewed .cache lines) | 0 | 0 | 0.7 | raft+proportional |
 
-**Total:** +535 / -25 lines, 26.4 agent-minutes over 5 commits
-<!-- totals: added=535 removed=25 minutes=26.4 commits=5 -->
+**Total:** +535 / -25 lines, 27.1 agent-minutes over 6 commits
+<!-- totals: added=535 removed=25 minutes=27.1 commits=6 -->

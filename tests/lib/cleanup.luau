@@ -52,7 +52,9 @@ local function leftBehind(path: string): { string }
 	return out
 end
 
-function cleanup.removeTree(path: string, seconds: number?, remove: ((string) -> ())?)
+-- Returns nothing; typed `...any` so `local ok, err = pcall(cleanup.removeTree, …)` type-checks (a `()` return gives
+-- pcall a single result).
+function cleanup.removeTree(path: string, seconds: number?, remove: ((string) -> ())?): ...any
 	local doRemove: (string) -> () = remove or fs.removeDir
 	local bound = seconds or 3
 	if not exists(path) then

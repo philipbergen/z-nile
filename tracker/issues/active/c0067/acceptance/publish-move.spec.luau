@@ -140,7 +140,7 @@ return t.spec("tracker publish moves", function(it)
 		for _, bad in
 			{ "src/x.luau", "tracker/architecture.md", "tracker/issues/c0010/../x", "tracker/issues/R0010/a" }
 		do
-			t.expect(publish.itemPath(bad)).toBe(nil)
+			t.expect((publish.itemPath(bad))).toBe(nil)
 		end
 		local before = tip()
 		local r = publish.commit(work, function()

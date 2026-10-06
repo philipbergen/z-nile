@@ -7,6 +7,7 @@
 | 3 | 2026-10-06 05:42 | R0025: record the sequestered-fix rule | 0 | 0 | 0.1 | raft+proportional |
 | 4 | 2026-10-06 14:26 | c0070: the board follows main (refresh after every publish and main-checkout sync) | 147 | 84 | 70.0 | explicit |
 | 5 | 2026-10-06 14:53 | Merge origin/main (R0026, R0033 and preps) into R0025 | 523 | 20 | 1.1 | raft+proportional |
+| 6 | 2026-10-06 15:01 | R0025: promote-check fixes (spec type correction, cleanup return type, c0077 reviewed .cache lines) | 0 | 0 | 0.7 | raft+proportional |
 
-**Total:** +670 / -104 lines, 73.9 agent-minutes over 5 commits
-<!-- totals: added=670 removed=104 minutes=73.9 commits=5 -->
+**Total:** +670 / -104 lines, 74.6 agent-minutes over 6 commits
+<!-- totals: added=670 removed=104 minutes=74.6 commits=6 -->
