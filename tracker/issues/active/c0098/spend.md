@@ -13,6 +13,7 @@
 | 9 | 2026-10-06 16:03 | R0025: format | 0 | 1 | 0.1 | raft+proportional |
 | 10 | 2026-10-06 16:09 | R0025: refute-003 | 0 | 0 | 0.3 | raft+proportional |
 | 11 | 2026-10-06 16:24 | R0025: refute-004 | 0 | 0 | 0.3 | raft+proportional |
+| 12 | 2026-10-06 16:39 | R0025: refute-005 | 0 | 0 | 0.3 | raft+proportional |
 
-**Total:** +535 / -26 lines, 28.7 agent-minutes over 11 commits
-<!-- totals: added=535 removed=26 minutes=28.7 commits=11 -->
+**Total:** +535 / -26 lines, 29.0 agent-minutes over 12 commits
+<!-- totals: added=535 removed=26 minutes=29.0 commits=12 -->

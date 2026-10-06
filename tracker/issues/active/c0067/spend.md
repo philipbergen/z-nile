@@ -18,6 +18,7 @@
 | 14 | 2026-10-06 16:18 | R0025: review 004 fixes (unique claim stamps, resumed start keeps its claim, no-stamp refusal pinned; stop looks up after its pull) | 46 | 4 | 14.8 | explicit |
 | 15 | 2026-10-06 16:24 | R0025: refute-004 | 0 | 0 | 0.3 | raft+proportional |
 | 16 | 2026-10-06 16:33 | R0025: review 005 fixes (claims.taken with a real git grep and strict exit codes; resumed start reuses its claim only while origin carries it) | 63 | 2 | 15.0 | explicit |
+| 17 | 2026-10-06 16:39 | R0025: refute-005 | 0 | 0 | 0.3 | raft+proportional |
 
-**Total:** +1557 / -213 lines, 182.0 agent-minutes over 16 commits
-<!-- totals: added=1557 removed=213 minutes=182.0 commits=16 -->
+**Total:** +1557 / -213 lines, 182.3 agent-minutes over 17 commits
+<!-- totals: added=1557 removed=213 minutes=182.3 commits=17 -->
