@@ -7,6 +7,7 @@
 | 3 | 2026-10-16 22:58 | c0084: verification log | 0 | 0 | 2.0 | explicit | build |  |
 | 4 | 2026-10-16 23:29 | R0031: review-001 | 0 | 0 | 29.0 | explicit | code-review |  |
 | 5 | 2026-10-16 23:31 | c0084: record stream review on the raft branch | 2 | 2 | 10.0 | explicit | code-review |  |
+| 6 | 2026-10-16 23:31 | R0031: refute-001 | 0 | 0 | 4.0 | explicit | code-review |  |
 
-**Total:** +866 / -123 lines, 64.0 agent-minutes, 0 tokens over 5 records
-<!-- totals: added=866 removed=123 minutes=64.0 records=5 tokens=0 -->
+**Total:** +866 / -123 lines, 68.0 agent-minutes, 0 tokens over 6 records
+<!-- totals: added=866 removed=123 minutes=68.0 records=6 tokens=0 -->
