@@ -6,6 +6,7 @@
 | 2 | 2026-10-16 22:52 | c0084: record lifecycle spend by phase | 602 | 121 | 15.0 | explicit | build |  |
 | 3 | 2026-10-16 22:58 | c0084: verification log | 0 | 0 | 2.0 | explicit | build |  |
 | 4 | 2026-10-16 23:29 | R0031: review-001 | 0 | 0 | 29.0 | explicit | code-review |  |
+| 5 | 2026-10-16 23:31 | c0084: record stream review on the raft branch | 2 | 2 | 10.0 | explicit | code-review |  |
 
-**Total:** +864 / -121 lines, 54.0 agent-minutes, 0 tokens over 4 records
-<!-- totals: added=864 removed=121 minutes=54.0 records=4 tokens=0 -->
+**Total:** +866 / -123 lines, 64.0 agent-minutes, 0 tokens over 5 records
+<!-- totals: added=866 removed=123 minutes=64.0 records=5 tokens=0 -->
