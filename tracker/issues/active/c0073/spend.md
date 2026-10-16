@@ -6,6 +6,7 @@
 | 2 | 2026-10-16 22:46 | c0073: pure stats module | 382 | 0 | 5.2 | focus |
 | 3 | 2026-10-16 22:54 | c0073: history spells from git log | 302 | 0 | 8.6 | focus |
 | 4 | 2026-10-16 23:00 | c0073: svg chart module | 427 | 0 | 5.6 | focus |
+| 5 | 2026-10-16 23:18 | c0073: board stats section | 474 | 11 | 17.8 | focus |
 
-**Total:** +1111 / -0 lines, 34.4 agent-minutes over 4 commits
-<!-- totals: added=1111 removed=0 minutes=34.4 commits=4 -->
+**Total:** +1585 / -11 lines, 52.2 agent-minutes over 5 commits
+<!-- totals: added=1585 removed=11 minutes=52.2 commits=5 -->

@@ -108,7 +108,7 @@ function chart.svg(series: { Series }, opts: Options): string
 	local labels = opts.labels
 	local n = #labels
 	local kind = opts.kind
-	local below = opts.below or {}
+	local below: { Series } = opts.below or {}
 	local hbars = kind == "hbars"
 	local keys: { { key: string, label: string } } = {}
 	local seen: { [string]: boolean } = {}

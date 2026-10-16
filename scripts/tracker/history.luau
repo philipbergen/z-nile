@@ -146,7 +146,8 @@ function history.parse(log: string): Parsed
 			return
 		end
 		local id, area = classify(file.path)
-		if not id or not area then
+		-- classify's area singleton is widened to string at the boundary; narrow it back.
+		if not id or (area ~= "backlog" and area ~= "active" and area ~= "done") then
 			return
 		end
 		local bag = pending[id]
