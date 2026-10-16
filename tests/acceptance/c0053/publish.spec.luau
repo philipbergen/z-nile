@@ -66,7 +66,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		t.expect(git(work, { "branch", "--show-current" })).toBe("main")
 	end)
 
-	it("allows only an item's own document and check.sh, never anything else", function()
+	it("allows only an item's own document and check.sh, and an issue's spend.md", function()
 		for _, ok in
 			{
 				"tracker/issues/c0010/c0010.md",
@@ -74,6 +74,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 				"tracker/issues/active/d0030/d0030.md",
 				"tracker/rafts/R0010/R0010.md",
 				"tracker/rafts/done/R0140/check.sh",
+				"tracker/issues/c0010/spend.md",
 			}
 		do
 			t.expect(publish.allowed(ok)).toBe(true)
@@ -84,7 +85,6 @@ return t.spec("tracker publish (git plumbing)", function(it)
 				"tracker/architecture.md",
 				"tracker/game-design.md",
 				"tracker/issues/c0010/acceptance/a.spec.luau",
-				"tracker/issues/c0010/spend.md",
 				"tracker/issues/c0010/c0020.md",
 				"tracker/issues/R0010/R0010.md",
 				"tracker/rafts/c0010/c0010.md",

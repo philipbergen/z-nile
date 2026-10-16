@@ -7,6 +7,7 @@ local compactLib = require("./compact")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
+local ledger = require("./ledger")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local publish = require("./publish")
@@ -43,8 +44,11 @@ usage: scripts/tracker.sh <command> ...
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
-  commit -m <msg> [--issue <id>]... [--time <minutes>]   stage all, record spend, commit, push
-  done <R-id>                                   verify checks + review resolution, move to done, ready PR
+  commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
+                                                stage all, record spend, commit, push
+  spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--note <text>]
+                                                append one phase's rows to origin/main; changes nothing here
+  done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
@@ -1014,9 +1018,10 @@ function cmd.status(pos: { string })
 	end
 	if not id then
 		for _, p in originPaths() do
-			if publish.allowed(p) and string.match(p, "/[^/]+%.md$") and stateOfPath(p) ~= "done" then
+			-- the item's own document only: spend.md sits beside it and must not list the item twice
+			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
+			if fid and file == `{fid}.md` and publish.allowed(p) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				local fid = string.match(p, "/([fdcR]%d%d%d%d)/[^/]+$") :: string
 				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
 			end
 		end
@@ -2224,8 +2229,11 @@ local function recordAndCommit(
 	message: string,
 	issueIds: { string },
 	explicitMinutes: number?,
-	isDone: boolean?
+	isDone: boolean?,
+	phase: string?,
+	tokens: number?
 )
+	phase = if phase and phase ~= "" then phase else "build"
 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
 	if sh.git({ "ls-files", "-u" }) ~= "" then
 		fail("unmerged paths: resolve the merge first")
@@ -2246,17 +2254,23 @@ local function recordAndCommit(
 		issues = store.members(raft.id)
 	end
 	local minutes = explicitMinutes or spend.elapsedMinutes()
-	local shares = spend.attribute(issues, spend.stagedStats(isDone), minutes, how)
+	local shares = spend.attribute(issues, spend.stagedStats(isDone), minutes, how, tokens)
 	local trailers: { string } = {}
 	for _, share in shares do
-		if share.added + share.removed == 0 and share.minutes < 0.1 then
-			continue -- nothing to record (e.g. a pure tracker move)
+		-- a share with tokens is kept even when it moved no lines and took no measurable time
+		if share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0 then
+			continue
 		end
-		spend.appendRow(store.get(share.id), share, message)
-		table.insert(
-			trailers,
+		spend.appendRow(store.get(share.id), share, message, phase)
+		local trailer =
 			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
-		)
+		if phase ~= "build" then
+			trailer ..= " " .. (phase :: string)
+		end
+		if share.tokens ~= nil then
+			trailer ..= ` {share.tokens} tokens`
+		end
+		table.insert(trailers, trailer)
 	end
 	spend.writeRaft(raft)
 	sh.git({ "add", "-A", store.ROOT })
@@ -2268,10 +2282,30 @@ end
 function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	local message = opts["-m"] and opts["-m"][1]
 	if not message or message == "" then
-		fail("usage: commit -m <msg> [--issue <id>]... [--time <minutes>]")
+		fail(
+			"usage: commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]"
+		)
+	end
+	-- phase and tokens are checked before anything is staged
+	local phase = "build"
+	if opts["--phase"] then
+		phase = opts["--phase"][1]
+		if phase == "capture" or phase == "prep" or phase == "design-review" then
+			fail(`{phase} is recorded with tracker.sh spend`)
+		elseif phase ~= "build" and phase ~= "code-review" and phase ~= "deliver" then
+			fail("commit --phase is build, code-review or deliver")
+		end
+	end
+	local tokens: number? = nil
+	if opts["--tokens"] then
+		local raw = opts["--tokens"][1]
+		if not string.match(raw, "^%d+$") then
+			fail("commit --tokens must be a non-negative integer")
+		end
+		tokens = tonumber(raw)
 	end
 	local t = opts["--time"] and tonumber((string.gsub(opts["--time"][1], "m$", "")))
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t)
+	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens)
 end
 
 -- Copy each member's acceptance specs into tests/acceptance/<id>, run `check`, then remove the
@@ -2491,7 +2525,7 @@ function cmd.done(pos: { string })
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
-	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true)
+	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true, "deliver")
 	if hasUpstream() and onGitHub() then
 		local summary = fs.readFile(`{raft.dir}/spend.md`)
 		local body = sh.must("gh", { "pr", "view", "--json", "body", "-q", ".body" })
@@ -2856,13 +2890,223 @@ function cmd.stop(pos: { string })
 	print(`stopped {raft.id} ({table.concat(ids, ", ")})`)
 end
 
+local SPEND_PHASES = { "capture", "prep", "design-review", "deliver" }
+
+local function nonNegativeMinutes(raw: string?): number?
+	if not raw or not string.match(raw, "^%d+%.?%d*m?$") then
+		return nil
+	end
+	return tonumber((string.gsub(raw, "m$", "")))
+end
+
+-- One issue's ledger, or nil when the file is missing. A file that does not parse is reported and skipped.
+local function ledgerRows(issue: store.Item): { ledger.Row }?
+	local path = `{issue.dir}/spend.md`
+	if not fs.isFile(path) then
+		return {}
+	end
+	local parsed, err = ledger.parse(fs.readFile(path))
+	if not parsed then
+		stdio.ewrite(`metrics: {path} does not parse ({err}); skipped\n`)
+		return nil
+	end
+	return parsed.rows
+end
+
+function cmd.spend(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("spend")
+	if not publishing() then
+		fail(
+			"spend needs an origin remote (PICKMAN_PUBLISH=0 disables it); inside a raft, record with tracker.sh commit --phase"
+		)
+	end
+	local id = pos[1]
+	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
+		fail(
+			"usage: spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--note <text>]"
+		)
+	end
+	local phase = opts["--phase"] and opts["--phase"][1] or ""
+	if phase == "build" or phase == "code-review" then
+		fail(`{phase} is recorded with tracker.sh commit --phase`)
+	elseif not table.find(SPEND_PHASES, phase) then
+		fail("spend --phase is capture, prep, design-review or deliver")
+	end
+	local minutes = nonNegativeMinutes(opts["--time"] and opts["--time"][1])
+	if not opts["--time"] then
+		fail("spend needs --time <minutes>: spend has no commit gap to measure")
+	elseif minutes == nil then
+		fail("spend --time must be a non-negative number")
+	end
+	local tokens: number? = nil
+	if opts["--tokens"] then
+		local raw = opts["--tokens"][1]
+		if not string.match(raw, "^%d+$") then
+			fail("spend --tokens must be a non-negative integer")
+		end
+		tokens = tonumber(raw)
+	end
+	local note = phase
+	if opts["--note"] and opts["--note"][1] ~= "" then
+		note = opts["--note"][1]
+	end
+	local targets: { store.Item } = {}
+	local raftItem: store.Item? = nil
+	if store.isRaftId(id) then
+		raftItem = store.find(id)
+		targets = if raftItem then store.members(id) else {}
+		if not raftItem or #targets == 0 then
+			fail("run tracker.sh sync first")
+		end
+	else
+		local item = store.find(id)
+		if item then
+			targets = { item }
+		end
+	end
+	local stats: { { path: string, added: number, removed: number } } = {}
+	local owners: { [string]: { string } }? = nil
+	if phase == "prep" then
+		local fetched = sh.run("git", { "fetch", "-q", "origin", "main" })
+		if not fetched.ok then
+			fail("could not fetch origin/main: " .. sh.trim(fetched.stderr))
+		end
+		if store.isIssueId(id) then
+			if #targets == 1 then
+				stats, owners = spend.prepStats(targets, nil)
+			end
+		else
+			stats, owners = spend.prepStats(targets, raftItem)
+		end
+	end
+	local issues = targets
+	if store.isIssueId(id) and #targets == 0 then
+		-- looked up on origin/main inside the publish; it need not exist in this checkout
+		issues = {
+			{
+				id = id,
+				kind = "issue" :: "issue",
+				state = "backlog" :: "backlog",
+				dir = "",
+				doc = "",
+				slug = "",
+			},
+		}
+	end
+	local shares = spend.attribute(
+		issues,
+		if phase == "prep" then stats else {},
+		minutes :: number,
+		"spend",
+		tokens,
+		if phase == "prep" then owners else nil
+	)
+	local kept: { spend.Share } = {}
+	for _, share in shares do
+		if not (share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0) then
+			table.insert(kept, share)
+		end
+	end
+	if #kept == 0 then
+		fail("nothing to record")
+	end
+	-- one stamp for every retry of the publish, so a lost race appends the same row
+	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
+	local function activeThere(doc: string, text: string): boolean
+		return string.find(doc, "/active/", 1, true) ~= nil
+			or statusLib.effective(frontOf(text), stateOfPath(doc)) == "active"
+	end
+	local function activeReason(target: string): string
+		if phase == "capture" or phase == "deliver" then
+			return `{target} is active on origin/main: inside its raft, record with tracker.sh commit --phase`
+		end
+		return `{target} was readied before its {phase} spend was recorded: record nothing and report it`
+	end
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
+		if store.isRaftId(id) then
+			local doc = docPath(paths, id)
+			local text = if doc then read(doc) else nil
+			if not doc or not text then
+				return `{id} is not on origin/main`
+			end
+			if activeThere(doc, text) then
+				return activeReason(id)
+			end
+		end
+		local changes: { publish.Change } = {}
+		for _, share in kept do
+			local doc = docPath(paths, share.id)
+			local text = if doc then read(doc) else nil
+			if not doc or not text then
+				return `{share.id} is not on origin/main`
+			end
+			if activeThere(doc, text) then
+				return activeReason(share.id)
+			end
+			local dir = string.sub(doc, 1, #doc - #share.id - 4) -- ".../<ID>/<ID>.md" -> ".../<ID>"
+			local spendPath = `{dir}/spend.md`
+			local row: ledger.Row = {
+				when = when,
+				subject = note,
+				added = share.added,
+				removed = share.removed,
+				minutes = share.minutes,
+				how = share.how,
+				phase = phase,
+				tokens = share.tokens,
+			}
+			local itemTitle = frontOf(text).title or share.id
+			local okAppend, content = pcall(ledger.append, read(spendPath), share.id, itemTitle, row)
+			if not okAppend then
+				return tostring(content)
+			end
+			table.insert(changes, { path = spendPath, content = content :: string })
+		end
+		return changes
+	end, `tracker: spend {id} {phase}`))
+	if not r.ok then
+		fail(r.reason or "publish failed")
+	end
+	for _, share in kept do
+		local tok = if share.tokens ~= nil then ` {share.tokens} tokens` else ""
+		print(
+			string.format(
+				"%s %s +%d/-%d %.1f min%s",
+				share.id,
+				phase,
+				share.added,
+				share.removed,
+				share.minutes,
+				tok
+			)
+		)
+	end
+	if r.sha then
+		print(r.sha)
+	end
+end
+
 function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
-	type Row = { id: string, type: string, raft: string, added: number, removed: number, minutes: number }
-	local rows: { Row } = {}
+	type Counted = {
+		id: string,
+		type: string,
+		raft: string,
+		added: number,
+		removed: number,
+		minutes: number,
+		tokens: number,
+		rows: { ledger.Row },
+	}
+	local rows: { Counted } = {}
 	local byType: { [string]: { added: number, minutes: number, count: number } } = {}
 	for _, issue in store.all("issue") do
 		if issue.state == "done" or (issue.state == "active" and opts["--include-active"]) then
-			local t = spend.readTotals(issue.dir)
+			local parsed = ledgerRows(issue)
+			if not parsed then
+				continue
+			end
+			local t = ledger.sum(parsed)
 			local ty = store.typeOf(issue)
 			table.insert(rows, {
 				id = issue.id,
@@ -2871,6 +3115,8 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 				added = t.added,
 				removed = t.removed,
 				minutes = t.minutes,
+				tokens = t.tokens,
+				rows = parsed,
 			})
 			local b = byType[ty] or { added = 0, minutes = 0, count = 0 }
 			b.added += t.added
@@ -2879,25 +3125,144 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 			byType[ty] = b
 		end
 	end
-	print("| issue | type | raft | +lines | -lines | agent-minutes |\n|---|---|---|---|---|---|")
+	print("\nCost per issue (done, plus active with --include-active).")
+	print("| issue | type | raft | +lines | -lines | agent-minutes | tokens |\n|---|---|---|---|---|---|---|")
 	for _, r in rows do
 		print(
 			string.format(
-				"| %s | %s | %s | %d | %d | %.1f |",
+				"| %s | %s | %s | %d | %d | %.1f | %d |",
 				r.id,
 				r.type,
 				r.raft,
 				r.added,
 				r.removed,
-				r.minutes
+				r.minutes,
+				r.tokens
 			)
 		)
 	end
-	print("\n| type | issues | +lines | agent-minutes | minutes/issue |\n|---|---|---|---|---|")
+	print("\nTotals by type.")
+	print("| type | issues | +lines | agent-minutes | minutes/issue |\n|---|---|---|---|---|")
 	for _, ty in { "feature", "defect", "chore" } do
 		local b = byType[ty] or { added = 0, minutes = 0, count = 0 }
 		local per = if b.count > 0 then b.minutes / b.count else 0
 		print(string.format("| %s | %d | %d | %.1f | %.1f |", ty, b.count, b.added, b.minutes, per))
+	end
+	local phaseMin: { [string]: { [string]: number } } = {}
+	local phaseTok: { [string]: number } = {}
+	for _, p in ledger.PHASES do
+		phaseMin[p] = { feature = 0, defect = 0, chore = 0 }
+		phaseTok[p] = 0
+	end
+	for _, r in rows do
+		for _, row in r.rows do
+			local tenths = math.floor(row.minutes * 10 + 0.5)
+			phaseMin[row.phase][r.type] += tenths
+			phaseTok[row.phase] += row.tokens or 0
+		end
+	end
+	print("\nSpend by phase (agent-minutes).")
+	print("| phase | feature | defect | chore | all | tokens |\n|---|---|---|---|---|---|")
+	for _, p in ledger.PHASES do
+		local m = phaseMin[p]
+		local all = m.feature + m.defect + m.chore
+		print(
+			string.format(
+				"| %s | %.1f | %.1f | %.1f | %.1f | %d |",
+				p,
+				m.feature / 10,
+				m.defect / 10,
+				m.chore / 10,
+				all / 10,
+				phaseTok[p]
+			)
+		)
+	end
+	print("\nSpend per raft by phase (rafts with at least one counted issue).")
+	print(
+		"| raft | type | capture | prep | design-review | build | code-review | deliver | all | tokens |\n|---|---|---|---|---|---|---|---|---|---|"
+	)
+	local byRaft: { [string]: { Counted } } = {}
+	local raftIds: { string } = {}
+	for _, r in rows do
+		if r.raft ~= "" then
+			if not byRaft[r.raft] then
+				byRaft[r.raft] = {}
+				table.insert(raftIds, r.raft)
+			end
+			table.insert(byRaft[r.raft], r)
+		end
+	end
+	table.sort(raftIds)
+	for _, rid in raftIds do
+		local raft = store.find(rid)
+		local ty = if raft then store.typeOf(raft) else "?"
+		local tenths: { [string]: number } = {}
+		local tokens, allTenths = 0, 0
+		for _, p in ledger.PHASES do
+			tenths[p] = 0
+		end
+		for _, r in byRaft[rid] do
+			for _, row in r.rows do
+				local n = math.floor(row.minutes * 10 + 0.5)
+				tenths[row.phase] += n
+				allTenths += n
+				tokens += row.tokens or 0
+			end
+		end
+		print(
+			string.format(
+				"| %s | %s | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %d |",
+				rid,
+				ty,
+				tenths.capture / 10,
+				tenths.prep / 10,
+				tenths["design-review"] / 10,
+				tenths.build / 10,
+				tenths["code-review"] / 10,
+				tenths.deliver / 10,
+				allTenths / 10,
+				tokens
+			)
+		)
+	end
+	print("\nDesign-review cost per round (every raft with a design-review file, members in any state).")
+	print(
+		"| raft | design rounds | design-review minutes | minutes/round | tokens/round |\n|---|---|---|---|---|"
+	)
+	for _, raft in store.all("raft") do
+		local rounds = 0
+		for _, name in fs.readDir(raft.dir) do
+			if string.match(name, "^design%-review%-%d+%.md$") then
+				rounds += 1
+			end
+		end
+		if rounds == 0 then
+			continue
+		end
+		local tenths, tokens = 0, 0
+		for _, issue in store.members(raft.id) do
+			local parsed = ledgerRows(issue)
+			if parsed then
+				for _, row in parsed do
+					if row.phase == "design-review" then
+						tenths += math.floor(row.minutes * 10 + 0.5)
+						tokens += row.tokens or 0
+					end
+				end
+			end
+		end
+		local mins = tenths / 10
+		print(
+			string.format(
+				"| %s | %d | %.1f | %.1f | %d |",
+				raft.id,
+				rounds,
+				mins,
+				mins / rounds,
+				math.floor(tokens / rounds + 0.5)
+			)
+		)
 	end
 	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
 	local d = byType.defect or { added = 0, minutes = 0, count = 0 }
@@ -2929,6 +3294,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		print(string.format("| %s | %d | %d | %s |", raft.id, design, code, format))
 	end
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
+	print("Rework counts every phase, capture to deliver.")
 	print(`  by lines added:  {pct(d.added, f.added)}`)
 	print(`  by issues:       {pct(d.count, f.count)}`)
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
