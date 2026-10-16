@@ -9,6 +9,7 @@
 | 5 | 2026-10-16 23:31 | c0084: record stream review on the raft branch | 2 | 2 | 10.0 | explicit | code-review |  |
 | 6 | 2026-10-16 23:31 | R0031: refute-001 | 0 | 0 | 4.0 | explicit | code-review |  |
 | 7 | 2026-10-16 23:53 | R0031: review-002 | 0 | 0 | 20.0 | explicit | code-review |  |
+| 8 | 2026-10-16 23:55 | c0084: lead commits the stream review file | 2 | 2 | 8.0 | explicit | code-review |  |
 
-**Total:** +866 / -123 lines, 88.0 agent-minutes, 0 tokens over 7 records
-<!-- totals: added=866 removed=123 minutes=88.0 records=7 tokens=0 -->
+**Total:** +868 / -125 lines, 96.0 agent-minutes, 0 tokens over 8 records
+<!-- totals: added=868 removed=125 minutes=96.0 records=8 tokens=0 -->
