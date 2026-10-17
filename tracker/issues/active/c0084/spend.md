@@ -18,6 +18,7 @@
 | 14 | 2026-10-17 00:38 | c0084: match the git toplevel and keep stream reviews on the raft | 9 | 6 | 10.0 | explicit | code-review |  |
 | 15 | 2026-10-17 00:38 | R0031: refute-004 | 0 | 0 | 4.0 | explicit | code-review |  |
 | 16 | 2026-10-17 00:56 | R0031: review-005 | 0 | 0 | 17.0 | explicit | code-review |  |
+| 17 | 2026-10-17 00:56 | R0031: final verification | 0 | 0 | 3.0 | explicit | deliver |  |
 
-**Total:** +996 / -141 lines, 180.0 agent-minutes, 0 tokens over 16 records
-<!-- totals: added=996 removed=141 minutes=180.0 records=16 tokens=0 -->
+**Total:** +996 / -141 lines, 183.0 agent-minutes, 0 tokens over 17 records
+<!-- totals: added=996 removed=141 minutes=183.0 records=17 tokens=0 -->
