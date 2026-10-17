@@ -15,6 +15,7 @@
 | 11 | 2026-10-17 04:39 | R0028: refute-001 | 0 | 0 | 4.0 | focus | build |  |
 | 12 | 2026-10-17 04:56 | c0073: final verification log | 0 | 0 | 3.0 | focus | build |  |
 | 13 | 2026-10-17 05:00 | tracker: done R0028 | 0 | 0 | 4.0 | raft | deliver |  |
+| 14 | 2026-10-17 05:09 | deliver | 0 | 0 | 8.7 | spend | deliver |  |
 
-**Total:** +1618 / -17 lines, 99.2 agent-minutes, 0 tokens over 13 records
-<!-- totals: added=1618 removed=17 minutes=99.2 records=13 tokens=0 -->
+**Total:** +1618 / -17 lines, 107.9 agent-minutes, 0 tokens over 14 records
+<!-- totals: added=1618 removed=17 minutes=107.9 records=14 tokens=0 -->
