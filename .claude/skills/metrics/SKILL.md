@@ -10,7 +10,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
    - cost per issue: lines added and removed, agent-minutes, and tokens;
    - totals and minutes per issue, by type;
    - **spend by phase**, in lifecycle order, and the same minutes per raft, so a phase that dominates is visible;
-   - **design-review cost per round**: minutes and tokens of the `design-review` rows divided by the raft's design-round count, for every raft that has one;
+   - **design-review cost per round**: minutes and tokens of the `design-review` rows divided by the raft's design-round count, for every raft that has one. For each issue it reads the working-tree `spend.md` and, when this checkout is the git toplevel, the single `origin/main` blob. When one side's rows are a prefix of the other's it uses the longer, so a prep checkout prices a round whose rows were published while the round file is still local, and a branch keeps rows it has not merged. It does not fetch and it does not merge. A ledger that does not parse is reported and that issue is skipped; two blobs, or two ledgers that have diverged, are reported and skipped;
    - **review rounds per raft**, for every raft in any state: design and code rounds, and `format`, the finding format of the raft's first design review (`classic`, `second-order` or `none`);
    - **Rework %** = defect ÷ (defect + feature), measured by lines added, by issue count and by agent time. Rework counts every phase, capture to deliver. Chores are excluded, and that includes every CI and test fix, even ones that are bugs. The target is **under 20%** on all three.
 2. **Interpret it for the user**:

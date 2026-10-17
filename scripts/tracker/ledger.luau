@@ -226,6 +226,21 @@ local function same(a: Row, b: Row): boolean
 		and a.tokens == b.tokens
 end
 
+-- True when every row of `prefix` is field-equal to the same position in `rows` (minutes in tenths,
+-- tokens nil distinct from 0). An empty prefix extends anything.
+function ledger.extends(prefix: { Row }, rows: { Row }): boolean
+	if #prefix > #rows then
+		return false
+	end
+	for i, r in prefix do
+		local got = rows[i]
+		if not got or not same(r, got) then
+			return false
+		end
+	end
+	return true
+end
+
 function ledger.appendOnly(old: string?, new: string, id: string): string?
 	local n, nerr = ledger.parse(new)
 	if not n then

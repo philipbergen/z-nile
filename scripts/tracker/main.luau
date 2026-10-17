@@ -2899,18 +2899,112 @@ local function nonNegativeMinutes(raw: string?): number?
 	return tonumber((string.gsub(raw, "m$", "")))
 end
 
--- One issue's ledger, or nil when the file is missing. A file that does not parse is reported and skipped.
-local function ledgerRows(issue: store.Item): { ledger.Row }?
-	local path = `{issue.dir}/spend.md`
-	if not fs.isFile(path) then
-		return {}
+-- origin/main's issue spend.md blobs, keyed by id, loaded once. nil means this checkout has no
+-- origin/main of its own (a sandbox under .cache, or a cwd that is not the git toplevel): metrics
+-- then reads only the working tree, and it never fetches.
+local originSpend: { [string]: { string } }? = nil
+local originChecked = false
+
+local function originBlobs(id: string): { string }?
+	if not originChecked then
+		originChecked = true
+		local top = sh.run("git", { "rev-parse", "--show-toplevel" })
+		if top.ok and sh.trim(top.stdout) == process.cwd then
+			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main", "tracker/issues" })
+			if listed.ok then
+				originSpend = {}
+				for path in string.gmatch(listed.stdout, "[^\n]+") do
+					local found = string.match(path, "/([fdc]%d%d%d%d)/spend%.md$")
+					if found and originSpend then
+						local list = originSpend[found]
+						if not list then
+							list = {}
+							originSpend[found] = list
+						end
+						table.insert(list, path)
+					end
+				end
+			end
+		end
 	end
-	local parsed, err = ledger.parse(fs.readFile(path))
-	if not parsed then
-		stdio.ewrite(`metrics: {path} does not parse ({err}); skipped\n`)
+	if not originSpend then
 		return nil
 	end
-	return parsed.rows
+	return originSpend[id] or {}
+end
+
+-- The longer of the working-tree ledger and origin/main's, when one is a prefix of the other.
+-- nil means the issue is skipped. A checkout with no origin/main keeps the local read.
+local function ledgerRows(issue: store.Item): { ledger.Row }?
+	local path = `{issue.dir}/spend.md`
+	local localRows: { ledger.Row }? = nil
+	local localErr: string? = nil
+	if not fs.isFile(path) then
+		localRows = {}
+	else
+		local parsed, err = ledger.parse(fs.readFile(path))
+		if parsed then
+			localRows = parsed.rows
+		else
+			localErr = err
+		end
+	end
+	local blobs = originBlobs(issue.id)
+	if not blobs then
+		if localErr then
+			stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
+			return nil
+		end
+		return localRows
+	end
+	if #blobs > 1 then
+		stdio.ewrite(`metrics: {issue.id} spend.md appears twice on origin/main; skipped\n`)
+		return nil
+	end
+	local originRows: { ledger.Row }? = nil
+	local originErr: string? = nil
+	local absent = #blobs == 0
+	if not absent then
+		local blob = blobs[1]
+		local shown = sh.run("git", { "show", `origin/main:{blob}` })
+		if not shown.ok then
+			stdio.ewrite(`metrics: origin/main:{blob} could not be read; using the working tree\n`)
+			absent = true
+		else
+			local parsed, err = ledger.parse(shown.stdout)
+			if parsed then
+				originRows = parsed.rows
+			else
+				originErr = err
+			end
+		end
+	end
+	if localErr and (absent or originErr) then
+		stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
+		if originErr then
+			stdio.ewrite(`metrics: origin/main:{blobs[1]} does not parse ({originErr}); skipped\n`)
+		end
+		return nil
+	end
+	if localErr and originRows then
+		stdio.ewrite(`metrics: {path} does not parse ({localErr}); using origin/main\n`)
+		return originRows
+	end
+	if originErr then
+		stdio.ewrite(`metrics: origin/main:{blobs[1]} does not parse ({originErr}); using the working tree\n`)
+		return localRows
+	end
+	if absent or not originRows then
+		return localRows
+	end
+	local here = localRows :: { ledger.Row }
+	if ledger.extends(here, originRows) or ledger.extends(originRows, here) then
+		return if #originRows > #here then originRows else here
+	end
+	stdio.ewrite(
+		`metrics: {issue.id} spend.md on origin/main and in the working tree have diverged; skipped\n`
+	)
+	return nil
 end
 
 function cmd.spend(pos: { string }, opts: { [string]: { string } })
