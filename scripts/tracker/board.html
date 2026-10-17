@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pickman tracker</title>
 <style>
-:root { --bg: #fff; --fg: #1d2024; --mut: #6b7280; --line: #d9dde3; --sel: #e7efff; --hl: #fff3bf; --code: #f3f4f6; }
+:root { --bg: #fff; --fg: #1d2024; --mut: #6b7280; --line: #d9dde3; --sel: #e7efff; --hl: #fff3bf; --code: #f3f4f6; --ser-feature: #2a78d6; --ser-defect: #eb6834; --ser-chore: #1baf7a; --ser-net: #6b7280; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #15171a; --fg: #e6e8eb; --mut: #9aa3ad; --line: #2d3238; --sel: #1e2b44; --hl: #4a3f12; --code: #21252a; }
+  :root { --bg: #15171a; --fg: #e6e8eb; --mut: #9aa3ad; --line: #2d3238; --sel: #1e2b44; --hl: #4a3f12; --code: #21252a; --ser-feature: #3987e5; --ser-defect: #d95926; --ser-chore: #199e70; --ser-net: #9aa3ad; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
@@ -46,6 +46,27 @@ summary { cursor: pointer; }
 .md table { border-collapse: collapse; }
 .md th, .md td { border: 1px solid var(--line); padding: 2px 8px; }
 ul.links { margin: 0; padding-left: 20px; }
+#stats-toggle { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 12px; cursor: pointer; }
+#stats { border-bottom: 1px solid var(--line); padding: 8px 16px 12px; max-height: 72vh; overflow: auto; }
+#stats-view, #stats-type { display: inline-flex; gap: 4px; margin-right: 12px; }
+#stats button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+#stats button.on { background: var(--sel); font-weight: 600; }
+#stats-tables { margin-top: 8px; overflow-x: auto; }
+#stats table { border-collapse: collapse; margin: 0 16px 12px 0; display: inline-block; vertical-align: top; }
+#stats th, #stats td { border: 1px solid var(--line); padding: 2px 8px; text-align: right; }
+#stats th:first-child, #stats td:first-child { text-align: left; }
+.chart-fig { display: inline-block; margin: 4px 12px 8px 0; vertical-align: top; }
+.chart-fig[hidden] { display: none; }
+.chart-fig figcaption { color: var(--mut); font-size: 12px; }
+.chart { width: 320px; height: auto; }
+.chart text { fill: var(--fg); font-size: 11px; font-family: system-ui, sans-serif; }
+.grid { stroke: var(--line); }
+.baseline { stroke: var(--mut); }
+.ser-feature { fill: var(--ser-feature); stroke: var(--ser-feature); }
+.ser-defect { fill: var(--ser-defect); stroke: var(--ser-defect); }
+.ser-chore { fill: var(--ser-chore); stroke: var(--ser-chore); }
+.ser-net { fill: var(--ser-net); stroke: var(--ser-net); }
+.line { fill: none; stroke-width: 2px; }
 </style>
 <script>{{MARKED}}</script>
 </head>
@@ -53,8 +74,10 @@ ul.links { margin: 0; padding-left: 20px; }
 <header>
 <h1>pickman tracker</h1>
 <nav><button id="tab-active">Active</button><button id="tab-waiting">Waiting</button><button id="tab-done">Done</button></nav>
+<button id="stats-toggle" type="button">Stats</button>
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
+<section id="stats" hidden>{{STATS}}</section>
 <main><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
 <script>
@@ -180,6 +203,43 @@ ul.links { margin: 0; padding-left: 20px; }
     search.classList.remove("miss");
     go(a.getAttribute("data-id"));
   });
+
+  // Stats is reached only through $("stats"); the old DOM stubs have no such element and no querySelectorAll.
+  var statsRoot = $("stats");
+  if (statsRoot && statsRoot.querySelectorAll) {
+    var viewName = "month", typeName = "all";
+    function showStats() {
+      var figs = statsRoot.querySelectorAll("figure");
+      for (var i = 0; i < figs.length; i++) {
+        var fig = figs[i];
+        var v = fig.getAttribute("data-view"), ty = fig.getAttribute("data-type");
+        var on = (v === viewName || v === "all") && (ty === typeName || ty === "any");
+        if (on) fig.removeAttribute("hidden"); else fig.setAttribute("hidden", "");
+      }
+      var viewBtns = statsRoot.querySelectorAll("#stats-view button");
+      for (var j = 0; j < viewBtns.length; j++) viewBtns[j].classList.toggle("on", viewBtns[j].getAttribute("data-view") === viewName);
+      var typeBtns = statsRoot.querySelectorAll("#stats-type button");
+      for (var k = 0; k < typeBtns.length; k++) typeBtns[k].classList.toggle("on", typeBtns[k].getAttribute("data-type") === typeName);
+    }
+    statsRoot.addEventListener("click", function (e) {
+      var t = e.target;
+      if (!t || !t.getAttribute) return;
+      var v = t.getAttribute("data-view"), ty = t.getAttribute("data-type");
+      if (v) { viewName = v; showStats(); }
+      else if (ty) { typeName = ty; showStats(); }
+      else if (t.id === "stats-table-toggle") {
+        var boxes = statsRoot.querySelectorAll("#stats-tables");
+        if (!boxes.length) return;
+        if (boxes[0].hasAttribute("hidden")) boxes[0].removeAttribute("hidden");
+        else boxes[0].setAttribute("hidden", "");
+      }
+    });
+    var opener = $("stats-toggle");
+    if (opener && opener.addEventListener) opener.addEventListener("click", function () {
+      if (statsRoot.hasAttribute("hidden")) statsRoot.removeAttribute("hidden");
+      else statsRoot.setAttribute("hidden", "");
+    });
+  }
 
   var start = "";
   try { start = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* malformed: no match */ }

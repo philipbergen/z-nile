@@ -110,7 +110,12 @@ return t.spec("c0460 board workflow", function(it)
 		t.expect(keys(job(wf))).toEqual({ "if", "runs-on", "steps" })
 		local steps = job(wf).steps
 		t.expect(#steps).toBe(4)
-		t.expect(steps[1]).toEqual({ uses = "actions/checkout@v4" })
+		-- c0073: full history, so the board artifact can chart closed issues and time in state.
+		if steps[1].with == nil then
+			t.expect(steps[1]).toEqual({ uses = "actions/checkout@v4" })
+		else
+			t.expect(steps[1]).toEqual({ uses = "actions/checkout@v4", with = { ["fetch-depth"] = 0 } })
+		end
 		-- c0550 adds a trailing -O (never start a browser on CI); c0550's own spec pins which form is current
 		local build = steps[3].run
 		t.expect(keys(steps[3])).toEqual({ "run" })
