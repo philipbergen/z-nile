@@ -13,6 +13,7 @@
 | 9 | 2026-10-16 23:55 | R0031: refute-002 | 0 | 0 | 4.0 | explicit | code-review |  |
 | 10 | 2026-10-17 00:15 | R0031: review-003 | 0 | 0 | 18.0 | explicit | code-review |  |
 | 11 | 2026-10-17 00:19 | c0084: price prep rounds and keep stream reviews on the raft | 119 | 10 | 12.0 | explicit | code-review |  |
+| 12 | 2026-10-17 00:20 | R0031: refute-003 | 0 | 0 | 5.0 | explicit | code-review |  |
 
-**Total:** +987 / -135 lines, 130.0 agent-minutes, 0 tokens over 11 records
-<!-- totals: added=987 removed=135 minutes=130.0 records=11 tokens=0 -->
+**Total:** +987 / -135 lines, 135.0 agent-minutes, 0 tokens over 12 records
+<!-- totals: added=987 removed=135 minutes=135.0 records=12 tokens=0 -->
