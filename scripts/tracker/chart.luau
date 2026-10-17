@@ -352,7 +352,7 @@ function chart.svg(series: { Series }, opts: Options): string
 						first = false
 					end
 				end
-			else
+			elseif kind == "bars" then
 				local entry = series[1]
 				local v = entry and entry.values[i]
 				if nonempty and entry and v and v ~= 0 then
@@ -385,9 +385,15 @@ function chart.svg(series: { Series }, opts: Options): string
 						local yT = tenths(yPix(v))
 						table.insert(d, if pen then `L {fmtT(xT)} {fmtT(yT)}` else `M {fmtT(xT)} {fmtT(yT)}`)
 						pen = true
+						local notes = entry.notes
 						table.insert(
 							circles,
-							`<circle class="point ser-{entry.key}" cx="{fmtT(xT)}" cy="{fmtT(yT)}" r="4"></circle>`
+							`<circle class="point ser-{entry.key}" cx="{fmtT(xT)}" cy="{fmtT(yT)}" r="4"><title>{tip(
+								entry.label,
+								labels[i],
+								v,
+								if notes then notes[i] else nil
+							)}</title></circle>`
 						)
 					end
 				end

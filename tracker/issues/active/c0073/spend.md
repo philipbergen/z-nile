@@ -11,6 +11,7 @@
 | 7 | 2026-10-16 23:22 | c0073: record promote-check stop | 0 | 0 | 4.0 | focus |
 | 8 | 2026-10-17 04:13 | c0073: typecheck acceptance specs | 0 | 0 | 8.0 | focus |
 | 9 | 2026-10-17 04:16 | c0073: record gate after spec typecheck | 0 | 0 | 2.0 | focus |
+| 10 | 2026-10-17 04:39 | c0073: lines, hidden charts, and table ratios | 33 | 6 | 20.0 | focus |
 
-**Total:** +1585 / -11 lines, 68.2 agent-minutes over 9 commits
-<!-- totals: added=1585 removed=11 minutes=68.2 commits=9 -->
+**Total:** +1618 / -17 lines, 88.2 agent-minutes over 10 commits
+<!-- totals: added=1618 removed=17 minutes=88.2 commits=10 -->

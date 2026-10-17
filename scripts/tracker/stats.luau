@@ -256,6 +256,13 @@ function stats.row(items: { Item }, spends: { Spend }, bucket: Bucket): Row
 			add(removed, spend.type, spend.removed)
 		end
 	end
+	-- One decimal, before the ratios, so the table and the time percentages share a tenth.
+	minutes = {
+		all = roundTo(minutes.all, 1),
+		feature = roundTo(minutes.feature, 1),
+		defect = roundTo(minutes.defect, 1),
+		chore = roundTo(minutes.chore, 1),
+	}
 	return {
 		bucket = bucket,
 		opened = opened,

@@ -333,12 +333,21 @@ local function viewTable(title: string, rows: { stats.Row }): string
 	for _, row in rows do
 		table.insert(
 			body,
-			`<tr><td>{row.bucket.label}</td><td>{row.opened.all}</td><td>{row.closed.all}</td><td>{row.net.all}</td><td>{row.minutes.all}</td><td>{row.added.all}</td><td>{row.removed.all}</td><td>{row.netLines.all}</td></tr>`
+			`<tr><td>{row.bucket.label}</td><td>{row.opened.all}</td><td>{row.closed.all}</td><td>{row.net.all}</td><td>{num(
+				row.minutes.all
+			)}</td><td>{row.added.all}</td><td>{row.removed.all}</td><td>{row.netLines.all}</td></tr>`
 		)
 	end
 	return `<table><caption>{title}</caption><thead><tr><th>bucket</th><th>opened</th><th>closed</th><th>net</th><th>minutes</th><th>+lines</th><th>{MINUS}lines</th><th>net lines</th></tr></thead><tbody>{table.concat(
 		body
 	)}</tbody></table>`
+end
+
+local function pct(n: number?): string
+	if n == nil then
+		return ""
+	end
+	return `{num(n)}%`
 end
 
 local function periodsTable(
@@ -349,17 +358,21 @@ local function periodsTable(
 		for _, name in { "week", "month", "quarter", "year" } do
 			local row = (periods :: any)[name] :: stats.Row
 			for _, ty in TYPE_ORDER do
-				local ratios = if ty == "all" then `{num(row.ratios.defectCount)}%` else ""
+				local ratios = if ty == "all"
+					then `<td>{pct(row.ratios.defectCount)}</td><td>{pct(row.ratios.defectTime)}</td><td>{pct(
+						row.ratios.choreCount
+					)}</td><td>{pct(row.ratios.choreTime)}</td>`
+					else "<td></td><td></td><td></td><td></td>"
 				table.insert(
 					body,
 					`<tr><td>{row.bucket.label}</td><td>{TYPE_LABEL[ty]}</td><td>{(row.opened :: any)[ty]}</td><td>{(
 						row.closed :: any
-					)[ty]}</td><td>{(row.minutes :: any)[ty]}</td><td>{ratios}</td></tr>`
+					)[ty]}</td><td>{num((row.minutes :: any)[ty])}</td>{ratios}</tr>`
 				)
 			end
 		end
 	end
-	return `<table><caption>Periods</caption><thead><tr><th>period</th><th>type</th><th>opened</th><th>closed</th><th>minutes</th><th>defect %</th></tr></thead><tbody>{table.concat(
+	return `<table><caption>Periods</caption><thead><tr><th>period</th><th>type</th><th>opened</th><th>closed</th><th>minutes</th><th>defect %</th><th>defect time %</th><th>chore %</th><th>chore time %</th></tr></thead><tbody>{table.concat(
 		body
 	)}</tbody></table>`
 end
