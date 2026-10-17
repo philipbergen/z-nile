@@ -126,7 +126,7 @@ return t.spec("tracker board statistics", function(it)
 				'(<figure class="chart%-fig"[^>]*>)%s*<svg class="chart" data%-chart="([^"]+)"'
 			)
 		do
-			figures[id] = tag
+			figures[id :: string] = tag :: string
 		end
 		local function visible(id: string): boolean
 			return string.find(figures[id], " hidden", 1, true) == nil

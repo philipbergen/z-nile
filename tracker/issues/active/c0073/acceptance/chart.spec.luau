@@ -12,7 +12,7 @@ local function marks(svg: string): { Rect }
 			cls = string.match(tag, 'class="mark ([^"]*)"') or "",
 			y = tonumber(string.match(tag, ' y="([%-%d%.]+)"')) or 0 / 0,
 			height = tonumber(string.match(tag, ' height="([%-%d%.]+)"')) or 0 / 0,
-			title = title,
+			title = title :: string,
 		})
 	end
 	return out
@@ -142,7 +142,7 @@ return t.spec("tracker chart", function(it)
 		t.expect(string.find(legend, "Chore", 1, true) ~= nil).toBe(true)
 		local one =
 			chart.svg({ { key = "feature", label = "Feature", values = { 1 } } }, opts("stacked", { "a" }))
-		t.expect(string.find(one, 'class="legend"', 1, true)).toBe(nil)
+		t.expect((string.find(one, 'class="legend"', 1, true))).toBe(nil)
 		-- mirror: one legend entry per type, not one per side
 		local mirror = chart.svg(
 			{
@@ -167,9 +167,9 @@ return t.spec("tracker chart", function(it)
 		t.expect(string.find(svg, "ser-feature", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(svg, "ser-defect", 1, true) ~= nil).toBe(true)
 		-- no paint in the markup at all: not hex, rgb(), named colors or var(); the page CSS paints by class
-		t.expect(string.find(svg, " fill=", 1, true)).toBe(nil)
-		t.expect(string.find(svg, " stroke=", 1, true)).toBe(nil)
-		t.expect(string.find(svg, "style=", 1, true)).toBe(nil)
+		t.expect((string.find(svg, " fill=", 1, true))).toBe(nil)
+		t.expect((string.find(svg, " stroke=", 1, true))).toBe(nil)
+		t.expect((string.find(svg, "style=", 1, true))).toBe(nil)
 	end)
 
 	it("no data draws an empty frame", function()
@@ -249,7 +249,7 @@ return t.spec("tracker chart", function(it)
 	it("hbars draws one horizontal bar per non-nil mean, with n in its tooltip", function()
 		local svg = chart.svg({
 			{ key = "feature", label = "Feature", values = { 1.5, 3 }, notes = { "n=4", "n=2" } },
-			{ key = "defect", label = "Defect", values = { nil, 0.5 }, notes = { nil, "n=1" } },
+			{ key = "defect", label = "Defect", values = { nil, 0.5 }, notes = { nil :: string?, "n=1" } },
 		}, {
 			id = "durations",
 			title = "Time in state",
@@ -273,7 +273,7 @@ return t.spec("tracker chart", function(it)
 		for tag, title in string.gmatch(svg, '(<rect class="mark [^"]*"[^>]*>)%s*<title>(.-)</title>') do
 			local x = tonumber(string.match(tag, ' x="([%-%d%.]+)"')) :: number
 			t.expect(x >= (x0 :: number) - 0.01).toBe(true)
-			widths[title] = tonumber(string.match(tag, ' width="([%-%d%.]+)"')) :: number
+			widths[title :: string] = tonumber(string.match(tag, ' width="([%-%d%.]+)"')) :: number
 		end
 		local w15, w3 = widths["Feature, active: 1.5 days (n=4)"], widths["Feature, new: 3 days (n=2)"]
 		t.expect(math.abs(w3 / w15 - 2) < 0.1).toBe(true) -- widths proportional to the values
