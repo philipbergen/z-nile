@@ -12,6 +12,7 @@
 | 8 | 2026-10-17 04:13 | c0073: typecheck acceptance specs | 0 | 0 | 8.0 | focus |
 | 9 | 2026-10-17 04:16 | c0073: record gate after spec typecheck | 0 | 0 | 2.0 | focus |
 | 10 | 2026-10-17 04:39 | c0073: lines, hidden charts, and table ratios | 33 | 6 | 20.0 | focus |
+| 11 | 2026-10-17 04:39 | R0028: refute-001 | 0 | 0 | 4.0 | focus |
 
-**Total:** +1618 / -17 lines, 88.2 agent-minutes over 10 commits
-<!-- totals: added=1618 removed=17 minutes=88.2 commits=10 -->
+**Total:** +1618 / -17 lines, 92.2 agent-minutes over 11 commits
+<!-- totals: added=1618 removed=17 minutes=92.2 commits=11 -->
