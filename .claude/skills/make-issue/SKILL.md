@@ -23,4 +23,4 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
    - A few bullet-point ideas under Solution, if they came up.
    Everything else is left for `ticket-prep`. Keep `design: draft`.
 5. **Duplicates**: look for overlaps with `scripts/tracker.sh list backlog`. If there's an overlap, say so and ask whether to merge.
-6. **Land it.** Commit in the capture worktree (`git add tracker && git commit -m "tracker: new <id> <title>"`), run `scripts/tracker.sh land`, and then remove the worktree with the command it prints. No PR: land runs the gate locally and pushes to `main`. Report the ID and path.
+6. **Land it.** Commit in the capture worktree (`git add tracker && git commit -m "tracker: new <id> <title>"`), run `scripts/tracker.sh land`, and before the worktree is removed record `scripts/tracker.sh spend <id> --phase capture --time <minutes>`, then remove the worktree with the command it prints. No PR: land runs the gate locally and pushes to `main`. Report the ID and path.

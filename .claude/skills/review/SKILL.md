@@ -76,8 +76,8 @@ Attack all of the following:
 
 ## Stream mode (execute-raft Phase 2B)
 A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
-- **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs. Run the stream's checks (`scripts/tracker.sh check <issue>`, `scripts/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules, its own document, and its `stream-review-<issue>-*` and `stream-refute-<issue>-*` files; anything else is a finding.
-- **Output**: only `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md`, written in the stream worktree, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author answers in `stream-refute-<issue>-NNN.md`.
+- **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (the lead puts that text in the brief; it is not in the stream tree). Run the stream's checks (`scripts/tracker.sh check <issue>`, `scripts/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules and its own document. A `stream-review-*` or `stream-refute-*` file in that diff is a finding: those files live only on the raft branch.
+- **Output**: return the review markdown. Write no file. The lead writes `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md` on the raft branch, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author returns the refute text; the lead writes `stream-refute-<issue>-NNN.md` on the raft branch.
 - These files are not review rounds: `tracker.sh done` and `metrics` ignore them.
 
 ## Code mode (before the PR is marked ready)

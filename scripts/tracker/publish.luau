@@ -2,6 +2,7 @@
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
 local ids = require("./ids")
+local ledger = require("./ledger")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local task = require("@lune/task")
@@ -37,7 +38,8 @@ function publish.allowed(path: string): boolean
 	local okId = if kind == "issues"
 		then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
 		else (kind == "rafts" and string.match(id, "^R%d%d%d%d$") ~= nil)
-	return okId and (file == `{id}.md` or file == "check.sh")
+	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
+	return okId and (file == `{id}.md` or file == "check.sh" or (kind == "issues" and file == "spend.md"))
 end
 
 -- The id and the path relative to the item directory of any file inside an item directory,
@@ -359,6 +361,22 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			end
 			if string.find(c.content, "\r", 1, true) then
 				return fail(`{c.path}: carriage returns are not allowed in a published change`)
+			end
+			if string.sub(c.path, -9) == "/spend.md" then
+				-- moves (c.from) already continued: a ready/stop carries the file byte for byte
+				local id = string.match(c.path, "/([fdc]%d%d%d%d)/spend%.md$")
+				if not id or string.find(c.path, "/active/", 1, true) then
+					return fail(`{c.path}: an active item's spend.md is recorded on its raft branch`)
+				end
+				local doc = string.gsub(c.path, "/spend%.md$", `/{id}.md`)
+				if not onOrigin[doc] then
+					return fail(`{c.path}: no {id}.md beside it on origin/main`)
+				end
+				local reason = ledger.appendOnly(existing, c.content, id)
+				if reason then
+					return fail(`{c.path}: {reason}`)
+				end
+				continue
 			end
 			if existing then
 				local before, after = withoutStatus(existing), withoutStatus(c.content)

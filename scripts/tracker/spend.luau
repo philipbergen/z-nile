@@ -5,6 +5,7 @@
 -- wall-clock since the previous commit, capped to absorb idle gaps; multi-issue commits split
 -- minutes in proportion to lines added.
 local fs = require("@lune/fs")
+local ledger = require("./ledger")
 local sh = require("../lib/sh")
 local store = require("./store")
 
@@ -12,8 +13,15 @@ local spend = {}
 
 spend.IDLE_CAP_MINUTES = 45
 
-export type Share = { id: string, added: number, removed: number, minutes: number, how: string }
-export type Totals = { added: number, removed: number, minutes: number, commits: number }
+export type Share = {
+	id: string,
+	added: number,
+	removed: number,
+	minutes: number,
+	how: string,
+	tokens: number?,
+}
+export type Totals = { added: number, removed: number, minutes: number, records: number, tokens: number }
 
 type FileStat = { path: string, added: number, removed: number }
 
@@ -58,9 +66,51 @@ local function round1(n: number): number
 	return math.floor(n * 10 + 0.5) / 10
 end
 
--- Split staged lines and the given minutes across issues.
--- `how` is "explicit" | "focus" | "raft" (who picked the issues); per-file ownership refines it.
-function spend.attribute(issues: { store.Item }, stats: { FileStat }, minutes: number, how: string): { Share }
+-- The prep branch's own lines: each member's check.sh, acceptance/ and experiments/, plus the raft's
+-- check.sh when `raft` is given. A missing path is ignored. The owner map is each member's directory;
+-- the raft check.sh is unowned, so attribute splits it evenly.
+function spend.prepStats(items: { store.Item }, raft: store.Item?): ({ FileStat }, { [string]: { string } })
+	local owners: { [string]: { string } } = {}
+	local paths: { string } = {}
+	for _, issue in items do
+		owners[issue.id] = { issue.dir }
+		table.insert(paths, `{issue.dir}/check.sh`)
+		table.insert(paths, `{issue.dir}/acceptance`)
+		table.insert(paths, `{issue.dir}/experiments`)
+	end
+	if raft then
+		table.insert(paths, `{raft.dir}/check.sh`)
+	end
+	local out: { FileStat } = {}
+	for _, path in paths do
+		local r = sh.run("git", { "diff", "--numstat", "origin/main...HEAD", "--", path })
+		if r.ok then
+			for line in string.gmatch(r.stdout, "[^\n]+") do
+				local a, removed, p = string.match(line, "^(%S+)\t(%S+)\t(.+)$")
+				if a and removed and p then
+					table.insert(
+						out,
+						{ path = p, added = tonumber(a) or 0, removed = tonumber(removed) or 0 }
+					)
+				end
+			end
+		end
+	end
+	return out, owners
+end
+
+-- Split lines, minutes and optional tokens across issues.
+-- `how` is "explicit" | "focus" | "raft" | "spend" (who picked the issues); per-file ownership refines it.
+-- `owners`, when given, replaces the Touched-modules prefixes. Tokens, when given, split like minutes and
+-- sum exactly (largest remainder; equal fractions go to the smaller id). Minutes stay rounded to tenths.
+function spend.attribute(
+	issues: { store.Item },
+	stats: { FileStat },
+	minutes: number,
+	how: string,
+	tokens: number?,
+	owners: { [string]: { string } }?
+): { Share }
 	local shares: { [string]: Share } = {}
 	local order: { string } = {}
 	for _, issue in issues do
@@ -68,27 +118,33 @@ function spend.attribute(issues: { store.Item }, stats: { FileStat }, minutes: n
 		table.insert(order, issue.id)
 	end
 	local owned: { [string]: { string } } = {}
-	for _, issue in issues do
-		owned[issue.id] = spend.ownedPaths(issue)
+	if owners then
+		for _, issue in issues do
+			owned[issue.id] = owners[issue.id] or {}
+		end
+	elseif #issues > 1 then
+		for _, issue in issues do
+			owned[issue.id] = spend.ownedPaths(issue)
+		end
 	end
 	for _, stat in stats do
-		local owners: { string } = {}
+		local who: { string } = {}
 		if #issues > 1 then
 			for _, id in order do
 				for _, prefix in owned[id] do
 					if string.sub(stat.path, 1, #prefix) == prefix then
-						table.insert(owners, id)
+						table.insert(who, id)
 						break
 					end
 				end
 			end
 		end
-		if #owners == 0 then
-			owners = order
+		if #who == 0 then
+			who = order
 		end
-		for _, id in owners do
-			shares[id].added += stat.added / #owners
-			shares[id].removed += stat.removed / #owners
+		for _, id in who do
+			shares[id].added += stat.added / #who
+			shares[id].removed += stat.removed / #who
 		end
 	end
 	local totalAdded = 0
@@ -117,14 +173,32 @@ function spend.attribute(issues: { store.Item }, stats: { FileStat }, minutes: n
 		sumAdded += stat.added
 		sumRemoved += stat.removed
 	end
-	local out: { Share } = {}
+	local tokenParts: { { id: string, frac: number } } = {}
+	local tokenFloors = 0
 	for _, id in order do
 		local s = shares[id]
 		local weight = if totalAdded > 0 then s.added / totalAdded else 1 / #order
 		s.minutes = round1(minutes * weight)
+		if tokens ~= nil then
+			local exact = tokens * weight
+			local fl = math.floor(exact)
+			tokenFloors += fl
+			s.tokens = fl
+			table.insert(tokenParts, { id = id, frac = exact - fl })
+		end
+	end
+	if tokens ~= nil then
+		table.sort(tokenParts, function(a, b)
+			return if a.frac == b.frac then a.id < b.id else a.frac > b.frac
+		end)
+		for i = 1, tokens - tokenFloors do
+			local id = tokenParts[i].id
+			shares[id].tokens = (shares[id].tokens or 0) + 1
+		end
 	end
 	apportion("added", sumAdded)
 	apportion("removed", sumRemoved)
+	local out: { Share } = {}
 	for _, id in order do
 		local s = shares[id]
 		if #order > 1 and how ~= "explicit" then
@@ -135,80 +209,56 @@ function spend.attribute(issues: { store.Item }, stats: { FileStat }, minutes: n
 	return out
 end
 
-local HEADER =
-	"| # | when | commit | +lines | -lines | minutes | attribution |\n|---|---|---|---|---|---|---|\n"
-
 function spend.readTotals(dir: string): Totals
 	local path = `{dir}/spend.md`
-	local t: Totals = { added = 0, removed = 0, minutes = 0, commits = 0 }
 	if not fs.isFile(path) then
-		return t
+		return { added = 0, removed = 0, minutes = 0, records = 0, tokens = 0 }
 	end
-	local text = fs.readFile(path)
-	local a, r, m, c =
-		string.match(text, "<!%-%- totals: added=(%d+) removed=(%d+) minutes=([%d%.]+) commits=(%d+) %-%->")
-	if a and r and m and c then
-		t.added, t.removed, t.minutes, t.commits =
-			tonumber(a) :: number, tonumber(r) :: number, tonumber(m) :: number, tonumber(c) :: number
+	local parsed, err = ledger.parse(fs.readFile(path))
+	if not parsed then
+		error(`{path} does not parse: {err}`, 0)
 	end
-	return t
+	return ledger.sum(parsed.rows)
 end
 
-local function totalsLine(t: Totals): string
-	return string.format(
-		"\n**Total:** +%d / -%d lines, %.1f agent-minutes over %d commits\n<!-- totals: added=%d removed=%d minutes=%.1f commits=%d -->\n",
-		t.added,
-		t.removed,
-		t.minutes,
-		t.commits,
-		t.added,
-		t.removed,
-		t.minutes,
-		t.commits
-	)
-end
-
-function spend.appendRow(issue: store.Item, share: Share, subject: string)
+function spend.appendRow(issue: store.Item, share: Share, subject: string, phase: string?)
 	local path = `{issue.dir}/spend.md`
-	local t = spend.readTotals(issue.dir)
-	local rows = ""
-	if fs.isFile(path) then
-		rows = string.match(fs.readFile(path), "|%-%-%-|[^\n]*\n(.-)\n+%*%*Total") or ""
-		rows = string.gsub(rows, "%s+$", "")
-		if rows ~= "" then
-			rows ..= "\n"
-		end
-	end
-	t.added += share.added
-	t.removed += share.removed
-	t.minutes = round1(t.minutes + share.minutes)
-	t.commits += 1
-	local safeSubject = string.gsub(subject, "|", "/")
-	rows ..= string.format(
-		"| %d | %s | %s | %d | %d | %.1f | %s |\n",
-		t.commits,
-		os.date("!%Y-%m-%d %H:%M", os.time()),
-		safeSubject,
-		share.added,
-		share.removed,
-		share.minutes,
-		share.how
-	)
+	local existing = if fs.isFile(path) then fs.readFile(path) else nil
 	local title = store.readFront(issue.doc).title or issue.id
-	fs.writeFile(path, `# Spend: {issue.id} {title}\n\n{HEADER}{rows}{totalsLine(t)}`)
+	local row: ledger.Row = {
+		when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
+		subject = subject,
+		added = share.added,
+		removed = share.removed,
+		minutes = share.minutes,
+		how = share.how,
+		phase = phase or "build",
+		tokens = share.tokens,
+	}
+	fs.writeFile(path, ledger.append(existing, issue.id, title, row))
 end
 
--- Raft spend.md: a summary table over every issue that names this raft (members and emergent).
+-- Raft spend.md: a summary over every issue that names this raft (members and emergent), plus each
+-- phase that has records. A snapshot written by commit and done; metrics reads the members.
 function spend.writeRaft(raft: store.Item)
 	local lines = {
 		`# Spend: {raft.id} {store.readFront(raft.doc).title or ""}`,
 		"",
-		"| issue | type | emergent | +lines | -lines | minutes | commits |",
+		"| issue | type | emergent | +lines | -lines | minutes | tokens |",
 		"|---|---|---|---|---|---|---|",
 	}
-	local sum: Totals = { added = 0, removed = 0, minutes = 0, commits = 0 }
+	local all: { ledger.Row } = {}
 	for _, issue in store.members(raft.id) do
-		local t = spend.readTotals(issue.dir)
+		local path = `{issue.dir}/spend.md`
+		local rows: { ledger.Row } = {}
+		if fs.isFile(path) then
+			local parsed, err = ledger.parse(fs.readFile(path))
+			if not parsed then
+				error(`{path} does not parse: {err}`, 0)
+			end
+			rows = parsed.rows
+		end
+		local t = ledger.sum(rows)
 		local emergent = store.readFront(issue.doc).emergent == "true"
 		table.insert(
 			lines,
@@ -220,15 +270,50 @@ function spend.writeRaft(raft: store.Item)
 				t.added,
 				t.removed,
 				t.minutes,
-				t.commits
+				t.tokens
 			)
 		)
-		sum.added += t.added
-		sum.removed += t.removed
-		sum.minutes = round1(sum.minutes + t.minutes)
-		sum.commits = math.max(sum.commits, t.commits)
+		for _, row in rows do
+			table.insert(all, row)
+		end
 	end
-	fs.writeFile(`{raft.dir}/spend.md`, table.concat(lines, "\n") .. "\n" .. totalsLine(sum))
+	local sum = ledger.sum(all)
+	table.insert(
+		lines,
+		string.format(
+			"\n**Total:** +%d / -%d lines, %.1f agent-minutes, %d tokens over %d records",
+			sum.added,
+			sum.removed,
+			sum.minutes,
+			sum.tokens,
+			sum.records
+		)
+	)
+	table.insert(
+		lines,
+		string.format(
+			"<!-- totals: added=%d removed=%d minutes=%.1f records=%d tokens=%d -->",
+			sum.added,
+			sum.removed,
+			sum.minutes,
+			sum.records,
+			sum.tokens
+		)
+	)
+	table.insert(lines, "")
+	table.insert(lines, "| phase | +lines | -lines | minutes | tokens |")
+	table.insert(lines, "|---|---|---|---|---|")
+	local by = ledger.byPhase(all)
+	for _, phase in ledger.PHASES do
+		local t = by[phase]
+		if t.records > 0 then
+			table.insert(
+				lines,
+				string.format("| %s | %d | %d | %.1f | %d |", phase, t.added, t.removed, t.minutes, t.tokens)
+			)
+		end
+	end
+	fs.writeFile(`{raft.dir}/spend.md`, table.concat(lines, "\n") .. "\n")
 end
 
 return spend
