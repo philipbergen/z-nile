@@ -10,6 +10,7 @@
 | 6 | 2026-10-16 23:18 | c0073: verification log | 0 | 0 | 2.0 | focus |
 | 7 | 2026-10-16 23:22 | c0073: record promote-check stop | 0 | 0 | 4.0 | focus |
 | 8 | 2026-10-17 04:13 | c0073: typecheck acceptance specs | 0 | 0 | 8.0 | focus |
+| 9 | 2026-10-17 04:16 | c0073: record gate after spec typecheck | 0 | 0 | 2.0 | focus |
 
-**Total:** +1585 / -11 lines, 66.2 agent-minutes over 8 commits
-<!-- totals: added=1585 removed=11 minutes=66.2 commits=8 -->
+**Total:** +1585 / -11 lines, 68.2 agent-minutes over 9 commits
+<!-- totals: added=1585 removed=11 minutes=68.2 commits=9 -->
