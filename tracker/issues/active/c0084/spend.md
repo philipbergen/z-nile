@@ -15,6 +15,7 @@
 | 11 | 2026-10-17 00:19 | c0084: price prep rounds and keep stream reviews on the raft | 119 | 10 | 12.0 | explicit | code-review |  |
 | 12 | 2026-10-17 00:20 | R0031: refute-003 | 0 | 0 | 5.0 | explicit | code-review |  |
 | 13 | 2026-10-17 00:36 | R0031: review-004 | 0 | 0 | 14.0 | explicit | code-review |  |
+| 14 | 2026-10-17 00:38 | c0084: match the git toplevel and keep stream reviews on the raft | 9 | 6 | 10.0 | explicit | code-review |  |
 
-**Total:** +987 / -135 lines, 149.0 agent-minutes, 0 tokens over 13 records
-<!-- totals: added=987 removed=135 minutes=149.0 records=13 tokens=0 -->
+**Total:** +996 / -141 lines, 159.0 agent-minutes, 0 tokens over 14 records
+<!-- totals: added=996 removed=141 minutes=159.0 records=14 tokens=0 -->

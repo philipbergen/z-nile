@@ -2908,8 +2908,11 @@ local originChecked = false
 local function originBlobs(id: string): { string }?
 	if not originChecked then
 		originChecked = true
+		-- the same pair guardRepoRoot uses: process.cwd keeps a trailing slash, so it never
+		-- equals git's toplevel and the origin read would never run
+		local here = sh.run("pwd", { "-P" })
 		local top = sh.run("git", { "rev-parse", "--show-toplevel" })
-		if top.ok and sh.trim(top.stdout) == process.cwd then
+		if here.ok and top.ok and sh.trim(here.stdout) == sh.trim(top.stdout) then
 			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main", "tracker/issues" })
 			if listed.ok then
 				originSpend = {}
