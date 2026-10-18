@@ -11,6 +11,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0037
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: Awareness, HudView, Main.client, the project files and architecture.md are unchanged" bash -c 'git diff --quiet origin/main...HEAD -- src/shared/Logic/Awareness src/client/HudView.luau src/client/Main.client.luau tracker/architecture.md default.project.json lobby.project.json'
 
 finish
