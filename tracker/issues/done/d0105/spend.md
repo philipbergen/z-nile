@@ -18,6 +18,7 @@
 | 14 | 2026-10-18 16:28 | R0037: refute-001 | 0 | 0 | 6.0 | explicit | code-review |  |
 | 15 | 2026-10-18 16:29 | R0037: verification log | 0 | 0 | 3.0 | explicit | deliver |  |
 | 16 | 2026-10-18 16:31 | tracker: done R0037 | 0 | 0 | 2.9 | raft | deliver |  |
+| 17 | 2026-10-18 16:38 | deliver | 0 | 0 | 8.0 | spend | deliver |  |
 
-**Total:** +203 / -9 lines, 137.9 agent-minutes, 0 tokens over 16 records
-<!-- totals: added=203 removed=9 minutes=137.9 records=16 tokens=0 -->
+**Total:** +203 / -9 lines, 145.9 agent-minutes, 0 tokens over 17 records
+<!-- totals: added=203 removed=9 minutes=145.9 records=17 tokens=0 -->
