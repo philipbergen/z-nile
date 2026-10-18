@@ -15,6 +15,7 @@
 | 11 | 2026-10-18 16:20 | d0105: place the radar from Hud.radarBox | 22 | 7 | 10.0 | explicit | build |  |
 | 12 | 2026-10-18 16:23 | d0105: record the gate times | 0 | 0 | 2.0 | explicit | build |  |
 | 13 | 2026-10-18 16:27 | R0037: review-001 | 0 | 0 | 2.0 | explicit | code-review |  |
+| 14 | 2026-10-18 16:28 | R0037: refute-001 | 0 | 0 | 6.0 | explicit | code-review |  |
 
-**Total:** +203 / -9 lines, 126.0 agent-minutes, 0 tokens over 13 records
-<!-- totals: added=203 removed=9 minutes=126.0 records=13 tokens=0 -->
+**Total:** +203 / -9 lines, 132.0 agent-minutes, 0 tokens over 14 records
+<!-- totals: added=203 removed=9 minutes=132.0 records=14 tokens=0 -->
