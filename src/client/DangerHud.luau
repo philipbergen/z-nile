@@ -1,11 +1,13 @@
 --!strict
--- Client adapter: the danger aids. A radar in the top-right corner (the maze around the player, turned so up
--- is where the camera looks) and arrows on the screen edge for ghosts out of view, larger and brighter the
--- closer they are along the maze. All the geometry is Awareness; this only draws it.
+-- Client adapter: the danger aids. A radar in the bottom-right corner, one margin above the power bar
+-- (Hud.radarBox), the maze around the player turned so up is where the camera looks, and arrows on the
+-- screen edge for ghosts out of view, larger and brighter the closer they are along the maze. All the
+-- geometry is Awareness; this only draws it.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
+local Hud = require("@game/ReplicatedStorage/Shared/Logic/Hud")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 
@@ -50,8 +52,6 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 	local radarSize = (Awareness.RADAR_RADIUS * 2 + 1) * CELL
 	local radar = Instance.new("Frame")
 	radar.Name = "Radar"
-	radar.AnchorPoint = Vector2.new(1, 0)
-	radar.Position = UDim2.new(1, -16, 0, 16)
 	radar.Size = UDim2.fromOffset(radarSize, radarSize)
 	radar.BackgroundColor3 = Color3.new(0, 0, 0)
 	radar.BackgroundTransparency = 0.35
@@ -71,8 +71,10 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 	local walls: { Frame } = {}
 	local blips: { Frame } = {}
 	local arrows: { TextLabel } = {}
-
 	RunService.RenderStepped:Connect(function()
+		local view = gui.AbsoluteSize
+		local box = Hud.radarBox(view.X, view.Y, radarSize)
+		radar.Position = UDim2.fromOffset(box.x, box.y)
 		local snap, m, pose = latest, maze, getPose()
 		if snap == nil or m == nil or pose == nil or snap.ghosts == nil then
 			return
@@ -103,7 +105,6 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 			f.Position = UDim2.fromOffset(radarSize / 2 + b.x * CELL, radarSize / 2 + b.y * CELL)
 		end
 
-		local view = gui.AbsoluteSize
 		local aspect = view.X / math.max(view.Y, 1)
 		local list = Awareness.indicators(m, pose, ghosts, {
 			verticalFieldOfView = math.rad(workspace.CurrentCamera.FieldOfView),

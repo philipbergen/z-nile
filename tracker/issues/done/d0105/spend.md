@@ -12,6 +12,12 @@
 | 8 | 2026-10-18 06:53 | design-review-004 | 0 | 0 | 10.0 | spend | design-review |  |
 | 9 | 2026-10-18 06:53 | design-refute-004 | 0 | 0 | 10.0 | spend | design-review |  |
 | 10 | 2026-10-18 06:59 | prep | 181 | 2 | 25.0 | spend | prep |  |
+| 11 | 2026-10-18 16:20 | d0105: place the radar from Hud.radarBox | 22 | 7 | 10.0 | explicit | build |  |
+| 12 | 2026-10-18 16:23 | d0105: record the gate times | 0 | 0 | 2.0 | explicit | build |  |
+| 13 | 2026-10-18 16:27 | R0037: review-001 | 0 | 0 | 2.0 | explicit | code-review |  |
+| 14 | 2026-10-18 16:28 | R0037: refute-001 | 0 | 0 | 6.0 | explicit | code-review |  |
+| 15 | 2026-10-18 16:29 | R0037: verification log | 0 | 0 | 3.0 | explicit | deliver |  |
+| 16 | 2026-10-18 16:31 | tracker: done R0037 | 0 | 0 | 2.9 | raft | deliver |  |
 
-**Total:** +181 / -2 lines, 112.0 agent-minutes, 0 tokens over 10 records
-<!-- totals: added=181 removed=2 minutes=112.0 records=10 tokens=0 -->
+**Total:** +203 / -9 lines, 137.9 agent-minutes, 0 tokens over 16 records
+<!-- totals: added=203 removed=9 minutes=137.9 records=16 tokens=0 -->
