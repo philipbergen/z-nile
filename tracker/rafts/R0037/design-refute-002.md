@@ -1,0 +1,5 @@
+# Refute 002
+
+- F1: fixed: the size-`if` assertion is gone, because it does not catch a cache that is never written. The cache row is now `reasoned`. Scalability and the decision say a lost write of `placedX, placedY` still passes and costs one `layout` per frame. The adapter spec now requires that `radar.AnchorPoint` is absent, and a Rules row names that mutant. `radar.AnchorPoint = Vector2.new(1, 1)` fails "the old top-right corner is gone". consequences: an explicit anchor of `(0, 0)` fails the same assertion, so the design says leave `radar.AnchorPoint` unset. The cache is no longer a checked acceptance property.
+- F2: fixed: Maintainability now limits the "cannot drift apart" sentence to screens with no side or bottom safe-area inset, and names the two `IgnoreGuiInset` settings. The f0029 non-goal names safe-area insets next to the jump button. consequences: none for this raft's code.
+- F3: fixed: Usability says a ghost behind and to the right puts its edge arrow over the radar's left or top part, and the arrow draws on top because it is created later. O2 asks for that bearing. consequences: none for the code.
