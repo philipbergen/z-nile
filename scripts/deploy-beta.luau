@@ -31,7 +31,11 @@ end
 -- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
 -- project copies must not be left in the checkout
 local tmp = sh.must("mktemp", { "-d" })
+-- same trim as Beta.project: Lune's cwd ends in `/`, and `{root}/{file}` would be `//`
 local root = process.cwd
+if #root > 1 and string.sub(root, -1) == "/" then
+	root = string.sub(root, 1, -2)
+end
 local files: { string } = {}
 for _, target in plan.targets do
 	local source = `{root}/{target.project}`

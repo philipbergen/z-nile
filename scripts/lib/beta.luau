@@ -92,11 +92,19 @@ function Beta.target(plan: Plan, place: Place): Target?
 	return nil
 end
 
+-- Lune's process.cwd ends in `/`. Joining that with another slash writes `//` into every copied `$path`.
+local function directory(dir: string): string
+	if #dir > 1 and string.sub(dir, -1) == "/" then
+		return string.sub(dir, 1, -2)
+	end
+	return dir
+end
+
 local function absolute(dir: string, path: string): string
 	if string.sub(path, 1, 1) == "/" then
 		return path
 	end
-	return `{dir}/{path}`
+	return `{directory(dir)}/{path}`
 end
 
 local function rewrite(node: any, dir: string)
