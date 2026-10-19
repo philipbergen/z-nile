@@ -11,6 +11,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0038
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: game code, the architecture graph and the board workflow stay untouched" git diff --quiet origin/main...HEAD -- src tracker/architecture.md .github/workflows/board.yml
 
 finish
