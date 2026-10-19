@@ -9,6 +9,9 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: each raft and issue is in one readiness group with its next command" lune run tests/run -- "$A/views.spec.luau"
+check "AC2: a raft's shown type comes from its issues, and the colors stay distinct" lune run tests/run -- "$A/label.spec.luau"
+check "AC3: Rafts and Issues replace the old tabs, and the copy button writes the command" lune run tests/run -- "$A/page.spec.luau"
+check "AC4: search, dependencies and Stats stay, and the skill describes the new board" lune run tests/run -- "$A/keep.spec.luau"
 
 finish
