@@ -37,16 +37,16 @@ return t.spec("f0026 board read", function(it)
 			fetches += 1
 			return sample()
 		end
-		local cache, last, rows =
+		local cache: any, last, rows: any =
 			Hiscores.lookup(nil, 0, Hiscores.CACHE_TTL, nil, Hiscores.READ_GAP, false, fetch)
 		t.expect(fetches).toBe(1)
 		t.expect(rows[1].score).toBe(10)
-		local _, last2, rows2 =
+		local _, last2, rows2: any =
 			Hiscores.lookup(cache, 1, Hiscores.CACHE_TTL, last, Hiscores.READ_GAP, false, fetch)
 		t.expect(fetches).toBe(1)
 		t.expect(rows2[1].name).toBe("A")
 		t.expect(last2).toBe(0)
-		local kept, failedAt, missing = Hiscores.lookup(
+		local kept: any, failedAt, missing = Hiscores.lookup(
 			cache,
 			15,
 			Hiscores.CACHE_TTL,
@@ -65,7 +65,7 @@ return t.spec("f0026 board read", function(it)
 			Hiscores.lookup(cache, 15.5, Hiscores.CACHE_TTL, failedAt, Hiscores.READ_GAP, false, fetch)
 		t.expect(blocked).toBe(nil)
 		t.expect(fetches).toBe(1)
-		local _, _, fresh =
+		local _, _, fresh: any =
 			Hiscores.lookup(cache, 16, Hiscores.CACHE_TTL, failedAt, Hiscores.READ_GAP, false, fetch)
 		t.expect(fetches).toBe(2)
 		t.expect(fresh[1].score).toBe(10)
@@ -73,7 +73,7 @@ return t.spec("f0026 board read", function(it)
 
 	it("an empty board is cached, and a clock that is not a number does not fetch", function()
 		local fetches = 0
-		local cache, last, rows = Hiscores.lookup(
+		local cache: any, last, rows: any = Hiscores.lookup(
 			nil,
 			5,
 			Hiscores.CACHE_TTL,
@@ -128,8 +128,9 @@ return t.spec("f0026 board read", function(it)
 			return sample()
 		end
 		local stale: any = { at = 0, rows = sample() }
-		local _, _, rows = Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, 0, Hiscores.READ_GAP, false, fetch)
-		local held, heldLast, waiting =
+		local _, _, rows: any =
+			Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, 0, Hiscores.READ_GAP, false, fetch)
+		local held: any, heldLast, waiting =
 			Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, 0, Hiscores.READ_GAP, true, fetch)
 		t.expect(fetches).toBe(1)
 		t.expect(rows[1].score).toBe(10)
@@ -137,7 +138,7 @@ return t.spec("f0026 board read", function(it)
 		t.expect(held).toBe(stale)
 		t.expect(held.at).toBe(0)
 		t.expect(heldLast).toBe(0)
-		local kept, failedAt, missing = Hiscores.lookup(
+		local kept: any, failedAt, missing = Hiscores.lookup(
 			stale,
 			15,
 			Hiscores.CACHE_TTL,
@@ -165,7 +166,7 @@ return t.spec("f0026 board read", function(it)
 		t.expect(blockedRows).toBe(nil)
 		t.expect(blocked).toBe(stale)
 		t.expect(blockedLast).toBe(failedAt)
-		local _, _, retried = Hiscores.lookup(
+		local _, _, retried: any = Hiscores.lookup(
 			stale,
 			(failedAt :: number) + Hiscores.READ_GAP,
 			Hiscores.CACHE_TTL,

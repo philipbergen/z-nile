@@ -25,7 +25,7 @@ return t.spec("f0025 disconnect window", function(it)
 			state = nextState
 		end
 		t.expect(state.waited).toBe(44)
-		local over, sub = Hiscores.onStep(state, { { kind = "GameOver", score = 15, level = 3 } }, false)
+		local over, sub: any = Hiscores.onStep(state, { { kind = "GameOver", score = 15, level = 3 } }, false)
 		t.expect(sub ~= nil).toBe(true)
 		t.expect(sub.score).toBe(15)
 		t.expect(sub.level).toBe(3)

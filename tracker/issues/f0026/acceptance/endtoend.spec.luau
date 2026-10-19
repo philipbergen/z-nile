@@ -29,12 +29,12 @@ return t.spec("f0026 score reaches the lobby", function(it)
 		t.expect(day.rows[1].name).toBe("Ada")
 		local lower = Hiscores.submit(store, { name = "Nope", userId = "7", score = 10, level = 9 }, FRI)
 		t.expect(lower.all).toBe(false)
-		t.expect(store.get(Hiscores.board("all", FRI), "7").name).toBe("Ada")
-		t.expect(store.get(Hiscores.board("all", FRI), "7").score).toBe(50)
+		t.expect((store.get(Hiscores.board("all", FRI), "7") :: any).name).toBe("Ada")
+		t.expect((store.get(Hiscores.board("all", FRI), "7") :: any).score).toBe(50)
 	end)
 
 	it("the same run submits once, and the rank line is that run's all-time place", function()
-		local state, sub = Hiscores.onStep(
+		local state, sub: any = Hiscores.onStep(
 			Hiscores.newRun(),
 			{ { kind = "GameOver", score = 50, level = 2, run = 99 } },
 			true
@@ -49,9 +49,11 @@ return t.spec("f0026 score reaches the lobby", function(it)
 		t.expect(rank).toBe(1)
 		local off = Hiscores.rankOf(Hiscores.top(store, "all", FRI), "8")
 		t.expect(off).toBe(nil)
-		local view = (Flow :: any).hearRank({ over = sub.run }, sub.run, rank)
+		local view = (Flow :: any).hearRank({ over = sub.run }, sub.run, rank, true)
 		t.expect((Flow :: any).shownRank(view, true)).toBe("ALL-TIME #1")
 		t.expect((Flow :: any).shownRank(view, false)).toBe(nil)
+		-- the lobby's retry gap is its own copy of the server's (LobbyView does not require Hiscores)
+		t.expect((Lobby :: any).READ_GAP).toBe(Hiscores.READ_GAP)
 		t.expect(
 			(Lobby :: any).lines(
 				(Lobby :: any).boardPanel(Hiscores.lobbyRows(Hiscores.top(store, "all", FRI)), "all"),

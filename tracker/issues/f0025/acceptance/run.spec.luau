@@ -23,7 +23,7 @@ return t.spec("f0025 one submit per run", function(it)
 		local state = Hiscores.newRun()
 		t.expect(state.run).toBe(1)
 		t.expect(state.drop).toBe(false)
-		local nextState, sub =
+		local nextState, sub: any =
 			Hiscores.onStep(state, { { kind = "GameOver", score = 70, level = 2, run = 99 } }, true)
 		t.expect(sub ~= nil).toBe(true)
 		t.expect(sub.run).toBe(1)
@@ -37,7 +37,7 @@ return t.spec("f0025 one submit per run", function(it)
 	end)
 
 	it("two GameOver events in one step submit the first only", function()
-		local _, sub = Hiscores.onStep(Hiscores.newRun(), {
+		local _, sub: any = Hiscores.onStep(Hiscores.newRun(), {
 			{ kind = "GameOver", score = 10, level = 1 },
 			{ kind = "GameOver", score = 99, level = 9 },
 		}, true)
@@ -57,19 +57,34 @@ return t.spec("f0025 one submit per run", function(it)
 		t.expect(lower).toBe(nil)
 	end)
 
+	it("two fresh runs for one player both submit run 1: the dedupe dies with the run state", function()
+		local first, a: any =
+			Hiscores.onStep(Hiscores.newRun(), { { kind = "GameOver", score = 40, level = 1 } }, false)
+		t.expect(a ~= nil).toBe(true)
+		t.expect(a.run).toBe(1)
+		t.expect(first.drop).toBe(true)
+		local _, b: any =
+			Hiscores.onStep(Hiscores.newRun(), { { kind = "GameOver", score = 90, level = 3 } }, true)
+		t.expect(b ~= nil).toBe(true)
+		t.expect(b.run).toBe(1)
+		t.expect(b.score).toBe(90)
+		t.expect(Hiscores.newRun() == Hiscores.newRun()).toBe(false)
+	end)
+
 	it("a successful play again is a new run, and a failed one is the same state", function()
 		local done =
 			Hiscores.onStep(Hiscores.newRun(), { { kind = "GameOver", score = 70, level = 2 } }, true)
 		local moved = Hiscores.onAgain(done, true)
 		t.expect(moved.run).toBe(2)
 		t.expect(moved == done).toBe(false)
-		local _, third = Hiscores.onStep(moved, { { kind = "GameOver", score = 5, level = 1 } }, true)
+		local afterThird, third: any =
+			Hiscores.onStep(moved, { { kind = "GameOver", score = 5, level = 1 } }, true)
 		t.expect(third ~= nil).toBe(true)
 		t.expect(third.run).toBe(2)
 		t.expect(third.score).toBe(5)
-		local stayed = Hiscores.onAgain(moved, false)
+		local stayed = Hiscores.onAgain(afterThird, false)
 		t.expect(stayed.run).toBe(2)
-		t.expect(stayed).toBe(moved)
+		t.expect(stayed).toBe(afterThird)
 		local _, repeatOver = Hiscores.onStep(stayed, { { kind = "GameOver", score = 8, level = 1 } }, true)
 		t.expect(repeatOver).toBe(nil)
 	end)

@@ -1,6 +1,8 @@
 --!strict
--- f0024 AC5: retry, backoff and budget are a pure policy. Writes go through commit and an ordered
--- max, so a later lower score cannot replace a higher one. A zero list budget still reads the top.
+-- f0024 AC5: retry, backoff and budget are a pure policy. Both writes are transforms the store applies to the
+-- row it actually holds: commit for the companion, a max of the packed score for the ordered key. The doubles
+-- here store whatever the transform returns and never do the policy themselves. A zero list budget still
+-- reads the top.
 local Hiscores = require("@logic/Hiscores")
 local t = require("@tests/lib/t")
 
@@ -44,7 +46,7 @@ return t.spec("f0024 drive policy", function(it)
 		t.expect(Hiscores.commit(stored, attempt("7", 10, 9, "Nope"))).toBe(nil)
 		t.expect(stored.name).toBe("Ada")
 		t.expect(stored.score).toBe(50)
-		local better = Hiscores.commit(stored, attempt("7", 80, 2, "Bea"))
+		local better: any = Hiscores.commit(stored, attempt("7", 80, 2, "Bea"))
 		t.expect(better.name).toBe("Bea")
 		t.expect(better.score).toBe(80)
 		t.expect(stored.name).toBe("Ada")
@@ -68,11 +70,17 @@ return t.spec("f0024 drive policy", function(it)
 				entries[slot(board, key)] = nextEntry
 				return nextEntry, nil
 			end,
-			updateScore = function(board: any, key: string, packed: number): (number?, string?)
-				local id = slot(board, key)
-				local kept = math.max(entries[id .. ":packed"] or 0, packed)
-				entries[id .. ":packed"] = kept
-				return kept, nil
+			updateScore = function(
+				board: any,
+				key: string,
+				transform: (number?) -> number?
+			): (number?, string?)
+				local id = slot(board, key) .. ":packed"
+				local nextValue = transform(entries[id])
+				if nextValue ~= nil then
+					entries[id] = nextValue
+				end
+				return nextValue, nil
 			end,
 			top = function(board: any): (any, string?)
 				local id = slot(board, "7")
@@ -120,7 +128,11 @@ return t.spec("f0024 drive policy", function(it)
 				updates += 1
 				return nil, "down"
 			end,
-			updateScore = function(_board: any, _key: string, _packed: number): (number?, string?)
+			updateScore = function(
+				_board: any,
+				_key: string,
+				_transform: (number?) -> number?
+			): (number?, string?)
 				updates += 1
 				return nil, "down"
 			end,
@@ -158,7 +170,11 @@ return t.spec("f0024 drive policy", function(it)
 				updates += 1
 				return nil, nil
 			end,
-			updateScore = function(_board: any, _key: string, _packed: number): (number?, string?)
+			updateScore = function(
+				_board: any,
+				_key: string,
+				_transform: (number?) -> number?
+			): (number?, string?)
 				updates += 1
 				return nil, nil
 			end,
@@ -187,8 +203,12 @@ return t.spec("f0024 drive policy", function(it)
 			updateEntry = function(_board: any, _key: string, transform: (any) -> any): (any, string?)
 				return transform(nil), nil
 			end,
-			updateScore = function(_board: any, _key: string, packed: number): (number?, string?)
-				return packed, nil
+			updateScore = function(
+				_board: any,
+				_key: string,
+				transform: (number?) -> number?
+			): (number?, string?)
+				return transform(nil), nil
 			end,
 			top = function(_board: any): (any, string?)
 				tops += 1
@@ -208,7 +228,7 @@ return t.spec("f0024 drive policy", function(it)
 		t.expect(result.wrote.all).toBe(true)
 	end)
 
-	it("a failed read is retried, and a row that does not qualify is not written or retried", function()
+	it("a failed read is retried, and a row that does not qualify is not rewritten or retried", function()
 		local failed: { [string]: boolean } = {}
 		local waits: { number } = {}
 		local scores = 0
@@ -227,7 +247,11 @@ return t.spec("f0024 drive policy", function(it)
 				end
 				return nextEntry, nil
 			end,
-			updateScore = function(_board: any, _key: string, _packed: number): (number?, string?)
+			updateScore = function(
+				_board: any,
+				_key: string,
+				_transform: (number?) -> number?
+			): (number?, string?)
 				scores += 1
 				return 1, nil
 			end,
@@ -247,7 +271,8 @@ return t.spec("f0024 drive policy", function(it)
 		t.expect(#waits).toBe(1)
 		t.expect(waits[1]).toBe(0.25)
 		t.expect(scores).toBe(3)
-		local blockedWrites = 0
+		local entryWrites = 0
+		local stored: { number } = {}
 		local blockedWaits: { number } = {}
 		local blocked = {
 			get = function(_board: any, _key: string): (any, string?)
@@ -258,12 +283,17 @@ return t.spec("f0024 drive policy", function(it)
 				if nextEntry == nil then
 					return nil, nil
 				end
-				blockedWrites += 1
+				entryWrites += 1
 				return nextEntry, nil
 			end,
-			updateScore = function(_board: any, _key: string, _packed: number): (number?, string?)
-				blockedWrites += 1
-				return 1, nil
+			updateScore = function(
+				_board: any,
+				_key: string,
+				transform: (number?) -> number?
+			): (number?, string?)
+				local nextValue = transform(nil)
+				table.insert(stored, nextValue :: number)
+				return nextValue, nil
 			end,
 			top = function(_board: any): (any, string?)
 				return { {} }, nil
@@ -277,8 +307,14 @@ return t.spec("f0024 drive policy", function(it)
 		}
 		local lower = Hiscores.drive(blocked, attempt("1", 10, 9, "Nope"), FRI, Hiscores.RETRY)
 		t.expect(lower.wrote.all).toBe(false)
-		t.expect(blockedWrites).toBe(0)
+		t.expect(lower.wrote.day).toBe(false)
+		t.expect(entryWrites).toBe(0)
 		t.expect(#blockedWaits).toBe(0)
+		-- the row stands, and its ordered key is brought up to the row actually stored, never to the attempt
+		t.expect(#stored).toBe(3)
+		for _, value in stored do
+			t.expect(value).toBe(Hiscores.pack(100, 5))
+		end
 	end)
 
 	it("one board's failure does not stop the others, and an invalid attempt writes nothing", function()
@@ -294,7 +330,11 @@ return t.spec("f0024 drive policy", function(it)
 				end
 				return transform(nil), nil
 			end,
-			updateScore = function(board: any, _key: string, _packed: number): (number?, string?)
+			updateScore = function(
+				board: any,
+				_key: string,
+				_transform: (number?) -> number?
+			): (number?, string?)
 				if board.id ~= "all" then
 					scores += 1
 				end
@@ -325,7 +365,11 @@ return t.spec("f0024 drive policy", function(it)
 				updates += 1
 				return nil, nil
 			end,
-			updateScore = function(_board: any, _key: string, _packed: number): (number?, string?)
+			updateScore = function(
+				_board: any,
+				_key: string,
+				_transform: (number?) -> number?
+			): (number?, string?)
 				updates += 1
 				return nil, nil
 			end,
@@ -345,50 +389,71 @@ return t.spec("f0024 drive policy", function(it)
 		t.expect(tops).toBe(1)
 	end)
 
-	it("overlapping drives keep 5000, and a failed ordered write retries that score", function()
-		local entry: any = nil
-		local packedSeen: { number } = {}
-		local nested = false
-		local io: any
-		io = {
-			get = function(_board: any, _key: string): (any, string?)
-				return entry, nil
-			end,
-			updateEntry = function(_board: any, _key: string, transform: (any) -> any): (any, string?)
-				local nextEntry = transform(entry)
-				if nextEntry == nil then
+	it(
+		"overlapping drives keep 5000: the loser's transform sees the live row, not the snapshot get returned",
+		function()
+			local entry: any = nil
+			local ordered: number? = nil
+			local storedOrdered: { number } = {}
+			local nested = false
+			local io: any
+			io = {
+				-- the snapshot from before either drive: a drive that commits from it publishes a stale row
+				get = function(_board: any, _key: string): (any, string?)
 					return nil, nil
-				end
-				entry = nextEntry
-				if not nested then
-					nested = true
-					Hiscores.drive(io, attempt("7", 100, 1, "Low"), FRI, Hiscores.RETRY)
-				end
-				return nextEntry, nil
-			end,
-			updateScore = function(_board: any, _key: string, packed: number): (number?, string?)
-				table.insert(packedSeen, packed)
-				return packed, nil
-			end,
-			top = function(_board: any): (any, string?)
-				return { {} }, nil
-			end,
-			budget = function(_op: string): number
-				return 5
-			end,
-			wait = function(_seconds: number) end,
-		}
-		Hiscores.drive(io, attempt("7", 5000, 2, "High"), FRI, Hiscores.RETRY)
-		t.expect(entry.name).toBe("High")
-		t.expect(entry.score).toBe(5000)
-		t.expect(#packedSeen > 0).toBe(true)
-		for _, packed in packedSeen do
-			t.expect(packed).toBe(Hiscores.pack(5000, 2))
+				end,
+				updateEntry = function(board: any, _key: string, transform: (any) -> any): (any, string?)
+					if board.id ~= "all" then
+						return transform(nil), nil
+					end
+					local nextEntry = transform(entry)
+					if nextEntry ~= nil then
+						entry = nextEntry
+					end
+					if not nested then
+						nested = true
+						Hiscores.drive(io, attempt("7", 100, 1, "Low"), FRI, Hiscores.RETRY)
+					end
+					return nextEntry, nil
+				end,
+				updateScore = function(
+					board: any,
+					_key: string,
+					transform: (number?) -> number?
+				): (number?, string?)
+					if board.id ~= "all" then
+						return transform(nil), nil
+					end
+					local nextValue = transform(ordered)
+					if nextValue ~= nil then
+						ordered = nextValue
+						table.insert(storedOrdered, nextValue)
+					end
+					return nextValue, nil
+				end,
+				top = function(_board: any): (any, string?)
+					return { {} }, nil
+				end,
+				budget = function(_op: string): number
+					return 5
+				end,
+				wait = function(_seconds: number) end,
+			}
+			Hiscores.drive(io, attempt("7", 5000, 2, "High"), FRI, Hiscores.RETRY)
+			t.expect(entry.name).toBe("High")
+			t.expect(entry.score).toBe(5000)
+			t.expect(ordered).toBe(Hiscores.pack(5000, 2))
+			t.expect(#storedOrdered >= 2).toBe(true)
+			for _, value in storedOrdered do
+				t.expect(value).toBe(Hiscores.pack(5000, 2))
+			end
 		end
+	)
 
+	it("a retried ordered write keeps a higher value another drive stored, and does not recommit", function()
 		local commits = 0
-		local retried: { number } = {}
-		local scoreFails = 0
+		local ordered: { [string]: number } = {}
+		local failedOnce = false
 		local retryIo = {
 			get = function(_board: any, _key: string): (any, string?)
 				return nil, nil
@@ -397,13 +462,22 @@ return t.spec("f0024 drive policy", function(it)
 				commits += 1
 				return transform(nil), nil
 			end,
-			updateScore = function(_board: any, _key: string, packed: number): (number?, string?)
-				scoreFails += 1
-				if scoreFails == 1 then
+			updateScore = function(
+				board: any,
+				_key: string,
+				transform: (number?) -> number?
+			): (number?, string?)
+				if board.id == "all" and not failedOnce then
+					failedOnce = true
+					-- the write failed, and meanwhile a better run on another server stored its score
+					ordered.all = Hiscores.pack(8000, 1)
 					return nil, "down"
 				end
-				table.insert(retried, packed)
-				return packed, nil
+				local nextValue = transform(ordered[board.id])
+				if nextValue ~= nil then
+					ordered[board.id] = nextValue
+				end
+				return nextValue, nil
 			end,
 			top = function(_board: any): (any, string?)
 				return { {} }, nil
@@ -416,11 +490,60 @@ return t.spec("f0024 drive policy", function(it)
 		local result = Hiscores.drive(retryIo, attempt("1", 5000, 4, "Ada"), FRI, Hiscores.RETRY)
 		t.expect(result.wrote.all).toBe(true)
 		t.expect(commits).toBe(3)
-		t.expect(#retried > 0).toBe(true)
-		for _, packed in retried do
-			t.expect(packed).toBe(Hiscores.pack(5000, 4))
-			t.expect(packed ~= 100).toBe(true)
-			t.expect(packed ~= 5000).toBe(true)
-		end
+		t.expect(ordered.all).toBe(Hiscores.pack(8000, 1))
+		t.expect(ordered.day).toBe(Hiscores.pack(5000, 4))
+		t.expect(ordered.week).toBe(Hiscores.pack(5000, 4))
 	end)
+
+	it(
+		"an ordered key every retry missed is repaired by the next attempt, even one that does not qualify",
+		function()
+			local entries: { [string]: any } = {}
+			local ordered: { [string]: number } = {}
+			local down = true
+			local io = {
+				get = function(_board: any, _key: string): (any, string?)
+					return nil, nil
+				end,
+				updateEntry = function(board: any, _key: string, transform: (any) -> any): (any, string?)
+					local nextEntry = transform(entries[board.id])
+					if nextEntry ~= nil then
+						entries[board.id] = nextEntry
+					end
+					return nextEntry, nil
+				end,
+				updateScore = function(
+					board: any,
+					_key: string,
+					transform: (number?) -> number?
+				): (number?, string?)
+					if down then
+						return nil, "down"
+					end
+					local nextValue = transform(ordered[board.id])
+					if nextValue ~= nil then
+						ordered[board.id] = nextValue
+					end
+					return nextValue, nil
+				end,
+				top = function(_board: any): (any, string?)
+					return { {} }, nil
+				end,
+				budget = function(_op: string): number
+					return 5
+				end,
+				wait = function(_seconds: number) end,
+			}
+			local first = Hiscores.drive(io, attempt("1", 5000, 4, "Ada"), FRI, Hiscores.RETRY)
+			t.expect(first.wrote.all).toBe(false)
+			t.expect(entries.all.score).toBe(5000)
+			t.expect(ordered.all).toBe(nil)
+			down = false
+			local second = Hiscores.drive(io, attempt("1", 100, 1, "Ada"), FRI, Hiscores.RETRY)
+			t.expect(second.wrote.all).toBe(false)
+			t.expect(entries.all.score).toBe(5000)
+			t.expect(ordered.all).toBe(Hiscores.pack(5000, 4))
+			t.expect(ordered.day).toBe(Hiscores.pack(5000, 4))
+		end
+	)
 end)

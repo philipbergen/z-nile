@@ -9,6 +9,6 @@ A="$HERE/acceptance"
 
 check "AC1: one submission per run, from the server GameOver, and a new run may submit again" lune run tests/run -- "$A/run.spec.luau"
 check "AC2: a disconnected player is kept through the dying pause, then dropped" lune run tests/run -- "$A/leave.spec.luau"
-check "AC3: Sessions wires GameOver through that policy and keeps the pinned adapter shape" lune run tests/run -- "$A/sessions.spec.luau"
+check "AC3: Sessions steps and parks sessions for its runs and keeps the pinned adapter shape, and Submits wires GameOver through that policy" lune run tests/run -- "$A/sessions.spec.luau"
 
 finish

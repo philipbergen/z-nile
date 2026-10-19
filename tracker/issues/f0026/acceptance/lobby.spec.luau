@@ -19,6 +19,7 @@ return t.spec("f0026 lobby boards", function(it)
 		t.expect(Lobby.EMPTY).toBe("No scores yet")
 		t.expect(Lobby.MAX_ROWS).toBe(10)
 		t.expect(Lobby.BUTTON_MIN_PX).toBe(44)
+		t.expect((Lobby :: any).READ_GAP).toBe(1)
 		local many = {}
 		for i = 1, 11 do
 			table.insert(many, row(i, "P", i, 1))
