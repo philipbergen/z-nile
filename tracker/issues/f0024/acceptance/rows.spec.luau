@@ -59,7 +59,7 @@ return t.spec("f0024 top N rows", function(it)
 				{ key = "8", score = 5 },
 			},
 		}
-		local rows = Hiscores.rows(pages, lookup, 10)
+		local rows: any = Hiscores.rows(pages, lookup, 10)
 		t.expect(#rows).toBe(4)
 		t.expect(rows[1].userId).toBe("3")
 		t.expect(rows[1].rank).toBe(1)
@@ -72,10 +72,10 @@ return t.spec("f0024 top N rows", function(it)
 		t.expect(rows[4].userId).toBe("2")
 		t.expect(rows[4].level).toBe(1)
 		t.expect(rows[4].rank).toBe(4)
-		local short = Hiscores.rows({ { { key = "3", score = 50 } } }, lookup, 10)
+		local short: any = Hiscores.rows({ { { key = "3", score = 50 } } }, lookup, 10)
 		t.expect(#short).toBe(1)
 		t.expect(short[1].rank).toBe(1)
-		t.expect(#Hiscores.rows(pages, lookup, 0)).toBe(0)
+		t.expect(#(Hiscores.rows(pages, lookup, 0) :: any)).toBe(0)
 	end)
 
 	it("an equal score keeps the higher level when the ordered page is one row", function()
@@ -90,7 +90,7 @@ return t.spec("f0024 top N rows", function(it)
 	end)
 
 	it("an equal score and level orders the user id as a string, so 10 comes before 2", function()
-		local tied = Hiscores.rows({
+		local tied: any = Hiscores.rows({
 			{
 				{ key = "10", score = 5 },
 				{ key = "2", score = 5 },
@@ -103,20 +103,24 @@ return t.spec("f0024 top N rows", function(it)
 	end)
 
 	it("a companion whose user id is not the key is skipped, and a period key still matches", function()
-		local mismatch = Hiscores.rows({ { { key = "15", score = 80 } } }, function(_key: string): any
+		local mismatch: any = Hiscores.rows({ { { key = "15", score = 80 } } }, function(_key: string): any
 			return { name = "X", userId = "1", level = 1, score = 80 }
 		end, 10)
 		t.expect(#mismatch).toBe(0)
-		local period = Hiscores.rows({ { { key = "5:2026-10-16", score = 80 } } }, function(_key: string): any
-			return { name = "X", userId = "5", level = 1, score = 80 }
-		end, 10)
+		local period: any = Hiscores.rows(
+			{ { { key = "5:2026-10-16", score = 80 } } },
+			function(_key: string): any
+				return { name = "X", userId = "5", level = 1, score = 80 }
+			end,
+			10
+		)
 		t.expect(#period).toBe(1)
 		t.expect(period[1].userId).toBe("5")
 		t.expect(period[1].score).toBe(80)
 	end)
 
 	it("lobby rows drop the user id and keep rank, name, score and level", function()
-		local rows = Hiscores.rows({ { { key = "3", score = 50 } } }, lookup, 10)
+		local rows: any = Hiscores.rows({ { { key = "3", score = 50 } } }, lookup, 10)
 		local shown = Hiscores.lobbyRows(rows)
 		t.expect(shown[1].rank).toBe(1)
 		t.expect(shown[1].name).toBe("Mid")
@@ -124,4 +128,27 @@ return t.spec("f0024 top N rows", function(it)
 		t.expect(shown[1].level).toBe(2)
 		t.expect((shown[1] :: any).userId).toBe(nil)
 	end)
+
+	it(
+		"a companion that cannot be read makes the whole board unknown, and an absent one is skipped",
+		function()
+			local page = { { { key = "2", score = 80 }, { key = "7", score = 50 } } }
+			local unknown = Hiscores.rows(page, function(key: string): (any, string?)
+				if key == "2" then
+					return nil, "throttled"
+				end
+				return { name = "Ada", userId = "7", level = 2, score = 50 }, nil
+			end, 10)
+			t.expect(unknown).toBe(nil)
+			local absent: any = Hiscores.rows(page, function(key: string): (any, string?)
+				if key == "2" then
+					return nil, nil
+				end
+				return { name = "Ada", userId = "7", level = 2, score = 50 }, nil
+			end, 10)
+			t.expect(#absent).toBe(1)
+			t.expect(absent[1].userId).toBe("7")
+			t.expect(absent[1].rank).toBe(1)
+		end
+	)
 end)

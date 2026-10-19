@@ -585,4 +585,82 @@ return t.spec("f0024 drive policy", function(it)
 			t.expect(ordered.day).toBe(Hiscores.pack(5000, 4))
 		end
 	)
+
+	it("a companion read that fails on the page gives no rank, rather than a better one", function()
+		local gets = 0
+		local topped = false
+		local function io(failKey: string?, getBudget: () -> number): any
+			return {
+				get = function(_board: any, key: string): (any, string?)
+					gets += 1
+					if key == failKey then
+						return nil, "throttled"
+					end
+					if key == "2" then
+						return { name = "Bea", userId = "2", level = 3, score = 80 }, nil
+					end
+					return { name = "Ada", userId = "7", level = 2, score = 50 }, nil
+				end,
+				updateEntry = function(_board: any, _key: string, transform: (any) -> any): (any, string?)
+					return transform(nil), nil
+				end,
+				updateScore = function(
+					_board: any,
+					_key: string,
+					transform: (number?) -> number?
+				): (number?, string?)
+					return transform(nil), nil
+				end,
+				top = function(_board: any): (any, string?)
+					topped = true
+					return { { { key = "2", score = 80 }, { key = "7", score = 50 } } }, nil
+				end,
+				budget = function(op: string): number
+					if op == "get" then
+						return getBudget()
+					end
+					return 5
+				end,
+				wait = function(_seconds: number) end,
+			}
+		end
+		local healthy = Hiscores.drive(
+			io(nil, function(): number
+				return 5
+			end),
+			attempt("7", 50, 2),
+			FRI,
+			Hiscores.RETRY
+		)
+		t.expect(healthy.rank).toBe(2)
+		local failed = Hiscores.drive(
+			io("2", function(): number
+				return 5
+			end),
+			attempt("7", 50, 2),
+			FRI,
+			Hiscores.RETRY
+		)
+		t.expect(failed.rank).toBe(nil)
+		t.expect(failed.wrote.all).toBe(true)
+		-- the read budget refuses the page's first key, the row above the player: no rank, not rank 1
+		gets = 0
+		topped = false
+		local afterTop = 0
+		local short = Hiscores.drive(
+			io(nil, function(): number
+				if not topped then
+					return 5
+				end
+				afterTop += 1
+				return if afterTop == 1 then 0 else 5
+			end),
+			attempt("7", 50, 2),
+			FRI,
+			Hiscores.RETRY
+		)
+		t.expect(short.wrote.all).toBe(true)
+		t.expect(gets <= 1).toBe(true)
+		t.expect(short.rank).toBe(nil)
+	end)
 end)

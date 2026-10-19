@@ -198,9 +198,12 @@ local function load(path: string, env: { [string]: any }): any
 	return luau.load(fs.readFile(path), { environment = env, debugName = path })()
 end
 
+local home = node("Players") -- where a player who is still in the game is parented
+
 local function player(userId: number): any
 	local p = node("Player", `Player{userId}`)
 	p.UserId = userId
+	p.Parent = home
 	return p
 end
 
@@ -214,6 +217,10 @@ type BoardsWorld = {
 	reads: { { name: string, scope: string, ascending: boolean, size: number } },
 	ordered: { [string]: { [string]: number } },
 	companion: { [string]: { [string]: any } },
+	openFails: number, -- this many GetOrderedDataStore calls throw first
+	companionFails: { [string]: boolean }, -- keys whose GetAsync throws
+	removing: Signal,
+	errors: { string }, -- errors that escaped the request handler (the engine would only log them)
 	ask: (p: any, raw: any) -> (),
 	answers: (p: any) -> { { any } },
 	release: (failure: boolean) -> (),
@@ -225,6 +232,10 @@ local function boards(): BoardsWorld
 	local w: BoardsWorld
 	local dataStores = {
 		GetOrderedDataStore = function(_: any, name: string, scope: string?): any
+			if w.openFails > 0 then
+				w.openFails -= 1
+				error("stub: You must publish this place to the web to access DataStore", 0)
+			end
 			return {
 				GetSortedAsync = function(_: any, ascending: boolean, size: number): any
 					table.insert(
@@ -261,15 +272,20 @@ local function boards(): BoardsWorld
 		GetDataStore = function(_: any, _name: string, scope: string?): any
 			return {
 				GetAsync = function(_: any, key: string): any
+					if w.companionFails[key] then
+						error("stub: companion read throttled", 0)
+					end
 					return (w.companion[scope or "global"] or {})[key]
 				end,
 			}
 		end,
 	}
-	local env = plainEnv(
-		{ ReplicatedStorage = storage, DataStoreService = dataStores },
-		{ [LOGIC .. "Hiscores"] = Hiscores }
-	)
+	local removing = signal()
+	local env = plainEnv({
+		ReplicatedStorage = storage,
+		DataStoreService = dataStores,
+		Players = { PlayerRemoving = removing },
+	}, { [LOGIC .. "Hiscores"] = Hiscores })
 	env.os = {
 		time = function(): number
 			return w.now
@@ -283,8 +299,17 @@ local function boards(): BoardsWorld
 		reads = {},
 		ordered = {},
 		companion = {},
+		openFails = 0,
+		companionFails = {},
+		removing = removing,
+		errors = {},
 		ask = function(p: any, raw: any)
-			w.remote.OnServerEvent:fire(p, raw)
+			local ok, err = pcall(function()
+				w.remote.OnServerEvent:fire(p, raw)
+			end)
+			if not ok then
+				table.insert(w.errors, tostring(err))
+			end
 		end,
 		answers = function(p: any): { { any } }
 			local out: { { any } } = {}
@@ -509,6 +534,17 @@ return t.spec("f0026 adapter boundaries", function(it)
 		w.ask(p1, "all")
 		t.expect(#w.answers(p1)).toBe(3)
 		t.expect(w.answers(p1)[3]).toEqual({ "all", healthy[2], 2, true } :: { any })
+		-- inside that failure window the board the server holds is the answer, never an empty one, and nothing is read
+		reads = #w.reads
+		w.now += 1
+		local p2 = player(2)
+		w.ask(p2, "all")
+		w.ask(p3, "all")
+		w.ask(p1, "all")
+		t.expect(#w.reads).toBe(reads)
+		t.expect(w.answers(p2)).toEqual({ { "all", healthy[2], 1, true } :: { any } })
+		t.expect(w.answers(p3)[3]).toEqual({ "all", healthy[2], nil, true } :: { any })
+		t.expect(w.answers(p1)[4]).toEqual({ "all", healthy[2], 2, true } :: { any })
 	end)
 
 	it(
@@ -562,6 +598,74 @@ return t.spec("f0026 adapter boundaries", function(it)
 			t.expect(w.answers(p1)[12][4]).toBe(false)
 		end
 	)
+
+	it(
+		"an error anywhere in the read, opening the store included, is a failed read and the board is not wedged",
+		function()
+			local w = boards()
+			seed(w)
+			w.openFails = 1
+			local p1, p2, p9 = player(1), player(2), player(9)
+			w.ask(p1, "all")
+			t.expect(w.answers(p1)).toEqual({ { "all", {}, nil, true } :: { any } })
+			w.now += 1
+			w.ask(p2, "all")
+			t.expect(w.answers(p2)).toEqual({ { "all", {}, nil, true } :: { any } })
+			w.now += Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 1) - 1
+			w.ask(p9, "all")
+			t.expect(#w.answers(p9)).toBe(1)
+			t.expect(w.answers(p9)[1][4]).toBe(false)
+			t.expect(#w.answers(p9)[1][2]).toBe(2)
+			w.ask(p2, "all")
+			t.expect(w.answers(p2)[2][3]).toBe(1)
+			t.expect(w.errors).toEqual({})
+		end
+	)
+
+	it(
+		"a companion row that cannot be read fails the read: no short board is answered as healthy or cached",
+		function()
+			local w = boards()
+			seed(w)
+			w.companionFails["2"] = true
+			local p1 = player(1)
+			w.ask(p1, "all")
+			t.expect(w.answers(p1)).toEqual({ { "all", {}, nil, true } :: { any } })
+			w.companionFails["2"] = nil
+			w.now += Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 1)
+			w.ask(p1, "all")
+			local answer = w.answers(p1)[2]
+			t.expect(answer[4]).toBe(false)
+			t.expect(#answer[2]).toBe(2)
+			t.expect(answer[3]).toBe(2)
+			-- a companion that is simply absent is skipped, and the board is healthy
+			local v = boards()
+			seed(v)
+			v.companion.all["2"] = nil
+			v.ask(p1, "all")
+			t.expect(v.answers(p1)).toEqual({
+				{ "all", { { rank = 1, name = "Ada", score = 50, level = 2 } }, 1, false } :: { any },
+			})
+		end
+	)
+
+	it("a waiter who left before the read returned gets no answer, and leaving forgets the player", function()
+		local w = boards()
+		seed(w)
+		local p1, p2 = player(1), player(2)
+		w.mode = "hold"
+		w.ask(p1, "all")
+		w.ask(p2, "all")
+		p2.Parent = nil
+		w.removing:fire(p2)
+		w.release(false)
+		t.expect(#w.answers(p1)).toBe(1)
+		t.expect(#w.answers(p2)).toBe(0)
+		t.expect(#w.removing.fns).toBe(1)
+		local src = stripped("src/lobby/server/Boards.luau")
+		t.expect(string.find(src, "PlayerRemoving", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(src, "lastFetch%[%s*player%s*%]%s*=%s*nil") ~= nil).toBe(true)
+	end)
 
 	it("a healthy empty board is an answer, not a failure", function()
 		local w = boards()
@@ -618,12 +722,34 @@ return t.spec("f0026 adapter boundaries", function(it)
 
 	it("a failed day or week answer asks again for that board", function()
 		local v = lobbyView(true)
+		v.button(Lobby.boardTitle("day")).Activated:fire()
 		v.remotes.Board.OnClientEvent:fire("day", {}, nil, true)
 		v.tick(Lobby.READ_GAP)
-		t.expect(v.asks()).toEqual({ { "all" }, { "day" } })
+		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "day" } })
+		v.button(Lobby.boardTitle("week")).Activated:fire()
 		v.remotes.Board.OnClientEvent:fire("week", {}, nil, true)
 		v.tick(10)
-		t.expect(v.asks()[3]).toEqual({ "week" })
+		t.expect(v.asks()[5]).toEqual({ "week" })
+	end)
+
+	it("a retry or a late answer for a board the player left neither asks nor draws", function()
+		local v = lobbyView(true)
+		local board = v.remotes.Board
+		board.OnClientEvent:fire("all", {}, nil, true)
+		v.button(Lobby.boardTitle("day")).Activated:fire()
+		v.tick(Lobby.READ_GAP)
+		t.expect(v.asks()).toEqual({ { "all" }, { "day" } })
+		board.OnClientEvent:fire("day", rowsOf({ rank = 1, name = "Cy", score = 5, level = 1 }), nil, false)
+		t.expect(v.find("Title").Text).toBe("TODAY")
+		v.button(Lobby.boardTitle("week")).Activated:fire()
+		board.OnClientEvent:fire("week", rowsOf({ rank = 1, name = "Di", score = 9, level = 2 }), nil, false)
+		-- TODAY's answer arrives after THIS WEEK's, and after a failed one for all: neither is drawn
+		board.OnClientEvent:fire("day", rowsOf({ rank = 1, name = "Old", score = 1, level = 1 }), nil, false)
+		board.OnClientEvent:fire("all", {}, nil, true)
+		t.expect(v.find("Title").Text).toBe("THIS WEEK")
+		t.expect(v.find("Rows").Text).toBe("1 Di 9 2")
+		v.tick(10)
+		t.expect(#v.asks()).toBe(3)
 	end)
 
 	it("a failed answer asks for all once more after READ_GAP, and a healthy one never does", function()
@@ -652,9 +778,6 @@ return t.spec("f0026 adapter boundaries", function(it)
 		t.expect(today.Size.Y.Offset >= Lobby.BUTTON_MIN_PX).toBe(true)
 		t.expect(week.Size.Y.Offset >= Lobby.BUTTON_MIN_PX).toBe(true)
 		today.Activated:fire()
-		week.Activated:fire()
-		all.Activated:fire()
-		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "week" }, { "all" } })
 		v.remotes.Board.OnClientEvent:fire(
 			"day",
 			rowsOf({ rank = 1, name = "Cy", score = 5, level = 1 }),
@@ -663,6 +786,9 @@ return t.spec("f0026 adapter boundaries", function(it)
 		)
 		t.expect(v.find("Title").Text).toBe("TODAY")
 		t.expect(v.find("Rows").Text).toBe("1 Cy 5 1")
+		week.Activated:fire()
+		all.Activated:fire()
+		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "week" }, { "all" } })
 		v.find("Start").Activated:fire()
 		t.expect(v.remotes.StartGame.toServer).toEqual({ {} })
 	end)
