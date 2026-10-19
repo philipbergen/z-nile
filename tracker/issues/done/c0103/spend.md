@@ -18,6 +18,7 @@
 | 14 | 2026-10-19 03:37 | R0036: review-001 | 0 | 0 | 5.0 | focus | code-review | 60000 |
 | 15 | 2026-10-19 03:37 | R0036: final notes | 0 | 0 | 0.1 | focus | deliver |  |
 | 16 | 2026-10-19 03:40 | tracker: done R0036 | 0 | 0 | 2.4 | raft | deliver |  |
+| 17 | 2026-10-19 03:43 | deliver | 0 | 0 | 20.0 | spend | deliver |  |
 
-**Total:** +125 / -13 lines, 180.5 agent-minutes, 592449 tokens over 16 records
-<!-- totals: added=125 removed=13 minutes=180.5 records=16 tokens=592449 -->
+**Total:** +125 / -13 lines, 200.5 agent-minutes, 592449 tokens over 17 records
+<!-- totals: added=125 removed=13 minutes=200.5 records=17 tokens=592449 -->
