@@ -194,6 +194,45 @@ return t.spec("f0024 drive policy", function(it)
 		t.expect(result.wrote.all).toBe(false)
 	end)
 
+	it(
+		"a zero ordered read budget skips only the ordered update, and the companion is still written",
+		function()
+			local entryWrites = 0
+			local scoreWrites = 0
+			local io = {
+				get = function(_board: any, _key: string): (any, string?)
+					return nil, nil
+				end,
+				updateEntry = function(_board: any, _key: string, transform: (any) -> any): (any, string?)
+					entryWrites += 1
+					return transform(nil), nil
+				end,
+				updateScore = function(
+					_board: any,
+					_key: string,
+					transform: (number?) -> number?
+				): (number?, string?)
+					scoreWrites += 1
+					return transform(nil), nil
+				end,
+				top = function(_board: any): (any, string?)
+					return { {} }, nil
+				end,
+				budget = function(op: string): number
+					if op == "getSorted" then
+						return 0
+					end
+					return 5
+				end,
+				wait = function(_seconds: number) end,
+			}
+			local result = Hiscores.drive(io, attempt("1", 10, 1), FRI, Hiscores.RETRY)
+			t.expect(entryWrites).toBe(3)
+			t.expect(scoreWrites).toBe(0)
+			t.expect(result.wrote.all).toBe(false)
+		end
+	)
+
 	it("a zero list budget still reads the top and can rank", function()
 		local tops = 0
 		local io = {

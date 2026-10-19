@@ -26,6 +26,12 @@ type World = {
 	budgets: { string },
 	warnings: number,
 	sortedFails: boolean,
+	sortedFailsAt: number?, -- a page size the sorted read rejects
+	sizes: { number },
+	log: { string }, -- "budget:<kind>" and "update:<ordered|companion>", in call order
+	budgetFails: boolean,
+	hold: boolean, -- task.spawn keeps the function in `spawned` instead of running it
+	spawned: { () -> () },
 	heard: { { any } },
 }
 
@@ -36,6 +42,12 @@ local function world(): World
 		budgets = {},
 		warnings = 0,
 		sortedFails = false,
+		sortedFailsAt = nil,
+		sizes = {},
+		log = {},
+		budgetFails = false,
+		hold = false,
+		spawned = {},
 		heard = {},
 	}
 	local function open(kind: string, name: string, scope: string?): any
@@ -52,6 +64,7 @@ local function world(): World
 			end,
 			UpdateAsync = function(_: any, key: string, transform: (any) -> any): any
 				s.updates += 1
+				table.insert(w.log, `update:{kind}`)
 				local nextValue = transform(s.data[key])
 				if nextValue ~= nil then
 					s.data[key] = nextValue
@@ -59,7 +72,8 @@ local function world(): World
 				return nextValue
 			end,
 			GetSortedAsync = function(_: any, ascending: boolean, size: number): any
-				if w.sortedFails then
+				table.insert(w.sizes, size)
+				if w.sortedFails or w.sortedFailsAt == size then
 					error("stub: sorted read failed", 0)
 				end
 				local list: { { key: string, value: number } } = {}
@@ -91,7 +105,11 @@ local function world(): World
 			return open("ordered", name, scope)
 		end,
 		GetRequestBudgetForRequestType = function(_: any, kind: any): number
+			if w.budgetFails then
+				error("stub: budget query failed", 0)
+			end
 			table.insert(w.budgets, tostring(kind))
+			table.insert(w.log, `budget:{tostring(kind)}`)
 			return 100
 		end,
 	}
@@ -116,8 +134,12 @@ local function world(): World
 			end,
 		}),
 		task = {
-			spawn = function(fn: (...any) -> (), ...: any)
-				fn(...)
+			spawn = function(fn: () -> ())
+				if w.hold then
+					table.insert(w.spawned, fn)
+				else
+					fn()
+				end
 			end,
 			wait = function(_seconds: number?) end,
 		},
@@ -136,6 +158,12 @@ local function world(): World
 		table.insert(w.heard, { userId, run, rank } :: { any })
 	end)
 	return w
+end
+
+-- run the oldest function a held task.spawn kept
+local function runNext(w: World)
+	local fn = table.remove(w.spawned, 1) :: () -> ()
+	fn()
 end
 
 -- what the store of that name and scope holds; empty when the adapter never opened it
@@ -258,9 +286,57 @@ return t.spec("f0024 module shape", function(it)
 		for _, kind in w.budgets do
 			local known = kind == "DataStoreRequestType.StandardRead"
 				or kind == "DataStoreRequestType.StandardWrite"
+				or kind == "DataStoreRequestType.OrderedRead"
 				or kind == "DataStoreRequestType.OrderedWrite"
 			t.expect(known).toBe(true)
 		end
+	end)
+
+	it("each update is preceded by the read and write budgets of its own store", function()
+		local w = world()
+		w.store.submit("7", "Ada", 50, 2, 1)
+		local since: { [string]: boolean } = {}
+		local updates = 0
+		for _, entry in w.log do
+			local kind = string.match(entry, "^budget:(.+)$")
+			if kind then
+				since[kind] = true
+			else
+				updates += 1
+				if entry == "update:ordered" then
+					t.expect(since["DataStoreRequestType.OrderedRead"]).toBe(true)
+					t.expect(since["DataStoreRequestType.OrderedWrite"]).toBe(true)
+				else
+					t.expect(since["DataStoreRequestType.StandardRead"]).toBe(true)
+					t.expect(since["DataStoreRequestType.StandardWrite"]).toBe(true)
+				end
+				since = {}
+			end
+		end
+		t.expect(updates).toBe(6)
+	end)
+
+	it("a submit is pending from the call until its drive ends, also when the drive fails", function()
+		local w = world()
+		t.expect(w.store.pending()).toBe(0)
+		w.hold = true
+		w.store.submit("7", "Ada", 50, 2, 1)
+		w.store.submit("8", "Bea", 40, 1, 1)
+		t.expect(w.store.pending()).toBe(2)
+		runNext(w)
+		t.expect(w.store.pending()).toBe(1)
+		w.budgetFails = true
+		runNext(w)
+		t.expect(w.store.pending()).toBe(0)
+		t.expect(w.warnings).toBe(1)
+	end)
+
+	it("a page size of 10 that the store rejects is tried once at 50, and the rank still comes", function()
+		local w = world()
+		w.sortedFailsAt = 10
+		w.store.submit("7", "Ada", 50, 2, 1)
+		t.expect(w.sizes).toEqual({ 10, 50 })
+		t.expect(w.heard).toEqual({ { "7", 1, 1 } :: { any } })
 	end)
 
 	it("no rank is heard when the board cannot be read, and the write still happens", function()

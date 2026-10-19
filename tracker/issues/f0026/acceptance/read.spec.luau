@@ -178,4 +178,57 @@ return t.spec("f0026 board read", function(it)
 		t.expect(fetches).toBe(2)
 		t.expect(retried[1].score).toBe(10)
 	end)
+
+	it(
+		"a board whose read keeps failing is read again only after 2, 4, 8 and at most CACHE_TTL seconds",
+		function()
+			t.expect(Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 1)).toBe(2)
+			t.expect(Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 2)).toBe(4)
+			t.expect(Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 3)).toBe(8)
+			t.expect(Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 4)).toBe(15)
+			t.expect(Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 9)).toBe(15)
+			local fetches = 0
+			local result: { any }? = nil
+			local function fetch(): { any }?
+				fetches += 1
+				return result
+			end
+			local old: any = { at = -100, rows = sample() }
+			local function at(now: number, failure: any): (any, any, any)
+				local cache, _, rows, nextFailure = Hiscores.lookup(
+					old,
+					now,
+					Hiscores.CACHE_TTL,
+					nil,
+					Hiscores.READ_GAP,
+					false,
+					fetch,
+					failure
+				)
+				return cache, rows, nextFailure
+			end
+			local cache, rows, failure = at(0, nil)
+			t.expect(fetches).toBe(1)
+			t.expect(cache).toBe(old)
+			t.expect(rows).toBe(nil)
+			t.expect(failure.at).toBe(0)
+			t.expect(failure.count).toBe(1)
+			local _, blockedRows, same = at(1, failure)
+			t.expect(fetches).toBe(1)
+			t.expect(blockedRows).toBe(nil)
+			t.expect(same).toBe(failure)
+			local _, _, second = at(2, failure)
+			t.expect(fetches).toBe(2)
+			t.expect(second.count).toBe(2)
+			local _, _, still = at(5, second)
+			t.expect(fetches).toBe(2)
+			t.expect(still).toBe(second)
+			result = sample()
+			local healed, healedRows, cleared = at(6, second)
+			t.expect(fetches).toBe(3)
+			t.expect(healed.at).toBe(6)
+			t.expect(healedRows[1].score).toBe(10)
+			t.expect(cleared).toBe(nil)
+		end
+	)
 end)

@@ -74,4 +74,18 @@ return t.spec("f0026 lobby boards", function(it)
 		t.expect(lines({ empty = "No scores yet", rows = {} }, nil)).toBe("No scores yet")
 		t.expect(lines({ empty = "No scores yet", rows = {} }, 1)).toBe("No scores yet")
 	end)
+
+	it(
+		"the client asks again after 1, 2 and 4 s of failed answers in a row, and not a fourth time",
+		function()
+			local retryAfter = (Lobby :: any).retryAfter
+			t.expect((Lobby :: any).MAX_RETRIES).toBe(3)
+			t.expect(retryAfter(1)).toBe(1)
+			t.expect(retryAfter(2)).toBe(2)
+			t.expect(retryAfter(3)).toBe(4)
+			t.expect(retryAfter(4)).toBe(nil)
+			t.expect(retryAfter(0)).toBe(nil)
+			t.expect(retryAfter(1.5)).toBe(nil)
+		end
+	)
 end)

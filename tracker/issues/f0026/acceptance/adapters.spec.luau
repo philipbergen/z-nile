@@ -482,9 +482,14 @@ return t.spec("f0026 adapter boundaries", function(it)
 		t.expect(w.reads[2].size).toBe(50)
 		t.expect(w.reads[1].name).toBe("Hiscores")
 		t.expect(w.reads[1].scope).toBe("all")
+		-- inside the key's failure window another player is answered from what there is, without a read
+		w.now += Hiscores.READ_GAP
+		w.ask(p3, "all")
+		t.expect(w.answers(p3)).toEqual({ { "all", {}, nil, true } :: { any } })
+		t.expect(#w.reads).toBe(2)
 		seed(w)
 		w.mode = "ok"
-		w.now += Hiscores.READ_GAP
+		w.now += Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 1) - Hiscores.READ_GAP
 		w.ask(p1, "all")
 		local healthy = w.answers(p1)[2]
 		t.expect(healthy[1]).toBe("all")
@@ -499,7 +504,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 		w.now += 2
 		w.ask(p3, "all")
 		t.expect(#w.reads).toBe(reads)
-		t.expect(w.answers(p3)).toEqual({ { "all", healthy[2], nil, false } :: { any } })
+		t.expect(w.answers(p3)[2]).toEqual({ "all", healthy[2], nil, false } :: { any })
 		w.now += Hiscores.CACHE_TTL
 		w.ask(p1, "all")
 		t.expect(#w.answers(p1)).toBe(3)
@@ -530,6 +535,31 @@ return t.spec("f0026 adapter boundaries", function(it)
 			t.expect(w.answers(p9)[1][3]).toBe(nil)
 			t.expect(w.answers(p2)[1][4]).toBe(false)
 			t.expect(#w.answers(p2)[1][2]).toBe(2)
+		end
+	)
+
+	it(
+		"during an outage a client asking every second costs three reads of the board in ten seconds",
+		function()
+			local w = boards()
+			local p1 = player(1)
+			w.mode = "error"
+			for _ = 0, 10 do
+				w.ask(p1, "all")
+				w.now += 1
+			end
+			-- reads at 0, 2 and 6 s (failure waits of 2, 4, then 8 s), each at page sizes 10 and 50
+			t.expect(#w.reads).toBe(6)
+			t.expect(#w.answers(p1)).toBe(11)
+			for _, answer in w.answers(p1) do
+				t.expect(answer[4]).toBe(true)
+			end
+			seed(w)
+			w.mode = "ok"
+			w.now = FRI + 14
+			w.ask(p1, "all")
+			t.expect(#w.reads).toBe(7)
+			t.expect(w.answers(p1)[12][4]).toBe(false)
 		end
 	)
 
@@ -564,6 +594,38 @@ return t.spec("f0026 adapter boundaries", function(it)
 		end
 	)
 
+	it(
+		"failed answers in a row ask again after 1, 2 and 4 s, then stop, and a healthy answer starts over",
+		function()
+			local v = lobbyView(true)
+			local board = v.remotes.Board
+			for n, wait in { 1, 2, 4 } do
+				board.OnClientEvent:fire("all", {}, nil, true)
+				v.tick(wait - 0.5)
+				t.expect(#v.asks()).toBe(n)
+				v.tick(0.5)
+				t.expect(#v.asks()).toBe(n + 1)
+			end
+			board.OnClientEvent:fire("all", {}, nil, true)
+			v.tick(60)
+			t.expect(#v.asks()).toBe(4)
+			board.OnClientEvent:fire("all", {}, nil, false)
+			board.OnClientEvent:fire("all", {}, nil, true)
+			v.tick(Lobby.READ_GAP)
+			t.expect(#v.asks()).toBe(5)
+		end
+	)
+
+	it("a failed day or week answer asks again for that board", function()
+		local v = lobbyView(true)
+		v.remotes.Board.OnClientEvent:fire("day", {}, nil, true)
+		v.tick(Lobby.READ_GAP)
+		t.expect(v.asks()).toEqual({ { "all" }, { "day" } })
+		v.remotes.Board.OnClientEvent:fire("week", {}, nil, true)
+		v.tick(10)
+		t.expect(v.asks()[3]).toEqual({ "week" })
+	end)
+
 	it("a failed answer asks for all once more after READ_GAP, and a healthy one never does", function()
 		local v = lobbyView(true)
 		v.remotes.Board.OnClientEvent:fire("all", {}, nil, true)
@@ -580,16 +642,19 @@ return t.spec("f0026 adapter boundaries", function(it)
 		t.expect(#v.asks()).toBe(2)
 	end)
 
-	it("day and week are buttons of at least the touch size that ask for only their board", function()
+	it("all, day and week are buttons of at least the touch size that ask for only their board", function()
 		local v = lobbyView(true)
+		local all = v.button(Lobby.boardTitle("all"))
 		local today = v.button(Lobby.boardTitle("day"))
 		local week = v.button(Lobby.boardTitle("week"))
-		t.expect(today ~= nil and week ~= nil).toBe(true)
+		t.expect(all ~= nil and today ~= nil and week ~= nil).toBe(true)
+		t.expect(all.Size.Y.Offset >= Lobby.BUTTON_MIN_PX).toBe(true)
 		t.expect(today.Size.Y.Offset >= Lobby.BUTTON_MIN_PX).toBe(true)
 		t.expect(week.Size.Y.Offset >= Lobby.BUTTON_MIN_PX).toBe(true)
 		today.Activated:fire()
 		week.Activated:fire()
-		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "week" } })
+		all.Activated:fire()
+		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "week" }, { "all" } })
 		v.remotes.Board.OnClientEvent:fire(
 			"day",
 			rowsOf({ rank = 1, name = "Cy", score = 5, level = 1 }),

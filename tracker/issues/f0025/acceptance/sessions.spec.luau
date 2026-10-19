@@ -61,6 +61,10 @@ type World = {
 	submits: { { any } },
 	againOk: boolean,
 	unknown: { string },
+	closers: { () -> () },
+	clock: number,
+	waiting: { { co: thread, due: number } },
+	drives: number,
 }
 
 local function folder(children: { [string]: any }): any
@@ -96,6 +100,10 @@ local function world(runs: string): World
 		submits = {},
 		againOk = false,
 		unknown = {},
+		closers = {},
+		clock = 0,
+		waiting = {},
+		drives = 0,
 	}
 	for _, name in { "Ready", "Intent", "Snapshot", "PlayAgain", "ToLobby", "LobbyStatus" } do
 		w.remotes[name] = {
@@ -146,6 +154,16 @@ local function world(runs: string): World
 					assert(found ~= nil, `stub: game:GetService("{name}") is not modelled`)
 					return found
 				end,
+				BindToClose = function(_: any, fn: () -> ())
+					table.insert(w.closers, fn)
+				end,
+			},
+			task = {
+				wait = function(seconds: number?): number
+					table.insert(w.waiting, { co = coroutine.running(), due = w.clock + (seconds or 0) })
+					coroutine.yield()
+					return seconds or 0
+				end,
 			},
 			-- an unknown module is recorded, not served: f0065's fake serves Sessions only Maze and Session
 			require = function(spec: string): any
@@ -176,9 +194,14 @@ local function world(runs: string): World
 			end,
 		})
 	elseif runs == "submits" then
+		-- every submit starts a drive that stays in flight until the spec sets w.drives back
 		local store = {
 			submit = function(...: any)
 				table.insert(w.submits, { ... })
+				w.drives += 1
+			end,
+			pending = function(): number
+				return w.drives
 			end,
 		}
 		w.mod.start(load(SUBMITS, { [LOGIC .. "Hiscores"] = Hiscores, ["./HiscoreStore"] = store }))
@@ -212,6 +235,38 @@ local function frames(w: World, n: number)
 	for _ = 1, n do
 		frame(w, ONE)
 	end
+end
+
+-- the server clock that task.wait sleeps on (separate from Heartbeat, which the spec fires itself)
+local function tick(w: World, seconds: number)
+	w.clock += seconds
+	local due: { { co: thread, due: number } } = {}
+	local later: { { co: thread, due: number } } = {}
+	for _, entry in w.waiting do
+		table.insert(if entry.due <= w.clock + 1e-9 then due else later, entry)
+	end
+	w.waiting = later
+	for _, entry in due do
+		local ok, err = coroutine.resume(entry.co)
+		if not ok then
+			error(err, 0)
+		end
+	end
+end
+
+-- start the close handler Submits bound, as the engine does when the server shuts down
+local function close(w: World): thread
+	t.expect(#w.closers).toBe(1)
+	local co = coroutine.create(w.closers[1])
+	local ok, err = coroutine.resume(co)
+	if not ok then
+		error(err, 0)
+	end
+	return co
+end
+
+local function closed(co: thread): boolean
+	return coroutine.status(co) == "dead"
 end
 
 local function snapshots(w: World, p: any): number
@@ -496,5 +551,68 @@ return t.spec("f0025 Sessions wiring", function(it)
 		t.expect(w.submits[1]).toEqual({ "1", "Ada", 300, 2, 1 } :: { any })
 		t.expect(w.submits[2]).toEqual({ "1", "Ada", 120, 1, 1 } :: { any })
 		t.expect(snapshots(w, again)).toBe(6)
+	end)
+
+	it("a parked session is stepped once per step Session.advance grants, not once per Heartbeat", function()
+		local w = world("record")
+		local p1 = join(w, 1)
+		local s1 = w.made[1]
+		leave(w, p1)
+		frame(w, 2 / Session.STEP_RATE)
+		t.expect(w.steps[s1]).toBe(2)
+		frame(w, 0.5 * ONE)
+		t.expect(w.steps[s1]).toBe(2)
+		frame(w, 0.5 * ONE)
+		t.expect(w.steps[s1]).toBe(3)
+	end)
+
+	it(
+		"Submits binds one close handler, which returns at once when no run is held and no drive is in flight",
+		function()
+			local w = world("submits")
+			t.expect(#w.closers).toBe(1)
+			t.expect(closed(close(w))).toBe(true)
+		end
+	)
+
+	it(
+		"closing waits for a parked run to reach its GameOver and for that drive, while the server keeps stepping",
+		function()
+			local w = world("submits")
+			local p1 = join(w, 1, "Ada")
+			local s1 = w.made[1]
+			w.script[s1] = gameOverAt(10, 640, 3)
+			frames(w, 2)
+			leave(w, p1)
+			local co = close(w)
+			t.expect(closed(co)).toBe(false)
+			for _ = 1, 7 do
+				frame(w, ONE)
+				tick(w, 0.25)
+			end
+			t.expect(#w.submits).toBe(0)
+			t.expect(closed(co)).toBe(false)
+			frame(w, ONE)
+			tick(w, 0.25)
+			t.expect(w.submits[1]).toEqual({ "1", "Ada", 640, 3, 1 } :: { any })
+			t.expect(closed(co)).toBe(false)
+			tick(w, 1)
+			t.expect(closed(co)).toBe(false)
+			w.drives = 0
+			tick(w, 0.25)
+			t.expect(closed(co)).toBe(true)
+		end
+	)
+
+	it("closing gives up at the close wait when a drive never finishes", function()
+		local w = world("submits")
+		w.drives = 1
+		local co = close(w)
+		for _ = 1, 99 do
+			tick(w, 0.25)
+		end
+		t.expect(closed(co)).toBe(false)
+		tick(w, 0.25)
+		t.expect(closed(co)).toBe(true)
 	end)
 end)
