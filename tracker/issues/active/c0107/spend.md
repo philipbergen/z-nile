@@ -14,6 +14,7 @@
 | 10 | 2026-10-19 04:01 | prep | 1042 | 2 | 90.0 | spend | prep |  |
 | 11 | 2026-10-19 05:27 | c0107: list rafts and issues by readiness | 287 | 210 | 45.0 | explicit | build |  |
 | 12 | 2026-10-19 05:31 | c0107: record the full gate | 0 | 0 | 2.0 | explicit | build |  |
+| 13 | 2026-10-19 05:34 | R0038: review-001 | 0 | 0 | 6.0 | focus | code-review |  |
 
-**Total:** +1329 / -212 lines, 284.0 agent-minutes, 430000 tokens over 12 records
-<!-- totals: added=1329 removed=212 minutes=284.0 records=12 tokens=430000 -->
+**Total:** +1329 / -212 lines, 290.0 agent-minutes, 430000 tokens over 13 records
+<!-- totals: added=1329 removed=212 minutes=290.0 records=13 tokens=430000 -->
