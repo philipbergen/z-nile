@@ -66,6 +66,7 @@ jobs:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
           ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
           ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
       - if: steps.deploy.outputs.version != ''
         run: |
           gh pr comment "$PR" --edit-last --create-if-none \
@@ -82,3 +83,13 @@ jobs:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
           ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
           ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
+      # the lobby (c0064): published only once ROBLOX_BETA_GAME_PLACE_ID is set
+      - if: steps.deploy.outputs.lobby_version != ''
+        run: lune run scripts/runtime-test -- --lobby "$LOBBY_VERSION"
+        env:
+          LOBBY_VERSION: ${{ steps.deploy.outputs.lobby_version }}
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
