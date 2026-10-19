@@ -13,6 +13,7 @@
 | 9 | 2026-10-19 03:05 | design-refute-005 | 0 | 0 | 6.0 | spend | design-review |  |
 | 10 | 2026-10-19 03:13 | design-review-006 | 0 | 0 | 5.0 | spend | design-review | 80000 |
 | 11 | 2026-10-19 03:14 | prep | 115 | 3 | 90.0 | spend | prep |  |
+| 12 | 2026-10-19 03:17 | design-review-006 token correction (exact 82199, 80000 recorded) | 0 | 0 | 0.0 | spend | design-review | 2199 |
 
-**Total:** +115 / -3 lines, 148.0 agent-minutes, 530250 tokens over 11 records
-<!-- totals: added=115 removed=3 minutes=148.0 records=11 tokens=530250 -->
+**Total:** +115 / -3 lines, 148.0 agent-minutes, 532449 tokens over 12 records
+<!-- totals: added=115 removed=3 minutes=148.0 records=12 tokens=532449 -->
