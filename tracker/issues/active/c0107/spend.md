@@ -17,6 +17,7 @@
 | 13 | 2026-10-19 05:34 | R0038: review-001 | 0 | 0 | 6.0 | focus | code-review |  |
 | 14 | 2026-10-19 05:35 | R0038: restore the raft dependency links in the smoke walk | 8 | 11 | 15.0 | explicit | code-review |  |
 | 15 | 2026-10-19 05:36 | R0038: refute-001 | 0 | 0 | 8.0 | focus | code-review |  |
+| 16 | 2026-10-19 05:36 | c0107: record the review answer | 0 | 0 | 5.0 | explicit | deliver |  |
 
-**Total:** +1337 / -223 lines, 313.0 agent-minutes, 430000 tokens over 15 records
-<!-- totals: added=1337 removed=223 minutes=313.0 records=15 tokens=430000 -->
+**Total:** +1337 / -223 lines, 318.0 agent-minutes, 430000 tokens over 16 records
+<!-- totals: added=1337 removed=223 minutes=318.0 records=16 tokens=430000 -->
