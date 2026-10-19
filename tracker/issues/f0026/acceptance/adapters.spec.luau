@@ -218,6 +218,9 @@ type BoardsWorld = {
 	ordered: { [string]: { [string]: number } },
 	companion: { [string]: { [string]: any } },
 	openFails: number, -- this many GetOrderedDataStore calls throw first
+	failsAt: number?, -- a page size the sorted read rejects
+	opens: { string }, -- "<ordered|companion>|<name>|<scope>" per store open, in order
+	gets: number, -- companion GetAsync calls
 	companionFails: { [string]: boolean }, -- keys whose GetAsync throws
 	removing: Signal,
 	errors: { string }, -- errors that escaped the request handler (the engine would only log them)
@@ -232,6 +235,7 @@ local function boards(): BoardsWorld
 	local w: BoardsWorld
 	local dataStores = {
 		GetOrderedDataStore = function(_: any, name: string, scope: string?): any
+			table.insert(w.opens, `ordered|{name}|{scope or "global"}`)
 			if w.openFails > 0 then
 				w.openFails -= 1
 				error("stub: You must publish this place to the web to access DataStore", 0)
@@ -242,7 +246,7 @@ local function boards(): BoardsWorld
 						w.reads,
 						{ name = name, scope = scope or "global", ascending = ascending, size = size }
 					)
-					if w.mode == "error" then
+					if w.mode == "error" or w.failsAt == size then
 						error("stub: sorted read failed", 0)
 					elseif w.mode == "hold" then
 						table.insert(w.held, coroutine.running())
@@ -269,9 +273,11 @@ local function boards(): BoardsWorld
 				end,
 			}
 		end,
-		GetDataStore = function(_: any, _name: string, scope: string?): any
+		GetDataStore = function(_: any, name: string, scope: string?): any
+			table.insert(w.opens, `companion|{name}|{scope or "global"}`)
 			return {
 				GetAsync = function(_: any, key: string): any
+					w.gets += 1
 					if w.companionFails[key] then
 						error("stub: companion read throttled", 0)
 					end
@@ -300,6 +306,9 @@ local function boards(): BoardsWorld
 		ordered = {},
 		companion = {},
 		openFails = 0,
+		failsAt = nil,
+		opens = {},
+		gets = 0,
 		companionFails = {},
 		removing = removing,
 		errors = {},
@@ -474,7 +483,13 @@ return t.spec("f0026 adapter boundaries", function(it)
 		t.expect(fs.isFile("src/lobby/server/Boards.luau")).toBe(true)
 		local src = stripped("src/lobby/server/Boards.luau")
 		for _, needle in
-			{ "Hiscores.boardId", "Hiscores.lookup", "Hiscores.cacheKey", "GetSortedAsync(false" }
+			{
+				"Hiscores.boardId",
+				"Hiscores.lookup",
+				"Hiscores.cacheKey",
+				"Hiscores.storeTarget",
+				"GetSortedAsync(false",
+			}
 		do
 			t.expect(string.find(src, needle, 1, true) ~= nil).toBe(true)
 		end
@@ -649,22 +664,89 @@ return t.spec("f0026 adapter boundaries", function(it)
 		end
 	)
 
-	it("a waiter who left before the read returned gets no answer, and leaving forgets the player", function()
+	it(
+		"a waiter who left before the read returned gets no answer, and Boards keeps no per-player state",
+		function()
+			local w = boards()
+			seed(w)
+			local p1, p2 = player(1), player(2)
+			w.mode = "hold"
+			w.ask(p1, "all")
+			w.ask(p2, "all")
+			p2.Parent = nil
+			w.removing:fire(p2)
+			w.release(false)
+			t.expect(#w.answers(p1)).toBe(1)
+			t.expect(#w.answers(p2)).toBe(0)
+			-- nothing is keyed by player, so nothing can outlive a visitor
+			local src = stripped("src/lobby/server/Boards.luau")
+			t.expect((string.find(src, "lastFetch", 1, true))).toBe(nil)
+			t.expect((string.find(src, "%[%s*player%s*%]%s*="))).toBe(nil)
+		end
+	)
+
+	it("one player asking all and then day in the same second gets both boards, healthy", function()
 		local w = boards()
 		seed(w)
-		local p1, p2 = player(1), player(2)
-		w.mode = "hold"
-		w.ask(p1, "all")
+		w.ordered["day:2026-10-16"] = { ["2"] = Hiscores.pack(80, 3) }
+		w.companion["day:2026-10-16"] = { ["2"] = { name = "Bea", userId = "2", level = 3, score = 80 } }
+		local p2 = player(2)
 		w.ask(p2, "all")
-		p2.Parent = nil
-		w.removing:fire(p2)
-		w.release(false)
-		t.expect(#w.answers(p1)).toBe(1)
-		t.expect(#w.answers(p2)).toBe(0)
-		t.expect(#w.removing.fns).toBe(1)
-		local src = stripped("src/lobby/server/Boards.luau")
-		t.expect(string.find(src, "PlayerRemoving", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(src, "lastFetch%[%s*player%s*%]%s*=%s*nil") ~= nil).toBe(true)
+		w.ask(p2, "day")
+		t.expect(#w.reads).toBe(2)
+		t.expect(w.answers(p2)[1][4]).toBe(false)
+		t.expect(w.answers(p2)[2]).toEqual({
+			"day",
+			{ { rank = 1, name = "Bea", score = 80, level = 3 } },
+			1,
+			false,
+		} :: { any })
+		t.expect(table.find(w.opens, "companion|HiscoreEntries|day:2026-10-16") ~= nil).toBe(true)
+		t.expect(table.find(w.opens, "ordered|Hiscores|day:2026-10-16") ~= nil).toBe(true)
+	end)
+
+	it(
+		"Boards opens the ordered and the companion store under their own names and the board's scope",
+		function()
+			local w = boards()
+			seed(w)
+			w.ask(player(1), "all")
+			local companions, ordereds = 0, 0
+			for _, open in w.opens do
+				if string.sub(open, 1, 9) == "companion" then
+					companions += 1
+					t.expect(open).toBe("companion|HiscoreEntries|all")
+				else
+					ordereds += 1
+					t.expect(open).toBe("ordered|Hiscores|all")
+				end
+			end
+			t.expect(companions >= 1).toBe(true)
+			t.expect(ordereds >= 1).toBe(true)
+			local name, scope = Hiscores.storeTarget("companion", Hiscores.board("all", FRI), true)
+			t.expect(`companion|{name}|{scope}`).toBe("companion|HiscoreEntries|all")
+		end
+	)
+
+	it("a page of 50 after the size-10 fallback is cut to the top N before any companion is read", function()
+		local w = boards()
+		w.ordered.all = {}
+		w.companion.all = {}
+		for i = 1, 30 do
+			local id = tostring(100 + i)
+			w.ordered.all[id] = Hiscores.pack(1000 - i, 1)
+			w.companion.all[id] = { name = `P{i}`, userId = id, level = 1, score = 1000 - i }
+		end
+		w.failsAt = 10
+		local p1 = player(1)
+		w.ask(p1, "all")
+		t.expect(#w.reads).toBe(2)
+		t.expect(w.reads[2].size).toBe(50)
+		t.expect(w.gets <= Hiscores.N).toBe(true)
+		local answer = w.answers(p1)[1]
+		t.expect(answer[4]).toBe(false)
+		t.expect(#answer[2]).toBe(Hiscores.N)
+		t.expect(answer[2][1].score).toBe(999)
 	end)
 
 	it("a healthy empty board is an answer, not a failure", function()
@@ -717,6 +799,26 @@ return t.spec("f0026 adapter boundaries", function(it)
 			board.OnClientEvent:fire("all", {}, nil, true)
 			v.tick(Lobby.READ_GAP)
 			t.expect(#v.asks()).toBe(5)
+		end
+	)
+
+	it(
+		"a tap starts the failure count over, so a failed answer after the retries stopped is retried",
+		function()
+			local v = lobbyView(true)
+			local board = v.remotes.Board
+			for _, wait in { 1, 2, 4 } do
+				board.OnClientEvent:fire("all", {}, nil, true)
+				v.tick(wait)
+			end
+			board.OnClientEvent:fire("all", {}, nil, true)
+			v.tick(60)
+			t.expect(#v.asks()).toBe(4)
+			v.button(Lobby.boardTitle("day")).Activated:fire()
+			board.OnClientEvent:fire("day", {}, nil, true)
+			v.tick(Lobby.READ_GAP)
+			t.expect(#v.asks()).toBe(6)
+			t.expect(v.asks()[6]).toEqual({ "day" })
 		end
 	)
 

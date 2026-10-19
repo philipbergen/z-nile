@@ -1,6 +1,6 @@
 --!strict
 -- f0026 AC3: the lobby asks for a board id, never a score. A fresh cache is shared. A stale cache
--- refetches only after the gap, and a failed fetch does not wipe the rows. Time is a parameter.
+-- refetches, a failed fetch does not wipe the rows, and a failing board waits longer each time. Time is a parameter.
 local Hiscores = require("@logic/Hiscores")
 local t = require("@tests/lib/t")
 
@@ -31,152 +31,106 @@ return t.spec("f0026 board read", function(it)
 		t.expect(Hiscores.cacheKey("week", FRI)).toBe("week:2026-10-12")
 	end)
 
-	it("a fresh cache is returned, the boundary refetches, and the gap blocks a stampede", function()
-		local fetches = 0
-		local function fetch(): { any }?
-			fetches += 1
-			return sample()
+	it(
+		"a fresh cache is returned, the boundary refetches, and a failed read waits before the next",
+		function()
+			local fetches = 0
+			local result: { any }? = sample()
+			local function fetch(): { any }?
+				fetches += 1
+				return result
+			end
+			local cache: any, rows: any, failure: any =
+				Hiscores.lookup(nil, 0, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, nil)
+			t.expect(fetches).toBe(1)
+			t.expect(rows[1].score).toBe(10)
+			t.expect(failure).toBe(nil)
+			local same: any, rows2: any =
+				Hiscores.lookup(cache, 14.9, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, nil)
+			t.expect(fetches).toBe(1)
+			t.expect(same).toBe(cache)
+			t.expect(rows2[1].name).toBe("A")
+			result = nil
+			local kept: any, missing, failed: any =
+				Hiscores.lookup(cache, 15, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, nil)
+			t.expect(fetches).toBe(2)
+			t.expect(missing).toBe(nil)
+			t.expect(kept).toBe(cache)
+			t.expect(failed.at).toBe(15)
+			t.expect(failed.count).toBe(1)
+			result = sample()
+			local _, blocked, held =
+				Hiscores.lookup(cache, 16, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, failed)
+			t.expect(blocked).toBe(nil)
+			t.expect(held).toBe(failed)
+			t.expect(fetches).toBe(2)
+			local fresh: any, freshRows: any, cleared =
+				Hiscores.lookup(cache, 17, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, failed)
+			t.expect(fetches).toBe(3)
+			t.expect(fresh.at).toBe(17)
+			t.expect(freshRows[1].score).toBe(10)
+			t.expect(cleared).toBe(nil)
 		end
-		local cache: any, last, rows: any =
-			Hiscores.lookup(nil, 0, Hiscores.CACHE_TTL, nil, Hiscores.READ_GAP, false, fetch)
-		t.expect(fetches).toBe(1)
-		t.expect(rows[1].score).toBe(10)
-		local _, last2, rows2: any =
-			Hiscores.lookup(cache, 1, Hiscores.CACHE_TTL, last, Hiscores.READ_GAP, false, fetch)
-		t.expect(fetches).toBe(1)
-		t.expect(rows2[1].name).toBe("A")
-		t.expect(last2).toBe(0)
-		local kept: any, failedAt, missing = Hiscores.lookup(
-			cache,
-			15,
-			Hiscores.CACHE_TTL,
-			last,
-			Hiscores.READ_GAP,
-			false,
-			function(): { any }?
-				return nil
-			end
-		)
-		t.expect(fetches).toBe(1)
-		t.expect(missing).toBe(nil)
-		t.expect(kept).toBe(cache)
-		t.expect(failedAt).toBe(15)
-		local _, _, blocked =
-			Hiscores.lookup(cache, 15.5, Hiscores.CACHE_TTL, failedAt, Hiscores.READ_GAP, false, fetch)
-		t.expect(blocked).toBe(nil)
-		t.expect(fetches).toBe(1)
-		local _, _, fresh: any =
-			Hiscores.lookup(cache, 16, Hiscores.CACHE_TTL, failedAt, Hiscores.READ_GAP, false, fetch)
-		t.expect(fetches).toBe(2)
-		t.expect(fresh[1].score).toBe(10)
-	end)
+	)
 
-	it("an empty board is cached, and a clock that is not a number does not fetch", function()
-		local fetches = 0
-		local cache: any, last, rows: any = Hiscores.lookup(
-			nil,
-			5,
-			Hiscores.CACHE_TTL,
-			nil,
-			Hiscores.READ_GAP,
-			false,
-			function(): { any }?
-				fetches += 1
-				return {}
-			end
-		)
-		t.expect(fetches).toBe(1)
-		t.expect(rows).toEqual({})
-		t.expect(cache.rows).toEqual({})
-		t.expect(last).toBe(5)
-		local _, _, backwards = Hiscores.lookup(
-			nil,
-			4,
-			Hiscores.CACHE_TTL,
-			10,
-			Hiscores.READ_GAP,
-			false,
-			function(): { any }?
+	it(
+		"an empty board is cached, and a clock that is not a number or runs backwards does not fetch",
+		function()
+			local fetches = 0
+			local function fetch(): { any }?
 				fetches += 1
 				return sample()
 			end
-		)
-		t.expect(backwards).toBe(nil)
-		t.expect(fetches).toBe(1)
-		local same, sameLast, nanRows = Hiscores.lookup(
-			cache,
-			0 / 0,
-			Hiscores.CACHE_TTL,
-			last,
-			Hiscores.READ_GAP,
-			false,
-			function(): { any }?
-				fetches += 1
-				return sample()
-			end
-		)
-		t.expect(nanRows).toBe(nil)
-		t.expect(same).toBe(cache)
-		t.expect(sameLast).toBe(last)
-		t.expect(fetches).toBe(1)
-	end)
+			local cache: any, rows: any = Hiscores.lookup(
+				nil,
+				5,
+				Hiscores.CACHE_TTL,
+				Hiscores.READ_GAP,
+				false,
+				function(): { any }?
+					fetches += 1
+					return {}
+				end,
+				nil
+			)
+			t.expect(fetches).toBe(1)
+			t.expect(rows).toEqual({})
+			t.expect(cache.rows).toEqual({})
+			local failure = { at = 10, count = 1 }
+			local _, backwards, kept =
+				Hiscores.lookup(nil, 4, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, failure)
+			t.expect(backwards).toBe(nil)
+			t.expect(kept).toBe(failure)
+			t.expect(fetches).toBe(1)
+			local same, nanRows =
+				Hiscores.lookup(cache, 0 / 0, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, nil)
+			t.expect(nanRows).toBe(nil)
+			t.expect(same).toBe(cache)
+			t.expect(fetches).toBe(1)
+		end
+	)
 
-	it("an in-flight read does not fetch, and a cleared flag retries after the gap", function()
+	it("an in-flight read does not fetch or move anything, and a cleared flag reads", function()
 		local fetches = 0
 		local function fetch(): { any }?
 			fetches += 1
 			return sample()
 		end
 		local stale: any = { at = 0, rows = sample() }
-		local _, _, rows: any =
-			Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, 0, Hiscores.READ_GAP, false, fetch)
-		local held: any, heldLast, waiting =
-			Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, 0, Hiscores.READ_GAP, true, fetch)
-		t.expect(fetches).toBe(1)
-		t.expect(rows[1].score).toBe(10)
+		local failure = { at = 0, count = 1 }
+		local held: any, waiting, heldFailure =
+			Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, Hiscores.READ_GAP, true, fetch, failure)
+		t.expect(fetches).toBe(0)
 		t.expect(waiting).toBe(nil)
 		t.expect(held).toBe(stale)
 		t.expect(held.at).toBe(0)
-		t.expect(heldLast).toBe(0)
-		local kept: any, failedAt, missing = Hiscores.lookup(
-			stale,
-			15,
-			Hiscores.CACHE_TTL,
-			0,
-			Hiscores.READ_GAP,
-			false,
-			function(): { any }?
-				return nil
-			end
-		)
-		t.expect(missing).toBe(nil)
-		t.expect(kept).toBe(stale)
-		t.expect(kept.at).toBe(0)
-		t.expect(failedAt).toBe(15)
-		local blocked, blockedLast, blockedRows = Hiscores.lookup(
-			stale,
-			(failedAt :: number) + Hiscores.READ_GAP,
-			Hiscores.CACHE_TTL,
-			failedAt,
-			Hiscores.READ_GAP,
-			true,
-			fetch
-		)
+		t.expect(heldFailure).toBe(failure)
+		local fresh: any, rows: any =
+			Hiscores.lookup(stale, 15, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, failure)
 		t.expect(fetches).toBe(1)
-		t.expect(blockedRows).toBe(nil)
-		t.expect(blocked).toBe(stale)
-		t.expect(blockedLast).toBe(failedAt)
-		local _, _, retried: any = Hiscores.lookup(
-			stale,
-			(failedAt :: number) + Hiscores.READ_GAP,
-			Hiscores.CACHE_TTL,
-			failedAt,
-			Hiscores.READ_GAP,
-			false,
-			fetch
-		)
-		t.expect(fetches).toBe(2)
-		t.expect(retried[1].score).toBe(10)
+		t.expect(rows[1].score).toBe(10)
+		t.expect(fresh.at).toBe(15)
+		t.expect(stale.at).toBe(0)
 	end)
 
 	it(
@@ -195,17 +149,7 @@ return t.spec("f0026 board read", function(it)
 			end
 			local old: any = { at = -100, rows = sample() }
 			local function at(now: number, failure: any): (any, any, any)
-				local cache, _, rows, nextFailure = Hiscores.lookup(
-					old,
-					now,
-					Hiscores.CACHE_TTL,
-					nil,
-					Hiscores.READ_GAP,
-					false,
-					fetch,
-					failure
-				)
-				return cache, rows, nextFailure
+				return Hiscores.lookup(old, now, Hiscores.CACHE_TTL, Hiscores.READ_GAP, false, fetch, failure)
 			end
 			local cache, rows, failure = at(0, nil)
 			t.expect(fetches).toBe(1)

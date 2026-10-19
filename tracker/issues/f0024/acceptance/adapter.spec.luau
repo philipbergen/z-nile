@@ -32,6 +32,7 @@ type World = {
 	budgetFails: boolean,
 	hold: boolean, -- task.spawn keeps the function in `spawned` instead of running it
 	spawned: { () -> () },
+	gets: number, -- companion GetAsync calls
 	heard: { { any } },
 }
 
@@ -48,6 +49,7 @@ local function world(): World
 		budgetFails = false,
 		hold = false,
 		spawned = {},
+		gets = 0,
 		heard = {},
 	}
 	local function open(kind: string, name: string, scope: string?): any
@@ -60,6 +62,7 @@ local function world(): World
 		local s = found :: Store
 		return {
 			GetAsync = function(_: any, key: string): any
+				w.gets += 1
 				return s.data[key]
 			end,
 			UpdateAsync = function(_: any, key: string, transform: (any) -> any): any
@@ -331,13 +334,23 @@ return t.spec("f0024 module shape", function(it)
 		t.expect(w.warnings).toBe(1)
 	end)
 
-	it("a page size of 10 that the store rejects is tried once at 50, and the rank still comes", function()
-		local w = world()
-		w.sortedFailsAt = 10
-		w.store.submit("7", "Ada", 50, 2, 1)
-		t.expect(w.sizes).toEqual({ 10, 50 })
-		t.expect(w.heard).toEqual({ { "7", 1, 1 } :: { any } })
-	end)
+	it(
+		"a page size of 10 that the store rejects is tried once at 50, cut to N, and the rank still comes",
+		function()
+			local w = world()
+			for i = 1, 30 do
+				w.store.submit(tostring(100 + i), `P{i}`, 1000 + i, 1, 1)
+			end
+			w.sortedFailsAt = 10
+			table.clear(w.sizes)
+			table.clear(w.heard)
+			w.gets = 0
+			w.store.submit("7", "Ada", 5000, 2, 1)
+			t.expect(w.sizes).toEqual({ 10, 50 })
+			t.expect(w.gets <= Hiscores.N).toBe(true)
+			t.expect(w.heard).toEqual({ { "7", 1, 1 } :: { any } })
+		end
+	)
 
 	it("no rank is heard when the board cannot be read, and the write still happens", function()
 		local w = world()
