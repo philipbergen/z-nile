@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pickman tracker</title>
 <style>
-:root { --bg: #fff; --fg: #1d2024; --mut: #6b7280; --line: #d9dde3; --sel: #e7efff; --hl: #fff3bf; --code: #f3f4f6; --ser-feature: #2a78d6; --ser-defect: #eb6834; --ser-chore: #1baf7a; --ser-net: #6b7280; }
+:root { --bg: #fff; --fg: #1d2024; --mut: #6b7280; --line: #d9dde3; --sel: #e7efff; --code: #f3f4f6; --ser-feature: #2a78d6; --ser-defect: #eb6834; --ser-chore: #1baf7a; --ser-net: #6b7280; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #15171a; --fg: #e6e8eb; --mut: #9aa3ad; --line: #2d3238; --sel: #1e2b44; --hl: #4a3f12; --code: #21252a; --ser-feature: #3987e5; --ser-defect: #d95926; --ser-chore: #199e70; --ser-net: #9aa3ad; }
+  :root { --bg: #15171a; --fg: #e6e8eb; --mut: #9aa3ad; --line: #2d3238; --sel: #1e2b44; --code: #21252a; --ser-feature: #3987e5; --ser-defect: #d95926; --ser-chore: #199e70; --ser-net: #9aa3ad; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
@@ -46,10 +46,6 @@ a.jump { color: #2563eb; cursor: pointer; font-family: ui-monospace, monospace; 
 .s-prepared { background: #22c55e33; }
 .s-preparing { background: #f59e0b33; }
 .s-new { background: #d1d5db33; }
-details { border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; padding: 4px 10px; }
-details.highlight { background: var(--hl); }
-summary { cursor: pointer; }
-.dep { color: var(--mut); font-size: 12px; }
 .md pre, .md code { background: var(--code); border-radius: 4px; }
 .md pre { padding: 8px 12px; overflow-x: auto; }
 .md code { padding: 0 4px; }

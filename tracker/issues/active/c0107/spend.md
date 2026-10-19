@@ -15,6 +15,7 @@
 | 11 | 2026-10-19 05:27 | c0107: list rafts and issues by readiness | 287 | 210 | 45.0 | explicit | build |  |
 | 12 | 2026-10-19 05:31 | c0107: record the full gate | 0 | 0 | 2.0 | explicit | build |  |
 | 13 | 2026-10-19 05:34 | R0038: review-001 | 0 | 0 | 6.0 | focus | code-review |  |
+| 14 | 2026-10-19 05:35 | R0038: restore the raft dependency links in the smoke walk | 8 | 11 | 15.0 | explicit | code-review |  |
 
-**Total:** +1329 / -212 lines, 290.0 agent-minutes, 430000 tokens over 13 records
-<!-- totals: added=1329 removed=212 minutes=290.0 records=13 tokens=430000 -->
+**Total:** +1337 / -223 lines, 305.0 agent-minutes, 430000 tokens over 14 records
+<!-- totals: added=1337 removed=223 minutes=305.0 records=14 tokens=430000 -->

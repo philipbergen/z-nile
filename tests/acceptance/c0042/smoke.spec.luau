@@ -1,8 +1,8 @@
 --!strict
 -- c0400 AC6: the page's own scripts run. node executes the generated page's inline scripts against a
 -- small fake DOM (the DOM subset the design allows; elements after the script do not exist yet while
--- it loads) and drives it: initial tab (with and without active rafts), every key, tab switching,
--- search with highlighting, unknown ids, and #id links on load.
+-- it loads) and drives it: the opening view (with and without active rafts), every key, view switching,
+-- search, unknown ids, and #id links on load.
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -131,7 +131,6 @@ function key(k, target) {
   return ev.defaultPrevented;
 }
 function expect(cond, msg) { if (!cond) throw new Error(msg + "\n--- list:\n" + els.list.innerHTML.slice(0, 400) + "\n--- pane:\n" + els.pane.innerHTML.slice(0, 600)); }
-function highlighted(id) { const m = els.pane.innerHTML.match(new RegExp('<details[^>]*id="i-' + id + '"[^>]*>')); return !!m && /highlight/.test(m[0]) && /\bopen\b/.test(m[0]); }
 const list = () => els.list.innerHTML, pane = () => els.pane.innerHTML;
 if (mode === "walk") {
   expect(/R0020/.test(list()) && /R0050/.test(list()) && /R0010/.test(list()), "opens on Rafts");
@@ -142,6 +141,7 @@ if (mode === "walk") {
   expect(/Epsilon/.test(pane()), "ArrowDown moves to R0050");
   key("ArrowDown");
   expect(/Alpha/.test(pane()), "ArrowDown moves to R0010");
+  expect(/<h3>Dependents<\/h3><ul class="links"><li><a class="jump" data-id="R0020"/.test(pane()), "Alpha lists Dependents as id links");
   key("ArrowDown");
   expect(/Alpha/.test(pane()), "ArrowDown stops at the last row");
   key("ArrowUp");
@@ -176,6 +176,7 @@ if (mode === "walk") {
   key("Enter", els.search);
   expect(/Gamma/.test(pane()) && /<table>/.test(pane()), "a raft id shows that raft, with its markdown");
   expect(/Waiting for/.test(pane()) && /Depends on/.test(pane()), "the pane shows Waiting for and Depends on");
+  expect(/<h3>Depends on<\/h3><ul class="links"><li><a class="jump" data-id="R0020"/.test(pane()), "Depends on renders id links");
   els.pane.dispatch("click", { target: { closest: sel => (sel === "a.jump" ? { getAttribute: n => (n === "data-id" ? "R0020" : null) } : null) }, preventDefault() {} });
   expect(/Beta/.test(pane()) && /R0020/.test(list()) && sandbox.location.hash === "#R0020", "clicking an id link jumps to that item");
   els.search.value = "x9999";
@@ -227,7 +228,7 @@ return t.spec("c0400 page smoke test (node)", function(it)
 		return r
 	end
 
-	it("drives the page: tabs, arrows, search, highlight, unknown ids", function()
+	it("drives the page: views, arrows, search, unknown ids", function()
 		local r = node({ `{DIR}/harness.js`, `{DIR}/page.html`, "", "walk" })
 		if not r.ok or not string.find(r.stdout, "SMOKE OK", 1, true) then
 			error(r.stderr .. r.stdout)
