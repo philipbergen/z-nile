@@ -34,7 +34,8 @@ This is the source of truth for product decisions. Every raft design must agree 
   - The buffer expires after **0.8 s of game time** (24 ticks; R0004), 1.6 s in real time. A re-press restarts it.
   - **Cornering grace** (user, 2026-09-29): a turn arriving one tick after passing straight through a centre where that exit exists is taken there, cutting the corner.
   - **Missed turns** (user, 2026-09-29): a later press for a turn the player just passed straight by is discarded while the player is still nearer that junction than the next one ahead with that exit, so a late press never diverts the player at a later junction. A press nearer the next such junction is buffered for it.
-- **Look:** the camera's yaw and pitch are free and never change the heading. A "snap look to heading" action recentres it.
+- **Look:** the camera's yaw and pitch are free and never change the heading. On desktop the arrow keys look relative to the heading (see *Desktop keys*); on touch a "snap look to heading" button recentres it.
+- **Desktop keys** (user, 2026-10-17; f0104, R0035): **W** `Forward` (the straight exit, and it cancels a buffered turn), **A** `Left`, **D** `Right`, **S** `Back`, as before. **Space** jumps (the spy hop, f0101). **E** fires the blaster (f0100). The **arrow keys look** relative to the direction of travel while held (up ahead, down behind, left and right to the sides, two together give the diagonals) and the view springs back to the heading on release; pressing an arrow also snaps the view out of any mouse look. The snap-look key goes away.
 - **Collisions are grid rules in Logic:**
   - wall contact means stopping at the tile edge: the player is one tile wide, so its front edge meets the wall when its centre reaches the last tile's centre (R0004);
   - pellets are eaten when the player enters a tile;
