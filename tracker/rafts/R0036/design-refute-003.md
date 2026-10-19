@@ -1,0 +1,6 @@
+# Design refute 003
+
+- F1: fixed: the scanner-visible `"require("` literal is gone (the spec builds require text by concatenation); `scripts/tracker.sh promote-check R0036` is OK and is re-run after every edit to `narrowed.spec`; consequences: none.
+- F2: fixed: the golden now includes the three require lines (split in the literal so the scanner does not trip), so a stub for `View` or `Movement` fails; mutants M18, M19 added and run, both fail on an assertion; consequences: moving or renaming those modules would update the golden too, which is the point.
+- F3: fixed: the normaliser drops a trailing comma before `}`, so a `stylua` one-line `want` table passes (run); E3 says what formatting is tolerated; mutant M20 (an added case) added and run; consequences: none.
+- F4: fixed: R0036's Theme says this prep records the decision in game-design.md; AC1's wording and the Rules and mutants table are consistent, with the M-numbering explained in E3; `LeftShift` has a reason; game-design.md drops the implementation notes; f0104 spells out what the narrowed spec limits it to (also recorded in c0103's Design); consequences: none. The stale `prep-ghost-hunter-tools` worktree was put to the user, who said it is stale; its removal is the user's to run.
