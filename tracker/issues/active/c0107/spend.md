@@ -13,6 +13,7 @@
 | 9 | 2026-10-19 03:59 | design-refute-003 | 0 | 0 | 10.0 | spend | design-review |  |
 | 10 | 2026-10-19 04:01 | prep | 1042 | 2 | 90.0 | spend | prep |  |
 | 11 | 2026-10-19 05:27 | c0107: list rafts and issues by readiness | 287 | 210 | 45.0 | explicit | build |  |
+| 12 | 2026-10-19 05:31 | c0107: record the full gate | 0 | 0 | 2.0 | explicit | build |  |
 
-**Total:** +1329 / -212 lines, 282.0 agent-minutes, 430000 tokens over 11 records
-<!-- totals: added=1329 removed=212 minutes=282.0 records=11 tokens=430000 -->
+**Total:** +1329 / -212 lines, 284.0 agent-minutes, 430000 tokens over 12 records
+<!-- totals: added=1329 removed=212 minutes=284.0 records=12 tokens=430000 -->
