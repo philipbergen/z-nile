@@ -16,6 +16,7 @@
 | 12 | 2026-10-19 03:17 | design-review-006 token correction (exact 82199, 80000 recorded) | 0 | 0 | 0.0 | spend | design-review | 2199 |
 | 13 | 2026-10-19 03:34 | c0103: narrow the promoted key-map spec | 10 | 10 | 25.0 | focus | build |  |
 | 14 | 2026-10-19 03:37 | R0036: review-001 | 0 | 0 | 5.0 | focus | code-review | 60000 |
+| 15 | 2026-10-19 03:37 | R0036: final notes | 0 | 0 | 0.1 | focus | deliver |  |
 
-**Total:** +125 / -13 lines, 178.0 agent-minutes, 592449 tokens over 14 records
-<!-- totals: added=125 removed=13 minutes=178.0 records=14 tokens=592449 -->
+**Total:** +125 / -13 lines, 178.1 agent-minutes, 592449 tokens over 15 records
+<!-- totals: added=125 removed=13 minutes=178.1 records=15 tokens=592449 -->
