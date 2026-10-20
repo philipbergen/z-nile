@@ -1,0 +1,3 @@
+# Answers to design review 005 (R0039)
+
+- F1: fixed (documents only, nothing else changes): `jail()` step 3 now passes `outerJail`, the inherited `PICKMAN_TEST_JAIL`, to `linuxWhy`, with a Rules row marked reasoned; AC2's text and Test plan name the nested case; E3 says 12 of 12; Scalability says E2 nested the first argv and the final policy nested is E5's first check; E5 says to add a narrowed promoted spec to `Overrides:` and the Touched modules; the Linux sibling of `repo-fence` gates its bwrap-only probes on `PICKMAN_TEST_JAIL == "bwrap"` and names the `/tmp` check. consequences: none (wording only; no rule, interface, state or spec case added).

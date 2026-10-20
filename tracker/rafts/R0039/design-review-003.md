@@ -1,0 +1,51 @@
+# Review 003: R0039 (design mode)
+Inputs: b5d1fbf plus the uncommitted prep tree: `tracker/rafts/R0039/{R0039.md,check.sh,design-review-00{1,2}.md,design-refute-00{1,2}.md}`, `tracker/issues/c0075/{c0075.md,check.sh,acceptance/*.spec.luau,experiments/*}`. Read against `tests/lib/fence.luau` (`enter`, `jail`, `REAPER`, the lock), `scripts/lib/fence.sh`, `.github/workflows/check.yml`, `tests/tooling/{repo-fence,fence-cache-entry,run-guard-relaunch}.spec.luau`, `tests/acceptance/{c0001,c0015,c0058,c0064,c0003,c0006,c0081}`, and the prototype in `.worktree/proto-linux-jail` (`fence.luau` seams and `REAPER` record, `fence.sh`, `scripts/linux-jail.sh`, which is byte-identical to E3).
+Checked and holding:
+- **Lock.** I walked every `c0058/lock.spec` case under nested bwrap with the launcher record: the killed-top case waits on the live launcher, then takes over once it is gone.
+- **Gate scan.** It reproduces: with `docker`, `systemd-run`, `busctl` and `dbus-send` added to `NAMES`, the c0075 specs hit exactly the planned `ALLOWED` entries, and nothing in `tests/` or `scripts/` (the prototype script included) names the four.
+- **fence.sh.** The two new `GIT_CONFIG_KEY_*` entries shift no index any spec pins.
+- **Workflow.** The step pins in `check.yml` survive the new step.
+- **Argv order.** It holds for a checkout, git directory, `TMPDIR` or `HOME` under `/run` or `/tmp`, including a run temp folder or `.cache` inside a rebind, which already exists as a mount point.
+Dropped from design-review-002: F1, F3, F4, F5, F6, F7, F8, F9, F10. F2 is carried in part (F1 and F2 below). F1 also questions the "pure seam, wiring read in review" mechanism, the third round to find a hole in it (round 1 F8, round 2 F4).
+
+### F1 [high] (repeat of review-002 F2, the rebind part) `jail()`'s rebind candidates are wired wrong in two ways that AC1 can't see: every nested Linux run fails its trial on a missing `PATH` entry, and resolving the NixOS `PATH` entry removes it from the rebind
+Where: c0075 Design, "Hiding `/run` and `/tmp`" ("`jail()` passes `fence.rebindPaths({ here, git common dir, every PATH entry, $HOME })` (each resolved) as `rebind`") and `jail()` step 1; `jail-argv.spec` "keeps what a run needs…" (feeds `rebindPaths` literal paths); the Rules table (no row for the wiring); R0039 Risks ("`jail()` re-binds it read-only (`rebindPaths`), pinned in AC1"); `tests/lib/fence.luau` `enter` (`PATH="$3/bin:$PATH"` for every run; `{runTemp}/bin` is created only `if process.os == "macos"`) and `resolved` (returns the path itself when `realpath` fails).
+Evidence:
+- **A missing entry.** Every spec runs with `PATH=<runTemp>/bin:…`, and on Linux `<runTemp>/bin` doesn't exist. A spec that starts a copied runner (`c0058/lock.spec` `run()` passes only `PICKMAN_TEST_FENCE = ""`, so `PATH` is inherited; `c0058/fence.spec`, `fence-leftovers`, `fence-cache-entry` and `c0059/adapt` do the same) gives the inner `jail()` a candidate `/tmp/pickman-run.XXXX/bin`.
+  - On CI `TMPDIR` is unset, so the outer run temp folder is under `/tmp`. GNU `realpath` prints a path whose last component is missing, and `resolved` would return it anyway.
+  - The path is under `/tmp`, so `rebindPaths` keeps it, and the inner trial runs `bwrap … --ro-bind /tmp/pickman-run.XXXX/bin …` and dies with `bwrap: Can't find source path …: No such file or directory`.
+  - The inner run then takes the fallback. Inside the outer jail `/tmp` and `/dev/shm` are writable (private), so `fence.leaks` reports them, and the run refuses.
+  - So `lock.spec`'s setup case (`must(run("ok"))`) fails and every case after it with it, and the same goes for each nested-run spec. E5 will find this as a wall of red with a misleading cause. E2 nested bwrap by hand, not through the runner, so nothing in prep exercised it.
+- **NixOS.** `/run/current-system` is a symlink into `/nix/store`, so `resolved("/run/current-system/sw/bin")` is `/nix/store/<hash>-system-path/bin`. That is not under `/run`, so `rebindPaths` drops it. Inside the jail `PATH` still names `/run/current-system/sw/bin`, which the tmpfs hides, so `true` and `bash` aren't found. The trial fails, `linuxWhy` quotes `execvp true`, and the run refuses.
+  - That is exactly the case round 2 F2 added this mechanism for, and the Risks section says it is handled.
+  - The opposite direction needs the resolved form: a literal path outside `/run` and `/tmp` that is a link into them (`~/bin -> /tmp/b`).
+- **Not caught.** The pure spec passes literal paths, so a `jail()` that resolves first, passes `{}`, or keeps missing paths passes AC1. There is no Rules row for the wiring.
+Critique: the earlier fixes pinned a pure function and left its use to "one line, read in review". Here the bug lives in that line, which is not one line at all: splitting `PATH`, resolving, checking existence and combining. The tempting fixes are to drop resolution, or to filter missing paths in `jail()` silently. Each fixes one direction and breaks the other, and neither is pinned.
+Consequences: a path whose `/run` or `/tmp` component is a symlink has to be bound at its **literal** path. The bind's source follows the link, and bubblewrap creates the destination's parents as real folders in the tmpfs. So only that subtree appears: `/run/current-system/sw/bin`, not, for example, `$LOCALE_ARCHIVE` under `/run/current-system/sw/lib`. A path that points into them needs its **resolved** form. A missing path must be skipped, not bound with `--ro-bind-try`, which would leave the pinned "nothing else" list open to change.
+Recommendation:
+- **Pure seam.** Make the whole candidate step pure, as `fence.rebindFor(here: string, common: string, pathVar: string, home: string, resolve: (string) -> string?, exists: (string) -> boolean): { string }`. It splits `PATH` on `:` and ignores empty entries. It takes each candidate both as given and as `resolve` returns it, drops those `exists` rejects, and returns `rebindPaths` of the rest. `jail()` calls it with `realpath` and `fs.isDir`, so its own wiring is just that call.
+- **Spec cases in `jail-argv.spec`**, now while it can still change:
+  - a NixOS `PATH` whose entry resolves into `/nix/store` yields `/run/current-system/sw/bin`;
+  - a missing `/tmp/pickman-run.X/bin` is dropped;
+  - `~/bin` resolving to `/tmp/b` yields `/tmp/b`;
+  - `::` and `""` entries are ignored;
+  - an ordinary host yields `{}`.
+- **Rules rows.** Mutants "only the resolved form", "missing paths kept", "`PATH` not split". Plus a reasoned row for `jail()` calling it, with `c0058/lock.spec` on the Linux gate as the live proof of the nested case.
+- **Or narrow the claim.** If the author would rather not support symlinked `/run` paths, drop NixOS and Guix from Risks and Usability, and say in SETUP.md that such hosts refuse. The missing-path skip is needed either way.
+
+### F2 [medium] (repeat of review-002 F2, the script part) `scripts/linux-jail.sh`'s trial runs `true` with no rebind, so on a host whose tools live under `/run` it reports a broken jail where the runner (once F1 is fixed) starts one, and RC1 fails there. This is the third round in which the script and the runner disagree
+Where: c0075 `scripts/linux-jail.sh` step 3 ("the runner's own trial (`fence.trialArgv` with no rebind…)"); E3, the prototype script (`bwrap … --die-with-parent true`); `linux-jail-script.spec` `TRIAL_PATTERN` (ends `true$`, no `--ro-bind` pairs); R0039 RC1; SETUP.md (new Linux hosts run the script).
+Evidence: on NixOS, `true` is `/run/current-system/sw/bin/true`, which `--tmpfs /run` hides, and there is no `/bin/true`. The script's trial fails with `bwrap: execvp true: No such file or directory`. This is not a user-namespace error, so the script exits 1 with that line, and RC1 (`… && bash scripts/linux-jail.sh`) is red on a host whose runner, with F1's fix, jails fine. Round 1 F9 (trial narrower than the runner's) and round 2 F2 (sysctl advice for any error) were earlier holes in the same copy-the-argv-into-shell mechanism.
+Critique: the tempting fix is to copy the rebind rule into bash as well, a third copy of policy that already exists twice (`jailArgv` and the script) and that the spec matches only by pattern.
+Consequences: the script exists to install bubblewrap and prove the namespace and mounts start. Finding tools through `PATH` is the runner's job, and F1 covers it. A trial command that doesn't depend on `PATH` removes the coupling. The cost is that the runner's trial no longer proves `bash` is on the jail's `PATH`: a host where it isn't fails at the real launch with bubblewrap's own `execvp` error, loud and after the lock, which the top still releases.
+Recommendation: make the trial command absolute and the same in both places, for example `/bin/sh -c :` (present on NixOS and every other Linux). Update `jail-argv.spec` "the trial is the jail with a command that does nothing" and `TRIAL_PATTERN` now. Add a Rules row with the mutant "trial runs a `PATH`-relative command" (reasoned: needs a NixOS host). Alternatively keep `true` and say in SETUP.md and Risks that the script's verdict may differ where tools live under `/run`. Either way, state which.
+
+### F3 [low] Stale text the executor will read: a sequestered spec's header restates the lock claim round 1 refuted, and the Implementation steps omit three pieces of the design
+Where: `tracker/issues/c0075/acceptance/lock-pidns.spec.luau` header ("the top process, outside, holds the lock and outlives everything in the jail"); c0075 Implementation steps 2 and 4.
+Evidence:
+- **The spec header.** The Design now says the launcher holds the lock because the top does not outlive the jail (round 1 F1). The header says the opposite, and once promoted it can't be edited in that raft.
+- **Step 2** lists the new functions without `fence.rebindPaths` (or F1's seam) and `fence.leaks`.
+- **Step 4** says `escapes()` goes "through `fence.escapePaths` and `fence.networkClosed`", which is not `fence.leaks` as the Design says, and gives `fence.sh` only "hook condition", without the `commit.gpgSign`/`tag.gpgSign` lines AC6 checks.
+Recommendation: rewrite the header as "the launcher, outside, holds the lock (`launcher-lock.spec`)". Bring steps 2 and 4 in line with the Design: `rebindPaths` (or F1's seam), `leaks` with the `getconf:` lookup, and the signing lines.
+
+Verdict: changes

@@ -11,6 +11,7 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0039
 
-# check "RC1: <end-to-end statement>" <command>
+# a Linux host without bubblewrap fails here instead of installing a package from a check
+check "RC1: this host can run the spec jail" bash -c '{ [[ $(uname -s) != Linux ]] || command -v bwrap >/dev/null; } && bash scripts/linux-jail.sh'
 
 finish
