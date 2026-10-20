@@ -9,6 +9,11 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: exactly ten keys: W A S D move, Space jumps, E fires, the arrows look" lune run tests/run -- "$A/keys.spec.luau"
+check "AC2: the arrow look turns at the turn rate, springs back, and gives way to the mouse" lune run tests/run -- "$A/look.spec.luau"
+check "AC3: the aim is the nearest heading to the arrows or the look, ties the way of travel" lune run tests/run -- "$A/aim.spec.luau"
+check "AC4: Controls and Camera relay the keys, the look and the aimed shot" lune run tests/run -- "$A/place.spec.luau"
+check "AC5: end to end, a dropped shot fired with E down the corridor an arrow looks along eats the ghost there" lune run tests/run -- "$A/hunt.spec.luau"
+check "AC6: Logic stays engine-free and every dependency is declared" lune run tests/run -- tests/meta/architecture.spec.luau
 
 finish
