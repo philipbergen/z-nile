@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 # Mutation check for R0035 (prep). Usage: python3 mutants.py <scratch worktree with prototype.patch applied> [ids...]
 # Applies the edit in the prototype worktree, runs the spec, and requires that the named case FAILs with an
-# assertion ("expected ..."), then restores the file with git checkout.
+# assertion ("expected ..."), then restores the file from the text it had before.
 import subprocess, sys, json, re
 
-ROOT = sys.argv[1] if len(sys.argv) > 1 else "."  # a scratch worktree with prototype.patch applied and the acceptance specs present
+import os
+
+# ROOT is required: a scratch worktree (never the main checkout) with prototype.patch applied and committed and the
+# acceptance specs present, and no uncommitted change to the files the mutants touch. Each mutated file is restored
+# from the text read before mutating it, never from git, so nothing else in the tree is touched.
+if len(sys.argv) < 2:
+    sys.exit("usage: python3 mutants.py <scratch worktree with prototype.patch applied> [ids...]")
+ROOT = os.path.realpath(sys.argv[1])
+_git = lambda *a: subprocess.run(["git", "-C", ROOT, *a], capture_output=True, text=True).stdout.strip()
+if os.path.realpath(_git("rev-parse", "--git-dir")) == os.path.realpath(_git("rev-parse", "--git-common-dir")):
+    sys.exit(f"refusing: {ROOT} is a main checkout, not a scratch worktree")
 A = "tracker/issues/{}/acceptance/{}.spec.luau"
 BL = "src/shared/Logic/Blaster/init.luau"
 SE = "src/shared/Logic/Session/init.luau"
@@ -125,6 +135,9 @@ for row in M:
     if only and mid not in only:
         continue
     path = f"{ROOT}/{f}"
+    if _git("status", "--porcelain", "--", f):
+        results.append((mid, "NOAPPLY", f"{f} has uncommitted changes: refusing to mutate it"))
+        continue
     src = open(path).read()
     if src.count(old) != 1:
         results.append((mid, "NOAPPLY", f"old text found {src.count(old)}x"))
@@ -142,7 +155,8 @@ for row in M:
     try:
         out = subprocess.run(["lune", "run", "tests/run", "--", spec], cwd=ROOT, capture_output=True, text=True, timeout=600).stdout
     finally:
-        subprocess.run(["git", "checkout", "--", f], cwd=ROOT)
+        with open(path, "w") as restore:
+            restore.write(src)
     lines = out.splitlines()
     verdict, why = "SURVIVED", ""
     for i, line in enumerate(lines):
