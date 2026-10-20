@@ -15,6 +15,7 @@
 | 11 | 2026-10-20 01:42 | R0011: whole-raft verification log | 0 | 0 | 2.6 | focus | build |  |
 | 12 | 2026-10-20 01:47 | f0026: board row along the top, clear of START GAME (review 001 F1) | 136 | 1 | 6.0 | explicit | code-review |  |
 | 13 | 2026-10-20 01:47 | R0011: review-001 | 0 | 0 | 15.0 | focus | code-review | 113817 |
+| 14 | 2026-10-20 01:47 | R0011: refute-001 | 0 | 0 | 3.0 | focus | code-review |  |
 
-**Total:** +2093 / -12 lines, 91.6 agent-minutes, 472148 tokens over 13 records
-<!-- totals: added=2093 removed=12 minutes=91.6 records=13 tokens=472148 -->
+**Total:** +2093 / -12 lines, 94.6 agent-minutes, 472148 tokens over 14 records
+<!-- totals: added=2093 removed=12 minutes=94.6 records=14 tokens=472148 -->
