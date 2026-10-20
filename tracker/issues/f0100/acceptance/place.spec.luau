@@ -87,7 +87,7 @@ return t.spec("f0100 blaster adapters", function(it)
 			t.expect(string.find(src, "%.tick%s*==%s*frame%.tick") ~= nil).toBe(true)
 			-- from the tile the server shot from, not from where the camera is
 			t.expect(string.find(src, "shot%.from") ~= nil).toBe(true)
-			for _, word in { "pose", "Camera", "function BlastView.start(" } do
+			for _, word in { "pose", "Camera", "player", "function BlastView.start(" } do
 				t.expect(has(src, word)).toBe(false)
 			end
 			t.expect(has(src, "function BlastView.fire(")).toBe(false)
