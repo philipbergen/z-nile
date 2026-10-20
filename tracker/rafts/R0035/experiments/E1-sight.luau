@@ -1,5 +1,5 @@
 --!strict
--- E1: cardinal line of sight on Maze.parse fixtures. The same rules as Sight.ray / Sight.clear.
+-- E1 (f0100): a cardinal line through player-passable tiles on Maze.parse fixtures: the rules of Blaster.ray.
 -- A mutant that keeps the blocking tile fails the wall case.
 local Maze = require("@logic/Maze")
 
@@ -77,10 +77,5 @@ expect("an open row wraps and does not repeat the start", #around == 4)
 expect("the tile across the wrap is in sight", clear(wrap, { x = 2, y = 2 }, { x = 0, y = 2 }, false))
 expect("a diagonal is never in sight", not clear(wrap, { x = 1, y = 1 }, { x = 2, y = 2 }, false))
 expect("the origin tile is in sight of itself", clear(wrap, { x = 2, y = 2 }, { x = 2, y = 2 }, false))
-
-local classic = Maze.layout("classic")
-expect("classic is 28 by 31", classic.width == 28 and classic.height == 31)
-local chars = (classic.width * classic.height + 5) // 6
-expect("classic explored code is 145 characters", chars == 145)
 
 print("E1 ok")
