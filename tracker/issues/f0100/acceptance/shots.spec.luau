@@ -347,6 +347,8 @@ return t.spec("f0100 shots in a session", function(it)
 		local e = find(fire(s, "N"), "Shot") :: Session.Event
 		t.expect(Movement.occupied(s.maze, member.move).x).toBe(11) -- it did move on
 		t.expect(e.ghost).toBe("blinky")
+		-- and the frame says where the shot started: the junction, not where the player is now
+		t.expect((Session.frame(s, "p").shot :: Session.Shot).from).toEqual({ x = 12, y = 23 })
 		t.expect(Ghosts.ghost(ghostsOf(s), "blinky").status).toBe("eyes")
 	end)
 
@@ -357,11 +359,14 @@ return t.spec("f0100 shots in a session", function(it)
 		arm(s, 2)
 		fire(s, "W") -- a miss is a shot taken too
 		local frame = Session.frame(s, "p")
-		t.expect(frame.shot).toEqual({ tick = frame.tick, heading = "W" })
+		t.expect(frame.shot).toEqual({ tick = frame.tick, heading = "W", from = { x = 6, y = 23 } })
 		Session.step(s)
 		local later = Session.frame(s, "p")
 		t.expect((later.shot :: Session.Shot).tick).toBe(frame.tick) -- the latest, not this step's
 		t.expect(later.shot ~= frame.shot).toBe(true) -- a fresh table each frame
+		t.expect((later.shot :: Session.Shot).from ~= (frame.shot :: Session.Shot).from).toBe(true);
+		((later.shot :: Session.Shot).from :: any).x = 99
+		t.expect((Session.frame(s, "p").shot :: Session.Shot).from.x).toBe(6) -- changing it changes nothing
 	end)
 
 	it(
@@ -376,7 +381,7 @@ return t.spec("f0100 shots in a session", function(it)
 			Session.submit(s, "p", Blaster.intent("N"))
 			Session.step(s)
 			local frame = Session.frame(s, "p")
-			t.expect(frame.shot).toEqual({ tick = frame.tick, heading = "E" })
+			t.expect(frame.shot).toEqual({ tick = frame.tick, heading = "E", from = { x = 6, y = 23 } })
 			t.expect(frame.shots).toBe(1)
 			local paused = new()
 			arm(paused, 1)

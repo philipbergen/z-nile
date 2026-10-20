@@ -1,13 +1,13 @@
 diff --git a/src/client/BlastView.luau b/src/client/BlastView.luau
 new file mode 100644
-index 0000000..b857e0e
+index 0000000..92b45da
 --- /dev/null
 +++ b/src/client/BlastView.luau
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,55 @@
 +--!strict
 +-- Client adapter: the blaster's beam (f0100). When a frame says the server took a shot in that very step
-+-- (frame.shot.tick == frame.tick), a thin neon beam runs from the eye along its heading to View.beamEnd for a
-+-- moment. A fire the server dropped (a pause, no shot held, a second one in a tick) has no frame.shot and shows
++-- (frame.shot.tick == frame.tick), a thin neon beam runs from the tile the server shot from (frame.shot.from, not
++-- where the camera happens to be) along its heading to View.beamEnd for a moment, so it shows what the server did. A fire the server dropped (a pause, no shot held, a second one in a tick) has no frame.shot and shows
 +-- nothing. A ghost the shot hit turns into eyes in the same frames.
 +local Debris = game:GetService("Debris")
 +
@@ -22,10 +22,6 @@ index 0000000..b857e0e
 +local BlastView = {}
 +
 +local latest: Session.Frame? = nil
-+local getPose: () -> { x: number, y: number }? = function()
-+	return nil
-+end
-+
 +local function draw(m: Maze.Maze, p: { x: number, y: number }, heading: Maze.Heading)
 +	local ex, ey = View.beamEnd(m, p.x, p.y, heading)
 +	local x0, z0 = View.world(p.x, p.y)
@@ -57,14 +53,9 @@ index 0000000..b857e0e
 +	end
 +	latest = frame
 +	local shot = frame.shot
-+	local p = getPose()
-+	if shot and shot.tick == frame.tick and p then
-+		draw(Maze.layout(frame.maze), p, shot.heading)
++	if shot and shot.tick == frame.tick then
++		draw(Maze.layout(frame.maze), shot.from, shot.heading)
 +	end
-+end
-+
-+function BlastView.start(pose: () -> { x: number, y: number }?)
-+	getPose = pose
 +end
 +
 +return BlastView
@@ -521,7 +512,7 @@ index 5d31c27..8b9bb3a 100644
 +
  return HudView
 diff --git a/src/client/Main.client.luau b/src/client/Main.client.luau
-index 6395229..01cb9a2 100644
+index 6395229..37c4738 100644
 --- a/src/client/Main.client.luau
 +++ b/src/client/Main.client.luau
 @@ -2,6 +2,7 @@
@@ -541,11 +532,10 @@ index 6395229..01cb9a2 100644
  	local overlay = Flow.overlay(frame.play, RULES)
  	FlowView.show(overlay)
  	if model and overlay.flash ~= lit then
-@@ -58,6 +61,8 @@ end)
+@@ -58,6 +61,7 @@ end)
  Camera.start()
  GhostView.start()
  DangerHud.start(Camera.pose)
-+BlastView.start(Camera.pose)
 +Controls.keys({ jump = Camera.jump, arrows = Camera.arrows, aim = Camera.aim })
  Controls.start(Camera.snap)
  PelletView.start()
@@ -875,7 +865,7 @@ index ae12263..453c628 100644
 +
  return Hud
 diff --git a/src/shared/Logic/Session/init.luau b/src/shared/Logic/Session/init.luau
-index 711ff0a..f477a22 100644
+index 711ff0a..31b7d06 100644
 --- a/src/shared/Logic/Session/init.luau
 +++ b/src/shared/Logic/Session/init.luau
 @@ -10,6 +10,13 @@
@@ -892,18 +882,19 @@ index 711ff0a..f477a22 100644
  local Game = require("./Game")
  local Ghosts = require("./Ghosts")
  local Levels = require("./Levels")
-@@ -65,7 +72,10 @@ export type Frame = {
+@@ -65,7 +72,11 @@ export type Frame = {
  	play: PlayFrame,
  	pellets: string, -- Pellets.encode of what the player has left to eat
  	ghosts: { GhostSnapshot }?, -- the ghosts of a session that has them
 +	shots: number?, -- blaster shots held, 0..Blaster.MAX_SHOTS (always set by Session.frame)
 +	shot: Shot?, -- the latest shot taken (one that spent a shot), nil before any
  }
-+export type Shot = { tick: number, heading: Maze.Heading } -- the tick whose step took it
++-- tick: the tick whose step took it; from: the tile the shot started from (the player's, before that step's move)
++export type Shot = { tick: number, heading: Maze.Heading, from: Maze.Tile }
  export type Event = {
  	kind: string,
  	player: PlayerId,
-@@ -79,6 +89,7 @@ export type Event = {
+@@ -79,6 +90,7 @@ export type Event = {
  	reason: string?,
  	item: string?,
  	ghost: Ghosts.Name?,
@@ -911,7 +902,7 @@ index 711ff0a..f477a22 100644
  }
  export type Clock = { rate: number, maxSteps: number, acc: number }
  
-@@ -91,6 +102,9 @@ type Member = {
+@@ -91,6 +103,9 @@ type Member = {
  	stall: number, -- units of eating pause still owed
  	ghosts: Ghosts.Set?,
  	ghostJump: { [string]: number }, -- per ghost: tick of its latest position discontinuity
@@ -921,7 +912,7 @@ index 711ff0a..f477a22 100644
  }
  export type Session = {
  	tick: number, -- steps completed
-@@ -164,6 +178,8 @@ function Session.join(s: Session, id: PlayerId)
+@@ -164,6 +179,8 @@ function Session.join(s: Session, id: PlayerId)
  		stall = 0,
  		ghosts = if s.config.ghosts and Ghosts.available(s.maze) then Ghosts.new(s.maze, s.seed) else nil,
  		ghostJump = {},
@@ -930,7 +921,7 @@ index 711ff0a..f477a22 100644
  	}
  end
  
-@@ -185,12 +201,20 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
+@@ -185,12 +202,20 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
  	if member == nil then
  		return false, "unknown player"
  	end
@@ -953,7 +944,7 @@ index 711ff0a..f477a22 100644
  	table.insert(member.queue, raw)
  	return true, nil
  end
-@@ -199,6 +223,7 @@ end
+@@ -199,6 +224,7 @@ end
  local function teleport(s: Session, member: Member, jumpTick: number)
  	member.move = Movement.spawn(s.maze)
  	member.queue = {}
@@ -961,7 +952,7 @@ index 711ff0a..f477a22 100644
  	member.jumpTick = jumpTick
  	member.stall = 0
  end
-@@ -333,6 +358,36 @@ local function stepGhosts(
+@@ -333,6 +359,36 @@ local function stepGhosts(
  		for _, e in Game.addScore(member.play, points) do
  			table.insert(out, tagged(id, e))
  		end
@@ -979,12 +970,12 @@ index 711ff0a..f477a22 100644
 +	if set == nil or not Blaster.spend(member.blaster) then
 +		return
 +	end
-+	member.shot = { tick = s.tick, heading = heading }
++	local from = Movement.occupied(s.maze, member.move)
++	member.shot = { tick = s.tick, heading = heading, from = { x = from.x, y = from.y } }
 +	local targets: { Blaster.Target } = {}
 +	for i, tile in Ghosts.occupiedTiles(set) do
 +		table.insert(targets, { tile = tile, active = set.ghosts[i].status == "active" })
 +	end
-+	local from = Movement.occupied(s.maze, member.move)
 +	local hit = Blaster.target(s.maze, from, heading, targets)
 +	if hit == nil then
 +		table.insert(out, { kind = "Shot", player = id, heading = heading })
@@ -998,7 +989,7 @@ index 711ff0a..f477a22 100644
  	end
  end
  
-@@ -343,6 +398,8 @@ function Session.step(s: Session): { Event }
+@@ -343,6 +399,8 @@ function Session.step(s: Session): { Event }
  		local member = s.members[id]
  		local queue = member.queue
  		member.queue = {}
@@ -1007,7 +998,7 @@ index 711ff0a..f477a22 100644
  		-- whether the player moves this tick is decided before the run's phase changes
  		local moving = Game.canMove(member.play)
  		local frightened = member.play.frightened > 0
-@@ -359,6 +416,9 @@ function Session.step(s: Session): { Event }
+@@ -359,6 +417,9 @@ function Session.step(s: Session): { Event }
  		if not moving then
  			continue
  		end
@@ -1017,7 +1008,7 @@ index 711ff0a..f477a22 100644
  		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level, frightened)
  		-- an eating pause is owed distance: this step covers what is left of the speed
  		local owed = math.min(member.stall, speed)
-@@ -417,6 +477,7 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
+@@ -417,6 +478,7 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
  		teleport(s, member, s.tick + 1)
  		Pellets.reset(member.pellets)
  		resetGhosts(member, "again", s.tick + 1)
@@ -1025,13 +1016,17 @@ index 711ff0a..f477a22 100644
  	end
  	return out, ok
  end
-@@ -481,6 +542,10 @@ function Session.frame(s: Session, id: PlayerId): Frame
+@@ -481,6 +543,14 @@ function Session.frame(s: Session, id: PlayerId): Frame
  			frightened = play.frightened,
  		},
  		pellets = Pellets.encode(s.members[id].pellets),
 +		shots = s.members[id].blaster.shots,
 +		shot = if s.members[id].shot
-+			then { tick = (s.members[id].shot :: Shot).tick, heading = (s.members[id].shot :: Shot).heading }
++			then {
++				tick = (s.members[id].shot :: Shot).tick,
++				heading = (s.members[id].shot :: Shot).heading,
++				from = { x = (s.members[id].shot :: Shot).from.x, y = (s.members[id].shot :: Shot).from.y },
++			}
 +			else nil,
  	}
  end

@@ -118,13 +118,16 @@ M = [
  ("K4", SE, "\tlocal fire: Maze.Heading? = Blaster.heading(raw)\n", "\tlocal fire: Maze.Heading? = nil\n", A.format("f0104","hunt"), "press E"),
  ("S12", SE, "\t\tif member.ghosts then\n\t\t\tstepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)", "\t\tif fire then\n\t\t\tshoot(s, id, member, fire, out)\n\t\tend\n\t\tif member.ghosts then\n\t\t\tstepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)", A.format("f0100","shots"), "a moving player shoots from the tile", ("\t\tif fire then\n\t\t\tshoot(s, id, member, fire, out)\n\t\tend\n\t\tlocal speed", "\t\tlocal speed")),
  ("S13", SE, "\tlocal from = Movement.occupied(s.maze, member.move)\n", "\tlocal px, py = Movement.position(member.move)\n\tlocal from = { x = math.floor(px), y = math.floor(py) }\n", A.format("f0100","shots"), "a moving player shoots from the tile"),
- ("S14", SE, "\tif set == nil or not Blaster.spend(member.blaster) then\n\t\treturn\n\tend\n\tmember.shot = { tick = s.tick, heading = heading }\n", "\tmember.shot = { tick = s.tick, heading = heading }\n\tif set == nil or not Blaster.spend(member.blaster) then\n\t\treturn\n\tend\n", A.format("f0100","shots"), "a fire the server drops leaves the frame's shot alone"),
- ("S15", SE, "\tmember.shot = { tick = s.tick, heading = heading }\n", "", A.format("f0100","shots"), "the frame names the latest shot"),
- ("V3", "src/client/BlastView.luau", "if shot and shot.tick == frame.tick and p then", "if shot and p then", A.format("f0100","place"), "draws the server's shot"),
+ ("S14", SE, "\tif set == nil or not Blaster.spend(member.blaster) then\n\t\treturn\n\tend\n", "\tmember.shot = { tick = s.tick, heading = heading, from = Movement.occupied(s.maze, member.move) }\n\tif set == nil or not Blaster.spend(member.blaster) then\n\t\treturn\n\tend\n", A.format("f0100","shots"), "a fire the server drops leaves the frame's shot alone"),
+ ("S15", SE, "\tmember.shot = { tick = s.tick, heading = heading, from = { x = from.x, y = from.y } }\n", "", A.format("f0100","shots"), "the frame names the latest shot"),
+ ("V3", "src/client/BlastView.luau", "if shot and shot.tick == frame.tick then", "if shot then", A.format("f0100","place"), "draws the server's shot"),
  ("G17", AW, "\t\t\t\tname = ind.name,\n", "", A.format("f0102","glows"), "carries its nearest ghost's name"),
  ("G18", "src/client/DangerHud.luau", "local rgb = View.ghostColor(g.name or \"\", g.look, g.flash == true)", "local ghost = snap.ghosts[i]\n\t\t\tlocal rgb = View.ghostColor(ghost.name, g.look, ghost.flash)", A.format("f0102","place"), "not by position"),
  ("G19", "src/client/DangerHud.luau", "edge.DisplayOrder = -1", "edge.DisplayOrder = 0", A.format("f0102","place"), "under the radar"),
  ("G20", VI, "inky = table.freeze({ r = 0, g = 255, b = 255 }),", "inky = table.freeze({ r = 255, g = 0, b = 0 }),", A.format("f0102","colors"), "each ghost has its own colour"),
+ ("S16", SE, "from = { x = (s.members[id].shot :: Shot).from.x, y = (s.members[id].shot :: Shot).from.y },", "from = Movement.occupied(s.maze, s.members[id].move),", A.format("f0100","shots"), "a moving player shoots from the tile"),
+ ("S17", SE, "from = { x = (s.members[id].shot :: Shot).from.x, y = (s.members[id].shot :: Shot).from.y },", "from = (s.members[id].shot :: Shot).from,", A.format("f0100","shots"), "the frame names the latest shot"),
+ ("V4", "src/client/BlastView.luau", "draw(Maze.layout(frame.maze), shot.from, shot.heading)", "draw(Maze.layout(frame.maze), { x = 0, y = 0 }, shot.heading)", A.format("f0100","place"), "draws the server's shot"),
 ]
 
 only = set(sys.argv[2:])

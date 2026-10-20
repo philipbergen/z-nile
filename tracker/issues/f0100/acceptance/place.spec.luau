@@ -66,7 +66,6 @@ return t.spec("f0100 blaster adapters", function(it)
 		local src = source(client("Main"))
 		t.expect(string.find(src, "HudView%.shots%(%s*frame%.shots%s*%)") ~= nil).toBe(true)
 		t.expect(string.find(src, "BlastView%.push%(%s*frame%s*%)") ~= nil).toBe(true)
-		t.expect(string.find(src, "BlastView%.start%(%s*Camera%.pose%s*%)") ~= nil).toBe(true)
 	end)
 
 	it("HudView draws the shots with Hud.shotIcons and has a shots entry point", function()
@@ -86,6 +85,11 @@ return t.spec("f0100 blaster adapters", function(it)
 			-- it draws only a shot the server took in that frame's step
 			t.expect(string.find(src, "frame%.shot") ~= nil).toBe(true)
 			t.expect(string.find(src, "%.tick%s*==%s*frame%.tick") ~= nil).toBe(true)
+			-- from the tile the server shot from, not from where the camera is
+			t.expect(string.find(src, "shot%.from") ~= nil).toBe(true)
+			for _, word in { "pose", "Camera", "function BlastView.start(" } do
+				t.expect(has(src, word)).toBe(false)
+			end
 			t.expect(has(src, "function BlastView.fire(")).toBe(false)
 			for _, word in
 				{ "FireServer", "OnClientEvent", "Logic/Ghosts", "Logic/Blaster", "play.score", ".shots" }
