@@ -13,7 +13,7 @@ export type Overlay = {
 }
 
 export type RankView = {
-	over: number, -- game overs seen so far: the run whose overlay is up, or was last up
+	over: number, -- runs ended so far: the run whose overlay is up, or was last up
 	rank: number?, -- that run's all-time rank, only while its overlay is up
 	pending: number?, -- the next run's rank, heard before its overlay
 	pendingRun: number?,
@@ -49,7 +49,7 @@ function Flow.overlay(play: Session.PlayFrame, rules: Game.Config): Overlay
 	return { fade = 0, flash = false, playAgain = false }
 end
 
--- The extra game-over line for an all-time rank the server sent. Flow does not know the board size.
+-- The extra line at the end of a run for an all-time rank the server sent. Flow does not know the board size.
 function Flow.rankLine(rank: number?): string?
 	if type(rank) ~= "number" or rank < 1 or rank ~= math.floor(rank) or rank == math.huge then
 		return nil
@@ -57,7 +57,7 @@ function Flow.rankLine(rank: number?): string?
 	return `ALL-TIME #{string.format("%d", rank)}`
 end
 
--- Follow the game-over overlay. A new game over (the edge) is the next run; its rank is the one heard early for
+-- Follow the end-of-run overlay. A new end of run (the edge) is the next run; its rank is the one heard early for
 -- exactly that run, never the previous run's. Closing the overlay drops the shown rank and keeps what is pending.
 function Flow.follow(view: RankView, gameOver: boolean, wasOver: boolean): (RankView, boolean)
 	if gameOver == wasOver then
