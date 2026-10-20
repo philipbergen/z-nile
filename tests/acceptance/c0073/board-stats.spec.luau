@@ -61,15 +61,16 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(assert(s.periods).week.closed.all).toBe(0) -- no history: close days are unknown
 	end)
 
-	it("the page has the Stats button and section, and keeps the three tabs", function()
+	it("the page has the Stats button and section, beside Rafts and Issues", function()
 		local html = board.render(m, fs.readFile(board.MARKED_PATH))
-		for _, id in
-			{ "stats-toggle", "stats", "tab-active", "tab-waiting", "tab-done", "search", "board-data" }
-		do
+		for _, id in { "stats-toggle", "stats", "tab-rafts", "tab-issues", "search", "board-data" } do
 			t.expect(string.find(html, `id="{id}"`, 1, true) ~= nil).toBe(true)
 		end
+		for _, id in { "tab-active", "tab-waiting", "tab-done" } do
+			t.expect((string.find(html, `id="{id}"`, 1, true))).toBe(nil)
+		end
 		local nav = string.match(html, "<nav>.-</nav>") or ""
-		t.expect(string.find(nav, "stats", 1, true) == nil).toBe(true) -- not a fourth tab
+		t.expect(string.find(nav, "stats", 1, true) == nil).toBe(true)
 		t.expect(string.find(html, "history unavailable", 1, true) ~= nil).toBe(true)
 	end)
 

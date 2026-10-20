@@ -259,9 +259,8 @@ return t.spec("c0400 board model", function(it)
 	local rafts = byId(m.rafts)
 	local issues = byId(m.issues)
 
-	it("lists rafts, then the No raft entries, and issues, each sorted by id", function()
-		t.expect(ids(m.rafts))
-			.toEqual({ "R0010", "R0020", "R0030", "R0040", "R0050", "R0070", "none:done", "none:waiting" })
+	it("lists rafts and issues, each sorted by id", function()
+		t.expect(ids(m.rafts)).toEqual({ "R0010", "R0020", "R0030", "R0040", "R0050", "R0070" })
 		t.expect(ids(m.issues))
 			.toEqual({ "c0010", "c0050", "c0070", "f0020", "f0030", "f0031", "f0040", "f0060", "f0070", "f0080" })
 	end)
@@ -340,40 +339,37 @@ return t.spec("c0400 board model", function(it)
 		t.expect(rafts.R0070.topLevel).toBe(false)
 	end)
 
-	it("Done and Active list every raft in them; Waiting lists only top-level rafts; No raft last", function()
-		t.expect(rafts.R0030.tab).toBe("waiting")
-		t.expect(rafts.R0020.tab).toBe("active")
-		t.expect(m.tabs.done).toEqual({ "R0010", "none:done" })
-		t.expect(m.tabs.active).toEqual({ "R0020" }) -- listed although R0040 blocks it
-		t.expect(m.tabs.waiting).toEqual({ "R0050", "none:waiting" })
+	it("splits Rafts and Issues into Ready, Not ready and Done", function()
+		t.expect(m.views.rafts.ready).toEqual({ "R0020", "R0030" })
+		t.expect(m.views.rafts["not"]).toEqual({ "R0040", "R0050", "R0070" })
+		t.expect(m.views.rafts.done).toEqual({ "R0010" })
+		t.expect(m.views.issues.ready).toEqual({ "f0020", "f0030", "f0031" })
+		t.expect(m.views.issues["not"]).toEqual({ "c0050", "f0040", "f0060", "f0070", "f0080" })
+		t.expect(m.views.issues.done).toEqual({ "c0010", "c0070" })
+		t.expect(m.initialView).toBe("rafts")
+		t.expect(rafts.R0020.command).toBe("/launch-raft R0020")
+		t.expect(rafts.R0030.command).toBe("/ready-raft R0030")
+		t.expect(rafts.R0040.command).toBe(nil)
+		t.expect(rafts.R0050.command).toBe(nil)
+		t.expect(issues.f0060.command).toBe("/ticket-prep f0060")
+		t.expect(issues.f0080.command).toBe("/ticket-prep f0080")
+		t.expect(issues.f0060.dependents).toEqual({ "R0070" })
+		t.expect(issues.c0070.dependents).toEqual({})
+		for _, id in ids(m.rafts) do
+			t.expect((string.find(id, "none:", 1, true))).toBe(nil)
+		end
 	end)
 
-	it("opens on Active when it has entries, otherwise on Waiting", function()
-		t.expect(m.initialTab).toBe("active")
+	it("opens on Rafts even when nothing is active", function()
+		t.expect(m.initialView).toBe("rafts")
 		fixture.write(ROOT .. "-noactive", false, "/active/")
 		local quiet = board.collect(ROOT .. "-noactive")
 		fs.removeDir(ROOT .. "-noactive")
-		t.expect(quiet.tabs.active).toEqual({})
-		t.expect(quiet.initialTab).toBe("waiting")
+		t.expect(quiet.initialView).toBe("rafts")
+		t.expect(quiet.views.rafts.ready).toEqual({ "R0030" })
 	end)
 
-	it("collects issues without a raft into a No raft entry per tab", function()
-		local w = rafts["none:waiting"]
-		t.expect(w.pseudo).toBe(true)
-		t.expect(w.title).toBe("No raft")
-		t.expect(w.tab).toBe("waiting")
-		t.expect(w.issues).toEqual({ "f0060", "f0080" })
-		t.expect(w.topLevel).toBe(true)
-		t.expect(w.single).toBe(false)
-		t.expect(w.blockedBy).toEqual({})
-		t.expect(w.dependents).toEqual({ "R0070" }) -- R0070 waits for f0060
-		t.expect(rafts["none:done"].dependents).toEqual({})
-		t.expect(rafts["none:done"].issues).toEqual({ "c0070" })
-		t.expect(rafts["none:active"]).toBe(nil) -- omitted when empty
-		t.expect(rafts.R0010.pseudo).toBe(false)
-	end)
-
-	it("maps every raft and issue id to the raft whose pane shows it", function()
+	it("maps every raft and issue id to itself", function()
 		t.expect(m.home).toEqual({
 			R0010 = "R0010",
 			R0020 = "R0020",
@@ -381,16 +377,16 @@ return t.spec("c0400 board model", function(it)
 			R0040 = "R0040",
 			R0050 = "R0050",
 			R0070 = "R0070",
-			c0010 = "R0010",
-			f0020 = "R0020",
-			f0030 = "R0030",
-			f0031 = "R0030",
-			f0040 = "R0040",
-			c0050 = "R0050",
-			f0060 = "none:waiting",
-			f0070 = "R0070",
-			f0080 = "none:waiting",
-			c0070 = "none:done",
+			c0010 = "c0010",
+			f0020 = "f0020",
+			f0030 = "f0030",
+			f0031 = "f0031",
+			f0040 = "f0040",
+			c0050 = "c0050",
+			f0060 = "f0060",
+			f0070 = "f0070",
+			f0080 = "f0080",
+			c0070 = "c0070",
 		})
 	end)
 

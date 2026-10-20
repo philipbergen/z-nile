@@ -1,8 +1,8 @@
 --!strict
 -- c0400 AC6: the page's own scripts run. node executes the generated page's inline scripts against a
 -- small fake DOM (the DOM subset the design allows; elements after the script do not exist yet while
--- it loads) and drives it: initial tab (with and without active rafts), every key, tab switching,
--- search with highlighting, unknown ids, and #id links on load.
+-- it loads) and drives it: the opening view (with and without active rafts), every key, view switching,
+-- search, unknown ids, and #id links on load.
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -96,11 +96,14 @@ function el(id) {
     addEventListener: (type, fn) => (listeners[type] = listeners[type] || []).push(fn),
     dispatch: (type, ev) => (listeners[type] || []).forEach(fn => fn(ev)),
     focus() { sandbox.document.activeElement = e; }, blur() { if (sandbox.document.activeElement === e) sandbox.document.activeElement = body; },
-    select() {}, scrollIntoView() {}, getAttribute: () => null, closest: () => null,
+    select() {}, scrollIntoView() {},
+    getAttribute: n => n === "data-id" ? (e.dataId || null) : n === "data-command" ? (e.dataCommand || null) : null,
+    setAttribute: (n, v) => { if (n === "data-id") e.dataId = v; if (n === "data-command") e.dataCommand = v; },
+    closest: sel => (sel === "button.copy" && classes.has("copy")) || (sel === "a.jump" && classes.has("jump")) || (sel === "li.row" && classes.has("row")) ? e : null,
   };
   return e;
 }
-const ids = ["tab-active", "tab-waiting", "tab-done", "search", "list", "pane", "board-data"];
+const ids = ["tab-rafts", "tab-issues", "search", "list", "pane", "board-data"];
 const els = {}; ids.forEach(i => (els[i] = el(i)));
 const at = {}; ids.forEach(i => (at[i] = html.indexOf('id="' + i + '"')));
 const data = scripts.find(s => /id="board-data"/.test(s[1]));
@@ -128,31 +131,34 @@ function key(k, target) {
   return ev.defaultPrevented;
 }
 function expect(cond, msg) { if (!cond) throw new Error(msg + "\n--- list:\n" + els.list.innerHTML.slice(0, 400) + "\n--- pane:\n" + els.pane.innerHTML.slice(0, 600)); }
-function highlighted(id) { const m = els.pane.innerHTML.match(new RegExp('<details[^>]*id="i-' + id + '"[^>]*>')); return !!m && /highlight/.test(m[0]) && /\bopen\b/.test(m[0]); }
 const list = () => els.list.innerHTML, pane = () => els.pane.innerHTML;
 if (mode === "walk") {
-  expect(/R0020/.test(list()) && !/R0050/.test(list()), "opens on the Active tab");
-  expect(/Beta/.test(pane()), "shows the first Active raft");
-  key("ArrowUp");
-  expect(/Beta/.test(pane()), "ArrowUp stops at the first row");
-  key("ArrowRight");
-  expect(/R0050/.test(list()) && !/R0020/.test(list()), "ArrowRight moves to Waiting");
-  expect(/Epsilon/.test(pane()), "switching tabs selects the first row");
-  key("ArrowUp");
-  expect(/Epsilon/.test(pane()), "ArrowUp on the first of several rows stays there (no wrap)");
+  expect(/R0020/.test(list()) && /R0050/.test(list()) && /R0010/.test(list()), "opens on Rafts");
+  expect(/Beta/.test(pane()), "shows the first raft");
   key("ArrowDown");
-  expect(/f0060/.test(pane()) && /No raft/.test(pane()), "ArrowDown selects the No raft entry");
+  expect(/Gamma/.test(pane()), "ArrowDown moves to R0030");
   key("ArrowDown");
-  expect(/f0060/.test(pane()), "ArrowDown stops at the last row");
+  expect(/Epsilon/.test(pane()), "ArrowDown moves to R0050");
+  key("ArrowDown");
+  expect(/Alpha/.test(pane()), "ArrowDown moves to R0010");
+  expect(/<h3>Dependents<\/h3><ul class="links"><li><a class="jump" data-id="R0020"/.test(pane()), "Alpha lists Dependents as id links");
+  key("ArrowDown");
+  expect(/Alpha/.test(pane()), "ArrowDown stops at the last row");
   key("ArrowUp");
-  expect(/Epsilon/.test(pane()), "ArrowUp moves back");
-  key("ArrowLeft");
-  expect(/R0020/.test(list()), "ArrowLeft moves back to Active");
-  key("ArrowLeft");
-  expect(/R0010/.test(list()) && /Alpha/.test(pane()), "ArrowLeft cycles from Active to Done");
-  expect(/Dependents/.test(pane()) && /<a class="jump" data-id="R0020"/.test(pane()), "the pane lists reverse dependencies as links");
+  expect(/Epsilon/.test(pane()), "ArrowUp reverses");
+  key("ArrowUp");
+  expect(/Gamma/.test(pane()), "ArrowUp moves to R0030");
+  key("ArrowUp");
+  expect(/Beta/.test(pane()), "ArrowUp moves to R0020");
   key("ArrowRight");
-  expect(/R0020/.test(list()), "ArrowRight cycles from Done to Active");
+  expect(/data-id="f0020"/.test(list()) && /data-id="f0060"/.test(list()) && !/data-id="R0020"/.test(list()), "ArrowRight shows Issues");
+  expect(/Second/.test(pane()), "the first issue is selected");
+  key("ArrowLeft");
+  expect(/Beta/.test(pane()) && /R0020/.test(list()), "ArrowLeft returns to Rafts");
+  key("ArrowLeft");
+  expect(/data-id="f0020"/.test(list()) && !/data-id="R0020"/.test(list()), "ArrowLeft wraps to Issues");
+  key("ArrowRight");
+  expect(/R0020/.test(list()), "ArrowRight wraps to Rafts");
   expect(key("/") === true, "/ calls preventDefault, so the / is not typed into the field");
   expect(sandbox.document.activeElement === els.search, "/ focuses the search field");
   key("ArrowDown", els.search);
@@ -160,43 +166,38 @@ if (mode === "walk") {
   expect(/R0020/.test(list()) && /Beta/.test(pane()), "arrow keys typed into the search field are ignored");
   key("Escape", els.search);
   expect(sandbox.document.activeElement !== els.search, "Esc leaves the search field");
-  els.search.value = "F0031";
+  els.search.value = "f0031";
   key("Enter", els.search);
-  expect(/Gamma/.test(pane()), "search finds the raft holding the issue, case-insensitively");
-  expect(highlighted("f0031"), "the searched issue is highlighted and open");
-  expect(/<table>/.test(pane()), "markdown is rendered with marked (a table)");
-  expect(/R0050/.test(list()) && !/R0020/.test(list()), "a search hit switches the list to the entry's tab");
+  expect(/<h2><span class="id">f0031<\/span>/.test(pane()), "search opens the issue heading");
+  expect(/data-id="R0030"/.test(pane()) && !/<h2><span class="id">R0030<\/span>/.test(pane()), "the issue pane jumps to its raft");
+  expect(/data-id="f0031"/.test(list()) && !/data-id="R0030"/.test(list()), "search selects the issue in Issues");
   expect(sandbox.location.hash === "#f0031", "a successful jump updates location.hash");
+  els.search.value = "r0030";
+  key("Enter", els.search);
+  expect(/Gamma/.test(pane()) && /<table>/.test(pane()), "a raft id shows that raft, with its markdown");
   expect(/Waiting for/.test(pane()) && /Depends on/.test(pane()), "the pane shows Waiting for and Depends on");
-  expect(/<a class="jump" data-id="R0020"/.test(pane()), "dependencies are id links");
+  expect(/<h3>Depends on<\/h3><ul class="links"><li><a class="jump" data-id="R0020"/.test(pane()), "Depends on renders id links");
   els.pane.dispatch("click", { target: { closest: sel => (sel === "a.jump" ? { getAttribute: n => (n === "data-id" ? "R0020" : null) } : null) }, preventDefault() {} });
   expect(/Beta/.test(pane()) && /R0020/.test(list()) && sandbox.location.hash === "#R0020", "clicking an id link jumps to that item");
-  els.search.value = "f0031";
-  key("Enter", els.search);
-  key("ArrowUp");
-  expect(/f0060/.test(pane()) && /No raft/.test(pane()), "ArrowUp from an unlisted pane selects the last row");
-  els.search.value = "f0031";
-  key("Enter", els.search);
-  expect(!els.search.classList.contains("miss"), "a hit does not mark the field");
-  key("ArrowDown");
-  expect(/Epsilon/.test(pane()), "ArrowDown from an unlisted pane selects the first row");
   els.search.value = "x9999";
   key("Enter", els.search);
   expect(els.search.classList.contains("miss"), "an unknown id marks the field");
   els.search.value = "r0050";
   key("Enter", els.search);
   expect(/Epsilon/.test(pane()) && !els.search.classList.contains("miss"), "a raft id shows that raft and clears the mark");
-  els["tab-done"].dispatch("click", { target: els["tab-done"], preventDefault() {} });
-  expect(/R0010/.test(list()), "clicking a tab switches to it");
+  els["tab-issues"].dispatch("click", { target: els["tab-issues"], preventDefault() {} });
+  expect(/f0020/.test(list()), "clicking Issues switches to it");
+  els.search.value = "f0031";
+  key("Enter", els.search);
+  key("ArrowUp");
+  expect(/Third/.test(pane()) && !/Third B/.test(pane()), "ArrowUp from f0031 goes to f0030");
 } else if (mode === "quiet") {
-  expect(/R0050/.test(list()) && !/Nothing here/.test(list()) && /Gamma/.test(pane()), "with nothing active, opens on Waiting");
-  key("ArrowLeft");
-  expect(/Nothing here/.test(list()), "an empty tab shows Nothing here");
+  expect(/Nothing here/.test(list()), "an empty Rafts view shows Nothing here");
   key("ArrowDown"); key("ArrowUp");
   key("ArrowRight");
-  expect(/R0050/.test(list()), "keys on an empty tab are harmless");
+  expect(/ticket-prep/.test(list()), "ArrowRight shows a raftless issue");
 } else {
-  expect(/Fifth/.test(pane()) && highlighted("c0050"), "a #id in the URL opens that item");
+  expect(/<h2><span class="id">c0050<\/span>/.test(pane()), "a #id in the URL opens that issue");
 }
 console.log("SMOKE OK");
 ]==]
@@ -209,7 +210,7 @@ return t.spec("c0400 page smoke test (node)", function(it)
 		`{DIR}/page.html`,
 		board.render(board.collect(`{DIR}/tracker`), fs.readFile(board.MARKED_PATH))
 	)
-	fixture.write(`{DIR}/quiet`, "/active/")
+	fixture.write(`{DIR}/quiet`, "rafts/")
 	fs.writeFile(
 		`{DIR}/quiet.html`,
 		board.render(board.collect(`{DIR}/quiet`), fs.readFile(board.MARKED_PATH))
@@ -227,7 +228,7 @@ return t.spec("c0400 page smoke test (node)", function(it)
 		return r
 	end
 
-	it("drives the page: tabs, arrows, search, highlight, unknown ids", function()
+	it("drives the page: views, arrows, search, unknown ids", function()
 		local r = node({ `{DIR}/harness.js`, `{DIR}/page.html`, "", "walk" })
 		if not r.ok or not string.find(r.stdout, "SMOKE OK", 1, true) then
 			error(r.stderr .. r.stdout)
