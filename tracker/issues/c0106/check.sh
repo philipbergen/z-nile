@@ -9,6 +9,8 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: radar.spec accepts today's and f0029's layout, rejects a changed or missing number, changes nothing else" lune run tests/run -- "$A/narrow-radar.spec.luau"
+check "AC2: adapter.spec accepts the three- and the five-argument radarBox line, rejects the regressions, changes nothing else" lune run tests/run -- "$A/narrow-adapter.spec.luau"
+check "AC3: the two narrowed d0105 specs pass on the current tree" lune run tests/run -- tests/acceptance/d0105/radar.spec.luau tests/acceptance/d0105/adapter.spec.luau
 
 finish
