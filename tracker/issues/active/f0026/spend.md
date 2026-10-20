@@ -13,6 +13,7 @@
 | 9 | 2026-10-20 01:36 | f0026: hiscore boards in the lobby and the rank line at game over | 521 | 5 | 2.8 | explicit | build |  |
 | 10 | 2026-10-20 01:39 | R0011: keep the engine words out of Logic comments | 3 | 3 | 2.8 | focus | build |  |
 | 11 | 2026-10-20 01:42 | R0011: whole-raft verification log | 0 | 0 | 2.6 | focus | build |  |
+| 12 | 2026-10-20 01:47 | f0026: board row along the top, clear of START GAME (review 001 F1) | 136 | 1 | 6.0 | explicit | code-review |  |
 
-**Total:** +1957 / -11 lines, 70.6 agent-minutes, 358331 tokens over 11 records
-<!-- totals: added=1957 removed=11 minutes=70.6 records=11 tokens=358331 -->
+**Total:** +2093 / -12 lines, 76.6 agent-minutes, 358331 tokens over 12 records
+<!-- totals: added=2093 removed=12 minutes=76.6 records=12 tokens=358331 -->

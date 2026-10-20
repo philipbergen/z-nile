@@ -113,12 +113,17 @@ function LobbyView.start()
 			end
 		end)
 
+		-- the board row sits along the top edge, clear of START GAME at any height; the title and list make room
+		local rowHeight = Lobby.BUTTON_MIN_PX + 4
+		title.Position = UDim2.new(0.5, 0, 0.06, rowHeight)
+		list.Position = UDim2.new(0.5, 0, 0.2, rowHeight)
+		list.Size = UDim2.fromScale(0.6, 0.32)
 		for index, id in { "all", "day", "week" } do
 			local pick = Instance.new("TextButton")
 			pick.Name = `Board{id}`
 			pick.AnchorPoint = Vector2.new(0.5, 0)
 			pick.Size = UDim2.new(0.18, 0, 0, Lobby.BUTTON_MIN_PX)
-			pick.Position = UDim2.fromScale(0.26 + 0.24 * (index - 1), 0.88)
+			pick.Position = UDim2.new(0.26 + 0.24 * (index - 1), 0, 0, 4)
 			pick.Font = Enum.Font.GothamBold
 			pick.TextScaled = true
 			pick.Text = Lobby.boardTitle(id)
