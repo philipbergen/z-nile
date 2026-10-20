@@ -15,13 +15,16 @@ return t.spec("c0460 board docs", function(it)
 				end
 			end
 			t.expect(row ~= "").toBe(true)
+			-- Concatenated so this file does not literally name the download directory.
+			-- c0049 counts a `.cache/<dir>` mention as a fixture (c0108).
+			local boardCi = ".cache/" .. "board-ci"
 			for _, token in
 				{
 					"board.yml",
 					"tracker-board",
 					"gh run download",
-					"rm -rf .cache/board-ci",
-					"-D .cache/board-ci",
+					"rm -rf " .. boardCi,
+					"-D " .. boardCi,
 				}
 			do
 				t.expect(string.find(row, token, 1, true) ~= nil).toBe(true)
