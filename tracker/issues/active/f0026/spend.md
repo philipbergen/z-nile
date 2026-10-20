@@ -10,6 +10,7 @@
 | 6 | 2026-10-19 05:17 | design-review-005 | 0 | 0 | 6.7 | spend+proportional | design-review | 58333 |
 | 7 | 2026-10-19 05:24 | design-refute-005 | 0 | 0 | 1.7 | spend+proportional | design-review | 15000 |
 | 8 | 2026-10-19 05:25 | prep | 1433 | 3 | 23.3 | spend+proportional | prep |  |
+| 9 | 2026-10-20 01:36 | f0026: hiscore boards in the lobby and the rank line at game over | 521 | 5 | 2.8 | explicit | build |  |
 
-**Total:** +1433 / -3 lines, 62.4 agent-minutes, 358331 tokens over 8 records
-<!-- totals: added=1433 removed=3 minutes=62.4 records=8 tokens=358331 -->
+**Total:** +1954 / -8 lines, 65.2 agent-minutes, 358331 tokens over 9 records
+<!-- totals: added=1954 removed=8 minutes=65.2 records=9 tokens=358331 -->

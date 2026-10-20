@@ -29,6 +29,8 @@ export type DriveResult = { wrote: { [string]: boolean }, rank: number? }
 export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
 export type Submission = { score: number, level: number, run: number }
 export type StepEvent = { kind: string, score: number?, level: number? }
+export type CacheEntry = { at: number, rows: { Row } }
+export type Failure = { at: number, count: number } -- consecutive failed reads of one board key
 
 local Hiscores = {}
 
@@ -38,6 +40,8 @@ Hiscores.COMPANION_STORE = "HiscoreEntries"
 Hiscores.LEVEL_CAP = 10000 -- the ordered integer is score * LEVEL_CAP + min(level, LEVEL_CAP - 1)
 Hiscores.RETRY = table.freeze({ attempts = 3, base = 0.25, cap = 1 }) :: Retry
 Hiscores.LEAVE_STEPS = 45 -- how long a departed player's run is kept: the classic dying pause, in steps
+Hiscores.CACHE_TTL = 15 -- seconds a read board is shared before it is read again
+Hiscores.READ_GAP = 1 -- the first wait after a failed read; it doubles up to CACHE_TTL
 Hiscores.CLOSE_WAIT = 25 -- seconds a closing server is held for hiscore work (the engine allows 30)
 
 local SECONDS_PER_DAY = 86400
@@ -529,6 +533,57 @@ end
 -- Whether a closing server still waits: while a run or a write is pending, and not past CLOSE_WAIT.
 function Hiscores.holdClose(runs: number, drives: number, waited: number): boolean
 	return (runs > 0 or drives > 0) and waited < Hiscores.CLOSE_WAIT
+end
+
+-- A board id a client may ask for: "all", "day" or "week", and nothing else (a number or a table is nil).
+function Hiscores.boardId(raw: any): BoardId?
+	if raw == "all" then
+		return ALL
+	elseif raw == "day" then
+		return DAY
+	elseif raw == "week" then
+		return WEEK
+	end
+	return nil
+end
+
+-- How long a key that has failed `count` reads in a row is left alone: gap * 2^count, at most `ttl`.
+function Hiscores.failureWait(gap: number, ttl: number, count: number): number
+	return math.min(gap * 2 ^ count, ttl)
+end
+
+-- The shared read of one board key. A fresh cache answers; a stale one is read again unless a read is already
+-- under way or the key is inside the wait that its failed reads earned. `fetch` returns the rows, or nil for a
+-- failed read; an empty board is a board. Returns the cache, the rows (nil when nothing answered) and the failure.
+function Hiscores.lookup(
+	cache: CacheEntry?,
+	now: number,
+	ttl: number,
+	gap: number,
+	inflight: boolean,
+	fetch: (() -> { Row }?)?,
+	failure: Failure?
+): (CacheEntry?, { Row }?, Failure?)
+	if type(now) ~= "number" or now ~= now then
+		return cache, nil, failure
+	end
+	if cache ~= nil and now >= cache.at and now - cache.at < ttl then
+		return cache, cache.rows, failure
+	end
+	if inflight or fetch == nil then
+		return cache, nil, failure
+	end
+	if
+		failure ~= nil
+		and (now < failure.at or now - failure.at < Hiscores.failureWait(gap, ttl, failure.count))
+	then
+		return cache, nil, failure
+	end
+	local rows = fetch()
+	if rows == nil then
+		return cache, nil, { at = now, count = (if failure then failure.count else 0) + 1 }
+	end
+	return { at = now, rows = rows }, rows, nil
 end
 
 return Hiscores
