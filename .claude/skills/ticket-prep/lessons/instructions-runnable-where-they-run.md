@@ -1,0 +1,15 @@
+---
+title: Instructions must be runnable where they are read
+when: design
+tags: [skills, worktrees]
+check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a reviewer or stream subagent that may not publish), and without breaking a project rule?
+---
+An instruction added to many skills has to fit each skill's context. Writing a file is impossible in the main checkout, cannot land through a capture, and is forbidden to a reviewer. Where the action cannot happen, route it to something that can land (an issue, the author's harvest).
+
+**Why:** R0040 design review 1 (F5): every skill was told to write lesson files when it finished, but only the prep and raft worktrees can carry them.
+
+R0040 design review 2 (F3): the fix routed those skills to `tracker.sh new issue`, which subagents (stream implementers and reviewers, handed the same skills) may not run. Skills are read by agents in different roles, so the split has to be by role, not by skill.
+
+R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads ticket-prep and testing), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
+
+**How to apply:** for each skill a change touches, name every role that reads it (lead, stream subagent, reviewer), its working directory and what it may write or publish. Write one instruction keyed on role, the same wherever it appears, rather than a variant per skill.
