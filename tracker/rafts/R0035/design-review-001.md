@@ -1,0 +1,81 @@
+# Review 001: R0035 (design mode)
+Inputs: prep-ghost-hunter-tools at 6db85f4 (`git diff origin/main...HEAD`): R0035.md, R0035/check.sh, experiments (E1–E3, prototype.patch, mutants.py), f0100/f0101/f0102/f0104 documents, check.sh files and acceptance specs; tracker/game-design.md, tracker/architecture.md; the prototype worktree proto-ghost-hunter-tools (the 19 acceptance specs pass there, 134 cases; every spec under tests/acceptance, unit, meta, place, scenario and integration passes, 1860 cases); R0012's documents and specs in prep-mobile-controls (read only). `tracker.sh check` of each member fails for the right reasons (missing `Blaster`, `View.GHOST`, …).
+
+### F1 [high] The R0012 interaction is mis-stated: the two rafts' sequestered Camera specs can't both pass, so whichever lands second hits a spec it can't edit
+Where: R0035.md Risks & rollback, first bullet ("This raft keeps all of them … a merge, not a redesign"); f0104 Design "R0012 compatibility"; `tracker/issues/f0104/acceptance/place.spec.luau:99`; R0012's `tracker/issues/f0028/acceptance/place.spec.luau:33-45`.
+Evidence: R0012's f0028 `place.spec` requires the Camera source to contain `View.look(look, delta`, after `not mouseHeld and not lookedThisFrame` and before `lookedThisFrame = false` and `snap == nil`. R0035 deletes that line (`look = View.look(look, delta.X, delta.Y)` → `steer = View.steer(steer, arrows, delta.X, delta.Y, dt)`, prototype.patch Camera hunk), and f0104's `place.spec` requires `View%.steer%([^)]*delta%.X%s*,%s*delta%.Y`. The list of R0012 pins in R0035's Risks leaves out `View.look(look, delta`, `lookedThisFrame` and `Camera.lookBy`/`holdMouse`. It also leaves out DangerHud, which R0012 edits too (its `Hud.radarBox(…, UserInputService.TouchEnabled, bandTop())` line, with c0106 narrowing d0105). And it leaves out that R0012's HudView places the lives at `Touch.blocks` rects, where R0035's `Shots` frame copies `lives.Position`/`Size`.
+- If R0012 lands first, `tests/acceptance/f0028/place.spec.luau` is promoted, and R0035's Camera turns it red. That is an override nobody named, and RC3 forbids it.
+- If R0035 lands first, R0012's executor can satisfy both specs only in one of two ways: apply the mouse delta twice (`View.look(look, delta…)` and `View.steer(…, delta.X, delta.Y …)`), or branch in the adapter between "mouse" and "arrows/spring". The second breaks architecture rule 3. Either way it is an escalation, not "a merge".
+Critique: the tempting fix is to add `View.look(look, delta` back somewhere in R0035's Camera to keep R0012's text pin happy. That is dead or double-applied code written to satisfy a string scan.
+Consequences: any real fix changes a sequestered spec in one of the two preps. Both are still in prep, so that is allowed now and not later. R0012's `Camera.lookBy` (touch look) also has to write the steer, and has to clear the spring (a touch look during a spring-back must take over, like the mouse). Otherwise the next frame's spring undoes the touch look.
+Recommendation: settle it in both preps now, and tell R0012's owner and the user.
+1. Fix a landing order: put `depends_on` on the second raft's adapter issue, f0104 → f0028, or the reverse.
+2. Write the second raft's Camera design and pins against the merged adapter. For example, R0012 lands first and R0035's Camera becomes `local mdx, mdy = 0, 0; if not mouseHeld and not lookedThisFrame then mdx, mdy = delta.X, delta.Y end; steer = View.steer(steer, arrows, mdx, mdy, dt)`, with `Camera.lookBy` doing `steer = View.steer(steer, NONE, dx, dy, …)`, or a pure `View.lookBy(steer, dx, dy)` that clears `spring`.
+3. Narrow whichever pin then cannot hold through a chore, named on an `Overrides:` line, because f0028's spec will be promoted by then. Or, if the order is R0035 first, R0012 rewrites its pin in prep to `View.steer(`.
+4. Add a look.spec case: a touch/mouse delta during a spring stops the spring.
+5. List DangerHud and the HudView lives block in Risks, with the rule that the shot bars follow the lives rect whichever HudView layout is current.
+
+### F2 [medium] "The shot is taken before the player moves" isn't pinned: shooting after `Movement.step` passes every acceptance spec
+Where: f0100 Design (Session.step: "before `Movement.step`"), Rules and mutants row S4, `shots.spec`, `hunt.spec`.
+Evidence: I ran the mutant in the prototype: I moved `shoot(...)` from before the speed/`Movement.step` block to just before `stepGhosts`, after the player moved. All of f0100's and f0104's acceptance specs still pass (85 passed). Every shot case uses a player `settled` against the wall at 6,23, and `hunt.spec` does too. The tile before the move and after it are the same, so the order never shows. S4 only checks the shot against the ghosts' move and the contacts.
+Critique: the order matters to the player at junctions. Take a player running through a junction who presses E with Left held on the tick their occupied tile is the junction. Before the move, the shot goes up the side corridor. After the move, the shot starts one tile on and hits the wall. That is exactly the "missed my shot" feeling the Rules table means to rule out.
+Consequences: a new case has to stage a moving player. Running the ghosts would make that case depend on the ghost AI, so the case parks the ghosts the way `clearLines` does. The ray's start tile is `Movement.occupied` (rounded), and a floor-based start tile is another plausible mutant the same case kills.
+Recommendation: add a `shots.spec` case. The player runs east along row 23 through a junction (for example x = 9 on the classic maze, with an open column north). A fire `N` is submitted for the step that starts with the player on the junction tile (occupied, mid-tile), with an active ghost up that column. The ghost is eaten. Add a second case where the player is half a tile before the junction and the same fire misses (rounding). Add Rules rows "the shot starts from the pre-move occupied tile" with mutants "shoot after Movement.step" and "math.floor of the position".
+
+### F3 [medium] The beam is drawn for fires the server ignores: in every pause, and for a second press before the count updates
+Where: f0100 Design, BlastView ("only when the latest frame's `shots` > 0"); `place.spec` ("it draws only while the latest frame holds a shot").
+Evidence: `BlastView.fire` checks only `(frame.shots or 0) > 0`. In READY!, dying, level clear and GAME OVER (where "the results still show them", drops.spec), the client sends the fire, draws the cyan beam, and the server drops the fire and spends nothing (by design). A second E within one 67 ms step, or before the next frame arrives, draws a second beam with one shot held. The server takes one fire a tick, or none once the count is 0.
+Critique: "fair and readable" (pillar 3). The beam tells the player a shot went off. Here it didn't, and the count doesn't change. The tempting fix is to also check `frame.play.phase == "playing"` in BlastView. That moves a rule into the adapter and still mis-draws at a phase edge: a fire sent in READY!'s last frame is taken in play.
+Consequences: drawing from authority means the frame carries the server's last shot. That is a new JSON-safe frame field (`f0018/frame` allows new fields), and it needs a spec for "a beam per Shot event, none for a dropped fire". Drawing it then costs up to one round trip of latency. The alternative is a client-side gate. That needs a pure rule and its tie with the server's `moving`, which is decided at the start of the tick.
+Recommendation: choose one, and record the choice.
+- (a) `Frame.shot: { tick: number, heading: Maze.Heading }?` set by `shoot` on a spend, and BlastView draws on a new tick. Add drops/shots spec cases: a pause fire leaves it nil, two fires in one tick give one. The place spec pins that BlastView reads `frame.shot`.
+- (b) A pure `View.beamShown(frame, sentSinceFrame): boolean` (phase is playing and fires sent since that frame < `frame.shots`), unit-tested, with Controls keeping the count.
+(a) is simpler and authoritative.
+
+### F4 [medium] The drop sequence is the same in every game for a given player: the session seed is the UserId
+Where: f0100 Design ("`Blaster.new(seed)` … the session's own generator"); `src/server/Sessions.luau:35` (`Session.new(Maze.layout(Maze.DEFAULT), player.UserId, …)`); RC2 forbids changing it.
+Evidence: each visit to the game place builds a new Session seeded with `player.UserId`, so the player's n-th contact eat always rolls the same. With the prototype's `Blaster`, seed 1234567 rolls `00000001`: that player never gets a shot from their first seven eaten ghosts, in any game. Seed 98765432 rolls `00011110`. `playAgain` continues the stream inside one server session only. Every member of an N-player maze (game-design: "Logic should still allow N players per maze later") would also share one stream.
+Critique: the user asked for "a chance (default 50%)" that is "deterministic under the existing seeded randomness". The existing seeding turns the chance into a fixed script per account, which the user probably didn't intend. The tempting fix is to mix `os.time` or a random into Logic. That is illegal (Logic is pure) and would break the drops spec's seed oracle.
+Consequences: a per-session seed must come from the server adapter (`Random.new():NextInteger(1, 2^31 - 2)` or similar) passed to `Session.new`. That would also vary the frightened ghosts' wander (the same seed), loosen RC2 and `place.spec`'s "the server adapter is untouched" case, and need the f0025/sessions fake to accept it (it already passes a number). Per-member streams would need `Blaster.new(seed, id)`.
+Recommendation: put it to the user now, with the other (prep) decisions: accept the per-account script (record it in game-design's Ghost hunter tools section), or seed per session in `Sessions.luau`. In the second case, R0035 owns that one line: change RC2 to allow exactly that diff, and add a place-spec pin that `Session.new` gets a seed that isn't `player.UserId`. Either way, add `Blaster.new` mixing the member index for later N-player mazes, or a Non-goal that says it is out of scope.
+
+### F5 [medium] Glow stacking is unspecified: the corner glow overlaps the radar, and the glows tie with the radar's and Flow's DisplayOrder 0
+Where: f0102 Design ("`DisplayOrder = 0`, below HudView's 1"); `place.spec :: the glows have their own screen … under the HUD` (checks only `< 1`); DangerHud's own gui (no DisplayOrder, 0) and `FlowView.luau:55` (`DisplayOrder = 0`).
+Evidence: from the prototype's `Hud.radarBox(w, h, 120)` and `Awareness.glowBox` for sector 5 at full size:
+- 1280×720: radar x 1144–1264, y 555–675; glow x 1194–1280, y 634–720.
+- 1920×1080: radar 1780–1900 × 904–1024; glow 1790–1920 × 950–1080.
+
+So the bottom-right glow overlaps the radar on common screens. Both ScreenGuis are DisplayOrder 0, so which one draws on top isn't defined by anything the design controls. A bright red glow can cover the radar's blips. The glows also tie with Flow's dying fade and GAME OVER overlay.
+Critique: "under the HUD" was specified, but the radar and the overlays were not considered. The tempting fix is to move the glow box. That breaks "the corner" placement the user asked for.
+Consequences: a negative DisplayOrder for the Glows puts them under the radar and under Flow's fade too. Glows dimmed by the death fade are probably right, but say so. The place spec must then compare the orders of three ScreenGuis, not just "< 1".
+Recommendation: Glows `DisplayOrder = -1`, documented as under the radar (Danger, 0), Flow (0) and the HUD (1). Change the place-spec case to find the Glows gui's order and require it to be below the Danger gui's (default 0) and FlowView's. Add an OC1 step: the radar stays readable with a ghost glowing in the bottom-right corner.
+
+### F6 [medium] Which ghost colours a glow is decided in the adapter by an index lookup that no check covers
+Where: f0102 Design, DangerHud (`View.ghostColor(snap.ghosts[g.index].name, g.look, snap.ghosts[g.index].flash)`); `place.spec` checks only that `View.ghostColor(` appears.
+Evidence: a DangerHud that colours glow `i` with `snap.ghosts[i]` (the glow's place in the lit list, which is the natural loop variable in `for i, g in lit`) passes every f0102 spec. It gives a wrong colour whenever the lit sectors aren't exactly ghosts 1..k in order, which is almost always. "Coloured as the ghost" is the user's main ask, and OC1 doesn't say "the right colour".
+Critique: architecture rule 3: a choice an adapter could get wrong belongs in Logic. `Awareness.Ghost` drops the name and the flash, so the adapter has to rejoin them.
+Consequences: carrying `name: string?` and `flash: boolean?` through `Awareness.Ghost` → `Indicator` → `Glow` changes the radar's input type too (optional fields keep `f0033/awareness` green). `glows.spec` gains a field to pin.
+Recommendation: add optional `name` and `flash` to `Awareness.Ghost`, and copy them into `Indicator` and `Glow`, so the adapter calls `View.ghostColor(g.name, g.look, g.flash)` with no index. Add a `glows.spec` case: with only inky (index 3) and clyde lit, the first glow carries inky's name and flash, and a G-row mutant takes the name by output position. Or keep `index`, and have `place.spec` pin `snap.ghosts[g.index]` and the absence of `snap.ghosts[i]`. That is weaker.
+
+### F7 [medium] On touch, shots pile up with no way to fire them and the hop can't be used; no issue tracks it
+Where: f0100 and f0104 Non-goals ("Touch controls … need a jump gesture and a fire control of their own"); f0101 Non-goals; R0012.md and f0029 ("none is captured"); game-design Platforms ("Desktop … and mobile (touch)").
+Evidence: on a phone, eating ghosts fills the cyan bars (HudView draws `frame.shots` everywhere), but nothing sends `Blaster.intent`. Both rafts say a touch fire/jump control is needed and "none is captured".
+Critique: a HUD element the player can never use is unfair on one of the two supported platforms, and the gap is tracked nowhere.
+Consequences: either a new feature issue (it touches R0012's `Touch` zones, which would then become a dependency), or a rule that hides the bars when `UserInputService.TouchEnabled` (an adapter branch, so a pure `Hud.showShots(touch)`) until that issue lands.
+Recommendation: capture the touch fire and jump issue now (make-issue), and ask the user, in the same batch as F4, whether the bars show on touch before it exists. Name the issue in both rafts' Non-goals.
+
+### F8 [low] Small inconsistencies in the documents and one spec name
+Where: f0100 Unknowns E5 ("34 mutants … B1–B15, S1–S11, D1–D7, H1–H3, V1–V2"); `tracker/issues/f0104/acceptance/hunt.spec.luau:35`; mutants.py `E1` against experiment E1.
+Evidence: those ranges are 38 mutants, and the raft's 84 adds up only with 38. hunt.spec's case is named "look left with an arrow", but it holds Right and expects N (its comment and AC5 say Right). Mutation id `E1` reuses the experiment id E1.
+Critique: a sequestered case name that contradicts its body misleads whoever reads a failure.
+Consequences: none.
+Recommendation: say 38, rename the case to "look right", and rename the mutant to `H-E1` or `K4`, now while they can still change.
+
+### F9 [low] Leaving f0109 out is right, but its open colour question touches what this raft ships
+Where: R0035 Theme (f0109 left out); f0102 `View.GHOST_COLORS` (inky `0,255,255`); f0100's cyan bars and beam; f0109 Problem ("One ordinary ghost is white … Inky, painted (0, 255, 255)").
+Evidence: f0109 records that this user sees Inky's cyan as white. R0035 makes Inky's glow that cyan, a blinking ghost's glow flashes white, and the blaster's own colour is the same cyan. Until f0109 lands, the user may read Inky's glow as a blinking ghost.
+Critique: including f0109 would block the raft on a decision and add the green-walls rule, so leaving it out is correct. The colour choice itself, though, costs one row in the table this raft creates.
+Consequences: none if asked now. Later it is one row change in f0109.
+Recommendation: in the F4/F7 batch to the user, also ask Inky's new colour. If it is answered before execution, ship it in `View.GHOST_COLORS`, and keep f0109 for the green walls only. Otherwise keep the plan as is.
+
+Verdict: changes

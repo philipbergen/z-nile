@@ -11,6 +11,36 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0035
 
-# check "RC1: <end-to-end statement>" <command>
+# a sequestered issue spec before `tracker.sh done`, its promoted copy after it
+spec() { # $1 issue id, $2 spec name
+  local f
+  f="$(scripts/tracker.sh find "$1")/acceptance/$2.spec.luau"
+  [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
+  echo "$f"
+}
+
+hunt_end_to_end() {
+  local i
+  for i in 1 2 3; do
+    lune run tests/run -- "$(spec f0104 hunt)" "$(spec f0100 shots)" "$(spec f0100 drops)" "$(spec f0104 aim)" \
+      tests/acceptance/f0013/intents.spec.luau tests/acceptance/f0023/contacts.spec.luau \
+      tests/acceptance/f0023/session-ghosts.spec.luau tests/acceptance/f0014/keys.spec.luau >/dev/null 2>&1 \
+      || { echo "the ghost-hunt specs fail on repeat $i"; return 1; }
+  done
+}
+check "RC1: a ghost hunt end to end, three times in a row, beside the promoted intent, contact and key-map specs" hunt_end_to_end
+
+server_untouched() {
+  git diff --quiet "$(git merge-base origin/main HEAD)" -- src/server default.project.json lobby.project.json src/lobby \
+    || { echo "the server adapters, the place files or the lobby changed"; return 1; }
+}
+check "RC2: the server adapters, the remotes and the lobby are untouched: shots ride the Intent remote" server_untouched
+
+promoted_only_added() {
+  local changed
+  changed="$(git diff --name-status "$(git merge-base origin/main HEAD)" -- tests/acceptance | grep -v '^A' || true)"
+  [[ -z $changed ]] || { echo "promoted specs were changed: $changed"; return 1; }
+}
+check "RC3: no promoted acceptance spec was edited or removed (Overrides: none)" promoted_only_added
 
 finish

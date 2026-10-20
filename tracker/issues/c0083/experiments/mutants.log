@@ -1,0 +1,217 @@
+# c0083 mutation check on the throwaway prototype (2026-10-20). Driver: mutate.py in this folder, run in the clone.
+# Round 1 (65 mutants; M21c added after the first run):
+M1 list drops both: 14 passed, 1 failed, 1 spec files
+      [the two suites cover every spec, and share only tests/meta] spec:96: expected "tests/meta/architecture.spec.luau: covered: true", got "tests/meta/architecture.spec.luau: 
+M2 meta by the graph: 13 passed, 2 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:61: expected "tests/meta/architecture.spec.luau: both", got "tests/meta/architecture.spec.luau: harness"
+      [the two suites cover every spec, and share only tests/meta] spec:114: expected true, got false
+M3 list files tests/unit in harness too: 12 passed, 3 failed, 1 spec files
+      [the two suites cover every spec, and share only tests/meta] spec:103: expected "tests/unit/Awareness/awareness.spec.luau: game only: true", got "tests/unit/Awareness/awar
+      [a harness change runs the whole harness suite and no game-on] spec:160: expected nil, got true
+      [a mixed change unions every path, and a shared path is still] spec:246: expected nil, got true
+M4 tests/scenario not a game folder: 10 passed, 5 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:76: expected "tests/scenario/harness.spec.luau: game", got "tests/scenario/harness.spec.luau: harness"
+      [the two suites cover every spec, and share only tests/meta] spec:121: expected true, got false
+      [default.project.json runs the whole game suite plus only the] spec:269: expected true, got nil
+M4b contract/integration/runtime not game folders: 13 passed, 2 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:76: expected "tests/contract/x.spec.luau: game", got "tests/contract/x.spec.luau: harness"
+      [the selector's command line prints a suite, and selects by s] spec:391: expected "game\
+M4c runtime not a game folder: 14 passed, 1 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:76: expected "tests/runtime/x.spec.luau: game", got "tests/runtime/x.spec.luau: harness"
+M4d folders unanchored: 14 passed, 1 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:81: expected "pkg/tests/unit/x.spec.luau: harness", got "pkg/tests/unit/x.spec.luau: game"
+M5 no f/d rule: 13 passed, 2 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:61: expected "tests/acceptance/f0054/docs.spec.luau: game", got "tests/acceptance/f0054/docs.spec.luau: h
+      [the selector's command line prints a suite, and selects by s] spec:395: expected "harness\
+M6 PLACE_LIB not counted: 10 passed, 5 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:61: expected "tests/acceptance/c0041/place-game.spec.luau: game", got "tests/acceptance/c0041/place-game.
+      [a game change runs only game specs, and the ones that depend] spec:223: expected "tests/acceptance/c0002/resolve-require.spec.luau: true", got "tests/acceptance/c0002/resol
+      [default.project.json runs the whole game suite plus only the] spec:266: expected "tests/acceptance/c0002/place-rules.spec.luau: true", got "tests/acceptance/c0002/place-rul
+M7 rokit.toml not shared: 14 passed, 1 failed, 1 spec files
+      [a change to what every spec runs on runs everything] spec:326: expected "rokit.toml: true", got "rokit.toml: false"
+M8 scripts/check.sh not shared: 13 passed, 2 failed, 1 spec files
+      [a mixed change unions every path, and a shared path is still] spec:251: expected "ALL", got table: 0x0000000cbb6d74c0
+      [a change to what every spec runs on runs everything] spec:326: expected "scripts/check.sh: true", got "scripts/check.sh: false"
+M8b fence.sh not shared: 14 passed, 1 failed, 1 spec files
+      [a change to what every spec runs on runs everything] spec:326: expected "scripts/lib/fence.sh: true", got "scripts/lib/fence.sh: false"
+M8c replace-file.pl not shared: 14 passed, 1 failed, 1 spec files
+      [a change to what every spec runs on runs everything] spec:326: expected "scripts/lib/replace-file.pl: true", got "scripts/lib/replace-file.pl: false"
+M9 tests/meta not shared: 14 passed, 1 failed, 1 spec files
+      [a change to what every spec runs on runs everything] spec:326: expected "tests/meta/architecture.spec.luau: true", got "tests/meta/architecture.spec.luau: false"
+M9b runner closure not shared: 14 passed, 1 failed, 1 spec files
+      [a change to what every spec runs on runs everything] spec:347: expected "ALL", got table: 0x000000082b2710f0
+M10 harness by graph only: 13 passed, 2 failed, 1 spec files
+      [a harness change runs the whole harness suite and no game-on] spec:151: expected "scripts/tracker/main.luau -> tests/acceptance/c0051/key.spec.luau: true", got "scripts/tra
+      [a mixed change unions every path, and a shared path is still] spec:240: expected "tests/acceptance/c0001/ci-workflow.spec.luau: true", got "tests/acceptance/c0001/ci-workfl
+M11 fixture.luau not harness: 14 passed, 1 failed, 1 spec files
+      [a harness change runs the whole harness suite and no game-on] spec:151: expected "tests/lib/fixture.luau -> tests/acceptance/c0051/key.spec.luau: true", got "tests/lib/fixt
+M11b cachepaths not harness: 14 passed, 1 failed, 1 spec files
+      [a harness change runs the whole harness suite and no game-on] spec:151: expected "tests/lib/cachepaths.luau -> tests/acceptance/c0051/key.spec.luau: true", got "tests/lib/c
+M11c stylua.toml not harness: 14 passed, 1 failed, 1 spec files
+      [a harness change runs the whole harness suite and no game-on] spec:151: expected "stylua.toml -> tests/acceptance/c0051/key.spec.luau: true", got "stylua.toml -> tests/acce
+M12 ^tests/lib/ is harness: 14 passed, 1 failed, 1 spec files
+      [a tests/lib file outside the allowlist stays graph plus text] spec:191: expected nil, got true
+M13 .claude/ not harness: 14 passed, 1 failed, 1 spec files
+      [a harness change runs the whole harness suite and no game-on] spec:151: expected ".claude/skills/ticket-prep/SKILL.md -> tests/acceptance/c0051/key.spec.luau: true", got ".
+M13b tracker/templates not harness: 14 passed, 1 failed, 1 spec files
+      [a harness change runs the whole harness suite and no game-on] spec:151: expected "tracker/templates/prompt.md -> tests/acceptance/c0051/key.spec.luau: true", got "tracker/t
+M14 lobby drops text hits: 14 passed, 1 failed, 1 spec files
+      [lobby.project.json runs the whole game suite plus only the s] spec:308: expected true, got nil
+M15 a project file runs the harness suite too: 13 passed, 2 failed, 1 spec files
+      [default.project.json runs the whole game suite plus only the] spec:266: expected "tests/acceptance/c0001/ci-workflow.spec.luau: true", got "tests/acceptance/c0001/ci-workfl
+      [lobby.project.json runs the whole game suite plus only the s] spec:283: expected "tests/acceptance/c0001/ci-workflow.spec.luau: true", got "tests/acceptance/c0001/ci-workfl
+M16 any src change is the whole game suite: 13 passed, 2 failed, 1 spec files
+      [a game change runs only game specs, and the ones that depend] spec:219: expected nil, got true
+      [a mixed change unions every path, and a shared path is still] spec:246: expected nil, got true
+M17 select is textAffected only: 12 passed, 3 failed, 1 spec files
+      [a tests/lib file outside the allowlist stays graph plus text] spec:195: expected true, got nil
+      [a game change runs only game specs, and the ones that depend] spec:216: expected "tests/acceptance/c0002/resolve-require.spec.luau: true", got "tests/acceptance/c0002/resol
+      [a mixed change unions every path, and a shared path is still] spec:243: expected "graph tests/acceptance/c0002/resolve-require.spec.luau: true", got "graph tests/acceptance
+M18 select uses changed[1] only: 13 passed, 2 failed, 1 spec files
+      [a mixed change unions every path, and a shared path is still] spec:240: expected "tests/acceptance/c0001/ci-workflow.spec.luau: true", got "tests/acceptance/c0001/ci-workfl
+      [a change to what every spec runs on runs everything] spec:348: expected "ALL", got table: 0x00000007521b3dc0
+M18b mixed non-shared list is ALL: 14 passed, 1 failed, 1 spec files
+      [a mixed change unions every path, and a shared path is still] spec:41: src/shared/Logic/Game/init.luau scripts/tracker/main.luau selected ALL
+M19 no text references: 11 passed, 4 failed, 1 spec files
+      [lobby.project.json runs the whole game suite plus only the s] spec:308: expected true, got nil
+      [the selector's command line prints a suite, and selects by s] spec:395: expected "harness\
+      [a file a spec reads as text selects that spec, and a spec ch] spec:487: expected ".github/workflows/check.yml -> tests/acceptance/c0001/ci-workflow.spec.luau: true", got ".
+M20 only existing paths count: 14 passed, 1 failed, 1 spec files
+      [a deleted or renamed file still selects the specs that named] spec:503: expected 1, got 0
+M21 leading / kept: 13 passed, 2 failed, 1 spec files
+      [a file a spec reads as text selects that spec, and a spec ch] spec:487: expected "tests/unit/smoke.spec.luau -> tests/acceptance/c0049/spec-isolation.spec.luau: true", got 
+      [a deleted or renamed file still selects the specs that named] spec:504: expected 1, got 0
+M21b interpolation pieces ignored: 15 passed, 0 failed, 1 spec files
+      SURVIVED
+M22 --suite with no name selects changes: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:416: expected false, got true
+M23 --deps on a shared path prints ALL: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:457: expected nil, got 6010
+M24 --deps expanded with the harness suite: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:457: expected nil, got 7977
+M25 --deps by require only: 12 passed, 3 failed, 1 spec files
+      [lobby.project.json runs the whole game suite plus only the s] spec:308: expected true, got nil
+      [the selector's command line prints a suite, and selects by s] spec:395: expected "harness\
+      [a file a spec reads as text selects that spec, and a spec ch] spec:487: expected ".github/workflows/check.yml -> tests/acceptance/c0001/ci-workflow.spec.luau: true", got ".
+M26 --which by selected specs: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:378: expected "harness\
+M27 backlog acceptance path by closure: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:401: expected "game\
+M28 active/ prefix skips rule 1: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:404: expected "game\
+M29 a chore acceptance spec is game: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:408: expected "harness\
+M29b missing active chore is game: 13 passed, 2 failed, 1 spec files
+      [a spec's suite: meta both, tooling harness, game folders and] spec:81: expected "pkg/tests/unit/x.spec.luau: harness", got "pkg/tests/unit/x.spec.luau: game"
+      [the selector's command line prints a suite, and selects by s] spec:408: expected "harness\
+M30 --which with no paths prints both: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:413: expected false, got true
+M31 game-design.md is game only: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:395: expected "harness\
+M32 check.sh --suite validated late: 14 passed, 1 failed, 1 spec files
+      [check.sh --suite runs one suite's specs, and refuses a bad n] spec:571: expected 2, got 0
+M33 check.sh --suite ignores the selection: 14 passed, 1 failed, 1 spec files
+      [check.sh --suite runs one suite's specs, and refuses a bad n] spec:583: expected true, got false
+M34 hook without --no-renames: 14 passed, 1 failed, 1 spec files
+      [the Stop hook gates whenever the selector picks a spec, harn] spec:652: expected true, got false
+M35 hook keeps the src/tests filter: 14 passed, 1 failed, 1 spec files
+      [the Stop hook gates whenever the selector picks a spec, harn] spec:639: expected true, got false
+M36 failing selector skips the gate: 14 passed, 1 failed, 1 spec files
+      [the Stop hook gates whenever the selector picks a spec, harn] spec:646: expected true, got false
+M37 hook gates without asking: 14 passed, 1 failed, 1 spec files
+      [the Stop hook gates whenever the selector picks a spec, harn] spec:639: expected true, got false
+D1 Phase 5 left on --full: AC8 FAILED (.claude/skills/execute-raft/SKILL.md:99:2. `git fetch origin main` and merge it into the branch now (renumber colliding )
+D2 Phase 0 without --which: AC8 FAILED (Phase 0 does not key the baseline on --which)
+D3 commands row ties --full to rafts: AC8 FAILED (the testing skill ties --full to the raft gate: | `scripts/check.sh --full` | every spec, on demand. Used by raft `check)
+D4 old Graph-miss sentence kept: AC8 FAILED (the Graph-miss rule still names a local --full run)
+D5 Merging only says BLOCKED: AC8 FAILED (Merging is missing: lune run scripts/affected)
+D6 Merging excepts template drift: AC8 FAILED (Merging excepts a template-drift RC0 line)
+D7 a second line in a raft check.sh: AC9 FAILED (tracker/rafts/R0035/check.sh changes more than its RC0 line)
+D8 another done check.sh changes: AC9 FAILED (a done/ check.sh changed: tracker/issues/done/c0001/check.sh)
+D9 R0039 left on --full: AC9 FAILED (tracker/rafts/R0039/check.sh still has the old RC0 line)
+D10 RC0 replaced and a blank line deleted: AC9 FAILED (tracker/rafts/R0012/check.sh changes more than its RC0 line)
+D11 done argv stays --full: AC9 FAILED (done still passes "--full")
+D12 one args: --affected: AC9 FAILED (c0074 still pins args: --full)
+D13 a toBe(full) removed: AC9 FAILED (c0074 dropped the full mode name (3))
+D14 force one kept: AC7 FAILED (the testing skill still has the old full-run rule)
+D15 review item 4 without --deps: AC7 FAILED (the review skill's item 4 does not use --deps)
+D16 c0080 grep changes two lines: AC9 FAILED (tracker/issues/done/c0080/check.sh changes more than the Phase 4 grep)
+
+# Re-run after the deleted-file case named a literal piece before a brace:
+M21b interpolation pieces ignored: 14 passed, 1 failed (a deleted or renamed file ... expected 1, got 0)
+M21c code between braces counted: 14 passed, 1 failed (a deleted or renamed file ... expected 0, got 1)
+
+# Round 3 findings (design-review-003):
+N1 inside-folder rule removed: 14 passed, 1 failed, 1 spec files
+      [a file a spec reads as text selects that spec, and a spec ch] spec:510: expected true, got nil
+N2 inside-folder rule ignores existence: 14 passed, 1 failed, 1 spec files
+      [a deleted or renamed file still selects the specs that named] spec:535: expected 0, got 1
+N3 unpromoted chore closure empty: 14 passed, 1 failed, 1 spec files
+      [the selector's command line prints a suite, and selects by s] spec:426: expected "game", got "harness"
+N4 hook asks the selector with no paths: 14 passed, 1 failed, 1 spec files
+      [the Stop hook gates whenever the selector picks a spec, harn] spec:690: expected nil, got 1
+N5 land default is the harness suite: AC9 FAILED (land does not default to scripts/check.sh --affected)
+N6 AGENTS.md left on a local full gate: AC8 FAILED (tracker or AGENTS.md still says after a local full gate)
+N7 template comment pastes the plain selector: AC7 FAILED (the issue template still pastes the plain selector)
+N8 commands row without --which: AC7 FAILED (the scripts/affected commands row does not list --which)
+N9 architecture skill without the GAME list: AC7 FAILED (the architecture skill does not say a further place joins the GAME list in scripts/lib/suites.luau)
+
+# Round 4 findings (design-review-004):
+O1 item documents match tokens above the item folder: 15 passed, 1 failed, 1 spec files
+      [a tracker item's own files select only the specs that name t] spec:289: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+O2 no tree readers: 14 passed, 2 failed, 1 spec files
+      [a tracker item's own files select only the specs that name t] spec:285: expected "tests/acceptance/c0082/real-tree.spec.luau: true", got "tests/acceptance/c0082/real-tree.s
+      [a file a spec reads as text selects that spec, and a spec ch] spec:567: expected "tracker/issues/done/c0008/check.sh -> tests/tooling/repo-fence.spec.luau: true", got "trac
+O3 real-tree selected only by text: 15 passed, 1 failed, 1 spec files
+      [a tracker item's own files select only the specs that name t] spec:285: expected "tests/acceptance/c0082/real-tree.spec.luau: true", got "tests/acceptance/c0082/real-tree.s
+O4 tree readers only for check.sh: 15 passed, 1 failed, 1 spec files
+      [a tracker item's own files select only the specs that name t] spec:304: expected "tests/acceptance/c0082/real-tree.spec.luau: true", got "tests/acceptance/c0082/real-tree.s
+O5 item rule for issues only: 15 passed, 1 failed, 1 spec files
+      [a tracker item's own files select only the specs that name t] spec:289: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+O6 item rule skips done/: 15 passed, 1 failed, 1 spec files
+      [a tracker item's own files select only the specs that name t] spec:289: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+O7 suites paragraph without the readers list: AC7 FAILED (the testing skill does not mention TRACKER_TREE_READERS)
+
+# Option B (user's choice on design-review-005; supersedes the round-4 rule and its O-mutants):
+P1 item documents match tokens above the item folder: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P4 no real-tree reader: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:278: expected true, got nil
+P5 readers only for a check.sh: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:278: expected true, got nil
+P6 item rule for issues only: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P7 item rule skips done/: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P8 item rule skips the backlog: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P9 suites paragraph without the readers list: AC7 FAILED (the testing skill does not mention TRACKER_TREE_READERS)
+P2 check.sh under the narrow rule: 14 passed, 2 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:313: expected "tracker/issues/done/f9999/check.sh -> tests/acceptance/c0034/locator.spec.luau: true", got
+      [a file a spec reads as text selects that spec, and a spec ch] spec:571: expected "tracker/issues/done/c0008/check.sh -> tests/tooling/repo-fence.spec.luau: true", got "trac
+P3 acceptance specs under the narrow rule: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:313: expected "tracker/issues/c9999/acceptance/x.spec.luau -> tests/acceptance/c0044/guard.spec.luau: tru
+
+# Round 6 findings (design-review-006): only .md files are item documents; P2/P3 superseded by Q1/Q2:
+P1 item documents match tokens above the item folder: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P4 no real-tree reader: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:278: expected true, got nil
+P5 readers only for a check.sh: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:278: expected true, got nil
+P6 item rule for issues only: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P7 item rule skips done/: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P8 item rule skips the backlog: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:281: expected "tests/acceptance/c0001/tracker-lifecycle.spec.luau: true", got "tests/acceptance/c0001/tra
+P9 suites paragraph without the readers list: AC7 FAILED (the testing skill does not mention TRACKER_TREE_READERS)
+Q1 every file in an item folder is a document: 14 passed, 2 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:327: expected "tracker/issues/c9999/replacements/x.spec.luau -> tests/acceptance/c0044/guard.spec.luau: t
+      [a file a spec reads as text selects that spec, and a spec ch] spec:585: expected "tracker/issues/done/c0008/check.sh -> tests/tooling/repo-fence.spec.luau: true", got "trac
+Q2 only check.sh and acceptance/ are exempt: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:327: expected "tracker/issues/c9999/replacements/x.spec.luau -> tests/acceptance/c0044/guard.spec.luau: t
+Q3 the rule skips the issue backlog and done rafts: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:304: expected "tracker/issues/c9999/c9999.md: tests/acceptance/c0082/real-tree.spec.luau", got "tracker/i
+Q4 the reader trigger fires only for tracker/issues: 15 passed, 1 failed, 1 spec files
+      [a tracker item's documents select only the specs that name t] spec:304: expected "tracker/rafts/R9999/spend.md: tests/acceptance/c0082/real-tree.spec.luau", got "tracker/ra

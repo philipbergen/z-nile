@@ -1,0 +1,21 @@
+# Review 004: R0035 (design mode)
+Inputs: prep-ghost-hunter-tools at 71e1de5. I reviewed the fix delta (`git diff fbcd957..HEAD`: f0100.md, f0100's `shots.spec` and `place.spec`, f0102.md's E6, R0035.md, mutants.py, prototype.patch) and the whole raft again: R0035.md and its check.sh, the f0100/f0101/f0102/f0104 documents, and design-review/refute 001–003. Also read: tracker/game-design.md; R0012 in prep-mobile-controls (still b531210, unchanged since rounds 2 and 3, read only); origin/main (1d4ef00), which since the prep base f880bed has changed only the four members' `spend.md`, so nothing under `src/`, `tests/` or `scripts/`. In proto-ghost-hunter-tools (65d4cd1, `git status` clean before and after) I checked that `git diff <merge-base>..HEAD -- src tests/unit` matches prototype.patch line for line, and that the copies of the acceptance specs in `tracker/issues/<id>/acceptance/` and `tests/acceptance/<id>/` match the prep worktree's for all four issues. I ran the mutants S12–S17, V3 and V4 (8 of 8 killed, at the case lines the Rules table names), `f0100/shots` and `f0100/place` (24 passed), and the promoted `f0013`, `f0018` and `f0032` specs that pin the frame and snapshot (107 passed, 16 files).
+Dropped from review-003: F1, F2
+
+Rulings on design-refute-003:
+- F1 (fixed, holds). `shoot` takes `from = Movement.occupied(...)` before the move. `Movement.occupied` already returns a fresh table, either a copy of `s.tile` or `Maze.neighbor`'s result, so `member.move.tile` can't be aliased. `member.shot.from` is copied again anyway, and `Session.frame` copies it a third time (S17 pins that). BlastView draws from `shot.from` and doesn't read the pose. `place.spec` strips comments before it scans, so the comment in the prototype that names `frame.shot.from` proves nothing, and V4 is killed by the code alone. The Design now says where the beam starts and why. OC2 now judges the shot by where the beam starts and whether the ghost turns into eyes. Main no longer has `BlastView.start`, and `f0031/place`'s "started before Ready" doesn't need it. That spec is in the gate the author reports as passing.
+- F2 (fixed, holds). The Theme lists the five open decisions, and E6 now says -1 under 0 and 1, both in R0035 and in f0102.
+
+### F1 [low] `place.spec` checks only that `shot.from` appears somewhere in BlastView. It doesn't ban `frame.player`, the wrong start review 003 F1 named.
+Where: `tracker/issues/f0100/acceptance/place.spec.luau`, the case "the beam is a client module that draws the server's shot …" (`string.find(src, "shot%.from")` and the banned words `pose`, `Camera`, `function BlastView.start(`). Rules row "the beam starts at the server's tile" (V4).
+Evidence: this BlastView passes every assertion in the case:
+`if shot and shot.from and shot.tick == frame.tick then draw(m, frame.player, shot.heading) end`
+- `shot.from` appears, `frame.shot` appears, and `.tick == frame.tick` appears.
+- None of `pose`, `Camera` or `BlastView.start` appears.
+- The beam still starts from the post-move position. That is the wrong tile in the other direction (review 003 F1, Critique).
+V4 is killed only because the prototype's one mention of `shot.from` is in the draw call. Code written fresh from the Design isn't bound that way.
+Critique: this is an adapter source scan, so it can't be airtight. But review 003 named this exact substitution as the one an executor is tempted to make, and the case doesn't stop it. The quick fix would be to require `draw(…, shot.from` literally. That pins the prototype's private helper, and it's brittle.
+Consequences: banning the word `player` in BlastView's code is cheap, because BlastView has no reason to read the player. The prototype has no `player` in its code (only in a comment, which `source` strips), so nothing else changes. No new rule or decision.
+Recommendation: add `"player"` (or `"frame.player"`) to the banned words in that case, add a mutant V5 (`shot.from` → `frame.player` in the draw call, with `shot.from` kept in the guard) to mutants.py, and add V5 to the "the beam starts at the server's tile" row. The spec can still change in prep. If it is left as it is, the code review must check where the beam starts by reading the code.
+
+Verdict: approve
