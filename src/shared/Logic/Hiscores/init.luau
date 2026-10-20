@@ -26,6 +26,9 @@ export type Io = {
 }
 export type Retry = { attempts: number, base: number, cap: number }
 export type DriveResult = { wrote: { [string]: boolean }, rank: number? }
+export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
+export type Submission = { score: number, level: number, run: number }
+export type StepEvent = { kind: string, score: number?, level: number? }
 
 local Hiscores = {}
 
@@ -34,6 +37,8 @@ Hiscores.ORDERED_STORE = "Hiscores"
 Hiscores.COMPANION_STORE = "HiscoreEntries"
 Hiscores.LEVEL_CAP = 10000 -- the ordered integer is score * LEVEL_CAP + min(level, LEVEL_CAP - 1)
 Hiscores.RETRY = table.freeze({ attempts = 3, base = 0.25, cap = 1 }) :: Retry
+Hiscores.LEAVE_STEPS = 45 -- how long a departed player's run is kept: the classic dying pause, in steps
+Hiscores.CLOSE_WAIT = 25 -- seconds a closing server is held for hiscore work (the engine allows 30)
 
 local SECONDS_PER_DAY = 86400
 local MAX_INTEGER = 2 ^ 53 - 1
@@ -464,6 +469,66 @@ function Hiscores.drive(io: Io, attempt: Attempt, unix: number, policy: Retry): 
 		end
 	end
 	return { wrote = wrote, rank = rank }
+end
+
+-- One submit per run: record `runId` on a copy of `done`, or refuse it (a bad id, or one already recorded).
+function Hiscores.once(done: { [number]: boolean }, runId: number): (boolean, { [number]: boolean })
+	if not whole(runId) or runId < 1 or done[runId] then
+		return false, done
+	end
+	local nextDone = table.clone(done)
+	nextDone[runId] = true
+	return true, nextDone
+end
+
+-- The state of a session's first run. The run id is this counter, never a value a client or a tick supplies.
+function Hiscores.newRun(): RunState
+	return { run = 1, done = {}, waited = 0, drop = false }
+end
+
+-- A play again that the session accepted starts the next run; one it refused changes nothing.
+function Hiscores.onAgain(state: RunState, ok: boolean): RunState
+	if not ok then
+		return state
+	end
+	return { run = state.run + 1, done = state.done, waited = state.waited, drop = false }
+end
+
+-- Keep a departed player's run for the dying pause, or drop it: at once when it has ended.
+function Hiscores.leave(stepsWaited: number, sawOver: boolean): "drop" | "keep"
+	if sawOver or stepsWaited >= Hiscores.LEAVE_STEPS then
+		return "drop"
+	end
+	return "keep"
+end
+
+-- One server step of a run. Returns the next state and the submission when this step ended the run with a score.
+-- `here` is whether the player is still in the server; the steps away are counted.
+function Hiscores.onStep(state: RunState, events: { StepEvent }, here: boolean): (RunState, Submission?)
+	local saw = false
+	local done = state.done
+	local submission: Submission? = nil
+	for _, event in events do
+		if event.kind ~= "GameOver" then
+			continue
+		end
+		saw = true
+		if type(event.score) == "number" and type(event.level) == "number" then
+			local fresh, nextDone = Hiscores.once(done, state.run)
+			if fresh then
+				done = nextDone
+				submission = { score = event.score, level = event.level, run = state.run }
+			end
+		end
+	end
+	local waited = if here then 0 else state.waited + 1
+	local drop = not here and Hiscores.leave(waited, saw) == "drop"
+	return { run = state.run, done = done, waited = waited, drop = drop }, submission
+end
+
+-- Whether a closing server still waits: while a run or a write is pending, and not past CLOSE_WAIT.
+function Hiscores.holdClose(runs: number, drives: number, waited: number): boolean
+	return (runs > 0 or drives > 0) and waited < Hiscores.CLOSE_WAIT
 end
 
 return Hiscores
