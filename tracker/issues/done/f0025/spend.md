@@ -12,6 +12,7 @@
 | 8 | 2026-10-19 05:25 | prep | 788 | 3 | 12.8 | spend+proportional | prep |  |
 | 9 | 2026-10-20 01:33 | f0025: submit a run once at game over; Sessions hands steps to the runs hook | 226 | 5 | 1.8 | explicit | build |  |
 | 10 | 2026-10-20 01:51 | tracker: done R0011 | 0 | 0 | 1.2 | raft+proportional | deliver |  |
+| 11 | 2026-10-20 01:56 | deliver | 0 | 0 | 4.0 | spend+proportional | deliver |  |
 
-**Total:** +1014 / -8 lines, 54.9 agent-minutes, 358333 tokens over 10 records
-<!-- totals: added=1014 removed=8 minutes=54.9 records=10 tokens=358333 -->
+**Total:** +1014 / -8 lines, 58.9 agent-minutes, 358333 tokens over 11 records
+<!-- totals: added=1014 removed=8 minutes=58.9 records=11 tokens=358333 -->
