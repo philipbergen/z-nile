@@ -17,10 +17,13 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Awareness | How the player senses ghosts they cannot see, engine-free: the radar around the player and the edge indicators that grow and brighten as a ghost nears along the maze (R0010, f0033) |
 | Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0024, f0061) |
 | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
+| Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0004, f0013) |
 | Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout (R0015, f0019) |
 | Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065) |
 | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030) |
+
+Hiscores has no row in the deps block. It takes the store as a parameter. Session, Lobby and Flow do not require it; the server and lobby adapters call it (R0011).
 
 ## Allowed dependencies
 

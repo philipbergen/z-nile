@@ -1,0 +1,5 @@
+# Refute 001
+
+- F1: fixed 6e3f69c: the smoke walk asserts the Dependents heading and its first id link on Alpha, and the Depends on heading and its first id link on Gamma; consequences: a pane-wide `data-id="R0020"` match still passes when Depends on is plain text, because Waiting for on Gamma already links R0020, so the assertions sit on the heading. Dropping `group("Dependents", …)` fails the Alpha step. Rendering Depends on as text fails the Gamma step. No bucket or command rule changed.
+- F2: fixed 6e3f69c: member issues stay links, recorded in the verification log; the unused `details`, `summary`, `.dep` and `--hl` rules and the `highlighted()` helper are gone, and the smoke case no longer says highlight or tabs; consequences: an issue body is only on that issue's pane, which search already opens. No spec asserted `<details>`. `keep.spec` still passes.
+- F3: fixed 6e3f69c: the board row ends the copy-button sentence, then starts a new one for cursor keys and the document; consequences: punctuation only. `keep.spec` and `c0048/board-docs.spec.luau` pass, and the artifact tokens are unchanged.

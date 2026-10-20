@@ -25,7 +25,7 @@ function el(id) {
     focus() {}, blur() {}, select() {}, scrollIntoView() {}, getAttribute: () => null, closest: () => null };
 }
 const els = {};
-["tab-active", "tab-waiting", "tab-done", "search", "list", "pane", "board-data"].forEach(i => (els[i] = el(i)));
+["tab-rafts", "tab-issues", "search", "list", "pane", "board-data"].forEach(i => (els[i] = el(i)));
 els["board-data"].textContent = scripts.find(x => /id="board-data"/.test(x[1]))[2];
 const doc = el("document");
 const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
@@ -75,9 +75,15 @@ return t.spec("board unit", function(it)
 		fs.removeDir(EMPTY)
 		t.expect(m.rafts).toEqual({})
 		t.expect(m.issues).toEqual({})
-		t.expect(m.tabs).toEqual({ done = {}, active = {}, waiting = {} })
+		t.expect(m.views).toEqual({
+			rafts = { ready = {}, ["not"] = {}, done = {} },
+			issues = { ready = {}, ["not"] = {}, done = {} },
+		})
 		t.expect(m.home).toEqual({})
-		t.expect(m.initialTab).toBe("waiting")
+		t.expect(m.initialView).toBe("rafts")
+		local raw = m :: any
+		t.expect(raw.tabs).toBe(nil)
+		t.expect(raw.initialTab).toBe(nil)
 	end)
 
 	it("--open runs the opener on the page, and does not eat the next argument", function()
