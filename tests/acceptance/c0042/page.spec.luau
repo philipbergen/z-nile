@@ -331,18 +331,12 @@ return t.spec("c0400 board page", function(it)
 		t.expect(body).toBe("# f0031: Third B\n\nMentions </script><script>alert(1)</script> literally.\n")
 	end)
 
-	it("has the three tabs and the search field the page is driven by", function()
-		for _, id in
-			{
-				'id="tab-active"',
-				'id="tab-waiting"',
-				'id="tab-done"',
-				'id="search"',
-				'id="list"',
-				'id="pane"',
-			}
-		do
+	it("has Rafts and Issues, and the search field the page is driven by", function()
+		for _, id in { 'id="tab-rafts"', 'id="tab-issues"', 'id="search"', 'id="list"', 'id="pane"' } do
 			t.expect(string.find(htmlA, id, 1, true) ~= nil).toBe(true)
+		end
+		for _, id in { 'id="tab-active"', 'id="tab-waiting"', 'id="tab-done"' } do
+			t.expect((string.find(htmlA, id, 1, true))).toBe(nil)
 		end
 	end)
 end)

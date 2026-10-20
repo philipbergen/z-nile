@@ -11,6 +11,8 @@ export type Model = {
 }
 export type Layout =
 	{ textSize: number, margin: number, iconSize: number, barWidth: number, barHeight: number }
+-- Top-left of the radar in pixels. w and h are the requested size (0 when size is not a positive finite number).
+export type Box = { x: number, y: number, w: number, h: number }
 
 local Hud = {}
 Hud.MIN_TEXT = 14
@@ -51,6 +53,18 @@ function Hud.layout(width: number, height: number): Layout
 		barWidth = math.max(0, math.min(round(w * Hud.BAR_SHARE), Hud.MAX_BAR, w - 2 * margin)),
 		barHeight = math.max(Hud.MIN_BAR_HEIGHT, round(text * 0.4)),
 	}
+end
+
+-- The radar's square in the bottom-right corner, in pixels. The right edge is one layout margin in from
+-- the screen. The bottom edge is one margin above the power bar, whose own top is one margin up from the
+-- screen, so the inset from the bottom is the bar's height plus two margins. A size that is not a positive
+-- finite number is an empty square on that same corner. Hud.layout's numbers are not changed.
+function Hud.radarBox(width: number, height: number, size: number): Box
+	local l = Hud.layout(width, height)
+	local s = side(size)
+	local right = side(width) - l.margin
+	local bottom = side(height) - (l.barHeight + 2 * l.margin)
+	return { x = right - s, y = bottom - s, w = s, h = s }
 end
 
 return Hud

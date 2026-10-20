@@ -81,7 +81,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		"every step has exactly the keys designed: no with, shell, working-directory, continue-on-error or extra if",
 		function()
 			local steps: any = beta.steps
-			t.expect(#steps == 4 or #steps == 5).toBe(true) -- 5 once c0030 adds the runtime step
+			t.expect(#steps >= 4 and #steps <= 6).toBe(true) -- 5 once c0030 adds the runtime step, 6 with c0064's lobby
 			t.expect(keysOf(steps[1])).toEqual({ "uses" })
 			t.expect(steps[1].uses).toBe("actions/checkout@v4")
 			t.expect(keysOf(steps[2])).toEqual({ "env", "run" })
@@ -95,8 +95,8 @@ return t.spec("c0140 beta job in check.yml", function(it)
 				VERSION = "${{ steps.deploy.outputs.version }}",
 				SHA = "${{ github.event.pull_request.head.sha }}",
 			})
-			if #steps == 5 then
-				-- exactly the runtime step c0030 adds, and nothing else
+			if #steps >= 5 then
+				-- exactly the runtime step c0030 adds, and nothing else (c0064 pins the lobby's sixth)
 				t.expect(keysOf(steps[5])).toEqual({ "env", "if", "run" })
 				t.expect(steps[5].run).toBe('lune run scripts/runtime-test -- "$VERSION"')
 				t.expect(steps[5]["if"]).toBe("steps.deploy.outputs.version != ''")
@@ -147,21 +147,22 @@ return t.spec("c0140 beta job in check.yml", function(it)
 			return s.id == "deploy"
 		end)
 		t.expect(deploy.run).toBe("lune run scripts/deploy-beta")
-		t.expect(deploy.env).toEqual({
-			ROBLOX_API_KEY = KEY,
-			ROBLOX_BETA_UNIVERSE_ID = UNIVERSE,
-			ROBLOX_BETA_PLACE_ID = PLACE,
-		})
+		-- these three at least; c0064's workflow spec pins the whole env with the game place's variable
+		for name, value in
+			{ ROBLOX_API_KEY = KEY, ROBLOX_BETA_UNIVERSE_ID = UNIVERSE, ROBLOX_BETA_PLACE_ID = PLACE }
+		do
+			t.expect(deploy.env[name]).toBe(value)
+		end
 		-- nowhere else: not the job, not the gate, not the other steps of the beta job (but the runtime step)
 		t.expect(beta.env).toBe(nil)
 		t.expect(has(serde.encode("json" :: "json", gate), "secrets.")).toBe(false)
 		for i, step in beta.steps do
-			local isRuntime = i == 5 and step.run == 'lune run scripts/runtime-test -- "$VERSION"'
+			local isRuntime = i >= 5 and has(step.run, "lune run scripts/runtime-test -- ")
 			if step.id ~= "deploy" and not isRuntime then
 				t.expect(has(serde.encode("json" :: "json", step), "ROBLOX")).toBe(false)
 			end
 		end
-		t.expect(count(text, "secrets.ROBLOX_API_KEY") <= 2).toBe(true)
+		t.expect(count(text, "secrets.ROBLOX_API_KEY") <= 3).toBe(true) -- deploy, game and lobby runtime (c0064)
 		t.expect(has(text, 'echo "$ROBLOX_API_KEY')).toBe(false)
 		t.expect(has(text, "set -x")).toBe(false)
 	end)

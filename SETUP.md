@@ -57,10 +57,16 @@ scripts/setup.sh
 ## Beta publishing (Pickman Beta)
 Every PR that is ready for review is published to the private **Pickman (Beta)** experience by the `beta` job in `.github/workflows/check.yml`, after the gate is green. A PR comment names the published version and commit, and a later push edits that comment.
 - **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write. It only exists in CI.
-- **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits.
+- **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits. `ROBLOX_BETA_PLACE_ID` is the experience's start place.
+- **Two places** (c0064): the repo variable `ROBLOX_BETA_GAME_PLACE_ID` is the id of the game place. With it set, the deploy publishes `default.project.json` (the game) to it and `lobby.project.json` (the lobby) to `ROBLOX_BETA_PLACE_ID`, with the game place's id written into the lobby's `GamePlaceId` (in a copy of the project built outside the checkout; the checked-in value stays 0). Both are built before either is published. Without it, the deploy warns and publishes the game to `ROBLOX_BETA_PLACE_ID` as before, and the lobby is not live.
+- **Setting up the game place** (once, by the owner of the experience; nothing in the repo can do it):
+  1. Creator Dashboard, Pickman (Beta), Places: create a new place (for example "Pickman Game") and copy its place id (the digits in its URL). Leave the existing place as the start place: it becomes the lobby.
+  2. GitHub, Settings, Secrets and variables, Actions, Variables: add the repository variable `ROBLOX_BETA_GAME_PLACE_ID` with that id.
+  3. Check the key: `ROBLOX_API_KEY` must cover the new place too (`universe-places` write and `luau-execution-sessions` read and write for the experience, not for one place). A key limited to the old place fails the game publish with HTTP 403.
+  4. Mark any PR ready for review: the `beta` job publishes both places and runs both runtime suites; its log names both versions.
 - If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
 - Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
 - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
 - The job installs only the tools (`scripts/setup.sh --tools`); the gate has already run.
-- By hand: export the three settings and run `lune run scripts/deploy-beta`. That publishes to Beta.
-- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version: `lune run scripts/runtime-test -- <version>`. They skip with a warning when the settings are missing.
+- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta`. That publishes to Beta.
+- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.

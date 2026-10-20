@@ -5,48 +5,57 @@ local fs = require("@lune/fs")
 local history = require("./history")
 local serde = require("@lune/serde")
 local stats = require("./stats")
+local status = require("./status")
 local store = require("./store")
 
 local board = {}
 
-export type Tab = "done" | "active" | "waiting"
+export type Bucket = "ready" | "not" | "done"
+export type ViewName = "rafts" | "issues"
+export type Groups = { ready: { string }, ["not"]: { string }, done: { string } }
 export type Raft = {
-	id: string, -- "R0040", or "none:<tab>" for a No raft entry
+	id: string,
 	kind: string, -- "raft"
-	type: string, -- "feature" | "defect" | "chore" ("" for No raft)
-	title: string, -- frontmatter title ("No raft" for the pseudo entries)
-	state: string, -- "backlog" | "active" | "done", from the directory ("" for No raft)
+	type: string, -- frontmatter type: "feature" | "defect" | "chore" | ""
+	label: string, -- "feature" | "defect" | "chore" | "mix" | ""
+	title: string,
+	state: string, -- "backlog" | "active" | "done", from the directory
 	design: string, -- frontmatter design ("" if absent)
-	status: string, -- "done" | "active" | "ready" | "reviewed" | "draft" ("" for No raft)
+	status: string, -- "done" | "active" | "ready" | "reviewed" | "draft"
+	stage: string, -- status.effective: "new" | "preparing" | "prepared" | "active" | "done"
 	single: boolean,
-	pseudo: boolean, -- true only for No raft entries
-	tab: Tab,
+	pseudo: boolean, -- false for every raft; there is no No raft entry
 	issues: { string }, -- member issue ids, sorted
 	dependsOn: { string }, -- raft ids, sorted
 	dependents: { string }, -- raft ids, sorted
 	blockedBy: { string }, -- unfinished dependencies: raft ids and raftless issue ids, sorted
 	topLevel: boolean, -- #blockedBy == 0
-	body: string, -- the document after its frontmatter ("" for No raft)
+	command: string?, -- nil when this row has no next command
+	body: string,
 }
 export type Issue = {
 	id: string,
 	kind: string, -- always "issue"
 	type: string,
+	label: string, -- the issue's own type ("" when it has none)
 	title: string,
 	state: string,
 	design: string,
 	status: string,
+	stage: string,
 	raft: string?, -- frontmatter raft; nil when empty, absent or naming a raft that does not exist
 	dependsOn: { string }, -- frontmatter depends_on ids, sorted, as written (even if they don't exist)
+	dependents: { string }, -- raft ids whose members depend_on a raftless issue; {} otherwise
 	emergent: boolean,
+	command: string?,
 	body: string,
 }
 export type Model = {
-	rafts: { Raft }, -- real rafts sorted by id, then No raft entries in done, active, waiting order
+	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
-	tabs: { done: { string }, active: { string }, waiting: { string } },
-	home: { [string]: string }, -- every raft and issue id -> the id of the entry whose pane shows it
-	initialTab: Tab, -- "active" if tabs.active is non-empty, else "waiting"
+	views: { rafts: Groups, issues: Groups },
+	home: { [string]: string }, -- every id maps to itself
+	initialView: ViewName, -- always "rafts"
 	stats: stats.Stats,
 }
 
@@ -70,8 +79,6 @@ function board.inlineMarked(js: string): string
 	return (string.gsub(js, "\n//# sourceMappingURL=[^\n]*\n?$", "\n"))
 end
 
-local TAB_OF_STATE: { [string]: Tab } = { done = "done", active = "active", backlog = "waiting" }
-local TAB_ORDER: { Tab } = { "done", "active", "waiting" }
 local TYPES: { [string]: boolean } = { feature = true, defect = true, chore = true }
 
 -- Every %w+ run of a frontmatter list like "[f0100, c0090]", sorted.
@@ -547,16 +554,20 @@ function board.collect(root: string?): Model
 	local issueById: { [string]: Issue } = {}
 	for _, i in rawIssues do
 		local named = i.front.raft
+		local issueType = if TYPES[i.front.type or ""] then i.front.type else ""
 		local issue: Issue = {
 			id = i.id,
 			kind = "issue",
-			type = if TYPES[i.front.type or ""] then i.front.type else "",
+			type = issueType,
+			label = issueType,
 			title = i.front.title or "",
 			state = i.state,
 			design = i.front.design or "",
 			status = statusOf(i.state, i.front.design or ""),
+			stage = status.effective(i.front, i.state),
 			raft = if named and raftIds[named] then named else nil,
 			dependsOn = listOf(i.front.depends_on),
+			dependents = {},
 			emergent = i.front.emergent == "true",
 			body = i.body,
 		}
@@ -565,35 +576,66 @@ function board.collect(root: string?): Model
 	end
 
 	local members: { [string]: { string } } = {}
-	local loose: { [string]: { string } } = { done = {}, active = {}, waiting = {} }
 	for _, issue in issues do
 		if issue.raft then
 			members[issue.raft] = members[issue.raft] or {}
 			table.insert(members[issue.raft], issue.id)
-		else
-			table.insert(loose[TAB_OF_STATE[issue.state]], issue.id)
 		end
+	end
+
+	local function labelOf(raftType: string, memberIds: { string }): string
+		local seen: { [string]: boolean } = {}
+		for _, id in memberIds do
+			local memberType = issueById[id].type
+			if TYPES[memberType] then
+				seen[memberType] = true
+			end
+		end
+		local found = sortedKeys(seen)
+		if #found == 0 then
+			return raftType
+		elseif #found == 1 then
+			return found[1]
+		end
+		return "mix"
 	end
 
 	local rafts: { Raft } = {}
 	local raftById: { [string]: Raft } = {}
+	local raftBuckets: { [string]: Bucket } = {}
 	for _, r in rawRafts do
+		local raftType = if TYPES[r.front.type or ""] then r.front.type else ""
+		local memberIds = members[r.id] or {}
+		local stage = status.effective(r.front, r.state)
+		local bucket: Bucket = if r.state == "done"
+			then "done"
+			elseif
+				r.state == "active" or ((r.front.design or "") == "ready" and stage == "prepared")
+			then "ready"
+			else "not"
+		local command: string? = nil
+		if bucket == "ready" then
+			command = if r.state == "active" then `/launch-raft {r.id}` else `/ready-raft {r.id}`
+		end
+		raftBuckets[r.id] = bucket
 		local raft: Raft = {
 			id = r.id,
 			kind = "raft",
-			type = if TYPES[r.front.type or ""] then r.front.type else "",
+			type = raftType,
+			label = labelOf(raftType, memberIds),
 			title = r.front.title or "",
 			state = r.state,
 			design = r.front.design or "",
 			status = statusOf(r.state, r.front.design or ""),
+			stage = stage,
 			single = r.front.single == "true",
 			pseudo = false,
-			tab = TAB_OF_STATE[r.state],
-			issues = members[r.id] or {},
+			issues = memberIds,
 			dependsOn = {},
 			dependents = {},
 			blockedBy = {},
 			topLevel = true,
+			command = command,
 			body = r.body,
 		}
 		table.insert(rafts, raft)
@@ -601,7 +643,7 @@ function board.collect(root: string?): Model
 	end
 
 	-- dependencies: raft -> raft through member issues, and raft -> raftless issue (blocks, never a raft dependency)
-	local noRaftDependents: { [string]: { [string]: boolean } } = { done = {}, active = {}, waiting = {} }
+	local looseDependents: { [string]: { [string]: boolean } } = {}
 	for _, raft in rafts do
 		local deps: { [string]: boolean } = {}
 		local blockers: { [string]: boolean } = {}
@@ -616,7 +658,8 @@ function board.collect(root: string?): Model
 						deps[target.raft] = true
 					end
 				else
-					noRaftDependents[TAB_OF_STATE[target.state]][raft.id] = true
+					looseDependents[target.id] = looseDependents[target.id] or {}
+					looseDependents[target.id][raft.id] = true
 					if target.status ~= "done" then
 						blockers[target.id] = true
 					end
@@ -641,60 +684,51 @@ function board.collect(root: string?): Model
 		table.sort(raft.dependents)
 	end
 
-	-- tabs: Done and Active list every raft, Waiting only the top-level ones; each ends with its No raft entry
-	local tabs =
-		{ done = {}, active = {}, waiting = {} } :: { done: { string }, active: { string }, waiting: { string } }
-	local pseudo: { Raft } = {}
-	for _, raft in rafts do
-		if raft.tab ~= "waiting" or raft.topLevel then
-			table.insert(tabs[raft.tab], raft.id)
-		end
+	local function groups(): Groups
+		return { ready = {}, ["not"] = {}, done = {} }
 	end
+	local views = { rafts = groups(), issues = groups() }
+	for _, raft in rafts do
+		table.insert(views.rafts[raftBuckets[raft.id]], raft.id)
+	end
+	for _, issue in issues do
+		if issue.raft then
+			issue.dependents = {}
+		else
+			issue.dependents = sortedKeys(looseDependents[issue.id] or {})
+		end
+		local bucket: Bucket = "not"
+		if issue.state == "done" then
+			bucket = "done"
+		elseif issue.raft and raftBuckets[issue.raft] == "ready" then
+			bucket = "ready"
+			issue.command = raftById[issue.raft].command
+		elseif not issue.raft then
+			issue.command = `/ticket-prep {issue.id}`
+		end
+		table.insert(views.issues[bucket], issue.id)
+	end
+	table.sort(views.rafts.ready)
+	table.sort(views.rafts["not"])
+	table.sort(views.rafts.done)
+	table.sort(views.issues.ready)
+	table.sort(views.issues["not"])
+	table.sort(views.issues.done)
+
 	local home: { [string]: string } = {}
 	for _, raft in rafts do
 		home[raft.id] = raft.id
-		for _, id in raft.issues do
-			home[id] = raft.id
-		end
 	end
-	for _, tab: Tab in TAB_ORDER do
-		if #loose[tab] == 0 then
-			continue
-		end
-		local entry: Raft = {
-			id = `none:{tab}`,
-			kind = "raft",
-			type = "",
-			title = "No raft",
-			state = "",
-			design = "",
-			status = "",
-			single = false,
-			pseudo = true,
-			tab = tab,
-			issues = loose[tab],
-			dependsOn = {},
-			dependents = sortedKeys(noRaftDependents[tab]),
-			blockedBy = {},
-			topLevel = true,
-			body = "",
-		}
-		table.insert(pseudo, entry)
-		table.insert(tabs[tab], entry.id)
-		for _, id in entry.issues do
-			home[id] = entry.id
-		end
-	end
-	for _, entry in pseudo do
-		table.insert(rafts, entry)
+	for _, issue in issues do
+		home[issue.id] = issue.id
 	end
 
 	return {
 		rafts = rafts,
 		issues = issues,
-		tabs = tabs,
+		views = views,
 		home = home,
-		initialTab = if #tabs.active > 0 then "active" else "waiting",
+		initialView = "rafts",
 		stats = statistics(base, rawIssues),
 	}
 end

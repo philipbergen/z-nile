@@ -52,12 +52,17 @@ return t.spec("c0030 runtime tests in the pipeline and docs", function(it)
 			table.sort(keys)
 			t.expect(keys).toEqual({ "env", "if", "run" })
 			t.expect(step.run).toBe('lune run scripts/runtime-test -- "$VERSION"')
-			t.expect(step.env).toEqual({
-				VERSION = "${{ steps.deploy.outputs.version }}",
-				ROBLOX_API_KEY = "${{ secrets.ROBLOX_API_KEY }}",
-				ROBLOX_BETA_UNIVERSE_ID = "${{ vars.ROBLOX_BETA_UNIVERSE_ID }}",
-				ROBLOX_BETA_PLACE_ID = "${{ vars.ROBLOX_BETA_PLACE_ID }}",
-			})
+			-- these four at least; c0064's workflow spec pins the whole env with the game place's variable
+			for name, value in
+				{
+					VERSION = "${{ steps.deploy.outputs.version }}",
+					ROBLOX_API_KEY = "${{ secrets.ROBLOX_API_KEY }}",
+					ROBLOX_BETA_UNIVERSE_ID = "${{ vars.ROBLOX_BETA_UNIVERSE_ID }}",
+					ROBLOX_BETA_PLACE_ID = "${{ vars.ROBLOX_BETA_PLACE_ID }}",
+				}
+			do
+				t.expect(step.env[name]).toBe(value)
+			end
 		end
 	)
 

@@ -1,6 +1,7 @@
 --!strict
 -- Lobby client adapter: draws the lobby screen from Lobby's view models and sends one intent, "start".
--- The mouse is free here (there is no maze and no camera control).
+-- The mouse is free here (there is no maze and no camera control). When the server has a Board remote, the
+-- screen also asks it for a board id (never a score), draws the answer, and asks again after a failed one.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -39,7 +40,7 @@ function LobbyView.start()
 	backdrop.Parent = gui
 
 	local panel = Lobby.panel(nil)
-	label(backdrop, "Title", UDim2.fromScale(0.6, 0.1), UDim2.fromScale(0.5, 0.06), panel.title)
+	local title = label(backdrop, "Title", UDim2.fromScale(0.6, 0.1), UDim2.fromScale(0.5, 0.06), panel.title)
 	local list = label(
 		backdrop,
 		"Rows",
@@ -74,6 +75,67 @@ function LobbyView.start()
 		startGame:FireServer()
 	end)
 	status.OnClientEvent:Connect(show)
+
+	-- the board remote is made by the server script when it runs, so a screen without it keeps the empty panel
+	local boardRemote = remotes:FindFirstChild("Board")
+	if boardRemote then
+		local board = boardRemote :: RemoteEvent
+		local wanted = "all" -- the board last asked for: the start ask, or the last tap
+		local asks = 0 -- asks sent, so a scheduled retry can tell that a newer ask has gone out
+		local failures = 0 -- failed answers in a row
+
+		local function ask(id: string)
+			asks += 1
+			board:FireServer(id)
+		end
+
+		board.OnClientEvent:Connect(function(id: any, rows: any, highlight: any, failed: any)
+			local shown = Lobby.board(id)
+			if shown == nil or shown ~= wanted then
+				return -- an answer for a board the player has left
+			end
+			local drawn = Lobby.boardPanel(rows, shown)
+			title.Text = drawn.title
+			list.Text = Lobby.lines(drawn, highlight)
+			if failed == true then
+				failures += 1
+				local wait = Lobby.retryAfter(failures)
+				if wait ~= nil then
+					local sent = asks
+					task.delay(wait, function()
+						if asks == sent and wanted == shown then
+							ask(shown)
+						end
+					end)
+				end
+			else
+				failures = 0
+			end
+		end)
+
+		-- the board row sits along the top edge, clear of START GAME at any height; the title and list make room
+		local rowHeight = Lobby.BUTTON_MIN_PX + 4
+		title.Position = UDim2.new(0.5, 0, 0.06, rowHeight)
+		list.Position = UDim2.new(0.5, 0, 0.2, rowHeight)
+		list.Size = UDim2.fromScale(0.6, 0.32)
+		for index, id in { "all", "day", "week" } do
+			local pick = Instance.new("TextButton")
+			pick.Name = `Board{id}`
+			pick.AnchorPoint = Vector2.new(0.5, 0)
+			pick.Size = UDim2.new(0.18, 0, 0, Lobby.BUTTON_MIN_PX)
+			pick.Position = UDim2.new(0.26 + 0.24 * (index - 1), 0, 0, 4)
+			pick.Font = Enum.Font.GothamBold
+			pick.TextScaled = true
+			pick.Text = Lobby.boardTitle(id)
+			pick.Parent = backdrop
+			pick.Activated:Connect(function()
+				wanted = id
+				failures = 0
+				ask(id)
+			end)
+		end
+		ask(wanted)
+	end
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 end
 
