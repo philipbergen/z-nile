@@ -9,6 +9,7 @@ local Blaster = require("@logic/Blaster")
 local Ghosts = require("@logic/Ghosts")
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
+local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
 local t = require("@tests/lib/t")
 
@@ -321,4 +322,66 @@ return t.spec("f0100 shots in a session", function(it)
 		t.expect(revived).toBe(true)
 		t.expect(Ghosts.ghost(ghostsOf(s), "blinky").frightened).toBe(false)
 	end)
+
+	it("a moving player shoots from the tile it holds before this step's move, not after it", function()
+		-- from the spawn the player runs west along row 23; tile 12 is a junction with a corridor north (12,22 to
+		-- 12,21), and 11 has a wall to its north. The step that starts with the player 30 units past the centre of
+		-- 12 (still holding 12) moves it on to hold 11: a shot north from 12 hits the ghost at 12,21, from 11 it
+		-- would hit the wall.
+		local s = new()
+		clearLines(s)
+		put(s, "blinky", 12, 21)
+		arm(s, 1)
+		local member = s.members.p
+		for x = 7, 13 do
+			Pellets.eat(member.pellets, { x = x, y = 23 }) -- no eating pause: whole 30-unit steps
+		end
+		for _ = 1, 200 do
+			if member.move.tile.x == 12 and member.move.tile.y == 23 and member.move.progress == 30 then
+				break
+			end
+			Session.step(s)
+		end
+		t.expect(`{member.move.tile.x},{member.move.progress},{member.move.heading}`).toBe("12,30,W")
+		t.expect(Movement.occupied(s.maze, member.move).x).toBe(12)
+		local e = find(fire(s, "N"), "Shot") :: Session.Event
+		t.expect(Movement.occupied(s.maze, member.move).x).toBe(11) -- it did move on
+		t.expect(e.ghost).toBe("blinky")
+		t.expect(Ghosts.ghost(ghostsOf(s), "blinky").status).toBe("eyes")
+	end)
+
+	it("the frame names the latest shot the server took, by its step's tick and heading", function()
+		local s = settled(new())
+		clearLines(s)
+		t.expect(Session.frame(s, "p").shot).toBe(nil)
+		arm(s, 2)
+		fire(s, "W") -- a miss is a shot taken too
+		local frame = Session.frame(s, "p")
+		t.expect(frame.shot).toEqual({ tick = frame.tick, heading = "W" })
+		Session.step(s)
+		local later = Session.frame(s, "p")
+		t.expect((later.shot :: Session.Shot).tick).toBe(frame.tick) -- the latest, not this step's
+		t.expect(later.shot ~= frame.shot).toBe(true) -- a fresh table each frame
+	end)
+
+	it(
+		"a fire the server drops leaves the frame's shot alone: none held, a pause, a second fire in a tick",
+		function()
+			local s = settled(new())
+			clearLines(s)
+			fire(s, "E") -- none held
+			t.expect(Session.frame(s, "p").shot).toBe(nil)
+			arm(s, 2)
+			Session.submit(s, "p", Blaster.intent("E"))
+			Session.submit(s, "p", Blaster.intent("N"))
+			Session.step(s)
+			local frame = Session.frame(s, "p")
+			t.expect(frame.shot).toEqual({ tick = frame.tick, heading = "E" })
+			t.expect(frame.shots).toBe(1)
+			local paused = new()
+			arm(paused, 1)
+			fire(paused, "E")
+			t.expect(Session.frame(paused, "p").shot).toBe(nil)
+		end
+	)
 end)

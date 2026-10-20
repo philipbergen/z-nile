@@ -1,9 +1,11 @@
 --!strict
 -- f0104 AC2: the arrow look, pure. View.press tracks which arrows are held; View.arrowQuarters says where they look
 -- in quarter turns from the heading (up 0, left 1, right -1, down 2, two together the half quarters between,
--- opposite arrows cancel); View.steer is one frame of the look. While an arrow is held the look turns toward it,
--- pitch level, at View.turnRate() (a quarter turn in View.TURN_SECONDS), and the mouse is ignored. Let go, it springs
--- back to the heading at the same rate until the mouse moves, which takes over from wherever the look is.
+-- opposite arrows cancel); View.steer is one frame of the arrow look, run after the mouse (or a touch drag) has
+-- moved the look: it gets last frame's result and this frame's look. While an arrow is held the look turns from
+-- last frame's toward the arrows, pitch level, at View.turnRate() (a quarter turn in View.TURN_SECONDS), so any other
+-- look input is ignored. Let go, it springs back to the heading at the same rate until the look is moved by anything
+-- else, which takes over from there.
 local View = require("@logic/View")
 local t = require("@tests/lib/t")
 
@@ -24,12 +26,12 @@ local function steer(yaw: number, pitch: number, spring: boolean?): View.Steer
 	return { look = { yaw = yaw, pitch = pitch }, spring = spring == true }
 end
 
--- frames of `a` held from `s` until the look stops changing; returns the frames taken and the final steer
-local function settle(s: View.Steer, a: View.Arrows, dx: number?, dy: number?): (number, View.Steer)
+-- frames of `a` held from `s`, with no other look input, until the look stops changing; the frames and the result
+local function settle(s: View.Steer, a: View.Arrows): (number, View.Steer)
 	local frames = 0
 	local cur = s
 	while true do
-		local nextSteer = View.steer(cur, a, dx or 0, dy or 0, DT)
+		local nextSteer = View.steer(cur, cur.look, a, DT)
 		frames += 1
 		assert(frames < 1000, "settles")
 		if nextSteer.look.yaw == cur.look.yaw and nextSteer.look.pitch == cur.look.pitch then
@@ -97,7 +99,7 @@ return t.spec("f0104 arrow look", function(it)
 			t.expect(final.look.yaw).toBeNear(PI / 2, 1e-12)
 			t.expect(final.look.pitch).toBe(0)
 			t.expect(math.abs(frames * DT - View.TURN_SECONDS) <= DT + 1e-9).toBe(true)
-			local first = View.steer(steer(0, 0), arrows("L"), 0, 0, DT)
+			local first = View.steer(steer(0, 0), { yaw = 0, pitch = 0 }, arrows("L"), DT)
 			t.expect(first.look.yaw).toBeNear(View.turnRate() * DT, 1e-12)
 			t.expect(first.spring).toBe(true)
 		end
@@ -106,61 +108,75 @@ return t.spec("f0104 arrow look", function(it)
 	it("behind is the shorter way round, and up-and-left is 45 degrees", function()
 		local _, back = settle(steer(PI / 2, 0), arrows("D"))
 		t.expect(back.look.yaw).toBeNear(PI, 1e-12)
-		local one = View.steer(steer(-PI / 2, 0), arrows("D"), 0, 0, DT)
+		local one = View.steer(steer(-PI / 2, 0), { yaw = -PI / 2, pitch = 0 }, arrows("D"), DT)
 		t.expect(one.look.yaw < -PI / 2).toBe(true) -- from the right it turns on round to the right
 		local _, diag = settle(steer(0, 0), arrows("UL"))
 		t.expect(diag.look.yaw).toBeNear(PI / 4, 1e-12)
 	end)
 
-	it(
-		"pressing an arrow drops the mouse's look: the pitch levels and the mouse is ignored while held",
-		function()
-			local s = steer(-1.2, 0.6)
-			local _, final = settle(s, arrows("U"), 40, -30)
-			t.expect(final.look.yaw).toBeNear(0, 1e-12)
-			t.expect(final.look.pitch).toBeNear(0, 1e-12)
-			local held = View.steer(steer(0, 0), arrows("U"), 500, 500, DT)
-			t.expect(held.look).toEqual({ yaw = 0, pitch = 0 })
-		end
-	)
+	it("while an arrow is held, any other look input is ignored: it turns from last frame's look", function()
+		local held = View.steer(steer(0, 0), { yaw = 0.5, pitch = 0.3 }, arrows("U"), DT)
+		t.expect(held.look).toEqual({ yaw = 0, pitch = 0 })
+		local turning = View.steer(steer(0.2, 0), { yaw = 1.5, pitch = -0.4 }, arrows("L"), DT)
+		t.expect(turning.look.yaw).toBeNear(0.2 + View.turnRate() * DT, 1e-12)
+		t.expect(turning.look.pitch).toBe(0)
+	end)
+
+	it("pressing an arrow drops the mouse's look: the pitch levels at the same rate", function()
+		local _, final = settle(steer(-1.2, 0.6), arrows("U"))
+		t.expect(final.look.yaw).toBeNear(0, 1e-12)
+		t.expect(final.look.pitch).toBeNear(0, 1e-12)
+		local first = View.steer(steer(-1.2, 0.6), { yaw = -1.2, pitch = 0.6 }, arrows("U"), DT)
+		t.expect(first.look.pitch).toBeNear(0.6 - View.turnRate() * DT, 1e-12)
+	end)
 
 	it("let go, the look springs back to the heading at the same rate, and stops springing there", function()
-		local s = steer(PI / 2, 0, true)
-		local frames, final = settle(s, NONE)
+		local frames, final = settle(steer(PI / 2, 0, true), NONE)
 		t.expect(final.look).toEqual({ yaw = 0, pitch = 0 })
 		t.expect(final.spring).toBe(false)
 		t.expect(math.abs(frames * DT - View.TURN_SECONDS) <= DT + 1e-9).toBe(true)
 	end)
 
-	it("the mouse takes over from a spring, from wherever the look is", function()
-		local s = View.steer(steer(PI / 2, 0, true), NONE, 0, 0, DT)
-		t.expect(s.spring).toBe(true)
-		local moved = View.steer(s, NONE, 10, 0, DT)
-		t.expect(moved.spring).toBe(false)
-		t.expect(moved.look).toEqual(View.look(s.look, 10, 0))
-		local still = View.steer(moved, NONE, 0, 0, DT)
-		t.expect(still.look).toEqual(moved.look) -- no spring any more
-	end)
-
-	it("without arrows or a spring, the mouse looks exactly as View.look", function()
-		local s = steer(0.3, -0.2)
-		t.expect(View.steer(s, NONE, 7, -4, DT).look).toEqual(View.look(s.look, 7, -4))
-		t.expect(View.steer(s, NONE, 0, 0, DT).look).toEqual(s.look)
-		t.expect(View.steer(s, NONE, 0, 0, DT).spring).toBe(false)
-	end)
-
-	it("a frame time that is not a positive number moves nothing, and a NaN mouse is ignored", function()
-		for _, dt in { 0, -1, 0 / 0, math.huge } do
-			t.expect(View.steer(steer(0, 0), arrows("L"), 0, 0, dt).look.yaw).toBe(0)
+	it(
+		"any other look input takes over a spring (a mouse move or a touch drag), from wherever it put the look",
+		function()
+			local s = View.steer(steer(PI / 2, 0, true), { yaw = PI / 2, pitch = 0 }, NONE, DT)
+			t.expect(s.spring).toBe(true)
+			local moved = View.look(s.look, 10, 0)
+			local taken = View.steer(s, moved, NONE, DT)
+			t.expect(taken.spring).toBe(false)
+			t.expect(taken.look).toEqual(moved)
+			local still = View.steer(taken, taken.look, NONE, DT)
+			t.expect(still.look).toEqual(moved) -- no spring any more
+			local tilted = View.steer(s, { yaw = s.look.yaw, pitch = 0.1 }, NONE, DT)
+			t.expect(tilted.spring).toBe(false) -- a pitch-only move counts too
 		end
-		t.expect(View.steer(steer(0.5, 0), NONE, 0 / 0, 0, DT).look).toEqual({ yaw = 0.5, pitch = 0 })
+	)
+
+	it("without arrows or a spring, the look is whatever the mouse made it", function()
+		local s = steer(0.3, -0.2)
+		local mouse = View.look(s.look, 7, -4)
+		t.expect(View.steer(s, mouse, NONE, DT).look).toEqual(mouse)
+		t.expect(View.steer(s, s.look, NONE, DT).look).toEqual(s.look)
+		t.expect(View.steer(s, s.look, NONE, DT).spring).toBe(false)
 	end)
 
-	it("the steer it returns is a fresh table, and the given one is untouched", function()
+	it("a frame time that is not a positive number moves nothing", function()
+		for _, dt in { 0, -1, 0 / 0, math.huge } do
+			t.expect(View.steer(steer(0, 0), { yaw = 0, pitch = 0 }, arrows("L"), dt).look.yaw).toBe(0)
+			t.expect(View.steer(steer(1, 0, true), { yaw = 1, pitch = 0 }, NONE, dt).look.yaw).toBe(1)
+		end
+	end)
+
+	it("the steer it returns is a fresh table, and what it was given is untouched", function()
 		local s = steer(0.1, 0.2, true)
-		local out = View.steer(s, arrows("R"), 0, 0, DT)
-		t.expect(out ~= s and out.look ~= s.look).toBe(true)
+		local look = { yaw = 0.1, pitch = 0.2 }
+		for _, a in { arrows("R"), NONE } do
+			local out = View.steer(s, look, a, DT)
+			t.expect(out ~= s and out.look ~= s.look and out.look ~= look).toBe(true)
+		end
 		t.expect(s.look).toEqual({ yaw = 0.1, pitch = 0.2 })
 		t.expect(s.spring).toBe(true)
+		t.expect(look).toEqual({ yaw = 0.1, pitch = 0.2 })
 	end)
 end)

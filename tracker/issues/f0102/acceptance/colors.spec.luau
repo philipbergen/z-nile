@@ -1,7 +1,7 @@
 --!strict
 -- f0102 AC4: one table of ghost colours for every view of a ghost (its body and its glow). Each ghost has its own:
 -- Blinky red, Pinky pink, Inky cyan, Clyde orange. Frightened is blue; blinking is blue, white on the white half of
--- its flash; eyes going home are white. View.ghostColor gives a fresh table each time.
+-- its flash; eyes going home are white. (Inky's own colour is left to f0109; it must only differ from the others.) View.ghostColor gives a fresh table each time.
 local View = require("@logic/View")
 local t = require("@tests/lib/t")
 
@@ -11,18 +11,28 @@ end
 
 return t.spec("f0102 ghost colours", function(it)
 	it("each ghost has its own colour while normal, flash or not", function()
-		local want: { [string]: string } =
-			{ blinky = "255,0,0", pinky = "255,184,255", inky = "0,255,255", clyde = "255,184,82" }
+		-- Inky's is left open: f0109 will choose a new one, and it needs only be its own (below)
+		local want: { [string]: string } = { blinky = "255,0,0", pinky = "255,184,255", clyde = "255,184,82" }
 		for name, colour in want do
 			t.expect(rgb(View.ghostColor(name, "normal", false))).toBe(colour)
 			t.expect(rgb(View.ghostColor(name, "normal", true))).toBe(colour)
 			t.expect(rgb(View.GHOST_COLORS[name])).toBe(colour)
 		end
 		local n = 0
-		for _ in View.GHOST_COLORS do
+		local seen: { [string]: boolean } = {}
+		for _, c in View.GHOST_COLORS do
 			n += 1
+			seen[rgb(c)] = true
 		end
 		t.expect(n).toBe(4)
+		local inky = rgb(View.ghostColor("inky", "normal", false))
+		t.expect(inky).toBe(rgb(View.GHOST_COLORS.inky))
+		t.expect(inky ~= "33,33,255" and inky ~= "255,255,255").toBe(true)
+		local count = 0
+		for _ in seen do
+			count += 1
+		end
+		t.expect(count).toBe(4) -- four different colours
 	end)
 
 	it("frightened is blue for everyone, and blinking flashes white", function()

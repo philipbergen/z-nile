@@ -1,13 +1,14 @@
 diff --git a/src/client/BlastView.luau b/src/client/BlastView.luau
 new file mode 100644
-index 0000000..da179be
+index 0000000..b857e0e
 --- /dev/null
 +++ b/src/client/BlastView.luau
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,64 @@
 +--!strict
-+-- Client adapter: the blaster's beam (f0100). When a shot is sent while the latest frame holds one, a thin neon
-+-- beam runs from the eye along the shot's heading to View.beamEnd for a moment. The server decides the hit: a
-+-- ghost it hits turns into eyes in the next frames. A shot sent with none held shows nothing.
++-- Client adapter: the blaster's beam (f0100). When a frame says the server took a shot in that very step
++-- (frame.shot.tick == frame.tick), a thin neon beam runs from the eye along its heading to View.beamEnd for a
++-- moment. A fire the server dropped (a pause, no shot held, a second one in a tick) has no frame.shot and shows
++-- nothing. A ghost the shot hit turns into eyes in the same frames.
 +local Debris = game:GetService("Debris")
 +
 +local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
@@ -25,22 +26,7 @@ index 0000000..da179be
 +	return nil
 +end
 +
-+function BlastView.push(frame: Session.Frame)
-+	if latest == nil or frame.tick > latest.tick then
-+		latest = frame
-+	end
-+end
-+
-+function BlastView.start(pose: () -> { x: number, y: number }?)
-+	getPose = pose
-+end
-+
-+function BlastView.fire(heading: Maze.Heading)
-+	local frame, p = latest, getPose()
-+	if frame == nil or p == nil or (frame.shots or 0) <= 0 then
-+		return
-+	end
-+	local m = Maze.layout(frame.maze)
++local function draw(m: Maze.Maze, p: { x: number, y: number }, heading: Maze.Heading)
 +	local ex, ey = View.beamEnd(m, p.x, p.y, heading)
 +	local x0, z0 = View.world(p.x, p.y)
 +	local x1, z1 = View.world(ex, ey)
@@ -64,9 +50,26 @@ index 0000000..da179be
 +	Debris:AddItem(beam, BEAM_SECONDS)
 +end
 +
++-- Every frame, newest first: a shot the server took in this frame's step is drawn once.
++function BlastView.push(frame: Session.Frame)
++	if latest ~= nil and frame.tick <= latest.tick then
++		return
++	end
++	latest = frame
++	local shot = frame.shot
++	local p = getPose()
++	if shot and shot.tick == frame.tick and p then
++		draw(Maze.layout(frame.maze), p, shot.heading)
++	end
++end
++
++function BlastView.start(pose: () -> { x: number, y: number }?)
++	getPose = pose
++end
++
 +return BlastView
 diff --git a/src/client/Camera.luau b/src/client/Camera.luau
-index 81b94c3..23ae56d 100644
+index 81b94c3..0c9651e 100644
 --- a/src/client/Camera.luau
 +++ b/src/client/Camera.luau
 @@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
@@ -77,25 +80,20 @@ index 81b94c3..23ae56d 100644
  local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
  local View = require("@game/ReplicatedStorage/Shared/Logic/View")
  
-@@ -12,7 +13,9 @@ local Camera = {}
- local prev: Session.Snapshot? = nil
+@@ -13,6 +14,9 @@ local prev: Session.Snapshot? = nil
  local latest: Session.Snapshot? = nil
  local arrived = 0
--local look: View.Look = { yaw = 0, pitch = 0 }
-+local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false }
+ local look: View.Look = { yaw = 0, pitch = 0 }
++local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- the arrow look, as of the last frame
 +local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
 +local jumped: number? = nil -- when the latest jump started, in os.clock seconds
  local yaw: number? = nil
  local cursor = false -- the mouse is free (and shown) for a prompt
  local current: Awareness.Pose? = nil
-@@ -33,7 +36,29 @@ function Camera.pose(): Awareness.Pose?
+@@ -36,6 +40,28 @@ function Camera.snap()
+ 	look = View.snap(look)
  end
  
- function Camera.snap()
--	look = View.snap(look)
-+	steer = { look = View.snap(steer.look), spring = false }
-+end
-+
 +-- The arrow keys held (f0104): they look, and the view springs back when they are let go.
 +function Camera.arrows(a: View.Arrows)
 +	arrows = { up = a.up, down = a.down, left = a.left, right = a.right }
@@ -116,20 +114,21 @@ index 81b94c3..23ae56d 100644
 +		return nil
 +	end
 +	return View.aim(snap.player.heading, steer, arrows)
- end
- 
++end
++
  -- Frees the mouse and shows it (true), or locks it to the centre and hides it (false), from the next frame.
-@@ -52,7 +77,8 @@ function Camera.start()
- 			else Enum.MouseBehavior.LockCenter
+ function Camera.setCursor(free: boolean)
+ 	cursor = free
+@@ -53,6 +79,8 @@ function Camera.start()
  		UserInputService.MouseIconEnabled = cursor
  		local delta = UserInputService:GetMouseDelta()
--		look = View.look(look, delta.X, delta.Y)
-+		steer = View.steer(steer, arrows, delta.X, delta.Y, dt)
-+		local look = steer.look
+ 		look = View.look(look, delta.X, delta.Y)
++		steer = View.steer(steer, look, arrows, dt)
++		look = steer.look
  
  		local snap = latest
  		if snap == nil then
-@@ -65,7 +91,7 @@ function Camera.start()
+@@ -65,7 +93,7 @@ function Camera.start()
  
  		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
  		local x, z = View.world(pose.x, pose.y)
@@ -139,10 +138,10 @@ index 81b94c3..23ae56d 100644
  			* CFrame.Angles(look.pitch, 0, 0)
  	end)
 diff --git a/src/client/Controls.luau b/src/client/Controls.luau
-index c9435c6..19610aa 100644
+index c9435c6..d1b74e9 100644
 --- a/src/client/Controls.luau
 +++ b/src/client/Controls.luau
-@@ -1,12 +1,32 @@
+@@ -1,12 +1,31 @@
  --!strict
 --- Client adapter: binds the key map from View and relays intents to the server.
 +-- Client adapter: binds the key map from View and relays intents to the server. The movement keys and the fire key
@@ -156,12 +155,11 @@ index c9435c6..19610aa 100644
  local View = require("@game/ReplicatedStorage/Shared/Logic/View")
  
 +-- What the keys drive besides the intents: the camera's jump and arrow look, the way a shot would go now (nil
-+-- before the first snapshot), and what to show when a shot is sent.
++-- before the first snapshot).
 +export type Keys = {
 +	jump: () -> (),
 +	arrows: (View.Arrows) -> (),
 +	aim: () -> Maze.Heading?,
-+	fired: (Maze.Heading) -> (),
 +}
 +
  local Controls = {}
@@ -176,7 +174,7 @@ index c9435c6..19610aa 100644
  function Controls.start(onSnap: () -> ())
  	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
  
-@@ -15,27 +35,52 @@ function Controls.start(onSnap: () -> ())
+@@ -15,27 +34,51 @@ function Controls.start(onSnap: () -> ())
  		state: Enum.UserInputState,
  		input: InputObject
  	): Enum.ContextActionResult
@@ -193,7 +191,6 @@ index c9435c6..19610aa 100644
 +				local h: Maze.Heading? = k.aim()
 +				if h then
 +					intent:FireServer(Blaster.intent(h))
-+					k.fired(h)
 +				end
 +			elseif action == "Jump" and k then
 +				k.jump()
@@ -235,7 +232,7 @@ index c9435c6..19610aa 100644
  end
  
 diff --git a/src/client/DangerHud.luau b/src/client/DangerHud.luau
-index 750051c..364fa89 100644
+index 750051c..36ac99d 100644
 --- a/src/client/DangerHud.luau
 +++ b/src/client/DangerHud.luau
 @@ -1,8 +1,9 @@
@@ -300,12 +297,12 @@ index 750051c..364fa89 100644
  	gui.ResetOnSpawn = false
  	gui.IgnoreGuiInset = true
  	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
-+	-- the glows: their own screen, the device's safe area, below the HUD (HudView's DisplayOrder is 1)
++	-- the glows: their own screen, in the device's safe area, under everything else
 +	local edge = Instance.new("ScreenGui")
 +	edge.Name = "Glows"
 +	edge.ResetOnSpawn = false
 +	edge.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
-+	edge.DisplayOrder = 0
++	edge.DisplayOrder = -1 -- under the radar (Danger, 0), the Flow overlay (0) and the HUD (1)
 +	edge.Parent = gui.Parent
  
  	local radarSize = (Awareness.RADAR_RADIUS * 2 + 1) * CELL
@@ -319,7 +316,17 @@ index 750051c..364fa89 100644
  	RunService.RenderStepped:Connect(function()
  		local view = gui.AbsoluteSize
  		local box = Hud.radarBox(view.X, view.Y, radarSize)
-@@ -105,36 +124,30 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
+@@ -81,7 +100,8 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
+ 		end
+ 		local ghosts: { Awareness.Ghost } = {}
+ 		for _, g in snap.ghosts do
+-			table.insert(ghosts, { x = g.x, y = g.y, look = g.look })
++			local entry: Awareness.Ghost = { x = g.x, y = g.y, look = g.look, name = g.name, flash = g.flash }
++			table.insert(ghosts, entry)
+ 		end
+ 		local r = Awareness.radar(m, pose, ghosts)
+ 		for i, w in r.walls do
+@@ -105,36 +125,29 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
  			f.Position = UDim2.fromOffset(radarSize / 2 + b.x * CELL, radarSize / 2 + b.y * CELL)
  		end
  
@@ -365,8 +372,7 @@ index 750051c..364fa89 100644
 +			local f: Frame = glows[i]
 +			local u, v = Awareness.edgePoint(g.bearing, aspect)
 +			local place = Awareness.glowBox(u, v, g.size, area.X, area.Y)
-+			local ghost = snap.ghosts[g.index]
-+			local rgb = View.ghostColor(ghost.name, g.look, ghost.flash)
++			local rgb = View.ghostColor(g.name or "", g.look, g.flash == true)
 +			f.Visible = true
 +			f.Position = UDim2.fromOffset(place.x, place.y)
 +			f.Size = UDim2.fromOffset(place.w, place.h)
@@ -515,7 +521,7 @@ index 5d31c27..8b9bb3a 100644
 +
  return HudView
 diff --git a/src/client/Main.client.luau b/src/client/Main.client.luau
-index 6395229..0d38044 100644
+index 6395229..01cb9a2 100644
 --- a/src/client/Main.client.luau
 +++ b/src/client/Main.client.luau
 @@ -2,6 +2,7 @@
@@ -540,15 +546,25 @@ index 6395229..0d38044 100644
  GhostView.start()
  DangerHud.start(Camera.pose)
 +BlastView.start(Camera.pose)
-+Controls.keys({ jump = Camera.jump, arrows = Camera.arrows, aim = Camera.aim, fired = BlastView.fire })
++Controls.keys({ jump = Camera.jump, arrows = Camera.arrows, aim = Camera.aim })
  Controls.start(Camera.snap)
  PelletView.start()
  HudView.start()
 diff --git a/src/shared/Logic/Awareness/init.luau b/src/shared/Logic/Awareness/init.luau
-index 5a85d4e..a44a2ea 100644
+index 5a85d4e..45c0b4f 100644
 --- a/src/shared/Logic/Awareness/init.luau
 +++ b/src/shared/Logic/Awareness/init.luau
-@@ -17,6 +17,7 @@ export type Options = {
+@@ -8,7 +8,8 @@
+ local Maze = require("./Maze")
+ 
+ export type Look = "normal" | "frightened" | "blinking" | "eyes"
+-export type Ghost = { x: number, y: number, look: Look }
++-- name and flash are carried through to the indicators and glows untouched (f0102: a glow is coloured as its ghost)
++export type Ghost = { x: number, y: number, look: Look, name: string?, flash: boolean? }
+ export type Pose = { x: number, y: number, yaw: number }
+ export type Options = {
+ 	verticalFieldOfView: number?, -- the camera's (Roblox's) vertical field of view in radians
+@@ -17,6 +18,7 @@ export type Options = {
  	minSize: number?,
  	maxSize: number?,
  	minBrightness: number?,
@@ -556,11 +572,13 @@ index 5a85d4e..a44a2ea 100644
  }
  export type Indicator = {
  	index: number, -- the ghost's place in the input list
-@@ -25,7 +26,20 @@ export type Indicator = {
+@@ -25,7 +27,24 @@ export type Indicator = {
  	size: number, -- 0..1: the larger, the closer
  	brightness: number, -- 0..1: the brighter, the closer
  	look: Look,
 +	inView: boolean, -- inside the horizontal field of view (only with the inView option)
++	name: string?, -- the ghost's, as given
++	flash: boolean?, -- the ghost's, as given
  }
 +-- One lit place on the screen edge (f0102). Sectors count from straight ahead (0, the top) to the left: 1 the
 +-- top-left corner, 2 left, 3 bottom-left, 4 behind (the bottom), 5 bottom-right, 6 right, 7 top-right.
@@ -572,12 +590,14 @@ index 5a85d4e..a44a2ea 100644
 +	size: number,
 +	brightness: number,
 +	look: Look,
++	name: string?, -- the nearest ghost's
++	flash: boolean?, -- the nearest ghost's
 +}
 +export type Box = { x: number, y: number, w: number, h: number } -- pixels, top-left corner
  export type Blip = { x: number, y: number, look: Look } -- offsets from the player, x right and y down on the radar
  export type Radar = { radius: number, walls: { { x: number, y: number } }, blips: { Blip } }
  
-@@ -41,6 +55,10 @@ local DEFAULTS = {
+@@ -41,6 +60,10 @@ local DEFAULTS = {
  local Awareness = {}
  Awareness.DEFAULTS = table.freeze(DEFAULTS)
  Awareness.RADAR_RADIUS = 7
@@ -588,7 +608,7 @@ index 5a85d4e..a44a2ea 100644
  
  -- Tiles to walk from `from` to `to` through the maze, ghosts' routes (doors and the house included), or
  -- nil when it is more than `limit`. Wrapping tunnels count.
-@@ -181,7 +199,8 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
+@@ -181,7 +204,8 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
  			if d ~= nil then
  				local dx, dy, unseen = offsetVia(m, pose, here, g, tile, wrap)
  				local bearing = Awareness.bearing(pose, pose.x + dx, pose.y + dy)
@@ -598,15 +618,17 @@ index 5a85d4e..a44a2ea 100644
  					local closeness = 1 - math.clamp(d / maxDistance, 0, 1)
  					table.insert(out, {
  						index = i,
-@@ -190,6 +209,7 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
+@@ -190,6 +214,9 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
  						size = minSize + (maxSize - minSize) * closeness,
  						brightness = minBrightness + (1 - minBrightness) * closeness,
  						look = g.look,
 +						inView = inView,
++						name = g.name,
++						flash = g.flash,
  					})
  				end
  			end
-@@ -204,6 +224,79 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
+@@ -204,6 +231,81 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
  	return out
  end
  
@@ -661,6 +683,8 @@ index 5a85d4e..a44a2ea 100644
 +				size = ind.size,
 +				brightness = ind.brightness,
 +				look = ind.look,
++				name = ind.name,
++				flash = ind.flash,
 +			})
 +		end
 +	end
@@ -851,7 +875,7 @@ index ae12263..453c628 100644
 +
  return Hud
 diff --git a/src/shared/Logic/Session/init.luau b/src/shared/Logic/Session/init.luau
-index 711ff0a..8d387fa 100644
+index 711ff0a..f477a22 100644
 --- a/src/shared/Logic/Session/init.luau
 +++ b/src/shared/Logic/Session/init.luau
 @@ -10,6 +10,13 @@
@@ -868,15 +892,18 @@ index 711ff0a..8d387fa 100644
  local Game = require("./Game")
  local Ghosts = require("./Ghosts")
  local Levels = require("./Levels")
-@@ -65,6 +72,7 @@ export type Frame = {
+@@ -65,7 +72,10 @@ export type Frame = {
  	play: PlayFrame,
  	pellets: string, -- Pellets.encode of what the player has left to eat
  	ghosts: { GhostSnapshot }?, -- the ghosts of a session that has them
 +	shots: number?, -- blaster shots held, 0..Blaster.MAX_SHOTS (always set by Session.frame)
++	shot: Shot?, -- the latest shot taken (one that spent a shot), nil before any
  }
++export type Shot = { tick: number, heading: Maze.Heading } -- the tick whose step took it
  export type Event = {
  	kind: string,
-@@ -79,6 +87,7 @@ export type Event = {
+ 	player: PlayerId,
+@@ -79,6 +89,7 @@ export type Event = {
  	reason: string?,
  	item: string?,
  	ghost: Ghosts.Name?,
@@ -884,16 +911,17 @@ index 711ff0a..8d387fa 100644
  }
  export type Clock = { rate: number, maxSteps: number, acc: number }
  
-@@ -91,6 +100,8 @@ type Member = {
+@@ -91,6 +102,9 @@ type Member = {
  	stall: number, -- units of eating pause still owed
  	ghosts: Ghosts.Set?,
  	ghostJump: { [string]: number }, -- per ghost: tick of its latest position discontinuity
 +	blaster: Blaster.Blaster,
 +	fire: Maze.Heading?, -- the shot asked for this tick
++	shot: Shot?, -- the latest shot taken
  }
  export type Session = {
  	tick: number, -- steps completed
-@@ -164,6 +175,8 @@ function Session.join(s: Session, id: PlayerId)
+@@ -164,6 +178,8 @@ function Session.join(s: Session, id: PlayerId)
  		stall = 0,
  		ghosts = if s.config.ghosts and Ghosts.available(s.maze) then Ghosts.new(s.maze, s.seed) else nil,
  		ghostJump = {},
@@ -902,7 +930,7 @@ index 711ff0a..8d387fa 100644
  	}
  end
  
-@@ -185,12 +198,20 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
+@@ -185,12 +201,20 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
  	if member == nil then
  		return false, "unknown player"
  	end
@@ -925,7 +953,7 @@ index 711ff0a..8d387fa 100644
  	table.insert(member.queue, raw)
  	return true, nil
  end
-@@ -199,6 +220,7 @@ end
+@@ -199,6 +223,7 @@ end
  local function teleport(s: Session, member: Member, jumpTick: number)
  	member.move = Movement.spawn(s.maze)
  	member.queue = {}
@@ -933,7 +961,7 @@ index 711ff0a..8d387fa 100644
  	member.jumpTick = jumpTick
  	member.stall = 0
  end
-@@ -333,6 +355,35 @@ local function stepGhosts(
+@@ -333,6 +358,36 @@ local function stepGhosts(
  		for _, e in Game.addScore(member.play, points) do
  			table.insert(out, tagged(id, e))
  		end
@@ -951,6 +979,7 @@ index 711ff0a..8d387fa 100644
 +	if set == nil or not Blaster.spend(member.blaster) then
 +		return
 +	end
++	member.shot = { tick = s.tick, heading = heading }
 +	local targets: { Blaster.Target } = {}
 +	for i, tile in Ghosts.occupiedTiles(set) do
 +		table.insert(targets, { tile = tile, active = set.ghosts[i].status == "active" })
@@ -969,7 +998,7 @@ index 711ff0a..8d387fa 100644
  	end
  end
  
-@@ -343,6 +394,8 @@ function Session.step(s: Session): { Event }
+@@ -343,6 +398,8 @@ function Session.step(s: Session): { Event }
  		local member = s.members[id]
  		local queue = member.queue
  		member.queue = {}
@@ -978,7 +1007,7 @@ index 711ff0a..8d387fa 100644
  		-- whether the player moves this tick is decided before the run's phase changes
  		local moving = Game.canMove(member.play)
  		local frightened = member.play.frightened > 0
-@@ -359,6 +412,9 @@ function Session.step(s: Session): { Event }
+@@ -359,6 +416,9 @@ function Session.step(s: Session): { Event }
  		if not moving then
  			continue
  		end
@@ -988,7 +1017,7 @@ index 711ff0a..8d387fa 100644
  		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level, frightened)
  		-- an eating pause is owed distance: this step covers what is left of the speed
  		local owed = math.min(member.stall, speed)
-@@ -417,6 +473,7 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
+@@ -417,6 +477,7 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
  		teleport(s, member, s.tick + 1)
  		Pellets.reset(member.pellets)
  		resetGhosts(member, "again", s.tick + 1)
@@ -996,16 +1025,19 @@ index 711ff0a..8d387fa 100644
  	end
  	return out, ok
  end
-@@ -481,6 +538,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
+@@ -481,6 +542,10 @@ function Session.frame(s: Session, id: PlayerId): Frame
  			frightened = play.frightened,
  		},
  		pellets = Pellets.encode(s.members[id].pellets),
 +		shots = s.members[id].blaster.shots,
++		shot = if s.members[id].shot
++			then { tick = (s.members[id].shot :: Shot).tick, heading = (s.members[id].shot :: Shot).heading }
++			else nil,
  	}
  end
  
 diff --git a/src/shared/Logic/View/init.luau b/src/shared/Logic/View/init.luau
-index 011d5c3..20b918f 100644
+index 011d5c3..e049f11 100644
 --- a/src/shared/Logic/View/init.luau
 +++ b/src/shared/Logic/View/init.luau
 @@ -10,7 +10,21 @@ local Pellets = require("./Pellets")
@@ -1146,28 +1178,28 @@ index 011d5c3..20b918f 100644
 +	return side * 1.5
 +end
 +
-+-- One frame of the look. While an arrow is held the look turns toward it (pitch level) at View.turnRate(), and
-+-- the mouse is ignored; once they are all let go it springs back to the heading at the same rate, until the
-+-- mouse moves, which takes over from wherever the look is. Without arrows or a spring, the mouse looks.
-+function View.steer(s: Steer, a: Arrows, dx: number, dy: number, dt: number): Steer
++-- One frame of the arrow look, after the mouse (and any other look input) has moved `look`. `prev` is what this
++-- returned last frame. While an arrow is held the look turns from prev.look toward the arrows (pitch level) at
++-- View.turnRate(), so any other look input is ignored; once they are all let go it springs back to the heading at
++-- the same rate, until the look is moved by anything else (it differs from prev.look), which takes over from there.
++function View.steer(prev: Steer, look: Look, a: Arrows, dt: number): Steer
 +	local step = View.turnRate() * (if finite(dt) and dt > 0 then dt else 0)
-+	local function toward(target: Look): Look
-+		local pitch = s.look.pitch
-+		local dp = math.clamp(target.pitch - pitch, -step, step)
-+		return { yaw = View.approachYaw(s.look.yaw, target.yaw, step), pitch = pitch + dp }
++	local function toward(from: Look, target: Look): Look
++		local dp = math.clamp(target.pitch - from.pitch, -step, step)
++		return { yaw = View.approachYaw(from.yaw, target.yaw, step), pitch = from.pitch + dp }
 +	end
 +	local q = View.arrowQuarters(a)
 +	if q ~= nil then
-+		return { look = toward({ yaw = wrap(q * PI / 2), pitch = 0 }), spring = true }
++		return { look = toward(prev.look, { yaw = wrap(q * PI / 2), pitch = 0 }), spring = true }
 +	end
-+	if (dx ~= 0 or dy ~= 0) and finite(dx) and finite(dy) then
-+		return { look = View.look(s.look, dx, dy), spring = false }
++	if look.yaw ~= prev.look.yaw or look.pitch ~= prev.look.pitch then
++		return { look = { yaw = look.yaw, pitch = look.pitch }, spring = false }
 +	end
-+	if s.spring then
-+		local look = toward({ yaw = 0, pitch = 0 })
-+		return { look = look, spring = not (look.yaw == 0 and look.pitch == 0) }
++	if prev.spring then
++		local back = toward(look, { yaw = 0, pitch = 0 })
++		return { look = back, spring = not (back.yaw == 0 and back.pitch == 0) }
 +	end
-+	return { look = { yaw = s.look.yaw, pitch = s.look.pitch }, spring = false }
++	return { look = { yaw = look.yaw, pitch = look.pitch }, spring = false }
 +end
 +
 +-- The heading a shot goes when the player, heading `heading`, aims: the held arrows' direction, else the look's

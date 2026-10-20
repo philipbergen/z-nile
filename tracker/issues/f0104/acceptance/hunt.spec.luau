@@ -32,7 +32,7 @@ local function find(events: { Session.Event }, kind: string): Session.Event?
 end
 
 return t.spec("f0104 ghost hunt", function(it)
-	it("eat a ghost, get a shot, look left with an arrow, press E, and the ghost there is eaten", function()
+	it("eat a ghost, get a shot, look right with an arrow, press E, and the ghost there is eaten", function()
 		local s = Session.new(classic, seedThatDrops(), Session.GAME_CONFIG)
 		Session.join(s, "p")
 		for _ = 1, 101 do
@@ -69,7 +69,7 @@ return t.spec("f0104 ghost hunt", function(it)
 			View.press({ up = false, down = false, left = false, right = false }, View.action("Right"), true)
 		local look: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false }
 		for _ = 1, 3 do
-			look = View.steer(look, held, 0, 0, 1 / 60) -- mid-turn: the arrow decides the aim, not the look
+			look = View.steer(look, look.look, held, 1 / 60) -- mid-turn: the arrow decides the aim, not the look
 		end
 		local heading: Maze.Heading = View.aim(Session.snapshot(s, "p").player.heading, look, held)
 		t.expect(heading).toBe("N")

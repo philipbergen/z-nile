@@ -50,18 +50,31 @@ return t.spec("f0102 glow adapters", function(it)
 		t.expect(has(src, ".Rotation")).toBe(false)
 	end)
 
-	it("the glows have their own screen, in the device's safe area, under the HUD", function()
+	it(
+		"the glows have their own screen, in the device's safe area, under the radar, the Flow overlay and the HUD",
+		function()
+			local src = source("DangerHud")
+			t.expect(has(src, "Enum.ScreenInsets.DeviceSafeInsets")).toBe(true)
+			local orders = {}
+			for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
+				table.insert(orders, tonumber(n) :: number)
+			end
+			t.expect(#orders).toBe(1) -- the glows' screen sets one; the radar's (Danger) keeps the default, 0
+			t.expect(orders[1] < 0).toBe(true)
+			local flow = string.match(source("FlowView"), "DisplayOrder%s*=%s*(%-?%d+)")
+			t.expect(flow == nil or (tonumber(flow) :: number) > orders[1]).toBe(true)
+			t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
+		end
+	)
+
+	it("a glow is coloured from its own ghost's name and flash, not by position", function()
 		local src = source("DangerHud")
-		t.expect(has(src, "Enum.ScreenInsets.DeviceSafeInsets")).toBe(true)
-		local orders = {}
-		for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
-			table.insert(orders, tonumber(n) :: number)
-		end
-		t.expect(#orders >= 1).toBe(true)
-		for _, n in orders do
-			t.expect(n < 1).toBe(true) -- HudView's is 1
-		end
-		t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
+		t.expect(string.find(src, "View%.ghostColor%(%s*g%.name") ~= nil).toBe(true)
+		t.expect(string.find(src, "g%.flash") ~= nil).toBe(true)
+		t.expect(string.find(src, "snap%.ghosts%[") == nil).toBe(true)
+		-- the snapshot's names and flashes reach Awareness
+		t.expect(string.find(src, "name%s*=%s*g%.name") ~= nil).toBe(true)
+		t.expect(string.find(src, "flash%s*=%s*g%.flash") ~= nil).toBe(true)
 	end)
 
 	it("the HUD still does no geometry itself", function()

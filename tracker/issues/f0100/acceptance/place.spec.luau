@@ -75,16 +75,23 @@ return t.spec("f0100 blaster adapters", function(it)
 		t.expect(has(src, "Hud.shotIcons(")).toBe(true)
 	end)
 
-	it("the beam is a client module that draws View.beamEnd and decides nothing", function()
-		local node = client("BlastView")
-		t.expect(node ~= nil and node.ClassName).toBe("ModuleScript")
-		local src = source(node)
-		t.expect(has(src, "View.beamEnd(")).toBe(true)
-		t.expect(has(src, "function BlastView.fire(")).toBe(true)
-		for _, word in { "FireServer", "OnClientEvent", "Logic/Ghosts", "Logic/Blaster", "play.score" } do
-			t.expect(has(src, word)).toBe(false)
+	it(
+		"the beam is a client module that draws the server's shot, from View.beamEnd, and decides nothing",
+		function()
+			local node = client("BlastView")
+			t.expect(node ~= nil and node.ClassName).toBe("ModuleScript")
+			local src = source(node)
+			t.expect(has(src, "View.beamEnd(")).toBe(true)
+			t.expect(has(src, "function BlastView.push(")).toBe(true)
+			-- it draws only a shot the server took in that frame's step
+			t.expect(string.find(src, "frame%.shot") ~= nil).toBe(true)
+			t.expect(string.find(src, "%.tick%s*==%s*frame%.tick") ~= nil).toBe(true)
+			t.expect(has(src, "function BlastView.fire(")).toBe(false)
+			for _, word in
+				{ "FireServer", "OnClientEvent", "Logic/Ghosts", "Logic/Blaster", "play.score", ".shots" }
+			do
+				t.expect(has(src, word)).toBe(false)
+			end
 		end
-		-- it draws only while the latest frame holds a shot
-		t.expect(string.find(src, "%.shots") ~= nil).toBe(true)
-	end)
+	)
 end)

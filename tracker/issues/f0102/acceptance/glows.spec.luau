@@ -154,4 +154,27 @@ return t.spec("f0102 glows", function(it)
 		t.expect(at[2]).toBe(3)
 		t.expect(at[6]).toBe(4)
 	end)
+
+	it("each glow carries its nearest ghost's name and flash, so its colour needs no lookup", function()
+		-- only inky (third) and clyde (fourth) are close: the glows' places in the output are 1 and 2, not 3 and 4
+		local p = pose(6, 5, 0)
+		local ghosts: { Awareness.Ghost } = {
+			{ x = 20, y = 29, look = "normal", name = "blinky", flash = false },
+			{ x = 21, y = 29, look = "normal", name = "pinky", flash = false },
+			{ x = 6, y = 2, look = "blinking", name = "inky", flash = true },
+			{ x = 6, y = 8, look = "normal", name = "clyde", flash = false },
+		}
+		local list = Awareness.indicators(classic, p, ghosts, ALL)
+		t.expect(#list).toBe(2)
+		local glows = Awareness.glows(list, ASPECT)
+		t.expect(sectors(glows)).toBe("0 4")
+		t.expect(glows[1].name).toBe("inky")
+		t.expect(glows[1].flash).toBe(true)
+		t.expect(glows[1].index).toBe(3)
+		t.expect(glows[2].name).toBe("clyde")
+		t.expect(glows[2].flash).toBe(false)
+		-- a ghost given without them has none
+		local bare = Awareness.glows(Awareness.indicators(classic, p, { ghost(6, 2) }, ALL), ASPECT)
+		t.expect(bare[1].name).toBe(nil)
+	end)
 end)

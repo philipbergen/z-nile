@@ -61,10 +61,10 @@ return t.spec("f0104 key adapters", function(it)
 		t.expect(has(src, "View.press(")).toBe(true)
 	end)
 
-	it("the camera's part comes in through Controls.keys: jump, arrows, aim and the beam", function()
+	it("the camera's part comes in through Controls.keys: jump, arrows and aim", function()
 		local src = source("Controls")
 		t.expect(has(src, "function Controls.keys(")).toBe(true)
-		for _, field in { "jump", "arrows", "aim", "fired" } do
+		for _, field in { "jump", "arrows", "aim" } do
 			t.expect(string.find(src, "%." .. field .. "%(") ~= nil).toBe(true)
 		end
 	end)
@@ -76,27 +76,28 @@ return t.spec("f0104 key adapters", function(it)
 		t.expect(string.find(main, "Controls%.start%(%s*Camera%.snap") ~= nil).toBe(true)
 	end)
 
-	it(
-		"Main hands the camera's jump, arrows and aim and the beam's fire to Controls.keys, before Ready",
-		function()
-			local main = source("Main")
-			local call = string.match(main, "Controls%.keys%b()") or ""
-			for _, part in { "Camera.jump", "Camera.arrows", "Camera.aim", "BlastView.fire" } do
-				t.expect(has(call, part)).toBe(true)
-			end
-			local keys = string.find(main, "Controls.keys(", 1, true)
-			local ready = string.find(main, "ready:FireServer(", 1, true)
-			t.expect(keys ~= nil and ready ~= nil and (keys :: number) < (ready :: number)).toBe(true)
+	it("Main hands the camera's jump, arrows and aim to Controls.keys, before Ready", function()
+		local main = source("Main")
+		local call = string.match(main, "Controls%.keys%b()") or ""
+		for _, part in { "Camera.jump", "Camera.arrows", "Camera.aim" } do
+			t.expect(has(call, part)).toBe(true)
 		end
-	)
+		local keys = string.find(main, "Controls.keys(", 1, true)
+		local ready = string.find(main, "ready:FireServer(", 1, true)
+		t.expect(keys ~= nil and ready ~= nil and (keys :: number) < (ready :: number)).toBe(true)
+	end)
 
 	it("Camera looks with View.steer and aims with View.aim, and has the arrows' entry point", function()
 		local src = source("Camera")
 		for _, word in { "View.steer(", "View.aim(", "function Camera.arrows(", "function Camera.aim(" } do
 			t.expect(has(src, word)).toBe(true)
 		end
-		-- the mouse still feeds the look: its delta goes into View.steer
-		t.expect(string.find(src, "View%.steer%([^)]*delta%.X%s*,%s*delta%.Y") ~= nil).toBe(true)
+		-- the mouse still looks through View.look (R0012 guards that very line), and the arrow look runs after it,
+		-- on the look the mouse left
+		local mouse = string.find(src, "View.look(look, delta.X, delta.Y)", 1, true)
+		local arrow = string.find(src, "View%.steer%(%s*steer%s*,%s*look%s*,%s*arrows%s*,%s*dt%s*%)")
+		t.expect(mouse ~= nil and arrow ~= nil and (mouse :: number) < (arrow :: number)).toBe(true)
+		t.expect(string.find(src, "look%s*=%s*steer%.look") ~= nil).toBe(true)
 	end)
 
 	it(
