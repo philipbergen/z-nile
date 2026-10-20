@@ -20,8 +20,9 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
 | Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0004, f0013); fire intents, shots and drops (R0035, f0100) |
-| Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout (R0015, f0019); the shot bars after the lives (R0035, f0100) |
+| Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout, including an optional safe-area inset (R0015, f0019; R0012, f0029); the shot bars after the lives (R0035, f0100) |
 | Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065) |
+| Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029) |
 | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030); the lowered walls, the ghost body and the jump (R0035, f0101), the ghost colours and the beam's end (f0100, f0102), the new keys, the arrow look and the shot's aim (f0104) |
 
 Hiscores has no row in the deps block. It takes the store as a parameter. Session, Lobby and Flow do not require it; the server and lobby adapters call it (R0011).
@@ -52,6 +53,7 @@ Session -> Levels
 Session -> Maze
 Session -> Movement
 Session -> Pellets
+Touch -> View
 View -> Maze
 View -> Movement
 View -> Pellets
