@@ -12,6 +12,7 @@
 | 8 | 2026-10-19 05:25 | prep | 1433 | 3 | 23.3 | spend+proportional | prep |  |
 | 9 | 2026-10-20 01:36 | f0026: hiscore boards in the lobby and the rank line at game over | 521 | 5 | 2.8 | explicit | build |  |
 | 10 | 2026-10-20 01:39 | R0011: keep the engine words out of Logic comments | 3 | 3 | 2.8 | focus | build |  |
+| 11 | 2026-10-20 01:42 | R0011: whole-raft verification log | 0 | 0 | 2.6 | focus | build |  |
 
-**Total:** +1957 / -11 lines, 68.0 agent-minutes, 358331 tokens over 10 records
-<!-- totals: added=1957 removed=11 minutes=68.0 records=10 tokens=358331 -->
+**Total:** +1957 / -11 lines, 70.6 agent-minutes, 358331 tokens over 11 records
+<!-- totals: added=1957 removed=11 minutes=70.6 records=11 tokens=358331 -->
