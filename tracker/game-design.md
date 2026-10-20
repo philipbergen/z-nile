@@ -70,16 +70,8 @@ This is the source of truth for product decisions. Every raft design must agree 
 - **HUD:** scales to small screens. Touch targets are at least 44 pt.
 - **Recentring:** a "snap look to heading" button.
 
-## Ghost hunter tools (R0035, prep 2026-10-16; the user may veto)
-The user asked (2026-10-16) for the power pellet to give a 3-shot ghost blaster, for a minimap of where the player has been with no ghosts, and for a device from hitting a ghost that shows ghosts passing that spot out to the maze's line of sight. Prep keeps every frightened rule already in Scoring and rules (contact-eat, the 200/400/800/1600 chain, the timer, the speed boost, the blue look, the power bar). The pellet also loads the blaster. Replacing contact-eat would turn promoted specs red and needs the user to say so.
-- **Shots**: a power pellet sets shots to 3 (a later pellet refreshes to 3; it does not add). A shot spends one even on a miss. F fires. A frightened ghost that is shot is eaten on the chain; any other active ghost is sent home for 0 points and must revive before it hunts. Shots survive the dying pause and clear on the next Ready, on a level clear, on game over, and on play again.
-- **Minimap**: floors the player has occupied, the wall tiles beside those floors, and a marker on the player's own tile. No ghosts, pellets, or unvisited floors. It clears on a new level and on play again, and it survives a death.
-- **Sensor**: one held, at most four placed. A hit grants one when the hand is empty and fewer than four are placed. Q drops it on the player's tile. It sees an active or leaving ghost on the same row or column with only player-passable tiles between, in any of the four directions, including its own tile. Doors, walls, and diagonals block. It survives a death and clears on a new level and on play again.
-- **Keys**: F and Q join the key map. c0103 (R0036) narrows the promoted key-map spec first; R0035 does not start until that chore is done.
-
 ## Open decisions
 - **The slower-ghosts factor** (f0021): a number for `Levels.GHOST_TUNING`, after a Beta playtest of the classic tables with the radar and the edge indicators.
-- **Whether the blaster replaces contact-eat** (R0035): prep kept contact-eat. Say so if the pellet should stop the contact hunt.
 
 ## Roadmap (single-type rafts; order a1 → a2 → b → c → c2 → d → e, with f any time after a2)
 | Raft | Type | Issues | Proves |
@@ -93,7 +85,5 @@ The user asked (2026-10-16) for the power pellet to give a 3-shot ghost blaster,
 | e Hiscores (R0011) | feature | f0024, f0025, f0026 | all-time, daily and weekly boards |
 | f Mobile controls (R0012) | feature | f0027, f0028, f0029 | playable on a phone |
 | g Lobby place (R0024) | feature | f0061 | a lobby place with a start button that teleports to the game place (any time; the Beta publish is c0064, the way back f0065) |
-| h Key-map room (R0036) | chore | c0103 | the promoted key map allows Fire and Drop beside the nine keys |
-| i Ghost hunter tools (R0035) | feature | f0100, f0101, f0102 | a 3-shot blaster, an explored minimap, a droppable ghost sensor (after h) |
 
 Process chores that aren't tied to a game raft: c0005 (worktrees, R0002), c0006, c0007, c0008 and c0009.
