@@ -204,6 +204,21 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		-- c0007, renamed by that compaction, is removed and a new item takes c0007 later: a life the map does not prove
 		push("c7gone", { ["tracker/issues/c0007"] = false }, "tracker: drop c0007")
 		push("c7back", { ["tracker/issues/c0007/c0007.md"] = doc("c0007", "a new seven") }, "R0007: prep")
+		-- a commit that edits only the map's header and also edits c0008's document: not a compaction
+		push("fix", {
+			["tracker/compaction.txt"] = "# tracker.sh compact, rotate (fixed)\nc0080 c0008\nc0700 c0007\nc0800 c0080\n",
+			["tracker/issues/c0008/c0008.md"] = doc("c0008", "eighty, edited"),
+		}, "tracker: fix the map header, edit c0008")
+		-- a map that no longer parses, in a commit that also edits c0095: unproven, so the walk stops and says so
+		push(
+			"c95",
+			{ ["tracker/issues/c0095/c0095.md"] = doc("c0095", "ninety-five") },
+			"tracker: new c0095 Ninety-five"
+		)
+		push("badmap", {
+			["tracker/compaction.txt"] = "# broken\nnot a map line\n",
+			["tracker/issues/c0095/c0095.md"] = doc("c0095", "ninety-five, edited"),
+		}, "R0095: prep with a broken map")
 	end)
 
 	it(
@@ -291,6 +306,16 @@ return t.spec("c0119 tracker.sh capture", function(it)
 				.toBe(true)
 		end
 	)
+
+	it("does not take a map edit for a compaction, and marks a map it cannot read", function()
+		local _, eighty = capture("c0008")
+		t.expect(has(eighty, `capture {SHA.c80} tracker/issues/c0080/c0080.md tracker: new c0080 Eighty`))
+			.toBe(true)
+		t.expect(has(eighty, "(ambiguous")).toBe(false)
+		local _, broken = capture("c0095")
+		local head = string.match(broken, "^[^\n]+") :: string
+		t.expect(has(head, `(ambiguous: unproven compaction at {string.sub(SHA.badmap, 1, 7)})`)).toBe(true)
+	end)
 
 	it("marks a first-add fallback, and only that", function()
 		local _, legacy = capture("c0020")
