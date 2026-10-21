@@ -25,3 +25,7 @@
 - design-review-005 F8: ticket-prep/restated-rules-move-together
 - design-review-005 F9: ticket-prep/never-narrow-captured-scope
 - note R0035 re-prep, the prototype's full gate found a type error in f0100's sequestered hud.spec (R0012's new Hud.Layout fields) that the affected gate never type-checks: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-006 F1: testing/seed-every-enumerated-case
+- design-review-006 F2: ticket-prep/spec-design-correspondence
+- design-review-006 F3: ticket-prep/restated-rules-move-together
+- design-review-006 F4: ticket-prep/never-narrow-captured-scope

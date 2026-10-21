@@ -30,7 +30,7 @@ return t.spec("f0101 heights", function(it)
 		end
 	)
 
-	it("the player is airborne exactly while the eye is over the wall tops", function()
+	it("Hop.CLEARANCE is the studs from the standing eye up to the wall top", function()
 		t.expect(Hop.CLEARANCE).toBe(View.SCALE.wallHeight - View.SCALE.eyeHeight)
 	end)
 

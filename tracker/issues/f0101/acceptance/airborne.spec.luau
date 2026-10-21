@@ -149,7 +149,9 @@ return t.spec("f0101 the hop in a session", function(it)
 			end
 			onPlayer(s, "blinky")
 			local events = Session.step(s)
-			t.expect(Session.frame(s, "p").hopped).toBe(s.tick - k)
+			-- a catch before step 2 forgets the hop; from step 2 on, the tick is kept
+			local started = if k >= 2 then s.tick - k else nil
+			t.expect(Session.frame(s, "p").hopped).toBe(started)
 			local airborne = k >= 2 and k <= 11
 			t.expect(count(events, "Caught")).toBe(if airborne then 0 else 1)
 		end
@@ -293,30 +295,70 @@ return t.spec("f0101 the hop in a session", function(it)
 		end
 		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
 		Session.step(s) -- p's take-off
-		Session.step(s) -- step 1 of p's hop; the ghosts arrive in step 2
+		Session.step(s) -- step 1 of p's hop
 		t.expect((Session.submit(s, "q", Hop.INTENT))).toBe(true) -- p's cooldown is not q's
-		for _, id in { "p", "q" } do
-			local at = Movement.occupied(s.maze, s.members[id].move)
-			local g = Ghosts.ghost(s.members[id].ghosts :: Ghosts.Set, "blinky")
-			g.tile, g.progress, g.status = { x = at.x, y = at.y }, 0, "active"
-		end
-		local caught = {}
-		for _, e in Session.step(s) do
-			if e.kind == "Caught" then
-				table.insert(caught, e.player)
-			end
-		end
-		t.expect(table.concat(caught, ",")).toBe("q") -- q took off this step, on the ground; p is airborne
-		t.expect(Session.frame(s, "q").hopped).toBe(s.tick)
-		t.expect(Session.frame(s, "p").hopped).toBe(s.tick - 2)
+		local events = Session.step(s) -- q's take-off, with no ghost on either
+		t.expect(count(events, "Caught")).toBe(0)
+		t.expect(Session.frame(s, "q").hopped).toBe(s.tick) -- q took off, and was not caught
+		t.expect(Session.frame(s, "p").hopped).toBe(s.tick - 2) -- p's hop is untouched
 	end)
 
-	it("a respawn forgets the hop", function()
+	it("leaving play before step 2 of a hop forgets it, so the pause does not play the arc", function()
+		local function staysDown(s: Session.Session, started: number)
+			t.expect(Hop.rise(started, started + Hop.TICKS / 2) > Hop.CLEARANCE).toBe(true)
+			for _ = 1, 12 do
+				Session.step(s)
+				t.expect(Session.frame(s, "p").hopped).toBe(nil)
+			end
+		end
+
+		local takeoff = settled(new())
+		t.expect((Session.submit(takeoff, "p", Hop.INTENT))).toBe(true)
+		onPlayer(takeoff, "blinky")
+		local caughtNow = Session.step(takeoff)
+		t.expect(count(caughtNow, "Caught")).toBe(1)
+		t.expect(count(caughtNow, "Hopped")).toBe(0)
+		t.expect(Session.frame(takeoff, "p").hopped).toBe(nil)
+		staysDown(takeoff, takeoff.tick)
+
+		local nextStep = settled(new())
+		hop(nextStep) -- the take-off, still in play
+		onPlayer(nextStep, "blinky")
+		local caughtNext = Session.step(nextStep)
+		t.expect(count(caughtNext, "Caught")).toBe(1)
+		t.expect(count(caughtNext, "Hopped")).toBe(0)
+		t.expect(Session.frame(nextStep, "p").hopped).toBe(nil)
+		staysDown(nextStep, nextStep.tick - 1)
+	end)
+
+	it("the last pellet, eaten the step after take-off, forgets the hop for the level-clear pause", function()
+		local s = playing(new())
+		for _, tile in Pellets.tiles(s.members.p.pellets) do
+			if not (tile.x == 12 and tile.y == 23) then
+				Pellets.eat(s.members.p.pellets, tile)
+			end
+		end
+		t.expect(Pellets.remaining(s.members.p.pellets)).toBe(1)
+		hop(s)
+		t.expect(Session.frame(s, "p").hopped).toBe(s.tick)
+		local events = Session.step(s)
+		t.expect(count(events, "LevelCleared")).toBe(1)
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+		for _ = 1, 20 do
+			Session.step(s)
+			t.expect(Session.frame(s, "p").hopped).toBe(nil)
+		end
+	end)
+
+	it("a catch on the landing step keeps the hop until the respawn", function()
 		local s = settled(new())
-		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+		hop(s)
+		for _ = 1, 11 do
+			Session.step(s)
+		end
 		onPlayer(s, "blinky")
 		t.expect(count(Session.step(s), "Caught")).toBe(1)
-		t.expect(Session.frame(s, "p").hopped ~= nil).toBe(true)
+		t.expect(Session.frame(s, "p").hopped).toBe(s.tick - 12)
 		local ready = false
 		for _ = 1, 300 do
 			if count(Session.step(s), "Ready") > 0 then
@@ -326,5 +368,84 @@ return t.spec("f0101 the hop in a session", function(it)
 		end
 		t.expect(ready).toBe(true)
 		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+	end)
+
+	it("the last life, caught on take-off, is game over with no hop and no respawn", function()
+		local s = settled(new())
+		s.members.p.play.lives = 1
+		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+		onPlayer(s, "blinky")
+		t.expect(count(Session.step(s), "Hopped")).toBe(0)
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+		local over, sawReady = false, false
+		for _ = 1, 80 do
+			local events = Session.step(s)
+			if count(events, "Ready") > 0 then
+				sawReady = true
+			end
+			if count(events, "GameOver") > 0 then
+				over = true
+				break
+			end
+		end
+		t.expect(over).toBe(true)
+		t.expect(sawReady).toBe(false)
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+		Session.playAgain(s, "p")
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+	end)
+
+	it("a take-off catch forgets only that player's hop", function()
+		local s = Session.new(classic, 1, Session.GAME_CONFIG)
+		Session.join(s, "p")
+		Session.join(s, "q")
+		for _ = 1, 101 do
+			Session.step(s)
+		end
+		for _, id in { "p", "q" } do
+			local set = s.members[id].ghosts :: Ghosts.Set
+			for _, g in set.ghosts do
+				g.tile, g.progress, g.status, g.frightened, g.reverse =
+					{ x = 13, y = 14 }, 0, "house", false, false
+			end
+			set.house.idle = -100000
+		end
+		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+		Session.step(s)
+		Session.step(s) -- p is airborne
+		t.expect((Session.submit(s, "q", Hop.INTENT))).toBe(true)
+		local at = Movement.occupied(s.maze, s.members.q.move)
+		local g = Ghosts.ghost(s.members.q.ghosts :: Ghosts.Set, "blinky")
+		g.tile, g.progress, g.status = { x = at.x, y = at.y }, 0, "active"
+		local caught = {}
+		for _, e in Session.step(s) do
+			if e.kind == "Caught" then
+				table.insert(caught, e.player)
+			end
+		end
+		t.expect(table.concat(caught, ",")).toBe("q")
+		t.expect(Session.frame(s, "q").hopped).toBe(nil)
+		t.expect(Session.frame(s, "p").hopped).toBe(s.tick - 2)
+	end)
+
+	it("a hop and a shot in one tick both happen, and each counts toward the limit", function()
+		local s = settled(new())
+		local g = Ghosts.ghost(ghostsOf(s), "blinky")
+		g.tile, g.progress, g.status, g.heading = { x = 9, y = 23 }, 0, "active", "N"
+		s.members.p.blaster.shots = 1
+		t.expect((Session.submit(s, "p", "Forward"))).toBe(true)
+		t.expect((Session.submit(s, "p", "Forward"))).toBe(true)
+		t.expect((Session.submit(s, "p", Blaster.intent("E")))).toBe(true)
+		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+		local refused, why = Session.submit(s, "p", "Forward")
+		t.expect(refused).toBe(false)
+		t.expect(why).toBe("rate limited")
+		local events = Session.step(s)
+		t.expect(count(events, "Shot")).toBe(1)
+		t.expect(count(events, "Hopped")).toBe(1)
+		t.expect(count(events, "Caught")).toBe(0)
+		t.expect(g.status).toBe("eyes")
+		t.expect(s.members.p.blaster.shots).toBe(0)
+		t.expect(Hop.airborne(Session.frame(s, "p").hopped, s.tick)).toBe(false)
 	end)
 end)
