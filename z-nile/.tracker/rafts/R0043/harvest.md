@@ -22,3 +22,6 @@
 - design-review-005 F1: ticket-prep/prove-specs-pass-on-a-prototype
 - design-review-005 F2: ticket-prep/design-the-execution-window
 - note R0043 code review 001 F1, a promoted spec with a live-item floor: testing/no-live-counts-in-promoted-specs
+- review-001 F1: testing/no-live-counts-in-promoted-specs
+- review-001 F2: ticket-prep/restated-rules-move-together
+- review-001 F3: one-off: a forwarder's file mode and stale comments after the move
