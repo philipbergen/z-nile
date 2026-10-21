@@ -45,12 +45,12 @@ return t.spec("f0028 look deltas", function(it)
 	it("a large look delta clamps pitch at MAX_PITCH and keeps yaw in (-pi, pi]", function()
 		local state = Touch.empty()
 		state = Touch.track(state, { id = 1, phase = "begin", x = 600, y = 100 }, { width = 800, snap = nil })
-		local _, down = Touch.track(
+		local _, down: { any } = Touch.track(
 			state,
 			{ id = 1, phase = "move", x = 600, y = 10100 },
 			{ width = 800, snap = nil }
 		)
-		local _, up = Touch.track(
+		local _, up: { any } = Touch.track(
 			state,
 			{ id = 1, phase = "move", x = 600, y = 100 - 10000 },
 			{ width = 800, snap = nil }

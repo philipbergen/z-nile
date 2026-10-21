@@ -1,4 +1,4 @@
-# Spend: f0029 Mobile hud layout
+# Spend: f0028 Touch look
 
 | # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |
 |---|---|---|---|---|---|---|---|---|
@@ -12,7 +12,11 @@
 | 8 | 2026-10-20 15:14 | design-refute-004 | 0 | 0 | 11.7 | spend+proportional | design-review |  |
 | 9 | 2026-10-20 15:21 | design-review-005 | 0 | 0 | 10.0 | spend+proportional | design-review | 53333 |
 | 10 | 2026-10-20 15:23 | design-refute-005 | 0 | 0 | 8.3 | spend+proportional | design-review |  |
-| 11 | 2026-10-20 16:52 | prep (this session; earlier session's prep time not recorded) | 806 | 3 | 36.2 | spend+proportional | prep |  |
+| 11 | 2026-10-20 16:52 | prep (this session; earlier session's prep time not recorded) | 236 | 3 | 10.6 | spend+proportional | prep |  |
+| 12 | 2026-10-21 16:57 | f0028: touch look and the held mouse in Camera, wired from Main | 21 | 3 | 12.0 | focus | build |  |
+| 13 | 2026-10-21 17:08 | R0012: type-only amendment of three sequestered specs (user-authorized), Phase 3 verification | 1 | 1 | 6.7 | explicit | build |  |
+| 14 | 2026-10-21 17:19 | R0012: review 001 fixes (touch hold, focus reset, adapter pins, snap frame on touch only) | 39 | 4 | 9.0 | explicit | code-review |  |
+| 15 | 2026-10-21 17:32 | tracker: done R0012 | 0 | 0 | 0.9 | raft+proportional | deliver |  |
 
-**Total:** +806 / -3 lines, 122.4 agent-minutes, 199999 tokens over 11 records
-<!-- totals: added=806 removed=3 minutes=122.4 records=11 tokens=199999 -->
+**Total:** +297 / -11 lines, 125.4 agent-minutes, 199999 tokens over 15 records
+<!-- totals: added=297 removed=11 minutes=125.4 records=15 tokens=199999 -->

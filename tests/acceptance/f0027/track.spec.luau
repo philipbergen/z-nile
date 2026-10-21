@@ -4,7 +4,7 @@
 local Touch = require("@logic/Touch")
 local t = require("@tests/lib/t")
 
-type Event = { id: number, phase: string, x: number, y: number }
+type Event = { id: number, phase: Touch.Phase, x: number, y: number }
 type Rect = { x: number, y: number, w: number, h: number }
 
 local function run(events: { Event }, width: number, snap: Rect?): ({ [number]: any }, { any })
@@ -194,7 +194,7 @@ return t.spec("f0027 touch fold", function(it)
 			local _, ignored = run({
 				{ id = 4, phase = "move", x = 10, y = 10 },
 				{ id = 4, phase = "end", x = 200, y = 10 },
-				{ id = 5, phase = "cancel", x = 10, y = 10 },
+				{ id = 5, phase = "cancel" :: any, x = 10, y = 10 },
 			}, 800, nil)
 			t.expect(ignored).toEqual({})
 		end
