@@ -15,3 +15,4 @@
 - design-review-003 F1: testing/specs-set-host-markers-explicitly
 - design-review-003 F2: architecture/guard-no-is-explicit
 - design-review-003 F3: ticket-prep/new-rules-migrate-existing-work
+- design-review-004 F1: testing/specs-set-host-markers-explicitly
