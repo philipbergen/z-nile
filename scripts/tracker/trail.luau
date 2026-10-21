@@ -13,7 +13,8 @@ local ids = require("./ids")
 
 local trail = {}
 
--- `doc` is true for the item's document (`isDoc`); `id` is set by `read`: the id the item had at that commit
+-- `doc` is true for the item's document (`isDoc`); `id` is set by `read` to the item's current id (no id change is
+-- followed)
 export type Commit = {
 	sha: string,
 	time: number,
@@ -239,9 +240,9 @@ function trail.namedIds(subject: string): { string }
 	return out
 end
 
--- The capture: the newest commit, not a deletion, whose subject is `tracker: new` with the commit's own `id` (the id
--- the item had then) in its leading id list (make-issue's landing commit and the stub's publish), or, when none is,
--- the earliest add (or, with none, the earliest commit). The second result says whether the commit is a capture commit
+-- The capture: the newest commit, not a deletion, whose subject is `tracker: new` with the commit's `id` (the item's
+-- current id) in its leading id list (make-issue's landing commit and the stub's publish), or, when none is, the
+-- earliest add (or, with none, the earliest commit). The second result says whether the commit is a capture commit
 -- (false: the fallback).
 function trail.capture(commits: { Commit }): (Commit?, boolean)
 	for _, c in newestFirst(commits) do

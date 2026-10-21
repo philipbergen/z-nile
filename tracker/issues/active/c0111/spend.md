@@ -49,6 +49,7 @@
 | 45 | 2026-10-21 06:05 | c0111 c0119: lessons, metrics, trail, capture and the scope rules, from the prep prototype | 0 | 0 | 15.0 | raft+proportional | build |  |
 | 46 | 2026-10-21 06:09 | R0042: verification logs | 0 | 0 | 2.5 | raft+proportional | build |  |
 | 47 | 2026-10-21 06:15 | R0042: review-001 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
+| 48 | 2026-10-21 06:16 | R0042: review-001 fixes (lesson text, hidden files in lessons/, trail comments) | 9 | 6 | 10.0 | raft+proportional | code-review |  |
 
-**Total:** +3425 / -16 lines, 860.7 agent-minutes, 770979 tokens over 47 records
-<!-- totals: added=3425 removed=16 minutes=860.7 records=47 tokens=770979 -->
+**Total:** +3434 / -22 lines, 870.7 agent-minutes, 770979 tokens over 48 records
+<!-- totals: added=3434 removed=22 minutes=870.7 records=48 tokens=770979 -->

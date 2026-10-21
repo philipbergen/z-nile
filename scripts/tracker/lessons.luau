@@ -543,7 +543,9 @@ function lessons.load(root: string): Tree
 			table.sort(names)
 			for _, name in names do
 				local slug = string.match(name, "^(.+)%.md$")
-				if slug and fs.isFile(`{folder}/{name}`) then
+				if string.sub(name, 1, 1) == "." then
+					continue -- hidden files (.DS_Store, editor swap files) are never lessons
+				elseif slug and fs.isFile(`{folder}/{name}`) then
 					tree.lessons[`{skill}/{slug}`] = fs.readFile(`{folder}/{name}`)
 				else
 					table.insert(tree.problems, `.claude/skills/{skill}/lessons/{name}: not a lesson file`)
