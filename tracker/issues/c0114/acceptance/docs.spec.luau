@@ -1,5 +1,5 @@
 --!strict
--- c0114 AC17: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
+-- c0114 AC9: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
 -- (scripts/tracker.sh is named once, as the forwarder), and they state the project-root rules the engine follows.
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")

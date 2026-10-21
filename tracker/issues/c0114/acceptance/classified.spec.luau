@@ -1,9 +1,10 @@
 --!strict
--- c0114 AC18, AC20: every existing tooling item moved into z-nile/.tracker/ and every game item stayed in tracker/,
+-- c0114 AC10: every existing tooling item moved into z-nile/.tracker/ and every game item stayed in tracker/,
 -- by the classification in c0114's Design. Items are named by kind and slug, which a compaction never changes (ids it
 -- does), and each moved with its id, so nothing else about it changed. And every unfinished item's check.sh,
 -- sequestered before the move, still runs through the forwarders: listed (AC_LIST=1) it names its checks, or it is an
 -- empty draft.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local store = require("@znile/engine/store")
@@ -229,26 +230,78 @@ return t.spec("c0114 every item is filed in its project", function(it)
 		end
 	end)
 
+	-- List mode is proven first (as c0034's locator does): a check.sh that ignored AC_LIST would run every raft's full
+	-- gate in this checkout. The loop below refuses to start without the proof.
+	local listing = false
+	it("list mode holds through the scripts/lib/ac.sh forwarder, and the runner refuses it", function()
+		local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+		local dir = `{root}/.cache/c0114-classified`
+		if fs.isDir(dir) then
+			fs.removeDir(dir)
+		end
+		fs.writeDir(dir)
+		t.expect(process.exec("git", { "init", "-q", dir }).ok).toBe(true)
+		local marker = `{dir}/ran`
+		fs.writeFile(
+			`{dir}/check.sh`,
+			`source "{root}/scripts/lib/ac.sh"\ncheck "AC1: touches a marker" touch "{marker}"\nfinish\n`
+		)
+		local listed = fixture.exec(dir, "bash", { "check.sh" }, { env = { AC_LIST = "1" } })
+		t.expect(listed.ok).toBe(true)
+		t.expect(string.find(listed.stdout, "1 criteria listed (none run)", 1, true) ~= nil).toBe(true)
+		t.expect(fs.isFile(marker)).toBe(false)
+		local runner = process.exec(
+			"lune",
+			{ "run", "tests/run", "--", "tests/meta/architecture.spec.luau" },
+			{
+				env = { AC_LIST = "1" },
+			}
+		)
+		t.expect(runner.ok).toBe(false)
+		t.expect(string.find(runner.stdout .. runner.stderr, "AC_LIST", 1, true) ~= nil).toBe(true)
+		fs.removeDir(dir)
+		listing = true
+	end)
+
 	it("every unfinished item's check.sh still lists its checks through the forwarders", function()
+		if not listing then
+			error("list mode is not proven safe (ac.sh or tests/run): not running any item's check.sh")
+		end
 		local bad: { string } = {}
-		local checked = 0
+		local expected, listed = 0, 0
 		for _, kind in { "issue", "raft" } do
 			for _, item in store.all(kind) do
 				local path = `{item.dir}/check.sh`
 				if item.state ~= "done" and fs.isFile(path) then
-					local r = process.exec("bash", { path }, { env = { AC_LIST = "1" } })
-					local listed = r.ok
-						and string.find(r.stdout, "criteria listed (none run)", 1, true) ~= nil
+					local hasCheck = false
+					for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+						if string.match(line, '^%s*check "') then
+							hasCheck = true
+						end
+					end
+					-- at most 60 s each, so a check.sh that ignores list mode can't hold the gate
+					local r = process.exec(
+						"perl",
+						{ "-e", "alarm shift; exec @ARGV or die", "60", "bash", path },
+						{ env = { AC_LIST = "1" } }
+					)
+					local ok = r.ok and string.find(r.stdout, "criteria listed (none run)", 1, true) ~= nil
 					local draft = string.find(r.stdout, "no acceptance checks defined", 1, true) ~= nil
-					if listed then
-						checked += 1
+					if hasCheck then
+						expected += 1
+						if ok then
+							listed += 1
+						else
+							table.insert(bad, `{path}: {r.stderr}{r.stdout}`)
+						end
 					elseif not draft then
-						table.insert(bad, `{path}: {r.stderr}{r.stdout}`)
+						table.insert(bad, `{path}: neither listed nor an empty draft: {r.stderr}{r.stdout}`)
 					end
 				end
 			end
 		end
 		t.expect(table.concat(bad, "\n")).toBe("")
-		t.expect(checked >= 10).toBe(true)
+		t.expect(expected >= 10).toBe(true)
+		t.expect(listed).toBe(expected)
 	end)
 end)

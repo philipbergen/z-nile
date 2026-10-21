@@ -1,5 +1,5 @@
 --!strict
--- c0114 AC2, AC3: the engine and the whole build moved into z-nile/, ./zn is the command, and every path that a
+-- c0114 AC2: the engine and the whole build moved into z-nile/, ./zn is the command, and every path that a
 -- check.sh or a spec of an unfinished raft names still works through a forwarder: scripts/tracker.sh, scripts/check.sh,
 -- scripts/setup.sh, scripts/ci-verify.sh, scripts/lib/ac.sh and scripts/affected.luau run the moved file, and each
 -- scripts/tracker/<module>.luau and scripts/lib/{sh,graph,changed}.luau returns the moved module itself. The shared

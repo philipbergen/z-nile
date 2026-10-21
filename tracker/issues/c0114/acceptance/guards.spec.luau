@@ -1,8 +1,9 @@
 --!strict
--- c0114 AC15: every lookup of the repository guards fails closed now that they live in z-nile/lib/: a check.sh whose
+-- c0114 AC7: every lookup of the repository guards fails closed now that they live in z-nile/lib/: a check.sh whose
 -- ac.sh can't find fence.sh refuses to run, the scripts/lib/ac.sh forwarder refuses when its target is gone, the
--- tracker publishes nothing when it can't ask fence.sh whether a check is running, the fence refuses a checkout with no
--- ref guard hooks outside the jail, and the spec runner refuses to start without fence.sh. Fixtures under
+-- tracker publishes only on fence.sh's one explicit "unguarded" answer (a missing or broken fence.sh, a missing
+-- pickman_guarded or any other answer publishes nothing), the fence refuses a checkout with no ref guard hooks unless
+-- all of the runner's jail markers say the kernel protects it, and the spec runner refuses to start without fence.sh. Fixtures under
 -- .cache/c0114-guards (repositories of their own) and .cache/c0114-guards-tf (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -61,20 +62,50 @@ return t.spec("c0114 the guards fail closed", function(it)
 		t.expect(fs.isFile(`{dir}/.cache/ran`)).toBe(false)
 	end)
 
-	it("the tracker publishes nothing when it can't find fence.sh to ask whether a check runs", function()
-		local f = trackerfix.new("c0114-guards-tf", {})
-		local wt = trackerfix.trOk(f, f.main, { "worktree", "probe" })
-		local before = fixture.git(f.origin, { "rev-parse", "main" })
-		-- a fixture is not protected by this run's guards, so with fence.sh in place it publishes
-		t.expect(trackerfix.tr(f, wt, { "new", "issue", "c", "published" }).ok).toBe(true)
-		local published = fixture.git(f.origin, { "rev-parse", "main" })
-		t.expect(published ~= before).toBe(true)
-		fs.removeFile(`{wt}/z-nile/lib/fence.sh`)
-		local r = trackerfix.tr(f, wt, { "new", "issue", "c", "local-only" })
-		t.expect(has(r.stderr, "not publishing")).toBe(true)
-		t.expect(has(r.stderr, "z-nile/lib/fence.sh")).toBe(true)
-		t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(published)
-	end)
+	it(
+		"the tracker publishes only when fence.sh answers unguarded; any other outcome publishes nothing",
+		function()
+			local f = trackerfix.new("c0114-guards-tf", {})
+			local wt = trackerfix.trOk(f, f.main, { "worktree", "probe" })
+			local function tip(): string
+				return fixture.git(f.origin, { "rev-parse", "main" })
+			end
+			-- the answer itself: a fixture is not one this run protects, this checkout is
+			local ask = 'source z-nile/lib/fence.sh && pickman_guarded "$PWD"'
+			t.expect(fixture.exec(wt, "bash", { "-c", ask }).stdout).toBe("unguarded\n")
+			t.expect(process.exec("bash", { "-c", ask }).stdout).toBe("guarded\n")
+			-- the explicit "unguarded" publishes
+			local before = tip()
+			t.expect(trackerfix.tr(f, wt, { "new", "issue", "c", "published" }).ok).toBe(true)
+			local published = tip()
+			t.expect(published ~= before).toBe(true)
+			local real = fs.readFile(`{wt}/z-nile/lib/fence.sh`)
+			local broken: { [string]: string } = {
+				missing = "", -- removed, not written
+				["a syntax error"] = "pickman_fence() { (\n",
+				["no pickman_guarded"] = "pickman_fence() { :; }\n",
+				["another answer"] = "pickman_guarded() { echo maybe; }\n",
+				["a failing lookup"] = "pickman_guarded() { return 2; }\n",
+			}
+			t.expect(broken.missing).toBe("")
+			for what, text in broken do
+				if text ~= "" then
+					fs.writeFile(`{wt}/z-nile/lib/fence.sh`, text)
+				elseif fs.isFile(`{wt}/z-nile/lib/fence.sh`) then
+					fs.removeFile(`{wt}/z-nile/lib/fence.sh`)
+				end
+				local r = trackerfix.tr(f, wt, { "new", "issue", "c", "local-only" })
+				if not has(r.stderr, "not publishing") then
+					error(`{what}: no "not publishing" in: {r.stderr}`)
+				end
+				if what == "missing" then
+					t.expect(has(r.stderr, "z-nile/lib/fence.sh is missing")).toBe(true)
+				end
+				t.expect(tip()).toBe(published)
+			end
+			fs.writeFile(`{wt}/z-nile/lib/fence.sh`, real)
+		end
+	)
 
 	it("the fence refuses a checkout with no ref guard hooks, unless the jail already protects it", function()
 		local bare = repo("no-hooks", { "z-nile/lib/fence.sh" })
@@ -88,6 +119,16 @@ return t.spec("c0114 the guards fail closed", function(it)
 			env = { PICKMAN_FENCE_HOOKS = "", PICKMAN_TEST_JAIL = "sandbox-exec" },
 		})
 		t.expect(jailed.ok).toBe(true)
+		-- the jail marker alone is not enough: the checkout must lie under the run's own .cache (the runner's marker)
+		local stray = fixture.exec(bare, "bash", { "-c", script }, {
+			env = {
+				PICKMAN_FENCE_HOOKS = "",
+				PICKMAN_TEST_JAIL = "sandbox-exec",
+				PICKMAN_TEST_FENCE = "/nonexistent",
+			},
+		})
+		t.expect(stray.ok).toBe(false)
+		t.expect(has(stray.stderr, "no ref guard")).toBe(true)
 		local hooked = repo("hooks", { "z-nile/lib/fence.sh", "z-nile/lib/git-hooks" })
 		local fine = fixture.exec(hooked, "bash", { "-c", script }, {
 			env = { PICKMAN_FENCE_HOOKS = "", PICKMAN_TEST_JAIL = "" },

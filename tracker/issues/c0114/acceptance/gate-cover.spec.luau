@@ -1,11 +1,12 @@
 --!strict
--- c0114 AC16: the gate covers z-nile/ as it covered scripts/: a change there selects every spec (a .tracker/ document
+-- c0114 AC8: the gate covers z-nile/ as it covered scripts/: a change there selects every spec (a .tracker/ document
 -- selects none, like tracker/), the format stage reads z-nile/.tracker/ (stylua skips hidden folders unless named), the
 -- types stage reads z-nile/ but not its sequestered specs, the repository-fence scan reads ./zn, z-nile/ and every
 -- root's check.sh (not their unpromoted specs), the reviewed .cache list covers z-nile/, the stop hook gates z-nile/
 -- changes, and CI runs the moved bootstrap and skips tracker-only pushes to every root. Fixtures under
 -- .cache/c0114-gate.
 local cachepaths = require("@tests/lib/cachepaths")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -35,10 +36,13 @@ local function write(path: string, text: string)
 	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(path, text)
 end
--- the gate's LUAU_DIRS, as z-nile/check.sh sets them
-local function luauDirs(): { string }
-	local line = string.match(fs.readFile("z-nile/check.sh"), "\nLUAU_DIRS=%(([^)]*)%)") :: string
-	return string.split(line, " ")
+-- the gate's format and lint folders, as z-nile/check.sh takes them (`lune run z-nile/roots -- --luau-dirs`), in `cwd`
+local function luauDirs(cwd: string?): { string }
+	local r = process.exec("lune", { "run", `{root}/z-nile/roots`, "--", "--luau-dirs" }, { cwd = cwd })
+	if not r.ok then
+		error(r.stderr)
+	end
+	return string.split((string.gsub(r.stdout, "%s+$", "")), " ")
 end
 
 return t.spec("c0114 the gate covers z-nile/", function(it)
@@ -151,12 +155,83 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 		end
 	end)
 
-	it("the stop hook gates a change under z-nile/, but not one to its tracker documents", function()
-		local hook = fs.readFile("scripts/hooks/stop.sh")
-		t.expect(has(hook, "grep -E '^(src|tests|z-nile)/'")).toBe(true)
-		t.expect(has(hook, "grep -v '^z-nile/\\.tracker/'")).toBe(true)
-		t.expect(has(hook, "z-nile/check.sh --affected")).toBe(true)
-	end)
+	it(
+		"the stop hook gates a change under src/, tests/ or z-nile/ (no project root's documents), through scripts/check.sh",
+		function()
+			-- a tree with a stub gate at scripts/check.sh that records its call: the path both sides of the move have
+			local function tree(name: string, withRoots: boolean): string
+				local dir = `{base}/hook-{name}`
+				if fs.isDir(dir) then
+					fs.removeDir(dir)
+				end
+				fs.writeDir(dir)
+				t.expect(process.exec("git", { "init", "-q", "-b", "main", dir }).ok).toBe(true)
+				fixture.git(dir, { "config", "user.name", "c0114-gate" })
+				fixture.git(dir, { "config", "user.email", "c0114-gate@example.invalid" })
+				write(
+					`{dir}/scripts/check.sh`,
+					'#!/usr/bin/env bash\necho "$@" >> "$(dirname "$0")/../gate.log"\n'
+				)
+				process.exec("chmod", { "+x", `{dir}/scripts/check.sh` })
+				if withRoots then
+					copy(dir, { "z-nile/roots.luau", "z-nile/engine/projects.luau", "z-nile/projects.toml" })
+				end
+				write(`{dir}/readme`, "x\n")
+				fixture.git(dir, { "add", "-A" })
+				fixture.git(dir, { "commit", "-q", "-m", "base" })
+				return dir
+			end
+			local function stop(dir: string): (boolean, boolean)
+				local r = fixture.exec(
+					dir,
+					"bash",
+					{ `{root}/scripts/hooks/stop.sh` },
+					{ stdin = '{"cwd": "' .. dir .. '"}' }
+				)
+				local ran = fs.isFile(`{dir}/gate.log`)
+				if ran then
+					fs.removeFile(`{dir}/gate.log`)
+				end
+				return r.ok, ran
+			end
+			local now = tree("now", true)
+			write(`{now}/z-nile/.tracker/issues/c0001/c0001.md`, "doc\n")
+			t.expect({ stop(now) }).toEqual({ true, false }) -- a project root's document alone: no gate
+			write(`{now}/z-nile/engine/x.luau`, "--!strict\nreturn 1\n")
+			t.expect({ stop(now) }).toEqual({ true, true }) -- the engine: the gate runs
+			-- a tree from before c0114 (no z-nile/): the same hook runs that tree's own gate
+			local old = tree("old", false)
+			write(`{old}/src/x.luau`, "--!strict\nreturn 1\n")
+			t.expect({ stop(old) }).toEqual({ true, true })
+		end
+	)
+
+	it(
+		"every root of the registry reaches every gate site, so a new root needs only its registry entry",
+		function()
+			-- the sites that read the registry follow a new root by themselves
+			local fx = `{base}/registry`
+			copy(fx, { "z-nile/projects.toml" })
+			fs.writeFile(
+				`{fx}/z-nile/projects.toml`,
+				fs.readFile(`{fx}/z-nile/projects.toml`)
+					.. '\n[[project]]\nname = "probe"\nroot = "probe/.tracker"\n'
+			)
+			t.expect(table.find(luauDirs(fx), "probe/.tracker") ~= nil).toBe(true)
+			-- and in the real tree every current root is at every site, the ones that can't read the registry included
+			local projects = require("@znile/engine/projects")
+			local roots = projects.roots(projects.load("."))
+			local dirs = luauDirs()
+			local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml")) :: any
+			local ignored: { string } = wf["on"].push["paths-ignore"]
+			for _, r in roots do
+				t.expect(table.find(dirs, r) ~= nil).toBe(true)
+				t.expect(affected(`{r}/issues/c0001/c0001.md`)).toBe("")
+				t.expect(cachepaths.SKIP[r]).toBe(true)
+				t.expect(table.find(ignored, `{r}/**`) ~= nil).toBe(true)
+			end
+		end
+	)
 
 	it(
 		"CI bootstraps with z-nile/setup.sh and skips tracker-only pushes to every root and the counter",

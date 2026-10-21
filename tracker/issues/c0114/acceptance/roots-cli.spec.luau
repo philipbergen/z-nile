@@ -1,5 +1,5 @@
 --!strict
--- c0114 AC4-AC7: every command works across the project roots of z-nile/projects.toml, reading origin/main's registry
+-- c0114 AC3: every command works across the project roots of z-nile/projects.toml, reading origin/main's registry
 -- for what it publishes. Driven through ./zn in a tracker fixture under .cache/c0114-roots (tests/lib/trackerfix): a
 -- bare origin, a main checkout and a second terminal that pushes straight to origin's main.
 local claims = require("@znile/engine/claims")
@@ -110,6 +110,20 @@ return t.spec("c0114 commands across project roots", function(it)
 		t.expect(onOrigin(`{Z}/rafts/R0011/R0011.md`)).toBe(true)
 		t.expect(has(originText(`{Z}/issues/c0020/c0020.md`), "status: preparing-")).toBe(true)
 		refused({ "new", "raft", "chore", "mixed", "c0021", "c0043" }, "a raft holds issues of one project")
+		-- offline (PICKMAN_PUBLISH=0) the same rule holds, from the local items
+		fixture.git(wt, { "fetch", "-q", "origin" })
+		fixture.git(wt, { "merge", "-q", "origin/main" })
+		local before = tip()
+		local offline = trackerfix.tr(
+			f,
+			wt,
+			{ "new", "raft", "chore", "mixed", "c0021", "c0043" },
+			{ PICKMAN_PUBLISH = "0" }
+		)
+		t.expect(offline.ok).toBe(false)
+		t.expect(has(offline.stderr, "a raft holds issues of one project")).toBe(true)
+		t.expect(fs.isDir(`{wt}/tracker/rafts/R0012`) or fs.isDir(`{wt}/{Z}/rafts/R0012`)).toBe(false)
+		t.expect(tip()).toBe(before)
 	end)
 
 	it("status moves an item in z-nile's root on origin/main", function()
@@ -243,6 +257,23 @@ return t.spec("c0114 commands across project roots", function(it)
 		t.expect(stamp ~= nil).toBe(true)
 		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { "tracker", Z }))).toBe(true)
 		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { "tracker" }))).toBe(false)
+		-- an emergent issue, made on the raft's branch in its worktree, is filed beside its raft in z-nile's root
+		local rwt = trackerfix.trOk(f, f.main, { "worktree", "R0010" })
+		trackerfix.trOk(f, rwt, { "start", "R0010" })
+		local made = trackerfix.trOk(f, rwt, { "new", "issue", "c", "found-late", "--raft", "R0010" })
+		local eid = string.match(made, "^z%-nile/%.tracker/issues/active/(c%d%d%d%d)/c%d%d%d%d%.md$")
+		t.expect(eid ~= nil).toBe(true)
+		t.expect(trackerfix.trOk(f, rwt, { "find", eid :: string })).toBe(`{Z}/issues/active/{eid}`)
+		-- and naming another project for it is refused, with nothing reserved on origin
+		local tipBefore = tip()
+		local other = trackerfix.tr(
+			f,
+			rwt,
+			{ "new", "issue", "c", "elsewhere", "--raft", "R0010", "--project", "pickman" }
+		)
+		t.expect(other.ok).toBe(false)
+		t.expect(has(other.stderr, "an emergent issue is made in its raft's project")).toBe(true)
+		t.expect(tip()).toBe(tipBefore)
 		-- and stop moves both back, restores check.sh byte for byte, and removes the prompt
 		local s = trackerfix.tr(f, f.main, { "stop", "R0010" })
 		if not s.ok then
@@ -282,5 +313,23 @@ return t.spec("c0114 commands across project roots", function(it)
 		end
 		t.expect(has(r.stdout, `removed {path}`)).toBe(true)
 		t.expect(fs.isDir(path)).toBe(false)
+	end)
+	it("audit reports a registry that does not parse, and a tracker/next that parses as a counter", function()
+		local reg = fs.readFile(`{f.main}/z-nile/projects.toml`)
+		fs.writeFile(`{f.main}/z-nile/projects.toml`, "[[project]\n")
+		local bad = trackerfix.tr(f, f.main, { "audit" })
+		fs.writeFile(`{f.main}/z-nile/projects.toml`, reg)
+		t.expect(bad.ok).toBe(false)
+		t.expect(has(bad.stdout, "error registry z-nile/projects.toml")).toBe(true)
+		fs.writeFile(`{f.main}/tracker/next`, "issue 9 a-b-c\nraft 9 a-b-c\n")
+		local old = trackerfix.tr(f, f.main, { "audit" })
+		fs.removeFile(`{f.main}/tracker/next`)
+		t.expect(old.ok).toBe(false)
+		t.expect(has(old.stdout, "error old-counter tracker/next")).toBe(true)
+		-- the tombstone itself is fine
+		fs.writeFile(`{f.main}/tracker/next`, fs.readFile("tracker/next"))
+		local tomb = trackerfix.tr(f, f.main, { "audit" })
+		fs.removeFile(`{f.main}/tracker/next`)
+		t.expect(has(tomb.stdout, "old-counter")).toBe(false)
 	end)
 end)

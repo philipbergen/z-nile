@@ -1,5 +1,5 @@
 --!strict
--- c0114 AC6, AC8: what a tracker-only publish may write is decided by origin/main's registry alone (lesson
+-- c0114 AC4: what a tracker-only publish may write is decided by origin/main's registry alone (lesson
 -- architecture/guards-trust-only-origin): a root only the working tree lists is refused, a registry that does not
 -- parse publishes nothing, and an origin/main without one has the legacy root alone. A published move stays in its
 -- root. And paths.rewrite takes a root only where it starts a path segment, so `tracker/` inside `z-nile/.tracker/` is

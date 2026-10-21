@@ -1,5 +1,5 @@
 --!strict
--- c0114 AC9, AC10: a move between project roots keeps the id, so every reader of an item's past follows it like a
+-- c0114 AC5: a move between project roots keeps the id, so every reader of an item's past follows it like a
 -- move between folders: `capture` still finds the original `tracker: new` commit with no marker, the move of the
 -- compaction map is no compaction, a later compaction of z-nile/compaction.txt still marks the history before it,
 -- history keeps the item's state and close day across the move, and the lessons reader finds a z-nile raft's reviews

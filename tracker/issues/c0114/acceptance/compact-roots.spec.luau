@@ -1,5 +1,5 @@
 --!strict
--- c0114 AC12: compaction renumbers every item of every project root from one counter, rewrites ids in every root's
+-- c0114 AC6: compaction renumbers every item of every project root from one counter, rewrites ids in every root's
 -- documents, refuses while a branch changes z-nile's root, writes the map to z-nile/compaction.txt and the counter to
 -- z-nile/next, and leaves z-nile/templates/ alone. Fixture under .cache/c0114-compact (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
