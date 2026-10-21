@@ -279,4 +279,37 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
 		t.expect(select(2, raftplan.parseGrouped("c0001@aaaa")) ~= nil).toBe(true)
 		t.expect(raftplan.parseGrouped(nil)).toEqual({})
 	end)
+
+	it(
+		"records a member over its design files: document, check.sh, acceptance specs, reviews and harvest",
+		function()
+			local base: { [string]: string } = {
+				["c0001.md"] = "---\nid: c0001\nraft: \nstatus: prepared-a-b-c\n---\n\n# c0001\n",
+				["check.sh"] = 'check "AC1: x" true\n',
+				["acceptance/a.spec.luau"] = "--!strict\nreturn nil\n",
+				["design-review-001.md"] = "# Review 001\n",
+			}
+			local function with(rel: string, text: string?): { [string]: string }
+				local c = table.clone(base)
+				c[rel] = text :: any
+				return c
+			end
+			local h = raftplan.recordHash("c0001", base)
+			for _, rel in { "check.sh", "acceptance/a.spec.luau", "design-review-001.md" } do
+				t.expect(raftplan.recordHash("c0001", with(rel, base[rel] .. "more\n")) ~= h).toBe(true)
+			end
+			for _, rel in { "acceptance/b.spec.luau", "design-refute-001.md", "harvest.md" } do
+				t.expect(raftplan.recordHash("c0001", with(rel, "new\n")) ~= h).toBe(true)
+			end
+			-- files that change for other reasons leave it alone
+			for _, rel in { "spend.md", "prompt.md", "experiments/e1.luau" } do
+				t.expect(raftplan.recordHash("c0001", with(rel, "anything\n"))).toBe(h)
+			end
+			local moved =
+				with("c0001.md", "---\nid: c0001\nraft: R0010\nstatus: active-d-e-f\n---\n\n# c0001\n")
+			t.expect(raftplan.recordHash("c0001", moved)).toBe(h)
+			t.expect(raftplan.isDesignFile("c0001.md", "c0001")).toBe(true)
+			t.expect(raftplan.isDesignFile("c0002.md", "c0001")).toBe(false)
+		end
+	)
 end)

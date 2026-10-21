@@ -27,6 +27,7 @@ local f: trackerfix.Fixture
 local A, B, C, D, E = "", "", "", "", "" -- rafting worktrees, each a terminal of its own
 local F, G, H = "", "", "" -- review 001 F1: two raftings and a z-design terminal
 local J, K, L, M, N, O = "", "", "", "", "", "" -- review 002
+local P, Q, S, U, V, X = "", "", "", "", "", "" -- review 003
 local R, R2 = "", ""
 
 local function has(text: string?, needle: string): boolean
@@ -79,6 +80,13 @@ local function land(wt: string)
 	fixture.git(f.main, { "pull", "-q", "origin", "main" })
 end
 
+-- a coherence review of the raft's current record (zz-review raft mode quotes it), review 003 F2
+local function coherence(dir: string, n: string)
+	local id = string.match(dir, "(R%d+)$") :: string
+	local grouped = string.match(fs.readFile(`{dir}/{id}.md`), "\ngrouped: ([^\n]*)\n") or "[]"
+	fs.writeFile(`{dir}/design-review-{n}.md`, `# Review {n}\n\nGrouped: {grouped}\n\nVerdict: approve\n`)
+end
+
 return t.spec(
 	"c0116 rafting prepared issues: the raft: line is the lock, the stamp claims the raft",
 	function(it)
@@ -105,6 +113,18 @@ return t.spec(
 				["tracker/issues/c0024/c0024.md"] = issue("c0024", ""),
 				["tracker/issues/c0025/c0025.md"] = draft("c0025"),
 				["tracker/issues/c0026/c0026.md"] = draft("c0026"),
+				-- review 003: redesigns of check.sh and specs, re-folding, an empty record, a fold window
+				["tracker/issues/c0031/c0031.md"] = issue("c0031", ""),
+				["tracker/issues/c0032/c0032.md"] = issue("c0032", ""),
+				["tracker/issues/c0033/c0033.md"] = issue("c0033", ""),
+				["tracker/issues/c0034/c0034.md"] = issue("c0034", ""),
+				["tracker/issues/c0035/c0035.md"] = issue("c0035", ""),
+				["tracker/issues/c0036/c0036.md"] = issue("c0036", ""),
+				["tracker/issues/c0037/c0037.md"] = issue("c0037", ""),
+				["tracker/issues/c0038/c0038.md"] = issue("c0038", ""),
+				["tracker/issues/c0039/c0039.md"] = issue("c0039", ""),
+				["tracker/issues/c0041/c0041.md"] = issue("c0041", ""),
+				["tracker/rafts/R0110/R0110.md"] = raftDoc("R0110", ""),
 				-- another project's chore, and a feature, both prepared and raftless
 				["z-nile/.tracker/issues/c0080/c0080.md"] = issue("c0080", ""),
 				["tracker/issues/f0085/f0085.md"] = (
@@ -135,6 +155,12 @@ return t.spec(
 			for _, id in { "c0021", "c0022", "c0023", "c0024", "c0025", "c0026" } do
 				seed[`tracker/issues/{id}/check.sh`] = CHECK
 			end
+			for _, id in
+				{ "c0031", "c0032", "c0033", "c0034", "c0035", "c0036", "c0037", "c0038", "c0039", "c0041" }
+			do
+				seed[`tracker/issues/{id}/check.sh`] = CHECK
+			end
+			seed["tracker/rafts/R0110/check.sh"] = CHECK
 			seed["z-nile/.tracker/issues/c0080/check.sh"] = CHECK
 			seed["tracker/rafts/R0090/check.sh"] = CHECK
 			seed["tracker/rafts/R0100/check.sh"] = CHECK
@@ -153,6 +179,12 @@ return t.spec(
 			M = trOk(f.main, { "worktree", "prep-m" })
 			N = trOk(f.main, { "worktree", "raft-n" })
 			O = trOk(f.main, { "worktree", "raft-o" })
+			P = trOk(f.main, { "worktree", "raft-p" })
+			Q = trOk(f.main, { "worktree", "prep-q" })
+			S = trOk(f.main, { "worktree", "raft-s" })
+			U = trOk(f.main, { "worktree", "raft-u" })
+			V = trOk(f.main, { "worktree", "raft-v" })
+			X = trOk(f.main, { "worktree", "raft-x" })
 			t.expect(trOk(A, { "status", "c0010" })).toBe("prepared")
 		end)
 
@@ -204,10 +236,7 @@ return t.spec(
 				local noReview = tr(A, { "status", R, "prepared" })
 				t.expect(noReview.ok).toBe(false)
 				t.expect(has(noReview.stderr, "coherence review")).toBe(true)
-				fs.writeFile(
-					`{A}/tracker/rafts/{R}/design-review-001.md`,
-					"# Review 001\n\nVerdict: approve\n"
-				)
+				coherence(`{A}/tracker/rafts/{R}`, "001")
 				trOk(A, { "status", R, "prepared" })
 				t.expect(tip()).toBe(before) -- carried: nothing published
 				t.expect(string.match(fs.readFile(doc), "\nstatus: prepared%-%a+%-%a+%-%a+\n") ~= nil)
@@ -328,7 +357,7 @@ return t.spec(
 			local stale = tr(C, { "status", R, "prepared" })
 			t.expect(stale.ok).toBe(false)
 			t.expect(has(stale.stderr, "coherence review")).toBe(true)
-			fs.writeFile(`{C}/tracker/rafts/{R}/design-review-002.md`, "# Review 002\n\nVerdict: approve\n")
+			coherence(`{C}/tracker/rafts/{R}`, "002")
 			trOk(C, { "status", R, "prepared" })
 			t.expect(string.match(fs.readFile(doc), "\nstatus: prepared%-") ~= nil).toBe(true)
 			fixture.git(C, { "add", "-A" })
@@ -380,10 +409,7 @@ return t.spec(
 				local doc = `{F}/tracker/rafts/{RX}/{RX}.md`
 				setLine(doc, "design", "ready")
 				writeDesign(doc)
-				fs.writeFile(
-					`{F}/tracker/rafts/{RX}/design-review-001.md`,
-					"# Review 001\n\nVerdict: approve\n"
-				)
+				coherence(`{F}/tracker/rafts/{RX}`, "001")
 				refused(F, { "status", RX, "prepared" }, "c0013", "claimed by another terminal", claim)
 				t.expect(originStatus("tracker/issues/c0013/c0013.md")).toBe(claim)
 				-- the rafting drops it and prepares the rest
@@ -407,7 +433,7 @@ return t.spec(
 			local doc = `{H}/tracker/rafts/{RY}/{RY}.md`
 			setLine(doc, "design", "ready")
 			writeDesign(doc)
-			fs.writeFile(`{H}/tracker/rafts/{RY}/design-review-001.md`, "# Review 001\n\nVerdict: approve\n")
+			coherence(`{H}/tracker/rafts/{RY}`, "001")
 			trOk(H, { "status", RY, "prepared" })
 			fixture.git(H, { "add", "-A" })
 			fixture.git(H, { "commit", "-q", "-m", `tracker: raft {RY}` })
@@ -431,10 +457,7 @@ return t.spec(
 			local doc = `{wt}/tracker/rafts/{rid}/{rid}.md`
 			setLine(doc, "design", "ready")
 			writeDesign(doc)
-			fs.writeFile(
-				`{wt}/tracker/rafts/{rid}/design-review-001.md`,
-				"# Review 001\n\nVerdict: approve\n"
-			)
+			coherence(`{wt}/tracker/rafts/{rid}`, "001")
 		end
 
 		it(
@@ -513,6 +536,9 @@ return t.spec(
 			t.expect(string.match(onOrigin("tracker/issues/c0070/c0070.md") or "", "\nraft: *\n") ~= nil)
 				.toBe(true)
 			trOk(N, { "status", "c0070", "preparing" })
+			-- review 003 F6: the raft unfold emptied is named by audit
+			local audited = tr(f.main, { "audit" }).stdout
+			t.expect(has(audited, "orphan-raft") and has(audited, "R0090")).toBe(true)
 		end)
 
 		it(
@@ -551,5 +577,88 @@ return t.spec(
 				t.expect(fs.isFile(`{O}/.cache/tracker-claim-c0026`)).toBe(false)
 			end
 		)
+
+		-- z-design's cycle on an issue alone that changes only its contract: its check.sh (check), or else one acceptance spec
+		local function recontract(wt: string, id: string, check: boolean)
+			trOk(wt, { "sync" })
+			trOk(wt, { "status", id, "preparing" })
+			local dir = `{wt}/tracker/issues/{id}`
+			if check then
+				fs.writeFile(
+					`{dir}/check.sh`,
+					fs.readFile(`{dir}/check.sh`) .. 'check "AC2: NEW CRITERION" true\n'
+				)
+			end
+			if not check then
+				fs.writeDir(`{dir}/acceptance`)
+				fs.writeFile(`{dir}/acceptance/new.spec.luau`, "--!strict\nreturn nil\n")
+			end
+			trOk(wt, { "status", id, "prepared" })
+			fixture.git(wt, { "add", "-A" })
+			fixture.git(wt, { "commit", "-q", "-m", `tracker: prep {id}` })
+			land(wt)
+		end
+		local function commitAll(wt: string, msg: string)
+			fixture.git(wt, { "add", "-A" })
+			fixture.git(wt, { "commit", "-q", "-m", msg })
+		end
+
+		it(
+			"a redesign of only a member's check.sh or acceptance specs inside the window is refused",
+			function()
+				local R1 = string.match(
+					trOk(P, { "new", "raft", "chore", "chk", "c0031", "c0032" }),
+					"(R%d+)"
+				) :: string
+				prepareRaft(P, R1)
+				commitAll(P, "wip")
+				recontract(Q, "c0032", true)
+				trOk(P, { "sync" })
+				refused(P, { "status", R1, "prepared" }, "c0032 (", "changed on origin/main since")
+				local RA = string.match(
+					trOk(S, { "new", "raft", "chore", "acc", "c0033", "c0034" }),
+					"(R%d+)"
+				) :: string
+				prepareRaft(S, RA)
+				commitAll(S, "wip")
+				recontract(Q, "c0034", false)
+				trOk(S, { "sync" })
+				refused(S, { "status", RA, "prepared" }, "c0034 (", "changed on origin/main since")
+			end
+		)
+
+		it("re-folding a redesigned member needs a new coherence review; an unfold alone does not", function()
+			local R3 = string.match(
+				trOk(U, { "new", "raft", "chore", "refold", "c0035", "c0036", "c0037" }),
+				"(R%d+)"
+			) :: string
+			prepareRaft(U, R3)
+			commitAll(U, "wip")
+			redesign(Q, "c0037", "REDESIGNED-REFOLD")
+			trOk(U, { "sync" })
+			refused(U, { "status", R3, "prepared" }, "c0037 (", "changed on origin/main since")
+			trOk(U, { "unfold", R3, "c0037" })
+			trOk(U, { "status", R3, "prepared" }) -- the review's record still covers c0035 and c0036
+			commitAll(U, "wip")
+			trOk(U, { "fold", R3, "c0037" })
+			refused(U, { "status", R3, "prepared" }, "predates its record")
+			coherence(`{U}/tracker/rafts/{R3}`, "002")
+			trOk(U, { "status", R3, "prepared" })
+		end)
+
+		it("an empty grouped: record does not exempt the members this rafting grouped", function()
+			local R4 =
+				string.match(trOk(V, { "new", "raft", "chore", "empty", "c0038", "c0039" }), "(R%d+)") :: string
+			prepareRaft(V, R4)
+			setLine(`{V}/tracker/rafts/{R4}/{R4}.md`, "grouped", "[]")
+			refused(V, { "status", R4, "prepared" }, "has no grouped: record")
+		end)
+
+		it("a redesign inside a fold window is refused by the carried move", function()
+			trOk(X, { "fold", "R0110", "c0041" })
+			redesign(Q, "c0041", "REDESIGNED-FOLD")
+			trOk(X, { "sync" })
+			refused(X, { "status", "R0110", "prepared" }, "c0041 (", "changed on origin/main since")
+		end)
 	end
 )

@@ -11,3 +11,9 @@
 - design-review-002 F2: tracker/retire-keeps-what-readers-count, testing/prove-state-folders-on-the-real-tree, testing/seed-every-enumerated-case
 - design-review-002 F3: ticket-prep/instructions-runnable-where-they-run
 - design-review-002 F4: one-off: the remembered issue claim's own failure modes (a cleared .cache, and release covering only the raft's stamp), specific to G14
+- design-review-003 F1: architecture/records-cover-what-was-reviewed, architecture/locks-detect-change
+- design-review-003 F2: ticket-prep/required-steps-on-every-path
+- design-review-003 F3: testing/guard-needs-its-own-case
+- design-review-003 F4: architecture/records-cover-what-was-reviewed, tracker/item-history-spans-moves-and-compaction
+- design-review-003 F5: architecture/guard-no-is-explicit
+- design-review-003 F6: one-off: unfold of a raft's last member left an empty prepared raft; the orphan warning now covers it

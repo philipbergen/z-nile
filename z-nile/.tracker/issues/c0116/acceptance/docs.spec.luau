@@ -114,11 +114,11 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 				"an open raft with a member that has no `size:` takes nothing, because the cap can't be kept",
 				w
 			)
-			at(s, "whenever this rafting changed its membership", w)
+			at(s, "whenever this rafting changed its record", w)
 			at(s, "- `./zn unfold <R-id> <ids…>` takes members out of a raft", w)
 			at(s, "**Redesigned members.**", w)
 			at(s, "changed on origin/main since <R-id> grouped it", w)
-			at(s, "record in the raft's `grouped:` line a hash of each prepared member's document", w)
+			at(s, "record in the raft's `grouped:` line a hash of each prepared member's design", w)
 			at(s, "`./zn status <id> new`, then claim it again", w)
 			at(s, "- **Theme**:", w)
 			at(s, "- **Whole-raft design**: the interfaces between the members", w)
@@ -131,7 +131,9 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			)
 			at(s, "zz-review skill in **raft mode**", w)
 			at(s, "this skill never edits a member's design", w)
-			at(s, "One round: there is no second.", w)
+			at(s, "One round per grouping", w)
+			at(s, "an `unfold` alone needs none", w)
+			at(s, "the engine refuses the raft until a review quotes the new record", w)
 			at(s, "`./zn status <R-id> prepared`", w)
 			at(
 				s,
@@ -177,7 +179,8 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			"`status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`",
 			w
 		)
-		at(s, "A raft's `grouped:` line records a hash of each prepared member's document", w)
+		at(s, "A raft's `grouped:` line records a hash of each prepared member's design", w)
+		at(s, "`compact` and `renumber` re-record every entry that matched before they rewrote its ids", w)
 		at(s, "It also gives back the issue claims this checkout remembers for the raft's members", w)
 		at(s, "| fold | `./zn fold <R-id> <issue>...` |", w)
 		at(s, "| recombine | `./zn recombine <keeper> <other> [<issue>...]` |", w)
@@ -207,6 +210,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 	it("zz-review, zz-stats, z-ready, the README, AGENTS.md and the usage move with it", function()
 		local review = read(`{SKILLS}/zz-review/SKILL.md`)
 		at(review, "## Raft mode (from z-raft)", "zz-review")
+		at(review, "as `Grouped: [<the value>]`", "zz-review")
 		at(
 			review,
 			"- Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue)",

@@ -71,6 +71,13 @@ local function land(wt: string)
 	fixture.git(f.main, { "pull", "-q", "origin", "main" })
 end
 
+-- a coherence review of the raft's current record (zz-review raft mode quotes it), review 003 F2
+local function coherence(dir: string, n: string)
+	local id = string.match(dir, "(R%d+)$") :: string
+	local grouped = string.match(fs.readFile(`{dir}/{id}.md`), "\ngrouped: ([^\n]*)\n") or "[]"
+	fs.writeFile(`{dir}/design-review-{n}.md`, `# Review {n}\n\nGrouped: {grouped}\n\nVerdict: approve\n`)
+end
+
 return t.spec("c0116 recombine moves members between backlog rafts and retires an emptied one", function(it)
 	it("sets up prepared rafts in two projects, an active raft, a feature raft and a solo member", function()
 		local seed: { [string]: string } = {
@@ -185,7 +192,7 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 	it(
 		"the carried move takes the moved member through the shared stamp, and both rafts are readyable after the merge",
 		function()
-			fs.writeFile(`{W}/tracker/rafts/R0010/design-review-001.md`, "# Review 001\n\nVerdict: approve\n")
+			coherence(`{W}/tracker/rafts/R0010`, "001")
 			local before = tip()
 			trOk(W, { "status", "R0010", "prepared" })
 			trOk(W, { "status", "R0020", "prepared" })
@@ -210,7 +217,7 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			t.expect(has(out, "retired R0040")).toBe(true)
 			t.expect(fs.isDir(`{X}/tracker/rafts/R0040`)).toBe(false)
 			t.expect(onOrigin("tracker/rafts/R0040/R0040.md") ~= nil).toBe(true) -- publish never deletes: the PR does
-			fs.writeFile(`{X}/tracker/rafts/R0030/design-review-001.md`, "# Review 001\n\nVerdict: approve\n")
+			coherence(`{X}/tracker/rafts/R0030`, "001")
 			trOk(X, { "status", "R0030", "prepared" })
 			fixture.git(X, { "add", "-A" })
 			fixture.git(X, { "commit", "-q", "-m", "tracker: raft R0030" })
@@ -313,7 +320,7 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			-- another terminal folds c0182 into R0180 and lands it; Z has not synced since
 			local V = trOk(f.main, { "worktree", "raft-v" })
 			trOk(V, { "fold", "R0180", "c0182" })
-			fs.writeFile(`{V}/tracker/rafts/R0180/design-review-001.md`, REVIEW)
+			coherence(`{V}/tracker/rafts/R0180`, "001")
 			trOk(V, { "status", "R0180", "prepared" })
 			fixture.git(V, { "add", "-A" })
 			fixture.git(V, { "commit", "-q", "-m", "tracker: fold c0182 into R0180" })
