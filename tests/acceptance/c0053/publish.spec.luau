@@ -79,7 +79,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 				"tracker/issues/c0010/spend.md",
 			}
 		do
-			t.expect(publish.allowed(ok)).toBe(true)
+			t.expect(publish.allowed(ok, { "tracker" })).toBe(true)
 		end
 		for _, bad in
 			{
@@ -97,7 +97,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 				"",
 			}
 		do
-			t.expect(publish.allowed(bad)).toBe(false)
+			t.expect(publish.allowed(bad, { "tracker" })).toBe(false)
 		end
 	end)
 

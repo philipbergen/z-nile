@@ -131,7 +131,7 @@ return t.spec("tracker publish moves", function(it)
 	end)
 
 	it("non-move changes keep today's rules", function()
-		t.expect(publish.allowed(`{FROM}/acceptance/a.spec.luau`)).toBe(false)
+		t.expect(publish.allowed(`{FROM}/acceptance/a.spec.luau`, { "tracker" })).toBe(false)
 		local id, rel = publish.itemPath(`{FROM}/acceptance/a.spec.luau`)
 		t.expect(id).toBe("c0010")
 		t.expect(rel).toBe("acceptance/a.spec.luau")
