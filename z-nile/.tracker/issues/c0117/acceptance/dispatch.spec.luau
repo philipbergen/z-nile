@@ -59,38 +59,44 @@ local function act(f: dispatch.Facts): string
 end
 
 return t.spec("c0117 dispatch rules", function(it)
-	it("ready, stop, recombine and spend are script steps; every z-nile skill is a step or read inside one", function()
-		for _, name in { "z-ready", "z-stop", "recombine", "spend", "raft-plan", "fold", "release", "zz-stats" } do
-			t.expect(dispatch.step(name).kind).toBe("script")
-		end
-		for _, name in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
-			t.expect(dispatch.step(name).kind).toBe("model")
-		end
-		for _, name in fs.readDir("z-nile/skills") do
-			if fs.isFile(`z-nile/skills/{name}/SKILL.md`) then
-				local ok, e = pcall(dispatch.step, name)
-				t.expect(ok or (dispatch.READ_INSIDE[name] == true and has(tostring(e), "read inside"))).toBe(true)
+	it(
+		"ready, stop, recombine and spend are script steps; every z-nile skill is a step or read inside one",
+		function()
+			for _, name in
+				{ "z-ready", "z-stop", "recombine", "spend", "raft-plan", "fold", "release", "zz-stats" }
+			do
+				t.expect(dispatch.step(name).kind).toBe("script")
 			end
+			for _, name in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
+				t.expect(dispatch.step(name).kind).toBe("model")
+			end
+			for _, name in fs.readDir("z-nile/skills") do
+				if fs.isFile(`z-nile/skills/{name}/SKILL.md`) then
+					local ok, e = pcall(dispatch.step, name)
+					t.expect(ok or (dispatch.READ_INSIDE[name] == true and has(tostring(e), "read inside")))
+						.toBe(true)
+				end
+			end
+			t.expect(has(
+				errorOf(function()
+					dispatch.step("zz-rules")
+				end),
+				"not a step"
+			)).toBe(true)
+			t.expect(has(
+				errorOf(function()
+					dispatch.step("pickman-arch")
+				end),
+				"project's skill"
+			)).toBe(true)
+			t.expect(has(
+				errorOf(function()
+					dispatch.step("z-deploy")
+				end),
+				"unknown step z-deploy"
+			)).toBe(true)
 		end
-		t.expect(has(
-			errorOf(function()
-				dispatch.step("zz-rules")
-			end),
-			"not a step"
-		)).toBe(true)
-		t.expect(has(
-			errorOf(function()
-				dispatch.step("pickman-arch")
-			end),
-			"project's skill"
-		)).toBe(true)
-		t.expect(has(
-			errorOf(function()
-				dispatch.step("z-deploy")
-			end),
-			"unknown step z-deploy"
-		)).toBe(true)
-	end)
+	)
 
 	it("a script step is a ./zn command, and takes no model", function()
 		t.expect(dispatch.scriptArgv("z-ready", "R0040")).toEqual({ "./zn", "ready", "R0040" })
@@ -123,11 +129,14 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(dispatch.phaseOf("z-run")).toBe("deliver")
 		t.expect(dispatch.phaseOf("zz-review", "design")).toBe("design-review")
 		t.expect(dispatch.phaseOf("zz-review", "code")).toBe("code-review")
+		-- a stream's review under the dispatcher: the review model of the CLI, its row printed for the author
+		t.expect(dispatch.lessonsOf("zz-review", "stream")).toBe("build")
+		t.expect(dispatch.phaseOf("zz-review", "stream")).toBe("code-review")
 		t.expect(has(
 			errorOf(function()
-				dispatch.lessonsOf("zz-review", "stream")
+				dispatch.lessonsOf("zz-review", "bogus")
 			end),
-			"no mode stream"
+			"no mode bogus"
 		)).toBe(true)
 	end)
 
@@ -171,29 +180,35 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(has(run, "`./zn lessons --when build --full`")).toBe(true)
 	end)
 
-	it("stops first for questions.md, a failed step, and an unharvested finding after a review step", function()
-		t.expect(act(facts({ questions = true }))).toBe("stop 3")
-		t.expect(act(facts({ last = { step = "z-design", outcome = "cap" } }))).toBe("stop 1")
-		t.expect(act(facts({ last = { step = "z-design", outcome = "quota" } }))).toBe("stop 1")
-		local after = { step = "z-design", outcome = "ok" }
-		t.expect(act(facts({
-			status = "preparing",
-			ownClaim = true,
-			last = after,
-			pr = pr(),
-			uncovered = { "design-review-001 F1" },
-		}))).toBe("stop 1")
-		-- the same finding after a script step does not stop the chain
-		t.expect(act(facts({
-			status = "prepared",
-			design = "ready",
-			last = { step = "raft-plan", outcome = "ok" },
-			localRaft = "R0050",
-			uncovered = { "x" },
-		}))).toBe("step z-raft R0050")
-		local a = dispatch.next(facts({ questions = true }))
-		t.expect(has(a.why or "", "questions.md")).toBe(true)
-	end)
+	it(
+		"stops first for questions.md, a failed step, and an unharvested finding after a review step",
+		function()
+			t.expect(act(facts({ questions = true }))).toBe("stop 3")
+			t.expect(act(facts({ last = { step = "z-design", outcome = "cap" } }))).toBe("stop 1")
+			t.expect(act(facts({ last = { step = "z-design", outcome = "quota" } }))).toBe("stop 1")
+			local after = { step = "z-design", outcome = "ok" }
+			t.expect(act(facts({
+				status = "preparing",
+				ownClaim = true,
+				last = after,
+				pr = pr(),
+				uncovered = { "design-review-001 F1" },
+			}))).toBe("stop 1")
+			-- the same finding after a script step does not stop the chain
+			t.expect(act(facts({
+				status = "prepared",
+				design = "ready",
+				last = { step = "raft-plan", outcome = "ok" },
+				localRaft = "R0050",
+				uncovered = { "x" },
+			}))).toBe("step z-raft R0050")
+			t.expect(act(facts({ last = { step = "z-design", outcome = "tripwire" } }))).toBe("stop 5")
+			t.expect(act(facts({ last = { step = "z-design", outcome = "lost" } }))).toBe("stop 1")
+			t.expect(dispatch.MAX_ACTIONS).toBe(30)
+			local a = dispatch.next(facts({ questions = true }))
+			t.expect(has(a.why or "", "questions.md")).toBe(true)
+		end
+	)
 
 	it("captures, designs, and waits at or passes the prep gate", function()
 		t.expect(act(facts({ kind = "none", where = "none", status = "none", description = "words" })))
@@ -203,11 +218,20 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(act(facts({ status = "preparing", ownClaim = true }))).toBe("step z-design c0010")
 		t.expect(act(facts({ status = "preparing", ownClaim = false }))).toBe("stop 1")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr() }))).toBe("merge prep 7")
-		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ green = false }) }))).toBe("stop 4 prep")
-		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ draft = true }) }))).toBe("stop 4 prep")
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ green = false }) })))
+			.toBe("stop 4 prep")
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ draft = true }) })))
+			.toBe("stop 4 prep")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ mergeable = false }) })))
 			.toBe("stop 4 prep")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr(), autoMerge = { "raft" } })))
+			.toBe("stop 4 prep")
+		-- a merged PR origin does not show yet, or a closed one, stops instead of designing again
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ state = "MERGED" }) })))
+			.toBe("stop 1")
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ state = "CLOSED" }) })))
+			.toBe("stop 1")
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr(), autoMerge = {} })))
 			.toBe("stop 4 prep")
 	end)
 
@@ -218,7 +242,8 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(act(facts({ last = ok("z-design") }))).toBe("stop 1")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, last = ok("z-design") }))).toBe("stop 1")
 		t.expect(act(facts({ status = "prepared", design = "ready", last = ok("raft-plan") }))).toBe("stop 1")
-		t.expect(act(facts({ kind = "raft", id = "R0050", status = "prepared", last = ok("z-ready") }))).toBe("stop 1")
+		t.expect(act(facts({ kind = "raft", id = "R0050", status = "prepared", last = ok("z-ready") })))
+			.toBe("stop 1")
 		t.expect(act(facts({
 			kind = "raft",
 			id = "R0050",
@@ -243,9 +268,11 @@ return t.spec("c0117 dispatch rules", function(it)
 			.toBe("step z-raft R0050")
 		t.expect(act(with({ localRaft = "R0050", last = { step = "z-raft", outcome = "ok" }, pr = pr() })))
 			.toBe("merge raft 7")
-		t.expect(act(with({ localRaft = "R0050", last = { step = "z-raft", outcome = "ok" } }))).toBe("stop 1")
+		t.expect(act(with({ localRaft = "R0050", last = { step = "z-raft", outcome = "ok" } })))
+			.toBe("stop 1")
 		t.expect(act(with({ raft = "R0050" }))).toBe("step follow R0050")
-		t.expect(act(facts({ where = "active", status = "active", raft = "R0050" }))).toBe("step follow R0050")
+		t.expect(act(facts({ where = "active", status = "active", raft = "R0050" })))
+			.toBe("step follow R0050")
 		t.expect(act(facts({ where = "done", status = "done" }))).toBe("stop 0")
 	end)
 
@@ -261,9 +288,14 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(act(with({ status = "prepared" }))).toBe("step z-ready R0050")
 		t.expect(act(with({ status = "preparing" }))).toBe("stop 1")
 		t.expect(act(with({ where = "active", status = "active" }))).toBe("step z-run R0050")
-		t.expect(act(with({ where = "active", status = "active", pr = pr({ draft = true }) }))).toBe("step z-run R0050")
+		t.expect(act(with({ where = "active", status = "active", pr = pr({ draft = true }) })))
+			.toBe("step z-run R0050")
 		-- green, mergeable and every gate auto-merged: still a stop at the run gate
-		t.expect(act(with({ where = "active", status = "active", pr = pr(), autoMerge = { "prep", "raft", "run" } })))
+		t.expect(
+			act(
+				with({ where = "active", status = "active", pr = pr(), autoMerge = { "prep", "raft", "run" } })
+			)
+		)
 			.toBe("stop 4 run")
 		local done = dispatch.next(with({ where = "done", status = "done" }))
 		t.expect(done.kind).toBe("stop")

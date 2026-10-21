@@ -1,0 +1,16 @@
+# Harvest: c0117
+- design-review-001 F1: architecture/guards-decide-from-the-tools-resolution, architecture/guards-trust-only-origin
+- design-review-001 F2: architecture/guards-decide-from-the-tools-resolution, architecture/guards-trust-only-origin
+- design-review-001 F3: architecture/guards-trust-only-origin
+- design-review-001 F4: architecture/children-need-a-lifeline
+- design-review-001 F5: ticket-prep/instructions-runnable-where-they-run
+- design-review-001 F6: ticket-prep/never-narrow-captured-scope
+- design-review-001 F7: architecture/guard-no-is-explicit
+- design-review-001 F8: ticket-prep/spec-design-correspondence
+- design-review-001 F9: ticket-prep/instructions-runnable-where-they-run
+- design-review-001 F10: ticket-prep/no-check-red-between-steps
+- design-review-001 F11: testing/new-commands-run-in-a-copy
+- design-review-001 F12: ticket-prep/spec-design-correspondence
+- design-review-001 F13: one-off: a sentence named a file the folder did not hold
+- design-review-001 F14: ticket-prep/specify-every-named-artifact
+- design-review-001 F15: testing/specs-set-host-markers-explicitly

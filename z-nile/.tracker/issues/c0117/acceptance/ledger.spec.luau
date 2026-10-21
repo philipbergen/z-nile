@@ -47,7 +47,12 @@ return t.spec("c0117 the spend row's model cell", function(it)
 	end)
 
 	it("a row with a model makes ten columns; earlier rows parse back with no model", function()
-		local text = ledger.append(ledger.render("c0010", "T", { row(nil, 5) }), "c0010", "T", row("grok-4.7-xhigh", 9))
+		local text = ledger.append(
+			ledger.render("c0010", "T", { row(nil, 5) }),
+			"c0010",
+			"T",
+			row("grok-4.7-xhigh", 9)
+		)
 		t.expect(has(text, ledger.HEADER_MODEL)).toBe(true)
 		t.expect(has(text, "| 1 | 2026-10-21 10:00 | s | 1 | 0 | 1.5 | spend | prep | 5 |  |\n")).toBe(true)
 		t.expect(has(text, "| prep | 9 | grok-4.7-xhigh |\n")).toBe(true)
@@ -99,13 +104,18 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		local l = ledger.parse(text) :: ledger.Ledger
 		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5-high")
 		t.expect(l.rows[#l.rows].tokens).toBe(123)
-		local r = trackerfix.tr(f, w, { "spend", "c0010", "--phase", "capture", "--time", "1", "--model", "has space" })
+		local r = trackerfix.tr(
+			f,
+			w,
+			{ "spend", "c0010", "--phase", "capture", "--time", "1", "--model", "has space" }
+		)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "--model takes one model id")).toBe(true)
 		-- without --model the cell stays empty
 		trackerfix.trOk(f, w, { "spend", "c0010", "--phase", "capture", "--time", "1", "--tokens", "4" })
-		local again =
-			ledger.parse(fixture.git(f.origin, { "show", "main:tracker/issues/c0010/spend.md" }) .. "\n") :: ledger.Ledger
+		local again = ledger.parse(
+			fixture.git(f.origin, { "show", "main:tracker/issues/c0010/spend.md" }) .. "\n"
+		) :: ledger.Ledger
 		t.expect(again.rows[#again.rows].model).toBe(nil)
 	end)
 

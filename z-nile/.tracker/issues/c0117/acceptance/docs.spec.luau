@@ -40,9 +40,11 @@ return t.spec("c0117 docs", function(it)
 			local h = section(text, "## Headless (under `./zn dispatch`)")
 			at(h, "write the questions to `$ZN_DISPATCH_DIR/questions.md`", name)
 			at(h, "./zn dispatch retry <id>", name)
-			at(h, "Never merge a pull request and never push to `main`", name)
+			at(h, "Never `git push` to `main` and never merge a pull request", name)
+			at(h, "the dispatcher pushes that tracker state to `main` for you", name)
+			at(h, "with the agent's own GitHub credential", name)
 			at(h, "without `--tokens` for your own session", name)
-			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code>`", name)
+			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code|stream>`", name)
 			if first then
 				t.expect(h).toBe(first)
 			end
@@ -71,6 +73,22 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
+	it(
+		"z-ticket lands without asking, and z-run's stream reviews run on any CLI, under the dispatcher",
+		function()
+			at(
+				skill("z-ticket"),
+				"Under the dispatcher, land without asking (the user started it)",
+				"z-ticket"
+			)
+			at(
+				skill("z-run"),
+				"a stream review is `./zn dispatch zz-review <issue> --mode stream` instead",
+				"z-run"
+			)
+		end
+	)
+
 	it("z-run ends at Ready to merge under the dispatcher", function()
 		at(
 			section(skill("z-run"), "## Phase 6: Merge and clean up"),
@@ -90,8 +108,19 @@ return t.spec("c0117 docs", function(it)
 				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 				"`claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`)",
 				"Nothing defaults",
+				'- **The agent credential** (the user\'s "Bot token, no bypass").',
+				"can't merge, bypass `main`'s protection or write protection or rulesets",
+				"Not enforceable: the agent runs as the user",
+				"- **Tracker state from inside a step.**",
+				"- **The tripwire.**",
+				"(exit 5, outcome `tripwire`)",
+				"an unset or unreadable `auto_merge` is none",
+				"Only the dispatcher merges",
+				"holds a lifeline from the dispatcher",
+				"only the CLI's own signals report",
+				"never a group id of 1 or less",
 				"- **Running a model step.**",
-				"It moves down `order` only when a CLI fails on quota",
+				"It moves down `order` only on quota",
 				"input + cache writes + output, cache reads left out",
 				"- **Spend.**",
 				"- **The chain.**",

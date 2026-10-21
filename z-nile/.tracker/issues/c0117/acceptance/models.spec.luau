@@ -57,21 +57,24 @@ local function spec(cli: string, rank: number, max: number, model: string?): mod
 end
 
 return t.spec("c0117 .models.toml", function(it)
-	it("a closer file replaces only the keys it sets: max_tokens closer, model and rank from the root", function()
-		local closer = layer("[z-design.claude]\nmax_tokens = 1000\n", "pickman/.models.toml")
-		local r = models.resolve({ layer(ROOT, ".models.toml"), closer }, "z-design")
-		local c = r.specs.claude
-		t.expect(c.maxTokens).toBe(1000)
-		t.expect(c.model).toBe("claude-opus-5-5")
-		t.expect(c.rank).toBe(3)
-		t.expect(c.runtime).toBe("claude-cli")
-		-- the CLI the closer file did not name keeps the root's whole spec
-		t.expect(r.specs.grok.maxTokens).toBe(200000)
-		t.expect(r.specs.grok.effort).toBe("high")
-		-- the walk's order and settings come from the root
-		t.expect(r.order).toEqual({ "claude", "grok", "agent" })
-		t.expect(r.settings.stallSeconds).toBe(300)
-	end)
+	it(
+		"a closer file replaces only the keys it sets: max_tokens closer, model and rank from the root",
+		function()
+			local closer = layer("[z-design.claude]\nmax_tokens = 1000\n", "pickman/.models.toml")
+			local r = models.resolve({ layer(ROOT, ".models.toml"), closer }, "z-design")
+			local c = r.specs.claude
+			t.expect(c.maxTokens).toBe(1000)
+			t.expect(c.model).toBe("claude-opus-5-5")
+			t.expect(c.rank).toBe(3)
+			t.expect(c.runtime).toBe("claude-cli")
+			-- the CLI the closer file did not name keeps the root's whole spec
+			t.expect(r.specs.grok.maxTokens).toBe(200000)
+			t.expect(r.specs.grok.effort).toBe("high")
+			-- the walk's order and settings come from the root
+			t.expect(r.order).toEqual({ "claude", "grok", "agent" })
+			t.expect(r.settings.stallSeconds).toBe(300)
+		end
+	)
 
 	it("a closer order replaces the root's whole, and each setting is replaced on its own", function()
 		local closer = layer('order = ["grok"]\n[dispatch]\nauto_merge = ["prep"]\n')
@@ -83,6 +86,27 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(#tries).toBe(1)
 		t.expect(tries[1].cli).toBe("grok")
 	end)
+
+	it(
+		"settings come from the walk, closest first; an unset auto_merge is none, and so is any error",
+		function()
+			local root =
+				layer('order = ["claude"]\n[dispatch]\nauto_merge = ["prep", "raft"]\ntool_seconds = 600\n')
+			local item = layer("[dispatch]\nauto_merge = []\n")
+			t.expect(models.settings({ root }).autoMerge).toEqual({ "prep", "raft" })
+			t.expect(models.settings({ root, item }).autoMerge).toEqual({})
+			t.expect(models.settings({ root, item }).toolSeconds).toBe(600)
+			t.expect(models.settings({}).autoMerge).toEqual({})
+			t.expect(models.settings({}).stallSeconds).toBe(300)
+			t.expect(models.settings({}).toolSeconds).toBe(900)
+			t.expect(has(
+				errorOf(function()
+					layer('[dispatch]\nauto_merge = ["run"]\n')
+				end),
+				"only prep, raft"
+			)).toBe(true)
+		end
+	)
 
 	it("tries the CLIs of the order that name the skill, in the order's order", function()
 		local r = models.resolve(
@@ -132,7 +156,8 @@ return t.spec("c0117 .models.toml", function(it)
 
 	it("a raft takes, per CLI, the stronger of its members' specs, in the raft's own order", function()
 		local root = layer(ROOT, ".models.toml")
-		local cheap = models.resolve({ root, layer("[z-design.claude]\nrank = 1\nmax_tokens = 10\n") }, "z-design")
+		local cheap =
+			models.resolve({ root, layer("[z-design.claude]\nrank = 1\nmax_tokens = 10\n") }, "z-design")
 		local rich = models.resolve({ root }, "z-design")
 		local own = models.resolve({ root, layer('order = ["grok", "claude"]\n') }, "z-design")
 		local r = models.forRaft(own, { cheap, rich })
@@ -192,7 +217,9 @@ return t.spec("c0117 .models.toml", function(it)
 	it("a spec missing a field is an error naming the skill, the CLI and the field", function()
 		local e = errorOf(function()
 			models.resolve({
-				layer('order = ["claude"]\n[z-design.claude]\nmodel = "m"\nruntime = "claude-cli"\nmax_tokens = 5\n'),
+				layer(
+					'order = ["claude"]\n[z-design.claude]\nmodel = "m"\nruntime = "claude-cli"\nmax_tokens = 5\n'
+				),
 			}, "z-design")
 		end)
 		t.expect(has(e, "z-design.claude: no rank")).toBe(true)
@@ -220,7 +247,9 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(has(
 			errorOf(function()
 				models.resolve({
-					layer('[z-design.claude]\nmodel = "m"\nrank = 1\nruntime = "claude-cli"\nmax_tokens = 5\n'),
+					layer(
+						'[z-design.claude]\nmodel = "m"\nrank = 1\nruntime = "claude-cli"\nmax_tokens = 5\n'
+					),
 				}, "z-design")
 			end),
 			"no order"
@@ -241,26 +270,29 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(has(e, "duplicate")).toBe(true)
 	end)
 
-	it("the review model belongs to the CLI: Opus through claude and agent, grok-4.7 at xhigh through grok", function()
-		local function review(cli: string, model: string, effort: string?): string?
-			local text =
-				`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\n`
-			if effort then
-				text ..= `effort = "{effort}"\n`
+	it(
+		"the review model belongs to the CLI: Opus through claude and agent, grok-4.7 at xhigh through grok",
+		function()
+			local function review(cli: string, model: string, effort: string?): string?
+				local text =
+					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\n`
+				if effort then
+					text ..= `effort = "{effort}"\n`
+				end
+				local ok, e = pcall(models.resolve, { layer(text) }, "zz-review")
+				return if ok then nil else tostring(e)
 			end
-			local ok, e = pcall(models.resolve, { layer(text) }, "zz-review")
-			return if ok then nil else tostring(e)
+			t.expect(review("claude", "claude-opus-5-5")).toBe(nil)
+			t.expect(review("agent", "claude-opus-5-5-high")).toBe(nil)
+			t.expect(review("grok", "grok-4.7", "xhigh")).toBe(nil)
+			t.expect(has(review("claude", "claude-sonnet-5") or "", "runs on Opus")).toBe(true)
+			t.expect(has(review("agent", "grok-4.7-xhigh") or "", "runs on Opus")).toBe(true)
+			t.expect(has(review("grok", "grok-4.7", "high") or "", "grok-4.7-xhigh")).toBe(true)
+			t.expect(has(review("grok", "grok-4.6", "xhigh") or "", "grok-4.7-xhigh")).toBe(true)
+			-- the rule is the review's alone: an author may run on any model
+			t.expect(models.reviewRule("z-design", spec("claude", 1, 1, "claude-sonnet-5"))).toBe(nil)
 		end
-		t.expect(review("claude", "claude-opus-5-5")).toBe(nil)
-		t.expect(review("agent", "claude-opus-5-5-high")).toBe(nil)
-		t.expect(review("grok", "grok-4.7", "xhigh")).toBe(nil)
-		t.expect(has(review("claude", "claude-sonnet-5") or "", "runs on Opus")).toBe(true)
-		t.expect(has(review("agent", "grok-4.7-xhigh") or "", "runs on Opus")).toBe(true)
-		t.expect(has(review("grok", "grok-4.7", "high") or "", "grok-4.7-xhigh")).toBe(true)
-		t.expect(has(review("grok", "grok-4.6", "xhigh") or "", "grok-4.7-xhigh")).toBe(true)
-		-- the rule is the review's alone: an author may run on any model
-		t.expect(models.reviewRule("z-design", spec("claude", 1, 1, "claude-sonnet-5"))).toBe(nil)
-	end)
+	)
 
 	it("the model id a row records carries its effort", function()
 		local s = spec("grok", 4, 9, "grok-4.7")

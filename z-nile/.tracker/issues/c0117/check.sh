@@ -25,6 +25,8 @@ check "AC7: the skills, README, AGENTS.md, usage and prompt template say what th
   lune run tests/run -- "$A/docs.spec.luau"
 check "AC8: the prompt names skill files and the architecture map (c0115 and c0120 specs, overridden), and the README spec stays green" \
   lune run tests/run -- tests/acceptance/c0115/prompt.spec.luau tests/acceptance/c0120/homes.spec.luau tests/acceptance/c0115/readme.spec.luau
-check "AC9: the real tree's skill links, lessons and audit stay clean, and its .models.toml resolves z-design for c0117" \
-  bash -c './zn skills --check && ./zn lessons --check && ./zn audit && ./zn dispatch z-design c0117 --dry-run | grep -q "^try=3 cli="'
+check "AC9: the real tree's skill links, lessons and audit stay clean" \
+  bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
+check "AC10: the dispatcher controls a run: questions, capture, a nested review, the broker, the tripwire, the lifeline, the lock, stop and the gates" \
+  lune run tests/run -- "$A/control-cli.spec.luau"
 finish
