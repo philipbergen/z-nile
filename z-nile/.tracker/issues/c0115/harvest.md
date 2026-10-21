@@ -17,3 +17,7 @@
 - design-review-003 F1: architecture/one-reader-per-format, testing/one-rule-one-function
 - design-review-003 F2: ticket-prep/bulk-renames-skip-ordinary-words
 - design-review-003 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-004 F1: testing/one-rule-one-function, testing/absence-scans-cover-every-form, architecture/one-reader-per-format
+- design-review-004 F2: ticket-prep/prove-specs-pass-on-a-prototype
+- note c0115 prep round 4: a rule built on parseHarvest left out the lines the reader skips (headings, paragraphs, sub-bullets): testing/one-rule-one-function
+- note c0115 prep round 4: the prototype's edits commit was amended before the promotion type check ran, and another agent read the unchecked commit: ticket-prep/rerun-skipped-checks-after-edits

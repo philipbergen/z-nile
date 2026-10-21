@@ -200,6 +200,37 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 		end
 	)
 
+	it(
+		"every byte of a ledger is covered: headings, paragraphs, sub-bullets and refused lines take the prose rule",
+		function()
+			local existing = { ["zz-test/no-vacuous-pass"] = true }
+			local text = "# Harvest: see testing/no-vacuous-pass\n"
+				.. "Rounds 001 to 005 reviewed it. See testing/no-vacuous-pass.\n"
+				.. "  - also testing/no-vacuous-pass\n"
+				.. "- design-review-001 F1: zz-test/no-vacuous-pass\n"
+			local found = lessons.ledgerOldIds(text, existing)
+			t.expect(#found).toBe(3)
+			local out, n = lessons.renameLedger(text, existing)
+			t.expect(n).toBe(3)
+			t.expect((string.find(out, "testing/", 1, true))).toBe(nil)
+			t.expect(out).toBe((string.gsub(text, "testing/no%-vacuous%-pass", "zz-test/no-vacuous-pass")))
+			-- look-alike paths anywhere stay byte for byte
+			local alike = "# Harvest under review/x\nA paragraph on tracker/rafts/R0010.\n  - see review/x and testing/fixtures\n"
+				.. "- not an entry: review/x\n"
+			t.expect((lessons.ledgerOldIds(alike, existing))).toEqual({})
+			local same, zero = lessons.renameLedger(alike, existing)
+			t.expect(same).toBe(alike)
+			t.expect(zero).toBe(0)
+			-- a refused line is prose too: renamed, and still a problem for lessons --check
+			local refused, m =
+				lessons.renameLedger("- not an entry naming testing/no-vacuous-pass\n", existing)
+			t.expect(refused).toBe("- not an entry naming zz-test/no-vacuous-pass\n")
+			t.expect(m).toBe(1)
+			local _, problems = lessons.parseHarvest("c0010", refused)
+			t.expect(#problems).toBe(1)
+		end
+	)
+
 	it("no harvest.md under any root, and no lesson, names an old skill's id", function()
 		local r = process.exec("git", { "ls-files" })
 		local existing = skills.lessonIndex(".")

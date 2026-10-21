@@ -9,3 +9,5 @@ Some checks pass once and are never run again, because the everyday loop (runnin
 **Why:** R0040 design review 2 (F1): ticket-prep runs `promote-check` once, in step 4. Round 1's answers added a field to a type and a two-argument `t.expect`. All 32 spec cases still passed, because the runner does not type-check, but `promote-check` (and with it RC0, which the executor may not fix) failed.
 
 **How to apply:** list the checks the runner skips for the files this draft changes, and put each one's rerun in the step that edits those files (for sequestered specs: ticket-prep step 5.3).
+
+Run those checks before committing to a branch other agents read, not after: in c0115's round 4 the promotion type check caught a two-value `string.find` passed to `t.expect`, but only after the commit holding it had been read by another agent.
