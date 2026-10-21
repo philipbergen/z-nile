@@ -109,14 +109,17 @@ return t.spec("c0120 the runner runs from a project's home", function(it)
 		write("z-nile/tests/tooling/home.spec.luau", ZNILE_SPEC)
 	end)
 
-	it("from pickman/ it collects pickman's specs only and runs them there, with pickman's aliases", function()
-		local ok, out = runIn(`{base}/pickman`, {})
-		t.expect(has(out, "1 passed, 0 failed, 1 spec files")).toBe(true)
-		t.expect(ok).toBe(true)
-		-- the relative .cache path landed in the home's .cache
-		t.expect(fs.isFile(`{base}/pickman/.cache/c0120-runner-probe/written`)).toBe(true)
-		t.expect(fs.isDir(`{base}/.cache/c0120-runner-probe`)).toBe(false)
-	end)
+	it(
+		"from pickman/ it collects pickman's specs only and runs them there, with pickman's aliases",
+		function()
+			local ok, out = runIn(`{base}/pickman`, {})
+			t.expect(has(out, "1 passed, 0 failed, 1 spec files")).toBe(true)
+			t.expect(ok).toBe(true)
+			-- the relative .cache path landed in the home's .cache
+			t.expect(fs.isFile(`{base}/pickman/.cache/c0120-runner-probe/written`)).toBe(true)
+			t.expect(fs.isDir(`{base}/.cache/c0120-runner-probe`)).toBe(false)
+		end
+	)
 
 	it("from z-nile/ it collects z-nile's specs only", function()
 		local ok, out = runIn(`{base}/z-nile`, {})

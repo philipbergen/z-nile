@@ -10,9 +10,9 @@
 -- which its own work will create, and the check.sh files of the rafts the user restamps for a re-prep after c0120
 -- (R0030 with c0083, R0039 with c0075), by their exact content, so a re-prep that rewrites them is checked again.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
 local serde = require("@lune/serde")
-local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 -- the checkout's top, with a slash: these specs run from z-nile/ (c0120), and the scan reads the checkout from there
@@ -52,7 +52,11 @@ local function literals(text: string): { string }
 					dir = w .. "/"
 					continue
 				end
-				if not string.find(w, "$", 1, true) and string.sub(w, 1, 1) ~= "/" and string.sub(w, 1, 1) ~= "-" then
+				if
+					not string.find(w, "$", 1, true)
+					and string.sub(w, 1, 1) ~= "/"
+					and string.sub(w, 1, 1) ~= "-"
+				then
 					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
 						path = if string.match(w, "%.luau$") then w else w .. ".luau"
 					elseif FILES[w] then
@@ -84,7 +88,9 @@ local function present(base: string, home: string, path: string): boolean
 	if not dir or string.find(dir, "*", 1, true) or not fs.isDir(dir) then
 		return false
 	end
-	local lua = "^" .. string.gsub(string.gsub(pat :: string, "[%.%-%+%?%[%]%^%$%(%)%%]", "%%%0"), "%*", ".*") .. "$"
+	local lua = "^"
+		.. string.gsub(string.gsub(pat :: string, "[%.%-%+%?%[%]%^%$%(%)%%]", "%%%0"), "%*", ".*")
+		.. "$"
 	for _, name in fs.readDir(dir) do
 		if string.match(name, lua) then
 			return true
@@ -105,7 +111,11 @@ local function touched(doc: string): { string }
 end
 local function under(path: string, own: { string }): boolean
 	for _, o in own do
-		if path == o or string.sub(path, 1, #o + 1) == o .. "/" or string.sub(o, 1, #path + 1) == path .. "/" then
+		if
+			path == o
+			or string.sub(path, 1, #o + 1) == o .. "/"
+			or string.sub(o, 1, #path + 1) == path .. "/"
+		then
 			return true
 		end
 	end
@@ -259,12 +269,15 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		fs.removeDir(FX)
 	end)
 
-	it("every unfinished item's check.sh, in every project root, names only paths that exist from its home", function()
-		local s = scan(TOP)
-		t.expect(table.concat(s.bad, "\n")).toBe("")
-		-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
-		t.expect(s.checked).toBe(s.found)
-	end)
+	it(
+		"every unfinished item's check.sh, in every project root, names only paths that exist from its home",
+		function()
+			local s = scan(TOP)
+			t.expect(table.concat(s.bad, "\n")).toBe("")
+			-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
+			t.expect(s.checked).toBe(s.found)
+		end
+	)
 
 	it("the restamped check.sh files are exempt only as they are now", function()
 		for _, i in items(TOP) do

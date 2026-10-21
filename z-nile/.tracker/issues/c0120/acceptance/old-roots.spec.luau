@@ -59,13 +59,16 @@ local function codes(problems: { audit.Problem }): { string }
 end
 
 return t.spec("c0120 the old places stay empty", function(it)
-	it("the repository: nothing but the tombstone under tracker/, every promoted spec in its project's home", function()
-		local reg = projects.load(TOP)
-		t.expect(reg.retired).toEqual({ "tracker" })
-		t.expect(codes(audit.leftovers(TOP, audit.scan(TOP), reg))).toEqual({})
-		local r = process.exec("git", { "ls-files", "--", "tracker" }, { cwd = TOP })
-		t.expect(r.stdout).toBe("tracker/next\n")
-	end)
+	it(
+		"the repository: nothing but the tombstone under tracker/, every promoted spec in its project's home",
+		function()
+			local reg = projects.load(TOP)
+			t.expect(reg.retired).toEqual({ "tracker" })
+			t.expect(codes(audit.leftovers(TOP, audit.scan(TOP), reg))).toEqual({})
+			local r = process.exec("git", { "ls-files", "--", "tracker" }, { cwd = TOP })
+			t.expect(r.stdout).toBe("tracker/next\n")
+		end
+	)
 
 	it("the repository: no tests/ at the root, and none of pickman's old places", function()
 		local back: { string } = {}

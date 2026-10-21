@@ -12,7 +12,9 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 -- the checkout's top: these specs run from z-nile/, and the fixture copies its files from there
-local TOP = (string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
 	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local SOURCE = 'HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"\n'
@@ -73,7 +75,11 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			["pickman/.tracker/issues/f0010/f0010.md"] = doc("f0010", "feature", "raft: R0010\n"),
 			["pickman/.tracker/issues/f0010/check.sh"] = PICKMAN_CHECK,
 			["pickman/.tracker/issues/f0010/acceptance/.gitkeep"] = "",
-			["pickman/.tracker/rafts/R0010/R0010.md"] = doc("R0010", "feature", "issues: [f0010]\nsingle: true\n"),
+			["pickman/.tracker/rafts/R0010/R0010.md"] = doc(
+				"R0010",
+				"feature",
+				"issues: [f0010]\nsingle: true\n"
+			),
 			["pickman/.tracker/rafts/R0010/check.sh"] = RAFT_CHECK,
 			["z-nile/.tracker/issues/c0020/c0020.md"] = doc("c0020", "chore", "raft: \n"),
 			["z-nile/.tracker/issues/c0020/check.sh"] = ZNILE_CHECK,
@@ -85,7 +91,11 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			["pickman/.tracker/architecture.md"] = "# Architecture\n\nARCH-MARKER pickman's map\n",
 			["z-nile/.tracker/issues/c0021/c0021.md"] = doc("c0021", "chore", "raft: R0020\n"),
 			["z-nile/.tracker/issues/c0021/check.sh"] = ZNILE_CHECK,
-			["z-nile/.tracker/rafts/R0020/R0020.md"] = doc("R0020", "chore", "issues: [c0021]\nsingle: true\n"),
+			["z-nile/.tracker/rafts/R0020/R0020.md"] = doc(
+				"R0020",
+				"chore",
+				"issues: [c0021]\nsingle: true\n"
+			),
 			["z-nile/.tracker/rafts/R0020/check.sh"] = ZNILE_CHECK,
 		}
 		for _, sk in { "execute-raft", "tracker", "architecture", "testing", "review" } do
@@ -163,7 +173,12 @@ return t.spec("c0120 checks run from their project's home", function(it)
 				fs.removeDir(at("pickman/.cache"))
 			end
 			fixture.exec(f.main, "ln", { "-s", away, "pickman/.cache" })
-			local r = fixture.exec(f.main, "bash", { "pickman/.tracker/issues/f0010/check.sh" }, { env = NO_JAIL })
+			local r = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = NO_JAIL }
+			)
 			local inJail = fixture.exec(
 				f.main,
 				"bash",
@@ -197,7 +212,8 @@ return t.spec("c0120 checks run from their project's home", function(it)
 				{ "z-nile/.tracker/issues/c0020/probe/check.sh" },
 				{ env = markers() }
 			)
-			local rootSeen = string.split(fs.readFile(at("z-nile/.tracker/issues/c0020/probe/guards.txt")), "\n")
+			local rootSeen =
+				string.split(fs.readFile(at("z-nile/.tracker/issues/c0020/probe/guards.txt")), "\n")
 			-- a home .cache with no sentinel that refuses writes
 			lockHomeCache()
 			local r = fixture.exec(f.main, "bash", { probe }, { env = markers() })
@@ -278,18 +294,21 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		t.expect(guardsCheckout(r)).toBe(true)
 	end)
 
-	it("a fence entered from the root with GIT_DIR at another repository guards the checkout's refs", function()
-		local foreign = `{f.base}/c0120-foreign`
-		fixture.exec(f.main, "git", { "init", "-q", foreign })
-		fs.writeFile(at("escape-probe.sh"), escapeProbe(".", `{foreign}/.git`))
-		local r = fixture.exec(f.main, "bash", { "escape-probe.sh" }, { env = NO_JAIL })
-		fs.removeFile(at("escape-probe.sh"))
-		pcall(fixture.git, f.main, { "update-ref", "-d", "refs/heads/c0120-escaped" })
-		fs.removeDir(foreign)
-		t.expect(r.ok).toBe(true)
-		t.expect(guardsCheckout(r)).toBe(true)
-		t.expect(has(r.stdout, "COMMON=" .. foreign)).toBe(false)
-	end)
+	it(
+		"a fence entered from the root with GIT_DIR at another repository guards the checkout's refs",
+		function()
+			local foreign = `{f.base}/c0120-foreign`
+			fixture.exec(f.main, "git", { "init", "-q", foreign })
+			fs.writeFile(at("escape-probe.sh"), escapeProbe(".", `{foreign}/.git`))
+			local r = fixture.exec(f.main, "bash", { "escape-probe.sh" }, { env = NO_JAIL })
+			fs.removeFile(at("escape-probe.sh"))
+			pcall(fixture.git, f.main, { "update-ref", "-d", "refs/heads/c0120-escaped" })
+			fs.removeDir(foreign)
+			t.expect(r.ok).toBe(true)
+			t.expect(guardsCheckout(r)).toBe(true)
+			t.expect(has(r.stdout, "COMMON=" .. foreign)).toBe(false)
+		end
+	)
 
 	it("a sourced pickman check.sh refuses, instead of running from its caller's folder", function()
 		local r = fromHome({ "source-it.sh" })
@@ -338,8 +357,10 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		local found = fromHome({ "scripts/tracker.sh", "find", "f0010" })
 		t.expect(found.ok).toBe(true)
 		t.expect(found.stdout).toBe(".tracker/issues/f0010\n")
-		t.expect(fromHome({ "scripts/tracker.sh", "members", "R0010" }).stdout).toBe(".tracker/issues/f0010\n")
-		t.expect(fromHome({ "scripts/tracker.sh", "find", "c0020" }).stdout).toBe("../z-nile/.tracker/issues/c0020\n")
+		t.expect(fromHome({ "scripts/tracker.sh", "members", "R0010" }).stdout)
+			.toBe(".tracker/issues/f0010\n")
+		t.expect(fromHome({ "scripts/tracker.sh", "find", "c0020" }).stdout)
+			.toBe("../z-nile/.tracker/issues/c0020\n")
 	end)
 
 	it("a check.sh under a .tracker/ folder that no project's root holds refuses to run", function()
@@ -349,33 +370,39 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		t.expect(fs.isFile(at("other/.tracker/issues/c0030/where.txt"))).toBe(false)
 	end)
 
-	it("a pickman raft's prompt inlines pickman's architecture map; a z-nile raft's says it has none", function()
-		local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
-		if not r.ok then
-			error(r.stderr .. r.stdout)
+	it(
+		"a pickman raft's prompt inlines pickman's architecture map; a z-nile raft's says it has none",
+		function()
+			local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
+			if not r.ok then
+				error(r.stderr .. r.stdout)
+			end
+			local prompt = fs.readFile(at("pickman/.tracker/rafts/active/R0010/prompt.md"))
+			t.expect(has(prompt, "## Architecture map (pickman/.tracker/architecture.md)")).toBe(true)
+			t.expect(has(prompt, "ARCH-MARKER pickman's map")).toBe(true)
+			t.expect(has(prompt, "## Work items (verbatim from pickman/.tracker/)")).toBe(true)
+			local z = trackerfix.tr(f, f.main, { "ready", "R0020" })
+			if not z.ok then
+				error(z.stderr .. z.stdout)
+			end
+			local zp = fs.readFile(at("z-nile/.tracker/rafts/active/R0020/prompt.md"))
+			t.expect(has(zp, "## Architecture map (z-nile/.tracker/architecture.md)")).toBe(true)
+			t.expect(has(zp, "(z-nile/.tracker has no architecture.md: this project has none)")).toBe(true)
+			t.expect(has(zp, "ARCH-MARKER")).toBe(false)
+			-- the prompts are ignored files: the main checkout stays clean
+			t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
 		end
-		local prompt = fs.readFile(at("pickman/.tracker/rafts/active/R0010/prompt.md"))
-		t.expect(has(prompt, "## Architecture map (pickman/.tracker/architecture.md)")).toBe(true)
-		t.expect(has(prompt, "ARCH-MARKER pickman's map")).toBe(true)
-		t.expect(has(prompt, "## Work items (verbatim from pickman/.tracker/)")).toBe(true)
-		local z = trackerfix.tr(f, f.main, { "ready", "R0020" })
-		if not z.ok then
-			error(z.stderr .. z.stdout)
-		end
-		local zp = fs.readFile(at("z-nile/.tracker/rafts/active/R0020/prompt.md"))
-		t.expect(has(zp, "## Architecture map (z-nile/.tracker/architecture.md)")).toBe(true)
-		t.expect(has(zp, "(z-nile/.tracker has no architecture.md: this project has none)")).toBe(true)
-		t.expect(has(zp, "ARCH-MARKER")).toBe(false)
-		-- the prompts are ignored files: the main checkout stays clean
-		t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
-	end)
+	)
 
-	it("a pickman check.sh refuses when the registry can't be read, instead of running from the root", function()
-		local good = fs.readFile(at("z-nile/projects.toml"))
-		fs.writeFile(at("z-nile/projects.toml"), "this is = not [ toml\n")
-		local r = fixture.exec(f.main, "bash", { "pickman/.tracker/issues/active/f0010/check.sh" }) -- readied above
-		fs.writeFile(at("z-nile/projects.toml"), good)
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "is under no project root")).toBe(true)
-	end)
+	it(
+		"a pickman check.sh refuses when the registry can't be read, instead of running from the root",
+		function()
+			local good = fs.readFile(at("z-nile/projects.toml"))
+			fs.writeFile(at("z-nile/projects.toml"), "this is = not [ toml\n")
+			local r = fixture.exec(f.main, "bash", { "pickman/.tracker/issues/active/f0010/check.sh" }) -- readied above
+			fs.writeFile(at("z-nile/projects.toml"), good)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "is under no project root")).toBe(true)
+		end
+	)
 end)

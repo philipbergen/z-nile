@@ -76,4 +76,6 @@ if #bad > 0 then
 	print(`finished: {#bad} of {judged} sequestered files differ from their text before the move ({pre})`)
 	process.exit(1)
 end
-print(`finished: {judged} sequestered files are their text before the move, finished check.sh files rewritten ({pre})`)
+print(
+	`finished: {judged} sequestered files are their text before the move, finished check.sh files rewritten ({pre})`
+)

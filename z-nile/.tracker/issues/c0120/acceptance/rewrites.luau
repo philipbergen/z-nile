@@ -68,7 +68,12 @@ function rewrites.literals(text: string): { Literal }
 				continue
 			end
 			local path: string? = nil
-			if k > 2 and words[k - 2].w == "lune" and words[k - 1].w == "run" and string.find(w, "/", 1, true) then
+			if
+				k > 2
+				and words[k - 2].w == "lune"
+				and words[k - 1].w == "run"
+				and string.find(w, "/", 1, true)
+			then
 				path = if string.match(w, "%.luau$") then w else w .. ".luau"
 			elseif FILES[w] then
 				path = if w == "./zn" then "zn" else w
@@ -80,7 +85,10 @@ function rewrites.literals(text: string): { Literal }
 				end
 			end
 			if path then
-				table.insert(out, { line = n, first = word.first, last = word.last, word = w, path = path, dir = dir })
+				table.insert(
+					out,
+					{ line = n, first = word.first, last = word.last, word = w, path = path, dir = dir }
+				)
 			end
 		end
 	end
@@ -286,7 +294,11 @@ function rewrites.rewrite(text: string, home: string, world: World): string
 					if string.sub(l.word, -1) == "/" then
 						new ..= "/"
 					end
-					if l.path ~= l.word and string.sub(new, -5) == ".luau" and string.sub(l.word, -5) ~= ".luau" then
+					if
+						l.path ~= l.word
+						and string.sub(new, -5) == ".luau"
+						and string.sub(l.word, -5) ~= ".luau"
+					then
 						new = string.sub(new, 1, -6) -- `lune run tests/run` names no .luau
 					end
 					-- a file in the home itself is named ./<file>: a bare word in a command's place would be looked up

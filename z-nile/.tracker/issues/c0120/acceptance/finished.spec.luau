@@ -113,7 +113,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			"check \"AC5: a glob\" bash -c 'ls .tracker/issues/done/*/check.sh'",
 			"",
 		}, "\n"))
-		local znile = rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
+		local znile =
+			rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
 		t.expect(znile).toBe(table.concat({
 			"#!/usr/bin/env bash",
 			'check "AC1: ci" ../scripts/ci-verify.sh',

@@ -50,13 +50,21 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		)
 		at(s, "`z-nile/` for z-nile", w)
 		at(s, "the repository root belongs to no project (c0120)", w)
-		at(s, "`./zn check` runs a pickman item's `check.sh` from `pickman/` and a z-nile item's from `z-nile/`", w)
+		at(
+			s,
+			"`./zn check` runs a pickman item's `check.sh` from `pickman/` and a z-nile item's from `z-nile/`",
+			w
+		)
 		at(s, "CI runs one gate job per project, `gate (<project>)`, and branch protection requires each", w)
 		at(s, "adding a project means a registry entry, a CI matrix entry and a new required check", w)
 		at(s, "`./zn find` and `members` print paths from the folder you run them in", w)
 		at(s, "`tracker/` is a retired root (c0120)", w)
 		at(s, "`./zn audit` and the gate fail if anything else appears there", w)
-		at(s, "`check.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`", w)
+		at(
+			s,
+			"`check.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`",
+			w
+		)
 		at(s, "a branch from before c0120 that added a file in a pickman item's folder", w)
 		at(s, "`./zn busy` lists what holds them", w)
 		at(s, "| busy | `./zn busy [<path>...]` |", w)
@@ -64,34 +72,53 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		at(s, "writes the ignored `<root>/rafts/active/<R-id>/prompt.md`", w)
 	end)
 
-	it("the testing skill states where specs live and run, each project's gate, and promotion into the home", function()
-		local s = read(`{SKILLS}/testing/SKILL.md`)
-		local w = "testing skill"
-		at(s, "| `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate", w)
-		at(s, "| `z-nile/check.sh --plan` |", w)
-		at(s, "Each project's specs live under its home and run from it (c0120)", w)
-		at(s, "z-nile's (the tooling's) under `z-nile/tests/`", w)
-		at(s, "There is no `tests/` at the root.", w)
-		at(s, "The runner refuses any other folder: the repository root belongs to no project", w)
-		at(s, "`z-nile/tests/acceptance/<id>/` for z-nile's", w)
-		at(s, "A project's gate proves that project alone (c0120)", w)
-		at(s, "for **finished** items' `check.sh` files only", w)
-		at(s, "`pickman/tests/run.luau` runs it from `pickman/`", w)
-		at(s, "**Runs from its project's home** (c0120)", w)
-		at(s, "A `check.sh` under a `.tracker/` folder that no project's root holds refuses to run.", w)
-		at(s, "`$ZN_ROOT` is the repository root", w)
-		at(s, "in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's, `z-nile/tests/acceptance/<id>/` for z-nile's)", w)
-		at(s, "one run at a time per checkout and home (`<home>/.cache/tests-run.lock`)", w)
-		at(s, "`lune run z-nile/affected -- --project <name>`", w)
-		at(s, "`ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`", w)
-		at(
-			s,
-			"The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set",
-			w
-		)
-		at(s, "Any other failed write refuses, spec runs included.", w)
-		at(s, "makes in each member's project's `<home>/tests/acceptance/` and removes before it exits", w)
-	end)
+	it(
+		"the testing skill states where specs live and run, each project's gate, and promotion into the home",
+		function()
+			local s = read(`{SKILLS}/testing/SKILL.md`)
+			local w = "testing skill"
+			at(
+				s,
+				"| `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate",
+				w
+			)
+			at(s, "| `z-nile/check.sh --plan` |", w)
+			at(s, "Each project's specs live under its home and run from it (c0120)", w)
+			at(s, "z-nile's (the tooling's) under `z-nile/tests/`", w)
+			at(s, "There is no `tests/` at the root.", w)
+			at(s, "The runner refuses any other folder: the repository root belongs to no project", w)
+			at(s, "`z-nile/tests/acceptance/<id>/` for z-nile's", w)
+			at(s, "A project's gate proves that project alone (c0120)", w)
+			at(s, "for **finished** items' `check.sh` files only", w)
+			at(s, "`pickman/tests/run.luau` runs it from `pickman/`", w)
+			at(s, "**Runs from its project's home** (c0120)", w)
+			at(s, "A `check.sh` under a `.tracker/` folder that no project's root holds refuses to run.", w)
+			at(s, "`$ZN_ROOT` is the repository root", w)
+			at(
+				s,
+				"in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's, `z-nile/tests/acceptance/<id>/` for z-nile's)",
+				w
+			)
+			at(s, "one run at a time per checkout and home (`<home>/.cache/tests-run.lock`)", w)
+			at(s, "`lune run z-nile/affected -- --project <name>`", w)
+			at(
+				s,
+				"`ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`",
+				w
+			)
+			at(
+				s,
+				"The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set",
+				w
+			)
+			at(s, "Any other failed write refuses, spec runs included.", w)
+			at(
+				s,
+				"makes in each member's project's `<home>/tests/acceptance/` and removes before it exits",
+				w
+			)
+		end
+	)
 
 	it("the architecture and ticket-prep skills, AGENTS.md and SETUP.md name pickman's home", function()
 		at(
@@ -104,7 +131,11 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		at(read("AGENTS.md"), "The game is the `pickman` project, in `pickman/`", "AGENTS.md")
 		at(read("AGENTS.md"), "designing or writing anything in `pickman/src/`", "AGENTS.md")
 		at(read("AGENTS.md"), "runs one suite per checkout and project home at a time", "AGENTS.md")
-		at(read("SETUP.md"), "In `pickman/` (the game's home: its Rojo projects are there), `rojo serve`", "SETUP.md")
+		at(
+			read("SETUP.md"),
+			"In `pickman/` (the game's home: its Rojo projects are there), `rojo serve`",
+			"SETUP.md"
+		)
 		at(read("SETUP.md"), "run `lune run scripts/deploy-beta` in `pickman/`", "SETUP.md")
 	end)
 
@@ -131,7 +162,9 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 	it("no document names pickman's old map or design paths", function()
 		local bad: { string } = {}
 		for path, text in docs() do
-			for _, old in { "`tracker/architecture.md`", "`tracker/game-design.md`", " tracker/architecture.md" } do
+			for _, old in
+				{ "`tracker/architecture.md`", "`tracker/game-design.md`", " tracker/architecture.md" }
+			do
 				if string.find(text, old, 1, true) then
 					table.insert(bad, `{path}: {old}`)
 				end

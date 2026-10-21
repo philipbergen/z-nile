@@ -116,7 +116,8 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker, pickman's home", "--allow-empty" })
-		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new issue")).toBe("pickman/.tracker/issues/f0010/f0010.md")
+		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new issue"))
+			.toBe("pickman/.tracker/issues/f0010/f0010.md")
 		must(tr({ "new", "raft", "feature", "demo", "f0010", "--single" }), "new raft")
 		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
@@ -178,8 +179,10 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		-- the promoted spec ran (it only passes from pickman/)
 		t.expect(string.find(r.stdout, "passed, 0 failed", 1, true) ~= nil).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
-		local promoted = git({ "show", "--name-status", "--format=", "HEAD", "--", "pickman/tests/acceptance" })
-		t.expect(string.find(promoted, "pickman/" .. ACC .. "f0010/alpha.spec.luau", 1, true) ~= nil).toBe(true)
+		local promoted =
+			git({ "show", "--name-status", "--format=", "HEAD", "--", "pickman/tests/acceptance" })
+		t.expect(string.find(promoted, "pickman/" .. ACC .. "f0010/alpha.spec.luau", 1, true) ~= nil)
+			.toBe(true)
 	end)
 
 	it("the done check.sh still finds its promoted specs from pickman/", function()

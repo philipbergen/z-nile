@@ -56,7 +56,13 @@ local function stubbed(name: string): string
 	engine.copy(root, dir)
 	fs.writeFile(`{dir}/z-nile/projects.toml`, REGISTRY)
 	for _, rel in
-		{ "pickman/src/shared", "pickman/tests/unit", "z-nile/tests/tooling", "z-nile/.tracker", "pickman/.tracker" }
+		{
+			"pickman/src/shared",
+			"pickman/tests/unit",
+			"z-nile/tests/tooling",
+			"z-nile/.tracker",
+			"pickman/.tracker",
+		}
 	do
 		fs.writeDir(`{dir}/{rel}`)
 	end
@@ -155,36 +161,40 @@ local function untouched(dir: string)
 end
 
 return t.spec("c0120 each project has its own gate", function(it)
-	it("the plan of the real tree's layout: every home's folders, pickman's places and both projects' specs", function()
-		local dir = planTree()
-		local ok, out = plan(dir, {})
-		untouched(dir)
-		t.expect(ok).toBe(true)
-		local format = words(lineOf(out, "format"))
-		for _, d in
-			{
-				"pickman/src",
-				"pickman/tests",
-				"pickman/scripts",
-				"pickman/.tracker",
-				"scripts",
-				"z-nile",
-				"z-nile/.tracker",
-			}
-		do
-			t.expect(format[d]).toBe(true)
+	it(
+		"the plan of the real tree's layout: every home's folders, pickman's places and both projects' specs",
+		function()
+			local dir = planTree()
+			local ok, out = plan(dir, {})
+			untouched(dir)
+			t.expect(ok).toBe(true)
+			local format = words(lineOf(out, "format"))
+			for _, d in
+				{
+					"pickman/src",
+					"pickman/tests",
+					"pickman/scripts",
+					"pickman/.tracker",
+					"scripts",
+					"z-nile",
+					"z-nile/.tracker",
+				}
+			do
+				t.expect(format[d]).toBe(true)
+			end
+			t.expect(format.src or format.tracker or format.tests or false).toBe(false)
+			t.expect(lineOf(out, "lint")).toBe(lineOf(out, "format"))
+			t.expect(lineOf(out, "types (Roblox)")).toBe("pickman/src, from pickman")
+			local lune = lineOf(out, "types (Lune)")
+			for _, d in { "pickman/tests", "pickman/scripts", "scripts", "z-nile" } do
+				t.expect(words(lune)[d]).toBe(true)
+			end
+			t.expect(has(lune, ".tracker")).toBe(false)
+			t.expect(has(out, "build: pickman/default.project.json\nbuild: pickman/lobby.project.json\n"))
+				.toBe(true)
+			t.expect(has(out, "specs: pickman, from pickman\nspecs: z-nile, from z-nile\n")).toBe(true)
 		end
-		t.expect(format.src or format.tracker or format.tests or false).toBe(false)
-		t.expect(lineOf(out, "lint")).toBe(lineOf(out, "format"))
-		t.expect(lineOf(out, "types (Roblox)")).toBe("pickman/src, from pickman")
-		local lune = lineOf(out, "types (Lune)")
-		for _, d in { "pickman/tests", "pickman/scripts", "scripts", "z-nile" } do
-			t.expect(words(lune)[d]).toBe(true)
-		end
-		t.expect(has(lune, ".tracker")).toBe(false)
-		t.expect(has(out, "build: pickman/default.project.json\nbuild: pickman/lobby.project.json\n")).toBe(true)
-		t.expect(has(out, "specs: pickman, from pickman\nspecs: z-nile, from z-nile\n")).toBe(true)
-	end)
+	)
 
 	it(
 		"--project keeps one project's stages; pickman/check.sh is --project pickman; an unknown name exits 2",
@@ -200,7 +210,11 @@ return t.spec("c0120 each project has its own gate", function(it)
 			t.expect(has(z, "pickman")).toBe(false)
 			local r = process.exec("bash", { "pickman/check.sh", "--plan" }, { cwd = dir })
 			t.expect(r.stdout).toBe(p)
-			local bad = process.exec("bash", { "z-nile/check.sh", "--plan", "--project", "nope" }, { cwd = dir })
+			local bad = process.exec(
+				"bash",
+				{ "z-nile/check.sh", "--plan", "--project", "nope" },
+				{ cwd = dir }
+			)
 			untouched(dir)
 			t.expect(bad.code).toBe(2)
 			t.expect(has(bad.stderr, "no project nope")).toBe(true)
@@ -225,7 +239,8 @@ return t.spec("c0120 each project has its own gate", function(it)
 			t.expect(has(out, "GATE PASSED (full)")).toBe(true)
 			local here = (string.gsub(process.exec("pwd", { "-P" }, { cwd = dir }).stdout, "%s+$", ""))
 			-- the sourcemap and the Roblox types from pickman/, the builds of its two project files from the root
-			t.expect(has(log, `{here}/pickman|rojo|sourcemap default.project.json -o sourcemap.json`)).toBe(true)
+			t.expect(has(log, `{here}/pickman|rojo|sourcemap default.project.json -o sourcemap.json`))
+				.toBe(true)
 			t.expect(has(log, `{here}/pickman|luau-lsp|analyze`)).toBe(true)
 			t.expect(has(log, "--sourcemap=sourcemap.json")).toBe(true)
 			t.expect(has(log, `{here}|rojo|build pickman/default.project.json -o`)).toBe(true)

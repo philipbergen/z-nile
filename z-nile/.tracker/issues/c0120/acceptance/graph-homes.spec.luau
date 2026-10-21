@@ -80,27 +80,34 @@ return t.spec("c0120 the graph and the selector know the homes", function(it)
 		t.expect(r.stdout).toBe("../shared/thing.luau\n../shared/thing.luau\n")
 	end)
 
-	it("pickman's files resolve through pickman/.luaurc, z-nile's through z-nile/.luaurc, from any folder", function()
-		t.expect(graph.resolve("../pickman/tests/unit/Maze/maze.spec.luau", "@logic/Maze"))
-			.toBe("../pickman/src/shared/Logic/Maze/init.luau")
-		t.expect(graph.resolve("../pickman/tests/unit/Maze/maze.spec.luau", "@tests/lib/t"))
-			.toBe("../pickman/tests/lib/t.luau")
-		t.expect(graph.resolve("../pickman/tests/acceptance/x.spec.luau", "@znile/lib/graph")).toBe("lib/graph.luau")
-		t.expect(graph.resolve("tests/tooling/x.spec.luau", "@tests/lib/t")).toBe("tests/lib/t.luau")
-		t.expect(graph.resolve("../pickman/tests/lib/t.luau", "../../../z-nile/tests/lib/t"))
-			.toBe("../z-nile/tests/lib/t.luau")
-	end)
+	it(
+		"pickman's files resolve through pickman/.luaurc, z-nile's through z-nile/.luaurc, from any folder",
+		function()
+			t.expect(graph.resolve("../pickman/tests/unit/Maze/maze.spec.luau", "@logic/Maze"))
+				.toBe("../pickman/src/shared/Logic/Maze/init.luau")
+			t.expect(graph.resolve("../pickman/tests/unit/Maze/maze.spec.luau", "@tests/lib/t"))
+				.toBe("../pickman/tests/lib/t.luau")
+			t.expect(graph.resolve("../pickman/tests/acceptance/x.spec.luau", "@znile/lib/graph"))
+				.toBe("lib/graph.luau")
+			t.expect(graph.resolve("tests/tooling/x.spec.luau", "@tests/lib/t")).toBe("tests/lib/t.luau")
+			t.expect(graph.resolve("../pickman/tests/lib/t.luau", "../../../z-nile/tests/lib/t"))
+				.toBe("../z-nile/tests/lib/t.luau")
+		end
+	)
 
-	it("@game resolves through the project file of the file's own project, from the root and from the home", function()
-		local GAME = '"@game/ReplicatedStorage/Shared/Logic/Maze"'
-		t.expect(inView(TOP, `print(graph.resolve("pickman/src/client/Main.client.luau", {GAME}))`))
-			.toBe("pickman/src/shared/Logic/Maze/init.luau\n")
-		t.expect(inView(`{TOP}/pickman`, `print(graph.resolve("src/client/Main.client.luau", {GAME}))`))
-			.toBe("src/shared/Logic/Maze/init.luau\n")
-		-- neither the root nor z-nile/ has a place of its own
-		t.expect(inView(TOP, "print(#graph.gameRoots())")).toBe("0\n")
-		t.expect(#graph.gameRoots()).toBe(0)
-	end)
+	it(
+		"@game resolves through the project file of the file's own project, from the root and from the home",
+		function()
+			local GAME = '"@game/ReplicatedStorage/Shared/Logic/Maze"'
+			t.expect(inView(TOP, `print(graph.resolve("pickman/src/client/Main.client.luau", {GAME}))`))
+				.toBe("pickman/src/shared/Logic/Maze/init.luau\n")
+			t.expect(inView(`{TOP}/pickman`, `print(graph.resolve("src/client/Main.client.luau", {GAME}))`))
+				.toBe("src/shared/Logic/Maze/init.luau\n")
+			-- neither the root nor z-nile/ has a place of its own
+			t.expect(inView(TOP, "print(#graph.gameRoots())")).toBe("0\n")
+			t.expect(#graph.gameRoots()).toBe(0)
+		end
+	)
 
 	it("every require in pickman's src/ and tests/ resolves from the root's view, the gate's", function()
 		local out = inView(
