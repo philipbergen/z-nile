@@ -18,5 +18,6 @@ AC7=(tests/acceptance/c00{01,03,47,48,50,57,64,67,68,69,74,81,82}/*.spec.luau te
 check "AC7: the existing specs that read the prompt template, the skills or main.luau pass" lune run tests/run -- "${AC7[@]}"
 check "AC8: the real tree's lessons and ledgers are valid" scripts/tracker.sh lessons --check
 check "AC8: R0040's own reviews are fully harvested" scripts/tracker.sh lessons --uncovered R0040
+check "AC9: metrics count findings per lesson tag and design rounds before and after lessons" lune run tests/run -- "$A/metrics-lessons.spec.luau"
 
 finish

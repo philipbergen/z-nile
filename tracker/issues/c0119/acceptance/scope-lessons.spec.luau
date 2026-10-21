@@ -17,7 +17,8 @@ return t.spec("c0119 scope lessons", function(it)
 			t.expect(l.when).toBe("design")
 			t.expect(table.find(l.tags, "scope") ~= nil).toBe(true)
 			local named = false
-			for _, s in sources[id] or {} do
+			local list: { string } = sources[id] or {}
+			for _, s in list do
 				if string.find(s, "R0042 note user correction 2026-10-20", 1, true) == 1 then
 					named = true
 				end
@@ -25,7 +26,7 @@ return t.spec("c0119 scope lessons", function(it)
 			t.expect(named).toBe(true)
 		end
 		for _, p in lessons.check(tree) do
-			t.expect(string.find(p, "scope", 1, true)).toBe(nil)
+			t.expect((string.find(p, "scope", 1, true))).toBe(nil)
 		end
 	end)
 end)

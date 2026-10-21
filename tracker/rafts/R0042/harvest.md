@@ -14,7 +14,7 @@ Rounds 001 to 005 reviewed the reduced-scope design (c0114 to c0118), which the 
 - design-review-001 F11: ticket-prep/never-narrow-captured-scope
 - design-review-001 F12: ticket-prep/spec-design-correspondence
 - design-review-001 F13: testing/seed-every-enumerated-case
-- design-review-001 F14: one-off: the reduced board's data sources were unspecified; the full-scope board (c0118) names them
+- design-review-001 F14: ticket-prep/specify-every-named-artifact
 - design-review-001 F15: one-off: small inconsistencies in the reduced-scope drafts
 - design-review-002 F1: testing/plain-find-for-literals
 - design-review-002 F2: ticket-prep/spec-design-correspondence
@@ -26,14 +26,14 @@ Rounds 001 to 005 reviewed the reduced-scope design (c0114 to c0118), which the 
 - design-review-002 F8: ticket-prep/restated-rules-move-together
 - design-review-002 F9: ticket-prep/prove-specs-pass-on-a-prototype
 - design-review-002 F10: ticket-prep/spec-design-correspondence
-- design-review-002 F11: one-off: the root `.models.toml` content was unspecified; the user now owns that table (c0117)
+- design-review-002 F11: ticket-prep/specify-every-named-artifact
 - design-review-002 F12: one-off: small gaps in the reduced-scope drafts
 - design-review-003 F1: architecture/lock-reads-live-state
 - design-review-003 F2: architecture/lock-reads-live-state
 - design-review-003 F3: ticket-prep/spec-design-correspondence
-- design-review-003 F4: one-off: c0117's own acceptance spec joined the model comparison; the directory rule is redesigned in its own prep
+- design-review-003 F4: ticket-prep/spec-design-correspondence
 - design-review-003 F5: testing/no-vacuous-pass
-- design-review-003 F6: one-off: the prep tree edited a live skill file to point at a file no branch had
+- design-review-003 F6: ticket-prep/instructions-runnable-where-they-run
 - design-review-003 F7: testing/seed-every-enumerated-case
 - design-review-003 F8: ticket-prep/spec-design-correspondence
 - design-review-003 F9: ticket-prep/prove-specs-pass-on-a-prototype
@@ -48,4 +48,15 @@ Rounds 001 to 005 reviewed the reduced-scope design (c0114 to c0118), which the 
 - design-review-005 F2: architecture/lock-reads-live-state
 - design-review-005 F3: ticket-prep/prove-specs-pass-on-a-prototype
 - design-review-005 F4: one-off: small gaps in the reduced-scope drafts
+- design-review-006 F1: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-006 F2: ticket-prep/never-narrow-captured-scope, ticket-prep/new-rules-migrate-existing-work
+- design-review-006 F3: ticket-prep/required-steps-on-every-path
+- design-review-006 F4: ticket-prep/spec-design-correspondence
+- design-review-006 F5: ticket-prep/restated-rules-move-together
+- design-review-006 F6: ticket-prep/never-narrow-captured-scope
+- design-review-006 F7: ticket-prep/never-narrow-captured-scope
+- design-review-006 F8: ticket-prep/restated-rules-move-together
+- design-review-006 F9: ticket-prep/instructions-runnable-where-they-run
+- design-review-006 F10: ticket-prep/new-rules-migrate-existing-work
+- design-review-006 F11: one-off: harvest entries marked one-off whose class recurs; remapped in this round
 - note user correction 2026-10-20, R0042's refutes narrowed the captured scope and rewrote its Problems: ticket-prep/never-narrow-captured-scope, review/no-scope-cut-as-fix
