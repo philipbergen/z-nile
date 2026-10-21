@@ -154,4 +154,30 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			t.expect(fs.isFile(path)).toBe(true)
 		end
 	end)
+	it(
+		"covers every ask of c0113, which it supersedes: a skill table, the command sequence, the state diagram",
+		function()
+			local text = fs.readFile(README)
+			at(text, "\n## Skills\n| skill | step | what it does |", "README (c0113: a skill table)")
+			at(text, "\n## The flow\n", "README (c0113: the command sequence)")
+			local diagram = string.match(text, "```mermaid\nstateDiagram%-v2\n(.-)```")
+			if not diagram then
+				error("README (c0113: the state diagram) has no stateDiagram-v2 block")
+			end
+			for _, edge in
+				{
+					"[*] --> new",
+					"new --> preparing",
+					"preparing --> new: release the claim",
+					"preparing --> prepared",
+					"prepared --> active",
+					"active --> prepared: z-stop",
+					"active --> done",
+				}
+			do
+				at(diagram, edge, "README state diagram (c0113)")
+			end
+			at(text, "`design:` is separate from status", "README (c0113: the separate design field)")
+		end
+	)
 end)

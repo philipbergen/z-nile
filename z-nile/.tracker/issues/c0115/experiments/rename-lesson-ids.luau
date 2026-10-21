@@ -2,7 +2,8 @@
 -- c0115 (E4): rewrites lesson ids from the old skill folders to the new ones, in every harvest.md under every
 -- project root (backlog, active/ and done/) and in every lesson file's body. Run from the repository root, after
 -- the skill folders have moved:
---   lune run "$(./zn find c0115)/experiments/rename-lesson-ids" [-- --dry-run]
+--   lune run "$(./zn find c0115)/experiments/rename-lesson-ids" [-- --dry-run | --check]
+-- (--check: write nothing, and exit 1 if anything is left to rename: c0115's AC14)
 -- The rules are lessons.renameLedger for a harvest.md and skills.oldLessonIds for prose, the ones AC4 and AC5 check
 -- with. In a harvest.md the id list of each entry lessons.parseHarvest reads takes the id rule (every old id renamed in
 -- place); every other part of a ledger is prose (a note's text, a one-off's reason, and the lines parseHarvest skips or
@@ -14,7 +15,8 @@ local lessons = require("@znile/engine/lessons")
 local process = require("@lune/process")
 local skills = require("@znile/engine/skills")
 
-local dry = table.find(process.args, "--dry-run") ~= nil
+local checkOnly = table.find(process.args, "--check") ~= nil
+local dry = checkOnly or table.find(process.args, "--dry-run") ~= nil
 local existing = skills.lessonIndex(".")
 local missing: { [string]: boolean } = {}
 
@@ -87,6 +89,84 @@ for _, folder in { "z-nile/skills", "pickman/skills" } do
 		end
 	end)
 end
+-- Pass 3 (the user's decision on G4, 2026-10-21): live backlog designs. In every unfinished item but c0115 itself, an
+-- issue document is rewritten from its `## Design` heading on (its captured title, Problem, Non-goals and Solution stay
+-- as captured) and a raft document after its frontmatter, by the name and prose-id rules. Its check.sh and acceptance/
+-- files are rewritten only when they name an old skill path (`.claude/skills/<old>`): those are
+-- sequestered, and the user's decision covers them; each is printed with "(sequestered)". Reviews, refutes and
+-- harvest.md are history (harvest.md is pass 1's), and experiments/ are prep evidence; neither is touched.
+local SELF = "c0115"
+local function renameProse(text: string): (string, number)
+	local a, n = skills.renameLessonIds(text, existing)
+	local b, m = skills.renameOldNames(a)
+	return b, n + m
+end
+local function namesOldPath(text: string): boolean
+	for old in skills.RENAMED_PATH do
+		local from = 1
+		while true do
+			local i, j = string.find(text, `.claude/skills/{old}`, from, true)
+			if not i then
+				break
+			end
+			local after = string.sub(text, (j :: number) + 1, (j :: number) + 1)
+			if not string.match(after, "[%w_%-]") then
+				return true
+			end
+			from = (j :: number) + 1
+		end
+	end
+	return false
+end
+local function write(path: string, out: string, n: number, tag: string)
+	if n > 0 then
+		total += n
+		print(`{n} {path}{tag}`)
+		if not dry then
+			fs.writeFile(path, out)
+		end
+	end
+end
+for _, root in roots() do
+	for _, kind in { "issues", "rafts" } do
+		for _, state in { "", "/active" } do
+			local parent = `{root}/{kind}{state}`
+			if fs.isDir(parent) then
+				local ids = fs.readDir(parent)
+				table.sort(ids)
+				for _, id in ids do
+					local dir = `{parent}/{id}`
+					if id == SELF or not string.match(id, "^[cdfR]%d%d%d%d$") or not fs.isDir(dir) then
+						continue
+					end
+					local doc = `{dir}/{id}.md`
+					if fs.isFile(doc) then
+						local text = fs.readFile(doc)
+						local cut = if string.sub(id, 1, 1) == "R"
+							then (select(2, string.find(text, "^%-%-%-\n.-\n%-%-%-\n")) or 0) + 1
+							else string.find(text, "\n## Design\n", 1, true)
+						if cut then
+							local tail, n = renameProse(string.sub(text, cut :: number))
+							write(doc, string.sub(text, 1, (cut :: number) - 1) .. tail, n, "")
+						end
+					end
+					walk(dir, function(p)
+						local rel = string.sub(p, #dir + 2)
+						local sequestered = rel == "check.sh" or string.sub(rel, 1, 11) == "acceptance/"
+						if sequestered then
+							local text = fs.readFile(p)
+							if namesOldPath(text) then
+								local out, n = renameProse(text)
+								write(p, out, n, " (sequestered)")
+							end
+						end
+					end)
+				end
+			end
+		end
+	end
+end
+
 print(`{total} ids rewritten{if dry then " (dry run: nothing written)" else ""}`)
 local gaps = {}
 for id in missing do
@@ -95,5 +175,9 @@ end
 table.sort(gaps)
 if #gaps > 0 then
 	print("old ids with no lesson at the new place:\n" .. table.concat(gaps, "\n"))
+	process.exit(1)
+end
+if checkOnly and total > 0 then
+	print("the rename is not finished: run the script without --check")
 	process.exit(1)
 end

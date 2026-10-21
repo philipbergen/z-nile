@@ -45,10 +45,12 @@ check "AC12: as of the last fetch, nothing but this raft holds the skill folders
 
 # AC13 reads the branch's own commits since it left origin/main (git reads only): exactly one commit whose subject
 # starts "c0115: move the skills", holding only R100 renames, and no other commit of the range renaming a skill file.
-# It is a branch check (`./zn check`, `done`); once the PR is squashed into main the range is empty, and it fails.
+# On a live branch it is strict. An empty range (the PR squashed into main, so nothing is left to read) passes, the
+# user's decision on G11; JC1's reviewer judges a live branch that has no commits since origin/main.
 moves_only() {
   local base moves bad c
   base=$(git merge-base origin/main HEAD) || return 1
+  if [[ -z $(git rev-list "$base..HEAD") ]]; then echo "no commits since origin/main: nothing to check (G11)"; return 0; fi
   moves=$(git log --format=%H --grep='^c0115: move the skills' "$base..HEAD")
   if [[ $(printf '%s\n' "$moves" | grep -c .) != 1 ]]; then echo "want one moves commit since $base, got: ${moves:-none}"; return 1; fi
   bad=$(git show -M --find-renames=100% --name-status --format= "$moves" | grep -v '^R100' || true)
@@ -61,5 +63,30 @@ moves_only() {
   done
 }
 check "AC13: the skills move is one renames-only commit, and no other commit of the branch renames a skill file" moves_only
+# AC14's second half is independent of the script: unfinished items' designs (an issue from its `## Design` heading on,
+# a raft after its frontmatter) and their check.sh and acceptance files name no hyphenated old skill and no path
+# through .claude/skills/<old>; c0115's own folder aside (the record of the rename).
+backlog_clean() {
+  local old='(make-issue|ticket-prep|ready-raft|launch-raft|execute-raft|stop-raft)'
+  local re="(^|[^a-z0-9_./-])$old([^a-z0-9_-]|\$)|\.claude/skills/($old|review|tracker|metrics|testing|architecture)([^a-z0-9_-]|\$)"
+  local bad="" dir id f
+  while IFS= read -r dir; do
+    id=${dir##*/}
+    [[ $id == c0115 ]] && continue
+    if [[ $id == R* ]]; then
+      f=$(awk 'n>=2 {print} /^---$/ {n++}' "$dir/$id.md" 2>/dev/null)
+    else
+      f=$(awk '/^## Design$/ {on=1} on {print}' "$dir/$id.md" 2>/dev/null)
+    fi
+    if grep -qE "$re" <<<"$f"; then bad+="$dir/$id.md "; fi
+    while IFS= read -r g; do
+      grep -qE "$re" "$g" && bad+="$g "
+    done < <(find "$dir" \( -name check.sh -o -path "*/acceptance/*" \) -type f 2>/dev/null)
+  done < <(for r in $(lune run z-nile/roots); do find "$r/issues" "$r/rafts" "$r/issues/active" "$r/rafts/active" -mindepth 1 -maxdepth 1 -type d -name '[cdfR][0-9][0-9][0-9][0-9]' 2>/dev/null; done)
+  [[ -z $bad ]] || { echo "old skill names left in live backlog designs: $bad"; return 1; }
+}
+rename_finished() { lune run "$HERE/experiments/rename-lesson-ids" -- --check && backlog_clean; }
+check "AC14: the rename is finished: the rename script's check run finds nothing left, and no live backlog design names an old skill" \
+  rename_finished
 
 finish

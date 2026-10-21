@@ -119,7 +119,7 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 			["pickman/skills/pickman-play/lessons/feel.md"] = lesson("Does it feel fair?"),
 			["tracker/rafts/R0010/design-review-001.md"] = "# Review 001\n\n### F1 [low] a\n\n### F2 [low] b\n\nVerdict: changes\n",
 			["tracker/rafts/R0010/harvest.md"] = "- design-review-001 F1: zz-test/pin\n- design-review-001 F2: pickman-play/feel\n",
-		})
+		}, { noLessons = true }) -- fixtures copy the real lessons (G7); this one counts its own
 	end)
 
 	it("--full prints each lesson's real path, and --check passes", function()

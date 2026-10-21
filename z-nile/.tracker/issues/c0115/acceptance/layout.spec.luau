@@ -1,7 +1,7 @@
 --!strict
--- c0115 AC3: the eleven old skills are renamed, not copied: the pipeline is z-ticket, z-design, z-ready, z-run (with
--- launch-raft's steps) and z-stop, the skills called from inside a step are zz-review, zz-rules, zz-arch, zz-test
--- and zz-stats, all in z-nile/skills/; pickman's own are pickman-arch and pickman-test in pickman/skills/. No old
+-- c0115 AC3: the eleven old skills are renamed, not copied: the pipeline is z-ticket, z-design, z-ready, z-run
+-- (launch-raft) and z-stop, the skills called from inside a step are zz-execute (execute-raft), zz-review, zz-rules,
+-- zz-arch, zz-test and zz-stats, all in z-nile/skills/; pickman's own are pickman-arch and pickman-test in pickman/skills/. No old
 -- folder is left anywhere, .claude/skills holds one committed link (mode 120000) per skill folder and nothing
 -- else, the old architecture lessons are zz-arch's, .claude/README.md is gone, and z-design
 -- has its three checklists. Reads the real tree only (fs, git ls-files, git show).
@@ -27,6 +27,7 @@ local ZNILE = {
 	"z-design",
 	"z-ready",
 	"z-run",
+	"zz-execute",
 	"z-stop",
 	"zz-review",
 	"zz-rules",
@@ -129,15 +130,19 @@ return t.spec("c0115 the skills are renamed and live in their projects' folders"
 		t.expect(others).toEqual({})
 	end)
 
-	it("launch-raft's steps open z-run, and .claude/README.md is gone", function()
-		local run = fs.readFile("z-nile/skills/z-run/SKILL.md")
-		local launch = string.find(run, "\n## Launch (from the main checkout)\n", 1, true)
-		local phase0 = string.find(run, "\n## Phase 0", 1, true)
-		t.expect(launch ~= nil and phase0 ~= nil and (launch :: number) < (phase0 :: number)).toBe(true)
-		t.expect(string.find(run, "./zn prompt <R> --path", 1, true) ~= nil).toBe(true)
-		t.expect(fs.isFile(".claude/README.md")).toBe(false)
-		t.expect(git({ "ls-files", "--", ".claude/README.md" })).toBe("")
-	end)
+	it(
+		"launch-raft became z-run and execute-raft zz-execute, two skills; .claude/README.md is gone",
+		function()
+			local run = fs.readFile("z-nile/skills/z-run/SKILL.md")
+			local exec = fs.readFile("z-nile/skills/zz-execute/SKILL.md")
+			t.expect(string.find(run, "./zn prompt <R> --path", 1, true) ~= nil).toBe(true)
+			t.expect((string.find(run, "\n## Phase 0", 1, true))).toBe(nil) -- the protocol is not in z-run
+			t.expect(string.find(exec, "\n## Phase 0", 1, true) ~= nil).toBe(true)
+			t.expect((string.find(exec, "./zn prompt <R> --path", 1, true))).toBe(nil) -- nor the launch in zz-execute
+			t.expect(fs.isFile(".claude/README.md")).toBe(false)
+			t.expect(git({ "ls-files", "--", ".claude/README.md" })).toBe("")
+		end
+	)
 
 	it("the old architecture lessons are zz-arch's", function()
 		for _, slug in

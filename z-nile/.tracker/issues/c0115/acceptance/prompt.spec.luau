@@ -1,5 +1,5 @@
 --!strict
--- c0115 AC7: a raft's prompt inlines z-nile's step skills (z-run, zz-rules, zz-arch, zz-test, zz-review, in that
+-- c0115 AC7: a raft's prompt inlines z-nile's step skills (zz-execute, zz-rules, zz-arch, zz-test, zz-review, in that
 -- order) and then every skill of the raft's own project, each from its real folder, never through .claude/skills;
 -- a z-nile raft gets no project skill, and another project's skills and lessons never reach it. Its Lessons section
 -- lists the build lessons of z-nile's skills and the raft's project's only, and the prompt names the project.
@@ -13,7 +13,7 @@ local PREPARED = "prepared-quiet-copper-falcon"
 local Z = "z-nile/.tracker"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
-local INLINED = { "z-run", "zz-rules", "zz-arch", "zz-test", "zz-review" }
+local INLINED = { "zz-execute", "zz-rules", "zz-arch", "zz-test", "zz-review" }
 
 local function raft(id: string, member: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {string.lower(id)}\nsingle: true\nissues: [{member}]\n`
@@ -73,6 +73,29 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 			["z-nile/skills/zz-test/lessons/pin.md"] = lesson("Are the inputs pinned?"),
 		})
 	end)
+
+	it(
+		"the fixture's copied tooling carries every skill's lessons (the user's G7: fixtures copy lessons too)",
+		function()
+			local count = 0
+			for _, base in { "z-nile/skills", "pickman/skills" } do
+				if fs.isDir(base) then
+					for _, skill in fs.readDir(base) do
+						local dir = `{base}/{skill}/lessons`
+						if fs.isDir(dir) then
+							for _, name in fs.readDir(dir) do
+								count += 1
+								if not fs.isFile(`{f.main}/{dir}/{name}`) then
+									error(`the fixture lacks {dir}/{name}`)
+								end
+							end
+						end
+					end
+				end
+			end
+			t.expect(count > 0).toBe(true)
+		end
+	)
 
 	it(
 		"a pickman raft gets z-nile's five skills in order, then pickman's, from their real folders",

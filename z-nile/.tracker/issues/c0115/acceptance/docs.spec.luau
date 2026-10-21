@@ -1,5 +1,6 @@
 --!strict
--- c0115 AC8: the renamed skills say what they now hold: z-run opens with launch-raft's steps; zz-test keeps the gate,
+-- c0115 AC8: the renamed skills say what they now hold: z-run launches (launch-raft) and hands off to zz-execute
+-- (execute-raft); zz-test keeps the gate,
 -- check.sh, sequestration and the guards, and pickman-test the game's tiers; zz-arch holds the tooling's rules and
 -- pickman-arch the game's; z-design reads its three checklists; zz-rules states the skill folders, the links, the
 -- naming rule and the `skills` command in every list a command joins; every skill's lessons paragraph names the real
@@ -34,6 +35,7 @@ local ALL = {
 	"z-ready",
 	"z-run",
 	"z-stop",
+	"zz-execute",
 	"zz-review",
 	"zz-rules",
 	"zz-arch",
@@ -42,16 +44,24 @@ local ALL = {
 }
 
 return t.spec("c0115 the renamed skills say what they hold", function(it)
-	it("z-run opens with the launch steps, and says when to skip them", function()
-		local launch = section(read(`{Z}/z-run/SKILL.md`), "## Launch (from the main checkout)")
+	it("z-run launches and hands off; zz-execute is the protocol it hands off to", function()
+		local run = read(`{Z}/z-run/SKILL.md`)
+		at(run, "`./zn prompt <R> --path`", "z-run")
+		at(run, "run `/z-ready <R>`", "z-run")
+		at(run, 'cd "$(./zn worktree <R>)"', "z-run")
 		at(
-			launch,
-			"Skip this section when you were handed the raft's prompt and already work in its worktree",
-			"z-run Launch"
+			run,
+			"**Hand off.** Follow the prompt as your instructions, from its first line: it carries the zz-execute skill",
+			"z-run"
 		)
-		at(launch, "`./zn prompt <R> --path`", "z-run Launch")
-		at(launch, "run `/z-ready <R>`", "z-run Launch")
-		at(launch, 'cd "$(./zn worktree <R>)"', "z-run Launch")
+		local exec = read(`{Z}/zz-execute/SKILL.md`)
+		at(exec, "\n## Phase 0: Claim", "zz-execute")
+		at(exec, "\n## Stop conditions", "zz-execute")
+		at(
+			read("z-nile/templates/prompt.md"),
+			"1. **Follow the `zz-execute` skill below, step by step.**",
+			"the prompt template"
+		)
 	end)
 
 	it(
