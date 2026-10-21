@@ -83,7 +83,7 @@ return t.spec("c0111 metrics over lessons", function(it)
 		end
 	)
 
-	it("dates a YYYY-MM-DD day as days since 1970-01-01 (UTC), and refuses anything else", function()
+	it("dates a YYYY-MM-DD day as days since 1970-01-01, and refuses anything else", function()
 		t.expect(lessons.day("1970-01-01")).toBe(0)
 		t.expect(lessons.day("2026-10-20")).toBe(20746)
 		t.expect(lessons.day("2000-03-01")).toBe(11017)
@@ -111,31 +111,32 @@ return t.spec("c0111 metrics over lessons", function(it)
 				["tracker/rafts/R0010/design-review-002.md"] = review("F1"),
 				["tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n- design-review-001 F1: testing/pin\n"
 					.. "- design-review-001 F2: one-off: x\n- design-review-002 F1: testing/pin\n",
-				["tracker/rafts/R0020/design-review-001.md"] = review("F1") .. "R0020 round 1\n",
+				["tracker/rafts/done/R0020/design-review-001.md"] = review("F1") .. "R0020 round 1\n",
 				["tracker/rafts/R0010/R0010.md"] = raft("R0010", "2030-06-01"),
-				["tracker/rafts/R0020/R0020.md"] = raft("R0020", "2099-01-01"),
-				-- created long before lessons existed, but every one of its commits is made today
-				["tracker/rafts/R0030/R0030.md"] = raft("R0030", "2030-05-31"),
-				["tracker/rafts/R0030/design-review-001.md"] = review("F1") .. "R0030 round 1\n",
-				["tracker/rafts/R0030/design-review-002.md"] = review("F1") .. "R0030 round 2\n",
+				["tracker/rafts/done/R0020/R0020.md"] = raft("R0020", "2099-01-01"),
+				-- created the day before lessons land, though every one of its commits is made today; it is active
+				["tracker/rafts/active/R0030/R0030.md"] = raft("R0030", "2030-05-31"),
+				["tracker/rafts/active/R0030/design-review-001.md"] = review("F1") .. "R0030 round 1\n",
+				["tracker/rafts/active/R0030/design-review-002.md"] = review("F1") .. "R0030 round 2\n",
 			})
 			-- a compaction-like commit rewrites R0020's review in place: a dater that reads history would lose it
 			fs.writeFile(`{f.main}/tracker/compaction.txt`, "# tracker.sh compact, test\nR0200 R0020\n")
 			fs.writeFile(
-				`{f.main}/tracker/rafts/R0020/design-review-001.md`,
+				`{f.main}/tracker/rafts/done/R0020/design-review-001.md`,
 				review("F1") .. "R0020 round 1, compacted\n"
 			)
-			-- lessons.luau is added on 2030-06-01, not with the seed: rafts created 2030-05-31 are before, 2030-06-01 after
+			-- lessons.luau is added on 2030-06-01 in Los Angeles (2030-06-02 in UTC), not with the seed: rafts created
+			-- 2030-05-31 are before, 2030-06-01 after. The reader uses the process's calendar, so it runs in that zone
 			local function at(d: string): fixture.Options
 				return { env = { GIT_COMMITTER_DATE = d, GIT_AUTHOR_DATE = d }, stdin = nil }
 			end
 			fixture.git(f.main, { "rm", "-q", "--cached", "scripts/tracker/lessons.luau" })
 			fixture.git(f.main, { "commit", "-q", "--amend", "--no-edit" }, at("2020-01-01T00:00:00Z"))
 			fixture.git(f.main, { "add", "scripts/tracker/lessons.luau" })
-			fixture.git(f.main, { "commit", "-q", "-m", "lessons" }, at("2030-06-01T12:00:00Z"))
+			fixture.git(f.main, { "commit", "-q", "-m", "lessons" }, at("2030-06-01T20:00:00-07:00"))
 			fixture.git(f.main, { "add", "-A" })
 			fixture.git(f.main, { "commit", "-q", "-m", "tracker: compact ids" })
-			local r = trackerfix.tr(f, f.main, { "metrics" })
+			local r = trackerfix.tr(f, f.main, { "metrics" }, { TZ = "America/Los_Angeles" })
 			t.expect(r.code).toBe(0)
 			t.expect(has(r.stdout, "| tag | findings | items |")).toBe(true)
 			t.expect(has(r.stdout, "| seams | 2 | 1 |")).toBe(true)
