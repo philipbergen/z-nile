@@ -42,13 +42,13 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	GhostView.push(snap)
 	DangerHud.push(snap, Maze.layout(snap.maze))
 	HudView.show(frame.play)
-	local overlay = Flow.overlay(frame.play, RULES)
+	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
 	FlowView.show(overlay)
 	if model and overlay.flash ~= lit then
 		lit = overlay.flash
 		MazeView.flash(model, overlay.flash)
 	end
-	Camera.setCursor(overlay.playAgain)
+	Camera.setCursor(overlay.cursor)
 	-- last: a code that fails to decode can't stop the rest of the frame
 	if pellets then
 		PelletView.show(pellets, frame.pellets)
