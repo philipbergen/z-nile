@@ -10,6 +10,7 @@
 | 6 | 2026-10-20 19:34 | design-refute-003 | 0 | 0 | 2.0 | spend | design-review |  |
 | 7 | 2026-10-20 19:34 | prep | 402 | 1 | 55.0 | spend | prep |  |
 | 8 | 2026-10-21 15:43 | c0106: narrow the d0105 radar layout and radarBox assertions | 17 | 5 | 6.0 | focus | build |  |
+| 9 | 2026-10-21 15:45 | c0106: verification log | 0 | 0 | 2.0 | focus | build |  |
 
-**Total:** +419 / -6 lines, 98.0 agent-minutes, 252896 tokens over 8 records
-<!-- totals: added=419 removed=6 minutes=98.0 records=8 tokens=252896 -->
+**Total:** +419 / -6 lines, 100.0 agent-minutes, 252896 tokens over 9 records
+<!-- totals: added=419 removed=6 minutes=100.0 records=9 tokens=252896 -->
