@@ -12,7 +12,6 @@ local f: trackerfix.Fixture
 local SLUG = "old-slug"
 local LEGACY = `tracker/issues/c0020/c0020-{SLUG}.md`
 local SHA: { [string]: string } = {}
-local LEDGER60, LEDGER70 = "", ""
 
 local function doc(id: string, line: string): string
 	return trackerfix.stub(id, id, "new-a-b-c") .. `\n## Problem\n{line}\n`
@@ -39,7 +38,7 @@ local function push(key: string, files: { [string]: string | false }, message: s
 end
 
 -- `tracker.sh renumber <args>` in a worktree of `other` (renumber refuses a main checkout), committed and pushed
-local function renumber(key: string, args: { string }, message: string): string
+local function renumber(key: string, args: { string }, message: string)
 	fixture.git(f.other, { "pull", "-q", "origin", "main" })
 	local wt = `{f.base}/wt-{key}`
 	fixture.git(f.other, { "worktree", "add", "-q", "-b", `renumber-{key}`, wt, "HEAD" })
@@ -55,7 +54,6 @@ local function renumber(key: string, args: { string }, message: string): string
 	fixture.git(wt, { "commit", "-q", "-m", message })
 	fixture.git(wt, { "push", "-q", "origin", "HEAD:main" })
 	SHA[key] = fixture.git(wt, { "rev-parse", "HEAD" })
-	return fs.readFile(`{wt}/tracker/renumbered.txt`)
 end
 
 local function capture(id: string): (number, string, string)
@@ -148,7 +146,7 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			{ ["tracker/issues/c0060/c0060.md"] = doc("c0060", "sixty, as captured") },
 			"tracker: new c0060 Sixty"
 		)
-		LEDGER60 = renumber("renum60", { "c0060", "c0061" }, "R0060: prep, with a renumber")
+		renumber("renum60", { "c0060", "c0061" }, "R0060: prep, with a renumber")
 		-- two copies of c0070 (a collision): the backlog stub is renumbered by its directory, the done copy keeps c0070
 		push(
 			"c70stub",
@@ -160,8 +158,7 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			{ ["tracker/issues/done/c0070/c0070.md"] = doc("c0070", "the done copy") },
 			"tracker: new c0070 Done copy"
 		)
-		LEDGER70 =
-			renumber("renum70", { "tracker/issues/c0070", "c0071" }, "tracker: renumber the c0070 stub")
+		renumber("renum70", { "tracker/issues/c0070", "c0071" }, "tracker: renumber the c0070 stub")
 		-- a second compaction writes only its own map: c0030 becomes c0003
 		push("compact2", {
 			["tracker/issues/c0030"] = false,
@@ -204,19 +201,22 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		t.expect(has(reused, "a new item")).toBe(true)
 	end)
 
-	it("renumber records each renumber in the ledger, and capture follows it", function()
-		t.expect(has(LEDGER60, "\nc0060 c0061\n")).toBe(true)
-		t.expect(has(LEDGER70, "\nc0070 c0071 tracker/issues/c0070\n")).toBe(true)
-		local code, out = capture("c0061")
-		t.expect(code).toBe(0)
-		local first = string.match(out, "^[^\n]+") :: string
-		t.expect(first).toBe(`capture {SHA.c60} tracker/issues/c0060/c0060.md tracker: new c0060 Sixty`)
-		-- the renumbered copy's history is its own folder's, not the done copy's that kept the number
+	it("does not follow a renumber, and marks what it cannot settle", function()
+		-- a renumbered item's capture is its first add at the new id, marked, never another item's capture
+		local _, sixty = capture("c0061")
+		local first = string.match(sixty, "^[^\n]+") :: string
+		t.expect(first).toBe(
+			`capture {SHA.renum60} tracker/issues/c0061/c0061.md R0060: prep, with a renumber (no capture commit: first add)`
+		)
 		local _, stub = capture("c0071")
-		t.expect(has(stub, `capture {SHA.c70stub} tracker/issues/c0070/c0070.md tracker: new c0070 Stub`))
-			.toBe(true)
+		t.expect(has(stub, `capture {SHA.renum70} tracker/issues/c0071/c0071.md`)).toBe(true)
+		t.expect(has(stub, "(no capture commit: first add)")).toBe(true)
+		-- the id two items held at once is marked ambiguous
 		local _, kept = capture("c0070")
-		t.expect(has(kept, `capture {SHA.c70done} tracker/issues/done/c0070/c0070.md`)).toBe(true)
+		t.expect(has(string.match(kept, "^[^\n]+") :: string, "(ambiguous: two items held this id at once)"))
+			.toBe(true)
+		local _, landed = capture("c0010")
+		t.expect(has(landed, "ambiguous")).toBe(false)
 	end)
 
 	it("marks a first-add fallback, and only that", function()

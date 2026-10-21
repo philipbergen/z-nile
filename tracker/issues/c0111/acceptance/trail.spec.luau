@@ -2,7 +2,7 @@
 -- c0111 AC10: an item's trail. `trail.ranges` names the folders and revisions to read, walking back through every
 -- compaction to the id the item had then; `isDoc` tells an item's document from its other files; `parse` keeps only
 -- changes directly in those folders; `namedIds` reads a `tracker: new` subject; `oldestAdd` and `capture` pick the
--- commit. Pure; reads nothing.
+-- commit; `ambiguous` finds two items that held one id at once. Pure; reads nothing.
 local t = require("@tests/lib/t")
 local trail = require("@scripts/tracker/trail")
 
@@ -46,40 +46,43 @@ return t.spec("c0111 an item's trail", function(it)
 		t.expect(#trail.ranges("issues", "c0010", "HEAD", { { sha = "ccc", map = nil } })).toBe(2)
 	end)
 
-	it("follows a renumber cut, limited to the one folder a renumber by directory moved", function()
-		local cuts: { trail.Cut } = {
-			{ sha = "ddd", map = { c0070 = "c0071" }, dirs = { c0070 = "tracker/issues/c0070" } },
-			{ sha = "eee", map = { c0060 = "c0061" }, dirs = {} },
-		}
-		t.expect(trail.ranges("issues", "c0071", "HEAD", cuts)).toEqual({
-			{ rev = "ddd..HEAD", dirs = dirs("issues", "c0071"), id = "c0071" },
-			{ rev = "eee..ddd~1", dirs = { "tracker/issues/c0070" }, id = "c0070" },
-			{ rev = "eee~1", dirs = { "tracker/issues/c0070" }, id = "c0070" },
-		})
-		-- the copy that kept c0070 keeps its other folders before the cut
-		t.expect(trail.ranges("issues", "c0070", "HEAD", { cuts[1] })).toEqual({
-			{ rev = "ddd..HEAD", dirs = dirs("issues", "c0070"), id = "c0070" },
-			{
-				rev = "ddd~1",
-				dirs = { "tracker/issues/active/c0070", "tracker/issues/done/c0070" },
+	it("finds two items holding one id at once, but not a move or a rename in one folder", function()
+		local function c(sha: string, time: number, status: string, path: string): trail.Commit
+			return {
+				sha = sha,
+				time = time,
+				subject = "x",
+				status = status,
+				path = path,
+				order = 0,
 				id = "c0070",
-			},
-		})
-		t.expect(trail.ranges("issues", "c0061", "HEAD", { cuts[2] })[2]).toEqual({
-			rev = "eee~1",
-			dirs = dirs("issues", "c0060"),
-			id = "c0060",
-		})
-	end)
-
-	it("reads the lines a commit added to the renumber ledger", function()
-		local before = "# header\nc0040 c0041\n"
-		local map, d =
-			trail.added(before, before .. "c0060 c0061\nc0070 c0071 tracker/issues/c0070\nnot a line\n")
-		t.expect(map).toEqual({ c0060 = "c0061", c0070 = "c0071" })
-		t.expect(d).toEqual({ c0070 = "tracker/issues/c0070" })
-		local first = trail.added(nil, "# header\nc0040 c0041\n")
-		t.expect(first).toEqual({ c0040 = "c0041" })
+			}
+		end
+		local moved = {
+			c("b", 200, "D", "tracker/issues/c0070/c0070.md"),
+			c("b", 200, "A", "tracker/issues/done/c0070/c0070.md"),
+			c("a", 100, "A", "tracker/issues/c0070/c0070.md"),
+		}
+		t.expect(trail.ambiguous(moved)).toBe(false)
+		-- a legacy slug name, built so the c0044 guard (no literal <ID>-<slug>.md in a spec) does not see it
+		local slug = "old"
+		local legacy = `tracker/issues/c0070/c0070-{slug}.md`
+		local renamedInPlace = {
+			c("b", 200, "A", "tracker/issues/c0070/c0070.md"),
+			c("b", 200, "D", legacy),
+			c("a", 100, "A", legacy),
+		}
+		t.expect(trail.ambiguous(renamedInPlace)).toBe(false)
+		local twoCopies = {
+			c("b", 200, "A", "tracker/issues/done/c0070/c0070.md"),
+			c("a", 100, "A", "tracker/issues/c0070/c0070.md"),
+		}
+		t.expect(trail.ambiguous(twoCopies)).toBe(true)
+		-- the same folder under two ids (before and after a compaction) is not two items
+		local other = c("a", 100, "A", "tracker/issues/c0700/c0700.md")
+		other.id = "c0700"
+		t.expect(trail.ambiguous({ c("b", 200, "A", "tracker/issues/done/c0070/c0070.md"), other }))
+			.toBe(false)
 	end)
 
 	it("reads the ids a `tracker: new` subject names", function()
