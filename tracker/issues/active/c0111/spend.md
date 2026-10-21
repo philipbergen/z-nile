@@ -52,6 +52,7 @@
 | 48 | 2026-10-21 06:16 | R0042: review-001 fixes (lesson text, hidden files in lessons/, trail comments) | 9 | 6 | 10.0 | raft+proportional | code-review |  |
 | 49 | 2026-10-21 06:16 | R0042: refute-001 and harvest | 0 | 0 | 2.5 | raft+proportional | code-review | 78514 |
 | 50 | 2026-10-21 06:22 | R0042: review-002 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
+| 51 | 2026-10-21 06:24 | c0111: spec the hidden-file skip in lessons/ (review-002 F1) | 31 | 0 | 8.0 | explicit | code-review |  |
 
-**Total:** +3434 / -22 lines, 876.2 agent-minutes, 849493 tokens over 50 records
-<!-- totals: added=3434 removed=22 minutes=876.2 records=50 tokens=849493 -->
+**Total:** +3465 / -22 lines, 884.2 agent-minutes, 849493 tokens over 51 records
+<!-- totals: added=3465 removed=22 minutes=884.2 records=51 tokens=849493 -->
