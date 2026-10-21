@@ -1,0 +1,4 @@
+# Refute 001: R0041
+- F1: fixed: both narrow specs now fingerprint their promoted file with the replaced region cut out (ids normalised, so a compaction doesn't move it); Rules and mutants row "the other cases stay as they are" is `run` (a gutted chat case and a dropped `overlaps` line both fail); both specs name the full d0105 paths in a comment; consequences: a later edit to either d0105 file turns the c0106 spec red, so it must name c0106 on its `Overrides:` line (written in Design); the executor must paste the Design snippets exactly, or the fingerprint fails and it escalates (stated in Design).
+- F2: fixed: the snippet's variable is `start`; consequences: none.
+- F3: fixed: split into `narrow-radar.spec.luau` (AC1) and `narrow-adapter.spec.luau` (AC2), each with its own loader; Test plan, Touched modules and `check.sh` updated; consequences: ~40 duplicated lines, accepted.

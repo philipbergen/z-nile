@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0115. SEQUESTERED: never edit during execution.
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh"
+# One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0115 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0115"
 
-check "AC1: pipeline skills have name and description" lune run tests/run -- "$A/names.spec.luau"
-check "AC2: internal skills have name and description" lune run tests/run -- "$A/names.spec.luau"
-check "AC3: README flowchart precedes the first paragraph" lune run tests/run -- "$A/names.spec.luau"
-check "AC4: the old tracker skill stays, and AGENTS.md names z-ticket" lune run tests/run -- "$A/names.spec.luau"
-check "AC5: the seven copy pairs match apart from name" lune run tests/run -- "$A/names.spec.luau"
-check "AC6: z-run contains both source headings" lune run tests/run -- "$A/names.spec.luau"
+# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
+# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 
 finish
