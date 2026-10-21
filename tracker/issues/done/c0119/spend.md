@@ -43,6 +43,7 @@
 | 39 | 2026-10-21 06:24 | R0042: refute-002, harvest | 0 | 0 | 1.5 | raft+proportional | code-review | 36247 |
 | 40 | 2026-10-21 06:24 | R0042: addressed during execution | 0 | 0 | 1.0 | raft+proportional | deliver |  |
 | 41 | 2026-10-21 06:29 | tracker: done R0042 | 0 | 0 | 2.4 | raft+proportional | deliver |  |
+| 42 | 2026-10-21 06:33 | deliver | 0 | 0 | 2.5 | spend+proportional | deliver |  |
 
-**Total:** +735 / -7 lines, 384.7 agent-minutes, 885735 tokens over 41 records
-<!-- totals: added=735 removed=7 minutes=384.7 records=41 tokens=885735 -->
+**Total:** +735 / -7 lines, 387.2 agent-minutes, 885735 tokens over 42 records
+<!-- totals: added=735 removed=7 minutes=387.2 records=42 tokens=885735 -->
