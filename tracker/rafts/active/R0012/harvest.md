@@ -9,3 +9,4 @@
 - review-001 F6: one-off: a comment wider than stylua's column width, which stylua does not wrap
 - review-001 F7: one-off: an unverified engine guarantee (an end for every touch), answered by a focus-loss reset and an OC1 question
 - note R0012 code review 001's lesson candidate, f0028 AC3's order pin took a declaration as the clear: testing/order-pins-anchor-unique-text
+- review-002 F1: testing/pin-call-site-arguments
