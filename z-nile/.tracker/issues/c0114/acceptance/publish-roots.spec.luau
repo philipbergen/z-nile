@@ -1,7 +1,7 @@
 --!strict
 -- c0114 AC4: what a tracker-only publish may write is decided by origin/main's registry alone (lesson
 -- architecture/guards-trust-only-origin): a root only the working tree lists is refused, a registry that does not
--- parse publishes nothing, and an origin/main without one has the legacy root alone. A published move stays in its
+-- parse publishes nothing, and neither does an origin/main without one ("Missing also refuses"). A published move stays in its
 -- root. And paths.rewrite takes a root only where it starts a path segment, so `tracker/` inside `z-nile/.tracker/` is
 -- never read as the root `tracker`. Fixture under .cache/c0114-publish (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
@@ -86,16 +86,19 @@ return t.spec("c0114 publish roots come from origin/main", function(it)
 		refusedPush({ { path = "tracker/issues/c0060/c0060.md", content = stub("c0060") } }, "not valid TOML")
 	end)
 
-	it("an origin/main with no registry has the legacy root tracker alone", function()
+	it("an origin/main with no registry publishes nothing", function()
 		fixture.git(f.other, { "pull", "-q", "origin", "main" })
 		fixture.git(f.other, { "rm", "-q", "z-nile/projects.toml" })
 		fixture.git(f.other, { "commit", "-q", "-m", "no registry" })
 		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
 		refusedPush(
 			{ { path = `{Z}/issues/c0070/c0070.md`, content = stub("c0070") } },
-			"not a tracker item file"
+			"origin/main has no z-nile/projects.toml"
 		)
-		t.expect(push({ { path = "tracker/issues/c0080/c0080.md", content = stub("c0080") } }).ok).toBe(true)
+		refusedPush(
+			{ { path = "tracker/issues/c0080/c0080.md", content = stub("c0080") } },
+			"origin/main has no z-nile/projects.toml"
+		)
 	end)
 
 	it("allowed takes the counter, and item files only under the roots it is given", function()
