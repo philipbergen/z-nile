@@ -257,6 +257,52 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		t.expect(has(r.stderr, "no ref guard")).toBe(true)
 	end)
 
+	-- code review 001 F1: the fence reads the repository it protects only after it strips every inherited override, so
+	-- a GIT_DIR inherited from a git hook (relative, `.git`) or pointing at another repository never decides which
+	-- repository the ref guard protects. The shell sets GIT_DIR itself: fixture.exec refuses one handed in.
+	local function escapeProbe(home: string, gitDir: string): string
+		return table.concat({
+			`cd {home} || exit 8`,
+			'. "$OLDPWD/z-nile/lib/fence.sh"',
+			`GIT_DIR={gitDir}; export GIT_DIR`,
+			'pickman_fence "$PWD" specs || exit 9',
+			'echo "REAL=:$PICKMAN_FENCE_REAL_GIT:"',
+			'echo "COMMON=$(git rev-parse --path-format=absolute --git-common-dir)"',
+			"if git update-ref refs/heads/c0120-escaped HEAD 2>/dev/null; then echo ESCAPED; else echo REFUSED; fi",
+			"",
+		}, "\n")
+	end
+	local function guardsCheckout(r: any): boolean
+		local real = string.match(r.stdout, "REAL=(%S*)") or ""
+		local common = string.match(r.stdout, "COMMON=(%S+)") or "?"
+		return has(real, `:{common}:`) and has(r.stdout, "REFUSED") and not has(r.stdout, "ESCAPED")
+	end
+
+	it("a fence entered from a home with GIT_DIR=.git inherited guards the checkout's refs", function()
+		fs.writeFile(at("escape-probe.sh"), escapeProbe("pickman", ".git"))
+		local r = fixture.exec(f.main, "bash", { "escape-probe.sh" }, { env = NO_JAIL })
+		fs.removeFile(at("escape-probe.sh"))
+		pcall(fixture.git, f.main, { "update-ref", "-d", "refs/heads/c0120-escaped" })
+		t.expect(r.ok).toBe(true)
+		t.expect(guardsCheckout(r)).toBe(true)
+	end)
+
+	it(
+		"a fence entered from the root with GIT_DIR at another repository guards the checkout's refs",
+		function()
+			local foreign = `{f.base}/c0120-foreign`
+			fixture.exec(f.main, "git", { "init", "-q", foreign })
+			fs.writeFile(at("escape-probe.sh"), escapeProbe(".", `{foreign}/.git`))
+			local r = fixture.exec(f.main, "bash", { "escape-probe.sh" }, { env = NO_JAIL })
+			fs.removeFile(at("escape-probe.sh"))
+			pcall(fixture.git, f.main, { "update-ref", "-d", "refs/heads/c0120-escaped" })
+			fs.removeDir(foreign)
+			t.expect(r.ok).toBe(true)
+			t.expect(guardsCheckout(r)).toBe(true)
+			t.expect(has(r.stdout, "COMMON=" .. foreign)).toBe(false)
+		end
+	)
+
 	it("a sourced pickman check.sh refuses, instead of running from its caller's folder", function()
 		local r = fromHome({ "source-it.sh" })
 		t.expect(r.ok).toBe(false)

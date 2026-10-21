@@ -10,4 +10,6 @@ A rule is usually stated in one place and summarized in several others. A fix th
 
 c0120 design review 002 F2: the design still named a superseded prototype commit, a `prototype.patch` "beside this document" that was never committed, and a 15/16 the Verification log had made 15/17. Pointers to prototype artifacts are restatements too.
 
+c0120 code review 001 F3: the build's log named R0043 as the active raft holding the old paths; `./zn busy` said R0034 (the check log's tail had cut that line). A tool's answer copied into a document is a restatement: copy it from the tool's full output.
+
 **How to apply:** when a refute line changes a rule, grep the repo for its old wording and its key terms, update every restatement in the same change, and pin the new wording where a spec already reads that file.
