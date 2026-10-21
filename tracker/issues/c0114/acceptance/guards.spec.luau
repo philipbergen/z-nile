@@ -76,7 +76,8 @@ return t.spec("c0114 the guards fail closed", function(it)
 			t.expect(process.exec("bash", { "-c", ask }).stdout).toBe("guarded\n")
 			-- the explicit "unguarded" publishes
 			local before = tip()
-			t.expect(trackerfix.tr(f, wt, { "new", "issue", "c", "published" }).ok).toBe(true)
+			t.expect(trackerfix.tr(f, wt, { "new", "issue", "c", "published", "--project", "pickman" }).ok)
+				.toBe(true)
 			local published = tip()
 			t.expect(published ~= before).toBe(true)
 			local real = fs.readFile(`{wt}/z-nile/lib/fence.sh`)
@@ -94,7 +95,7 @@ return t.spec("c0114 the guards fail closed", function(it)
 				elseif fs.isFile(`{wt}/z-nile/lib/fence.sh`) then
 					fs.removeFile(`{wt}/z-nile/lib/fence.sh`)
 				end
-				local r = trackerfix.tr(f, wt, { "new", "issue", "c", "local-only" })
+				local r = trackerfix.tr(f, wt, { "new", "issue", "c", "local-only", "--project", "pickman" })
 				if not has(r.stderr, "not publishing") then
 					error(`{what}: no "not publishing" in: {r.stderr}`)
 				end
