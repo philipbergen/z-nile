@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0118. SEQUESTERED: never edit during execution.
-# One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0118 after it
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh"
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0118"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the six statuses map to their columns" lune run tests/run -- "$A/view.spec.luau"
+check "AC2: ISO week changes on Monday and at the year boundary" lune run tests/run -- "$A/view.spec.luau"
+check "AC3: only a raft with a done time counts its reviews" lune run tests/run -- "$A/view.spec.luau"
+check "AC4: tokens split by model and a build row is ignored" lune run tests/run -- "$A/view.spec.luau"
+check "AC5: the page tabs come from the view and the done window is bounded" lune run tests/run -- "$A/view.spec.luau"
+check "AC6: the reader JSON splits the projects and dates the done commit" lune run tests/run -- "$A/view.spec.luau"
+check "AC7: a z-nile issue is only on that tab, and the pickman tab exists" lune run tests/run -- "$A/tab.spec.luau"
 
 finish

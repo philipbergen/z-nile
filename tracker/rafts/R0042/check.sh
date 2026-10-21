@@ -11,6 +11,11 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0042
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the game and the architecture graph are untouched" git diff --quiet origin/main...HEAD -- src tracker/architecture.md
+
+TAB="tracker/issues/c0118/acceptance/tab.spec.luau"
+[[ -f $TAB ]] || TAB="tracker/issues/active/c0118/acceptance/tab.spec.luau"
+[[ -f $TAB ]] || TAB="tests/acceptance/c0118/tab.spec.luau"
+check "RC2: a z-nile issue is only on that tab" lune run tests/run -- "$TAB"
 
 finish
