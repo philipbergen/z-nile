@@ -301,7 +301,8 @@ return t.spec("c0114 every item is filed in its project", function(it)
 			end
 		end
 		t.expect(table.concat(bad, "\n")).toBe("")
-		t.expect(expected >= 10).toBe(true)
+		-- no floor on how many items are live: the backlog shrinks and grows on its own (code review 001 F1); list mode
+		-- itself is proven on the fixture before this loop runs
 		t.expect(listed).toBe(expected)
 	end)
 end)
