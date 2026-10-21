@@ -3,6 +3,7 @@
 -- `lessons.roundsSplit` splits design review rounds at the commit that added scripts/tracker/lessons.luau.
 -- `tracker.sh metrics` prints both tables, read in a tracker fixture under .cache/lessons-metrics
 -- (tests/lib/trackerfix). It only reads.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local lessons = require("@scripts/tracker/lessons")
 local t = require("@tests/lib/t")
@@ -93,17 +94,36 @@ return t.spec("c0111 metrics over lessons", function(it)
 				["tracker/rafts/R0010/design-review-002.md"] = review("F1"),
 				["tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n- design-review-001 F1: testing/pin\n"
 					.. "- design-review-001 F2: one-off: x\n- design-review-002 F1: testing/pin\n",
-				["tracker/rafts/R0020/design-review-001.md"] = review("F1"),
+				["tracker/rafts/R0020/design-review-001.md"] = review("F1") .. "R0020 round 1\n",
 				["tracker/rafts/R0010/R0010.md"] = trackerfix.stub("R0010", "one", "new-a-b-c"),
 				["tracker/rafts/R0020/R0020.md"] = trackerfix.stub("R0020", "two", "new-d-e-f"),
 			})
+			-- R0030's first review is written years before lessons existed (a backdated commit), then deleted, written
+			-- again today, and its raft moved into done/: only the oldest add, followed across the move, dates it. The text
+			-- written again equals R0020's review byte for byte: a reader that followed renames would date it by R0020's
+			local old =
+				{ GIT_COMMITTER_DATE = "2020-01-01T00:00:00Z", GIT_AUTHOR_DATE = "2020-01-01T00:00:00Z" }
+			local dir = `{f.main}/tracker/rafts/R0030`
+			fs.writeDir(dir)
+			fs.writeFile(`{dir}/R0030.md`, trackerfix.stub("R0030", "three", "new-g-h-i"))
+			fs.writeFile(`{dir}/design-review-001.md`, review("F1") .. "R0030 round 1, the old text\n")
+			fs.writeFile(`{dir}/design-review-002.md`, review("F1") .. "R0030 round 2\n")
+			fixture.git(f.main, { "add", "-A" })
+			fixture.git(f.main, { "commit", "-q", "-m", "R0030 reviews, long ago" }, { env = old })
+			fixture.git(f.main, { "rm", "-q", "tracker/rafts/R0030/design-review-001.md" })
+			fixture.git(f.main, { "commit", "-q", "-m", "drop the first review" })
+			fs.writeFile(`{dir}/design-review-001.md`, review("F1") .. "R0020 round 1\n")
+			fixture.git(f.main, { "add", "-A" })
+			fixture.git(f.main, { "commit", "-q", "-m", "write it again" })
+			fixture.git(f.main, { "mv", "tracker/rafts/R0030", "tracker/rafts/done/R0030" })
+			fixture.git(f.main, { "commit", "-q", "-m", "R0030 done" })
 			local r = trackerfix.tr(f, f.main, { "metrics" })
 			t.expect(r.code).toBe(0)
 			t.expect(has(r.stdout, "| tag | findings | items |")).toBe(true)
 			t.expect(has(r.stdout, "| seams | 2 | 1 |")).toBe(true)
 			t.expect(has(r.stdout, "| wiring | 2 | 1 |")).toBe(true)
-			-- the fixture's first commit adds scripts/tracker/lessons.luau and both rafts' reviews together
-			t.expect(has(r.stdout, "| before | 0 | 0 | 0.0 |")).toBe(true)
+			-- the seed commit adds scripts/tracker/lessons.luau and R0010's and R0020's reviews together: both after
+			t.expect(has(r.stdout, "| before | 1 | 2 | 2.0 |")).toBe(true)
 			t.expect(has(r.stdout, "| after | 2 | 3 | 1.5 |")).toBe(true)
 		end
 	)

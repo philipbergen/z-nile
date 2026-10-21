@@ -19,5 +19,6 @@ check "AC7: the existing specs that read the prompt template, the skills or main
 check "AC8: the real tree's lessons and ledgers are valid" scripts/tracker.sh lessons --check
 check "AC8: R0040's own reviews are fully harvested" scripts/tracker.sh lessons --uncovered R0040
 check "AC9: metrics count findings per lesson tag and design rounds before and after lessons" lune run tests/run -- "$A/metrics-lessons.spec.luau"
+check "AC10: an item's trail: ranges, documents, parsing, the first add and the capture" lune run tests/run -- "$A/trail.spec.luau"
 
 finish
