@@ -16,8 +16,8 @@ local look: View.Look = { yaw = 0, pitch = 0 }
 local yaw: number? = nil
 local cursor = false -- the mouse is free (and shown) for a prompt
 local current: Awareness.Pose? = nil
--- a touch look was applied since the last render step, and a finger is down (the locked mouse's delta is then
--- the touch)
+-- a touch looked, or a finger went down or came up, since the last render step; and a finger is down (the
+-- locked mouse's delta is then the touch)
 local lookedThisFrame, mouseHeld = false, false
 
 -- Snapshots only move forward: a connected client's session is never replaced.
@@ -45,9 +45,11 @@ function Camera.lookBy(dx: number, dy: number)
 	look = View.look(look, dx, dy)
 end
 
--- Whether a touch finger is down; while it is, the mouse delta is not applied.
+-- Whether a touch finger is down; while it is, the mouse delta is not applied. The frame of the change is
+-- skipped too: a finger that lifts before the render step has already moved the mouse this frame.
 function Camera.holdMouse(held: boolean)
 	mouseHeld = held
+	lookedThisFrame = true
 end
 
 -- Frees the mouse and shows it (true), or locks it to the centre and hides it (false), from the next frame.
@@ -69,7 +71,7 @@ function Camera.start()
 		if not mouseHeld and not lookedThisFrame then
 			look = View.look(look, delta.X, delta.Y)
 		end
-		-- cleared here, after the guard read it: a touch that began and ended before this step still looked
+		-- cleared here, after the guard read it: a touch that began and ended before this step still counts
 		lookedThisFrame = false
 
 		local snap = latest

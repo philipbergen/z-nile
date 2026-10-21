@@ -16,6 +16,7 @@
 | 12 | 2026-10-21 16:56 | f0027: Touch feature and the Controls touch path | 241 | 2 | 25.0 | focus | build |  |
 | 13 | 2026-10-21 16:56 | f0027: verification log | 0 | 0 | 2.0 | focus | build |  |
 | 14 | 2026-10-21 17:08 | R0012: type-only amendment of three sequestered specs (user-authorized), Phase 3 verification | 2 | 1 | 6.7 | explicit | build |  |
+| 15 | 2026-10-21 17:19 | R0012: review 001 fixes (touch hold, focus reset, adapter pins, snap frame on touch only) | 51 | 7 | 11.8 | explicit | code-review |  |
 
-**Total:** +759 / -7 lines, 143.1 agent-minutes, 200002 tokens over 14 records
-<!-- totals: added=759 removed=7 minutes=143.1 records=14 tokens=200002 -->
+**Total:** +810 / -14 lines, 154.9 agent-minutes, 200002 tokens over 15 records
+<!-- totals: added=810 removed=14 minutes=154.9 records=15 tokens=200002 -->

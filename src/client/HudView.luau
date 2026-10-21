@@ -6,6 +6,7 @@
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Hud = require("@game/ReplicatedStorage/Shared/Logic/Hud")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
@@ -113,10 +114,12 @@ function HudView.start()
 	f.Size = UDim2.fromScale(0, 1)
 	f.Parent = b
 	fill = f
-	-- drawn only: a touch on it is the snap zone in Touch's fold, so it takes no input itself
+	-- drawn only: a touch on it is the snap zone in Touch's fold, so it takes no input itself. A mouse click
+	-- on it does nothing, so a screen without touch does not show it.
 	local s = Instance.new("Frame")
 	s.Name = "Snap"
 	s.Active = false
+	s.Visible = UserInputService.TouchEnabled
 	s.BackgroundColor3 = WHITE
 	s.BackgroundTransparency = 0.6
 	s.BorderSizePixel = 0

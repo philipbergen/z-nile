@@ -1,8 +1,8 @@
 --!strict
 -- Client adapter: the danger aids. A radar in the bottom-right corner, one margin above the power bar, or on a
--- touch screen above Roblox's jump button corner (Hud.radarBox), the maze around the player turned so up is where the camera looks, and arrows on the
--- screen edge for ghosts out of view, larger and brighter the closer they are along the maze. All the
--- geometry is Awareness; this only draws it.
+-- touch screen above Roblox's jump button corner (Hud.radarBox), the maze around the player turned so up is
+-- where the camera looks, and arrows on the screen edge for ghosts out of view, larger and brighter the closer
+-- they are along the maze. All the geometry is Awareness; this only draws it.
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")

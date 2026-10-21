@@ -55,6 +55,17 @@ function Controls.start(
 	local lastId = 0
 	local held = false
 
+	-- Held while any physical touch is down, including one the fold ignored: it still moves the locked mouse.
+	local function hold()
+		local down = next(ids) ~= nil
+		if down ~= held then
+			held = down
+			if onTouch then
+				onTouch(held)
+			end
+		end
+	end
+
 	-- Every touch event is converted to screen pixels and measured against the full screen, read afresh each
 	-- time: the first frames can report an empty area, and a rotation changes it.
 	local function onInput(input: InputObject, phase: Touch.Phase)
@@ -101,13 +112,7 @@ function Controls.start(
 				onSnap()
 			end
 		end
-		local down = next(fingers.fingers) ~= nil
-		if down ~= held then
-			held = down
-			if onTouch then
-				onTouch(held)
-			end
-		end
+		hold()
 	end
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, _: boolean)
@@ -118,6 +123,12 @@ function Controls.start(
 	end)
 	UserInputService.InputEnded:Connect(function(input: InputObject, _: boolean)
 		onInput(input, "end")
+	end)
+	-- a touch held while the window loses focus may never end; drop every finger so no zone stays locked
+	UserInputService.WindowFocusReleased:Connect(function()
+		fingers = Touch.empty()
+		ids = {}
+		hold()
 	end)
 end
 

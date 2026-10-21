@@ -16,6 +16,7 @@
 | 12 | 2026-10-21 17:00 | f0029: HUD and snap button in the safe area, radar clear of the jump button | 244 | 28 | 45.0 | explicit | build |  |
 | 13 | 2026-10-21 17:08 | R0012: type-only amendment of three sequestered specs (user-authorized), Phase 3 verification | 1 | 0 | 6.7 | explicit | build |  |
 | 14 | 2026-10-21 17:14 | R0012: review-001 | 0 | 0 | 25.0 | focus | code-review |  |
+| 15 | 2026-10-21 17:19 | R0012: review 001 fixes (touch hold, focus reset, adapter pins, snap frame on touch only) | 40 | 4 | 9.2 | explicit | code-review |  |
 
-**Total:** +1051 / -31 lines, 199.1 agent-minutes, 199999 tokens over 14 records
-<!-- totals: added=1051 removed=31 minutes=199.1 records=14 tokens=199999 -->
+**Total:** +1091 / -35 lines, 208.3 agent-minutes, 199999 tokens over 15 records
+<!-- totals: added=1091 removed=35 minutes=208.3 records=15 tokens=199999 -->
