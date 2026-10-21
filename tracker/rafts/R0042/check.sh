@@ -11,11 +11,8 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0042
 
-check "RC1: the game and the architecture graph are untouched" git diff --quiet origin/main...HEAD -- src tracker/architecture.md
-
-TAB="tracker/issues/c0118/acceptance/tab.spec.luau"
-[[ -f $TAB ]] || TAB="tracker/issues/active/c0118/acceptance/tab.spec.luau"
-[[ -f $TAB ]] || TAB="tests/acceptance/c0118/tab.spec.luau"
-check "RC2: a z-nile issue is only on that tab" lune run tests/run -- "$TAB"
+check "RC1: a design lesson is sourced from R0040's own design reviews" bash -c '[[ $(scripts/tracker.sh lessons --when design --full | grep -c "^sources: .*R0040 design-review-") -ge 1 ]]'
+check "RC2: every design-review finding of R0040 and R0042 is harvested" scripts/tracker.sh lessons --uncovered R0040 R0042
+check "RC3: the game and the architecture graph are untouched" git diff --quiet origin/main...HEAD -- src tracker/architecture.md
 
 finish
