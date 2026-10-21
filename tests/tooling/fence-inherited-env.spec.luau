@@ -231,10 +231,14 @@ return t.spec(
 						'echo "PLAIN=$(pickman_guarded "$PWD")"',
 						`GIT_DIR="{repo}/.git"; export GIT_DIR`,
 						'echo "SET=$(pickman_guarded "$PWD")"',
+						-- and the other way: GIT_DIR at an unprotected repository hides nothing from the clean read
+						`GIT_DIR="{foreign}/.git"; export GIT_DIR`,
+						`echo "AWAY=$(pickman_guarded "{repo}")"`,
 					}, "\n")
 				)
 				t.expect(has(r.stdout, "PLAIN=unguarded\n")).toBe(true)
 				t.expect(has(r.stdout, "SET=guarded\n")).toBe(true)
+				t.expect(has(r.stdout, "AWAY=guarded\n")).toBe(true)
 			end
 		)
 
