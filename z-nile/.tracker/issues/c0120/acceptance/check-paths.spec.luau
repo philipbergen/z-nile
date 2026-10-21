@@ -72,9 +72,7 @@ local function literals(text: string): { string }
 				then
 					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
 						path = if string.match(w, "%.luau$") then w else w .. ".luau"
-					elseif FILES[w] then
-						path = w
-					elseif finding and FOLDERS[w] then
+					elseif FILES[w] or (finding and FOLDERS[w]) then
 						path = w
 					else
 						for _, p in PREFIXES do
