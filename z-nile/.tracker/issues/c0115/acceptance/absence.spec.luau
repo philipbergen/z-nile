@@ -51,7 +51,7 @@ end
 -- its renamed lesson exists, so look-alike paths such as tracker/next never count)
 local function oldLessonIds(text: string, existing: { [string]: boolean }): { string }
 	local out: { string } = {}
-	for _, id in skills.oldLessonIds(text, existing, false) do
+	for _, id in skills.oldLessonIds(text, existing) do
 		table.insert(out, `{id.old}/{id.slug}`)
 	end
 	table.sort(out)

@@ -3,12 +3,14 @@
 -- project root (backlog, active/ and done/) and in every lesson file's body. Run from the repository root, after
 -- the skill folders have moved:
 --   lune run "$(./zn find c0115)/experiments/rename-lesson-ids" [-- --dry-run]
--- The rule is skills.oldLessonIds, the one AC4 and AC5 check with: an `<old>/<slug>` token is renamed only where
--- `<new>/<slug>.md` exists, and a lesson body's old skill names are renamed by skills.oldNames (AC4's rule). In a
--- harvest.md every such token is an id, so one with no lesson at the new place is
+-- The rules are lessons.renameLedger for a harvest.md (every id parseHarvest reads; its notes and one-off reasons as
+-- prose) and skills.oldLessonIds for prose (a token is renamed only where `<new>/<slug>.md` exists), the ones AC4 and
+-- AC5 check with; a lesson body's old skill names are renamed by skills.oldNames (AC4's rule). In a harvest.md every
+-- parsed id is an id, so one with no lesson at the new place is
 -- reported (exit 1); in a lesson body a token may be a path (tracker/next), so it is only left alone. Prints each
 -- changed file with its count. Idempotent: a second run changes nothing.
 local fs = require("@lune/fs")
+local lessons = require("@znile/engine/lessons")
 local process = require("@lune/process")
 local skills = require("@znile/engine/skills")
 
@@ -47,8 +49,14 @@ end
 
 local total = 0
 local function fix(path: string, ledger: boolean)
-	local out, n, unknown = skills.renameLessonIds(fs.readFile(path), existing, ledger)
-	if not ledger then
+	local text = fs.readFile(path)
+	local out, n, unknown
+	if ledger then
+		-- a ledger: the ids lessons.parseHarvest reads are ids; its notes and one-off reasons are prose
+		out, n, unknown = lessons.renameLedger(text, existing)
+	else
+		out, n = skills.renameLessonIds(text, existing)
+		unknown = {}
 		-- a lesson body is live text: its old skill names go too (skills.oldNames, AC4's rule); a ledger is history
 		local named, m = skills.renameOldNames(out)
 		out, n = named, n + m

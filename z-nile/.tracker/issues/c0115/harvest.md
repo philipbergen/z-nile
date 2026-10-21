@@ -14,3 +14,6 @@
 - design-review-002 F2: testing/new-commands-run-in-a-copy
 - design-review-002 F3: ticket-prep/prove-specs-pass-on-a-prototype
 - design-review-002 F4: one-off: a lesson body quoted an old id as a token, which the rename then rewrote into a false example
+- design-review-003 F1: architecture/one-reader-per-format, testing/one-rule-one-function
+- design-review-003 F2: ticket-prep/bulk-renames-skip-ordinary-words
+- design-review-003 F3: ticket-prep/prove-specs-pass-on-a-prototype

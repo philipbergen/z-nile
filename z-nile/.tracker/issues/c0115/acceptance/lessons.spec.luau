@@ -27,11 +27,14 @@ local function write(path: string, text: string)
 	end
 	fs.writeFile(path, text)
 end
--- the one old-id rule (skills.oldLessonIds, shared with the rename script and AC4): every token in a ledger, and in a
--- lesson body only a token whose renamed lesson exists
+-- the old-id rules the rename script uses: a ledger through lessons.ledgerOldIds (every id parseHarvest reads; notes
+-- and one-off reasons as prose), anything else through skills.oldLessonIds (only a renamed lesson's old id)
 local function oldIds(text: string, existing: { [string]: boolean }, ledger: boolean): { string }
+	if ledger then
+		return (lessons.ledgerOldIds(text, existing))
+	end
 	local out: { string } = {}
-	for _, id in skills.oldLessonIds(text, existing, ledger) do
+	for _, id in skills.oldLessonIds(text, existing) do
 		table.insert(out, `{id.old}/{id.slug}`)
 	end
 	return out
@@ -140,17 +143,29 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 	end)
 
 	it(
-		"the old-id rule: every token in a ledger, only renamed lessons in prose, never a look-alike path",
+		"a ledger's parsed ids all count; its notes and one-off reasons are prose; look-alikes never count",
 		function()
 			local existing = { ["zz-test/no-vacuous-pass"] = true, ["z-design/x"] = true }
-			-- a ledger: every token is an id, known or not
+			-- every parsed id of an old skill counts, known or not
+			local found, unknown = lessons.ledgerOldIds(
+				"- design-review-001 F1: testing/no-vacuous-pass, ticket-prep/x, testing/gone\n",
+				existing
+			)
+			t.expect(found).toEqual({ "testing/no-vacuous-pass", "ticket-prep/x", "testing/gone" })
+			t.expect(unknown).toEqual({ "testing/gone" })
+			-- a note's text and a one-off's reason are prose: paths there never count, valid ids beside them pass
+			local notes = "- note c0115 prep: a spec wrote under review/x and tracker/rafts/R0010: zz-test/no-vacuous-pass\n"
+				.. "- review-001 F2: one-off: a stale testing/fixtures link and a review/round path\n"
+			t.expect((lessons.ledgerOldIds(notes, existing))).toEqual({})
+			-- an old id in a note's id list is an id, and a renamed lesson's old id in its prose is caught too
 			t.expect(
-				oldIds(
-					"- design-review-001 F1: testing/no-vacuous-pass, ticket-prep/x, testing/unknown-slug\n",
-					existing,
-					true
+				(
+					lessons.ledgerOldIds(
+						"- note it said testing/no-vacuous-pass: testing/no-vacuous-pass\n",
+						existing
+					)
 				)
-			).toEqual({ "testing/no-vacuous-pass", "ticket-prep/x", "testing/unknown-slug" })
+			).toEqual({ "testing/no-vacuous-pass", "testing/no-vacuous-pass" })
 			-- a lesson body: look-alikes and unknown slugs pass, a renamed lesson's old id fails
 			local prose =
 				"Read `tracker/next`, scripts/tracker/x and testing/unknown-slug; z-nile/.tracker/issues too."
@@ -159,12 +174,29 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 				.toEqual({ "testing/no-vacuous-pass" })
 			t.expect(oldIds("- review-001 F1: zz-test/no-vacuous-pass, z-design/x\n", existing, true))
 				.toEqual({})
-			-- the rename the script makes from the same rule
-			local out, n, unknown =
-				skills.renameLessonIds("- r F1: testing/no-vacuous-pass, testing/gone\n", existing, true)
-			t.expect(out).toBe("- r F1: zz-test/no-vacuous-pass, testing/gone\n")
-			t.expect(n).toBe(1)
+		end
+	)
+
+	it(
+		"the script's ledger rename: parsed ids by the list, prose by the prose rule, nothing else changed",
+		function()
+			local existing = { ["zz-test/no-vacuous-pass"] = true }
+			local text = "# Harvest: c0010\n- design-review-001 F1: testing/no-vacuous-pass, testing/gone\n"
+				.. "- note under review/x, see testing/no-vacuous-pass: testing/no-vacuous-pass\n"
+				.. "- review-001 F2: one-off: a review/x path\n"
+			local out, n, unknown = lessons.renameLedger(text, existing)
+			t.expect(out).toBe(
+				"# Harvest: c0010\n- design-review-001 F1: zz-test/no-vacuous-pass, testing/gone\n"
+					.. "- note under review/x, see zz-test/no-vacuous-pass: zz-test/no-vacuous-pass\n"
+					.. "- review-001 F2: one-off: a review/x path\n"
+			)
+			t.expect(n).toBe(3)
 			t.expect(unknown).toEqual({ "testing/gone" })
+			local clean = "- note a spec wrote under review/x: zz-test/no-vacuous-pass\n"
+			local same, zero, none = lessons.renameLedger(clean, existing)
+			t.expect(same).toBe(clean)
+			t.expect(zero).toBe(0)
+			t.expect(none).toEqual({})
 		end
 	)
 

@@ -1579,7 +1579,7 @@ index 22a5a7f..0582508 100644
  	end)
  
 diff --git a/tests/tooling/repo-fence.spec.luau b/tests/tooling/repo-fence.spec.luau
-index b8dd9c5..8b86a0d 100644
+index 6deaf07..01ea0ef 100644
 --- a/tests/tooling/repo-fence.spec.luau
 +++ b/tests/tooling/repo-fence.spec.luau
 @@ -1,5 +1,5 @@
@@ -1598,7 +1598,7 @@ index b8dd9c5..8b86a0d 100644
  -- the file may name them.
  local ALLOWED: { [string]: { [string]: string } } = {
  	-- c0660: the fixture helper names these to refuse them, and its spec proves it
-@@ -448,7 +448,7 @@ return t.spec("repository fence", function(it)
+@@ -449,7 +449,7 @@ return t.spec("repository fence", function(it)
  
  	it("when jailed, a spec can't signal the run's top process", function()
  		if env.PICKMAN_TEST_JAIL ~= "sandbox-exec" then
@@ -1637,7 +1637,7 @@ index 8c09542..32d660e 100644
  local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
 new file mode 100644
-index 0000000..acf023a
+index 0000000..10bf78f
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
 @@ -0,0 +1,239 @@
@@ -1694,7 +1694,7 @@ index 0000000..acf023a
 +-- its renamed lesson exists, so look-alike paths such as tracker/next never count)
 +local function oldLessonIds(text: string, existing: { [string]: boolean }): { string }
 +	local out: { string } = {}
-+	for _, id in skills.oldLessonIds(text, existing, false) do
++	for _, id in skills.oldLessonIds(text, existing) do
 +		table.insert(out, `{id.old}/{id.slug}`)
 +	end
 +	table.sort(out)
@@ -2240,10 +2240,10 @@ index 0000000..1cc462b
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau
 new file mode 100644
-index 0000000..7702dd0
+index 0000000..b9c6b4c
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,223 @@
 +--!strict
 +-- c0115 AC5: lessons live in their skill's real folder (z-nile/skills/<skill>/lessons/ or
 +-- <project>/skills/<skill>/lessons/), keep the id <skill>/<slug> with the new skill names, and `lessons --full` prints
@@ -2273,11 +2273,14 @@ index 0000000..7702dd0
 +	end
 +	fs.writeFile(path, text)
 +end
-+-- the one old-id rule (skills.oldLessonIds, shared with the rename script and AC4): every token in a ledger, and in a
-+-- lesson body only a token whose renamed lesson exists
++-- the old-id rules the rename script uses: a ledger through lessons.ledgerOldIds (every id parseHarvest reads; notes
++-- and one-off reasons as prose), anything else through skills.oldLessonIds (only a renamed lesson's old id)
 +local function oldIds(text: string, existing: { [string]: boolean }, ledger: boolean): { string }
++	if ledger then
++		return (lessons.ledgerOldIds(text, existing))
++	end
 +	local out: { string } = {}
-+	for _, id in skills.oldLessonIds(text, existing, ledger) do
++	for _, id in skills.oldLessonIds(text, existing) do
 +		table.insert(out, `{id.old}/{id.slug}`)
 +	end
 +	return out
@@ -2386,17 +2389,29 @@ index 0000000..7702dd0
 +	end)
 +
 +	it(
-+		"the old-id rule: every token in a ledger, only renamed lessons in prose, never a look-alike path",
++		"a ledger's parsed ids all count; its notes and one-off reasons are prose; look-alikes never count",
 +		function()
 +			local existing = { ["zz-test/no-vacuous-pass"] = true, ["z-design/x"] = true }
-+			-- a ledger: every token is an id, known or not
++			-- every parsed id of an old skill counts, known or not
++			local found, unknown = lessons.ledgerOldIds(
++				"- design-review-001 F1: testing/no-vacuous-pass, ticket-prep/x, testing/gone\n",
++				existing
++			)
++			t.expect(found).toEqual({ "testing/no-vacuous-pass", "ticket-prep/x", "testing/gone" })
++			t.expect(unknown).toEqual({ "testing/gone" })
++			-- a note's text and a one-off's reason are prose: paths there never count, valid ids beside them pass
++			local notes = "- note c0115 prep: a spec wrote under review/x and tracker/rafts/R0010: zz-test/no-vacuous-pass\n"
++				.. "- review-001 F2: one-off: a stale testing/fixtures link and a review/round path\n"
++			t.expect((lessons.ledgerOldIds(notes, existing))).toEqual({})
++			-- an old id in a note's id list is an id, and a renamed lesson's old id in its prose is caught too
 +			t.expect(
-+				oldIds(
-+					"- design-review-001 F1: testing/no-vacuous-pass, ticket-prep/x, testing/unknown-slug\n",
-+					existing,
-+					true
++				(
++					lessons.ledgerOldIds(
++						"- note it said testing/no-vacuous-pass: testing/no-vacuous-pass\n",
++						existing
++					)
 +				)
-+			).toEqual({ "testing/no-vacuous-pass", "ticket-prep/x", "testing/unknown-slug" })
++			).toEqual({ "testing/no-vacuous-pass", "testing/no-vacuous-pass" })
 +			-- a lesson body: look-alikes and unknown slugs pass, a renamed lesson's old id fails
 +			local prose =
 +				"Read `tracker/next`, scripts/tracker/x and testing/unknown-slug; z-nile/.tracker/issues too."
@@ -2405,12 +2420,29 @@ index 0000000..7702dd0
 +				.toEqual({ "testing/no-vacuous-pass" })
 +			t.expect(oldIds("- review-001 F1: zz-test/no-vacuous-pass, z-design/x\n", existing, true))
 +				.toEqual({})
-+			-- the rename the script makes from the same rule
-+			local out, n, unknown =
-+				skills.renameLessonIds("- r F1: testing/no-vacuous-pass, testing/gone\n", existing, true)
-+			t.expect(out).toBe("- r F1: zz-test/no-vacuous-pass, testing/gone\n")
-+			t.expect(n).toBe(1)
++		end
++	)
++
++	it(
++		"the script's ledger rename: parsed ids by the list, prose by the prose rule, nothing else changed",
++		function()
++			local existing = { ["zz-test/no-vacuous-pass"] = true }
++			local text = "# Harvest: c0010\n- design-review-001 F1: testing/no-vacuous-pass, testing/gone\n"
++				.. "- note under review/x, see testing/no-vacuous-pass: testing/no-vacuous-pass\n"
++				.. "- review-001 F2: one-off: a review/x path\n"
++			local out, n, unknown = lessons.renameLedger(text, existing)
++			t.expect(out).toBe(
++				"# Harvest: c0010\n- design-review-001 F1: zz-test/no-vacuous-pass, testing/gone\n"
++					.. "- note under review/x, see zz-test/no-vacuous-pass: zz-test/no-vacuous-pass\n"
++					.. "- review-001 F2: one-off: a review/x path\n"
++			)
++			t.expect(n).toBe(3)
 +			t.expect(unknown).toEqual({ "testing/gone" })
++			local clean = "- note a spec wrote under review/x: zz-test/no-vacuous-pass\n"
++			local same, zero, none = lessons.renameLedger(clean, existing)
++			t.expect(same).toBe(clean)
++			t.expect(zero).toBe(0)
++			t.expect(none).toEqual({})
 +		end
 +	)
 +
@@ -3036,7 +3068,7 @@ index 0000000..3c53670
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/c0115/c0115.md
-index 258a3a7..a13d784 100644
+index 258a3a7..29966dd 100644
 --- a/z-nile/.tracker/issues/c0115/c0115.md
 +++ b/z-nile/.tracker/issues/c0115/c0115.md
 @@ -6,7 +6,7 @@ slug: skill-names-readme
@@ -3048,7 +3080,7 @@ index 258a3a7..a13d784 100644
  created: 2026-10-20
  status: new-falcon-lucky-mongoose
  ---
-@@ -38,53 +38,449 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -38,53 +38,460 @@ Decided with the user (2026-10-20), from the programme review:
  - Move and rename the skill files under `z-nile/` to the `z-` and `zz-` names. `scripts/tracker.sh` verbs stay (`new issue`, `new raft`, `ready`, `start`, `done`).
  - Write `z-nile/README.md` so it opens with the flow diagram and a short account of the five parts.
  
@@ -3061,12 +3093,12 @@ index 258a3a7..a13d784 100644
  ## Design
 -<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
 -     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
-+A working prototype of everything below is the scratch worktree `.worktree/proto-c0115`, local branch `proto-c0115`, on c0120's prototype `proto-c0120` at b7e75b9 (c0120 after its code-review fixes; the measured base, see §11). It has three kinds of commit:
++A working prototype of everything below is the scratch worktree `.worktree/proto-c0115`, local branch `proto-c0115`, on c0120's prototype `proto-c0120` at bc550e9 (c0120 final for its code review; the measured base, see §11). It has three kinds of commit:
 +- **a simulation, not part of c0115**: c0120 done, its specs promoted to `tests/acceptance/c0120` (c0115 runs after c0120, so its overrides are written against those promoted files);
 +- **the move**: 31 files, all `R100` (`git show -M --name-status` of the renames commit);
 +- **the edits**: one commit.
 +
-+`prototype.patch` beside this document (in this item's folder) is `git diff -M proto-c0120` of that worktree at b7e75b9, so it includes the simulation. The documents are the contract; the executor may start from the prototype.
++`prototype.patch` beside this document (in this item's folder) is `git diff -M proto-c0120` of that worktree at bc550e9 (`git diff -M bc550e9`, by sha: the branch name moves), so it includes the simulation. The documents are the contract; the executor may start from the prototype.
 +
 +### 1. The names
 +| old skill | new skill | where | how |
@@ -3171,11 +3203,12 @@ index 258a3a7..a13d784 100644
 +- **One rule, three users** (design review 002 F1; lesson zz-test/one-rule-one-function). `z-nile/engine/skills.luau` holds the rename map and the two rules, and the rename script, AC4 and AC5 all call them:
 +  - `skills.RENAMED` (old skill → new, `architecture` → `zz-arch` for ids), `skills.RENAMED_PATH` (old skill → real folder, `architecture` → `pickman/skills/pickman-arch` for paths), `skills.HYPHENATED` and `skills.WORDS`, all between the markers `-- c0115 rename map: begin` and `-- c0115 rename map: end`, the one block AC4's scan leaves out (a missing block is an error);
 +  - `skills.lessonIndex(root)`: every existing `<skill>/<slug>` in the skills folders;
-+  - `skills.oldLessonIds(text, existing, ledger)`: every `<old>/<slug>` token not after a name character, `/` or `.`. In a ledger every token counts, since an entry is always an id; in prose only a token whose renamed lesson exists, so `tracker/next` and `scripts/tracker/x` never count. `skills.renameLessonIds` renames the known ones and returns the ledger's unknown ones;
++  - `skills.oldLessonIds(text, existing)`, the prose rule: an `<old>/<slug>` token not after a name character, `/` or `.` counts only where its renamed lesson exists, so `tracker/next`, `scripts/tracker/x` and `review/x` never count; `skills.renameLessonIds` renames them;
++  - the ledger rule, in `z-nile/engine/lessons.luau` beside the format's one reader (design review 003 F1; lesson zz-arch/one-reader-per-format): `lessons.ledgerOldIds(text, existing)` and `lessons.renameLedger(text, existing)` read each line through `lessons.parseHarvest`. Every parsed id of an old skill counts, known or not, and is renamed in the id list; a note's text and a one-off's reason are prose and take the prose rule; a line `parseHarvest` refuses is left alone, since `lessons --check` (AC6) already fails on it. (`skills.luau` can't hold it: `lessons.luau` requires `skills.luau`.);
 +  - `skills.oldNames(text)`: §8's name forms with their replacements, earliest and longest match first; `skills.renameOldNames` applies them.
-+- **The ledgers.** Every `harvest.md` under every root (done items included: the ledgers are data, not frozen captures) and every lesson body is rewritten by `rename-lesson-ids.luau`, in this item's `experiments/`. Run it as `lune run "$(./zn find c0115)/experiments/rename-lesson-ids"`, with `-- --dry-run` to preview. It maps `make-issue→z-ticket`, `ticket-prep→z-design`, `ready-raft→z-ready`, `launch-raft` and `execute-raft→z-run`, `stop-raft→z-stop`, `review→zz-review`, `tracker→zz-rules`, `metrics→zz-stats`, `testing→zz-test` and `architecture→zz-arch`. It rewrites an `<old>/<slug>` token only where `<new>/<slug>.md` exists, so `scripts/tracker/x.luau` is never touched, and in each lesson body it also renames the old skill names (`skills.renameOldNames`): lessons keep arriving between this prep and the execution, and their prose names the old skills. It exits 1 naming any id in a ledger with no lesson at the new place. It is idempotent (E4). The executor runs it after the move and again after any merge of main that brings new ledger lines (c0112).
++- **The ledgers.** Every `harvest.md` under every root (done items included: the ledgers are data, not frozen captures) and every lesson body is rewritten by `rename-lesson-ids.luau`, in this item's `experiments/`. Run it as `lune run "$(./zn find c0115)/experiments/rename-lesson-ids"`, with `-- --dry-run` to preview. It maps `make-issue→z-ticket`, `ticket-prep→z-design`, `ready-raft→z-ready`, `launch-raft` and `execute-raft→z-run`, `stop-raft→z-stop`, `review→zz-review`, `tracker→zz-rules`, `metrics→zz-stats`, `testing→zz-test` and `architecture→zz-arch`. It rewrites an `<old>/<slug>` token only where `<new>/<slug>.md` exists, so `scripts/tracker/x.luau` is never touched, and in each lesson body it also renames the old skill names (`skills.renameOldNames`): lessons keep arriving between this prep and the execution, and their prose names the old skills. It exits 1 naming any parsed ledger id with no lesson at the new place; prose in a note or a one-off never makes it fail. It is idempotent (E4). The executor runs it after the move and again after any merge of main that brings new ledger lines (c0112).
 +- **c0112.** Either order works. If c0112 (the backfill) lands first, its entries are rewritten by the same run. If it lands after, it writes new ids itself, since the old folders are gone and `lessons --check` would refuse old ones.
-+- **Text.** Skill text and lesson bodies that cite a lesson id use the new id (`lesson zz-arch/one-reader-per-format`). A lesson that quotes an old id as history names it in words ("the old testing-skill id of no-vacuous-pass"), never as a token, or the rename turns the example into a false statement (design review 002 F4).
++- **Text.** Skill text and lesson bodies that cite a lesson id use the new id (`lesson zz-arch/one-reader-per-format`). A lesson that quotes an old id or an old skill name as an example or as history names it in words ("the old testing-skill id of no-vacuous-pass", "the design skill"), never as a token, or the rename turns the example into a false statement (design review 002 F4, 003 F2): `plain-find-for-literals` now shows `string.find(s, "ab-cd")` (nil in Lune, as the old example was), and `instructions-runnable-where-they-run` says "reads the design skill and the testing skill".
 +
 +### 6. Prompts per project
 +`renderPrompt` inlines `inlinedSkills(project)`: z-nile's `skills.INLINED` in that order (`z-run`, `zz-rules`, `zz-arch`, `zz-test`, `zz-review`), then, for a raft of any project but z-nile, every skill whose project is the raft's, sorted by name. All of them come from their real folders. The project is `projects.projectOf(registry, raft.root)`. The Lessons section is the build index over z-nile's skills' lessons and the raft's project's: another project's lessons are left out. The template's `{{PROJECT}}` names the project. Line 3 ends "This raft is the {{PROJECT}} project's.", and the section titles are "## Lessons (build and both, from z-nile's skills and the {{PROJECT}} project's)" and "## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, the binding rules)". Hard rule 1 says to follow "the `z-run` skill below". c0117 ("Name the files in the prompt": paths instead of pasted text) replaces the inlining later; c0115 only changes what is inlined.
@@ -3230,7 +3263,7 @@ index 258a3a7..a13d784 100644
 +- **Overrides they inherit**: c0115's promoted `tests/acceptance/c0115/readme.spec.luau` pins `z-raft (c0116, planned)`, `dispatcher (c0117, planned)`, `.models.toml (c0117, planned)` and `c0118, planned`. When c0116, c0117 and c0118 build their part, each changes that spec (they are chores, so the override is theirs) and names it on its `Overrides:` line, with `z-nile/README.md` and `tests/acceptance/c0115` in its Touched modules. `layout.spec` needs no change for `z-raft`: it pins the ten z-nile skills as present, not as the only ones, and c0116 only adds the link (AC2).
 +
 +### 11. Rebase on c0120 (the rule)
-+c0115 is measured on `proto-c0120` at b7e75b9. After design review 001 F4 it was rebased three times: from 080d247 to d6e36fa; to 51e5b3f, when c0120 amended a word in the testing skill's Jail bullet, which landed in `zz-test`; and to c9c6070 (a home-fence fix in `fence.sh`, `homes.spec` and `repo-fence.spec`, naming no skill). Each time: the simulation commit, then the move and the edits cherry-picked, clean. The stack under c0115 is R0043 (c0114), then c0120; the prototype stands on c0120's prototype, which stands on c0114's prototype, not on `impl-r43`, so R0043's later edits reach c0115 only through this rule. After design review 002 it was rebased once more, onto b7e75b9 (c0120's code-review fixes: one testing-skill line, the Overrides-stripped bullet, landed in `zz-test`). Any later change to the stack, before c0115's prep lands or at its execution (Implementation step 1), rechecks:
++c0115 is measured on `proto-c0120` at bc550e9. After design review 001 F4 it was rebased three times: from 080d247 to d6e36fa; to 51e5b3f, when c0120 amended a word in the testing skill's Jail bullet, which landed in `zz-test`; and to c9c6070 (a home-fence fix in `fence.sh`, `homes.spec` and `repo-fence.spec`, naming no skill). Each time: the simulation commit, then the move and the edits cherry-picked, clean. The stack under c0115 is R0043 (c0114), then c0120; the prototype stands on c0120's prototype, which stands on c0114's prototype, not on `impl-r43`, so R0043's later edits reach c0115 only through this rule. After design review 002 it was rebased onto b7e75b9 (c0120's code-review fixes: one testing-skill line, the Overrides-stripped bullet, landed in `zz-test`), and after design review 003 onto bc550e9 (c0120 final for its code review: `fence.sh` and two tooling specs, no skill text; (a) to (k) rechecked). Any later change to the stack, before c0115's prep lands or at its execution (Implementation step 1), rechecks:
 +- (a) the final testing-skill text against §2's split: every line the stack adds or changes in `testing/SKILL.md` lands in `zz-test` unless it is a game tier (at d6e36fa the Protected writers and the Fence bullet; at 51e5b3f the Jail bullet; at b7e75b9 the Overrides-stripped bullet; and R0043's later Writers, Gate spec and Hooks lines, taken from `impl-c0120`'s text into `zz-test` in round 2);
 +- (k) R0043's later edits elsewhere (`impl-r43` against `proto-c0114`): skill text, lessons, ledgers, engine messages and promoted specs, each carrying the new names. Its lessons and ledgers are checked by E4's overlay; its skill lines by (a) and `skilldiff.py`, the prep's comparison of every prep-tree skill line, renamed, against the prototype's files;
 +- (b) c0120/docs' pinned phrases, read from `zz-test`, `zz-rules` and `pickman-arch` (the override's paths);
@@ -3319,8 +3352,8 @@ index 258a3a7..a13d784 100644
 +
 +  **PASS.** No resolver was needed.
 +- **E3. The mapping and the splits.** Pass: every section of `testing` and `architecture` has a destination (§2, §3), and every pinned phrase is found by plain find in its new file. The gate's promoted docs specs (c0003, c0064, c0081, c0111, c0114, c0119, c0120) pass on the prototype with path-only overrides, except c0119's two phrases and c0111's lessons paragraph, which name the old skills and are rewritten (§ Overrides). **PASS.**
-+- **E4. The ledger rewrite.** Pass: the script on the prototype turns `lessons --check` from a list of problems (every stale id in R0040's and R0042's ledgers, and the 21 lessons they left without a source) into ok, a second run changes nothing, and every changed line is a pure id substitution. Shown by mapping the old file with `sed` and comparing it with the new one: identical for `R0040/harvest.md` (29 ids) and `R0042/harvest.md` (102 ids). `./zn lessons --uncovered R0040 R0042`: "every finding is covered". **PASS.** Rerun after design review 001 on a copy of the prep tree (outside the repository, the move applied with `mv`). The prep tree is ahead of the prototype: R0043's seven lessons and its ledger, c0120's and c0115's ledgers. 185 ids were rewritten across five ledgers and one lesson, the script exited 0, and a second run rewrote 0. That run also found that a lesson body's `tracker/next` was reported as a missing id, so the script now reports a missing id only in a `harvest.md`. Round 2: the merged prep tree's lessons and ledgers (34 lessons, 179 harvest entries) were laid over a scratch clone of the prototype. The script then made 204 rewrites (ids and, in lesson bodies, old skill names), exited 0, and a second run made 0. `./zn lessons --check` was ok, `--uncovered R0040 R0042 c0115` covered, `./zn skills --check` ok, and AC3's, AC4's and AC5's specs pass there. Before the script renamed names, that run had failed AC4 on five prep-tree lessons that named `ticket-prep` and "testing skill" in prose (§5).
-+- **E5. Mutants.** Every Rules-and-mutants row was applied to the prototype one at a time by the scratchpad runner (`c0115-work/mut.py`), each against its spec case, and reverted. The exceptions: M30 and M31 are state mutants, applied by hand, and M44 and M45 are branch mutants of AC13, run in a scratch clone. After the rebases onto d6e36fa, 51e5b3f, c9c6070 and b7e75b9: **all run on each, all killed (47 on b7e75b9, plus M37 against AC2) on an assertion of their case** (M1 to M45). M4 had first survived in round 0; its case gained a project named `zz`.
++- **E4. The ledger rewrite.** Pass: the script on the prototype turns `lessons --check` from a list of problems (every stale id in R0040's and R0042's ledgers, and the 21 lessons they left without a source) into ok, a second run changes nothing, and every changed line is a pure id substitution. Shown by mapping the old file with `sed` and comparing it with the new one: identical for `R0040/harvest.md` (29 ids) and `R0042/harvest.md` (102 ids). `./zn lessons --uncovered R0040 R0042`: "every finding is covered". **PASS.** Rerun after design review 001 on a copy of the prep tree (outside the repository, the move applied with `mv`). The prep tree is ahead of the prototype: R0043's seven lessons and its ledger, c0120's and c0115's ledgers. 185 ids were rewritten across five ledgers and one lesson, the script exited 0, and a second run rewrote 0. That run also found that a lesson body's `tracker/next` was reported as a missing id, so the script now reports a missing id only in a `harvest.md`. Round 2: the merged prep tree's lessons and ledgers (34 lessons, 179 harvest entries) were laid over a scratch clone of the prototype. The script then made 204 rewrites (ids and, in lesson bodies, old skill names), exited 0, and a second run made 0. `./zn lessons --check` was ok, `--uncovered R0040 R0042 c0115` covered, `./zn skills --check` ok, and AC3's, AC4's and AC5's specs pass there. Before the script renamed names, that run had failed AC4 on five prep-tree lessons that named `ticket-prep` and "testing skill" in prose (§5). Round 3, after the ledger rule moved to `parseHarvest`, rebased onto bc550e9: the overlay again, plus the reviewer's probe (a note naming `review/x` and `tracker/rafts/R0010`). 203 rewrites, no unknown id reported, a second run 0; the eight lesson-body changes read line by line, all correct renames (none an example); `lessons --check` ok (34 lessons, 180 entries with the probe); AC3 to AC5's specs pass.
++- **E5. Mutants.** Every Rules-and-mutants row was applied to the prototype one at a time by the scratchpad runner (`c0115-work/mut.py`), each against its spec case, and reverted. The exceptions: M30 and M31 are state mutants, applied by hand, and M44 and M45 are branch mutants of AC13, run in a scratch clone. After the rebases onto d6e36fa, 51e5b3f, c9c6070, b7e75b9 and bc550e9: **all run on each, all killed (48 on bc550e9, plus M37 against AC2) on an assertion of their case** (M1 to M45). M4 had first survived in round 0; its case gained a project named `zz`.
  
  ## Regression guard
 -<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
@@ -3342,7 +3375,7 @@ index 258a3a7..a13d784 100644
 +- `check.sh`'s `links_check`: `./zn skills --check` and `--plan` in a clean clone under `.cache/c0115-ac2` that stays unchanged, and the gate's stage line → AC2
 +- `layout.spec` :: the ten z-nile skills and the two pickman ones, tracked, each named for its folder; no old folder anywhere; `.claude/skills` is one committed relative link per folder and nothing else; z-run opens with Launch; `.claude/README.md` gone; the prototype's four architecture lessons in zz-arch; the three checklists. Plus `check.sh`'s `z-raft` line → AC3
 +- `absence.spec` :: the scan's forms and look-alikes; no live file names an old skill; no code or spec reads through a link; the lesson-id scan's planted cases (catches `architecture/guards-trust-only-origin` and `testing/no-vacuous-pass`, leaves `tracker/next`, `tracker/compaction.txt` and `scripts/tracker/x.luau`); no live file cites an old lesson id → AC4
-+- `lessons.spec` :: load reads both folders with owners; the legacy fallback; the no-skill message; a skill in two folders; `--full` paths and `--check` in a fixture; an old id in a harvest fails `--check`; the scan; no ledger or lesson on the real tree names an old id → AC5
++- `lessons.spec` :: load reads both folders with owners; the legacy fallback; the no-skill message; a skill in two folders; the ledger rule (parsed ids count, known or not; a note naming `review/x` and `tracker/rafts/R0010` and a one-off naming `testing/fixtures` pass; an old id in a note's list counts) and the script's ledger rename; `--full` paths and `--check` in a fixture; an old id in a harvest fails `--check`; the scan; no ledger or lesson on the real tree names an old id → AC5
 +- `./zn lessons --check` and `./zn lessons --uncovered R0040 R0042` → AC6
 +- `prompt.spec` :: a pickman raft gets the five then pickman's, from real folders, with both lessons and its project named; a z-nile raft gets the five, no project skill and no pickman lesson → AC7
 +- `docs.spec` :: z-run's Launch; zz-test and pickman-test sections; zz-arch and pickman-arch; z-design's checklist sentence; zz-rules' Skills bullet, four lists, the Conflicts sentence and the usage; the lessons paragraph in every skill; AGENTS.md and SETUP.md. Plus c0042/model, c0107/views and c0069/prompt (overridden) → AC8
@@ -3401,7 +3434,8 @@ index 258a3a7..a13d784 100644
 +| no live text cites an old lesson id | absence :: no live file, skills and comments included, cites an old lesson id | zz-test keeps `testing/no-vacuous-pass` (M41); `publish.luau` keeps `architecture/guards-trust-only-origin` (M42, the reviewer's probe) | run: killed |
 +| every drawn skill sits in a quoted label | readme :: every z- and zz- skill… | an unquoted node `ghost[zz-ghost]` (M43) | run: killed |
 +| the move is one renames-only commit | check.sh AC13 | an edit amended into the moves commit (M44); a later commit renaming a skill file (M45) | run (scratch clone): killed |
-+| prose counts an old id only where its renamed lesson exists | lessons :: the old-id rule… | the prose rule widened to every token (M46) | run: killed |
++| prose counts an old id only where its renamed lesson exists | lessons :: a ledger's parsed ids all count… (the lesson-body lines) | the prose rule widened to every token (M46) | run: killed |
++| a ledger counts only parsed ids; its notes and one-off reasons are prose | lessons :: a ledger's parsed ids all count…; the script's ledger rename… | every token of a ledger line taken as an id again (M48) | run: killed |
 +| a promoted spec's file name is no old skill | absence :: the scan finds each form… | the `.spec` exemption dropped (M47) | run: killed |
 +| AC2's `--check` writes nothing where it runs | check.sh AC2 (`links_check`: the ok line and the clean clone) | `--check` falls through to the write (M37, committed on a scratch branch) | run: killed ("skills --check said: skills: 12 skills linked") |
 +| the rename script renames lesson-body names | absence :: the same rule renames…; the overlay run (E4) | — | reasoned: the script calls `skills.renameOldNames`, whose cases are AC4's; E4's overlay shows the merged prep tree's lessons clean afterwards |
@@ -3437,11 +3471,11 @@ index 258a3a7..a13d784 100644
  
  ## Implementation steps
 -<!-- Ordered, small, each verifiable. -->
-+1. **Phase 1 checks.** Rebase rule §11 if the stack under c0115 changed after b7e75b9. `./zn sync --fetch`, then `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing (no other raft active); c0120 is done (`tests/acceptance/c0120/` exists); rerun E1's Claude Code probe if the CLI version changed.
++1. **Phase 1 checks.** Rebase rule §11 if the stack under c0115 changed after bc550e9. `./zn sync --fetch`, then `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing (no other raft active); c0120 is done (`tests/acceptance/c0120/` exists); rerun E1's Claude Code probe if the CLI version changed.
 +2. **The move, one commit, renames only** (§1's `git mv` lines, `architecture/lessons` to `zz-arch/lessons` first). Verify: `git show -M --name-status HEAD` is all `R100` (AC13).
 +3. **Engine.** `z-nile/engine/skills.luau`; `main.luau` (`skills`, the usage, `inlinedSkills`, `projectOfRoot`, the scoped `buildLessons`, `folderOf` in `--full`, messages); `lessons.luau` (folders, owners, `folderOf`, the legacy fallback). Verify: AC1, AC5, AC7.
 +4. **The links.** `./zn skills` in the worktree; `git add .claude/skills`. Verify: `./zn skills --check`; the gate stage line in `z-nile/check.sh`.
-+5. **The ledgers.** `lune run "$(./zn find c0115)/experiments/rename-lesson-ids"`; then `./zn lessons --check` and `--uncovered R0040 R0042`. Rerun after every merge of `origin/main`.
++5. **The ledgers.** `lune run "$(./zn find c0115)/experiments/rename-lesson-ids"`; then read its lesson-body diff line by line (`git diff -U0 -- 'z-nile/skills/*/lessons/*.md' 'pickman/skills/*/lessons/*.md'`): a renamed example or a half-renamed sentence is reworded by hand (§5 Text); then `./zn lessons --check` and `--uncovered R0040 R0042`. Rerun all of it after every merge of `origin/main`, since lessons keep arriving.
 +6. **Skill text.** Frontmatter names; z-run's Launch and the deletion of `launch-raft`; the testing split (§2) and `pickman-test`; `zz-arch` (§3); zz-rules' Skills bullet and lists; the lessons paragraph; the checklists and z-design's step 3; every cross-reference (§8). Verify: AC3, AC8.
 +7. **README and AGENTS.md**; delete `.claude/README.md`; the template (§6). Verify: AC9.
 +8. **Fixtures and overrides**: `tests/lib/engine.luau`, then each override group, running its specs.
@@ -3477,12 +3511,12 @@ index 258a3a7..a13d784 100644
 +- F12 (who moves the skills): settled by the user ("c0115 also moves the skill sources", c0114's decision); c0114's design says skills stay in `.claude/skills/` for c0115.
 +
 +## Size
-+Measured on the prototype at b7e75b9 (`git diff -M --numstat` from the renames commit; pure renames count 0; the simulation commit excluded):
++Measured on the prototype at bc550e9 (`git diff -M --numstat` from the renames commit; pure renames count 0; the simulation commit excluded):
 +
 +| part | files | + | − |
 +|---|---|---|---|
 +| the move (R100) | 31 | 0 | 0 |
-+| engine (`skills.luau` new, with the shared rename rules; `main.luau`, `lessons.luau`, board, trail, publish) | 6 | 683 | 46 |
++| engine (`skills.luau` new, with the shared rename rules; `main.luau`, `lessons.luau` with the ledger rule, board, trail, publish) | 6 | 770 | 46 |
 +| skills, lessons, checklists (incl. new `zz-arch`, `pickman-test`) | 20 | 295 | 186 |
 +| AGENTS.md, SETUP.md, `z-nile/README.md` | 3 | 108 | 17 |
 +| `.claude/` (12 links, `launch-raft` and the old map deleted) | 14 | 12 | 87 |
@@ -3491,12 +3525,21 @@ index 258a3a7..a13d784 100644
 +| overrides (28 promoted specs) | 28 | 163 | 137 |
 +| ledgers (tracker roots, not counted as code) | 2 | 109 | 109 |
 +| this issue's document, acceptance specs, `check.sh` and the rename script (prep's lines) | 10 | 1899 | 24 |
-+| **total, renames, ledgers and prep aside** | 91 | **1,305** | **507** |
++| **total, renames, ledgers and prep aside** | 91 | **1,392** | **507** |
 +
-+About 1,800 changed lines outside the prep's own files and the ledgers: over the 1,500-line guide, mostly the generator and the shared rename rules (about 520 lines in `skills.luau`) and the overrides. One PR: the rename has to land at once (a half-renamed tree fails AC4), and AC13 and JC1 keep it reviewable.
++About 1,900 changed lines outside the prep's own files and the ledgers: over the 1,500-line guide, mostly the generator and the shared rename rules (`skills.luau`, and the ledger rule in `lessons.luau`) and the overrides. One PR: the rename has to land at once (a half-renamed tree fails AC4), and AC13 and JC1 keep it reviewable.
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++Prep round 3, 2026-10-21 (after design review 003), rebased onto c0120's prototype bc550e9 (final for c0120's code review), plus c0120's promotion simulated:
++- `z-nile/check.sh --full`: GATE PASSED (full). pickman: 1068 passed, 0 failed, 157 spec files; z-nile: 997 passed, 0 failed, 144 spec files; 114.4 s at load average 12 (other agents' gates running).
++- `pickman/check.sh --full`: GATE PASSED (full).
++- `./zn check c0115`: 12/13; AC12 red for the right reason (R0034 active; the stacked branches change the skill paths).
++- Promotion dry run: `luau-lsp analyze tests` exits 0; 73 cases in 11 files pass with repo-fence, c0049, c0077 and the root meta spec.
++- E4's overlay with the reviewer's note probe: 203 rewrites, no unknown id, a second run 0, the lesson-body diff read line by line (eight correct renames), AC3 to AC5 pass.
++- Prep tree: `./zn lessons --check` ok (34 lessons, 182 harvest entries); `--uncovered c0115` covered.
++- Mutation check on bc550e9: M1 to M48 (44 by the runner; M30 and M31 by hand; M44 and M45 in a scratch clone) and M37 against AC2: all killed. M46 was retargeted to the prose rule's `if known` (the ledger flag is gone).
++
 +Prep round 2, 2026-10-21 (after design review 002), rebased onto c0120's prototype b7e75b9 (stable, per the coordinator), plus c0120's promotion simulated:
 +- `z-nile/check.sh --full`: GATE PASSED (full). pickman: 1068 passed, 0 failed, 157 spec files; z-nile: 995 passed, 0 failed, 144 spec files; 98.7 s at load average 7 to 11 (slowest c0084, c0114 roots-cli, c0072: none c0115's).
 +- `pickman/check.sh --full`: GATE PASSED (full).
@@ -3592,21 +3635,23 @@ index 50ea286..3780cfa 100755
  finish
 diff --git a/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau b/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau
 new file mode 100644
-index 0000000..28e1a8d
+index 0000000..a17322a
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,99 @@
 +--!strict
 +-- c0115 (E4): rewrites lesson ids from the old skill folders to the new ones, in every harvest.md under every
 +-- project root (backlog, active/ and done/) and in every lesson file's body. Run from the repository root, after
 +-- the skill folders have moved:
 +--   lune run "$(./zn find c0115)/experiments/rename-lesson-ids" [-- --dry-run]
-+-- The rule is skills.oldLessonIds, the one AC4 and AC5 check with: an `<old>/<slug>` token is renamed only where
-+-- `<new>/<slug>.md` exists, and a lesson body's old skill names are renamed by skills.oldNames (AC4's rule). In a
-+-- harvest.md every such token is an id, so one with no lesson at the new place is
++-- The rules are lessons.renameLedger for a harvest.md (every id parseHarvest reads; its notes and one-off reasons as
++-- prose) and skills.oldLessonIds for prose (a token is renamed only where `<new>/<slug>.md` exists), the ones AC4 and
++-- AC5 check with; a lesson body's old skill names are renamed by skills.oldNames (AC4's rule). In a harvest.md every
++-- parsed id is an id, so one with no lesson at the new place is
 +-- reported (exit 1); in a lesson body a token may be a path (tracker/next), so it is only left alone. Prints each
 +-- changed file with its count. Idempotent: a second run changes nothing.
 +local fs = require("@lune/fs")
++local lessons = require("@znile/engine/lessons")
 +local process = require("@lune/process")
 +local skills = require("@znile/engine/skills")
 +
@@ -3645,8 +3690,14 @@ index 0000000..28e1a8d
 +
 +local total = 0
 +local function fix(path: string, ledger: boolean)
-+	local out, n, unknown = skills.renameLessonIds(fs.readFile(path), existing, ledger)
-+	if not ledger then
++	local text = fs.readFile(path)
++	local out, n, unknown
++	if ledger then
++		-- a ledger: the ids lessons.parseHarvest reads are ids; its notes and one-off reasons are prose
++		out, n, unknown = lessons.renameLedger(text, existing)
++	else
++		out, n = skills.renameLessonIds(text, existing)
++		unknown = {}
 +		-- a lesson body is live text: its old skill names go too (skills.oldNames, AC4's rule); a ledger is history
 +		local named, m = skills.renameOldNames(out)
 +		out, n = named, n + m
@@ -4083,7 +4134,7 @@ index 813d4a6..5ba5345 100644
  		table.insert(views.issues[bucket], issue.id)
  	end
 diff --git a/z-nile/engine/lessons.luau b/z-nile/engine/lessons.luau
-index 8c98724..644ff6d 100644
+index 8c98724..ca8668c 100644
 --- a/z-nile/engine/lessons.luau
 +++ b/z-nile/engine/lessons.luau
 @@ -1,9 +1,11 @@
@@ -4211,6 +4262,110 @@ index 8c98724..644ff6d 100644
  	for _, top in roots do
  		for _, kind in { "issues", "rafts" } do
  			for _, state in { "", "/active", "/done" } do
+@@ -592,4 +637,103 @@ function lessons.load(root: string): Tree
+ 	return tree
+ end
+ 
++-- c0115: the old lesson ids in one harvest.md line, through parseHarvest (the format's one reader). Every parsed id
++-- whose skill is an old one counts, known or not (an entry's ids are always ids); a note's text and a one-off's reason
++-- are prose and take skills.oldLessonIds' prose rule. A line parseHarvest refuses is left alone: `lessons --check`
++-- reports it. Returns the line with every known old id renamed, the count, and every old id found ("old/slug", with
++-- `unknown` the parsed ones that have no renamed lesson).
++local function ledgerLine(
++	line: string,
++	existing: { [string]: boolean }
++): (string, number, { string }, { string })
++	local entries = lessons.parseHarvest("x", line)
++	local entry = entries[1]
++	if not entry then
++		return line, 0, {}, {}
++	end
++	local found: { string } = {}
++	local unknown: { string } = {}
++	local n = 0
++	local renamed: { [string]: string } = {}
++	for _, id in entry.lessons do
++		local old, slug = string.match(id, "^([^/]+)/(.+)$")
++		local new = old and skillsLib.RENAMED[old]
++		if new then
++			table.insert(found, id)
++			if existing[`{new}/{slug}`] then
++				renamed[id] = `{new}/{slug}`
++			else
++				table.insert(unknown, id)
++			end
++		end
++	end
++	local prose = entry.note or entry.oneOff
++	local head, ids
++	if entry.note then
++		head, ids = string.match(line, "^(%- note .*: )([^:]*)$")
++	elseif entry.oneOff then
++		head, ids = line, nil
++	else
++		head, ids = string.match(line, "^(%- %S+ F%d+:%s*)(.-)%s*$")
++	end
++	local out = head or line
++	if prose and prose ~= "" then
++		for _, hit in skillsLib.oldLessonIds(prose, existing) do
++			table.insert(found, `{hit.old}/{hit.slug}`)
++		end
++		local renamedProse, m = skillsLib.renameLessonIds(prose, existing)
++		if m > 0 then
++			local a, b = string.find(out, prose, 1, true)
++			if a then
++				out = string.sub(out, 1, (a :: number) - 1)
++					.. renamedProse
++					.. string.sub(out, (b :: number) + 1)
++				n += m
++			end
++		end
++	end
++	if ids then
++		local parts: { string } = {}
++		for id in string.gmatch(ids, "[^,]+") do
++			local lid = string.match(id, "^%s*(.-)%s*$") :: string
++			if renamed[lid] then
++				n += 1
++			end
++			table.insert(parts, renamed[lid] or lid)
++		end
++		out ..= table.concat(parts, ", ")
++	end
++	return out, n, found, unknown
++end
++
++-- Every old lesson id in a harvest.md's text ("old/slug"), and the parsed ones with no renamed lesson.
++function lessons.ledgerOldIds(text: string, existing: { [string]: boolean }): ({ string }, { string })
++	local found: { string } = {}
++	local unknown: { string } = {}
++	for line in string.gmatch(text, "[^\n]+") do
++		local _, _, f, u = ledgerLine(line, existing)
++		table.move(f, 1, #f, #found + 1, found)
++		table.move(u, 1, #u, #unknown + 1, unknown)
++	end
++	return found, unknown
++end
++
++-- A harvest.md's text with every known old id renamed (ids and prose alike), the count, and the unknown parsed ids.
++function lessons.renameLedger(text: string, existing: { [string]: boolean }): (string, number, { string })
++	local out: { string } = {}
++	local unknown: { string } = {}
++	local n = 0
++	for line in string.gmatch(text .. (if string.sub(text, -1) == "\n" then "" else "\n"), "([^\n]*)\n") do
++		local l, m, _, u = ledgerLine(line, existing)
++		table.insert(out, l)
++		n += m
++		table.move(u, 1, #u, #unknown + 1, unknown)
++	end
++	local joined = table.concat(out, "\n")
++	if string.sub(text, -1) == "\n" then
++		joined ..= "\n"
++	end
++	return joined, n, unknown
++end
++
+ return lessons
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
 index 27ccc49..61ed36e 100644
 --- a/z-nile/engine/main.luau
@@ -4495,10 +4650,10 @@ index 387908a..d9b27b0 100644
  		local reg: projects.Registry?, regErr: string? = projects.legacy(), nil
 diff --git a/z-nile/engine/skills.luau b/z-nile/engine/skills.luau
 new file mode 100644
-index 0000000..2690f2f
+index 0000000..ae44cc3
 --- /dev/null
 +++ b/z-nile/engine/skills.luau
-@@ -0,0 +1,499 @@
+@@ -0,0 +1,487 @@
 +--!strict
 +-- Skill folders and their links (c0115). z-nile's skills live in z-nile/skills/<name>/SKILL.md and a project's own
 +-- in <project>/skills/<name>/SKILL.md (the project's name in z-nile/projects.toml); the harnesses find each through
@@ -4822,8 +4977,8 @@ index 0000000..2690f2f
 +skills.WORDS = { "review", "tracker", "metrics", "testing", "architecture" }
 +-- c0115 rename map: end
 +
-+-- One old lesson id found in a text: its span, its old and new skill, its slug, and whether `<new>/<slug>` exists.
-+export type OldId = { from: number, to: number, old: string, new: string, slug: string, known: boolean }
++-- One old lesson id found in prose: its span, its old and new skill, and its slug (its renamed lesson exists).
++export type OldId = { from: number, to: number, old: string, new: string, slug: string }
 +
 +-- Every lesson that exists in `root`'s skills folders, as "<skill>/<slug>". Only reads.
 +function skills.lessonIndex(root: string): { [string]: boolean }
@@ -4852,12 +5007,11 @@ index 0000000..2690f2f
 +	return c ~= "" and string.match(c, "[%w_%-]") ~= nil
 +end
 +
-+-- The one old-id rule (c0115 §5; the rename script, AC4 and AC5 all call it). A token is `<old>/<slug>` with <old> a
-+-- key of RENAMED, not after a name character, `/` or `.` (so scripts/tracker/x and z-nile/.tracker are never one).
-+-- In a ledger (`ledger` true: a harvest.md, where every such token is an id) every token counts, known or not; in
-+-- prose (a lesson body, a skill, code) only a token whose renamed lesson `<new>/<slug>` exists counts, so look-alike
-+-- paths such as tracker/next are left alone. Pure; sorted by position.
-+function skills.oldLessonIds(text: string, existing: { [string]: boolean }, ledger: boolean): { OldId }
++-- The prose old-id rule (c0115 §5): a token `<old>/<slug>`, with <old> a key of RENAMED, not after a name character,
++-- `/` or `.`, counts only where its renamed lesson `<new>/<slug>` exists, so look-alike paths (tracker/next,
++-- scripts/tracker/x, review/x) never count. It covers all text but a ledger's parsed ids, which lessons.ledgerOldIds
++-- reads through lessons.parseHarvest, the format's one reader (the rename script, AC4 and AC5 all call these). Pure.
++function skills.oldLessonIds(text: string, existing: { [string]: boolean }): { OldId }
 +	local out: { OldId } = {}
 +	for old, new in skills.RENAMED do
 +		local pos = 1
@@ -4871,14 +5025,13 @@ index 0000000..2690f2f
 +			local slug = string.match(string.sub(text, (b :: number) + 1), "^([%w][%w%-]*)")
 +			if slug and not nameChar(prev) and prev ~= "/" and prev ~= "." then
 +				local known = existing[`{new}/{slug}`] == true
-+				if ledger or known then
++				if known then
 +					table.insert(out, {
 +						from = a :: number,
 +						to = (b :: number) + #slug,
 +						old = old,
 +						new = new,
 +						slug = slug,
-+						known = known,
 +					})
 +				end
 +			end
@@ -4890,28 +5043,18 @@ index 0000000..2690f2f
 +	return out
 +end
 +
-+-- `text` with every known old id renamed, the count, and (in a ledger) the old ids with no renamed lesson.
-+function skills.renameLessonIds(
-+	text: string,
-+	existing: { [string]: boolean },
-+	ledger: boolean
-+): (string, number, { string })
-+	local found = skills.oldLessonIds(text, existing, ledger)
++-- `text` (prose) with every old id whose renamed lesson exists renamed, and the count.
++function skills.renameLessonIds(text: string, existing: { [string]: boolean }): (string, number)
 +	local parts: { string } = {}
-+	local unknown: { string } = {}
 +	local last, n = 1, 0
-+	for _, id in found do
-+		if id.known then
-+			table.insert(parts, string.sub(text, last, id.from - 1))
-+			table.insert(parts, `{id.new}/{id.slug}`)
-+			last = id.to + 1
-+			n += 1
-+		else
-+			table.insert(unknown, `{id.old}/{id.slug}`)
-+		end
++	for _, id in skills.oldLessonIds(text, existing) do
++		table.insert(parts, string.sub(text, last, id.from - 1))
++		table.insert(parts, `{id.new}/{id.slug}`)
++		last = id.to + 1
++		n += 1
 +	end
 +	table.insert(parts, string.sub(text, last))
-+	return table.concat(parts), n, unknown
++	return table.concat(parts), n
 +end
 +
 +-- One old skill name found in a text: its span, the form it takes, and what replaces it.
@@ -5025,7 +5168,7 @@ index 8822d4a..6d7e530 100755
  if [[ ! -f z-nile/lib/fence.sh ]]; then
    echo "ac.sh: $(pwd -P)/z-nile/lib/fence.sh is missing: refusing to run checks without the repository guards" >&2
 diff --git a/z-nile/lib/fence.sh b/z-nile/lib/fence.sh
-index 849eebe..adf7b1d 100644
+index a15022b..b256720 100644
 --- a/z-nile/lib/fence.sh
 +++ b/z-nile/lib/fence.sh
 @@ -1,4 +1,4 @@
@@ -5219,10 +5362,10 @@ index 0000000..edde4a4
 +- **Measurable proxies**: every "feels right" turned into a number a spec can check, with what is left for Observed kept to the minimum.
 +- **Overrides**: a promoted spec the feature turns red is changed by its own chore, named in `depends_on` (z-design step 3, Override check).
 diff --git a/.claude/skills/ticket-prep/lessons/instructions-runnable-where-they-run.md b/z-nile/skills/z-design/lessons/instructions-runnable-where-they-run.md
-similarity index 86%
+similarity index 85%
 rename from .claude/skills/ticket-prep/lessons/instructions-runnable-where-they-run.md
 rename to z-nile/skills/z-design/lessons/instructions-runnable-where-they-run.md
-index 82418f2..9665838 100644
+index 82418f2..f54b1bd 100644
 --- a/.claude/skills/ticket-prep/lessons/instructions-runnable-where-they-run.md
 +++ b/z-nile/skills/z-design/lessons/instructions-runnable-where-they-run.md
 @@ -10,6 +10,6 @@ An instruction added to many skills has to fit each skill's context. Writing a f
@@ -5230,7 +5373,7 @@ index 82418f2..9665838 100644
  R0040 design review 2 (F3): the fix routed those skills to `./zn new issue`, which subagents (stream implementers and reviewers, handed the same skills) may not run. Skills are read by agents in different roles, so the split has to be by role, not by skill.
  
 -R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads ticket-prep and testing), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
-+R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads z-design and testing), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
++R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads the design skill and the zz-test skill), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
  
  **How to apply:** for each skill a change touches, name every role that reads it (lead, stream subagent, reviewer), its working directory and what it may write or publish. Write one instruction keyed on role, the same wherever it appears, rather than a variant per skill.
 diff --git a/.claude/skills/ticket-prep/lessons/never-narrow-captured-scope.md b/z-nile/skills/z-design/lessons/never-narrow-captured-scope.md
@@ -6081,7 +6224,7 @@ diff --git a/.claude/skills/testing/lessons/plain-find-for-literals.md b/z-nile/
 similarity index 82%
 rename from .claude/skills/testing/lessons/plain-find-for-literals.md
 rename to z-nile/skills/zz-test/lessons/plain-find-for-literals.md
-index 680bad9..d172c24 100644
+index 680bad9..264fa77 100644
 --- a/.claude/skills/testing/lessons/plain-find-for-literals.md
 +++ b/z-nile/skills/zz-test/lessons/plain-find-for-literals.md
 @@ -4,7 +4,7 @@ when: both
@@ -6089,7 +6232,7 @@ index 680bad9..d172c24 100644
  check: Does every `string.find`, `string.match` or `string.gsub` on literal text (an id, a model name, a path, a heading) pass `plain = true` or escape the pattern characters, especially `-`, `.`, `%` and `[`?
  ---
 -In Lua patterns `-` is a quantifier and `.` matches anything, so `string.gsub(text, "grok-4.7", x)` and `string.find(s, "make-issue")` do not match the text they name. A spec that does this can fail for every correct implementation, or pass for a wrong one.
-+In Lua patterns `-` is a quantifier and `.` matches anything, so `string.gsub(text, "grok-4.7", x)` and `string.find(s, "z-ticket")` do not match the text they name. A spec that does this can fail for every correct implementation, or pass for a wrong one.
++In Lua patterns `-` is a quantifier and `.` matches anything, so `string.gsub(text, "grok-4.7", x)` and `string.find(s, "ab-cd")` do not match the text they name. A spec that does this can fail for every correct implementation, or pass for a wrong one.
  
  **Why:** R0042 design reviews 002 F1 and 004 F3: a skill-name swap and two model-id replacements used hyphenated literals as patterns, so sequestered criteria could not pass. The bug came back after the first fix because only one call was changed.
  
