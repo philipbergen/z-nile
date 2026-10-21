@@ -37,3 +37,6 @@
 - design-review-007 F8: ticket-prep/restated-rules-move-together
 - note c0115 prep round 7: AC14 looped over roots it computed and passed when the computation failed or found nothing: testing/no-vacuous-pass
 - note c0115 prep round 7: the author's lint runs grepped selene errors only, and a warning failed the gate: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-008 F1: ticket-prep/required-steps-on-every-path, ticket-prep/specify-every-named-artifact
+- design-review-008 F2: architecture/one-reader-per-format
+- note c0115 prep round 8: the mutation runner's git checkout restore reverted an uncommitted edit; commit before running any tool that resets files: ticket-prep/rerun-skipped-checks-after-edits
