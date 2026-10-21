@@ -154,6 +154,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["tests/tooling/fence-inherited-env.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "a fixture shell and a nested fixture run inherit a ceiling at the fixture checkout's root",
 		GIT_COMMON_DIR = "a fixture shell inherits GIT_COMMON_DIR at another fixture repository",
+		GIT_DIR = "a fixture shell sets GIT_DIR to the fixture checkout's repository, to prove pickman_guarded answers for the caller's own git too (code review 003 F1)",
 		PICKMAN_FENCE_ = "prints PICKMAN_FENCE_REAL_GIT, what the fence recorded, in a fixture shell",
 		PICKMAN_TEST_FENCE = "runs the fixture's runner as a top-level run",
 		GIT_CONFIG_ = "reads GIT_CONFIG_COUNT after a refused fence in a fixture shell",

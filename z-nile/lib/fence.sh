@@ -184,13 +184,19 @@ pickman_fence() {
 # caller must treat that as guarded (c0114: "unguarded" is the one explicit "no"). The tracker's publisher asks this
 # instead of reading the guards' variables itself (c0650).
 pickman_guarded() {
-  local common
-  # the same clean read as the fence's (code review 002 F1); no answer is exit 1, which the caller treats as guarded
-  common=$(cd "$1" 2>/dev/null && _pickman_fence_git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
-  [[ -n $common ]] || return 1
-  common=$(cd "$common" && pwd -P) || return 1
-  case ":${PICKMAN_FENCE_REAL_GIT:-}:" in
-  *":$common:"*) echo guarded; return 0 ;;
-  esac
+  # Both ways (code review 003 F1): the clean read (no inherited override or ceiling hides the repository, code review
+  # 002 F1) and the caller's own environment, which is how the caller's git will act (a GIT_DIR it set itself).
+  # Guarded when either names a protected repository; exit 1 when either read fails or finds nothing (the caller
+  # treats that as guarded); unguarded only when both name unprotected repositories.
+  local clean own c
+  clean=$(cd "$1" 2>/dev/null && _pickman_fence_git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  own=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [[ -n $clean && -n $own ]] || return 1
+  for c in "$clean" "$own"; do
+    c=$(cd "$c" && pwd -P) || return 1
+    case ":${PICKMAN_FENCE_REAL_GIT:-}:" in
+    *":$c:"*) echo guarded; return 0 ;;
+    esac
+  done
   echo unguarded
 }

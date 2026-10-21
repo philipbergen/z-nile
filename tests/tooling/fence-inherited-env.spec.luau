@@ -135,25 +135,34 @@ return t.spec(
 		)
 
 		it(
-			"pickman_guarded answers guarded for the checkout under a ceiling at its root, from the root and from pickman/",
+			"pickman_guarded never answers unguarded for the checkout under a ceiling at its root, from the root or from pickman/",
 			function()
 				setUp()
 				local r = probe(
 					"pickman",
 					`export GIT_CEILING_DIRECTORIES="{repo}"`,
-					`echo "ROOT=$(pickman_guarded {repo})"; echo "HOME=$(pickman_guarded {repo}/pickman)"`
+					`echo "ROOT=$(pickman_guarded {repo})"; echo "HOME=$(pickman_guarded {repo}/pickman) rc=$?"`
 				)
 				t.expect(has(r.stdout, "ROOT=guarded\n")).toBe(true)
-				t.expect(has(r.stdout, "HOME=guarded\n")).toBe(true)
+				-- from pickman/ the caller's own read can't see past the ceiling: no answer (exit 1), which callers treat as
+				-- guarded (code review 003 F1); never unguarded
+				t.expect(has(r.stdout, "HOME=guarded rc=0") or has(r.stdout, "HOME= rc=1")).toBe(true)
 			end
 		)
 
 		it("a fence whose read finds no repository refuses, in every mode", function()
 			setUp()
 			for _, mode in { "specs", "checks" } do
+				-- the markers set explicitly (code review 003 F2): inside this spec run PICKMAN_FENCE_SPECS is inherited, and
+				-- it would turn checks mode into specs mode
+				local markers = if mode == "specs"
+					then "export PICKMAN_FENCE_SPECS=1"
+					else "unset PICKMAN_FENCE_SPECS PICKMAN_TEST_FENCE"
 				local script = table.concat({
 					". z-nile/lib/fence.sh",
+					markers,
 					`cd {nowhere} || exit 8`,
+					'echo "MODE-SPECS=${PICKMAN_FENCE_SPECS:-unset}"',
 					`pickman_fence "$PWD" {mode}`,
 					'echo "rc=$? COUNT=${GIT_CONFIG_COUNT:-unset}"',
 					"",
@@ -168,8 +177,66 @@ return t.spec(
 				fs.removeFile(`{repo}/.cache-probe.sh`)
 				t.expect(has(r.stdout, "rc=1")).toBe(true)
 				t.expect(has(r.stderr, "is in no git repository")).toBe(true)
+				t.expect(has(r.stdout, if mode == "specs" then "MODE-SPECS=1" else "MODE-SPECS=unset"))
+					.toBe(true)
 			end
 		end)
+
+		-- code review 003 F2: a git that answers rev-parse with an empty success reaches the guards' empty-answer checks
+		it(
+			"with a git that answers rev-parse with nothing, the fence refuses and pickman_guarded never says unguarded",
+			function()
+				setUp()
+				local real = (string.gsub(process.exec("sh", { "-c", "command -v git" }).stdout, "%s+$", ""))
+				local stub = `{base}/fake-empty`
+				fs.writeDir(stub)
+				fs.writeFile(
+					`{stub}/git`,
+					`#!/bin/sh\nfor a in "$@"; do [ "$a" = rev-parse ] && exit 0; done\nexec "{real}" "$@"\n`
+				)
+				process.exec("chmod", { "+x", `{stub}/git` })
+				local script = table.concat({
+					". z-nile/lib/fence.sh",
+					`PATH="{stub}:$PATH"; export PATH`,
+					'echo "GUARDED=$(pickman_guarded "$PWD") rc=$?"',
+					'pickman_fence "$PWD" specs; echo "FENCE-rc=$?"',
+					"",
+				}, "\n")
+				fs.writeFile(`{repo}/.cache-probe.sh`, script)
+				local r = fixture.exec(
+					repo,
+					"bash",
+					{ ".cache-probe.sh" },
+					{ env = { PICKMAN_TEST_JAIL = "none" } }
+				)
+				fs.removeFile(`{repo}/.cache-probe.sh`)
+				t.expect(has(r.stdout, "unguarded")).toBe(false)
+				t.expect(has(r.stdout, "GUARDED= rc=1")).toBe(true)
+				t.expect(has(r.stdout, "FENCE-rc=1")).toBe(true)
+				t.expect(has(r.stderr, "is in no git repository")).toBe(true)
+			end
+		)
+
+		-- code review 003 F1: the caller's git acts where its own GIT_DIR points; pickman_guarded answers for that too
+		it(
+			"pickman_guarded answers guarded in a fixture whose caller set GIT_DIR to the protected repository",
+			function()
+				setUp()
+				local r = probe(
+					".",
+					"",
+					table.concat({
+						`git init -q "{repo}/.cache/fx"`,
+						`cd "{repo}/.cache/fx" || exit 7`,
+						'echo "PLAIN=$(pickman_guarded "$PWD")"',
+						`GIT_DIR="{repo}/.git"; export GIT_DIR`,
+						'echo "SET=$(pickman_guarded "$PWD")"',
+					}, "\n")
+				)
+				t.expect(has(r.stdout, "PLAIN=unguarded\n")).toBe(true)
+				t.expect(has(r.stdout, "SET=guarded\n")).toBe(true)
+			end
+		)
 
 		it(
 			"a run from pickman/ with a ceiling at the checkout's root still sees the repository: its tripwire fires",
