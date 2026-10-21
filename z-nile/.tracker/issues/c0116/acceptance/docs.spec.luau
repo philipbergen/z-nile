@@ -132,6 +132,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			at(s, "zz-review skill in **raft mode**", w)
 			at(s, "this skill never edits a member's design", w)
 			at(s, "One round per grouping", w)
+			at(s, "a review file is never edited after it is written", w)
 			at(s, "an `unfold` alone needs none", w)
 			at(s, "the engine refuses the raft until a review quotes the new record", w)
 			at(s, "`./zn status <R-id> prepared`", w)
@@ -211,6 +212,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 		local review = read(`{SKILLS}/zz-review/SKILL.md`)
 		at(review, "## Raft mode (from z-raft)", "zz-review")
 		at(review, "as `Grouped: [<the value>]`", "zz-review")
+		at(review, "Never edit a review once it is written: a new round is a new file.", "zz-review")
 		at(
 			review,
 			"- Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue)",

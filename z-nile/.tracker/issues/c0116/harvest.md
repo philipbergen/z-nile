@@ -17,3 +17,7 @@
 - design-review-003 F4: architecture/records-cover-what-was-reviewed, tracker/item-history-spans-moves-and-compaction
 - design-review-003 F5: architecture/guard-no-is-explicit
 - design-review-003 F6: one-off: unfold of a raft's last member left an empty prepared raft; the orphan warning now covers it
+- design-review-004 F1: architecture/one-reader-per-format, architecture/records-cover-what-was-reviewed
+- design-review-004 F2: testing/guard-needs-its-own-case, architecture/records-cover-what-was-reviewed
+- design-review-004 F3: ticket-prep/restated-rules-move-together
+- design-review-004 F4: one-off: the refusal printed the exact line that silences it; the message now names the record's ids and the rule "never edit a written review"

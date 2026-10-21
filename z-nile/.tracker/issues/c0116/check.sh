@@ -29,7 +29,7 @@ check "AC9: the promoted claim, prep, start, board and remap specs, and c0115's 
   lune run tests/run -- tests/acceptance/c0053/commands-prep.spec.luau tests/acceptance/c0053/commands-claim.spec.luau \
   tests/acceptance/c0053/commands-start.spec.luau tests/acceptance/c0067/*.spec.luau tests/acceptance/c0068/stop.spec.luau \
   tests/acceptance/c0070/board-refresh.spec.luau tests/acceptance/c0081/remap.spec.luau tests/acceptance/c0115/readme.spec.luau
-check "AC10: compact and renumber re-record a grouped raft, so ready still takes it, and a stale record still refuses" \
+check "AC10: compact, remap and renumber re-record a grouped raft, so ready still takes it, and a stale record still refuses" \
   lune run tests/run -- "$A/compact-record.spec.luau"
 
 finish

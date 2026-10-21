@@ -26,7 +26,7 @@ local function record(id: string, text: string): string
 end
 
 local f: trackerfix.Fixture
-local W = ""
+local W, X = "", ""
 
 local function trOk(cwd: string, args: { string }): string
 	return trackerfix.trOk(f, cwd, args)
@@ -73,6 +73,9 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 			["tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
 			["tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
 			["tracker/issues/c0610/c0610.md"] = e,
+			-- prepared and raftless: rafted while the compaction lands (review 004 F2)
+			["tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
+			["tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
 			-- a record that already did not match: a rewrite must not make it match
 			["tracker/rafts/R0600/R0600.md"] = raftDoc("R0600", "stale", "c0610", "[c0610@000000000000]"),
 		}
@@ -83,6 +86,8 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 				"tracker/issues/c0710",
 				"tracker/issues/c0720",
 				"tracker/issues/c0610",
+				"tracker/issues/c0810",
+				"tracker/issues/c0820",
 				"tracker/rafts/R0500",
 				"tracker/rafts/R0700",
 				"tracker/rafts/R0600",
@@ -92,6 +97,7 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		end
 		f = trackerfix.new("c0116-compact", seed)
 		W = trOk(f.main, { "worktree", "ids" })
+		X = trOk(f.main, { "worktree", "raft-open" })
 	end)
 
 	it("renumber of a member re-records its raft, and the review's quote with it", function()
@@ -120,6 +126,33 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		function()
 			fixture.git(W, { "fetch", "-q", "origin" })
 			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
+			-- a rafting is open while the compaction lands; and an ignored file sits in a member's folder (review 004 F1)
+			local RO =
+				string.match(trOk(X, { "new", "raft", "chore", "open", "c0810", "c0820" }), "(R%d+)") :: string
+			local doc = `{X}/tracker/rafts/{RO}/{RO}.md`
+			local text = fs.readFile(doc)
+			text = (string.gsub(text, "design: draft", "design: ready", 1))
+			text = (string.gsub(text, "## Theme\n<!%-%-.-%-%->", "## Theme\nTwo chores.", 1))
+			text = (
+				string.gsub(
+					text,
+					"## Order & dependencies\n<!%-%-.-%-%->",
+					"## Order & dependencies\nBy id.",
+					1
+				)
+			)
+			fs.writeFile(doc, text)
+			local grouped = string.match(text, "\ngrouped: ([^\n]*)\n") :: string
+			fs.writeFile(
+				`{X}/tracker/rafts/{RO}/design-review-001.md`,
+				`# Review 001\n\nGrouped: {grouped}\n\nVerdict: approve\n`
+			)
+			fixture.git(X, { "add", "-A" })
+			fixture.git(X, { "commit", "-q", "-m", "tracker: raft (open)" })
+			fixture.git(W, { "fetch", "-q", "origin" })
+			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
+			fs.writeDir(`{W}/tracker/issues/c0510/acceptance`)
+			fs.writeFile(`{W}/tracker/issues/c0510/acceptance/.DS_Store`, "finder")
 			trOk(W, { "compact", "--force" })
 			land(W)
 			local kept, renamed, stale = raftBySlug("kept"), raftBySlug("renamed"), raftBySlug("stale")
@@ -129,6 +162,32 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 			local r = trackerfix.tr(f, f.main, { "ready", stale })
 			t.expect(r.ok).toBe(false)
 			t.expect(string.find(r.stderr, "changed on origin/main since", 1, true) ~= nil).toBe(true)
+		end
+	)
+
+	it(
+		"remap re-records an open rafting's record and its review, so it prepares, lands and readies",
+		function()
+			trOk(X, { "remap" })
+			local open = nil :: string?
+			for _, name in fs.readDir(`{X}/tracker/rafts`) do
+				local d = `{X}/tracker/rafts/{name}/{name}.md`
+				if
+					string.match(name, "^R%d+$")
+					and fs.isFile(d)
+					and string.find(fs.readFile(d), "\nslug: open\n", 1, true)
+				then
+					open = name
+				end
+			end
+			local RO = open :: string
+			trOk(X, { "status", RO, "prepared" })
+			fixture.git(X, { "add", "-A" })
+			fixture.git(X, { "commit", "-q", "-m", "tracker: raft (open, prepared)" })
+			fixture.git(X, { "fetch", "-q", "origin" })
+			fixture.git(X, { "merge", "-q", "--no-edit", "origin/main" })
+			land(X)
+			trOk(f.main, { "ready", RO })
 		end
 	)
 end)

@@ -363,6 +363,10 @@ return t.spec(
 			fixture.git(C, { "add", "-A" })
 			fixture.git(C, { "commit", "-q", "-m", `tracker: fold c0040 into {R}` })
 			land(C)
+			-- review 004 F1: an ignored file in a member's folder (Finder's .DS_Store) never changes its record
+			fs.writeDir(`{f.main}/tracker/issues/c0010/acceptance`)
+			fs.writeFile(`{f.main}/tracker/issues/c0010/acceptance/.DS_Store`, "finder")
+			t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
 			trOk(f.main, { "ready", R })
 			t.expect(onOrigin("tracker/issues/active/c0040/c0040.md") ~= nil).toBe(true)
 			-- an active raft is never folded into
@@ -641,6 +645,10 @@ return t.spec(
 			trOk(U, { "status", R3, "prepared" }) -- the review's record still covers c0035 and c0036
 			commitAll(U, "wip")
 			trOk(U, { "fold", R3, "c0037" })
+			-- review 004 F4: the refusal names what to do, never a line to paste into the old review
+			local stale = tr(U, { "status", R3, "prepared" })
+			t.expect(has(stale.stderr, "Grouped: [")).toBe(false)
+			t.expect(has(stale.stderr, "never edit a review")).toBe(true)
 			refused(U, { "status", R3, "prepared" }, "predates its record")
 			coherence(`{U}/tracker/rafts/{R3}`, "002")
 			trOk(U, { "status", R3, "prepared" })
