@@ -15,7 +15,7 @@ local function trim(s: string): string
 end
 
 -- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
--- runner's guard (scripts/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
+-- runner's guard (z-nile/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
 -- git config through the environment, which would replace the guard's (testing skill).
 local NO_GC: { [string]: string } = {}
 
