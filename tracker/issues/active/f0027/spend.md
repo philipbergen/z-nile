@@ -13,6 +13,7 @@
 | 9 | 2026-10-20 15:21 | design-review-005 | 0 | 0 | 10.0 | spend+proportional | design-review | 53334 |
 | 10 | 2026-10-20 15:23 | design-refute-005 | 0 | 0 | 8.3 | spend+proportional | design-review |  |
 | 11 | 2026-10-20 16:52 | prep (this session; earlier session's prep time not recorded) | 516 | 4 | 23.2 | spend+proportional | prep |  |
+| 12 | 2026-10-21 16:56 | f0027: Touch feature and the Controls touch path | 241 | 2 | 25.0 | focus | build |  |
 
-**Total:** +516 / -4 lines, 109.4 agent-minutes, 200002 tokens over 11 records
-<!-- totals: added=516 removed=4 minutes=109.4 records=11 tokens=200002 -->
+**Total:** +757 / -6 lines, 134.4 agent-minutes, 200002 tokens over 12 records
+<!-- totals: added=757 removed=6 minutes=134.4 records=12 tokens=200002 -->
