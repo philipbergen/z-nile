@@ -13,6 +13,7 @@
 | 9 | 2026-10-20 15:21 | design-review-005 | 0 | 0 | 10.0 | spend+proportional | design-review | 53333 |
 | 10 | 2026-10-20 15:23 | design-refute-005 | 0 | 0 | 8.3 | spend+proportional | design-review |  |
 | 11 | 2026-10-20 16:52 | prep (this session; earlier session's prep time not recorded) | 236 | 3 | 10.6 | spend+proportional | prep |  |
+| 12 | 2026-10-21 16:57 | f0028: touch look and the held mouse in Camera, wired from Main | 21 | 3 | 12.0 | focus | build |  |
 
-**Total:** +236 / -3 lines, 96.8 agent-minutes, 199999 tokens over 11 records
-<!-- totals: added=236 removed=3 minutes=96.8 records=11 tokens=199999 -->
+**Total:** +257 / -6 lines, 108.8 agent-minutes, 199999 tokens over 12 records
+<!-- totals: added=257 removed=6 minutes=108.8 records=12 tokens=199999 -->
