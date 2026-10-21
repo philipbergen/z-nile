@@ -168,7 +168,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
 
 ## Hooks (Claude Code only)
 - After every `.luau` edit: stylua formats the file and selene lints it.
-- On stop: `scripts/check.sh --affected` (the forwarder to `z-nile/check.sh`, so a worktree from before c0114 still runs its own gate) runs if a file outside every registry root changed under `src/`, `tests/` or `z-nile/`.
+- On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/` or `z-nile/`.
 
 ## Lessons
 Before you start, read this skill's lessons: `./zn lessons --skill testing --full`. Each is a mistake made before, with the question that catches it.
