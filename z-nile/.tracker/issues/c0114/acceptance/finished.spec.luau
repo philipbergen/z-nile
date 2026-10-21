@@ -1,53 +1,55 @@
 --!strict
 -- c0114 AC14: finished items' check.sh files name the moved paths' new locations (decided with the user, 2026-10-21:
 -- "Rewrite finished files"; the user's exception to "sequestered files never change", for finished items only, in
--- c0114's PR). rewrites.luau is the one rewrite; finished.luau (run by check.sh) checks each file against its base text.
--- Reads the real tree, read-only.
+-- c0114's PR). rewrites.luau is the one rewrite and the fixed list of files it covers (those finished when c0114
+-- lands); finished.luau (run by check.sh) checks each file against its base text. Reads the real tree, read-only;
+-- writes only under .cache/c0114-finished.
 local fs = require("@lune/fs")
 local rewrites = require("./rewrites")
 local t = require("@tests/lib/t")
 
-local ROOTS = { "tracker", "z-nile/.tracker" }
-
--- every item id whose folder is under z-nile/.tracker, and every finished item's sequestered file
-local function tree(): ({ [string]: boolean }, { string })
+-- every item id whose folder is under z-nile/.tracker in the tree at `base`
+local function movedIds(base: string): { [string]: boolean }
 	local moved: { [string]: boolean } = {}
-	local files: { string } = {}
-	local function walk(dir: string)
-		for _, name in fs.readDir(dir) do
-			local p = `{dir}/{name}`
-			if fs.isDir(p) then
-				walk(p)
-			else
-				table.insert(files, p)
-			end
-		end
-	end
-	for _, root in ROOTS do
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{root}/{kind}/{state}`
-				if fs.isDir(dir) then
-					for _, id in fs.readDir(dir) do
-						if string.match(id, "^[fdcR]%d%d%d%d$") then
-							if root ~= "tracker" then
-								moved[id] = true
-							end
-							if state == "done/" then
-								if fs.isFile(`{dir}{id}/check.sh`) then
-									table.insert(files, `{dir}{id}/check.sh`)
-								end
-								if fs.isDir(`{dir}{id}/acceptance`) then
-									walk(`{dir}{id}/acceptance`)
-								end
-							end
-						end
+	for _, kind in { "issues", "rafts" } do
+		for _, state in { "", "active/", "done/" } do
+			local dir = `{base}/z-nile/.tracker/{kind}/{state}`
+			if fs.isDir(dir) then
+				for _, id in fs.readDir(dir) do
+					if string.match(id, "^[fdcR]%d%d%d%d$") then
+						moved[id] = true
 					end
 				end
 			end
 		end
 	end
-	return moved, files
+	return moved
+end
+
+-- The listed files (rewrites.FINISHED, relative to `base`) that still name a moved path. Only the list is read, never
+-- the live done/ folders: a raft that finishes later keeps its old paths (decided with the user, 2026-10-21: "Only
+-- items done at landing"), and its `done` must not turn this spec red.
+local function unsettled(base: string): { string }
+	local moved = movedIds(base)
+	local out: { string } = {}
+	for _, f in rewrites.FINISHED do
+		local path = `{base}/{f}`
+		if not fs.isFile(path) then
+			table.insert(out, `{f} (missing)`)
+		else
+			local text = fs.readFile(path)
+			local settled = rewrites.paths(text, moved) == text
+			-- an item whose special edits undo a rewrite (a spec case name) is settled when they give the same text
+			if not settled and rewrites.SPECIAL[f] then
+				local ok, again = pcall(rewrites.expected, f, text, moved)
+				settled = ok and again == text
+			end
+			if not settled then
+				table.insert(out, f)
+			end
+		end
+	end
+	return out
 end
 
 return t.spec("c0114 finished items' check.sh files name the new paths", function(it)
@@ -85,45 +87,50 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
 		t.expect(rw(once)).toBe(once)
 	end)
 
-	it("every finished item's check.sh and acceptance file is already rewritten", function()
-		local moved, files = tree()
-		t.expect(#files > 100).toBe(true)
-		for _, f in files do
-			local text = fs.readFile(f)
-			local settled = rewrites.paths(text, moved) == text
-			-- an item whose special edits undo a rewrite (a spec case name) is settled when they give the same text
-			local id = string.match(f, "/([fdcR]%d%d%d%d)/[^/]+$") :: string
-			if not settled and rewrites.SPECIAL[id] then
-				local ok, again = pcall(rewrites.expected, id, text, moved)
-				settled = ok and again == text
-			end
-			if not settled then
-				error(`{f} still names a moved path`)
-			end
+	it("every check.sh finished when c0114 lands is already rewritten", function()
+		t.expect(#rewrites.FINISHED > 100).toBe(true)
+		local bad = unsettled(".")
+		if #bad > 0 then
+			error(`still naming a moved path: {table.concat(bad, ", ")}`)
 		end
 	end)
 
-	it("each special edit names a finished item and applies once", function()
-		local moved = tree()
-		for id, edits in rewrites.SPECIAL do
+	it("a raft that finishes later with old paths in its check.sh leaves this spec green", function()
+		-- a copy of the listed files, plus a later raft's done check.sh that sources the old ac.sh path
+		local base = ".cache/c0114-finished"
+		if fs.isDir(base) then
+			fs.removeDir(base)
+		end
+		for _, f in rewrites.FINISHED do
+			local dir = string.match(f, "^(.*)/[^/]+$") :: string
+			fs.writeDir(`{base}/{dir}`)
+			fs.writeFile(`{base}/{f}`, fs.readFile(f))
+		end
+		fs.writeDir(`{base}/tracker/rafts/done/R9990`)
+		fs.writeFile(
+			`{base}/tracker/rafts/done/R9990/check.sh`,
+			'source "$(git rev-parse --show-toplevel)/scripts/lib/ac.sh"\ncheck "RC0: gate" scripts/check.sh --full\nfinish\n'
+		)
+		fs.writeDir(`{base}/z-nile/.tracker/issues/done/c9990`)
+		fs.writeFile(
+			`{base}/z-nile/.tracker/issues/done/c9990/check.sh`,
+			"bash scripts/tracker.sh members R9990\n"
+		)
+		t.expect(#unsettled(base)).toBe(0)
+		fs.removeDir(base)
+	end)
+
+	it("each special edit names a listed finished file and applies once", function()
+		for path, edits in rewrites.SPECIAL do
 			t.expect(#edits > 0).toBe(true)
-			local found = false
-			for _, root in ROOTS do
-				for _, kind in { "issues", "rafts" } do
-					local f = `{root}/{kind}/done/{id}/check.sh`
-					if fs.isFile(f) then
-						found = true
-						local text = fs.readFile(f)
-						for _, e in edits do
-							t.expect(string.find(text, e[2], 1, true) ~= nil).toBe(true)
-						end
-					end
-				end
+			if not table.find(rewrites.FINISHED, path) then
+				error(`SPECIAL {path}: not a listed finished check.sh`)
 			end
-			if not found then
-				error(`SPECIAL {id}: no finished check.sh`)
+			local text = fs.readFile(path)
+			for _, e in edits do
+				t.expect(string.find(text, e[2], 1, true) ~= nil).toBe(true)
 			end
 		end
-		t.expect(moved.c0114).toBe(true)
+		t.expect(movedIds(".").c0114).toBe(true)
 	end)
 end)

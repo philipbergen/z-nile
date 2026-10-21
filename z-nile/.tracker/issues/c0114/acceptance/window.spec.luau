@@ -62,6 +62,8 @@ return t.spec("c0114 the counter across the landing", function(it)
 			{
 				{ "new", "issue", "c", "in-window", "--project", "pickman" },
 				{ "status", "c0050", "preparing" },
+				-- so the branch makes no id and never renumbers: every id comes from origin's counter, by merge
+				{ "renumber", "c0050" },
 			}
 		do
 			local r = trackerfix.tr(f, wt, args)
@@ -166,16 +168,15 @@ return t.spec("c0114 the counter across the landing", function(it)
 		end, "tracker: probe")
 		t.expect(fresh.ok).toBe(false)
 		t.expect(tip()).toBe(before)
-		-- the choice, from the base alone: (has a registry, has z-nile/next, tracker/next's text) -> counter, migrate
-		local function choice(reg: boolean, new: boolean, old: string?): string
-			local file, migrate = publish.counterOf(reg, new, old)
+		-- the choice, from a base with the registry: (has z-nile/next, tracker/next's text) -> counter, migrate
+		local function choice(new: boolean, old: string?): string
+			local file, migrate = publish.counterOf(new, old)
 			return `{file} {migrate}`
 		end
 		local live = "issue 1 a\nraft 1 a\n"
-		t.expect(choice(true, true, nil)).toBe("z-nile/next false")
-		t.expect(choice(true, true, live)).toBe("z-nile/next false")
-		t.expect(choice(false, false, live)).toBe("tracker/next false")
-		t.expect(choice(true, false, live)).toBe("z-nile/next true")
-		t.expect(choice(true, false, ids.TOMBSTONE)).toBe("z-nile/next false")
+		t.expect(choice(true, nil)).toBe("z-nile/next false")
+		t.expect(choice(true, live)).toBe("z-nile/next false")
+		t.expect(choice(false, live)).toBe("z-nile/next true")
+		t.expect(choice(false, ids.TOMBSTONE)).toBe("z-nile/next false")
 	end)
 end)

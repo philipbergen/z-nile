@@ -141,7 +141,14 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		at(make, "Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`")
 		at(make, "game work is `--project pickman`, which has no folder until c0120")
 		at(tracker, "the directory gives the project unless `--project` names one")
-		at(tracker, "`new issue` and `new raft` refuse and ask for `--project`")
+		at(
+			tracker,
+			"the commands that create or change a project's items (`new issue`, `new raft`) refuse and ask for `--project`"
+		)
+		at(
+			tracker,
+			"read-only ones read every project there (`list` shows them all), because reading needs no project"
+		)
 		-- every capture line a skill or template gives names its project, or its raft
 		for _, skill in fs.readDir(SKILLS) do
 			local doc = `{SKILLS}/{skill}/SKILL.md`

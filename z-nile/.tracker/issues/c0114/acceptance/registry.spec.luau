@@ -119,6 +119,24 @@ return t.spec("c0114 the project registry", function(it)
 		local okMissing, errMissing = pcall(projects.load, base, true)
 		t.expect(okMissing).toBe(false)
 		t.expect(string.find(tostring(errMissing), "no z-nile/projects.toml", 1, true) ~= nil).toBe(true)
+		-- and every command that reads the items refuses there instead of scanning a guessed root (list, audit's scan,
+		-- offline numbering; remap reads the items through the same scan, after it fetches origin)
+		fs.writeDir(`{base}/tracker/issues/c0010`)
+		fs.writeFile(`{base}/tracker/issues/c0010/c0010.md`, "---\nid: c0010\nslug: s\n---\n")
+		fixture.git(base, { "add", "-A" })
+		fixture.git(base, { "commit", "-q", "-m", "an item" }) -- remap needs a clean tree before it reads anything
+		for _, args in { { "list" }, { "audit" }, { "new", "issue", "c", "offline", "--project", "pickman" } } do
+			local all = { "run", `{fixture.physical(".")}/z-nile/engine/main`, "--" }
+			for _, a in args do
+				table.insert(all, a)
+			end
+			local r = process.exec("lune", all, { cwd = base, env = { PICKMAN_PUBLISH = "0" } })
+			t.expect(r.ok).toBe(false)
+			if not string.find(r.stdout .. r.stderr, "projects.toml", 1, true) then
+				error(`{table.concat(args, " ")} did not refuse for the registry: {r.stdout}{r.stderr}`)
+			end
+		end
+		fixture.git(base, { "rm", "-q", "-r", "tracker" })
 		fs.writeDir(`{base}/z-nile`)
 		fs.writeFile(`{base}/z-nile/projects.toml`, "[[project]\n")
 		fixture.git(base, { "add", "-A" })
