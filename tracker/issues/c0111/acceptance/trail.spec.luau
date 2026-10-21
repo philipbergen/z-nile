@@ -1,8 +1,8 @@
 --!strict
--- c0111 AC10: an item's trail. `trail.ranges` names the folders and revisions to read, walking back through every
--- compaction to the id the item had then; `isDoc` tells an item's document from its other files; `parse` keeps only
--- changes directly in those folders; `namedIds` reads a `tracker: new` subject; `oldestAdd` and `capture` pick the
--- commit; `ambiguous` finds two items that held one id at once. Pure; reads nothing.
+-- c0111 AC10: an item's trail. `life` finds where an item's life under one id starts and `since` narrows it to a
+-- compaction that renamed an old id onto it; `crossing` proves the old id; `isDoc` tells an item's document from its
+-- other files; `parse` keeps only changes directly in the item's folders; `namedIds` reads a `tracker: new` subject;
+-- `oldestAdd` and `capture` pick the commit; `ambiguous` finds two items that held one id at once. Pure; reads nothing.
 local t = require("@tests/lib/t")
 local trail = require("@scripts/tracker/trail")
 
@@ -14,36 +14,86 @@ local function commit(sha: string, time: number, subject: string, status: string
 		status = status,
 		path = "tracker/issues/c0010/c0010.md",
 		order = order,
+		doc = true,
 		id = "c0010",
 	}
 end
 
-local function dirs(kind: string, id: string): { string }
-	return { `tracker/{kind}/{id}`, `tracker/{kind}/active/{id}`, `tracker/{kind}/done/{id}` }
+-- a document change of c0070 at `path`, in commit `sha` made at `time`
+local function d(sha: string, time: number, status: string, path: string): trail.Commit
+	return {
+		sha = sha,
+		time = time,
+		subject = sha,
+		status = status,
+		path = path,
+		order = 0,
+		doc = true,
+		id = "c0070",
+	}
+end
+
+local function shas(list: { trail.Commit }): string
+	local out = {}
+	for _, c in list do
+		table.insert(out, c.sha)
+	end
+	return table.concat(out, ",")
 end
 
 return t.spec("c0111 an item's trail", function(it)
-	it("reads every folder of the id, walking back through every compaction to the id it had", function()
-		t.expect(trail.ranges("issues", "c0010", "origin/main", {})).toEqual({
-			{ rev = "origin/main", dirs = dirs("issues", "c0010"), id = "c0010" },
-		})
-		-- two compactions, newest first: R0300 became R0030, which became R0003
-		local cuts: { trail.Cut } = {
-			{ sha = "bbb", map = { R0030 = "R0003", R0040 = "R0004" } },
-			{ sha = "aaa", map = { R0300 = "R0030" } },
-		}
-		t.expect(trail.ranges("rafts", "R0003", "HEAD", cuts)).toEqual({
-			{ rev = "bbb..HEAD", dirs = dirs("rafts", "R0003"), id = "R0003" },
-			{ rev = "aaa..bbb~1", dirs = dirs("rafts", "R0030"), id = "R0030" },
-			{ rev = "aaa~1", dirs = dirs("rafts", "R0300"), id = "R0300" },
-		})
-		-- an id a compaction renamed away has no history of its own before that cut: the walk stops there
-		t.expect(trail.ranges("rafts", "R0030", "HEAD", cuts)).toEqual({
-			{ rev = "bbb..HEAD", dirs = dirs("rafts", "R0030"), id = "R0030" },
-		})
-		-- an id no map mentions kept its number through every cut; an unreadable map renames nothing
-		t.expect(#trail.ranges("issues", "c0010", "HEAD", cuts)).toBe(3)
-		t.expect(#trail.ranges("issues", "c0010", "HEAD", { { sha = "ccc", map = nil } })).toBe(2)
+	it("starts an item's life where its document last went from absent to present", function()
+		local B, A = "tracker/issues/c0070/c0070.md", "tracker/issues/done/c0070/c0070.md"
+		-- a removed item, then a new one at the same number: only the new life counts
+		local reused = { d("e", 500, "M", B), d("c", 300, "A", B), d("b", 200, "D", B), d("a", 100, "A", B) }
+		local lived, start = trail.life(reused)
+		t.expect(shas(lived)).toBe("e,c")
+		t.expect((start :: trail.Commit).sha).toBe("c")
+		-- a move to done/ deletes and adds in one commit: the same life
+		local moved = { d("b", 200, "D", B), d("b", 200, "A", A), d("a", 100, "A", B) }
+		t.expect((select(2, trail.life(moved)) :: trail.Commit).sha).toBe("a")
+		-- a rename within one folder (legacy slug to <id>.md) is the same life too
+		local slug = "old"
+		local legacy = `tracker/issues/c0070/c0070-{slug}.md`
+		local renamed = { d("b", 200, "A", B), d("b", 200, "D", legacy), d("a", 100, "A", legacy) }
+		t.expect((select(2, trail.life(renamed)) :: trail.Commit).sha).toBe("a")
+		-- a commit that touched only other files is not a start; no document change at all gives every commit
+		local review = d("x", 50, "A", "tracker/issues/c0070/review-001.md")
+		review.doc = false
+		local none, nostart = trail.life({ review })
+		t.expect(shas(none)).toBe("x")
+		t.expect(nostart).toBe(nil)
+	end)
+
+	it(
+		"narrows a life to a newer commit that starts one, such as a compaction renaming onto the id",
+		function()
+			local B = "tracker/issues/c0040/c0040.md"
+			local lived = { d("c", 300, "M", B), d("b", 200, "M", B), d("a", 100, "A", B) }
+			local start = lived[3]
+			local narrowed, at = trail.since(lived, start, function(c: trail.Commit): boolean
+				return c.sha == "b"
+			end)
+			t.expect(shas(narrowed)).toBe("c,b")
+			t.expect((at :: trail.Commit).sha).toBe("b")
+			local same, keep = trail.since(lived, start, function(_: trail.Commit): boolean
+				return false
+			end)
+			t.expect(shas(same)).toBe("c,b,a")
+			t.expect(keep).toBe(start)
+		end
+	)
+
+	it("crosses a compaction only to the old id its map names and that held a document before it", function()
+		local map = { c0400 = "c0040", c0040 = "c0004" }
+		local held = function(old: string): boolean
+			return old == "c0400"
+		end
+		t.expect(trail.crossing(map, "c0040", held)).toBe("c0400")
+		-- the map names no old id for c0041; an old id with no document before the commit proves nothing
+		t.expect(trail.crossing(map, "c0041", held)).toBe(nil)
+		t.expect(trail.crossing(map, "c0004", held)).toBe(nil)
+		t.expect(trail.crossing(nil, "c0040", held)).toBe(nil)
 	end)
 
 	it("finds two items holding one id at once, but not a move or a rename in one folder", function()
@@ -55,6 +105,7 @@ return t.spec("c0111 an item's trail", function(it)
 				status = status,
 				path = path,
 				order = 0,
+				doc = true,
 				id = "c0070",
 			}
 		end
@@ -142,6 +193,7 @@ return t.spec("c0111 an item's trail", function(it)
 				status = "M",
 				path = "tracker/issues/c0010/c0010.md",
 				order = 1,
+				doc = true,
 			},
 			{
 				sha = "bbb",
@@ -150,6 +202,7 @@ return t.spec("c0111 an item's trail", function(it)
 				status = "A",
 				path = "tracker/issues/c0010/c0010.md",
 				order = 2,
+				doc = true,
 			},
 			{
 				sha = "ccc",
@@ -158,6 +211,7 @@ return t.spec("c0111 an item's trail", function(it)
 				status = "D",
 				path = "tracker/issues/done/c0010/c0010.md",
 				order = 3,
+				doc = true,
 			},
 		})
 	end)

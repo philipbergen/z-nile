@@ -165,6 +165,45 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			["tracker/issues/c0003/c0003.md"] = doc("c0003", "before compaction"),
 			["tracker/compaction.txt"] = "# tracker.sh compact, test 2\nc0030 c0003\n",
 		}, "tracker: compact ids again")
+		-- an item removed, and later a new one at its number with no capture commit: never the old item's capture
+		push(
+			"c90old",
+			{ ["tracker/issues/c0090/c0090.md"] = doc("c0090", "old ninety") },
+			"tracker: new c0090 Old ninety"
+		)
+		push("c90gone", { ["tracker/issues/c0090"] = false }, "tracker: drop c0090")
+		push("c90new", { ["tracker/issues/c0090/c0090.md"] = doc("c0090", "new ninety") }, "R0090: prep")
+		-- a compaction that rotates ids: c0080 becomes c0008 while c0800 becomes c0080, at the same path
+		push(
+			"c80",
+			{ ["tracker/issues/c0080/c0080.md"] = doc("c0080", "eighty") },
+			"tracker: new c0080 Eighty"
+		)
+		push(
+			"c700",
+			{ ["tracker/issues/c0700/c0700.md"] = doc("c0700", "seven hundred") },
+			"tracker: new c0700 Seven hundred"
+		)
+		push(
+			"c800",
+			{ ["tracker/issues/c0800/c0800.md"] = doc("c0800", "eight hundred") },
+			"tracker: new c0800 Eight hundred"
+		)
+		push("rotate", {
+			["tracker/issues/c0800"] = false,
+			["tracker/issues/c0700"] = false,
+			["tracker/issues/c0007/c0007.md"] = doc("c0007", "seven hundred"),
+			["tracker/issues/c0008/c0008.md"] = doc("c0008", "eighty"),
+			["tracker/issues/c0080/c0080.md"] = doc("c0080", "eight hundred"),
+			["tracker/compaction.txt"] = "# tracker.sh compact, rotate\nc0080 c0008\nc0700 c0007\nc0800 c0080\n",
+		}, "tracker: compact ids, rotating")
+		-- an edit to the map's header only: no item moved, so it changes no capture
+		push("mapedit", {
+			["tracker/compaction.txt"] = "# tracker.sh compact, rotate (header edited)\nc0080 c0008\nc0700 c0007\nc0800 c0080\n",
+		}, "tracker: edit the compaction header")
+		-- c0007, renamed by that compaction, is removed and a new item takes c0007 later: a life the map does not prove
+		push("c7gone", { ["tracker/issues/c0007"] = false }, "tracker: drop c0007")
+		push("c7back", { ["tracker/issues/c0007/c0007.md"] = doc("c0007", "a new seven") }, "R0007: prep")
 	end)
 
 	it(
@@ -218,6 +257,40 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		local _, landed = capture("c0010")
 		t.expect(has(landed, "ambiguous")).toBe(false)
 	end)
+
+	it(
+		"starts an item's life at its last appearance, and crosses only a compaction that renamed it",
+		function()
+			local _, reused = capture("c0090")
+			t.expect(
+				has(
+					reused,
+					`capture {SHA.c90new} tracker/issues/c0090/c0090.md R0090: prep (no capture commit: first add)`
+				)
+			).toBe(true)
+			t.expect(has(reused, "old ninety")).toBe(false)
+			local _, rotatedIn = capture("c0080")
+			t.expect(
+				has(
+					rotatedIn,
+					`capture {SHA.c800} tracker/issues/c0800/c0800.md tracker: new c0800 Eight hundred`
+				)
+			).toBe(true)
+			t.expect(has(rotatedIn, "ambiguous")).toBe(false)
+			local _, seven = capture("c0007")
+			t.expect(
+				has(
+					seven,
+					`capture {SHA.c7back} tracker/issues/c0007/c0007.md R0007: prep (no capture commit: first add)`
+				)
+			).toBe(true)
+			local _, rotatedOut = capture("c0008")
+			t.expect(
+				has(rotatedOut, `capture {SHA.c80} tracker/issues/c0080/c0080.md tracker: new c0080 Eighty`)
+			)
+				.toBe(true)
+		end
+	)
 
 	it("marks a first-add fallback, and only that", function()
 		local _, legacy = capture("c0020")

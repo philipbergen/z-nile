@@ -110,6 +110,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 			doc,
 			"a capture marked `(no capture commit: first add)` or `(ambiguous: …)` counts as not matching"
 		)
+		at(doc, "until the Problem has a `Scope decision (user, …)` line that confirms the item's scope")
 	end)
 
 	it("review never prescribes a cut, and design mode checks scope fidelity after Lessons", function()
