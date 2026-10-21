@@ -226,8 +226,8 @@ return t.spec(
 					".",
 					"",
 					table.concat({
-						`git init -q "{repo}/.cache/fx"`,
-						`cd "{repo}/.cache/fx" || exit 7`,
+						`git init -q "{repo}/.cache/c0120-guarded-fx"`,
+						`cd "{repo}/.cache/c0120-guarded-fx" || exit 7`,
 						'echo "PLAIN=$(pickman_guarded "$PWD")"',
 						`GIT_DIR="{repo}/.git"; export GIT_DIR`,
 						'echo "SET=$(pickman_guarded "$PWD")"',
