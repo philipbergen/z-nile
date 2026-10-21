@@ -21,3 +21,6 @@
 - design-review-004 F2: ticket-prep/prove-specs-pass-on-a-prototype
 - note c0115 prep round 4: a rule built on parseHarvest left out the lines the reader skips (headings, paragraphs, sub-bullets): testing/one-rule-one-function
 - note c0115 prep round 4: the prototype's edits commit was amended before the promotion type check ran, and another agent read the unchecked commit: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-005 F1: testing/seed-every-enumerated-case, ticket-prep/spec-design-correspondence
+- design-review-005 F2: testing/absence-scans-cover-every-form
+- design-review-005 F3: ticket-prep/restated-rules-move-together

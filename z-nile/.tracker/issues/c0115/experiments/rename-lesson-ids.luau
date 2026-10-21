@@ -3,12 +3,12 @@
 -- project root (backlog, active/ and done/) and in every lesson file's body. Run from the repository root, after
 -- the skill folders have moved:
 --   lune run "$(./zn find c0115)/experiments/rename-lesson-ids" [-- --dry-run]
--- The rules are lessons.renameLedger for a harvest.md (every id parseHarvest reads; its notes and one-off reasons as
--- prose) and skills.oldLessonIds for prose (a token is renamed only where `<new>/<slug>.md` exists), the ones AC4 and
--- AC5 check with; a lesson body's old skill names are renamed by skills.oldNames (AC4's rule). In a harvest.md every
--- parsed id is an id, so one with no lesson at the new place is
--- reported (exit 1); in a lesson body a token may be a path (tracker/next), so it is only left alone. Prints each
--- changed file with its count. Idempotent: a second run changes nothing.
+-- The rules are lessons.renameLedger for a harvest.md and skills.oldLessonIds for prose, the ones AC4 and AC5 check
+-- with. In a harvest.md the id list of each entry lessons.parseHarvest reads takes the id rule (every old id renamed in
+-- place); every other part of a ledger is prose (a note's text, a one-off's reason, and the lines parseHarvest skips or
+-- refuses), where a token is renamed only where `<new>/<slug>.md` exists. A lesson body is prose too, and its old skill
+-- names are renamed by skills.oldNames (AC4's rule). Only a parsed id with no lesson at the new place is reported
+-- (exit 1). Prints each changed file with its count. Idempotent: a second run changes nothing.
 local fs = require("@lune/fs")
 local lessons = require("@znile/engine/lessons")
 local process = require("@lune/process")
@@ -52,7 +52,7 @@ local function fix(path: string, ledger: boolean)
 	local text = fs.readFile(path)
 	local out, n, unknown
 	if ledger then
-		-- a ledger: the ids lessons.parseHarvest reads are ids; its notes and one-off reasons are prose
+		-- a ledger: each entry's parsed id list takes the id rule; every other part of a ledger is prose
 		out, n, unknown = lessons.renameLedger(text, existing)
 	else
 		out, n = skills.renameLessonIds(text, existing)

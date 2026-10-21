@@ -201,35 +201,109 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 	)
 
 	it(
-		"every byte of a ledger is covered: headings, paragraphs, sub-bullets and refused lines take the prose rule",
+		"every part of a ledger takes a rule: each row with a renamed id is found and renamed, with a look-alike untouched",
 		function()
 			local existing = { ["zz-test/no-vacuous-pass"] = true }
-			local text = "# Harvest: see testing/no-vacuous-pass\n"
-				.. "Rounds 001 to 005 reviewed it. See testing/no-vacuous-pass.\n"
-				.. "  - also testing/no-vacuous-pass\n"
-				.. "- design-review-001 F1: zz-test/no-vacuous-pass\n"
-			local found = lessons.ledgerOldIds(text, existing)
-			t.expect(#found).toBe(3)
-			local out, n = lessons.renameLedger(text, existing)
-			t.expect(n).toBe(3)
-			t.expect((string.find(out, "testing/", 1, true))).toBe(nil)
-			t.expect(out).toBe((string.gsub(text, "testing/no%-vacuous%-pass", "zz-test/no-vacuous-pass")))
-			-- look-alike paths anywhere stay byte for byte
-			local alike = "# Harvest under review/x\nA paragraph on tracker/rafts/R0010.\n  - see review/x and testing/fixtures\n"
-				.. "- not an entry: review/x\n"
-			t.expect((lessons.ledgerOldIds(alike, existing))).toEqual({})
-			local same, zero = lessons.renameLedger(alike, existing)
-			t.expect(same).toBe(alike)
-			t.expect(zero).toBe(0)
-			-- a refused line is prose too: renamed, and still a problem for lessons --check
-			local refused, m =
-				lessons.renameLedger("- not an entry naming testing/no-vacuous-pass\n", existing)
-			t.expect(refused).toBe("- not an entry naming zz-test/no-vacuous-pass\n")
-			t.expect(m).toBe(1)
+			local OLD, NEW = "testing/no-vacuous-pass", "zz-test/no-vacuous-pass"
+			-- one row per kind of part a harvest.md has; `alike` is a token the row's rule must leave alone
+			local rows: { { part: string, line: (string) -> string, alike: string } } = {
+				{
+					part = "id list",
+					line = function(x)
+						return `- design-review-001 F1: {x}`
+					end,
+					alike = "zz-test/fixtures",
+				},
+				{
+					part = "note text",
+					line = function(x)
+						return `- note it mentions {x} here: zz-test/no-vacuous-pass`
+					end,
+					alike = "review/x",
+				},
+				{
+					part = "one-off reason",
+					line = function(x)
+						return `- review-001 F2: one-off: see {x} for why`
+					end,
+					alike = "testing/fixtures",
+				},
+				{
+					part = "heading",
+					line = function(x)
+						return `# Harvest: {x}`
+					end,
+					alike = "review/x",
+				},
+				{
+					part = "paragraph",
+					line = function(x)
+						return `Rounds 001 to 005 reviewed it; see {x}.`
+					end,
+					alike = "tracker/rafts/R0010",
+				},
+				{
+					part = "sub-bullet",
+					line = function(x)
+						return `  - also {x}`
+					end,
+					alike = "review/x",
+				},
+				{
+					part = "refused line",
+					line = function(x)
+						return `- not an entry naming {x}`
+					end,
+					alike = "testing/fixtures",
+				},
+			}
+			for _, row in rows do
+				local text = row.line(OLD) .. "\n"
+				local found = lessons.ledgerOldIds(text, existing)
+				if #found ~= 1 or found[1] ~= OLD then
+					error(`{row.part}: {OLD} not found once: {table.concat(found, ", ")}`)
+				end
+				local out, n = lessons.renameLedger(text, existing)
+				if out ~= row.line(NEW) .. "\n" or n ~= 1 then
+					error(`{row.part}: not renamed in place: {out} ({n})`)
+				end
+				local alike = row.line(row.alike) .. "\n"
+				local none = lessons.ledgerOldIds(alike, existing)
+				local same, zero = lessons.renameLedger(alike, existing)
+				if #none ~= 0 or same ~= alike or zero ~= 0 then
+					error(
+						`{row.part}: the look-alike {row.alike} was touched: {same} ({table.concat(none, ", ")})`
+					)
+				end
+			end
+			-- a one-off naming an old id with no renamed lesson is prose: never reported, so the script's exit stays 0
+			local quiet, unknown =
+				lessons.ledgerOldIds("- review-001 F3: one-off: see testing/never-a-lesson\n", existing)
+			t.expect(quiet).toEqual({})
+			t.expect(unknown).toEqual({})
+			local _, _, none =
+				lessons.renameLedger("- review-001 F3: one-off: see testing/never-a-lesson\n", existing)
+			t.expect(none).toEqual({})
+			-- a refused line is still a problem for lessons --check after its rename
+			local refused = lessons.renameLedger("- not an entry naming testing/no-vacuous-pass\n", existing)
 			local _, problems = lessons.parseHarvest("c0010", refused)
 			t.expect(#problems).toBe(1)
 		end
 	)
+
+	it("an id list keeps its separators and spaces byte for byte", function()
+		local existing = { ["zz-test/no-vacuous-pass"] = true }
+		local text = "- design-review-001 F1: testing/no-vacuous-pass,zz-test/b  \n"
+			.. "- design-review-001 F2: zz-test/a,zz-test/b\n"
+			.. "- note n:  zz-test/a ,testing/no-vacuous-pass\n"
+		local out, n = lessons.renameLedger(text, existing)
+		t.expect(out).toBe(
+			"- design-review-001 F1: zz-test/no-vacuous-pass,zz-test/b  \n"
+				.. "- design-review-001 F2: zz-test/a,zz-test/b\n"
+				.. "- note n:  zz-test/a ,zz-test/no-vacuous-pass\n"
+		)
+		t.expect(n).toBe(2)
+	end)
 
 	it("no harvest.md under any root, and no lesson, names an old skill's id", function()
 		local r = process.exec("git", { "ls-files" })
