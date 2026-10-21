@@ -58,6 +58,8 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		local a, b = issue("c0510", "R0500", "c0520"), issue("c0520", "R0500")
 		local c, d = issue("c0710", "R0700"), issue("c0720", "R0700", "c0710")
 		local e = issue("c0610", "R0600")
+		local w1, w2 = issue("c0951", "R0950"), issue("c0952", "R0950", "c0951")
+		local g9 = raftplan.renderGrouped({ c0951 = record("c0951", w1), c0952 = record("c0952", w2) })
 		local g5 = raftplan.renderGrouped({ c0510 = record("c0510", a), c0520 = record("c0520", b) })
 		local g7 = raftplan.renderGrouped({ c0710 = record("c0710", c), c0720 = record("c0720", d) })
 		local seed: { [string]: string } = {
@@ -73,6 +75,11 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 			["tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
 			["tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
 			["tracker/issues/c0610/c0610.md"] = e,
+			-- review 005 F1: renumbered while an untracked work file sits in a member's folder
+			["tracker/issues/c0951/c0951.md"] = w1,
+			["tracker/issues/c0952/c0952.md"] = w2,
+			["tracker/rafts/R0950/R0950.md"] = raftDoc("R0950", "wip", "c0951, c0952", g9),
+			["tracker/rafts/R0950/design-review-001.md"] = `# Review 001\n\nGrouped: {g9}\n\nVerdict: approve\n`,
 			-- prepared and raftless: rafted while the compaction lands (review 004 F2)
 			["tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
 			["tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
@@ -86,6 +93,9 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 				"tracker/issues/c0710",
 				"tracker/issues/c0720",
 				"tracker/issues/c0610",
+				"tracker/issues/c0951",
+				"tracker/issues/c0952",
+				"tracker/rafts/R0950",
 				"tracker/issues/c0810",
 				"tracker/issues/c0820",
 				"tracker/rafts/R0500",
@@ -120,6 +130,26 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		fixture.git(W, { "commit", "-q", "-m", "renumber c0710" })
 		land(W)
 	end)
+
+	it(
+		"renumber with an untracked work file in a member's folder keeps the record (review 005 F1)",
+		function()
+			fixture.git(W, { "fetch", "-q", "origin" })
+			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
+			fs.writeDir(`{W}/tracker/issues/c0952/acceptance`)
+			fs.writeFile(`{W}/tracker/issues/c0952/acceptance/wip.spec.luau`, "--!strict\nreturn nil\n")
+			trOk(W, { "renumber", "c0952", "c0958" })
+			-- the work file is not committed: the rename alone lands
+			-- the work folder was never tracked (c0952 had no acceptance specs): remove it whole
+			if fs.isDir(`{W}/tracker/issues/c0958/acceptance`) then
+				fs.removeDir(`{W}/tracker/issues/c0958/acceptance`)
+			end
+			fixture.git(W, { "add", "-A" })
+			fixture.git(W, { "commit", "-q", "-m", "renumber c0952" })
+			land(W)
+			trOk(f.main, { "ready", "R0950" })
+		end
+	)
 
 	it(
 		"after compact, ready takes the rafts nothing redesigned and still refuses the stale record",
