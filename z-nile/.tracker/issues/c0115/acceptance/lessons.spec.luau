@@ -7,22 +7,10 @@
 local fs = require("@lune/fs")
 local lessons = require("@znile/engine/lessons")
 local process = require("@lune/process")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
-local OLD = {
-	"make-issue",
-	"ticket-prep",
-	"ready-raft",
-	"launch-raft",
-	"execute-raft",
-	"stop-raft",
-	"review",
-	"tracker",
-	"architecture",
-	"testing",
-	"metrics",
-}
 local function lesson(check: string): string
 	return `---\ntitle: A lesson\nwhen: build\ntags: [wiring]\ncheck: {check}\n---\nBody.\n`
 end
@@ -39,24 +27,12 @@ local function write(path: string, text: string)
 	end
 	fs.writeFile(path, text)
 end
--- every `<old>/<slug>` id token in a text (after a space, a comma or a backtick)
-local function oldIds(text: string): { string }
-	local out = {}
-	for _, old in OLD do
-		for _, sep in { " ", ",", "`", "(" } do
-			local from = 1
-			while true do
-				local a, b = string.find(text, sep .. old .. "/", from, true)
-				if not a then
-					break
-				end
-				local slug = string.match(string.sub(text, (b :: number) + 1), "^([%w][%w%-]*)")
-				if slug and slug ~= "SKILL" then
-					table.insert(out, `{old}/{slug}`)
-				end
-				from = (b :: number) + 1
-			end
-		end
+-- the one old-id rule (skills.oldLessonIds, shared with the rename script and AC4): every token in a ledger, and in a
+-- lesson body only a token whose renamed lesson exists
+local function oldIds(text: string, existing: { [string]: boolean }, ledger: boolean): { string }
+	local out: { string } = {}
+	for _, id in skills.oldLessonIds(text, existing, ledger) do
+		table.insert(out, `{id.old}/{id.slug}`)
 	end
 	return out
 end
@@ -163,14 +139,38 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 		t.expect(has(r.stdout, "testing/pin")).toBe(true)
 	end)
 
-	it("the oldIds scan finds an old id and leaves new ids and paths alone", function()
-		t.expect(oldIds("- design-review-001 F1: testing/pin, ticket-prep/x\n"))
-			.toEqual({ "ticket-prep/x", "testing/pin" })
-		t.expect(oldIds("- review-001 F1: zz-test/pin, z-design/x (scripts/tracker/main.luau)\n")).toEqual({})
-	end)
+	it(
+		"the old-id rule: every token in a ledger, only renamed lessons in prose, never a look-alike path",
+		function()
+			local existing = { ["zz-test/no-vacuous-pass"] = true, ["z-design/x"] = true }
+			-- a ledger: every token is an id, known or not
+			t.expect(
+				oldIds(
+					"- design-review-001 F1: testing/no-vacuous-pass, ticket-prep/x, testing/unknown-slug\n",
+					existing,
+					true
+				)
+			).toEqual({ "testing/no-vacuous-pass", "ticket-prep/x", "testing/unknown-slug" })
+			-- a lesson body: look-alikes and unknown slugs pass, a renamed lesson's old id fails
+			local prose =
+				"Read `tracker/next`, scripts/tracker/x and testing/unknown-slug; z-nile/.tracker/issues too."
+			t.expect(oldIds(prose, existing, false)).toEqual({})
+			t.expect(oldIds("as testing/no-vacuous-pass says", existing, false))
+				.toEqual({ "testing/no-vacuous-pass" })
+			t.expect(oldIds("- review-001 F1: zz-test/no-vacuous-pass, z-design/x\n", existing, true))
+				.toEqual({})
+			-- the rename the script makes from the same rule
+			local out, n, unknown =
+				skills.renameLessonIds("- r F1: testing/no-vacuous-pass, testing/gone\n", existing, true)
+			t.expect(out).toBe("- r F1: zz-test/no-vacuous-pass, testing/gone\n")
+			t.expect(n).toBe(1)
+			t.expect(unknown).toEqual({ "testing/gone" })
+		end
+	)
 
 	it("no harvest.md under any root, and no lesson, names an old skill's id", function()
 		local r = process.exec("git", { "ls-files" })
+		local existing = skills.lessonIndex(".")
 		local bad: { string } = {}
 		local n = 0
 		for path in string.gmatch(r.stdout, "[^\n]+") do
@@ -178,7 +178,7 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 			local lessonFile = string.match(path, "^[%w%-]+/skills/[^/]+/lessons/[^/]+%.md$") ~= nil
 			if (ledger or lessonFile) and fs.isFile(path) then
 				n += 1
-				for _, id in oldIds(fs.readFile(path)) do
+				for _, id in oldIds(fs.readFile(path), existing, ledger) do
 					table.insert(bad, `{path}: {id}`)
 				end
 			end

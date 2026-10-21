@@ -10,3 +10,7 @@
 - design-review-001 F9: one-off: a Judged criterion whose every test was a git read; the testing skill already says to turn such criteria into checks
 - note c0115 prep: layout.spec first pinned the exact skill set and "no pickman lesson", which c0116 and any lesson would turn red: testing/promoted-specs-pin-rules-not-sets
 - note c0115 prep: a bulk name substitution rewrote `{source}/tracker` and `architecture.md`, and was reverted: ticket-prep/bulk-renames-skip-ordinary-words
+- design-review-002 F1: testing/one-rule-one-function, testing/absence-scans-cover-every-form
+- design-review-002 F2: testing/new-commands-run-in-a-copy
+- design-review-002 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-002 F4: one-off: a lesson body quoted an old id as a token, which the rename then rewrote into a false example

@@ -10,8 +10,23 @@ A="$HERE/acceptance"
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: skills live in z-nile/skills and <project>/skills; ./zn skills links each from .claude/skills and refuses bad folders" lune run tests/run -- "$A/skills.spec.luau"
-check "AC2: the real tree's links pass ./zn skills --check, and the gate runs it" \
-  bash -c './zn skills --check && z-nile/check.sh --plan | grep -qx "skills: .claude/skills" && grep -qxF "[[ -d z-nile/skills ]] && par_start \"skills (./zn skills --check)\" ./zn skills --check" z-nile/check.sh'
+# AC2 runs c0115's own `skills --check` and its changed `--plan` in a plain clone of HEAD under .cache (never
+# `git worktree add`, which writes the real .git): a wrong --check that writes then fails the clean-status assertion
+# and the "ok" line, and the committed links are what is checked, as CI's fresh checkout sees them.
+links_check() {
+  local copy="$PWD/.cache/c0115-ac2"
+  mkdir -p "$PWD/.cache" && rm -rf "$copy" && git clone -q --no-hardlinks "$PWD" "$copy" || return 1
+  (
+    cd "$copy" || exit 1
+    out=$(./zn skills --check) || { echo "$out"; exit 1; }
+    [[ $out == *"one link each, ok"* ]] || { echo "skills --check said: $out"; exit 1; }
+    z-nile/check.sh --plan | grep -qx "skills: .claude/skills" || { echo "no skills: line in --plan"; exit 1; }
+    [[ -z $(git status --porcelain) ]] || { echo "the copy changed:"; git status --porcelain; exit 1; }
+  ) || return 1
+  rm -rf "$copy"
+  grep -qxF '[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check' z-nile/check.sh
+}
+check "AC2: the committed links pass ./zn skills --check in a clean copy, which it leaves unchanged, and the gate runs it" links_check
 check "AC3: the eleven skills are renamed into their folders, nothing old is left, and z-raft is not made here" \
   bash -c 'lune run tests/run -- "$1" && test -z "$(git ls-files -- z-nile/skills/z-raft .claude/skills/z-raft)"' _ "$A/layout.spec.luau"
 check "AC4: no live file names an old skill or cites an old lesson id, and no code or spec reads through a .claude/skills link" lune run tests/run -- "$A/absence.spec.luau"
