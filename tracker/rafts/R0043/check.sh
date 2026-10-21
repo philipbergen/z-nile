@@ -14,6 +14,6 @@ check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker
 # check "RC1: <end-to-end statement>" <command>
 
 check "RC1: the game is untouched" git diff --quiet origin/main...HEAD -- src
-check "RC2: lessons and ledgers are valid on the moved tree" bash -c '[[ -x ./zn ]] && ./zn lessons --check || scripts/tracker.sh lessons --check'
+check "RC2: lessons and ledgers are valid on the moved tree" ./zn lessons --check
 
 finish
