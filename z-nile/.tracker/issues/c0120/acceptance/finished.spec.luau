@@ -31,6 +31,7 @@ local PICKMAN_DONE = table.concat({
 	'for dir in $(./zn members R0001); do check "x" bash "$dir/check.sh"; done',
 	'check "AC4: gone before the move" test -f tests/gone.luau',
 	"check \"AC5: a glob\" bash -c 'ls tracker/issues/done/*/check.sh'",
+	"check \"AC6: a folder find searches\" bash -c 'find tracker -name x.md'",
 	"",
 }, "\n")
 local ZNILE_DONE = table.concat({
@@ -39,6 +40,7 @@ local ZNILE_DONE = table.concat({
 	'check "AC2: specs" lune run tests/run -- tests/tooling/x.spec.luau',
 	'check "AC3: a pickman spec" test -f tests/acceptance/f0001/a.spec.luau',
 	'check "AC4: the gate" z-nile/check.sh --full',
+	'check "AC5: a folder most of whose files stayed" test -d scripts/lib',
 	"",
 }, "\n")
 
@@ -59,6 +61,9 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		put("zn", "#!/usr/bin/env bash\n")
 		put("z-nile/check.sh", "#!/usr/bin/env bash\n")
 		put("scripts/ci-verify.sh", "#!/usr/bin/env bash\n")
+		put("scripts/lib/a.luau", "--!strict\nreturn 1\n")
+		put("scripts/lib/b.luau", "--!strict\nreturn 1\n")
+		put("scripts/lib/beta.luau", "--!strict\nreturn 1\n")
 		put("src/server/Main.server.luau", "--!strict\nreturn nil\n")
 		put("tests/run.luau", "--!strict\nreturn nil\n")
 		put("tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
@@ -84,6 +89,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 				{ "tracker/architecture.md", "pickman/.tracker/architecture.md" },
 				{ "tracker/issues", "pickman/.tracker/issues" },
 				{ "tracker/rafts", "pickman/.tracker/rafts" },
+				{ "scripts/lib/beta.luau", "pickman/scripts/lib/beta.luau" },
 			}
 		do
 			fs.writeDir(string.match(`{FX}/{pair[2]}`, "^(.*)/[^/]+$") :: string)
@@ -111,6 +117,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			'for dir in $(../zn members R0001); do check "x" bash "$dir/check.sh"; done',
 			'check "AC4: gone before the move" test -f tests/gone.luau',
 			"check \"AC5: a glob\" bash -c 'ls .tracker/issues/done/*/check.sh'",
+			"check \"AC6: a folder find searches\" bash -c 'find ./.tracker -name x.md'",
 			"",
 		}, "\n"))
 		local znile =
@@ -121,6 +128,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			'check "AC2: specs" lune run tests/run -- tests/tooling/x.spec.luau',
 			'check "AC3: a pickman spec" test -f ../pickman/tests/acceptance/f0001/a.spec.luau',
 			'check "AC4: the gate" ./check.sh --full',
+			'check "AC5: a folder most of whose files stayed" test -d ../scripts/lib',
 			"",
 		}, "\n"))
 		-- written and run again, it changes nothing

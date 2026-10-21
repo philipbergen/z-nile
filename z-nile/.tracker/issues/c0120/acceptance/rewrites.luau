@@ -20,7 +20,14 @@ rewrites.MARK = "tracker/rafts/done/R0001/check.sh"
 -- or an option, and either after `lune run` (then with .luau), a root file of a home, or under a top-level folder.
 local PREFIXES =
 	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
-local FILES = { ["default.project.json"] = true, ["lobby.project.json"] = true, zn = true, ["./zn"] = true }
+local FILES = {
+	["default.project.json"] = true,
+	["lobby.project.json"] = true,
+	zn = true,
+	["./zn"] = true,
+}
+-- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
+local FOLDERS = { tracker = true, src = true, tests = true }
 
 export type Literal = { line: number, first: number, last: number, word: string, path: string, dir: string }
 
@@ -58,8 +65,15 @@ function rewrites.literals(text: string): { Literal }
 			i = (e :: number) + 1
 		end
 		local dir = ""
+		local finding = false -- the words after `find`, before its first option, are the folders it searches
 		for k, word in words do
 			local w = word.w
+			if w == "find" then
+				finding = true
+				continue
+			elseif string.sub(w, 1, 1) == "-" then
+				finding = false
+			end
 			if k > 1 and words[k - 1].w == "cd" and not string.find(w, "$", 1, true) then
 				dir = w .. "/"
 				continue
@@ -77,6 +91,8 @@ function rewrites.literals(text: string): { Literal }
 				path = if string.match(w, "%.luau$") then w else w .. ".luau"
 			elseif FILES[w] then
 				path = if w == "./zn" then "zn" else w
+			elseif finding and FOLDERS[w] then
+				path = w
 			else
 				for _, p in PREFIXES do
 					if string.sub(w, 1, #p) == p and #w > #p then
@@ -251,6 +267,10 @@ function rewrites.world(top: string, pre: string): World
 			tail = string.sub(q, #fixed + 1)
 			q = fixed
 		end
+		-- a file: its rename. A folder: where most of its files went, if most of them moved (tracker/ keeps only its
+		-- counter, so it moved; the root's scripts/lib keeps c0114's shims, so it stayed)
+		local to: { [string]: number } = {}
+		local movedCount = 0
 		for _, m in map do
 			if m.old == q then
 				return m.new .. tail
@@ -258,9 +278,26 @@ function rewrites.world(top: string, pre: string): World
 			if string.sub(m.old, 1, #q + 1) == q .. "/" then
 				local rest = string.sub(m.old, #q + 1)
 				if string.sub(m.new, -#rest) == rest then
-					return string.sub(m.new, 1, #m.new - #rest) .. tail
+					local prefix = string.sub(m.new, 1, #m.new - #rest)
+					to[prefix] = (to[prefix] or 0) + 1
+					movedCount += 1
 				end
 			end
+		end
+		local total = 0
+		for f in files do
+			if string.sub(f, 1, #q + 1) == q .. "/" then
+				total += 1
+			end
+		end
+		local best, bestCount = nil :: string?, 0
+		for prefix, n in to do
+			if n > bestCount then
+				best, bestCount = prefix, n
+			end
+		end
+		if best and movedCount * 2 > total then
+			return (best :: string) .. tail
 		end
 		return nil
 	end

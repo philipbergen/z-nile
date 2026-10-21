@@ -27,7 +27,13 @@ local RESTAMPED: { [string]: string } = {
 }
 local PREFIXES =
 	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
-local FILES = { ["default.project.json"] = true, ["lobby.project.json"] = true, zn = true }
+local FILES = {
+	["default.project.json"] = true,
+	["lobby.project.json"] = true,
+	zn = true,
+}
+-- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
+local FOLDERS = { tracker = true, src = true, tests = true }
 
 local function blob(text: string): string
 	return serde.hash("sha1", `blob {#text}\0{text}`)
@@ -46,8 +52,15 @@ local function literals(text: string): { string }
 				table.insert(words, (string.gsub(w, "[\\,]+$", "")))
 			end
 			local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
+			local finding = false -- the words after `find`, before its first option, are the folders it searches
 			for i, w in words do
 				local path: string? = nil
+				if w == "find" then
+					finding = true
+					continue
+				elseif string.sub(w, 1, 1) == "-" then
+					finding = false
+				end
 				if words[i - 1] == "cd" and not string.find(w, "$", 1, true) then
 					dir = w .. "/"
 					continue
@@ -60,6 +73,8 @@ local function literals(text: string): { string }
 					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
 						path = if string.match(w, "%.luau$") then w else w .. ".luau"
 					elseif FILES[w] then
+						path = w
+					elseif finding and FOLDERS[w] then
 						path = w
 					else
 						for _, p in PREFIXES do
