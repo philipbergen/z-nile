@@ -77,6 +77,8 @@ Rounds 001 to 005 reviewed the reduced-scope design (c0114 to c0118), which the 
 - design-review-012 F2: ticket-prep/restated-rules-move-together
 - design-review-013 F1: tracker/item-history-spans-moves-and-compaction, architecture/parsers-refuse-ambiguity, testing/seed-every-enumerated-case
 - design-review-013 F2: ticket-prep/spec-design-correspondence
+- design-review-014 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case, ticket-prep/spec-design-correspondence
+- design-review-014 F2: ticket-prep/restated-rules-move-together, tracker/exhaustive-lists-name-new-things
 - note R0042 prep, two sequestered specs spelled legacy <ID>-<slug>.md names that the promoted c0044 guard refuses, found only by the prototype's full gate: ticket-prep/prove-specs-pass-on-a-prototype
 - note R0042 prep round 010, a new trail.spec case spelled a legacy <ID>-<slug>.md name again, caught only by the prototype's full gate: ticket-prep/prove-specs-pass-on-a-prototype
 - note user correction 2026-10-20, R0042's refutes narrowed the captured scope and rewrote its Problems: ticket-prep/never-narrow-captured-scope, review/no-scope-cut-as-fix

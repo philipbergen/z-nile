@@ -12,6 +12,6 @@ A="$HERE/acceptance"
 check "AC1: the skills carry the scope rules where the Design puts them" lune run tests/run -- "$A/scope-docs.spec.luau"
 check "AC2: the two scope lessons are valid and sourced from the R0042 correction" lune run tests/run -- "$A/scope-lessons.spec.luau"
 check "AC3: the real tree's lessons and ledgers are valid" scripts/tracker.sh lessons --check
-check "AC4: tracker.sh capture prints an item's capture across moves, legacy names and compaction" lune run tests/run -- "$A/capture-cli.spec.luau"
+check "AC4: tracker.sh capture prints an item's capture across moves and legacy names, and marks what it does not follow" lune run tests/run -- "$A/capture-cli.spec.luau"
 
 finish

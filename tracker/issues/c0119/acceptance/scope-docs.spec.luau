@@ -111,7 +111,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(doc, "`scripts/tracker.sh capture <id>`")
 		at(
 			doc,
-			"a capture marked `(no capture commit: first add)` or `(ambiguous: …)` counts as not matching"
+			"a capture whose header carries any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) counts as not matching"
 		)
 		at(doc, "until the Problem has a `Scope decision (user, …)` line that confirms the item's scope")
 	end)
@@ -138,7 +138,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(item, "is **high**")
 		at(
 			item,
-			"A capture marked `(no capture commit: first add)` or `(ambiguous: …)` is not a confirmed capture"
+			"A capture carrying any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) is not a confirmed capture"
 		)
 	end)
 
