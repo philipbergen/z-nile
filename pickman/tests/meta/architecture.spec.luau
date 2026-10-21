@@ -1,7 +1,8 @@
 --!strict
--- Structural rules from the `architecture` and `testing` skills, enforced mechanically.
+-- Structural rules from the `architecture` and `testing` skills, enforced mechanically: pickman's (c0120), run from
+-- pickman/ like every pickman spec. The tooling's own rules are in the root's tests/meta/architecture.spec.luau.
 local fs = require("@lune/fs")
-local graph = require("../../z-nile/lib/graph")
+local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 
 local LOGIC = "src/shared/Logic"
@@ -24,7 +25,7 @@ local function featureOf(file: string): string?
 end
 
 local function declaredDeps(): { [string]: { [string]: boolean } }
-	local md = fs.readFile("tracker/architecture.md")
+	local md = fs.readFile(".tracker/architecture.md")
 	local block = string.match(md, "```deps\n(.-)```") or ""
 	local deps: { [string]: { [string]: boolean } } = {}
 	for line in string.gmatch(block, "[^\n]+") do
@@ -69,15 +70,9 @@ return t.spec("architecture", function(it)
 
 	it("every Luau file is --!strict", function()
 		local bad = {}
-		-- z-nile/ is the engine and the gate (c0114); its .tracker/ holds tracker documents, like tracker/
-		local all = graph.listLuau(
-			"src",
-			graph.listLuau("tests", graph.listLuau("scripts", graph.listLuau("z-nile")))
-		)
+		-- pickman's own files; its .tracker/ holds tracker documents and specs not yet promoted
+		local all = graph.listLuau("src", graph.listLuau("tests", graph.listLuau("scripts")))
 		for _, f in all do
-			if string.sub(f, 1, 15) == "z-nile/.tracker" then
-				continue
-			end
 			if not string.match(fs.readFile(f), "^%-%-!strict") then
 				table.insert(bad, f)
 			end
@@ -111,7 +106,7 @@ return t.spec("architecture", function(it)
 		t.expect(table.concat(bad, "\n")).toBe("")
 	end)
 
-	it("cross-feature requires are declared in tracker/architecture.md", function()
+	it("cross-feature requires are declared in .tracker/architecture.md", function()
 		local declared = declaredDeps()
 		local bad = {}
 		for file, deps in g.deps do

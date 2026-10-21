@@ -4,7 +4,7 @@
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
-local text = fs.readFile("z-nile/setup.sh")
+local text = fs.readFile("../z-nile/setup.sh")
 
 local function at(needle: string): number?
 	return (string.find(text, needle, 1, true))

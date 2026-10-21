@@ -43,7 +43,9 @@ for _, target in plan.targets do
 		print(`rojo build failed ({target.project}): the project file is missing`)
 		process.exit(1)
 	end
-	local okCopy, copy = pcall(Beta.project, fs.readFile(source), root, target.attributes)
+	-- a project's "$path"s are relative to the project file's own folder (c0120 F8: CI runs this from pickman/)
+	local dir = string.match(source, "^(.*)/[^/]+$") or root
+	local okCopy, copy = pcall(Beta.project, fs.readFile(source), dir, target.attributes)
 	if not okCopy then
 		print(`rojo build failed ({target.project}): {copy}`)
 		process.exit(1)

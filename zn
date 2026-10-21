@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # z-nile's command (c0114): ./zn <command> ... at the repository root. See .claude/skills/tracker/SKILL.md.
 set -euo pipefail
+# the caller's directory: paths the engine prints (find, members) resolve from there (c0120)
+ZN_CWD="$(pwd -P)"
+export ZN_CWD
 cd "$(dirname "$0")"
 export PATH="$HOME/.rokit/bin:$PATH"
 exec lune run z-nile/engine/main -- "$@"

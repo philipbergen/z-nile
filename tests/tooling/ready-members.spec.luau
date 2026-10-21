@@ -41,7 +41,7 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 	it("sets up prepared rafts whose issues: lists disagree with their members, both ways", function()
 		local seed: { [string]: string } = {
 			[".gitignore"] = fs.readFile(".gitignore"), -- ignores prompt.md
-			["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
+			["tracker/architecture.md"] = fs.readFile("pickman/.tracker/architecture.md"),
 			-- R0010 leaves out c0020, which names it
 			["tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0010"),
 			["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),

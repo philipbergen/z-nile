@@ -12,7 +12,8 @@ local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local root = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+-- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+local root = (string.gsub(process.cwd, "/+$", ""))
 local script = `{root}/scripts/runtime-test`
 local work = `{root}/.cache/c0064-runtime`
 local KEY = "KEY-NOT-IN-OUTPUT"

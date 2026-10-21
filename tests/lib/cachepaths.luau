@@ -1,5 +1,5 @@
 --!strict
--- The reviewed list of .cache paths in scripts/ and z-nile/ (c0077, c0114). Unjailed writers under .cache must never
+-- The reviewed list of .cache paths in scripts/, z-nile/ and pickman/scripts/ (c0077, c0114, c0120). Unjailed writers under .cache must never
 -- write through a symlink a spec swapped in there (the jail can't refuse a swap, c0077 E1), so every line in those
 -- folders that names a .cache path is listed here with how it stays safe: through z-nile/lib/replace-file.pl (a
 -- rename, never a write through a link), a `mkdir -p` of a plain folder the fence checks, a read, or a message. A new
@@ -10,7 +10,7 @@ local projects = require("@znile/engine/projects")
 local cachepaths = {}
 
 -- The folders whose .luau and .sh files the list covers, and the ones inside them it skips (tracker documents).
-cachepaths.ROOTS = { "scripts", "z-nile" }
+cachepaths.ROOTS = { "scripts", "z-nile", "pickman/scripts" }
 -- every project root of the registry (design review 001 F5): a new root is skipped without an edit here
 cachepaths.SKIP = {} :: { [string]: boolean }
 for _, r in projects.roots(projects.load(".")) do
@@ -64,17 +64,25 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
 		["find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +"] = "unlinks top-level links, never follows one",
 		["defs=.cache/globalTypes.d.luau"] = `downloaded to the user temp folder, then {RENAMED}`,
-		['"$@" -o "$d/$out" && perl z-nile/lib/replace-file.pl ".cache/$out" "$d/$out"'] = `built in the user temp folder, then {RENAMED}`,
+		['c="$(prefix "${homes[$i]}").cache"'] = "a project home's .cache folder (c0120): made with mkdir -p and its top-level links unlinked, as the root's",
+		['out="$(prefix "$h").cache/check.rbxl"'] = `a project's game place, built in the user temp folder by build_place, then {RENAMED}`,
+		['[[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"'] = `a project's other places, built like the game place, then {RENAMED}`,
 	},
 	["z-nile/lib/fence.sh"] = {
-		['export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"'] = "a path in an environment variable; writes nothing",
+		['*":$1/.cache:"*) ;;'] = "a match on an environment variable; writes nothing (c0120: the ceiling step)",
+		['*) export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$1/.cache" ;;'] = "a path in an environment variable; writes nothing",
+		['echo "fence: cannot write $home/.cache\'s sentinel; refusing. Stop and report this." >&2'] = "a message (c0120)",
+		['echo "fence: the jail refused $home/.cache\'s sentinel; its ceiling and every other guard hold" >&2'] = "a message (c0120)",
+		['$home/.cache != "$PICKMAN_TEST_FENCE"/.cache && $home/.cache != "$PICKMAN_TEST_FENCE"/.cache/* ]]; then'] = "a comparison of paths; writes nothing (c0120 review 003 F2)",
+		["if [[ ! -L $here/.cache/.git && -d $here/.cache/.git ]]; then"] = "a read: refuses a sentinel that is a folder (the refusals step)",
+		['echo "fence: $here/.cache/.git is a folder; refusing (remove it yourself after checking it). Stop and report this." >&2'] = "a message",
 		["if [[ -L $here/.cache || ( -e $here/.cache && ! -d $here/.cache ) ]]; then"] = "a read: refuses a .cache that isn't a plain folder",
 		['echo "fence: $here/.cache is not a plain folder (a symlink or a file); refusing. Stop and report this." >&2'] = "a message",
-		['mkdir -p "$here/.cache"'] = "the folder itself, checked to be a plain folder just above",
+		['mkdir -p "$here/.cache" || return 1'] = "the folder itself, checked to be a plain folder just above",
 		['$here == "$PICKMAN_TEST_FENCE"/.cache/* ]]; then'] = "a read: compares two paths (the jail waiver, c0114)",
 		['local sentinel="$here/.cache/.git"'] = "a link there is unlinked, a folder refused; the sentinel is renamed in (rename(2), inline)",
 		['fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs'] = "mktemp creates a fresh file exclusively, never through a link",
-		['mkdir -p "$here/.cache/gh-none"'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
+		['mkdir -p "$here/.cache/gh-none" || return 1'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
 	},
 	["z-nile/engine/main.luau"] = {

@@ -13,6 +13,12 @@ local function trim(s: string): string
 end
 
 local here = trim(process.exec("pwd", { "-P" }).stdout)
+-- the checkout's root (`checkout`): `here` itself, or the folder above a project's home (pickman/, c0120), whose run is jailed to
+-- its own .cache; pickman/tests/meta/fence.spec.luau runs this spec there
+local checkout = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+if checkout == "" then
+	checkout = here
+end
 local env = process.env
 
 -- What turns a guard off or sends git to another repository; also what overrides the guard's own config.
@@ -131,6 +137,16 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/engine/gate.luau"] = {
 		PICKMAN_FENCE_ = "doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard (c0074)",
 	},
+	-- c0120: its fixture check.sh files print the git guards they see, and one fence call in a fixture gets an empty
+	-- hook folder and no jail marker, to prove a refused home fence leaves the inherited guards whole; its fixture
+	-- check.sh runs get the jail's three markers set explicitly, so they test the same path on every host
+	["tests/acceptance/c0120/homes.spec.luau"] = {
+		GIT_CEILING_DIRECTORIES = "a fixture check.sh prints the ceiling it sees",
+		GIT_CONFIG_ = "a fixture check.sh and a fence call compare the guard config they see",
+		PICKMAN_FENCE_ = "points PICKMAN_FENCE_HOOKS at an empty folder for one fence call in a fixture, and sets PICKMAN_FENCE_SPECS for a fixture check.sh",
+		PICKMAN_TEST_FENCE = "a fixture check.sh gets the jail's markers set explicitly, naming the fixture (review 003 F1)",
+		["sandbox-exec"] = "a fixture check.sh gets the jail's markers set explicitly, with chmod 555 standing in for the jail",
+	},
 	["tests/acceptance/c0074/done-gate.spec.luau"] = {
 		PICKMAN_FENCE_ = "names PICKMAN_FENCE_SPECS only as a table key passed to the pure doneGate, never in a process's environment (c0074)",
 	},
@@ -172,12 +188,13 @@ local EXEMPT: { [string]: boolean } = {
 -- fixtures copy only tests/ and z-nile/lib/) uses the roots c0114 shipped with; an engine that is there but fails to
 -- load is an error, never a narrower scan (design review 002 F4).
 local ROOTS: { string } = { "tracker", "z-nile/.tracker" }
-if fs.isFile("z-nile/engine/projects.luau") then
+-- the checkout's registry, read at its root (c0120: this spec also runs from pickman/, see `checkout`)
+if fs.isFile(`{checkout}/z-nile/engine/projects.luau`) then
 	local okP, lib = pcall(require, "@znile/engine/projects")
 	if not okP then
 		error(`repo-fence: z-nile/engine/projects.luau does not load: {lib}`)
 	end
-	ROOTS = (lib :: any).roots((lib :: any).load("."))
+	ROOTS = (lib :: any).roots((lib :: any).load(checkout))
 end
 -- c0640 lives in z-nile's tracker root since c0114; every root and state is listed so a move never unexempts it
 local C0640_DIRS = { "tests/acceptance/" .. C0640 }
@@ -202,15 +219,16 @@ local function exempt(path: string): boolean
 	return EXEMPT[path] == true
 end
 
+-- Walks `dir` (relative to the checkout's root, wherever this run started) and records root-relative paths.
 local function files(dir: string, out: { string }, skip: { [string]: boolean }?)
-	if not fs.isDir(dir) then
+	if not fs.isDir(`{checkout}/{dir}`) then
 		return
 	end
-	for _, name in fs.readDir(dir) do
+	for _, name in fs.readDir(`{checkout}/{dir}`) do
 		local path = `{dir}/{name}`
 		if skip and skip[path] then
 			continue
-		elseif fs.isDir(path) then
+		elseif fs.isDir(`{checkout}/{path}`) then
 			files(path, out, skip)
 		elseif
 			string.match(name, "%.luau$")
@@ -227,12 +245,13 @@ end
 -- ./zn entry, and every check.sh under every project root. Acceptance specs prepared under a root are scanned once
 -- promoted into tests/, which is when they start to run.
 local function sources(): { string }
-	local all: { string } = if fs.isFile("zn") then { "zn" } else {}
+	local all: { string } = if fs.isFile(`{checkout}/zn`) then { "zn" } else {}
 	local skip: { [string]: boolean } = {}
 	for _, r in ROOTS do
 		skip[r] = true
 	end
-	for _, dir in { "tests", "scripts", "z-nile" } do
+	-- c0120: pickman's home runs as a check too (its specs, scripts, gate entry and forwarders)
+	for _, dir in { "tests", "scripts", "z-nile", "pickman" } do
 		files(dir, all, skip)
 	end
 	local checks: { string } = {}
@@ -279,7 +298,7 @@ return t.spec("repository fence", function(it)
 			t.expect(fs.isFile(`{configured}/reference-transaction`)).toBe(true)
 			t.expect(fs.isFile(`{configured}/pre-push`)).toBe(true)
 		end
-		local hooks = `{here}/z-nile/lib/git-hooks`
+		local hooks = `{checkout}/z-nile/lib/git-hooks`
 		t.expect(fs.isFile(`{hooks}/reference-transaction`)).toBe(true)
 		t.expect(fs.isFile(`{hooks}/pre-push`)).toBe(true)
 		local refused = process.exec(`{hooks}/reference-transaction`, { "prepared" }, { cwd = here })
@@ -311,6 +330,11 @@ return t.spec("repository fence", function(it)
 		local tag = trim(process.exec("sh", { "-c", "echo $$" }).stdout)
 		-- harmless if the jail were broken: untracked files, removed at once
 		local probes = { `{here}/.pickman-jail-probe-{tag}`, `{common}/pickman-jail-probe-{tag}` }
+		if checkout ~= here then
+			-- a project home's run (c0120): the checkout's root and the root's .cache are outside its jail too
+			table.insert(probes, `{checkout}/.pickman-jail-probe-{tag}`)
+			table.insert(probes, `{checkout}/.cache/pickman-jail-probe-{tag}`)
+		end
 		if main ~= here then
 			table.insert(probes, `{main}/.pickman-jail-probe-{tag}`) -- the main checkout, from a worktree
 		end
@@ -453,7 +477,7 @@ return t.spec("repository fence", function(it)
 			t.expect(string.find(r.stderr, "not allowed", 1, true) ~= nil).toBe(true)
 		end
 		-- and the push guard refuses them where hooks run
-		local hooks = `{here}/z-nile/lib/git-hooks`
+		local hooks = `{checkout}/z-nile/lib/git-hooks`
 		for _, url in
 			{ "https://github.com/x/y.git", "github.com:x/y.git", "gh:x/y", "ssh://git@github.com/x/y" }
 		do
@@ -467,7 +491,7 @@ return t.spec("repository fence", function(it)
 		local bad: { string } = {}
 		for _, path in all do
 			if not exempt(path) then
-				for _, name in bannedIn(fs.readFile(path), ALLOWED[path] or {}) do
+				for _, name in bannedIn(fs.readFile(`{checkout}/{path}`), ALLOWED[path] or {}) do
 					table.insert(bad, `{path} names {name}`)
 				end
 			end
@@ -500,7 +524,7 @@ return t.spec("repository fence", function(it)
 			if exempt(path) then
 				continue
 			end
-			for _, email in identitiesIn(fs.readFile(path)) do
+			for _, email in identitiesIn(fs.readFile(`{checkout}/{path}`)) do
 				if not string.match(email, "@example%.invalid$") then
 					table.insert(bad, `{path}: {email}`)
 				end

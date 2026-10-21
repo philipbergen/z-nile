@@ -44,7 +44,7 @@ return t.spec("a readied raft's start reuses its open pull request", function(it
 	it("sets up two readied rafts behind an origin whose path names github.com", function()
 		local seed: { [string]: string } = {
 			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
+			["tracker/architecture.md"] = fs.readFile("pickman/.tracker/architecture.md"),
 			["tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "kept", "c0010"),
 			["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
 			["tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "fresh", "c0020"),

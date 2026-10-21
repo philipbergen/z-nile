@@ -201,7 +201,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			process.exec("git", { "status", "--porcelain", "--untracked-files=all" }, { cwd = wt }).stdout
 		t.expect(
 			string.find(status, "probe-one", 1, true) ~= nil
-				or string.find(status, "tracker/issues/c", 1, true) ~= nil
+				or string.find(status, "pickman/.tracker/issues/c", 1, true) ~= nil
 		).toBe(true)
 	end)
 
@@ -224,8 +224,9 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		setUp()
 		-- the issue the previous case published
 		local id: string? = nil
-		for _, dir in fs.readDir(`{wt}/tracker/issues`) do
-			local doc = `{wt}/tracker/issues/{dir}/{dir}.md`
+		-- c0120 override: the copied registry puts pickman's items in pickman/.tracker
+		for _, dir in fs.readDir(`{wt}/pickman/.tracker/issues`) do
+			local doc = `{wt}/pickman/.tracker/issues/{dir}/{dir}.md`
 			if fs.isFile(doc) and string.find(fs.readFile(doc), "probe-two", 1, true) then
 				id = dir
 			end

@@ -41,7 +41,7 @@ local function sandbox(): string
 		fs.removeDir(SB)
 	end
 	fs.writeDir(SB)
-	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/
+	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/ (c0120: pickman's root is pickman/.tracker)
 	fs.copy(".luaurc", `{SB}/.luaurc`)
 	fs.copy("rokit.toml", `{SB}/rokit.toml`)
 	local front = "---\nid: %s\ntype: chore\ntitle: T\nslug: t\n---\n\n# %s\n"
@@ -116,12 +116,12 @@ return t.spec("c0410 review rounds in metrics", function(it)
 			table.insert(ids, r[1])
 		end
 		local want = {}
-		-- c0114 override: rafts live under every project root
+		-- c0114 override: rafts live under every project root (c0120: pickman's root is pickman/.tracker)
 		for _, base in
 			{
-				"tracker/rafts",
-				"tracker/rafts/active",
-				"tracker/rafts/done",
+				"pickman/.tracker/rafts",
+				"pickman/.tracker/rafts/active",
+				"pickman/.tracker/rafts/done",
 				"z-nile/.tracker/rafts",
 				"z-nile/.tracker/rafts/active",
 				"z-nile/.tracker/rafts/done",

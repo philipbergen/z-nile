@@ -2,15 +2,19 @@
 # board tab. A directory that is not listed here is not a project. Read by z-nile/engine/projects.luau; the publish
 # guard reads this file from origin/main only.
 #   name: lowercase words joined by hyphens, unique
-#   root: "<name>/.tracker", or "tracker" (pickman's until c0120 moves it to pickman/.tracker)
+#   root: "<name>/.tracker", or "tracker" (the one root before c0114)
+#   home: "." (the repository root, the default) or "<name>": the folder the project's check.sh files and specs run
+#         in, which holds its tests/ (c0120). A home other than "." holds the root too.
 # The first project is where `./zn new issue` files an issue that names no --project.
 # `retired` lists roots that once held items and hold none now; history and the trail still read them.
-retired = []
+retired = ["tracker"]
 
 [[project]]
 name = "pickman"
-root = "tracker"
+root = "pickman/.tracker"
+home = "pickman"
 
 [[project]]
 name = "z-nile"
 root = "z-nile/.tracker"
+home = "."

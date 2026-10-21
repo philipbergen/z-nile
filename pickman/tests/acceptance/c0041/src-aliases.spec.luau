@@ -3,7 +3,7 @@
 -- ReplicatedStorage either never replicates to clients (ServerScriptService) or loads a second copy
 -- of a module (StarterPlayer). tests/meta applies this to every require in src.
 local fs = require("@lune/fs")
-local graph = require("@scripts/lib/graph")
+local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 
 return t.spec("c0390 src alias rule", function(it)

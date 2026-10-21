@@ -43,12 +43,20 @@ local function rewritesIds(path: string, roots: { string }): boolean
 		and (string.match(path, "%.md$") ~= nil or string.match(path, "%.sh$") ~= nil)
 end
 
--- Renames every item in `found` that the map moves, and every tests/acceptance/<old> folder, then rewrites: ids in
--- the .md and .sh files under every project root, and tests/acceptance/<id> paths in every other tracked text file
--- (the templates are left alone). One pass per file, so a new id is never mapped again.
+-- Renames every item in `found` that the map moves, and every tests/acceptance/<old> folder of every project
+-- (c0120: pickman/tests/acceptance too), then rewrites: ids in the .md and .sh files under every project root, and
+-- tests/acceptance/<id> paths (also as <home>/tests/acceptance/<id>) in every other tracked text file (the templates
+-- are left alone). One pass per file, so a new id is never mapped again.
 function compact.apply(map: { [string]: string }, found: { audit.Found }, at: string?)
 	local root = at or "."
-	local roots = projects.roots(projects.load(root))
+	local reg = projects.load(root)
+	local roots = projects.roots(reg)
+	local homes: { string } = {}
+	for _, p in reg.projects do
+		if p.home ~= "." then
+			table.insert(homes, p.home)
+		end
+	end
 	local moves: { { from: string, to: string } } = {}
 	local docs: { { dir: string, old: string, new: string } } = {}
 	for _, f in found do
@@ -59,9 +67,11 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 			table.insert(docs, { dir = `{parent}/{new}`, old = f.id, new = new })
 		end
 	end
-	for old, new in map do
-		if old ~= new and fs.isDir(`{root}/tests/acceptance/{old}`) then
-			table.insert(moves, { from = `tests/acceptance/{old}`, to = `tests/acceptance/{new}` })
+	for _, acc in projects.acceptanceRoots(reg) do
+		for old, new in map do
+			if old ~= new and fs.isDir(`{root}/{acc}/{old}`) then
+				table.insert(moves, { from = `{acc}/{old}`, to = `{acc}/{new}` })
+			end
 		end
 	end
 	moveAll(root, moves)
@@ -78,7 +88,7 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 			if not string.find(text, "\0", 1, true) then
 				local out = if rewritesIds(path, roots)
 					then ids.rewrite(text, map)
-					else ids.rewritePaths(text, map)
+					else ids.rewritePaths(text, map, homes)
 				if out ~= text then
 					fs.writeFile(abs, out)
 				end
@@ -87,19 +97,31 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 	end
 end
 
--- Branches that change a project root or tests/acceptance/ since they left origin/main: every origin branch and every
--- local one except main and `current`. Compaction renumbers under them, so they block it unless forced.
-function compact.busyRefs(current: string): { string }
+-- The paths compaction guards: every project root and every project's promoted specs (c0120: pickman/tests/acceptance).
+function compact.guarded(): { string }
+	local reg = projects.load()
+	local out = projects.acceptanceRoots(reg)
+	for _, r in projects.roots(reg) do
+		table.insert(out, r)
+	end
+	return out
+end
+
+-- Branches that change any of `paths` (default compact.guarded()) since they left origin/main: every origin branch
+-- and every local one except main and `current`. Compaction renumbers under them, so they block it unless forced;
+-- `./zn busy` reports them for any paths (c0120's readiness: tracker/, src/, tests/).
+function compact.busyRefs(current: string, paths: { string }?): { string }
 	local out: { string } = {}
-	local within = projects.roots(projects.load())
+	local within = paths or compact.guarded()
 	local refs = sh.git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin", "refs/heads" })
 	for ref in string.gmatch(refs, "[^\n]+") do
 		local skip = ref == "refs/remotes/origin/main"
 			or ref == "refs/remotes/origin/HEAD"
 			or ref == "refs/heads/main"
 			or ref == `refs/heads/{current}`
+			or ref == `refs/remotes/origin/{current}`
 		if not skip then
-			local args = { "diff", "--name-only", `origin/main...{ref}`, "--", "tests/acceptance" }
+			local args = { "diff", "--name-only", `origin/main...{ref}`, "--" }
 			for _, r in within do
 				table.insert(args, r)
 			end
@@ -109,6 +131,26 @@ function compact.busyRefs(current: string): { string }
 					out,
 					string.match(ref, "^refs/remotes/(.+)$") or string.match(ref, "^refs/heads/(.+)$") or ref
 				)
+			end
+		end
+	end
+	return out
+end
+
+-- Other worktrees of this repository with uncommitted changes (tracked or not) under any of `paths`, read without
+-- taking git's optional locks, so nothing of theirs is written (c0120). `self` is this checkout's physical path.
+function compact.dirtyWorktrees(self: string, paths: { string }): { string }
+	local out: { string } = {}
+	local list = sh.git({ "worktree", "list", "--porcelain" })
+	for path in string.gmatch(list, "worktree ([^\n]+)") do
+		if path ~= self then
+			local args = { "--no-optional-locks", "-C", path, "status", "--porcelain", "--" }
+			for _, p in paths do
+				table.insert(args, p)
+			end
+			local r = sh.run("git", args)
+			if r.ok and sh.trim(r.stdout) ~= "" then
+				table.insert(out, path)
 			end
 		end
 	end

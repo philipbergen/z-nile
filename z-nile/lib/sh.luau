@@ -24,6 +24,11 @@ function sh.stream(cmd: string, args: { string }): boolean
 	return process.exec(cmd, args, { stdio = { stdout = "forward", stderr = "forward" } }).ok
 end
 
+-- sh.stream with `dir` as the working directory (c0120: a project's specs run from its home).
+function sh.streamIn(dir: string, cmd: string, args: { string }): boolean
+	return process.exec(cmd, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } }).ok
+end
+
 -- Run and return trimmed stdout; throws with stderr on failure.
 function sh.must(cmd: string, args: { string }): string
 	local r = sh.run(cmd, args)

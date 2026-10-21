@@ -4,8 +4,9 @@ name: check
 on:
   push:
     branches: [main]
-    # tracker state is pushed straight to main in tiny commits (c0510): every project root and the shared counter (c0114)
-    paths-ignore: ['tracker/**', 'z-nile/.tracker/**', 'z-nile/next']
+    # tracker state is pushed straight to main in tiny commits (c0510): every project root and the shared counter
+    # (c0114). tracker/ is a retired root (c0120): a push that brings it back runs the gate, whose old-roots spec fails
+    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'z-nile/next']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}
@@ -29,14 +30,24 @@ jobs:
       # sequestered acceptance specs of the dispatched branch's raft, proven on Linux before `./zn done`
       # (main holds other readied rafts, whose code does not exist on this branch)
       - if: github.event_name == 'workflow_dispatch'
+        shell: bash
         run: |
+          set -euo pipefail
           # only a raft branch (R0025-ready-raft) has a raft: there, a failing `members` fails the step
           case $GITHUB_REF_NAME in
             R[0-9][0-9][0-9][0-9]-*) r=${GITHUB_REF_NAME%%-*}; ./zn find "$r" >/dev/null; dirs=$(./zn members "$r") ;;
-            *) echo "not a raft branch: no sequestered acceptance specs to run"; dirs= ;;
+            *) echo "not a raft branch: no sequestered acceptance specs to run"; exit 0 ;;
           esac
-          files=$(for d in $dirs; do find "$d" -path '*/active/*/acceptance/*.spec.luau'; done | sort)
-          if [ -n "$files" ]; then lune run tests/run -- $files; fi
+          # each project's specs run from its home (c0120), as its check.sh files do, with paths relative to it
+          lune run z-nile/roots -- --projects >"$RUNNER_TEMP/projects"
+          while IFS=$'\t' read -r name home root; do
+            files=$(for d in $dirs; do
+              if [[ $d == "$root"/* ]]; then find "$d" -path '*/active/*/acceptance/*.spec.luau'; fi
+            done | sort)
+            [ -n "$files" ] || continue
+            if [ "$home" = . ]; then lune run tests/run -- $files
+            else (cd "$home" && lune run tests/run -- $(printf '%s\n' $files | sed "s#^$home/##")); fi
+          done <"$RUNNER_TEMP/projects"
 
   # Every PR that is ready for review goes live on the private Pickman Beta experience and the runtime tests
   # then run in a real server of that version. Only after the gate is green, only for branches of this repo
@@ -61,7 +72,9 @@ jobs:
       - run: z-nile/setup.sh --tools
         env:
           GH_TOKEN: ${{ github.token }}
+      # pickman's publishing runs from its home (c0120): its Rojo projects and runtime tests are there
       - id: deploy
+        working-directory: pickman
         run: lune run scripts/deploy-beta
         env:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
@@ -78,6 +91,7 @@ jobs:
           VERSION: ${{ steps.deploy.outputs.version }}
           SHA: ${{ github.event.pull_request.head.sha }}
       - if: steps.deploy.outputs.version != ''
+        working-directory: pickman
         run: lune run scripts/runtime-test -- "$VERSION"
         env:
           VERSION: ${{ steps.deploy.outputs.version }}
@@ -87,6 +101,7 @@ jobs:
           ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
       # the lobby (c0064): published only once ROBLOX_BETA_GAME_PLACE_ID is set
       - if: steps.deploy.outputs.lobby_version != ''
+        working-directory: pickman
         run: lune run scripts/runtime-test -- --lobby "$LOBBY_VERSION"
         env:
           LOBBY_VERSION: ${{ steps.deploy.outputs.lobby_version }}

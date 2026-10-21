@@ -5,11 +5,11 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local wf: any = serde.decode("yaml" :: "yaml", fs.readFile(".github/workflows/check.yml"))
+local wf: any = serde.decode("yaml" :: "yaml", fs.readFile("../.github/workflows/check.yml"))
 local beta: any = wf.jobs.beta
-local setup = fs.readFile("SETUP.md")
-local testing = fs.readFile(".claude/skills/testing/SKILL.md")
-local tracker = fs.readFile(".claude/skills/tracker/SKILL.md")
+local setup = fs.readFile("../SETUP.md")
+local testing = fs.readFile("../.claude/skills/testing/SKILL.md")
+local tracker = fs.readFile("../.claude/skills/tracker/SKILL.md")
 
 local function has(s: any, needle: string): boolean
 	return type(s) == "string" and string.find(s, needle, 1, true) ~= nil
@@ -50,7 +50,9 @@ return t.spec("c0030 runtime tests in the pipeline and docs", function(it)
 				end
 			end
 			table.sort(keys)
-			t.expect(keys).toEqual({ "env", "if", "run" })
+			-- c0120 override: run from pickman's home, its one extra key
+			t.expect(keys).toEqual({ "env", "if", "run", "working-directory" })
+			t.expect(step["working-directory"]).toBe("pickman")
 			t.expect(step.run).toBe('lune run scripts/runtime-test -- "$VERSION"')
 			-- these four at least; c0064's workflow spec pins the whole env with the game place's variable
 			for name, value in

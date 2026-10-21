@@ -19,7 +19,7 @@ end
 local function seed(withLessons: boolean): { [string]: string }
 	local s: { [string]: string } = {
 		[".gitignore"] = fs.readFile(".gitignore"), -- ignores prompt.md
-		["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
+		["tracker/architecture.md"] = fs.readFile("pickman/.tracker/architecture.md"),
 		["tracker/rafts/R0010/R0010.md"] = `---\nid: R0010\ntype: chore\ntitle: Lessons\nslug: lessons\nsingle: true\nissues: [c0010]\ndesign: ready\ncreated: 2026-10-20\nstatus: {PREPARED}\n---\n\n# R0010\n`,
 		["tracker/rafts/R0010/check.sh"] = CHECK,
 		["tracker/issues/c0010/c0010.md"] = `---\nid: c0010\ntype: chore\ntitle: c0010\nslug: c0010\nraft: R0010\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nstatus: {PREPARED}\n---\n\n# c0010\n`,

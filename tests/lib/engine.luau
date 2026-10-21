@@ -18,8 +18,25 @@ engine.PATHSPECS = {
 	":(exclude)z-nile/next",
 	":(exclude)z-nile/compaction.txt",
 }
--- Every project root of the repository's registry, and the shared counter (c0114).
+-- The layout tracker fixtures run under: pickman's items in tracker/, run from the root, and z-nile's in
+-- z-nile/.tracker (c0114's), which these specs were written for. The repository moved pickman into pickman/ (c0120);
+-- c0120's own specs seed that layout, its homes and its registry themselves.
+engine.REGISTRY = table.concat({
+	"retired = []",
+	"",
+	"[[project]]",
+	'name = "pickman"',
+	'root = "tracker"',
+	"",
+	"[[project]]",
+	'name = "z-nile"',
+	'root = "z-nile/.tracker"',
+	"",
+}, "\n")
+-- The fixtures' project roots (engine.REGISTRY's), and the shared counter (c0114).
 engine.ROOTS = { "tracker", "z-nile/.tracker" }
+-- Every root a clone of the repository may hold items in: the fixtures' and the repository's own (c0120).
+engine.CLONE_ROOTS = { "tracker", "z-nile/.tracker", "pickman/.tracker" }
 engine.COUNTER = "z-nile/next"
 -- Both places the counter can be: tracker/next stays the counter until origin moves it (the first publish after c0114).
 engine.COUNTERS = { "z-nile/next", "tracker/next" }
@@ -40,6 +57,7 @@ function engine.copy(root: string, dest: string)
 			cp(`{root}/z-nile/{name}`, `{dest}/z-nile/{name}`)
 		end
 	end
+	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
 end
 
 -- Empty tracker folders under every root of the copied registry, each kept by a .gitkeep so a commit holds them.
@@ -53,9 +71,12 @@ function engine.roots(dest: string)
 end
 
 -- A clone of the repository with no items: every item folder under every root removed, and the counter too (wherever it is) (ids
--- then follow the old rule, the next multiple of 10, c0870).
+-- then follow the old rule, the next multiple of 10, c0870), on the fixtures' layout (engine.REGISTRY).
 function engine.empty(dir: string)
-	for _, root in engine.ROOTS do
+	if fs.isDir(`{dir}/z-nile`) then
+		fs.writeFile(`{dir}/z-nile/projects.toml`, engine.REGISTRY)
+	end
+	for _, root in engine.CLONE_ROOTS do
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/", "done/" } do
 				local base = `{dir}/{root}/{kind}/{state}`
@@ -73,6 +94,10 @@ function engine.empty(dir: string)
 		if fs.isFile(`{dir}/{counter}`) then
 			fs.removeFile(`{dir}/{counter}`)
 		end
+	end
+	-- the fixtures' roots, laid out (a clone's tracker/ holds only the old counter's tombstone since c0120)
+	if fs.isDir(`{dir}/z-nile`) then
+		engine.roots(dir)
 	end
 end
 

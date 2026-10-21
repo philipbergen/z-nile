@@ -30,8 +30,8 @@ z-nile/setup.sh
 ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
 1. Install Roblox Studio.
 2. Install the Rojo plugin with `rojo plugin install`, or from the Studio plugin marketplace.
-3. `rojo serve`, then Connect in Studio. You should see `ReplicatedStorage.Shared`, `ServerScriptService.Server` and `StarterPlayer.StarterPlayerScripts.Client`. Play prints `[pickman] server started` and `[pickman] client started`.
-4. The lobby place: `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
+3. In `pickman/` (the game's home: its Rojo projects are there), `rojo serve`, then Connect in Studio. You should see `ReplicatedStorage.Shared`, `ServerScriptService.Server` and `StarterPlayer.StarterPlayerScripts.Client`. Play prints `[pickman] server started` and `[pickman] client started`.
+4. The lobby place: in `pickman/`, `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
 
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
@@ -68,5 +68,5 @@ Every PR that is ready for review is published to the private **Pickman (Beta)**
 - Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
 - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
 - The job installs only the tools (`z-nile/setup.sh --tools`); the gate has already run.
-- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta`. That publishes to Beta.
-- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.
+- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta` in `pickman/` (the job runs its steps there too). That publishes to Beta.
+- After the publish, the job runs the runtime tests (`tests/runtime/`, in `pickman/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.

@@ -2,7 +2,8 @@
 #   pickman_fence <checkout>          # check.sh files (z-nile/lib/ac.sh)
 #   pickman_fence <checkout> specs [<jail>]   # spec runs (tests/lib/fence.luau): also no network, no credentials,
 #                                             # no fetch; under the jail (<jail> = sandbox-exec) no hooks either
-# <checkout> is the checkout's physical root. After it, every git command this shell and its children run:
+# <checkout> is the physical folder the checks or specs run in: the checkout's root, or a project's home inside it
+# (pickman/, c0120), whose own .cache is then the fixtures' folder. After it, every git command this shell and its children run:
 #   - finds no repository above <checkout>/.cache (GIT_CEILING_DIRECTORIES, plus a sentinel .cache/.git that
 #     fails git run in .cache itself), so a fixture whose own repository is missing is an error;
 #   - ignores inherited repository overrides (GIT_DIR, GIT_INDEX_FILE, ... are unset);
@@ -11,47 +12,54 @@
 #   - runs no background gc or maintenance (fixtures are throwaway, and are re-created mid-run).
 # The guards accumulate: a fence set up inside another keeps the outer checkout's ceiling and ref guard.
 # On macOS, tests/lib/fence.luau also runs specs in a jail that denies every write to the checkout outside .cache.
-pickman_fence() {
-  local here=$1 mode=${2:-checks} jail=${3:-} real n=0
-  # inside a spec run every guard stays a spec guard: a check.sh started there keeps the spec's limits
-  [[ ${PICKMAN_FENCE_SPECS:-} == 1 ]] && mode=specs
-  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
-  unset GIT_NAMESPACE GIT_PREFIX GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
-  real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
-  export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"
+# The ref guard's hooks are the git-hooks/ folder beside this file (c0120: a project's home has none of its own).
+_pickman_fence_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+# The fence, in four steps, each callable alone (c0120 review 002 F1); pickman_fence runs them in this order:
+#   pickman_fence_ceiling <dir>    git never looks above <dir>/.cache: environment only, cannot fail, always first
+#   pickman_fence_refusals <dir>   reads only: a .cache that isn't a plain folder, or a sentinel that is a folder,
+#                                  refuses (in every mode, never waived)
+#   pickman_fence_env <dir> [<mode>] [<jail>]
+#                                  the git and spec guards in the environment: its one refusal (no ref guard
+#                                  hooks) comes before it changes anything, and from its first change to
+#                                  GIT_CONFIG_COUNT it never returns early, so a failure leaves inherited guards whole
+#   pickman_fence_sentinel <dir>   the writes: .cache, the sentinel, gh's empty configuration; last, so a write the
+#                                  jail refuses leaves the environment fully guarded
+pickman_fence_ceiling() {
+  case ":${GIT_CEILING_DIRECTORIES:-}:" in
+  *":$1/.cache:"*) ;;
+  *) export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$1/.cache" ;;
+  esac
+  return 0
+}
+
+pickman_fence_refusals() {
+  local here=$1
   # .cache must be a plain folder of this checkout: a symlink there would turn every write below into a write
   # elsewhere, the real repository included (review 004 F1). Nothing here ever deletes recursively.
   if [[ -L $here/.cache || ( -e $here/.cache && ! -d $here/.cache ) ]]; then
     echo "fence: $here/.cache is not a plain folder (a symlink or a file); refusing. Stop and report this." >&2
     return 1
   fi
-  mkdir -p "$here/.cache"
-  # the sentinel is rewritten every time: a spec could have repointed it at the real .git (review 002 F7). A
-  # symlink there is unlinked (never followed); a folder there (it could hold a commondir leading to the real
-  # repository, review 003 F2) is refused, not deleted
-  local sentinel="$here/.cache/.git"
-  if [[ -L $sentinel ]]; then
-    rm -f "$sentinel"
-  elif [[ -d $sentinel ]]; then
-    echo "fence: $sentinel is a folder; refusing (remove it yourself after checking it). Stop and report this." >&2
+  # a folder at the sentinel's place could hold a commondir leading to the real repository (review 003 F2): refused,
+  # not deleted
+  if [[ ! -L $here/.cache/.git && -d $here/.cache/.git ]]; then
+    echo "fence: $here/.cache/.git is a folder; refusing (remove it yourself after checking it). Stop and report this." >&2
     return 1
   fi
-  # written beside it and renamed in with rename(2): a rename replaces whatever is there (a link to a file or to a
-  # directory) instead of writing through it. Inline, not z-nile/lib/replace-file.pl: fixtures copy this file alone
-  local fresh
-  fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs
-  printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" || { rm -f "$fresh"; return 1; }
-  perl -e 'rename $ARGV[0], $ARGV[1] or die "rename: $!\n"' "$fresh" "$sentinel" || { rm -f "$fresh"; return 1; }
-  if [[ -n $real ]]; then
-    export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
-  fi
+  return 0
+}
+
+pickman_fence_env() {
+  local here=$1 mode=${2:-checks} jail=${3:-} real n=0 hooks=
+  # inside a spec run every guard stays a spec guard: a check.sh started there keeps the spec's limits
+  [[ ${PICKMAN_FENCE_SPECS:-} == 1 ]] && mode=specs
   # The hooks guard refs and pushes where no jail does: Linux, check.sh files, runs nested inside a jail. Under
   # the jail (macOS spec runs) the kernel already denies every write to the repository, and hooks would only
   # add a process start, slow inside the sandbox, to every fixture commit; fixtures' own hooks then run natively.
   if [[ $jail != sandbox-exec ]]; then
     # the first guard's hook stays in force: a nested copy may lack z-nile/lib/git-hooks
-    [[ -n ${PICKMAN_FENCE_HOOKS:-} && -x $PICKMAN_FENCE_HOOKS/reference-transaction ]] ||
-      export PICKMAN_FENCE_HOOKS="$here/z-nile/lib/git-hooks"
+    hooks=${PICKMAN_FENCE_HOOKS:-}
+    [[ -n $hooks && -x $hooks/reference-transaction ]] || hooks="$_pickman_fence_lib/git-hooks"
     # no hooks there (moved, deleted): fail closed rather than run with the ref and push guards off (c0114), except
     # inside a jailed spec run, where the kernel already refuses every write to the repository. The waiver rests on
     # all three of the runner's markers: the jail, the spec guards, and this checkout lying under the run's own .cache
@@ -60,11 +68,21 @@ pickman_fence() {
       $here == "$PICKMAN_TEST_FENCE"/.cache/* ]]; then
       jailed=1
     fi
-    if [[ -z $jailed ]] &&
-      [[ ! -x $PICKMAN_FENCE_HOOKS/reference-transaction || ! -x $PICKMAN_FENCE_HOOKS/pre-push ]]; then
-      echo "fence: no ref guard at $PICKMAN_FENCE_HOOKS (reference-transaction, pre-push); refusing. Stop and report this." >&2
+    # read-only, and before anything below changes the environment
+    if [[ -z $jailed ]] && [[ ! -x $hooks/reference-transaction || ! -x $hooks/pre-push ]]; then
+      echo "fence: no ref guard at $hooks (reference-transaction, pre-push); refusing. Stop and report this." >&2
       return 1
     fi
+  fi
+  # From here on nothing returns early: every inherited override is replaced by the whole set at once.
+  real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+  unset GIT_NAMESPACE GIT_PREFIX GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+  if [[ -n $real ]]; then
+    export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
+  fi
+  if [[ -n $hooks ]]; then
+    export PICKMAN_FENCE_HOOKS=$hooks
     export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=$PICKMAN_FENCE_HOOKS"
     n=$((n + 1))
   fi
@@ -82,7 +100,7 @@ pickman_fence() {
     # allowlist, which overrides protocol.allow, pinned to local paths (review 002 F2, F5)
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY GIT_PROXY_COMMAND
     export GIT_ALLOW_PROTOCOL=file
-    mkdir -p "$here/.cache/gh-none"
+    # gh's configuration folder is made by pickman_fence_sentinel; gh reads none from a missing one either
     export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0
     export GIT_SSH_COMMAND='echo "fence: a spec tried to use ssh; refused" >&2; exit 1; :'
     export "GIT_CONFIG_KEY_$n=credential.helper" "GIT_CONFIG_VALUE_$n="
@@ -95,6 +113,56 @@ pickman_fence() {
     n=$((n + 1))
   fi
   export GIT_CONFIG_COUNT=$n
+  return 0
+}
+
+pickman_fence_sentinel() {
+  local here=$1
+  mkdir -p "$here/.cache" || return 1
+  # the sentinel is rewritten every time: a spec could have repointed it at the real .git (review 002 F7). A
+  # symlink there is unlinked (never followed); a folder there was refused by pickman_fence_refusals
+  local sentinel="$here/.cache/.git"
+  [[ -L $sentinel ]] && rm -f "$sentinel"
+  # written beside it and renamed in with rename(2): a rename replaces whatever is there (a link to a file or to a
+  # directory) instead of writing through it. Inline, not z-nile/lib/replace-file.pl: fixtures copy this file alone
+  local fresh
+  fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs
+  printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" || { rm -f "$fresh"; return 1; }
+  perl -e 'rename $ARGV[0], $ARGV[1] or die "rename: $!\n"' "$fresh" "$sentinel" || { rm -f "$fresh"; return 1; }
+  if [[ ${PICKMAN_FENCE_SPECS:-} == 1 ]]; then
+    mkdir -p "$here/.cache/gh-none" || return 1
+  fi
+  return 0
+}
+
+# A project home a check.sh runs in, inside a checkout already fenced (c0120, review 002 F1). The same four steps;
+# only the last, the sentinel's write, may fail without refusing, and only where the runner's jail forbids it: all
+# three of its markers (the jail, the spec guards, the run's own checkout) and <home>/.cache outside the run's own
+# .cache, the one place the jail lets a spec write (review 003 F2, as c0114's `jailed` compares them); never "the write
+# failed". The jail then refuses every write there, the environment is fully guarded, and git still finds no
+# repository below <home>/.cache. A new jail (R0039's bwrap) adds its name to this test, with c0034's list mode as its
+# regression case (review 003 F3).
+pickman_home_fence() {
+  local home=$1
+  pickman_fence_ceiling "$home"
+  pickman_fence_refusals "$home" || return 1
+  pickman_fence_env "$home" || return 1
+  pickman_fence_sentinel "$home" && return 0
+  if [[ ${PICKMAN_TEST_JAIL:-} == sandbox-exec && ${PICKMAN_FENCE_SPECS:-} == 1 && -n ${PICKMAN_TEST_FENCE:-} &&
+    $home/.cache != "$PICKMAN_TEST_FENCE"/.cache && $home/.cache != "$PICKMAN_TEST_FENCE"/.cache/* ]]; then
+    echo "fence: the jail refused $home/.cache's sentinel; its ceiling and every other guard hold" >&2
+    return 0
+  fi
+  echo "fence: cannot write $home/.cache's sentinel; refusing. Stop and report this." >&2
+  return 1
+}
+
+pickman_fence() {
+  local here=$1
+  pickman_fence_ceiling "$here"
+  pickman_fence_refusals "$here" || return 1
+  pickman_fence_env "$@" || return 1
+  pickman_fence_sentinel "$here" || return 1
 }
 
 # Answers whether the repository holding <dir> is one these guards protect (a check is running there): prints exactly

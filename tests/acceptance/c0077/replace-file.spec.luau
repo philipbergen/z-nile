@@ -68,6 +68,18 @@ local function gateCopy(name: string): string
 	local dir = `{base}/{name}`
 	-- c0114 override: the gate and its libraries moved to z-nile/
 	fs.writeDir(`{dir}/z-nile/lib`)
+	-- c0120 override: the gate builds the places, makes the sourcemap and runs the specs of the folders that have
+	-- them (a tree without ./zn is one project at the root): a game's src/, project files and tests/
+	fs.writeDir(`{dir}/src`)
+	fs.writeDir(`{dir}/tests`)
+	fs.writeFile(
+		`{dir}/default.project.json`,
+		'{ "name": "stand-in", "tree": { "$className": "DataModel" } }\n'
+	)
+	fs.writeFile(
+		`{dir}/lobby.project.json`,
+		'{ "name": "stand-in-lobby", "tree": { "$className": "DataModel" } }\n'
+	)
 	fs.writeFile(`{dir}/z-nile/check.sh`, fs.readFile(`{root}/z-nile/check.sh`))
 	for _, lib in fs.readDir(`{root}/z-nile/lib`) do
 		if fs.isFile(`{root}/z-nile/lib/{lib}`) then

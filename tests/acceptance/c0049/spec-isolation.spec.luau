@@ -9,6 +9,7 @@
 -- read it, to find the run's top process (c0097).)
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local t = require("@tests/lib/t")
 
 local PATTERN = "%." .. "cache/([%w_%-]+)" -- built by concatenation so this file never matches itself
@@ -95,7 +96,16 @@ return t.spec("spec fixture directories are not shared", function(it)
 	it("no two spec files in the repo share a fixture directory", function()
 		local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 		local texts: { [string]: string } = {}
-		collect(`{root}/tests`, texts)
+		-- c0120 override: every project's specs (pickman's under pickman/tests), one rule for the whole repository
+		local seen: { [string]: boolean } = {}
+		for _, p in projects.load(root).projects do
+			local dir = if p.home == "." then `{root}/tests` else `{root}/{p.home}/tests`
+			if not seen[dir] then
+				seen[dir] = true
+				collect(dir, texts)
+			end
+		end
+		t.expect(seen[`{root}/pickman/tests`]).toBe(true)
 		-- a string, so a failure names the colliding directories and files
 		t.expect(table.concat(sharedDirs(texts), "\n")).toBe("")
 	end)

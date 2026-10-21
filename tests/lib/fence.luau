@@ -18,6 +18,9 @@ local task = require("@lune/task")
 local fence = {}
 
 local MARKER = "PICKMAN_TEST_FENCE"
+-- The repository root: two folders above this file (tests/lib/). A run may start in a project's home inside it
+-- (pickman/, c0120); the guards' shell half is always the root's z-nile/lib/fence.sh.
+local ROOT = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+$") or "."
 local DEFAULT_WAIT_SECONDS = 240 -- under the Stop hook's 300 s budget
 local UNOWNED_SECONDS = 2
 local FIXTURE_EMAIL = "@example.invalid" -- every fixture commits as <name>@example.invalid
@@ -187,9 +190,15 @@ local function snapshot(cache: string): Snapshot
 			table.insert(config, line)
 		end
 	end
+	-- under this run's .cache, or any .cache of the checkout: a run from a project's home (c0120) must not register
+	-- one under the root's .cache either, which its jail closes only on macOS
 	local inside: { string } = {}
+	local top = git({ "rev-parse", "--show-toplevel" }) or ""
 	for path in string.gmatch(git({ "worktree", "list", "--porcelain" }) or "", "worktree ([^\n]+)") do
-		if string.sub(path, 1, #cache + 1) == cache .. "/" then
+		local underTop = top ~= ""
+			and string.sub(path, 1, #top + 1) == top .. "/"
+			and string.find(path, "/.cache/", #top, true)
+		if string.sub(path, 1, #cache + 1) == cache .. "/" or underTop then
 			table.insert(inside, path)
 		end
 	end
@@ -282,6 +291,11 @@ local function protectedPaths(here: string): { string }
 		table.insert(repos, real)
 	end
 	local paths = { here }
+	-- the checkout's own root, when the run starts in a project's home inside it (c0120)
+	local top = git({ "rev-parse", "--show-toplevel" })
+	if top and top ~= here then
+		table.insert(paths, top)
+	end
 	for _, repo in repos do
 		table.insert(paths, repo)
 		table.insert(paths, (string.gsub(repo, "/%.git$", "")))
@@ -661,11 +675,12 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . z-nile/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 4 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
 		runTemp,
+		ROOT,
 	}
 	for _, a in process.args do
 		if a ~= "--" then

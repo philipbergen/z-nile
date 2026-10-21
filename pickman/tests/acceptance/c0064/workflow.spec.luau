@@ -6,7 +6,7 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local text = fs.readFile(".github/workflows/check.yml")
+local text = fs.readFile("../.github/workflows/check.yml")
 local wf: any = serde.decode("yaml" :: "yaml", text)
 local beta: any = wf.jobs.beta
 
@@ -77,7 +77,9 @@ return t.spec("c0064 beta job with two places", function(it)
 		"the lobby's runtime step runs only when a lobby was published, with exactly these keys and env",
 		function()
 			local step = beta.steps[6]
-			t.expect(keysOf(step)).toEqual({ "env", "if", "run" })
+			-- c0120 override: run from pickman's home, its one extra key
+			t.expect(keysOf(step)).toEqual({ "env", "if", "run", "working-directory" })
+			t.expect(step["working-directory"]).toBe("pickman")
 			t.expect(step["if"]).toBe("steps.deploy.outputs.lobby_version != ''")
 			t.expect(step.env).toEqual({
 				LOBBY_VERSION = "${{ steps.deploy.outputs.lobby_version }}",

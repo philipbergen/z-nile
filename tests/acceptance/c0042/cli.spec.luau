@@ -41,12 +41,12 @@ return t.spec("c0400 tracker.sh board", function(it)
 			issues += 1
 		end
 		local onDisk = 0
-		-- c0114 override: the board reads every project root
+		-- c0114 override: the board reads every project root (c0120: pickman's root is pickman/.tracker)
 		for _, base in
 			{
-				"tracker/rafts",
-				"tracker/rafts/active",
-				"tracker/rafts/done",
+				"pickman/.tracker/rafts",
+				"pickman/.tracker/rafts/active",
+				"pickman/.tracker/rafts/done",
 				"z-nile/.tracker/rafts",
 				"z-nile/.tracker/rafts/active",
 				"z-nile/.tracker/rafts/done",
@@ -62,9 +62,9 @@ return t.spec("c0400 tracker.sh board", function(it)
 		-- every issue directory has a place on the page
 		for _, base in
 			{
-				"tracker/issues",
-				"tracker/issues/active",
-				"tracker/issues/done",
+				"pickman/.tracker/issues",
+				"pickman/.tracker/issues/active",
+				"pickman/.tracker/issues/done",
 				"z-nile/.tracker/issues",
 				"z-nile/.tracker/issues/active",
 				"z-nile/.tracker/issues/done",

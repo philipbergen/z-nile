@@ -1,6 +1,7 @@
 --!strict
--- The project registry (c0114): z-nile/projects.toml names every project and the tracker root that holds its issues
--- and rafts. A directory that is not listed is not a project. `parse` and the path helpers are pure; `load` reads the
+-- The project registry (c0114): z-nile/projects.toml names every project, the tracker root that holds its issues
+-- and rafts, and (c0120) its home: the folder its check.sh files and specs run in. A directory that is not listed is
+-- not a project. `parse` and the path helpers are pure; `load` reads the
 -- working tree and `at` reads a commit. The publish guard reads the registry only from origin/main (publish.luau).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -8,7 +9,7 @@ local serde = require("@lune/serde")
 
 local projects = {}
 
-export type Project = { name: string, root: string }
+export type Project = { name: string, root: string, home: string }
 export type Registry = { projects: { Project }, retired: { string } }
 
 projects.FILE = "z-nile/projects.toml"
@@ -36,7 +37,7 @@ end
 
 -- The registry of a tree or commit from before c0114, which has no registry file: the one root `tracker`.
 function projects.legacy(): Registry
-	return { projects = { { name = "pickman", root = projects.LEGACY } }, retired = {} }
+	return { projects = { { name = "pickman", root = projects.LEGACY, home = "." } }, retired = {} }
 end
 local legacy = projects.legacy
 
@@ -65,7 +66,7 @@ function projects.parse(text: string): (Registry?, string?)
 			return nil, `{projects.FILE}: project {i} is not a table`
 		end
 		for k in p do
-			if k ~= "name" and k ~= "root" then
+			if k ~= "name" and k ~= "root" and k ~= "home" then
 				return nil, `{projects.FILE}: project {i} has an unknown key {k}`
 			end
 		end
@@ -76,6 +77,14 @@ function projects.parse(text: string): (Registry?, string?)
 		if type(root) ~= "string" or not (root == projects.LEGACY or root == `{name}/.tracker`) then
 			return nil, `{projects.FILE}: {name}'s root must be "{name}/.tracker" or "{projects.LEGACY}"`
 		end
+		-- the home (c0120): "." (the repository root) or the project's own folder, nothing else; absent is "."
+		local home: any = if p.home == nil then "." else p.home
+		if type(home) ~= "string" or not (home == "." or home == name) then
+			return nil, `{projects.FILE}: {name}'s home must be "." or "{name}"`
+		end
+		if home ~= "." and root ~= `{home}/.tracker` then
+			return nil, `{projects.FILE}: {name}'s home {home} needs the root {home}/.tracker`
+		end
 		if names[name] then
 			return nil, `{projects.FILE}: project {name} is listed twice`
 		end
@@ -83,7 +92,7 @@ function projects.parse(text: string): (Registry?, string?)
 			return nil, `{projects.FILE}: root {root} is listed twice`
 		end
 		names[name], roots[root] = true, true
-		table.insert(out, { name = name, root = root })
+		table.insert(out, { name = name, root = root, home = home :: string })
 	end
 	local retired: { string } = {}
 	local raw = doc.retired
@@ -142,6 +151,32 @@ function projects.projectOf(reg: Registry, root: string): Project?
 		end
 	end
 	return nil
+end
+
+-- The home of the project whose current root holds the repo-relative `path` (c0120): where that project's check.sh
+-- files and specs run. A path under no current root (a retired root, a fixture's loose file) has the repository root.
+function projects.homeOf(reg: Registry, path: string): string
+	for _, p in reg.projects do
+		if string.sub(path, 1, #p.root + 1) == p.root .. "/" then
+			return p.home
+		end
+	end
+	return "."
+end
+
+-- Every project's promoted-spec folder (c0120): `<home>/tests/acceptance`, `tests/acceptance` for the root's, once
+-- each, in registry order.
+function projects.acceptanceRoots(reg: Registry): { string }
+	local out: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, p in reg.projects do
+		local dir = if p.home == "." then "tests/acceptance" else `{p.home}/tests/acceptance`
+		if not seen[dir] then
+			seen[dir] = true
+			table.insert(out, dir)
+		end
+	end
+	return out
 end
 
 -- The project named `name`, or nil.

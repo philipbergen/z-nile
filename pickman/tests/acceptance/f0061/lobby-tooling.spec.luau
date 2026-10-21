@@ -2,7 +2,7 @@
 -- f0670: the tooling knows the second place: the place library builds either project, the test selector
 -- treats a change to the lobby's project file like any change to a place, and the gate builds both.
 local fs = require("@lune/fs")
-local graph = require("@scripts/lib/graph")
+local graph = require("@znile/lib/graph")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -42,18 +42,22 @@ return t.spec("f0670 tooling", function(it)
 		end
 	)
 
+	-- c0120 override: the gate (at the root, ../z-nile/check.sh from pickman/) builds every project file of each
+	-- project's home, so this home's two
 	it("the gate builds the lobby project too", function()
-		local text = fs.readFile("z-nile/check.sh")
-		-- a stage that is run, not one that is commented out
-		local lobby, game = false, false
+		local text = fs.readFile("../z-nile/check.sh")
+		-- stages that are run, not ones that are commented out
+		local each, build = false, false
 		for line in string.gmatch(text, "[^\n]+") do
-			if string.match(line, "^%s*par_start .*rojo build lobby%.project%.json") then
-				lobby = true
-			elseif string.match(line, "^%s*par_start .*rojo build default%.project%.json") then
-				game = true
+			if string.match(line, '^%s*for f in "%$%{p%}"%*%.project%.json; do') then
+				each = true
+			elseif string.match(line, '^%s*par_start .*rojo build "%$f"') then
+				build = true
 			end
 		end
-		t.expect(lobby).toBe(true)
-		t.expect(game).toBe(true)
+		t.expect(each).toBe(true)
+		t.expect(build).toBe(true)
+		t.expect(fs.isFile("lobby.project.json")).toBe(true)
+		t.expect(fs.isFile("default.project.json")).toBe(true)
 	end)
 end)

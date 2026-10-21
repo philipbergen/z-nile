@@ -5,7 +5,8 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
-local root = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+-- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+local root = (string.gsub(process.cwd, "/+$", ""))
 local script = `{root}/scripts/deploy-beta`
 local work = `{root}/.cache/deploy-cli`
 
