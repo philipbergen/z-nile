@@ -8,4 +8,6 @@ A rule is usually stated in one place and summarized in several others. A fix th
 
 **Why:** R0039's late rounds were mostly contradictions between the issue, the specs and the experiments. R0040 design review 2 (F5): round 1 split "every skill records lessons" into two forms, but the new AGENTS.md sentence still said every skill records them.
 
+c0120 design review 002 F2: the design still named a superseded prototype commit, a `prototype.patch` "beside this document" that was never committed, and a 15/16 the Verification log had made 15/17. Pointers to prototype artifacts are restatements too.
+
 **How to apply:** when a refute line changes a rule, grep the repo for its old wording and its key terms, update every restatement in the same change, and pin the new wording where a spec already reads that file.

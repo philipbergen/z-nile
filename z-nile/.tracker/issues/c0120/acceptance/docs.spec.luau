@@ -81,9 +81,15 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 			at(s, "`lune run z-nile/affected -- --project <name>`", w)
 			at(
 				s,
-				"`ac.sh` puts a home's `.cache` in the ceiling and writes its sentinel before a `check.sh` runs there",
+				"`ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`",
 				w
 			)
+			at(
+				s,
+				"The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set",
+				w
+			)
+			at(s, "Any other failed write refuses, spec runs included.", w)
 			at(
 				s,
 				"makes in each member's project's `<home>/tests/acceptance/` and removes before it exits",
