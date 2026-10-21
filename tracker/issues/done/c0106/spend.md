@@ -9,6 +9,11 @@
 | 5 | 2026-10-20 19:34 | design-review-003 | 0 | 0 | 4.0 | spend | design-review | 70000 |
 | 6 | 2026-10-20 19:34 | design-refute-003 | 0 | 0 | 2.0 | spend | design-review |  |
 | 7 | 2026-10-20 19:34 | prep | 402 | 1 | 55.0 | spend | prep |  |
+| 8 | 2026-10-21 15:43 | c0106: narrow the d0105 radar layout and radarBox assertions | 17 | 5 | 6.0 | focus | build |  |
+| 9 | 2026-10-21 15:45 | c0106: verification log | 0 | 0 | 2.0 | focus | build |  |
+| 10 | 2026-10-21 15:48 | R0041: review-001 | 0 | 0 | 3.0 | focus | code-review |  |
+| 11 | 2026-10-21 15:48 | R0041: harvest design reviews, addressed during execution | 0 | 0 | 4.0 | focus | deliver |  |
+| 12 | 2026-10-21 15:51 | tracker: done R0041 | 0 | 0 | 2.6 | raft | deliver |  |
 
-**Total:** +402 / -1 lines, 92.0 agent-minutes, 252896 tokens over 7 records
-<!-- totals: added=402 removed=1 minutes=92.0 records=7 tokens=252896 -->
+**Total:** +419 / -6 lines, 109.6 agent-minutes, 252896 tokens over 12 records
+<!-- totals: added=419 removed=6 minutes=109.6 records=12 tokens=252896 -->
