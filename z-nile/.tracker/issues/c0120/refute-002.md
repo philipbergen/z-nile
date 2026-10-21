@@ -1,0 +1,34 @@
+# Refute 002: c0120 (code review 002)
+
+- F1: fixed as a mechanism, not a symptom (`4171346`). Every guard reads what it protects through one clean read and fails closed when it finds nothing.
+  - **The clean read**: `_pickman_fence_git` in `z-nile/lib/fence.sh` runs `env -u` of every repository override and `GIT_CEILING_DIRECTORIES`, for that one read only. The shell keeps its ceiling, so nested fences and the specs still accumulate theirs. The fence's `real` and `pickman_guarded` both read through it.
+  - **Order**: the read comes first, read-only, before the shell's own strip, so review-002's design rule holds: the refusals come before any change (W2 still killed).
+  - **Fail closed**: an empty `real` refuses (`fence: <here> is in no git repository …; refusing`) in every mode. `pickman_guarded` returns 1 on an empty answer, which the publisher treats as guarded.
+  - **The runner**: `tests/lib/fence.luau`'s `git()` drops the ceiling too (`OVERRIDES` gains it, used only by the guards' own reads; specs keep theirs). `fence.enter` refuses a checkout where git finds no repository, before it takes the tripwire's snapshot. `protectedPaths` and `fixtureOfGuarded` ignore an empty answer instead of protecting `""`.
+  - An empty-but-successful answer stays `""` in `git()`, because the tripwire uses some as yes/no. Making it `nil` broke c0058's tripwire cases, so each caller that takes the answer for a repository checks for empty itself.
+  - **Audit** of every place that derives "what to protect" from git:
+    - `fence.sh`: `real` and `pickman_guarded`, both fixed.
+    - `fence.luau`: `protectedPaths`, `snapshot`, the worktree list and `fixtureOfGuarded`, all through `git()`, now ceiling-free; `enter` fails closed.
+    - `ac.sh`: makes no such read (it fences through `fence.sh`).
+    - The publisher asks `pickman_guarded`.
+    - Each `check.sh`'s first line fails closed under a root ceiling, as review-002 found. Unchanged, because it is sequestered.
+  - **Specs**: new unsequestered `tests/tooling/fence-inherited-env.spec.luau` (6 cases), on a throwaway runner repository with a `pickman/` home under `.cache`:
+    - a ceiling at the root, entered from `pickman/`: the fence records the repository and refuses `update-ref`;
+    - `pickman_guarded` answers guarded from the root and from `pickman/`;
+    - a read that finds no repository refuses in both modes;
+    - a nested top-level run from `pickman/` under a root ceiling: its tripwire sees a config change;
+    - plus F2's case and cleanup.
+  - Its repo-fence `ALLOWED` entry is added.
+  - The testing skill's "Overrides stripped" bullet names the ceiling and the fail-closed rule. §3 step 3 and Rules and mutants are updated.
+  - **Mutants**: all run and killed except X5, which is reasoned. W1 to W7 rerun: all killed (W7 is now "read with plain `git`").
+    - X1: the ceiling kept for the fence's read.
+    - X2: an empty `real` treated as unprotected.
+    - X3: the runner's `git()` keeps the ceiling.
+    - X4: only `GIT_DIR` (and the ceiling) stripped.
+    - X6: plain `git` in `pickman_guarded`.
+    - X5 (`pickman_guarded`'s empty check dropped): reasoned, because `rev-parse --git-common-dir` never succeeds with an empty answer.
+  - Prototype: `proto-c0120` amended to `b7e75b9` (local only; c0115's prototype rebases on it).
+  - Lesson: a note on testing/derive-after-stripping-overrides ("found nothing is not 'nothing to protect'").
+- F2: fixed. `fence-inherited-env` has the `GIT_COMMON_DIR` case: entered from `pickman/` with `GIT_COMMON_DIR` at another fixture repository, the fence records the checkout and refuses `update-ref`, and the foreign repository is not recorded. Mutant X4 ("strip only `GIT_DIR`") is killed by it. Lesson: a note on testing/seed-every-enumerated-case.
+- The pre-existing `PICKMAN_FENCE_HOOKS` behaviour (an inherited permissive hooks folder is honoured) is c0114's rule, unchanged, and is left for the lead to capture.
+- Results: `z-nile/check.sh --full` GATE PASSED (pickman 1068/157, z-nile 835/120, 76.8 s). c0120's `check.sh` is 14/17, with the same three reds for the same reasons. Sequestration: 103 item-root `check.sh` and `acceptance/` files, all R100 against `prep-c0120`. `./zn lessons --check` and `--uncovered c0120` pass.
