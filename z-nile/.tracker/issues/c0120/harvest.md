@@ -19,3 +19,7 @@
 - review-001 F1: testing/derive-after-stripping-overrides
 - review-001 F2: ticket-prep/instructions-runnable-where-they-run
 - review-001 F3: ticket-prep/restated-rules-move-together
+- review-002 F1: testing/derive-after-stripping-overrides
+- review-002 F2: testing/seed-every-enumerated-case
+- review-003 F1: testing/derive-after-stripping-overrides
+- review-003 F2: testing/specs-set-host-markers-explicitly
