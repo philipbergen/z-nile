@@ -777,6 +777,21 @@ local function projectRoot(opts: { [string]: { string } }, what: string): string
 	)
 end
 
+-- c0114's execution window: origin/main can be read but has no registry (c0114 has not landed). The branch's engine
+-- then makes no item, offline (PICKMAN_PUBLISH=0) included: it would number from the local tracker/next, the number
+-- main's next capture takes. Captures come from the main checkout, whose engine predates the registry.
+local function refuseInWindow(what: string)
+	if not hasOrigin() or not sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok then
+		return
+	end
+	local _, why = projects.at("origin/main")
+	if why and string.find(why, `has no {projects.FILE}`, 1, true) then
+		fail(
+			`{what}: origin/main has no {projects.FILE} (c0114 has not landed): capture from the main checkout until it does, never offline here`
+		)
+	end
+end
+
 local cmd = {}
 
 function cmd.new(pos: { string }, opts: { [string]: { string } })
@@ -791,6 +806,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
 		refuseStale()
+		refuseInWindow("new issue")
 		local raftId = opts["--raft"] and opts["--raft"][1]
 		-- an emergent issue's raft gives its project; any other issue's comes from --project or the directory
 		local root = if raftId and not opts["--project"] then "" else projectRoot(opts, "new issue")
@@ -855,7 +871,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end))
 			if not r.ok then
 				fail(
-					`new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
+					if string.find(r.reason or "", `has no {projects.FILE}`, 1, true)
+						then `new: could not publish to origin/main: {r.reason}`
+						else `new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
 				)
 			end
 			-- inside a raft's worktree the stub reaches the branch with the final merge of origin/main
@@ -892,6 +910,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if not (rtype and store.PREFIX[rtype] and slug) then
 			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]")
 		end
+		refuseInWindow("new raft")
 		-- the raft's project comes from --project or the directory, and holds every member (c0114)
 		local wanted = projectRoot(opts, "new raft")
 		refuseStale()
@@ -1397,7 +1416,7 @@ end
 -- store.find (c0880): the other commands refuse such a tree, so `list` says where the trouble is.
 -- The project `list` shows (c0114): --project's, else the one whose folder holds the directory ./zn was run from;
 -- nil (every project) at the checkout's root or in a folder no project holds. Decided with the user (2026-10-21):
--- "list shows all projects": only commands that create or change a project's items refuse there; reading needs none.
+-- "list shows all projects": only the commands that create an item, and so must choose its project, refuse there; reading needs none.
 local function listedRoot(opts: { [string]: { string } }): string?
 	if opts["--project"] then
 		return projectRoot(opts, "list")
