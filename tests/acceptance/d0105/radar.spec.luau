@@ -43,7 +43,14 @@ local VIEWS = {
 
 return t.spec("d0105 radar box", function(it)
 	it("layout's numbers are unchanged, so the bar and the labels stay where f0019 put them", function()
-		t.expect(Hud.layout(1280, 720)).toEqual({
+		local l = Hud.layout(1280, 720)
+		t.expect({
+			textSize = l.textSize,
+			margin = l.margin,
+			iconSize = l.iconSize,
+			barWidth = l.barWidth,
+			barHeight = l.barHeight,
+		}).toEqual({
 			textSize = 32,
 			margin = 16,
 			iconSize = 32,

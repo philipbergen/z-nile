@@ -8,4 +8,6 @@ Testing a pure function does not test the call that feeds it. Each argument the 
 
 **Why:** R0039 needed rounds 3 and 4 because the rebind candidates `jail()` passed were unpinned. R0040 design review 1 (F2) found the same gap: `renderPrompt` could pass empty sources and the prompt spec still passed, because every fixture lesson had a `from:` that hid the missing count.
 
-**How to apply:** for each call from the adapter into the pure module, list its arguments in the Rules table, each with a mutant that passes a wrong value and a fixture in which that value shows.
+R0012 code review 001 (F3): every fold spec exercised the pure `Touch.track`, but nothing pinned Controls' `snap = rect` argument or how it dispatched the effects. `snap = nil`, `onLook(dy, dx)` and `FireServer(effect.kind)` all passed the gate. Code review 002 (F1) then found the source pins added for that covered a helper's body but not its call: deleting `hold()` from the input handler passed every spec. The pins became a behavioural spec that runs the adapter's real source on a stub engine.
+
+**How to apply:** prefer driving the adapter's real source on a stub engine to pinning its text; a text pin on a helper proves nothing unless the call on the hot path is pinned too. For each call from the adapter into the pure module, list its arguments in the Rules table, each with a mutant that passes a wrong value and a fixture in which that value shows.
