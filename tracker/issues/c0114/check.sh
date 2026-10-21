@@ -23,5 +23,6 @@ check "AC9: the skills, AGENTS.md, SETUP.md and the templates name ./zn, the mov
 check "AC10: every tooling item is in z-nile/.tracker/, every game item in tracker/, and live check.sh files still list" lune run tests/run -- "$A/classified.spec.luau"
 check "AC11: the guard scans pass over the moved tree" lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau "$PWD/tests/acceptance/c0077/cache-paths.spec.luau"
 check "AC12: the real tracker audits clean across both roots" ./zn audit
+check "AC13: during c0114's own execution the engine counts on origin's tracker/next, and merges keep both counters right" lune run tests/run -- "$A/window.spec.luau"
 
 finish

@@ -9,3 +9,7 @@
 - design-review-001 F7: architecture/guard-no-is-explicit
 - design-review-001 F8: ticket-prep/restated-rules-move-together, ticket-prep/specify-every-named-artifact
 - design-review-001 F9: ticket-prep/spec-design-correspondence
+- design-review-002 F1: ticket-prep/design-the-execution-window, ticket-prep/new-rules-migrate-existing-work
+- design-review-002 F2: ticket-prep/required-steps-on-every-path
+- design-review-002 F3: testing/plain-find-for-literals
+- design-review-002 F4: architecture/guard-no-is-explicit

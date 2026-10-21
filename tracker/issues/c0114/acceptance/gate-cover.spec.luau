@@ -136,6 +136,16 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			t.expect(has(out, `z-nile/engine/planted.luau names {hooks}`)).toBe(true)
 			t.expect(has(out, "z-nile/.tracker/issues/c0001/check.sh names --no-" .. "verify")).toBe(true)
 			t.expect(has(out, "acceptance/x.spec.luau")).toBe(false)
+			-- an engine that is there but fails to load is an error, never a fallback to fewer roots
+			write(`{scan}/z-nile/engine/projects.luau`, "--!strict\nreturn (\n")
+			local broken = process.exec(
+				"lune",
+				{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
+				{ cwd = scan, env = { PICKMAN_TEST_FENCE = "" } }
+			)
+			t.expect(broken.ok).toBe(false)
+			t.expect(has(broken.stdout .. broken.stderr, "z-nile/engine/projects.luau does not load"))
+				.toBe(true)
 		end
 	)
 
@@ -197,6 +207,9 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			local now = tree("now", true)
 			write(`{now}/z-nile/.tracker/issues/c0001/c0001.md`, "doc\n")
 			t.expect({ stop(now) }).toEqual({ true, false }) -- a project root's document alone: no gate
+			-- code whose path merely contains a root's name is not under the root: tests/lib/tracker/ is gated
+			write(`{now}/tests/lib/tracker/x.luau`, "--!strict\nreturn 1\n")
+			t.expect({ stop(now) }).toEqual({ true, true })
 			write(`{now}/z-nile/engine/x.luau`, "--!strict\nreturn 1\n")
 			t.expect({ stop(now) }).toEqual({ true, true }) -- the engine: the gate runs
 			-- a tree from before c0114 (no z-nile/): the same hook runs that tree's own gate
