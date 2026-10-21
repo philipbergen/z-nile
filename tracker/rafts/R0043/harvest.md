@@ -17,3 +17,5 @@
 - design-review-003 F2: ticket-prep/no-check-red-between-steps, ticket-prep/design-the-execution-window
 - design-review-003 F3: ticket-prep/restated-rules-move-together, ticket-prep/rerun-skipped-checks-after-edits
 - design-review-003 F4: testing/plain-find-for-literals
+- design-review-004 F1: ticket-prep/spec-design-correspondence, testing/no-vacuous-pass
+- design-review-004 F2: ticket-prep/new-rules-migrate-existing-work

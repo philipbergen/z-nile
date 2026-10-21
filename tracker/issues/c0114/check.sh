@@ -24,5 +24,6 @@ check "AC10: every tooling item is in z-nile/.tracker/, every game item in track
 check "AC11: the guard scans pass over the moved tree" lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau "$PWD/tests/acceptance/c0077/cache-paths.spec.luau"
 check "AC12: the real tracker audits with no errors across both roots (an unmoved counter is a warning)" ./zn audit
 check "AC13: the branch never touches tracker/next; the first publish after landing moves the counter to z-nile/next with a tombstone, and only z-nile/next is written after" lune run tests/run -- "$A/window.spec.luau"
+check "AC13: this branch changes neither tracker/next nor z-nile/next" git diff --quiet origin/main...HEAD -- tracker/next z-nile/next
 
 finish
