@@ -14,6 +14,23 @@ return t.spec("Touch extras", function(it)
 		t.expect(Touch.zone(100, 50, 0, nil)).toBe("look")
 	end)
 
+	it("places the snap button left of the bar, on a wide and on a narrow safe width", function()
+		local box = {
+			textSize = 10,
+			margin = 5,
+			iconSize = 10,
+			barWidth = 40,
+			barHeight = 4,
+			safeX = 0,
+			safeY = 0,
+			safeW = 400,
+			safeH = 300,
+		}
+		t.expect(Touch.snapRect(box)).toEqual({ x = 306, y = 251, w = 44, h = 44 })
+		box.safeW = 100
+		t.expect(Touch.snapRect(box)).toEqual({ x = 6, y = 251, w = 44, h = 44 })
+	end)
+
 	it("a begin leaves Touch.empty() as it was", function()
 		local empty = Touch.empty()
 		local next = Touch.track(

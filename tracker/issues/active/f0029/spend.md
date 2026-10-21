@@ -13,6 +13,7 @@
 | 9 | 2026-10-20 15:21 | design-review-005 | 0 | 0 | 10.0 | spend+proportional | design-review | 53333 |
 | 10 | 2026-10-20 15:23 | design-refute-005 | 0 | 0 | 8.3 | spend+proportional | design-review |  |
 | 11 | 2026-10-20 16:52 | prep (this session; earlier session's prep time not recorded) | 806 | 3 | 36.2 | spend+proportional | prep |  |
+| 12 | 2026-10-21 17:00 | f0029: HUD and snap button in the safe area, radar clear of the jump button | 244 | 28 | 45.0 | explicit | build |  |
 
-**Total:** +806 / -3 lines, 122.4 agent-minutes, 199999 tokens over 11 records
-<!-- totals: added=806 removed=3 minutes=122.4 records=11 tokens=199999 -->
+**Total:** +1050 / -31 lines, 167.4 agent-minutes, 199999 tokens over 12 records
+<!-- totals: added=1050 removed=31 minutes=167.4 records=12 tokens=199999 -->

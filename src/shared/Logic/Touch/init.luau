@@ -20,10 +20,23 @@ export type Effect =
 export type Context = { width: number, snap: Rect? }
 -- Min/Max, the shape of an inset area.
 export type Area = { Min: { X: number, Y: number }, Max: { X: number, Y: number } }
+-- The HUD's sizes and its safe rectangle, as Hud.layout reports them.
+export type Box = {
+	margin: number,
+	iconSize: number,
+	textSize: number,
+	barWidth: number,
+	barHeight: number,
+	safeX: number,
+	safeY: number,
+	safeW: number,
+	safeH: number,
+}
 
 local Touch = {}
 Touch.MIN_SWIPE = 48 -- px, straight line from finger-down to finger-up
 Touch.AXIS_DEGREES = 30 -- the cone around each screen axis
+Touch.MIN_TARGET = 44 -- px, the smallest side of a touch control
 
 local function finite(v: number): boolean
 	return v == v and math.abs(v) ~= math.huge
@@ -113,6 +126,36 @@ function Touch.toScreen(none: Area?, x: number, y: number): (number, number)
 	local ox = if finite(none.Min.X) then none.Min.X else 0
 	local oy = if finite(none.Min.Y) then none.Min.Y else 0
 	return x - ox, y - oy
+end
+
+-- The four HUD blocks in the margin bands of the safe rectangle: score top-left, level top-right, lives
+-- bottom-left, the power bar bottom-right.
+function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power: Rect }
+	local x, y, w, h, m = box.safeX, box.safeY, box.safeW, box.safeH, box.margin
+	local half = math.max(0, w / 2 - 2 * m)
+	return {
+		score = { x = x + m, y = y + m, w = half, h = box.textSize },
+		level = { x = x + w / 2 + m, y = y + m, w = half, h = box.textSize },
+		lives = { x = x + m, y = y + h - m - box.iconSize, w = math.max(0, w / 2 - m), h = box.iconSize },
+		power = {
+			x = x + w - m - box.barWidth,
+			y = y + h - m - box.barHeight,
+			w = box.barWidth,
+			h = box.barHeight,
+		},
+	}
+end
+
+-- The snap control: a square of at least MIN_TARGET, bottom-aligned, one margin left of the power bar. It has
+-- one placement; it never climbs into the forward view.
+function Touch.snapRect(box: Box): Rect
+	local side = math.max(Touch.MIN_TARGET, box.iconSize)
+	return {
+		x = box.safeX + box.safeW - 2 * box.margin - box.barWidth - side,
+		y = box.safeY + box.safeH - box.margin - side,
+		w = side,
+		h = side,
+	}
 end
 
 -- The screen's size from the full-screen area, or the fallback while that area is empty or bad.
