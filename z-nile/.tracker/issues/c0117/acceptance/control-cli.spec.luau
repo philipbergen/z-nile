@@ -41,6 +41,13 @@ rank = 3
 runtime = "grok-cli"
 max_tokens = 5000
 
+[z-design.agent]
+model = "claude-opus-5-5-high"
+rank = 3
+runtime = "cursor-cli"
+max_tokens = 5000
+max_calls = 2
+
 [zz-review.claude]
 model = "claude-opus-5-5"
 rank = 4
@@ -102,6 +109,8 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			["tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
 			["tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
 			["tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
+			["tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
+			["tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
 		})
 	end)
 
@@ -276,6 +285,27 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 		-- this spec's own process (the stale group id above) is alive
 		t.expect(process.exec("kill", { "-0", tostring(me) }).ok).toBe(true)
 	end)
+
+	it(
+		"a cursor step stops after max_calls model calls, and a finished one records the real total",
+		function()
+			fakecli.clear(h)
+			mode("agent", "calls")
+			local r = zn({ "dispatch", "z-design", "c0090" })
+			t.expect(r.ok).toBe(false)
+			local s = fakecli.state(h, "c0090")
+			t.expect(s.outcome).toBe("cap")
+			t.expect(string.find(s.detail, "passed max_calls 2 at call 3", 1, true) ~= nil).toBe(true)
+			fakecli.clear(h)
+			local ok = zn({ "dispatch", "z-design", "c0090" })
+			t.expect(ok.ok).toBe(true)
+			local rows = fakecli.rows(h, "c0090")
+			t.expect(rows ~= nil).toBe(true)
+			local list = rows :: { any }
+			t.expect(list[#list].tokens).toBe(300 + 9)
+			t.expect(list[#list].model).toBe("claude-opus-5-5-high")
+		end
+	)
 
 	it(
 		"passes the prep gate only when the item's own walk allows it, and merges with the real gh itself",

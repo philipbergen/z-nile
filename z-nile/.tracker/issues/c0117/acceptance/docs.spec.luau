@@ -108,6 +108,8 @@ return t.spec("c0117 docs", function(it)
 				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 				"`claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`)",
 				"Nothing defaults",
+				"an `agent` table also `max_calls`",
+				"calls are not tokens, so the user tunes it",
 				'- **The agent credential** (the user\'s "Bot token, no bypass").',
 				"can't merge, bypass `main`'s protection or write protection or rulesets",
 				"Not enforceable: the agent runs as the user",

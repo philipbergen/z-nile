@@ -39,6 +39,7 @@ model = "claude-opus-5-5-high"
 rank = 3
 runtime = "cursor-cli"
 max_tokens = 5000
+max_calls = 30
 
 [z-ready.claude]
 model = "nobody"
@@ -120,7 +121,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 				"step=z-design id=c0010 kind=model",
 				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5 rank=3 max_tokens=5000",
 				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
-				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000",
+				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30",
 			})
 			local closer = zn({ "dispatch", "z-design", "c0020", "--dry-run" })
 			t.expect(

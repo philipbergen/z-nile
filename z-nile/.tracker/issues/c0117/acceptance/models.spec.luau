@@ -237,6 +237,25 @@ return t.spec("c0117 .models.toml", function(it)
 		)).toBe(true)
 	end)
 
+	it("agent's specs need max_calls, never unlimited; the other CLIs' don't", function()
+		local base =
+			'order = ["agent", "claude"]\n[z-design.agent]\nmodel = "m"\nrank = 1\nruntime = "cursor-cli"\nmax_tokens = 5\n'
+		local e = errorOf(function()
+			models.resolve({ layer(base) }, "z-design")
+		end)
+		t.expect(has(e, "z-design.agent: no max_calls")).toBe(true)
+		t.expect(has(e, "calls are not tokens")).toBe(true)
+		local r = models.resolve({ layer(base .. "max_calls = 30\n") }, "z-design")
+		t.expect(r.specs.agent.maxCalls).toBe(30)
+		t.expect(models.resolve({ layer(ROOT) }, "z-design").specs.claude.maxCalls).toBe(nil)
+		t.expect(has(
+			errorOf(function()
+				layer("[z-design.agent]\nmax_calls = 0\n")
+			end),
+			"whole number"
+		)).toBe(true)
+	end)
+
 	it("nothing defaults: no file, no order, or a skill no file names is an error naming it", function()
 		t.expect(has(
 			errorOf(function()
@@ -275,7 +294,7 @@ return t.spec("c0117 .models.toml", function(it)
 		function()
 			local function review(cli: string, model: string, effort: string?): string?
 				local text =
-					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\n`
+					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\nmax_calls = 9\n`
 				if effort then
 					text ..= `effort = "{effort}"\n`
 				end

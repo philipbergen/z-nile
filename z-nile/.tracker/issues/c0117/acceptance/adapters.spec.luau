@@ -165,15 +165,29 @@ return t.spec("c0117 adapters", function(it)
 		t.expect(finish(acc, true)).toBe("ok")
 	end)
 
-	it("agent: an estimate while it runs, the result line's count at the end", function()
-		local running = feed("cursor-cli", { AGENT[1], AGENT[2] })
-		t.expect(running.final).toBe(nil)
-		t.expect(running.live > 0).toBe(true)
-		t.expect(adapters.get("cursor-cli").estimated).toBe(true)
-		local acc = feed("cursor-cli", AGENT)
-		t.expect(acc.final).toBe(15155 + 28)
-		t.expect(adapters.tokens(acc)).toBe(15183)
-	end)
+	it(
+		"agent: no running token count, its model calls counted by distinct model_call_id, the result's real total at the end",
+		function()
+			local running = feed("cursor-cli", {
+				AGENT[1],
+				AGENT[2],
+				'{"type":"tool_call","subtype":"started","call_id":"a","model_call_id":"m-1"}',
+				'{"type":"tool_call","subtype":"completed","call_id":"a","model_call_id":"m-1"}',
+				'{"type":"assistant","message":{"content":[]},"model_call_id":"m-1"}',
+				'{"type":"tool_call","subtype":"started","call_id":"b","model_call_id":"m-2"}',
+			})
+			t.expect(running.final).toBe(nil)
+			t.expect(running.live).toBe(0)
+			t.expect(running.calls).toBe(2)
+			t.expect(adapters.get("cursor-cli").callCapped).toBe(true)
+			t.expect(adapters.get("cursor-app").callCapped).toBe(true)
+			t.expect(adapters.get("claude-cli").callCapped).toBe(false)
+			t.expect(adapters.get("grok-cli").callCapped).toBe(false)
+			local acc = feed("cursor-cli", AGENT)
+			t.expect(acc.final).toBe(15155 + 28)
+			t.expect(adapters.tokens(acc)).toBe(15183)
+		end
+	)
 
 	it("tracks the tool calls that are running, per CLI, for the tool limit", function()
 		local c = feed("claude-cli", {

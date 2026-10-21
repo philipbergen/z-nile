@@ -1,9 +1,9 @@
 diff --git a/.models.toml b/.models.toml
 new file mode 100644
-index 00000000..4120e48a
+index 00000000..bec08ee5
 --- /dev/null
 +++ b/.models.toml
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,127 @@
 +# Which model runs each model step (c0117). Files stack like .gitignore: a .models.toml closer to the work (a
 +# project's home, an issue's folder) replaces only the keys it sets. A step about one issue reads that issue's walk; a
 +# step about a raft takes, for each CLI, the strongest of its members' specs (higher rank, then larger max_tokens).
@@ -41,6 +41,8 @@ index 00000000..4120e48a
 +model = "claude-sonnet-5-thinking-high"
 +rank = 2
 +runtime = "cursor-cli"
++# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
++max_calls = 200
 +max_tokens = 300000
 +
 +[z-design.claude]
@@ -61,6 +63,8 @@ index 00000000..4120e48a
 +model = "claude-opus-5-5-high"
 +rank = 3
 +runtime = "cursor-cli"
++# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
++max_calls = 200
 +max_tokens = 3000000
 +
 +[z-raft.claude]
@@ -80,6 +84,8 @@ index 00000000..4120e48a
 +model = "claude-sonnet-5-thinking-high"
 +rank = 2
 +runtime = "cursor-cli"
++# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
++max_calls = 200
 +max_tokens = 600000
 +
 +[z-run.claude]
@@ -100,6 +106,8 @@ index 00000000..4120e48a
 +model = "claude-opus-5-5-high"
 +rank = 3
 +runtime = "cursor-cli"
++# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
++max_calls = 200
 +max_tokens = 12000000
 +
 +# The review model belongs to the CLI (the user's decision): Opus through claude or agent, grok-4.7-xhigh through grok.
@@ -120,6 +128,8 @@ index 00000000..4120e48a
 +model = "claude-opus-5-5-high"
 +rank = 4
 +runtime = "cursor-cli"
++# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
++max_calls = 200
 +max_tokens = 2000000
 diff --git a/AGENTS.md b/AGENTS.md
 index d63b5de0..7e64b9e4 100644
@@ -350,10 +360,10 @@ index 999927ca..cb7506de 100644
  			}
  		do
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/claims.spec.luau b/tests/acceptance/c0116/claims.spec.luau
-similarity index 82%
+similarity index 80%
 rename from z-nile/.tracker/issues/c0116/acceptance/claims.spec.luau
 rename to tests/acceptance/c0116/claims.spec.luau
-index 224d9017..e3716bc7 100644
+index deff3cd5..e3716bc7 100644
 --- a/z-nile/.tracker/issues/c0116/acceptance/claims.spec.luau
 +++ b/tests/acceptance/c0116/claims.spec.luau
 @@ -27,7 +27,6 @@ local f: trackerfix.Fixture
@@ -435,7 +445,7 @@ index 224d9017..e3716bc7 100644
  				trOk(A, { "status", R, "prepared" })
  				t.expect(tip()).toBe(before) -- carried: nothing published
  				t.expect(string.match(fs.readFile(doc), "\nstatus: prepared%-%a+%-%a+%-%a+\n") ~= nil)
-@@ -357,7 +328,7 @@ return t.spec(
+@@ -357,16 +328,12 @@ return t.spec(
  			local stale = tr(C, { "status", R, "prepared" })
  			t.expect(stale.ok).toBe(false)
  			t.expect(has(stale.stderr, "coherence review")).toBe(true)
@@ -444,7 +454,16 @@ index 224d9017..e3716bc7 100644
  			trOk(C, { "status", R, "prepared" })
  			t.expect(string.match(fs.readFile(doc), "\nstatus: prepared%-") ~= nil).toBe(true)
  			fixture.git(C, { "add", "-A" })
-@@ -409,7 +380,10 @@ return t.spec(
+ 			fixture.git(C, { "commit", "-q", "-m", `tracker: fold c0040 into {R}` })
+ 			land(C)
+-			-- review 004 F1: an ignored file in a member's folder (Finder's .DS_Store) never changes its record
+-			fs.writeDir(`{f.main}/tracker/issues/c0010/acceptance`)
+-			fs.writeFile(`{f.main}/tracker/issues/c0010/acceptance/.DS_Store`, "finder")
+-			t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
+ 			trOk(f.main, { "ready", R })
+ 			t.expect(onOrigin("tracker/issues/active/c0040/c0040.md") ~= nil).toBe(true)
+ 			-- an active raft is never folded into
+@@ -413,7 +380,10 @@ return t.spec(
  				local doc = `{F}/tracker/rafts/{RX}/{RX}.md`
  				setLine(doc, "design", "ready")
  				writeDesign(doc)
@@ -456,7 +475,7 @@ index 224d9017..e3716bc7 100644
  				refused(F, { "status", RX, "prepared" }, "c0013", "claimed by another terminal", claim)
  				t.expect(originStatus("tracker/issues/c0013/c0013.md")).toBe(claim)
  				-- the rafting drops it and prepares the rest
-@@ -433,7 +407,7 @@ return t.spec(
+@@ -437,7 +407,7 @@ return t.spec(
  			local doc = `{H}/tracker/rafts/{RY}/{RY}.md`
  			setLine(doc, "design", "ready")
  			writeDesign(doc)
@@ -465,7 +484,7 @@ index 224d9017..e3716bc7 100644
  			trOk(H, { "status", RY, "prepared" })
  			fixture.git(H, { "add", "-A" })
  			fixture.git(H, { "commit", "-q", "-m", `tracker: raft {RY}` })
-@@ -457,7 +431,10 @@ return t.spec(
+@@ -461,7 +431,10 @@ return t.spec(
  			local doc = `{wt}/tracker/rafts/{rid}/{rid}.md`
  			setLine(doc, "design", "ready")
  			writeDesign(doc)
@@ -477,7 +496,7 @@ index 224d9017..e3716bc7 100644
  		end
  
  		it(
-@@ -536,9 +513,6 @@ return t.spec(
+@@ -540,9 +513,6 @@ return t.spec(
  			t.expect(string.match(onOrigin("tracker/issues/c0070/c0070.md") or "", "\nraft: *\n") ~= nil)
  				.toBe(true)
  			trOk(N, { "status", "c0070", "preparing" })
@@ -487,7 +506,7 @@ index 224d9017..e3716bc7 100644
  		end)
  
  		it(
-@@ -558,7 +532,7 @@ return t.spec(
+@@ -562,7 +532,7 @@ return t.spec(
  					O,
  					{ "status", RV, "prepared" },
  					"c0026",
@@ -496,7 +515,7 @@ index 224d9017..e3716bc7 100644
  					"status c0026 new"
  				)
  				fs.writeFile(`{O}/.cache/tracker-claim-c0026`, claim .. "\n")
-@@ -577,88 +551,5 @@ return t.spec(
+@@ -581,92 +551,5 @@ return t.spec(
  				t.expect(fs.isFile(`{O}/.cache/tracker-claim-c0026`)).toBe(false)
  			end
  		)
@@ -564,6 +583,10 @@ index 224d9017..e3716bc7 100644
 -			trOk(U, { "status", R3, "prepared" }) -- the review's record still covers c0035 and c0036
 -			commitAll(U, "wip")
 -			trOk(U, { "fold", R3, "c0037" })
+-			-- review 004 F4: the refusal names what to do, never a line to paste into the old review
+-			local stale = tr(U, { "status", R3, "prepared" })
+-			t.expect(has(stale.stderr, "Grouped: [")).toBe(false)
+-			t.expect(has(stale.stderr, "never edit a review")).toBe(true)
 -			refused(U, { "status", R3, "prepared" }, "predates its record")
 -			coherence(`{U}/tracker/rafts/{R3}`, "002")
 -			trOk(U, { "status", R3, "prepared" })
@@ -586,10 +609,10 @@ index 224d9017..e3716bc7 100644
  	end
  )
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/docs.spec.luau b/tests/acceptance/c0116/docs.spec.luau
-similarity index 95%
+similarity index 94%
 rename from z-nile/.tracker/issues/c0116/acceptance/docs.spec.luau
 rename to tests/acceptance/c0116/docs.spec.luau
-index 08150844..6d76c1cf 100644
+index 2f1f1487..6d76c1cf 100644
 --- a/z-nile/.tracker/issues/c0116/acceptance/docs.spec.luau
 +++ b/tests/acceptance/c0116/docs.spec.luau
 @@ -114,11 +114,11 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
@@ -606,18 +629,19 @@ index 08150844..6d76c1cf 100644
  			at(s, "`./zn status <id> new`, then claim it again", w)
  			at(s, "- **Theme**:", w)
  			at(s, "- **Whole-raft design**: the interfaces between the members", w)
-@@ -131,9 +131,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
+@@ -131,10 +131,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
  			)
  			at(s, "zz-review skill in **raft mode**", w)
  			at(s, "this skill never edits a member's design", w)
 -			at(s, "One round per grouping", w)
+-			at(s, "a review file is never edited after it is written", w)
 -			at(s, "an `unfold` alone needs none", w)
 -			at(s, "the engine refuses the raft until a review quotes the new record", w)
 +			at(s, "One round: there is no second.", w)
  			at(s, "`./zn status <R-id> prepared`", w)
  			at(
  				s,
-@@ -179,8 +177,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
+@@ -180,8 +177,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
  			"`status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`",
  			w
  		)
@@ -627,11 +651,12 @@ index 08150844..6d76c1cf 100644
  		at(s, "It also gives back the issue claims this checkout remembers for the raft's members", w)
  		at(s, "| fold | `./zn fold <R-id> <issue>...` |", w)
  		at(s, "| recombine | `./zn recombine <keeper> <other> [<issue>...]` |", w)
-@@ -210,7 +207,6 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
+@@ -211,8 +207,6 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
  	it("zz-review, zz-stats, z-ready, the README, AGENTS.md and the usage move with it", function()
  		local review = read(`{SKILLS}/zz-review/SKILL.md`)
  		at(review, "## Raft mode (from z-raft)", "zz-review")
 -		at(review, "as `Grouped: [<the value>]`", "zz-review")
+-		at(review, "Never edit a review once it is written: a new round is a new file.", "zz-review")
  		at(
  			review,
  			"- Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue)",
@@ -804,10 +829,10 @@ index 1bfecaf6..72c3f212 100644
  	},
 diff --git a/tests/lib/fakecli.luau b/tests/lib/fakecli.luau
 new file mode 100644
-index 00000000..aa4e0c03
+index 00000000..de9e738f
 --- /dev/null
 +++ b/tests/lib/fakecli.luau
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,185 @@
 +--!strict
 +-- Fake model CLIs for the dispatcher's specs (c0117): `claude`, `grok` and `agent` scripts that print the stream
 +-- lines each real CLI prints (from c0117's probes) and act as a mode file says: `<fakes>/<cli>.<step>`, else
@@ -863,6 +888,8 @@ index 00000000..aa4e0c03
 +		-- the CLI's own wait message (stdout, not JSON): a stall after it is quota
 +		"wait) echo 'Usage limit reached, retrying in 60s'; sleep 20 ;;",
 +		"stall) echo 'thinking'; sleep 20 ;;",
++		-- three model calls (distinct model_call_id), then quiet: a cursor step's max_calls is what stops it
++		[[calls) for c in 1 1 2 3; do echo "{\"type\":\"tool_call\",\"subtype\":\"started\",\"call_id\":\"t$c\",\"model_call_id\":\"m-$c\"}"; done; sleep 20 ;;]],
 +		-- the model's own words about waiting and trying again: a stall after them is a stall, not quota
 +		[[prose) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"text","text":"Rate limit? I will try again, waiting for the gate"}]}}'; sleep 20 ;;]],
 +		-- a quiet tool call longer than the stall limit, under the tool limit
@@ -1019,10 +1046,10 @@ index 01ea0ef1..72c3cbd6 100644
  		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/compact-record.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/compact-record.spec.luau
 deleted file mode 100644
-index 18dd944e..00000000
+index 51a71d38..00000000
 --- a/z-nile/.tracker/issues/c0116/acceptance/compact-record.spec.luau
 +++ /dev/null
-@@ -1,134 +0,0 @@
+@@ -1,193 +0,0 @@
 ---!strict
 --- c0116 AC10 (review 003 F4): `compact` and `renumber` rewrite ids in member documents, which changes their record
 --- hash. Both re-record every `grouped:` entry that matched before the rewrite, in the raft's document and in the
@@ -1051,7 +1078,7 @@ index 18dd944e..00000000
 -end
 -
 -local f: trackerfix.Fixture
--local W = ""
+-local W, X = "", ""
 -
 -local function trOk(cwd: string, args: { string }): string
 -	return trackerfix.trOk(f, cwd, args)
@@ -1098,6 +1125,9 @@ index 18dd944e..00000000
 -			["tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
 -			["tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
 -			["tracker/issues/c0610/c0610.md"] = e,
+-			-- prepared and raftless: rafted while the compaction lands (review 004 F2)
+-			["tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
+-			["tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
 -			-- a record that already did not match: a rewrite must not make it match
 -			["tracker/rafts/R0600/R0600.md"] = raftDoc("R0600", "stale", "c0610", "[c0610@000000000000]"),
 -		}
@@ -1108,6 +1138,8 @@ index 18dd944e..00000000
 -				"tracker/issues/c0710",
 -				"tracker/issues/c0720",
 -				"tracker/issues/c0610",
+-				"tracker/issues/c0810",
+-				"tracker/issues/c0820",
 -				"tracker/rafts/R0500",
 -				"tracker/rafts/R0700",
 -				"tracker/rafts/R0600",
@@ -1117,6 +1149,7 @@ index 18dd944e..00000000
 -		end
 -		f = trackerfix.new("c0116-compact", seed)
 -		W = trOk(f.main, { "worktree", "ids" })
+-		X = trOk(f.main, { "worktree", "raft-open" })
 -	end)
 -
 -	it("renumber of a member re-records its raft, and the review's quote with it", function()
@@ -1145,6 +1178,33 @@ index 18dd944e..00000000
 -		function()
 -			fixture.git(W, { "fetch", "-q", "origin" })
 -			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
+-			-- a rafting is open while the compaction lands; and an ignored file sits in a member's folder (review 004 F1)
+-			local RO =
+-				string.match(trOk(X, { "new", "raft", "chore", "open", "c0810", "c0820" }), "(R%d+)") :: string
+-			local doc = `{X}/tracker/rafts/{RO}/{RO}.md`
+-			local text = fs.readFile(doc)
+-			text = (string.gsub(text, "design: draft", "design: ready", 1))
+-			text = (string.gsub(text, "## Theme\n<!%-%-.-%-%->", "## Theme\nTwo chores.", 1))
+-			text = (
+-				string.gsub(
+-					text,
+-					"## Order & dependencies\n<!%-%-.-%-%->",
+-					"## Order & dependencies\nBy id.",
+-					1
+-				)
+-			)
+-			fs.writeFile(doc, text)
+-			local grouped = string.match(text, "\ngrouped: ([^\n]*)\n") :: string
+-			fs.writeFile(
+-				`{X}/tracker/rafts/{RO}/design-review-001.md`,
+-				`# Review 001\n\nGrouped: {grouped}\n\nVerdict: approve\n`
+-			)
+-			fixture.git(X, { "add", "-A" })
+-			fixture.git(X, { "commit", "-q", "-m", "tracker: raft (open)" })
+-			fixture.git(W, { "fetch", "-q", "origin" })
+-			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
+-			fs.writeDir(`{W}/tracker/issues/c0510/acceptance`)
+-			fs.writeFile(`{W}/tracker/issues/c0510/acceptance/.DS_Store`, "finder")
 -			trOk(W, { "compact", "--force" })
 -			land(W)
 -			local kept, renamed, stale = raftBySlug("kept"), raftBySlug("renamed"), raftBySlug("stale")
@@ -1154,6 +1214,32 @@ index 18dd944e..00000000
 -			local r = trackerfix.tr(f, f.main, { "ready", stale })
 -			t.expect(r.ok).toBe(false)
 -			t.expect(string.find(r.stderr, "changed on origin/main since", 1, true) ~= nil).toBe(true)
+-		end
+-	)
+-
+-	it(
+-		"remap re-records an open rafting's record and its review, so it prepares, lands and readies",
+-		function()
+-			trOk(X, { "remap" })
+-			local open = nil :: string?
+-			for _, name in fs.readDir(`{X}/tracker/rafts`) do
+-				local d = `{X}/tracker/rafts/{name}/{name}.md`
+-				if
+-					string.match(name, "^R%d+$")
+-					and fs.isFile(d)
+-					and string.find(fs.readFile(d), "\nslug: open\n", 1, true)
+-				then
+-					open = name
+-				end
+-			end
+-			local RO = open :: string
+-			trOk(X, { "status", RO, "prepared" })
+-			fixture.git(X, { "add", "-A" })
+-			fixture.git(X, { "commit", "-q", "-m", "tracker: raft (open, prepared)" })
+-			fixture.git(X, { "fetch", "-q", "origin" })
+-			fixture.git(X, { "merge", "-q", "--no-edit", "origin/main" })
+-			land(X)
+-			trOk(f.main, { "ready", RO })
 -		end
 -	)
 -end)
@@ -1181,6 +1267,17 @@ index 244eae9c..00000000
 -- F4: fixed: `keepRecords(root, idMap, rewrite)` wraps `compact` (its tree and the remap's merge-base scratch), `remap` and `renumber`. Before the rewrite it notes every `grouped:` entry whose member matches; after it, it writes the new hash under the new id, in the raft's document and in its reviews' `Grouped:` lines. An entry that did not match before is left alone. A new compact-record.spec (AC10) runs it for real: a landed grouped raft through `renumber`, land, `compact --force`, land, and then `ready` succeeds for both grouped rafts and still refuses the stale one. consequences: the one place a compaction touches a raft's reviews is the quoted record line, by exact `<id>@<hash>` text; M84 (no re-record) and M87 (re-records a mismatch) run and killed.
 -- F5: fixed: the exemption is explicit. In the carried move, a member taken as `prepared` that this rafting grouped (its origin `raft:` is not R) and that has no entry is refused ("<id> has no grouped: record in <R>: fold it again (only a member stamped with <R>'s value is exempt)"). Old-flow members are `preparing` with the raft's stamp, so they never reach that branch. T4 (`grouped: []`) is a claims.spec case. consequences: none; M85 run and killed.
 -- F6: fixed: unfolding the last member is allowed (it is how a single raft's issue goes back to z-design), and audit's orphan warning now names an empty backlog raft at `prepared` too, telling you to retire it with `recombine`. claims.spec asserts the warning after the R0090 unfold. consequences: none, beyond R0040 being warned about as before; M86 run and killed.
+diff --git a/z-nile/.tracker/issues/c0116/design-refute-004.md b/z-nile/.tracker/issues/c0116/design-refute-004.md
+deleted file mode 100644
+index 4307b7b8..00000000
+--- a/z-nile/.tracker/issues/c0116/design-refute-004.md
++++ /dev/null
+@@ -1,5 +0,0 @@
+-# Refute 004: c0116
+-- F1: fixed: every check of the record reads git's view, never a directory walk. `ready` checks the record and the review inside `moveOnOrigin`'s build, through a new `whole(paths, read)` argument, with `treeFolderFiles` over the tree it publishes, as the carried move does. That also closes the window between `ready`'s pull and its publish. `keepRecords` and the carried move's raft reviews read `gitFolderFiles(dir)` (`git ls-files -co --exclude-standard`: tracked files, and untracked ones that aren't ignored), and the old walk is gone. §1 says it once ("Every hash reads git's view"). Cases: a `.DS_Store` in the main checkout's member folder leaves `ready` succeeding (claims), and one in the compacting worktree's member folder leaves the raft readyable after `compact` (compact-record). The race is a `reasoned` row: no spec can land a commit between a command's pull and its own publish without a hook. A note on architecture/one-reader-per-format records it. consequences: `keepRecords`' after-hash reads the index's paths, so a rewrite's `git mv` is seen (the reviewer's consequence); M90 (ignored files listed) and M91 (a working-tree walk in `ready`) run and killed.
+-- F2: fixed: a compact-record case as the reviewer's Q4. A rafting is open when `compact --force` lands; then, in the rafting worktree, `remap`, the carried move, a landing, and `ready`, which succeeds. AC10 (its label and text) names `remap`; M89 (remap without `keepRecords`) run and killed. The merge-base scratch call is kept and marked `reasoned` in §1 and the Rules table: HEAD and origin re-record identically, so no case can tell it apart, and it exists so the three sides of remap's merge match. consequences: none.
+-- F3: fixed: AC1 now states only the round-3 rule (a `design-review-NNN.md` quoting a `Grouped:` record that covers the current one; none after an unfold alone), and its clause "written in this rafting" is gone. G7 and G16 describe what the engine checks now. The Scope check and the programme-review answer cite M81, M85 and M88, and E1's counts point to the Verification log. Before this round I grepped for `changed membership`, `written in this rafting`, `M11`, `M12`, `M60`, `M10 to M12`, `checks only the record` and `78 run`; what remains are history notes in two Rules rows. The user's re-confirmation is in the Problem: `Decided with the user (2026-10-21), after design review 003: "Still one PR" (re-confirmed at about 1,890 changed lines)`. consequences: none.
+-- F4: fixed: the refusal names the record's ids and says "run a new raft-mode round (zz-review); never edit a review that is already written", without the `Grouped:` line. z-raft §4 and zz-review raft mode say a review is never edited after it is written. claims.spec asserts the message has no `Grouped: [` and has the rule; docs.spec pins both skill sentences. Refusing a review edited after its first commit is only partly feasible, so it is not built (G20): in the carried move the branch history could show such an edit, but compact and remap legitimately edit a review's `Grouped:` line, and on `main` a squash merge leaves each review one commit, so `ready` can never tell. consequences: none.
 diff --git a/z-nile/.tracker/issues/c0116/design-review-002.md b/z-nile/.tracker/issues/c0116/design-review-002.md
 deleted file mode 100644
 index da722785..00000000
@@ -1282,12 +1379,55 @@ index f4f2d9fc..00000000
 -Candidate lesson (for the lead): zz-arch: a record of "what was reviewed" must cover every file the review's subject is made of, and every command that rewrites those files for a mechanical reason must re-record it, because c0116's document-only hash missed a `check.sh` redesign and would refuse every raft after a `compact`; check: "Which files make up the thing this record vouches for, and which commands rewrite them without changing what it means?"
 -
 -Verdict: changes
+diff --git a/z-nile/.tracker/issues/c0116/design-review-004.md b/z-nile/.tracker/issues/c0116/design-review-004.md
+deleted file mode 100644
+index f4d73769..00000000
+--- a/z-nile/.tracker/issues/c0116/design-review-004.md
++++ /dev/null
+@@ -1,37 +0,0 @@
+-# Review 004: c0116 (design mode)
+-Inputs: prep-c0116 at 51ea689 (`c0116.md`, `check.sh`, `acceptance/*`, `design-review-00{1,2,3}.md`, `design-refute-00{1,2,3}.md`, `harvest.md`; the prep's `acceptance/` and `check.sh` are byte-identical to the prototype's, and `prototype.patch` equals `git diff -M 0d574f38` of it); prototype `.worktree/proto-c0116` at be18fe9 (on `proto-c0115` 0d574f3), the record code read (`raftplan.isDesignFile`/`recordHash`/`parseGrouped`, `localFolderFiles`, `treeFolderFiles`, `originFolderFiles`, `recordGrouped`, `regrouped`, `keepRecords` and its four call sites, `reviewCovers`, the carried move, `ready`, `moveOnOrigin`, `paths.rewrite`), z-raft §4, zz-review raft mode, zz-rules' **Rafting** bullet; `./zn capture c0116` (fb7fd80: title, Problem and Solution as captured, prep's additions marked); `./zn lessons --when design --full`. Every run was in a scratch clone of the prototype with its origin removed (`scratchpad/c0116-review004/clone`), fixtures under its own `.cache`. Reproductions: `scratchpad/c0116-review004/rv4.spec.luau`; round 3's `rv3.spec.luau` rerun there.
+-Dropped from review-003: F1 (rv3 T1: the carried move now refuses "c0020 (b241b5557811 → f39c216db5f0): changed on origin/main"), F2 (rv3 T2: after unfold and fold, the carried move refuses "R0020's coherence review predates its record"), F3 (M82/M83 recorded killed; not rerun), F4 (`compact-record.spec` passes; rv4 Q4 also holds through `compact --force` and a `remap`), F5 (rv3 T4: `grouped: []` refused "c0050 has no grouped: record"), F6 (rv3 T6: audit now names the empty prepared R0040).
+-
+-Held this round (no finding): an acceptance file removed inside the window (rv4 Q1: refused by the carried move; unfold, fold and a new review then pass); `stop` then `ready` again with a `check.sh` that names another member's acceptance path (Q3: `ready` rewrites it to `active/`, `stop` back, byte-equal, and the second `ready` succeeds); `compact --force` landing while a rafting is open, then `remap` in the rafting worktree, the carried move and `ready` (Q4: all succeed, the review's quote re-recorded to `c0007@…, c0008@…`); a review renamed out of the pattern or a quote only in a refute (not counted: a false refusal, the safe side); line endings (no `.gitattributes`, SETUP.md covers macOS and Linux only, so blobs and checkouts agree). `z-nile/check.sh --full` on the clone: see the verification line at the end.
+-
+-### F1 [medium] `ready` and `keepRecords` hash the working tree, ignored files included, while the record is taken from git: an ignored `acceptance/.DS_Store` makes `ready` refuse a raft nothing redesigned, and the refusal's own recovery cannot clear it
+-Where: §1 "What the record covers" ("The adapter reads a member's folder from origin/main, from the publish build's tree or from the working tree"); `localFolderFiles` (walks the directory: every file, tracked or not); `cmd.ready` (`now[m.id] = raftplan.recordHash(m.id, localFolderFiles(m.dir))`, outside `moveOnOrigin`'s build); `keepRecords` (its before and after hashes).
+-Evidence: reproduced (rv4 Q1). A grouped raft R0900 lands with a covering review. In the main checkout `tracker/issues/c0010/acceptance/.DS_Store` appears (Finder; `.DS_Store` is in `.gitignore`, so `git status --porcelain` is empty and `mainCheckoutGuards` passes). `./zn ready R0900`: "R0900: c0010 (9f209e52f27f → e16c61142ffc) changed on origin/main since R0900 grouped it: z-raft drops it (./zn unfold …) or folds it again with a new coherence review". Nothing changed on origin/main. Removing the file, `ready` succeeds. Following the message instead (unfold, fold, a new review) re-records from origin/main, which has no `.DS_Store`, so `ready` refuses again: a loop that costs a review round per turn. `keepRecords` has the same reader: an ignored file in a member's design files in the compact or renumber worktree makes "matched before" false, so the entry is left stale and every later `ready` refuses (or, after the rewrite, the fresh hash includes the file and `ready` refuses later). Reasoned, not run: `ready`'s check runs before `moveOnOrigin`'s build, so a member redesign landing between `pullMain` and the publish passes, while the carried move checks inside its build.
+-Critique: one record, three readers, and only two of them read the same thing (git blobs). The record's direction is safe here (a false refusal, never a pass), but the message is false and its recovery does not recover. The tempting fix is to skip dot-files, which leaves editor swap files, `*.orig` after a merge, and anything else `.gitignore` covers.
+-Consequences: reading tracked files only changes what `keepRecords` sees mid-rewrite: `compactLib.apply` moves folders with `git mv` when tracked and `fs.move` otherwise, so the after-hash must read the index's paths with working-tree bytes, not `HEAD`.
+-Recommendation: one folder reader for the record, over git's view: `ready` computes `now` inside `moveOnOrigin`'s build with `treeFolderFiles(paths, read, dir)`, exactly as the carried move does (this also closes the window after `pullMain`); `keepRecords` lists a folder's files with `git ls-files -- <dir>` (the index, after the rewrite's `git mv`) and reads their bytes; `localFolderFiles` goes, or is that. Say it in §1 ("every hash reads tracked files: origin/main, the publish build, or the index"). Spec cases: an ignored `acceptance/.DS_Store` in the main checkout leaves `ready` succeeding; the same file in the compact worktree leaves the raft readyable after `compact`. Mutant: the working-tree walk (today's code).
+-Lesson: architecture/one-reader-per-format
+-
+-### F2 [medium] No spec fails when `remap` stops re-recording: removing `keepRecords` from `cmd.remap` leaves all 133 cases of c0116's specs and c0081's green
+-Where: §1 "Mechanical rewrites re-record" (`compact` on its tree and on remap's merge-base scratch, `remap`, `renumber`); AC10 ("`compact` and `renumber`"); Rules row M84 (compact-record :: renumber…; after compact…); `cmd.remap`'s two `keepRecords` calls.
+-Evidence: run in the clone. With `keepRecords(".", m, …)` in `cmd.remap` replaced by a bare `compactLib.apply(m, found)`, `tests/run` over `z-nile/.tracker/issues/c0116/acceptance/*.spec.luau` and `tests/acceptance/c0081/*.spec.luau`: **133 passed, 0 failed**. rv4 Q4 (a rafting open while `compact --force` lands, then `remap`) kills it: "c0007 (96cdbc244b11 → 11b3c924ae16), c0008 (…): changed on origin/main since R0004 grouped it", for a raft nothing redesigned. The second call, on the merge-base scratch, survives Q4 too: there HEAD and origin re-record identically, so the merge never reads the base's line.
+-Critique: `remap` is the path every in-flight rafting takes after a compaction (compact prints "in flight: raft-…: on each, run ./zn remap"), and the lesson the author added in round 3 says "Prove it by running that command on a tree holding a record, then the check". AC10 names only `compact` and `renumber`.
+-Recommendation: a compact-record case as rv4 Q4 (a grouped rafting open, `compact --force` lands, `remap`, the carried move, land, `ready` succeeds); AC10 names `remap`; a Rules row and mutant "remap without keepRecords". For the scratch call, either a case where only it decides the merge (a branch whose own tree lacks the raft that origin re-recorded, if one exists), or a sentence in §1 saying why it is kept although no case can tell, marked `reasoned`.
+-Lesson: testing/guard-needs-its-own-case, architecture/records-cover-what-was-reviewed
+-
+-### F3 [medium] The rule for the coherence review changed in round 3, but AC1, G7, G16, the Scope check, the programme-review answer and E1 still state the old one
+-Where: AC1 ("(with several issues and a changed membership) a coherence review written in this rafting", then, later in the same criterion, the round-3 rule); G7 ("enforced by the carried move (a `design-review-NNN.md` in the raft's folder that isn't on `origin/main`)"); G16 ("the engine checks only the record"); Scope check ("the decided coherence review → AC1 (M11, M12)", the mutants round 3 removed); Programme review F3 ("enforced by the carried move (M10 to M12)"); E1 ("78 run, 78 killed", against the Verification log's 85 of 85); the Problem's "Keep one PR" at "about 1,700 changed lines" against Size's 1,890.
+-Evidence: §1 "A review of the record" and the prototype now require a review whose `Grouped:` quote covers the current record, and need none after an `unfold` alone (Rules row M88). AC1's first clause says a changed membership needs a review "written in this rafting", which an unfold changes; an executor implementing AC1 as written puts back the round-2 guard that M60 removed and fails "an unfold alone does not". G7 is what the user is asked to approve, and it describes a mechanism that no longer exists. The Size section says "Keep one PR" "was given at about 1,670 lines, before round 3"; if the user re-confirmed it at about 1,890, no `Decided with the user` line records that.
+-Recommendation: AC1 keeps only the round-3 rule (the quoted record); G7 and G16 say what the engine checks now (the record, the review that quotes it, no exemption by absence); the Scope check and programme-review answer cite M81, M85, M88; E1's counts match the Verification log; add the re-confirmation as `Decided with the user (2026-10-21)` with its line count, or ask the user for it. Before the next round, grep the document for every restatement of the review rule (`coherence review`, `M11`, `M12`, `M60`, `origin/main`) and bring each into line.
+-Lesson: ticket-prep/restated-rules-move-together
+-
+-### F4 [low] The refusal prints the exact `Grouped:` line, and pasting it into the old review passes the carried move
+-Where: the refusal "<R>'s coherence review predates its record: no design-review-NNN.md in its folder quotes \"Grouped: […]\" (zz-review raft mode prints it): rerun it"; `reviewCovers` (any `design-review-*.md`, any line starting `Grouped: [`).
+-Evidence: reproduced (rv4 Q2). After unfold and fold of a redesigned c0040, the carried move refuses with the line; appending that line to the existing `design-review-001.md` (which read the old c0040) makes the carried move **succeed**. The engine cannot authenticate a review, so this is the same trust as writing a fake review; but the refusal hands an agent in a hurry (or c0117's unattended model step) the exact text that silences it.
+-Recommendation: the refusal names the record's ids and says "run a new raft-mode round (zz-review); never edit a review that is written", without printing the line to paste; z-raft §4 and zz-review raft mode say a review file is never edited after it is written. Optionally `reviewCovers` reads the quote only from the line right after `Inputs:`. No spec case is needed beyond the message pin.
+-
+-Candidate lesson (for the lead): zz-arch: every check of one record reads it through one reader over the same source (git's tracked blobs), because c0116's `ready` hashed the working tree, ignored files included, while the record was taken from origin/main, so a Finder `.DS_Store` refused a raft nothing redesigned; check: "Do all the places that compute or compare this record read the same files from the same source, and can an untracked or ignored file change what one of them sees?" (it may fit as a note on architecture/one-reader-per-format instead).
+-
+-Verification: `z-nile/check.sh --full` on the clone at be18fe9: **GATE PASSED (full)**, pickman 1068 and z-nile 1053 cases, 0 failed, 116.8 s.
+-
+-Verdict: changes
 diff --git a/z-nile/.tracker/issues/c0116/harvest.md b/z-nile/.tracker/issues/c0116/harvest.md
 deleted file mode 100644
-index 818e4af6..00000000
+index 3931db0d..00000000
 --- a/z-nile/.tracker/issues/c0116/harvest.md
 +++ /dev/null
-@@ -1,19 +0,0 @@
+@@ -1,23 +0,0 @@
 -# Harvest: c0116
 -- design-review-001 F1: zz-arch/claims-name-who-else-can-claim, zz-arch/lock-reads-live-state
 -- design-review-001 F2: zz-rules/retire-keeps-what-readers-count
@@ -1307,12 +1447,16 @@ index 818e4af6..00000000
 -- design-review-003 F4: zz-arch/records-cover-what-was-reviewed, zz-rules/item-history-spans-moves-and-compaction
 -- design-review-003 F5: zz-arch/guard-no-is-explicit
 -- design-review-003 F6: one-off: unfold of a raft's last member left an empty prepared raft; the orphan warning now covers it
+-- design-review-004 F1: zz-arch/one-reader-per-format, zz-arch/records-cover-what-was-reviewed
+-- design-review-004 F2: zz-test/guard-needs-its-own-case, zz-arch/records-cover-what-was-reviewed
+-- design-review-004 F3: z-design/restated-rules-move-together
+-- design-review-004 F4: one-off: the refusal printed the exact line that silences it; the message now names the record's ids and the rule "never edit a written review"
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/adapters.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/adapters.spec.luau
 new file mode 100644
-index 00000000..b294e464
+index 00000000..b5d6da01
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/adapters.spec.luau
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,252 @@
 +--!strict
 +-- c0117 AC6: one adapter per runtime. Each starts its CLI headless and unattended with the flags pinned here, and
 +-- reads its stream into one token count (input + cache writes + output, cache reads left out), the same for every
@@ -1480,15 +1624,29 @@ index 00000000..b294e464
 +		t.expect(finish(acc, true)).toBe("ok")
 +	end)
 +
-+	it("agent: an estimate while it runs, the result line's count at the end", function()
-+		local running = feed("cursor-cli", { AGENT[1], AGENT[2] })
-+		t.expect(running.final).toBe(nil)
-+		t.expect(running.live > 0).toBe(true)
-+		t.expect(adapters.get("cursor-cli").estimated).toBe(true)
-+		local acc = feed("cursor-cli", AGENT)
-+		t.expect(acc.final).toBe(15155 + 28)
-+		t.expect(adapters.tokens(acc)).toBe(15183)
-+	end)
++	it(
++		"agent: no running token count, its model calls counted by distinct model_call_id, the result's real total at the end",
++		function()
++			local running = feed("cursor-cli", {
++				AGENT[1],
++				AGENT[2],
++				'{"type":"tool_call","subtype":"started","call_id":"a","model_call_id":"m-1"}',
++				'{"type":"tool_call","subtype":"completed","call_id":"a","model_call_id":"m-1"}',
++				'{"type":"assistant","message":{"content":[]},"model_call_id":"m-1"}',
++				'{"type":"tool_call","subtype":"started","call_id":"b","model_call_id":"m-2"}',
++			})
++			t.expect(running.final).toBe(nil)
++			t.expect(running.live).toBe(0)
++			t.expect(running.calls).toBe(2)
++			t.expect(adapters.get("cursor-cli").callCapped).toBe(true)
++			t.expect(adapters.get("cursor-app").callCapped).toBe(true)
++			t.expect(adapters.get("claude-cli").callCapped).toBe(false)
++			t.expect(adapters.get("grok-cli").callCapped).toBe(false)
++			local acc = feed("cursor-cli", AGENT)
++			t.expect(acc.final).toBe(15155 + 28)
++			t.expect(adapters.tokens(acc)).toBe(15183)
++		end
++	)
 +
 +	it("tracks the tool calls that are running, per CLI, for the tool limit", function()
 +		local c = feed("claude-cli", {
@@ -1553,10 +1711,10 @@ index 00000000..b294e464
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
 new file mode 100644
-index 00000000..235a131a
+index 00000000..46743775
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
-@@ -0,0 +1,311 @@
+@@ -0,0 +1,341 @@
 +--!strict
 +-- c0117 AC10: the dispatcher's control of a run, for real with fake CLIs (@tests/lib/fakecli): the chain stops at
 +-- questions.md and retry keeps the answers; `dispatch new` captures and chains; a review the author starts through the
@@ -1599,6 +1757,13 @@ index 00000000..235a131a
 +rank = 3
 +runtime = "grok-cli"
 +max_tokens = 5000
++
++[z-design.agent]
++model = "claude-opus-5-5-high"
++rank = 3
++runtime = "cursor-cli"
++max_tokens = 5000
++max_calls = 2
 +
 +[zz-review.claude]
 +model = "claude-opus-5-5"
@@ -1661,6 +1826,8 @@ index 00000000..235a131a
 +			["tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
 +			["tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
 +			["tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
++			["tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
++			["tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
 +		})
 +	end)
 +
@@ -1837,6 +2004,27 @@ index 00000000..235a131a
 +	end)
 +
 +	it(
++		"a cursor step stops after max_calls model calls, and a finished one records the real total",
++		function()
++			fakecli.clear(h)
++			mode("agent", "calls")
++			local r = zn({ "dispatch", "z-design", "c0090" })
++			t.expect(r.ok).toBe(false)
++			local s = fakecli.state(h, "c0090")
++			t.expect(s.outcome).toBe("cap")
++			t.expect(string.find(s.detail, "passed max_calls 2 at call 3", 1, true) ~= nil).toBe(true)
++			fakecli.clear(h)
++			local ok = zn({ "dispatch", "z-design", "c0090" })
++			t.expect(ok.ok).toBe(true)
++			local rows = fakecli.rows(h, "c0090")
++			t.expect(rows ~= nil).toBe(true)
++			local list = rows :: { any }
++			t.expect(list[#list].tokens).toBe(300 + 9)
++			t.expect(list[#list].model).toBe("claude-opus-5-5-high")
++		end
++	)
++
++	it(
 +		"passes the prep gate only when the item's own walk allows it, and merges with the real gh itself",
 +		function()
 +			fakecli.clear(h)
@@ -1870,10 +2058,10 @@ index 00000000..235a131a
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/dispatch-cli.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/dispatch-cli.spec.luau
 new file mode 100644
-index 00000000..791a5417
+index 00000000..025f280d
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/dispatch-cli.spec.luau
-@@ -0,0 +1,324 @@
+@@ -0,0 +1,325 @@
 +--!strict
 +-- c0117 AC6: `./zn dispatch` runs one model step for real, with fake CLIs (@tests/lib/fakecli). It runs in its worktree
 +-- with the wrapper first on PATH, the agent's own token (never the user's) and a prompt that names its skill; it moves
@@ -1915,6 +2103,7 @@ index 00000000..791a5417
 +rank = 3
 +runtime = "cursor-cli"
 +max_tokens = 5000
++max_calls = 30
 +
 +[z-ready.claude]
 +model = "nobody"
@@ -1996,7 +2185,7 @@ index 00000000..791a5417
 +				"step=z-design id=c0010 kind=model",
 +				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5 rank=3 max_tokens=5000",
 +				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
-+				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000",
++				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30",
 +			})
 +			local closer = zn({ "dispatch", "z-design", "c0020", "--dry-run" })
 +			t.expect(
@@ -2511,10 +2700,10 @@ index 00000000..f5885edc
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
 new file mode 100644
-index 00000000..cee64449
+index 00000000..f229be8b
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,187 @@
 +--!strict
 +-- c0117 AC14: the skills, the README, AGENTS.md, the usage and the prompt template say what the design's Docs part
 +-- says: the headless rules in every model step's skill, word for word; the review model of the CLI wherever a skill
@@ -2625,6 +2814,8 @@ index 00000000..cee64449
 +				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 +				"`claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`)",
 +				"Nothing defaults",
++				"an `agent` table also `max_calls`",
++				"calls are not tokens, so the user tunes it",
 +				'- **The agent credential** (the user\'s "Bot token, no bypass").',
 +				"can't merge, bypass `main`'s protection or write protection or rulesets",
 +				"Not enforceable: the agent runs as the user",
@@ -2888,10 +3079,10 @@ index 00000000..6bb52c75
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/models.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/models.spec.luau
 new file mode 100644
-index 00000000..5c5e013c
+index 00000000..35b11ae7
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/models.spec.luau
-@@ -0,0 +1,325 @@
+@@ -0,0 +1,344 @@
 +--!strict
 +-- c0117 AC1, AC2: .models.toml stacks like .gitignore (a closer file replaces only the keys it sets), a raft takes the
 +-- stronger spec whole per CLI (higher rank, then larger max_tokens), only the three CLIs and their runtimes exist,
@@ -3131,6 +3322,25 @@ index 00000000..5c5e013c
 +		)).toBe(true)
 +	end)
 +
++	it("agent's specs need max_calls, never unlimited; the other CLIs' don't", function()
++		local base =
++			'order = ["agent", "claude"]\n[z-design.agent]\nmodel = "m"\nrank = 1\nruntime = "cursor-cli"\nmax_tokens = 5\n'
++		local e = errorOf(function()
++			models.resolve({ layer(base) }, "z-design")
++		end)
++		t.expect(has(e, "z-design.agent: no max_calls")).toBe(true)
++		t.expect(has(e, "calls are not tokens")).toBe(true)
++		local r = models.resolve({ layer(base .. "max_calls = 30\n") }, "z-design")
++		t.expect(r.specs.agent.maxCalls).toBe(30)
++		t.expect(models.resolve({ layer(ROOT) }, "z-design").specs.claude.maxCalls).toBe(nil)
++		t.expect(has(
++			errorOf(function()
++				layer("[z-design.agent]\nmax_calls = 0\n")
++			end),
++			"whole number"
++		)).toBe(true)
++	end)
++
 +	it("nothing defaults: no file, no order, or a skill no file names is an error naming it", function()
 +		t.expect(has(
 +			errorOf(function()
@@ -3169,7 +3379,7 @@ index 00000000..5c5e013c
 +		function()
 +			local function review(cli: string, model: string, effort: string?): string?
 +				local text =
-+					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\n`
++					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\nmax_calls = 9\n`
 +				if effort then
 +					text ..= `effort = "{effort}"\n`
 +				end
@@ -4106,10 +4316,10 @@ index 9b12753c..a17322a4 100644
  	else
  		out, n = skills.renameLessonIds(text, existing)
 diff --git a/z-nile/.tracker/issues/c0116/c0116.md b/z-nile/.tracker/issues/done/c0116/c0116.md
-similarity index 77%
+similarity index 73%
 rename from z-nile/.tracker/issues/c0116/c0116.md
 rename to z-nile/.tracker/issues/done/c0116/c0116.md
-index 4e424b9f..edca432e 100644
+index 84a8a9fe..edca432e 100644
 --- a/z-nile/.tracker/issues/c0116/c0116.md
 +++ b/z-nile/.tracker/issues/done/c0116/c0116.md
 @@ -7,7 +7,7 @@ raft:
@@ -4121,33 +4331,36 @@ index 4e424b9f..edca432e 100644
  solo: true
  created: 2026-10-20
  status: new-amber-mongoose-marble
-@@ -30,8 +30,6 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -30,9 +30,6 @@ Decided with the user (2026-10-20), from the programme review:
  - "On the issue, rolled up": an issue's design reviews, refutes and `harvest.md` live in its own folder, and metrics, the review skill and the board roll them up to the raft.
  - "z-design writes `size:`": z-design records an estimate of changed lines, and z-raft sums them. An issue over the cap is a raft by itself and is never split automatically.
  
--Decided with the user (2026-10-21), from design review 002: "Keep one PR" (c0116 lands as one PR at about 1,700 changed lines, over the 1,500-line guide, rather than as two sequential issues).
+-Decided with the user (2026-10-21), from design review 002: "Keep one PR" (c0116 lands as one PR, given at about 1,670 changed lines, over the 1,500-line guide, rather than as two sequential issues).
+-Decided with the user (2026-10-21), after design review 003: "Still one PR" (re-confirmed at about 1,890 changed lines).
 -
  ## Non-goals
  - Changing the design checklist for a feature, a defect, or a chore beyond taking raft creation out. The three checklists are named in the README by c0115; the signatures and specs of a designed issue stay ticket-prep's job.
  - Choosing models or drawing the board.
-@@ -56,16 +54,6 @@ The earlier attempt (R0042 design reviews 001 to 005) computed "who holds a prep
+@@ -57,18 +54,6 @@ The earlier attempt (R0042 design reviews 001 to 005) computed "who holds a prep
  
  **The rule, once.** An issue belongs to the raft its `raft:` line names on `origin/main`. A command that claims or prepares a raft refuses an issue whose origin `raft:` names a different raft, unless that raft carries this raft's own stamp (recombine's other raft). No command restamps an issue that is `prepared` on `origin/main`. `ready` (unchanged) reads membership from `raft:` lines and refuses a raft whose `issues:` disagrees.
  
 -**What was grouped is recorded** (review 002 F1; lesson architecture/locks-detect-change). A claim check sees only claims that are still open; a full z-design cycle (claim, redesign, carried prepare, land) inside the rafting window leaves none. So `new raft`, `fold` and `recombine` write into the raft's `grouped:` line a hash of each prepared member's document as it is on `origin/main` when it is grouped (`grouped: [c0013@1a2b3c4d5e6f, …]`; `raftplan.designHash` leaves out the `status:` and `raft:` lines, which ready, stop and the rafting PR itself change). The carried `status <R> prepared` and `ready <R>` refuse a member whose document no longer hashes to its record: "<id> (<recorded> → <now>): changed on origin/main since <R> grouped it". Old-flow members (stamped with the raft's value) have no record and are exempt. A single-member raft is checked too (its Theme quotes the design). I chose this over restamping members because the user's plan says the raft stamp claims only the raft, and because restamping would bring back review-004 F1's give-back problem (`prepared>new`) on every release (G16).
 -
--**What the record covers** (review 003 F1; lesson architecture/records-cover-what-was-reviewed), stated once as `raftplan.isDesignFile(rel, id)`: the files of the member's folder that make up its reviewed design: its document (hashed without `status:` and `raft:`), `check.sh`, every file under `acceptance/`, and its `design-review-*`, `design-refute-*` and `harvest.md`. Not `spend.md` (`./zn spend` after the landing), `prompt.md` or `experiments/`. A new file kind in an issue folder is classified there. `raftplan.recordHash(id, files)` hashes the design files sorted by path, each path with its length and bytes.
+-**What the record covers** (review 003 F1; lesson architecture/records-cover-what-was-reviewed), stated once as `raftplan.isDesignFile(rel, id)`: the files of the member's folder that make up its reviewed design: its document (hashed without `status:` and `raft:`), `check.sh`, every file under `acceptance/`, and its `design-review-*`, `design-refute-*` and `harvest.md`. Not `spend.md` (`./zn spend` after the landing), `prompt.md` or `experiments/`. A new file kind in an issue folder is classified there. `raftplan.recordHash(id, files)` hashes the design files sorted by path, each path with its length and bytes. **Every hash reads git's view, never a directory walk** (review 004 F1; lesson architecture/one-reader-per-format): `recordGrouped` reads origin/main; the carried move and `ready` read the tree they publish (`treeFolderFiles` inside the build, so a redesign landing after `ready`'s pull is seen too); and `keepRecords` and the carried move's raft reviews read `gitFolderFiles(dir)`, which lists tracked and untracked-but-not-ignored files through `git ls-files -co --exclude-standard`. So Finder's `.DS_Store`, an editor's swap file or a merge's `*.orig` never change a hash.
 -
--**A review of the record** (review 003 F2). zz-review's raft mode quotes the raft's `grouped:` value in its Inputs as `Grouped: [...]`. For a raft of two or more members, the carried move (after its Theme check) and `ready` need a `design-review-NNN.md` in the raft's folder whose quoted record covers the current one: every current entry, with the same hash. A fold, re-fold or recombine changes the record, so it needs a new round; an `unfold` only drops entries, so it needs none. The check is on content, not commit order, so it holds after the rafting PR's squash merge. Refusal: "<R>'s coherence review predates its record: no design-review-NNN.md in its folder quotes \"Grouped: …\" (zz-review raft mode prints it): rerun it".
+-**A review of the record** (review 003 F2). zz-review's raft mode quotes the raft's `grouped:` value in its Inputs as `Grouped: [...]`. For a raft of two or more members, the carried move (after its Theme check) and `ready` need a `design-review-NNN.md` in the raft's folder whose quoted record covers the current one: every current entry, with the same hash. A fold, re-fold or recombine changes the record, so it needs a new round; an `unfold` only drops entries, so it needs none. The check is on content, not commit order, so it holds after the rafting PR's squash merge. Refusal: "<R>'s coherence review predates its record (<ids>): run a new raft-mode round (zz-review); never edit a review that is already written". It names the record's ids, not the `Grouped:` line, so it hands no one text to paste into an old review (review 004 F4). z-raft and zz-review say a review file is never edited after it is written.
+-
+-**Refusing an edited review** (review 004 F4, asked whether it is feasible): only partly. In the carried move the branch's history could show a review modified after its first commit, but `compact` and `remap` legitimately edit a review's `Grouped:` line, so the check would need their commits exempted. On `main` the rafting PR's squash merge leaves each review a single commit, so `ready` could never tell. Not built (G20): the message and the skills carry the rule, and the engine can no more authenticate a review than it can tell a pasted line from a written one.
 -
 -**No exemption by absence** (review 003 F5). The carried move refuses a member it takes as `prepared` that this rafting grouped (its origin `raft:` is not R) and that has no entry: "<id> has no grouped: record in <R>: fold it again (only a member stamped with <R>'s value is exempt)". The exemption is explicit: an old-flow member is `preparing` with the raft's own stamp.
 -
--**Mechanical rewrites re-record** (review 003 F4). `compact` (on its tree and on remap's merge-base scratch), `remap` and `renumber` rewrite ids in member documents, which changes their hashes. `keepRecords(root, idMap, rewrite)` notes, before the rewrite, every `grouped:` entry whose member matches it. After the rewrite it writes the new hash under the new id, in the raft's document and in its reviews' `Grouped:` lines. An entry that did not match before is left alone.
+-**Mechanical rewrites re-record** (review 003 F4). `compact` (on its tree and on remap's merge-base scratch), `remap` and `renumber` rewrite ids in member documents, which changes their hashes. `keepRecords(root, idMap, rewrite)` notes, before the rewrite, every `grouped:` entry whose member matches it. After the rewrite it writes the new hash under the new id, in the raft's document and in its reviews' `Grouped:` lines. An entry that did not match before is left alone. The second call, on remap's merge-base scratch, is kept although no case can tell it apart (review 004 F2): HEAD and origin/main re-record the same entries to the same values, so git's merge never needs the base's line. It is kept so the three sides of remap's merge match in every line, which is what that scratch exists for. It is marked `reasoned`.
 -
  | command | origin state it needs | what it publishes | what it writes in the worktree | refuses |
  |---|---|---|---|---|
  | `new raft <type> <slug> <ids…>` over `new` issues (the old prep) | each id `new`, `raft:` empty | the raft (`preparing-S`) and each id (`preparing-S`), as today | each id's `raft:`, one commit | an id with `raft:` set ("already belongs to"), a type mismatch, two projects |
-@@ -73,11 +61,10 @@ The earlier attempt (R0042 design reviews 001 to 005) computed "who holds a prep
+@@ -76,11 +61,10 @@ The earlier attempt (R0042 design reviews 001 to 005) computed "who holds a prep
  | `fold <R> <ids…>` | R backlog `prepared` (or `preparing` with this checkout's remembered stamp: resumed, nothing published); each id prepared, `design: ready`, `raft:` empty, R's type and project | R's status line only | each id's `raft:`, R's `issues:` appended, one commit; the claim file | R new, preparing (another checkout's), active or done; a solo id with others, or into a raft holding a solo issue |
  | `recombine <K> <O> [<ids…>]` | K and O backlog, `prepared` or `new`, one project, one type; every member of both (`raft:` lines) prepared; each named id a member of O (none named: all) | K's and O's status lines, one shared fresh `preparing-S` | moved ids' `raft:` = K, K's `issues:` += them, O's `issues:` −= them, or, when O ends up empty, O's folder moved to `<root>/rafts/retired/<O>` (`git mv`) with `retired: <K>` in its document; one commit; both claim files | the two rafts the same; another project ("rafts never cross projects"), another type, active, done or preparing; a non-member of O; a solo issue with others |
  | `status <R> preparing\|new` (published raft move) | as today | R, and each origin-listed member that is **not** `prepared` (the old prep's members keep moving with their raft, so c0053's abandon stays green) | the merge of origin | a listed member whose origin `raft:` names another raft ("<id> belongs to <X> on origin/main, not <R>") |
@@ -4162,7 +4375,7 @@ index 4e424b9f..edca432e 100644
  
  Every new publish is preceded by `refuseStale()` (c0081's publish-guard pins it). `fold`, `recombine` and `new raft` need a clean tree, refuse the main checkout, and merge `origin/main` first, so the local tree holds everything `origin/main` does when they read membership.
  
-@@ -88,14 +75,13 @@ Every new publish is preceded by `refuseStale()` (c0081's publish-guard pins it)
+@@ -91,14 +75,13 @@ Every new publish is preceded by `refuseStale()` (c0081's publish-guard pins it)
  - *Recombine* (review-005 F1): both rafts share one stamp; the carried `status K prepared` takes the moved issue whose origin `raft:` still names O, because O carries K's stamp; a raft with another stamp is refused, naming it; after the merge both rafts are readyable, and an emptied O is gone.
  - *A raft at `new` that lists a held issue* (review-005 F2's third bullet): `status <R> preparing` refuses the listed issue another raft's `raft:` names.
  - *A member re-claimed for design during the rafting* (review 001 F1): B's `status c0013 preparing` succeeds (nothing on origin says c0013 is being rafted) and merges into the rafting worktree cleanly; the carried `status RX prepared` then refuses, naming B's stamp, and leaves origin's c0013 alone; the rafting drops c0013 and prepares the rest. Once it lands, z-design's claim of a member refuses ("is in RX"). The other order (B claims after the carried move, before the landing) meets at `ready`, which refuses the raft while the member is `preparing`.
@@ -4178,7 +4391,7 @@ index 4e424b9f..edca432e 100644
  | `new raft … <id>` (another rafting) | publishes; the two PRs conflict on `<id>`'s `raft:` line (U1), and the later carried move refuses it ("belongs to <R>") once the first lands |
  | `fold <R2> <id>` | the same `raft:` line; `fold` into the raft being rafted is refused (it is `preparing` with a stamp this checkout does not remember) |
  | `recombine <K> <O>` | the issue is in no raft on origin (its `raft:` is empty), so it is no one's member to move; a raft being rafted is `preparing` and refused |
-@@ -108,7 +94,6 @@ Every new publish is preceded by `refuseStale()` (c0081's publish-guard pins it)
+@@ -111,7 +94,6 @@ Every new publish is preceded by `refuseStale()` (c0081's publish-guard pins it)
  ### 2. The new commands
  Signatures in `z-nile/engine/main.luau` (each `function cmd.<name>(pos, opts)`; `raft-plan` is `cmd["raft-plan"]`):
  ```
@@ -4186,7 +4399,7 @@ index 4e424b9f..edca432e 100644
  fold <R-id> <issue>...                        put prepared, raftless issues into a prepared backlog raft (z-raft)
  recombine <keeper> <other> [<issue>...]       move the other backlog raft's members (all, or those named) into the
                                                keeper; retire the other when it ends up empty (z-raft)
-@@ -118,7 +103,6 @@ raft-plan [--apply]                           print z-raft's plan for every prep
+@@ -121,7 +103,6 @@ raft-plan [--apply]                           print z-raft's plan for every prep
  promote-check <R-id|issue-id>                 (was <R-id>)
  ```
  - Shared helpers: `raftingStart(what)` (refuse the main checkout, need an origin and a clean tree, `refuseStale`, merge `origin/main`), `rememberClaim(R, value)` / `rememberedClaim(R)` over the existing `claimFile(R)` (`.cache/tracker-claim-<R>`, which `start` already uses; the directory is made when missing), `refuseUnraftable(issue, raft)`, `listValue(ids)`, `sectionWritten(text, heading)` (text beyond the template's comment), `freshStamp(state)` (`claimStamp()` is now `freshStamp("active")`), `promotedItems(item)` (an issue is its own promotion set).
@@ -4194,7 +4407,7 @@ index 4e424b9f..edca432e 100644
  - `claims.carriers(cwd, value, ref?, roots): ({string}?, string?)` in `claims.luau`: the documents whose line is `status: <value>`, one `git grep -l`; `{}` when none, nil and git's message when it can't tell (the same contract as `claims.taken`).
  - Outputs: `fold` prints `folded <ids> into <R>`; `recombine` prints `recombined <O> into <K>: <ids>` and then `retired <O>: its folder is deleted in this branch` or `<O> keeps <ids>`; `release` prints `released <id> (<prepared|new>), …` and `this branch's own rafting commits are left as they are: reset it to origin/main or remove the worktree`; `promote-check` prints `copied <n> acceptance specs` before its checks (so a promotion that found nothing to copy is visible: lesson zz-test/no-vacuous-pass).
  - Commit subjects in the worktree: `tracker: <R> members` (new raft, as today), `tracker: fold <ids> into <R>`, `tracker: recombine <O> into <K> (<ids>|no members)`. Published subjects: `tracker: new raft <R> <slug>`, `tracker: fold into <R> (claim)`, `tracker: recombine <O> into <K> (claim)`, `tracker: release <R>`.
-@@ -184,21 +168,18 @@ Sections: the lock; **1. Plan** (the no-argument policy as six bullets, and "- *
+@@ -187,21 +168,18 @@ Sections: the lock; **1. Plan** (the no-argument policy as six bullets, and "- *
  Publish never deletes (`publish.luau`), so a raft made by `new raft` over prepared issues and then released stays on `origin/main` at `new` with no member. Nothing reads its `issues:` (§1), so it holds nothing. `audit` warns (never an error, so `main` stays green): `orphan-raft <path>: <R> is a given-back raft with no member: retire it with ./zn recombine <a raft of its project and type> <R>`, for a backlog raft whose status is `new`/`new-…` and that no issue's `raft:` names. `recombine <K> <orphan>` moves nothing and retires the orphan in the rafting PR (retirement lands by PR). On today's tree the warning already finds one: R0040 (`status: new-…`, `issues: []`).
  
  **A retired raft keeps its history** (review 001 F2). R0040 holds five design reviews, five refutes and a `harvest.md`; deleting its folder would make `lessons --check` fail (a lesson loses its only source) and drop five rounds from metrics. So `recombine` moves a retired raft's whole folder to `<root>/rafts/retired/<R-id>` and sets `retired: <keeper>` in its document. The readers:
@@ -4218,7 +4431,7 @@ index 4e424b9f..edca432e 100644
  - `flags()`: `--apply` is a boolean flag (`--force` already is).
  - zz-rules: the main checkout's read-only list ("`lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read)"); the refusing list ("`status <id> <to>`, `fold`, `recombine`, `release`, `raft-plan --apply`, `compact`, …"); four command-table rows; Other commands; Published or carried; Claims; a new **Rafting** bullet; Whose claim ("`release` is the one give-back that checks"); the worktree table (`raft-<slug>`); Items (`design-review-NNN.md` on the issue, the coherence review on the raft); Spend (`prep` and `design-review` on the issue); Lifecycle ("z-raft makes every raft"; "a raftless issue goes to z-raft"; "`z-design` sets an issue's and `z-raft` a raft's").
  - `READ_ONLY` (main.luau's guard exemption): unchanged; `raft-plan` reads a real checkout, so the repository-root guard costs nothing there.
-@@ -250,8 +231,6 @@ A raft's project is its root: `store.Item.root` locally and `publish.itemPath(pa
+@@ -253,8 +231,6 @@ A raft's project is its root: `store.Item.root` locally and `publish.itemPath(pa
  - `z-nile/README.md`
  - `AGENTS.md`
  - `tests/acceptance/c0043/rounds.spec.luau`
@@ -4227,12 +4440,12 @@ index 4e424b9f..edca432e 100644
  - `tests/acceptance/c0111/skill-docs.spec.luau`
  - `tests/acceptance/c0115/layout.spec.luau`
  - `tests/acceptance/c0115/readme.spec.luau`
-@@ -270,16 +249,13 @@ A raft's project is its root: `store.Item.root` locally and `publish.itemPath(pa
+@@ -273,16 +249,13 @@ A raft's project is its root: `store.Item.root` locally and `publish.itemPath(pa
  - **U5. Where do design reviews live, and does anything promoted read them under a raft?** `grep -rl design-review` over the engine and `tests/acceptance`: the readers are `lessons.luau` (every item folder already), `metrics` (raft folders only: changed), `trail.luau` and `ledger.luau` (names only). Promoted specs pinning the raft-only count: c0043/rounds (overridden). **PASS.**
  - **U6. Raft-level coherence for grouped features**: the user decided "Short coherence review" (Problem).
  - **E2. A retired raft keeps what its readers count** (review 001 F2). Run 2026-10-21 on a copy of today's tree (a scratch clone with its own bare origin, in the scratchpad, never this repository): before, `./zn lessons --check` said "21 lessons, 118 harvest entries, ok" and `metrics` listed `| R0040 | 5 | 0 | second-order |`; `./zn recombine R0030 R0040` moved R0040's folder to `z-nile/.tracker/rafts/retired/R0040` with `retired: R0030`; after, `lessons --check` said the same, metrics kept `| R0040 | 5 | 0 | second-order |`, `audit` had no orphan warning, and the carried `status R0030 prepared` succeeded with no new review. **PASS.** The first draft's `git rm -r` turned `lessons --check` red (the reviewer's run).
 -- **E3. The full gate on a copy of today's tree with a raft retired** (review 002 F2; lesson testing/prove-state-folders-on-the-real-tree). Run 2026-10-21 in a scratch clone (in the scratchpad, with its own bare origin; its identity was set to a non-fixture one, because the tripwire refuses a checkout whose identity looks like a fixture's): `recombine R0030 R0040`, the carried `status R0030 prepared`, a commit, then `z-nile/check.sh --full`. Before the fixes: 1049 passed, 3 failed: c0005/worktree (`engine.empty` left the retired folder), c0043/rounds ("lists every raft once") and c0114/classified ("raft skill-lessons: not found"), exactly the reviewer's three. After them, retired.spec runs c0114/classified and c0043/rounds on a clone holding a retired raft, and they pass; `engine.empty` clears `retired/` (M77). **PASS.**
--- **E1. Mutation check.** 85 mutants (M1 to M88 without M11, M12 and M60, whose guard round 3 removed as subsumed), each applied alone to the prototype in a scratch worktree (`.worktree/mut-c0116-{1,2,3}`, detached, removed after) by the scratchpad runner (`c0116-work/mutrun.sh`, `mutants.py`), its spec run, then reverted. **78 run, 78 killed on an assertion of their case.** Round 2 added M69 to M78 (review 002 F1 to F4), and all were killed on the first run. Round 1 (round 1 added M57 to M68 for review 001 F1, F2, F3, F5 and F7; M66 first raised a Lua error instead of failing an assertion, so it was rewritten as "a sizeless member counts 0", the draft's rule, and killed; M64 first survived because the retired R0150 carries recombine's `preparing-` stamp, so no orphan warning could fire, and the case gained a retired raft whose document still says `new` (lesson testing/guard-needs-its-own-case)). Four needed a stronger case first: M24 (recombine's raft-level type check) survived because the members' own type check also refused, so the case gained an empty feature raft (an orphan of another type, where only the raft check can refuse); M27 (recombine's membership check) survived because the publish's origin check refuses the same input with another message, so the case now pins `c0031 is not a member of R0020`, the message §2 states; M4 and M21 first failed on a spec-side file read (a missing claim file, a deleted folder), and their cases now assert the file or folder before reading it. M54 to M56 were added after the first run, when the table showed `fold`'s own project, type and backlog refusals had no case.
+-- **E1. Mutation check.** 88 mutants (M1 to M91 without M11, M12 and M60, whose guard round 3 removed as subsumed), each applied alone to the prototype in a scratch worktree (`.worktree/mut-c0116-{1,2,3}`, detached, removed after) by the scratchpad runner (`c0116-work/mutrun.sh`, `mutants.py`), its spec run, then reverted. Round 4 added M89 to M91 (review 004 F1 and F2) and reran the mutants the round's code touched; the final count is under Verification log. Round 2 added M69 to M78 (review 002 F1 to F4), and all were killed on the first run. Round 1 (round 1 added M57 to M68 for review 001 F1, F2, F3, F5 and F7; M66 first raised a Lua error instead of failing an assertion, so it was rewritten as "a sizeless member counts 0", the draft's rule, and killed; M64 first survived because the retired R0150 carries recombine's `preparing-` stamp, so no orphan warning could fire, and the case gained a retired raft whose document still says `new` (lesson testing/guard-needs-its-own-case)). Four needed a stronger case first: M24 (recombine's raft-level type check) survived because the members' own type check also refused, so the case gained an empty feature raft (an orphan of another type, where only the raft check can refuse); M27 (recombine's membership check) survived because the publish's origin check refuses the same input with another message, so the case now pins `c0031 is not a member of R0020`, the message §2 states; M4 and M21 first failed on a spec-side file read (a missing claim file, a deleted folder), and their cases now assert the file or folder before reading it. M54 to M56 were added after the first run, when the table showed `fold`'s own project, type and backlog refusals had no case.
 +- **E1. Mutation check.** 68 mutants (M1 to M68), each applied alone to the prototype in a scratch worktree (`.worktree/mut-c0116-{1,2,3}`, detached, removed after) by the scratchpad runner (`c0116-work/mutrun.sh`, `mutants.py`), its spec run, then reverted. **68 run, 68 killed on an assertion of their case** (round 1 added M57 to M68 for review 001 F1, F2, F3, F5 and F7; M66 first raised a Lua error instead of failing an assertion, so it was rewritten as "a sizeless member counts 0", the draft's rule, and killed; M64 first survived because the retired R0150 carries recombine's `preparing-` stamp, so no orphan warning could fire, and the case gained a retired raft whose document still says `new` (lesson testing/guard-needs-its-own-case)). Four needed a stronger case first: M24 (recombine's raft-level type check) survived because the members' own type check also refused, so the case gained an empty feature raft (an orphan of another type, where only the raft check can refuse); M27 (recombine's membership check) survived because the publish's origin check refuses the same input with another message, so the case now pins `c0031 is not a member of R0020`, the message §2 states; M4 and M21 first failed on a spec-side file read (a missing claim file, a deleted folder), and their cases now assert the file or folder before reading it. M54 to M56 were added after the first run, when the table showed `fold`'s own project, type and backlog refusals had no case.
  - Lessons that changed this design (the lessons pass): zz-arch/lock-reads-live-state (the lock lives on the `raft:` line and the stamp; no `issues:` list is read for a hold), zz-test/no-vacuous-pass (`promote-check` prints what it copied; `raft-plan` says "nothing to raft"), zz-test/seed-every-enumerated-case (the plan spec seeds every raft state and `single`; the CLI fixture seeds every record field), zz-test/pin-call-site-arguments (M42 to M47 pass wrong arguments from `raft-plan`), zz-test/plain-find-for-literals (every spec edit of a document line uses plain find), z-design/prove-specs-pass-on-a-prototype (every case ran on the prototype), z-design/new-rules-migrate-existing-work (§10), zz-rules/exhaustive-lists-name-new-things (§9), z-design/never-narrow-captured-scope (every captured outcome has a criterion: Scope check below).
  
@@ -4245,7 +4458,7 @@ index 4e424b9f..edca432e 100644
  - `tests/acceptance/c0043/rounds.spec.luau`, "in a sandbox tracker": a member issue's design review now rolls up to its raft (R0030's design rounds 2 → 3; the issue's code review still isn't counted). Case renamed "… a member's design reviews roll up".
  - `tests/acceptance/c0111/skill-docs.spec.luau`, "ticket-prep: …": z-design's three commands take `<id>` (`promote-check <id>`, `lessons --uncovered <id>`, `status <id> prepared`), not `<R-id>`.
  - `tests/acceptance/c0119/scope-docs.spec.luau`: step 1's heading is "## 1. Claim the issue" (was "Form the raft"), and the scope check compares "the issue's document" (was "each member's").
-@@ -288,16 +264,15 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -291,16 +264,15 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
  - `z-nile/.tracker/issues/done/c0115/check.sh` AC3: drops its "z-raft is not made here" clause (the z-design rule for a spec that must change: its owner's `check.sh` line changes with it).
  
  ## Test plan
@@ -4261,11 +4474,11 @@ index 4e424b9f..edca432e 100644
  - `promote.spec` :: copies the issue's one spec, checks it and removes the copy (`copied 1 acceptance specs`); fails on an issue spec that breaks the type check and still removes the copy; in a clone under `.cache/c0116-promote` (review 001 F4) → AC7
  - `./zn skills --check`, `./zn lessons --check`, `./zn audit` on the real tree → AC8
  - c0053/commands-{prep,claim,start}, c0067/*, c0068/stop, c0070/board-refresh, c0081/remap, c0115/readme → AC9
--- `compact-record.spec` :: renumber of a member re-records its raft and the review's quote; after `compact --force` and landing, `ready` takes both rafts nothing redesigned and still refuses the stale record → AC10
+-- `compact-record.spec` :: renumber of a member re-records its raft and the review's quote; after `compact --force` (a rafting open, an ignored file in a member's folder) and landing, `ready` takes both rafts nothing redesigned and still refuses the stale record; `remap` re-records the open rafting, which then prepares, lands and readies → AC10
  
  ### Rules and mutants
  | rule | spec :: case | mutant it kills | checked |
-@@ -312,7 +287,8 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -315,7 +287,8 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
  | a raft with another stamp is not the same claim | recombine :: the carried move refuses a member held by a raft with another stamp | any holder accepted on a carried move (M8) | run: killed |
  | the carried move takes a prepared member as it is | claims :: the carried move needs…, then takes prepared members | prepared members refused ("claim it first", today's rule) (M9) | run: killed |
  | a z-raft raft needs its Theme and Order | claims :: the carried move needs the raft's Theme… | guard dropped (M10) | run: killed |
@@ -4275,7 +4488,7 @@ index 4e424b9f..edca432e 100644
  | fold claims the raft alone | claims :: fold claims a prepared raft alone and once… | members restamped by fold (M13) | run: killed |
  | fold never crosses projects | claims :: new raft refuses … (fold of another project's chore) | `refuseUnraftable`'s root check dropped (M54) | run: killed |
  | fold never mixes types | claims :: new raft refuses … (fold of a feature into a chore raft) | its type check dropped (M55) | run: killed |
-@@ -361,7 +337,7 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -364,7 +337,7 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
  | z-design never claims an issue past its raft | claims :: a member re-claimed… (after the landing) | the guard dropped (M58) | run: killed |
  | an issue claimed here is remembered for this checkout's carried move | c0053/commands-prep :: a raft move follows the local member list… (the old prep claims an added issue with `status <id> preparing`) | the claim not remembered (M59) | run: killed |
  | `ready` refuses a raft while a member is `preparing` | claims :: a member claimed after the carried move but before the landing… | reasoned: today's `ready` rule, unchanged (its `moveOnOrigin` verify); the case pins it for this window | reasoned |
@@ -4284,7 +4497,7 @@ index 4e424b9f..edca432e 100644
  | a retired raft keeps its folder | recombine :: retiring an orphan keeps its review history… | the folder deleted (M61, the first draft's `git rm -r`) | run: killed |
  | lessons read a retired raft's harvest | recombine :: retiring an orphan… (`lessons --check` stays ok) | `retired/` not read (M62) | run: killed |
  | metrics keeps a retired raft's rounds | recombine :: retiring an orphan… (R0150's row stays `1`) | retired rafts left out (M63) | run: killed |
-@@ -370,25 +346,6 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -373,30 +346,6 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
  | an open raft with a sizeless member takes nothing from the plan | plan :: never folds into an open raft with a member that has no size:… | the member counted as 0 (M66, the first draft's G4) | run: killed |
  | rafting commands merge `origin/main` before reading membership | recombine :: recombine merges origin/main before it reads membership… | no merge first (M67) | run: killed |
  | `--apply` stops at the first refusal | plan-cli :: --apply stops at the first refusal… | every command run whatever the last one did (M68) | run: killed |
@@ -4307,29 +4520,40 @@ index 4e424b9f..edca432e 100644
 -| a rewrite re-records only entries that matched | compact-record :: after compact… (the stale record still refuses) | every entry re-recorded (M87) | run: killed |
 -| a missing entry is no exemption | claims :: an empty grouped: record does not exempt… | absence exempts (M85, round 2's code) | run: killed |
 -| audit names an empty prepared raft | claims :: unfold takes a member out of a landed raft… (R0090 named) | only `new` rafts named (M86) | run: killed |
+-| `remap` re-records an open rafting's record and its review | compact-record :: remap re-records an open rafting's record… | `remap` without `keepRecords` (M89) | run: killed |
+-| an ignored file never changes a record (`keepRecords`) | compact-record :: after compact… (a `.DS_Store` in the compacting worktree's member folder) | ignored files listed (M90) | run: killed |
+-| `ready` reads the tree it publishes, never the working tree | claims :: a fold lands … and ready then claims the folded issue (a `.DS_Store` in the main checkout's member folder) | a working-tree walk (M91, round 3's code) | run: killed |
+-| `ready` sees a redesign landing between its pull and its publish | none | reasoned: the check runs inside `moveOnOrigin`'s build, which is re-run on every lease retry against the tree it publishes; no spec can land a commit between a command's pull and its own publish without a hook | reasoned |
+-| remap's merge-base scratch is re-recorded too | none | reasoned: HEAD and origin re-record identically, so the merge never reads the base's line; kept so the three sides match (§1) | reasoned |
  | `release` gives back backlog carriers only | none | reasoned: a fresh stamp is drawn so that no item on `origin/main` carries it (`freshStamp`), and `ready` restamps what it moves to `active/`, so an active or done item never carries a rafting stamp; the skip guards a hand-edited tree | reasoned |
  | the docs say what §4 to §9 say | docs :: (four cases) | reasoned: each is a plain find of a quoted sentence; a missing or stale sentence fails its own `at`/`absent` (the gate ran it red before the skills were edited) | reasoned |
  | the carried move checks a prepared member's local design | none | reasoned: unreachable through z-raft (a prepared issue's design is ready on `origin/main`, and the rafting PR never edits it); kept as the same guard the preparing members get | reasoned |
-@@ -396,8 +353,8 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -404,8 +353,8 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
  ## Acceptance criteria
  
  ### Checked
--- AC1: An issue's raft is its own `raft:` line, written in the rafting worktree. `new raft` over prepared issues and `fold` publish the raft's claim alone (a fresh `preparing-…` stamp, remembered in this checkout), never restamp a prepared issue, refuse new and prepared issues together, a solo issue with others, another project, another type and a raft that is not in the backlog, and `fold` resumes only its own claim. The carried `status <R> prepared` takes prepared members as they are, takes a `preparing` member only with R's own stamp or a claim this checkout made, refuses a member another raft holds on origin, and, for a raft z-raft grouped, needs its Theme, Order & dependencies and (with several issues and a changed membership) a coherence review written in this rafting. z-design's claim refuses an issue already in a raft, and `ready` refuses a raft while a member is `preparing`. A raft records a hash of each prepared member's design files it grouped (`raftplan.isDesignFile`), and the carried move and `ready` refuse a member whose design changed since, a member this rafting grouped with no entry, and (with several members) a raft whose reviews quote no record covering the current one. `unfold` takes members out of a backlog raft. `release` also gives back the issue claims this checkout made. Two raftings of one issue conflict on its `raft:` line. A published raft move never restamps a prepared member and refuses one another raft holds. `release` gives back exactly what carries the stamp (prepared when its design is ready, else new), only for this checkout's claim unless `--force`, without merging; the orphan it leaves is an audit warning.
+-- AC1: An issue's raft is its own `raft:` line, written in the rafting worktree. `new raft` over prepared issues and `fold` publish the raft's claim alone (a fresh `preparing-…` stamp, remembered in this checkout), never restamp a prepared issue, refuse new and prepared issues together, a solo issue with others, another project, another type and a raft that is not in the backlog, and `fold` resumes only its own claim. The carried `status <R> prepared` takes prepared members as they are, takes a `preparing` member only with R's own stamp or a claim this checkout made, refuses a member another raft holds on origin, and, for a raft z-raft grouped, needs its Theme and Order & dependencies. z-design's claim refuses an issue already in a raft, and `ready` refuses a raft while a member is `preparing`. A raft records a hash of each prepared member's design files it grouped (`raftplan.isDesignFile`), and the carried move and `ready` refuse a member whose design changed since, a member this rafting grouped with no entry, and (with several members) a raft none of whose `design-review-NNN.md` files quotes a `Grouped:` record covering the current one (an `unfold` alone needs none). Every hash reads tracked files only, and an ignored file never changes one. `unfold` takes members out of a backlog raft. `release` also gives back the issue claims this checkout made. Two raftings of one issue conflict on its `raft:` line. A published raft move never restamps a prepared member and refuses one another raft holds. `release` gives back exactly what carries the stamp (prepared when its design is ready, else new), only for this checkout's claim unless `--force`, without merging; the orphan it leaves is an audit warning.
 -- AC2: `recombine <keeper> <other> [<issue>...]` moves the named members, or all, under one shared stamp on both rafts, retires the other only when it ends up empty (into `rafts/retired/`, keeping its review history for `lessons`, `metrics` and `audit`), merges `origin/main` before it reads membership, keeps every reader that walks rafts green on a tree holding a retired raft (c0114/classified, c0043/rounds, `lessons`, `audit`, `engine.empty`), refuses another project, another type, an active, done or claimed raft, a non-member and a solo issue with others, and both rafts are readyable after the merge.
 +- AC1: An issue's raft is its own `raft:` line, written in the rafting worktree. `new raft` over prepared issues and `fold` publish the raft's claim alone (a fresh `preparing-…` stamp, remembered in this checkout), never restamp a prepared issue, refuse new and prepared issues together, a solo issue with others, another project, another type and a raft that is not in the backlog, and `fold` resumes only its own claim. The carried `status <R> prepared` takes prepared members as they are, takes a `preparing` member only with R's own stamp or a claim this checkout made, refuses a member another raft holds on origin, and, for a raft z-raft grouped, needs its Theme, Order & dependencies and (with several issues and a changed membership) a coherence review written in this rafting. z-design's claim refuses an issue already in a raft, and `ready` refuses a raft while a member is `preparing`. Two raftings of one issue conflict on its `raft:` line. A published raft move never restamps a prepared member and refuses one another raft holds. `release` gives back exactly what carries the stamp (prepared when its design is ready, else new), only for this checkout's claim unless `--force`, without merging; the orphan it leaves is an audit warning.
 +- AC2: `recombine <keeper> <other> [<issue>...]` moves the named members, or all, under one shared stamp on both rafts, retires the other only when it ends up empty (into `rafts/retired/`, keeping its review history for `lessons`, `metrics` and `audit`), merges `origin/main` before it reads membership, refuses another project, another type, an active, done or claimed raft, a non-member and a solo issue with others, and both rafts are readyable after the merge.
  - AC3: With no argument, z-raft's plan never mixes types or projects, folds only into prepared backlog rafts that aren't single (defects into the lowest open defect raft that fits, chores likewise), groups features only by a shared surface, honours the 1,500-line cap inclusively, keeps solo and over-cap issues alone, skips an issue with no `size:` and never folds into a raft with a member that has none, and is the same for any input order.
  - AC4: `raft-plan` prints that plan as commands built from the documents (Touched modules, `size:`, `solo:`, roots, raft states and `single:`), then the skips or "nothing to raft", only reads, and `--apply` runs the commands in a worktree only.
  - AC5: z-design claims, reviews, spends and prepares one issue with no raft; `ready` sends a raftless issue to z-raft; `metrics` counts design rounds per issue, rolls them up to the raft, and sets `size:` against the changed lines.
-@@ -405,7 +362,6 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -413,7 +362,6 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
  - AC7: `promote-check <issue>` copies the issue's own acceptance specs, says how many, fails on one that breaks the type check, and removes the copies (run in a clone under `.cache`).
  - AC8: the real tree passes `./zn skills --check`, `./zn lessons --check` and `./zn audit` with z-raft added.
  - AC9: the promoted claim, prep, start, ready, stop, board-refresh and remap specs, and c0115's overridden README spec, stay green.
--- AC10: `compact` and `renumber` re-record every grouped entry that matched before their rewrite (raft document and quoted reviews), so `ready` takes a raft nothing redesigned, and a record that was stale stays stale.
+-- AC10: `compact`, `remap` and `renumber` re-record every grouped entry that matched before their rewrite (raft document and quoted reviews), so `ready` takes a raft nothing redesigned, and a record that was stale stays stale.
  
  ### Judged
  - JC1: z-raft's prose steps are what a clean agent can follow. Rubric: pass when an agent given only z-raft and zz-rules can, for each of three cases (two prepared chores; a feature that shares a surface with a prepared feature raft; recombining two backlog rafts), name the exact commands it would run, what it writes in the raft document, whether a coherence review is needed, and what it does on a `raft:` conflict, with nothing contradicting zz-rules' **Rafting** bullet; fail on any step it can't place or any contradiction.
-@@ -435,14 +391,10 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+@@ -438,25 +386,20 @@ Overrides: c0116 is a chore, so it changes these promoted specs in its own raft
+ 4. G4: `size:` is the designer's estimate with no formula (U3 failed), calibrated afterwards by metrics' size table; an open raft with a member that has no `size:` is not open to the no-argument plan (review 001 F3), so today's open rafts take new members only with an argument.
+ 5. G5: a raft of one issue gets `single: true` only when the issue is solo or over the cap; any other lone issue's raft is `single: false`, so later issues of its type can fold in. Existing `single: true` rafts are never folded into.
+ 6. G6: z-raft's coherence review is exactly one round; a finding that needs a member's design to change takes the member out of the raft (back to z-design) instead of a second round.
+-7. G7: the coherence review applies to every raft of two or more issues (the decision's "several issues"), defects and chores included, not only features. The carried move and `ready` enforce it: a `design-review-NNN.md` in the raft's folder must quote a `Grouped:` record covering the raft's current one, so every fold, re-fold or recombine needs a new round and an `unfold` alone needs none (review 003 F2).
++7. G7: the coherence review applies to every raft of two or more issues (the decision's "several issues"), defects and chores included, not only features; it is enforced by the carried move (a `design-review-NNN.md` in the raft's folder that isn't on `origin/main`).
+ 8. G8: a released `new raft` is left on `origin/main` as an orphan (publish never deletes), warned about by `audit`, and retired by a later `recombine` into any raft of its project and type, in that rafting PR.
  9. G9: z-design designs exactly one issue per run; features that share a surface are designed apart and meet in z-raft's coherence review (the decided option, not "design several together").
  10. G10: rafting worktrees are named `raft-<slug>`, and rafting PRs merge under the same rule as preps ("ask the user before merging a rafting PR they didn't ask for"); c0117 decides whether an unattended one may merge.
  11. G11: `raft-plan` reads the local tree (run after `./zn sync`), not `origin/main` directly; `--apply` runs in-process and stops at the first refusal, leaving the claims made so far for resume or `release`.
@@ -4338,34 +4562,54 @@ index 4e424b9f..edca432e 100644
  13. G13 (review 001 F2): a retired raft keeps its whole folder under `<root>/rafts/retired/<R-id>` with `retired: <keeper>` (not a `retired` status, which every status reader would have to learn); it is history only: never found, drawn, readied or planned, but its reviews and harvest stay lesson sources and metrics rounds, and `compact` renumbers it with the rest.
  14. G14 (review 001 F1): a claim this checkout made on an issue (`status <id> preparing`) is remembered in `.cache/tracker-claim-<id>`, so the old prep's "claim an added issue, then prepare the raft" still works in one worktree, while the same claim from any other worktree is refused by the carried move.
 -15. G15 (review 001 F1, revised by review 002 F1): z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `unfold`). A design claim made inside the rafting window is caught wherever it ends: the carried move refuses it while it is open or once it has changed the member, and `ready` refuses the raft while the member is `preparing` or once it has changed it. No git conflict is forced.
--16. G16 (review 002 F1): the lock records a hash of each grouped member's document (`grouped:`) instead of restamping members. The user's plan says the stamp claims only the raft, and restamping would bring back the `prepared>new` give-back. Keeping a redesigned member means folding it again and rerunning the coherence review; z-raft's text says so, and the engine checks only the record.
+-16. G16 (review 002 F1): the lock records a hash of each grouped member's document (`grouped:`) instead of restamping members. The user's plan says the stamp claims only the raft, and restamping would bring back the `prepared>new` give-back. Keeping a redesigned member means folding it again and rerunning the coherence review; the engine checks the record (a hash of each member's design files), the review that quotes it (G7), and that no member this rafting grouped goes without an entry (review 003 F5).
 -17. G17 (review 002 F3): `unfold <R> <ids…>` is a new command, the route back to z-design for a rafted issue. A hand edit would have been a second, unchecked way to change membership.
 -18. G18 (review 002 F4): `release` also gives back the issue claims this checkout remembers for the raft's members.
 -19. G19: decided by the user on 2026-10-21 ("Keep one PR"): see the Problem.
+-20. G20 (review 004 F4): the engine does not refuse a review edited after its first commit: compact and remap edit one legitimately, and squash merges erase the history `ready` would need. The rule is in the refusal message and the skills.
 +15. G15 (review 001 F1): z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (rafted issues are redesigned through z-raft, which takes them out first); if a design claim slips in after the carried move but before the landing, the two meet at `ready`, which refuses the raft until the claim lands or is given back, and no git conflict is forced.
  
  ## Programme review of c0116: how each finding is answered
  - F1 (the lock needs four additions): all four, as one rule and one table (§1). (1) A claim is its stamp: `new raft` over prepared issues, `fold`, `status <R> preparing` and `recombine` stamp rafts only; prepared members are never restamped; `new` members still are (c0053). (2) One early live check, at the line that is the lock: `new raft` and `fold` refuse an issue whose origin `raft:` is set; the carried move refuses a member whose origin `raft:` names another raft unless that raft carries this raft's stamp, and accepts a prepared, ready member. Nothing reads an origin `issues:` list for a hold. (3) `release` is a separate published verb; the carried `status <R> prepared` stays carried (G2). (4) Retirement lands by PR: `recombine` deletes an emptied raft's folder in its branch; an abandoned `new raft` stays as an orphan that `audit` warns about and `recombine` retires (G8). Every listed spec case is in claims.spec or recombine.spec, run on the prototype, with the regression specs in AC9; the four mutants are M1/M5, M6 (the early check reading nothing: dropped), M19/M16 (the release), and M7 (same claim by raft id), all killed.
-@@ -471,30 +423,15 @@ Measured on the prototype (`git diff -M --numstat` of the edits commit; the simu
+ - F2 (where design reviews live): on the issue (the user's "On the issue, rolled up"): z-design's reviewer writes in the issue's folder, spend is `spend <id>`, `metrics` counts per issue and rolls up through `raft:` (§6, AC5, M48 to M50), zz-review's output path changes, code reviews stay on the raft; c0043/rounds is overridden (U5). c0118's interface is §11.
+-- F3 (the raft's own design): the user's "Short coherence review": z-raft writes Theme, Order and interfaces (z-raft §3), sets the raft's `design:` (zz-rules now says so), and runs one raft-mode round for any raft of several issues (G6, G7), enforced by the carried move and `ready` through the review's quoted record (M10, M81, M88).
++- F3 (the raft's own design): the user's "Short coherence review": z-raft writes Theme, Order and interfaces (z-raft §3), sets the raft's `design:` (zz-rules now says so), and runs one raft-mode round for any raft of several issues (G6, G7), enforced by the carried move (M10 to M12).
+ - F4 (unattended z-raft): the policy is the pure `raftplan.luau`, exposed as `raft-plan [--apply]` (§3); an empty Touched list shares nothing (M36); claims are remembered in `.cache/tracker-claim-<R>`, `fold` resumes its own, `release` refuses another's (M14, M15, M17); a lost race ends at the `raft:` conflict. A `preparing` raft is never folded into (M29): the plan opens a new raft instead. The determinism and every listed spec case are in plan.spec.
+ - F5 (size has no input): z-design writes `size:` (the user's decision), z-raft sums it with no judgement, a missing one is skipped and named (M34), an over-cap issue is alone (M32). U3 ran and failed, so the estimate is the designer's, calibrated by metrics (G4).
+ - F6 (sequencing): the user's `solo:` marker: z-design writes it from a recorded decision, the plan never folds it (M33), and the commands refuse it with others (G3, M3, M26). Three solo chores make three rafts (plan.spec). The finding's extra clause (never fold next to an issue that depends through a solo member) is covered by construction: a solo issue's raft holds only it and is `single: true`, so nothing joins it (M30).
+@@ -473,42 +416,22 @@ Against `./zn capture c0116` (fb7fd80, "tracker: new c0114 c0115 c0116 c0117 c01
+ - with none: never mixes types → AC3 (M28); never pulls an active or done raft → AC3 (M29); folds defects into one open prepared defect raft, chores the same → AC3; features only when they share a surface → AC3 (M36 to M38); about 1,500 lines starts another → AC3 (M31, M32).
+ - recombining keeps one backlog raft and retires the other (moves `raft:` and `issues:`) → AC2.
+ - rafts never cross projects → AC2 (M23), AC3 (M35), and `new raft`'s c0114 refusal.
+-- the decided coherence review → AC1 (M81, M85, M88), AC6; `solo:` → AC1, AC2, AC3; partial recombine → AC2; rules always hold → AC1, AC2, AC6; reviews on the issue, rolled up → AC5, AC6; `size:` → AC3, AC4, AC5.
++- the decided coherence review → AC1 (M11, M12), AC6; `solo:` → AC1, AC2, AC3; partial recombine → AC2; rules always hold → AC1, AC2, AC6; reviews on the issue, rolled up → AC5, AC6; `size:` → AC3, AC4, AC5.
+ 
+ ## Size
+ Measured on the prototype (`git diff -M --numstat` of the edits commit; the simulation commit excluded):
  
  | part | + | − |
  |---|---|---|
--| engine (`main.luau`, `raftplan.luau` new, `claims.luau`, `audit.luau`, `lessons.luau`) | 1,565 | 69 |
+-| engine (`main.luau`, `raftplan.luau` new, `claims.luau`, `audit.luau`, `lessons.luau`) | 1,597 | 70 |
 -| skills (z-design, z-raft new, zz-rules, zz-review, zz-stats, z-ready), README, AGENTS.md, the link | 132 | 58 |
 -| overrides (seven promoted specs, c0115's check.sh) | 48 | 16 |
 -| `tests/lib/engine.luau` | 2 | 1 |
--| this issue's acceptance specs and `check.sh` (prep's lines) | 2,281 | 4 |
--| **total, prep aside** | **1,747** | **144** |
+-| this issue's acceptance specs and `check.sh` (prep's lines) | 2,350 | 4 |
+-| **total, prep aside** | **1,779** | **145** |
 +| engine (`main.luau`, `raftplan.luau` new, `claims.luau`, `audit.luau`, `lessons.luau`) | 1,098 | 39 |
 +| skills (z-design, z-raft new, zz-rules, zz-review, zz-stats, z-ready), README, AGENTS.md, the link | 128 | 58 |
 +| overrides (five promoted specs, c0115's check.sh) | 17 | 15 |
 +| this issue's acceptance specs and `check.sh` (prep's lines) | 1,654 | 4 |
 +| **total, prep aside** | **1,243** | **112** |
  
--About 1,890 changed lines outside the prep's own specs. Review round 3 added about 220 of them (the record over design files, the review of the record, `keepRecords` and the explicit exemption). `size: 1900`. **Decided with the user (2026-10-21): "Keep one PR"**, recorded in the Problem; it was given at about 1,670 lines, before round 3. c0116 is `solo: true`, so the cap never groups it with anything.
+-About 1,920 changed lines outside the prep's own specs. Review round 3 added about 220 of them, and round 4 about 30 (one git-view reader, `ready`'s check in its build) (the record over design files, the review of the record, `keepRecords` and the explicit exemption). `size: 1900`. **Decided with the user (2026-10-21): "Keep one PR"**, and after round 3 **"Still one PR"** at about 1,890 lines, both recorded in the Problem. c0116 is `solo: true`, so the cap never groups it with anything.
 +About 1,355 changed lines outside the prep's own specs (round 1 added about 140: the claim rules, retired rafts, the sizeless-raft rule), still under the 1,500-line guide; `size: 1200` stays the estimate for z-raft's sum (G12). The four lesson files are prep's and the review files are history; neither is counted.
  
  ## Verification log
+-Design review 004 answered, 2026-10-21, in `.worktree/proto-c0116`, still on `proto-c0115` at 0d574f3. Its branch is at 2956c44, which you said has not settled, so I did not rebase.
+-- `z-nile/check.sh --full`: **GATE PASSED (full)**. pickman ran 1068 cases in 157 files, z-nile 1053 in 151, 0 failed. Wall time 166.9 s (the machine was shared with mutation runs). `./zn check c0116`: **10/10**.
+-- Mutation check: the 22 mutants this round's code touched were rerun on it, and all were killed on an assertion: M10, M53, M57, M69, M70, M71, M77 to M83 (M79 against claims and plan), M84 to M88, and the new M89 to M91. With round 3's 85 that makes 88 of 88 (E1). The race between `ready`'s pull and its publish, and the merge-base scratch call, are `reasoned` rows.
+-- Lessons, in the prep tree: `scripts/tracker.sh lessons --check` gives "39 lessons, 197 harvest entries, ok", and `lessons --uncovered c0116` gives "every finding is covered".
+-
 -Design review 003 answered, 2026-10-21, in `.worktree/proto-c0116`, rebased onto `proto-c0115` at 0d574f3 (the simulation add465f). By the end, `proto-c0115`'s branch had moved on to 2956c44 (c0115 is being reworked for the user's decisions), so the prototype stays on 0d574f3 until that settles.
 -- `z-nile/check.sh --full`: **GATE PASSED (full)**. pickman ran 1068 cases in 157 files, z-nile 1053 in 151, 0 failed. Wall time 148.3 s. `./zn check c0116`: **10/10**. `./zn lessons --check`: "29 lessons, 136 harvest entries, ok". The prototype carries copies of the two main-only lessons its harvest cites.
 -- An earlier gate run in this round failed lint (a shadowed local in claims.spec), which was fixed. The first mutation run left M11 and M12 alive: the old "a review not on origin/main" guard is now subsumed by the record's review, so it was removed. It left M79 alive in claims.spec: T1 also added an acceptance spec, so T1 was split into a `check.sh`-only raft and a spec-only raft.
@@ -4387,14 +4631,14 @@ diff --git a/z-nile/.tracker/issues/c0116/check.sh b/z-nile/.tracker/issues/done
 similarity index 93%
 rename from z-nile/.tracker/issues/c0116/check.sh
 rename to z-nile/.tracker/issues/done/c0116/check.sh
-index 697d86d7..19ea1d88 100755
+index 4601ecb2..19ea1d88 100755
 --- a/z-nile/.tracker/issues/c0116/check.sh
 +++ b/z-nile/.tracker/issues/done/c0116/check.sh
 @@ -29,7 +29,5 @@ check "AC9: the promoted claim, prep, start, board and remap specs, and c0115's
    lune run tests/run -- tests/acceptance/c0053/commands-prep.spec.luau tests/acceptance/c0053/commands-claim.spec.luau \
    tests/acceptance/c0053/commands-start.spec.luau tests/acceptance/c0067/*.spec.luau tests/acceptance/c0068/stop.spec.luau \
    tests/acceptance/c0070/board-refresh.spec.luau tests/acceptance/c0081/remap.spec.luau tests/acceptance/c0115/readme.spec.luau
--check "AC10: compact and renumber re-record a grouped raft, so ready still takes it, and a stale record still refuses" \
+-check "AC10: compact, remap and renumber re-record a grouped raft, so ready still takes it, and a stale record still refuses" \
 -  lune run tests/run -- "$A/compact-record.spec.luau"
  
  finish
@@ -4503,10 +4747,10 @@ index 00000000..377c5995
 +exec "$real" "$@"
 diff --git a/z-nile/engine/adapters.luau b/z-nile/engine/adapters.luau
 new file mode 100644
-index 00000000..87bd3b4c
+index 00000000..f773d7f0
 --- /dev/null
 +++ b/z-nile/engine/adapters.luau
-@@ -0,0 +1,418 @@
+@@ -0,0 +1,426 @@
 +--!strict
 +-- One adapter per runtime (c0117): the command line that starts a model step headless and unattended, the reader of
 +-- its output stream (a token count as it runs, the final count, a quota or error signal), and the outcome. Pure: the
@@ -4516,7 +4760,7 @@ index 00000000..87bd3b4c
 +-- out. Probed 2026-10-21 (c0117 E1, E2): `claude -p --output-format stream-json --verbose` gives `usage` on each
 +-- assistant message, a `rate_limit_event` per call and a final `result` with `modelUsage`; `grok -p --output-format
 +-- streaming-json` gives a `usage` line per model call and an `end` line with the total; `agent -p --output-format
-+-- stream-json` gives usage only on its final `result` line, so its running count is an estimate from the text.
++-- stream-json` gives usage only on its final `result` line, so its step is capped by model calls instead.
 +local serde = require("@lune/serde")
 +
 +local adapters = {}
@@ -4536,13 +4780,15 @@ index 00000000..87bd3b4c
 +	errorText: string?,
 +	cliText: string, -- the last text the CLI itself printed (not the model's words): a stall's wait message
 +	open: { [string]: boolean }, -- the tool calls started and not finished yet
++	calls: number, -- distinct model calls seen (agent: distinct model_call_id values)
++	callIds: { [string]: boolean },
 +	session: string?,
 +}
 +export type Outcome = "ok" | "failed" | "quota"
 +export type Adapter = {
 +	cli: string,
 +	runtime: string,
-+	estimated: boolean, -- the running count is an estimate (no usage until the end)
++	callCapped: boolean, -- no running token count: the step stops on max_calls, and the row takes the final total
 +	argv: (Request) -> { string },
 +	feed: (Acc, string) -> (),
 +}
@@ -4586,6 +4832,8 @@ index 00000000..87bd3b4c
 +		errorText = nil,
 +		cliText = "",
 +		open = {},
++		calls = 0,
++		callIds = {},
 +		session = nil,
 +	}
 +end
@@ -4750,8 +4998,12 @@ index 00000000..87bd3b4c
 +			acc.open[j.call_id] = nil
 +		end
 +	end
-+	-- no usage until the end: a token per four characters streamed, an undercount (escalated: c0117 review 001 F6)
-+	acc.live += math.ceil(#line / 4)
++	-- no usage until the end (probe E3): count the model calls, one per distinct model_call_id, for max_calls; the
++	-- running token count stays 0 and the row takes the result's real total (the user's decision, 2026-10-21)
++	if type(j.model_call_id) == "string" and not acc.callIds[j.model_call_id] then
++		acc.callIds[j.model_call_id] = true
++		acc.calls += 1
++	end
 +end
 +
 +-- claude's own sandbox off, whatever the user's settings say, so the gate's jail can engage inside the step
@@ -4770,7 +5022,7 @@ index 00000000..87bd3b4c
 +	["claude-cli"] = {
 +		cli = "claude",
 +		runtime = "claude-cli",
-+		estimated = false,
++		callCapped = false,
 +		argv = function(r: Request): { string }
 +			return withEffort({
 +				"claude",
@@ -4796,7 +5048,7 @@ index 00000000..87bd3b4c
 +	["claude-cloud"] = {
 +		cli = "claude",
 +		runtime = "claude-cloud",
-+		estimated = false,
++		callCapped = false,
 +		argv = function(r: Request): { string }
 +			return withEffort({
 +				"claude",
@@ -4815,7 +5067,7 @@ index 00000000..87bd3b4c
 +	["grok-cli"] = {
 +		cli = "grok",
 +		runtime = "grok-cli",
-+		estimated = false,
++		callCapped = false,
 +		argv = function(r: Request): { string }
 +			return withEffort({
 +				"grok",
@@ -4837,7 +5089,7 @@ index 00000000..87bd3b4c
 +	["grok-bot"] = {
 +		cli = "grok",
 +		runtime = "grok-bot",
-+		estimated = false,
++		callCapped = false,
 +		argv = function(r: Request): { string }
 +			local args = withEffort({ "grok", "agent", "-m", r.model }, "--reasoning-effort", r.effort)
 +			table.insert(args, "--always-approve")
@@ -4849,7 +5101,7 @@ index 00000000..87bd3b4c
 +	["cursor-cli"] = {
 +		cli = "agent",
 +		runtime = "cursor-cli",
-+		estimated = true,
++		callCapped = true,
 +		argv = function(r: Request): { string }
 +			return {
 +				"agent",
@@ -4872,7 +5124,7 @@ index 00000000..87bd3b4c
 +	["cursor-app"] = {
 +		cli = "agent",
 +		runtime = "cursor-app",
-+		estimated = true,
++		callCapped = true,
 +		argv = function(r: Request): { string }
 +			return {
 +				"agent",
@@ -5110,10 +5362,10 @@ index 00000000..3023d828
 +return credential
 diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
 new file mode 100644
-index 00000000..b0da325b
+index 00000000..ee6f611d
 --- /dev/null
 +++ b/z-nile/engine/dispatch.luau
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,316 @@
 +--!strict
 +-- The dispatcher's rules (c0117), pure: which steps are scripts and which need a model, the prompt a model step gets,
 +-- and the chain: from an item's tracker state, the next step, merge or stop. dispatcher.luau reads the state, runs the
@@ -5423,6 +5675,7 @@ index 00000000..b0da325b
 +		table.insert(
 +			out,
 +			`try={i} cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} rank={spec.rank} max_tokens={spec.maxTokens}`
++				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
 +		)
 +	end
 +	return out
@@ -5431,10 +5684,10 @@ index 00000000..b0da325b
 +return dispatch
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
 new file mode 100644
-index 00000000..884ab132
+index 00000000..dd473d7e
 --- /dev/null
 +++ b/z-nile/engine/dispatcher.luau
-@@ -0,0 +1,1147 @@
+@@ -0,0 +1,1148 @@
 +--!strict
 +-- `./zn dispatch` (c0117): runs script steps itself and model steps on .models.toml's CLIs, headless and unattended,
 +-- and chains them from an item's tracker state up to the run's pull request. The rules are dispatch.luau's (pure);
@@ -6060,6 +6313,7 @@ index 00000000..884ab132
 +			stdin = if adapters.STDIN[spec.runtime] then prompt else nil,
 +			adapter = adapter,
 +			cap = spec.maxTokens,
++			maxCalls = if adapter.callCapped then spec.maxCalls else nil,
 +			stallSeconds = resolved.settings.stallSeconds,
 +			toolSeconds = resolved.settings.toolSeconds,
 +			stateDir = stateDir,
@@ -6751,7 +7005,7 @@ index 18bdd4dd..94d21c75 100644
  
  -- Every old lesson id in a harvest.md's text ("old/slug"), and the parsed ones with no renamed lesson.
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 7821b265..e63a42f4 100644
+index 84cf4590..e63a42f4 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -2,8 +2,10 @@
@@ -6813,7 +7067,27 @@ index 7821b265..e63a42f4 100644
  local function publishing(): boolean
  	local v = process.env.PICKMAN_PUBLISH
  	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
-@@ -743,6 +764,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+@@ -572,18 +593,10 @@ local function moveOnOrigin(
+ 	to: store.State,
+ 	status: string,
+ 	message: string,
+-	verify: ((id: string, st: string) -> string?)?,
+-	whole: ((paths: { string }, read: (string) -> string?) -> string?)?
++	verify: ((id: string, st: string) -> string?)?
+ ): publish.Result
+ 	refuseStale()
+ 	return published(publish.commit(".", function(paths, read)
+-		-- c0116 (review 004 F1): a check of the tree being published, in the same build
+-		if whole then
+-			local refusal = whole(paths, read)
+-			if refusal then
+-				return refusal
+-			end
+-		end
+ 		local dirs: { [string]: string } = {}
+ 		local sources: { [string]: string } = {}
+ 		for _, id in ids do
+@@ -751,6 +764,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  			or a == "--tags"
  			or a == "--uncovered"
  			or a == "--apply"
@@ -6821,26 +7095,31 @@ index 7821b265..e63a42f4 100644
  		then
  			opts[a] = { "true" }
  		elseif string.sub(a, 1, 1) == "-" then
-@@ -787,61 +809,8 @@ local function projectRoot(opts: { [string]: { string } }): string
+@@ -795,66 +809,8 @@ local function projectRoot(opts: { [string]: { string } }): string
  	return (p :: projects.Project).root
  end
  
 --- c0116 (review 002 F1, 003 F1): an item folder's files as path (relative to the folder) -> text, read from the
 --- working tree, from origin/main, or from a publish build's tree; raftplan.recordHash picks the design files.
--local function localFolderFiles(dir: string): { [string]: string }
+--- The working tree as git sees it (review 004 F1): tracked files and untracked ones that aren't ignored, so a Finder
+--- .DS_Store or an editor's swap file never changes a record. Bytes from disk (the index's paths after a rewrite's git mv).
+-local function gitFolderFiles(dir: string): { [string]: string }
 -	local out: { [string]: string } = {}
--	local function walk(abs: string, rel: string)
--		for _, name in fs.readDir(abs) do
--			local a, r = `{abs}/{name}`, if rel == "" then name else `{rel}/{name}`
--			if fs.isDir(a) then
--				walk(a, r)
--			elseif fs.isFile(a) then
--				out[r] = fs.readFile(a)
--			end
--		end
+-	if not fs.isDir(dir) then
+-		return out
 -	end
--	if fs.isDir(dir) then
--		walk(dir, "")
+-	local listed = process.exec(
+-		"git",
+-		{ "ls-files", "-co", "--exclude-standard", "-z", "--", "." },
+-		{ cwd = dir }
+-	)
+-	if not listed.ok then
+-		fail(`cannot list {dir} through git: {listed.stderr}`)
+-	end
+-	for _, rel in string.split(listed.stdout, "\0") do
+-		if rel ~= "" and fs.isFile(`{dir}/{rel}`) then
+-			out[rel] = fs.readFile(`{dir}/{rel}`)
+-		end
 -	end
 -	return out
 -end
@@ -6885,7 +7164,7 @@ index 7821b265..e63a42f4 100644
  local function recordGrouped(raftDoc: string, ids: { string }, forget: boolean?)
  	local map, problem = raftplan.parseGrouped(store.readFront(raftDoc).grouped)
  	if problem then
-@@ -851,108 +820,37 @@ local function recordGrouped(raftDoc: string, ids: { string }, forget: boolean?)
+@@ -864,108 +820,37 @@ local function recordGrouped(raftDoc: string, ids: { string }, forget: boolean?)
  		if forget then
  			map[id] = nil
  		else
@@ -6946,7 +7225,7 @@ index 7821b265..e63a42f4 100644
 -			local map = raftplan.parseGrouped(store.readFront(doc).grouped)
 -			for mid, h in map do
 -				local mdir = before[mid]
--				if mdir and raftplan.recordHash(mid, localFolderFiles(mdir)) == h then
+-				if mdir and raftplan.recordHash(mid, gitFolderFiles(mdir)) == h then
 -					table.insert(kept, { raft = rid, id = mid, hash = h })
 -				end
 -			end
@@ -6958,7 +7237,7 @@ index 7821b265..e63a42f4 100644
 -		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
 -		local rdir, mdir = after[rid], after[mid]
 -		if rdir and mdir then
--			local fresh = raftplan.recordHash(mid, localFolderFiles(mdir))
+-			local fresh = raftplan.recordHash(mid, gitFolderFiles(mdir))
 -			local old, new = `{mid}@{k.hash}`, `{mid}@{fresh}`
 -			for _, name in fs.readDir(rdir) do
 -				if name == `{rid}.md` or string.match(name, "^design%-review%-%d+%.md$") then
@@ -6986,13 +7265,13 @@ index 7821b265..e63a42f4 100644
 -
 --- c0116 (review 003 F2): whether a coherence review in the raft's folder quotes a `Grouped:` record that covers the
 --- current one: every current entry with the same hash (an unfold only drops entries, so it needs no new review).
--local function reviewCovers(raftDir: string, map: { [string]: string }): boolean
+-local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
 -	if next(map) == nil then
 -		return true
 -	end
--	for _, name in fs.readDir(raftDir) do
+-	for name, text in files do
 -		if string.match(name, "^design%-review%-%d+%.md$") then
--			for quoted in string.gmatch("\n" .. fs.readFile(`{raftDir}/{name}`), "\nGrouped: (%[[^\n]*%])") do
+-			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
 -				local q = raftplan.parseGrouped(quoted)
 -				local all = true
 -				for id, h in map do
@@ -7012,7 +7291,7 @@ index 7821b265..e63a42f4 100644
  local cmd = {}
  
  function cmd.new(pos: { string }, opts: { [string]: { string } })
-@@ -1313,8 +1211,8 @@ local function setStatus(id: string, to: string)
+@@ -1326,8 +1211,8 @@ local function setStatus(id: string, to: string)
  		local value = stamp(to)
  		local changes: { publish.Change } = {}
  		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
@@ -7023,7 +7302,7 @@ index 7821b265..e63a42f4 100644
  		for _, t in targets do
  			local tp = docPath(paths, t)
  			local tt = tp and read(tp)
-@@ -1327,15 +1225,17 @@ local function setStatus(id: string, to: string)
+@@ -1340,15 +1225,17 @@ local function setStatus(id: string, to: string)
  				return `{t} is readied (in active/): use ./zn stop {if raftId ~= "" then raftId else "<R-id>"}`
  			end
  			local cur = statusLib.effective(tf, stateOfPath(tp))
@@ -7044,7 +7323,7 @@ index 7821b265..e63a42f4 100644
  				-- c0116: an issue belongs to the raft its own `raft:` line names on origin/main. A member another raft
  				-- holds there is refused, unless that raft carries this raft's own claim stamp (recombine's other raft).
  				local owner = tf.raft or ""
-@@ -1357,9 +1257,6 @@ local function setStatus(id: string, to: string)
+@@ -1370,9 +1257,6 @@ local function setStatus(id: string, to: string)
  							return `{t} is not design: ready: set it (z-design) before status {id} prepared`
  						end
  						rafted = true
@@ -7054,7 +7333,7 @@ index 7821b265..e63a42f4 100644
  					end
  					continue
  				end
-@@ -1371,7 +1268,7 @@ local function setStatus(id: string, to: string)
+@@ -1384,7 +1268,7 @@ local function setStatus(id: string, to: string)
  					and tf.status ~= front.status
  					and not (tf.status ~= nil and tf.status == rememberedClaim(t))
  				then
@@ -7063,7 +7342,7 @@ index 7821b265..e63a42f4 100644
  				end
  			end
  			if carried and t ~= id and cur ~= "preparing" then
-@@ -1398,21 +1295,10 @@ local function setStatus(id: string, to: string)
+@@ -1411,21 +1295,10 @@ local function setStatus(id: string, to: string)
  		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
  		-- the rafting window) leaves the rafting: its coherence review read the old design
  		if carried and store.isRaftId(id) then
@@ -7086,7 +7365,7 @@ index 7821b265..e63a42f4 100644
  		end
  		if carried and rafted then
  			-- z-raft wrote the raft's own design, and a raft of several issues had its coherence review in this rafting
-@@ -1423,15 +1309,21 @@ local function setStatus(id: string, to: string)
+@@ -1436,18 +1309,21 @@ local function setStatus(id: string, to: string)
  					return `{id} has no {heading}: z-raft writes it before status {id} prepared`
  				end
  			end
@@ -7095,10 +7374,10 @@ index 7821b265..e63a42f4 100644
 -		if carried and store.isRaftId(id) and #targets > 2 then
 -			local raftItem = store.get(id)
 -			local map = raftplan.parseGrouped(store.readFront(raftItem.doc).grouped)
--			if not reviewCovers(raftItem.dir, map) then
--				return `{id}'s coherence review predates its record: no design-review-NNN.md in its folder quotes "Grouped: {raftplan.renderGrouped(
--					map
--				)}" (zz-review raft mode prints it): rerun it`
+-			if not reviewCovers(gitFolderFiles(raftItem.dir), map) then
+-				local ids: { string } = {}
+-				for mid in map do
+-					table.insert(ids, mid)
 +			-- only a raft whose membership this rafting changed needs a new one (review 001 F5)
 +			if #targets > 2 and changed then
 +				local originDir = string.sub(path, 1, #path - #id - 4)
@@ -7113,11 +7392,13 @@ index 7821b265..e63a42f4 100644
 +				end
 +				if not fresh then
 +					return `{id} groups {#targets - 1} issues: run its coherence review (z-raft) before status {id} prepared`
-+				end
+ 				end
+-				table.sort(ids)
+-				return `{id}'s coherence review predates its record ({table.concat(ids, ", ")}): run a new raft-mode round (zz-review); never edit a review that is already written`
  			end
  		end
  		if carried then
-@@ -2129,7 +2021,14 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+@@ -2145,7 +2021,14 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
  			message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
  		end
  		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
@@ -7133,7 +7414,7 @@ index 7821b265..e63a42f4 100644
  		if pushed.ok then
  			sh.git({ "reset", "--hard", "--quiet", sha })
  			sh.run("git", { "fetch", "--quiet", "origin", "main" })
-@@ -2439,27 +2338,24 @@ function cmd.renumber(pos: { string })
+@@ -2455,27 +2338,24 @@ function cmd.renumber(pos: { string })
  	if fs.isDir(dest) then
  		fail(`{new} already exists`)
  	end
@@ -7177,7 +7458,7 @@ index 7821b265..e63a42f4 100644
  	print(`{old} -> {new}`)
  end
  
-@@ -2516,9 +2412,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
+@@ -2532,9 +2412,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
  		counts[space] += 1
  	end
  	local map = idsLib.plan(all)
@@ -7188,7 +7469,7 @@ index 7821b265..e63a42f4 100644
  	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
  	-- a compaction before origin moved the counter moves it too: the old file becomes the tombstone (c0114)
  	if fs.isFile(idsLib.OLD_FILE) and idsLib.parse(fs.readFile(idsLib.OLD_FILE)) then
-@@ -2632,9 +2526,7 @@ function cmd.remap()
+@@ -2648,9 +2526,7 @@ function cmd.remap()
  			number(c :: idsLib.Counters, used)
  		end
  	end
@@ -7199,7 +7480,7 @@ index 7821b265..e63a42f4 100644
  	local problems = audit.run(".")
  	if audit.errors(problems) > 0 then
  		for _, p in problems do
-@@ -2658,9 +2550,7 @@ function cmd.remap()
+@@ -2674,9 +2550,7 @@ function cmd.remap()
  	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
  	local built, baseTree = pcall(function(): string
  		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
@@ -7210,7 +7491,7 @@ index 7821b265..e63a42f4 100644
  		-- the scratch worktree's tracked state as a commit object, with no ref moved: empty when nothing changed
  		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
  		local saved = process.exec("git", { "stash", "create" }, { cwd = scratch })
-@@ -3342,6 +3232,18 @@ function cmd.focus(pos: { string })
+@@ -3358,6 +3232,18 @@ function cmd.focus(pos: { string })
  	print(`focus: {issue.id}`)
  end
  
@@ -7229,7 +7510,7 @@ index 7821b265..e63a42f4 100644
  local function recordAndCommit(
  	raft: store.Item,
  	message: string,
-@@ -3349,7 +3251,8 @@ local function recordAndCommit(
+@@ -3365,7 +3251,8 @@ local function recordAndCommit(
  	explicitMinutes: number?,
  	isDone: boolean?,
  	phase: string?,
@@ -7239,7 +7520,7 @@ index 7821b265..e63a42f4 100644
  )
  	phase = if phase and phase ~= "" then phase else "build"
  	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
-@@ -3379,7 +3282,7 @@ local function recordAndCommit(
+@@ -3395,7 +3282,7 @@ local function recordAndCommit(
  		if share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0 then
  			continue
  		end
@@ -7248,7 +7529,7 @@ index 7821b265..e63a42f4 100644
  		local trailer =
  			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
  		if phase ~= "build" then
-@@ -3388,6 +3291,9 @@ local function recordAndCommit(
+@@ -3404,6 +3291,9 @@ local function recordAndCommit(
  		if share.tokens ~= nil then
  			trailer ..= ` {share.tokens} tokens`
  		end
@@ -7258,7 +7539,7 @@ index 7821b265..e63a42f4 100644
  		table.insert(trailers, trailer)
  	end
  	spend.writeRaft(raft)
-@@ -3405,7 +3311,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -3421,7 +3311,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
  	local message = opts["-m"] and opts["-m"][1]
  	if not message or message == "" then
  		fail(
@@ -7267,7 +7548,7 @@ index 7821b265..e63a42f4 100644
  		)
  	end
  	-- phase and tokens are checked before anything is staged
-@@ -3426,8 +3332,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -3442,8 +3332,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
  		end
  		tokens = tonumber(raw)
  	end
@@ -7278,7 +7559,7 @@ index 7821b265..e63a42f4 100644
  end
  
  -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
-@@ -3745,6 +3652,20 @@ local function buildLessons(project: string?): string
+@@ -3761,6 +3652,20 @@ local function buildLessons(project: string?): string
  	return (string.gsub(text, "\n$", ""))
  end
  
@@ -7299,7 +7580,7 @@ index 7821b265..e63a42f4 100644
  local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
  	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
  
-@@ -3934,12 +3855,12 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+@@ -3950,12 +3855,12 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -7315,7 +7596,7 @@ index 7821b265..e63a42f4 100644
  		else `({raft.root} has no architecture.md: this project has none)`
  end
  
-@@ -3998,11 +3919,12 @@ local function renderPrompt(raft: store.Item): string
+@@ -4014,11 +3919,12 @@ local function renderPrompt(raft: store.Item): string
  			end
  		end
  	end
@@ -7330,7 +7611,7 @@ index 7821b265..e63a42f4 100644
  	end
  	local plan, _, planError = workstreamPlan(raft)
  	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
-@@ -4014,10 +3936,11 @@ local function renderPrompt(raft: store.Item): string
+@@ -4030,10 +3936,11 @@ local function renderPrompt(raft: store.Item): string
  		ITEMS = items,
  		SKILLS = skills,
  		ARCHITECTURE = architectureOf(raft),
@@ -7343,38 +7624,69 @@ index 7821b265..e63a42f4 100644
  		PROJECT = project or raft.root,
  	})
  	for _, m in store.members(raft.id) do
-@@ -4171,27 +4094,16 @@ function cmd.ready(pos: { string })
+@@ -4186,6 +4093,17 @@ function cmd.ready(pos: { string })
+ 				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (z-design) and ready again`
  			)
  		end
- 		-- c0116 (review 002 F1): a member redesigned since z-raft grouped it is never handed out under the old review
--		local now: { [string]: string? } = {}
++		-- c0116 (review 002 F1): a member redesigned since z-raft grouped it is never handed out under the old review
 +		local texts: { [string]: string? } = {}
- 		for _, m in members do
--			now[m.id] = raftplan.recordHash(m.id, localFolderFiles(m.dir))
++		for _, m in members do
 +			texts[m.id] = fs.readFile(m.doc)
- 		end
--		local map, problem = raftplan.parseGrouped(store.readFront(raft.doc).grouped)
--		if problem then
--			fail(`{raft.doc}: {problem}`)
--		end
--		local redesigned = regrouped(map, now)
++		end
 +		local redesigned = regrouped(raft.doc, texts)
- 		if #redesigned > 0 then
- 			fail(
- 				`{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
- 			)
- 		end
--		if #members > 1 and not reviewCovers(raft.dir, map) then
--			fail(
--				`{raft.id}'s coherence review predates its record: no design-review-NNN.md in its folder quotes "Grouped: {raftplan.renderGrouped(
--					map
--				)}": rerun it (z-raft)`
--			)
--		end
++		if #redesigned > 0 then
++			fail(
++				`{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
++			)
++		end
  		local everyone: { store.Item } = { raft }
  		for _, m in members do
  			table.insert(everyone, m)
-@@ -4495,7 +4407,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+@@ -4229,43 +4147,6 @@ function cmd.ready(pos: { string })
+ 					return `{id} is {cur} on origin/main, not prepared`
+ 				end
+ 				return nil
+-			end,
+-			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
+-			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
+-			function(paths, read): string?
+-				local rp = docPath(paths, raft.id)
+-				local rt = rp and read(rp)
+-				if not rp or not rt then
+-					return `{raft.id} is not on origin/main`
+-				end
+-				local map, problem = raftplan.parseGrouped(frontOf(rt).grouped)
+-				if problem then
+-					return `{rp}: {problem}`
+-				end
+-				local now: { [string]: string? } = {}
+-				for _, m in members do
+-					local mp = docPath(paths, m.id)
+-					if mp then
+-						now[m.id] = raftplan.recordHash(
+-							m.id,
+-							treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
+-						)
+-					end
+-				end
+-				local redesigned = regrouped(map, now)
+-				if #redesigned > 0 then
+-					return `{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
+-				end
+-				if
+-					#members > 1
+-					and not reviewCovers(
+-						treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4)),
+-						map
+-					)
+-				then
+-					return `{raft.id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
+-				end
+-				return nil
+ 			end
+ 		)
+ 		if not r.ok then
+@@ -4526,7 +4407,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
  	local id = pos[1]
  	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
  		fail(
@@ -7383,7 +7695,7 @@ index 7821b265..e63a42f4 100644
  		)
  	end
  	local phase = opts["--phase"] and opts["--phase"][1] or ""
-@@ -4518,6 +4430,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+@@ -4549,6 +4430,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
  		end
  		tokens = tonumber(raw)
  	end
@@ -7391,7 +7703,7 @@ index 7821b265..e63a42f4 100644
  	local note = phase
  	if opts["--note"] and opts["--note"][1] ~= "" then
  		note = opts["--note"][1]
-@@ -4628,6 +4541,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+@@ -4659,6 +4541,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
  				how = share.how,
  				phase = phase,
  				tokens = share.tokens,
@@ -7399,7 +7711,7 @@ index 7821b265..e63a42f4 100644
  			}
  			local itemTitle = frontOf(text).title or share.id
  			local okAppend, content = pcall(ledger.append, read(spendPath), share.id, itemTitle, row)
-@@ -5122,6 +5036,60 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
+@@ -5153,6 +5036,60 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -7462,10 +7774,10 @@ index 7821b265..e63a42f4 100644
  	table.remove(args, 1)
 diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
 new file mode 100644
-index 00000000..00064ece
+index 00000000..cabd4e44
 --- /dev/null
 +++ b/z-nile/engine/models.luau
-@@ -0,0 +1,354 @@
+@@ -0,0 +1,371 @@
 +--!strict
 +-- .models.toml (c0117): which model runs each model step, on which CLI, and in which order the CLIs are tried.
 +-- The files stack like .gitignore: from the repository root down to the work, a closer file replaces only the keys
@@ -7499,8 +7811,17 @@ index 00000000..00064ece
 +models.STALL_SECONDS = 300
 +-- the stall limit while a tool call runs (a full gate is quiet for minutes)
 +models.TOOL_SECONDS = 900
-+local FIELDS =
-+	{ model = "string", effort = "string", rank = "count", runtime = "string", max_tokens = "count" }
++local FIELDS = {
++	model = "string",
++	effort = "string",
++	rank = "count",
++	runtime = "string",
++	max_tokens = "count",
++	max_calls = "count",
++}
++-- the CLIs whose stream has no running token count: their step stops after `max_calls` model calls (the user's decision,
++-- 2026-10-21: "Cap model calls, record real total"); a spec of theirs without it is an error, never unlimited
++models.CALL_CAPPED = { agent = true } :: { [string]: boolean }
 +local REQUIRED = { "model", "rank", "runtime", "max_tokens" }
 +
 +export type Spec = {
@@ -7510,6 +7831,7 @@ index 00000000..00064ece
 +	rank: number,
 +	runtime: string,
 +	maxTokens: number,
++	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
 +}
 +export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
 +-- One parsed file: its order and settings when it sets them, and its skill tables (skill -> cli -> field -> value).
@@ -7622,7 +7944,7 @@ index 00000000..00064ece
 +					local want = FIELDS[field]
 +					if not want then
 +						error(
-+							`{path}: {key}.{cli}.{field} is not a field (model, effort, rank, runtime, max_tokens)`,
++							`{path}: {key}.{cli}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls)`,
 +							0
 +						)
 +					end
@@ -7729,6 +8051,12 @@ index 00000000..00064ece
 +				error(`{skill}.{cli}: no {k} (every model has model, rank, runtime and max_tokens)`, 0)
 +			end
 +		end
++		if models.CALL_CAPPED[cli] and f.max_calls == nil then
++			error(
++				`{skill}.{cli}: no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
++				0
++			)
++		end
 +		local spec: Spec = {
 +			cli = cli,
 +			model = f.model,
@@ -7736,6 +8064,7 @@ index 00000000..00064ece
 +			rank = f.rank,
 +			runtime = f.runtime,
 +			maxTokens = f.max_tokens,
++			maxCalls = f.max_calls,
 +		}
 +		local why = models.reviewRule(skill, spec)
 +		if why then
@@ -7900,10 +8229,10 @@ index 6887665b..7a2bd4d9 100644
  	local out: { [string]: string } = {}
 diff --git a/z-nile/engine/runner.luau b/z-nile/engine/runner.luau
 new file mode 100644
-index 00000000..8a026508
+index 00000000..4d979132
 --- /dev/null
 +++ b/z-nile/engine/runner.luau
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,258 @@
 +--!strict
 +-- Runs one model step's CLI (c0117) under a supervisor: the CLI leads a process group of its own (so the cap, a
 +-- stall or `./zn dispatch stop` kills every process the step started, a `check.sh` or a Bash tool's children
@@ -7928,6 +8257,7 @@ index 00000000..8a026508
 +	stdin: string?, -- the prompt, for the runtimes that read it there
 +	adapter: adapters.Adapter,
 +	cap: number, -- max_tokens: the running count past it kills the step
++	maxCalls: number?, -- a call-capped runtime's max_calls: the next model call past it kills the step
 +	stallSeconds: number,
 +	toolSeconds: number, -- the stall limit while a tool call runs
 +	stateDir: string, -- holds the pid file, the stdin file and the stop marker
@@ -8106,6 +8436,8 @@ index 00000000..8a026508
 +		local limit = if adapters.toolRunning(acc) then r.toolSeconds else r.stallSeconds
 +		if fs.isFile(stopFile) then
 +			early, detail = "stopped", "stopped by ./zn dispatch stop"
++		elseif r.maxCalls and acc.calls > (r.maxCalls :: number) then
++			early, detail = "cap", `passed max_calls {r.maxCalls} at call {acc.calls}`
 +		elseif acc.live > r.cap then
 +			early, detail = "cap", `passed max_tokens {r.cap} at {acc.live} tokens`
 +		elseif acc.quota then
@@ -8639,7 +8971,7 @@ index 1bb549c9..0a6ebf5e 100644
  Before you start, read this skill's lessons: `./zn lessons --skill z-design --full`. Each is a mistake made before, with the question that catches it.
  
 diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
-index f3a81a19..37362286 100644
+index 70e21e7d..37362286 100644
 --- a/z-nile/skills/z-raft/SKILL.md
 +++ b/z-nile/skills/z-raft/SKILL.md
 @@ -27,7 +27,7 @@ Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or th
@@ -8655,7 +8987,7 @@ index f3a81a19..37362286 100644
  Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
  
  ## 4. Coherence review (a raft of several issues)
--A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on Opus 5.5 (as z-design step 5.2 says). It writes `design-review-NNN.md` in the raft's folder. Answer every finding in the raft document, or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One round per grouping: a raft whose record changes (a member folded, re-folded or recombined in) gets a new round, and an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
+-A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on Opus 5.5 (as z-design step 5.2 says). It writes `design-review-NNN.md` in the raft's folder. Answer every finding in the raft document, or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One round per grouping: a raft whose record changes (a member folded, re-folded or recombined in) gets a new round, and an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), and a review file is never edited after it is written (a new round is a new `design-review-NNN.md`), and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
 +A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its membership (a raft that only retired an orphan or kept the rest of a partial recombine needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **review model of the CLI** (the user's rule): Opus through `claude` or `agent`, `grok-4.7-xhigh` through `grok`, whatever model the author runs on (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). It writes `design-review-NNN.md` in the raft's folder. Answer every finding in the raft document, or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One round: there is no second.
  As soon as the reviewer returns, `./zn spend <R-id> --phase design-review --time <reviewer minutes> --tokens <reviewer tokens> --note design-review-NNN` (it shares the row among the members this branch gives the raft), and again for your answering time.
  
@@ -8775,6 +9107,16 @@ index e38130fc..00000000
 -**Why:** c0116 design review 002 F1: the rafting checked for a live `preparing` claim on each member. A complete z-design cycle (claim, redesign, carried prepare, land) inside the rafting window left the member `prepared` again, so the carried move took it "as it is", and `ready` handed out a raft whose coherence review read the old design. This was the third hole in the raft-only stamp.
 -
 -**How to apply:** record what the claim read (a hash of the item, its stamp) at the moment it reads it, and compare at every later step that relies on it (the carried move, `ready`). Refuse on a difference, and name both values. Then try the both-orders cases: a full change landing before the next step, and one landing after it.
+diff --git a/z-nile/skills/zz-arch/lessons/one-reader-per-format.md b/z-nile/skills/zz-arch/lessons/one-reader-per-format.md
+index 92b2466c..448c7034 100644
+--- a/z-nile/skills/zz-arch/lessons/one-reader-per-format.md
++++ b/z-nile/skills/zz-arch/lessons/one-reader-per-format.md
+@@ -9,5 +9,3 @@ Two parsers of one format drift apart, and then each tool sees a different set o
+ **Why:** R0040 design review 1 (F7): the lesson tooling's `findings` was stricter than `./zn done`'s heading pattern, so a `### F1: claim` heading would be a finding for `done` but invisible to the harvest.
+ 
+ **How to apply:** before writing a parser, search for an existing one of the same format, and add a spec case on input where a stricter or looser reader would differ.
+-
+-**Note (c0116 design review 004 F1):** this holds for every reader of one *record* too, not only for parsers of one format. c0116's `ready` and `keepRecords` hashed a member's folder by walking the working tree, ignored files included, while the record was taken from git's blobs on `origin/main`. So Finder's `.DS_Store` made `ready` refuse a raft nothing had redesigned, and the refusal's own recovery couldn't clear it. Ask: do all the places that compute or compare this record read the same files from the same source, and can an untracked or ignored file change what one of them sees?
 diff --git a/z-nile/skills/zz-arch/lessons/records-cover-what-was-reviewed.md b/z-nile/skills/zz-arch/lessons/records-cover-what-was-reviewed.md
 deleted file mode 100644
 index cc4d4970..00000000
@@ -8793,7 +9135,7 @@ index cc4d4970..00000000
 -
 -**How to apply:** list the files the reviewed thing is made of once, as one function (c0116: `raftplan.isDesignFile`). Leave out files that change for other reasons (`spend.md`). Then grep for every command that rewrites those files (compact, remap, renumber, migrate) and make each re-record the entries that matched before its rewrite, and only those. Prove it by running that command on a tree holding a record, then the check.
 diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
-index 784a7073..10347c13 100644
+index 5bec93c9..10347c13 100644
 --- a/z-nile/skills/zz-review/SKILL.md
 +++ b/z-nile/skills/zz-review/SKILL.md
 @@ -14,6 +14,9 @@ You have no shared context with the author. Judge only what's in front of you:
@@ -8810,7 +9152,7 @@ index 784a7073..10347c13 100644
  - Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
  
  ## Raft mode (from z-raft)
--One short round on a raft z-raft grouped from prepared issues, whose own designs were reviewed apart. Copy the raft's `grouped:` value onto a line of its own under `Inputs:`, as `Grouped: [<the value>]`: z-raft's carried move and `ready` need a review that quotes the record it read. Attack only the raft: item 7 (**Raft coherence**) below, and the raft's Theme, Order & dependencies and Whole-raft design: do two members change one module, public signature or `architecture.md` edge in ways that disagree, does the order follow `depends_on` and what the interfaces force, and does the Theme quote the decisions the members rely on? Don't re-review a member's design. A finding whose fix needs a member's design to change says so: z-raft takes that member out of the raft.
+-One short round on a raft z-raft grouped from prepared issues, whose own designs were reviewed apart. Copy the raft's `grouped:` value onto a line of its own under `Inputs:`, as `Grouped: [<the value>]`: z-raft's carried move and `ready` need a review that quotes the record it read. Never edit a review once it is written: a new round is a new file. Attack only the raft: item 7 (**Raft coherence**) below, and the raft's Theme, Order & dependencies and Whole-raft design: do two members change one module, public signature or `architecture.md` edge in ways that disagree, does the order follow `depends_on` and what the interfaces force, and does the Theme quote the decisions the members rely on? Don't re-review a member's design. A finding whose fix needs a member's design to change says so: z-raft takes that member out of the raft.
 +One short round on a raft z-raft grouped from prepared issues, whose own designs were reviewed apart. Attack only the raft: item 7 (**Raft coherence**) below, and the raft's Theme, Order & dependencies and Whole-raft design: do two members change one module, public signature or `architecture.md` edge in ways that disagree, does the order follow `depends_on` and what the interfaces force, and does the Theme quote the decisions the members rely on? Don't re-review a member's design. A finding whose fix needs a member's design to change says so: z-raft takes that member out of the raft.
  
  ## Design mode (from z-design)
@@ -8828,7 +9170,7 @@ index 784a7073..10347c13 100644
  
  ## Code mode (before the PR is marked ready)
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 2d090998..f06e2f25 100644
+index 2d090998..953394d4 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -45,6 +45,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -8874,7 +9216,7 @@ index 2d090998..f06e2f25 100644
 +## Dispatch
 +`./zn dispatch` runs the pipeline headless and unattended. The rules are `z-nile/engine/dispatch.luau`'s; the stacked model files are `models.luau`'s.
 +- **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test` and a project's skills are read inside a step and are never one; any other name is an error.
-+- **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (`order` whole, each `[dispatch]` setting, each field of each `[<skill>.<cli>]` table). `order` is the CLI priority, top first; the supported CLIs are `claude`, `grok` and `agent` (Cursor), and a table naming any other is an error. Each `[<skill>.<cli>]` has `model`, `rank`, `runtime` and `max_tokens` (and optionally `effort`); the runtime belongs to its CLI: `claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`). Nothing defaults: a skill no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's order; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. `zz-review` follows the review rule: Opus (`claude-opus-…`) through `claude` and `agent`, `grok-4.7` at `effort = "xhigh"` through `grok`; any other is an error.
++- **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (`order` whole, each `[dispatch]` setting, each field of each `[<skill>.<cli>]` table). `order` is the CLI priority, top first; the supported CLIs are `claude`, `grok` and `agent` (Cursor), and a table naming any other is an error. Each `[<skill>.<cli>]` has `model`, `rank`, `runtime` and `max_tokens` (and optionally `effort`), and an `agent` table also `max_calls`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s) and the spend row takes the result's real total; calls are not tokens, so the user tunes it, and an `agent` table without it is an error, never unlimited (the user's "Cap model calls, record real total"); the runtime belongs to its CLI: `claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`). Nothing defaults: a skill no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's order; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. `zz-review` follows the review rule: Opus (`claude-opus-…`) through `claude` and `agent`, `grok-4.7` at `effort = "xhigh"` through `grok`; any other is an error.
 +- **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the tripwire and the server's protection are what catch its use.
 +- **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the dispatcher's publish broker (`ZN_PUBLISH_BROKER`), which pushes them with the user's credential only when everything they add to `main` is tracker state by a freshly fetched `main`'s registry. Nothing else in a step can push to `main`.
 +- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
