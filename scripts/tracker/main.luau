@@ -8,6 +8,7 @@ local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
 local ledger = require("./ledger")
+local lessonsLib = require("./lessons")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local publish = require("./publish")
@@ -16,6 +17,7 @@ local spend = require("./spend")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
+local trailLib = require("./trail")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
 local function asSpace(s: string): idsLib.Space
@@ -54,9 +56,12 @@ usage: scripts/tracker.sh <command> ...
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
+  capture <id>                                  print the item's document as captured (read-only)
   metrics [--include-active]                    cost per issue and rework %
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
-                                                and open it in the browser; -O only writes it]]
+                                                and open it in the browser; -O only writes it
+  lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
+                                                list skill lessons; also --tags, --check, and --uncovered <id>...]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 
@@ -641,6 +646,10 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--fetch"
 			or a == "--force"
 			or a == "-O"
+			or a == "--full"
+			or a == "--check"
+			or a == "--tags"
+			or a == "--uncovered"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -2536,6 +2545,175 @@ end
 
 local SKILLS_INLINED = { "execute-raft", "tracker", "architecture", "testing", "review" }
 
+-- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
+local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
+	local ids = {}
+	for id in tree.lessons do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	local out = {}
+	for _, id in ids do
+		local l, err = lessonsLib.parse(id, tree.lessons[id])
+		if l then
+			table.insert(out, l)
+		else
+			stdio.ewrite(`warning: {err}\n`)
+		end
+	end
+	return out
+end
+
+-- The prompt's Lessons section: the index of the build and both lessons (c0111).
+local function buildLessons(): string
+	local tree = lessonsLib.load(".")
+	local sources = lessonsLib.sources(tree.items)
+	local text =
+		lessonsLib.index(lessonsLib.select(parsedLessons(tree), sources, { when = "build" }), sources)
+	return (string.gsub(text, "\n$", ""))
+end
+
+local LESSONS_USAGE = "usage: tracker.sh lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
+	.. "       tracker.sh lessons --tags | --check | --uncovered [<id>...]"
+
+-- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
+function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+	local function usage(why: string): never
+		stdio.ewrite(`{why}\n{LESSONS_USAGE}\n`)
+		return process.exit(2)
+	end
+	local KNOWN = {
+		["--skill"] = true,
+		["--when"] = true,
+		["--tag"] = true,
+		["--full"] = true,
+		["--tags"] = true,
+		["--check"] = true,
+		["--uncovered"] = true,
+	}
+	local n = 0
+	for k, values in opts do
+		if not KNOWN[k] then
+			usage(`unknown option {k}`)
+		end
+		for _, v in values do
+			if v == "" then
+				usage(`{k} needs a value`)
+			end
+		end
+		n += 1
+	end
+	local modes = 0
+	for _, k in { "--tags", "--check", "--uncovered" } do
+		if opts[k] then
+			modes += 1
+		end
+	end
+	if modes > 0 and (n > 1 or (not opts["--uncovered"] and #pos > 0)) then
+		usage("--tags, --check and --uncovered take no other option")
+	end
+	local when = opts["--when"] and opts["--when"][1]
+	if opts["--when"] and (#opts["--when"] > 1 or (when ~= "design" and when ~= "build")) then
+		usage("--when is design or build")
+	end
+	local tree = lessonsLib.load(".")
+	local sources = lessonsLib.sources(tree.items)
+	if opts["--check"] then
+		local problems = lessonsLib.check(tree)
+		if #problems > 0 then
+			print(table.concat(problems, "\n"))
+			process.exit(1)
+		end
+		local lessonCount, entries = 0, 0
+		for _ in tree.lessons do
+			lessonCount += 1
+		end
+		for _, item in tree.items do
+			if item.harvest then
+				local e = lessonsLib.parseHarvest(item.id, item.harvest)
+				entries += #e
+			end
+		end
+		print(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`)
+		return
+	end
+	if opts["--uncovered"] then
+		local items = tree.items
+		if #pos > 0 then
+			items = {}
+			for _, id in pos do
+				local found = false
+				for _, item in tree.items do
+					if item.id == id then
+						table.insert(items, item)
+						found = true
+					end
+				end
+				if not found and tree.found[id] then
+					print(`{id}: no reviews`)
+				elseif not found then
+					usage(`{id}: no such item`)
+				end
+			end
+		end
+		local gaps = lessonsLib.uncovered(items)
+		if #gaps > 0 then
+			print(table.concat(gaps, "\n"))
+			process.exit(1)
+		end
+		print("harvest: every finding is covered")
+		return
+	end
+	local all = parsedLessons(tree)
+	if opts["--tags"] then
+		local counts: { [string]: number } = {}
+		for _, l in all do
+			for _, tag in l.tags do
+				counts[tag] = (counts[tag] or 0) + 1
+			end
+		end
+		local tags = {}
+		for tag in counts do
+			table.insert(tags, tag)
+		end
+		table.sort(tags, function(a, b)
+			if counts[a] ~= counts[b] then
+				return counts[a] > counts[b]
+			end
+			return a < b
+		end)
+		for _, tag in tags do
+			print(`{tag} {counts[tag]}`)
+		end
+		return
+	end
+	local chosen = lessonsLib.select(all, sources, {
+		skills = opts["--skill"],
+		when = when :: any,
+		tags = opts["--tag"],
+		words = pos,
+	})
+	if not opts["--full"] then
+		stdio.write(lessonsLib.index(chosen, sources))
+		return
+	end
+	for i, l in chosen do
+		if i > 1 then
+			print("")
+		end
+		local src = table.clone(sources[l.id] or {})
+		if l.from then
+			table.insert(src, l.from)
+		end
+		print(`== .claude/skills/{l.skill}/lessons/{l.slug}.md`)
+		print(`sources: {if #src > 0 then table.concat(src, ", ") else "none"}`)
+		stdio.write(tree.lessons[l.id])
+	end
+	if #chosen == 0 then
+		print("(none)")
+	end
+end
+
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
 -- architecture map and workstream plan filled in.
 local function renderPrompt(raft: store.Item): string
@@ -2572,6 +2750,7 @@ local function renderPrompt(raft: store.Item): string
 		SKILLS = skills,
 		ARCHITECTURE = fs.readFile("tracker/architecture.md"),
 		WORKSTREAMS = planText,
+		LESSONS = buildLessons(),
 	})
 	for _, m in store.members(raft.id) do
 		if store.readFront(m.doc).design ~= "ready" then
@@ -3184,6 +3363,108 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- the commit time (unix seconds) that first added `path`; nil without git history
+local function addedAt(path: string): number?
+	local r = process.exec("git", { "log", "--follow", "--diff-filter=A", "--format=%ct", "--", path })
+	if not r.ok then
+		return nil
+	end
+	local last: string? = nil
+	for line in string.gmatch(r.stdout, "[^\n]+") do
+		last = line
+	end
+	return if last then tonumber(last) else nil
+end
+
+-- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
+local function metricsLessons()
+	local tree = lessonsLib.load(".")
+	local all: { lessonsLib.Lesson } = {}
+	for id, text in tree.lessons do
+		local l = lessonsLib.parse(id, text)
+		if l then
+			table.insert(all, l)
+		end
+	end
+	print("\nFindings per lesson tag (harvested review findings; a finding counts once per tag).")
+	print("| tag | findings | items |\n|---|---|---|")
+	for _, c in lessonsLib.tagCounts(all, tree.items) do
+		print(string.format("| %s | %d | %d |", c.tag, c.findings, c.items))
+	end
+	local rafts: { lessonsLib.RaftRounds } = {}
+	for _, raft in store.all("raft") do
+		local n = 0
+		for _, name in fs.readDir(raft.dir) do
+			if string.match(name, "^design%-review%-%d+%.md$") then
+				n += 1
+			end
+		end
+		if n > 0 then
+			-- a raft is dated by its `created:` day, which no compaction or renumber rewrites
+			local created = store.readFront(raft.doc).created
+			table.insert(
+				rafts,
+				{ id = raft.id, rounds = n, start = if created then lessonsLib.day(created) else nil }
+			)
+		end
+	end
+	local added = addedAt("scripts/tracker/lessons.luau")
+	-- `created:` is written as the local calendar day, so the cutoff is the local day of that commit too
+	local split =
+		lessonsLib.roundsSplit(rafts, if added then lessonsLib.day(os.date("%Y-%m-%d", added)) else nil)
+	print(
+		"\nDesign rounds before and after lessons (a raft's created day against the day scripts/tracker/lessons.luau was added)."
+	)
+	print("| | rafts | design rounds | rounds/raft |\n|---|---|---|---|")
+	print(
+		string.format(
+			"| before | %d | %d | %.1f |",
+			split.before.rafts,
+			split.before.rounds,
+			split.before.mean
+		)
+	)
+	print(
+		string.format("| after | %d | %d | %.1f |", split.after.rafts, split.after.rounds, split.after.mean)
+	)
+end
+
+-- capture <id> (c0119): the item's document as captured, read-only. The capture is the newest commit on origin/main
+-- (HEAD without one), under the item's current id, whose subject is `tracker: new` naming it, or else the document's
+-- first add; the header line carries a marker for every weaker answer (trail.capture, trail.read).
+function cmd.capture(pos: { string }, _opts: { [string]: { string } })
+	local id = pos[1]
+	if not id or not string.match(id, "^[fdcR]%d%d%d%d$") then
+		fail("usage: capture <id>")
+	end
+	local kind = if string.sub(id, 1, 1) == "R" then "rafts" else "issues"
+	local head = if process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
+		then "origin/main"
+		else "HEAD"
+	local commits, notes = trailLib.read(kind, id, trailLib.isDoc, head)
+	local found, isCapture = nil, false
+	if commits then
+		found, isCapture = trailLib.capture(commits)
+	end
+	if not found then
+		fail(`capture: no history for {id} on {head}`)
+	end
+	local c = found :: trailLib.Commit
+	local shown = process.exec("git", { "show", `{c.sha}:{c.path}` })
+	if not shown.ok then
+		fail(`capture: cannot read {c.path} at {c.sha}`)
+	end
+	local marks = if isCapture then "" else " (no capture commit: first add)"
+	if trailLib.ambiguous(commits :: { trailLib.Commit }) then
+		marks ..= " (ambiguous: two items held this id at once)"
+	end
+	for _, note in notes do
+		marks ..= ` (history before {note} not followed: it changed tracker/compaction.txt)`
+	end
+	print(`capture {c.sha} {c.path} {c.subject}{marks}`)
+	stdio.write(shown.stdout)
+end
+
 function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	type Counted = {
 		id: string,
@@ -3390,6 +3671,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		end
 		print(string.format("| %s | %d | %d | %s |", raft.id, design, code, format))
 	end
+	metricsLessons()
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
 	print("Rework counts every phase, capture to deliver.")
 	print(`  by lines added:  {pct(d.added, f.added)}`)

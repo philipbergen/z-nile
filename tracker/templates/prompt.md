@@ -36,6 +36,10 @@ If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told y
 ## Architecture map (tracker/architecture.md)
 {{ARCHITECTURE}}
 
+## Lessons (build and both, from .claude/skills/*/lessons)
+Apply each before you write the code it concerns; its full text is `scripts/tracker.sh lessons --full <id>`.
+{{LESSONS}}
+
 ## Work items (verbatim from tracker/)
 {{ITEMS}}
 

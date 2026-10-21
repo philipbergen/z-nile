@@ -34,6 +34,7 @@
 | 30 | 2026-10-21 05:56 | design-review-017 | 0 | 0 | 1.0 | spend+proportional | design-review |  |
 | 31 | 2026-10-21 05:56 | design-review-017 tokens | 0 | 0 | 0.0 | spend+proportional | design-review | 31299 |
 | 32 | 2026-10-21 05:58 | prep | 552 | 1 | 69.7 | spend+proportional | prep |  |
+| 33 | 2026-10-21 06:05 | R0042: experiments (all settled in prep; nothing to run) | 183 | 6 | 0.1 | raft+proportional | build |  |
 
-**Total:** +552 / -1 lines, 353.7 agent-minutes, 770974 tokens over 32 records
-<!-- totals: added=552 removed=1 minutes=353.7 records=32 tokens=770974 -->
+**Total:** +735 / -7 lines, 353.8 agent-minutes, 770974 tokens over 33 records
+<!-- totals: added=735 removed=7 minutes=353.8 records=33 tokens=770974 -->
