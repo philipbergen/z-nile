@@ -35,11 +35,11 @@ export type Commit = {
 
 local FOLDERS = { "", "active/", "done/" }
 
--- The folders an item with this id can have lived in: its three state folders under each of `roots` (default: the
--- legacy `tracker` alone).
-function trail.dirs(kind: string, id: string, roots: { string }?): { string }
+-- The folders an item with this id can have lived in: its three state folders under each of `roots` (no default: a
+-- caller without roots gets none, never a guessed root, c0114).
+function trail.dirs(kind: string, id: string, roots: { string }): { string }
 	local out = {}
-	local within: { string } = roots or { projects.LEGACY }
+	local within: { string } = roots
 	for _, r in within do
 		for _, f in FOLDERS do
 			table.insert(out, `{r}/{kind}/{f}{id}`)
@@ -339,7 +339,8 @@ function trail.read(
 	local function keep(name: string): boolean
 		return trail.isDoc(name) or want(name)
 	end
-	local lived, start = trail.life(changes({ "log", head }, trail.dirs(kind, id, within), keep, id))
+	local lived, start =
+		trail.life(changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id))
 	lived, start = trail.since(lived, start, function(c: Commit): boolean
 		return c.doc and cuts[c.sha] ~= nil
 	end)

@@ -79,28 +79,25 @@ function publish.itemPath(path: string): (string?, string?, string?)
 end
 
 -- The live id counter of a base, from the base alone (never the working tree), and whether this publish moves it there
--- (c0114). The branch that lands c0114 never touches the counter; origin moves it once:
+-- (c0114), for a base that has the registry (publish.commit refuses one without it, so before c0114 lands only the
+-- main checkout's older engine numbers, on tracker/next). The branch that lands c0114 never touches the counter;
+-- origin moves it once:
 -- - the base has z-nile/next: that is the counter;
--- - the base has no registry (before c0114 lands, c0114's own execution included): tracker/next is the counter, which
---   only the old engine writes (publish.commit refuses a base without the registry before it gets here);
--- - the base has a registry but no z-nile/next, and tracker/next parses (c0114 has just landed): z-nile/next is the
---   counter and `migrate` is true: this publish writes z-nile/next from tracker/next's counters and the tombstone at
---   tracker/next, in its one lease push.
-function publish.counterOf(hasRegistry: boolean, hasNew: boolean, oldText: string?): (string, boolean)
+-- - the base has no z-nile/next, and tracker/next parses (c0114 has just landed): z-nile/next is the counter and
+--   `migrate` is true: this publish writes z-nile/next from tracker/next's counters and the tombstone at tracker/next,
+--   in its one lease push.
+function publish.counterOf(hasNew: boolean, oldText: string?): (string, boolean)
 	if hasNew then
 		return ids.FILE, false
-	end
-	if not hasRegistry then
-		return ids.OLD_FILE, false
 	end
 	return ids.FILE, oldText ~= nil and ids.parse(oldText) ~= nil
 end
 
 -- <root>/(issues|rafts)/[active/ | done/]<ID>/(<ID>.md | check.sh), the id's prefix matching the kind, under a root
--- that `roots` (origin/main's registry, never the working tree's; default the legacy `tracker` alone) lists. Also the
--- live counter `counter` (default z-nile/next; tracker/next only while origin/main has no registry, publish.counterFor).
-function publish.allowed(path: string, roots: { string }?, counter: string?): boolean
-	local within: { string } = roots or { projects.LEGACY }
+-- that `roots` (origin/main's registry, never the working tree's; no default, c0114) lists. Also the live counter
+-- `counter` (default z-nile/next; publish.counterOf).
+function publish.allowed(path: string, roots: { string }, counter: string?): boolean
+	local within: { string } = roots
 	if path == (counter or ids.FILE) then
 		return true
 	end
@@ -375,7 +372,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		end
 		local roots = projects.roots(reg)
 		local oldText = read(ids.OLD_FILE)
-		local counter, migrate = publish.counterOf(regText ~= nil, read(ids.FILE) ~= nil, oldText)
+		local counter, migrate = publish.counterOf(read(ids.FILE) ~= nil, oldText)
 		-- while it moves the counter, this publish reads the old counters as z-nile/next
 		local buildRead = read
 		if migrate then

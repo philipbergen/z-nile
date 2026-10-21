@@ -69,7 +69,7 @@ for _, f in files do
 		print(`new: {f.path} is not at {base}, at its path or at {old}`)
 		bad += 1
 	else
-		local want = if f.done then rewrites.expected(f.id, text, moved) else text
+		local want = if f.done then rewrites.expected(f.path, text, moved) else text
 		if now ~= want then
 			print(
 				`changed: {f.path} is not its text at {base}{if f.done

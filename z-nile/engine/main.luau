@@ -1396,7 +1396,8 @@ end
 -- Prints every item it can read, both copies of a duplicated id included, then fails on the problems that stop
 -- store.find (c0880): the other commands refuse such a tree, so `list` says where the trouble is.
 -- The project `list` shows (c0114): --project's, else the one whose folder holds the directory ./zn was run from;
--- nil (every project) at the checkout's root or in a folder no project holds.
+-- nil (every project) at the checkout's root or in a folder no project holds. Decided with the user (2026-10-21):
+-- "list shows all projects": only commands that create or change a project's items refuse there; reading needs none.
 local function listedRoot(opts: { [string]: { string } }): string?
 	if opts["--project"] then
 		return projectRoot(opts, "list")
