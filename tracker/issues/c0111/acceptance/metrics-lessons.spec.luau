@@ -112,10 +112,10 @@ return t.spec("c0111 metrics over lessons", function(it)
 				["tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n- design-review-001 F1: testing/pin\n"
 					.. "- design-review-001 F2: one-off: x\n- design-review-002 F1: testing/pin\n",
 				["tracker/rafts/R0020/design-review-001.md"] = review("F1") .. "R0020 round 1\n",
-				["tracker/rafts/R0010/R0010.md"] = raft("R0010", "2099-01-01"),
+				["tracker/rafts/R0010/R0010.md"] = raft("R0010", "2030-06-01"),
 				["tracker/rafts/R0020/R0020.md"] = raft("R0020", "2099-01-01"),
 				-- created long before lessons existed, but every one of its commits is made today
-				["tracker/rafts/R0030/R0030.md"] = raft("R0030", "2020-01-01"),
+				["tracker/rafts/R0030/R0030.md"] = raft("R0030", "2030-05-31"),
 				["tracker/rafts/R0030/design-review-001.md"] = review("F1") .. "R0030 round 1\n",
 				["tracker/rafts/R0030/design-review-002.md"] = review("F1") .. "R0030 round 2\n",
 			})
@@ -125,6 +125,14 @@ return t.spec("c0111 metrics over lessons", function(it)
 				`{f.main}/tracker/rafts/R0020/design-review-001.md`,
 				review("F1") .. "R0020 round 1, compacted\n"
 			)
+			-- lessons.luau is added on 2030-06-01, not with the seed: rafts created 2030-05-31 are before, 2030-06-01 after
+			local function at(d: string): fixture.Options
+				return { env = { GIT_COMMITTER_DATE = d, GIT_AUTHOR_DATE = d }, stdin = nil }
+			end
+			fixture.git(f.main, { "rm", "-q", "--cached", "scripts/tracker/lessons.luau" })
+			fixture.git(f.main, { "commit", "-q", "--amend", "--no-edit" }, at("2020-01-01T00:00:00Z"))
+			fixture.git(f.main, { "add", "scripts/tracker/lessons.luau" })
+			fixture.git(f.main, { "commit", "-q", "-m", "lessons" }, at("2030-06-01T12:00:00Z"))
 			fixture.git(f.main, { "add", "-A" })
 			fixture.git(f.main, { "commit", "-q", "-m", "tracker: compact ids" })
 			local r = trackerfix.tr(f, f.main, { "metrics" })
