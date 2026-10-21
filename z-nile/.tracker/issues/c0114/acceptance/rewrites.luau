@@ -200,14 +200,15 @@ rewrites.SPECIAL = {
 			'cmp -s z-nile/.tracker/issues/done/c0053/replacements/c0005-worktree.spec.luau tests/acceptance/c0005/worktree.spec.luau || { echo "c0053 replacement differs from the c0005 spec"; exit 1; }',
 			'test -f z-nile/.tracker/issues/done/c0053/replacements/c0005-worktree.spec.luau || { echo "c0053 replacement copy is missing"; exit 1; }',
 		},
+		{ "c0053's replacement copy still matches", "c0053's replacement copy is still there" },
 	},
 } :: { [string]: { { string } } }
 
--- The finished items' check.sh files this rewrite covers: the ones finished when c0114 lands (decided with the user,
--- 2026-10-21: "Only items done at landing"), at their new paths. A fixed list, never the live set of done/ folders: an
+-- The finished items' check.sh files this rewrite covers: the ones finished on origin/main when c0114 lands (decided
+-- with the user, 2026-10-21: "Only items done at landing"), at their new paths, as prep last merged origin/main. An item
+-- that finishes on main later, before c0114 lands, is rewritten by implementation step 9 and checked by finished.luau. A fixed list, never the live set of done/ folders: an
 -- item finished later keeps its old paths, which work through the forwarders until the raft that removes them, so its
--- `done` never turns this spec red. Implementation step 9 adds nothing here: an item that finishes on main inside the
--- window is rewritten by step 9 and checked by finished.luau. Paths, so a compaction rewrites them with the items.
+-- `done` never turns this spec red. Paths, so a compaction rewrites them with the items.
 rewrites.FINISHED = {
 	"tracker/issues/done/c0002/check.sh",
 	"tracker/issues/done/c0003/check.sh",
@@ -219,6 +220,7 @@ rewrites.FINISHED = {
 	"tracker/issues/done/c0063/check.sh",
 	"tracker/issues/done/c0064/check.sh",
 	"tracker/issues/done/c0103/check.sh",
+	"tracker/issues/done/c0106/check.sh",
 	"tracker/issues/done/d0105/check.sh",
 	"tracker/issues/done/f0011/check.sh",
 	"tracker/issues/done/f0012/check.sh",
@@ -235,6 +237,9 @@ rewrites.FINISHED = {
 	"tracker/issues/done/f0024/check.sh",
 	"tracker/issues/done/f0025/check.sh",
 	"tracker/issues/done/f0026/check.sh",
+	"tracker/issues/done/f0027/check.sh",
+	"tracker/issues/done/f0028/check.sh",
+	"tracker/issues/done/f0029/check.sh",
 	"tracker/issues/done/f0030/check.sh",
 	"tracker/issues/done/f0031/check.sh",
 	"tracker/issues/done/f0032/check.sh",
@@ -249,6 +254,7 @@ rewrites.FINISHED = {
 	"tracker/rafts/done/R0009/check.sh",
 	"tracker/rafts/done/R0010/check.sh",
 	"tracker/rafts/done/R0011/check.sh",
+	"tracker/rafts/done/R0012/check.sh",
 	"tracker/rafts/done/R0015/check.sh",
 	"tracker/rafts/done/R0017/check.sh",
 	"tracker/rafts/done/R0018/check.sh",
@@ -257,6 +263,7 @@ rewrites.FINISHED = {
 	"tracker/rafts/done/R0033/check.sh",
 	"tracker/rafts/done/R0036/check.sh",
 	"tracker/rafts/done/R0037/check.sh",
+	"tracker/rafts/done/R0041/check.sh",
 	"z-nile/.tracker/issues/done/c0001/check.sh",
 	"z-nile/.tracker/issues/done/c0004/check.sh",
 	"z-nile/.tracker/issues/done/c0005/check.sh",

@@ -1,10 +1,12 @@
 --!strict
--- Client adapter: the danger aids. A radar in the bottom-right corner, one margin above the power bar
--- (Hud.radarBox), the maze around the player turned so up is where the camera looks, and arrows on the
--- screen edge for ghosts out of view, larger and brighter the closer they are along the maze. All the
--- geometry is Awareness; this only draws it.
+-- Client adapter: the danger aids. A radar in the bottom-right corner, one margin above the power bar, or on a
+-- touch screen above Roblox's jump button corner (Hud.radarBox), the maze around the player turned so up is
+-- where the camera looks, and arrows on the screen edge for ghosts out of view, larger and brighter the closer
+-- they are along the maze. All the geometry is Awareness; this only draws it.
+local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
 local Hud = require("@game/ReplicatedStorage/Shared/Logic/Hud")
@@ -71,9 +73,17 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 	local walls: { Frame } = {}
 	local blips: { Frame } = {}
 	local arrows: { TextLabel } = {}
+	-- the top bar between this frame (the device safe area) and the HUD's (the core-UI safe area); read every
+	-- frame, because a rotation changes it
+	local function bandTop(): number
+		return Hud.bandTop(
+			GuiService:GetInsetArea(Enum.ScreenInsets.CoreUISafeInsets),
+			GuiService:GetInsetArea(Enum.ScreenInsets.DeviceSafeInsets)
+		)
+	end
 	RunService.RenderStepped:Connect(function()
 		local view = gui.AbsoluteSize
-		local box = Hud.radarBox(view.X, view.Y, radarSize)
+		local box = Hud.radarBox(view.X, view.Y, radarSize, UserInputService.TouchEnabled, bandTop())
 		radar.Position = UDim2.fromOffset(box.x, box.y)
 		local snap, m, pose = latest, maze, getPose()
 		if snap == nil or m == nil or pose == nil or snap.ghosts == nil then

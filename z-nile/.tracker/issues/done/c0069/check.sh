@@ -40,7 +40,7 @@ check "AC5: the launch-raft skill; docs point to /launch-raft; no ./zn launch an
   grep -qF "launch-raft/SKILL.md" AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
   bad=$(grep -rnF "./zn launch" .claude AGENTS.md SETUP.md z-nile/templates scripts || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC6: the overridden c0046, c0045 and c0005 specs pass; c0053's replacement copy still matches" bash -c '
+check "AC6: the overridden c0046, c0045 and c0005 specs pass; c0053's replacement copy is still there" bash -c '
   lune run tests/run -- tests/acceptance/c0046/launch.spec.luau || exit 1
   ! grep -qF "it(\"launch" tests/acceptance/c0046/launch.spec.luau || { echo "c0046: launch cases remain"; exit 1; }
   grep -qF "it(\"worktree-prune warns about a worktree outside" tests/acceptance/c0046/launch.spec.luau || { echo "c0046: prune case lost"; exit 1; }

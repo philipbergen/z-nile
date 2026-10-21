@@ -11,7 +11,17 @@ return t.spec("Hud extras", function(it)
 
 	it("lays out a 1280x720 screen with 32 px text", function()
 		local l = Hud.layout(1280, 720)
-		t.expect(l).toEqual({ textSize = 32, margin = 16, iconSize = 32, barWidth = 320, barHeight = 13 })
+		t.expect(l).toEqual({
+			textSize = 32,
+			margin = 16,
+			iconSize = 32,
+			barWidth = 320,
+			barHeight = 13,
+			safeX = 0,
+			safeY = 0,
+			safeW = 1280,
+			safeH = 720,
+		})
 	end)
 
 	it("caps the power bar at 400 px", function()
