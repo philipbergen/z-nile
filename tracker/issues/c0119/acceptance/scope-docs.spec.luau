@@ -57,7 +57,10 @@ return t.spec("c0119 scope rules in the skills", function(it)
 			p,
 			"whose subject is `tracker: new` followed by a list of ids that includes the item's id at the time"
 		)
-		at(p, "marked `(no capture commit: first add)`, across folder moves and every compaction")
+		at(
+			p,
+			"marked `(no capture commit: first add)`, across folder moves; an id change is never followed, and the result says so"
+		)
 		at(p, "it keeps the captured Solution bullets as they are and adds after them")
 		at(p, "`Decided with the user (YYYY-MM-DD)`")
 		at(p, "never rewrites, narrows, defers or drops a captured outcome")
@@ -158,11 +161,10 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		t.expect(row ~= nil).toBe(true)
 		at(row, "`tracker.sh capture <id>`")
 		at(row, "read-only")
-		at(row, "before each compaction")
-		at(row, "A `renumber` is not followed.")
+		at(row, "no id change (a compaction or a `renumber`) is followed")
 		at(row, "`(no capture commit: first add)` when no commit is a capture")
 		at(row, "`(ambiguous: two items held this id at once)` when the id had two copies")
-		at(row, "`(ambiguous: unproven compaction at <sha>)`")
+		at(row, "`(history before <sha> not followed: it changed tracker/compaction.txt)`")
 		at(row, "`tracker: new raft …` and `tracker: scope …` are not captures")
 		at(section(doc, "Worktrees"), "`capture <id>`")
 	end)

@@ -1,6 +1,6 @@
 --!strict
 -- c0111 AC10: an item's trail. `life` finds where an item's life under one id starts and `since` narrows it to a
--- compaction that renamed an old id onto it; `crossing` proves the old id; `isDoc` tells an item's document from its
+-- later commit that starts one (a compaction); `isDoc` tells an item's document from its
 -- other files; `parse` keeps only changes directly in the item's folders; `namedIds` reads a `tracker: new` subject;
 -- `oldestAdd` and `capture` pick the commit; `ambiguous` finds two items that held one id at once. Pure; reads nothing.
 local t = require("@tests/lib/t")
@@ -84,18 +84,6 @@ return t.spec("c0111 an item's trail", function(it)
 		end
 	)
 
-	it("crosses a compaction only to the old id its map names and that held a document before it", function()
-		local map = { c0400 = "c0040", c0040 = "c0004" }
-		local held = function(old: string): boolean
-			return old == "c0400"
-		end
-		t.expect(trail.crossing(map, "c0040", held)).toBe("c0400")
-		-- the map names no old id for c0041; an old id with no document before the commit proves nothing
-		t.expect(trail.crossing(map, "c0041", held)).toBe(nil)
-		t.expect(trail.crossing(map, "c0004", held)).toBe(nil)
-		t.expect(trail.crossing(nil, "c0040", held)).toBe(nil)
-	end)
-
 	it("finds two items holding one id at once, but not a move or a rename in one folder", function()
 		local function c(sha: string, time: number, status: string, path: string): trail.Commit
 			return {
@@ -134,14 +122,6 @@ return t.spec("c0111 an item's trail", function(it)
 		other.id = "c0700"
 		t.expect(trail.ambiguous({ c("b", 200, "A", "tracker/issues/done/c0070/c0070.md"), other }))
 			.toBe(false)
-	end)
-
-	it("compares two compaction maps by their renames", function()
-		t.expect(trail.sameMap({ c0080 = "c0008" }, { c0080 = "c0008" })).toBe(true)
-		t.expect(trail.sameMap({ c0080 = "c0008" }, { c0080 = "c0008", c0700 = "c0007" })).toBe(false)
-		t.expect(trail.sameMap({ c0080 = "c0008" }, { c0080 = "c0009" })).toBe(false)
-		t.expect(trail.sameMap(nil, nil)).toBe(true)
-		t.expect(trail.sameMap({}, nil)).toBe(false)
 	end)
 
 	it("reads the ids a `tracker: new` subject names", function()

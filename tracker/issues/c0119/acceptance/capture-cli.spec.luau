@@ -62,6 +62,10 @@ local function capture(id: string): (number, string, string)
 	return r.code, r.stdout, r.stderr
 end
 
+local function short(sha: string): string
+	return string.sub(sha, 1, 7)
+end
+
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
@@ -240,19 +244,21 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		t.expect(has(out, "#!/usr/bin/env bash")).toBe(false)
 	end)
 
-	it("follows every compaction to the old id, and keeps a reused number to its own item", function()
+	it("never follows a compaction: it marks the start, and keeps a reused number to its own item", function()
 		local _, renamed = capture("c0003")
+		local head = string.match(renamed, "^[^\n]+") :: string
+		t.expect(has(head, `capture {SHA.compact2} tracker/issues/c0003/c0003.md`)).toBe(true)
 		t.expect(
 			has(
-				renamed,
-				`capture {SHA.oldLanded} tracker/issues/c0300/c0300.md tracker: new c0300 Old, landed`
+				head,
+				`(history before {short(SHA.compact2)} not followed: it changed tracker/compaction.txt)`
 			)
 		)
 			.toBe(true)
-		t.expect(has(renamed, "before compaction, landed")).toBe(true)
 		local _, reused = capture("c0300")
 		t.expect(has(reused, `capture {SHA.reused} tracker/issues/c0300/c0300.md`)).toBe(true)
 		t.expect(has(reused, "a new item")).toBe(true)
+		t.expect(has(reused, "not followed")).toBe(false)
 	end)
 
 	it("does not follow a renumber, and marks what it cannot settle", function()
@@ -273,48 +279,37 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		t.expect(has(landed, "ambiguous")).toBe(false)
 	end)
 
-	it(
-		"starts an item's life at its last appearance, and crosses only a compaction that renamed it",
-		function()
-			local _, reused = capture("c0090")
-			t.expect(
-				has(
-					reused,
-					`capture {SHA.c90new} tracker/issues/c0090/c0090.md R0090: prep (no capture commit: first add)`
-				)
-			).toBe(true)
-			t.expect(has(reused, "old ninety")).toBe(false)
-			local _, rotatedIn = capture("c0080")
-			t.expect(
-				has(
-					rotatedIn,
-					`capture {SHA.c800} tracker/issues/c0800/c0800.md tracker: new c0800 Eight hundred`
-				)
-			).toBe(true)
-			t.expect(has(rotatedIn, "ambiguous")).toBe(false)
-			local _, seven = capture("c0007")
-			t.expect(
-				has(
-					seven,
-					`capture {SHA.c7back} tracker/issues/c0007/c0007.md R0007: prep (no capture commit: first add)`
-				)
-			).toBe(true)
-			local _, rotatedOut = capture("c0008")
-			t.expect(
-				has(rotatedOut, `capture {SHA.c80} tracker/issues/c0080/c0080.md tracker: new c0080 Eighty`)
+	it("starts a life at the last appearance or at a commit that changed the map and the document", function()
+		local _, reused = capture("c0090")
+		t.expect(
+			has(
+				reused,
+				`capture {SHA.c90new} tracker/issues/c0090/c0090.md R0090: prep (no capture commit: first add)`
 			)
-				.toBe(true)
-		end
-	)
-
-	it("does not take a map edit for a compaction, and marks a map it cannot read", function()
+		).toBe(true)
+		t.expect(has(reused, "old ninety")).toBe(false)
+		-- a rotating compaction: neither item is followed to its old id, and neither is taken for the other
+		local _, rotatedIn = capture("c0080")
+		local inHead = string.match(rotatedIn, "^[^\n]+") :: string
+		t.expect(has(inHead, `capture {SHA.rotate} tracker/issues/c0080/c0080.md`)).toBe(true)
+		t.expect(has(inHead, `(history before {short(SHA.rotate)} not followed`)).toBe(true)
+		t.expect(has(inHead, "Eighty")).toBe(false)
+		-- a commit that edits the map's header and the document is marked too; it never names another item
 		local _, eighty = capture("c0008")
-		t.expect(has(eighty, `capture {SHA.c80} tracker/issues/c0080/c0080.md tracker: new c0080 Eighty`))
-			.toBe(true)
-		t.expect(has(eighty, "(ambiguous")).toBe(false)
+		local eHead = string.match(eighty, "^[^\n]+") :: string
+		t.expect(has(eHead, `capture {SHA.fix} tracker/issues/c0008/c0008.md`)).toBe(true)
+		t.expect(has(eHead, `(history before {short(SHA.fix)} not followed`)).toBe(true)
+		local _, seven = capture("c0007")
+		t.expect(
+			has(
+				seven,
+				`capture {SHA.c7back} tracker/issues/c0007/c0007.md R0007: prep (no capture commit: first add)`
+			)
+		).toBe(true)
+		-- a map that no longer parses changes nothing about the rule: the start is marked
 		local _, broken = capture("c0095")
-		local head = string.match(broken, "^[^\n]+") :: string
-		t.expect(has(head, `(ambiguous: unproven compaction at {string.sub(SHA.badmap, 1, 7)})`)).toBe(true)
+		local bHead = string.match(broken, "^[^\n]+") :: string
+		t.expect(has(bHead, `(history before {short(SHA.badmap)} not followed`)).toBe(true)
 	end)
 
 	it("marks a first-add fallback, and only that", function()
