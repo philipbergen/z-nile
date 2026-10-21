@@ -37,6 +37,7 @@
 | 33 | 2026-10-21 06:05 | R0042: experiments (all settled in prep; nothing to run) | 183 | 6 | 0.1 | raft+proportional | build |  |
 | 34 | 2026-10-21 06:05 | c0111 c0119: lessons, metrics, trail, capture and the scope rules, from the prep prototype | 0 | 0 | 15.0 | raft+proportional | build |  |
 | 35 | 2026-10-21 06:09 | R0042: verification logs | 0 | 0 | 2.5 | raft+proportional | build |  |
+| 36 | 2026-10-21 06:15 | R0042: review-001 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
 
-**Total:** +735 / -7 lines, 371.3 agent-minutes, 770974 tokens over 35 records
-<!-- totals: added=735 removed=7 minutes=371.3 records=35 tokens=770974 -->
+**Total:** +735 / -7 lines, 374.3 agent-minutes, 770974 tokens over 36 records
+<!-- totals: added=735 removed=7 minutes=374.3 records=36 tokens=770974 -->
