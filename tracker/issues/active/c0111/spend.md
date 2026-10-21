@@ -51,6 +51,7 @@
 | 47 | 2026-10-21 06:15 | R0042: review-001 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
 | 48 | 2026-10-21 06:16 | R0042: review-001 fixes (lesson text, hidden files in lessons/, trail comments) | 9 | 6 | 10.0 | raft+proportional | code-review |  |
 | 49 | 2026-10-21 06:16 | R0042: refute-001 and harvest | 0 | 0 | 2.5 | raft+proportional | code-review | 78514 |
+| 50 | 2026-10-21 06:22 | R0042: review-002 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
 
-**Total:** +3434 / -22 lines, 873.2 agent-minutes, 849493 tokens over 49 records
-<!-- totals: added=3434 removed=22 minutes=873.2 records=49 tokens=849493 -->
+**Total:** +3434 / -22 lines, 876.2 agent-minutes, 849493 tokens over 50 records
+<!-- totals: added=3434 removed=22 minutes=876.2 records=50 tokens=849493 -->
