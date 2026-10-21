@@ -70,6 +70,16 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			{ ["tracker/issues/c0010/c0010.md"] = doc("c0010", "a narrower rewrite") },
 			"tracker: prep R0010 r"
 		)
+		-- a decision landed later, and another capture that edits c0010 on the way: neither is c0010's capture
+		push(
+			"scope",
+			{ ["tracker/issues/c0010/c0010.md"] = doc("c0010", "a narrower rewrite, decided") },
+			"tracker: scope c0010 the user decided"
+		)
+		push("other", {
+			["tracker/issues/c0050/c0050.md"] = doc("c0050", "other"),
+			["tracker/issues/c0010/c0010.md"] = doc("c0010", "a narrower rewrite, decided, edited"),
+		}, "tracker: new c0050 other")
 		push("done", {
 			["tracker/issues/c0010"] = false,
 			["tracker/issues/done/c0010/c0010.md"] = doc("c0010", "a narrower rewrite"),
@@ -81,7 +91,11 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			"R0040: prep"
 		)
 		-- a legacy document named by its slug, renamed by the layout migration
-		push("legacy", { [LEGACY] = doc("c0020", "legacy words") }, "backlog")
+		-- its first add also writes check.sh, which must never be taken for the document
+		push("legacy", {
+			[LEGACY] = doc("c0020", "legacy words"),
+			["tracker/issues/c0020/check.sh"] = "#!/usr/bin/env bash\n",
+		}, "backlog")
 		push("migrate", {
 			[LEGACY] = false,
 			["tracker/issues/c0020/c0020.md"] = doc("c0020", "legacy words"),
@@ -91,6 +105,11 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			"old",
 			{ ["tracker/issues/c0300/c0300.md"] = doc("c0300", "before compaction") },
 			"tracker: new c0300 Old"
+		)
+		push(
+			"oldLanded",
+			{ ["tracker/issues/c0300/c0300.md"] = doc("c0300", "before compaction, landed") },
+			"tracker: new c0300 Old, landed"
 		)
 		push("compact", {
 			["tracker/issues/c0300"] = false,
@@ -102,6 +121,12 @@ return t.spec("c0119 tracker.sh capture", function(it)
 			{ ["tracker/issues/c0300/c0300.md"] = doc("c0300", "a new item") },
 			"tracker: new c0300 Reused"
 		)
+		-- a second compaction writes only its own map: c0030 becomes c0003
+		push("compact2", {
+			["tracker/issues/c0030"] = false,
+			["tracker/issues/c0003/c0003.md"] = doc("c0003", "before compaction"),
+			["tracker/compaction.txt"] = "# tracker.sh compact, test 2\nc0030 c0003\n",
+		}, "tracker: compact ids again")
 	end)
 
 	it(
@@ -120,16 +145,29 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		local code, out = capture("c0020")
 		t.expect(code).toBe(0)
 		t.expect(has(out, `capture {SHA.legacy} {LEGACY} backlog`)).toBe(true)
+		t.expect(has(out, "#!/usr/bin/env bash")).toBe(false)
 	end)
 
-	it("follows a compaction to the old id, and keeps a reused number to its own item", function()
-		local _, renamed = capture("c0030")
-		t.expect(has(renamed, `capture {SHA.old} tracker/issues/c0300/c0300.md tracker: new c0300 Old`))
+	it("follows every compaction to the old id, and keeps a reused number to its own item", function()
+		local _, renamed = capture("c0003")
+		t.expect(
+			has(
+				renamed,
+				`capture {SHA.oldLanded} tracker/issues/c0300/c0300.md tracker: new c0300 Old, landed`
+			)
+		)
 			.toBe(true)
-		t.expect(has(renamed, "before compaction")).toBe(true)
+		t.expect(has(renamed, "before compaction, landed")).toBe(true)
 		local _, reused = capture("c0300")
 		t.expect(has(reused, `capture {SHA.reused} tracker/issues/c0300/c0300.md`)).toBe(true)
 		t.expect(has(reused, "a new item")).toBe(true)
+	end)
+
+	it("reads a raft's folders for an R id", function()
+		local code, out = capture("R0010")
+		t.expect(code).toBe(0)
+		t.expect(has(out, `capture {SHA.raft} tracker/rafts/R0010/R0010.md tracker: new raft R0010 r`))
+			.toBe(true)
 	end)
 
 	it("never takes a look-alike document for another item's", function()

@@ -1,7 +1,8 @@
 --!strict
--- c0111 AC10: an item's trail. `trail.ranges` names the folders and revisions to read (the current id's folders after
--- the last compaction, the old id's before it), `isDoc` tells an item's document from its other files, `parse` keeps
--- only changes directly in those folders, and `oldestAdd` and `capture` pick the commit. Pure; reads nothing.
+-- c0111 AC10: an item's trail. `trail.ranges` names the folders and revisions to read, walking back through every
+-- compaction to the id the item had then; `isDoc` tells an item's document from its other files; `parse` keeps only
+-- changes directly in those folders; `namedIds` reads a `tracker: new` subject; `oldestAdd` and `capture` pick the
+-- commit. Pure; reads nothing.
 local t = require("@tests/lib/t")
 local trail = require("@scripts/tracker/trail")
 
@@ -13,35 +14,46 @@ local function commit(sha: string, time: number, subject: string, status: string
 		status = status,
 		path = "tracker/issues/c0010/c0010.md",
 		order = order,
+		id = "c0010",
 	}
 end
 
+local function dirs(kind: string, id: string): { string }
+	return { `tracker/{kind}/{id}`, `tracker/{kind}/active/{id}`, `tracker/{kind}/done/{id}` }
+end
+
 return t.spec("c0111 an item's trail", function(it)
-	it("reads every folder of the id, and the renamed id before the last compaction", function()
-		t.expect(trail.ranges("issues", "c0010", "origin/main", nil, nil)).toEqual({
-			{
-				rev = "origin/main",
-				dirs = { "tracker/issues/c0010", "tracker/issues/active/c0010", "tracker/issues/done/c0010" },
-			},
+	it("reads every folder of the id, walking back through every compaction to the id it had", function()
+		t.expect(trail.ranges("issues", "c0010", "origin/main", {})).toEqual({
+			{ rev = "origin/main", dirs = dirs("issues", "c0010"), id = "c0010" },
 		})
-		t.expect(trail.ranges("rafts", "R0002", "HEAD", "abc123", { R0020 = "R0002", R0030 = "R0003" }))
-			.toEqual({
-				{
-					rev = "abc123..HEAD",
-					dirs = { "tracker/rafts/R0002", "tracker/rafts/active/R0002", "tracker/rafts/done/R0002" },
-				},
-				{
-					rev = "abc123~1",
-					dirs = { "tracker/rafts/R0020", "tracker/rafts/active/R0020", "tracker/rafts/done/R0020" },
-				},
-			})
-		-- an id compaction renamed away has no history of its own before the cut: that history is the renamed item's
-		t.expect(#trail.ranges("issues", "c0300", "HEAD", "abc123", { c0300 = "c0030" })).toBe(1)
-		-- an id the map does not mention kept its number, so its own folders are read before the cut too
-		t.expect(trail.ranges("issues", "c0010", "HEAD", "abc123", { c0300 = "c0030" })[2]).toEqual({
-			rev = "abc123~1",
-			dirs = { "tracker/issues/c0010", "tracker/issues/active/c0010", "tracker/issues/done/c0010" },
+		-- two compactions, newest first: R0300 became R0030, which became R0003
+		local cuts: { trail.Cut } = {
+			{ sha = "bbb", map = { R0030 = "R0003", R0040 = "R0004" } },
+			{ sha = "aaa", map = { R0300 = "R0030" } },
+		}
+		t.expect(trail.ranges("rafts", "R0003", "HEAD", cuts)).toEqual({
+			{ rev = "bbb..HEAD", dirs = dirs("rafts", "R0003"), id = "R0003" },
+			{ rev = "aaa..bbb~1", dirs = dirs("rafts", "R0030"), id = "R0030" },
+			{ rev = "aaa~1", dirs = dirs("rafts", "R0300"), id = "R0300" },
 		})
+		-- an id a compaction renamed away has no history of its own before that cut: the walk stops there
+		t.expect(trail.ranges("rafts", "R0030", "HEAD", cuts)).toEqual({
+			{ rev = "bbb..HEAD", dirs = dirs("rafts", "R0030"), id = "R0030" },
+		})
+		-- an id no map mentions kept its number through every cut; an unreadable map renames nothing
+		t.expect(#trail.ranges("issues", "c0010", "HEAD", cuts)).toBe(3)
+		t.expect(#trail.ranges("issues", "c0010", "HEAD", { { sha = "ccc", map = nil } })).toBe(2)
+	end)
+
+	it("reads the ids a `tracker: new` subject names", function()
+		t.expect(trail.namedIds("tracker: new c0114 c0115 c0116 z-nile chores"))
+			.toEqual({ "c0114", "c0115", "c0116" })
+		t.expect(trail.namedIds("tracker: new c0119 c0120; record decisions on c0114-c0118"))
+			.toEqual({ "c0119", "c0120" })
+		t.expect(trail.namedIds("tracker: new raft R0010 r")).toEqual({})
+		t.expect(trail.namedIds("tracker: new c0810–c0850 leftovers")).toEqual({})
+		t.expect(trail.namedIds("tracker: scope c0010 decided")).toEqual({})
 	end)
 
 	it("knows an item's document, including a legacy slug name, from its other files", function()
@@ -112,17 +124,26 @@ return t.spec("c0111 an item's trail", function(it)
 	end)
 
 	it(
-		"picks the earliest add, and the capture: the newest `tracker: new <issue>` commit, else the earliest add",
+		"picks the earliest add, and the capture: the newest `tracker: new` naming the item's id then",
 		function()
 			local commits = {
-				commit("e", 500, "tracker: new raft R0010 x", "M", 1),
-				commit("d", 400, "tracker: prep R0010 x", "M", 2),
-				commit("c", 300, "tracker: new c0010 Landed", "M", 3),
-				commit("b", 200, "tracker: new c0010 stub", "A", 4),
-				commit("a", 100, "backlog", "A", 5),
+				commit("f", 600, "tracker: scope c0010 the user decided", "M", 1),
+				commit("e", 500, "tracker: new raft R0010 x", "M", 2),
+				commit("g", 450, "tracker: new c0050 other; edits c0010 too", "M", 3),
+				commit("d", 400, "tracker: prep R0010 x", "M", 4),
+				commit("c", 300, "tracker: new c0010 Landed", "M", 5),
+				commit("b", 200, "tracker: new c0010 stub", "A", 6),
+				commit("a", 100, "backlog", "A", 7),
 			}
 			t.expect((trail.oldestAdd(commits) :: trail.Commit).sha).toBe("a")
 			t.expect((trail.capture(commits) :: trail.Commit).sha).toBe("c")
+			-- before a compaction the item had another id, and the commit carries it
+			local landedOld = commit("o", 60, "tracker: new c0100 Landed before", "M", 2)
+			landedOld.id = "c0100"
+			local stubOld = commit("p", 50, "backlog", "A", 3)
+			stubOld.id = "c0100"
+			local renamed = { commit("d", 400, "tracker: prep R0010 x", "M", 1), landedOld, stubOld }
+			t.expect((trail.capture(renamed) :: trail.Commit).sha).toBe("o")
 			local none =
 				{ commit("d", 400, "tracker: prep R0010 x", "M", 1), commit("a", 100, "backlog", "A", 2) }
 			t.expect((trail.capture(none) :: trail.Commit).sha).toBe("a")
