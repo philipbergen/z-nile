@@ -24,3 +24,6 @@
 - design-review-005 F1: testing/seed-every-enumerated-case, ticket-prep/spec-design-correspondence
 - design-review-005 F2: testing/absence-scans-cover-every-form
 - design-review-005 F3: ticket-prep/restated-rules-move-together
+- design-review-006 F1: testing/seed-every-enumerated-case
+- design-review-006 F2: one-off: a recheck list for the coming rebase onto the reworked c0114 and c0120, not a defect of this design
+- note c0115 prep round 6: the separators case renamed only unspaced ids, so dropping a renamed id's spaces passed; seed each value of every position (first, middle, last; spaced and unspaced): testing/seed-every-enumerated-case

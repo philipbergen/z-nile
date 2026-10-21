@@ -296,13 +296,15 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 		local text = "- design-review-001 F1: testing/no-vacuous-pass,zz-test/b  \n"
 			.. "- design-review-001 F2: zz-test/a,zz-test/b\n"
 			.. "- note n:  zz-test/a ,testing/no-vacuous-pass\n"
+			.. "- design-review-001 F3: zz-test/a, testing/no-vacuous-pass ,zz-test/b\n"
 		local out, n = lessons.renameLedger(text, existing)
 		t.expect(out).toBe(
 			"- design-review-001 F1: zz-test/no-vacuous-pass,zz-test/b  \n"
 				.. "- design-review-001 F2: zz-test/a,zz-test/b\n"
 				.. "- note n:  zz-test/a ,zz-test/no-vacuous-pass\n"
+				.. "- design-review-001 F3: zz-test/a, zz-test/no-vacuous-pass ,zz-test/b\n"
 		)
-		t.expect(n).toBe(2)
+		t.expect(n).toBe(3)
 	end)
 
 	it("no harvest.md under any root, and no lesson, names an old skill's id", function()
