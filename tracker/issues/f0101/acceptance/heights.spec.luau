@@ -1,5 +1,5 @@
 --!strict
--- f0101 AC2: the heights the spy hop is built on. The walls are a stud lower (9, from 10); the ghosts keep the
+-- f0101 AC3: the heights the spy hop is built on. The walls are a stud lower (9, from 10); the ghosts keep the
 -- walls' old height (10) and the 6-stud width; the eye stays at 4, below the wall top, and the top of a jump is above
 -- both the walls and the ghosts. Hop.CLEARANCE, the rise that makes the player airborne, is exactly the eye's climb
 -- to the wall top. Pellets stay below the eye and the walls.

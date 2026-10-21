@@ -9,8 +9,8 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-check "AC1: the hop rises 14 studs and lands in 12 steps on a parabola, 8 steps before the next; airborne steps 2 to 10" lune run tests/run -- "$A/jump.spec.luau"
-check "AC2: in a session a hop is an intent; airborne, the player is not caught, passes blue ghosts and eats nothing" lune run tests/run -- "$A/airborne.spec.luau"
+check "AC1: the hop rises 14 studs and lands in 12 steps on a parabola, 8 steps before the next; airborne mid-step, steps 2 to 11; the shown tick clamped" lune run tests/run -- "$A/jump.spec.luau"
+check "AC2: in a session a hop is a per-player intent; airborne, the player is not caught (head-on too), passes blue ghosts and eats nothing; ghosts move on" lune run tests/run -- "$A/airborne.spec.luau"
 check "AC3: walls 9, ghosts 10 by 6, eye 4, clearance 5: ghosts over the walls, the eye under them, the hop's top over both" lune run tests/run -- "$A/heights.spec.luau"
 check "AC4: on the classic maze, standing hides the ghosts behind walls and a hop's top shows them" lune run tests/run -- "$A/sight.spec.luau"
 check "AC5: the camera shows the server's hop at the shown tick; ghosts GHOST-sized, walls at the scale's height" lune run tests/run -- "$A/place.spec.luau"

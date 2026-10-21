@@ -1,8 +1,8 @@
 --!strict
 -- f0101 AC5: the spy hop's adapters. The server decides the hop (airborne.spec); the clients only send it and show
--- it (f0104 binds Space to send Hop.INTENT). Main hands each frame's `hopped` to Camera, and Camera lifts the eye by Hop.rise of it at the tick being shown, the same blend of the two latest
--- snapshots the ghosts are drawn at, so the rise matches the server's airborne window. Camera keeps no jump of its
--- own and sends nothing. The ghosts are drawn GHOST-sized and the walls and doors at the lowered SCALE.wallHeight.
+-- it (f0104 binds Space to send Hop.INTENT). Main hands each frame's `hopped` to Camera, and Camera lifts the eye
+-- by Hop.rise of it at the tick being shown (View.shownTick of the two latest snapshots, the blend the ghosts are
+-- drawn at), so the rise matches the server's airborne window. Camera keeps no jump of its own and sends nothing. The ghosts are drawn GHOST-sized and the walls and doors at the lowered SCALE.wallHeight.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -48,12 +48,12 @@ return t.spec("f0101 spy hop adapters", function(it)
 			local at =
 				string.match(src, "View%.SCALE%.eyeHeight%s*%+%s*Hop%.rise%(%s*hopped%s*,%s*([%w_]+)%s*%)")
 			t.expect(at ~= nil).toBe(true)
-			-- that tick is the snapshots' blend: prev.tick + (snap.tick - prev.tick) * View.alpha(the time since arrival)
+			-- that tick is View.shownTick of the two snapshots the pose is blended from, at the same View.alpha
 			local blend = string.match(
 				src,
 				"local%s+"
 					.. (at :: string)
-					.. "%s*=%s*if%s+prev%s+then%s+prev%.tick%s*%+%s*%(%s*snap%.tick%s*%-%s*prev%.tick%s*%)%s*%*%s*View%.alpha%(%s*os%.clock%(%)%s*%-%s*arrived%s*%)%s*else%s+snap%.tick"
+					.. "%s*=%s*View%.shownTick%(%s*prev%s*,%s*snap%s*,%s*View%.alpha%(%s*os%.clock%(%)%s*%-%s*arrived%s*%)%s*%)"
 			)
 			t.expect(blend ~= nil).toBe(true)
 			local frames = 0

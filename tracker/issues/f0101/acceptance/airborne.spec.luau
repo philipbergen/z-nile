@@ -2,7 +2,7 @@
 -- f0101 AC2: the hop in a Session. "Hop" (Hop.INTENT) is an intent beside the movement and fire intents ("Jump"
 -- stays invalid); it counts toward the per-tick limit, one a tick. It starts a hop at the start of the player's
 -- play in the step, only in play and only when the last hop has landed and cooled down. While airborne (the steps
--- whose rise is over the wall tops: the 2nd to the 10th after take-off) the player is not caught, passes over a
+-- whose middle has the rise over the wall tops: the 2nd to the 11th after take-off) the player is not caught, passes over a
 -- blue ghost without eating it, and eats no pellet, while the rail movement and a shot go on. The frame says when
 -- the latest hop started, and a respawn forgets it.
 local Blaster = require("@logic/Blaster")
@@ -139,7 +139,7 @@ return t.spec("f0101 the hop in a session", function(it)
 		t.expect(Session.frame(s, "p").hopped).toBe(first + 20)
 	end)
 
-	it("an active ghost on the player catches them, except in the 2nd to the 10th step of a hop", function()
+	it("an active ghost on the player catches them, except in the 2nd to the 11th step of a hop", function()
 		for k = 0, Hop.TICKS + 1 do
 			-- the ghost arrives in step k of the hop (step 0 is the take-off, on the ground)
 			local s = settled(new())
@@ -150,7 +150,7 @@ return t.spec("f0101 the hop in a session", function(it)
 			onPlayer(s, "blinky")
 			local events = Session.step(s)
 			t.expect(Session.frame(s, "p").hopped).toBe(s.tick - k)
-			local airborne = k >= 2 and k <= 10
+			local airborne = k >= 2 and k <= 11
 			t.expect(count(events, "Caught")).toBe(if airborne then 0 else 1)
 		end
 	end)
@@ -218,6 +218,97 @@ return t.spec("f0101 the hop in a session", function(it)
 		t.expect(Hop.airborne(Session.frame(s, "p").hopped, s.tick)).toBe(true)
 		t.expect(count(events, "Shot")).toBe(1)
 		t.expect(g.status).toBe("eyes")
+	end)
+
+	it(
+		"running head-on into a ghost: a hop 2 to 9 steps before the meeting carries the player over it",
+		function()
+			-- the idle player runs west along row 23 from its spawn; blinky comes east at it from 7,23
+			local function run(hopBefore: number?, meet: number?): (number?, Session.Session)
+				local s = playing(new())
+				Session.step(s) -- the first tick in play
+				for _, g in ghostsOf(s).ghosts do
+					g.tile, g.progress, g.status, g.frightened, g.reverse =
+						{ x = 13, y = 14 }, 0, "house", false, false
+				end
+				ghostsOf(s).house.idle = -100000
+				local g = Ghosts.ghost(ghostsOf(s), "blinky")
+				g.tile, g.progress, g.status, g.heading = { x = 7, y = 23 }, 0, "active", "E"
+				for i = 1, 30 do
+					if hopBefore and meet and i == meet - hopBefore then
+						t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+					end
+					if count(Session.step(s), "Caught") > 0 then
+						return i, s
+					end
+				end
+				return nil, s
+			end
+			local meet = run(nil, nil)
+			t.expect(meet ~= nil and (meet :: number) > 10).toBe(true) -- a real meeting, with room to hop before it
+			t.expect((run(1, meet))).toBe(meet) -- take-off is on the ground
+			for d = 2, 9 do
+				local caught, s = run(d, meet)
+				t.expect(caught).toBe(nil)
+				local at = Movement.occupied(s.maze, s.members.p.move)
+				t.expect(Ghosts.ghost(ghostsOf(s), "blinky").tile.x > at.x).toBe(true) -- the ghost is behind them now
+			end
+		end
+	)
+
+	it("the ghosts move on exactly as without the hop", function()
+		local function run(hopping: boolean): { string }
+			local s = settled(new())
+			local g = Ghosts.ghost(ghostsOf(s), "blinky")
+			g.tile, g.progress, g.status, g.heading = { x = 26, y = 29 }, 0, "active", "W"
+			if hopping then
+				t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+			end
+			local trail = {}
+			for _ = 0, Hop.TICKS do
+				Session.step(s)
+				table.insert(trail, `{g.tile.x},{g.tile.y},{g.progress},{g.heading}`)
+			end
+			return trail
+		end
+		local walked, hopped = run(false), run(true)
+		t.expect(table.concat(hopped, ";")).toBe(table.concat(walked, ";"))
+		t.expect(hopped[2] ~= hopped[11]).toBe(true) -- it does move while the player is airborne
+	end)
+
+	it("each player has their own hop", function()
+		local s = Session.new(classic, 1, Session.GAME_CONFIG)
+		Session.join(s, "p")
+		Session.join(s, "q")
+		for _ = 1, 101 do
+			Session.step(s)
+		end
+		for _, id in { "p", "q" } do
+			local set = s.members[id].ghosts :: Ghosts.Set
+			for _, g in set.ghosts do
+				g.tile, g.progress, g.status, g.frightened, g.reverse =
+					{ x = 13, y = 14 }, 0, "house", false, false
+			end
+			set.house.idle = -100000
+		end
+		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+		Session.step(s) -- p's take-off
+		Session.step(s) -- step 1 of p's hop; the ghosts arrive in step 2
+		t.expect((Session.submit(s, "q", Hop.INTENT))).toBe(true) -- p's cooldown is not q's
+		for _, id in { "p", "q" } do
+			local at = Movement.occupied(s.maze, s.members[id].move)
+			local g = Ghosts.ghost(s.members[id].ghosts :: Ghosts.Set, "blinky")
+			g.tile, g.progress, g.status = { x = at.x, y = at.y }, 0, "active"
+		end
+		local caught = {}
+		for _, e in Session.step(s) do
+			if e.kind == "Caught" then
+				table.insert(caught, e.player)
+			end
+		end
+		t.expect(table.concat(caught, ",")).toBe("q") -- q took off this step, on the ground; p is airborne
+		t.expect(Session.frame(s, "q").hopped).toBe(s.tick)
+		t.expect(Session.frame(s, "p").hopped).toBe(s.tick - 2)
 	end)
 
 	it("a respawn forgets the hop", function()

@@ -60,7 +60,7 @@ index 0000000..92b45da
 +
 +return BlastView
 diff --git a/src/client/Camera.luau b/src/client/Camera.luau
-index 1b27a01..6c27a74 100644
+index 1b27a01..5149493 100644
 --- a/src/client/Camera.luau
 +++ b/src/client/Camera.luau
 @@ -4,6 +4,8 @@ local RunService = game:GetService("RunService")
@@ -109,7 +109,7 @@ index 1b27a01..6c27a74 100644
  -- Frees the mouse and shows it (true), or locks it to the centre and hides it (false), from the next frame.
  function Camera.setCursor(free: boolean)
  	cursor = free
-@@ -73,19 +98,25 @@ function Camera.start()
+@@ -73,19 +98,22 @@ function Camera.start()
  		end
  		-- cleared here, after the guard read it: a touch that began and ended before this step still counts
  		lookedThisFrame = false
@@ -121,10 +121,7 @@ index 1b27a01..6c27a74 100644
  			return
  		end
  		local pose = View.interpolate(prev, snap, View.alpha(os.clock() - arrived))
-+		-- the tick being shown, the same blend the ghosts are drawn at
-+		local shown = if prev
-+			then prev.tick + (snap.tick - prev.tick) * View.alpha(os.clock() - arrived)
-+			else snap.tick
++		local shown = View.shownTick(prev, snap, View.alpha(os.clock() - arrived))
  		local target = View.headingYaw(snap.player.heading)
  		local turned = View.approachYaw(yaw or target, target, View.turnRate() * dt)
  		yaw = turned
@@ -881,10 +878,10 @@ index adc2dac..a6ce56c 100644
  	g.status = "eyes"
 diff --git a/src/shared/Logic/Hop/init.luau b/src/shared/Logic/Hop/init.luau
 new file mode 100644
-index 0000000..1e8adb3
+index 0000000..c87bdda
 --- /dev/null
 +++ b/src/shared/Logic/Hop/init.luau
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,54 @@
 +--!strict
 +-- Hop: the spy hop (f0101), engine-free and counted in steps, so the server and the camera agree on it. A hop
 +-- lifts the eye on a parabola and lands again; while the eye is above the wall tops the player is airborne:
@@ -930,9 +927,12 @@ index 0000000..1e8adb3
 +	return Hop.RISE * 4 * u * (1 - u)
 +end
 +
-+-- Whether the player is airborne during step `tick`: the eye is above the wall tops.
++-- Whether the player is airborne during step `tick`: the eye is above the wall tops in the middle of the step.
++-- Step N moves the world from tick N - 1 to tick N, and the camera shows it while the shown tick runs over that
++-- span, so the rule samples the rise at N - 0.5 (steps 2 to 11 of a hop; off from the drawn eye by at most 0.19
++-- of a step, always in the player's favour).
 +function Hop.airborne(last: number?, tick: number): boolean
-+	return Hop.rise(last, tick) > Hop.CLEARANCE
++	return Hop.rise(last, tick - 0.5) > Hop.CLEARANCE
 +end
 +
 +return Hop
@@ -1182,7 +1182,7 @@ index 711ff0a..246145f 100644
  end
  
 diff --git a/src/shared/Logic/View/init.luau b/src/shared/Logic/View/init.luau
-index 011d5c3..9872012 100644
+index 011d5c3..c257db8 100644
 --- a/src/shared/Logic/View/init.luau
 +++ b/src/shared/Logic/View/init.luau
 @@ -10,7 +10,21 @@ local Pellets = require("./Pellets")
@@ -1256,7 +1256,23 @@ index 011d5c3..9872012 100644
  -- Pellets float just below the eye line; a power pellet is bigger and pulses, in real seconds.
  View.PELLET = table.freeze({ height = 3, pellet = 1, power = 3, pulseSeconds = 0.5, pulseMin = 0.7 })
  
-@@ -183,4 +214,113 @@ function View.action(keyName: string): Action?
+@@ -112,6 +143,15 @@ function View.interpolate(prev: Session.Snapshot?, latest: Session.Snapshot, alp
+ 	return { x = from.x + (to.x - from.x) * a, y = from.y + (to.y - from.y) * a }
+ end
+ 
++-- The tick on the screen between the previous and the latest snapshot, at the same clamped blend
++-- View.interpolate uses: the latest tick with no usable previous snapshot or a blend that is not a number.
++function View.shownTick(prev: Session.Snapshot?, latest: Session.Snapshot, alpha: number): number
++	if prev == nil or prev.tick >= latest.tick or alpha ~= alpha then
++		return latest.tick
++	end
++	return prev.tick + (latest.tick - prev.tick) * math.clamp(alpha, 0, 1)
++end
++
+ export type GhostPose = { x: number, y: number, heading: Maze.Heading, look: Session.Look, flash: boolean }
+ 
+ -- Where each ghost is drawn between the previous and the latest snapshot, in the latest snapshot's order.
+@@ -183,4 +223,113 @@ function View.action(keyName: string): Action?
  	return KEYS[keyName]
  end
  

@@ -3,9 +3,11 @@
 -- camera agree on it. Hop.canStart says whether a hop may start at a step, given when the last one started;
 -- Hop.rise is how far the eye is above its standing height: a parabola that rises to Hop.RISE half way through
 -- Hop.TICKS and lands at 0. The next hop may start Hop.COOLDOWN steps after landing. Hop.airborne is a rise over
--- Hop.CLEARANCE, the eye above the wall tops: the middle of the hop.
+-- Hop.CLEARANCE, the eye above the wall tops, in the middle of the step: step N is shown while the camera's tick
+-- (View.shownTick, clamped like View.interpolate) runs from N - 1 to N.
 local Hop = require("@logic/Hop")
 local Session = require("@logic/Session")
+local View = require("@logic/View")
 local t = require("@tests/lib/t")
 
 return t.spec("f0101 jump", function(it)
@@ -89,21 +91,58 @@ return t.spec("f0101 jump", function(it)
 	end)
 
 	it(
-		"airborne is the eye over the wall tops: steps 2 to 10 of the hop, 0.6 s, never at take-off or landing",
+		"airborne is the eye over the wall tops in the middle of the step: steps 2 to 11 of the hop, 0.67 s",
 		function()
 			local last = 40
 			local window = {}
-			for dt = -1, Hop.TICKS + 1 do
+			for dt = -1, Hop.TICKS + 2 do
 				local up = Hop.airborne(last, last + dt)
-				t.expect(up).toBe(Hop.rise(last, last + dt) > Hop.CLEARANCE)
+				t.expect(up).toBe(Hop.rise(last, last + dt - 0.5) > Hop.CLEARANCE)
 				if up then
 					table.insert(window, dt)
 				end
 			end
-			t.expect(table.concat(window, ",")).toBe("2,3,4,5,6,7,8,9,10")
-			t.expect(#window / Session.STEP_RATE).toBeNear(0.6, 1e-9)
+			t.expect(table.concat(window, ",")).toBe("2,3,4,5,6,7,8,9,10,11")
+			t.expect(#window / Session.STEP_RATE).toBeNear(10 / 15, 1e-9)
 			t.expect(Hop.airborne(nil, last)).toBe(false)
 			t.expect(Hop.airborne(last, 0 / 0)).toBe(false)
 		end
 	)
+
+	it(
+		"a step is airborne when the eye is over the wall tops for most of the time the camera shows it",
+		function()
+			-- step N moves the world from tick N - 1 to tick N, shown while the camera's tick runs over that span
+			local last = 7
+			for n = -1, Hop.TICKS + 2 do
+				local over = 0
+				for i = 1, 100 do
+					if Hop.rise(last, last + n - 1 + (i - 0.5) / 100) > Hop.CLEARANCE then
+						over += 1
+					end
+				end
+				if over > 50 then
+					t.expect(Hop.airborne(last, last + n)).toBe(true)
+				elseif over < 50 then
+					t.expect(Hop.airborne(last, last + n)).toBe(false)
+				end
+			end
+		end
+	)
+
+	it("the tick the camera shows is the snapshots' blend, clamped like View.interpolate's", function()
+		local function snap(tick: number): any
+			return { tick = tick, player = { x = 0, y = 0, heading = "N", jumpTick = 0 } }
+		end
+		local prev, latest = snap(10), snap(11)
+		t.expect(View.shownTick(prev, latest, 0)).toBe(10)
+		t.expect(View.shownTick(prev, latest, 0.5)).toBe(10.5)
+		t.expect(View.shownTick(prev, latest, 1)).toBe(11)
+		t.expect(View.shownTick(prev, latest, 1.5)).toBe(11) -- a late snapshot: the eye waits with the ghosts
+		t.expect(View.shownTick(prev, latest, -1)).toBe(10)
+		t.expect(View.shownTick(prev, latest, 0 / 0)).toBe(11)
+		t.expect(View.shownTick(nil, latest, 0.5)).toBe(11)
+		t.expect(View.shownTick(snap(11), latest, 0.5)).toBe(11)
+		t.expect(View.shownTick(snap(12), latest, 0.5)).toBe(11)
+	end)
 end)

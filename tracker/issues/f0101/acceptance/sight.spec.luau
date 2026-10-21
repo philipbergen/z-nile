@@ -1,5 +1,5 @@
 --!strict
--- f0101 AC3: the spy hop works on the classic maze, measured with View's own numbers (prep experiment E3).
+-- f0101 AC4: the spy hop works on the classic maze, measured with View's own numbers (prep experiment E3).
 -- For every pair of a player tile centre and a ghost tile up to 10 tiles away (in x and in y), rays from the eye to
 -- points on the ghost's body (a GHOST.width box GHOST.height tall on the tile centre: its edges, centre line and face
 -- middles) walk the grid exactly; a wall or door tile blocks a ray that is at or below the wall top anywhere inside
