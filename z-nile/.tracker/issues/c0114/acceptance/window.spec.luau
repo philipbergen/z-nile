@@ -1,7 +1,7 @@
 --!strict
 -- c0114 AC13: the counter across the landing. The branch that lands c0114 never touches tracker/next. While origin/main
--- has no registry (c0114's own execution), the branch's engine reserves on origin's tracker/next, and a merge of
--- origin/main is a plain merge. Once origin has the registry but no z-nile/next (c0114 has landed), the first publish
+-- has no registry (c0114's own execution), the branch's engine publishes nothing ("Missing also refuses": the main
+-- checkout's old engine publishes, and keeps raising tracker/next), and a merge of origin/main is a plain merge. Once origin has the registry but no z-nile/next (c0114 has landed), the first publish
 -- moves the counter in its own commit and lease push: z-nile/next with tracker/next's counters at the leased base
 -- (raised, if it reserves) and the tombstone at tracker/next. Every later publish counts on z-nile/next, and
 -- tracker/next is never written again. Fixture under .cache/c0114-window (tests/lib/trackerfix).
@@ -56,21 +56,23 @@ return t.spec("c0114 the counter across the landing", function(it)
 		fixture.git(wt, { "commit", "-q", "-m", "c0114: the registry" })
 	end)
 
-	it("in the window the branch reserves on tracker/next, and merges are plain", function()
-		local r = trackerfix.tr(f, wt, { "new", "issue", "c", "in-window" })
-		if not r.ok then
-			error(r.stderr .. r.stdout)
+	it("in the window the branch publishes nothing, and merges of main are plain", function()
+		local before = tip()
+		for _, args in
+			{
+				{ "new", "issue", "c", "in-window", "--project", "pickman" },
+				{ "status", "c0050", "preparing" },
+			}
+		do
+			local r = trackerfix.tr(f, wt, args)
+			t.expect(r.ok).toBe(false)
+			if not has(r.stderr, "origin/main has no z-nile/projects.toml") then
+				error(`{table.concat(args, " ")}: {r.stderr}`)
+			end
 		end
-		t.expect(has(r.stdout, "tracker/issues/c0051/c0051.md")).toBe(true)
-		t.expect(counter(originText("tracker/next"))).toBe("issue 52\nraft 11")
+		t.expect(tip()).toBe(before)
+		t.expect(originText("tracker/next")).toBe("issue 51 a-b-c\nraft 11 a-b-c")
 		t.expect(originHas("z-nile/next")).toBe(false)
-		local n = trackerfix.tr(f, wt, { "renumber", "c0051" })
-		if not n.ok then
-			error(n.stderr .. n.stdout)
-		end
-		t.expect(counter(originText("tracker/next"))).toBe("issue 53\nraft 11")
-		fixture.git(wt, { "add", "-A" })
-		fixture.git(wt, { "commit", "-q", "-m", "renumber" })
 		-- main keeps raising the counter; the branch never changed it, so a merge never conflicts on it
 		trackerfix.elsewhere(
 			f,
@@ -81,7 +83,12 @@ return t.spec("c0114 the counter across the landing", function(it)
 		t.expect(fs.readFile(`{wt}/tracker/next`)).toBe("issue 64 g-h-i\nraft 12 g-h-i\n")
 		t.expect(fs.isFile(`{wt}/z-nile/next`)).toBe(false)
 		-- offline, the local copy of the live counter numbers (not the old rule's next multiple of 10, c0060)
-		local off = trackerfix.tr(f, wt, { "new", "issue", "c", "offline" }, { PICKMAN_PUBLISH = "0" })
+		local off = trackerfix.tr(
+			f,
+			wt,
+			{ "new", "issue", "c", "offline", "--project", "pickman" },
+			{ PICKMAN_PUBLISH = "0" }
+		)
 		if not off.ok then
 			error(off.stderr .. off.stdout)
 		end
@@ -130,7 +137,7 @@ return t.spec("c0114 the counter across the landing", function(it)
 	end)
 
 	it("later publishes count on z-nile/next, and tracker/next is never written again", function()
-		local r = trackerfix.tr(f, wt, { "new", "issue", "c", "after" })
+		local r = trackerfix.tr(f, wt, { "new", "issue", "c", "after", "--project", "pickman" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
