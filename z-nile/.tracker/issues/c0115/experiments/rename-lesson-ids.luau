@@ -17,7 +17,19 @@ local skills = require("@znile/engine/skills")
 
 local checkOnly = table.find(process.args, "--check") ~= nil
 local dry = checkOnly or table.find(process.args, "--dry-run") ~= nil
-local existing = skills.lessonIndex(".")
+-- Every path is anchored at the repository root (design review 007 F1): the script may be run from any home.
+local function topLevel(): string
+	local r = process.exec("git", { "rev-parse", "--show-toplevel" })
+	if not r.ok then
+		error(`not in a git checkout: {r.stderr}`)
+	end
+	return (string.gsub(r.stdout, "%s+$", ""))
+end
+local TOP = topLevel()
+local function rel(p: string): string
+	return if string.sub(p, 1, #TOP + 1) == TOP .. "/" then string.sub(p, #TOP + 2) else p
+end
+local existing = skills.lessonIndex(TOP)
 local missing: { [string]: boolean } = {}
 
 local function walk(dir: string, visit: (string) -> ())
@@ -37,15 +49,20 @@ local function walk(dir: string, visit: (string) -> ())
 end
 
 local function roots(): { string }
-	local r = process.exec("lune", { "run", "z-nile/roots" })
+	local r = process.exec("lune", { "run", "z-nile/roots" }, { cwd = TOP })
 	if not r.ok then
-		error(`lune run z-nile/roots failed: {r.stderr}`)
+		print(`lune run z-nile/roots failed: {r.stderr}`)
+		process.exit(1) -- fail closed: no roots, nothing checked
 	end
 	local out = {}
 	for line in string.gmatch(r.stdout, "[^\n]+") do
-		table.insert(out, line)
+		table.insert(out, `{TOP}/{line}`)
 	end
-	table.insert(out, "tracker") -- the retired root, for any ledger left there
+	if #out == 0 then
+		print("lune run z-nile/roots printed no root: nothing to check")
+		process.exit(1)
+	end
+	table.insert(out, `{TOP}/tracker`) -- the retired root, for any ledger left there
 	return out
 end
 
@@ -68,7 +85,7 @@ local function fix(path: string, ledger: boolean)
 	end
 	if n > 0 then
 		total += n
-		print(`{n} {path}`)
+		print(`{n} {rel(path)}`)
 		if not dry then
 			fs.writeFile(path, out)
 		end
@@ -82,7 +99,7 @@ for _, root in roots() do
 		end
 	end)
 end
-for _, folder in { "z-nile/skills", "pickman/skills" } do
+for _, folder in { `{TOP}/z-nile/skills`, `{TOP}/pickman/skills` } do
 	walk(folder, function(p)
 		if string.match(p, "/lessons/[^/]+%.md$") then
 			fix(p, false)
@@ -103,6 +120,10 @@ local function renameProse(text: string): (string, number)
 end
 local function namesOldPath(text: string): boolean
 	for old in skills.RENAMED_PATH do
+		-- a path built from a variable (`{SKILLS}/ticket-prep/SKILL.md`) names the old folder too
+		if string.find(text, `/{old}/SKILL.md`, 1, true) then
+			return true
+		end
 		local from = 1
 		while true do
 			local i, j = string.find(text, `.claude/skills/{old}`, from, true)
@@ -121,7 +142,7 @@ end
 local function write(path: string, out: string, n: number, tag: string)
 	if n > 0 then
 		total += n
-		print(`{n} {path}{tag}`)
+		print(`{n} {rel(path)}{tag}`)
 		if not dry then
 			fs.writeFile(path, out)
 		end
@@ -151,8 +172,8 @@ for _, root in roots() do
 						end
 					end
 					walk(dir, function(p)
-						local rel = string.sub(p, #dir + 2)
-						local sequestered = rel == "check.sh" or string.sub(rel, 1, 11) == "acceptance/"
+						local inItem = string.sub(p, #dir + 2)
+						local sequestered = inItem == "check.sh" or string.sub(inItem, 1, 11) == "acceptance/"
 						if sequestered then
 							local text = fs.readFile(p)
 							if namesOldPath(text) then

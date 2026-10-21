@@ -1,6 +1,6 @@
 diff --git a/.claude/README.md b/.claude/README.md
 deleted file mode 100644
-index 3354556..0000000
+index 3354556a..00000000
 --- a/.claude/README.md
 +++ /dev/null
 @@ -1,64 +0,0 @@
@@ -70,7 +70,7 @@ index 3354556..0000000
 -A skill or doc change still has an issue, and normally a raft, and then follows the same flow.
 diff --git a/.claude/skills/launch-raft/SKILL.md b/.claude/skills/launch-raft/SKILL.md
 deleted file mode 100644
-index 1ac3b97..0000000
+index 1ac3b977..00000000
 --- a/.claude/skills/launch-raft/SKILL.md
 +++ /dev/null
 @@ -1,23 +0,0 @@
@@ -99,7 +99,7 @@ index 1ac3b97..0000000
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
 diff --git a/.claude/skills/pickman-arch b/.claude/skills/pickman-arch
 new file mode 120000
-index 0000000..95ceeca
+index 00000000..95ceeca4
 --- /dev/null
 +++ b/.claude/skills/pickman-arch
 @@ -0,0 +1 @@
@@ -107,7 +107,7 @@ index 0000000..95ceeca
 \ No newline at end of file
 diff --git a/.claude/skills/pickman-test b/.claude/skills/pickman-test
 new file mode 120000
-index 0000000..361c7b9
+index 00000000..361c7b9f
 --- /dev/null
 +++ b/.claude/skills/pickman-test
 @@ -0,0 +1 @@
@@ -115,7 +115,7 @@ index 0000000..361c7b9
 \ No newline at end of file
 diff --git a/.claude/skills/z-design b/.claude/skills/z-design
 new file mode 120000
-index 0000000..aeeb5e2
+index 00000000..aeeb5e2d
 --- /dev/null
 +++ b/.claude/skills/z-design
 @@ -0,0 +1 @@
@@ -123,7 +123,7 @@ index 0000000..aeeb5e2
 \ No newline at end of file
 diff --git a/.claude/skills/z-ready b/.claude/skills/z-ready
 new file mode 120000
-index 0000000..a570503
+index 00000000..a5705039
 --- /dev/null
 +++ b/.claude/skills/z-ready
 @@ -0,0 +1 @@
@@ -131,7 +131,7 @@ index 0000000..a570503
 \ No newline at end of file
 diff --git a/.claude/skills/z-run b/.claude/skills/z-run
 new file mode 120000
-index 0000000..1adce53
+index 00000000..1adce53d
 --- /dev/null
 +++ b/.claude/skills/z-run
 @@ -0,0 +1 @@
@@ -139,7 +139,7 @@ index 0000000..1adce53
 \ No newline at end of file
 diff --git a/.claude/skills/z-stop b/.claude/skills/z-stop
 new file mode 120000
-index 0000000..d63a769
+index 00000000..d63a769c
 --- /dev/null
 +++ b/.claude/skills/z-stop
 @@ -0,0 +1 @@
@@ -147,7 +147,7 @@ index 0000000..d63a769
 \ No newline at end of file
 diff --git a/.claude/skills/z-ticket b/.claude/skills/z-ticket
 new file mode 120000
-index 0000000..d42392f
+index 00000000..d42392f4
 --- /dev/null
 +++ b/.claude/skills/z-ticket
 @@ -0,0 +1 @@
@@ -155,7 +155,7 @@ index 0000000..d42392f
 \ No newline at end of file
 diff --git a/.claude/skills/zz-arch b/.claude/skills/zz-arch
 new file mode 120000
-index 0000000..233201f
+index 00000000..233201f0
 --- /dev/null
 +++ b/.claude/skills/zz-arch
 @@ -0,0 +1 @@
@@ -163,7 +163,7 @@ index 0000000..233201f
 \ No newline at end of file
 diff --git a/.claude/skills/zz-execute b/.claude/skills/zz-execute
 new file mode 120000
-index 0000000..4244928
+index 00000000..42449286
 --- /dev/null
 +++ b/.claude/skills/zz-execute
 @@ -0,0 +1 @@
@@ -171,7 +171,7 @@ index 0000000..4244928
 \ No newline at end of file
 diff --git a/.claude/skills/zz-review b/.claude/skills/zz-review
 new file mode 120000
-index 0000000..6262c5c
+index 00000000..6262c5ce
 --- /dev/null
 +++ b/.claude/skills/zz-review
 @@ -0,0 +1 @@
@@ -179,7 +179,7 @@ index 0000000..6262c5c
 \ No newline at end of file
 diff --git a/.claude/skills/zz-rules b/.claude/skills/zz-rules
 new file mode 120000
-index 0000000..bf62dd0
+index 00000000..bf62dd01
 --- /dev/null
 +++ b/.claude/skills/zz-rules
 @@ -0,0 +1 @@
@@ -187,7 +187,7 @@ index 0000000..bf62dd0
 \ No newline at end of file
 diff --git a/.claude/skills/zz-stats b/.claude/skills/zz-stats
 new file mode 120000
-index 0000000..b0dc3b1
+index 00000000..b0dc3b1b
 --- /dev/null
 +++ b/.claude/skills/zz-stats
 @@ -0,0 +1 @@
@@ -195,14 +195,14 @@ index 0000000..b0dc3b1
 \ No newline at end of file
 diff --git a/.claude/skills/zz-test b/.claude/skills/zz-test
 new file mode 120000
-index 0000000..4111734
+index 00000000..4111734d
 --- /dev/null
 +++ b/.claude/skills/zz-test
 @@ -0,0 +1 @@
 +../../z-nile/skills/zz-test
 \ No newline at end of file
 diff --git a/AGENTS.md b/AGENTS.md
-index cafd9bd..245a96d 100644
+index cafd9bde..245a96d0 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
 @@ -1,23 +1,29 @@
@@ -251,7 +251,7 @@ index cafd9bd..245a96d 100644
 -Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Every skill reads its own when it starts. ticket-prep and execute-raft harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.
 +Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Every skill reads its own when it starts. z-design and zz-execute harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.
 diff --git a/SETUP.md b/SETUP.md
-index 68dcedb..1a3fc25 100644
+index 68dcedb2..1a3fc256 100644
 --- a/SETUP.md
 +++ b/SETUP.md
 @@ -35,8 +35,8 @@ z-nile/setup.sh
@@ -266,7 +266,7 @@ index 68dcedb..1a3fc25 100644
  ## CI
  `.github/workflows/check.yml` bootstraps the runner with `z-nile/setup.sh`, the same script as a new host, so every CI run also proves this document on a clean Linux machine. setup.sh ends with `z-nile/check.sh --full`.
 diff --git a/pickman/check.sh b/pickman/check.sh
-index 12a02ae..91bac98 100755
+index 12a02ae8..91bac98c 100755
 --- a/pickman/check.sh
 +++ b/pickman/check.sh
 @@ -1,4 +1,4 @@
@@ -279,7 +279,7 @@ diff --git a/.claude/skills/architecture/SKILL.md b/pickman/skills/pickman-arch/
 similarity index 82%
 rename from .claude/skills/architecture/SKILL.md
 rename to pickman/skills/pickman-arch/SKILL.md
-index a4a18a6..6b7caf7 100644
+index a4a18a65..6b7caf77 100644
 --- a/.claude/skills/architecture/SKILL.md
 +++ b/pickman/skills/pickman-arch/SKILL.md
 @@ -1,9 +1,9 @@
@@ -319,7 +319,7 @@ index a4a18a6..6b7caf7 100644
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
 new file mode 100644
-index 0000000..7459587
+index 00000000..74595874
 --- /dev/null
 +++ b/pickman/skills/pickman-test/SKILL.md
 @@ -0,0 +1,76 @@
@@ -400,7 +400,7 @@ index 0000000..7459587
 +- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 diff --git a/pickman/tests/acceptance/c0003/pipeline.spec.luau b/pickman/tests/acceptance/c0003/pipeline.spec.luau
-index 2023649..1cdb3c8 100644
+index 20236493..1cdb3c85 100644
 --- a/pickman/tests/acceptance/c0003/pipeline.spec.luau
 +++ b/pickman/tests/acceptance/c0003/pipeline.spec.luau
 @@ -8,8 +8,8 @@ local t = require("@tests/lib/t")
@@ -415,7 +415,7 @@ index 2023649..1cdb3c8 100644
  local function has(s: any, needle: string): boolean
  	return type(s) == "string" and string.find(s, needle, 1, true) ~= nil
 diff --git a/pickman/tests/acceptance/c0064/docs.spec.luau b/pickman/tests/acceptance/c0064/docs.spec.luau
-index fd7977b..371da3b 100644
+index fd7977b2..371da3bb 100644
 --- a/pickman/tests/acceptance/c0064/docs.spec.luau
 +++ b/pickman/tests/acceptance/c0064/docs.spec.luau
 @@ -5,7 +5,7 @@ local fs = require("@lune/fs")
@@ -428,7 +428,7 @@ index fd7977b..371da3b 100644
  local function has(s: string, needle: string): boolean
  	return string.find(s, needle, 1, true) ~= nil
 diff --git a/pickman/tests/lib/sim.luau b/pickman/tests/lib/sim.luau
-index 72d3f2a..643cbff 100644
+index 72d3f2ac..643cbff6 100644
 --- a/pickman/tests/lib/sim.luau
 +++ b/pickman/tests/lib/sim.luau
 @@ -1,6 +1,6 @@
@@ -440,7 +440,7 @@ index 72d3f2a..643cbff 100644
  -- Tick semantics: step k moves the world from time k to time k+1; an intent at k is delivered in
  -- step k; events returned by step k are visible at time k+1 (stamped tick = k+1).
 diff --git a/pickman/tests/meta/architecture.spec.luau b/pickman/tests/meta/architecture.spec.luau
-index f9e84c4..5da1332 100644
+index f9e84c40..5da13328 100644
 --- a/pickman/tests/meta/architecture.spec.luau
 +++ b/pickman/tests/meta/architecture.spec.luau
 @@ -1,5 +1,5 @@
@@ -451,7 +451,7 @@ index f9e84c4..5da1332 100644
  local fs = require("@lune/fs")
  local graph = require("@znile/lib/graph")
 diff --git a/tests/acceptance/c0042/model.spec.luau b/tests/acceptance/c0042/model.spec.luau
-index f4b5bac..fc62608 100644
+index f4b5bacc..fc626084 100644
 --- a/tests/acceptance/c0042/model.spec.luau
 +++ b/tests/acceptance/c0042/model.spec.luau
 @@ -347,12 +347,12 @@ return t.spec("c0400 board model", function(it)
@@ -472,7 +472,7 @@ index f4b5bac..fc62608 100644
  		t.expect(issues.c0070.dependents).toEqual({})
  		for _, id in ids(m.rafts) do
 diff --git a/tests/acceptance/c0042/smoke.spec.luau b/tests/acceptance/c0042/smoke.spec.luau
-index ffc8339..a5866b0 100644
+index ffc83395..a5866b0b 100644
 --- a/tests/acceptance/c0042/smoke.spec.luau
 +++ b/tests/acceptance/c0042/smoke.spec.luau
 @@ -195,7 +195,7 @@ if (mode === "walk") {
@@ -485,7 +485,7 @@ index ffc8339..a5866b0 100644
    expect(/<h2><span class="id">c0050<\/span>/.test(pane()), "a #id in the URL opens that issue");
  }
 diff --git a/tests/acceptance/c0043/format.spec.luau b/tests/acceptance/c0043/format.spec.luau
-index b8a9d2a..92cd542 100644
+index b8a9d2a7..92cd5422 100644
 --- a/tests/acceptance/c0043/format.spec.luau
 +++ b/tests/acceptance/c0043/format.spec.luau
 @@ -4,7 +4,7 @@
@@ -498,7 +498,7 @@ index b8a9d2a..92cd542 100644
  -- The fenced markdown block that shows the output file format.
  local function template(): string
 diff --git a/tests/acceptance/c0043/review-skill.spec.luau b/tests/acceptance/c0043/review-skill.spec.luau
-index 6a63a9e..cd8d87a 100644
+index 6a63a9e0..cd8d87aa 100644
 --- a/tests/acceptance/c0043/review-skill.spec.luau
 +++ b/tests/acceptance/c0043/review-skill.spec.luau
 @@ -22,7 +22,7 @@ local function has(text: string, phrase: string): boolean
@@ -511,7 +511,7 @@ index 6a63a9e..cd8d87a 100644
  return t.spec("c0410 review skill sections", function(it)
  	it("review: the one-step-further rule is prose, outside the template", function()
 diff --git a/tests/acceptance/c0043/ticket-prep.spec.luau b/tests/acceptance/c0043/ticket-prep.spec.luau
-index de455aa..03609e9 100644
+index de455aa1..03609e95 100644
 --- a/tests/acceptance/c0043/ticket-prep.spec.luau
 +++ b/tests/acceptance/c0043/ticket-prep.spec.luau
 @@ -17,7 +17,7 @@ local function has(text: string, phrase: string): boolean
@@ -524,7 +524,7 @@ index de455aa..03609e9 100644
  return t.spec("c0410 ticket-prep sections", function(it)
  	it("ticket-prep: step 3 asks for the Rules and mutants table", function()
 diff --git a/tests/acceptance/c0047/override-check.spec.luau b/tests/acceptance/c0047/override-check.spec.luau
-index 3682434..207311c 100644
+index 36824346..207311c1 100644
 --- a/tests/acceptance/c0047/override-check.spec.luau
 +++ b/tests/acceptance/c0047/override-check.spec.luau
 @@ -28,7 +28,7 @@ return t.spec("c0450 override check", function(it)
@@ -564,7 +564,7 @@ index 3682434..207311c 100644
  		for _, token in { "depends_on", "isn't a member", "done/", "stop" } do
  			t.expect(has(ready, token)).toBe(true)
 diff --git a/tests/acceptance/c0048/board-docs.spec.luau b/tests/acceptance/c0048/board-docs.spec.luau
-index b5739af..bdf5d68 100644
+index b5739af3..bdf5d687 100644
 --- a/tests/acceptance/c0048/board-docs.spec.luau
 +++ b/tests/acceptance/c0048/board-docs.spec.luau
 @@ -7,7 +7,7 @@ return t.spec("c0460 board docs", function(it)
@@ -577,7 +577,7 @@ index b5739af..bdf5d68 100644
  			for line in string.gmatch(text, "[^\n]+") do
  				if string.sub(line, 1, 10) == "| board | " then
 diff --git a/tests/acceptance/c0050/start-depends.spec.luau b/tests/acceptance/c0050/start-depends.spec.luau
-index f1465b2..856cdc2 100644
+index f1465b2a..856cdc29 100644
 --- a/tests/acceptance/c0050/start-depends.spec.luau
 +++ b/tests/acceptance/c0050/start-depends.spec.luau
 @@ -171,7 +171,7 @@ return t.spec("c0480 start checks depends_on", function(it)
@@ -590,7 +590,7 @@ index f1465b2..856cdc2 100644
  				row = line
  			end
 diff --git a/tests/acceptance/c0052/skill-doc.spec.luau b/tests/acceptance/c0052/skill-doc.spec.luau
-index a9d4afd..c3e8083 100644
+index a9d4afd6..c3e8083f 100644
 --- a/tests/acceptance/c0052/skill-doc.spec.luau
 +++ b/tests/acceptance/c0052/skill-doc.spec.luau
 @@ -5,7 +5,7 @@ local fs = require("@lune/fs")
@@ -612,7 +612,7 @@ index a9d4afd..c3e8083 100644
  	end)
  end)
 diff --git a/tests/acceptance/c0057/open.spec.luau b/tests/acceptance/c0057/open.spec.luau
-index fedbf70..5ddba37 100644
+index fedbf707..5ddba377 100644
 --- a/tests/acceptance/c0057/open.spec.luau
 +++ b/tests/acceptance/c0057/open.spec.luau
 @@ -120,7 +120,7 @@ return t.spec("c0550 board opens by default", function(it)
@@ -625,7 +625,7 @@ index fedbf70..5ddba37 100644
  				row = line
  			end
 diff --git a/tests/acceptance/c0069/prompt.spec.luau b/tests/acceptance/c0069/prompt.spec.luau
-index a997fc8..76aa2b4 100644
+index a997fc88..76aa2b42 100644
 --- a/tests/acceptance/c0069/prompt.spec.luau
 +++ b/tests/acceptance/c0069/prompt.spec.luau
 @@ -178,7 +178,7 @@ return t.spec("tracker prompt", function(it)
@@ -638,7 +638,7 @@ index a997fc8..76aa2b4 100644
  		end
  		fs.removeDir(stale)
 diff --git a/tests/acceptance/c0081/skill-doc.spec.luau b/tests/acceptance/c0081/skill-doc.spec.luau
-index cdc25df..72f2d3e 100644
+index cdc25df1..72f2d3ed 100644
 --- a/tests/acceptance/c0081/skill-doc.spec.luau
 +++ b/tests/acceptance/c0081/skill-doc.spec.luau
 @@ -5,7 +5,7 @@ local fs = require("@lune/fs")
@@ -660,7 +660,7 @@ index cdc25df..72f2d3e 100644
  		t.expect(says(testing, "in two parts")).toBe(true)
  	end)
 diff --git a/tests/acceptance/c0082/cli.spec.luau b/tests/acceptance/c0082/cli.spec.luau
-index 025398a..9264161 100644
+index 025398a1..9264161d 100644
 --- a/tests/acceptance/c0082/cli.spec.luau
 +++ b/tests/acceptance/c0082/cli.spec.luau
 @@ -156,7 +156,7 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
@@ -673,7 +673,7 @@ index 025398a..9264161 100644
  		t.expect(has(other, "./zn audit")).toBe(true)
  		local readOnly = string.match(skill, "the read%-only tracker commands ([^\n]+)") :: string
 diff --git a/tests/acceptance/c0107/keep.spec.luau b/tests/acceptance/c0107/keep.spec.luau
-index 6867b3d..32cf06d 100644
+index 6867b3dc..32cf06df 100644
 --- a/tests/acceptance/c0107/keep.spec.luau
 +++ b/tests/acceptance/c0107/keep.spec.luau
 @@ -116,7 +116,7 @@ return t.spec("c0107 board keep", function(it)
@@ -686,7 +686,7 @@ index 6867b3d..32cf06d 100644
  				row = line
  			end
 diff --git a/tests/acceptance/c0107/page.spec.luau b/tests/acceptance/c0107/page.spec.luau
-index 5ea4c15..aeef17a 100644
+index 5ea4c158..aeef17ab 100644
 --- a/tests/acceptance/c0107/page.spec.luau
 +++ b/tests/acceptance/c0107/page.spec.luau
 @@ -143,7 +143,7 @@ out.pane = els.pane.innerHTML;
@@ -747,7 +747,7 @@ index 5ea4c15..aeef17a 100644
  		t.expect(string.find(shown.afterRightPane, "MixedChore", 1, true) ~= nil).toBe(true)
  		t.expect(string.find(shown.preparingPane, ">R9104<", 1, true) ~= nil).toBe(true)
 diff --git a/tests/acceptance/c0107/views.spec.luau b/tests/acceptance/c0107/views.spec.luau
-index 5b58565..8decf48 100644
+index 5b585655..8decf487 100644
 --- a/tests/acceptance/c0107/views.spec.luau
 +++ b/tests/acceptance/c0107/views.spec.luau
 @@ -257,14 +257,14 @@ return t.spec("c0107 board views", function(it)
@@ -787,7 +787,7 @@ index 5b58565..8decf48 100644
  		t.expect(issues.f9006.command).toBe(nil)
  		t.expect(issues.c9008.command).toBe(nil)
 diff --git a/tests/acceptance/c0111/lessons-cli.spec.luau b/tests/acceptance/c0111/lessons-cli.spec.luau
-index 0765e8c..4225d16 100644
+index 0765e8c4..4225d16f 100644
 --- a/tests/acceptance/c0111/lessons-cli.spec.luau
 +++ b/tests/acceptance/c0111/lessons-cli.spec.luau
 @@ -22,30 +22,30 @@ local function review(...: string): string
@@ -944,7 +944,7 @@ index 0765e8c..4225d16 100644
  		t.expect(code).toBe(0)
  		t.expect(out).toBe("(none)\n")
 diff --git a/tests/acceptance/c0111/metrics-lessons.spec.luau b/tests/acceptance/c0111/metrics-lessons.spec.luau
-index 820b17a..f087474 100644
+index 820b17a3..f0874746 100644
 --- a/tests/acceptance/c0111/metrics-lessons.spec.luau
 +++ b/tests/acceptance/c0111/metrics-lessons.spec.luau
 @@ -104,13 +104,13 @@ return t.spec("c0111 metrics over lessons", function(it)
@@ -975,7 +975,7 @@ index 820b17a..f087474 100644
  		t.expect(has(doc, '"Design rounds before and after lessons"')).toBe(true)
  	end)
 diff --git a/tests/acceptance/c0111/prompt-lessons.spec.luau b/tests/acceptance/c0111/prompt-lessons.spec.luau
-index 42272f7..1bfca23 100644
+index 42272f7c..1bfca233 100644
 --- a/tests/acceptance/c0111/prompt-lessons.spec.luau
 +++ b/tests/acceptance/c0111/prompt-lessons.spec.luau
 @@ -25,21 +25,18 @@ local function seed(withLessons: boolean): { [string]: string }
@@ -1040,7 +1040,7 @@ index 42272f7..1bfca23 100644
  		if not r.ok then
  			error(r.stderr .. r.stdout)
 diff --git a/tests/acceptance/c0111/skill-docs.spec.luau b/tests/acceptance/c0111/skill-docs.spec.luau
-index cf9fbf0..fa340bc 100644
+index cf9fbf02..fa340bcf 100644
 --- a/tests/acceptance/c0111/skill-docs.spec.luau
 +++ b/tests/acceptance/c0111/skill-docs.spec.luau
 @@ -6,7 +6,18 @@
@@ -1129,7 +1129,7 @@ index cf9fbf0..fa340bc 100644
  			at(agents, "lessons/")
  			at(agents, "./zn lessons")
 diff --git a/tests/acceptance/c0114/docs.spec.luau b/tests/acceptance/c0114/docs.spec.luau
-index 0efcbd0..7eb6d66 100644
+index 0efcbd0a..7eb6d667 100644
 --- a/tests/acceptance/c0114/docs.spec.luau
 +++ b/tests/acceptance/c0114/docs.spec.luau
 @@ -4,15 +4,25 @@
@@ -1207,7 +1207,7 @@ index 0efcbd0..7eb6d66 100644
  	end)
  end)
 diff --git a/tests/acceptance/c0114/roots-cli.spec.luau b/tests/acceptance/c0114/roots-cli.spec.luau
-index 4047d0c..8ae8e96 100644
+index 4047d0c7..8ae8e963 100644
 --- a/tests/acceptance/c0114/roots-cli.spec.luau
 +++ b/tests/acceptance/c0114/roots-cli.spec.luau
 @@ -66,9 +66,7 @@ return t.spec("c0114 commands across project roots", function(it)
@@ -1222,7 +1222,7 @@ index 4047d0c..8ae8e96 100644
  		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
  	end)
 diff --git a/tests/acceptance/c0119/scope-docs.spec.luau b/tests/acceptance/c0119/scope-docs.spec.luau
-index 9abf3e6..0141f6a 100644
+index 9abf3e6d..0141f6a2 100644
 --- a/tests/acceptance/c0119/scope-docs.spec.luau
 +++ b/tests/acceptance/c0119/scope-docs.spec.luau
 @@ -5,8 +5,6 @@
@@ -1328,7 +1328,7 @@ index 9abf3e6..0141f6a 100644
  		t.expect(row ~= nil).toBe(true)
  		at(row, "`./zn capture <id>`")
 diff --git a/tests/acceptance/c0119/scope-lessons.spec.luau b/tests/acceptance/c0119/scope-lessons.spec.luau
-index e11c3e6..fc35e42 100644
+index e11c3e66..fc35e427 100644
 --- a/tests/acceptance/c0119/scope-lessons.spec.luau
 +++ b/tests/acceptance/c0119/scope-lessons.spec.luau
 @@ -8,7 +8,7 @@ return t.spec("c0119 scope lessons", function(it)
@@ -1344,7 +1344,7 @@ diff --git a/z-nile/.tracker/issues/c0120/acceptance/check-paths.spec.luau b/tes
 similarity index 98%
 rename from z-nile/.tracker/issues/c0120/acceptance/check-paths.spec.luau
 rename to tests/acceptance/c0120/check-paths.spec.luau
-index 12e207b..dcfb233 100644
+index 12e207bf..dcfb233a 100644
 --- a/z-nile/.tracker/issues/c0120/acceptance/check-paths.spec.luau
 +++ b/tests/acceptance/c0120/check-paths.spec.luau
 @@ -16,7 +16,7 @@ local t = require("@tests/lib/t")
@@ -1364,7 +1364,7 @@ diff --git a/z-nile/.tracker/issues/c0120/acceptance/docs.spec.luau b/tests/acce
 similarity index 88%
 rename from z-nile/.tracker/issues/c0120/acceptance/docs.spec.luau
 rename to tests/acceptance/c0120/docs.spec.luau
-index 5e87789..afb75af 100644
+index 5e877896..afb75af1 100644
 --- a/z-nile/.tracker/issues/c0120/acceptance/docs.spec.luau
 +++ b/tests/acceptance/c0120/docs.spec.luau
 @@ -6,7 +6,18 @@
@@ -1451,7 +1451,7 @@ diff --git a/z-nile/.tracker/issues/c0120/acceptance/homes.spec.luau b/tests/acc
 similarity index 99%
 rename from z-nile/.tracker/issues/c0120/acceptance/homes.spec.luau
 rename to tests/acceptance/c0120/homes.spec.luau
-index 35202af..1d6b46b 100644
+index 35202af2..1d6b46be 100644
 --- a/z-nile/.tracker/issues/c0120/acceptance/homes.spec.luau
 +++ b/tests/acceptance/c0120/homes.spec.luau
 @@ -91,9 +91,7 @@ return t.spec("c0120 checks run from their project's home", function(it)
@@ -1490,7 +1490,7 @@ similarity index 100%
 rename from z-nile/.tracker/issues/c0120/acceptance/trail-home.spec.luau
 rename to tests/acceptance/c0120/trail-home.spec.luau
 diff --git a/tests/lib/cachepaths.luau b/tests/lib/cachepaths.luau
-index 4eabd6c..1bfecaf 100644
+index 4eabd6c3..1bfecaf6 100644
 --- a/tests/lib/cachepaths.luau
 +++ b/tests/lib/cachepaths.luau
 @@ -4,7 +4,7 @@
@@ -1503,17 +1503,28 @@ index 4eabd6c..1bfecaf 100644
  
  local cachepaths = {}
 diff --git a/tests/lib/engine.luau b/tests/lib/engine.luau
-index e5a43ff..a67cbfc 100644
+index e5a43ff5..cd77205e 100644
 --- a/tests/lib/engine.luau
 +++ b/tests/lib/engine.luau
-@@ -60,6 +60,20 @@ function engine.copy(root: string, dest: string)
+@@ -38,6 +38,9 @@ engine.ROOTS = { "tracker", "z-nile/.tracker" }
+ -- Every root a clone of the repository may hold items in: the fixtures' and the repository's own (c0120).
+ engine.CLONE_ROOTS = { "tracker", "z-nile/.tracker", "pickman/.tracker" }
+ engine.COUNTER = "z-nile/next"
++-- The skills folders engine.copy brings (with their lessons, the user's G7): z-nile's only, part of the copied z-nile/.
++-- A project's skills folder (pickman/skills) is never copied; a spec that needs one seeds it.
++engine.COPIED_SKILLS = { "z-nile/skills" }
+ -- Both places the counter can be: tracker/next stays the counter until origin moves it (the first publish after c0114).
+ engine.COUNTERS = { "z-nile/next", "tracker/next" }
+ 
+@@ -60,6 +63,21 @@ function engine.copy(root: string, dest: string)
  	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
  end
  
 +-- c0115: fixtures copy the skills with their lessons (the user's decision, 2026-10-21). A spec that needs an exact set
 +-- of lessons clears the copied ones first (trackerfix.new's `noLessons`), then seeds its own.
 +function engine.clearLessons(dest: string)
-+	for _, base in { `{dest}/z-nile/skills`, `{dest}/pickman/skills` } do
++	for _, folder in engine.COPIED_SKILLS do
++		local base = `{dest}/{folder}`
 +		if fs.isDir(base) then
 +			for _, name in fs.readDir(base) do
 +				if fs.isDir(`{base}/{name}/lessons`) then
@@ -1528,7 +1539,7 @@ index e5a43ff..a67cbfc 100644
  function engine.roots(dest: string)
  	for _, root in engine.ROOTS do
 diff --git a/tests/lib/fence.luau b/tests/lib/fence.luau
-index 55daf47..15bdfcf 100644
+index 55daf474..15bdfcf2 100644
 --- a/tests/lib/fence.luau
 +++ b/tests/lib/fence.luau
 @@ -1,5 +1,5 @@
@@ -1566,7 +1577,7 @@ index 55daf47..15bdfcf 100644
  				"\n"
  			)}\nStop and report this; do not repair the repository yourself.\n`
 diff --git a/tests/lib/fixture.luau b/tests/lib/fixture.luau
-index e2b6c18..eb8572d 100644
+index e2b6c181..eb8572d1 100644
 --- a/tests/lib/fixture.luau
 +++ b/tests/lib/fixture.luau
 @@ -1,5 +1,5 @@
@@ -1577,7 +1588,7 @@ index e2b6c18..eb8572d 100644
  -- a .cache folder and is that directory itself: if a fixture's repository were missing, git would otherwise find
  -- the enclosing real one. Creating a fixture (git init, git clone to a new path) needs no check: the new path is
 diff --git a/tests/lib/trackerfix.luau b/tests/lib/trackerfix.luau
-index 1664330..1215392 100644
+index 16643306..12153928 100644
 --- a/tests/lib/trackerfix.luau
 +++ b/tests/lib/trackerfix.luau
 @@ -30,9 +30,10 @@ local function identity(dir: string, name: string)
@@ -1604,7 +1615,7 @@ index 1664330..1215392 100644
  	fs.writeFile(`{source}/.gitignore`, ".cache/\n.worktree/\n")
  	local extra: { [string]: string } = seed or {}
 diff --git a/tests/meta/architecture.spec.luau b/tests/meta/architecture.spec.luau
-index b9d1bdd..be30872 100644
+index b9d1bdd8..be308723 100644
 --- a/tests/meta/architecture.spec.luau
 +++ b/tests/meta/architecture.spec.luau
 @@ -1,5 +1,5 @@
@@ -1615,7 +1626,7 @@ index b9d1bdd..be30872 100644
  -- pickman/ (c0120).
  local fs = require("@lune/fs")
 diff --git a/tests/tooling/lessons-hidden.spec.luau b/tests/tooling/lessons-hidden.spec.luau
-index 722bcaf..9472b1a 100644
+index 722bcaf4..9472b1a6 100644
 --- a/tests/tooling/lessons-hidden.spec.luau
 +++ b/tests/tooling/lessons-hidden.spec.luau
 @@ -12,9 +12,9 @@ return t.spec("lessons.load and hidden files", function(it)
@@ -1640,7 +1651,7 @@ index 722bcaf..9472b1a 100644
  		t.expect(string.find(joined, "notes.txt: not a lesson file", 1, true) ~= nil).toBe(true)
  		t.expect((string.find(joined, ".DS_Store", 1, true))).toBe(nil)
 diff --git a/tests/tooling/ready-members.spec.luau b/tests/tooling/ready-members.spec.luau
-index 22a5a7f..0582508 100644
+index 22a5a7fc..05825086 100644
 --- a/tests/tooling/ready-members.spec.luau
 +++ b/tests/tooling/ready-members.spec.luau
 @@ -65,9 +65,7 @@ return t.spec("ready and stop agree on a raft's members", function(it)
@@ -1655,7 +1666,7 @@ index 22a5a7f..0582508 100644
  	end)
  
 diff --git a/tests/tooling/repo-fence.spec.luau b/tests/tooling/repo-fence.spec.luau
-index 6deaf07..01ea0ef 100644
+index 6deaf076..01ea0ef1 100644
 --- a/tests/tooling/repo-fence.spec.luau
 +++ b/tests/tooling/repo-fence.spec.luau
 @@ -1,5 +1,5 @@
@@ -1684,7 +1695,7 @@ index 6deaf07..01ea0ef 100644
  		local top = trim(fs.readFile(`{env.PICKMAN_TEST_FENCE or ""}/.cache/tests-run.lock/pid`))
  		t.expect(string.match(top, "^%d+$") ~= nil).toBe(true)
 diff --git a/tests/tooling/start-pr-reuse.spec.luau b/tests/tooling/start-pr-reuse.spec.luau
-index 1fcb65a..e385ac2 100644
+index 1fcb65a1..e385ac23 100644
 --- a/tests/tooling/start-pr-reuse.spec.luau
 +++ b/tests/tooling/start-pr-reuse.spec.luau
 @@ -55,9 +55,7 @@ return t.spec("a readied raft's start reuses its open pull request", function(it
@@ -1699,7 +1710,7 @@ index 1fcb65a..e385ac2 100644
  		bin, log = `{f.base}/bin`, `{f.base}/gh.log`
  		fs.writeDir(bin)
 diff --git a/tests/tooling/worktree-fetch.spec.luau b/tests/tooling/worktree-fetch.spec.luau
-index 8c09542..32d660e 100644
+index 8c095426..32d660e1 100644
 --- a/tests/tooling/worktree-fetch.spec.luau
 +++ b/tests/tooling/worktree-fetch.spec.luau
 @@ -16,7 +16,7 @@ end
@@ -1712,7 +1723,7 @@ index 8c09542..32d660e 100644
  
  local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 diff --git a/z-nile/.tracker/issues/c0075/acceptance/wiring.spec.luau b/z-nile/.tracker/issues/c0075/acceptance/wiring.spec.luau
-index 78c2c4c..b8a3d02 100644
+index 78c2c4c6..b8a3d02b 100644
 --- a/z-nile/.tracker/issues/c0075/acceptance/wiring.spec.luau
 +++ b/z-nile/.tracker/issues/c0075/acceptance/wiring.spec.luau
 @@ -94,7 +94,7 @@ return t.spec("c0075 the Linux jail is wired in", function(it)
@@ -1725,7 +1736,7 @@ index 78c2c4c..b8a3d02 100644
  		t.expect(has(agents, "unjailed runs on Linux")).toBe(false)
  		t.expect(has(agents, "bubblewrap")).toBe(true)
 diff --git a/z-nile/.tracker/issues/c0075/c0075.md b/z-nile/.tracker/issues/c0075/c0075.md
-index f694ee1..bd57d16 100644
+index f694ee1d..bd57d161 100644
 --- a/z-nile/.tracker/issues/c0075/c0075.md
 +++ b/z-nile/.tracker/issues/c0075/c0075.md
 @@ -113,7 +113,7 @@ The sysctl is host-wide and lasts to the next boot, so a developer machine is ne
@@ -1774,7 +1785,7 @@ index f694ee1..bd57d16 100644
  
  ### Judged
 diff --git a/z-nile/.tracker/issues/c0083/acceptance/suites.spec.luau b/z-nile/.tracker/issues/c0083/acceptance/suites.spec.luau
-index 448f28b..a6be6e7 100644
+index 448f28b0..a6be6e73 100644
 --- a/z-nile/.tracker/issues/c0083/acceptance/suites.spec.luau
 +++ b/z-nile/.tracker/issues/c0083/acceptance/suites.spec.luau
 @@ -136,7 +136,7 @@ return t.spec("c0083 harness and game suites", function(it)
@@ -1787,7 +1798,7 @@ index 448f28b..a6be6e7 100644
  				"tests/lib/fixture.luau",
  				"tests/lib/clone.luau",
 diff --git a/z-nile/.tracker/issues/c0083/c0083.md b/z-nile/.tracker/issues/c0083/c0083.md
-index 5cd9ec9..4adfdbc 100644
+index 5cd9ec98..c1a94d89 100644
 --- a/z-nile/.tracker/issues/c0083/c0083.md
 +++ b/z-nile/.tracker/issues/c0083/c0083.md
 @@ -73,7 +73,7 @@ Rules give the same split, with no file moved and no promoted spec overridden fo
@@ -1894,7 +1905,7 @@ index 5cd9ec9..4adfdbc 100644
  
  ### Skills
 -The testing-skill, ticket-prep and review edits are the table above. c0047's override-check spec pins, in ticket-prep's Override check and in review item 4, the tokens `Overrides:`, `scripts/affected`, `grep -rlF`, `carries no list`, `tests/acceptance`, `depends_on`, `placeholder`, `high` and `ALL`. The new sentences keep them. AC7 runs that spec after the edits.
-+The testing-skill, z-design and review edits are the table above. c0047's override-check spec pins, in z-design's Override check and in review item 4, the tokens `Overrides:`, `scripts/affected`, `grep -rlF`, `carries no list`, `tests/acceptance`, `depends_on`, `placeholder`, `high` and `ALL`. The new sentences keep them. AC7 runs that spec after the edits.
++The zz-test, z-design and zz-review edits are the table above. c0047's override-check spec pins, in z-design's Override check and in zz-review item 4, the tokens `Overrides:`, `scripts/affected`, `grep -rlF`, `carries no list`, `tests/acceptance`, `depends_on`, `placeholder`, `high` and `ALL`. The new sentences keep them. AC7 runs that spec after the edits.
  
  ### Scalability
  - The text scan reads every spec once per selection. On this tree `select` of `scripts/tracker/main.luau` took 0.876 s after the graph was built. The runner closure is one walk of two files.
@@ -1940,7 +1951,7 @@ index 5cd9ec9..4adfdbc 100644
  ## Regression guard
  - `tests/tooling/affected.spec.luau`, c0002's and c0007's selector specs: the graph functions and the changed-file list are unchanged. c0007 still sees `require("./lib/changed")`.
 -- c0047's override-check spec: AC7 runs it after the ticket-prep and review edits, and the new sentences keep its tokens.
-+- c0047's override-check spec: AC7 runs it after the z-design and review edits, and the new sentences keep its tokens.
++- c0047's override-check spec: AC7 runs it after the z-design and zz-review edits, and the new sentences keep its tokens.
  - c0005's stop-hook cases edit `src/` and expect the gate to fail. The new hook still gates a `src/` change.
  - c0072's `land.spec` does not pin `--full`. Changing land's default does not turn it red.
  - c0055, c0015 and c0001 pin setup and CI `--full`. This raft does not change `scripts/setup.sh` or `check.yml`.
@@ -1969,12 +1980,12 @@ index 5cd9ec9..4adfdbc 100644
 -- AC7: the testing skill describes the two suites, the module, `check.sh --suite` and `TRACKER_TREE_READERS`, and no longer has the old full-run rule (`force one`). ticket-prep's Affected-specs step and its Override check, the review skill's item 4 and the issue template's two comments use `--deps` and no longer paste the plain selector. The testing skill's `scripts/affected` commands row lists `--suite`, `--deps` and `--which`. The architecture skill says a further place joins the `GAME` list in `scripts/lib/suites.luau`. The Override check and item 4 keep `ALL` and `carries no list`. c0047's spec passes.
 -- AC8: no step in the execute-raft, review, tracker or ticket-prep skills, nor in `tracker/templates/raft/check.sh` or `tracker/templates/prompt.md`, runs `check.sh --full`. The worktree note no longer says `for a raft, the full gate`, and neither the tracker skill's direct-push sentence nor `AGENTS.md` says `after a local full gate`. The testing skill names `--full` only on a line that contains `on demand` and does not contain `raft`, `RC0` or `exit criteria`. Phase 0 runs `check.sh --suite` for the sides `--which` prints. The Graph-miss bullet describes a selector miss fixed on the PR's branch and filed with `tracker.sh new issue c`, and it no longer says a spec fails under `--full` but wasn't selected. Merging states the forward procedure (absent from `lune run scripts/affected`, `lune run tests/run --`, plain `git commit`, `review-fix`). ticket-prep section 4 says RC0 runs `scripts/check.sh --affected`. Design item 2 says an RC0 that is not that command is a finding, and that the finding is not a selector-miss exception. Merging does not contain `template-drift` and does not contain `not BLOCKED`: red on origin/main stays `BLOCKED:`. Phase 3 and code item 2 name the c0080 exception and the c0037 exception.
 +- AC7: the zz-test skill describes the two suites, the module, `check.sh --suite` and `TRACKER_TREE_READERS`, and no longer has the old full-run rule (`force one`). z-design's Affected-specs step and its Override check, the zz-review skill's item 4 and the issue template's two comments use `--deps` and no longer paste the plain selector. The zz-test skill's `scripts/affected` commands row lists `--suite`, `--deps` and `--which`. The pickman-arch skill says a further place joins the `GAME` list in `scripts/lib/suites.luau`. The Override check and item 4 keep `ALL` and `carries no list`. c0047's spec passes.
-+- AC8: no step in the zz-execute, review, tracker or z-design skills, nor in `tracker/templates/raft/check.sh` or `tracker/templates/prompt.md`, runs `check.sh --full`. The worktree note no longer says `for a raft, the full gate`, and neither the zz-rules skill's direct-push sentence nor `AGENTS.md` says `after a local full gate`. The zz-test skill names `--full` only on a line that contains `on demand` and does not contain `raft`, `RC0` or `exit criteria`. Phase 0 runs `check.sh --suite` for the sides `--which` prints. The Graph-miss bullet describes a selector miss fixed on the PR's branch and filed with `tracker.sh new issue c`, and it no longer says a spec fails under `--full` but wasn't selected. Merging states the forward procedure (absent from `lune run scripts/affected`, `lune run tests/run --`, plain `git commit`, `review-fix`). z-design section 4 says RC0 runs `scripts/check.sh --affected`. Design item 2 says an RC0 that is not that command is a finding, and that the finding is not a selector-miss exception. Merging does not contain `template-drift` and does not contain `not BLOCKED`: red on origin/main stays `BLOCKED:`. Phase 3 and code item 2 name the c0080 exception and the c0037 exception.
++- AC8: no step in the zz-execute, zz-review, zz-rules or z-design skills, nor in `tracker/templates/raft/check.sh` or `tracker/templates/prompt.md`, runs `check.sh --full`. The worktree note no longer says `for a raft, the full gate`, and neither the zz-rules skill's direct-push sentence nor `AGENTS.md` says `after a local full gate`. The zz-test skill names `--full` only on a line that contains `on demand` and does not contain `raft`, `RC0` or `exit criteria`. Phase 0 runs `check.sh --suite` for the sides `--which` prints. The Graph-miss bullet describes a selector miss fixed on the PR's branch and filed with `tracker.sh new issue c`, and it no longer says a spec fails under `--full` but wasn't selected. Merging states the forward procedure (absent from `lune run scripts/affected`, `lune run tests/run --`, plain `git commit`, `review-fix`). z-design section 4 says RC0 runs `scripts/check.sh --affected`. Design item 2 says an RC0 that is not that command is a finding, and that the finding is not a selector-miss exception. Merging does not contain `template-drift` and does not contain `not BLOCKED`: red on origin/main stays `BLOCKED:`. Phase 3 and code item 2 name the c0080 exception and the c0037 exception.
  - AC9: each changed raft `check.sh` outside `done/` differs from `origin/main` by exactly one removed body line and one added body line. A body line is every remaining `+` or `-` line after `diff `, `index `, `@@`, `--- ` and `+++ ` headers are dropped, and a blank body line counts. The removed line is `check "RC0: repo gate passes (full)" scripts/check.sh --full` and the added line is the template's new RC0. No `check.sh` under `done/` changes except `tracker/issues/done/c0080/check.sh`, whose single changed line is the Phase 4 grep, now `scripts/check.sh --affected`, and `tracker/issues/done/c0037/check.sh`, whose single changed line replaces the Merging grep `check.sh --full` with `check.sh --affected` (not `scripts/check.sh --full`); `gh pr merge` and `Never use --admin` stay. If `git rev-parse --verify -q origin/main` prints nothing, this check fails with that fact and does not fetch; the content checks still run and the diff loops do not. Even then, any `check.sh` under `tracker/rafts` or `tracker/rafts/active` outside `done/` that still contains `check "RC0: repo gate passes (full)" scripts/check.sh --full` fails this check. Raft names are not hardcoded. That grep is not in a promoted spec and not in the gate. `scripts/tracker/main.luau` contains `override or "scripts/check.sh --affected"`, no longer contains `scripts/check.sh --full` or `"--full"`, still calls `doneGate(process.env)`, and does not name `PICKMAN_DONE_GATE`. c0074 pins `args: --affected` twice, still says `full gate fails` and `full gate is skipped`, and still has at least four `toBe("full")`. This check does not read c0072.md or R0025.md. It does not run a promoted spec over raft `check.sh` files.
  
  ### Judged
 diff --git a/z-nile/.tracker/issues/c0083/check.sh b/z-nile/.tracker/issues/c0083/check.sh
-index f9d4fd1..2ed1124 100755
+index f9d4fd1f..2ed11243 100755
 --- a/z-nile/.tracker/issues/c0083/check.sh
 +++ b/z-nile/.tracker/issues/c0083/check.sh
 @@ -44,21 +44,21 @@ check "AC5: scripts/affected --suite and --deps, and check.sh --suite" suites \
@@ -2101,9 +2112,18 @@ index f9d4fd1..2ed1124 100755
    grep -qF -- "--affected" <<<"$phase3" || { echo "Phase 3 sequestration does not name the --affected exception"; return 1; }
    if grep -qF "template-drift" <<<"$merging"; then
 diff --git a/z-nile/.tracker/issues/c0113/c0113.md b/z-nile/.tracker/issues/c0113/c0113.md
-index 5222160..901487b 100644
+index 52221609..057be294 100644
 --- a/z-nile/.tracker/issues/c0113/c0113.md
 +++ b/z-nile/.tracker/issues/c0113/c0113.md
+@@ -6,7 +6,7 @@ slug: skills-readme
+ raft: 
+ depends_on: []
+ emergent: false
+-design: draft
++design: ready
+ created: 2026-10-20
+ status: new-mongoose-mongoose-brisk
+ ---
 @@ -16,6 +16,8 @@ status: new-mongoose-mongoose-brisk
  ## Problem
  The rules live in eleven skills under `.claude/skills/`. Nothing on one page says which skill to read, or how an issue moves from capture to done. An agent has to open every skill to see the state machine.
@@ -2113,7 +2133,7 @@ index 5222160..901487b 100644
  ## Non-goals
  - Changing any skill, the tracker, or the commands.
  - Copying every rule out of the skills. The page points at them.
-@@ -24,17 +26,21 @@ The rules live in eleven skills under `.claude/skills/`. Nothing on one page say
+@@ -24,17 +26,23 @@ The rules live in eleven skills under `.claude/skills/`. Nothing on one page say
  - Add `.claude/README.md`: one page with a skill table, the command sequence, and a state diagram of `new` → `preparing` → `prepared` → `active` → `done`, including `stop` and a released claim, and the separate `design:` field.
  
  ## Design
@@ -2124,6 +2144,8 @@ index 5222160..901487b 100644
 +- the command sequence: its "## The flow" section, steps 1 to 5;
 +- the state diagram of `new` → `preparing` → `prepared` → `active` → `done`, with `z-stop` (`active --> prepared`) and a released claim (`preparing --> new: release the claim`): its `stateDiagram-v2` block;
 +- the separate `design:` field: "`design:` is separate from status, and only z-design changes it".
++
++Design reviewed with c0115: its design review 007 covered this superseded Design and its `check.sh` (under G9), and c0115's next round covers them again; hence `design: ready`, set by c0115's prep. c0113's `depends_on` stays empty: it rides in c0115's raft.
 +
 +The page this item added, `.claude/README.md`, is deleted by c0115 (the user's decision, recorded there). Nothing else changes for c0113. Its check runs c0115's README spec, whose case "covers every ask of c0113" pins the four points.
  
@@ -2141,10 +2163,10 @@ index 5222160..901487b 100644
  ### Affected specs
  <!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
 diff --git a/z-nile/.tracker/issues/c0113/check.sh b/z-nile/.tracker/issues/c0113/check.sh
-index 14607b1..750e97f 100755
+index 14607b1b..8a1e9759 100755
 --- a/z-nile/.tracker/issues/c0113/check.sh
 +++ b/z-nile/.tracker/issues/c0113/check.sh
-@@ -2,13 +2,12 @@
+@@ -2,13 +2,14 @@
  # Acceptance checks for c0113. SEQUESTERED: never edit during execution.
  # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
@@ -2154,19 +2176,21 @@ index 14607b1..750e97f 100755
 -[[ -d $A ]] || A="$PWD/tests/acceptance/c0113"
 +source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: the root
 +# c0115's sequestered specs, which this superseded item's checks reuse: in c0115's folder before its `done`, promoted after
-+C="$("$ZN_ROOT/zn" find c0115)/acceptance"
-+[[ -d $C ]] || C="$PWD/tests/acceptance/c0115"
++# anchored at the repository root, not at the home ac.sh changed to: c0115's promoted folder is in its project's home
++C="$ZN_ROOT/$(cd "$ZN_ROOT" && ./zn find c0115)/acceptance"
++for c in "$ZN_ROOT/tests/acceptance/c0115" "$ZN_ROOT/z-nile/tests/acceptance/c0115"; do [[ -d $C ]] || C=$c; done
  
 -# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 -# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 -# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 +check "AC1: z-nile/README.md, which supersedes this page, covers each of its asks" lune run tests/run -- "$C/readme.spec.luau"
-+check "AC2: the page this item added, .claude/README.md, is gone" bash -c '! git ls-files --error-unmatch .claude/README.md >/dev/null 2>&1'
++check "AC2: the page this item added, .claude/README.md, is gone" \
++  bash -c '! git -C "$1" ls-files --error-unmatch -- .claude/README.md >/dev/null 2>&1' _ "$ZN_ROOT"
  
  finish
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
 new file mode 100644
-index 0000000..10bf78f
+index 00000000..10bf78fa
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
 @@ -0,0 +1,239 @@
@@ -2411,7 +2435,7 @@ index 0000000..10bf78f
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau
 new file mode 100644
-index 0000000..fed1a18
+index 00000000..fed1a185
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau
 @@ -0,0 +1,189 @@
@@ -2606,7 +2630,7 @@ index 0000000..fed1a18
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau
 new file mode 100644
-index 0000000..9399640
+index 00000000..9399640e
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau
 @@ -0,0 +1,172 @@
@@ -2784,7 +2808,7 @@ index 0000000..9399640
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau
 new file mode 100644
-index 0000000..7184787
+index 00000000..7184787a
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau
 @@ -0,0 +1,330 @@
@@ -3120,10 +3144,10 @@ index 0000000..7184787
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau
 new file mode 100644
-index 0000000..9ca43a5
+index 00000000..bf40c370
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,137 @@
 +--!strict
 +-- c0115 AC7: a raft's prompt inlines z-nile's step skills (zz-execute, zz-rules, zz-arch, zz-test, zz-review, in that
 +-- order) and then every skill of the raft's own project, each from its real folder, never through .claude/skills;
@@ -3131,6 +3155,7 @@ index 0000000..9ca43a5
 +-- lists the build lessons of z-nile's skills and the raft's project's only, and the prompt names the project.
 +-- Fixture under .cache/c0115-prompt (tests/lib/trackerfix): a pickman raft in tracker/ (the fixtures' layout,
 +-- tests/lib/engine REGISTRY) and a z-nile raft in z-nile/.tracker, with a pickman skill and lessons on both sides.
++local engine = require("@tests/lib/engine")
 +local fs = require("@lune/fs")
 +local t = require("@tests/lib/t")
 +local trackerfix = require("@tests/lib/trackerfix")
@@ -3201,10 +3226,11 @@ index 0000000..9ca43a5
 +	end)
 +
 +	it(
-+		"the fixture's copied tooling carries every skill's lessons (the user's G7: fixtures copy lessons too)",
++		"the fixture's copied skills carry their lessons (the user's G7), for every folder engine.copy copies",
 +		function()
 +			local count = 0
-+			for _, base in { "z-nile/skills", "pickman/skills" } do
++			-- the folders engine.copy copies (z-nile's skills), from its own constant: a project's lessons are not copied
++			for _, base in engine.COPIED_SKILLS do
 +				if fs.isDir(base) then
 +					for _, skill in fs.readDir(base) do
 +						local dir = `{base}/{skill}/lessons`
@@ -3261,7 +3287,7 @@ index 0000000..9ca43a5
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau
 new file mode 100644
-index 0000000..2633a77
+index 00000000..2633a774
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau
 @@ -0,0 +1,183 @@
@@ -3450,7 +3476,7 @@ index 0000000..2633a77
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau
 new file mode 100644
-index 0000000..3c53670
+index 00000000..3c536706
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau
 @@ -0,0 +1,313 @@
@@ -3768,7 +3794,7 @@ index 0000000..3c53670
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/c0115/c0115.md
-index 258a3a7..19c2416 100644
+index 258a3a73..60d8529f 100644
 --- a/z-nile/.tracker/issues/c0115/c0115.md
 +++ b/z-nile/.tracker/issues/c0115/c0115.md
 @@ -6,7 +6,7 @@ slug: skill-names-readme
@@ -3780,7 +3806,7 @@ index 258a3a7..19c2416 100644
  created: 2026-10-20
  status: new-falcon-lucky-mongoose
  ---
-@@ -38,53 +38,526 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -38,53 +38,543 @@ Decided with the user (2026-10-20), from the programme review:
  - Move and rename the skill files under `z-nile/` to the `z-` and `zz-` names. `scripts/tracker.sh` verbs stay (`new issue`, `new raft`, `ready`, `start`, `done`).
  - Write `z-nile/README.md` so it opens with the flow diagram and a short account of the five parts.
  
@@ -3955,10 +3981,12 @@ index 258a3a7..19c2416 100644
 +- **the files, on the merged prep tree today (the dry run):**
 +  - documents: `c0075.md`, `c0083.md`, `R0039.md`, `R0040.md`, plus `c0114.md`, `c0120.md` and `R0043.md`, which will be in `done/` before c0115 runs, so the pass skips them then;
 +  - sequestered, named here as the decision asks: `z-nile/.tracker/issues/c0083/check.sh`, `z-nile/.tracker/issues/c0083/acceptance/suites.spec.luau` and `z-nile/.tracker/issues/c0075/acceptance/wiring.spec.luau`;
-+  - the executor's run prints the list again, and AC14 fails if anything is left;
++  - the executor's run prints the list again, and AC14 fails if anything is left. The script's gate for a sequestered file is a path through `.claude/skills/<old>` or a `/<old>/SKILL.md` path, literal or built from a variable; a sequestered file AC14 flags beyond that gate is escalated to the user under the G4 exception, never edited by hand;
++- half-renamed sentences (bare `review`, `tracker` beside a renamed name) are reworded by hand in documents, never in sequestered files (step 5b). On the prototype: four in `c0083.md` and one in `R0040.md`; c0083's `check.sh` keeps "tracker or AGENTS.md" in one message (sequestered);
 +- **c0120's check-paths spec:** it exempts R0030's, c0083's, R0039's and c0075's `check.sh` by blob id. c0083's changes (its old skill paths renamed), so c0115 overrides that one entry with the rewritten file's blob id (2ed11243 on the prototype). The other three `check.sh` files name no old skill path and stay as they are. §11 (n) rechecks it at the rebase.
 +
 +### 9. Readiness and work in flight
++- **The raft (the user's G9).** When c0115's raft is formed (z-design today, z-raft after c0116), it holds c0115 and c0113, the item c0115 supersedes: `./zn new raft chore <slug> c0115 c0113` (or the raft operator's equivalent), both z-nile chores. c0113 is `design: ready` (design review 007 covered its superseded Design and `check.sh`, and the next round covers them again). AC15 fails while the raft is missing or doesn't list c0113, so `./zn done` can't close c0115 without closing c0113 too.
 +- **The freeze.** c0115 is readied only when no other raft is active and no branch or worktree changes the skill paths: `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing (AC12; c0120's `busy`). `busy` reads `origin/main` and the origin branches as of the last fetch and never fetches itself (c0120 §8), so Implementation steps 1, 9 and 10 run `./zn sync --fetch` just before it, and AC12 says "as of the last fetch". An active raft's prompt names `/z-ready`, `.claude/skills/<old>` and the old lessons paragraph. A branch that edits an old skill path conflicts with the move, and a lesson written through the old path after the merge makes a real `.claude/skills/<old>/` folder, which the gate's `skills --check` refuses.
 +- **Sessions.** Claude Code loads skills from the folder the session starts in (the main checkout, by launch rule). After c0115 lands and the main checkout syncs, a new session sees the new names. A session that started before keeps the old list until restarted, and the old names no longer resolve on disk: restart sessions after the landing (the landing note says so). The hooks are `.claude/settings.json`'s and don't name skills, so no change there (lesson zz-rules/main-checkout-tools-span-the-move, where it exists).
 +- **Old worktrees** (cut before c0115) keep their own `.claude/skills/<old>` real folders until they merge `origin/main`, and git moves them. A file such a branch added inside an old skill folder comes back as `CONFLICT (file location)` with git's suggestion under `z-nile/skills/<new>/`. The zz-rules Conflicts paragraph gains the sentence "A branch from before c0115 that added a file inside an old skill folder (`.claude/skills/<old>/`) gets the same conflict: accept git's place under `z-nile/skills/<new>/` or `pickman/skills/<new>/`, never a real folder in `.claude/skills/` (the gate's `./zn skills --check` fails on it)." (AC8)
@@ -3984,7 +4012,9 @@ index 258a3a7..19c2416 100644
 +- (h) `./zn busy`'s paths and current-branch semantics (AC12);
 +- (i) the `projects` API that `skills.luau` and the specs call (`parse`, `legacy`, `projectOf`, `load`);
 +- (j) c0120's edits to the tracker skill's exhaustive lists, which §4 extends;
-+- (l) design review 006 F2's places, written for today's layout:
++- (l) design review 006 F2's and 007 F1/F2's places, written for today's layout:
++  - AC14 (`backlog_clean` and the rename script): now anchored at `$ZN_ROOT` (the script at `git rev-parse --show-toplevel`) and failing closed when the roots command fails or prints nothing, or no document is read; recheck that it still reads every root and still counts more than zero documents;
++  - c0113's `check.sh`: AC2's pathspec runs from `$ZN_ROOT` (`git -C "$ZN_ROOT" ls-files`), and AC1 finds c0115's promoted specs at `$ZN_ROOT/tests/acceptance/c0115` or `$ZN_ROOT/z-nile/tests/acceptance/c0115`; recheck both against the home c0120's rework gives z-nile;
 +  - §4 and G6 ("z-nile's home is `.`"), and `check.sh` line 5's comment ("cds to the item's project home: the root"): z-nile's home becomes `z-nile/`;
 +  - §4's "the stage runs with or without `--project`": the project now comes from the current directory;
 +  - AC10's command (`lune run tests/run -- tests/tooling/…` from the root, then `cd pickman`) and `check.sh`'s `tests/acceptance/c0115` fallback: both assume today's homes;
@@ -4107,7 +4137,8 @@ index 258a3a7..19c2416 100644
 +- `./zn audit` → AC11
 +- `./zn busy .claude/skills z-nile/skills pickman/skills`, after `./zn sync --fetch` → AC12
 +- `check.sh`'s `moves_only` over the branch's commits since `origin/main` (an empty range passes) → AC13
-+- `check.sh`'s `rename_finished`: the script's `--check` and `backlog_clean` → AC14
++- `check.sh`'s `rename_finished`: the script's `--check` and `backlog_clean`, both anchored at the root and failing closed → AC14
++- `check.sh`'s `raft_holds_c0113` → AC15
  
  ### Rules and mutants
 -<!-- One row per behavioural rule in the Design. The mutant is a plausible wrong implementation
@@ -4148,6 +4179,11 @@ index 258a3a7..19c2416 100644
 +| fixtures copy the skills with their lessons (G7) | prompt :: the fixture's copied tooling carries every skill's lessons | `engine.copy` strips the lessons again (M54; M32, its inverse, retired with the old rule) | run: killed |
 +| an exact-set fixture opts out of the copied lessons | c0111/lessons-cli (override) :: lists every lesson… | `noLessons` ignored (M55) | run: killed |
 +| the rename covers live backlog designs (G4) | check.sh AC14 (`backlog_clean`, independent of the script) | the script's backlog pass dropped (M56) | run (by hand): killed |
++| AC14 fails closed on an empty or failed scan, from any home | check.sh AC14 | `backlog_clean`'s roots command failing (M57, `z-nile/nosuch` on a copy); the script's roots command failing (M58) | run (by hand): both red; from `z-nile/` the scan still reads 27 documents |
++| AC14 sees the `/command` form | check.sh AC14 | a planted `/launch-raft R0010` in R0039's design | run (by hand): red |
++| the G7 case covers only what engine.copy copies (`engine.COPIED_SKILLS`) | prompt :: the fixture's copied skills carry their lessons… | a game lesson planted in `pickman/skills/pickman-arch/lessons/` | run (by hand): stays green |
++| c0113's AC2 reads the repository root | c0113 check.sh AC2 | `.claude/README.md` restored | run (by hand): red |
++| c0115's raft holds c0113 (G9) | check.sh AC15 | no raft yet, or a raft without c0113 | reasoned: red on the prototype today (no raft); `./zn members` is the tracker's own reader |
 +| AC13 passes an empty range and stays strict on a live branch (G11) | check.sh AC13 | — | run (scratch clone): a live branch passes, an edit in the moves commit (M44) and a later rename (M45) fail, `origin/main` itself (empty range) passes |
 +| the testing split is a move, not a copy | docs :: zz-test keeps the gate… | zz-test keeps a Simulations section (M33) | run: killed |
 +| the gate runs `skills --check` | check.sh AC2 (the exact stage line) | the stage deleted, the plan line kept (M34) | run: killed |
@@ -4189,13 +4225,14 @@ index 258a3a7..19c2416 100644
 +- AC11: `./zn audit` reports no error on the real tree.
 +- AC12: as of the last fetch, `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing on the raft branch.
 +- AC13: on a live branch, the branch's commits since it left `origin/main` hold exactly one commit whose subject starts `c0115: move the skills`, its `git show -M --find-renames=100% --name-status` lines are all `R100`, and no other commit of the range renames a file under `.claude/skills`, `z-nile/skills` or `pickman/skills`. An empty range (the PR squashed into main) passes (the user's G11).
-+- AC14: the rename is finished: the rename script's `--check` run finds nothing left to rename (ledgers, lessons, live backlog designs), and, independently of the script, no unfinished item's design (c0115 aside) or its `check.sh` or acceptance files name a hyphenated old skill or a path through `.claude/skills/<old>`.
++- AC14: the rename is finished: the rename script's `--check` run finds nothing left to rename (ledgers, lessons, live backlog designs), and, independently of the script, no unfinished item's design (c0115 aside) or its `check.sh` or acceptance files name a hyphenated old skill (bare or as a `/command`), a `/<old>/SKILL.md` path (literal or built from a variable) or a path through `.claude/skills/<old>`. Both halves are anchored at the repository root and fail closed: a roots command that fails or prints nothing, or a scan that reads no document, is red.
++- AC15: c0115's raft (its `raft:` field) holds c0113, the item it supersedes (`./zn members`); no raft yet is red.
  
  ### Judged
 -<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
 -     Ruled on by the adversarial code reviewer. -->
 +- JC1: the PR is reviewable as a rename. The mechanics are AC13; the reviewer judges whether the edits commit reads as edits of moved files (`git diff -M` shows each changed skill as a modification at its new path, never as a delete and an add), and, where AC13 passed on an empty range while the branch is still live (no commits since `origin/main`), that there is nothing to review. Fail when it doesn't.
-+- JC2: the README is a short, true map. Rubric: pass when `z-nile/README.md`'s account of the five parts is at most about 15 lines, says nothing an existing skill contradicts (each sentence checked against zz-rules, zz-test and z-run), and marks every unbuilt part with its issue; fail on a stale command or path, a part described as built that is not, or rules copied out of a skill rather than pointed at.
++- JC2: the README is a short, true map. Rubric: pass when `z-nile/README.md`'s account of the five parts is at most about 15 lines, says nothing an existing skill contradicts (each sentence checked against zz-rules, zz-test, z-run and zz-execute), and marks every unbuilt part with its issue; fail on a stale command or path, a part described as built that is not, or rules copied out of a skill rather than pointed at.
  
  ### Observed
 -<!-- Minimal Studio playtest steps for the human (OCn). -->
@@ -4203,12 +4240,12 @@ index 258a3a7..19c2416 100644
  
  ## Implementation steps
 -<!-- Ordered, small, each verifiable. -->
-+1. **Phase 1 checks.** Rebase rule §11 if the stack under c0115 changed after bc550e9. `./zn sync --fetch`, then `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing (no other raft active); c0120 is done (`tests/acceptance/c0120/` exists); rerun E1's Claude Code probe if the CLI version changed.
++1. **Phase 1 checks.** Rebase rule §11 if the stack under c0115 changed after bc550e9. `./zn sync --fetch`, then `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing (no other raft active); c0120 is done (`tests/acceptance/c0120/` exists); rerun E1's Claude Code probe if the CLI version changed. The raft holds c0115 and c0113 (§9; AC15).
 +2. **The move, one commit, renames only** (§1's `git mv` lines, `architecture/lessons` to `zz-arch/lessons` first). Verify: `git show -M --name-status HEAD` is all `R100` (AC13).
 +3. **Engine.** `z-nile/engine/skills.luau`; `main.luau` (`skills`, the usage, `inlinedSkills`, `projectOfRoot`, the scoped `buildLessons`, `folderOf` in `--full`, messages); `lessons.luau` (folders, owners, `folderOf`, the legacy fallback). Verify: AC1, AC5, AC7.
 +4. **The links.** `./zn skills` in the worktree; `git add .claude/skills`. Verify: `./zn skills --check`; the gate stage line in `z-nile/check.sh`.
 +5. **The ledgers.** `lune run "$(./zn find c0115)/experiments/rename-lesson-ids"`; then read its lesson-body diff line by line (`git diff -U0 -- 'z-nile/skills/*/lessons/*.md' 'pickman/skills/*/lessons/*.md'`): a renamed example or a half-renamed sentence is reworded by hand (§5 Text); then `./zn lessons --check` and `--uncovered R0040 R0042`. Rerun all of it after every merge of `origin/main`, since lessons keep arriving.
-+5b. **Live backlog designs (G4).** The same script run (step 5) rewrites them; read its list and diff, and name every file it touched in the PR description.
++5b. **Live backlog designs (G4).** The same script run (step 5) rewrites them. Read pass 3's diff line by line, as step 5 does for lessons, and reword by hand any half-renamed sentence in a document (the name rule rightly skips bare `review` and `tracker`: "zz-execute, review, tracker or z-design skills" becomes "zz-execute, zz-review, zz-rules or z-design skills"); never hand-edit a sequestered file. Name every file the pass touched, and every reworded sentence, in the PR description. A sequestered file AC14 flags that the script's path gate skipped (one with only a bare old name) is escalated to the user under their G4 exception, never edited by hand.
 +6. **Skill text.** Frontmatter names; `z-run` (the launch and hand-off) and `zz-execute` (the protocol); the testing split (§2) and `pickman-test`; `zz-arch` (§3); zz-rules' Skills bullet and lists; the lessons paragraph; the checklists and z-design's step 3; every cross-reference (§8). Verify: AC3, AC8.
 +7. **README and AGENTS.md**; delete `.claude/README.md`; the template (§6). Verify: AC9.
 +8. **Fixtures and overrides**: `tests/lib/engine.luau`, then each override group, running its specs.
@@ -4234,7 +4271,7 @@ index 258a3a7..19c2416 100644
 +- F2 (eleven onto ten names, `z-raft` is c0116's): §1's full table; `launch-raft` becomes `z-run` and `execute-raft` becomes `zz-execute` (the user's G2). No `z-raft` folder is made (AC3's `check.sh` line), and the README draws it as c0116's (AC9).
 +- F3 (links and git): the user's decision, committed relative links checked in the gate (§4, AC1, AC2). Every reader uses real paths, pinned by AC4's link rule (M25). E1 reran the probe committed and in a fresh worktree. The fallback is recorded.
 +- F4 (lesson ids): the rewrite script over every ledger and lesson (§5, E4), with `lessons --check` and `--uncovered` (AC6) and the real-tree id scan (AC5, M31). The four architecture lessons go to `zz-arch` (G3). R0042's pinned ids are overridden (c0119/scope-lessons, c0111's fixtures). The c0112 order is either way (§5).
-+- F5 (prepared rafts' sequestered files): c0114's rule is that no sequestered file is edited, and the user decided that R0030 and R0039 are re-prepped after c0120. Since c0115 follows c0120, their re-prep follows c0115 (G4); c0120's check-paths spec keeps exempting their current files by content. The freeze rule is adopted (G5, AC12).
++- F5 (prepared rafts' sequestered files): settled by the user's G4, "Rewrite in c0115": the rename script's third pass rewrites live backlog designs and the sequestered files that name old skill paths (c0083's `check.sh` and `suites.spec`, c0075's `wiring.spec`), §8 overrides c0120/check-paths' c0083 entry, and AC14 checks nothing is left. The freeze rule is adopted (G5, AC12).
 +- F6 (pinned phrases): measured on the prototype by the full gate: 28 promoted specs, listed under Overrides with the file each phrase now reads (c0003 and c0064 read `pickman-test`; c0081, c0114 and c0120 read `zz-test`).
 +- F7 (per-project inlining): §6, AC7 (M19 to M23). The prompt names its project. c0117's own decision ("Name the files in the prompt") settles the interface note: c0115 only changes what is inlined (G8).
 +- F8 (`.claude/README.md`): the user decided to delete it (§7, AC3). The links in AGENTS.md and SETUP.md don't exist on this tree, so AGENTS.md now points at `z-nile/README.md`. Closing c0113 is the user's call (G9).
@@ -4265,6 +4302,12 @@ index 258a3a7..19c2416 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++Design review 007 answered, 2026-10-21, on bc550e9:
++- AC14 and the rename script anchored at the repository root and failing closed; `backlog_clean` read 27 unfinished items' designs from the root and from `z-nile/`; c0113's `check.sh` anchored (AC2 red with `.claude/README.md` restored); c0113 `design: ready`; AC15 added; `engine.COPIED_SKILLS`; half-renamed sentences reworded in two documents.
++- `z-nile/check.sh --full`: GATE PASSED (full), pickman 1068 and z-nile 997 cases, 228.0 s at load average 22. (Its first run this round failed the lint stage on a selene warning, a shadowed local in the rename script: my lint runs had filtered warnings out. Fixed, and the gate rerun green.)
++- `./zn check c0115`: 13/15. AC12 (the freeze) and AC15 (no raft formed yet) are red for the right reasons.
++- Mutation check: 52 by the runner (M1 to M55, M32 retired), and by hand M57, M58, the `/launch-raft` plant, the planted game lesson and c0113's AC2: all as expected.
++
 +User decisions on the guesses, 2026-10-21 (G1 to G11 above), applied on bc550e9:
 +- G2: the move commit was rebuilt with `launch-raft` → `z-run` and `execute-raft` → `zz-execute` (32 files, all `R100`), and the edits split the old merged `z-run` into the two skills; 13 skills, one link each.
 +- G4: the rename script's backlog pass rewrote 113 tokens in the prototype's live backlog designs (c0075, c0083, R0039, R0040); 388 on the merged prep tree's dry run, which also lists c0114, c0120 and R0043 (done by c0115's time). c0120/check-paths' c0083 entry is overridden.
@@ -4327,10 +4370,10 @@ index 258a3a7..19c2416 100644
 +
 +Prep round 0, 2026-10-21, on 080d247 (superseded by the rebases): the full gate passed (1068 and 982 cases, 90.6 s against the base's 94.1 s); `check.sh` 11/12 (AC12); the base 2/12; the promotion dry run clean (65 cases, 11 files, `luau-lsp analyze tests` exit 0); 34 mutants killed.
 diff --git a/z-nile/.tracker/issues/c0115/check.sh b/z-nile/.tracker/issues/c0115/check.sh
-index 50ea286..e7dfa2f 100755
+index 50ea286e..e6801bf2 100755
 --- a/z-nile/.tracker/issues/c0115/check.sh
 +++ b/z-nile/.tracker/issues/c0115/check.sh
-@@ -2,13 +2,91 @@
+@@ -2,13 +2,109 @@
  # Acceptance checks for c0115. SEQUESTERED: never edit during execution.
  # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
@@ -4400,38 +4443,56 @@ index 50ea286..e7dfa2f 100755
 +}
 +check "AC13: the skills move is one renames-only commit, and no other commit of the branch renames a skill file" moves_only
 +# AC14's second half is independent of the script: unfinished items' designs (an issue from its `## Design` heading on,
-+# a raft after its frontmatter) and their check.sh and acceptance files name no hyphenated old skill and no path
-+# through .claude/skills/<old>; c0115's own folder aside (the record of the rename).
++# a raft after its frontmatter) and their check.sh and acceptance files name no hyphenated old skill (bare or as a
++# /command), no `/<old>/SKILL.md` path (literal or built from a variable) and no path through .claude/skills/<old>;
++# c0115's own folder aside (the record of the rename). It is anchored at $ZN_ROOT, whatever home ac.sh changed to, and
++# fails closed: a roots command that fails or prints nothing, or a scan that reads no document, is red.
 +backlog_clean() {
 +  local old='(make-issue|ticket-prep|ready-raft|launch-raft|execute-raft|stop-raft)'
-+  local re="(^|[^a-z0-9_./-])$old([^a-z0-9_-]|\$)|\.claude/skills/($old|review|tracker|metrics|testing|architecture)([^a-z0-9_-]|\$)"
-+  local bad="" dir id f
++  local all='(make-issue|ticket-prep|ready-raft|launch-raft|execute-raft|stop-raft|review|tracker|metrics|testing|architecture)'
++  local re="(^|[^a-z0-9_./-])$old([^a-z0-9_-]|\$)|(^|[^a-z0-9_.-])/$old([^a-z0-9_-]|\$)|/$all/SKILL\.md|\.claude/skills/$all([^a-z0-9_-]|\$)"
++  local roots bad="" dir id f n=0
++  roots=$(cd "$ZN_ROOT" && lune run z-nile/roots) || { echo "the roots command failed: nothing checked"; return 1; }
++  [[ -n $roots ]] || { echo "the roots command printed no root: nothing checked"; return 1; }
 +  while IFS= read -r dir; do
 +    id=${dir##*/}
 +    [[ $id == c0115 ]] && continue
++    [[ -f $dir/$id.md ]] || continue
++    n=$((n + 1))
 +    if [[ $id == R* ]]; then
-+      f=$(awk 'n>=2 {print} /^---$/ {n++}' "$dir/$id.md" 2>/dev/null)
++      f=$(awk 'n>=2 {print} /^---$/ {n++}' "$dir/$id.md")
 +    else
-+      f=$(awk '/^## Design$/ {on=1} on {print}' "$dir/$id.md" 2>/dev/null)
++      f=$(awk '/^## Design$/ {on=1} on {print}' "$dir/$id.md")
 +    fi
-+    if grep -qE "$re" <<<"$f"; then bad+="$dir/$id.md "; fi
++    if grep -qE "$re" <<<"$f"; then bad+="${dir#"$ZN_ROOT"/}/$id.md "; fi
 +    while IFS= read -r g; do
-+      grep -qE "$re" "$g" && bad+="$g "
-+    done < <(find "$dir" \( -name check.sh -o -path "*/acceptance/*" \) -type f 2>/dev/null)
-+  done < <(for r in $(lune run z-nile/roots); do find "$r/issues" "$r/rafts" "$r/issues/active" "$r/rafts/active" -mindepth 1 -maxdepth 1 -type d -name '[cdfR][0-9][0-9][0-9][0-9]' 2>/dev/null; done)
++      grep -qE "$re" "$g" && bad+="${g#"$ZN_ROOT"/} "
++    done < <(find "$dir" \( -name check.sh -o -path "*/acceptance/*" \) -type f)
++  done < <(for r in $roots; do find "$ZN_ROOT/$r/issues" "$ZN_ROOT/$r/rafts" "$ZN_ROOT/$r/issues/active" "$ZN_ROOT/$r/rafts/active" -mindepth 1 -maxdepth 1 -type d -name '[cdfR][0-9][0-9][0-9][0-9]' 2>/dev/null; done)
++  ((n > 0)) || { echo "no unfinished item's document was read: nothing checked"; return 1; }
 +  [[ -z $bad ]] || { echo "old skill names left in live backlog designs: $bad"; return 1; }
++  echo "$n unfinished items' designs read, none names an old skill"
 +}
 +rename_finished() { lune run "$HERE/experiments/rename-lesson-ids" -- --check && backlog_clean; }
 +check "AC14: the rename is finished: the rename script's check run finds nothing left, and no live backlog design names an old skill" \
 +  rename_finished
++
++# AC15 (the user's G9): c0115's raft holds c0113, which it supersedes, so `./zn done` closes both. No raft yet is red.
++raft_holds_c0113() {
++  local raft
++  raft=$(awk '/^raft:/ {print $2; exit}' "$HERE/c0115.md")
++  [[ -n $raft ]] || { echo "c0115 has no raft yet: form it with c0113 (z-design)"; return 1; }
++  (cd "$ZN_ROOT" && ./zn members "$raft") | grep -qE '(^|/)c0113$' || { echo "$raft does not hold c0113"; return 1; }
++}
++check "AC15: c0115's raft holds c0113, the item it supersedes" raft_holds_c0113
  
  finish
 diff --git a/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau b/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau
 new file mode 100644
-index 0000000..068b16c
+index 00000000..fff578ba
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,204 @@
 +--!strict
 +-- c0115 (E4): rewrites lesson ids from the old skill folders to the new ones, in every harvest.md under every
 +-- project root (backlog, active/ and done/) and in every lesson file's body. Run from the repository root, after
@@ -4451,7 +4512,19 @@ index 0000000..068b16c
 +
 +local checkOnly = table.find(process.args, "--check") ~= nil
 +local dry = checkOnly or table.find(process.args, "--dry-run") ~= nil
-+local existing = skills.lessonIndex(".")
++-- Every path is anchored at the repository root (design review 007 F1): the script may be run from any home.
++local function topLevel(): string
++	local r = process.exec("git", { "rev-parse", "--show-toplevel" })
++	if not r.ok then
++		error(`not in a git checkout: {r.stderr}`)
++	end
++	return (string.gsub(r.stdout, "%s+$", ""))
++end
++local TOP = topLevel()
++local function rel(p: string): string
++	return if string.sub(p, 1, #TOP + 1) == TOP .. "/" then string.sub(p, #TOP + 2) else p
++end
++local existing = skills.lessonIndex(TOP)
 +local missing: { [string]: boolean } = {}
 +
 +local function walk(dir: string, visit: (string) -> ())
@@ -4471,15 +4544,20 @@ index 0000000..068b16c
 +end
 +
 +local function roots(): { string }
-+	local r = process.exec("lune", { "run", "z-nile/roots" })
++	local r = process.exec("lune", { "run", "z-nile/roots" }, { cwd = TOP })
 +	if not r.ok then
-+		error(`lune run z-nile/roots failed: {r.stderr}`)
++		print(`lune run z-nile/roots failed: {r.stderr}`)
++		process.exit(1) -- fail closed: no roots, nothing checked
 +	end
 +	local out = {}
 +	for line in string.gmatch(r.stdout, "[^\n]+") do
-+		table.insert(out, line)
++		table.insert(out, `{TOP}/{line}`)
 +	end
-+	table.insert(out, "tracker") -- the retired root, for any ledger left there
++	if #out == 0 then
++		print("lune run z-nile/roots printed no root: nothing to check")
++		process.exit(1)
++	end
++	table.insert(out, `{TOP}/tracker`) -- the retired root, for any ledger left there
 +	return out
 +end
 +
@@ -4502,7 +4580,7 @@ index 0000000..068b16c
 +	end
 +	if n > 0 then
 +		total += n
-+		print(`{n} {path}`)
++		print(`{n} {rel(path)}`)
 +		if not dry then
 +			fs.writeFile(path, out)
 +		end
@@ -4516,7 +4594,7 @@ index 0000000..068b16c
 +		end
 +	end)
 +end
-+for _, folder in { "z-nile/skills", "pickman/skills" } do
++for _, folder in { `{TOP}/z-nile/skills`, `{TOP}/pickman/skills` } do
 +	walk(folder, function(p)
 +		if string.match(p, "/lessons/[^/]+%.md$") then
 +			fix(p, false)
@@ -4537,6 +4615,10 @@ index 0000000..068b16c
 +end
 +local function namesOldPath(text: string): boolean
 +	for old in skills.RENAMED_PATH do
++		-- a path built from a variable (`{SKILLS}/ticket-prep/SKILL.md`) names the old folder too
++		if string.find(text, `/{old}/SKILL.md`, 1, true) then
++			return true
++		end
 +		local from = 1
 +		while true do
 +			local i, j = string.find(text, `.claude/skills/{old}`, from, true)
@@ -4555,7 +4637,7 @@ index 0000000..068b16c
 +local function write(path: string, out: string, n: number, tag: string)
 +	if n > 0 then
 +		total += n
-+		print(`{n} {path}{tag}`)
++		print(`{n} {rel(path)}{tag}`)
 +		if not dry then
 +			fs.writeFile(path, out)
 +		end
@@ -4585,8 +4667,8 @@ index 0000000..068b16c
 +						end
 +					end
 +					walk(dir, function(p)
-+						local rel = string.sub(p, #dir + 2)
-+						local sequestered = rel == "check.sh" or string.sub(rel, 1, 11) == "acceptance/"
++						local inItem = string.sub(p, #dir + 2)
++						local sequestered = inItem == "check.sh" or string.sub(inItem, 1, 11) == "acceptance/"
 +						if sequestered then
 +							local text = fs.readFile(p)
 +							if namesOldPath(text) then
@@ -4628,7 +4710,7 @@ similarity index 100%
 rename from z-nile/.tracker/issues/c0120/spend.md
 rename to z-nile/.tracker/issues/done/c0120/spend.md
 diff --git a/z-nile/.tracker/rafts/R0039/R0039.md b/z-nile/.tracker/rafts/R0039/R0039.md
-index adaab24..e516746 100644
+index adaab24f..e5167468 100644
 --- a/z-nile/.tracker/rafts/R0039/R0039.md
 +++ b/z-nile/.tracker/rafts/R0039/R0039.md
 @@ -44,7 +44,7 @@ RC0 lines (the full gate; c0075's checks AC1 to AC7; `promote-check`), and RC1:
@@ -4641,7 +4723,7 @@ index adaab24..e516746 100644
  - **Group signals and TIOCSTI** are closed by `--new-session`, shown compatible with the launcher in E4.
  - Rollback: revert the PR; Linux goes back to unjailed.
 diff --git a/z-nile/.tracker/rafts/R0040/R0040.md b/z-nile/.tracker/rafts/R0040/R0040.md
-index c54d2d5..272b237 100644
+index c54d2d50..1fbe13dc 100644
 --- a/z-nile/.tracker/rafts/R0040/R0040.md
 +++ b/z-nile/.tracker/rafts/R0040/R0040.md
 @@ -27,7 +27,7 @@ scripts/tracker/lessons.luau (pure: parse, findings, parseHarvest, check, source
@@ -4649,7 +4731,7 @@ index c54d2d5..272b237 100644
  renderPrompt (ready) ──► prompt.md "## Lessons": the build lessons' index
  skills: every SKILL.md ends with the same "## Lessons" paragraph (read at the start; new lessons routed by role)
 -        ticket-prep 5.1 lessons pass, 5.3 harvest each round, 5.5 confirm · execute-raft Phase 4 harvest, Phase 5 confirm · review item 10, `Lesson:` line
-+        z-design 5.1 lessons pass, 5.3 harvest each round, 5.5 confirm · zz-execute Phase 4 harvest, Phase 5 confirm · review item 10, `Lesson:` line
++        z-design 5.1 lessons pass, 5.3 harvest each round, 5.5 confirm · zz-execute Phase 4 harvest, Phase 5 confirm · zz-review item 10, `Lesson:` line
  ```
  The interfaces are typed in c0111's Design.
  
@@ -4663,7 +4745,7 @@ index c54d2d5..272b237 100644
  - **A bad lesson file** never breaks `ready` or the listing (they skip it with a warning). `--check` and AC8 catch it, and c0112 puts `--check` in the gate.
  - **Prompt size** grows by one line per build lesson (c0111 Scalability).
 diff --git a/z-nile/.tracker/rafts/R0040/harvest.md b/z-nile/.tracker/rafts/R0040/harvest.md
-index 6acec66..1530566 100644
+index 6acec662..15305667 100644
 --- a/z-nile/.tracker/rafts/R0040/harvest.md
 +++ b/z-nile/.tracker/rafts/R0040/harvest.md
 @@ -1,28 +1,28 @@
@@ -4722,7 +4804,7 @@ index 6acec66..1530566 100644
 +- design-review-005 F4: z-design/restated-rules-move-together, z-design/spec-design-correspondence
 +- design-review-005 F5: zz-arch/parsers-refuse-ambiguity
 diff --git a/z-nile/.tracker/rafts/done/R0042/harvest.md b/z-nile/.tracker/rafts/done/R0042/harvest.md
-index 962c3cd..058a960 100644
+index 962c3cd3..058a9600 100644
 --- a/z-nile/.tracker/rafts/done/R0042/harvest.md
 +++ b/z-nile/.tracker/rafts/done/R0042/harvest.md
 @@ -1,94 +1,94 @@
@@ -4905,7 +4987,7 @@ index 962c3cd..058a960 100644
 +- note user correction 2026-10-20, R0042's refutes narrowed the captured scope and rewrote its Problems: z-design/never-narrow-captured-scope, zz-review/no-scope-cut-as-fix
 diff --git a/z-nile/README.md b/z-nile/README.md
 new file mode 100644
-index 0000000..5f2118e
+index 00000000..5f2118e2
 --- /dev/null
 +++ b/z-nile/README.md
 @@ -0,0 +1,87 @@
@@ -4997,7 +5079,7 @@ index 0000000..5f2118e
 +| execution | `R0010`, branch `R0010-<slug>`, one PR |
 +| a skill, doc or config edit | `<area>-<slug>` |
 diff --git a/z-nile/check.sh b/z-nile/check.sh
-index 5db7580..55f29d4 100755
+index 5db75800..55f29d48 100755
 --- a/z-nile/check.sh
 +++ b/z-nile/check.sh
 @@ -1,5 +1,5 @@
@@ -5025,7 +5107,7 @@ index 5db7580..55f29d4 100755
  
  # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
 diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
-index 813d4a6..5ba5345 100644
+index 813d4a62..5ba53451 100644
 --- a/z-nile/engine/board.luau
 +++ b/z-nile/engine/board.luau
 @@ -643,7 +643,7 @@ function board.collect(root: string?, checkout: string?): Model
@@ -5047,7 +5129,7 @@ index 813d4a6..5ba5345 100644
  		table.insert(views.issues[bucket], issue.id)
  	end
 diff --git a/z-nile/engine/lessons.luau b/z-nile/engine/lessons.luau
-index 8c98724..6728de9 100644
+index 8c98724f..6728de98 100644
 --- a/z-nile/engine/lessons.luau
 +++ b/z-nile/engine/lessons.luau
 @@ -1,9 +1,11 @@
@@ -5269,7 +5351,7 @@ index 8c98724..6728de9 100644
 +
  return lessons
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 27ccc49..61ed36e 100644
+index 27ccc493..61ed36ed 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -1,5 +1,5 @@
@@ -5538,7 +5620,7 @@ index 27ccc49..61ed36e 100644
  			local check = `{it.dir}/check.sh`
  			if not fs.isFile(check) or not hasCheckLine(fs.readFile(check)) then
 diff --git a/z-nile/engine/publish.luau b/z-nile/engine/publish.luau
-index 387908a..d9b27b0 100644
+index 387908a5..d9b27b03 100644
 --- a/z-nile/engine/publish.luau
 +++ b/z-nile/engine/publish.luau
 @@ -359,7 +359,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
@@ -5552,7 +5634,7 @@ index 387908a..d9b27b0 100644
  		local reg: projects.Registry?, regErr: string? = projects.legacy(), nil
 diff --git a/z-nile/engine/skills.luau b/z-nile/engine/skills.luau
 new file mode 100644
-index 0000000..7b6de3e
+index 00000000..7b6de3ee
 --- /dev/null
 +++ b/z-nile/engine/skills.luau
 @@ -0,0 +1,487 @@
@@ -6044,7 +6126,7 @@ index 0000000..7b6de3e
 +
 +return skills
 diff --git a/z-nile/engine/trail.luau b/z-nile/engine/trail.luau
-index 4cdbeee..8fc919e 100644
+index 4cdbeee8..8fc919ea 100644
 --- a/z-nile/engine/trail.luau
 +++ b/z-nile/engine/trail.luau
 @@ -253,7 +253,7 @@ function trail.namedIds(subject: string): { string }
@@ -6057,7 +6139,7 @@ index 4cdbeee..8fc919e 100644
  -- (false: the fallback).
  function trail.capture(commits: { Commit }): (Commit?, boolean)
 diff --git a/z-nile/lib/ac.sh b/z-nile/lib/ac.sh
-index 8822d4a..6d7e530 100755
+index 8822d4a9..6d7e5304 100755
 --- a/z-nile/lib/ac.sh
 +++ b/z-nile/lib/ac.sh
 @@ -23,7 +23,7 @@ if [[ ${_ac_outer##*/} == check.sh && $_ac_outer != "$_ac_script" ]]; then
@@ -6070,7 +6152,7 @@ index 8822d4a..6d7e530 100755
  if [[ ! -f z-nile/lib/fence.sh ]]; then
    echo "ac.sh: $(pwd -P)/z-nile/lib/fence.sh is missing: refusing to run checks without the repository guards" >&2
 diff --git a/z-nile/lib/fence.sh b/z-nile/lib/fence.sh
-index a15022b..b256720 100644
+index a15022b8..b2567204 100644
 --- a/z-nile/lib/fence.sh
 +++ b/z-nile/lib/fence.sh
 @@ -1,4 +1,4 @@
@@ -6080,7 +6162,7 @@ index a15022b..b256720 100644
  #   pickman_fence <checkout> specs [<jail>]   # spec runs (tests/lib/fence.luau): also no network, no credentials,
  #                                             # no fetch; under the jail (<jail> = sandbox-exec) no hooks either
 diff --git a/z-nile/lib/git-hooks/pre-push b/z-nile/lib/git-hooks/pre-push
-index 3eb7db0..a6254f4 100755
+index 3eb7db0f..a6254f4b 100755
 --- a/z-nile/lib/git-hooks/pre-push
 +++ b/z-nile/lib/git-hooks/pre-push
 @@ -1,5 +1,5 @@
@@ -6091,7 +6173,7 @@ index 3eb7db0..a6254f4 100755
  # reference-transaction guard can't see a push). $2 is the URL as given. A local one (an absolute path, a path
  # relative to the pushing worktree, or file://) is resolved to its repository, and a push into one listed in
 diff --git a/z-nile/lib/git-hooks/reference-transaction b/z-nile/lib/git-hooks/reference-transaction
-index 09a323d..aca04b8 100755
+index 09a323de..aca04b86 100755
 --- a/z-nile/lib/git-hooks/reference-transaction
 +++ b/z-nile/lib/git-hooks/reference-transaction
 @@ -1,5 +1,5 @@
@@ -6105,7 +6187,7 @@ diff --git a/.claude/skills/ticket-prep/SKILL.md b/z-nile/skills/z-design/SKILL.
 similarity index 78%
 rename from .claude/skills/ticket-prep/SKILL.md
 rename to z-nile/skills/z-design/SKILL.md
-index e0dd1af..773bfc5 100644
+index e0dd1af6..773bfc53 100644
 --- a/.claude/skills/ticket-prep/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
 @@ -1,5 +1,5 @@
@@ -6218,7 +6300,7 @@ index e0dd1af..773bfc5 100644
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-design/checklists/chore.md b/z-nile/skills/z-design/checklists/chore.md
 new file mode 100644
-index 0000000..1ff7ef3
+index 00000000..1ff7ef3e
 --- /dev/null
 +++ b/z-nile/skills/z-design/checklists/chore.md
 @@ -0,0 +1,10 @@
@@ -6234,7 +6316,7 @@ index 0000000..1ff7ef3
 +- **Guards**: any change near the repository guards, the publisher or the gate fails closed (zz-arch skill).
 diff --git a/z-nile/skills/z-design/checklists/defect.md b/z-nile/skills/z-design/checklists/defect.md
 new file mode 100644
-index 0000000..be49921
+index 00000000..be49921c
 --- /dev/null
 +++ b/z-nile/skills/z-design/checklists/defect.md
 @@ -0,0 +1,9 @@
@@ -6249,7 +6331,7 @@ index 0000000..be49921
 +- **Smallest change**: no refactor beyond the fix; anything larger is a chore of its own.
 diff --git a/z-nile/skills/z-design/checklists/feature.md b/z-nile/skills/z-design/checklists/feature.md
 new file mode 100644
-index 0000000..edde4a4
+index 00000000..edde4a4d
 --- /dev/null
 +++ b/z-nile/skills/z-design/checklists/feature.md
 @@ -0,0 +1,10 @@
@@ -6267,7 +6349,7 @@ diff --git a/.claude/skills/ticket-prep/lessons/instructions-runnable-where-they
 similarity index 85%
 rename from .claude/skills/ticket-prep/lessons/instructions-runnable-where-they-run.md
 rename to z-nile/skills/z-design/lessons/instructions-runnable-where-they-run.md
-index 82418f2..f54b1bd 100644
+index 82418f2a..f54b1bd2 100644
 --- a/.claude/skills/ticket-prep/lessons/instructions-runnable-where-they-run.md
 +++ b/z-nile/skills/z-design/lessons/instructions-runnable-where-they-run.md
 @@ -10,6 +10,6 @@ An instruction added to many skills has to fit each skill's context. Writing a f
@@ -6282,7 +6364,7 @@ diff --git a/.claude/skills/ticket-prep/lessons/never-narrow-captured-scope.md b
 similarity index 96%
 rename from .claude/skills/ticket-prep/lessons/never-narrow-captured-scope.md
 rename to z-nile/skills/z-design/lessons/never-narrow-captured-scope.md
-index e7e2e19..ce27e59 100644
+index e7e2e19e..ce27e59a 100644
 --- a/.claude/skills/ticket-prep/lessons/never-narrow-captured-scope.md
 +++ b/z-nile/skills/z-design/lessons/never-narrow-captured-scope.md
 @@ -2,7 +2,7 @@
@@ -6314,7 +6396,7 @@ diff --git a/.claude/skills/ticket-prep/lessons/rerun-skipped-checks-after-edits
 similarity index 66%
 rename from .claude/skills/ticket-prep/lessons/rerun-skipped-checks-after-edits.md
 rename to z-nile/skills/z-design/lessons/rerun-skipped-checks-after-edits.md
-index 33a9c1d..960fc74 100644
+index 33a9c1dc..960fc74f 100644
 --- a/.claude/skills/ticket-prep/lessons/rerun-skipped-checks-after-edits.md
 +++ b/z-nile/skills/z-design/lessons/rerun-skipped-checks-after-edits.md
 @@ -6,6 +6,6 @@ check: Which checks for this draft does the test runner not run (a type check, a
@@ -6342,7 +6424,7 @@ diff --git a/.claude/skills/ready-raft/SKILL.md b/z-nile/skills/z-ready/SKILL.md
 similarity index 51%
 rename from .claude/skills/ready-raft/SKILL.md
 rename to z-nile/skills/z-ready/SKILL.md
-index 2275b91..41b136a 100644
+index 2275b918..41b136af 100644
 --- a/.claude/skills/ready-raft/SKILL.md
 +++ b/z-nile/skills/z-ready/SKILL.md
 @@ -1,31 +1,31 @@
@@ -6390,7 +6472,7 @@ index 2275b91..41b136a 100644
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-run/SKILL.md b/z-nile/skills/z-run/SKILL.md
 new file mode 100644
-index 0000000..14c8d9a
+index 00000000..14c8d9a4
 --- /dev/null
 +++ b/z-nile/skills/z-run/SKILL.md
 @@ -0,0 +1,21 @@
@@ -6419,7 +6501,7 @@ diff --git a/.claude/skills/stop-raft/SKILL.md b/z-nile/skills/z-stop/SKILL.md
 similarity index 61%
 rename from .claude/skills/stop-raft/SKILL.md
 rename to z-nile/skills/z-stop/SKILL.md
-index 3a7cbb8..e92011e 100644
+index 3a7cbb89..e92011ea 100644
 --- a/.claude/skills/stop-raft/SKILL.md
 +++ b/z-nile/skills/z-stop/SKILL.md
 @@ -1,6 +1,6 @@
@@ -6453,7 +6535,7 @@ diff --git a/.claude/skills/make-issue/SKILL.md b/z-nile/skills/z-ticket/SKILL.m
 similarity index 66%
 rename from .claude/skills/make-issue/SKILL.md
 rename to z-nile/skills/z-ticket/SKILL.md
-index 8689aeb..5924b93 100644
+index 8689aeb5..5924b93e 100644
 --- a/.claude/skills/make-issue/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
 @@ -1,11 +1,11 @@
@@ -6499,7 +6581,7 @@ index 8689aeb..5924b93 100644
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
 new file mode 100644
-index 0000000..4769829
+index 00000000..47698294
 --- /dev/null
 +++ b/z-nile/skills/zz-arch/SKILL.md
 @@ -0,0 +1,44 @@
@@ -6567,7 +6649,7 @@ diff --git a/.claude/skills/execute-raft/SKILL.md b/z-nile/skills/zz-execute/SKI
 similarity index 77%
 rename from .claude/skills/execute-raft/SKILL.md
 rename to z-nile/skills/zz-execute/SKILL.md
-index 9d4e11b..6c029f3 100644
+index 9d4e11b1..6c029f3b 100644
 --- a/.claude/skills/execute-raft/SKILL.md
 +++ b/z-nile/skills/zz-execute/SKILL.md
 @@ -1,19 +1,19 @@
@@ -6687,7 +6769,7 @@ diff --git a/.claude/skills/review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
 similarity index 83%
 rename from .claude/skills/review/SKILL.md
 rename to z-nile/skills/zz-review/SKILL.md
-index 2f3222b..bc5835e 100644
+index 2f3222b5..bc5835e0 100644
 --- a/.claude/skills/review/SKILL.md
 +++ b/z-nile/skills/zz-review/SKILL.md
 @@ -1,6 +1,6 @@
@@ -6769,7 +6851,7 @@ diff --git a/.claude/skills/tracker/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
 similarity index 78%
 rename from .claude/skills/tracker/SKILL.md
 rename to z-nile/skills/zz-rules/SKILL.md
-index f89c3de..c0f3eb0 100644
+index f89c3ded..c0f3eb05 100644
 --- a/.claude/skills/tracker/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -1,5 +1,5 @@
@@ -6929,7 +7011,7 @@ diff --git a/.claude/skills/tracker/lessons/exhaustive-lists-name-new-things.md 
 similarity index 87%
 rename from .claude/skills/tracker/lessons/exhaustive-lists-name-new-things.md
 rename to z-nile/skills/zz-rules/lessons/exhaustive-lists-name-new-things.md
-index d08b22e..8d97e0c 100644
+index d08b22e6..8d97e0cd 100644
 --- a/.claude/skills/tracker/lessons/exhaustive-lists-name-new-things.md
 +++ b/z-nile/skills/zz-rules/lessons/exhaustive-lists-name-new-things.md
 @@ -6,6 +6,6 @@ check: When this adds a command, file kind or rule, does every exhaustive list i
@@ -6948,7 +7030,7 @@ diff --git a/.claude/skills/metrics/SKILL.md b/z-nile/skills/zz-stats/SKILL.md
 similarity index 81%
 rename from .claude/skills/metrics/SKILL.md
 rename to z-nile/skills/zz-stats/SKILL.md
-index 672bf04..4865530 100644
+index 672bf049..4865530a 100644
 --- a/.claude/skills/metrics/SKILL.md
 +++ b/z-nile/skills/zz-stats/SKILL.md
 @@ -1,5 +1,5 @@
@@ -6975,7 +7057,7 @@ diff --git a/.claude/skills/testing/SKILL.md b/z-nile/skills/zz-test/SKILL.md
 similarity index 72%
 rename from .claude/skills/testing/SKILL.md
 rename to z-nile/skills/zz-test/SKILL.md
-index 29040b1..0ea7abb 100644
+index 29040b10..0ea7abba 100644
 --- a/.claude/skills/testing/SKILL.md
 +++ b/z-nile/skills/zz-test/SKILL.md
 @@ -1,9 +1,9 @@
@@ -7144,7 +7226,7 @@ diff --git a/.claude/skills/testing/lessons/plain-find-for-literals.md b/z-nile/
 similarity index 82%
 rename from .claude/skills/testing/lessons/plain-find-for-literals.md
 rename to z-nile/skills/zz-test/lessons/plain-find-for-literals.md
-index 680bad9..264fa77 100644
+index 680bad9a..264fa776 100644
 --- a/.claude/skills/testing/lessons/plain-find-for-literals.md
 +++ b/z-nile/skills/zz-test/lessons/plain-find-for-literals.md
 @@ -4,7 +4,7 @@ when: both
@@ -7161,7 +7243,7 @@ similarity index 100%
 rename from .claude/skills/testing/lessons/seed-every-enumerated-case.md
 rename to z-nile/skills/zz-test/lessons/seed-every-enumerated-case.md
 diff --git a/z-nile/templates/prompt.md b/z-nile/templates/prompt.md
-index 2b04961..8970767 100644
+index 2b04961e..8970767f 100644
 --- a/z-nile/templates/prompt.md
 +++ b/z-nile/templates/prompt.md
 @@ -1,6 +1,6 @@
@@ -7203,7 +7285,7 @@ index 2b04961..8970767 100644
 +## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, the binding rules)
  {{SKILLS}}
 diff --git a/zn b/zn
-index 1302670..7541b94 100755
+index 13026702..7541b940 100755
 --- a/zn
 +++ b/zn
 @@ -1,5 +1,5 @@

@@ -5,6 +5,7 @@
 -- lists the build lessons of z-nile's skills and the raft's project's only, and the prompt names the project.
 -- Fixture under .cache/c0115-prompt (tests/lib/trackerfix): a pickman raft in tracker/ (the fixtures' layout,
 -- tests/lib/engine REGISTRY) and a z-nile raft in z-nile/.tracker, with a pickman skill and lessons on both sides.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -75,10 +76,11 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 	end)
 
 	it(
-		"the fixture's copied tooling carries every skill's lessons (the user's G7: fixtures copy lessons too)",
+		"the fixture's copied skills carry their lessons (the user's G7), for every folder engine.copy copies",
 		function()
 			local count = 0
-			for _, base in { "z-nile/skills", "pickman/skills" } do
+			-- the folders engine.copy copies (z-nile's skills), from its own constant: a project's lessons are not copied
+			for _, base in engine.COPIED_SKILLS do
 				if fs.isDir(base) then
 					for _, skill in fs.readDir(base) do
 						local dir = `{base}/{skill}/lessons`

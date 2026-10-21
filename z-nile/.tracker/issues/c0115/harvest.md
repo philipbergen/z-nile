@@ -27,3 +27,13 @@
 - design-review-006 F1: testing/seed-every-enumerated-case
 - design-review-006 F2: one-off: a recheck list for the coming rebase onto the reworked c0114 and c0120, not a defect of this design
 - note c0115 prep round 6: the separators case renamed only unspaced ids, so dropping a renamed id's spaces passed; seed each value of every position (first, middle, last; spaced and unspaced): testing/seed-every-enumerated-case
+- design-review-007 F1: testing/no-vacuous-pass, testing/guards-move-with-the-working-directory
+- design-review-007 F2: testing/guards-move-with-the-working-directory, testing/no-vacuous-pass
+- design-review-007 F3: ticket-prep/required-steps-on-every-path, ticket-prep/new-rules-migrate-existing-work
+- design-review-007 F4: testing/promoted-specs-pin-rules-not-sets
+- design-review-007 F5: ticket-prep/restated-rules-move-together
+- design-review-007 F6: ticket-prep/bulk-renames-skip-ordinary-words
+- design-review-007 F7: testing/absence-scans-cover-every-form
+- design-review-007 F8: ticket-prep/restated-rules-move-together
+- note c0115 prep round 7: AC14 looped over roots it computed and passed when the computation failed or found nothing: testing/no-vacuous-pass
+- note c0115 prep round 7: the author's lint runs grepped selene errors only, and a warning failed the gate: ticket-prep/rerun-skipped-checks-after-edits

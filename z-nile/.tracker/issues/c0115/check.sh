@@ -64,29 +64,47 @@ moves_only() {
 }
 check "AC13: the skills move is one renames-only commit, and no other commit of the branch renames a skill file" moves_only
 # AC14's second half is independent of the script: unfinished items' designs (an issue from its `## Design` heading on,
-# a raft after its frontmatter) and their check.sh and acceptance files name no hyphenated old skill and no path
-# through .claude/skills/<old>; c0115's own folder aside (the record of the rename).
+# a raft after its frontmatter) and their check.sh and acceptance files name no hyphenated old skill (bare or as a
+# /command), no `/<old>/SKILL.md` path (literal or built from a variable) and no path through .claude/skills/<old>;
+# c0115's own folder aside (the record of the rename). It is anchored at $ZN_ROOT, whatever home ac.sh changed to, and
+# fails closed: a roots command that fails or prints nothing, or a scan that reads no document, is red.
 backlog_clean() {
   local old='(make-issue|ticket-prep|ready-raft|launch-raft|execute-raft|stop-raft)'
-  local re="(^|[^a-z0-9_./-])$old([^a-z0-9_-]|\$)|\.claude/skills/($old|review|tracker|metrics|testing|architecture)([^a-z0-9_-]|\$)"
-  local bad="" dir id f
+  local all='(make-issue|ticket-prep|ready-raft|launch-raft|execute-raft|stop-raft|review|tracker|metrics|testing|architecture)'
+  local re="(^|[^a-z0-9_./-])$old([^a-z0-9_-]|\$)|(^|[^a-z0-9_.-])/$old([^a-z0-9_-]|\$)|/$all/SKILL\.md|\.claude/skills/$all([^a-z0-9_-]|\$)"
+  local roots bad="" dir id f n=0
+  roots=$(cd "$ZN_ROOT" && lune run z-nile/roots) || { echo "the roots command failed: nothing checked"; return 1; }
+  [[ -n $roots ]] || { echo "the roots command printed no root: nothing checked"; return 1; }
   while IFS= read -r dir; do
     id=${dir##*/}
     [[ $id == c0115 ]] && continue
+    [[ -f $dir/$id.md ]] || continue
+    n=$((n + 1))
     if [[ $id == R* ]]; then
-      f=$(awk 'n>=2 {print} /^---$/ {n++}' "$dir/$id.md" 2>/dev/null)
+      f=$(awk 'n>=2 {print} /^---$/ {n++}' "$dir/$id.md")
     else
-      f=$(awk '/^## Design$/ {on=1} on {print}' "$dir/$id.md" 2>/dev/null)
+      f=$(awk '/^## Design$/ {on=1} on {print}' "$dir/$id.md")
     fi
-    if grep -qE "$re" <<<"$f"; then bad+="$dir/$id.md "; fi
+    if grep -qE "$re" <<<"$f"; then bad+="${dir#"$ZN_ROOT"/}/$id.md "; fi
     while IFS= read -r g; do
-      grep -qE "$re" "$g" && bad+="$g "
-    done < <(find "$dir" \( -name check.sh -o -path "*/acceptance/*" \) -type f 2>/dev/null)
-  done < <(for r in $(lune run z-nile/roots); do find "$r/issues" "$r/rafts" "$r/issues/active" "$r/rafts/active" -mindepth 1 -maxdepth 1 -type d -name '[cdfR][0-9][0-9][0-9][0-9]' 2>/dev/null; done)
+      grep -qE "$re" "$g" && bad+="${g#"$ZN_ROOT"/} "
+    done < <(find "$dir" \( -name check.sh -o -path "*/acceptance/*" \) -type f)
+  done < <(for r in $roots; do find "$ZN_ROOT/$r/issues" "$ZN_ROOT/$r/rafts" "$ZN_ROOT/$r/issues/active" "$ZN_ROOT/$r/rafts/active" -mindepth 1 -maxdepth 1 -type d -name '[cdfR][0-9][0-9][0-9][0-9]' 2>/dev/null; done)
+  ((n > 0)) || { echo "no unfinished item's document was read: nothing checked"; return 1; }
   [[ -z $bad ]] || { echo "old skill names left in live backlog designs: $bad"; return 1; }
+  echo "$n unfinished items' designs read, none names an old skill"
 }
 rename_finished() { lune run "$HERE/experiments/rename-lesson-ids" -- --check && backlog_clean; }
 check "AC14: the rename is finished: the rename script's check run finds nothing left, and no live backlog design names an old skill" \
   rename_finished
+
+# AC15 (the user's G9): c0115's raft holds c0113, which it supersedes, so `./zn done` closes both. No raft yet is red.
+raft_holds_c0113() {
+  local raft
+  raft=$(awk '/^raft:/ {print $2; exit}' "$HERE/c0115.md")
+  [[ -n $raft ]] || { echo "c0115 has no raft yet: form it with c0113 (z-design)"; return 1; }
+  (cd "$ZN_ROOT" && ./zn members "$raft") | grep -qE '(^|/)c0113$' || { echo "$raft does not hold c0113"; return 1; }
+}
+check "AC15: c0115's raft holds c0113, the item it supersedes" raft_holds_c0113
 
 finish
