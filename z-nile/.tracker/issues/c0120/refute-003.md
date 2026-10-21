@@ -1,0 +1,22 @@
+# Refute 003: c0120 (code review 003, approve)
+
+- F1: fixed (`7b71180`, `f74ebfc`). `pickman_guarded` now reads both ways: the clean read (`_pickman_fence_git`) and the caller's own environment, which is how the caller's git will act. It answers `guarded` when either names a repository in `PICKMAN_FENCE_REAL_GIT`. It returns 1 (treated as guarded) when either read fails or comes back empty, and answers `unguarded` only when both name unprotected repositories.
+  - New case in `fence-inherited-env`, in a fixture repository under the fenced checkout:
+    - with no `GIT_DIR`: `unguarded`;
+    - with `GIT_DIR` set to the protected repository: `guarded`;
+    - and the other way, `pickman_guarded <checkout>` with `GIT_DIR` at an unprotected repository: `guarded`, from the clean read.
+  - Mutants: X7 (clean read only, the code before this fix) killed; X6 (plain `git` for the clean read) killed by the other-way run.
+  - The ceiling case now expects "never unguarded" from `pickman/`. There the caller's own read can't see past the ceiling, so the answer is exit 1, which is fail-closed. From the root it is `guarded`.
+  - Lesson: a note on testing/derive-after-stripping-overrides ("check what each read is for before you clean it").
+- F2: fixed.
+  - The "every mode" case sets its markers explicitly: `PICKMAN_FENCE_SPECS=1` for specs, and `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` unset for checks. It asserts the mode each iteration ran in.
+  - New case: with a stub `git` first on `PATH` that answers `rev-parse` with an empty success, the fence refuses ("in no git repository"), and `pickman_guarded` prints nothing and exits 1, never `unguarded`.
+  - X5 (the empty check dropped) is now run and killed. Lesson: a note on testing/specs-set-host-markers-explicitly.
+- Also: the new case's fixture folder was first `.cache/fx`, another spec's name, and c0049's isolation check failed the gate. Renamed to `c0120-guarded-fx` (`0e33cbb`).
+- Mutants: X1 to X7 and W1 to W7 rerun in this branch, all killed.
+- Prototype: `proto-c0120` amended to `bc550e9` (local only; c0115's prototype rebases on it).
+- Results:
+  - `z-nile/check.sh --full`: GATE PASSED (pickman 1068/157, z-nile 837/120, 85.2 s).
+  - c0120's `check.sh`: 14/17, with the same three reds for the same reasons.
+  - Sequestration: 103 item-root `check.sh` and `acceptance/` files, all R100 against `prep-c0120`.
+  - `./zn lessons --check` and `--uncovered c0120` pass.
