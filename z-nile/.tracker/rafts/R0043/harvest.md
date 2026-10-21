@@ -33,3 +33,7 @@
 - design-review-006 F4: architecture/guard-no-is-explicit
 - design-review-006 F5: ticket-prep/restated-rules-move-together
 - design-review-006 F6: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-007 F1: ticket-prep/restated-rules-move-together
+- design-review-007 F2: ticket-prep/design-the-execution-window
+- design-review-007 F3: ticket-prep/restated-rules-move-together
+- design-review-007 F4: ticket-prep/restated-rules-move-together

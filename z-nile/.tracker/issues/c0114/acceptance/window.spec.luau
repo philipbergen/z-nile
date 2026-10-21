@@ -84,18 +84,18 @@ return t.spec("c0114 the counter across the landing", function(it)
 		trackerfix.trOk(f, wt, { "sync" })
 		t.expect(fs.readFile(`{wt}/tracker/next`)).toBe("issue 64 g-h-i\nraft 12 g-h-i\n")
 		t.expect(fs.isFile(`{wt}/z-nile/next`)).toBe(false)
-		-- offline, the local copy of the live counter numbers (not the old rule's next multiple of 10, c0060)
+		-- offline captures are refused too: they would number from the local tracker/next, as main's next capture does
 		local off = trackerfix.tr(
 			f,
 			wt,
 			{ "new", "issue", "c", "offline", "--project", "pickman" },
 			{ PICKMAN_PUBLISH = "0" }
 		)
-		if not off.ok then
-			error(off.stderr .. off.stdout)
-		end
-		t.expect(has(off.stdout, "tracker/issues/c0064/c0064.md")).toBe(true)
-		fs.removeDir(`{wt}/tracker/issues/c0064`)
+		t.expect(off.ok).toBe(false)
+		t.expect(has(off.stderr, "capture from the main checkout until it does, never offline here"))
+			.toBe(true)
+		t.expect(has(off.stderr, "PICKMAN_PUBLISH=0 creates it locally")).toBe(false)
+		t.expect(fs.isDir(`{wt}/tracker/issues/c0064`)).toBe(false)
 		-- an unmoved counter is a warning, not an error
 		local a = trackerfix.tr(f, wt, { "audit" })
 		t.expect(has(a.stdout, "warning counter-unmigrated tracker/next")).toBe(true)
@@ -111,6 +111,19 @@ return t.spec("c0114 the counter across the landing", function(it)
 		)
 		fixture.git(wt, { "fetch", "-q", "origin" })
 		fixture.git(wt, { "merge", "-q", "--no-edit", "origin/main" })
+		-- landed, with the counter not yet moved: offline numbering reads the local copy of the live counter
+		-- (tracker/next, not the old rule's next multiple of 10, c0060)
+		local off = trackerfix.tr(
+			f,
+			wt,
+			{ "new", "issue", "c", "offline", "--project", "pickman" },
+			{ PICKMAN_PUBLISH = "0" }
+		)
+		if not off.ok then
+			error(off.stderr .. off.stdout)
+		end
+		t.expect(has(off.stdout, "tracker/issues/c0064/c0064.md")).toBe(true)
+		fs.removeDir(`{wt}/tracker/issues/c0064`)
 		-- an old engine raises tracker/next while this publish builds: the lease refuses the push, and the retry
 		-- moves the raised counters, not the ones it first read
 		local raced = false

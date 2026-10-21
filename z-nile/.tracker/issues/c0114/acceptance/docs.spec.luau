@@ -143,7 +143,7 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		at(tracker, "the directory gives the project unless `--project` names one")
 		at(
 			tracker,
-			"the commands that create or change a project's items (`new issue`, `new raft`) refuse and ask for `--project`"
+			"the commands that create an item, and so must choose its project (`new issue`, `new raft`), refuse and ask for `--project`"
 		)
 		at(
 			tracker,
