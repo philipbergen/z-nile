@@ -1,0 +1,32 @@
+# Review 002: R0043 (code mode)
+Inputs: `impl-r43` at b94315a, diffed against `origin/prep-z-nile-home` (8ff448b) after `git fetch origin`; fix delta `36ba049..HEAD` (36ba049 added review-001; it also merges the prep's ced4cb1 and 8ff448b); review-001, refute-001, c0114.md, R0043.md, both `check.sh` files, c0114's acceptance specs, the testing and review skills, `./zn lessons --when build --full`.
+Dropped from review-001: F1 (fixed in the prep, judged legitimate below), F3 (mode 100755 restored; the `tracker.sh board` comments in `tests/run.luau` still name a live forwarder, so they mislead no one).
+
+What I ran and checked:
+- `z-nile/check.sh --full`: GATE PASSED, 1887 passed, 0 failed, 274 spec files, 73.2 s.
+- `bash z-nile/.tracker/issues/c0114/check.sh`: **13/14, AC9 fails** (F1). `bash z-nile/.tracker/rafts/R0043/check.sh`: 4/5 (RC0's member run of c0114 fails on AC9; RC0 promote-check, RC1, RC2 pass).
+- Sequestration: over the four item-root globs, `origin/prep-z-nile-home...HEAD` gives 108 `R100` and the same 2 `D` as round 001 (`tracker/templates/{issue,raft}/check.sh`, templates, not item files, moved to `z-nile/templates/`). The merge applied the prep's spec edit at the moved path: `classified.spec.luau` and `c0114.md` are identical to the prep's, so they show as `R100` against it, and nothing under `tracker/issues/c0114` or `tracker/rafts/R0043` was resurrected.
+- The F1 fix (prep ced4cb1), legitimacy: R0043 is `status: prepared` and its prep PR #97 is an open draft awaiting the user, so the acceptance specs are prep material, not yet sequestered against an executing raft. The edit only drops a floor; it is recorded in c0114.md's log and harvested as `testing/no-live-counts-in-promoted-specs`. It doesn't let a wrong implementation pass: the same spec's first two cases find all 67+21 z-nile and 43+20 pickman items by slug through `store.all`, so a store that skipped a root fails there, and list mode is proven on the fixture before the live loop runs. With no floor, an empty live set passes only when every item is done, which is truly nothing to check (testing/no-vacuous-pass satisfied). Legitimate. See F2 for how the user learns of it.
+- Fix delta: `scripts/lib/ac.sh` 100755 again; the stop-hook, writer-list and repo-fence lines in the testing skill now match `scripts/hooks/stop.sh`, `cachepaths.ROOTS` and the scan. The `worktree-fetch` comment change is comment-only. Commits 6d1d9b4 and b94315a are `M`/`A` only; the merge 36ba049 is `A`/`M` only.
+- Repository safety (item 8): the delta touches no guard and no command that writes; the spec edit removes one assertion and adds a comment. Nothing new reaches the real repository. Round 001's line-by-line pass stands for the unchanged rest.
+
+### F1 [high] The F2 fix turns AC9 red: the testing skill now names the old path `scripts/check.sh`, which c0114's docs.spec forbids
+Where: `.claude/skills/testing/SKILL.md:171` (6d1d9b4); `z-nile/.tracker/issues/c0114/acceptance/docs.spec.luau:42` (`OLD` lists `"scripts/check.sh"`), case "no skill, lesson, AGENTS.md, SETUP.md or template names an old path".
+Evidence: `bash z-nile/.tracker/issues/c0114/check.sh` → `FAIL AC9 … docs.spec:86: expected "", got ".claude/skills/testing/SKILL.md: scripts/check.sh"`, 13/14; R0043's RC0 fails with it. The full gate stays green because docs.spec is not yet promoted, so only the item's own `check.sh` sees it. The refute says only `worktree-fetch` and `repo-fence` were rerun. Review-001 F2's Recommendation itself proposed text naming `scripts/check.sh`: the reviewer's wording caused this, and the author pasted it in without rerunning the item's checks.
+Critique: an acceptance criterion that passed in round 001 is now unmet, a regression introduced by a fix. The tempting fix is to delete the parenthesis, or to add an exception for the path to docs.spec. The second is a sequestered edit and not allowed.
+Consequences: the line still has to say what the hook really runs, which is the forwarder path, without spelling that path. The rule is that skills name only moved paths, with `scripts/tracker.sh` as the one named forwarder. So the line describes the forwarder by role, not by path.
+Recommendation: reword line 171 without the old path, for example: "On stop: the affected gate (`z-nile/check.sh --affected`, reached through the old gate path's forwarder so a worktree from before c0114 still runs its own gate) runs if a file outside every registry root changed under `src/`, `tests/` or `z-nile/`." Then rerun both item `check.sh` files (14/14 and 5/5) before the refute. Rule for every fix round: rerun `./zn check` for each member, not only the specs next to the edit.
+
+### F2 [low] The prep PR #97, which the user confirms, doesn't mention that a sequestered spec changed after its design reviews
+Where: PR #97 description (its "needs user" list); c0114.md's log line is the only record in the prep.
+Evidence: `gh pr view 97` has no mention of `classified`, the floor or code review 001. The refute rests legitimacy on "the user confirms the prep with the guesses", but the guesses list doesn't include this change, and the change was made by the executing author to a spec that judges its own code.
+Critique: the edit is sound (see Inputs), but its legitimacy depends on the user seeing it. Without this, a confirmation of the guesses silently covers it too.
+Consequences: none beyond one line of PR text.
+Recommendation: add one line to PR #97's description under the items for the user: "After code review 001 (F1) the `classified.spec` live-count floor was removed in prep (ced4cb1); confirm with the guesses."
+
+## Judged criteria (code mode only)
+- JC1: pass. The single `c0114: move` commit, 9e178c4, is still 703 `R100` with `tracker/next` absent. The commits added since round 001 move nothing: 36ba049 (the prep merge plus review-001) is `A`/`M` only, 6d1d9b4 is three `M` (one a mode change), and b94315a is one `M` and one `A`. The prep's spec edit arrives at its moved path through the merge, not as a rename.
+
+Candidate lesson (for the lead): execute-raft: a fix round reruns every member's `check.sh`, not only the specs beside the edit, because R0043's review-001 F2 doc fix broke AC9, which only the item's own unpromoted docs.spec sees; check: "Did each member's `./zn check` pass after the last fix commit?" A note for the review skill too: a Recommendation's proposed text must itself pass the item's doc specs.
+
+Verdict: changes
