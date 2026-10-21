@@ -21,6 +21,7 @@
 | 17 | 2026-10-21 17:26 | R0012: review-002 | 0 | 0 | 20.0 | focus | code-review |  |
 | 18 | 2026-10-21 17:28 | R0012: refute-002, harvest of review 002 | 2 | 2 | 5.0 | focus | code-review |  |
 | 19 | 2026-10-21 17:29 | R0012: addressed during execution, design-review harvest, lessons | 11 | 0 | 15.0 | focus | deliver |  |
+| 20 | 2026-10-21 17:32 | tracker: done R0012 | 0 | 0 | 0.9 | raft+proportional | deliver |  |
 
-**Total:** +1128 / -37 lines, 258.3 agent-minutes, 199999 tokens over 19 records
-<!-- totals: added=1128 removed=37 minutes=258.3 records=19 tokens=199999 -->
+**Total:** +1128 / -37 lines, 259.2 agent-minutes, 199999 tokens over 20 records
+<!-- totals: added=1128 removed=37 minutes=259.2 records=20 tokens=199999 -->

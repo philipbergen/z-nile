@@ -16,6 +16,7 @@
 | 12 | 2026-10-21 16:57 | f0028: touch look and the held mouse in Camera, wired from Main | 21 | 3 | 12.0 | focus | build |  |
 | 13 | 2026-10-21 17:08 | R0012: type-only amendment of three sequestered specs (user-authorized), Phase 3 verification | 1 | 1 | 6.7 | explicit | build |  |
 | 14 | 2026-10-21 17:19 | R0012: review 001 fixes (touch hold, focus reset, adapter pins, snap frame on touch only) | 39 | 4 | 9.0 | explicit | code-review |  |
+| 15 | 2026-10-21 17:32 | tracker: done R0012 | 0 | 0 | 0.9 | raft+proportional | deliver |  |
 
-**Total:** +297 / -11 lines, 124.5 agent-minutes, 199999 tokens over 14 records
-<!-- totals: added=297 removed=11 minutes=124.5 records=14 tokens=199999 -->
+**Total:** +297 / -11 lines, 125.4 agent-minutes, 199999 tokens over 15 records
+<!-- totals: added=297 removed=11 minutes=125.4 records=15 tokens=199999 -->

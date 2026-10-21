@@ -18,6 +18,7 @@
 | 14 | 2026-10-21 17:08 | R0012: type-only amendment of three sequestered specs (user-authorized), Phase 3 verification | 2 | 1 | 6.7 | explicit | build |  |
 | 15 | 2026-10-21 17:19 | R0012: review 001 fixes (touch hold, focus reset, adapter pins, snap frame on touch only) | 51 | 7 | 11.8 | explicit | code-review |  |
 | 16 | 2026-10-21 17:28 | R0012: Controls touch wiring pinned by behaviour (review 002 F1) | 190 | 56 | 20.0 | explicit | code-review |  |
+| 17 | 2026-10-21 17:32 | tracker: done R0012 | 0 | 0 | 0.9 | raft+proportional | deliver |  |
 
-**Total:** +1000 / -70 lines, 174.9 agent-minutes, 200002 tokens over 16 records
-<!-- totals: added=1000 removed=70 minutes=174.9 records=16 tokens=200002 -->
+**Total:** +1000 / -70 lines, 175.8 agent-minutes, 200002 tokens over 17 records
+<!-- totals: added=1000 removed=70 minutes=175.8 records=17 tokens=200002 -->
