@@ -4,7 +4,8 @@
 -- play in the step, only in play and only when the last hop has landed and cooled down. While airborne (the steps
 -- whose middle has the rise over the wall tops: the 2nd to the 11th after take-off) the player is not caught, passes over a
 -- blue ghost without eating it, and eats no pellet, while the rail movement and a shot go on. The frame says when
--- the latest hop started, and a respawn forgets it.
+-- the latest hop started. Leaving play before step 2 forgets it, including a Session.kill between steps; a hop that
+-- has reached step 2 is kept until the respawn.
 local Blaster = require("@logic/Blaster")
 local Ghosts = require("@logic/Ghosts")
 local Hop = require("@logic/Hop")
@@ -69,6 +70,15 @@ local function hop(s: Session.Session): { Session.Event }
 	local ok, why = Session.submit(s, "p", Hop.INTENT)
 	assert(ok, why)
 	return Session.step(s)
+end
+
+-- the cancelled arc would have cleared the walls, and the pause keeps the eye down
+local function staysDown(s: Session.Session, started: number)
+	t.expect(Hop.rise(started, started + Hop.TICKS / 2) > Hop.CLEARANCE).toBe(true)
+	for _ = 1, 12 do
+		Session.step(s)
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+	end
 end
 
 return t.spec("f0101 the hop in a session", function(it)
@@ -304,14 +314,6 @@ return t.spec("f0101 the hop in a session", function(it)
 	end)
 
 	it("leaving play before step 2 of a hop forgets it, so the pause does not play the arc", function()
-		local function staysDown(s: Session.Session, started: number)
-			t.expect(Hop.rise(started, started + Hop.TICKS / 2) > Hop.CLEARANCE).toBe(true)
-			for _ = 1, 12 do
-				Session.step(s)
-				t.expect(Session.frame(s, "p").hopped).toBe(nil)
-			end
-		end
-
 		local takeoff = settled(new())
 		t.expect((Session.submit(takeoff, "p", Hop.INTENT))).toBe(true)
 		onPlayer(takeoff, "blinky")
@@ -447,5 +449,59 @@ return t.spec("f0101 the hop in a session", function(it)
 		t.expect(g.status).toBe("eyes")
 		t.expect(s.members.p.blaster.shots).toBe(0)
 		t.expect(Hop.airborne(Session.frame(s, "p").hopped, s.tick)).toBe(false)
+	end)
+
+	it("Session.kill right after take-off forgets the hop, so the pause does not play the arc", function()
+		local s = settled(new())
+		hop(s)
+		local started = s.tick
+		t.expect(Session.frame(s, "p").hopped).toBe(started)
+		t.expect(count(Session.kill(s, "p"), "LifeLost")).toBe(1)
+		Session.step(s)
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
+		staysDown(s, started)
+	end)
+
+	it(
+		"Session.kill after the step after take-off forgets the hop, so the pause does not play the arc",
+		function()
+			local s = settled(new())
+			hop(s)
+			local started = s.tick
+			Session.step(s) -- still on the ground: the rise is ahead of this step
+			t.expect(s.tick).toBe(started + 1)
+			t.expect(Session.frame(s, "p").hopped).toBe(started)
+			t.expect(Hop.airborne(started, s.tick)).toBe(false)
+			t.expect(Hop.rise(started, started + 2) > Hop.CLEARANCE).toBe(true) -- the next step would clear the walls
+			t.expect(Hop.rise(started, started + Hop.TICKS / 2)).toBe(Hop.RISE)
+			Session.kill(s, "p")
+			Session.step(s)
+			t.expect(Session.frame(s, "p").hopped).toBe(nil)
+			staysDown(s, started)
+		end
+	)
+
+	it("Session.kill after step 2 of a hop keeps it until the respawn", function()
+		local s = settled(new())
+		hop(s)
+		local started = s.tick
+		Session.step(s)
+		Session.step(s)
+		t.expect(s.tick).toBe(started + 2)
+		t.expect(Session.frame(s, "p").hopped).toBe(started)
+		t.expect(Hop.airborne(started, s.tick)).toBe(true)
+		Session.kill(s, "p")
+		Session.step(s)
+		t.expect(Session.frame(s, "p").hopped).toBe(started)
+		t.expect(Hop.rise(started, s.tick) > Hop.CLEARANCE).toBe(true) -- the death frame is already over the walls
+		local ready = false
+		for _ = 1, 300 do
+			if count(Session.step(s), "Ready") > 0 then
+				ready = true
+				break
+			end
+		end
+		t.expect(ready).toBe(true)
+		t.expect(Session.frame(s, "p").hopped).toBe(nil)
 	end)
 end)

@@ -29,3 +29,4 @@
 - design-review-006 F2: ticket-prep/spec-design-correspondence
 - design-review-006 F3: ticket-prep/restated-rules-move-together
 - design-review-006 F4: ticket-prep/never-narrow-captured-scope
+- design-review-007 F1: testing/age-uses-the-last-played-tick, ticket-prep/spec-design-correspondence
