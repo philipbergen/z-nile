@@ -17,6 +17,7 @@
 | 13 | 2026-10-21 17:08 | R0012: type-only amendment of three sequestered specs (user-authorized), Phase 3 verification | 1 | 0 | 6.7 | explicit | build |  |
 | 14 | 2026-10-21 17:14 | R0012: review-001 | 0 | 0 | 25.0 | focus | code-review |  |
 | 15 | 2026-10-21 17:19 | R0012: review 001 fixes (touch hold, focus reset, adapter pins, snap frame on touch only) | 40 | 4 | 9.2 | explicit | code-review |  |
+| 16 | 2026-10-21 17:20 | R0012: refute-001, harvest of review 001, lessons | 24 | 0 | 10.0 | focus | code-review |  |
 
-**Total:** +1091 / -35 lines, 208.3 agent-minutes, 199999 tokens over 15 records
-<!-- totals: added=1091 removed=35 minutes=208.3 records=15 tokens=199999 -->
+**Total:** +1115 / -35 lines, 218.3 agent-minutes, 199999 tokens over 16 records
+<!-- totals: added=1115 removed=35 minutes=218.3 records=16 tokens=199999 -->
