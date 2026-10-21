@@ -1,0 +1,2 @@
+- F1: fixed: the AC13 row is `run: killed`, with the three mutants design review 005 ran. consequences: none.
+- F2: fixed: rollback step 2 reads `origin/main`'s `z-nile/next` just before the rollback merges, and redoes the copy if main moves. consequences: none.

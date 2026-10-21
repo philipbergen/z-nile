@@ -19,3 +19,5 @@
 - design-review-003 F4: testing/plain-find-for-literals
 - design-review-004 F1: ticket-prep/spec-design-correspondence, testing/no-vacuous-pass
 - design-review-004 F2: ticket-prep/new-rules-migrate-existing-work
+- design-review-005 F1: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-005 F2: ticket-prep/design-the-execution-window
