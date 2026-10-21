@@ -22,3 +22,9 @@
 - design-review-005 F1: ticket-prep/prove-specs-pass-on-a-prototype
 - design-review-005 F2: ticket-prep/design-the-execution-window
 - note R0043 code review 001 F1, a promoted spec with a live-item floor: testing/no-live-counts-in-promoted-specs
+- design-review-006 F1: testing/no-live-counts-in-promoted-specs
+- design-review-006 F2: ticket-prep/design-the-execution-window, ticket-prep/restated-rules-move-together
+- design-review-006 F3: ticket-prep/instructions-runnable-where-they-run
+- design-review-006 F4: architecture/guard-no-is-explicit
+- design-review-006 F5: ticket-prep/restated-rules-move-together
+- design-review-006 F6: ticket-prep/prove-specs-pass-on-a-prototype
