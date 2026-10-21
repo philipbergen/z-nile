@@ -45,7 +45,7 @@ return t.spec("f0029 phone session", function(it)
 				{ width = 390, snap = nil }
 			)
 			t.expect(effects).toEqual({})
-			local _, ended = Touch.track(
+			local _, ended: { any } = Touch.track(
 				state,
 				{ id = 1, phase = "end", x = 40 - 80, y = 200 },
 				{ width = 390, snap = nil }
@@ -57,12 +57,12 @@ return t.spec("f0029 phone session", function(it)
 			t.expect(diagonal).toBe(nil)
 
 			local look = Touch.empty()
-			look, _ = Touch.track(
+			look = Touch.track(
 				look,
 				{ id = 2, phase = "begin", x = 300, y = 200 },
 				{ width = 390, snap = nil }
 			)
-			local _, moved = Touch.track(
+			local _, moved: { any } = Touch.track(
 				look,
 				{ id = 2, phase = "move", x = 300, y = 10200 },
 				{ width = 390, snap = nil }
