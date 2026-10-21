@@ -37,3 +37,4 @@
 - design-review-007 F2: ticket-prep/design-the-execution-window
 - design-review-007 F3: ticket-prep/restated-rules-move-together
 - design-review-007 F4: ticket-prep/restated-rules-move-together
+- review-004 F1: one-off: the PR description kept the guesses after the user decided them
