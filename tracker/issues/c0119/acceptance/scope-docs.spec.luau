@@ -57,7 +57,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 			p,
 			"whose subject is `tracker: new` followed by a list of ids that includes the item's id at the time"
 		)
-		at(p, "across folder moves and every compaction")
+		at(p, "marked `(no capture commit: first add)`, across folder moves, renumbers and every compaction")
 		at(p, "it keeps the captured Solution bullets as they are and adds after them")
 		at(p, "`Decided with the user (YYYY-MM-DD)`")
 		at(p, "never rewrites, narrows, defers or drops a captured outcome")
@@ -128,6 +128,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(item, "left without a criterion")
 		at(item, "or a Problem rewritten to match a smaller design")
 		at(item, "is **high**")
+		at(item, "A capture marked `(no capture commit: first add)` is only the first version on record")
 	end)
 
 	it("code review treats a deviation that shrinks the Problem as high", function()
@@ -149,7 +150,13 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		t.expect(row ~= nil).toBe(true)
 		at(row, "`tracker.sh capture <id>`")
 		at(row, "read-only")
-		at(row, "before each compaction")
+		at(row, "before each compaction or renumber")
+		at(row, "`tracker/renumbered.txt`")
+		at(row, "the header line ends `(no capture commit: first add)`")
+		at(
+			doc,
+			"appends `<old> <new>` (plus the directory, for a renumber by directory) to `tracker/renumbered.txt`"
+		)
 		at(row, "`tracker: new raft …` and `tracker: scope …` are not captures")
 		at(section(doc, "Worktrees"), "`capture <id>`")
 	end)

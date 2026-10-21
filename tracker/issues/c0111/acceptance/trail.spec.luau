@@ -46,6 +46,42 @@ return t.spec("c0111 an item's trail", function(it)
 		t.expect(#trail.ranges("issues", "c0010", "HEAD", { { sha = "ccc", map = nil } })).toBe(2)
 	end)
 
+	it("follows a renumber cut, limited to the one folder a renumber by directory moved", function()
+		local cuts: { trail.Cut } = {
+			{ sha = "ddd", map = { c0070 = "c0071" }, dirs = { c0070 = "tracker/issues/c0070" } },
+			{ sha = "eee", map = { c0060 = "c0061" }, dirs = {} },
+		}
+		t.expect(trail.ranges("issues", "c0071", "HEAD", cuts)).toEqual({
+			{ rev = "ddd..HEAD", dirs = dirs("issues", "c0071"), id = "c0071" },
+			{ rev = "eee..ddd~1", dirs = { "tracker/issues/c0070" }, id = "c0070" },
+			{ rev = "eee~1", dirs = { "tracker/issues/c0070" }, id = "c0070" },
+		})
+		-- the copy that kept c0070 keeps its other folders before the cut
+		t.expect(trail.ranges("issues", "c0070", "HEAD", { cuts[1] })).toEqual({
+			{ rev = "ddd..HEAD", dirs = dirs("issues", "c0070"), id = "c0070" },
+			{
+				rev = "ddd~1",
+				dirs = { "tracker/issues/active/c0070", "tracker/issues/done/c0070" },
+				id = "c0070",
+			},
+		})
+		t.expect(trail.ranges("issues", "c0061", "HEAD", { cuts[2] })[2]).toEqual({
+			rev = "eee~1",
+			dirs = dirs("issues", "c0060"),
+			id = "c0060",
+		})
+	end)
+
+	it("reads the lines a commit added to the renumber ledger", function()
+		local before = "# header\nc0040 c0041\n"
+		local map, d =
+			trail.added(before, before .. "c0060 c0061\nc0070 c0071 tracker/issues/c0070\nnot a line\n")
+		t.expect(map).toEqual({ c0060 = "c0061", c0070 = "c0071" })
+		t.expect(d).toEqual({ c0070 = "tracker/issues/c0070" })
+		local first = trail.added(nil, "# header\nc0040 c0041\n")
+		t.expect(first).toEqual({ c0040 = "c0041" })
+	end)
+
 	it("reads the ids a `tracker: new` subject names", function()
 		t.expect(trail.namedIds("tracker: new c0114 c0115 c0116 z-nile chores"))
 			.toEqual({ "c0114", "c0115", "c0116" })
@@ -136,7 +172,9 @@ return t.spec("c0111 an item's trail", function(it)
 				commit("a", 100, "backlog", "A", 7),
 			}
 			t.expect((trail.oldestAdd(commits) :: trail.Commit).sha).toBe("a")
-			t.expect((trail.capture(commits) :: trail.Commit).sha).toBe("c")
+			local got, isCapture = trail.capture(commits)
+			t.expect((got :: trail.Commit).sha).toBe("c")
+			t.expect(isCapture).toBe(true)
 			-- before a compaction the item had another id, and the commit carries it
 			local landedOld = commit("o", 60, "tracker: new c0100 Landed before", "M", 2)
 			landedOld.id = "c0100"
@@ -146,14 +184,16 @@ return t.spec("c0111 an item's trail", function(it)
 			t.expect((trail.capture(renamed) :: trail.Commit).sha).toBe("o")
 			local none =
 				{ commit("d", 400, "tracker: prep R0010 x", "M", 1), commit("a", 100, "backlog", "A", 2) }
-			t.expect((trail.capture(none) :: trail.Commit).sha).toBe("a")
+			local fallback, marked = trail.capture(none)
+			t.expect((fallback :: trail.Commit).sha).toBe("a")
+			t.expect(marked).toBe(false)
 			-- a deletion is never the capture, and equal times keep the log's order
 			local tie = {
 				commit("y", 100, "tracker: new c0010 removed", "D", 1),
 				commit("x", 100, "tracker: new c0010 kept", "A", 2),
 			}
 			t.expect((trail.capture(tie) :: trail.Commit).sha).toBe("x")
-			t.expect(trail.capture({})).toBe(nil)
+			t.expect((trail.capture({}))).toBe(nil)
 			t.expect(trail.oldestAdd({ commit("m", 1, "x", "M", 1) })).toBe(nil)
 		end
 	)
