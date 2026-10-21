@@ -131,7 +131,32 @@ return t.spec("c0120 checks run from their project's home", function(it)
 	)
 
 	-- review 002 F1: the home fence's refusals are reads, in every mode; only the sentinel's write is waived, and only
-	-- in the jail; whatever fails, the guards a check.sh inherited stay whole
+	-- in the jail; whatever fails, the guards a check.sh inherited stay whole. Review 003 F1: every run here sets the
+	-- runner's jail markers itself, never inherits them, so each case tests the same path on every host (macOS jail,
+	-- Linux's "none (…)", an outer sandbox). All it touches is this fixture, and `chmod 555` stands in for the jail.
+	local function markers(fence: string?): { [string]: string }
+		return {
+			PICKMAN_TEST_JAIL = "sandbox-exec",
+			PICKMAN_FENCE_SPECS = "1",
+			PICKMAN_TEST_FENCE = fence or fixture.physical(f.main) :: string,
+		}
+	end
+	local NO_JAIL = { PICKMAN_TEST_JAIL = "none", PICKMAN_FENCE_SPECS = "1" }
+	-- pickman/.cache made unwritable, as the jail makes it; a runner as root would write anyway: fail, never pass
+	local function lockHomeCache()
+		fs.writeDir(at("pickman/.cache"))
+		if fs.isFile(at("pickman/.cache/.git")) then
+			fs.removeFile(at("pickman/.cache/.git"))
+		end
+		fixture.exec(f.main, "chmod", { "555", "pickman/.cache" })
+		if pcall(fs.writeFile, at("pickman/.cache/.c0120-root-probe"), "") then
+			pcall(fs.removeFile, at("pickman/.cache/.c0120-root-probe"))
+			fixture.exec(f.main, "chmod", { "755", "pickman/.cache" })
+			error(
+				"pickman/.cache is still writable after chmod 555 (running as root?): this case can't stand in for the jail"
+			)
+		end
+	end
 	it(
 		"a symlinked pickman/.cache refuses with the spec guards on and no jail marker, writing nothing through it",
 		function()
@@ -141,10 +166,18 @@ return t.spec("c0120 checks run from their project's home", function(it)
 				fs.removeDir(at("pickman/.cache"))
 			end
 			fixture.exec(f.main, "ln", { "-s", away, "pickman/.cache" })
-			local r = fixture.exec(f.main, "bash", { "pickman/.tracker/issues/f0010/check.sh" }, {
-				env = { PICKMAN_TEST_JAIL = "none" },
-			})
-			local inJail = fixture.exec(f.main, "bash", { "pickman/.tracker/issues/f0010/check.sh" })
+			local r = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = NO_JAIL }
+			)
+			local inJail = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = markers() }
+			)
 			local written = fs.readDir(away)
 			fs.removeFile(at("pickman/.cache"))
 			t.expect(r.ok).toBe(false)
@@ -166,18 +199,27 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			fs.writeDir(at("z-nile/.tracker/issues/c0020/probe"))
 			fs.writeFile(at("z-nile/.tracker/issues/c0020/probe/check.sh"), PROBE_CHECK)
 			-- the root's guards, as a z-nile check.sh sees them
-			local rootRun = fixture.exec(f.main, "bash", { "z-nile/.tracker/issues/c0020/probe/check.sh" })
+			local rootRun = fixture.exec(
+				f.main,
+				"bash",
+				{ "z-nile/.tracker/issues/c0020/probe/check.sh" },
+				{ env = markers() }
+			)
 			local rootSeen =
 				string.split(fs.readFile(at("z-nile/.tracker/issues/c0020/probe/guards.txt")), "\n")
 			-- a home .cache with no sentinel that refuses writes
-			fs.writeDir(at("pickman/.cache"))
-			if fs.isFile(at("pickman/.cache/.git")) then
-				fs.removeFile(at("pickman/.cache/.git"))
-			end
-			fixture.exec(f.main, "chmod", { "555", "pickman/.cache" })
-			local r = fixture.exec(f.main, "bash", { probe })
+			lockHomeCache()
+			local r = fixture.exec(f.main, "bash", { probe }, { env = markers() })
 			-- the waiver is the jail's, never the spec run's: with no jail marker the same refused write refuses
-			local noJail = fixture.exec(f.main, "bash", { probe }, { env = { PICKMAN_TEST_JAIL = "none" } })
+			local noJail = fixture.exec(f.main, "bash", { probe }, { env = NO_JAIL })
+			-- and only where the jail forbids the write: a home whose .cache is the run's own (a run from pickman/)
+			-- is writable in the jail, so a failed write there has another cause and refuses (review 003 F2)
+			local ownCache = fixture.exec(
+				f.main,
+				"bash",
+				{ probe },
+				{ env = markers(`{fixture.physical(f.main)}/pickman`) }
+			)
 			fixture.exec(f.main, "chmod", { "755", "pickman/.cache" })
 			local seen = string.split(fs.readFile(at("pickman/.tracker/issues/f0010/probe/guards.txt")), "\n")
 			fs.removeDir(at("pickman/.tracker/issues/f0010/probe"))
@@ -192,6 +234,8 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			t.expect(has(r.stdout, "PASS  AC1: the ref guard refuses")).toBe(true)
 			t.expect(noJail.ok).toBe(false)
 			t.expect(has(noJail.stderr, "cannot write")).toBe(true)
+			t.expect(ownCache.ok).toBe(false)
+			t.expect(has(ownCache.stderr, "cannot write")).toBe(true)
 		end
 	)
 
@@ -207,7 +251,7 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			"",
 		}, "\n")
 		fs.writeFile(at("fence-probe.sh"), probe)
-		local r = fixture.exec(f.main, "bash", { "fence-probe.sh" }, { env = { PICKMAN_TEST_JAIL = "none" } })
+		local r = fixture.exec(f.main, "bash", { "fence-probe.sh" }, { env = NO_JAIL })
 		fs.removeFile(at("fence-probe.sh"))
 		t.expect(has(r.stdout, "rc=1 same=yes")).toBe(true)
 		t.expect(has(r.stderr, "no ref guard")).toBe(true)

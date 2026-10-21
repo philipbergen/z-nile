@@ -12,3 +12,6 @@
 - design-review-001 F10: ticket-prep/restated-rules-move-together
 - design-review-002 F1: architecture/guard-no-is-explicit
 - design-review-002 F2: ticket-prep/restated-rules-move-together
+- design-review-003 F1: testing/specs-set-host-markers-explicitly
+- design-review-003 F2: architecture/guard-no-is-explicit
+- design-review-003 F3: ticket-prep/new-rules-migrate-existing-work
