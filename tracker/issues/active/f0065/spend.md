@@ -8,6 +8,7 @@
 | 4 | 2026-10-21 23:02 | f0065: spec the rank line and the way-back prompt on one screen (review-001 F1) | 101 | 0 | 10.0 | focus | code-review |  |
 | 5 | 2026-10-21 23:02 | f0065: correct what pins Submits.again in the log (review-001 F2) | 0 | 0 | 3.0 | focus | code-review |  |
 | 6 | 2026-10-21 23:03 | R0034: refute-001 | 0 | 0 | 4.0 | focus | code-review |  |
+| 7 | 2026-10-21 23:05 | R0034: harvest review and design-review lessons | 22 | 0 | 8.0 | focus | code-review |  |
 
-**Total:** +414 / -82 lines, 63.0 agent-minutes, 0 tokens over 6 records
-<!-- totals: added=414 removed=82 minutes=63.0 records=6 tokens=0 -->
+**Total:** +436 / -82 lines, 71.0 agent-minutes, 0 tokens over 7 records
+<!-- totals: added=436 removed=82 minutes=71.0 records=7 tokens=0 -->
