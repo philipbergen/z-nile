@@ -46,6 +46,7 @@
 | 42 | 2026-10-21 05:56 | design-review-017 tokens | 0 | 0 | 0.0 | spend+proportional | design-review | 31300 |
 | 43 | 2026-10-21 05:58 | prep | 1350 | 4 | 170.3 | spend+proportional | prep |  |
 | 44 | 2026-10-21 06:05 | R0042: experiments (all settled in prep; nothing to run) | 1131 | 8 | 0.9 | raft+proportional | build |  |
+| 45 | 2026-10-21 06:05 | c0111 c0119: lessons, metrics, trail, capture and the scope rules, from the prep prototype | 0 | 0 | 15.0 | raft+proportional | build |  |
 
-**Total:** +3425 / -16 lines, 840.2 agent-minutes, 770979 tokens over 44 records
-<!-- totals: added=3425 removed=16 minutes=840.2 records=44 tokens=770979 -->
+**Total:** +3425 / -16 lines, 855.2 agent-minutes, 770979 tokens over 45 records
+<!-- totals: added=3425 removed=16 minutes=855.2 records=45 tokens=770979 -->
