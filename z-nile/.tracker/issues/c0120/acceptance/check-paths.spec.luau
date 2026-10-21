@@ -1,7 +1,8 @@
 --!strict
 -- c0120 AC11: every path a check.sh names exists, from its project's home, so no check passes because the path it
 -- guards moved away (`git diff --quiet -- src/server` is green on a path that is not there). It covers the check.sh of
--- every unfinished item (backlog and active, every project root): a finished one is never run again. A literal path is
+-- every unfinished item (backlog and active, every project root), read from its home (pickman/, z-nile/); finished
+-- items' files are finished.spec.luau's (the user's 2026-10-21 decision rewrites them). A literal path is
 -- a word of a command (comments aside) with no `$`, that starts with a top-level folder of the repository or a home
 -- (src/, tests/, scripts/, z-nile/, pickman/, tracker/, .tracker/, .github/, .claude/) or is a root file of a home
 -- (default.project.json, lobby.project.json, zn), or follows `lune run` (then with .luau). A glob matches at least one
@@ -11,7 +12,11 @@
 local fs = require("@lune/fs")
 local projects = require("@znile/engine/projects")
 local serde = require("@lune/serde")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
+
+-- the checkout's top, with a slash: these specs run from z-nile/ (c0120), and the scan reads the checkout from there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")) .. "/"
 
 -- git blob ids of the check.sh files restamped for a re-prep after c0120 (the user's decision), as they are now
 local RESTAMPED: { [string]: string } = {
@@ -47,11 +52,7 @@ local function literals(text: string): { string }
 					dir = w .. "/"
 					continue
 				end
-				if
-					not string.find(w, "$", 1, true)
-					and string.sub(w, 1, 1) ~= "/"
-					and string.sub(w, 1, 1) ~= "-"
-				then
+				if not string.find(w, "$", 1, true) and string.sub(w, 1, 1) ~= "/" and string.sub(w, 1, 1) ~= "-" then
 					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
 						path = if string.match(w, "%.luau$") then w else w .. ".luau"
 					elseif FILES[w] then
@@ -83,9 +84,7 @@ local function present(base: string, home: string, path: string): boolean
 	if not dir or string.find(dir, "*", 1, true) or not fs.isDir(dir) then
 		return false
 	end
-	local lua = "^"
-		.. string.gsub(string.gsub(pat :: string, "[%.%-%+%?%[%]%^%$%(%)%%]", "%%%0"), "%*", ".*")
-		.. "$"
+	local lua = "^" .. string.gsub(string.gsub(pat :: string, "[%.%-%+%?%[%]%^%$%(%)%%]", "%%%0"), "%*", ".*") .. "$"
 	for _, name in fs.readDir(dir) do
 		if string.match(name, lua) then
 			return true
@@ -106,11 +105,7 @@ local function touched(doc: string): { string }
 end
 local function under(path: string, own: { string }): boolean
 	for _, o in own do
-		if
-			path == o
-			or string.sub(path, 1, #o + 1) == o .. "/"
-			or string.sub(o, 1, #path + 1) == path .. "/"
-		then
+		if path == o or string.sub(path, 1, #o + 1) == o .. "/" or string.sub(o, 1, #path + 1) == path .. "/" then
 			return true
 		end
 	end
@@ -188,8 +183,8 @@ end
 
 -- a checkout with one item per home (review 001 F3: the scan's reach is proved here, never by counting live items)
 local FX = ".cache/c0120-check-paths/"
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local function put(rel: string, text: string)
 	fs.writeDir(string.match(FX .. rel, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(FX .. rel, text)
@@ -230,8 +225,8 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		put("z-nile/projects.toml", REGISTRY)
 		put("pickman/src/server/Main.server.luau", "--!strict\nreturn nil\n")
 		put("pickman/tests/acceptance/f0031/a.spec.luau", "--!strict\nreturn nil\n")
-		put("tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
-		put("tests/run.luau", "--!strict\nreturn nil\n")
+		put("z-nile/tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
+		put("z-nile/tests/run.luau", "--!strict\nreturn nil\n")
 		-- pickman's: a path that exists only from pickman/, a glob, its own work, and one that vanished
 		put(
 			"pickman/.tracker/issues/f0001/f0001.md",
@@ -244,7 +239,7 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		-- its raft names a member's own work too
 		put("pickman/.tracker/rafts/R0001/R0001.md", "---\nid: R0001\n---\n")
 		put("pickman/.tracker/rafts/R0001/check.sh", "test -d src/shared/Logic/New\n")
-		-- z-nile's, from the root
+		-- z-nile's, from z-nile/
 		put("z-nile/.tracker/issues/c0002/c0002.md", "---\nid: c0002\n---\n")
 		put(
 			"z-nile/.tracker/issues/c0002/check.sh",
@@ -253,10 +248,10 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		local s = scan(FX)
 		t.expect(s.bad).toEqual({
 			"pickman/.tracker/issues/f0001/check.sh: src/gone.luau (from pickman)",
-			"z-nile/.tracker/issues/c0002/check.sh: src/server (from .)",
+			"z-nile/.tracker/issues/c0002/check.sh: src/server (from z-nile)",
 		})
 		t.expect(s.checked).toBe(3)
-		t.expect(s.byHome).toEqual({ pickman = 2, ["."] = 1 })
+		t.expect(s.byHome).toEqual({ pickman = 2, ["z-nile"] = 1 })
 		t.expect(present(FX, ".", "src/server")).toBe(false)
 		t.expect(present(FX, "pickman", "tests/acceptance/f0031/*.nope")).toBe(false)
 		t.expect(under("tests/unit", { "tests/unit/Touch" })).toBe(true)
@@ -264,19 +259,16 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		fs.removeDir(FX)
 	end)
 
-	it(
-		"every unfinished item's check.sh, in every project root, names only paths that exist from its home",
-		function()
-			local s = scan("")
-			t.expect(table.concat(s.bad, "\n")).toBe("")
-			-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
-			t.expect(s.checked).toBe(s.found)
-		end
-	)
+	it("every unfinished item's check.sh, in every project root, names only paths that exist from its home", function()
+		local s = scan(TOP)
+		t.expect(table.concat(s.bad, "\n")).toBe("")
+		-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
+		t.expect(s.checked).toBe(s.found)
+	end)
 
 	it("the restamped check.sh files are exempt only as they are now", function()
-		for _, i in items("") do
-			local file = `{i.dir}/check.sh`
+		for _, i in items(TOP) do
+			local file = `{TOP}{i.dir}/check.sh`
 			if fs.isFile(file) and RESTAMPED[blob(fs.readFile(file))] then
 				t.expect(RESTAMPED[blob(fs.readFile(file))]).toBe(i.id)
 			end

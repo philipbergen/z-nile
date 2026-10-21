@@ -1,19 +1,22 @@
 --!strict
 -- c0120 AC6: each project has its own gate. `z-nile/check.sh --project <name>` runs one project's stages and specs,
--- no --project runs every project's, and `pickman/check.sh` is pickman's. Each stage's folders come from the projects'
--- homes: format and lint read every home's src/, tests/, scripts/ and root (each .tracker/ named, stylua skips hidden
--- folders), Roblox types read a home's src/ from that home (a sourcemap is relative to its project file), Lune types
--- read tests/ and scripts/ and never a .tracker/, the places are a home's project files, and a project's specs run from
--- its home. `--plan` prints all of it and runs and writes nothing. Fixture under .cache/c0120-gate (stub tools).
+-- no --project runs every project's, `pickman/check.sh` is pickman's, and each home's scripts/check.sh runs that
+-- project's gate alone (decided with the user, 2026-10-21: "pickman's gate only"). Each stage's folders come from the
+-- projects' homes: format and lint read a game's src/, tests/ and scripts/, the tooling's whole home (z-nile/) with the
+-- root's scripts/ (no project's), and every root (each .tracker/ named, stylua skips hidden folders); Roblox types read a
+-- home's src/ from that home (a sourcemap is relative to its project file); Lune types never read a .tracker/; the
+-- places are a home's project files; and a project's specs run from its home (z-nile's from z-nile/). `--plan` prints
+-- all of it and runs and writes nothing. These specs run from z-nile/. Fixture under .cache/c0120-gate (stub tools).
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
-local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0120-gate`
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local homeDir = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{homeDir}/.cache/c0120-gate`
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -53,7 +56,7 @@ local function stubbed(name: string): string
 	engine.copy(root, dir)
 	fs.writeFile(`{dir}/z-nile/projects.toml`, REGISTRY)
 	for _, rel in
-		{ "pickman/src/shared", "pickman/tests/unit", "tests/tooling", "z-nile/.tracker", "pickman/.tracker" }
+		{ "pickman/src/shared", "pickman/tests/unit", "z-nile/tests/tooling", "z-nile/.tracker", "pickman/.tracker" }
 	do
 		fs.writeDir(`{dir}/{rel}`)
 	end
@@ -79,10 +82,10 @@ local function stubbed(name: string): string
 		`{dir}/bin/lune`,
 		'#!/bin/sh\nif [ "$1" = --version ]; then echo "lune 0.10.5"; exit 0; fi\n'
 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --projects ]; then\n'
-			.. '  printf "pickman\\tpickman\\tpickman/.tracker\\nz-nile\\t.\\tz-nile/.tracker\\n"; exit 0\nfi\n'
+			.. '  printf "pickman\\tpickman\\tpickman/.tracker\\nz-nile\\tz-nile\\tz-nile/.tracker\\n"; exit 0\nfi\n'
 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --luau-dirs ]; then\n'
 			.. '  if [ "$5" = pickman ]; then echo "pickman/src pickman/tests pickman/.tracker"; exit 0; fi\n'
-			.. '  echo "pickman/src pickman/tests pickman/.tracker tests z-nile z-nile/.tracker"; exit 0\nfi\n'
+			.. '  echo "pickman/src pickman/tests pickman/.tracker z-nile scripts z-nile/.tracker"; exit 0\nfi\n'
 			.. log
 			.. "exit 0\n"
 	)
@@ -132,7 +135,7 @@ local function planTree(): string
 			"pickman/tests/unit",
 			"pickman/scripts/lib",
 			"pickman/.tracker/issues",
-			"tests/tooling",
+			"z-nile/tests/tooling",
 			"z-nile/.tracker/issues",
 		}
 	do
@@ -141,6 +144,7 @@ local function planTree(): string
 	write(`{dir}/pickman/default.project.json`, '{ "name": "g", "tree": { "$className": "DataModel" } }\n')
 	write(`{dir}/pickman/lobby.project.json`, '{ "name": "l", "tree": { "$className": "DataModel" } }\n')
 	write(`{dir}/pickman/check.sh`, fs.readFile(`{root}/pickman/check.sh`))
+	write(`{dir}/pickman/scripts/check.sh`, fs.readFile(`{root}/pickman/scripts/check.sh`))
 	realCopy = dir
 	return dir
 end
@@ -151,41 +155,36 @@ local function untouched(dir: string)
 end
 
 return t.spec("c0120 each project has its own gate", function(it)
-	it(
-		"the plan of the real tree's layout: every home's folders, pickman's places and both projects' specs",
-		function()
-			local dir = planTree()
-			local ok, out = plan(dir, {})
-			untouched(dir)
-			t.expect(ok).toBe(true)
-			local format = words(lineOf(out, "format"))
-			for _, d in
-				{
-					"pickman/src",
-					"pickman/tests",
-					"pickman/scripts",
-					"pickman/.tracker",
-					"tests",
-					"scripts",
-					"z-nile",
-					"z-nile/.tracker",
-				}
-			do
-				t.expect(format[d]).toBe(true)
-			end
-			t.expect(format.src or format.tracker or false).toBe(false)
-			t.expect(lineOf(out, "lint")).toBe(lineOf(out, "format"))
-			t.expect(lineOf(out, "types (Roblox)")).toBe("pickman/src, from pickman")
-			local lune = lineOf(out, "types (Lune)")
-			for _, d in { "pickman/tests", "pickman/scripts", "tests", "scripts", "z-nile" } do
-				t.expect(words(lune)[d]).toBe(true)
-			end
-			t.expect(has(lune, ".tracker")).toBe(false)
-			t.expect(has(out, "build: pickman/default.project.json\nbuild: pickman/lobby.project.json\n"))
-				.toBe(true)
-			t.expect(has(out, "specs: pickman, from pickman\nspecs: z-nile, from .\n")).toBe(true)
+	it("the plan of the real tree's layout: every home's folders, pickman's places and both projects' specs", function()
+		local dir = planTree()
+		local ok, out = plan(dir, {})
+		untouched(dir)
+		t.expect(ok).toBe(true)
+		local format = words(lineOf(out, "format"))
+		for _, d in
+			{
+				"pickman/src",
+				"pickman/tests",
+				"pickman/scripts",
+				"pickman/.tracker",
+				"scripts",
+				"z-nile",
+				"z-nile/.tracker",
+			}
+		do
+			t.expect(format[d]).toBe(true)
 		end
-	)
+		t.expect(format.src or format.tracker or format.tests or false).toBe(false)
+		t.expect(lineOf(out, "lint")).toBe(lineOf(out, "format"))
+		t.expect(lineOf(out, "types (Roblox)")).toBe("pickman/src, from pickman")
+		local lune = lineOf(out, "types (Lune)")
+		for _, d in { "pickman/tests", "pickman/scripts", "scripts", "z-nile" } do
+			t.expect(words(lune)[d]).toBe(true)
+		end
+		t.expect(has(lune, ".tracker")).toBe(false)
+		t.expect(has(out, "build: pickman/default.project.json\nbuild: pickman/lobby.project.json\n")).toBe(true)
+		t.expect(has(out, "specs: pickman, from pickman\nspecs: z-nile, from z-nile\n")).toBe(true)
+	end)
 
 	it(
 		"--project keeps one project's stages; pickman/check.sh is --project pickman; an unknown name exits 2",
@@ -201,11 +200,7 @@ return t.spec("c0120 each project has its own gate", function(it)
 			t.expect(has(z, "pickman")).toBe(false)
 			local r = process.exec("bash", { "pickman/check.sh", "--plan" }, { cwd = dir })
 			t.expect(r.stdout).toBe(p)
-			local bad = process.exec(
-				"bash",
-				{ "z-nile/check.sh", "--plan", "--project", "nope" },
-				{ cwd = dir }
-			)
+			local bad = process.exec("bash", { "z-nile/check.sh", "--plan", "--project", "nope" }, { cwd = dir })
 			untouched(dir)
 			t.expect(bad.code).toBe(2)
 			t.expect(has(bad.stderr, "no project nope")).toBe(true)
@@ -230,8 +225,7 @@ return t.spec("c0120 each project has its own gate", function(it)
 			t.expect(has(out, "GATE PASSED (full)")).toBe(true)
 			local here = (string.gsub(process.exec("pwd", { "-P" }, { cwd = dir }).stdout, "%s+$", ""))
 			-- the sourcemap and the Roblox types from pickman/, the builds of its two project files from the root
-			t.expect(has(log, `{here}/pickman|rojo|sourcemap default.project.json -o sourcemap.json`))
-				.toBe(true)
+			t.expect(has(log, `{here}/pickman|rojo|sourcemap default.project.json -o sourcemap.json`)).toBe(true)
 			t.expect(has(log, `{here}/pickman|luau-lsp|analyze`)).toBe(true)
 			t.expect(has(log, "--sourcemap=sourcemap.json")).toBe(true)
 			t.expect(has(log, `{here}|rojo|build pickman/default.project.json -o`)).toBe(true)
@@ -242,7 +236,7 @@ return t.spec("c0120 each project has its own gate", function(it)
 			t.expect(fs.readFile(`{built}check-lobby.rbxl`)).toBe("built\n")
 			-- each project's specs from its home
 			t.expect(has(log, `{here}/pickman|lune|run tests/run --`)).toBe(true)
-			t.expect(has(log, `{here}|lune|run tests/run --`)).toBe(true)
+			t.expect(has(log, `{here}/z-nile|lune|run tests/run --`)).toBe(true)
 		end
 	)
 
@@ -252,7 +246,20 @@ return t.spec("c0120 each project has its own gate", function(it)
 		t.expect(ok).toBe(true)
 		local here = (string.gsub(process.exec("pwd", { "-P" }, { cwd = dir }).stdout, "%s+$", ""))
 		t.expect(has(log, `{here}/pickman|lune|run tests/run --`)).toBe(true)
-		t.expect(has(log, `{here}|lune|run tests/run --`)).toBe(false)
+		t.expect(has(log, `{here}/z-nile|lune|run tests/run --`)).toBe(false)
+	end)
+
+	it("each home's scripts/check.sh plans that project's gate alone", function()
+		local dir = planTree()
+		local _, p = plan(dir, { "--project", "pickman" })
+		local _, z = plan(dir, { "--project", "z-nile" })
+		local rp = process.exec("bash", { "pickman/scripts/check.sh", "--plan" }, { cwd = dir })
+		local rz = process.exec("bash", { "z-nile/scripts/check.sh", "--plan" }, { cwd = dir })
+		untouched(dir)
+		t.expect(rp.stdout).toBe(p)
+		t.expect(rz.stdout).toBe(z)
+		t.expect(has(rz.stdout, "specs: z-nile, from z-nile")).toBe(true)
+		t.expect(has(rz.stdout, "specs: pickman")).toBe(false)
 	end)
 
 	it("cleans up", function()

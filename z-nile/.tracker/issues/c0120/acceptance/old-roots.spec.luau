@@ -1,9 +1,10 @@
 --!strict
 -- c0120 AC10: after the move the old places stay empty, and the gate fails if they fill again. tracker/ is a retired
 -- root: `./zn audit` reports any tracked file there but the counter's tombstone (`old-root`), and a promoted-spec
--- folder outside its item's project's home (`misplaced-spec`), such as a pickman item's specs brought back to the
--- root's tests/acceptance by a branch from before the move. This spec runs in the gate once promoted, so a
--- resurrection is red there. Fixture under .cache/c0120-oldroots.
+-- folder outside its item's project's home (`misplaced-spec`), such as a pickman item's specs promoted into z-nile's
+-- tests/acceptance. No tests/ is left at the root (the root belongs to no project, decided with the user, 2026-10-21),
+-- and none of pickman's old places. This spec runs in z-nile's gate once promoted, so a resurrection is red there.
+-- It runs from z-nile/: the repository is read from its top. Fixture under .cache/c0120-oldroots (this home's).
 local audit = require("@znile/engine/audit")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -15,11 +16,13 @@ local t = require("@tests/lib/t")
 local ACC = "tests/" .. "acceptance/"
 
 local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local base = `{root}/.cache/c0120-oldroots`
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
--- pickman's old places at the root: none may come back
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
+-- the old places at the root: none may come back (the root's tests/ as a whole, and pickman's)
 local OLD_GAME = {
+	"tests",
 	"src",
 	"default.project.json",
 	"lobby.project.json",
@@ -56,21 +59,18 @@ local function codes(problems: { audit.Problem }): { string }
 end
 
 return t.spec("c0120 the old places stay empty", function(it)
-	it(
-		"the repository: nothing but the tombstone under tracker/, every promoted spec in its project's home",
-		function()
-			local reg = projects.load(".")
-			t.expect(reg.retired).toEqual({ "tracker" })
-			t.expect(codes(audit.leftovers(".", audit.scan("."), reg))).toEqual({})
-			local r = process.exec("git", { "ls-files", "--", "tracker" })
-			t.expect(r.stdout).toBe("tracker/next\n")
-		end
-	)
+	it("the repository: nothing but the tombstone under tracker/, every promoted spec in its project's home", function()
+		local reg = projects.load(TOP)
+		t.expect(reg.retired).toEqual({ "tracker" })
+		t.expect(codes(audit.leftovers(TOP, audit.scan(TOP), reg))).toEqual({})
+		local r = process.exec("git", { "ls-files", "--", "tracker" }, { cwd = TOP })
+		t.expect(r.stdout).toBe("tracker/next\n")
+	end)
 
-	it("the repository: none of pickman's old places is tracked at the root", function()
+	it("the repository: no tests/ at the root, and none of pickman's old places", function()
 		local back: { string } = {}
 		for _, p in OLD_GAME do
-			local r = process.exec("git", { "ls-files", "--", p })
+			local r = process.exec("git", { "ls-files", "--", p }, { cwd = TOP })
 			if string.match(r.stdout, "%S") then
 				table.insert(back, p)
 			end
@@ -79,7 +79,7 @@ return t.spec("c0120 the old places stay empty", function(it)
 	end)
 
 	it("./zn audit is clean of both", function()
-		local r = process.exec("bash", { "zn", "audit" })
+		local r = process.exec("bash", { "zn", "audit" }, { cwd = TOP })
 		t.expect((string.find(r.stdout, "old-root", 1, true))).toBe(nil)
 		t.expect((string.find(r.stdout, "misplaced-spec", 1, true))).toBe(nil)
 	end)
@@ -111,14 +111,14 @@ return t.spec("c0120 the old places stay empty", function(it)
 	it("audit reports a promoted-spec folder outside its item's project's home, either way", function()
 		write("pickman/.tracker/issues/done/f0002/f0002.md", "---\nid: f0002\nslug: y\n---\n")
 		write("z-nile/.tracker/issues/done/c0003/c0003.md", "---\nid: c0003\nslug: z\n---\n")
-		write(ACC .. "f0002/a.spec.luau", "--!strict\nreturn nil\n")
+		write("z-nile/" .. ACC .. "f0002/a.spec.luau", "--!strict\nreturn nil\n")
 		write("pickman/" .. ACC .. "c0003/b.spec.luau", "--!strict\nreturn nil\n")
 		write("pickman/" .. ACC .. "f0004/c.spec.luau", "--!strict\nreturn nil\n") -- no such item: not judged
 		fixture.git(base, { "add", "-A" })
 		local reg = projects.load(base, true)
 		t.expect(codes(audit.leftovers(base, audit.scan(base), reg))).toEqual({
 			"error misplaced-spec pickman/" .. ACC .. "c0003",
-			"error misplaced-spec " .. ACC .. "f0002",
+			"error misplaced-spec z-nile/" .. ACC .. "f0002",
 			"error old-root tracker/issues/f0001/f0001.md",
 		})
 	end)
