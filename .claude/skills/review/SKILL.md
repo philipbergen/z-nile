@@ -29,6 +29,7 @@ Evidence: <the concrete failing scenario, input, or quote. Not "might be" but "d
 Critique: <why it matters, and the fix the author will be tempted to make>
 Consequences: <take that fix one step further: the new rules, state, edge cases or user decisions it brings, or "none">
 Recommendation: <the fix that holds up after its consequences, with the spec cases or decisions it needs>
+Lesson: <skill>/<slug> (only when the finding repeats an existing lesson)
 
 ### F2 [medium] ...
 
@@ -44,6 +45,8 @@ Verdict: approve | changes
 - **low**: a clarity or maintainability improvement.
 
 **Think one step further.** A finding isn't finished at "here's the fix". Say what new rule, state, edge case or user decision the fix brings, and how it interacts with existing rules, and make the Recommendation cover it, including its spec cases, so it doesn't come back as next round's finding.
+
+**Never prescribe a cut.** Scope belongs to the user. A Recommendation never makes an outcome the issue's Problem asks for smaller, later or optional. When narrowing is the only fix you can see, the Recommendation starts `escalate to the user:` and lists the options, including what keeping the full scope would cost.
 
 Don't pad the review. Zero findings with `Verdict: approve` is a valid result. Use `approve` only when no high or medium findings remain.
 
@@ -73,6 +76,8 @@ Attack all of the following:
 7. **Raft coherence**: do the issue designs agree with the whole-raft design and with each other, and is the order right?
 8. **Executability**: could an agent that has never seen this repo deliver it from the documents alone, without asking a question?
 9. **Repository safety**: could any spec, `check.sh` or script in this raft change the real repository (testing skill, "Specs never touch the real repository")? Every command that changes anything must run in a fixture under `.cache/<unique name>` with its own repository, committing as `@example.invalid`. Check especially what the runner can't enforce (that section's "Caught only by review" list). Any path to the real repository, or any weakening of its guards, is **high**.
+10. **Lessons**: run `scripts/tracker.sh lessons --when design --full` and ask each lesson's `check` of the draft. A draft that repeats a lesson's defect is a finding, with that lesson on its `Lesson:` line. Then judge the lessons the author added since the last round (`harvest.md`): each must be a lesson a different raft could fail, not a restated finding; a restated finding is a low finding.
+11. **Scope fidelity**: for each item, print its capture (`scripts/tracker.sh capture <id>`) and compare the document with it (ticket-prep, **Scope is what was captured**). Its title, Problem and Solution ideas may only gain detail, `Scope decision (user, YYYY-MM-DD)` lines and `Decided with the user (YYYY-MM-DD)` lines. Then check that every captured outcome has a Design and an acceptance criterion: Checked, or Judged or Observed only where the testing skill allows it. An outcome dropped, deferred, moved into Non-goals, reworded away or left without a criterion, with no `Scope decision` or `Decided with the user` line, or a Problem rewritten to match a smaller design, is **high**. A capture carrying any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) is not a confirmed capture: say so, and judge the scope from the item's history.
 
 ## Stream mode (execute-raft Phase 2B)
 A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
@@ -86,9 +91,18 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh` 
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `scripts/check.sh --full` and each `tracker.sh check <id>` yourself.
 2. **Sequestration**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/`). Any other change is **high**. The three-dot form shows only what this branch changed, not what `main` brought in.
 3. **Weak tests**: tests that assert on internals, lack a negative case, would pass with a stub, or depend on the wall clock or randomness.
-4. **Design adherence**: does the code match the Design? Is each deviation recorded with a reason?
+4. **Design adherence**: does the code match the Design? Is each deviation recorded with a reason? A deviation that drops or shrinks an outcome the issue's Problem asks for is **high**, and its Recommendation is to escalate (execute-raft stop conditions).
 5. **Architecture rules** from the skill, including thin adapters and server authority.
 6. **Performance**: per-frame allocations, O(n²) work in a tick, and replication volume.
 7. **Judged criteria**: give a ruling on each against its rubric.
 8. **Repository safety**: no spec, `check.sh` or script in the diff may change the real repository, run a command that changes anything outside a `.cache` fixture, or weaken a guard: `tests/lib/fence.luau`, `scripts/lib/fence.sh`, `scripts/lib/git-hooks/`, the fence in `scripts/lib/ac.sh`, `tests/tooling/repo-fence.spec.luau`. Check the "Caught only by review" list in the testing skill's "Specs never touch the real repository" section line by line. Any such path is **high**.
 9. **Fix delta** (re-review rounds): review the fix delta as well as the whole diff: `git diff <the previous review's commit>..HEAD` (the commit that added the previous `review-NNN.md`). For each fix, what new behaviour does it add, and what does that break or open? A defect in a fix is a finding like any other.
+10. **Lessons**: the same as design mode's item 10, with `scripts/tracker.sh lessons --when build --full`.
+
+## Lessons
+Before you start, read this skill's lessons: `scripts/tracker.sh lessons --skill review --full`. Each is a mistake made before, with the question that catches it.
+
+A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+- **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `tracker.sh new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `scripts/tracker.sh new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.

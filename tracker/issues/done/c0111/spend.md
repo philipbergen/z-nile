@@ -45,6 +45,17 @@
 | 41 | 2026-10-21 05:56 | design-review-017 | 0 | 0 | 1.0 | spend+proportional | design-review |  |
 | 42 | 2026-10-21 05:56 | design-review-017 tokens | 0 | 0 | 0.0 | spend+proportional | design-review | 31300 |
 | 43 | 2026-10-21 05:58 | prep | 1350 | 4 | 170.3 | spend+proportional | prep |  |
+| 44 | 2026-10-21 06:05 | R0042: experiments (all settled in prep; nothing to run) | 1131 | 8 | 0.9 | raft+proportional | build |  |
+| 45 | 2026-10-21 06:05 | c0111 c0119: lessons, metrics, trail, capture and the scope rules, from the prep prototype | 0 | 0 | 15.0 | raft+proportional | build |  |
+| 46 | 2026-10-21 06:09 | R0042: verification logs | 0 | 0 | 2.5 | raft+proportional | build |  |
+| 47 | 2026-10-21 06:15 | R0042: review-001 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
+| 48 | 2026-10-21 06:16 | R0042: review-001 fixes (lesson text, hidden files in lessons/, trail comments) | 9 | 6 | 10.0 | raft+proportional | code-review |  |
+| 49 | 2026-10-21 06:16 | R0042: refute-001 and harvest | 0 | 0 | 2.5 | raft+proportional | code-review | 78514 |
+| 50 | 2026-10-21 06:22 | R0042: review-002 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
+| 51 | 2026-10-21 06:24 | c0111: spec the hidden-file skip in lessons/ (review-002 F1) | 31 | 0 | 8.0 | explicit | code-review |  |
+| 52 | 2026-10-21 06:24 | R0042: refute-002, harvest | 0 | 0 | 1.5 | raft+proportional | code-review | 36248 |
+| 53 | 2026-10-21 06:24 | R0042: addressed during execution | 0 | 0 | 1.0 | raft+proportional | deliver |  |
+| 54 | 2026-10-21 06:29 | tracker: done R0042 | 0 | 0 | 2.4 | raft+proportional | deliver |  |
 
-**Total:** +2294 / -8 lines, 839.3 agent-minutes, 770979 tokens over 43 records
-<!-- totals: added=2294 removed=8 minutes=839.3 records=43 tokens=770979 -->
+**Total:** +3465 / -22 lines, 889.1 agent-minutes, 885741 tokens over 54 records
+<!-- totals: added=3465 removed=22 minutes=889.1 records=54 tokens=885741 -->

@@ -169,3 +169,11 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
 ## Hooks (Claude Code only)
 - After every `.luau` edit: stylua formats the file and selene lints it.
 - On stop: `scripts/check.sh --affected` runs if `src/` or `tests/` changed.
+
+## Lessons
+Before you start, read this skill's lessons: `scripts/tracker.sh lessons --skill testing --full`. Each is a mistake made before, with the question that catches it.
+
+A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+- **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `tracker.sh new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `scripts/tracker.sh new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.

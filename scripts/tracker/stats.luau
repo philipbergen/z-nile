@@ -386,4 +386,7 @@ function stats.compute(items: { Item }, spends: { Spend }, today: string, histor
 	}
 end
 
+-- days since 1970-01-01 of a `YYYY-MM-DD` day (the board's own day arithmetic), shared with lessons.day (c0111)
+stats.day = toDays
+
 return stats

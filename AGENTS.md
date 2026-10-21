@@ -19,3 +19,5 @@ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune 
 | `.claude/skills/execute-raft/SKILL.md` | implementing a raft: one branch, one PR |
 | `.claude/skills/review/SKILL.md` | acting as, or launching, the adversarial reviewer |
 | `.claude/skills/metrics/SKILL.md` | cost and rework reporting |
+
+Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `scripts/tracker.sh lessons` searches them. Every skill reads its own when it starts. ticket-prep and execute-raft harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.

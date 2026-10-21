@@ -34,6 +34,15 @@
 | 30 | 2026-10-21 05:56 | design-review-017 | 0 | 0 | 1.0 | spend+proportional | design-review |  |
 | 31 | 2026-10-21 05:56 | design-review-017 tokens | 0 | 0 | 0.0 | spend+proportional | design-review | 31299 |
 | 32 | 2026-10-21 05:58 | prep | 552 | 1 | 69.7 | spend+proportional | prep |  |
+| 33 | 2026-10-21 06:05 | R0042: experiments (all settled in prep; nothing to run) | 183 | 6 | 0.1 | raft+proportional | build |  |
+| 34 | 2026-10-21 06:05 | c0111 c0119: lessons, metrics, trail, capture and the scope rules, from the prep prototype | 0 | 0 | 15.0 | raft+proportional | build |  |
+| 35 | 2026-10-21 06:09 | R0042: verification logs | 0 | 0 | 2.5 | raft+proportional | build |  |
+| 36 | 2026-10-21 06:15 | R0042: review-001 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
+| 37 | 2026-10-21 06:16 | R0042: refute-001 and harvest | 0 | 0 | 2.5 | raft+proportional | code-review | 78514 |
+| 38 | 2026-10-21 06:22 | R0042: review-002 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
+| 39 | 2026-10-21 06:24 | R0042: refute-002, harvest | 0 | 0 | 1.5 | raft+proportional | code-review | 36247 |
+| 40 | 2026-10-21 06:24 | R0042: addressed during execution | 0 | 0 | 1.0 | raft+proportional | deliver |  |
+| 41 | 2026-10-21 06:29 | tracker: done R0042 | 0 | 0 | 2.4 | raft+proportional | deliver |  |
 
-**Total:** +552 / -1 lines, 353.7 agent-minutes, 770974 tokens over 32 records
-<!-- totals: added=552 removed=1 minutes=353.7 records=32 tokens=770974 -->
+**Total:** +735 / -7 lines, 384.7 agent-minutes, 885735 tokens over 41 records
+<!-- totals: added=735 removed=7 minutes=384.7 records=41 tokens=885735 -->

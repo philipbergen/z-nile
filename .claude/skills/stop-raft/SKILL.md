@@ -15,3 +15,11 @@ description: Undo ready-raft, or abort a started raft. Gives the claim back, mov
    - Emergent issues that exist only on the raft's branch are not on `origin/main`, so `stop` does not see them.
 4. **Re-readying.** `ready-raft` can ready the raft again later. After a started raft, its old branch and PR still exist, and the human picks one of two ways. To start fresh, close the PR and delete the branch (`gh pr close <pr> --delete-branch`, then `git -C <root> branch -D <branch>` and remove its worktree), and `start` makes new ones. To keep them, run `start` on that branch in its worktree: it adds an empty commit, pushes, and reuses the open PR.
 5. **Whose claim.** Stop only a raft whose claim is yours; ask the user before stopping one you did not ready.
+
+## Lessons
+Before you start, read this skill's lessons: `scripts/tracker.sh lessons --skill stop-raft --full`. Each is a mistake made before, with the question that catches it.
+
+A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+- **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `tracker.sh new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `scripts/tracker.sh new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
