@@ -12,20 +12,25 @@ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 
 export type Runs = {
 	ready: (s: Session.Session, player: Player) -> (), -- a session was made on Ready
-	again: (s: Session.Session) -> (), -- Session.playAgain accepted
 	step: (s: Session.Session, events: { Session.Event }, here: boolean) -> boolean, -- false: let a parked session go
 }
 
 local Sessions = {}
+
+local sessions: { [Player]: Session.Session } = {}
+
+-- Whether this player's run is over, as Logic says; a player with no session has no run.
+function Sessions.isOver(player: Player): boolean
+	local s = sessions[player]
+	return s ~= nil and Session.isOver(s, tostring(player.UserId))
+end
 
 function Sessions.start(runs: Runs?)
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local ready = remotes:WaitForChild("Ready") :: RemoteEvent
 	local intent = remotes:WaitForChild("Intent") :: RemoteEvent
 	local snapshot = remotes:WaitForChild("Snapshot") :: RemoteEvent
-	local playAgain = remotes:WaitForChild("PlayAgain") :: RemoteEvent
 
-	local sessions: { [Player]: Session.Session } = {}
 	local clock = Session.newClock(Session.STEP_RATE)
 	local parked: { Session.Session } = {} -- sessions of players who left, kept while the runs ask for it
 
@@ -45,17 +50,6 @@ function Sessions.start(runs: Runs?)
 		local s = sessions[player]
 		if s then
 			Session.submit(s, tostring(player.UserId), raw)
-		end
-	end)
-
-	-- only the sender's own run, and only if Logic says the run is over; anything the client sends is ignored
-	playAgain.OnServerEvent:Connect(function(player: Player)
-		local s = sessions[player]
-		if s then
-			local _, ok = Session.playAgain(s, tostring(player.UserId))
-			if ok and runs then
-				runs.again(s)
-			end
 		end
 	end)
 
