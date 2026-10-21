@@ -11,7 +11,18 @@ local classic = Maze.layout("classic")
 local DOOR = Maze.parse({ "#####", "#P  #", "#-  #", "#H  #", "#####" }, "door")
 
 local function layout(icon: number, margin: number): Hud.Layout
-	return { textSize = icon, margin = margin, iconSize = icon, barWidth = 100, barHeight = 4 }
+	-- the shot bars sit in the HUD's own frame: the safe rectangle (R0012) does not move them
+	return {
+		textSize = icon,
+		margin = margin,
+		iconSize = icon,
+		barWidth = 100,
+		barHeight = 4,
+		safeX = 0,
+		safeY = 0,
+		safeW = 1000,
+		safeH = 1000,
+	}
 end
 
 return t.spec("f0100 blaster on screen", function(it)

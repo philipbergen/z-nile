@@ -5,7 +5,8 @@
 -- middles) walk the grid exactly; a wall or door tile blocks a ray that is at or below the wall top anywhere inside
 -- it. A ghost is "hidden" when walls of unlimited height hide all of it.
 -- Standing (the eye at eyeHeight), at most 0.1% of the hidden ghosts show any of themselves over the lowered walls.
--- At the top of a jump (eyeHeight + JUMP.rise), at least 80% of them show their top 2 studs over the walls.
+-- At the top of a jump (eyeHeight + Hop.RISE), at least 80% of them show their top 2 studs over the walls.
+local Hop = require("@logic/Hop")
 local Maze = require("@logic/Maze")
 local View = require("@logic/View")
 local t = require("@tests/lib/t")
@@ -146,7 +147,7 @@ return t.spec("f0101 seeing over the walls", function(it)
 	)
 
 	it("at the top of a jump, at least 80% of them show their top two studs over the walls", function()
-		local apex = View.SCALE.eyeHeight + View.JUMP.rise
+		local apex = View.SCALE.eyeHeight + Hop.RISE
 		t.expect(share(apex, { View.GHOST.height - 2 }) >= 0.8).toBe(true)
 	end)
 end)
