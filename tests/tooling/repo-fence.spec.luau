@@ -148,6 +148,16 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_DIR = "a fixture shell inherits GIT_DIR (relative, or another fixture repository) to prove the fence strips it before it reads the repository it protects (code review 001 F1)",
 		["sandbox-exec"] = "a fixture check.sh gets the jail's markers set explicitly, with chmod 555 standing in for the jail",
 	},
+	-- c0120 code review 002: fixture shells inherit a ceiling at a fixture checkout's root and a GIT_COMMON_DIR at
+	-- another fixture repository, to prove the guards read what they protect in a clean environment; a nested run
+	-- from the fixture's pickman/ is a top-level run with that ceiling; the shells print what the fence recorded
+	["tests/tooling/fence-inherited-env.spec.luau"] = {
+		GIT_CEILING_DIRECTORIES = "a fixture shell and a nested fixture run inherit a ceiling at the fixture checkout's root",
+		GIT_COMMON_DIR = "a fixture shell inherits GIT_COMMON_DIR at another fixture repository",
+		PICKMAN_FENCE_ = "prints PICKMAN_FENCE_REAL_GIT, what the fence recorded, in a fixture shell",
+		PICKMAN_TEST_FENCE = "runs the fixture's runner as a top-level run",
+		GIT_CONFIG_ = "reads GIT_CONFIG_COUNT after a refused fence in a fixture shell",
+	},
 	["tests/acceptance/c0074/done-gate.spec.luau"] = {
 		PICKMAN_FENCE_ = "names PICKMAN_FENCE_SPECS only as a table key passed to the pure doneGate, never in a process's environment (c0074)",
 	},

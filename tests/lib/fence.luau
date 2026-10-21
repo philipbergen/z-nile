@@ -36,13 +36,17 @@ local OVERRIDES = {
 	"GIT_PREFIX",
 	"GIT_CONFIG_PARAMETERS",
 	"GIT_CONFIG_COUNT",
+	-- and, for the guards' own reads only, the ceiling: from a project home an inherited ceiling at the checkout's
+	-- root would hide the repository they protect (code review 002 F1). The specs keep theirs.
+	"GIT_CEILING_DIRECTORIES",
 }
 
 local function trim(s: string): string
 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
 end
 
--- git in the current directory with every inherited override removed; trimmed stdout, or nil on failure.
+-- git in the current directory with every inherited override and the ceiling removed; trimmed stdout, or nil on
+-- failure. A caller that takes the answer for a repository treats an empty one as "found nothing", never as an answer.
 local function git(args: { string }): string?
 	local argv: { string } = {}
 	for _, name in OVERRIDES do
@@ -284,7 +288,7 @@ end
 local function protectedPaths(here: string): { string }
 	local repos: { string } = {}
 	local common = git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
-	if common then
+	if common and common ~= "" then
 		table.insert(repos, common)
 	end
 	for real in string.gmatch(process.env.PICKMAN_FENCE_REAL_GIT or "", "[^:]+") do
@@ -293,7 +297,7 @@ local function protectedPaths(here: string): { string }
 	local paths = { here }
 	-- the checkout's own root, when the run starts in a project's home inside it (c0120)
 	local top = git({ "rev-parse", "--show-toplevel" })
-	if top and top ~= here then
+	if top and top ~= "" and top ~= here then
 		table.insert(paths, top)
 	end
 	for _, repo in repos do
@@ -425,7 +429,7 @@ end
 local function fixtureOfGuarded(here: string, open: { string }): boolean
 	local own = git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
 	local mine: { [string]: boolean } = { [here] = true }
-	if own then
+	if own and own ~= "" then
 		mine[own] = true
 		mine[(string.gsub(own, "/%.git$", ""))] = true
 	end
@@ -632,6 +636,14 @@ function fence.enter()
 		if process.exec("test", { "-L", `{cache}/{name}` }).ok then
 			process.exec("rm", { "-f", `{cache}/{name}` })
 		end
+	end
+	-- the guards protect the repository git finds here; finding none refuses, never "nothing to protect" (code review
+	-- 002 F1): the tripwire, the protected paths and the fence would all read nothing
+	if (git({ "rev-parse", "--path-format=absolute", "--git-common-dir" }) or "") == "" then
+		stdio.ewrite(
+			`tests/run: {here} is in no git repository (or git can't read it); refusing. Stop and report this.\n`
+		)
+		process.exit(1)
 	end
 	-- the tripwire tells fixture writes by their author; that only works while this repository has a real identity
 	local email = git({ "config", "user.email" }) or ""

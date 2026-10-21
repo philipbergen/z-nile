@@ -24,6 +24,14 @@ _pickman_fence_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)
 #                                  GIT_CONFIG_COUNT it never returns early, so a failure leaves inherited guards whole
 #   pickman_fence_sentinel <dir>   the writes: .cache, the sentinel, gh's empty configuration; last, so a write the
 #                                  jail refuses leaves the environment fully guarded
+# git with none of the inherited variables that redirect discovery or hide the repository: every repository override
+# and the ceiling. For the guards' own reads of what they protect, never for anything a check runs.
+_pickman_fence_git() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
+    -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_NAMESPACE -u GIT_PREFIX -u GIT_CONFIG_PARAMETERS -u GIT_CONFIG_COUNT \
+    -u GIT_CEILING_DIRECTORIES git "$@"
+}
+
 pickman_fence_ceiling() {
   case ":${GIT_CEILING_DIRECTORIES:-}:" in
   *":$1/.cache:"*) ;;
@@ -74,15 +82,19 @@ pickman_fence_env() {
       return 1
     fi
   fi
-  # From here on nothing returns early: every inherited override is replaced by the whole set at once. The strip comes
-  # first: every value derived from git below is read in a clean environment, so an inherited GIT_DIR (a hook's
-  # relative `.git`, another repository) never decides which repository the ref guard protects (code review 001 F1)
+  # The repository this fence protects, read once and read-only, before anything changes: in a clean environment
+  # for that one read (every inherited override, which could redirect it, code review 001 F1, and the inherited
+  # ceiling, which could hide it from a project home, code review 002 F1; the shell keeps its ceiling, which nested
+  # fences accumulate). Finding none refuses, in every mode: an empty answer never means "nothing to protect".
+  real=$(_pickman_fence_git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
+  if [[ -z $real ]]; then
+    echo "fence: $here is in no git repository (or git can't read it); refusing. Stop and report this." >&2
+    return 1
+  fi
+  # From here on nothing returns early: every inherited override is replaced by the whole set at once
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
   unset GIT_NAMESPACE GIT_PREFIX GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
-  real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
-  if [[ -n $real ]]; then
-    export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
-  fi
+  export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
   if [[ -n $hooks ]]; then
     export PICKMAN_FENCE_HOOKS=$hooks
     export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=$PICKMAN_FENCE_HOOKS"
@@ -173,7 +185,9 @@ pickman_fence() {
 # instead of reading the guards' variables itself (c0650).
 pickman_guarded() {
   local common
-  common=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  # the same clean read as the fence's (code review 002 F1); no answer is exit 1, which the caller treats as guarded
+  common=$(cd "$1" 2>/dev/null && _pickman_fence_git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [[ -n $common ]] || return 1
   common=$(cd "$common" && pwd -P) || return 1
   case ":${PICKMAN_FENCE_REAL_GIT:-}:" in
   *":$common:"*) echo guarded; return 0 ;;
