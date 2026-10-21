@@ -111,11 +111,52 @@ local function gate(dir: string, args: { string }): (boolean, string, string)
 	return r.ok, r.stdout .. r.stderr, log
 end
 
+-- A copy of the real tree's layout for the plan cases (review 001 F2): the gate, the registry's reader and both homes'
+-- folders and project files, made once. `--plan` runs only there, never in the checkout, so a gate that ran anyway
+-- would write the copy (and the case fails on it), never the repository.
+local realCopy: string? = nil
+local function planTree(): string
+	if realCopy then
+		return realCopy :: string
+	end
+	if fs.isDir(base) then
+		fs.removeDir(base)
+	end
+	local dir = `{base}/real`
+	fs.writeDir(dir)
+	engine.copy(root, dir)
+	fs.writeFile(`{dir}/z-nile/projects.toml`, REGISTRY)
+	for _, rel in
+		{
+			"pickman/src/shared",
+			"pickman/tests/unit",
+			"pickman/scripts/lib",
+			"pickman/.tracker/issues",
+			"tests/tooling",
+			"z-nile/.tracker/issues",
+		}
+	do
+		fs.writeDir(`{dir}/{rel}`)
+	end
+	write(`{dir}/pickman/default.project.json`, '{ "name": "g", "tree": { "$className": "DataModel" } }\n')
+	write(`{dir}/pickman/lobby.project.json`, '{ "name": "l", "tree": { "$className": "DataModel" } }\n')
+	write(`{dir}/pickman/check.sh`, fs.readFile(`{root}/pickman/check.sh`))
+	realCopy = dir
+	return dir
+end
+-- nothing a gate run writes appeared in the copy
+local function untouched(dir: string)
+	t.expect(fs.isDir(`{dir}/.cache`) or fs.isDir(`{dir}/pickman/.cache`)).toBe(false)
+	t.expect(fs.isFile(`{dir}/pickman/sourcemap.json`)).toBe(false)
+end
+
 return t.spec("c0120 each project has its own gate", function(it)
 	it(
-		"the plan of the real tree: every home's folders, pickman's places and both projects' specs",
+		"the plan of the real tree's layout: every home's folders, pickman's places and both projects' specs",
 		function()
-			local ok, out = plan(root, {})
+			local dir = planTree()
+			local ok, out = plan(dir, {})
+			untouched(dir)
 			t.expect(ok).toBe(true)
 			local format = words(lineOf(out, "format"))
 			for _, d in
@@ -149,26 +190,29 @@ return t.spec("c0120 each project has its own gate", function(it)
 	it(
 		"--project keeps one project's stages; pickman/check.sh is --project pickman; an unknown name exits 2",
 		function()
-			local _, p = plan(root, { "--project", "pickman" })
+			local dir = planTree()
+			local _, p = plan(dir, { "--project", "pickman" })
 			t.expect(has(p, "specs: pickman, from pickman")).toBe(true)
 			t.expect(has(p, "specs: z-nile")).toBe(false)
 			t.expect(words(lineOf(p, "format"))["z-nile"]).toBe(nil)
-			local _, z = plan(root, { "--project", "z-nile" })
+			local _, z = plan(dir, { "--project", "z-nile" })
 			t.expect(has(z, "build:")).toBe(false)
 			t.expect(has(z, "types (Roblox)")).toBe(false)
 			t.expect(has(z, "pickman")).toBe(false)
-			local r = process.exec("bash", { "pickman/check.sh", "--plan" })
+			local r = process.exec("bash", { "pickman/check.sh", "--plan" }, { cwd = dir })
 			t.expect(r.stdout).toBe(p)
-			local bad = process.exec("bash", { "z-nile/check.sh", "--plan", "--project", "nope" })
+			local bad = process.exec(
+				"bash",
+				{ "z-nile/check.sh", "--plan", "--project", "nope" },
+				{ cwd = dir }
+			)
+			untouched(dir)
 			t.expect(bad.code).toBe(2)
 			t.expect(has(bad.stderr, "no project nope")).toBe(true)
 		end
 	)
 
 	it("--plan writes nothing", function()
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
 		local dir = stubbed("plan")
 		local ok = gate(dir, { "--plan" })
 		t.expect(ok).toBe(true)

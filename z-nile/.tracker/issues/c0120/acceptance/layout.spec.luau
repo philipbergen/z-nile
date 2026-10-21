@@ -181,8 +181,7 @@ return t.spec("c0120 pickman lives in pickman/", function(it)
 			t.expect(process.exec("test", { "-x", f }).ok).toBe(true)
 		end
 		t.expect(run({ "pickman/scripts/tracker.sh", "audit" })).toBe(run({ "zn", "audit" }))
-		t.expect(run({ "pickman/check.sh", "--plan" }))
-			.toBe(run({ "z-nile/check.sh", "--plan", "--project", "pickman" }))
-		t.expect(run({ "pickman/scripts/check.sh", "--plan" })).toBe(run({ "z-nile/check.sh", "--plan" }))
+		-- the two check forwarders are pinned by their one command above: running them here would run a gate in the
+		-- checkout from a spec (gate-homes runs `--plan` in a copy)
 	end)
 end)

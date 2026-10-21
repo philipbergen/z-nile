@@ -73,9 +73,9 @@ local function literals(text: string): { string }
 	return out
 end
 
--- does `path` (relative to the home `home`) exist? A glob needs one match in its folder.
-local function present(home: string, path: string): boolean
-	local full = if home == "." then path else `{home}/{path}`
+-- does `path` (relative to the home `home`, in the checkout at `base`) exist? A glob needs one match in its folder.
+local function present(base: string, home: string, path: string): boolean
+	local full = base .. (if home == "." then path else `{home}/{path}`)
 	if not string.find(full, "*", 1, true) then
 		return fs.isFile(full) or fs.isDir(full)
 	end
@@ -117,22 +117,24 @@ local function under(path: string, own: { string }): boolean
 	return false
 end
 
--- every unfinished item folder under every current root: { dir, id, kind, raft }
-type Item = { dir: string, id: string, kind: string, raft: string }
-local function items(): { Item }
+-- every unfinished item folder under every current root of the checkout at `base` ("" or "<dir>/"): { dir, id, raft },
+-- with `dir` relative to that checkout
+type Item = { dir: string, id: string, raft: string }
+local function items(base: string): { Item }
 	local out: { Item } = {}
-	for _, r in projects.roots(projects.load()) do
+	local reg = projects.load(if base == "" then "." else string.sub(base, 1, -2), true)
+	for _, r in projects.roots(reg) do
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/" } do
-				local base = `{r}/{kind}/{state}`
-				if fs.isDir(base) then
-					for _, id in fs.readDir(base) do
+				local rel = `{r}/{kind}/{state}`
+				if fs.isDir(base .. rel) then
+					for _, id in fs.readDir(base .. rel) do
 						if string.match(id, "^[fdcR]%d%d%d%d$") then
-							local doc = `{base}{id}/{id}.md`
+							local doc = `{base}{rel}{id}/{id}.md`
 							local raft = if fs.isFile(doc)
 								then string.match(fs.readFile(doc), "\nraft:%s*(R%d%d%d%d)") or ""
 								else ""
-							table.insert(out, { dir = base .. id, id = id, kind = kind, raft = raft })
+							table.insert(out, { dir = rel .. id, id = id, raft = raft })
 						end
 					end
 				end
@@ -140,6 +142,57 @@ local function items(): { Item }
 		end
 	end
 	return out
+end
+
+-- The scan, over the checkout at `base`: every path an unfinished check.sh names that is missing from its home and not
+-- its own work; how many check.sh files it read, and how many it found (the restamped aside); and, per home, how many.
+type Scan = { bad: { string }, checked: number, found: number, byHome: { [string]: number } }
+local function scan(base: string): Scan
+	local reg = projects.load(if base == "" then "." else string.sub(base, 1, -2), true)
+	local all = items(base)
+	local byRaft: { [string]: { string } } = {}
+	for _, i in all do
+		if i.raft ~= "" then
+			byRaft[i.raft] = byRaft[i.raft] or {}
+			for _, o in touched(`{base}{i.dir}/{i.id}.md`) do
+				table.insert(byRaft[i.raft], o)
+			end
+		end
+	end
+	local out: Scan = { bad = {}, checked = 0, found = 0, byHome = {} }
+	for _, i in all do
+		local file = `{i.dir}/check.sh`
+		if fs.isFile(base .. file) then
+			local text = fs.readFile(base .. file)
+			if not RESTAMPED[blob(text)] then
+				out.found += 1
+				local home = projects.homeOf(reg, file)
+				local own = touched(`{base}{i.dir}/{i.id}.md`)
+				local members: { string } = byRaft[i.id] or {}
+				for _, o in members do
+					table.insert(own, o)
+				end
+				for _, p in literals(text) do
+					if not present(base, home, p) and not under(p, own) then
+						table.insert(out.bad, `{file}: {p} (from {home})`)
+					end
+				end
+				out.checked += 1
+				out.byHome[home] = (out.byHome[home] or 0) + 1
+			end
+		end
+	end
+	table.sort(out.bad)
+	return out
+end
+
+-- a checkout with one item per home (review 001 F3: the scan's reach is proved here, never by counting live items)
+local FX = ".cache/c0120-check-paths/"
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local function put(rel: string, text: string)
+	fs.writeDir(string.match(FX .. rel, "^(.*)/[^/]+$") :: string)
+	fs.writeFile(FX .. rel, text)
 end
 
 return t.spec("c0120 every path a live check.sh names exists from its home", function(it)
@@ -170,74 +223,67 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		})
 	end)
 
-	it("a path resolves from its home; a glob needs a match; own work is exempt", function()
-		t.expect(present("pickman", "src/server")).toBe(true)
-		t.expect(present("pickman", "tests/run.luau")).toBe(true)
-		t.expect(present(".", "src/server")).toBe(false)
-		t.expect(present("pickman", "tests/acceptance/f0031/*.spec.luau")).toBe(true)
-		t.expect(present("pickman", "tests/acceptance/f0031/*.nope")).toBe(false)
-		t.expect(under("src/shared/Logic/Touch/init.luau", { "src/shared/Logic/Touch" })).toBe(true)
+	it("in a fixture, each check.sh is read from its home, and a vanished path is reported", function()
+		if fs.isDir(FX) then
+			fs.removeDir(FX)
+		end
+		put("z-nile/projects.toml", REGISTRY)
+		put("pickman/src/server/Main.server.luau", "--!strict\nreturn nil\n")
+		put("pickman/tests/acceptance/f0031/a.spec.luau", "--!strict\nreturn nil\n")
+		put("tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
+		put("tests/run.luau", "--!strict\nreturn nil\n")
+		-- pickman's: a path that exists only from pickman/, a glob, its own work, and one that vanished
+		put(
+			"pickman/.tracker/issues/f0001/f0001.md",
+			"---\nid: f0001\nraft: R0001\n---\n### Touched modules\n- `src/shared/Logic/New`\n\n## Next\n"
+		)
+		put(
+			"pickman/.tracker/issues/f0001/check.sh",
+			"git diff --quiet -- src/server\nls tests/acceptance/f0031/*.spec.luau\ntest -f src/shared/Logic/New/init.luau\ntest -f src/gone.luau\n"
+		)
+		-- its raft names a member's own work too
+		put("pickman/.tracker/rafts/R0001/R0001.md", "---\nid: R0001\n---\n")
+		put("pickman/.tracker/rafts/R0001/check.sh", "test -d src/shared/Logic/New\n")
+		-- z-nile's, from the root
+		put("z-nile/.tracker/issues/c0002/c0002.md", "---\nid: c0002\n---\n")
+		put(
+			"z-nile/.tracker/issues/c0002/check.sh",
+			"lune run tests/run -- tests/tooling/x.spec.luau\ntest -f src/server\n"
+		)
+		local s = scan(FX)
+		t.expect(s.bad).toEqual({
+			"pickman/.tracker/issues/f0001/check.sh: src/gone.luau (from pickman)",
+			"z-nile/.tracker/issues/c0002/check.sh: src/server (from .)",
+		})
+		t.expect(s.checked).toBe(3)
+		t.expect(s.byHome).toEqual({ pickman = 2, ["."] = 1 })
+		t.expect(present(FX, ".", "src/server")).toBe(false)
+		t.expect(present(FX, "pickman", "tests/acceptance/f0031/*.nope")).toBe(false)
 		t.expect(under("tests/unit", { "tests/unit/Touch" })).toBe(true)
-		t.expect(under("src/server", { "src/shared/Logic/Touch" })).toBe(false)
 		t.expect(under("src/shared/Logic/Touchy", { "src/shared/Logic/Touch" })).toBe(false)
+		fs.removeDir(FX)
 	end)
 
 	it(
 		"every unfinished item's check.sh, in every project root, names only paths that exist from its home",
 		function()
-			local reg = projects.load()
-			local all = items()
-			local byRaft: { [string]: { string } } = {}
-			for _, i in all do
-				if i.raft ~= "" then
-					byRaft[i.raft] = byRaft[i.raft] or {}
-					for _, o in touched(`{i.dir}/{i.id}.md`) do
-						table.insert(byRaft[i.raft], o)
-					end
-				end
-			end
-			local bad: { string } = {}
-			local checked, homes = 0, { pickman = 0, root = 0 }
-			for _, i in all do
-				local file = `{i.dir}/check.sh`
-				if fs.isFile(file) then
-					local text = fs.readFile(file)
-					if not RESTAMPED[blob(text)] then
-						checked += 1
-						local home = projects.homeOf(reg, file)
-						homes[if home == "." then "root" else "pickman"] += 1
-						local own = touched(`{i.dir}/{i.id}.md`)
-						local members: { string } = byRaft[i.id] or {}
-						for _, o in members do
-							table.insert(own, o)
-						end
-						for _, p in literals(text) do
-							if not present(home, p) and not under(p, own) then
-								table.insert(bad, `{file}: {p} (from {home})`)
-							end
-						end
-					end
-				end
-			end
-			t.expect(table.concat(bad, "\n")).toBe("")
-			-- not vacuous: pickman's live check.sh files (R0012, R0035, R0041 and their members, ...) were read from pickman/
-			t.expect(homes.pickman >= 10).toBe(true)
-			t.expect(homes.root >= 5).toBe(true)
-			t.expect(checked).toBe(homes.pickman + homes.root)
+			local s = scan("")
+			t.expect(table.concat(s.bad, "\n")).toBe("")
+			-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
+			t.expect(s.checked).toBe(s.found)
 		end
 	)
 
 	it("the restamped check.sh files are exempt only as they are now", function()
-		local found = 0
-		for _, i in items() do
+		for _, i in items("") do
 			local file = `{i.dir}/check.sh`
 			if fs.isFile(file) and RESTAMPED[blob(fs.readFile(file))] then
-				found += 1
 				t.expect(RESTAMPED[blob(fs.readFile(file))]).toBe(i.id)
 			end
 		end
-		-- while those rafts wait for their re-prep all four are here; once a re-prep rewrites one, it is checked
-		t.expect(found <= 4).toBe(true)
-		t.expect(RESTAMPED[blob(fs.readFile(`{(items())[1].dir}/check.sh`) .. "\n")]).toBe(nil)
+		-- by content: a check.sh one byte apart is not exempt
+		for id, _ in RESTAMPED do
+			t.expect(RESTAMPED[blob(id .. "\n")]).toBe(nil)
+		end
 	end)
 end)

@@ -79,6 +79,16 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 			at(s, "in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's)", w)
 			at(s, "one run at a time per checkout and home (`<home>/.cache/tests-run.lock`)", w)
 			at(s, "`lune run z-nile/affected -- --project <name>`", w)
+			at(
+				s,
+				"`ac.sh` puts a home's `.cache` in the ceiling and writes its sentinel before a `check.sh` runs there",
+				w
+			)
+			at(
+				s,
+				"makes in each member's project's `<home>/tests/acceptance/` and removes before it exits",
+				w
+			)
 		end
 	)
 

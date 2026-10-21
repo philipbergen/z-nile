@@ -25,6 +25,11 @@ check "AC13: the skills, AGENTS.md, SETUP.md, the templates and the usage say wh
 check "AC14: the guard and structure specs pass in both homes" \
   bash -c 'lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0049/spec-isolation.spec.luau && cd pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau'
 check "AC15: the real tracker audits clean" ./zn audit
-check "AC16: nothing but this raft holds tracker/, src/ or tests/: no other raft active, no branch or worktree changing them" ./zn busy tracker src tests
+# AC16 reads origin as of the last fetch: run `./zn sync --fetch` first (Implementation step 11; a fetch from a
+# check.sh with nothing new is refused by the ref guard)
+check "AC16: as of the last fetch, nothing but this raft holds tracker/, src/ or tests/: no other raft active, no branch or worktree changing them" \
+  ./zn busy tracker src tests
+check "AC17: R0012, whose RC1 can't resolve after the move, is done (Guess 4 (a))" \
+  bash -c 'case "$(./zn find R0012)" in */rafts/done/R0012) exit 0 ;; *) echo "R0012 is at $(./zn find R0012), not done"; exit 1 ;; esac'
 
 finish

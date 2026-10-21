@@ -19,6 +19,11 @@ local PICKMAN_CHECK = SOURCE
 	.. 'printf "%s\\n%s\\n" "$(pwd -P)" "$ZN_ROOT" > "$HERE/where.txt"\n'
 	.. 'check "AC1: the server adapters are untouched" git diff --quiet HEAD -- src/server\n'
 	.. 'check "AC2: its own spec folder is found from here" test -d "$(scripts/tracker.sh find f0010)/acceptance"\n'
+	-- its own .cache is fenced: git finds no repository in a folder there that has none, nor in .cache itself
+	.. 'printf "%s\n" "$GIT_CEILING_DIRECTORIES" > "$HERE/ceiling.txt"\n'
+	.. "mkdir -p .cache/c0120-nofixture/sub\n"
+	.. "check \"AC3: no repository in a folder of its .cache\" bash -c '! git -C .cache/c0120-nofixture/sub rev-parse --git-dir'\n"
+	.. "check \"AC4: no repository in its .cache itself\" bash -c '! git -C .cache rev-parse --git-dir'\n"
 	.. "finish\n"
 local ZNILE_CHECK = SOURCE .. 'printf "%s\\n" "$(pwd -P)" > "$HERE/where.txt"\ncheck "AC1: ok" true\nfinish\n'
 -- both member loops pickman's rafts use: the forwarder's (R0035's) and the template's ($ZN_ROOT)
@@ -68,7 +73,9 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			["z-nile/.tracker/issues/c0020/check.sh"] = ZNILE_CHECK,
 			["other/.tracker/issues/c0030/check.sh"] = ZNILE_CHECK,
 			-- for `ready`: the ignore rules, pickman's architecture map, a z-nile raft, and the inlined skills
-			[".gitignore"] = fs.readFile(".gitignore") .. "where.txt\n",
+			[".gitignore"] = fs.readFile(".gitignore") .. "where.txt\nceiling.txt\n",
+			-- sources a pickman check.sh instead of running it (F6): ac.sh must refuse
+			["pickman/source-it.sh"] = '. "$(bash scripts/tracker.sh find f0010)/check.sh"\necho "sourced and went on"\n',
 			["pickman/.tracker/architecture.md"] = "# Architecture\n\nARCH-MARKER pickman's map\n",
 			["z-nile/.tracker/issues/c0021/c0021.md"] = doc("c0021", "chore", "raft: R0020\n"),
 			["z-nile/.tracker/issues/c0021/check.sh"] = ZNILE_CHECK,
@@ -100,6 +107,29 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		local where = fs.readFile(at("pickman/.tracker/issues/f0010/where.txt"))
 		local root = fixture.physical(f.main) :: string
 		t.expect(where).toBe(`{root}/pickman\n{root}\n`)
+	end)
+
+	it(
+		"a pickman check.sh's own .cache is fenced: in git's ceiling, with a sentinel, no repository found there",
+		function()
+			local r = trackerfix.tr(f, f.main, { "check", "f0010" })
+			t.expect(has(r.stdout, "PASS  AC3: no repository in a folder of its .cache")).toBe(true)
+			t.expect(has(r.stdout, "PASS  AC4: no repository in its .cache itself")).toBe(true)
+			local root = fixture.physical(f.main) :: string
+			local ceiling = ":"
+				.. (string.gsub(fs.readFile(at("pickman/.tracker/issues/f0010/ceiling.txt")), "%s+$", ""))
+				.. ":"
+			t.expect(has(ceiling, `:{root}/.cache:`)).toBe(true)
+			t.expect(has(ceiling, `:{root}/pickman/.cache:`)).toBe(true)
+			t.expect(fs.isFile(at("pickman/.cache/.git"))).toBe(true)
+		end
+	)
+
+	it("a sourced pickman check.sh refuses, instead of running from its caller's folder", function()
+		local r = fromHome({ "source-it.sh" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "run a check.sh with bash, never source it")).toBe(true)
+		t.expect(has(r.stdout, "sourced and went on")).toBe(false)
 	end)
 
 	it("a z-nile item's check.sh runs from the root", function()
