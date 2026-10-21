@@ -42,6 +42,7 @@
 | 38 | 2026-10-21 05:51 | design-review-016 | 0 | 0 | 2.0 | spend+proportional | design-review |  |
 | 39 | 2026-10-21 05:54 | design-refute-016 | 0 | 0 | 7.5 | spend+proportional | design-review |  |
 | 40 | 2026-10-21 05:54 | design-review-016 tokens | 0 | 0 | 0.0 | spend+proportional | design-review | 44956 |
+| 41 | 2026-10-21 05:56 | design-review-017 | 0 | 0 | 1.0 | spend+proportional | design-review |  |
 
-**Total:** +944 / -4 lines, 668.0 agent-minutes, 739679 tokens over 40 records
-<!-- totals: added=944 removed=4 minutes=668.0 records=40 tokens=739679 -->
+**Total:** +944 / -4 lines, 669.0 agent-minutes, 739679 tokens over 41 records
+<!-- totals: added=944 removed=4 minutes=669.0 records=41 tokens=739679 -->
