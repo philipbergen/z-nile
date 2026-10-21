@@ -1,0 +1,12 @@
+# Harvest: c0115
+- design-review-001 F1: testing/absence-scans-cover-every-form, ticket-prep/spec-design-correspondence
+- design-review-001 F2: architecture/guard-no-is-explicit
+- design-review-001 F3: architecture/lock-reads-live-state
+- design-review-001 F4: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-001 F5: one-off: stale internal references in the draft (a patch not beside it, a miscounted list, a wrong section number)
+- design-review-001 F6: ticket-prep/spec-design-correspondence
+- design-review-001 F7: testing/absence-scans-cover-every-form
+- design-review-001 F8: ticket-prep/new-rules-migrate-existing-work
+- design-review-001 F9: one-off: a Judged criterion whose every test was a git read; the testing skill already says to turn such criteria into checks
+- note c0115 prep: layout.spec first pinned the exact skill set and "no pickman lesson", which c0116 and any lesson would turn red: testing/promoted-specs-pin-rules-not-sets
+- note c0115 prep: a bulk name substitution rewrote `{source}/tracker` and `architecture.md`, and was reverted: ticket-prep/bulk-renames-skip-ordinary-words

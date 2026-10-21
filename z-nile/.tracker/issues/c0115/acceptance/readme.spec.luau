@@ -63,17 +63,53 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 	it("every z- and zz- skill in the picture exists, or its node says planned, with its issue", function()
 		local pic = picture(fs.readFile(README))
 		local seen = 0
-		-- each node's label on its own: a planned label covers only the skill it names
-		for label in string.gmatch(pic, '%["([^"]+)"%]') do
-			for name in string.gmatch(label, "z+%-[%a][%w%-]*") do
-				if string.match(name, "^zz?%-") and name ~= "z-nile" then -- z-nile is the project, not a skill
-					seen += 1
-					local built = fs.isFile(`z-nile/skills/{name}/SKILL.md`)
-					if not built and not has(label, `{name} (`) then
-						error(`{name} is drawn but has no folder and no (issue, planned) label: {label}`)
+		-- every z-/zz- token anywhere in the block, in whatever node shape, must sit inside a quoted label ("…"), and
+		-- that label alone decides: a skill with no folder needs "(<issue>, planned)" in its own label
+		for line in string.gmatch(pic, "[^\n]+") do
+			local labels: { { number } } = {}
+			local from = 1
+			while true do
+				local a = string.find(line, '"', from, true)
+				if not a then
+					break
+				end
+				local b = string.find(line, '"', (a :: number) + 1, true)
+				if not b then
+					error(`an unclosed label: {line}`)
+				end
+				table.insert(labels, { a :: number, b :: number })
+				from = (b :: number) + 1
+			end
+			local pos = 1
+			while true do
+				local a, b, name = string.find(line, "(z+%-[%a][%w%-]*)", pos)
+				if not a then
+					break
+				end
+				pos = (b :: number) + 1
+				local prev = string.sub(line, (a :: number) - 1, (a :: number) - 1)
+				if
+					name == "z-nile"
+					or not string.match(name :: string, "^zz?%-")
+					or string.match(prev, "[%w_]")
+				then
+					continue -- the project's name, or part of another word (a node id such as zticket is no token)
+				end
+				local label: string? = nil
+				for _, l in labels do
+					if l[1] < (a :: number) and (b :: number) < l[2] then
+						label = string.sub(line, l[1] + 1, l[2] - 1)
 					end
-					if not built and not has(label, "planned") then
-						error(`{name} is drawn but has no folder and is not marked planned: {label}`)
+				end
+				if not label then
+					error(`{name} is drawn outside a quoted label: {line}`)
+				end
+				seen += 1
+				if not fs.isFile(`z-nile/skills/{name}/SKILL.md`) then
+					if not has(label :: string, `{name} (`) or not has(label :: string, "planned)") then
+						error(
+							`{name} is drawn but has no folder and no (issue, planned) in its label: {label}`
+						)
 					end
 				end
 			end

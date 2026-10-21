@@ -47,7 +47,9 @@ local missing: { [string]: boolean } = {}
 
 -- One pass over `text`: every `<old>/<slug>` token (at the start or after a space, comma, parenthesis or backtick)
 -- whose new lesson exists becomes `<new>/<slug>`.
-local function rewrite(text: string): (string, number)
+-- `ledger`: the text is a harvest.md, where every such token is an id, so one with no lesson is reported; in a
+-- lesson body a token may be a path (tracker/next), so it is only left alone.
+local function rewrite(text: string, ledger: boolean): (string, number)
 	local n = 0
 	local out = string.gsub(
 		text,
@@ -61,7 +63,9 @@ local function rewrite(text: string): (string, number)
 				n += 1
 				return `{pre}{new}/{slug}`
 			end
-			missing[`{old}/{slug}`] = true
+			if ledger then
+				missing[`{old}/{slug}`] = true
+			end
 			return nil
 		end
 	)
@@ -100,7 +104,7 @@ end
 local total = 0
 local function fix(path: string)
 	local text = fs.readFile(path)
-	local out, n = rewrite(text)
+	local out, n = rewrite(text, string.match(path, "/harvest%.md$") ~= nil)
 	if n > 0 then
 		total += n
 		print(`{n} {path}`)

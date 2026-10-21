@@ -5,7 +5,8 @@
 -- ready-raft, launch-raft, execute-raft, stop-raft, as a /command or a bare word), and `<old>` skill or <old> skill
 -- for the five ordinary words (review, tracker, metrics, testing, architecture). And no code or spec names a path
 -- through a .claude/skills link (.claude/skills/<name>/...): git can't add through one, so every tool reads the real
--- folder. Plain finds only (lesson zz-test/plain-find-for-literals); `scan` is also run on planted texts.
+-- folder. And no live file cites an old lesson id (`testing/no-vacuous-pass`) whose renamed lesson exists. Plain finds
+-- only (lesson zz-test/plain-find-for-literals); `scan` and `oldLessonIds` are also run on planted texts.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -89,6 +90,61 @@ local function throughLink(text: string): boolean
 		end
 		from = (b :: number) + 1
 	end
+end
+
+-- c0115 §5: an old lesson id is `<old skill>/<slug>` whose renamed lesson `<new skill>/<slug>.md` exists (the rename
+-- script's own rule), so look-alike paths (tracker/next, scripts/tracker/x.luau) never count.
+local LESSON_SKILL: { [string]: string } = {
+	["make-issue"] = "z-ticket",
+	["ticket-prep"] = "z-design",
+	["ready-raft"] = "z-ready",
+	["launch-raft"] = "z-run",
+	["execute-raft"] = "z-run",
+	["stop-raft"] = "z-stop",
+	review = "zz-review",
+	tracker = "zz-rules",
+	metrics = "zz-stats",
+	testing = "zz-test",
+	architecture = "zz-arch",
+}
+local function existingLessons(): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	for _, base in { "z-nile/skills", "pickman/skills" } do
+		if fs.isDir(base) then
+			for _, skill in fs.readDir(base) do
+				local dir = `{base}/{skill}/lessons`
+				if fs.isDir(dir) then
+					for _, name in fs.readDir(dir) do
+						local slug = string.match(name, "^(.+)%.md$")
+						if slug then
+							out[`{skill}/{slug}`] = true
+						end
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+local function oldLessonIds(text: string, existing: { [string]: boolean }): { string }
+	local found: { string } = {}
+	for old, new in LESSON_SKILL do
+		local from = 1
+		while true do
+			local a, b = string.find(text, old .. "/", from, true)
+			if not a then
+				break
+			end
+			local prev = string.sub(text, (a :: number) - 1, (a :: number) - 1)
+			local slug = string.match(string.sub(text, (b :: number) + 1), "^([%w][%w%-]*)")
+			if not nameChar(prev) and prev ~= "/" and prev ~= "." and slug and existing[`{new}/{slug}`] then
+				table.insert(found, `{old}/{slug}`)
+			end
+			from = (b :: number) + 1
+		end
+	end
+	table.sort(found)
+	return found
 end
 
 local function tracked(): { string }
@@ -199,6 +255,45 @@ return t.spec("c0115 no old skill name is left in a live file", function(it)
 		t.expect(n > 50).toBe(true)
 		if #bad > 0 then
 			error("reads through a .claude/skills link:\n" .. table.concat(bad, "\n"))
+		end
+	end)
+	it("the lesson-id scan finds an old id whose renamed lesson exists, and no look-alike path", function()
+		local existing = { ["zz-arch/guards-trust-only-origin"] = true, ["zz-test/no-vacuous-pass"] = true }
+		t.expect(
+			oldLessonIds(
+				"(lesson architecture/guards-trust-only-origin) and testing/no-vacuous-pass.",
+				existing
+			)
+		).toEqual({ "architecture/guards-trust-only-origin", "testing/no-vacuous-pass" })
+		t.expect(
+			oldLessonIds(
+				"tracker/next, tracker/compaction.txt, scripts/tracker/x.luau, testing/unknown-slug",
+				existing
+			)
+		).toEqual({})
+		t.expect(oldLessonIds("lesson zz-arch/guards-trust-only-origin", existing)).toEqual({})
+	end)
+
+	it("no live file, skills and comments included, cites an old lesson id", function()
+		local existing = existingLessons()
+		local count = 0
+		for _ in existing do
+			count += 1
+		end
+		t.expect(count > 10).toBe(true) -- the lesson folders were read
+		local bad: { string } = {}
+		for _, path in tracked() do
+			if live(path) then
+				local text = readable(path)
+				if text then
+					for _, id in oldLessonIds(text, existing) do
+						table.insert(bad, `{path}: {id}`)
+					end
+				end
+			end
+		end
+		if #bad > 0 then
+			error("old lesson ids:\n" .. table.concat(bad, "\n"))
 		end
 	end)
 end)

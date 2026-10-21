@@ -271,4 +271,43 @@ return t.spec("c0115 the skill folders and their links", function(it)
 		t.expect(has(c.stderr, "missing")).toBe(true)
 		t.expect(fs.isDir(`{f.main}/.claude/skills`)).toBe(false)
 	end)
+	it(
+		"a .claude/skills that links outside the repository is refused, and nothing outside it changes",
+		function()
+			local outside = `{f.base}/outside-skills`
+			fs.writeDir(outside)
+			process.exec("ln", { "-s", "../nowhere", `{outside}/someone-elses-skill` })
+			process.exec("rm", { "-r", `{wt}/.claude/skills` }) -- links only: rm -r never follows them
+			process.exec("ln", { "-s", outside, `{wt}/.claude/skills` })
+			local w = zn({ "skills" })
+			t.expect(w.code).toBe(1)
+			t.expect(has(w.stderr, ".claude/skills: a link")).toBe(true)
+			t.expect(readlink(`{outside}/someone-elses-skill`)).toBe("../nowhere")
+			t.expect(readlink(`{outside}/z-run`)).toBe(nil)
+			local c = zn({ "skills", "--check" })
+			t.expect(c.code).toBe(1)
+			t.expect(has(c.stderr, ".claude/skills: a link")).toBe(true)
+			t.expect(readlink(`{outside}/someone-elses-skill`)).toBe("../nowhere")
+		end
+	)
+
+	it("--check fails on a committed .claude/skills link, whatever it points at", function()
+		fixture.git(wt, { "add", "-A" })
+		fixture.git(wt, { "commit", "-q", "-m", "a linked skills folder" })
+		local ls = fixture.git(wt, { "ls-files", "-s", "--", ".claude/skills" })
+		t.expect(string.sub(ls, 1, 6)).toBe("120000")
+		local c = zn({ "skills", "--check" })
+		t.expect(c.code).toBe(1)
+		t.expect(has(c.stderr, ".claude/skills: tracked itself")).toBe(true)
+	end)
+
+	it("a .claude that is a link is refused too", function()
+		local outside = `{f.base}/outside-claude`
+		process.exec("mv", { `{wt}/.claude`, outside })
+		process.exec("ln", { "-s", outside, `{wt}/.claude` })
+		local w = zn({ "skills" })
+		t.expect(w.code).toBe(1)
+		t.expect(has(w.stderr, ".claude: a link")).toBe(true)
+		t.expect(readlink(`{f.base}/outside-skills/someone-elses-skill`)).toBe("../nowhere")
+	end)
 end)

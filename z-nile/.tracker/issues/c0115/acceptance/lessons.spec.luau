@@ -103,6 +103,22 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 		t.expect(lessons.folderOf(tree, "testing")).toBe(".claude/skills/testing")
 	end)
 
+	it(
+		"a lesson in a folder with no SKILL.md names the skill and every skills folder, not .claude/skills",
+		function()
+			local root = `{LOAD}/noskill`
+			write(
+				`{root}/z-nile/projects.toml`,
+				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "tracker"\n'
+			)
+			write(`{root}/z-nile/skills/zz-gone/lessons/pin.md`, lesson("Pinned?") .. "")
+			local joined = table.concat(lessons.check(lessons.load(root)), "\n")
+			t.expect(has(joined, "zz-gone/pin: no skill zz-gone (no zz-gone/SKILL.md in any skills folder)"))
+				.toBe(true)
+			t.expect(has(joined, ".claude/")).toBe(false)
+		end
+	)
+
 	it("one skill name in two folders is a problem naming both", function()
 		local root = `{LOAD}/dup`
 		write(
