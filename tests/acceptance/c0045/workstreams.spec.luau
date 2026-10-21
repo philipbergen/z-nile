@@ -155,15 +155,61 @@ return t.spec("workstreams", function(it)
 				"t",
 			}
 		do
-			must(tr(seed, { "new", "issue", "f", slug }), "new issue " .. slug)
+			must(tr(seed, { "new", "issue", "f", slug, "--project", "pickman" }), "new issue " .. slug)
 		end
-		must(tr(seed, { "new", "raft", "feature", "demo", "f0010", "f0020", "f0030", "f0040" }), "raft demo")
-		must(tr(seed, { "new", "raft", "feature", "solo", "f0050", "--single" }), "raft solo")
-		must(tr(seed, { "new", "raft", "feature", "chain", "f0060", "f0070", "f0080" }), "raft chain")
-		must(tr(seed, { "new", "raft", "feature", "loop", "f0090", "f0100" }), "raft loop")
-		must(tr(seed, { "new", "raft", "feature", "line", "f0110", "f0120", "f0130" }), "raft line")
-		must(tr(seed, { "new", "raft", "feature", "prefix", "f0140", "f0150", "f0160" }), "raft prefix")
-		must(tr(seed, { "new", "raft", "feature", "late", "f0170", "f0180", "f0190", "f0200" }), "raft late")
+		must(
+			tr(seed, {
+				"new",
+				"raft",
+				"feature",
+				"demo",
+				"f0010",
+				"f0020",
+				"f0030",
+				"f0040",
+				"--project",
+				"pickman",
+			}),
+			"raft demo"
+		)
+		must(
+			tr(seed, { "new", "raft", "feature", "solo", "f0050", "--single", "--project", "pickman" }),
+			"raft solo"
+		)
+		must(
+			tr(seed, { "new", "raft", "feature", "chain", "f0060", "f0070", "f0080", "--project", "pickman" }),
+			"raft chain"
+		)
+		must(
+			tr(seed, { "new", "raft", "feature", "loop", "f0090", "f0100", "--project", "pickman" }),
+			"raft loop"
+		)
+		must(
+			tr(seed, { "new", "raft", "feature", "line", "f0110", "f0120", "f0130", "--project", "pickman" }),
+			"raft line"
+		)
+		must(
+			tr(
+				seed,
+				{ "new", "raft", "feature", "prefix", "f0140", "f0150", "f0160", "--project", "pickman" }
+			),
+			"raft prefix"
+		)
+		must(
+			tr(seed, {
+				"new",
+				"raft",
+				"feature",
+				"late",
+				"f0170",
+				"f0180",
+				"f0190",
+				"f0200",
+				"--project",
+				"pickman",
+			}),
+			"raft late"
+		)
 		touches("f0010", { "src/a" })
 		touches("f0020", { "src/b" })
 		touches("f0030", { "src/a/sub" })

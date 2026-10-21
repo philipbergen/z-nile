@@ -55,11 +55,17 @@ return t.spec("tracker guards after review 001", function(it)
 
 	it("--desc reaches the stub when nothing is published", function()
 		t.expect(ready).toBe(true)
-		local r = process.exec(
-			"bash",
-			{ "scripts/tracker.sh", "new", "issue", "c", "alpha", "--desc", "Alpha's one line." },
-			{ cwd = repo, env = { PICKMAN_PUBLISH = "0" } }
-		)
+		local r = process.exec("bash", {
+			"scripts/tracker.sh",
+			"new",
+			"issue",
+			"c",
+			"alpha",
+			"--desc",
+			"Alpha's one line.",
+			"--project",
+			"pickman",
+		}, { cwd = repo, env = { PICKMAN_PUBLISH = "0" } })
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
@@ -73,7 +79,7 @@ return t.spec("tracker guards after review 001", function(it)
 		t.expect(otherHead.ok).toBe(true)
 		local r = process.exec(
 			"bash",
-			{ "scripts/tracker.sh", "new", "issue", "c", "beta" },
+			{ "scripts/tracker.sh", "new", "issue", "c", "beta", "--project", "pickman" },
 			{ cwd = repo, env = { PICKMAN_PUBLISH = "0", [GITDIR_VAR] = `{other}/.git` } }
 		)
 		t.expect(r.ok).toBe(false)

@@ -102,6 +102,7 @@ return t.spec("tracker publish moves", function(it)
 		git(`{base}/seed`, { "config", "user.name", "t" })
 		git(`{base}/seed`, { "config", "user.email", "t@example.invalid" })
 		write("src/x.luau", "return 1\n")
+		write("z-nile/projects.toml", fs.readFile("z-nile/projects.toml")) -- c0114: origin needs the registry
 		write("tracker/issues/active/.gitkeep", "")
 		write("tracker/rafts/active/.gitkeep", "")
 		write(`{FROM}/c0010.md`, DOC)

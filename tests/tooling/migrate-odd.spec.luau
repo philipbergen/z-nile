@@ -15,6 +15,8 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 local base = trim(process.exec("mktemp", { "-d" }).stdout)
 -- the tool shim finds lune through a manifest in the working directory or above it
 fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
+fs.writeDir(`{base}/z-nile`) -- c0114: a tree without the registry refuses
+fs.writeFile(`{base}/z-nile/projects.toml`, fs.readFile(`{root}/z-nile/projects.toml`))
 
 -- legacy document names are built from parts: the guard spec rejects literal ones
 local function legacy(id: string, slug: string): string

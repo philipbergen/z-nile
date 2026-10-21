@@ -2,8 +2,8 @@
 # Acceptance checks for c0080. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0080 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0080 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0080"
 
@@ -28,7 +28,7 @@ check "AC1: done refuses a fixed answer without non-empty consequences, naming t
   "fixed answers with consequences, and refuted answers without, get past the review check"
 check "AC2: execute-raft Phase 4 runs the full gate first, gives the fixed format with consequences, and questions a twice-hit mechanism" bash -c '
   phase4=$(sed -n "/^## Phase 4/,/^## Phase 5/p" .claude/skills/execute-raft/SKILL.md)
-  grep -qF "scripts/check.sh --full" <<<"$phase4" || { echo "Phase 4 does not run the full gate before a review"; exit 1; }
+  grep -qF "z-nile/check.sh --full" <<<"$phase4" || { echo "Phase 4 does not run the full gate before a review"; exit 1; }
   grep -qF "; consequences: " <<<"$phase4" || { echo "Phase 4'"'"'s fixed format has no consequences"; exit 1; }
   grep -qi "mechanism" <<<"$phase4" || { echo "Phase 4 says nothing about questioning a mechanism"; exit 1; }'
 check "AC3: the review skill reviews the fix delta on a re-review and questions a mechanism hit again" bash -c '

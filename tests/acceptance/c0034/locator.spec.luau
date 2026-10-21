@@ -145,8 +145,13 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 			end
 		end
 		t.expect(process.exec("git", { "init", "-q", repo }).ok).toBe(true)
-		t.expect(fixture.exec(repo, "bash", { "scripts/tracker.sh", "new", "issue", "c", "probe" }).ok)
-			.toBe(true)
+		t.expect(
+			fixture.exec(
+				repo,
+				"bash",
+				{ "scripts/tracker.sh", "new", "issue", "c", "probe", "--project", "pickman" }
+			).ok
+		).toBe(true)
 		local env = { AC_LIST = "1" }
 		local checked = fixture.exec(repo, "bash", { "scripts/tracker.sh", "check", "c0010" }, { env = env })
 		t.expect(checked.ok).toBe(false)

@@ -2,13 +2,13 @@
 # Acceptance checks for c0053. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0053 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0053 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0053"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+# `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the pure status rules hold" lune run tests/run -- "$A/status.spec.luau"
 check "AC2: the publisher pushes only whitelisted files on top of origin/main and retries a lost race" lune run tests/run -- "$A/publish.spec.luau"
 check "AC3: the CLI publishes, claims, starts, syncs and stays local when asked" lune run tests/run -- "$A"/commands*.spec.luau # R0025 c0062 splits the spec
@@ -31,14 +31,14 @@ workflow_ignores_tracker_pushes() {
 check "AC5: check.yml ignores tracker/** on push, and only on push" workflow_ignores_tracker_pushes
 
 skills_carry_sync_and_claim() {
-  local s merging='tracker\.sh sync([^ -]|$)'
+  local s merging='zn sync([^ -]|$)'
   # the working skills run the merging form; reviewers, stream agents and metrics fetch only
   for s in tracker ticket-prep ready-raft execute-raft make-issue; do
-    grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill has no 'tracker.sh sync' (merging) step"; return 1; }
+    grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill has no './zn sync' (merging) step"; return 1; }
   done
   for s in review metrics; do
-    grep -q 'tracker\.sh sync --fetch' ".claude/skills/$s/SKILL.md" || { echo "$s skill has no 'tracker.sh sync --fetch' step"; return 1; }
-    ! grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill still runs the merging 'tracker.sh sync'"; return 1; }
+    grep -q 'zn sync --fetch' ".claude/skills/$s/SKILL.md" || { echo "$s skill has no './zn sync --fetch' step"; return 1; }
+    ! grep -Eq "$merging" ".claude/skills/$s/SKILL.md" || { echo "$s skill still runs the merging './zn sync'"; return 1; }
   done
   # the sequestration diff separates this branch's changes from what main brought in
   for s in review execute-raft; do
@@ -57,7 +57,7 @@ check "AC6: the skills sync (reviewers fetch only), diff sequestered files again
 
 usage_lists_new_commands() {
   local out
-  out=$(scripts/tracker.sh no-such-command 2>&1 || true)
+  out=$(./zn no-such-command 2>&1 || true)
   grep -q '^  status ' <<<"$out" && grep -q '^  sync ' <<<"$out" && grep -q -- '--desc' <<<"$out" && grep -q -- '--fetch' <<<"$out"
 }
 check "AC7: the usage text lists status, sync, --fetch and --desc" usage_lists_new_commands
@@ -73,10 +73,10 @@ replacements_applied() {
 check "AC8: the c0005 and c0015 specs are exactly the prepared replacements (PICKMAN_PUBLISH=0 in c0005's fixtures, paths-ignore in c0015's trigger)" replacements_applied
 
 no_index() { # the tree is built with mktree: no index, so no git variable for the repository guards (R0021) to ban
-  local f=scripts/tracker/publish.luau
+  local f=z-nile/engine/publish.luau
   [[ -f $f ]] || { echo "$f is missing"; return 1; }
   # the variable name is split so this file does not name it (R0021's gate scans every check.sh)
-  if grep -rnE "GIT_INDEX_""FILE|read-tree|update-index|write-tree" scripts/tracker/; then echo "the tracker code uses an index"; return 1; fi
+  if grep -rnE "GIT_INDEX_""FILE|read-tree|update-index|write-tree" z-nile/engine/; then echo "the tracker code uses an index"; return 1; fi
   grep -qE '"mktree"' "$f" || { echo "the publisher does not pass \"mktree\" to git"; return 1; }
 }
 check "AC9: the publisher builds its tree with mktree and uses no index" no_index

@@ -167,7 +167,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 			t.expect(git(ws, { "rev-parse", "origin/main" })).toBe(git(origin, { "rev-parse", "main" }))
 			t.expect(fs.isFile(`{ws}/tracker/issues/f0500/f0500.md`)).toBe(false)
 			-- an active raft is on this branch: the new stub is published but the branch is not touched
-			local out = trOk(ws, { "new", "issue", "c", "postponed" })
+			local out = trOk(ws, { "new", "issue", "c", "postponed", "--project", "pickman" })
 			t.expect(git(ws, { "rev-parse", "HEAD" })).toBe(head)
 			t.expect(fs.isFile(`{ws}/{out}`)).toBe(false)
 			t.expect(onOrigin(out) ~= nil).toBe(true)
