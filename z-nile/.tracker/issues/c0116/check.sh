@@ -21,8 +21,8 @@ check "AC5: z-design works on one raftless issue; design reviews live on the iss
   lune run tests/run -- "$A/issue-design.spec.luau"
 check "AC6: the skills, the README, AGENTS.md and the usage split rafting out of design" \
   lune run tests/run -- "$A/docs.spec.luau"
-check "AC7: promote-check takes an issue and copies its own acceptance specs" \
-  bash -c 'out="$(./zn promote-check c0116)" && grep -qE "^copied [1-9][0-9]* acceptance specs$" <<<"$out"'
+check "AC7: promote-check takes an issue and copies its own acceptance specs (in a clone under .cache)" \
+  lune run tests/run -- "$A/promote.spec.luau"
 check "AC8: the real tree's skill links, lessons and audit stay clean with z-raft added" \
   bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
 check "AC9: the promoted claim, prep, start, board and remap specs, and c0115's overridden README spec, stay green" \

@@ -234,4 +234,23 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
 		t.expect(raftplan.parseSize("-5")).toBe(nil)
 		t.expect(raftplan.parseSize(nil)).toBe(nil)
 	end)
+
+	it("never folds into an open raft with a member that has no size:, and says so", function()
+		local issues = {
+			issue("f0090", nil, { raft = "R0010", touched = { "a" } }),
+			issue("f0091", 100, { raft = "R0010", touched = { "a" } }),
+			issue("f0001", 100, { touched = { "a/b" } }),
+			issue("d0002", 100),
+		}
+		local rafts = { raft("R0010", "feature", { "f0090", "f0091" }), raft("R0020", "defect", { "d0099" }) }
+		local ops, skips = raftplan.plan(issues, rafts)
+		t.expect(lines(issues, rafts)).toEqual({ "new feature f0001", "new defect d0002" })
+		local named: { [string]: string } = {}
+		for _, sk in skips do
+			named[sk.id] = sk.reason
+		end
+		t.expect(string.find(named.R0010 or "", "f0090 has no size:", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(named.R0020 or "", "d0099 has no size:", 1, true) ~= nil).toBe(true)
+		t.expect(#ops).toBe(2)
+	end)
 end)

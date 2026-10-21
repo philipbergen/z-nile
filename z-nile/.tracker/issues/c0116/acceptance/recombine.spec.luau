@@ -22,8 +22,14 @@ local function raftDoc(id: string, kind: string, issues: string, status: string?
 	return `---\nid: {id}\ntype: {kind}\ntitle: {id}\nslug: {string.lower(id)}\nsingle: false\nissues: [{issues}]\ndesign: ready\ncreated: 2026-10-20\nstatus: {status or PREPARED}\n---\n\n# {id}\n\n## Theme\nSeeded.\n\n## Order & dependencies\nBy id.\n\n## Risks & rollback\n`
 end
 
+local REVIEW = "# Review 001\n\n### F1 [low] x\nWhere: a\nEvidence: b\nCritique: c\nConsequences: none\n"
+	.. "Recommendation: d\n\nVerdict: approve\n"
+local LESSON =
+	"---\ntitle: Demo\nwhen: design\ntags: [demo]\ncheck: Does the demo hold?\n---\nA demo lesson whose only source is R0150's harvest.\n"
+
 local f: trackerfix.Fixture
 local W, X = "", "" -- rafting worktrees
+local Y, Z = "", "" -- review 001 F2, F5, F7
 
 local function has(text: string?, needle: string): boolean
 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
@@ -106,9 +112,35 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 		add("tracker/issues/c0091/c0091.md", issue("c0091", "chore", "R0090"))
 		add("tracker/rafts/R0100/R0100.md", raftDoc("R0100", "chore", "c0101"))
 		add("tracker/issues/c0101/c0101.md", issue("c0101", "chore", "R0100"))
+		-- review 001 F2/F5: a keeper of two members, and an orphan holding review history a lesson cites
+		add("tracker/rafts/R0140/R0140.md", raftDoc("R0140", "chore", "c0141, c0142"))
+		add("tracker/issues/c0141/c0141.md", issue("c0141", "chore", "R0140"))
+		add("tracker/issues/c0142/c0142.md", issue("c0142", "chore", "R0140"))
+		add("tracker/rafts/R0150/R0150.md", raftDoc("R0150", "chore", "", "new-amber-otter-lynx"))
+		seed["tracker/rafts/R0150/design-review-001.md"] = REVIEW
+		seed["tracker/rafts/R0150/harvest.md"] = "# Harvest: R0150\n- design-review-001 F1: zz-test/demo\n"
+		seed["z-nile/skills/zz-test/lessons/demo.md"] = LESSON
+		-- a folder in retired/ that recombine did not make (no retired: line)
+		seed["tracker/rafts/retired/R0160/R0160.md"] = raftDoc("R0160", "chore", "", "new-amber-otter-lynx")
+		-- a retired raft whose document still says new: never an orphan
+		seed["tracker/rafts/retired/R0190/R0190.md"] = (
+			string.gsub(
+				raftDoc("R0190", "chore", "", "new-amber-otter-lynx"),
+				"\ndesign: ready\n",
+				"\ndesign: ready\nretired: R0010\n"
+			)
+		)
+		-- review 001 F7: a pair whose other raft gains a member elsewhere while this terminal has not synced
+		add("tracker/rafts/R0170/R0170.md", raftDoc("R0170", "chore", "c0171"))
+		add("tracker/issues/c0171/c0171.md", issue("c0171", "chore", "R0170"))
+		add("tracker/rafts/R0180/R0180.md", raftDoc("R0180", "chore", "c0181"))
+		add("tracker/issues/c0181/c0181.md", issue("c0181", "chore", "R0180"))
+		add("tracker/issues/c0182/c0182.md", issue("c0182", "chore", ""))
 		f = trackerfix.new("c0116-recombine", seed)
 		W = trOk(f.main, { "worktree", "raft-w" })
 		X = trOk(f.main, { "worktree", "raft-x" })
+		Y = trOk(f.main, { "worktree", "raft-y" })
+		Z = trOk(f.main, { "worktree", "raft-z" })
 	end)
 
 	it(
@@ -225,4 +257,71 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 		t.expect(string.match(originStatus("tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil).toBe(true)
 		t.expect(string.match(originStatus("tracker/rafts/R0100/R0100.md"), "^prepared%-") ~= nil).toBe(true)
 	end)
+
+	it(
+		"retiring an orphan keeps its review history, its lesson sources and its rounds, and needs no new review",
+		function()
+			local function rounds(): string?
+				local out = tr(Y, { "metrics" }).stdout
+				return string.match(out, "\n| R0150 | (%d+) | %d+ | [%w%-]+ |\n")
+			end
+			local function lessonsOk(): boolean
+				local r = tr(Y, { "lessons", "--check" })
+				return r.ok and has(r.stdout, "ok")
+			end
+			fixture.git(Y, { "fetch", "-q", "origin" })
+			fixture.git(Y, { "reset", "-q", "--hard", "origin/main" })
+			t.expect(lessonsOk()).toBe(true)
+			t.expect(rounds()).toBe("1")
+			local out = trOk(Y, { "recombine", "R0140", "R0150" })
+			t.expect(has(out, "retired R0150")).toBe(true)
+			local kept = `{Y}/tracker/rafts/retired/R0150`
+			t.expect(fs.isFile(`{kept}/design-review-001.md`)).toBe(true)
+			t.expect(fs.isFile(`{kept}/harvest.md`)).toBe(true)
+			t.expect(front(`{kept}/R0150.md`, "retired")).toBe("R0140")
+			t.expect(fs.isDir(`{Y}/tracker/rafts/R0150`)).toBe(false)
+			t.expect(lessonsOk()).toBe(true)
+			t.expect(rounds()).toBe("1")
+			-- R0140's membership did not change: its carried move needs no new coherence review
+			trOk(Y, { "status", "R0140", "prepared" })
+			fixture.git(Y, { "add", "-A" })
+			fixture.git(Y, { "commit", "-q", "-m", "tracker: raft R0140 (retire R0150)" })
+			land(Y)
+			t.expect(onOrigin("tracker/rafts/retired/R0150/harvest.md") ~= nil).toBe(true)
+			trOk(f.main, { "ready", "R0140" })
+			-- audit: no orphan warning for the retired raft; a retired/ folder recombine did not make is an error
+			local audit = tr(f.main, { "audit" }).stdout
+			local orphan, bad = false, false
+			for l in string.gmatch(audit, "[^\n]+") do
+				if has(l, "orphan-raft") and (has(l, "R0150") or has(l, "R0190")) then
+					orphan = true
+				end
+				if has(l, "retired-raft") and has(l, "R0160") then
+					bad = true
+				end
+			end
+			t.expect(orphan).toBe(false)
+			t.expect(bad).toBe(true)
+		end
+	)
+
+	it(
+		"recombine merges origin/main before it reads membership, so a member landed elsewhere moves too",
+		function()
+			fixture.git(Z, { "fetch", "-q", "origin" })
+			fixture.git(Z, { "reset", "-q", "--hard", "origin/main" })
+			-- another terminal folds c0182 into R0180 and lands it; Z has not synced since
+			local V = trOk(f.main, { "worktree", "raft-v" })
+			trOk(V, { "fold", "R0180", "c0182" })
+			fs.writeFile(`{V}/tracker/rafts/R0180/design-review-001.md`, REVIEW)
+			trOk(V, { "status", "R0180", "prepared" })
+			fixture.git(V, { "add", "-A" })
+			fixture.git(V, { "commit", "-q", "-m", "tracker: fold c0182 into R0180" })
+			land(V)
+			local out = trOk(Z, { "recombine", "R0170", "R0180" })
+			t.expect(has(out, "c0181, c0182")).toBe(true)
+			t.expect(front(`{Z}/tracker/issues/c0182/c0182.md`, "raft")).toBe("R0170")
+			t.expect(front(`{Z}/tracker/rafts/R0170/R0170.md`, "issues")).toBe("[c0171, c0181, c0182]")
+		end
+	)
 end)

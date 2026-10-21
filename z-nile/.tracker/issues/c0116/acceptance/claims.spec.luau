@@ -25,6 +25,7 @@ end
 
 local f: trackerfix.Fixture
 local A, B, C, D, E = "", "", "", "", "" -- rafting worktrees, each a terminal of its own
+local F, G, H = "", "", "" -- review 001 F1: two raftings and a z-design terminal
 local R, R2 = "", ""
 
 local function has(text: string?, needle: string): boolean
@@ -91,6 +92,11 @@ return t.spec(
 				["tracker/issues/c0050/c0050.md"] = issue("c0050", "", "solo: true\n"),
 				["tracker/issues/c0060/c0060.md"] = issue("c0060", ""),
 				["tracker/issues/c0070/c0070.md"] = issue("c0070", "R0090"),
+				-- review 001 F1: chores rafted while another terminal re-claims one for design
+				["tracker/issues/c0013/c0013.md"] = issue("c0013", ""),
+				["tracker/issues/c0014/c0014.md"] = issue("c0014", ""),
+				["tracker/issues/c0015/c0015.md"] = issue("c0015", ""),
+				["tracker/issues/c0016/c0016.md"] = issue("c0016", ""),
 				-- another project's chore, and a feature, both prepared and raftless
 				["z-nile/.tracker/issues/c0080/c0080.md"] = issue("c0080", ""),
 				["tracker/issues/f0085/f0085.md"] = (
@@ -100,7 +106,22 @@ return t.spec(
 				-- lists c0070, which R0090 holds by its raft: line
 				["tracker/rafts/R0100/R0100.md"] = raftDoc("R0100", "c0070"),
 			}
-			for _, id in { "c0010", "c0020", "c0030", "c0040", "c0050", "c0060", "c0070", "f0085" } do
+			for _, id in
+				{
+					"c0010",
+					"c0020",
+					"c0030",
+					"c0040",
+					"c0050",
+					"c0060",
+					"c0070",
+					"f0085",
+					"c0013",
+					"c0014",
+					"c0015",
+					"c0016",
+				}
+			do
 				seed[`tracker/issues/{id}/check.sh`] = CHECK
 			end
 			seed["z-nile/.tracker/issues/c0080/check.sh"] = CHECK
@@ -112,6 +133,9 @@ return t.spec(
 			C = trOk(f.main, { "worktree", "raft-c" })
 			D = trOk(f.main, { "worktree", "raft-d" })
 			E = trOk(f.main, { "worktree", "raft-e" })
+			F = trOk(f.main, { "worktree", "raft-f" })
+			G = trOk(f.main, { "worktree", "prep-g" })
+			H = trOk(f.main, { "worktree", "raft-h" })
 			t.expect(trOk(A, { "status", "c0010" })).toBe("prepared")
 		end)
 
@@ -323,5 +347,56 @@ return t.spec(
 				refused(E, { "status", "R0100", "preparing" }, "c0070", "R0090")
 			end
 		)
+
+		it(
+			"a member re-claimed for design during a rafting is refused by the carried move, naming that claim",
+			function()
+				local RX = string.match(
+					trOk(F, { "new", "raft", "chore", "race", "c0013", "c0014" }),
+					"(R%d+)"
+				) :: string
+				-- z-design in another terminal claims c0013: nothing on origin says it is being rafted, so this succeeds
+				trOk(G, { "status", "c0013", "preparing" })
+				local claim = originStatus("tracker/issues/c0013/c0013.md")
+				t.expect(string.match(claim, "^preparing%-") ~= nil).toBe(true)
+				trOk(F, { "sync" }) -- the claim's status line merges in cleanly
+				local doc = `{F}/tracker/rafts/{RX}/{RX}.md`
+				setLine(doc, "design", "ready")
+				writeDesign(doc)
+				fs.writeFile(
+					`{F}/tracker/rafts/{RX}/design-review-001.md`,
+					"# Review 001\n\nVerdict: approve\n"
+				)
+				refused(F, { "status", RX, "prepared" }, "c0013", "claimed by another terminal", claim)
+				t.expect(originStatus("tracker/issues/c0013/c0013.md")).toBe(claim)
+				-- the rafting drops it and prepares the rest
+				setLine(doc, "issues", "[c0014]")
+				setLine(`{F}/tracker/issues/c0013/c0013.md`, "raft", "")
+				trOk(F, { "status", RX, "prepared" })
+				fixture.git(F, { "add", "-A" })
+				fixture.git(F, { "commit", "-q", "-m", `tracker: raft {RX}` })
+				land(F)
+				-- once the rafting has landed, z-design can no longer claim a member past its raft
+				refused(G, { "status", "c0014", "preparing" }, "c0014", RX, "z-raft takes it out")
+				trOk(f.main, { "ready", RX })
+				t.expect(onOrigin("tracker/issues/active/c0014/c0014.md") ~= nil).toBe(true)
+				t.expect(originStatus("tracker/issues/c0013/c0013.md")).toBe(claim)
+			end
+		)
+
+		it("a member claimed after the carried move but before the landing keeps ready refused", function()
+			local RY =
+				string.match(trOk(H, { "new", "raft", "chore", "late", "c0015", "c0016" }), "(R%d+)") :: string
+			local doc = `{H}/tracker/rafts/{RY}/{RY}.md`
+			setLine(doc, "design", "ready")
+			writeDesign(doc)
+			fs.writeFile(`{H}/tracker/rafts/{RY}/design-review-001.md`, "# Review 001\n\nVerdict: approve\n")
+			trOk(H, { "status", RY, "prepared" })
+			fixture.git(H, { "add", "-A" })
+			fixture.git(H, { "commit", "-q", "-m", `tracker: raft {RY}` })
+			trOk(G, { "status", "c0016", "preparing" }) -- c0016's raft: is still empty on origin
+			land(H)
+			refused(f.main, { "ready", RY }, "c0016", "preparing")
+		end)
 	end
 )

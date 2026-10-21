@@ -101,6 +101,22 @@ return t.spec("c0116 raft-plan prints z-raft's plan as commands, and --apply run
 		t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(before)
 	end)
 
+	it("--apply stops at the first refusal and leaves what it did", function()
+		-- another terminal claims R0030 first, so the plan's fold (its second command) is refused
+		local V = trOk(f.main, { "worktree", "raft-v" })
+		trOk(V, { "status", "R0030", "preparing" })
+		local r = trackerfix.tr(f, W, { "raft-plan", "--apply" })
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stderr, "R0030", 1, true) ~= nil).toBe(true)
+		local function raftOf(path: string): string?
+			return string.match(fs.readFile(`{W}/{path}`), "\nraft: (%S*)\n")
+		end
+		t.expect(raftOf("tracker/issues/f0060/f0060.md") ~= "").toBe(true) -- the first command ran
+		t.expect(raftOf("tracker/issues/c0040/c0040.md")).toBe("") -- the commands after the refusal did not
+		trOk(V, { "release", "R0030", "--force" })
+		trOk(W, { "sync" }) -- raft-plan reads this tree: sync it after the give-back
+	end)
+
 	it(
 		"--apply runs the commands in a worktree: rafts claimed, raft: lines written, only the skip left",
 		function()

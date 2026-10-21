@@ -50,6 +50,11 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 		at(s, "`solo: true` only when a recorded user decision says the issue lands as its own raft", w)
 		at(s, "**then run `./zn status <id> prepared`**", w)
 		at(s, "Leave `raft:` empty: z-raft writes it.", w)
+		at(
+			s,
+			"An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out.",
+			w
+		)
 		at(s, "`./zn spend <id> --phase prep --time", w)
 		at(s, "- **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.", w)
 	end)
@@ -96,7 +101,20 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			do
 				at(s, cmd, w)
 			end
-			at(s, "retires the other (deletes its folder in this branch) only when it ends up empty", w)
+			at(
+				s,
+				"retires the other only when it ends up empty: its folder moves to `<root>/rafts/retired/<R-id>` in this branch",
+				w
+			)
+			at(s, 'makes `./zn status <R-id> prepared` refuse with "claimed by another terminal"', w)
+			at(s, "a conflict on a member's `status:` line means the same", w)
+			at(s, "Never take your own side of a `status:` conflict.", w)
+			at(
+				s,
+				"an open raft with a member that has no `size:` takes nothing, because the cap can't be kept",
+				w
+			)
+			at(s, "whenever this rafting changed its membership", w)
 			at(s, "- **Theme**:", w)
 			at(s, "- **Whole-raft design**: the interfaces between the members", w)
 			at(s, "- **Order & dependencies**: the members in `depends_on` order, then by id", w)
@@ -137,6 +155,17 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			w
 		)
 		at(s, "| raft-plan | `./zn raft-plan [--apply]` |", w)
+		at(
+			s,
+			"takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made",
+			w
+		)
+		at(
+			s,
+			"z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main`",
+			w
+		)
+		at(s, "`<root>/rafts/retired/<ID>` is a raft `recombine` retired", w)
 		at(s, "| fold | `./zn fold <R-id> <issue>...` |", w)
 		at(s, "| recombine | `./zn recombine <keeper> <other> [<issue>...]` |", w)
 		at(s, "| release | `./zn release <R-id> [--force]` |", w)
