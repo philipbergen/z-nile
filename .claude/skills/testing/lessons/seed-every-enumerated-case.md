@@ -10,4 +10,6 @@ When code iterates a fixed set (the backlog, `active/` and `done/` folders; issu
 
 R0040 design review 2 (F2) found the same gap one level down: after `active/` was added, the fixture still covered only 3 of the 6 kind × state folders, so a reader that skipped `rafts/done` (where every finished raft's ledger lives) passed.
 
+c0120 code review 002 F2: the fence strips ten overrides, and the cases seeded only `GIT_DIR`. A fix that stripped `GIT_DIR` alone before the read passed them; `GIT_COMMON_DIR` at another repository then escaped.
+
 **How to apply:** for each loop over a fixed list in the Design, name the fixture entry that covers each element, and add a Rules row whose mutant drops one element. For nested loops, cover the cross product, not each list once.
