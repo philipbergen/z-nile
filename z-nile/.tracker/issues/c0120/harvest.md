@@ -16,3 +16,6 @@
 - design-review-003 F2: architecture/guard-no-is-explicit
 - design-review-003 F3: ticket-prep/new-rules-migrate-existing-work
 - design-review-004 F1: testing/specs-set-host-markers-explicitly
+- review-001 F1: testing/derive-after-stripping-overrides
+- review-001 F2: ticket-prep/instructions-runnable-where-they-run
+- review-001 F3: ticket-prep/restated-rules-move-together
