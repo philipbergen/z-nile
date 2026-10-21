@@ -74,10 +74,12 @@ pickman_fence_env() {
       return 1
     fi
   fi
-  # From here on nothing returns early: every inherited override is replaced by the whole set at once.
-  real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
+  # From here on nothing returns early: every inherited override is replaced by the whole set at once. The strip comes
+  # first: every value derived from git below is read in a clean environment, so an inherited GIT_DIR (a hook's
+  # relative `.git`, another repository) never decides which repository the ref guard protects (code review 001 F1)
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
   unset GIT_NAMESPACE GIT_PREFIX GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+  real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || real=
   if [[ -n $real ]]; then
     export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
   fi

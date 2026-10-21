@@ -145,6 +145,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_CONFIG_ = "a fixture check.sh and a fence call compare the guard config they see",
 		PICKMAN_FENCE_ = "points PICKMAN_FENCE_HOOKS at an empty folder for one fence call in a fixture, and sets PICKMAN_FENCE_SPECS for a fixture check.sh",
 		PICKMAN_TEST_FENCE = "a fixture check.sh gets the jail's markers set explicitly, naming the fixture (review 003 F1)",
+		GIT_DIR = "a fixture shell inherits GIT_DIR (relative, or another fixture repository) to prove the fence strips it before it reads the repository it protects (code review 001 F1)",
 		["sandbox-exec"] = "a fixture check.sh gets the jail's markers set explicitly, with chmod 555 standing in for the jail",
 	},
 	["tests/acceptance/c0074/done-gate.spec.luau"] = {
