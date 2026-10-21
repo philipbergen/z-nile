@@ -103,6 +103,10 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		put("pickman/tests/run.luau", "--!strict\nreturn nil\n") -- a home's runner, as c0120 adds
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "the move" })
+		-- later commits (the edits, a merge of main) don't move the base: it is the parent of the move itself
+		put("later.md", "after the move\n")
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "after the move" })
 		local pre, why = rewrites.premove(FX)
 		t.expect(why).toBe(nil)
 		local world = rewrites.world(FX, pre :: string)

@@ -154,6 +154,17 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		at(prompt, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
 	end)
 
+	-- design review 005 F5: no ../zn settings entries (a settings entry is a prefix match, so `../zn` would allow it from
+	-- any folder one level down); from a home the forwarder scripts/tracker.sh already matches c0114's entries
+	it(
+		"the settings add no ../zn entries, and keep the scripts/tracker.sh ones a home's forwarder matches",
+		function()
+			local settings = read(".claude/settings.json")
+			t.expect(string.find(settings, "Bash(../zn", 1, true)).toBe(nil)
+			t.expect(string.find(settings, "Bash(scripts/tracker.sh", 1, true) ~= nil).toBe(true)
+		end
+	)
+
 	it("the command's usage names busy", function()
 		local main = read("z-nile/engine/main.luau")
 		at(main, "  busy [<path>...]", "usage")

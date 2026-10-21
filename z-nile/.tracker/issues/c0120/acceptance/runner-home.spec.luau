@@ -8,6 +8,7 @@
 -- 2026-10-21: "z-nile/ is its home").
 -- Fixture under .cache/c0120-runner (this home's .cache): a copy of the runner, its harness and the guards, with two
 -- homes.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -79,6 +80,27 @@ local ZNILE_SPEC = table.concat({
 	"",
 }, "\n")
 
+-- design review 005 F2: a run from a home keeps the checkout's own .cache fenced, the folder every spec used before
+local TOP_SPEC = table.concat({
+	"--!strict",
+	`local fs = {R}("@lune/fs")`,
+	`local process = {R}("@lune/process")`,
+	`local t = {R}("@tests/lib/t")`,
+	'return t.spec("the checkout\'s .cache", function(it)',
+	'\tit("is in the ceiling, and git finds no repository in it or below it", function()',
+	'\t\tlocal top = string.match(process.cwd, "^(.*)/pickman/?$") :: string',
+	'\t\tlocal ceiling = ":" .. (process.env.GIT_CEILING_DIRECTORIES or "") .. ":"',
+	'\t\tt.expect(string.find(ceiling, ":" .. top .. "/.cache:", 1, true) ~= nil).toBe(true)',
+	'\t\tfs.writeDir(top .. "/.cache/c0120-top-fx")',
+	'\t\tlocal below = process.exec("git", { "rev-parse", "--absolute-git-dir" }, { cwd = top .. "/.cache/c0120-top-fx" })',
+	'\t\tlocal at = process.exec("git", { "rev-parse", "--absolute-git-dir" }, { cwd = top .. "/.cache" })',
+	"\t\tt.expect(below.ok).toBe(false)",
+	"\t\tt.expect(at.ok).toBe(false)",
+	"\tend)",
+	"end)",
+	"",
+}, "\n")
+
 return t.spec("c0120 the runner runs from a project's home", function(it)
 	it("sets up a copy of the runner with a root and a pickman home", function()
 		if fs.isDir(base) then
@@ -144,6 +166,33 @@ return t.spec("c0120 the runner runs from a project's home", function(it)
 		local okAbs, outAbs = runIn(`{base}/pickman`, { `{base}/pickman/tests/unit/Probe/where.spec.luau` })
 		t.expect(okAbs).toBe(true)
 		t.expect(has(outAbs, "1 passed, 0 failed, 1 spec files")).toBe(true)
+	end)
+
+	it("a run from a home fences the checkout's own .cache too: in its ceiling, with its sentinel", function()
+		write("pickman/probe/top.spec.luau", TOP_SPEC)
+		if fs.isFile(`{base}/.cache/.git`) then
+			fs.removeFile(`{base}/.cache/.git`)
+		end
+		-- a top-level run (the marker cleared, as a person would start it) in a repository of its own
+		write(".gitignore", ".cache/\n")
+		t.expect(process.exec("git", { "init", "-q", "-b", "main", base }).ok).toBe(true)
+		fixture.git(base, { "add", "-A" })
+		fixture.git(
+			base,
+			{ "-c", "user.name=c0120", "-c", "user.email=c0120@example.invalid", "commit", "-qm", "fixture" }
+		)
+		local r = process.exec(
+			"lune",
+			{ "run", "tests/run", "--", "--jobs", "1", "probe/top.spec.luau" },
+			{ cwd = `{base}/pickman`, env = { PICKMAN_TEST_FENCE = "" } }
+		)
+		local ok, out = r.ok, r.stdout .. r.stderr
+		if not has(out, "1 passed, 0 failed, 1 spec files") then
+			print(out)
+		end
+		t.expect(has(out, "1 passed, 0 failed, 1 spec files")).toBe(true)
+		t.expect(ok).toBe(true)
+		t.expect(fs.isFile(`{base}/.cache/.git`)).toBe(true) -- the sentinel, written before the jail
 	end)
 
 	it("a root-relative path is not a pickman spec: from the home it names nothing", function()

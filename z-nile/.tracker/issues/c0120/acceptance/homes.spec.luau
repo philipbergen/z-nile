@@ -197,6 +197,42 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		end
 	)
 
+	-- design review 005 F3: the root's own fence (ac.sh step 2) refuses as the home's does; nothing waives it
+	it(
+		"the root's fence refuses too: a symlinked root .cache, and a folder at the root's sentinel even in the jail",
+		function()
+			local away = `{f.base}/elsewhere-root`
+			fs.writeDir(away)
+			if fs.isDir(at(".cache")) then
+				fs.removeDir(at(".cache"))
+			end
+			fixture.exec(f.main, "ln", { "-s", away, ".cache" })
+			local linked = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = NO_JAIL }
+			)
+			local written = fs.readDir(away)
+			fs.removeFile(at(".cache"))
+			fs.writeDir(at(".cache/.git"))
+			local folder = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = markers() }
+			)
+			fs.removeDir(at(".cache/.git"))
+			t.expect(linked.ok).toBe(false)
+			t.expect(has(linked.stderr, "is not a plain folder")).toBe(true)
+			t.expect(has(linked.stdout, "PASS")).toBe(false)
+			t.expect(#written).toBe(0)
+			t.expect(folder.ok).toBe(false)
+			t.expect(has(folder.stderr, "is a folder")).toBe(true)
+			t.expect(has(folder.stdout, "PASS")).toBe(false)
+		end
+	)
+
 	it(
 		"in the jail, a home sentinel the write is refused for leaves the ceiling and every guard as the root's",
 		function()
@@ -405,4 +441,18 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			t.expect(has(r.stderr, "is under no project root")).toBe(true)
 		end
 	)
+
+	it("a raft made online gets its project's gate in RC0", function()
+		-- captures run in a worktree (the tracker refuses the main checkout)
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "rc-capture" })
+		local issue = trackerfix.trOk(f, wt, { "new", "issue", "c", "rc-tool", "--project", "z-nile" })
+		local id = string.match(issue, "(c%d%d%d%d)%.md$") :: string
+		local raft = trackerfix.trOk(
+			f,
+			wt,
+			{ "new", "raft", "chore", "rc-tool", id, "--single", "--project", "z-nile" }
+		)
+		local check = fs.readFile(`{wt}/{(string.gsub(raft, "[^/]+%.md$", "check.sh"))}`)
+		t.expect(has(check, '"$ZN_ROOT/z-nile/check.sh" --project z-nile --full')).toBe(true)
+	end)
 end)

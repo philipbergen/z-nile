@@ -122,6 +122,16 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
 			"new raft"
 		)
+		-- its RC0 runs its project's gate (decided with the user: "pickman's gate only"; the template's {{PROJECT}})
+		local raftCheck = fs.readFile(`{work}/pickman/.tracker/rafts/R0010/check.sh`)
+		t.expect(
+			string.find(
+				raftCheck,
+				'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project pickman --full',
+				1,
+				true
+			) ~= nil
+		).toBe(true)
 		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
