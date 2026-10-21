@@ -52,7 +52,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 		at(s, "Leave `raft:` empty: z-raft writes it.", w)
 		at(
 			s,
-			"An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out.",
+			"An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`).",
 			w
 		)
 		at(s, "`./zn spend <id> --phase prep --time", w)
@@ -115,6 +115,11 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 				w
 			)
 			at(s, "whenever this rafting changed its membership", w)
+			at(s, "- `./zn unfold <R-id> <ids…>` takes members out of a raft", w)
+			at(s, "**Redesigned members.**", w)
+			at(s, "changed on origin/main since <R-id> grouped it", w)
+			at(s, "record in the raft's `grouped:` line a hash of each prepared member's document", w)
+			at(s, "`./zn status <id> new`, then claim it again", w)
 			at(s, "- **Theme**:", w)
 			at(s, "- **Whole-raft design**: the interfaces between the members", w)
 			at(s, "- **Order & dependencies**: the members in `depends_on` order, then by id", w)
@@ -166,6 +171,14 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			w
 		)
 		at(s, "`<root>/rafts/retired/<ID>` is a raft `recombine` retired", w)
+		at(s, "| unfold | `./zn unfold <R-id> <issue>...` |", w)
+		at(
+			s,
+			"`status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`",
+			w
+		)
+		at(s, "A raft's `grouped:` line records a hash of each prepared member's document", w)
+		at(s, "It also gives back the issue claims this checkout remembers for the raft's members", w)
 		at(s, "| fold | `./zn fold <R-id> <issue>...` |", w)
 		at(s, "| recombine | `./zn recombine <keeper> <other> [<issue>...]` |", w)
 		at(s, "| release | `./zn release <R-id> [--force]` |", w)
@@ -174,7 +187,11 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			"`lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read)",
 			w
 		)
-		at(s, "`status <id> <to>`, `fold`, `recombine`, `release`, `raft-plan --apply`, `compact`", w)
+		at(
+			s,
+			"`status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`",
+			w
+		)
 		at(s, "`./zn release <R-id> [--force]`\n", w)
 		at(s, "`z-design` sets an issue's and `z-raft` a raft's", w)
 		at(s, "a raftless issue goes to z-raft", w)
@@ -211,6 +228,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 		for _, line in
 			{
 				"  fold <R-id> <issue>...",
+				"  unfold <R-id> <issue>...",
 				"  recombine <keeper> <other> [<issue>...]",
 				"  release <R-id> [--force]",
 				"  raft-plan [--apply]",

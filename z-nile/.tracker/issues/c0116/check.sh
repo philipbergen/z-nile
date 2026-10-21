@@ -12,7 +12,7 @@ A="$HERE/acceptance"
 check "AC1: rafting prepared issues claims the raft only; raft: is the lock; fold, the carried move and release hold it" \
   lune run tests/run -- "$A/claims.spec.luau"
 check "AC2: recombine moves all or named members between backlog rafts under one stamp and retires only an emptied raft" \
-  lune run tests/run -- "$A/recombine.spec.luau"
+  lune run tests/run -- "$A/recombine.spec.luau" "$A/retired.spec.luau"
 check "AC3: z-raft's no-argument plan keeps types, projects, the cap, solo issues and shared surfaces, in any order" \
   lune run tests/run -- "$A/plan.spec.luau"
 check "AC4: raft-plan prints the plan as commands from the documents, and --apply runs them in a worktree only" \

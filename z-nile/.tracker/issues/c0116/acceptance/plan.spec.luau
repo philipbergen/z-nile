@@ -253,4 +253,30 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
 		t.expect(string.find(named.R0020 or "", "d0099 has no size:", 1, true) ~= nil).toBe(true)
 		t.expect(#ops).toBe(2)
 	end)
+
+	it(
+		"hashes a member's design without its status: and raft: lines, and changes with anything else",
+		function()
+			local doc =
+				"---\nid: c0001\nraft: \nsize: 100\nstatus: prepared-a-b-c\n---\n\n# c0001\n\n## Design\nOne.\n"
+			local h = raftplan.designHash(doc)
+			t.expect(string.match(h, "^%x+$") ~= nil and #h == 12).toBe(true)
+			local moved = (string.gsub(doc, "status: prepared%-a%-b%-c", "status: active-d-e-f"))
+			moved = (string.gsub(moved, "raft: \n", "raft: R0010\n"))
+			t.expect(raftplan.designHash(moved)).toBe(h)
+			t.expect(raftplan.designHash(doc .. "Two.\n") ~= h).toBe(true)
+			t.expect(raftplan.designHash((string.gsub(doc, "size: 100", "size: 200"))) ~= h).toBe(true)
+		end
+	)
+
+	it("reads and writes the grouped: record, refusing a malformed entry and an id twice", function()
+		local map, problem = raftplan.parseGrouped("[c0002@bbbbbbbbbbbb, c0001@aaaaaaaaaaaa]")
+		t.expect(problem).toBe(nil)
+		t.expect(map).toEqual({ c0001 = "aaaaaaaaaaaa", c0002 = "bbbbbbbbbbbb" })
+		t.expect(raftplan.renderGrouped(map)).toBe("[c0001@aaaaaaaaaaaa, c0002@bbbbbbbbbbbb]")
+		t.expect(select(2, raftplan.parseGrouped("[c0001@aaaa, c0001@bbbb]")) ~= nil).toBe(true)
+		t.expect(select(2, raftplan.parseGrouped("[c0001]")) ~= nil).toBe(true)
+		t.expect(select(2, raftplan.parseGrouped("c0001@aaaa")) ~= nil).toBe(true)
+		t.expect(raftplan.parseGrouped(nil)).toEqual({})
+	end)
 end)

@@ -7,3 +7,7 @@
 - design-review-001 F6: ticket-prep/specify-every-named-artifact
 - design-review-001 F7: ticket-prep/spec-design-correspondence
 - note c0116 prep mutation run: M24 and M27 survived because a second check refused the same input: testing/guard-needs-its-own-case
+- design-review-002 F1: architecture/locks-detect-change, architecture/claims-name-who-else-can-claim
+- design-review-002 F2: tracker/retire-keeps-what-readers-count, testing/prove-state-folders-on-the-real-tree, testing/seed-every-enumerated-case
+- design-review-002 F3: ticket-prep/instructions-runnable-where-they-run
+- design-review-002 F4: one-off: the remembered issue claim's own failure modes (a cleared .cache, and release covering only the raft's stamp), specific to G14

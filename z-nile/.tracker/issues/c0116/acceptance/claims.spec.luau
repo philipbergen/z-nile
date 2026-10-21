@@ -26,6 +26,7 @@ end
 local f: trackerfix.Fixture
 local A, B, C, D, E = "", "", "", "", "" -- rafting worktrees, each a terminal of its own
 local F, G, H = "", "", "" -- review 001 F1: two raftings and a z-design terminal
+local J, K, L, M, N, O = "", "", "", "", "", "" -- review 002
 local R, R2 = "", ""
 
 local function has(text: string?, needle: string): boolean
@@ -97,6 +98,13 @@ return t.spec(
 				["tracker/issues/c0014/c0014.md"] = issue("c0014", ""),
 				["tracker/issues/c0015/c0015.md"] = issue("c0015", ""),
 				["tracker/issues/c0016/c0016.md"] = issue("c0016", ""),
+				-- review 002: redesigns inside the rafting window, the unfold route, and release of remembered claims
+				["tracker/issues/c0021/c0021.md"] = issue("c0021", ""),
+				["tracker/issues/c0022/c0022.md"] = issue("c0022", ""),
+				["tracker/issues/c0023/c0023.md"] = issue("c0023", ""),
+				["tracker/issues/c0024/c0024.md"] = issue("c0024", ""),
+				["tracker/issues/c0025/c0025.md"] = draft("c0025"),
+				["tracker/issues/c0026/c0026.md"] = draft("c0026"),
 				-- another project's chore, and a feature, both prepared and raftless
 				["z-nile/.tracker/issues/c0080/c0080.md"] = issue("c0080", ""),
 				["tracker/issues/f0085/f0085.md"] = (
@@ -124,6 +132,9 @@ return t.spec(
 			do
 				seed[`tracker/issues/{id}/check.sh`] = CHECK
 			end
+			for _, id in { "c0021", "c0022", "c0023", "c0024", "c0025", "c0026" } do
+				seed[`tracker/issues/{id}/check.sh`] = CHECK
+			end
 			seed["z-nile/.tracker/issues/c0080/check.sh"] = CHECK
 			seed["tracker/rafts/R0090/check.sh"] = CHECK
 			seed["tracker/rafts/R0100/check.sh"] = CHECK
@@ -136,6 +147,12 @@ return t.spec(
 			F = trOk(f.main, { "worktree", "raft-f" })
 			G = trOk(f.main, { "worktree", "prep-g" })
 			H = trOk(f.main, { "worktree", "raft-h" })
+			J = trOk(f.main, { "worktree", "raft-j" })
+			K = trOk(f.main, { "worktree", "prep-k" })
+			L = trOk(f.main, { "worktree", "raft-l" })
+			M = trOk(f.main, { "worktree", "prep-m" })
+			N = trOk(f.main, { "worktree", "raft-n" })
+			O = trOk(f.main, { "worktree", "raft-o" })
 			t.expect(trOk(A, { "status", "c0010" })).toBe("prepared")
 		end)
 
@@ -398,5 +415,141 @@ return t.spec(
 			land(H)
 			refused(f.main, { "ready", RY }, "c0016", "preparing")
 		end)
+
+		-- z-design's whole cycle on an issue alone: claim, change the design, carried prepare, land
+		local function redesign(wt: string, id: string, mark: string)
+			trOk(wt, { "sync" })
+			trOk(wt, { "status", id, "preparing" })
+			local path = `{wt}/tracker/issues/{id}/{id}.md`
+			fs.writeFile(path, fs.readFile(path) .. `\n## Design\n{mark}: a new interface\n`)
+			trOk(wt, { "status", id, "prepared" })
+			fixture.git(wt, { "add", "-A" })
+			fixture.git(wt, { "commit", "-q", "-m", `tracker: prep {id}` })
+			land(wt)
+		end
+		local function prepareRaft(wt: string, rid: string)
+			local doc = `{wt}/tracker/rafts/{rid}/{rid}.md`
+			setLine(doc, "design", "ready")
+			writeDesign(doc)
+			fs.writeFile(
+				`{wt}/tracker/rafts/{rid}/design-review-001.md`,
+				"# Review 001\n\nVerdict: approve\n"
+			)
+		end
+
+		it(
+			"a redesign landed after the carried move is caught by ready, naming the member and both hashes",
+			function()
+				local RZ = string.match(
+					trOk(J, { "new", "raft", "chore", "late2", "c0021", "c0022" }),
+					"(R%d+)"
+				) :: string
+				t.expect(
+					string.match(
+						fs.readFile(`{J}/tracker/rafts/{RZ}/{RZ}.md`),
+						"\ngrouped: %[c0021@%x+, c0022@%x+%]\n"
+					) ~= nil
+				).toBe(true)
+				prepareRaft(J, RZ)
+				trOk(J, { "status", RZ, "prepared" })
+				fixture.git(J, { "add", "-A" })
+				fixture.git(J, { "commit", "-q", "-m", `tracker: raft {RZ}` })
+				trOk(K, { "status", "c0022", "preparing" }) -- its raft: is still empty on origin
+				land(J)
+				-- K finishes the redesign (its claim was made before the landing) and lands it
+				local path = `{K}/tracker/issues/c0022/c0022.md`
+				trOk(K, { "sync" })
+				fs.writeFile(path, fs.readFile(path) .. "\n## Design\nREDESIGNED-LATE: a new interface\n")
+				trOk(K, { "status", "c0022", "prepared" })
+				fixture.git(K, { "add", "-A" })
+				fixture.git(K, { "commit", "-q", "-m", "tracker: prep c0022" })
+				land(K)
+				local r = tr(f.main, { "ready", RZ })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "c0022 (")).toBe(true)
+				t.expect(has(r.stderr, "changed on origin/main since")).toBe(true)
+				t.expect(string.match(r.stderr, "c0022 %(%x+ → %x+%)") ~= nil).toBe(true)
+				t.expect(onOrigin(`tracker/rafts/active/{RZ}/{RZ}.md`)).toBe(nil)
+			end
+		)
+
+		it(
+			"a redesign landed before the carried move is refused by it, and unfold takes the member out",
+			function()
+				local RW = string.match(
+					trOk(L, { "new", "raft", "chore", "early2", "c0023", "c0024" }),
+					"(R%d+)"
+				) :: string
+				prepareRaft(L, RW)
+				redesign(M, "c0024", "REDESIGNED-EARLY")
+				trOk(L, { "sync" })
+				refused(L, { "status", RW, "prepared" }, "c0024 (", "changed on origin/main since")
+				-- the route: take it out, prepare the rest, land; the member is raftless and z-design may claim it
+				fixture.git(L, { "add", "-A" })
+				fixture.git(L, { "commit", "-q", "-m", "wip: the raft's design" })
+				trOk(L, { "unfold", RW, "c0024" })
+				t.expect(string.match(fs.readFile(`{L}/tracker/issues/c0024/c0024.md`), "\nraft: *\n") ~= nil)
+					.toBe(true)
+				t.expect(has(fs.readFile(`{L}/tracker/rafts/{RW}/{RW}.md`), "\nissues: [c0023]\n")).toBe(true)
+				trOk(L, { "status", RW, "prepared" })
+				fixture.git(L, { "add", "-A" })
+				fixture.git(L, { "commit", "-q", "-m", `tracker: raft {RW}` })
+				land(L)
+				trOk(f.main, { "ready", RW })
+				trOk(M, { "sync" })
+				trOk(M, { "status", "c0024", "preparing" })
+			end
+		)
+
+		it("unfold takes a member out of a landed raft, so z-design can claim it again", function()
+			-- RX (c0014) and the readied rafts aside, R0090 holds c0070 and is landed and prepared
+			refused(N, { "status", "c0070", "preparing" }, "c0070", "unfold")
+			refused(N, { "unfold", "R0090", "c0010" }, "c0010 is not a member of R0090")
+			trOk(N, { "unfold", "R0090", "c0070" })
+			trOk(N, { "status", "R0090", "prepared" })
+			fixture.git(N, { "add", "-A" })
+			fixture.git(N, { "commit", "-q", "-m", "tracker: unfold c0070 from R0090" })
+			land(N)
+			t.expect(string.match(onOrigin("tracker/issues/c0070/c0070.md") or "", "\nraft: *\n") ~= nil)
+				.toBe(true)
+			trOk(N, { "status", "c0070", "preparing" })
+		end)
+
+		it(
+			"a cleared .cache names the way back, and release gives back the issue claims this checkout made",
+			function()
+				local RV =
+					string.match(trOk(O, { "new", "raft", "chore", "oldflow", "c0025" }), "(R%d+)") :: string
+				trOk(O, { "status", "c0026", "preparing" }) -- an issue added during the old prep, claimed here
+				local doc = `{O}/tracker/rafts/{RV}/{RV}.md`
+				setLine(doc, "design", "ready")
+				setLine(`{O}/tracker/issues/c0025/c0025.md`, "design", "ready")
+				setLine(doc, "issues", "[c0025, c0026]")
+				setLine(`{O}/tracker/issues/c0026/c0026.md`, "raft", RV)
+				local claim = (string.gsub(fs.readFile(`{O}/.cache/tracker-claim-c0026`), "%s+$", ""))
+				fs.removeFile(`{O}/.cache/tracker-claim-c0026`)
+				refused(
+					O,
+					{ "status", RV, "prepared" },
+					"c0026",
+					"its claim file was cleared",
+					"status c0026 new"
+				)
+				fs.writeFile(`{O}/.cache/tracker-claim-c0026`, claim .. "\n")
+				local before = tip()
+				trOk(O, { "release", RV })
+				local changed =
+					string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
+				table.sort(changed)
+				t.expect(changed).toEqual({
+					"tracker/issues/c0025/c0025.md",
+					"tracker/issues/c0026/c0026.md",
+					`tracker/rafts/{RV}/{RV}.md`,
+				})
+				t.expect(string.match(originStatus("tracker/issues/c0026/c0026.md"), "^new%-") ~= nil)
+					.toBe(true)
+				t.expect(fs.isFile(`{O}/.cache/tracker-claim-c0026`)).toBe(false)
+			end
+		)
 	end
 )
