@@ -6,8 +6,16 @@ local ids = {}
 export type Space = "issue" | "raft"
 export type Counters = { issue: number, raft: number }
 
-ids.FILE = "tracker/next"
-ids.MAP_FILE = "tracker/compaction.txt"
+-- The one counter for every project's ids, and the last compaction's map (c0114: both left tracker/ for z-nile/).
+ids.FILE = "z-nile/next"
+ids.MAP_FILE = "z-nile/compaction.txt"
+-- Where they were before c0114. `tracker/next` stays as a tombstone that never parses, so an engine from before the
+-- move refuses to number instead of falling back to the old rule; history readers still read the old map's commits.
+ids.OLD_FILE = "tracker/next"
+ids.MAP_FILES = { "z-nile/compaction.txt", "tracker/compaction.txt" }
+-- What the first publish after c0114 lands writes at tracker/next when it moves the counter (publish.counterOf).
+ids.TOMBSTONE =
+	"moved to z-nile/next (c0114): this file never parses, so a tracker engine from before the move refuses to number\n"
 
 local ID = "[fdcR]%d%d%d%d"
 

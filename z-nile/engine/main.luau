@@ -1,5 +1,5 @@
 --!strict
--- Tracker CLI. Run through scripts/tracker.sh. See .claude/skills/tracker/SKILL.md.
+-- Tracker CLI. Run through ./zn at the repository root (c0114). See .claude/skills/tracker/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
 local claimsLib = require("./claims")
@@ -11,6 +11,7 @@ local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
+local projects = require("./projects")
 local publish = require("./publish")
 local sh = require("../lib/sh")
 local spend = require("./spend")
@@ -25,8 +26,10 @@ local function asSpace(s: string): idsLib.Space
 end
 
 local USAGE = [[
-usage: scripts/tracker.sh <command> ...
-  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"]   create an issue (emergent if the raft is active)
+usage: ./zn <command> ...
+  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--project <name>]
+                                                create an issue (emergent if the raft is active) in a project
+                                                of z-nile/projects.toml (default: the first)
   new raft <feature|defect|chore> <slug> <issue>... [--single]
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
@@ -37,12 +40,12 @@ usage: scripts/tracker.sh <command> ...
   members <R-id>                                print directories of every issue in the raft
   check <id>                                    run an item's check.sh (a raft runs its own)
   renumber <old|item directory> [<new>]         step an id (conflict resolution), or one copy of a duplicated id;
-                                                <new> defaults to the next free number (tracker/next, by one)
+                                                <new> defaults to the next free number (z-nile/next, by one)
   audit                                         check the whole tracker tree: duplicates, documents, the counter
   compact [--force]                             renumber every item from 0001 (a fresh worktree on origin/main)
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
-  ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write tracker/rafts/active/<R>/prompt.md
+  ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
@@ -64,6 +67,8 @@ usage: scripts/tracker.sh <command> ...
                                                 list skill lessons; also --tags, --check, and --uncovered <id>...]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
+-- the issue, raft and prompt templates: engine files, shared by every project (c0114)
+local TEMPLATES = "z-nile/templates"
 
 local function fail(msg: string): never
 	stdio.ewrite(msg .. "\n")
@@ -99,7 +104,7 @@ local function push()
 end
 
 local function move(item: store.Item, state: store.State): store.Item
-	local dest = store.dirFor(item.kind, state, item.id)
+	local dest = store.dirFor(item.kind, state, item.id, item.root)
 	sh.git({ "mv", item.dir, dest })
 	return store.get(item.id)
 end
@@ -150,11 +155,11 @@ end
 
 local function refuseInMainCheckout(what: string)
 	if hasOrigin() and inMainCheckout() then
-		fail(`{what} must run inside a worktree: cd "$(scripts/tracker.sh worktree <target>)"`)
+		fail(`{what} must run inside a worktree: cd "$(./zn worktree <target>)"`)
 	end
 end
 
--- tracker.sh changes into the repository root before it starts Lune, so the working directory is the
+-- ./zn changes into the repository root before it starts Lune, so the working directory is the
 -- checkout the tracker belongs to. A fixture whose own `.git` is missing would otherwise fall through to an
 -- enclosing repository, the real one, and change it.
 local function guardRepoRoot()
@@ -196,17 +201,29 @@ end
 
 -- A check run protects this repository (the repository guards, c0640): tracker state is never published from
 -- inside one (c0650). Asked once per command; the guards' own script answers, so no variable is named here.
+-- Only one answer publishes: exit 0 with exactly `unguarded` on stdout. Every other outcome (fence.sh missing or
+-- broken, pickman_guarded missing, a crash, any other output) counts as guarded and publishes nothing (c0114:
+-- a guard's "no" is one explicit answer).
 local guardedRun: boolean? = nil
 local function guarded(): boolean
 	if guardedRun == nil then
-		local r = process.exec("bash", {
+		local ok, r = pcall(process.exec, "bash", {
 			"-c",
-			'[ -f scripts/lib/fence.sh ] && source scripts/lib/fence.sh && pickman_guarded "$PWD"',
+			'[ -f z-nile/lib/fence.sh ] || { echo "z-nile/lib/fence.sh is missing" >&2; exit 3; }; '
+				.. 'source z-nile/lib/fence.sh && pickman_guarded "$PWD"',
 		})
-		guardedRun = r.ok
-		if r.ok then
+		local answer = if ok then sh.trim(r.stdout) else ""
+		guardedRun = not (ok and r.ok and answer == "unguarded")
+		if ok and r.ok and answer == "guarded" then
 			stdio.ewrite(
 				`not publishing: {process.cwd} is protected by the repository guards (a check run)\n`
+			)
+		elseif guardedRun then
+			local why = if ok then sh.trim(r.stderr) else tostring(r)
+			stdio.ewrite(
+				`not publishing: cannot ask z-nile/lib/fence.sh whether a check runs in {process.cwd} (exit {if ok
+					then r.code
+					else "none"}{if why ~= "" then ": " .. why else ""})\n`
 			)
 		end
 	end
@@ -258,7 +275,7 @@ local function docPath(paths: { string }, id: string): string?
 end
 
 -- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
--- left as it was and `tracker.sh sync` can be run again after resolving by hand.
+-- left as it was and `./zn sync` can be run again after resolving by hand.
 local function mergeOrigin()
 	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
 	if not r.ok then
@@ -326,10 +343,31 @@ local function idsOf(paths: { string }, kind: string): { string }
 	return out
 end
 
--- Every file path under tracker/ on origin/main as it is (no fetch), and whether origin/main could be read. The one
--- reader of origin/main's ids: `new` (originIds) and `renumber` (originMainIds) differ only in fetching and failure.
+-- origin/main's project registry as it is (no fetch), or nil and why: what the guards and every origin read trust
+-- (c0114), never the working tree's. An origin/main without the file predates c0114: the legacy root alone. Nil when
+-- origin/main can't be read or its registry does not parse.
+local function originRegistry(): (projects.Registry?, string?)
+	return projects.at("origin/main")
+end
+
+local function originRoots(): { string }?
+	local reg = originRegistry()
+	return if reg then projects.roots(reg) else nil
+end
+
+-- Every file path under origin/main's project roots as it is (no fetch), and whether origin/main and its registry could
+-- be read. The one reader of origin/main's ids: `new` (originIds) and `renumber` (originMainIds) differ only in fetching
+-- and failure.
 local function originTree(): (boolean, { string })
-	local r = sh.run("git", { "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" })
+	local roots = originRoots()
+	if not roots then
+		return false, {}
+	end
+	local args = { "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "--" }
+	for _, r in roots do
+		table.insert(args, r .. "/")
+	end
+	local r = sh.run("git", args)
 	return r.ok, if r.ok then string.split(r.stdout, "\n") else {}
 end
 
@@ -348,7 +386,7 @@ local function activeRaft(): store.Item
 	local raft = currentRaft()
 	if not raft then
 		fail(
-			`not on an active raft's branch ({sh.git({ "branch", "--show-current" })}): run it in the raft's worktree (scripts/tracker.sh worktree <R-id>)`
+			`not on an active raft's branch ({sh.git({ "branch", "--show-current" })}): run it in the raft's worktree (./zn worktree <R-id>)`
 		)
 	end
 	return raft :: store.Item
@@ -368,7 +406,7 @@ local function refuseStale()
 	local mine = if fs.isFile(idsLib.MAP_FILE) then fs.readFile(idsLib.MAP_FILE) else nil
 	if mine ~= theirs.stdout then
 		fail(
-			"this tree predates the compaction on origin/main: a branch that changed tracker/ runs tracker.sh remap; any other merges origin/main"
+			"this tree predates the compaction on origin/main: a branch that changed tracker/ runs ./zn remap; any other merges origin/main"
 		)
 	end
 end
@@ -378,35 +416,40 @@ end
 -- with nothing tracked at HEAD loses its ignored files and is removed; untracked files that are not ignored are kept,
 -- and named in a warning. Run after every pull or fast-forward in the main checkout.
 local function sweepStale(root: string)
-	for _, kind in { "issues", "rafts" } do
-		for _, state in { "", "active/", "done/" } do
-			local rel = `tracker/{kind}/{state}`
-			local base = `{root}/{rel}`
-			if not fs.isDir(base) then
-				continue
-			end
-			for _, name in fs.readDir(base) do
-				local isId = if kind == "rafts" then store.isRaftId(name) else store.isIssueId(name)
-				if not isId or not fs.isDir(`{base}{name}`) then
+	-- every root the pulled registry names, retired ones too: a root move leaves the old folders behind (c0114)
+	local ok, reg = pcall(projects.load, root, true)
+	local roots: { string } = if ok then projects.allRoots(reg :: projects.Registry) else { projects.LEGACY }
+	for _, top in roots do
+		for _, kind in { "issues", "rafts" } do
+			for _, state in { "", "active/", "done/" } do
+				local rel = `{top}/{kind}/{state}`
+				local base = `{root}/{rel}`
+				if not fs.isDir(base) then
 					continue
 				end
-				local dir = `{rel}{name}`
-				-- a directory with anything tracked at HEAD is a live item (a readied raft, or an item mid-edit)
-				local tracked =
-					sh.run("git", { "-C", root, "ls-tree", "-r", "--name-only", "HEAD", "--", dir })
-				if tracked.ok and sh.trim(tracked.stdout) == "" then
-					-- only ignored files (a prompt.md, Finder litter): untracked work is never deleted, only named
-					sh.run("git", { "-C", root, "clean", "-ffdXq", "--", dir })
-					local left = if fs.isDir(`{base}{name}`) then fs.readDir(`{base}{name}`) else {}
-					if fs.isDir(`{base}{name}`) and #left == 0 then
-						fs.removeDir(`{base}{name}`)
-					elseif #left > 0 then
-						stdio.ewrite(
-							`warning: {dir} is no longer tracked but holds untracked files ({table.concat(
-								left,
-								", "
-							)}); move them and remove it, or tracker.sh will see {name} twice\n`
-						)
+				for _, name in fs.readDir(base) do
+					local isId = if kind == "rafts" then store.isRaftId(name) else store.isIssueId(name)
+					if not isId or not fs.isDir(`{base}{name}`) then
+						continue
+					end
+					local dir = `{rel}{name}`
+					-- a directory with anything tracked at HEAD is a live item (a readied raft, or an item mid-edit)
+					local tracked =
+						sh.run("git", { "-C", root, "ls-tree", "-r", "--name-only", "HEAD", "--", dir })
+					if tracked.ok and sh.trim(tracked.stdout) == "" then
+						-- only ignored files (a prompt.md, Finder litter): untracked work is never deleted, only named
+						sh.run("git", { "-C", root, "clean", "-ffdXq", "--", dir })
+						local left = if fs.isDir(`{base}{name}`) then fs.readDir(`{base}{name}`) else {}
+						if fs.isDir(`{base}{name}`) and #left == 0 then
+							fs.removeDir(`{base}{name}`)
+						elseif #left > 0 then
+							stdio.ewrite(
+								`warning: {dir} is no longer tracked but holds untracked files ({table.concat(
+									left,
+									", "
+								)}); move them and remove it, or ./zn will see {name} twice\n`
+							)
+						end
 					end
 				end
 			end
@@ -415,11 +458,12 @@ local function sweepStale(root: string)
 end
 
 -- Rebuilds `root`'s .cache/board.html, never opening a browser; a failure is one warning.
--- In-process, not a second tracker.sh (c0070's fallback: a second Lune process per publish cost c0053's commands spec
--- about a third more). The page is built from root's tracker/ with this tooling's template, as `board -O` writes it.
+-- In-process, not a second ./zn (c0070's fallback: a second Lune process per publish cost c0053's commands spec
+-- about a third more). The page is built from every project root of root's registry with this tooling's template, as
+-- `board -O` writes it.
 local function buildBoard(root: string)
 	local ok, err = pcall(function()
-		local page = board.build(`{root}/{store.ROOT}`)
+		local page = board.build(nil, root)
 		fs.writeDir(`{root}/.cache`)
 		sh.writeReplacing(`{root}/.cache/board.html`, page)
 	end)
@@ -462,10 +506,12 @@ end
 -- A claim stamp (`active-…`) that no item on origin/main carries, done/ included: `stop` gives back exactly the
 -- issues that carry the raft's stamp, so two claims must never share one. One `git grep` over the fetched tree.
 local function claimStamp(): string
+	local roots = originRoots()
+		or fail(`cannot check a claim stamp: origin/main has no readable {projects.FILE}`)
 	local value = statusLib.fresh(function()
 		return stamp("active")
 	end, function(v: string): boolean
-		local taken, err = claimsLib.taken(".", v)
+		local taken, err = claimsLib.taken(".", v, nil, roots)
 		if taken == nil then
 			fail(`cannot check a claim stamp against origin/main: {err}`)
 		end
@@ -498,7 +544,9 @@ local function moveOnOrigin(
 				return `{id} is not on origin/main`
 			end
 			sources[id] = string.sub(doc, 1, #doc - #id - 4) -- ".../<ID>/<ID>.md" -> ".../<ID>"
-			dirs[id] = store.dirFor(if store.isRaftId(id) then "raft" else "issue", to, id)
+			-- a published move stays under the item's own root (c0114)
+			local _, _, root = publish.itemPath(doc)
+			dirs[id] = store.dirFor(if store.isRaftId(id) then "raft" else "issue", to, id, root :: string)
 			if verify then
 				local text = read(doc) :: string
 				local refusal = verify(id, statusLib.effective(frontOf(text), stateOfPath(doc)))
@@ -567,23 +615,27 @@ local function localIds(space: string): { string }
 end
 
 local function localCounters(): idsLib.Counters?
-	return if fs.isFile(idsLib.FILE) then idsLib.parse(fs.readFile(idsLib.FILE)) else nil
+	-- the local copy of the live counter: z-nile/next, or tracker/next in a tree from before origin moved it (c0114)
+	local file = if fs.isFile(idsLib.FILE) then idsLib.FILE else idsLib.OLD_FILE
+	return if fs.isFile(file) then idsLib.parse(fs.readFile(file)) else nil
 end
 
--- The next number of `space` from origin's tracker/next (as `read` returns it), and the change that raises it.
--- Both nil when origin has no counter: the old numbering applies. The third result is an error.
+-- The next number of `space` from origin's live counter `counter` (as `read` returns it; publish passes it: z-nile/next,
+-- or tracker/next while origin has no registry), and the change that raises it. Both nil when origin has no counter:
+-- the old numbering applies. The third result is an error.
 local function reserve(
 	space: string,
 	used: { string },
-	read: (string) -> string?
+	read: (string) -> string?,
+	counter: string
 ): (number?, publish.Change?, string?)
-	local text = read(idsLib.FILE)
+	local text = read(counter)
 	if not text then
 		return nil, nil, nil
 	end
 	local c = idsLib.parse(text)
 	if not c then
-		return nil, nil, `{idsLib.FILE} on origin/main does not parse`
+		return nil, nil, `{counter} on origin/main does not parse`
 	end
 	local n = idsLib.nextFree(asSpace(space), c, used)
 	if n > 9999 then
@@ -595,7 +647,7 @@ local function reserve(
 	else
 		raised.issue = n + 1
 	end
-	return n, { path = idsLib.FILE, content = idsLib.format(raised, phrase()) }, nil
+	return n, { path = counter, content = idsLib.format(raised, phrase()) }, nil
 end
 
 -- Reserves the next number of `space` on origin/main by pushing only the raised counter; nil when origin/main has
@@ -603,12 +655,12 @@ end
 local function reserveOnOrigin(space: string, extra: { string }): number?
 	local chosen: number? = nil
 	refuseStale()
-	local r = published(publish.commit(".", function(paths, read)
+	local r = published(publish.commit(".", function(paths, read, _roots, counter)
 		local used = idsOf(paths, space)
 		for _, id in extra do
 			table.insert(used, id)
 		end
-		local n, change, err = reserve(space, used, read)
+		local n, change, err = reserve(space, used, read, counter)
 		if err then
 			return err
 		end
@@ -675,6 +727,25 @@ local function withDesc(doc: string, opts: { [string]: { string } }): string
 	end, 1))
 end
 
+-- The root of the project `--project <name>` names in the working tree's registry, or else of its first project
+-- (c0114). Publishing checks the root against origin/main's registry too.
+local function projectRoot(opts: { [string]: { string } }): string
+	local reg = projects.load()
+	local name = opts["--project"] and opts["--project"][1]
+	if not name then
+		return reg.projects[1].root
+	end
+	local p = projects.named(reg, name)
+	if not p then
+		local names: { string } = {}
+		for _, q in reg.projects do
+			table.insert(names, q.name)
+		end
+		fail(`--project {name}: not a project in {projects.FILE} ({table.concat(names, ", ")})`)
+	end
+	return (p :: projects.Project).root
+end
+
 local cmd = {}
 
 function cmd.new(pos: { string }, opts: { [string]: { string } })
@@ -683,19 +754,25 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 	if what == "issue" then
 		local prefix, slug = pos[2], pos[3]
 		if not (prefix and store.TYPES[prefix] and slug) then
-			fail("usage: new issue <f|d|c> <slug> [--raft R0010]")
+			fail("usage: new issue <f|d|c> <slug> [--raft R0010] [--project <name>]")
 		end
 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
 		refuseStale()
 		local raftId = opts["--raft"] and opts["--raft"][1]
+		local root = projectRoot(opts)
 		if raftId then
-			store.get(raftId) -- an unknown raft fails here
+			local raft = store.get(raftId) -- an unknown raft fails here
+			-- an emergent issue lives beside its raft, in the raft's project
+			if opts["--project"] and root ~= raft.root then
+				fail(`--raft {raftId} is in {raft.root}: an emergent issue is made in its raft's project`)
+			end
+			root = raft.root
 			local current = currentRaft()
 			if not current or current.id ~= raftId then
 				fail(
-					`--raft {raftId}: an emergent issue is made on the raft's own branch, in its worktree (scripts/tracker.sh worktree {raftId})`
+					`--raft {raftId}: an emergent issue is made on the raft's own branch, in its worktree (./zn worktree {raftId})`
 				)
 			end
 		end
@@ -703,12 +780,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if state == "backlog" and publishing() then
 			local chosen = ""
 			refuseStale()
-			local r = published(publish.commit(".", function(paths, read)
+			local r = published(publish.commit(".", function(paths, read, roots, counter)
+				if not table.find(roots, root) then
+					return `{root} is not a project root in origin/main's {projects.FILE}`
+				end
 				local ids = idsOf(paths, "issue")
 				for _, id in localIds("issue") do
 					table.insert(ids, id)
 				end
-				local n, counter, err = reserve("issue", ids, read)
+				local n, raise, err = reserve("issue", ids, read, counter)
 				if err then
 					return err
 				end
@@ -722,20 +802,20 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					EMERGENT = "false",
 					DATE = today(),
 				}
-				local doc = withDesc(render("tracker/templates/issue/doc.md", vars), opts)
+				local doc = withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts)
 				local changes: { publish.Change } = {
 					{
-						path = `tracker/issues/{chosen}/{chosen}.md`,
+						path = `{root}/issues/{chosen}/{chosen}.md`,
 						content = withFront(doc, "status", stamp("new")),
 					},
 					{
-						path = `tracker/issues/{chosen}/check.sh`,
-						content = render("tracker/templates/issue/check.sh", vars),
+						path = `{root}/issues/{chosen}/check.sh`,
+						content = render(`{TEMPLATES}/issue/check.sh`, vars),
 						mode = "100755",
 					},
 				}
-				if counter then
-					table.insert(changes, counter)
+				if raise then
+					table.insert(changes, raise)
 				end
 				return changes
 			end, function()
@@ -750,7 +830,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			if not raftIsActiveHere() then
 				mergeOrigin()
 			end
-			print(`tracker/issues/{chosen}/{chosen}.md`)
+			print(`{root}/issues/{chosen}/{chosen}.md`)
 			return
 		end
 		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
@@ -760,7 +840,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				return store.nextNumber("issue", originIds("issue"))
 			end)
 		local id = store.formatId(prefix, n)
-		local dir = store.dirFor("issue", state, id)
+		local dir = store.dirFor("issue", state, id, root)
 		fs.writeDir(dir)
 		local vars = {
 			ID = id,
@@ -771,8 +851,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, withDesc(render("tracker/templates/issue/doc.md", vars), opts))
-		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/issue/check.sh", vars))
+		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
+		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
 	elseif what == "raft" then
@@ -798,13 +878,32 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				fail("a raft needs at least one issue")
 			end
 			local chosen = ""
+			local root = ""
 			refuseStale()
-			local r = published(publish.commit(".", function(paths, read)
+			local r = published(publish.commit(".", function(paths, read, roots, counter)
+				-- a raft lives in its members' project, and never spans two (c0114)
+				root = ""
+				for _, id in ids do
+					local path = docPath(paths, id)
+					local at: string? = nil
+					if path then
+						at = select(3, publish.itemPath(path))
+					end
+					if at then
+						if root ~= "" and at ~= root then
+							return `a raft holds issues of one project: {id} is in {at}, not {root}`
+						end
+						root = at
+					end
+				end
+				if root ~= "" and not table.find(roots, root) then
+					return `{root} is not a project root in origin/main's {projects.FILE}`
+				end
 				local known = idsOf(paths, "raft")
 				for _, raft in store.all("raft") do
 					table.insert(known, raft.id)
 				end
-				local n, counter, err = reserve("raft", known, read)
+				local n, raise, err = reserve("raft", known, read, counter)
 				if err then
 					return err
 				end
@@ -841,16 +940,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					DATE = today(),
 				}
 				table.insert(changes, {
-					path = `tracker/rafts/{chosen}/{chosen}.md`,
-					content = withFront(render("tracker/templates/raft/doc.md", vars), "status", claim),
+					path = `{root}/rafts/{chosen}/{chosen}.md`,
+					content = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
 				})
 				table.insert(changes, {
-					path = `tracker/rafts/{chosen}/check.sh`,
-					content = render("tracker/templates/raft/check.sh", vars),
+					path = `{root}/rafts/{chosen}/check.sh`,
+					content = render(`{TEMPLATES}/raft/check.sh`, vars),
 					mode = "100755",
 				})
-				if counter then
-					table.insert(changes, counter)
+				if raise then
+					table.insert(changes, raise)
 				end
 				return changes
 			end, function()
@@ -867,7 +966,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				sh.git({ "add", doc })
 			end
 			sh.git({ "commit", "--quiet", "-m", `tracker: {chosen} members` })
-			print(`tracker/rafts/{chosen}/{chosen}.md`)
+			print(`{root}/rafts/{chosen}/{chosen}.md`)
 			return
 		end
 		local members: { store.Item } = {}
@@ -885,13 +984,19 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if #members == 0 then
 			fail("a raft needs at least one issue")
 		end
+		local root = members[1].root
+		for _, m in members do
+			if m.root ~= root then
+				fail(`a raft holds issues of one project: {m.id} is in {m.root}, not {root}`)
+			end
+		end
 		local id = store.formatId(
 			"R",
 			localNumber("raft", function()
 				return store.nextNumber("raft", originIds("raft"))
 			end)
 		)
-		local dir = store.dirFor("raft", "backlog", id)
+		local dir = store.dirFor("raft", "backlog", id, root)
 		fs.writeDir(dir)
 		local ids: { string } = {}
 		for _, m in members do
@@ -907,8 +1012,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			ISSUES = table.concat(ids, ", "),
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, render("tracker/templates/raft/doc.md", vars))
-		fs.writeFile(`{dir}/check.sh`, render("tracker/templates/raft/check.sh", vars))
+		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
+		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
 	else
@@ -918,10 +1023,11 @@ end
 
 local function originPaths(): { string }
 	sh.git({ "fetch", "--quiet", "origin", "main" })
-	return string.split(
-		sh.git({ "ls-tree", "-r", "--name-only", "--full-tree", "origin/main", "tracker/" }),
-		"\n"
-	)
+	local ok, paths = originTree()
+	if not ok then
+		fail(`cannot read origin/main's project roots ({projects.FILE})`)
+	end
+	return paths
 end
 
 -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
@@ -962,13 +1068,11 @@ local function setStatus(id: string, to: string)
 			local tf = frontOf(tt)
 			if stateOfPath(tp) == "active" then
 				local raftId = if store.isRaftId(id) then id else (tf.raft or "")
-				return `{t} is readied (in active/): use tracker.sh stop {if raftId ~= ""
-					then raftId
-					else "<R-id>"}`
+				return `{t} is readied (in active/): use ./zn stop {if raftId ~= "" then raftId else "<R-id>"}`
 			end
 			local cur = statusLib.effective(tf, stateOfPath(tp))
 			if carried and t ~= id and cur ~= "preparing" then
-				return `{t} is {cur} on origin/main: claim it first with tracker.sh status {t} preparing`
+				return `{t} is {cur} on origin/main: claim it first with ./zn status {t} preparing`
 			end
 			if carried then
 				-- the move to `prepared` ties the two fields together: designs are ready first
@@ -1026,10 +1130,12 @@ function cmd.status(pos: { string })
 		fail("status needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
 	end
 	if not id then
-		for _, p in originPaths() do
+		local listed = originPaths()
+		local roots = originRoots() :: { string }
+		for _, p in listed do
 			-- the item's own document only: spend.md sits beside it and must not list the item twice
 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
-			if fid and file == `{fid}.md` and publish.allowed(p) and stateOfPath(p) ~= "done" then
+			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
 				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
 			end
@@ -1054,7 +1160,7 @@ function cmd.status(pos: { string })
 	end
 	if to == "active" then
 		fail(
-			"only tracker.sh start or tracker.sh ready claims active: it checks the tree, the designs and the dependencies first"
+			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
 		)
 	end
 	setStatus(id, to)
@@ -1087,7 +1193,8 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 end
 
 -- What a capture may change, from `git diff --name-status --no-renames origin/main HEAD`: only edits (M) to backlog
--- issue documents `tracker/issues/<ID>/<ID>.md` that say `design: draft` on both sides, with the status line unchanged.
+-- issue documents `<root>/issues/<ID>/<ID>.md`, under a root of `base`'s registry (c0114), that say `design: draft` on
+-- both sides, with the status line unchanged.
 -- Returns the first refusal (naming the path), or nil.
 -- The frontmatter keys in order, or nil when one repeats: frontOf reads the last copy of a key, store.withFront
 -- rewrites the first, so a document with two is refused rather than read two ways.
@@ -1110,6 +1217,11 @@ end
 local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true }
 
 local function captureScope(diff: string, base: string): string?
+	local reg, regErr = projects.at(base)
+	if not reg then
+		return `cannot read the project roots at {base}: {regErr}`
+	end
+	local roots = projects.roots(reg :: projects.Registry)
 	local seen = false
 	for line in string.gmatch(diff, "[^\n]+") do
 		seen = true
@@ -1117,7 +1229,11 @@ local function captureScope(diff: string, base: string): string?
 		if not kind or not path then
 			return `cannot read the diff line "{line}"`
 		end
-		local a, b = string.match(path, "^tracker/issues/([^/]+)/([^/]+)%.md$")
+		local root, rest = projects.rootOf(path, roots)
+		local a, b = nil, nil
+		if root and rest then
+			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
+		end
 		if kind ~= "M" or not a or a ~= b or not store.isIssueId(a) then
 			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents; land that through a pull request)`
 		end
@@ -1149,7 +1265,7 @@ local function captureScope(diff: string, base: string): string?
 			return `not a capture change: {path} is not design: draft on both sides (design moves only through prep)`
 		end
 		if was.status ~= now.status then
-			return `not a capture change: {path} changes its status line (tracker.sh status moves it)`
+			return `not a capture change: {path} changes its status line (./zn status moves it)`
 		end
 	end
 	if not seen then
@@ -1174,7 +1290,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	local root = sh.git({ "rev-parse", "--show-toplevel" })
 	local raw = process.env.PICKMAN_LAND_GATE
 	local override = if raw and string.match(raw, "%S") then raw else nil
-	local gate = override or "scripts/check.sh --full"
+	local gate = override or "z-nile/check.sh --full"
 	local given = opts["-m"]
 	for _ = 1, 3 do
 		sh.git({ "fetch", "--quiet", "origin", "main" })
@@ -1369,16 +1485,20 @@ function cmd.renumber(pos: { string })
 	local byDir = string.find(arg, "/", 1, true) ~= nil
 	if byDir then
 		local path = string.gsub(arg, "/+$", "")
-		local kindDir, state, id = string.match(path, "^tracker/(%a+)/(%a+)/([^/]+)$")
-		if not kindDir then
-			kindDir, id = string.match(path, "^tracker/(%a+)/([^/]+)$")
-			state = nil
+		local root, under = projects.rootOf(path, store.roots())
+		local kindDir, state, id = nil, nil, nil
+		if root and under then
+			kindDir, state, id = string.match(under, "^(%a+)/(%a+)/([^/]+)$")
+			if not kindDir then
+				kindDir, id = string.match(under, "^(%a+)/([^/]+)$")
+				state = nil
+			end
 		end
 		local space = id and idsLib.spaceOf(id)
 		local want = if kindDir == "issues" then "issue" elseif kindDir == "rafts" then "raft" else nil
 		local okState = state == nil or state == "active" or state == "done"
 		if not (id and space and space == want and okState and fs.isFile(`{path}/{id}.md`)) then
-			fail(`renumber: {arg} is not an item directory (tracker/<issues|rafts>/[active/|done/]<id>)`)
+			fail(`renumber: {arg} is not an item directory (<root>/<issues|rafts>/[active/|done/]<id>)`)
 		end
 		if state == "done" then
 			local others: { string } = {}
@@ -1402,6 +1522,7 @@ function cmd.renumber(pos: { string })
 			dir = path,
 			doc = `{path}/{id}.md`,
 			slug = "",
+			root = root :: string,
 		}
 	else
 		local ok, got = pcall(store.get, arg)
@@ -1409,7 +1530,7 @@ function cmd.renumber(pos: { string })
 			local why = tostring(got)
 			if string.find(why, "duplicate id", 1, true) then
 				fail(
-					`{why}\nrenumber one copy by its directory: tracker.sh renumber <directory> (not the one in done/)`
+					`{why}\nrenumber one copy by its directory: ./zn renumber <directory> (not the one in done/)`
 				)
 			end
 			fail(why)
@@ -1444,7 +1565,7 @@ function cmd.renumber(pos: { string })
 		end
 		new = store.formatId(string.sub(old, 1, 1), n :: number)
 	end
-	local dest = store.dirFor(item.kind, item.state, new :: string)
+	local dest = store.dirFor(item.kind, item.state, new :: string, item.root)
 	if fs.isDir(dest) then
 		fail(`{new} already exists`)
 	end
@@ -1456,7 +1577,16 @@ function cmd.renumber(pos: { string })
 		fs.move(item.dir, dest)
 		fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
 	end
-	rewriteUnder(if byDir then dest else store.ROOT, old, new :: string)
+	if byDir then
+		rewriteUnder(dest, old, new :: string)
+	else
+		-- every reference, in every project's documents: ids are unique across the roots
+		for _, r in store.roots() do
+			if fs.isDir(r) then
+				rewriteUnder(r, old, new :: string)
+			end
+		end
+	end
 	print(`{old} -> {new}`)
 end
 
@@ -1494,8 +1624,10 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	local busy = compactLib.busyRefs(sh.git({ "branch", "--show-current" }))
 	if #busy > 0 and not opts["--force"] then
 		fail(
-			`compact: these branches change tracker/ or tests/acceptance/: {table.concat(busy, ", ")}\n`
-				.. "land or delete them first, or pass --force and run tracker.sh remap on each"
+			`compact: these branches change a project root (tracker/, z-nile/.tracker/, ...) or tests/acceptance/: {table.concat(
+				busy,
+				", "
+			)}\n` .. "land or delete them first, or pass --force and run ./zn remap on each"
 		)
 	end
 	local before = auditErrors(noSkip)
@@ -1513,10 +1645,11 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	local map = idsLib.plan(all)
 	compactLib.apply(map, found)
 	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
-	fs.writeFile(
-		idsLib.MAP_FILE,
-		idsLib.formatMap(map, `tracker.sh compact, {today()}, from origin/main {base}`)
-	)
+	-- a compaction before origin moved the counter moves it too: the old file becomes the tombstone (c0114)
+	if fs.isFile(idsLib.OLD_FILE) and idsLib.parse(fs.readFile(idsLib.OLD_FILE)) then
+		fs.writeFile(idsLib.OLD_FILE, idsLib.TOMBSTONE)
+	end
+	fs.writeFile(idsLib.MAP_FILE, idsLib.formatMap(map, `./zn compact, {today()}, from origin/main {base}`))
 	local after = auditErrors(noSkip)
 	if #after > 0 then
 		fail(
@@ -1528,9 +1661,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	sh.git({ "commit", "--quiet", "-m", "tracker: compact ids" })
 	print(`compacted {counts.issue} issues and {counts.raft} rafts; the map is in {idsLib.MAP_FILE}`)
 	if #busy > 0 then
-		print(
-			`in flight: {table.concat(busy, ", ")}: on each, run tracker.sh remap before merging origin/main`
-		)
+		print(`in flight: {table.concat(busy, ", ")}: on each, run ./zn remap before merging origin/main`)
 	end
 end
 
@@ -1595,23 +1726,27 @@ function cmd.remap()
 	end
 	if #unmapped > 0 then
 		if publishing() then
-			local r = published(publish.commit(".", function(paths, read)
-				local c = idsLib.parse(read(idsLib.FILE) or "")
+			local r = published(publish.commit(".", function(paths, read, _roots, counter)
+				local c = idsLib.parse(read(counter) or "")
 				if not c then
-					return `origin/main has no usable {idsLib.FILE}`
+					return `origin/main has no usable {counter}`
 				end
 				local used = idsOf(paths, "issue")
 				for _, id in idsOf(paths, "raft") do
 					table.insert(used, id)
 				end
-				return { { path = idsLib.FILE, content = idsLib.format(number(c, used), phrase()) } }
+				return { { path = counter, content = idsLib.format(number(c, used), phrase()) } }
 			end, "tracker: reserve numbers for a remap"))
 			if not r.ok then
 				fail(`remap: could not reserve numbers on origin/main: {r.reason}`)
 			end
 		else
 			local _, paths = originTree()
-			local c = idsLib.parse(sh.run("git", { "show", `origin/main:{idsLib.FILE}` }).stdout)
+			local live = sh.run("git", { "show", `origin/main:{idsLib.FILE}` })
+			if not live.ok then
+				live = sh.run("git", { "show", `origin/main:{idsLib.OLD_FILE}` }) -- origin has not moved it yet
+			end
+			local c = idsLib.parse(live.stdout)
 			if not c then
 				fail(`remap: origin/main has no usable {idsLib.FILE}`)
 			end
@@ -1706,9 +1841,19 @@ end
 function cmd.migrate()
 	refuseInMainCheckout("migrate")
 	local ambiguous = false
-	for _, kind in { "issues", "rafts" } do
-		for _, state in { "", "active/", "done/" } do
-			local base = `{store.ROOT}/{kind}/{state}`
+	-- every project root's three folders of each kind (c0114)
+	local folders: { { root: string, kind: string, state: string } } = {}
+	for _, r in store.roots() do
+		for _, k in { "issues", "rafts" } do
+			for _, st in { "", "active/", "done/" } do
+				table.insert(folders, { root = r, kind = k, state = st })
+			end
+		end
+	end
+	for _, folder in folders do
+		local kind, state = folder.kind, folder.state
+		do
+			local base = `{folder.root}/{kind}/{state}`
 			if fs.isDir(base) then
 				local names = fs.readDir(base)
 				table.sort(names)
@@ -1819,9 +1964,7 @@ function cmd.start(pos: { string })
 				and stateOfPath(theirs :: string) == "active"
 				and statusLib.effective(frontOf(shown.stdout), "active") == "active"
 			if not readied then
-				fail(
-					`{raft.id} is not readied on origin/main: run tracker.sh ready {raft.id} in the main checkout`
-				)
+				fail(`{raft.id} is not readied on origin/main: run ./zn ready {raft.id} in the main checkout`)
 			end
 		end
 		local branch = raftBranch(raft)
@@ -1851,7 +1994,7 @@ function cmd.start(pos: { string })
 		local _, originFiles = originTree()
 		local theirs = docPath(originFiles, raft.id)
 		if theirs and stateOfPath(theirs) == "active" then
-			fail(`{raft.id} is readied on origin/main: run tracker.sh sync first`)
+			fail(`{raft.id} is readied on origin/main: run ./zn sync first`)
 		end
 	end
 	local members = store.members(raft.id)
@@ -2118,8 +2261,7 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local branch: string
 	local dirName: string
 	if string.match(target, "^R%d%d%d%d$") then
-		local missing =
-			`{target} is not in this tree; if it was just merged, run {mainRoot()}/scripts/tracker.sh sync`
+		local missing = `{target} is not in this tree; if it was just merged, run {mainRoot()}/zn sync`
 		local raft = store.find(target) or fail(missing)
 		if raft.state == "done" then
 			fail(`{target} is done`)
@@ -2189,12 +2331,23 @@ cmd["worktree-prune"] = function()
 	local here = sh.git({ "rev-parse", "--show-toplevel" })
 	local prefix = root .. "/.worktree/"
 	local failed = false
+	-- a raft is finished when it is in done/ under any project root of the base branch (c0114)
+	local baseReg = projects.at(base, root)
+	local doneRoots: { string } = if baseReg then projects.allRoots(baseReg) else { projects.LEGACY }
+	local function isDone(name: string): boolean
+		for _, r in doneRoots do
+			if sh.git({ "-C", root, "ls-tree", "-d", base, `{r}/rafts/done/{name}` }) ~= "" then
+				return true
+			end
+		end
+		return false
+	end
 	for _, w in worktrees() do
 		local name = if string.sub(w.path, 1, #prefix) == prefix then string.sub(w.path, #prefix + 1) else nil
 		if name and not string.find(name, "/", 1, true) then
 			if not string.match(name, "^R%d%d%d%d$") then
 				print(`kept {w.path} (named worktree: remove it when its PR has merged)`)
-			elseif sh.git({ "-C", root, "ls-tree", "-d", base, `tracker/rafts/done/{name}` }) ~= "" then
+			elseif isDone(name) then
 				-- finished: the raft is in done/ on the base branch, whatever merge strategy landed it
 				if w.path == here then
 					print(`skipped {w.path} (it is the current directory)`)
@@ -2282,7 +2435,11 @@ local function recordAndCommit(
 		table.insert(trailers, trailer)
 	end
 	spend.writeRaft(raft)
-	sh.git({ "add", "-A", store.ROOT })
+	for _, r in store.roots() do
+		if fs.isDir(r) then
+			sh.git({ "add", "-A", r })
+		end
+	end
 	sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
 	push()
@@ -2300,7 +2457,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	if opts["--phase"] then
 		phase = opts["--phase"][1]
 		if phase == "capture" or phase == "prep" or phase == "design-review" then
-			fail(`{phase} is recorded with tracker.sh spend`)
+			fail(`{phase} is recorded with ./zn spend`)
 		elseif phase ~= "build" and phase ~= "code-review" and phase ~= "deliver" then
 			fail("commit --phase is build, code-review or deliver")
 		end
@@ -2443,7 +2600,7 @@ function cmd.done(pos: { string })
 		fail(`{raft.id} must be an active raft`)
 	end
 	if sh.git({ "status", "--porcelain" }) ~= "" then
-		fail("commit everything first (scripts/tracker.sh commit); done needs a clean tree")
+		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
 	local problem = reviewProblem(raft)
 	if problem then
@@ -2472,9 +2629,9 @@ function cmd.done(pos: { string })
 	local members = store.members(raft.id)
 	local movedDirs: { string } = {}
 	for _, m in members do
-		table.insert(movedDirs, store.dirFor(m.kind, "done", m.id))
+		table.insert(movedDirs, store.dirFor(m.kind, "done", m.id, m.root))
 	end
-	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id))
+	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id, raft.root))
 	local function rollback()
 		sh.git({ "reset", "-q", "--hard", "HEAD" })
 		-- git removes the folders it empties; if one is left, store.find would see a duplicate id
@@ -2485,9 +2642,9 @@ function cmd.done(pos: { string })
 		end
 	end
 	-- every moved item's check.sh follows the move: its own item paths name done/ from now on (c0067)
-	local doneDirs: { [string]: string } = { [raft.id] = store.dirFor("raft", "done", raft.id) }
+	local doneDirs: { [string]: string } = { [raft.id] = store.dirFor("raft", "done", raft.id, raft.root) }
 	for _, m in members do
-		doneDirs[m.id] = store.dirFor("issue", "done", m.id)
+		doneDirs[m.id] = store.dirFor("issue", "done", m.id, m.root)
 	end
 	local movedItems: { store.Item } = {}
 	for _, m in members do
@@ -2517,7 +2674,7 @@ function cmd.done(pos: { string })
 		end
 	else
 		print("\n=== full gate on the done tree")
-		if not sh.stream("bash", { "scripts/check.sh", "--full" }) then
+		if not sh.stream("bash", { "z-nile/check.sh", "--full" }) then
 			rollback()
 			fail("the full gate fails on the done tree (rolled back); fix and retry done")
 		end
@@ -2573,8 +2730,8 @@ local function buildLessons(): string
 	return (string.gsub(text, "\n$", ""))
 end
 
-local LESSONS_USAGE = "usage: tracker.sh lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
-	.. "       tracker.sh lessons --tags | --check | --uncovered [<id>...]"
+local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
+	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
 
 -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
 function cmd.lessons(pos: { string }, opts: { [string]: { string } })
@@ -2741,7 +2898,7 @@ local function renderPrompt(raft: store.Item): string
 	end
 	local plan, _, planError = workstreamPlan(raft)
 	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
-	local text = render("tracker/templates/prompt.md", {
+	local text = render(`{TEMPLATES}/prompt.md`, {
 		RAFT_ID = raft.id,
 		RAFT_TITLE = store.readFront(raft.doc).title or raft.slug,
 		RAFT_TYPE = store.typeOf(raft),
@@ -2760,8 +2917,9 @@ local function renderPrompt(raft: store.Item): string
 	return text
 end
 
-local function promptPath(raftId: string): string
-	return `{mainRoot()}/tracker/rafts/active/{raftId}/prompt.md`
+-- A readied raft's prompt, beside it in its project's active/ folder of the main checkout (ignored there, c0114).
+local function promptPath(root: string, raftId: string): string
+	return `{mainRoot()}/{root}/rafts/active/{raftId}/prompt.md`
 end
 
 -- The reader of a readied raft's prompt.md (the launch-raft skill's input). The decision is made from origin/main's
@@ -2769,10 +2927,9 @@ end
 function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or #pos > 1 or not string.match(id, "^R%d%d%d%d$") then
-		fail("prompt takes a raft id (an issue's raft: tracker.sh find <id>)")
+		fail("prompt takes a raft id (an issue's raft: ./zn find <id>)")
 	end
-	local notReadied =
-		`{id} is not readied: run /ready-raft {id} (tracker.sh ready {id}) in the main checkout`
+	local notReadied = `{id} is not readied: run /ready-raft {id} (./zn ready {id}) in the main checkout`
 	if not hasOrigin() then
 		fail(notReadied)
 	end
@@ -2790,9 +2947,9 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	then
 		fail(notReadied)
 	end
-	local path = promptPath(id)
+	local path = promptPath(select(3, publish.itemPath(theirs :: string)) :: string, id)
 	if not fs.isFile(path) then
-		fail(`no prompt for {id}: run tracker.sh ready {id} in the main checkout to regenerate it`)
+		fail(`no prompt for {id}: run ./zn ready {id} in the main checkout to regenerate it`)
 	end
 	if opts["--path"] then
 		print(path)
@@ -2959,7 +3116,7 @@ function cmd.ready(pos: { string })
 		raft = store.get(raft.id)
 	end
 	local text = renderPrompt(raft)
-	local path = promptPath(raft.id)
+	local path = promptPath(raft.root, raft.id)
 	sh.writeReplacing(path, text)
 	local plan, _, planError = workstreamPlan(raft)
 	local parallel = if planError then "parallel: no" else string.match(plan, "[^\n]*$") :: string
@@ -3037,7 +3194,7 @@ function cmd.stop(pos: { string })
 			`warning: {table.concat(left, ", ")} name {raft.id} but were not claimed with it; left as they are\n`
 		)
 	end
-	local prompt = promptPath(raft.id)
+	local prompt = promptPath(raft.root, raft.id)
 	if fs.isFile(prompt) then
 		fs.removeFile(prompt)
 	end
@@ -3092,7 +3249,13 @@ local function originBlobs(id: string): { string }?
 		local here = sh.run("pwd", { "-P" })
 		local top = sh.run("git", { "rev-parse", "--show-toplevel" })
 		if here.ok and top.ok and sh.trim(here.stdout) == sh.trim(top.stdout) then
-			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main", "tracker/issues" })
+			local roots = originRoots()
+			local args = { "ls-tree", "-r", "--name-only", "origin/main", "--" }
+			local within: { string } = roots or {}
+			for _, r in within do
+				table.insert(args, `{r}/issues`)
+			end
+			local listed = if roots then sh.run("git", args) else { ok = false, stdout = "" }
 			if listed.ok then
 				originSpend = {}
 				for path in string.gmatch(listed.stdout, "[^\n]+") do
@@ -3193,7 +3356,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("spend")
 	if not publishing() then
 		fail(
-			"spend needs an origin remote (PICKMAN_PUBLISH=0 disables it); inside a raft, record with tracker.sh commit --phase"
+			"spend needs an origin remote (PICKMAN_PUBLISH=0 disables it); inside a raft, record with ./zn commit --phase"
 		)
 	end
 	local id = pos[1]
@@ -3204,7 +3367,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	local phase = opts["--phase"] and opts["--phase"][1] or ""
 	if phase == "build" or phase == "code-review" then
-		fail(`{phase} is recorded with tracker.sh commit --phase`)
+		fail(`{phase} is recorded with ./zn commit --phase`)
 	elseif not table.find(SPEND_PHASES, phase) then
 		fail("spend --phase is capture, prep, design-review or deliver")
 	end
@@ -3232,7 +3395,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		raftItem = store.find(id)
 		targets = if raftItem then store.members(id) else {}
 		if not raftItem or #targets == 0 then
-			fail("run tracker.sh sync first")
+			fail("run ./zn sync first")
 		end
 	else
 		local item = store.find(id)
@@ -3266,6 +3429,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 				dir = "",
 				doc = "",
 				slug = "",
+				root = "",
 			},
 		}
 	end
@@ -3294,7 +3458,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	local function activeReason(target: string): string
 		if phase == "capture" or phase == "deliver" then
-			return `{target} is active on origin/main: inside its raft, record with tracker.sh commit --phase`
+			return `{target} is active on origin/main: inside its raft, record with ./zn commit --phase`
 		end
 		return `{target} was readied before its {phase} spend was recorded: record nothing and report it`
 	end
@@ -3363,17 +3527,25 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
--- the commit time (unix seconds) that first added `path`; nil without git history
-local function addedAt(path: string): number?
-	local r = process.exec("git", { "log", "--follow", "--diff-filter=A", "--format=%ct", "--", path })
+-- the earliest commit time (unix seconds) that added any of `paths` (a file's homes before and after a move); nil
+-- without git history
+local function addedAt(paths: { string }): number?
+	local args = { "log", "--diff-filter=A", "--format=%ct", "--" }
+	for _, p in paths do
+		table.insert(args, p)
+	end
+	local r = process.exec("git", args)
 	if not r.ok then
 		return nil
 	end
-	local last: string? = nil
+	local first: number? = nil
 	for line in string.gmatch(r.stdout, "[^\n]+") do
-		last = line
+		local n = tonumber(line)
+		if n and (not first or n < first) then
+			first = n
+		end
 	end
-	return if last then tonumber(last) else nil
+	return first
 end
 
 -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
@@ -3408,7 +3580,8 @@ local function metricsLessons()
 			)
 		end
 	end
-	local added = addedAt("scripts/tracker/lessons.luau")
+	-- the cutoff keeps the original add: c0114 moved the file to z-nile/engine/lessons.luau
+	local added = addedAt({ "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" })
 	-- `created:` is written as the local calendar day, so the cutoff is the local day of that commit too
 	local split =
 		lessonsLib.roundsSplit(rafts, if added then lessonsLib.day(os.date("%Y-%m-%d", added)) else nil)
@@ -3459,7 +3632,7 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 		marks ..= " (ambiguous: two items held this id at once)"
 	end
 	for _, note in notes do
-		marks ..= ` (history before {note} not followed: it changed tracker/compaction.txt)`
+		marks ..= ` (history before {note.sha} not followed: it changed {note.file})`
 	end
 	print(`capture {c.sha} {c.path} {c.subject}{marks}`)
 	stdio.write(shown.stdout)
@@ -3693,7 +3866,7 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 		fs.writeDir(dir)
 	end
 	sh.writeReplacing(out, board.build())
-	-- tracker.sh runs from the repo root, so say where a relative path really is
+	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out
 	end

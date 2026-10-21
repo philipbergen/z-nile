@@ -1,8 +1,9 @@
 --!strict
--- c0870: ids come from tracker/next on origin/main, counting by one. Every allocation pushes the raised counter
+-- c0870: ids come from z-nile/next on origin/main, counting by one. Every allocation pushes the raised counter
 -- (with a fresh phrase) in the same commit as what it creates; a lost race is a rejected lease push, retried on the
--- new origin/main. Without tracker/next the numbering is unchanged (next multiple of 10). Fixture under
+-- new origin/main. Without z-nile/next the numbering is unchanged (next multiple of 10). Fixture under
 -- .cache/c0870-allocate: a seed with this tree's tooling, a bare origin, a main clone and a second clone.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
@@ -40,7 +41,7 @@ end
 local function counters(): ids.Counters
 	local c = ids.parse(onOrigin(ids.FILE) or "")
 	if not c then
-		error("origin's tracker/next does not parse", 2)
+		error("origin's z-nile/next does not parse", 2)
 	end
 	return c
 end
@@ -96,19 +97,19 @@ end
 
 local phrases: { string } = {}
 
-return t.spec("c0870 allocation from tracker/next", function(it)
-	it("sets up a bare origin holding tracker/next, a main checkout and a second clone", function()
+return t.spec("c0870 allocation from z-nile/next", function(it)
+	it("sets up a bare origin holding z-nile/next, a main checkout and a second clone", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
 		fs.writeDir(seed)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		identity(seed)
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		write(`{seed}/{ids.FILE}`, SEED_NEXT)
 		write(`{seed}/tracker/issues/c0890/c0890.md`, stub("c0890", "older"))
 		write(
@@ -132,7 +133,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 		t.expect(lastChanged()).toEqual({
 			"tracker/issues/c0891/c0891.md",
 			"tracker/issues/c0891/check.sh",
-			"tracker/next",
+			"z-nile/next",
 		})
 		local c = counters()
 		t.expect(c.issue).toBe(892)
@@ -182,7 +183,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 				.. `  [ -d "{other}/.git" ] || exit 1\n`
 				.. `  ( cd "{other}" && "{real}" pull -q origin main && mkdir -p tracker/issues/c0952 && `
 				.. `printf -- '---\\nid: c0952\\ntype: chore\\ntitle: theirs\\nslug: theirs\\nraft: \\ndepends_on: []\\nstatus: new\\n---\\n' > tracker/issues/c0952/c0952.md && `
-				.. `printf 'issue 953 other-other-other\\nraft 271 other-other-other\\n' > tracker/next && `
+				.. `printf 'issue 953 other-other-other\\nraft 271 other-other-other\\n' > z-nile/next && `
 				.. `"{real}" add -A && "{real}" commit -qm theirs && "{real}" push -q origin HEAD:main ) || exit 1\nfi\n`
 				.. `exec "{real}" "$@"\n`,
 			true
@@ -205,7 +206,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 		local c = counters()
 		t.expect(c.raft).toBe(272)
 		t.expect(c.issue).toBe(954)
-		t.expect(table.find(lastChanged(), "tracker/next") ~= nil).toBe(true)
+		t.expect(table.find(lastChanged(), "z-nile/next") ~= nil).toBe(true)
 	end)
 
 	it("an emergent issue reserves its number on origin and is created only locally", function()
@@ -222,7 +223,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 		t.expect(trOk(wt, { "new", "issue", "c", "eps", "--raft", "R0900" }))
 			.toBe("tracker/issues/active/c0954/c0954.md")
 		t.expect(git(origin, { "rev-parse", "main^" })).toBe(before) -- exactly one commit
-		t.expect(lastChanged()).toEqual({ "tracker/next" })
+		t.expect(lastChanged()).toEqual({ "z-nile/next" })
 		t.expect(counters().issue).toBe(955)
 		t.expect(onOrigin("tracker/issues/c0954/c0954.md")).toBe(nil)
 		t.expect(onOrigin("tracker/issues/active/c0954/c0954.md")).toBe(nil)
@@ -230,7 +231,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 		t.expect(fs.readFile(`{wt}/{ids.FILE}`)).toBe(localNext)
 		local audited = tr(wt, { "audit" })
 		t.expect(audited.ok).toBe(true)
-		t.expect(string.find(audited.stdout, "warning next-behind tracker/next", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(audited.stdout, "warning next-behind z-nile/next", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("renumber takes its number from the counter and reserves it on origin", function()
@@ -241,7 +242,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 		t.expect(fs.isFile(`{wt}/tracker/issues/c0956/c0956.md`)).toBe(true)
 		t.expect(fs.isDir(`{wt}/tracker/issues/c0955`)).toBe(false)
 		t.expect(counters().issue).toBe(957)
-		t.expect(lastChanged()).toEqual({ "tracker/next" })
+		t.expect(lastChanged()).toEqual({ "z-nile/next" })
 	end)
 
 	it("PICKMAN_PUBLISH=0 numbers from the local counter and ids, and writes no counter", function()
@@ -269,7 +270,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 		local before = git(origin, { "rev-parse", "main" })
 		local down = push(ids.format({ issue = now.issue - 1, raft = now.raft }, "down-down-down"))
 		t.expect(down.ok).toBe(false)
-		t.expect(string.find(down.reason or "", "tracker/next", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(down.reason or "", "z-nile/next", 1, true) ~= nil).toBe(true)
 		local rafts = push(ids.format({ issue = now.issue, raft = now.raft - 1 }, "down-down-down"))
 		t.expect(rafts.ok).toBe(false)
 		local bad = push("issue 99999 x\n")
@@ -281,7 +282,7 @@ return t.spec("c0870 allocation from tracker/next", function(it)
 	end)
 
 	it(
-		"without tracker/next on origin, numbering is the next multiple of 10 and no counter appears",
+		"without z-nile/next on origin, numbering is the next multiple of 10 and no counter appears",
 		function()
 			elsewhere({ [ids.FILE] = false }, "no counter")
 			local highest = 0

@@ -1,6 +1,7 @@
 --!strict
 -- c0410 AC5: `tracker.sh metrics` reports review rounds per raft, counted from the files, so the
 -- effect of second-order reviews can be measured. Done rafts never change, so their counts are fixed.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local renamed = require("@tests/lib/renamed")
@@ -40,7 +41,7 @@ local function sandbox(): string
 		fs.removeDir(SB)
 	end
 	fs.writeDir(SB)
-	fs.copy("scripts", `{SB}/scripts`)
+	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/
 	fs.copy(".luaurc", `{SB}/.luaurc`)
 	fs.copy("rokit.toml", `{SB}/rokit.toml`)
 	local front = "---\nid: %s\ntype: chore\ntitle: T\nslug: t\n---\n\n# %s\n"
@@ -115,7 +116,17 @@ return t.spec("c0410 review rounds in metrics", function(it)
 			table.insert(ids, r[1])
 		end
 		local want = {}
-		for _, base in { "tracker/rafts", "tracker/rafts/active", "tracker/rafts/done" } do
+		-- c0114 override: rafts live under every project root
+		for _, base in
+			{
+				"tracker/rafts",
+				"tracker/rafts/active",
+				"tracker/rafts/done",
+				"z-nile/.tracker/rafts",
+				"z-nile/.tracker/rafts/active",
+				"z-nile/.tracker/rafts/done",
+			}
+		do
 			for _, name in fs.readDir(base) do
 				if string.match(name, "^R%d%d%d%d$") then
 					table.insert(want, name)

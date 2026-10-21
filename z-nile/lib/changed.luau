@@ -1,5 +1,5 @@
 --!strict
--- Files changed relative to a base ref: what `scripts/affected` selects specs from.
+-- Files changed relative to a base ref: what `z-nile/affected` selects specs from.
 
 local process = require("@lune/process")
 

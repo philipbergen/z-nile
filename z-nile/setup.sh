@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap a new host for pickman. Idempotent; safe to re-run. See SETUP.md.
-# Usage: scripts/setup.sh [--tools]   (--tools: install the toolchain only, skip the gate)
+# Usage: z-nile/setup.sh [--tools]   (--tools: install the toolchain only, skip the gate)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -70,7 +70,7 @@ if [[ ${1:-} == --tools ]]; then
 fi
 
 say "gate"
-scripts/check.sh --full
+z-nile/check.sh --full
 
 cat <<'EOF'
 

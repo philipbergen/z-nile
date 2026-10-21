@@ -32,10 +32,10 @@ created: {{DATE}}
 ### Touched modules
 <!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
      paths (e.g. `tests/unit/Maze`). Used for spend attribution
-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
+     and for `lune run z-nile/affected -- <paths>` to list the affected specs below. -->
 
 ### Affected specs
-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
+<!-- Output of `lune run z-nile/affected -- <touched paths>` plus the new specs. -->
 
 ## Unknowns & experiments
 <!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),

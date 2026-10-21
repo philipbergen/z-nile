@@ -3,6 +3,7 @@
 -- when <id> is an existing backlog issue, and refuses it in every other case. Driven for real in a
 -- throwaway clone (no remote, so done skips push and gh).
 local cleanup = require("@tests/lib/cleanup")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -74,11 +75,17 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		end
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -91,20 +98,8 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
 		git({ "config", "gc.auto", "0" })
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{work}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(dir) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(dir .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{work}/tracker/next`) then
-			fs.removeFile(`{work}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha" }), "new issue")

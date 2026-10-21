@@ -36,9 +36,9 @@ local function tree(name: string, items: { [string]: string | false }, next: (st
 		end
 	end
 	if type(next) == "string" then
-		write(`{dir}/tracker/next`, next)
+		write(`{dir}/z-nile/next`, next)
 	elseif next == nil then
-		write(`{dir}/tracker/next`, "issue 100 a-b-c\nraft 100 a-b-c\n")
+		write(`{dir}/z-nile/next`, "issue 100 a-b-c\nraft 100 a-b-c\n")
 	end
 	return dir
 end
@@ -115,11 +115,11 @@ return t.spec("c0880 audit", function(it)
 
 	it("a missing or malformed counter file is an error", function()
 		t.expect(codes(audit.run(tree("next-missing", { ["issues/c0010"] = doc("c0010") }, false)))).toEqual({
-			"error next-missing tracker/next",
+			"error next-missing z-nile/next",
 		})
 		t.expect(codes(audit.run(tree("next-bad", { ["issues/c0010"] = doc("c0010") }, "issue ten\n"))))
 			.toEqual({
-				"error next-malformed tracker/next",
+				"error next-malformed z-nile/next",
 			})
 	end)
 
@@ -127,10 +127,10 @@ return t.spec("c0880 audit", function(it)
 		local items: { [string]: string | false } =
 			{ ["issues/c0010"] = doc("c0010"), ["rafts/R0005"] = doc("R0005") }
 		t.expect(codes(audit.run(tree("next-at", items, "issue 10 a\nraft 6 a\n")))).toEqual({
-			"warning next-behind tracker/next",
+			"warning next-behind z-nile/next",
 		})
 		t.expect(codes(audit.run(tree("raft-behind", items, "issue 11 a\nraft 5 a\n")))).toEqual({
-			"warning next-behind tracker/next",
+			"warning next-behind z-nile/next",
 		})
 		t.expect(audit.run(tree("next-ok", items, "issue 11 a\nraft 6 a\n"))).toEqual({})
 	end)

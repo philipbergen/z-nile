@@ -3,6 +3,7 @@
 -- backlog issue documents change, push one commit on top of origin/main, retry a lost race. Fixture under
 -- .cache/c0780-land: a seed with this tree's tooling, a bare origin, a main clone, a second clone and capture
 -- worktrees. The gate is PICKMAN_LAND_GATE (a command), so no case runs the real gate.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -69,11 +70,11 @@ return t.spec("tracker land", function(it)
 		fs.writeDir(seed)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		identity(seed)
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(`{seed}/tracker/{d}/.gitkeep`, "")
 		end
@@ -198,9 +199,9 @@ return t.spec("tracker land", function(it)
 			fs.writeFile(p, fs.readFile(p) .. "\nEdited.\n")
 		end, "tracker/rafts/R0900/R0900.md")
 		refused(function() -- an edit to the issue template, which carries `design: draft` too
-			local p = `{wt}/tracker/templates/issue/doc.md`
+			local p = `{wt}/z-nile/templates/issue/doc.md`
 			fs.writeFile(p, fs.readFile(p) .. "\n<!-- edited -->\n")
-		end, "tracker/templates/issue/doc.md")
+		end, "z-nile/templates/issue/doc.md")
 		refused(function() -- a capture promoting its own issue past draft, with no prep
 			local p = `{wt}/tracker/issues/{id}/{id}.md`
 			fs.writeFile(p, (string.gsub(fs.readFile(p), "design: draft", "design: ready")))

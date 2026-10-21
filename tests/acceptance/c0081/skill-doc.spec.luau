@@ -22,7 +22,7 @@ end
 return t.spec("c0870 tracker skill", function(it)
 	it("Numbering: ids come from tracker/next, counting by one, raised with a lease push", function()
 		local line = bullet("- **Numbering**")
-		t.expect(says(line, "`tracker/next`")).toBe(true)
+		t.expect(says(line, "`z-nile/next`")).toBe(true)
 		t.expect(says(line, "by one")).toBe(true)
 		t.expect(says(line, "lease")).toBe(true)
 		t.expect(says(line, "**next multiple of 10**")).toBe(false)
@@ -30,16 +30,16 @@ return t.spec("c0870 tracker skill", function(it)
 
 	it("Numbering: a tree without tracker/next keeps the old rule", function()
 		local line = bullet("- **Numbering**")
-		t.expect(says(line, "without `tracker/next`")).toBe(true)
+		t.expect(says(line, "without `z-nile/next`")).toBe(true)
 		t.expect(says(line, "multiple of 10")).toBe(true)
 	end)
 
 	it("a Compaction bullet says how to run it and when, and that in-flight branches remap", function()
 		local line = bullet("- **Compaction**")
-		t.expect(says(line, "tracker.sh compact")).toBe(true)
+		t.expect(says(line, "./zn compact")).toBe(true)
 		t.expect(says(line, "--force")).toBe(true)
-		t.expect(says(line, "tracker.sh remap")).toBe(true)
-		t.expect(says(line, "tracker/compaction.txt")).toBe(true)
+		t.expect(says(line, "./zn remap")).toBe(true)
+		t.expect(says(line, "z-nile/compaction.txt")).toBe(true) -- c0114 override: the map moved
 		-- a busy branch remaps before it merges, and the compaction lands only on the main it was made from
 		t.expect(says(line, "before merging `origin/main`")).toBe(true)
 		t.expect(says(line, "still equals")).toBe(true)
@@ -54,7 +54,7 @@ return t.spec("c0870 tracker skill", function(it)
 
 	it("the direct-push exception names tracker/next, which may only go up", function()
 		local line = bullet("- **The direct-push exception.**")
-		t.expect(says(line, "`tracker/next`")).toBe(true)
+		t.expect(says(line, "`z-nile/next`")).toBe(true)
 		t.expect(says(line, "only go up")).toBe(true)
 	end)
 
@@ -62,7 +62,7 @@ return t.spec("c0870 tracker skill", function(it)
 		local text = skill()
 		local other = string.match(text, "## Other commands\n(.-)\n## ") :: string
 		t.expect(other ~= nil).toBe(true)
-		for _, c in { "tracker.sh compact", "tracker.sh remap" } do
+		for _, c in { "./zn compact", "./zn remap" } do
 			t.expect(says(other, c)).toBe(true)
 		end
 	end)

@@ -2,6 +2,7 @@
 -- c0760: every tracker push to origin/main, and sync in the main checkout, brings the main checkout up to origin/main
 -- and rebuilds its board page (never opening a browser). Fixture under .cache/c0760-board: a seed with this
 -- tree's tooling and skills, a bare origin, a main clone (the main checkout), a named worktree and a second clone.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -140,11 +141,11 @@ return t.spec("tracker board follows main", function(it)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		git(seed, { "config", "user.name", "t" })
 		git(seed, { "config", "user.email", "t@example.invalid" })
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		process.exec("cp", { `{root}/tracker/architecture.md`, `{seed}/tracker/architecture.md` })
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(seed, `tracker/{d}/.gitkeep`, "")

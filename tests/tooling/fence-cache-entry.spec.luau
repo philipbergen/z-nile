@@ -30,7 +30,7 @@ end
 local function fence(checkout: string): Result
 	return process.exec(
 		"bash",
-		{ "-c", 'source "$1" || exit 2; pickman_fence "$2"', "_", `{root}/scripts/lib/fence.sh`, checkout },
+		{ "-c", 'source "$1" || exit 2; pickman_fence "$2"', "_", `{root}/z-nile/lib/fence.sh`, checkout },
 		{ cwd = checkout }
 	)
 end
@@ -82,8 +82,8 @@ return t.spec("the guards never delete through .cache", function(it)
 		local fx = fresh("link-runner")
 		local victim = standIn("victim-c")
 		fs.writeDir(`{fx}/tests`)
-		fs.writeDir(`{fx}/scripts/lib`)
-		for _, rel in { "tests/run.luau", "scripts/lib/fence.sh" } do
+		fs.writeDir(`{fx}/z-nile/lib`)
+		for _, rel in { "tests/run.luau", "z-nile/lib/fence.sh" } do
 			fs.writeFile(`{fx}/{rel}`, fs.readFile(`{root}/{rel}`))
 		end
 		process.exec("cp", { "-R", `{root}/tests/lib`, `{fx}/tests/lib` })

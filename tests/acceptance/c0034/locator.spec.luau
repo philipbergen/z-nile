@@ -123,11 +123,18 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 			fs.removeDir(repo)
 		end
 		fs.writeDir(repo)
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", "rokit.toml" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+			"rokit.toml",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -155,8 +162,11 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		local repo = `{base}/repo`
 		fs.writeDir(`{repo}/scripts/lib`)
 		fs.writeFile(`{repo}/scripts/lib/ac.sh`, fs.readFile(`{root}/scripts/lib/ac.sh`))
+		-- c0114 override: scripts/lib/ac.sh forwards to z-nile/lib/, which brings the guards it needs
+		fs.writeDir(`{repo}/z-nile`)
+		process.exec("cp", { "-R", `{root}/z-nile/lib`, `{repo}/z-nile/lib` })
 		t.expect(process.exec("git", { "init", "-q", repo }).ok).toBe(true)
-		local template = fs.readFile(`{root}/tracker/templates/issue/check.sh`)
+		local template = fs.readFile(`{root}/z-nile/templates/issue/check.sh`)
 		local withCheck, n = string.gsub(
 			string.gsub(template, "{{ID}}", "x0001"),
 			"\nfinish\n",
@@ -190,8 +200,16 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 			error("AC_LIST list mode is not safe (ac.sh or tests/run): not running every done check.sh")
 		end
 		local checked = 0
-		for _, kind in { "issues", "rafts" } do
-			local dir = `{root}/tracker/{kind}/done`
+		-- c0114 override: finished items live under every project root
+		for _, kind in
+			{
+				"tracker/issues",
+				"tracker/rafts",
+				"z-nile/.tracker/issues",
+				"z-nile/.tracker/rafts",
+			}
+		do
+			local dir = `{root}/{kind}/done`
 			for _, name in fs.readDir(dir) do
 				local item = `{dir}/{name}`
 				if
@@ -220,14 +238,21 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 
 	it("no live check.sh or the template uses the locator that needs acceptance/ to exist", function()
 		local old = '"$A/.."'
-		local paths: { string } = { `{root}/tracker/templates/issue/check.sh` }
-		for _, dir in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			if not fs.isDir(`{root}/tracker/{dir}`) then
+		-- c0114 override: the template moved to z-nile/templates, and items live under every project root
+		local paths: { string } = { `{root}/z-nile/templates/issue/check.sh` }
+		local dirs: { string } = {}
+		for _, top in { "tracker", "z-nile/.tracker" } do
+			for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+				table.insert(dirs, `{top}/{d}`)
+			end
+		end
+		for _, dir in dirs do
+			if not fs.isDir(`{root}/{dir}`) then
 				continue
 			end
-			for _, name in fs.readDir(`{root}/tracker/{dir}`) do
-				local file = `{root}/tracker/{dir}/{name}/check.sh`
-				if fs.isDir(`{root}/tracker/{dir}/{name}`) and fs.isFile(file) then
+			for _, name in fs.readDir(`{root}/{dir}`) do
+				local file = `{root}/{dir}/{name}/check.sh`
+				if fs.isDir(`{root}/{dir}/{name}`) and fs.isFile(file) then
 					table.insert(paths, file)
 				end
 			end

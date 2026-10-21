@@ -1,5 +1,5 @@
 # Guards for everything a check runs (testing skill, "Specs never touch the real repository").
-#   pickman_fence <checkout>          # check.sh files (scripts/lib/ac.sh)
+#   pickman_fence <checkout>          # check.sh files (z-nile/lib/ac.sh)
 #   pickman_fence <checkout> specs [<jail>]   # spec runs (tests/lib/fence.luau): also no network, no credentials,
 #                                             # no fetch; under the jail (<jail> = sandbox-exec) no hooks either
 # <checkout> is the checkout's physical root. After it, every git command this shell and its children run:
@@ -7,7 +7,7 @@
 #     fails git run in .cache itself), so a fixture whose own repository is missing is an error;
 #   - ignores inherited repository overrides (GIT_DIR, GIT_INDEX_FILE, ... are unset);
 #   - refuses ref updates in the real repository (check.sh flows may still fetch into refs/remotes/)
-#     (scripts/lib/git-hooks/reference-transaction), and pushes into it by any local URL (pre-push);
+#     (z-nile/lib/git-hooks/reference-transaction), and pushes into it by any local URL (pre-push);
 #   - runs no background gc or maintenance (fixtures are throwaway, and are re-created mid-run).
 # The guards accumulate: a fence set up inside another keeps the outer checkout's ceiling and ref guard.
 # On macOS, tests/lib/fence.luau also runs specs in a jail that denies every write to the checkout outside .cache.
@@ -37,7 +37,7 @@ pickman_fence() {
     return 1
   fi
   # written beside it and renamed in with rename(2): a rename replaces whatever is there (a link to a file or to a
-  # directory) instead of writing through it. Inline, not scripts/lib/replace-file.pl: fixtures copy this file alone
+  # directory) instead of writing through it. Inline, not z-nile/lib/replace-file.pl: fixtures copy this file alone
   local fresh
   fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs
   printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" || { rm -f "$fresh"; return 1; }
@@ -49,9 +49,22 @@ pickman_fence() {
   # the jail (macOS spec runs) the kernel already denies every write to the repository, and hooks would only
   # add a process start, slow inside the sandbox, to every fixture commit; fixtures' own hooks then run natively.
   if [[ $jail != sandbox-exec ]]; then
-    # the first guard's hook stays in force: a nested copy may lack scripts/lib/git-hooks
+    # the first guard's hook stays in force: a nested copy may lack z-nile/lib/git-hooks
     [[ -n ${PICKMAN_FENCE_HOOKS:-} && -x $PICKMAN_FENCE_HOOKS/reference-transaction ]] ||
-      export PICKMAN_FENCE_HOOKS="$here/scripts/lib/git-hooks"
+      export PICKMAN_FENCE_HOOKS="$here/z-nile/lib/git-hooks"
+    # no hooks there (moved, deleted): fail closed rather than run with the ref and push guards off (c0114), except
+    # inside a jailed spec run, where the kernel already refuses every write to the repository. The waiver rests on
+    # all three of the runner's markers: the jail, the spec guards, and this checkout lying under the run's own .cache
+    local jailed=
+    if [[ ${PICKMAN_TEST_JAIL:-} == sandbox-exec && ${PICKMAN_FENCE_SPECS:-} == 1 && -n ${PICKMAN_TEST_FENCE:-} &&
+      $here == "$PICKMAN_TEST_FENCE"/.cache/* ]]; then
+      jailed=1
+    fi
+    if [[ -z $jailed ]] &&
+      [[ ! -x $PICKMAN_FENCE_HOOKS/reference-transaction || ! -x $PICKMAN_FENCE_HOOKS/pre-push ]]; then
+      echo "fence: no ref guard at $PICKMAN_FENCE_HOOKS (reference-transaction, pre-push); refusing. Stop and report this." >&2
+      return 1
+    fi
     export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=$PICKMAN_FENCE_HOOKS"
     n=$((n + 1))
   fi
@@ -84,14 +97,16 @@ pickman_fence() {
   export GIT_CONFIG_COUNT=$n
 }
 
-# Exits 0 when the repository holding <dir> is one these guards protect: a check is running there. The tracker's
-# publisher asks this instead of reading the guards' variables itself (c0650).
+# Answers whether the repository holding <dir> is one these guards protect (a check is running there): prints exactly
+# `guarded` or `unguarded` and exits 0. Anything else (no answer, another exit code) means it could not tell, and the
+# caller must treat that as guarded (c0114: "unguarded" is the one explicit "no"). The tracker's publisher asks this
+# instead of reading the guards' variables itself (c0650).
 pickman_guarded() {
   local common
   common=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   common=$(cd "$common" && pwd -P) || return 1
   case ":${PICKMAN_FENCE_REAL_GIT:-}:" in
-  *":$common:"*) return 0 ;;
+  *":$common:"*) echo guarded; return 0 ;;
   esac
-  return 1
+  echo unguarded
 }

@@ -2,6 +2,7 @@
 -- c0480: `tracker.sh start` refuses a raft whose member issue depends on an item outside the raft that is not done.
 -- Driven for real in a throwaway clone (no remote, so start skips push and gh), like the lifecycle spec.
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -51,11 +52,17 @@ return t.spec("c0480 start checks depends_on", function(it)
 		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -67,20 +74,8 @@ return t.spec("c0480 start checks depends_on", function(it)
 		end
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local base = `{dir}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(base) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(base .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{dir}/tracker/next`) then
-			fs.removeFile(`{dir}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(dir)
 		for _, slug in { "base", "needs-base", "pair-a", "pair-b", "ghost", "late-a", "late-b" } do
 			must(tr({ "new", "issue", "f", slug }), "new issue " .. slug)
 		end

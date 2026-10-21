@@ -3,6 +3,7 @@
 -- drafts) runs on the final head. Driven for real in a throwaway clone whose origin is a local bare
 -- repository under a `github.com` path (so `done` takes its GitHub branch), with a fake `gh` that
 -- records the branch head on origin at the moment `gh pr ready` is called.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -73,11 +74,17 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -88,20 +95,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 			end
 		end
 		git({ "config", "gc.auto", "0" })
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{work}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(dir) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(dir .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{work}/tracker/next`) then
-			fs.removeFile(`{work}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha" }), "new issue")

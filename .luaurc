@@ -5,6 +5,7 @@
     "shared": "./src/shared",
     "tests": "./tests",
     "scripts": "./scripts",
+    "znile": "./z-nile",
     "lune": "~/.lune/.typedefs/0.10.5/"
   }
 }

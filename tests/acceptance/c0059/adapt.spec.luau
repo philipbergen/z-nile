@@ -71,6 +71,12 @@ local function copyInto(dest: string, rels: { string })
 	if fs.isDir(`{dest}/scripts`) then
 		must(process.exec("chmod", { "-R", "+x", `{dest}/scripts` }), "chmod")
 	end
+	-- c0114 override: the entry, the guards and the engine moved to ./zn and z-nile/
+	for _, rel in { "zn", "z-nile/lib" } do
+		if fs.isFile(`{dest}/{rel}`) or fs.isDir(`{dest}/{rel}`) then
+			must(process.exec("chmod", { "-R", "+x", `{dest}/{rel}` }), "chmod")
+		end
+	end
 end
 
 local function gate(): string
@@ -95,13 +101,32 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		copyInto(
-			repo,
-			{ "tests/run.luau", "tests/lib", "scripts", "tests/tooling/repo-fence.spec.luau", ".luaurc" }
-		)
+		copyInto(repo, {
+			"tests/run.luau",
+			"tests/lib",
+			"zn",
+			"scripts",
+			"z-nile/engine",
+			"z-nile/lib",
+			"z-nile/templates",
+			"z-nile/vendor",
+			"z-nile/projects.toml",
+			"tests/tooling/repo-fence.spec.luau",
+			".luaurc",
+		})
 		copyInto(repo, C0510)
 		must(process.exec("git", { "init", "-q", "-b", "main", repo }), "git init scan")
-		copyInto(work, { "scripts", "tracker/templates", "rokit.toml", ".luaurc" })
+		copyInto(work, {
+			"zn",
+			"scripts",
+			"z-nile/engine",
+			"z-nile/lib",
+			"z-nile/templates",
+			"z-nile/vendor",
+			"z-nile/projects.toml",
+			"rokit.toml",
+			".luaurc",
+		})
 		must(process.exec("git", { "init", "-q", "--bare", "-b", "main", origin }), "git init origin")
 		must(process.exec("git", { "init", "-q", "-b", "main", work }), "git init work")
 		git(work, { "config", "user.name", "e2e" })
@@ -162,7 +187,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		local tip, head = originTip(), git(wt, { "rev-parse", "HEAD" })
 		local guarded = process.exec("bash", {
 			"-c",
-			'source scripts/lib/fence.sh || exit 1; pickman_fence "$PWD" && bash scripts/tracker.sh new issue c probe-one',
+			'source z-nile/lib/fence.sh || exit 1; pickman_fence "$PWD" && bash scripts/tracker.sh new issue c probe-one',
 		}, { cwd = wt })
 		local said = guarded.stdout .. guarded.stderr
 		if not guarded.ok then
@@ -211,7 +236,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		local tip, head = originTip(), git(wt, { "rev-parse", "HEAD" })
 		local guarded = process.exec("bash", {
 			"-c",
-			'source scripts/lib/fence.sh || exit 1; pickman_fence "$PWD" && bash scripts/tracker.sh status "$1" preparing',
+			'source z-nile/lib/fence.sh || exit 1; pickman_fence "$PWD" && bash scripts/tracker.sh status "$1" preparing',
 			"_",
 			id,
 		}, { cwd = wt })

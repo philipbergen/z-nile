@@ -2,6 +2,7 @@
 -- c0870: `tracker.sh compact [--force]` renumbers every item from 0001 (issues f/d/c in one space, rafts in their
 -- own), in a worktree cut from origin/main, as one local commit. It refuses while another branch changes tracker/
 -- or tests/acceptance/ (unless --force), and on a malformed tree. Fixture under .cache/c0870-compact.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
@@ -99,14 +100,14 @@ return t.spec("c0870 compact", function(it)
 		fs.writeDir(seed)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		identity(seed)
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		-- a template that names ids which the compaction moves: templates are never rewritten
-		write(`{seed}/tracker/templates/issue/example.md`, "For example c0010, f0001 and R0020.\n")
-		write(`{seed}/tracker/next`, "issue 501 a-b-c\nraft 281 a-b-c\n")
+		write(`{seed}/z-nile/templates/issue/example.md`, "For example c0010, f0001 and R0020.\n")
+		write(`{seed}/z-nile/next`, "issue 501 a-b-c\nraft 281 a-b-c\n")
 		for _, i in ISSUES do
 			write(
 				`{seed}/{i[1]}/{i[2]}.md`,
@@ -145,7 +146,7 @@ return t.spec("c0870 compact", function(it)
 			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
 			identity(c)
 		end
-		local files = string.split(git(seed, { "ls-files", "tracker/templates" }), "\n")
+		local files = string.split(git(seed, { "ls-files", "z-nile/templates" }), "\n")
 		for _, f in files do
 			templatesBefore ..= f .. "\n" .. fs.readFile(`{seed}/{f}`)
 		end
@@ -318,7 +319,7 @@ return t.spec("c0870 compact", function(it)
 
 	it("leaves the templates alone", function()
 		local now = ""
-		for _, f in string.split(git(busyWt, { "ls-files", "tracker/templates" }), "\n") do
+		for _, f in string.split(git(busyWt, { "ls-files", "z-nile/templates" }), "\n") do
 			now ..= f .. "\n" .. fs.readFile(`{busyWt}/{f}`)
 		end
 		t.expect(now).toBe(templatesBefore)

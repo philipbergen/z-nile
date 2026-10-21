@@ -3,6 +3,7 @@
 -- harvest.md ledger in each reviewed item's folder mapping every review finding to the lessons it taught, or
 -- marking it one-off. Everything here is pure over texts except `load`, which only reads.
 local fs = require("@lune/fs")
+local projects = require("./projects")
 
 local stats = require("./stats")
 
@@ -372,7 +373,7 @@ function lessons.day(date: string): number?
 end
 
 -- design review rounds before and after lessons existed. `start` is a raft's `created:` day (`lessons.day`); `cutoff`
--- the day scripts/tracker/lessons.luau was added. A raft whose start is at
+-- the day the lessons module was first added (scripts/tracker/lessons.luau, before c0114 moved it). A raft whose start is at
 -- or after the cutoff is "after"; with no cutoff every dated raft is "before"; a raft with no start counts nowhere.
 export type RaftRounds = { id: string, rounds: number, start: number? }
 export type Split = { rafts: number, rounds: number, mean: number }
@@ -553,29 +554,34 @@ function lessons.load(root: string): Tree
 			end
 		end
 	end
-	for _, kind in { "issues", "rafts" } do
-		for _, state in { "", "/active", "/done" } do
-			local parent = `{root}/tracker/{kind}{state}`
-			for _, id in dirs(parent) do
-				if not string.match(id, ITEM) then
-					continue
-				end
-				tree.found[id] = true
-				local item: Item = { id = id, reviews = {}, harvest = nil }
-				local any = false
-				for _, name in fs.readDir(`{parent}/{id}`) do
-					local stem = string.match(name, "^(.+)%.md$")
-					local path = `{parent}/{id}/{name}`
-					if stem and isStem(stem) and fs.isFile(path) then
-						item.reviews[stem] = fs.readFile(path)
-						any = true
-					elseif name == "harvest.md" and fs.isFile(path) then
-						item.harvest = fs.readFile(path)
-						any = true
+	-- items under every project root of the checkout (c0114): z-nile's rafts hold the harvests
+	local ok, reg = pcall(projects.load, root)
+	local roots: { string } = if ok then projects.roots(reg :: projects.Registry) else { projects.LEGACY }
+	for _, top in roots do
+		for _, kind in { "issues", "rafts" } do
+			for _, state in { "", "/active", "/done" } do
+				local parent = `{root}/{top}/{kind}{state}`
+				for _, id in dirs(parent) do
+					if not string.match(id, ITEM) then
+						continue
 					end
-				end
-				if any then
-					table.insert(tree.items, item)
+					tree.found[id] = true
+					local item: Item = { id = id, reviews = {}, harvest = nil }
+					local any = false
+					for _, name in fs.readDir(`{parent}/{id}`) do
+						local stem = string.match(name, "^(.+)%.md$")
+						local path = `{parent}/{id}/{name}`
+						if stem and isStem(stem) and fs.isFile(path) then
+							item.reviews[stem] = fs.readFile(path)
+							any = true
+						elseif name == "harvest.md" and fs.isFile(path) then
+							item.harvest = fs.readFile(path)
+							any = true
+						end
+					end
+					if any then
+						table.insert(tree.items, item)
+					end
 				end
 			end
 		end

@@ -20,7 +20,7 @@ end
 return t.spec("tracker skill: Conflicts bullet", function(it)
 	it("renumber is called with just the id", function()
 		local line = conflicts()
-		t.expect(says(line, "tracker.sh renumber <ID>")).toBe(true)
+		t.expect(says(line, "./zn renumber <ID>")).toBe(true)
 		t.expect(says(line, "<next free>")).toBe(false)
 	end)
 
@@ -45,6 +45,6 @@ return t.spec("tracker skill: Conflicts bullet", function(it)
 
 	it("the Numbering bullet says new takes its number from tracker/next (c0870)", function()
 		local text = fs.readFile(".claude/skills/tracker/SKILL.md")
-		t.expect(says(text, "`tracker/next` holds the next number")).toBe(true)
+		t.expect(says(text, "`z-nile/next` holds the next number")).toBe(true)
 	end)
 end)

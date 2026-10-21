@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Concurrent gate stages with buffered, ordered, timed output. Sourced by scripts/check.sh.
+# Concurrent gate stages with buffered, ordered, timed output. Sourced by z-nile/check.sh.
 # Runs under bash 3.2 (macOS /bin/bash): indexed arrays, `wait <pid>`, no `wait -n`.
 #   par_start <label> <command> [args...]   start the stage in the background, output to a temp file
 #   par_wait                                wait for all, print each in start order as

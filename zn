@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# z-nile's command (c0114): ./zn <command> ... at the repository root. See .claude/skills/tracker/SKILL.md.
+set -euo pipefail
+cd "$(dirname "$0")"
+export PATH="$HOME/.rokit/bin:$PATH"
+exec lune run z-nile/engine/main -- "$@"

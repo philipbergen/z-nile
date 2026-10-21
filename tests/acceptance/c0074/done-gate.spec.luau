@@ -2,8 +2,9 @@
 -- c0800: `tracker.sh done` runs the full gate on the final tree (acceptance specs promoted, raft and members moved
 -- to done/) before it commits, and rolls everything back when the gate fails. Inside a spec run it doesn't (the
 -- fixture specs that drive done clone tests/, so a gate there would run them again) unless PICKMAN_DONE_GATE=1
--- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose scripts/check.sh is a stub that records
+-- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose z-nile/check.sh is a stub that records
 -- what it saw; each case starts from the same reviewed commit.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local gate = require("@scripts/tracker/gate")
@@ -18,7 +19,7 @@ local work = `{base}/work`
 local gateLog = `{base}/gate.log`
 
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
-local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
+local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 	.. 'check "RC1: fixture" true\nfinish\n'
 -- the stub gate: records its arguments and the tree it saw, then exits with GATE_EXIT
 local STUB_GATE = table.concat({
@@ -113,33 +114,27 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				write(path, fs.readFile(`{root}/{path}`))
 			end
 		end
-		write("scripts/check.sh", STUB_GATE)
-		must(process.exec("chmod", { "+x", `{work}/scripts/check.sh` }), "chmod")
+		write("z-nile/check.sh", STUB_GATE)
+		must(process.exec("chmod", { "+x", `{work}/z-nile/check.sh` }), "chmod")
 		git({ "config", "gc.auto", "0" })
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{work}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(dir) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(dir .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next the tracker numbers by the old rule (c0870)
-		if fs.isFile(`{work}/tracker/next`) then
-			fs.removeFile(`{work}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker, stub gate", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha" }), "new issue")
@@ -228,7 +223,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(gate.doneGate({ PICKMAN_DONE_GATE = "1" })).toBe("full")
 		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "", PICKMAN_DONE_GATE = "" })).toBe("full")
 		-- and done decides through it, reading nothing else
-		local main = fs.readFile(`{root}/scripts/tracker/main.luau`)
+		local main = fs.readFile(`{root}/z-nile/engine/main.luau`)
 		t.expect(string.find(main, "doneGate(process.env)", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(main, "PICKMAN_DONE_GATE", 1, true))).toBe(nil)
 	end)

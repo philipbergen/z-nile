@@ -69,7 +69,7 @@ local function fixture(
 end
 
 local function tracker(base: string, args: { string }): process.ExecResult
-	local all = { "run", `{root}/scripts/tracker/main`, "--" }
+	local all = { "run", `{root}/z-nile/engine/main`, "--" }
 	for _, a in args do
 		table.insert(all, a)
 	end

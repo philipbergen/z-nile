@@ -1,6 +1,6 @@
 --!strict
 -- Spend accounting: per-issue spend.md rows written into the same commit they describe.
--- Lines come from the staged diff (tracker/ excluded; on the done commit also the promoted
+-- Lines come from the staged diff (every project root excluded; on the done commit also the promoted
 -- tests/acceptance/ specs, which are prep work). Minutes are explicit (--time) or the
 -- wall-clock since the previous commit, capped to absorb idle gaps; multi-issue commits split
 -- minutes in proportion to lines added.
@@ -28,7 +28,11 @@ type FileStat = { path: string, added: number, removed: number }
 -- `excludeAcceptance`: on the done commit, promoted acceptance specs (prep work) are not spend.
 function spend.stagedStats(excludeAcceptance: boolean?): { FileStat }
 	local out: { FileStat } = {}
-	local args = { "diff", "--cached", "--numstat", "--", ".", ":(exclude)tracker" }
+	-- every project root's documents are tracker state, not code (c0114)
+	local args = { "diff", "--cached", "--numstat", "--", "." }
+	for _, r in store.roots() do
+		table.insert(args, `:(exclude){r}`)
+	end
 	if excludeAcceptance then
 		table.insert(args, ":(exclude)tests/acceptance")
 	end

@@ -22,7 +22,7 @@ local function legacy(id: string, slug: string): string
 end
 
 local function migrate(): process.ExecResult
-	return process.exec("lune", { "run", `{root}/scripts/tracker/main`, "--", "migrate" }, { cwd = base })
+	return process.exec("lune", { "run", `{root}/z-nile/engine/main`, "--", "migrate" }, { cwd = base })
 end
 
 local function write(path: string, text: string)

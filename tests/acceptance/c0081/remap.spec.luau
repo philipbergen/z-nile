@@ -1,7 +1,8 @@
 --!strict
 -- c0870: `tracker.sh remap` brings a branch that was in flight during a compaction onto the new ids: it applies
--- origin/main's tracker/compaction.txt to the branch, numbers the branch's own unmapped items from origin's counter,
+-- origin/main's z-nile/compaction.txt to the branch, numbers the branch's own unmapped items from origin's counter,
 -- commits, then merges origin/main itself against the remapped merge base. Fixture under .cache/c0870-remap.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
@@ -68,12 +69,12 @@ return t.spec("c0870 remap", function(it)
 		fs.writeDir(seed)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		identity(seed)
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
-		write(`{seed}/tracker/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
 		write(`{seed}/tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
 		write(`{seed}/tracker/issues/f0020/f0020.md`, doc("f0020", "raft: R0030\n"))
 		write(`{seed}/tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010, f0020]\n"))
@@ -115,7 +116,7 @@ return t.spec("c0870 remap", function(it)
 		end
 		t.expect(has(r.stdout .. r.stderr, "prep-y")).toBe(true)
 		git(wt, { "push", "-q", "origin", "HEAD:main" }) -- stands in for the merged pull request
-		local c = ids.parse(git(origin, { "show", "main:tracker/next" }) .. "\n") :: ids.Counters
+		local c = ids.parse(git(origin, { "show", "main:z-nile/next" }) .. "\n") :: ids.Counters
 		t.expect(c.issue).toBe(3)
 	end)
 
@@ -123,13 +124,13 @@ return t.spec("c0870 remap", function(it)
 		local before = git(origin, { "rev-parse", "main" })
 		local r = tr(branch, { "new", "issue", "c", "stale" })
 		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "a branch that changed tracker/ runs tracker.sh remap")).toBe(true)
+		t.expect(has(r.stderr, "a branch that changed tracker/ runs ./zn remap")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		t.expect(git(branch, { "status", "--porcelain" })).toBe("")
 		-- nor publish a status stamp: old ids name other items on origin now
 		local st = tr(branch, { "status", "c0010", "preparing" })
 		t.expect(st.ok).toBe(false)
-		t.expect(has(st.stderr, "a branch that changed tracker/ runs tracker.sh remap")).toBe(true)
+		t.expect(has(st.stderr, "a branch that changed tracker/ runs ./zn remap")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 	end)
 
@@ -154,7 +155,7 @@ return t.spec("c0870 remap", function(it)
 		t.expect(has(fs.readFile(`{branch}/tracker/rafts/R0001/R0001.md`), "issues: [c0001, f0002]"))
 			.toBe(true)
 		-- the number is reserved on origin
-		local c = ids.parse(git(origin, { "show", "main:tracker/next" }) .. "\n") :: ids.Counters
+		local c = ids.parse(git(origin, { "show", "main:z-nile/next" }) .. "\n") :: ids.Counters
 		t.expect(c.issue).toBe(5)
 	end)
 

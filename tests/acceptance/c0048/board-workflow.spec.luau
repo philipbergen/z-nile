@@ -80,9 +80,9 @@ return t.spec("c0460 board workflow", function(it)
 
 	it("bootstraps with setup.sh --tools, and only the tools", function()
 		local steps = job(load()).steps
-		local setup = runStep(steps, "scripts/setup.sh")
+		local setup = runStep(steps, "z-nile/setup.sh")
 		t.expect(setup).toBeTruthy()
-		t.expect(setup.run).toBe("scripts/setup.sh --tools")
+		t.expect(setup.run).toBe("z-nile/setup.sh --tools")
 		-- without the token setup.sh dies on CI ("GH_TOKEN missing or invalid")
 		t.expect(setup.env.GH_TOKEN).toBe("${{ github.token }}")
 		t.expect(keys(setup.env)).toEqual({ "GH_TOKEN" })
@@ -90,14 +90,14 @@ return t.spec("c0460 board workflow", function(it)
 
 	it("builds the board after setup and uploads exactly that file after the build", function()
 		local steps = job(load()).steps
-		local _, setupAt = runStep(steps, "scripts/setup.sh --tools")
-		local build, buildAt = runStep(steps, "scripts/tracker.sh board --out ")
+		local _, setupAt = runStep(steps, "z-nile/setup.sh --tools")
+		local build, buildAt = runStep(steps, "./zn board --out ")
 		local upload, uploadAt = usesStep(steps, "actions/upload-artifact@v4")
 		t.expect(build).toBeTruthy()
 		t.expect(upload).toBeTruthy()
 		t.expect(setupAt < buildAt).toBe(true)
 		t.expect(buildAt < uploadAt).toBe(true)
-		local out = string.match((build :: any).run, "scripts/tracker%.sh board %-%-out (%S+)")
+		local out = string.match((build :: any).run, "%./zn board %-%-out (%S+)")
 		t.expect(out).toBe("dist/board.html")
 		t.expect(upload.with.path).toBe(out)
 		t.expect(upload.with.name).toBe("tracker-board")
@@ -120,9 +120,9 @@ return t.spec("c0460 board workflow", function(it)
 		local build = steps[3].run
 		t.expect(keys(steps[3])).toEqual({ "run" })
 		t.expect(
-			build == "scripts/tracker.sh board --out dist/board.html"
-				or build == "scripts/tracker.sh board --out dist/board.html -O"
-		).toBe(true)
+			build == "./zn board --out dist/board.html" or build == "./zn board --out dist/board.html -O"
+		)
+			.toBe(true)
 		t.expect(steps[4].uses).toBe("actions/upload-artifact@v4")
 		t.expect(steps[4].with).toEqual({
 			name = "tracker-board",

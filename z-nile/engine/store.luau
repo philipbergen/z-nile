@@ -1,7 +1,9 @@
 --!strict
 -- Tracker storage: locating items, reading/writing their documents, allocating IDs.
--- Layout: tracker/{issues,rafts}/[active/|done/]<ID>/<ID>.md (+ check.sh, spend.md, reviews)
+-- Layout: <root>/{issues,rafts}/[active/|done/]<ID>/<ID>.md (+ check.sh, spend.md, reviews), for every project root in
+-- z-nile/projects.toml (c0114). An id is unique across every root: one counter numbers them all.
 local fs = require("@lune/fs")
+local projects = require("./projects")
 local statusLib = require("./status")
 
 export type State = string -- "backlog" | "active" | "done"
@@ -13,11 +15,11 @@ export type Item = {
 	dir: string, -- repo-relative directory
 	doc: string, -- repo-relative path of <ID>.md
 	slug: string,
+	root: string, -- the project root holding it (z-nile/.tracker, tracker, ...)
 }
 
 local store = {}
 
-store.ROOT = "tracker"
 store.TYPES = { f = "feature", d = "defect", c = "chore" } :: { [string]: string }
 store.PREFIX = { feature = "f", defect = "d", chore = "c" } :: { [string]: string }
 local STATE_DIRS: { [State]: string } = { backlog = "", active = "active/", done = "done/" }
@@ -40,12 +42,17 @@ local function kindOf(id: string): Kind
 	error(`not a tracker id: {id} (expected f0010, d0020, c0030 or R0010)`, 0)
 end
 
-function store.kindDir(kind: Kind): string
-	return if kind == "raft" then `{store.ROOT}/rafts` else `{store.ROOT}/issues`
+-- The working tree's project roots, in registry order.
+function store.roots(): { string }
+	return projects.roots(projects.load())
 end
 
-function store.dirFor(kind: Kind, state: State, id: string): string
-	return `{store.kindDir(kind)}/{STATE_DIRS[state]}{id}`
+function store.kindDir(kind: Kind, root: string): string
+	return if kind == "raft" then `{root}/rafts` else `{root}/issues`
+end
+
+function store.dirFor(kind: Kind, state: State, id: string, root: string): string
+	return `{store.kindDir(kind, root)}/{STATE_DIRS[state]}{id}`
 end
 
 local function docIn(dir: string, id: string): string
@@ -55,37 +62,43 @@ local function docIn(dir: string, id: string): string
 	end
 	for _, name in fs.readDir(dir) do
 		if string.match(name, `^{id}%-.+%.md$`) then
-			error(`{dir}: {name} uses the legacy document name; run scripts/tracker.sh migrate`, 0)
+			error(`{dir}: {name} uses the legacy document name; run ./zn migrate`, 0)
 		end
 	end
 	error(`{dir} has no {id}.md`, 0)
 end
 
+-- The item with this id in any project root. One id in two folders, in one root or in two, is an error.
 function store.find(id: string): Item?
 	local kind = kindOf(id)
-	local dirs: { string } = {}
-	for _, state in STATE_ORDER do
-		local d = store.dirFor(kind, state, id)
-		if fs.isDir(d) then
-			table.insert(dirs, d)
+	local found: { { dir: string, state: State, root: string } } = {}
+	for _, root in store.roots() do
+		for _, state in STATE_ORDER do
+			local d = store.dirFor(kind, state, id, root)
+			if fs.isDir(d) then
+				table.insert(found, { dir = d, state = state, root = root })
+			end
 		end
 	end
-	if #dirs > 1 then
+	if #found > 1 then
+		local dirs: { string } = {}
+		for _, f in found do
+			table.insert(dirs, f.dir)
+		end
 		error(`duplicate id {id}: {table.concat(dirs, ", ")}`, 0)
 	end
-	for _, state in STATE_ORDER do
-		local dir = store.dirFor(kind, state, id)
-		if fs.isDir(dir) then
-			local doc = docIn(dir, id)
-			local slug = store.readFront(doc).slug
-			if not slug or slug == "" then
-				error(`{doc} has no slug: in its frontmatter; add slug: <kebab-case-words>`, 0)
-			end
-			local item: Item = { id = id, kind = kind, state = state, dir = dir, doc = doc, slug = slug }
-			return item
-		end
+	local f = found[1]
+	if not f then
+		return nil
 	end
-	return nil
+	local doc = docIn(f.dir, id)
+	local slug = store.readFront(doc).slug
+	if not slug or slug == "" then
+		error(`{doc} has no slug: in its frontmatter; add slug: <kebab-case-words>`, 0)
+	end
+	local item: Item =
+		{ id = id, kind = kind, state = f.state, dir = f.dir, doc = doc, slug = slug, root = f.root }
+	return item
 end
 
 function store.get(id: string): Item
@@ -98,15 +111,17 @@ end
 
 function store.all(kind: Kind): { Item }
 	local out: { Item } = {}
-	for _, state in STATE_ORDER do
-		local base = `{store.kindDir(kind)}/{STATE_DIRS[state]}`
-		if fs.isDir(base) then
-			for _, name in fs.readDir(base) do
-				local isId = if kind == "raft" then store.isRaftId(name) else store.isIssueId(name)
-				if isId and fs.isDir(base .. name) then
-					local item = store.find(name)
-					if item then
-						table.insert(out, item)
+	for _, root in store.roots() do
+		for _, state in STATE_ORDER do
+			local base = `{store.kindDir(kind, root)}/{STATE_DIRS[state]}`
+			if fs.isDir(base) then
+				for _, name in fs.readDir(base) do
+					local isId = if kind == "raft" then store.isRaftId(name) else store.isIssueId(name)
+					if isId and fs.isDir(base .. name) then
+						local item = store.find(name)
+						if item then
+							table.insert(out, item)
+						end
 					end
 				end
 			end

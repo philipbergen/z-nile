@@ -1,11 +1,21 @@
 --!strict
--- The reviewed list of .cache paths in scripts/ (c0077). Unjailed writers under .cache must never write through a
--- symlink a spec swapped in there (the jail can't refuse a swap, c0077 E1), so every line in scripts/ that names a
--- .cache path is listed here with how it stays safe: through scripts/lib/replace-file.pl (a rename, never a write
--- through a link), a `mkdir -p` of a plain folder the fence checks, a read, or a message. A new line needs a
--- reviewer to add it here. The list covers scripts/ only: a write through a listed variable, or a write from the
--- runner (tests/lib), is review's to catch (testing skill).
+-- The reviewed list of .cache paths in scripts/ and z-nile/ (c0077, c0114). Unjailed writers under .cache must never
+-- write through a symlink a spec swapped in there (the jail can't refuse a swap, c0077 E1), so every line in those
+-- folders that names a .cache path is listed here with how it stays safe: through z-nile/lib/replace-file.pl (a
+-- rename, never a write through a link), a `mkdir -p` of a plain folder the fence checks, a read, or a message. A new
+-- line needs a reviewer to add it here. The list covers scripts/ and z-nile/ (its .tracker/ documents aside) only: a
+-- write through a listed variable, or a write from the runner (tests/lib), is review's to catch (testing skill).
+local projects = require("@znile/engine/projects")
+
 local cachepaths = {}
+
+-- The folders whose .luau and .sh files the list covers, and the ones inside them it skips (tracker documents).
+cachepaths.ROOTS = { "scripts", "z-nile" }
+-- every project root of the registry (design review 001 F5): a new root is skipped without an edit here
+cachepaths.SKIP = {} :: { [string]: boolean }
+for _, r in projects.roots(projects.load(".")) do
+	cachepaths.SKIP[r] = true
+end
 
 -- A comment line in Luau (`--`) or shell (`#`): skipped by the scan.
 local function comment(line: string): boolean
@@ -50,23 +60,24 @@ end
 local RENAMED = "written through replace-file.pl (a rename onto the path, never through a link)"
 
 local ALLOWED: { [string]: { [string]: string } } = {
-	["scripts/check.sh"] = {
+	["z-nile/check.sh"] = {
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
 		["find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +"] = "unlinks top-level links, never follows one",
 		["defs=.cache/globalTypes.d.luau"] = `downloaded to the user temp folder, then {RENAMED}`,
-		['"$@" -o "$d/$out" && perl scripts/lib/replace-file.pl ".cache/$out" "$d/$out"'] = `built in the user temp folder, then {RENAMED}`,
+		['"$@" -o "$d/$out" && perl z-nile/lib/replace-file.pl ".cache/$out" "$d/$out"'] = `built in the user temp folder, then {RENAMED}`,
 	},
-	["scripts/lib/fence.sh"] = {
+	["z-nile/lib/fence.sh"] = {
 		['export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$here/.cache"'] = "a path in an environment variable; writes nothing",
 		["if [[ -L $here/.cache || ( -e $here/.cache && ! -d $here/.cache ) ]]; then"] = "a read: refuses a .cache that isn't a plain folder",
 		['echo "fence: $here/.cache is not a plain folder (a symlink or a file); refusing. Stop and report this." >&2'] = "a message",
 		['mkdir -p "$here/.cache"'] = "the folder itself, checked to be a plain folder just above",
+		['$here == "$PICKMAN_TEST_FENCE"/.cache/* ]]; then'] = "a read: compares two paths (the jail waiver, c0114)",
 		['local sentinel="$here/.cache/.git"'] = "a link there is unlinked, a folder refused; the sentinel is renamed in (rename(2), inline)",
 		['fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs'] = "mktemp creates a fresh file exclusively, never through a link",
 		['mkdir -p "$here/.cache/gh-none"'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
 	},
-	["scripts/tracker/main.luau"] = {
+	["z-nile/engine/main.luau"] = {
 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",
 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,
 		["return `.cache/tracker-claim-{raftId}`"] = `the claim file, written with sh.writeReplacing: {RENAMED}`,
@@ -75,7 +86,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 	},
-	["scripts/tracker/history.luau"] = {
+	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
 	},
 }

@@ -14,9 +14,10 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 local base = trim(process.exec("mktemp", { "-d" }).stdout)
 fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
 process.exec("git", { "init", "-q" }, { cwd = base })
-process.exec("cp", { "-R", `{root}/tracker/templates`, `{base}/tracker-templates` })
+-- c0114 override: the templates and the engine moved to z-nile/
+fs.writeDir(`{base}/z-nile`)
+process.exec("cp", { "-R", `{root}/z-nile/templates`, `{base}/z-nile/templates` })
 fs.writeDir(`{base}/tracker`)
-process.exec("mv", { `{base}/tracker-templates`, `{base}/tracker/templates` })
 
 local function put(id: string)
 	fs.writeDir(`{base}/tracker/issues/{id}`)
@@ -24,7 +25,7 @@ local function put(id: string)
 end
 
 local function new(args: { string }): process.ExecResult
-	local all = { "run", `{root}/scripts/tracker/main`, "--", "new" }
+	local all = { "run", `{root}/z-nile/engine/main`, "--", "new" }
 	for _, a in args do
 		table.insert(all, a)
 	end

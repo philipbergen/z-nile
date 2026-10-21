@@ -27,7 +27,7 @@ created: {{DATE}}
 
 ## Exit criteria
 <!-- Exact, machine-checkable goal state. Implemented by this raft's check.sh (RCn labels).
-     "Done" == `scripts/tracker.sh done {{ID}}` succeeds. -->
+     "Done" == `./zn done {{ID}}` succeeds. -->
 
 ## Risks & rollback
 

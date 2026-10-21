@@ -148,7 +148,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		-- `status <id> active` is not a way to take the lock: only start claims
 		local direct = tr(wt2, { "status", "R0001", "active" })
 		t.expect(direct.ok).toBe(false)
-		t.expect(has(direct.stderr, "only tracker.sh start")).toBe(true)
+		t.expect(has(direct.stderr, "only ./zn start")).toBe(true)
 		-- giving the claim back ends this worktree's ownership: its claim file goes
 		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-R0001`)).toBe(true)
 		trOk(wt, { "status", "R0001", "prepared" })

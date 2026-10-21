@@ -71,7 +71,7 @@ local function build()
 	if fs.isDir(ROOT) then
 		fs.removeDir(ROOT)
 	end
-	for _, dir in { BIN, SYS, `{REPO}/scripts` } do
+	for _, dir in { BIN, SYS, `{REPO}/z-nile` } do
 		fs.writeDir(dir)
 	end
 	local text = string.gsub(string.gsub(STUB_TEXT, "@LOG@", LOG), "@STUB@", STUB)
@@ -83,8 +83,9 @@ local function build()
 	for _, name in TOOLS do
 		link(STUB, `{BIN}/{name}`)
 	end
-	link(STUB, `{REPO}/scripts/check.sh`)
-	fs.writeFile(`{REPO}/scripts/setup.sh`, fs.readFile("scripts/setup.sh"))
+	-- c0114 override: the bootstrap and the gate moved to z-nile/
+	link(STUB, `{REPO}/z-nile/check.sh`)
+	fs.writeFile(`{REPO}/z-nile/setup.sh`, fs.readFile("z-nile/setup.sh"))
 	built = true
 end
 
@@ -137,7 +138,7 @@ local function setup(args: { string }, env: { [string]: string }?): Result
 		end
 	end
 	table.insert(argv, real("bash"))
-	table.insert(argv, `{REPO}/scripts/setup.sh`)
+	table.insert(argv, `{REPO}/z-nile/setup.sh`)
 	for _, a in args do
 		table.insert(argv, a)
 	end

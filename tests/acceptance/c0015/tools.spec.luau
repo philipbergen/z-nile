@@ -1,10 +1,10 @@
 --!strict
--- c0140 AC5: scripts/setup.sh --tools installs the toolchain and stops before the gate, so the deploy
+-- c0140 AC5: z-nile/setup.sh --tools installs the toolchain and stops before the gate, so the deploy
 -- job doesn't run the whole gate a second time. The default (no flag) still ends with the gate.
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
-local text = fs.readFile("scripts/setup.sh")
+local text = fs.readFile("z-nile/setup.sh")
 
 local function at(needle: string): number?
 	return (string.find(text, needle, 1, true))
@@ -23,7 +23,7 @@ return t.spec("c0140 setup.sh --tools", function(it)
 	end)
 
 	it("still runs the gate when called without the flag, after the tools and type definitions", function()
-		local gate = at("scripts/check.sh --full")
+		local gate = at("z-nile/check.sh --full")
 		t.expect(gate ~= nil).toBe(true)
 		t.expect((at("lune setup") :: number) < (gate :: number)).toBe(true)
 		t.expect((at("rokit install") :: number) < (gate :: number)).toBe(true)

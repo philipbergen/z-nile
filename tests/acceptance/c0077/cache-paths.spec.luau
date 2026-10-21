@@ -47,34 +47,44 @@ return t.spec("c0830 every .cache path in scripts/ is reviewed", function(it)
 		t.expect(has(found, "scripts/gone.sh: listed but missing: mkdir -p .cache")).toBe(true)
 	end)
 
-	it("every .cache line in scripts/ is on the reviewed list, and every listed line exists", function()
-		local files: { [string]: string } = {}
-		local function walk(dir: string)
-			for _, name in fs.readDir(dir) do
-				local path = `{dir}/{name}`
-				if fs.isDir(path) then
-					walk(path)
-				elseif string.match(name, "%.luau$") or string.match(name, "%.sh$") then
-					files[path] = fs.readFile(path)
+	-- c0114 override: the gate and the engine moved to z-nile/, so the scan covers cachepaths.ROOTS (scripts/, z-nile/)
+	it(
+		"every .cache line in scripts/ and z-nile/ is on the reviewed list, and every listed line exists",
+		function()
+			local files: { [string]: string } = {}
+			local function walk(dir: string)
+				for _, name in fs.readDir(dir) do
+					local path = `{dir}/{name}`
+					if cachepaths.SKIP[path] then
+						continue
+					elseif fs.isDir(path) then
+						walk(path)
+					elseif string.match(name, "%.luau$") or string.match(name, "%.sh$") then
+						files[path] = fs.readFile(path)
+					end
+				end
+			end
+			for _, dir in cachepaths.ROOTS do
+				walk(dir)
+			end
+			t.expect(files["z-nile/check.sh"] ~= nil).toBe(true) -- the walk found the gate
+			t.expect(files["z-nile/lib/sh.luau"] ~= nil).toBe(true)
+			local found = cachepaths.scan(files, cachepaths.ALLOWED)
+			if #found > 0 then
+				error(
+					"not on the reviewed list (tests/lib/cachepaths.luau ALLOWED):\n"
+						.. table.concat(found, "\n")
+				)
+			end
+			-- every entry carries a reason
+			for path, lines in cachepaths.ALLOWED do
+				for line, why in lines do
+					t.expect(#why > 0).toBe(true)
+					t.expect(string.find(line, ".cache", 1, true) ~= nil).toBe(true)
+					t.expect(string.sub(path, 1, 8) == "scripts/" or string.sub(path, 1, 7) == "z-nile/")
+						.toBe(true)
 				end
 			end
 		end
-		walk("scripts")
-		t.expect(files["scripts/check.sh"] ~= nil).toBe(true) -- the walk found the gate
-		t.expect(files["scripts/lib/sh.luau"] ~= nil).toBe(true)
-		local found = cachepaths.scan(files, cachepaths.ALLOWED)
-		if #found > 0 then
-			error(
-				"not on the reviewed list (tests/lib/cachepaths.luau ALLOWED):\n" .. table.concat(found, "\n")
-			)
-		end
-		-- every entry carries a reason
-		for path, lines in cachepaths.ALLOWED do
-			for line, why in lines do
-				t.expect(#why > 0).toBe(true)
-				t.expect(string.find(line, ".cache", 1, true) ~= nil).toBe(true)
-				t.expect(string.sub(path, 1, 8)).toBe("scripts/")
-			end
-		end
-	end)
+	)
 end)

@@ -37,12 +37,12 @@ function sh.git(args: { string }): string
 	return sh.must("git", args)
 end
 
--- Writes `text` to `path` through scripts/lib/replace-file.pl: a sibling temporary file, created exclusively and never
+-- Writes `text` to `path` through z-nile/lib/replace-file.pl: a sibling temporary file, created exclusively and never
 -- followed, renamed onto `path`. A symlink a spec swapped in at `path` (to a file or to a directory) is replaced,
 -- never followed; a real directory there is an error (c0077). `path` is relative to the repository root, the cwd of
 -- every tracker command and spec, or absolute.
 function sh.writeReplacing(path: string, text: string)
-	local r = process.exec("perl", { "scripts/lib/replace-file.pl", path }, { stdio = { stdin = text } })
+	local r = process.exec("perl", { "z-nile/lib/replace-file.pl", path }, { stdio = { stdin = text } })
 	if not r.ok then
 		error(`writeReplacing {path}: {trim(r.stderr)}`, 0)
 	end

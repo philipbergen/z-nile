@@ -1,6 +1,6 @@
 #!/bin/sh
 # Push guard for checks (testing skill, "Specs never touch the real repository"). It runs in the pushing
-# repository, where scripts/lib/fence.sh's config applies (the receiving side of a local push drops it, so the
+# repository, where z-nile/lib/fence.sh's config applies (the receiving side of a local push drops it, so the
 # reference-transaction guard can't see a push). $2 is the URL as given. A local one (an absolute path, a path
 # relative to the pushing worktree, or file://) is resolved to its repository, and a push into one listed in
 # PICKMAN_FENCE_REAL_GIT is refused. During spec runs (PICKMAN_FENCE_SPECS) a push goes only into an existing

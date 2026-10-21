@@ -1,14 +1,15 @@
 --!strict
 -- The id an item has now, for a spec that pins a real tracker item by the id it had before a compaction (c0870):
--- mapped through tracker/compaction.txt, read from the checkout (the spec's working directory) unless `mapText` is
+-- mapped through z-nile/compaction.txt (tracker/compaction.txt before c0114), read from the checkout (the spec's working directory) unless `mapText` is
 -- given. Identity when there is no map or the map does not name the id; a malformed map is an error.
 -- Self-contained on purpose: c0640's fence spec copies tests/lib without scripts/, and repo-fence.spec requires this.
--- The format is ids.parseMap's (scripts/tracker/ids.luau): `# comment` lines and `<old> <new>` lines.
+-- The format is ids.parseMap's (z-nile/engine/ids.luau): `# comment` lines and `<old> <new>` lines.
 local fs = require("@lune/fs")
 
 local renamed = {}
 
-local MAP_FILE = "tracker/compaction.txt"
+-- the map's home since c0114, and before it (a tree from before the move)
+local MAP_FILES = { "z-nile/compaction.txt", "tracker/compaction.txt" }
 
 local function parse(text: string): { [string]: string }?
 	local map: { [string]: string } = {}
@@ -34,15 +35,21 @@ end
 
 function renamed.id(old: string, mapText: string?): string
 	local text = mapText
-	if text == nil and fs.isFile(MAP_FILE) then
-		text = fs.readFile(MAP_FILE)
+	local file = MAP_FILES[1]
+	if text == nil then
+		for _, f in MAP_FILES do
+			if fs.isFile(f) then
+				text, file = fs.readFile(f), f
+				break
+			end
+		end
 	end
 	if text == nil then
 		return old
 	end
 	local map = parse(text)
 	if not map then
-		error(`{MAP_FILE}: the compaction map does not parse`, 2)
+		error(`{file}: the compaction map does not parse`, 2)
 	end
 	return map[old] or old
 end

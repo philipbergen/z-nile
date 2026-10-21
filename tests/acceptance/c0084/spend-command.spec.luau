@@ -3,6 +3,7 @@
 -- publishes appended rows to the item's spend.md on origin/main and changes nothing in the checkout it runs in.
 -- Fixture under .cache/c0084-spend: a seed with this tree's tooling, a bare origin, a main clone, a second clone, and
 -- a prep worktree made by `tracker.sh worktree`. Ids come from `new issue` and `new raft`, never from literals.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@scripts/tracker/ledger")
@@ -74,11 +75,11 @@ return t.spec("tracker spend", function(it)
 		fs.writeDir(seed)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		identity(seed)
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		process.exec("cp", { `{root}/tracker/architecture.md`, `{seed}/tracker/architecture.md` }) -- ready's prompt
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(`{seed}/tracker/{d}/.gitkeep`, "")
@@ -215,8 +216,8 @@ return t.spec("tracker spend", function(it)
 		end
 		refused(prep, { "spend" })
 		refused(prep, { "spend", a, "--time", "1" }) -- no phase
-		refused(prep, { "spend", a, "--phase", "build", "--time", "1" }, "tracker.sh commit")
-		refused(prep, { "spend", a, "--phase", "code-review", "--time", "1" }, "tracker.sh commit")
+		refused(prep, { "spend", a, "--phase", "build", "--time", "1" }, "./zn commit")
+		refused(prep, { "spend", a, "--phase", "code-review", "--time", "1" }, "./zn commit")
 		refused(prep, { "spend", a, "--phase", "review", "--time", "1" }, "design-review")
 		refused(prep, { "spend", a, "--phase", "capture" }) -- no time: spend has no commit gap to measure
 		refused(prep, { "spend", a, "--phase", "capture", "--time", "-1" })
@@ -229,7 +230,7 @@ return t.spec("tracker spend", function(it)
 		-- a copy of the tooling with no .git of its own: git would find the enclosing repository, so spend refuses
 		local lost = `{main}/lost`
 		fs.writeDir(lost)
-		process.exec("cp", { "-R", `{root}/scripts`, `{lost}/scripts` })
+		engine.copy(root, lost) -- c0114 override: ./zn, scripts/ and z-nile/
 		process.exec("cp", { `{root}/.luaurc`, `{lost}/.luaurc` })
 		local r = fixture.exec(
 			main,

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs the repository's own hook of the name it is called by. scripts/lib/fence.sh points git at this directory
+# Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
 # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
 # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
 # working directory: git clone, for one, runs hooks while still in the repository it clones from (.repo.sh).

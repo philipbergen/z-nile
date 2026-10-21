@@ -41,7 +41,17 @@ return t.spec("c0400 tracker.sh board", function(it)
 			issues += 1
 		end
 		local onDisk = 0
-		for _, base in { "tracker/rafts", "tracker/rafts/active", "tracker/rafts/done" } do
+		-- c0114 override: the board reads every project root
+		for _, base in
+			{
+				"tracker/rafts",
+				"tracker/rafts/active",
+				"tracker/rafts/done",
+				"z-nile/.tracker/rafts",
+				"z-nile/.tracker/rafts/active",
+				"z-nile/.tracker/rafts/done",
+			}
+		do
 			for _, name in fs.readDir(base) do
 				if string.match(name, "^R%d%d%d%d$") then
 					onDisk += 1
@@ -50,7 +60,16 @@ return t.spec("c0400 tracker.sh board", function(it)
 		end
 		t.expect(rafts).toBe(onDisk)
 		-- every issue directory has a place on the page
-		for _, base in { "tracker/issues", "tracker/issues/active", "tracker/issues/done" } do
+		for _, base in
+			{
+				"tracker/issues",
+				"tracker/issues/active",
+				"tracker/issues/done",
+				"z-nile/.tracker/issues",
+				"z-nile/.tracker/issues/active",
+				"z-nile/.tracker/issues/done",
+			}
+		do
 			for _, name in fs.readDir(base) do
 				if string.match(name, "^[fdc]%d%d%d%d$") then
 					t.expect(m.home[name] ~= nil).toBe(true)

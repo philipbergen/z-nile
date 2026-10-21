@@ -3,6 +3,7 @@
 -- A parsed log is cached under .cache keyed by HEAD: ten times today's history parses in 0.78 s, over the 0.5 s budget.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local projects = require("./projects")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
 local stats = require("./stats")
@@ -12,17 +13,19 @@ local history = {}
 export type Spell = stats.Spell
 export type Parsed = { closed: { [string]: string }, spells: { [string]: { Spell } }, today: string? }
 
-history.LOG_ARGS = {
-	"log",
-	"--reverse",
-	"--format=@@C %cI",
-	"-p",
-	"--unified=0",
-	"--no-renames",
-	"--",
-	":(glob)tracker/issues/**/[fdc][0-9][0-9][0-9][0-9]*.md",
-	":(glob)tracker/rafts/**/R[0-9][0-9][0-9][0-9]*.md",
-}
+-- The log of every item document under `roots` (every root that ever held items, c0114). A move between roots is a
+-- delete plus an add in one commit, which `apply` reads as no change of state.
+function history.logArgs(roots: { string }): { string }
+	local args = { "log", "--reverse", "--format=@@C %cI", "-p", "--unified=0", "--no-renames", "--" }
+	for _, r in roots do
+		table.insert(args, `:(glob){r}/issues/**/[fdc][0-9][0-9][0-9][0-9]*.md`)
+		table.insert(args, `:(glob){r}/rafts/**/R[0-9][0-9][0-9][0-9]*.md`)
+	end
+	return args
+end
+
+-- The log of a tree with the legacy root alone.
+history.LOG_ARGS = history.logArgs({ projects.LEGACY })
 
 type Area = "backlog" | "active" | "done"
 type Touch = { area: Area, added: boolean, plus: string? }
@@ -40,13 +43,18 @@ local function stateOf(value: string): string
 	return string.match(value, "^([^-]+)") :: string
 end
 
--- id and area for an item document, legacy `<ID>-<slug>.md` names included. Raft documents are ignored.
-local function classify(path: string): (string?, Area?)
-	local id, file = string.match(path, "^tracker/issues/([fdc]%d%d%d%d)/(.+%.md)$")
+-- id and area for an item document under one of `roots`, legacy `<ID>-<slug>.md` names included. Raft documents are
+-- ignored.
+local function classify(path: string, roots: { string }): (string?, Area?)
+	local _, rest = projects.rootOf(path, roots)
+	if not rest then
+		return nil, nil
+	end
+	local id, file = string.match(rest, "^issues/([fdc]%d%d%d%d)/(.+%.md)$")
 	if id and file and string.sub(file, 1, #id) == id then
 		return id, "backlog"
 	end
-	local area, id2, file2 = string.match(path, "^tracker/issues/([^/]+)/([fdc]%d%d%d%d)/(.+%.md)$")
+	local area, id2, file2 = string.match(rest, "^issues/([^/]+)/([fdc]%d%d%d%d)/(.+%.md)$")
 	if id2 and file2 and (area == "active" or area == "done") and string.sub(file2, 1, #id2) == id2 then
 		return id2, if area == "active" then "active" else "done"
 	end
@@ -131,7 +139,9 @@ local function apply(item: Item, touches: { Touch }, when: string, day: string)
 	end
 end
 
-function history.parse(log: string): Parsed
+-- `roots`: the roots the log covers (default: the legacy `tracker` alone, as history.LOG_ARGS reads).
+function history.parse(log: string, roots: { string }?): Parsed
+	local within = roots or { projects.LEGACY }
 	local items: { [string]: Item } = {}
 	local pending: { [string]: { Touch } } = {}
 	local when: string? = nil
@@ -145,7 +155,7 @@ function history.parse(log: string): Parsed
 		if not file or file.deleted then
 			return
 		end
-		local id, area = classify(file.path)
+		local id, area = classify(file.path, within)
 		-- classify's area singleton is widened to string at the boundary; narrow it back.
 		if not id or (area ~= "backlog" and area ~= "active" and area ~= "done") then
 			return
@@ -278,7 +288,13 @@ function history.read(root: string?): Parsed?
 	if not shaRun.ok then
 		return nil
 	end
-	local sha = sh.trim(shaRun.stdout)
+	local ok, reg = pcall(projects.load, dir)
+	if not ok then
+		return nil
+	end
+	local roots = projects.allRoots(reg :: projects.Registry)
+	-- keyed by HEAD and the roots read, so a cache of another root set is never reused
+	local sha = sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",")
 	local path = cacheFile(dir)
 	if path and fs.isFile(path) then
 		local hit = loadCache(path, sha)
@@ -286,11 +302,11 @@ function history.read(root: string?): Parsed?
 			return hit
 		end
 	end
-	local log = process.exec("git", history.LOG_ARGS, { cwd = dir })
+	local log = process.exec("git", history.logArgs(roots), { cwd = dir })
 	if not log.ok then
 		return nil
 	end
-	local parsed = history.parse(sh.trim(log.stdout))
+	local parsed = history.parse(sh.trim(log.stdout), roots)
 	if path then
 		storeCache(path, sha, parsed)
 	end

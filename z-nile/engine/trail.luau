@@ -4,14 +4,21 @@
 -- is never followed (the user's decision on R0042 design review 013):
 -- - an item's life starts the last time its document went from absent in all of the id's folders to present (a reused
 --   number is a new life; a move or a rename in one folder is not);
--- - a commit that changed tracker/compaction.txt and the item's document also starts its life, and `read` returns a
---   note so `capture` marks that the history before it is not followed.
+-- - a commit that changed the compaction map (tracker/compaction.txt, z-nile/compaction.txt since c0114) and the
+--   item's document also starts its life, and `read` returns a note so `capture` marks that the history before it is
+--   not followed. Moving the map (c0114) is not a compaction.
+-- An item's folders are its three state folders under every project root that ever held items (c0114): an id is
+-- unique across roots, so a move between roots is a move like any other, never a new life.
 -- Everything here is pure over texts except `read`, which runs git and only reads.
 local process = require("@lune/process")
 
 local ids = require("./ids")
+local projects = require("./projects")
 
 local trail = {}
+
+-- a commit that changed the compaction map, and the map file it changed
+export type Cut = { sha: string, file: string }
 
 -- `doc` is true for the item's document (`isDoc`); `id` is set by `read` to the item's current id (no id change is
 -- followed)
@@ -28,10 +35,15 @@ export type Commit = {
 
 local FOLDERS = { "", "active/", "done/" }
 
-function trail.dirs(kind: string, id: string): { string }
+-- The folders an item with this id can have lived in: its three state folders under each of `roots` (default: the
+-- legacy `tracker` alone).
+function trail.dirs(kind: string, id: string, roots: { string }?): { string }
 	local out = {}
-	for _, f in FOLDERS do
-		table.insert(out, `tracker/{kind}/{f}{id}`)
+	local within: { string } = roots or { projects.LEGACY }
+	for _, r in within do
+		for _, f in FOLDERS do
+			table.insert(out, `{r}/{kind}/{f}{id}`)
+		end
 	end
 	return out
 end
@@ -279,32 +291,60 @@ local function changes(
 	return out
 end
 
+-- The commits on `head` that changed a compaction map's content: added or modified, never only moved (`-M`, so the
+-- c0114 move of tracker/compaction.txt to z-nile/compaction.txt is a rename and no cut), each with the file it changed.
+function trail.cuts(head: string): { [string]: string }
+	local args = { "log", "-M", "--diff-filter=AM", "--format=@@%H", "--name-only", head, "--" }
+	for _, f in ids.MAP_FILES do
+		table.insert(args, f)
+	end
+	local out: { [string]: string } = {}
+	local sha = ""
+	for line in string.gmatch(git(args) or "", "[^\n]+") do
+		local s = string.match(line, "^@@(%x+)$")
+		if s then
+			sha = s
+		elseif sha ~= "" and not out[sha] then
+			out[sha] = line
+		end
+	end
+	return out
+end
+
 -- The item's commits on `head` under `id` that touch files `want` accepts, newest first: its last life, where a life
--- starts at the item's last appearance (`life`) or at a later commit that changed tracker/compaction.txt and its
--- document (`since`). The second result lists such a start's short sha. Nil without git or `head`.
+-- starts at the item's last appearance (`life`) or at a later commit that changed a compaction map and its document
+-- (`since`). The second result lists such a start: its short sha and the map file it changed. The item's folders are
+-- under every root of `roots`, by default every root `head`'s registry names, retired ones included. Nil without git,
+-- `head`, or a registry that parses.
 function trail.read(
 	kind: string,
 	id: string,
 	want: (name: string) -> boolean,
-	head: string
-): ({ Commit }?, { string })
-	local notes: { string } = {}
+	head: string,
+	roots: { string }?
+): ({ Commit }?, { Cut })
+	local notes: { Cut } = {}
 	if not git({ "rev-parse", "--verify", "-q", head }) then
 		return nil, notes
 	end
-	local cuts: { [string]: boolean } = {}
-	for sha in string.gmatch(git({ "log", "--format=%H", head, "--", ids.MAP_FILE }) or "", "%x+") do
-		cuts[sha] = true
+	local within = roots
+	if not within then
+		local reg = projects.at(head)
+		if not reg then
+			return nil, notes
+		end
+		within = projects.allRoots(reg)
 	end
+	local cuts = trail.cuts(head)
 	local function keep(name: string): boolean
 		return trail.isDoc(name) or want(name)
 	end
-	local lived, start = trail.life(changes({ "log", head }, trail.dirs(kind, id), keep, id))
+	local lived, start = trail.life(changes({ "log", head }, trail.dirs(kind, id, within), keep, id))
 	lived, start = trail.since(lived, start, function(c: Commit): boolean
-		return c.doc and cuts[c.sha] == true
+		return c.doc and cuts[c.sha] ~= nil
 	end)
 	if start and cuts[start.sha] then
-		table.insert(notes, string.sub(start.sha, 1, 7))
+		table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })
 	end
 	local out: { Commit } = {}
 	for _, c in lived do

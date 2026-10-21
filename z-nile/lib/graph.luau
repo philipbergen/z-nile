@@ -1,5 +1,5 @@
 --!strict
--- Static require graph for the repo. Used by scripts/affected.luau and tests/meta.
+-- Static require graph for the repo. Used by z-nile/affected.luau and tests/meta.
 -- Resolves string requires the same way Luau does: "./" and "../" relative to the
 -- requiring file (for init.luau: relative to its directory's parent), "@self/",
 -- and aliases from .luaurc. Non-string requires are reported as "dynamic".

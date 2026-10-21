@@ -4,6 +4,7 @@
 -- branch, no `origin` (so every tracker command runs freely), the working tree's tooling overlaid,
 -- and the tracker emptied. The spec passes from any branch and from a detached HEAD.
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -88,33 +89,26 @@ return t.spec("document naming", function(it)
 		git({ "checkout", "-q", "-B", "main" })
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+			".gitignore",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				write(path, fs.readFile(`{root}/{path}`))
 			end
 		end
 		-- empty tracker
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{seed}/tracker/{kind}/{state}`
-				if fs.isDir(dir) then
-					for _, name in fs.readDir(dir) do
-						if string.match(name, "^[fdcR]%d%d%d%d$") then
-							fs.removeDir(dir .. name)
-						end
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{seed}/tracker/next`) then
-			fs.removeFile(`{seed}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(seed)
 
 		local out = must(tr({ "new", "issue", "f", "alpha" }), "new issue")
 		t.expect(out).toBe("tracker/issues/f0010/f0010.md")

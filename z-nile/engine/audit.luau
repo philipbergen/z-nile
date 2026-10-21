@@ -3,6 +3,7 @@
 -- malformed tree (which store.find refuses) can still be described. See c0880.
 local fs = require("@lune/fs")
 local ids = require("./ids")
+local projects = require("./projects")
 
 export type Level = "error" | "warning"
 export type Problem = { level: Level, code: string, path: string, message: string }
@@ -31,17 +32,30 @@ end
 
 export type Found = { id: string, path: string, kind: string }
 
--- Every item folder under tracker/ (relative paths), whatever state it is in. Never throws on a malformed tree.
+-- The project roots of the checkout at `root` (c0114), or the legacy root and the registry's problem.
+local function rootsOf(root: string): ({ string }, string?)
+	local ok, reg = pcall(projects.load, root)
+	if not ok then
+		return { projects.LEGACY }, tostring(reg)
+	end
+	return projects.roots(reg :: projects.Registry), nil
+end
+
+-- Every item folder under every project root (relative paths), whatever state it is in. Never throws on a malformed
+-- tree.
 function audit.scan(root: string): { Found }
 	local out: { Found } = {}
-	for _, kind in KINDS do
-		for _, state in STATES do
-			local rel = `tracker/{kind.dir}/{state}`
-			local abs = `{root}/{rel}`
-			if fs.isDir(abs) then
-				for _, name in fs.readDir(abs) do
-					if ids.spaceOf(name) and fs.isDir(abs .. name) then
-						table.insert(out, { id = name, path = rel .. name, kind = kind.space })
+	local roots = rootsOf(root)
+	for _, base in roots do
+		for _, kind in KINDS do
+			for _, state in STATES do
+				local rel = `{base}/{kind.dir}/{state}`
+				local abs = `{root}/{rel}`
+				if fs.isDir(abs) then
+					for _, name in fs.readDir(abs) do
+						if ids.spaceOf(name) and fs.isDir(abs .. name) then
+							table.insert(out, { id = name, path = rel .. name, kind = kind.space })
+						end
 					end
 				end
 			end
@@ -57,6 +71,10 @@ function audit.run(root: string): { Problem }
 	local problems: { Problem } = {}
 	local function add(level: Level, code: string, path: string, message: string)
 		table.insert(problems, { level = level, code = code, path = path, message = message })
+	end
+	local _, regProblem = rootsOf(root)
+	if regProblem then
+		add("error", "registry", projects.FILE, regProblem)
 	end
 	local found = audit.scan(root)
 	local byId: { [string]: { string } } = {}
@@ -129,19 +147,43 @@ function audit.run(root: string): { Problem }
 			add("warning", "shared-number", list[1].path, `one number for {table.concat(names, ", ")}`)
 		end
 	end
-	local nextPath = `{root}/{ids.FILE}`
-	if not fs.isFile(nextPath) then
+	-- The live counter (c0114): z-nile/next once origin has moved it there, and tracker/next before. Both parsing at once
+	-- is an error, because an engine from before the move would number from the old one.
+	local newPath, oldPath = `{root}/{ids.FILE}`, `{root}/{ids.OLD_FILE}`
+	local oldParses = fs.isFile(oldPath) and ids.parse(fs.readFile(oldPath)) ~= nil
+	local livePath, liveFile = newPath, ids.FILE
+	if fs.isFile(newPath) then
+		if oldParses then
+			add(
+				"error",
+				"old-counter",
+				ids.OLD_FILE,
+				`parses as a counter; it must stay a tombstone (the counter is {ids.FILE})`
+			)
+		end
+	elseif oldParses then
+		livePath, liveFile = oldPath, ids.OLD_FILE
+		if fs.isFile(`{root}/{projects.FILE}`) then
+			add(
+				"warning",
+				"counter-unmigrated",
+				ids.OLD_FILE,
+				`is still the counter: the first publish on an origin/main with {projects.FILE} moves it to {ids.FILE}`
+			)
+		end
+	end
+	if not fs.isFile(livePath) then
 		add("error", "next-missing", ids.FILE, "no counter file: ids fall back to the next multiple of 10")
 	else
-		local c = ids.parse(fs.readFile(nextPath))
+		local c = ids.parse(fs.readFile(livePath))
 		if not c then
-			add("error", "next-malformed", ids.FILE, "expected `issue <n> <phrase>` and `raft <n> <phrase>`")
+			add("error", "next-malformed", liveFile, "expected `issue <n> <phrase>` and `raft <n> <phrase>`")
 		else
 			-- a counter at or below the highest number in use in its space (a warning: allocation skips used numbers)
 			local function behind(space: ids.Space, n: number)
 				local high = ids.highest(space, used)
 				if high >= n then
-					add("warning", "next-behind", ids.FILE, `{space} counter {n} is not above {high}, in use`)
+					add("warning", "next-behind", liveFile, `{space} counter {n} is not above {high}, in use`)
 				end
 			end
 			behind("issue", c.issue)

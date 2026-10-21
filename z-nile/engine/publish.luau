@@ -5,71 +5,119 @@ local ids = require("./ids")
 local ledger = require("./ledger")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
+local projects = require("./projects")
 local task = require("@lune/task")
 
 local publish = {}
 
 export type Change = { path: string, content: string, mode: string?, from: string? }
 export type Result = { ok: boolean, sha: string?, reason: string? }
-export type Build = (paths: { string }, read: (string) -> string?) -> { Change } | string
+-- `roots`: origin/main's project roots (its z-nile/projects.toml), the only roots this publish may write under;
+-- `counter`: origin/main's live id counter, z-nile/next, or tracker/next while origin/main has no registry (c0114's
+-- execution window: the branch has moved the counter, origin has not yet)
+export type Build = (
+	paths: { string },
+	read: (string) -> string?,
+	roots: { string },
+	counter: string
+) -> { Change } | string
+
+local function isIssue(id: string): boolean
+	return string.match(id, "^[fdc]%d%d%d%d$") ~= nil
+end
 
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 
--- tracker/(issues|rafts)/[active/ | done/]<ID>/(<ID>.md | check.sh), the id's prefix matching the kind.
--- Also the counter file, tracker/next (c0870).
-function publish.allowed(path: string): boolean
-	if path == ids.FILE then
-		return true
+-- The project root at the start of `path` and the rest after it, by shape alone: the legacy `tracker`, or
+-- `<name>/.tracker`. Whether the root is registered on origin/main is `allowed`'s question, not this one's.
+local function splitRoot(path: string): (string?, string?)
+	local rest = string.match(path, "^tracker/(.+)$")
+	if rest then
+		return "tracker", rest
 	end
-	if string.find(path, "..", 1, true) or string.sub(path, 1, 1) == "/" then
-		return false
+	local root, more = string.match(path, "^([^/]+/%.tracker)/(.+)$")
+	if root and more and projects.shapeOk(root) then
+		return root, more
 	end
-	local kind, rest = string.match(path, "^tracker/(%a+)/(.+)$")
-	if not kind or not rest then
-		return false
-	end
-	local stripped: string = string.match(rest, "^active/(.+)$") or string.match(rest, "^done/(.+)$") or rest
-	local id, file = string.match(stripped, "^(%w+)/([%w%.]+)$")
-	if not id then
-		return false
-	end
-	local okId = if kind == "issues"
-		then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
-		else (kind == "rafts" and string.match(id, "^R%d%d%d%d$") ~= nil)
-	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
-	return okId and (file == `{id}.md` or file == "check.sh" or (kind == "issues" and file == "spend.md"))
+	return nil, nil
 end
 
--- The id and the path relative to the item directory of any file inside an item directory,
--- tracker/(issues|rafts)/[active/ | done/]<ID>/<rel>; nil for anything else. `rel` is one or more segments of
+-- The id, the path relative to the item directory, and the root, of any file inside an item directory,
+-- <root>/(issues|rafts)/[active/ | done/]<ID>/<rel>; nil for anything else. `rel` is one or more segments of
 -- [%w._-] that are not `.` or `..`.
-function publish.itemPath(path: string): (string?, string?)
+function publish.itemPath(path: string): (string?, string?, string?)
 	if string.sub(path, 1, 1) == "/" then
-		return nil, nil
+		return nil, nil, nil
 	end
-	local kind, rest = string.match(path, "^tracker/(%a+)/(.+)$")
+	local root, under = splitRoot(path)
+	if not root or not under then
+		return nil, nil, nil
+	end
+	local kind, rest = string.match(under, "^(%a+)/(.+)$")
 	if not kind or not rest or (kind ~= "issues" and kind ~= "rafts") then
-		return nil, nil
+		return nil, nil, nil
 	end
 	local stripped: string = string.match(rest, "^active/(.+)$") or string.match(rest, "^done/(.+)$") or rest
 	local id, rel = string.match(stripped, "^(%w+)/(.+)$")
 	if not id or not rel then
-		return nil, nil
+		return nil, nil, nil
 	end
 	local okId = if kind == "issues"
 		then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
 		else string.match(id, "^R%d%d%d%d$") ~= nil
 	if not okId then
-		return nil, nil
+		return nil, nil, nil
 	end
 	for _, seg in string.split(rel, "/") do
 		if seg == "." or seg == ".." or not string.match(seg, "^[%w%._%-]+$") then
-			return nil, nil
+			return nil, nil, nil
 		end
 	end
-	return id, rel
+	return id, rel, root
+end
+
+-- The live id counter of a base, from the base alone (never the working tree), and whether this publish moves it there
+-- (c0114). The branch that lands c0114 never touches the counter; origin moves it once:
+-- - the base has z-nile/next: that is the counter;
+-- - the base has no registry (before c0114 lands, c0114's own execution included): tracker/next is the counter;
+-- - the base has a registry but no z-nile/next, and tracker/next parses (c0114 has just landed): z-nile/next is the
+--   counter and `migrate` is true: this publish writes z-nile/next from tracker/next's counters and the tombstone at
+--   tracker/next, in its one lease push.
+function publish.counterOf(hasRegistry: boolean, hasNew: boolean, oldText: string?): (string, boolean)
+	if hasNew then
+		return ids.FILE, false
+	end
+	if not hasRegistry then
+		return ids.OLD_FILE, false
+	end
+	return ids.FILE, oldText ~= nil and ids.parse(oldText) ~= nil
+end
+
+-- <root>/(issues|rafts)/[active/ | done/]<ID>/(<ID>.md | check.sh), the id's prefix matching the kind, under a root
+-- that `roots` (origin/main's registry, never the working tree's; default the legacy `tracker` alone) lists. Also the
+-- live counter `counter` (default z-nile/next; tracker/next only while origin/main has no registry, publish.counterFor).
+function publish.allowed(path: string, roots: { string }?, counter: string?): boolean
+	local within: { string } = roots or { projects.LEGACY }
+	if path == (counter or ids.FILE) then
+		return true
+	end
+	if path == ids.FILE or path == ids.OLD_FILE then
+		return false -- the other counter file: never written
+	end
+	if string.find(path, "..", 1, true) or string.sub(path, 1, 1) == "/" then
+		return false
+	end
+	local id, rel, root = publish.itemPath(path)
+	if not id or not rel or not root or not table.find(within, root) then
+		return false
+	end
+	if string.find(rel, "/", 1, true) then
+		return false
+	end
+	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
+	return rel == `{id}.md` or rel == "check.sh" or (isIssue(id) and rel == "spend.md")
 end
 
 -- The directory of an item file: `path` without its `/<rel>`.
@@ -181,7 +229,8 @@ end
 local function validateMoves(
 	out: { Change },
 	onOrigin: { [string]: string },
-	read: (string) -> string?
+	read: (string) -> string?,
+	roots: { string }
 ): ({ string }, string?)
 	local sources: { string } = {}
 	local targets: { [string]: boolean } = {}
@@ -199,13 +248,17 @@ local function validateMoves(
 				return sources, `{from} is moved twice in one publish`
 			end
 			froms[from] = true
-			local fid, frel = publish.itemPath(from)
-			local pid, prel = publish.itemPath(c.path)
+			local fid, frel, froot = publish.itemPath(from)
+			local pid, prel, proot = publish.itemPath(c.path)
 			if not fid or not frel or not pid or not prel then
 				return sources, `{from} -> {c.path}: both sides of a move must be item files`
 			end
-			if fid ~= pid or frel ~= prel then
-				return sources, `{from} -> {c.path}: a move keeps the id and the relative path`
+			if not table.find(roots, froot :: string) or not table.find(roots, proot :: string) then
+				return sources,
+					`{from} -> {c.path}: a move stays under a project root that origin/main's registry lists`
+			end
+			if fid ~= pid or frel ~= prel or froot ~= proot then
+				return sources, `{from} -> {c.path}: a move keeps the id, the root and the relative path`
 			end
 			if not onOrigin[from] then
 				return sources, `{from} does not exist on origin/main`
@@ -301,30 +354,57 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if not rev.ok or not string.match(base, "^%x+$") then
 			return fail("cannot resolve origin/main: " .. trim(rev.stderr))
 		end
-		local listing = git(cwd, { "ls-tree", "-r", "-z", "--full-tree", base, "tracker/" })
-		if not listing.ok then
-			return fail("cannot list origin/main: " .. trim(listing.stderr))
-		end
-		local paths: { string } = {}
-		local onOrigin: { [string]: string } = {} -- every file under tracker/ -> its mode
-		for _, rec in string.split(listing.stdout, "\0") do
-			local mode, p = string.match(rec, "^(%d+) %a+ %x+\t(.+)$")
-			if mode and p then
-				onOrigin[p] = mode
-				if publish.allowed(p) or publish.itemPath(p) then
-					table.insert(paths, p)
-				end
-			end
-		end
 		local function read(p: string): string?
 			local r = git(cwd, { "show", `{base}:{p}` })
 			return if r.ok then r.stdout else nil
 		end
-		local out = build(paths, read)
+		-- the roots this publish may write under come from origin/main alone: a branch that edits its own registry
+		-- can't widen them (lesson architecture/guards-trust-only-origin). An origin/main without the registry predates
+		-- c0114 and has the legacy root alone (never more); a registry that does not parse publishes nothing.
+		local regText = read(projects.FILE)
+		local reg: projects.Registry?, regErr: string? = projects.legacy(), nil
+		if regText then
+			reg, regErr = projects.parse(regText)
+		end
+		if not reg then
+			return fail(`origin/main's {regErr}`)
+		end
+		local roots = projects.roots(reg)
+		local oldText = read(ids.OLD_FILE)
+		local counter, migrate = publish.counterOf(regText ~= nil, read(ids.FILE) ~= nil, oldText)
+		-- while it moves the counter, this publish reads the old counters as z-nile/next
+		local buildRead = read
+		if migrate then
+			buildRead = function(p: string): string?
+				return if p == ids.FILE then oldText else read(p)
+			end
+		end
+		local listArgs = { "ls-tree", "-r", "-z", "--full-tree", base, "--" }
+		for _, r in roots do
+			table.insert(listArgs, r .. "/")
+		end
+		table.insert(listArgs, counter)
+		local listing = git(cwd, listArgs)
+		if not listing.ok then
+			return fail("cannot list origin/main: " .. trim(listing.stderr))
+		end
+		local paths: { string } = {}
+		local onOrigin: { [string]: string } = {} -- every file under the roots (and the counter) -> its mode
+		for _, rec in string.split(listing.stdout, "\0") do
+			local mode, p = string.match(rec, "^(%d+) %a+ %x+\t(.+)$")
+			if mode and p then
+				onOrigin[p] = mode
+				local _, _, root = publish.itemPath(p)
+				if publish.allowed(p, roots, counter) or (root and table.find(roots, root)) then
+					table.insert(paths, p)
+				end
+			end
+		end
+		local out = build(paths, buildRead, roots, counter)
 		if type(out) == "string" then
 			return fail(out)
 		end
-		local moved, why = validateMoves(out, onOrigin, read)
+		local moved, why = validateMoves(out, onOrigin, read, roots)
 		if why then
 			return fail(why)
 		end
@@ -332,19 +412,19 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			if c.from then
 				continue -- validated above, byte for byte against origin
 			end
-			if not publish.allowed(c.path) then
-				return fail(`{c.path} is not a tracker item file`)
+			if not publish.allowed(c.path, roots, counter) then
+				return fail(`{c.path} is not a tracker item file under a project root of origin/main`)
 			end
 			for _, dir in moved do
 				if string.sub(c.path, 1, #dir + 1) == dir .. "/" then
 					return fail(`{c.path} is inside {dir}, which this publish moves away`)
 				end
 			end
-			local existing = read(c.path)
+			local existing = buildRead(c.path)
 			if existing and string.sub(c.path, -9) == "/check.sh" then
 				return fail(`{c.path} already exists on origin/main: check.sh is never rewritten`)
 			end
-			if c.path == ids.FILE then
+			if c.path == counter then
 				-- the counter only goes up: a lower value would hand out numbers already given
 				local new = ids.parse(c.content)
 				local old = if existing then ids.parse(existing) else nil
@@ -386,6 +466,18 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 					)
 				end
 			end
+		end
+		if migrate then
+			-- the counter moves with this publish: z-nile/next holds tracker/next's counters (or the raise the build made
+			-- of them), and tracker/next becomes the tombstone, in this one commit and lease push
+			local raised = false
+			for _, c in out do
+				raised = raised or c.path == ids.FILE
+			end
+			if not raised then
+				table.insert(out, { path = ids.FILE, content = oldText :: string })
+			end
+			table.insert(out, { path = ids.OLD_FILE, content = ids.TOMBSTONE })
 		end
 		if #out == 0 then
 			return { ok = true }

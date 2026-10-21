@@ -41,16 +41,16 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 				if fs.isFile(doc) then
 					n += 1
 					local s = section(read(doc), "Lessons")
-					at(s, `scripts/tracker.sh lessons --skill {name} --full`)
+					at(s, `./zn lessons --skill {name} --full`)
 					at(s, "- **A subagent** (")
-					at(s, "never writes a lesson file or runs `tracker.sh new`")
+					at(s, "never writes a lesson file or runs `./zn new`")
 					at(
 						s,
 						"- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md`"
 					)
 					at(s, "as `- note <what happened>: <lesson ids>`")
 					at(s, "- **Any other lead** (")
-					at(s, "scripts/tracker.sh new issue c lesson-")
+					at(s, "./zn new issue c lesson-")
 					t.expect(string.find(s, "never writes a lesson file itself", 1, true) == nil).toBe(true)
 					local a, b = string.find(s, `--skill {name} `, 1, true)
 					local same = string.sub(s, 1, (a :: number) - 1)
@@ -75,10 +75,10 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			local three, four = at(s5, "\n3. "), at(s5, "\n4. ")
 			local harvest = at(s5, "harvest.md")
 			t.expect(harvest > three and harvest < four).toBe(true) -- in the answering step
-			local rerun = at(s5, "rerun `scripts/tracker.sh promote-check <R-id>`")
+			local rerun = at(s5, "rerun `./zn promote-check <R-id>`")
 			t.expect(rerun > three and rerun < four).toBe(true)
 			t.expect(
-				at(s5, "first harvest anything `scripts/tracker.sh lessons --uncovered <R-id>` still lists")
+				at(s5, "first harvest anything `./zn lessons --uncovered <R-id>` still lists")
 					< at(s5, "status <R-id> prepared`")
 			).toBe(true)
 			t.expect(at(s5, "lessons --uncovered <R-id>") < at(s5, "status <R-id> prepared`")).toBe(true)
@@ -102,10 +102,10 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			local p5 = section(text, "Phase 5")
 			-- the confirmation harvests what is still uncovered (a raft prepped before lessons existed) before checking
 			t.expect(
-				at(p5, "first harvest anything `scripts/tracker.sh lessons --uncovered R0010` still lists")
-					< at(p5, "scripts/tracker.sh done")
+				at(p5, "first harvest anything `./zn lessons --uncovered R0010` still lists")
+					< at(p5, "./zn done")
 			).toBe(true)
-			t.expect(at(p5, "lessons --uncovered") < at(p5, "scripts/tracker.sh done")).toBe(true)
+			t.expect(at(p5, "lessons --uncovered") < at(p5, "./zn done")).toBe(true)
 			at(p5, "lessons --check")
 		end
 	)
@@ -125,18 +125,18 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 		"the tracker, ready-raft and metrics skills, AGENTS.md and the prompt template know lessons",
 		function()
 			local tracker = read(`{SKILLS}/tracker/SKILL.md`)
-			t.expect(string.find(tracker, "\n| lessons | `tracker.sh lessons", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(tracker, "\n| lessons | `./zn lessons", 1, true) ~= nil).toBe(true)
 			at(tracker, "harvest.md")
 			at(tracker, "`- note <text>: <lesson ids>`")
 			at(section(tracker, "Worktrees"), "`lessons`") -- it may run in the main checkout
 			at(read(`{SKILLS}/ready-raft/SKILL.md`), "build lessons")
-			at(read(`{SKILLS}/metrics/SKILL.md`), "tracker.sh lessons")
+			at(read(`{SKILLS}/metrics/SKILL.md`), "./zn lessons")
 			local agents = read("AGENTS.md")
 			at(agents, "lessons/")
-			at(agents, "scripts/tracker.sh lessons")
+			at(agents, "./zn lessons")
 			at(agents, "capture a new lesson as an issue")
 			t.expect(string.find(agents, "records new ones when it finishes", 1, true) == nil).toBe(true)
-			local prompt = read("tracker/templates/prompt.md")
+			local prompt = read("z-nile/templates/prompt.md")
 			local h = at(prompt, "\n## Lessons")
 			t.expect(h < at(prompt, "{{LESSONS}}")).toBe(true)
 			t.expect(at(prompt, "{{LESSONS}}") < at(prompt, "\n## Work items")).toBe(true)

@@ -3,6 +3,7 @@
 -- review rounds, deliver for the delivery commits) and optional tokens; `done` records its own commit as deliver,
 -- and the raft's summary shows each phase. Fixture under .cache/c0084-commit: a repository with this tree's tooling
 -- and no remote, so start and done stay local (as in c0001's lifecycle spec). Ids come from the commands' output.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@scripts/tracker/ledger")
@@ -73,11 +74,11 @@ return t.spec("tracker commit phases", function(it)
 		end
 		fs.writeDir(dir)
 		process.exec("git", { "init", "-q", "-b", "main", dir }) -- raw: init to a named path
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{dir}/{p}` })
 		end
 		fs.writeDir(`{dir}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{dir}/tracker/templates` })
+		engine.copy(root, dir) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(`tracker/{d}/.gitkeep`, "")
 		end
@@ -178,7 +179,7 @@ return t.spec("tracker commit phases", function(it)
 				t.expect(git({ "diff", "--cached", "--name-only" })).toBe("") -- refused before anything was staged
 			end
 			local r = tr({ "commit", "-m", "nope", "--phase", "capture", "--time", "1" })
-			t.expect(string.find(r.stderr, "tracker.sh spend", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(r.stderr, "./zn spend", 1, true) ~= nil).toBe(true)
 			-- dated ten minutes back, so done's own row (minutes since this commit) is never too small to record
 			local env = table.clone(ID)
 			env.GIT_COMMITTER_DATE = `@{os.time() - 600} +0000`

@@ -5,6 +5,7 @@ local audit = require("./audit")
 local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
+local projects = require("./projects")
 local sh = require("../lib/sh")
 
 local compact = {}
@@ -33,17 +34,21 @@ local function moveAll(root: string, moves: { { from: string, to: string } })
 	end
 end
 
-local function rewritesIds(path: string): boolean
-	return string.sub(path, 1, 8) == "tracker/"
-		and string.sub(path, 1, 18) ~= "tracker/templates/"
+-- The templates are never rewritten (R0270 review 001 F3); they left tracker/templates/ in c0114.
+local TEMPLATES = "z-nile/templates/"
+
+-- ids are rewritten in the .md and .sh files under every project root (c0114); elsewhere only acceptance paths are.
+local function rewritesIds(path: string, roots: { string }): boolean
+	return projects.rootOf(path, roots) ~= nil
 		and (string.match(path, "%.md$") ~= nil or string.match(path, "%.sh$") ~= nil)
 end
 
 -- Renames every item in `found` that the map moves, and every tests/acceptance/<old> folder, then rewrites: ids in
--- tracker/ .md and .sh files (templates aside), and tests/acceptance/<id> paths in every other tracked text file.
--- One pass per file, so a new id is never mapped again.
+-- the .md and .sh files under every project root, and tests/acceptance/<id> paths in every other tracked text file
+-- (the templates are left alone). One pass per file, so a new id is never mapped again.
 function compact.apply(map: { [string]: string }, found: { audit.Found }, at: string?)
 	local root = at or "."
+	local roots = projects.roots(projects.load(root))
 	local moves: { { from: string, to: string } } = {}
 	local docs: { { dir: string, old: string, new: string } } = {}
 	for _, f in found do
@@ -67,11 +72,13 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 	end
 	for path in string.gmatch(gitIn(root, { "ls-files" }), "[^\n]+") do
 		local abs = `{root}/{path}`
-		local template = string.sub(path, 1, 18) == "tracker/templates/" -- never rewritten (R0270 review 001 F3)
+		local template = string.sub(path, 1, #TEMPLATES) == TEMPLATES
 		if path ~= ids.FILE and path ~= ids.MAP_FILE and not template and fs.isFile(abs) then
 			local text = fs.readFile(abs)
 			if not string.find(text, "\0", 1, true) then
-				local out = if rewritesIds(path) then ids.rewrite(text, map) else ids.rewritePaths(text, map)
+				local out = if rewritesIds(path, roots)
+					then ids.rewrite(text, map)
+					else ids.rewritePaths(text, map)
 				if out ~= text then
 					fs.writeFile(abs, out)
 				end
@@ -80,10 +87,11 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 	end
 end
 
--- Branches that change tracker/ or tests/acceptance/ since they left origin/main: every origin branch and every local
--- one except main and `current`. Compaction renumbers under them, so they block it unless forced.
+-- Branches that change a project root or tests/acceptance/ since they left origin/main: every origin branch and every
+-- local one except main and `current`. Compaction renumbers under them, so they block it unless forced.
 function compact.busyRefs(current: string): { string }
 	local out: { string } = {}
+	local within = projects.roots(projects.load())
 	local refs = sh.git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin", "refs/heads" })
 	for ref in string.gmatch(refs, "[^\n]+") do
 		local skip = ref == "refs/remotes/origin/main"
@@ -91,10 +99,11 @@ function compact.busyRefs(current: string): { string }
 			or ref == "refs/heads/main"
 			or ref == `refs/heads/{current}`
 		if not skip then
-			local d = sh.run(
-				"git",
-				{ "diff", "--name-only", `origin/main...{ref}`, "--", "tracker", "tests/acceptance" }
-			)
+			local args = { "diff", "--name-only", `origin/main...{ref}`, "--", "tests/acceptance" }
+			for _, r in within do
+				table.insert(args, r)
+			end
+			local d = sh.run("git", args)
 			if not d.ok or sh.trim(d.stdout) ~= "" then
 				table.insert(
 					out,

@@ -6,7 +6,7 @@ local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
 local function readOnly(): { string }
-	local text = fs.readFile("scripts/tracker/main.luau")
+	local text = fs.readFile("z-nile/engine/main.luau")
 	local block = string.match(text, "\nlocal READ_ONLY: { %[string%]: boolean } = {\n(.-)\n}\n")
 	assert(block, "main.luau has no READ_ONLY table")
 	local out: { string } = {}

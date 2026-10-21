@@ -22,29 +22,68 @@ local function itemAt(s: string, kind: string): (string?, number?)
 	return nil, nil
 end
 
--- Every item path `tracker/<issues|rafts>/[active/|done/]<ID>` in `text` whose ID is a key of `dirs`, and whose kind
--- matches the kind in `dirs[ID]`, becomes `dirs[ID]` (for example "tracker/issues/active/c0001"). A path is an ID
--- only when the character after it is not a letter, digit, `_` or `-` (so `c00100` and `c0001-x` are left alone).
+-- The project root of an item directory `<root>/<issues|rafts>/[active/|done/]<ID>`, or nil.
+function paths.rootOf(dir: string): string?
+	return string.match(dir, "^(.+)/issues/[^/]+$")
+		or string.match(dir, "^(.+)/issues/[^/]+/[^/]+$")
+		or string.match(dir, "^(.+)/rafts/[^/]+$")
+		or string.match(dir, "^(.+)/rafts/[^/]+/[^/]+$")
+end
+
+-- Every item path `<root>/<issues|rafts>/[active/|done/]<ID>` in `text` whose ID is a key of `dirs`, whose kind matches
+-- the kind in `dirs[ID]` and whose root is the root of `dirs[ID]`, becomes `dirs[ID]` (for example
+-- "z-nile/.tracker/issues/active/c0001"). A root counts only where it starts a path segment: the character before it is
+-- not a letter, digit, `.`, `_` or `-` (so `tracker/` inside `z-nile/.tracker/` is never taken for the root `tracker`,
+-- c0114). A path is an ID only when the character after it is not a letter, digit, `_` or `-` (so `c00100` and
+-- `c0001-x` are left alone). A move never changes an item's root, so a path under another root is left alone.
 function paths.rewrite(text: string, dirs: { [string]: string }): string
+	local roots: { string } = {}
+	for _, d in dirs do
+		local r = paths.rootOf(d)
+		if r and not table.find(roots, r) then
+			table.insert(roots, r)
+		end
+	end
 	local out: { string } = {}
 	local pos = 1
 	while true do
-		local s, e, kind = string.find(text, "tracker/(%a+)/", pos)
-		if not s or not e or not kind then
+		local bestS: number? = nil
+		local bestRoot = ""
+		for _, r in roots do
+			local from = pos
+			while true do
+				local s = string.find(text, r .. "/", from, true)
+				if not s then
+					break
+				end
+				local before = if s > 1 then string.sub(text, s - 1, s - 1) else ""
+				if before == "" or not string.match(before, "[%w%._%-]") then
+					if not bestS or s < bestS then
+						bestS, bestRoot = s, r
+					end
+					break
+				end
+				from = s + 1
+			end
+		end
+		if not bestS then
 			break
 		end
+		local s = bestS :: number
+		local after = s + #bestRoot + 1 -- the first character after `<root>/`
+		local kind = string.match(text, "^(%a+)/", after)
 		local id, stop = nil, nil
 		if kind == "issues" or kind == "rafts" then
-			id, stop = itemAt(string.sub(text, e + 1), kind)
+			id, stop = itemAt(string.sub(text, after + #kind + 1), kind)
 		end
 		local target = if id then dirs[id] else nil
-		if id and stop and target then
+		if id and stop and target and paths.rootOf(target) == bestRoot then
 			table.insert(out, string.sub(text, pos, s - 1))
 			table.insert(out, target)
-			pos = e + stop + 1
+			pos = after + #(kind :: string) + 1 + stop
 		else
-			table.insert(out, string.sub(text, pos, e))
-			pos = e + 1
+			table.insert(out, string.sub(text, pos, s))
+			pos = s + 1
 		end
 	end
 	table.insert(out, string.sub(text, pos))

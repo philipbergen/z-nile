@@ -1,7 +1,7 @@
 --!strict
 -- c0830: every unjailed writer under .cache replaces whatever is at its path instead of writing through it.
--- scripts/lib/replace-file.pl writes a sibling temporary file (created exclusively, never followed) and renames it
--- onto the path; a rename replaces a link of any kind and refuses a real directory. scripts/check.sh unlinks the
+-- z-nile/lib/replace-file.pl writes a sibling temporary file (created exclusively, never followed) and renames it
+-- onto the path; a rename replaces a link of any kind and refuses a real directory. z-nile/check.sh unlinks the
 -- links at the top of .cache before it writes there, and the launcher (fence.REAPER) unlinks them after the specs'
 -- group is killed, whatever ended it. Every path here is a stand-in under .cache; nothing real is linked to.
 local fence = require("@tests/lib/fence")
@@ -14,7 +14,7 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local base = `{root}/.cache/c0830-replace`
-local REPLACE = `{root}/scripts/lib/replace-file.pl`
+local REPLACE = `{root}/z-nile/lib/replace-file.pl`
 
 local function has(text: string, part: string): boolean
 	return string.find(text, part, 1, true) ~= nil
@@ -63,14 +63,15 @@ local function case(name: string): (string, string, string)
 	return dir, `{dir}/victim-dir`, `{dir}/victim-file`
 end
 
--- a stand-in checkout for scripts/check.sh: the gate script and its libraries, and stub tools first on PATH
+-- a stand-in checkout for z-nile/check.sh: the gate script and its libraries, and stub tools first on PATH
 local function gateCopy(name: string): string
 	local dir = `{base}/{name}`
-	fs.writeDir(`{dir}/scripts/lib`)
-	fs.writeFile(`{dir}/scripts/check.sh`, fs.readFile(`{root}/scripts/check.sh`))
-	for _, lib in fs.readDir(`{root}/scripts/lib`) do
-		if fs.isFile(`{root}/scripts/lib/{lib}`) then
-			fs.writeFile(`{dir}/scripts/lib/{lib}`, fs.readFile(`{root}/scripts/lib/{lib}`))
+	-- c0114 override: the gate and its libraries moved to z-nile/
+	fs.writeDir(`{dir}/z-nile/lib`)
+	fs.writeFile(`{dir}/z-nile/check.sh`, fs.readFile(`{root}/z-nile/check.sh`))
+	for _, lib in fs.readDir(`{root}/z-nile/lib`) do
+		if fs.isFile(`{root}/z-nile/lib/{lib}`) then
+			fs.writeFile(`{dir}/z-nile/lib/{lib}`, fs.readFile(`{root}/z-nile/lib/{lib}`))
 		end
 	end
 	fs.writeDir(`{dir}/.cache`)
@@ -117,7 +118,7 @@ local function gate(dir: string, env: { [string]: string }?): Result
 			e[k] = v
 		end
 	end
-	return process.exec("bash", { "scripts/check.sh", "--full" }, { cwd = dir, env = e })
+	return process.exec("bash", { "z-nile/check.sh", "--full" }, { cwd = dir, env = e })
 end
 
 return t.spec("c0830 writers under .cache never follow a symlink", function(it)

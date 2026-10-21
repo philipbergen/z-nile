@@ -1,10 +1,10 @@
 #!/usr/bin/perl
 # Replaces the file at <dest> with new content, never writing through whatever is there (c0077).
-#   perl scripts/lib/replace-file.pl <dest> [<src>]     # content from <src> (bytes), else from stdin
+#   perl z-nile/lib/replace-file.pl <dest> [<src>]     # content from <src> (bytes), else from stdin
 # A sibling temporary file is created exclusively and without following links (O_CREAT|O_EXCL|O_NOFOLLOW), written,
 # then rename(2)d onto <dest>. A rename replaces a link of any kind (to a file or to a directory) instead of
 # following it, and refuses a real directory. On any failure the temporary file is removed. Every unjailed writer
-# under .cache uses this (or, in scripts/lib/fence.sh, an inline rename): a spec may have swapped a link in there.
+# under .cache uses this (or, in z-nile/lib/fence.sh, an inline rename): a spec may have swapped a link in there.
 use strict;
 use warnings;
 use Fcntl qw(O_WRONLY O_CREAT O_EXCL O_NOFOLLOW);

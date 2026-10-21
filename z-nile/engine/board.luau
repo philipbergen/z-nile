@@ -3,6 +3,7 @@
 local chart = require("./chart")
 local fs = require("@lune/fs")
 local history = require("./history")
+local projects = require("./projects")
 local serde = require("@lune/serde")
 local stats = require("./stats")
 local status = require("./status")
@@ -59,9 +60,9 @@ export type Model = {
 	stats: stats.Stats,
 }
 
-board.MARKED_PATH = "scripts/vendor/marked.umd.js"
+board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
 board.MARKED_SHA256 = "21568877a938d2c4e7d74e27f18e60da96bb73a68809610ca39216e1efebae62"
-board.TEMPLATE_PATH = "scripts/tracker/board.html"
+board.TEMPLATE_PATH = "z-nile/engine/board.html"
 
 -- Errors unless the vendored marked is the pinned build.
 function board.checkMarked(js: string)
@@ -112,11 +113,10 @@ local function bodyOf(text: string): string
 	return (string.gsub(string.sub(text, closeEnd + 1), "^\n+", ""))
 end
 
--- { id, state, front, body } for every item directory of one kind under root.
-local function scan(
-	root: string,
-	kind: string
-): { { id: string, state: string, front: { [string]: string }, body: string } }
+type Raw = { id: string, state: string, front: { [string]: string }, body: string, root: string }
+
+-- { id, state, front, body, root } for every item directory of one kind under root.
+local function scan(root: string, kind: string): { Raw }
 	local found = {}
 	local base = `{root}/{kind}`
 	local function isId(name: string): boolean
@@ -135,6 +135,7 @@ local function scan(
 					state = state,
 					front = store.readFront(doc),
 					body = bodyOf(fs.readFile(doc)),
+					root = root,
 				})
 			end
 		end
@@ -219,11 +220,8 @@ local function readSpend(path: string): { { day: string, added: number, removed:
 	return out
 end
 
-local function statistics(
-	root: string,
-	rawIssues: { { id: string, state: string, front: { [string]: string }, body: string } }
-): stats.Stats
-	local hist = history.read(parentOf(root))
+local function statistics(checkout: string, rawIssues: { Raw }): stats.Stats
+	local hist = history.read(checkout)
 	local items: { stats.Item } = {}
 	local spends: { stats.Spend } = {}
 	local latest = ""
@@ -248,7 +246,7 @@ local function statistics(
 				items,
 				{ id = raw.id, type = kind, opened = opened, closed = closed, spells = spells }
 			)
-			for _, row in readSpend(spendPath(root, raw.state, raw.id)) do
+			for _, row in readSpend(spendPath(raw.root, raw.state, raw.id)) do
 				consider(row.day)
 				table.insert(spends, {
 					id = raw.id,
@@ -541,9 +539,39 @@ local function statsHtml(s: stats.Stats): string
 	return (string.gsub(table.concat(parts), "[\r\n]", ""))
 end
 
-function board.collect(root: string?): Model
-	local base = root or store.ROOT
-	local rawRafts, rawIssues = scan(base, "rafts"), scan(base, "issues")
+-- The tracker roots to read and the checkout whose history the stats come from: `root` alone (one tracker folder, as
+-- specs pass) with its parent, or else every project root of `checkout` (default ".") from its registry (c0114).
+local function sources(root: string?, checkout: string?): ({ string }, string)
+	if root then
+		return { root }, parentOf(root)
+	end
+	local dir = checkout or "."
+	local out: { string } = {}
+	for _, r in projects.roots(projects.load(dir)) do
+		table.insert(out, if dir == "." then r else `{dir}/{r}`)
+	end
+	return out, dir
+end
+
+local function sortById(list: { Raw })
+	table.sort(list, function(a, b)
+		return a.id < b.id
+	end)
+end
+
+function board.collect(root: string?, checkout: string?): Model
+	local roots, checkoutDir = sources(root, checkout)
+	local rawRafts: { Raw }, rawIssues: { Raw } = {}, {}
+	for _, base in roots do
+		for _, r in scan(base, "rafts") do
+			table.insert(rawRafts, r)
+		end
+		for _, i in scan(base, "issues") do
+			table.insert(rawIssues, i)
+		end
+	end
+	sortById(rawRafts)
+	sortById(rawIssues)
 
 	local raftIds: { [string]: boolean } = {}
 	for _, r in rawRafts do
@@ -729,7 +757,7 @@ function board.collect(root: string?): Model
 		views = views,
 		home = home,
 		initialView = "rafts",
-		stats = statistics(base, rawIssues),
+		stats = statistics(checkoutDir, rawIssues),
 	}
 end
 
@@ -817,11 +845,12 @@ function board.render(m: Model, markedJs: string): string
 	})
 end
 
--- The page for the tracker under root (default: the real one), from the pinned marked.
-function board.build(root: string?): string
+-- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
+-- marked.
+function board.build(root: string?, checkout: string?): string
 	local markedJs = fs.readFile(board.MARKED_PATH)
 	board.checkMarked(markedJs)
-	return board.render(board.collect(root), markedJs)
+	return board.render(board.collect(root, checkout), markedJs)
 end
 
 return board

@@ -1,6 +1,7 @@
 --!strict
 -- R0200 review 001: the repo-root guard also refuses when git's directory is not the checkout's own .git (F2),
 -- --desc reaches a stub made without publishing (F5), and local ids count origin's too (F1).
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local store = require("@scripts/tracker/store")
@@ -42,8 +43,7 @@ return t.spec("tracker guards after review 001", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(`{repo}/tracker`)
-		process.exec("cp", { "-R", `{root}/scripts`, `{repo}/scripts` })
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{repo}/tracker/templates` })
+		engine.copy(root, repo)
 		t.expect(process.exec("git", { "init", "-q", "-b", "main", repo }).ok).toBe(true)
 		t.expect(process.exec("git", { "init", "-q", "-b", "main", other }).ok).toBe(true)
 		for _, r in { repo, other } do

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Ref guard for checks (testing skill, "Specs never touch the real repository"). scripts/lib/fence.sh points
+# Ref guard for checks (testing skill, "Specs never touch the real repository"). z-nile/lib/fence.sh points
 # every git a check runs at this directory (core.hooksPath), so this runs on every ref update. In a repository
 # listed in PICKMAN_FENCE_REAL_GIT (the checkouts' own git directories) it refuses every update. A check.sh flow
 # (not a spec run, PICKMAN_FENCE_SPECS) may still fetch: updates under refs/remotes/ that create or move a ref

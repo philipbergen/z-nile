@@ -8,7 +8,7 @@ An instruction added to many skills has to fit each skill's context. Writing a f
 
 **Why:** R0040 design review 1 (F5): every skill was told to write lesson files when it finished, but only the prep and raft worktrees can carry them.
 
-R0040 design review 2 (F3): the fix routed those skills to `tracker.sh new issue`, which subagents (stream implementers and reviewers, handed the same skills) may not run. Skills are read by agents in different roles, so the split has to be by role, not by skill.
+R0040 design review 2 (F3): the fix routed those skills to `./zn new issue`, which subagents (stream implementers and reviewers, handed the same skills) may not run. Skills are read by agents in different roles, so the split has to be by role, not by skill.
 
 R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads ticket-prep and testing), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
 
