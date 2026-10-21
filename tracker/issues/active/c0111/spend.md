@@ -53,6 +53,7 @@
 | 49 | 2026-10-21 06:16 | R0042: refute-001 and harvest | 0 | 0 | 2.5 | raft+proportional | code-review | 78514 |
 | 50 | 2026-10-21 06:22 | R0042: review-002 | 0 | 0 | 3.0 | raft+proportional | code-review |  |
 | 51 | 2026-10-21 06:24 | c0111: spec the hidden-file skip in lessons/ (review-002 F1) | 31 | 0 | 8.0 | explicit | code-review |  |
+| 52 | 2026-10-21 06:24 | R0042: refute-002, harvest | 0 | 0 | 1.5 | raft+proportional | code-review | 36248 |
 
-**Total:** +3465 / -22 lines, 884.2 agent-minutes, 849493 tokens over 51 records
-<!-- totals: added=3465 removed=22 minutes=884.2 records=51 tokens=849493 -->
+**Total:** +3465 / -22 lines, 885.7 agent-minutes, 885741 tokens over 52 records
+<!-- totals: added=3465 removed=22 minutes=885.7 records=52 tokens=885741 -->
