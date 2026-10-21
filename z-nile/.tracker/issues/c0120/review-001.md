@@ -1,0 +1,45 @@
+# Review 001: c0120 (code mode)
+Inputs: `impl-c0120` at fdeff0f (1fec94f moves, 6d35644 edits, fdeff0f log), `git diff origin/prep-c0120...HEAD` (origin/prep-c0120 at c4d736a), c0120.md with design reviews 001 to 004 and their refutes, PR #100 and #99 descriptions. Runs: `z-nile/check.sh --full` GATE PASSED (pickman 1068/157, z-nile 829/119, 81.9 s); `bash z-nile/.tracker/issues/c0120/check.sh` 14/17. Sequestration against origin/prep-c0120 over the item roots' `check.sh` and `acceptance/`: 103 files, all R100.
+
+### F1 [high] The fence reads the protected repository before it strips an inherited `GIT_DIR`, so a hook-started run from `pickman/` has no ref guard on the real repository
+Where: `z-nile/lib/fence.sh`, `pickman_fence_env`: `real=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir …)` now comes before `unset GIT_DIR GIT_WORK_TREE … GIT_CONFIG_COUNT`. On origin/prep-c0120 the unset came first.
+Evidence: reproduced in a scratch clone (`/private/tmp/claude-501/-Users-philipbergen-code-pickman/de5efc35-2bcd-47ee-b2a5-bc31e5be44c7/scratchpad/code-review-c0120-001/clone`, scripts `hook-repro.sh` and `gitdir-repro.sh` in its parent folder).
+- With `GIT_DIR=.git`, as git sets it for hooks in a main checkout, `cd pickman && source z-nile/lib/fence.sh && pickman_fence "$PWD" specs`: `git -C pickman` resolves `.git` as `pickman/.git`, rev-parse fails, and `PICKMAN_FENCE_REAL_GIT` is empty. `git update-ref refs/heads/evil-hook-new HEAD` then **succeeds** in the clone. `reference-transaction` passes every repository not listed in `PICKMAN_FENCE_REAL_GIT` (`[ -n "$protected" ] || chain`).
+- With `GIT_DIR=<another repo>/.git` at the root: the new fence records the other repository, and `update-ref` in the clone succeeds. The old fence records the clone and refuses (`fence: a check tried to change refs in the real repository`).
+
+This is the path the runner takes from a home: `fence.luau` runs `pickman_fence "$1" specs "$2"` with `here` = `pickman/` in a shell that inherits the caller's environment. The gate runs `(cd pickman && lune run tests/run)`. So a gate started from a git hook, or a `check.sh` whose shell inherits a foreign `GIT_DIR`, loses the ref guard. On Linux (CI, no jail) that guard is the only thing between a spec and the real refs. The testing skill states the rule this breaks ("an inherited `GIT_DIR` … (git hooks run with them set) is unset before any spec runs"), and the file's own header says inherited overrides are ignored. No spec catches it: c0058's cases set `GIT_DIR` to the same repository, absolute, and c0120's homes cases never inherit one.
+Critique: review 002 F1's reorder ("no early return after the first change") moved the unset below the hooks refusal, and `real` went with it, ahead of the unset. The tempting fix is to unset only `GIT_DIR`, or to run `real` through `env -u GIT_DIR`, which still leaves `GIT_COMMON_DIR`, `GIT_WORK_TREE` and `GIT_CONFIG_PARAMETERS` (any of them can point the read elsewhere or make it fail).
+Consequences: moving the whole `unset` line to just before `real=` puts a change ahead of `real`. That still honours review 002's rule, because nothing after the hooks refusal returns early. W2's case (a refused fence leaves the inherited guards whole) must stay green: the unset must come after the hooks refusal, never before it.
+Recommendation: in `pickman_fence_env`, run the full `unset` of the repository overrides after the hooks refusal and before `real=`. Add the case to an unsequestered guard spec (`tests/tooling/repo-fence.spec.luau`, or a new case in c0058's promoted fence spec if Overrides names it): a fence entered from a home with `GIT_DIR=.git` inherited, and one entered from the root with `GIT_DIR` pointing at another fixture repository, each record the checkout's common dir in `PICKMAN_FENCE_REAL_GIT` and refuse `git update-ref` there. Add a Rules-and-mutants row ("`real` read before the unset") and run that mutant against the new case.
+Lesson: testing/guards-move-with-the-working-directory
+
+### F2 [medium] The executor's redo steps leave out the work the freeze and Guess 4 (a) guarantee: R0034's and R0012's `done` before c0120
+Where: c0120.md, Verification log, "What the executor must redo" steps 1 to 4.
+Evidence:
+- Phase 1 requires R0034 done (the freeze) and R0012 done (stop condition, AC17) before any change. Both `done`s land on main after this build. They move `tracker/rafts/active/R0034` and R0012's items into `done/`, and they promote pickman folders into the root's `tests/acceptance/` (f0065, f0027 to f0029, and any others).
+- Redo step 3 re-runs §1's classification only for "anything captured in `tracker/`". It says nothing about these newly promoted pickman folders (§14b's third bullet). Nor does it say that a rebase over `done` commits which rewrite `tracker/` and `src/` will conflict inside the renames-only commit, whose resolution then mixes edits into it (JC1's fail condition).
+- Step 4 expects "15/17 until R0012 is done", which contradicts Phase 1's stop condition: R0012 must already be done, so the expected result is 16/17 (only AC16, until the branches clear) or 17/17.
+- Implementation step 12 covers part of this, but the redo list doesn't point to it.
+Critique: an executor who follows the redo list literally rebases, sees conflicts in 1fec94f, and either hand-merges them into the moves commit or leaves promoted pickman folders at the root. `old-roots` and audit's `misplaced-spec` would catch the second mistake, but nothing catches the first except JC1 at review. The tempting fix is one more line, "move new promoted folders too", which still leaves the rebase-versus-regenerate question open.
+Consequences: regenerating the moves commit on the new base means re-running §1's `git mv` lines and loop there. That replays 6d35644's edits on top, with conflicts confined to the edits commit. A newly promoted pickman spec may name a root-relative path that is not under `pickman/`; it then needs an override, which a chore may make but which must be named in Overrides.
+Recommendation: rewrite the redo list. (1) Check Phase 1 first, including R0034 and R0012 done. (2) Cut a fresh branch from the new `origin/main` and regenerate the renames-only commit with §1's table and loop, which also covers folders promoted by R0034, R0012 and any other `done`. (3) Cherry-pick 6d35644 and resolve its conflicts in the edits commit only. (4) Apply the six c0114 overrides, plus an override named in Overrides for any newly promoted pickman spec that turns red. (5) Run Implementation steps 11 and 12. (6) Expect 17/17 when nothing holds the old paths, and 16/17 with only AC16 red otherwise. Keep the c0114 override diff in c0120.md or a committed patch, not only in the PR description.
+
+### F3 [low] The PR and the Verification log name the wrong active raft for AC16
+Where: PR #100 "Results", c0120.md "Implementation build": "R0043 is active".
+Evidence: `git ls-tree origin/main tracker/rafts/active/` lists only `R0034`, and `./zn busy tracker src tests` prints `raft R0034 is active`. The check log doesn't show that line, because `ac.sh` keeps only the last 25 lines of a failure and the branch list fills them.
+Critique: this is the raft Phase 1 requires done. Naming the wrong one misleads whoever plans the freeze.
+Consequences: none.
+Recommendation: say R0034 in both places.
+
+## Judged criteria (code mode only)
+- JC1: pass. `git show -M --name-status 1fec94f` lists 632 entries, all R100. 6d35644 has no renames (9 A, 69 M). `git diff -M100% --name-status origin/prep-c0120...HEAD | grep -v '^R100'` lists 101 paths, and each is named in the design: the 21 pickman overrides (as D plus A, moved and edited), `scripts/deploy-beta.luau` (D plus A), the new home files, the 14 z-nile overrides, the harness and tooling specs in "Edited, not promoted", the engine, gate, guard and template files of Touched modules, and c0120.md. This is 101 rather than the prototype's 120, because the c0114 overrides and the item roots are absent. No move shares a commit with an edit. F2 bears on keeping this true after the redo.
+
+## The three expected reds
+- AC11: the one failure is `z-nile/.tracker/issues/c0114/check.sh: z-nile/next (from .)`. The scan is clean apart from that line, so AC11 goes green once c0114 is in `done/`, as claimed.
+- AC16: R0034 is active, and other branches and worktrees change the old paths: the freeze, as claimed (raft misnamed, F3).
+- AC17: `R0012 is at pickman/.tracker/rafts/R0012, not done`, as claimed.
+
+## Candidate lesson (for the lead)
+- testing: when a guard's steps are reordered, every read the guard makes of the repository it protects must still come after the overrides that redirect that read are stripped, because c0120 moved `real=` above `unset GIT_DIR …`. Check: does each value a guard derives from git (the protected repository, the toplevel) get computed in a clean environment, and is there a case with an inherited `GIT_DIR` that is relative and one that points at a foreign repository?
+
+Verdict: changes

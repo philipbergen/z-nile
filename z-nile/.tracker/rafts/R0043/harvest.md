@@ -25,3 +25,5 @@
 - review-001 F1: testing/no-live-counts-in-promoted-specs
 - review-001 F2: ticket-prep/restated-rules-move-together
 - review-001 F3: one-off: a forwarder's file mode and stale comments after the move
+- review-002 F1: execute-raft/fix-rounds-rerun-every-member-check
+- review-002 F2: one-off: a PR description missed a post-review sequestered edit

@@ -13,3 +13,5 @@ R0040 design review 2 (F3): the fix routed those skills to `./zn new issue`, whi
 R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads ticket-prep and testing), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
 
 **How to apply:** for each skill a change touches, name every role that reads it (lead, stream subagent, reviewer), its working directory and what it may write or publish. Write one instruction keyed on role, the same wherever it appears, rather than a variant per skill.
+
+c0120 code review 001 F2: the build's redo list said "rebase onto c0114, re-run the classification for new captures", which leaves out the `done`s the freeze and Guess 4 (a) put on main first (R0034, R0012, with their promoted pickman folders). Rebasing over them conflicts inside the renames-only commit. Redo steps for a stacked build start from the stop conditions and regenerate mechanical commits on the new base instead of rebasing them.
