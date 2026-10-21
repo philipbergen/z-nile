@@ -28,15 +28,16 @@ end
 local USAGE = [[
 usage: ./zn <command> ...
   new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--project <name>]
-                                                create an issue (emergent if the raft is active) in a project
-                                                of z-nile/projects.toml (default: the first)
-  new raft <feature|defect|chore> <slug> <issue>... [--single]
+                                                create an issue (emergent if the raft is active) in the project
+                                                whose folder you are in, or --project (refused elsewhere)
+  new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
   stamp <state>                                 print a fresh status stamp (diagnostics)
   find <id>                                     print the item's current directory
-  list [backlog|active|done]                    list items
+  list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
+                                                in, or of every project at the checkout's root
   members <R-id>                                print directories of every issue in the raft
   check <id>                                    run an item's check.sh (a raft runs its own)
   renumber <old|item directory> [<new>]         step an id (conflict resolution), or one copy of a duplicated id;
@@ -344,8 +345,8 @@ local function idsOf(paths: { string }, kind: string): { string }
 end
 
 -- origin/main's project registry as it is (no fetch), or nil and why: what the guards and every origin read trust
--- (c0114), never the working tree's. An origin/main without the file predates c0114: the legacy root alone. Nil when
--- origin/main can't be read or its registry does not parse.
+-- (c0114), never the working tree's. Nil and why when origin/main can't be read, has no registry (before c0114 lands:
+-- the main checkout's older engine works there until then) or has one that does not parse.
 local function originRegistry(): (projects.Registry?, string?)
 	return projects.at("origin/main")
 end
@@ -418,7 +419,10 @@ end
 local function sweepStale(root: string)
 	-- every root the pulled registry names, retired ones too: a root move leaves the old folders behind (c0114)
 	local ok, reg = pcall(projects.load, root, true)
-	local roots: { string } = if ok then projects.allRoots(reg :: projects.Registry) else { projects.LEGACY }
+	if not ok then
+		fail(`sweep: {reg}`) -- never guess which folders hold items (c0114)
+	end
+	local roots: { string } = projects.allRoots(reg :: projects.Registry)
 	for _, top in roots do
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/", "done/" } do
@@ -727,23 +731,50 @@ local function withDesc(doc: string, opts: { [string]: { string } }): string
 	end, 1))
 end
 
--- The root of the project `--project <name>` names in the working tree's registry, or else of its first project
--- (c0114). Publishing checks the root against origin/main's registry too.
-local function projectRoot(opts: { [string]: { string } }): string
+-- The directory ./zn was run from, relative to the checkout ("" for its root). zn passes it as ZN_CWD with the
+-- checkout as ZN_TOP; it counts only when the engine runs in that checkout, so a value inherited by a process that
+-- runs another checkout's engine (a spec's fixture) means its root.
+local function hereDir(): string
+	local top, rel = process.env.ZN_TOP, process.env.ZN_CWD
+	if not top or not rel or top == "" then
+		return ""
+	end
+	local cwd = sh.run("pwd", { "-P" })
+	if not cwd.ok or sh.trim(cwd.stdout) ~= top then
+		return ""
+	end
+	return rel
+end
+
+-- The project a command works in (c0114, decided with the user: "The directory gives the project unless it's given,
+-- so at root without project=fail, deduce from PWD with --project override"): the one `--project <name>` names,
+-- else the one whose folder holds the directory ./zn was run from. Anywhere else (the checkout's root, or a folder no
+-- project holds) the command refuses and names --project. Pickman has no folder before c0120, so its work always
+-- passes --project pickman until then. Returns the project's root.
+local function projectRoot(opts: { [string]: { string } }, what: string): string
 	local reg = projects.load()
+	local names: { string } = {}
+	for _, q in reg.projects do
+		table.insert(names, q.name)
+	end
+	local list = table.concat(names, ", ")
 	local name = opts["--project"] and opts["--project"][1]
-	if not name then
-		return reg.projects[1].root
-	end
-	local p = projects.named(reg, name)
-	if not p then
-		local names: { string } = {}
-		for _, q in reg.projects do
-			table.insert(names, q.name)
+	if name then
+		local p = projects.named(reg, name)
+		if not p then
+			fail(`--project {name}: not a project in {projects.FILE} ({list})`)
 		end
-		fail(`--project {name}: not a project in {projects.FILE} ({table.concat(names, ", ")})`)
+		return (p :: projects.Project).root
 	end
-	return (p :: projects.Project).root
+	local here = hereDir()
+	local p = projects.inDir(reg, here)
+	if p then
+		return p.root
+	end
+	local where = if here == "" then "the checkout's root" else here
+	return fail(
+		`{what}: no project holds {where}: run it in a project's folder or pass --project <name> ({list}); pickman has no folder until c0120, so its work passes --project pickman`
+	)
 end
 
 local cmd = {}
@@ -761,7 +792,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		end
 		refuseStale()
 		local raftId = opts["--raft"] and opts["--raft"][1]
-		local root = projectRoot(opts)
+		-- an emergent issue's raft gives its project; any other issue's comes from --project or the directory
+		local root = if raftId and not opts["--project"] then "" else projectRoot(opts, "new issue")
 		if raftId then
 			local raft = store.get(raftId) -- an unknown raft fails here
 			-- an emergent issue lives beside its raft, in the raft's project
@@ -858,8 +890,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
 		if not (rtype and store.PREFIX[rtype] and slug) then
-			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single]")
+			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]")
 		end
+		-- the raft's project comes from --project or the directory, and holds every member (c0114)
+		local wanted = projectRoot(opts, "new raft")
 		refuseStale()
 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
@@ -892,6 +926,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					if at then
 						if root ~= "" and at ~= root then
 							return `a raft holds issues of one project: {id} is in {at}, not {root}`
+						end
+						if at ~= wanted then
+							return `the raft is made in {wanted}: {id} is in {at}`
 						end
 						root = at
 					end
@@ -989,6 +1026,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			if m.root ~= root then
 				fail(`a raft holds issues of one project: {m.id} is in {m.root}, not {root}`)
 			end
+		end
+		if root ~= wanted then
+			fail(`the raft is made in {wanted}: {members[1].id} is in {root}`)
 		end
 		local id = store.formatId(
 			"R",
@@ -1355,8 +1395,28 @@ end
 
 -- Prints every item it can read, both copies of a duplicated id included, then fails on the problems that stop
 -- store.find (c0880): the other commands refuse such a tree, so `list` says where the trouble is.
-function cmd.list(pos: { string })
+-- The project `list` shows (c0114): --project's, else the one whose folder holds the directory ./zn was run from;
+-- nil (every project) at the checkout's root or in a folder no project holds.
+local function listedRoot(opts: { [string]: { string } }): string?
+	if opts["--project"] then
+		return projectRoot(opts, "list")
+	end
+	local p = projects.inDir(projects.load(), hereDir())
+	return if p then p.root else nil
+end
+
+function cmd.list(pos: { string }, opts: { [string]: { string } })
+	local only = listedRoot(opts)
 	local found = audit.scan(".")
+	if only then
+		local kept = {}
+		for _, f in found do
+			if string.sub(f.path, 1, #only + 1) == only .. "/" then
+				table.insert(kept, f)
+			end
+		end
+		found = kept
+	end
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
@@ -2332,8 +2392,11 @@ cmd["worktree-prune"] = function()
 	local prefix = root .. "/.worktree/"
 	local failed = false
 	-- a raft is finished when it is in done/ under any project root of the base branch (c0114)
-	local baseReg = projects.at(base, root)
-	local doneRoots: { string } = if baseReg then projects.allRoots(baseReg) else { projects.LEGACY }
+	local baseReg, regErr = projects.at(base, root)
+	if not baseReg then
+		fail(`worktree-prune: {regErr}`) -- prune nothing rather than guess which rafts are done (c0114)
+	end
+	local doneRoots: { string } = projects.allRoots(baseReg :: projects.Registry)
 	local function isDone(name: string): boolean
 		for _, r in doneRoots do
 			if sh.git({ "-C", root, "ls-tree", "-d", base, `{r}/rafts/done/{name}` }) ~= "" then

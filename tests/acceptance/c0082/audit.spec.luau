@@ -27,6 +27,7 @@ local function tree(name: string, items: { [string]: string | false }, next: (st
 	end
 	fs.writeDir(`{dir}/tracker/issues/done`)
 	fs.writeDir(`{dir}/tracker/rafts/done`)
+	write(`{dir}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml")) -- c0114: a tree without it is an error
 	for path, text in items do
 		if type(text) == "string" then
 			local id = string.match(path, "([^/]+)$") :: string

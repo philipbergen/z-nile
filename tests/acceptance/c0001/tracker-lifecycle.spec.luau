@@ -93,19 +93,27 @@ return t.spec("tracker lifecycle", function(it)
 		engine.empty(dir)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
-		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new f")).toBe("tracker/issues/f0010/f0010.md")
-		t.expect(must(tr({ "new", "issue", "d", "beta" }), "new d")).toBe("tracker/issues/d0020/d0020.md")
-		t.expect(must(tr({ "new", "issue", "f", "gamma" }), "new f")).toBe("tracker/issues/f0030/f0030.md")
+		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new f"))
+			.toBe("tracker/issues/f0010/f0010.md")
+		t.expect(must(tr({ "new", "issue", "d", "beta", "--project", "pickman" }), "new d"))
+			.toBe("tracker/issues/d0020/d0020.md")
+		t.expect(must(tr({ "new", "issue", "f", "gamma", "--project", "pickman" }), "new f"))
+			.toBe("tracker/issues/f0030/f0030.md")
 	end)
 
 	it("rejects a raft that mixes types", function()
-		local r = tr({ "new", "raft", "feature", "mixed", "f0010", "d0020" })
+		local r = tr({ "new", "raft", "feature", "mixed", "f0010", "d0020", "--project", "pickman" })
 		t.expect(r.ok).toBe(false)
 		t.expect(string.find(r.stderr, "cannot contain", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("renumber steps an id and rewrites references", function()
-		t.expect(must(tr({ "new", "raft", "feature", "demo", "f0010", "f0030" }), "new raft"))
+		t.expect(
+			must(
+				tr({ "new", "raft", "feature", "demo", "f0010", "f0030", "--project", "pickman" }),
+				"new raft"
+			)
+		)
 			.toBe("tracker/rafts/R0010/R0010.md")
 		must(tr({ "renumber", "f0030", "f0031" }), "renumber")
 		local raftDoc = read("tracker/rafts/R0010/R0010.md")

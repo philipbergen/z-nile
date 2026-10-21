@@ -24,6 +24,13 @@ engine.COUNTER = "z-nile/next"
 -- Both places the counter can be: tracker/next stays the counter until origin moves it (the first publish after c0114).
 engine.COUNTERS = { "z-nile/next", "tracker/next" }
 
+-- The repository's registry, written into the fixture tree `dest`: a tree without one refuses every tracker command
+-- (c0114, decided with the user: "Missing also refuses"), so a hand-built fixture writes it like the engine copy does.
+function engine.registry(dest: string)
+	fs.writeDir(`{dest}/z-nile`)
+	fs.writeFile(`{dest}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
+end
+
 -- Copies the tooling from the checkout `root` into `dest` (an existing folder under .cache). Raises when a copy fails.
 function engine.copy(root: string, dest: string)
 	local function cp(from: string, to: string)

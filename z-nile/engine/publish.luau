@@ -81,7 +81,8 @@ end
 -- The live id counter of a base, from the base alone (never the working tree), and whether this publish moves it there
 -- (c0114). The branch that lands c0114 never touches the counter; origin moves it once:
 -- - the base has z-nile/next: that is the counter;
--- - the base has no registry (before c0114 lands, c0114's own execution included): tracker/next is the counter;
+-- - the base has no registry (before c0114 lands, c0114's own execution included): tracker/next is the counter, which
+--   only the old engine writes (publish.commit refuses a base without the registry before it gets here);
 -- - the base has a registry but no z-nile/next, and tracker/next parses (c0114 has just landed): z-nile/next is the
 --   counter and `migrate` is true: this publish writes z-nile/next from tracker/next's counters and the tombstone at
 --   tracker/next, in its one lease push.
@@ -359,13 +360,16 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			return if r.ok then r.stdout else nil
 		end
 		-- the roots this publish may write under come from origin/main alone: a branch that edits its own registry
-		-- can't widen them (lesson architecture/guards-trust-only-origin). An origin/main without the registry predates
-		-- c0114 and has the legacy root alone (never more); a registry that does not parse publishes nothing.
+		-- can't widen them (lesson architecture/guards-trust-only-origin). An origin/main without the registry (before
+		-- c0114 lands) or with one that does not parse publishes nothing: the main checkout's engine, which predates the
+		-- registry, publishes until then.
 		local regText = read(projects.FILE)
-		local reg: projects.Registry?, regErr: string? = projects.legacy(), nil
-		if regText then
-			reg, regErr = projects.parse(regText)
+		if not regText then
+			return fail(
+				`origin/main has no {projects.FILE} (c0114 has not landed): publish from the main checkout until it does`
+			)
 		end
+		local reg, regErr = projects.parse(regText)
 		if not reg then
 			return fail(`origin/main's {regErr}`)
 		end

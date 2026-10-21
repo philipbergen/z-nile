@@ -93,8 +93,8 @@ return t.spec("tracker commands publish state to origin/main (sync)", function(i
 			end
 			-- every command that is not read-only is refused, not just the ones that publish
 			local writing = {
-				{ "new", "issue", "c", "x" },
-				{ "new", "raft", "chore", "r", "c0010", "--single" },
+				{ "new", "issue", "c", "x", "--project", "pickman" },
+				{ "new", "raft", "chore", "r", "c0010", "--single", "--project", "pickman" },
 				{ "renumber", "c0010", "c0011" },
 				{ "migrate" },
 				{ "start", "R0010" },
@@ -129,7 +129,10 @@ return t.spec("tracker commands publish state to origin/main (sync)", function(i
 				t.expect(has(trLost(args).stderr, "repository root")).toBe(false)
 			end
 			-- turning publishing off does not switch the guard off
-			local offline = trLost({ "new", "issue", "c", "y" }, { PICKMAN_PUBLISH = "0" })
+			local offline = trLost(
+				{ "new", "issue", "c", "y", "--project", "pickman" },
+				{ PICKMAN_PUBLISH = "0" }
+			)
 			t.expect(offline.ok).toBe(false)
 			t.expect(has(offline.stderr, "repository root")).toBe(true)
 			t.expect(has(git(`{outer}/repo`, { "worktree", "list" }), "zz")).toBe(false)

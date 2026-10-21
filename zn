@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
-# z-nile's command (c0114): ./zn <command> ... at the repository root. See .claude/skills/tracker/SKILL.md.
+# z-nile's command (c0114): ./zn <command> ... from anywhere in the checkout. See .claude/skills/tracker/SKILL.md.
+# The directory it is run from gives the project (a command's --project overrides it): ZN_CWD is that directory
+# relative to the checkout, and ZN_TOP the checkout, so the engine trusts ZN_CWD only when it runs in ZN_TOP.
 set -euo pipefail
-cd "$(dirname "$0")"
+top="$(cd "$(dirname "$0")" && pwd -P)"
+here="$(pwd -P)"
+case "$here/" in
+"$top/"*) rel="${here#"$top"}" ;;
+*) rel="" ;; # outside the checkout: like its root
+esac
+export ZN_TOP="$top" ZN_CWD="${rel#/}"
+cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
 exec lune run z-nile/engine/main -- "$@"

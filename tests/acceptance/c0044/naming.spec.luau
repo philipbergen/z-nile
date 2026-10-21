@@ -110,7 +110,7 @@ return t.spec("document naming", function(it)
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
 		engine.empty(seed)
 
-		local out = must(tr({ "new", "issue", "f", "alpha" }), "new issue")
+		local out = must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
 		t.expect(out).toBe("tracker/issues/f0010/f0010.md")
 		t.expect(fs.isFile(`{seed}/tracker/issues/f0010/f0010.md`)).toBe(true)
 		t.expect(fs.isFile(`{seed}/tracker/issues/f0010/f0010-alpha.md`)).toBe(false)
@@ -120,7 +120,8 @@ return t.spec("document naming", function(it)
 	end)
 
 	it("new raft writes <ID>.md with a slug in the frontmatter", function()
-		local out = must(tr({ "new", "raft", "feature", "demo", "f0010" }), "new raft")
+		local out =
+			must(tr({ "new", "raft", "feature", "demo", "f0010", "--project", "pickman" }), "new raft")
 		t.expect(out).toBe("tracker/rafts/R0010/R0010.md")
 		t.expect(fs.isFile(`{seed}/tracker/rafts/R0010/R0010-demo.md`)).toBe(false)
 		local doc = read("tracker/rafts/R0010/R0010.md")
@@ -131,7 +132,7 @@ return t.spec("document naming", function(it)
 	it("new rejects a bad slug and creates nothing", function()
 		local before = ids("tracker/issues")
 		for _, bad in { "Bad Slug", "a/b", "UPPER", "9lead", "under_score", "" } do
-			local r = tr({ "new", "issue", "f", bad })
+			local r = tr({ "new", "issue", "f", bad, "--project", "pickman" })
 			if r.ok then
 				error(`new accepted the slug "{bad}"`)
 			end
@@ -157,7 +158,7 @@ return t.spec("document naming", function(it)
 	end)
 
 	it("a document without a slug is an error naming the file", function()
-		must(tr({ "new", "issue", "f", "beta" }), "new beta")
+		must(tr({ "new", "issue", "f", "beta", "--project", "pickman" }), "new beta")
 		local path = "tracker/issues/f0020/f0020.md"
 		local original = read(path)
 		write(path, (string.gsub(original, "\nslug: beta\n", "\n")))
@@ -288,11 +289,11 @@ return t.spec("document naming", function(it)
 	it("two branches creating the same id conflict on the document", function()
 		local tip = git({ "rev-parse", "HEAD" })
 		git({ "checkout", "-q", "-b", "collide-a" })
-		local a = must(tr({ "new", "issue", "c", "first" }), "new on a")
+		local a = must(tr({ "new", "issue", "c", "first", "--project", "pickman" }), "new on a")
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "a" })
 		git({ "checkout", "-q", "-b", "collide-b", tip })
-		local b = must(tr({ "new", "issue", "c", "second" }), "new on b")
+		local b = must(tr({ "new", "issue", "c", "second", "--project", "pickman" }), "new on b")
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "b" })
 		-- both branches picked the same number, so both wrote the same path

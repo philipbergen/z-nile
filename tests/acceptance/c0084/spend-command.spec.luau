@@ -93,11 +93,18 @@ return t.spec("tracker spend", function(it)
 		end
 		prep = trOk(main, { "worktree", "prep-demo" })
 		identity(prep)
-		a =
-			string.match(trOk(prep, { "new", "issue", "c", "alpha", "--desc", "Alpha." }), "(c%d%d%d%d)") :: string
-		b =
-			string.match(trOk(prep, { "new", "issue", "c", "beta", "--desc", "Beta." }), "(c%d%d%d%d)") :: string
-		raft = string.match(trOk(prep, { "new", "raft", "chore", "demo", a, b }), "(R%d%d%d%d)") :: string
+		a = string.match(
+			trOk(prep, { "new", "issue", "c", "alpha", "--desc", "Alpha.", "--project", "pickman" }),
+			"(c%d%d%d%d)"
+		) :: string
+		b = string.match(
+			trOk(prep, { "new", "issue", "c", "beta", "--desc", "Beta.", "--project", "pickman" }),
+			"(c%d%d%d%d)"
+		) :: string
+		raft = string.match(
+			trOk(prep, { "new", "raft", "chore", "demo", a, b, "--project", "pickman" }),
+			"(R%d%d%d%d)"
+		) :: string
 		t.expect(a ~= b).toBe(true)
 		t.expect(has(git(origin, { "show", `main:tracker/rafts/{raft}/{raft}.md` }), a)).toBe(true)
 	end)
@@ -278,7 +285,7 @@ return t.spec("tracker spend", function(it)
 
 	it("records deliver on a done item, in its done directory", function()
 		local g = string.match(
-			trOk(prep, { "new", "issue", "c", "gamma", "--desc", "Gamma." }),
+			trOk(prep, { "new", "issue", "c", "gamma", "--desc", "Gamma.", "--project", "pickman" }),
 			"(c%d%d%d%d)"
 		) :: string
 		git(other, { "pull", "-q", "origin", "main" })
@@ -293,7 +300,7 @@ return t.spec("tracker spend", function(it)
 
 	it("keeps an existing ledger's rows and title, reading seven-cell rows as build", function()
 		local d = string.match(
-			trOk(prep, { "new", "issue", "c", "delta", "--desc", "Delta." }),
+			trOk(prep, { "new", "issue", "c", "delta", "--desc", "Delta.", "--project", "pickman" }),
 			"(c%d%d%d%d)"
 		) :: string
 		git(other, { "pull", "-q", "origin", "main" })

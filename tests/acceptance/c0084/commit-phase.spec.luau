@@ -84,10 +84,18 @@ return t.spec("tracker commit phases", function(it)
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-q", "-m", "seed" })
-		a = string.match(must(tr({ "new", "issue", "f", "alpha" }), "new"), "(f%d%d%d%d)") :: string
-		b = string.match(must(tr({ "new", "issue", "f", "beta" }), "new"), "(f%d%d%d%d)") :: string
-		raft =
-			string.match(must(tr({ "new", "raft", "feature", "demo", a, b }), "new raft"), "(R%d%d%d%d)") :: string
+		a = string.match(
+			must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new"),
+			"(f%d%d%d%d)"
+		) :: string
+		b = string.match(
+			must(tr({ "new", "issue", "f", "beta", "--project", "pickman" }), "new"),
+			"(f%d%d%d%d)"
+		) :: string
+		raft = string.match(
+			must(tr({ "new", "raft", "feature", "demo", a, b, "--project", "pickman" }), "new raft"),
+			"(R%d%d%d%d)"
+		) :: string
 		for _, doc in
 			{ `tracker/issues/{a}/{a}.md`, `tracker/issues/{b}/{b}.md`, `tracker/rafts/{raft}/{raft}.md` }
 		do
