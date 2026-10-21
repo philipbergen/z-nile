@@ -116,9 +116,9 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker, pickman's home", "--allow-empty" })
-		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new issue"))
+		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue"))
 			.toBe("pickman/.tracker/issues/f0010/f0010.md")
-		must(tr({ "new", "raft", "feature", "demo", "f0010", "--single" }), "new raft")
+		must(tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }), "new raft")
 		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
