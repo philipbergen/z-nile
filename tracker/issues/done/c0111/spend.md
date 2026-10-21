@@ -55,6 +55,7 @@
 | 51 | 2026-10-21 06:24 | c0111: spec the hidden-file skip in lessons/ (review-002 F1) | 31 | 0 | 8.0 | explicit | code-review |  |
 | 52 | 2026-10-21 06:24 | R0042: refute-002, harvest | 0 | 0 | 1.5 | raft+proportional | code-review | 36248 |
 | 53 | 2026-10-21 06:24 | R0042: addressed during execution | 0 | 0 | 1.0 | raft+proportional | deliver |  |
+| 54 | 2026-10-21 06:29 | tracker: done R0042 | 0 | 0 | 2.4 | raft+proportional | deliver |  |
 
-**Total:** +3465 / -22 lines, 886.7 agent-minutes, 885741 tokens over 53 records
-<!-- totals: added=3465 removed=22 minutes=886.7 records=53 tokens=885741 -->
+**Total:** +3465 / -22 lines, 889.1 agent-minutes, 885741 tokens over 54 records
+<!-- totals: added=3465 removed=22 minutes=889.1 records=54 tokens=885741 -->
