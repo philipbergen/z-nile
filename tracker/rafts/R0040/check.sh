@@ -11,6 +11,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0040
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: a design lesson is sourced from R0040's own design reviews" bash -c '[[ $(scripts/tracker.sh lessons --when design --full | grep -c "^sources: .*R0040 design-review-") -ge 1 ]]'
 
 finish
