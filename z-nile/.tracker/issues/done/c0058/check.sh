@@ -2,8 +2,8 @@
 # Acceptance checks for c0058. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0058 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0058 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0058"
 
@@ -60,7 +60,7 @@ gate() {
 check "AC6: the gate spec proves the guards are on, the jail included, and catches a planted bypass" gate
 overrides() {
   local f=tests/acceptance/c0034/locator.spec.luau
-  if grep -n "tracker.sh" "$f" | grep -q "cwd = root"; then echo "$f still runs tracker.sh in the real repository"; return 1; fi
+  if grep -n "./zn" "$f" | grep -q "cwd = root"; then echo "$f still runs ./zn in the real repository"; return 1; fi
   lune run tests/run -- "$f" tests/acceptance/c0005/worktree.spec.luau tests/acceptance/c0044/naming.spec.luau \
     tests/acceptance/c0045/workstreams.spec.luau tests/acceptance/c0046/launch.spec.luau tests/tooling/worktree-fetch.spec.luau
 }
@@ -87,8 +87,8 @@ unsandboxed() { # AC9 and AC10 build sandboxes of their own, which macOS can't d
 make_copy() { # $1: the copy; a copy of the runner and guards, plus a spec that tries to write this checkout
   local copy=$1 real req="req""uire" # keeps literal require text out of this file (graph scanner)
   real=$(pwd -P)
-  rm -rf "$copy" && mkdir -p "$copy/scripts/lib" "$copy/tests/probe"
-  cp -R tests/run.luau tests/lib "$copy/tests/" && cp -R scripts/lib/fence.sh scripts/lib/git-hooks "$copy/scripts/lib/"
+  rm -rf "$copy" && mkdir -p "$copy/z-nile/lib" "$copy/tests/probe"
+  cp -R tests/run.luau tests/lib "$copy/tests/" && cp -R z-nile/lib/fence.sh z-nile/lib/git-hooks "$copy/z-nile/lib/"
   cp .luaurc rokit.toml "$copy/"
   cat >"$copy/tests/probe/chain.spec.luau" <<SPEC
 --!strict
