@@ -13,3 +13,7 @@
 - design-review-002 F2: ticket-prep/required-steps-on-every-path
 - design-review-002 F3: testing/plain-find-for-literals
 - design-review-002 F4: architecture/guard-no-is-explicit
+- design-review-003 F1: ticket-prep/design-the-execution-window
+- design-review-003 F2: ticket-prep/no-check-red-between-steps, ticket-prep/design-the-execution-window
+- design-review-003 F3: ticket-prep/restated-rules-move-together, ticket-prep/rerun-skipped-checks-after-edits
+- design-review-003 F4: testing/plain-find-for-literals

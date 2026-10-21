@@ -5,6 +5,7 @@
 local claims = require("@znile/engine/claims")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local ids = require("@znile/engine/ids")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -327,7 +328,7 @@ return t.spec("c0114 commands across project roots", function(it)
 		t.expect(old.ok).toBe(false)
 		t.expect(has(old.stdout, "error old-counter tracker/next")).toBe(true)
 		-- the tombstone itself is fine
-		fs.writeFile(`{f.main}/tracker/next`, fs.readFile("tracker/next"))
+		fs.writeFile(`{f.main}/tracker/next`, ids.TOMBSTONE)
 		local tomb = trackerfix.tr(f, f.main, { "audit" })
 		fs.removeFile(`{f.main}/tracker/next`)
 		t.expect(has(tomb.stdout, "old-counter")).toBe(false)

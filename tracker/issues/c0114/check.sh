@@ -22,7 +22,7 @@ check "AC8: the gate, the selector, the fence scan, the .cache review, the stop 
 check "AC9: the skills, AGENTS.md, SETUP.md and the templates name ./zn, the moved paths and the root rules" lune run tests/run -- "$A/docs.spec.luau"
 check "AC10: every tooling item is in z-nile/.tracker/, every game item in tracker/, and live check.sh files still list" lune run tests/run -- "$A/classified.spec.luau"
 check "AC11: the guard scans pass over the moved tree" lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau "$PWD/tests/acceptance/c0077/cache-paths.spec.luau"
-check "AC12: the real tracker audits clean across both roots" ./zn audit
-check "AC13: during c0114's own execution the engine counts on origin's tracker/next, and merges keep both counters right" lune run tests/run -- "$A/window.spec.luau"
+check "AC12: the real tracker audits with no errors across both roots (an unmoved counter is a warning)" ./zn audit
+check "AC13: the branch never touches tracker/next; the first publish after landing moves the counter to z-nile/next with a tombstone, and only z-nile/next is written after" lune run tests/run -- "$A/window.spec.luau"
 
 finish

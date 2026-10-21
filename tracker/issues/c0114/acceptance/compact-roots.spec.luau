@@ -1,9 +1,11 @@
 --!strict
 -- c0114 AC6: compaction renumbers every item of every project root from one counter, rewrites ids in every root's
 -- documents, refuses while a branch changes z-nile's root, writes the map to z-nile/compaction.txt and the counter to
--- z-nile/next, and leaves z-nile/templates/ alone. Fixture under .cache/c0114-compact (tests/lib/trackerfix).
+-- z-nile/next, and leaves z-nile/templates/ alone. A compaction before origin has moved the counter moves it too: the
+-- old counter file becomes the tombstone, so the two never both parse. Fixture under .cache/c0114-compact (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local ids = require("@znile/engine/ids")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -25,7 +27,7 @@ end
 return t.spec("c0114 compaction spans every project root", function(it)
 	it("sets up items in both roots, a promoted spec folder and a template naming an id", function()
 		f = trackerfix.new("c0114-compact", {
-			["z-nile/next"] = "issue 401 a-b-c\nraft 301 a-b-c\n",
+			["tracker/next"] = "issue 401 a-b-c\nraft 301 a-b-c\n", -- not moved yet
 			["tracker/issues/c0100/c0100.md"] = doc("c0100", "Blocks c0200."),
 			[`{Z}/issues/c0200/c0200.md`] = doc("c0200", "See c0100 and R0300."),
 			[`{Z}/issues/c0200/check.sh`] = `A="{Z}/issues/c0200/acceptance"\n`,
@@ -63,6 +65,7 @@ return t.spec("c0114 compaction spans every project root", function(it)
 		t.expect(fs.isDir(`{wt}/{Z}/issues/c0200`)).toBe(false)
 		t.expect(has(read("z-nile/compaction.txt"), "\nc0200 c0002\n")).toBe(true)
 		t.expect(string.match(read("z-nile/next"), "^issue 3 %S+\nraft 2 %S+\n$") ~= nil).toBe(true)
+		t.expect(read("tracker/next")).toBe(ids.TOMBSTONE)
 		t.expect(fs.isFile(`{wt}/tracker/compaction.txt`)).toBe(false)
 		t.expect(read("z-nile/templates/issue/example.md"))
 			.toBe(`For example c0200, R0300 and {TA}c0200/x.spec.luau.\n`)

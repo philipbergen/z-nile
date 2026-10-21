@@ -3,7 +3,8 @@
 -- check.sh or a spec of an unfinished raft names still works through a forwarder: scripts/tracker.sh, scripts/check.sh,
 -- scripts/setup.sh, scripts/ci-verify.sh, scripts/lib/ac.sh and scripts/affected.luau run the moved file, and each
 -- scripts/tracker/<module>.luau and scripts/lib/{sh,graph,changed}.luau returns the moved module itself. The shared
--- engine files (templates, counter, compaction map) left tracker/; tracker/next stays as a tombstone that never parses.
+-- engine files (templates, compaction map) left tracker/. The counter is never moved by the branch: it is z-nile/next
+-- with a tombstone at tracker/next once origin has moved it (the first publish after landing), and tracker/next before.
 local fs = require("@lune/fs")
 local ids = require("@znile/engine/ids")
 local process = require("@lune/process")
@@ -99,11 +100,10 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 		end
 		t.expect(ids.FILE).toBe("z-nile/next")
 		t.expect(ids.MAP_FILE).toBe("z-nile/compaction.txt")
-		t.expect(ids.parse(fs.readFile("z-nile/next")) ~= nil).toBe(true)
 		t.expect(ids.parseMap(fs.readFile("z-nile/compaction.txt")) ~= nil).toBe(true)
 	end)
 
-	it("nothing of the build is left at its old path, and tracker/next is a tombstone", function()
+	it("nothing of the build is left at its old path, and exactly one counter file is live", function()
 		for _, gone in
 			{
 				"tracker/templates",
@@ -121,10 +121,17 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 				error(`still there: {gone}`)
 			end
 		end
-		-- an engine from before the move reads tracker/next: it must refuse to number, never fall back
-		t.expect(fs.isFile(ids.OLD_FILE)).toBe(true)
 		t.expect(ids.OLD_FILE).toBe("tracker/next")
-		t.expect(ids.parse(fs.readFile(ids.OLD_FILE))).toBe(nil)
+		t.expect(fs.isFile(ids.OLD_FILE)).toBe(true)
+		local old = ids.parse(fs.readFile(ids.OLD_FILE))
+		if fs.isFile(ids.FILE) then
+			-- moved on origin: z-nile/next counts, and an engine from before the move refuses on the tombstone
+			t.expect(ids.parse(fs.readFile(ids.FILE)) ~= nil).toBe(true)
+			t.expect(fs.readFile(ids.OLD_FILE)).toBe(ids.TOMBSTONE)
+		else
+			-- not moved yet (this branch, and main until its first publish after landing): tracker/next still counts
+			t.expect(old ~= nil).toBe(true)
+		end
 	end)
 
 	it("./zn runs the engine from the repository root", function()
