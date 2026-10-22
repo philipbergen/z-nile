@@ -1,6 +1,6 @@
 --!strict
 -- c0120 code review 004 F3: the gate gives every project home's .cache the fence's refusals before it writes there
--- (its builds write <home>/.cache/check*.rbxl), and before --plan, which only reads. A home .cache an unjailed spec
+-- (its builds write each home's check*.rbxl there), and before --plan, which only reads. A home .cache an unjailed spec
 -- swapped for a symlink refuses the gate. Runs --plan only, in a copy under this home's .cache.
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
@@ -43,7 +43,7 @@ return t.spec("c0120 the gate refuses a bad home .cache", function(it)
 		ok, out = plan(dir)
 		t.expect(ok).toBe(false)
 		t.expect(string.find(out, "pickman/.cache is not a plain folder", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(out, "format:", 1, true)).toBe(nil)
+		t.expect((string.find(out, "format:", 1, true))).toBe(nil)
 		fs.removeDir(base)
 	end)
 end)
