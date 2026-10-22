@@ -23,16 +23,43 @@ local function git(argv: { string }): string
 	return r.stdout
 end
 
-local diff = git({
-	"diff",
-	"-U0",
-	"-M",
-	base,
-	head,
-	"--",
-	"pickman/tests/acceptance",
-	"z-nile/tests/acceptance",
-})
+local ACC = { "pickman/tests/acceptance", "z-nile/tests/acceptance" }
+local function diffOf(argv: { string }): string
+	local r = process.exec("git", argv)
+	-- `git diff` of two blobs exits 1 when they differ
+	assert(r.ok or r.code == 1, `git {table.concat(argv, " ")} failed: {r.stderr}`)
+	return r.stdout
+end
+-- A spec promoted since the renames commit (a `done` merged in, code review 006 F1 (c)) is judged against its text in
+-- its item's folder before the move, so only c0120's own edits need markers: its hunks are a blob diff from there.
+local pre = (string.gsub(git({ "rev-parse", base .. "^" }), "%s+$", ""))
+local preTree = git({ "ls-tree", "-r", "--name-only", pre })
+local function before(id: string, rest: string): string?
+	for path in string.gmatch(preTree, "[^\n]+") do
+		local i, r = string.match(path, "/([fdcR]%d%d%d%d)/acceptance/(.+)$")
+		if i == id and r == rest then
+			return path
+		end
+	end
+	return nil
+end
+local parts: { string } = {}
+local argvMain = { "diff", "-U0", "-M", base, head, "--" }
+local status = diffOf({ "diff", "--name-status", "-M", base, head, "--", ACC[1], ACC[2] })
+for line in string.gmatch(status, "[^\n]+") do
+	local st, path = string.match(line, "^(%a)%d*\t([^\t]+)$")
+	local id, rest = if path then string.match(path, "/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$") else nil, nil
+	local old = if st == "A" and id then before(id, rest :: string) else nil
+	if old then
+		local blob = diffOf({ "diff", "-U0", `{pre}:{old}`, `{head}:{path}` })
+		table.insert(parts, `+++ b/{path}\n` .. (string.gsub(blob, "^.-\n%+%+%+ [^\n]*\n", "")))
+		table.insert(argvMain, `:(exclude){path}`)
+	end
+end
+for _, d in ACC do
+	table.insert(argvMain, d)
+end
+local diff = diffOf(argvMain) .. "\n" .. table.concat(parts, "\n")
 local bad: { string } = {}
 local hunks = 0
 local file = ""

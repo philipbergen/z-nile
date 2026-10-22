@@ -8,6 +8,7 @@
 -- Fixture under .cache/c0120-finished (this home's).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local paths = require("@znile/engine/paths")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
 local rewrites = require("./rewrites")
@@ -220,6 +221,21 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		w("tracker/issues/active/f0065/check.sh", "check AC1 true\n")
 		w("tracker/issues/active/f0065/acceptance/a.spec.luau", "-- a\n")
 		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 true\n")
+		-- c0114: unfinished before the move, its promoted specs later carry c0120's overrides (c0114-overrides.patch)
+		w("z-nile/.tracker/issues/c0114/check.sh", "check AC1 true\n")
+		w("z-nile/.tracker/issues/c0114/acceptance/b.spec.luau", "-- b\n")
+		w(
+			"z-nile/.tracker/issues/c0120/c0114-overrides.patch",
+			table.concat({
+				"diff --git a/z-nile/tests/acceptance/c0114/b.spec.luau b/z-nile/tests/acceptance/c0114/b.spec.luau",
+				"--- a/z-nile/tests/acceptance/c0114/b.spec.luau",
+				"+++ b/z-nile/tests/acceptance/c0114/b.spec.luau",
+				"@@ -1 +1,2 @@",
+				"+-- c0120 override: from its home",
+				" -- b",
+				"",
+			}, "\n")
+		)
 		g({ "add", "-A" })
 		g({ "commit", "-qm", "the prep" })
 		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
@@ -287,17 +303,65 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 true\n")
 		step("restore")
 		expectGreen()
-		-- an item finished by a later merge moves to done/: judged there, unchanged is green
-		fs.writeDir(`{OWNFX}/pickman/.tracker/issues/done`)
-		g({ "mv", "pickman/.tracker/issues/active/f0065", "pickman/.tracker/issues/done/f0065" })
+		-- done, as the tracker does it (code review 006 F1): acceptance/ to projects.promotedDir, the folder to done/,
+		-- its check.sh through paths.rewrite; the promoted spec is the same file in its promoted place
+		local reg = projects.load(OWNFX, true)
+		local function finish(id: string, root: string, from: string)
+			local promoted = projects.promotedDir(reg, root, id)
+			fs.writeDir(string.match(`{OWNFX}/{promoted}`, "^(.*)/[^/]+$") :: string)
+			g({ "mv", `{from}/acceptance`, promoted })
+			local done = `{root}/issues/done/{id}`
+			fs.writeDir(`{OWNFX}/{root}/issues/done`)
+			g({ "mv", from, done })
+			w(`{done}/check.sh`, paths.rewrite(fs.readFile(`{OWNFX}/{done}/check.sh`), { [id] = done }))
+			return promoted
+		end
+		local promoted = finish("f0065", "pickman/.tracker", "pickman/.tracker/issues/active/f0065")
+		t.expect(promoted).toBe("pickman/tests/acceptance/f0065")
 		step("f0065 done")
 		expectGreen()
-		-- and its spec edited there: changed
-		w("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau", "-- edited\n")
+		-- its promoted spec edited: changed
+		w("pickman/tests/acceptance/f0065/a.spec.luau", "-- edited\n")
 		step("edit")
-		expectRed("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau: changed")
-		w("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau", "-- a\n")
+		expectRed("pickman/tests/acceptance/f0065/a.spec.luau: changed")
+		w("pickman/tests/acceptance/f0065/a.spec.luau", "-- a\n")
 		step("unedit")
+		-- its promoted spec removed: deleted
+		g({ "rm", "-q", "pickman/tests/acceptance/f0065/a.spec.luau" })
+		step("rm promoted")
+		expectRed("tracker/issues/active/f0065/acceptance/a.spec.luau: deleted")
+		w("pickman/tests/acceptance/f0065/a.spec.luau", "-- a\n")
+		step("restore promoted")
+		expectGreen()
+		-- c0114 done, its promoted spec with c0114-overrides.patch applied: green; one hunk beyond the patch: red
+		finish("c0114", "z-nile/.tracker", "z-nile/.tracker/issues/c0114")
+		w("z-nile/tests/acceptance/c0114/b.spec.luau", "-- c0120 override: from its home\n-- b\n")
+		step("c0114 done")
+		expectGreen()
+		w("z-nile/tests/acceptance/c0114/b.spec.luau", "-- c0120 override: from its home\n-- b\n-- more\n")
+		step("beyond the patch")
+		expectRed("z-nile/tests/acceptance/c0114/b.spec.luau: changed")
+		w("z-nile/tests/acceptance/c0114/b.spec.luau", "-- c0120 override: from its home\n-- b\n")
+		step("back to the patch")
+		expectGreen()
+		-- a duplicate item folder: refused, whichever copy differs (code review 006 F3)
+		w("pickman/.tracker/issues/f0065/check.sh", "check AC1 true\n")
+		step("duplicate")
+		expectRed("duplicate item folders")
+		g({ "rm", "-q", "pickman/.tracker/issues/f0065/check.sh" })
+		step("unduplicate")
+		expectGreen()
+		-- a compaction merged in renumbers f0065: refused, never read as deletions (code review 006 F1 (d))
+		g({ "mv", "pickman/.tracker/issues/done/f0065", "pickman/.tracker/issues/done/f0066" })
+		g({ "mv", "pickman/tests/acceptance/f0065", "pickman/tests/acceptance/f0066" })
+		w("z-nile/compaction.txt", "# a compaction\nf0065 f0066\n")
+		step("compaction")
+		expectRed("f0065 was renumbered to f0066 by a compaction merged in")
+		g({ "mv", "pickman/.tracker/issues/done/f0066", "pickman/.tracker/issues/done/f0065" })
+		g({ "mv", "pickman/tests/acceptance/f0066", "pickman/tests/acceptance/f0065" })
+		g({ "rm", "-q", "z-nile/compaction.txt" })
+		step("uncompacted")
+		expectGreen()
 		-- an edit to its check.sh, with a local prep-c0120 at HEAD carrying it: still red
 		w("z-nile/.tracker/issues/c0120/check.sh", "check nothing\n")
 		step("an edit")
