@@ -183,6 +183,96 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		end
 	)
 
+	-- code review 004 F1 (decided with the user, 2026-10-21: "Reviewer-pinned commit"): c0120's own files are judged
+	-- against the prep commit an approved review records, never a branch ref the author can move
+	it("AC18 judges c0120's own files against the reviewer-recorded prep commit, never a branch", function()
+		local OWNFX = `{here}/.cache/c0120-own`
+		if fs.isDir(OWNFX) then
+			fs.removeDir(OWNFX)
+		end
+		fs.writeDir(OWNFX)
+		local function g(args: { string }): string
+			return fixture.git(OWNFX, args)
+		end
+		local function w(rel: string, text: string)
+			fs.writeDir(string.match(`{OWNFX}/{rel}`, "^(.*)/[^/]+$") :: string)
+			fs.writeFile(`{OWNFX}/{rel}`, text)
+		end
+		local function judge(): (boolean, string)
+			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/finished.luau`
+			if not fs.isFile(script) then
+				script = `{TOP}/z-nile/tests/acceptance/c0120/finished.luau`
+			end
+			local r = process.exec("lune", { "run", script, "--", OWNFX })
+			return r.ok, r.stdout .. r.stderr
+		end
+		t.expect(process.exec("git", { "init", "-q", "-b", "main", OWNFX }).ok).toBe(true)
+		g({ "config", "user.name", "c0120" })
+		g({ "config", "user.email", "c0120@example.invalid" })
+		w(rewrites.MARK, "#!/usr/bin/env bash\n")
+		w("tracker/next", "10\n")
+		w(
+			"z-nile/projects.toml",
+			'[[project]]\nname = "pickman"\nroot = "tracker"\n\n[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
+		)
+		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
+		g({ "add", "-A" })
+		g({ "commit", "-qm", "the prep" })
+		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
+		fs.writeDir(`{OWNFX}/pickman/.tracker`)
+		g({ "mv", "tracker/rafts", "pickman/.tracker/rafts" })
+		w(
+			"z-nile/projects.toml",
+			'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+				.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
+		)
+		g({ "add", "-A" })
+		g({ "commit", "-qm", "the move" })
+		-- no approved review records a reference: refused
+		local ok, out = judge()
+		t.expect(ok).toBe(false)
+		t.expect(string.find(out, 'records a "Prep reference', 1, true) ~= nil).toBe(true)
+		-- an approved review records the prep commit: c0120's check.sh as the prep has it passes
+		w(
+			"z-nile/.tracker/issues/c0120/review-001.md",
+			`# Review\nPrep reference: {prep}\n\nVerdict: approve\n`
+		)
+		g({ "add", "-A" })
+		g({ "commit", "-qm", "review" })
+		ok, out = judge()
+		t.expect(ok).toBe(true)
+		-- an edit to its check.sh, with a local prep-c0120 at HEAD carrying it: still red
+		w("z-nile/.tracker/issues/c0120/check.sh", "check nothing\n")
+		g({ "add", "-A" })
+		g({ "commit", "-qm", "an edit" })
+		g({ "branch", "-f", "prep-c0120", "HEAD" })
+		ok, out = judge()
+		t.expect(ok).toBe(false)
+		t.expect(string.find(out, "z-nile/.tracker/issues/c0120/check.sh: changed", 1, true) ~= nil)
+			.toBe(true)
+		-- a recorded commit the branch doesn't hold: refused
+		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
+		w(
+			"z-nile/.tracker/issues/c0120/review-002.md",
+			"Prep reference: 0123456789abcdef\n\nVerdict: approve\n"
+		)
+		g({ "add", "-A" })
+		g({ "commit", "-qm", "a bad reference" })
+		ok, out = judge()
+		t.expect(ok).toBe(false)
+		t.expect(string.find(out, "is no commit here", 1, true) ~= nil).toBe(true)
+		-- a review that doesn't approve records nothing (its bad reference is not read)
+		w(
+			"z-nile/.tracker/issues/c0120/review-002.md",
+			"Prep reference: 0123456789abcdef\n\nVerdict: changes\n"
+		)
+		g({ "add", "-A" })
+		g({ "commit", "-qm", "changes" })
+		ok, out = judge()
+		t.expect(ok).toBe(true)
+		fs.removeDir(OWNFX)
+	end)
+
 	it("the path from one folder to another", function()
 		t.expect(rewrites.relative("pickman", "pickman/.tracker/x")).toBe(".tracker/x")
 		t.expect(rewrites.relative("pickman", "z-nile/check.sh")).toBe("../z-nile/check.sh")
