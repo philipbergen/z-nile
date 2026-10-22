@@ -15,7 +15,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 | Authority | The **server** simulates every maze. Clients send intents and render the replicated state. A session starts only when its client signals it's ready (user, 2026-09-29). |
 | Two places (2026-10-02) | The experience has two places. The **lobby** (the existing place, the experience's start place) shows a hiscore list and a START GAME button, and a click teleports the player to the **game place**, which hosts the actual game. At game over an overlay shows the results and waits for a tap, then teleports back to the lobby (f0065, after c0063). The hiscore list is an empty panel until R0011 fills it. Both places live in the Beta experience (a repo variable for the game place's id); production stays undecided. (R0024, f0061; c0064) |
 | Deploy | A separate, private **Pickman Beta** experience. Every PR that becomes ready for review is published there (last one wins). Production publishing will be decided later. |
-| Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now. |
+| Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now, except the lobby's "your best" line under the all-time board (user, 2026-10-21, d0124). The all-time board also keeps a top-10 list of runs (see Hiscores). |
 | Platforms | Desktop (keyboard and mouse) and **mobile (touch)**. Gamepad isn't planned; it gets the same intents if it's added later. |
 | Danger awareness (2026-10-01) | **A minimap/radar and edge indicators** show where ghosts are in first person. The indicators give a sense of distance, not just direction: bigger and brighter as the ghost gets closer (R0010, f0033). Audio and a proximity vignette were not chosen. |
 | Slower ghosts (2026-10-01) | Ghosts may be slower than the classic tables, through **one tuning factor** (`Levels.GHOST_TUNING`) on the hunting and frightened ghost speeds, not on eyes. It ships at the classic 1 until the user gives the factor, after a Beta playtest (R0010, f0021). |
@@ -62,6 +62,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 - **Boards:** all-time top N (N **(prep)**, e.g. 50), plus daily and weekly boards keyed by UTC period.
 - **Entries:** the player's Roblox display name and user ID, the score and the level reached.
 - **Submission:** only the server submits, from its own simulated result, at game over. Clients never send scores.
+- **Top-10 runs (2026-10-21, d0124):** besides each player's best row on every board, the all-time board keeps one list of the ten best runs of all players, so one player can hold several places (rows: 10 plus one per player). Only all-time has it; today and this week stay one best row per player. Game over shows the run's place on that list, or that it is not in the all-time top 10. The lobby's all-time panel lists those ten runs and ends with the viewer's own best: the one personal-best line, by the user's choice. Rows stored before the list existed start it, one entry each. (R0044)
 - **Storage:** behind a Logic-facing interface. A fake store is used in tests, and Roblox's ordered store in the adapter. Beta and production have separate stores, because they are separate experiences.
 
 ## Mobile
