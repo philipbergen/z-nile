@@ -102,6 +102,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['*":$1/.cache:"*) ;;'] = "a match on an environment variable; writes nothing (c0120: the ceiling step)",
 		['*) export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$1/.cache" ;;'] = "a path in an environment variable; writes nothing",
 		['echo "fence: cannot write $home/.cache\'s sentinel; refusing. Stop and report this." >&2'] = "a message (c0120)",
+		['pickman_fence_sentinel "$d" || { echo "fence: cannot write $d/.cache\'s sentinel; refusing. Stop and report this." >&2; return 1; }'] = "a message; the sentinel is the fence's rename (pickman_fence_all, c0120 code review 005 F2)",
 		['echo "fence: the jail refused $home/.cache\'s sentinel; its ceiling and every other guard hold" >&2'] = "a message (c0120)",
 		['$home/.cache != "$PICKMAN_TEST_FENCE"/.cache && $home/.cache != "$PICKMAN_TEST_FENCE"/.cache/* ]]; then'] = "a comparison of paths; writes nothing (c0120 review 003 F2)",
 		["if [[ ! -L $here/.cache/.git && -d $here/.cache/.git ]]; then"] = "a read: refuses a sentinel that is a folder (the refusals step)",
