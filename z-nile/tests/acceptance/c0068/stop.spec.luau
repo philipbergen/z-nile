@@ -255,8 +255,8 @@ return t.spec("tracker stop", function(it)
 					.toBe(true)
 			end
 			t.expect(trOk(main, { "status", "R0010" })).toBe("prepared")
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			t.expect(
-				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 				string.sub(
 					git(origin, { "ls-tree", "main", "pickman/.tracker/issues/c0010/experiments/E1.sh" }),
 					1,

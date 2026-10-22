@@ -419,12 +419,17 @@ return t.spec("tracker ready", function(it)
 			end
 			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			t.expect(onOrigin("pickman/.tracker/issues/active/c0010/acceptance/a.spec.luau")).toBe(SPEC)
-			t.expect(string.sub(
-				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-				git(origin, { "ls-tree", "main", "pickman/.tracker/issues/active/c0010/experiments/E1.sh" }),
-				1,
-				6
-			)).toBe("100755")
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			t.expect(
+				string.sub(
+					git(
+						origin,
+						{ "ls-tree", "main", "pickman/.tracker/issues/active/c0010/experiments/E1.sh" }
+					),
+					1,
+					6
+				)
+			).toBe("100755")
 			local stamps: { [string]: boolean } = {}
 			for _, doc in
 				{

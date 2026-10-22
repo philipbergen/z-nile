@@ -436,8 +436,8 @@ return t.spec("tracker spend", function(it)
 		local PREP = "prepared-calm-oak-river"
 		local head = '#!/usr/bin/env bash\nsource "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)'
 			.. '/scripts/lib/ac.sh"\ncheck "AC1: fixture" true\nfinish\n'
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		write(
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			`{other}/pickman/.tracker/rafts/R0961/R0961.md`,
 			"---\nid: R0961\ntype: chore\ntitle: Carried\nslug: carried\nsingle: false\nissues: [c0961, c0962]\n"
 				.. `design: ready\ncreated: 2026-10-06\nstatus: {PREP}\n---\n\n# R0961: Carried\n`
@@ -445,8 +445,8 @@ return t.spec("tracker spend", function(it)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		write(`{other}/pickman/.tracker/rafts/R0961/check.sh`, head)
 		for _, id in { "c0961", "c0962" } do
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			write(
-				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 				`{other}/pickman/.tracker/issues/{id}/{id}.md`,
 				`---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: R0961\ndepends_on: []\nemergent: false\n`
 					.. `design: ready\ncreated: 2026-10-06\nstatus: {PREP}\n---\n\n# {id}\n`
@@ -454,8 +454,8 @@ return t.spec("tracker spend", function(it)
 			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			write(`{other}/pickman/.tracker/issues/{id}/check.sh`, head)
 		end
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		write(
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			`{other}/pickman/.tracker/issues/c0962/spend.md`,
 			"# Spend: c0962 c0962\n\n| # | when | commit | +lines | -lines | minutes | attribution |\n"
 				.. "|---|---|---|---|---|---|---|\n| 1 | 2026-09-29 03:16 | old | 3 | 0 | 2.0 | focus |\n"

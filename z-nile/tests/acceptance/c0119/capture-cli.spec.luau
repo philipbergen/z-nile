@@ -307,8 +307,8 @@ return t.spec("c0119 tracker.sh capture", function(it)
 		-- a renumbered item's capture is its first add at the new id, marked, never another item's capture
 		local _, sixty = capture("c0061")
 		local first = string.match(sixty, "^[^\n]+") :: string
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		t.expect(first).toBe(
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			`capture {SHA.renum60} pickman/.tracker/issues/c0061/c0061.md R0060: prep, with a renumber (no capture commit: first add)`
 		)
 		local _, stub = capture("c0071")
