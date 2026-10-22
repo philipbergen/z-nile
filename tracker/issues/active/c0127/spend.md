@@ -14,6 +14,7 @@
 | 10 | 2026-10-22 18:58 | design-review-005 | 0 | 0 | 30.0 | spend | design-review | 120000 |
 | 11 | 2026-10-22 19:24 | design-refute-005 | 0 | 0 | 40.0 | spend | design-review |  |
 | 12 | 2026-10-22 19:30 | prep | 519 | 1 | 120.0 | spend | prep |  |
+| 13 | 2026-10-22 20:20 | c0127: a reused pid no longer holds the test lock (start ids recorded with each pid) | 140 | 16 | 20.0 | focus | build |  |
 
-**Total:** +519 / -1 lines, 387.0 agent-minutes, 597953 tokens over 12 records
-<!-- totals: added=519 removed=1 minutes=387.0 records=12 tokens=597953 -->
+**Total:** +659 / -17 lines, 407.0 agent-minutes, 597953 tokens over 13 records
+<!-- totals: added=659 removed=17 minutes=407.0 records=13 tokens=597953 -->

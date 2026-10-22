@@ -151,6 +151,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 -- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
 -- rewrite never maps it a second time
 local C0640 = renamed.id("c0640")
+local C0127 = renamed.id("c0127") -- its reuse.spec clears the marker so a copied runner acts as a top-level run
 local EXEMPT: { [string]: boolean } = {
 	["tests/lib/fence.luau"] = true,
 	["scripts/lib/fence.sh"] = true,
@@ -167,6 +168,15 @@ do
 	EXEMPT[`{dir}/fence.spec.luau`] = true
 	EXEMPT[`{dir}/lock.spec.luau`] = true
 	EXEMPT[(string.gsub(dir, "/acceptance$", "")) .. "/check.sh"] = true -- the fence's own checks
+end
+for _, dir in
+	{
+		`tracker/issues/{C0127}/acceptance`,
+		`tracker/issues/active/{C0127}/acceptance`,
+		"tests/acceptance/" .. C0127,
+	}
+do
+	ALLOWED[`{dir}/reuse.spec.luau`] = { PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run" }
 end
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
 local EXEMPT_DIRS = { "scripts/lib/git-hooks/" }
