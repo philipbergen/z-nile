@@ -20,6 +20,7 @@
 | 16 | 2026-10-22 21:01 | R0047: review-001 | 0 | 0 | 30.0 | focus | code-review |  |
 | 17 | 2026-10-22 21:04 | R0047: review-001 F1 F2: read own start id once before waiting; lock-start-ids spec | 245 | 17 | 35.0 | explicit | code-review |  |
 | 18 | 2026-10-22 21:05 | R0047: refute-001 | 0 | 0 | 5.0 | focus | code-review |  |
+| 19 | 2026-10-22 21:10 | R0047: review-002 | 0 | 0 | 3.0 | focus | code-review |  |
 
-**Total:** +904 / -34 lines, 482.0 agent-minutes, 597953 tokens over 18 records
-<!-- totals: added=904 removed=34 minutes=482.0 records=18 tokens=597953 -->
+**Total:** +904 / -34 lines, 485.0 agent-minutes, 597953 tokens over 19 records
+<!-- totals: added=904 removed=34 minutes=485.0 records=19 tokens=597953 -->
