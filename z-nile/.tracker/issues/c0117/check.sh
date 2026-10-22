@@ -29,6 +29,6 @@ check "AC9: the real tree's skill links, lessons and audit stay clean" \
   bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
 check "AC10: the dispatcher controls a run: questions, capture, a nested review, the broker, the tripwire and the watermark, the lifeline, the lock, stop, the call cap and the gates" \
   lune run tests/run -- "$A/control-cli.spec.luau"
-check "AC11: one definition of tracker state, and a broker that pushes only a fast-forward of it, bound to its run" \
+check "AC11: one definition of tracker state (sequestered files judged per item, configuration never), and a broker that pushes only a fast-forward of it, commit by commit, bound to its run" \
   lune run tests/run -- "$A/trackerstate.spec.luau"
 finish

@@ -50,7 +50,6 @@ local function pr(over: { [string]: any }?): dispatch.Pr
 		green = true,
 		mergeable = true,
 		head = "abc123",
-		files = { "tracker/issues/c0010/c0010.md" },
 	}
 	local more_over: { [string]: any } = over or {}
 	for k, v in more_over do
@@ -220,6 +219,22 @@ return t.spec("c0117 dispatch rules", function(it)
 		end
 	)
 
+	it(
+		"a commit is a pull request's merge only when GitHub says it merged into main (review 003 F6)",
+		function()
+			local sha = "abc123"
+			local function answer(base: string, merged: string?, commitSha: string?): string
+				return `[\{"number":12,"merged_at":{if merged then '"' .. merged .. '"' else "null"},"merge_commit_sha":"{commitSha or sha}","base":\{"ref":"{base}"\}\}]`
+			end
+			t.expect(dispatch.prMergedFrom(answer("main", "2026-10-21T00:00:00Z"), sha)).toBe(true)
+			t.expect(dispatch.prMergedFrom(answer("side", "2026-10-21T00:00:00Z"), sha)).toBe(false)
+			t.expect(dispatch.prMergedFrom(answer("main", nil), sha)).toBe(false)
+			t.expect(dispatch.prMergedFrom(answer("main", "2026-10-21T00:00:00Z", "other"), sha)).toBe(false)
+			t.expect(dispatch.prMergedFrom("[]", sha)).toBe(false)
+			t.expect(dispatch.prMergedFrom("not json", sha)).toBe(false)
+		end
+	)
+
 	it("captures, designs, and waits at or passes the prep gate", function()
 		t.expect(act(facts({ kind = "none", where = "none", status = "none", description = "words" })))
 			.toBe("step z-ticket ")
@@ -228,6 +243,15 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(act(facts({ status = "preparing", ownClaim = true }))).toBe("step z-design c0010")
 		t.expect(act(facts({ status = "preparing", ownClaim = false }))).toBe("stop 1")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr() }))).toBe("merge prep 7")
+		-- the dispatcher's judgment of the PR's fetched head (review 003 F5): any refusal waits for a human
+		local judged = dispatch.next(
+			facts({ status = "preparing", ownClaim = true, pr = pr({ judged = "it carries src/x.lua" }) })
+		)
+		t.expect(judged.kind).toBe("stop")
+		t.expect(judged.code).toBe(4)
+		t.expect(has(judged.why or "", "it carries src/x.lua")).toBe(true)
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ head = "" }) })))
+			.toBe("stop 4 prep")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ green = false }) })))
 			.toBe("stop 4 prep")
 		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ draft = true }) })))

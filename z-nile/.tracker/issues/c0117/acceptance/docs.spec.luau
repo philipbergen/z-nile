@@ -108,15 +108,24 @@ return t.spec("c0117 docs", function(it)
 				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 				"`claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`)",
 				"Nothing defaults",
-				"an `agent` table also `max_calls`",
+				"an `agent` table also `max_calls` and `max_minutes`",
+				'- **What the guards are** (the user\'s "Keep same user, accept detection", 2026-10-21).',
+				"none is a security boundary against a determined agent",
+				"**Known limits:**",
+				"A `.models.toml` is never tracker state",
+				"judged per item",
+				"origin's URL as the run pinned it at its start",
+				"A missing watermark is never trusted",
+				"fetched from `refs/pull/<n>/head`",
 				"calls are not tokens, so the user tunes it",
 				'- **The agent credential** (the user\'s "Bot token, no bypass").',
 				"can't merge, bypass `main`'s protection or write protection or rulesets",
 				"Not enforceable: the agent runs as the user",
 				"- **Tracker state from inside a step.**",
 				"- **Tracker state** has one definition",
-				'- **The watermark and the tripwire** (the user\'s "Persisted watermark").',
-				"it never prevents one",
+				'- **The watermark and the tripwire** (the user\'s "Persisted watermark", framed by "Keep same user, accept detection").',
+				"where a well-behaved step never writes, and detects if it changes",
+				"and never prevents one",
 				"`./zn dispatch vet`",
 				"--match-head-commit <head>`",
 				"never forced",
@@ -158,6 +167,7 @@ return t.spec("c0117 docs", function(it)
 		at(readme, 'models[".models.toml: the model and CLI per step"]', "the README picture")
 		absent(readme, "(c0117, planned)", "the README")
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
+		at(readme, "none of them is a security boundary against a determined agent", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)
 

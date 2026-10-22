@@ -8,6 +8,7 @@
 local broker = require("@znile/engine/broker")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local paths = require("@znile/engine/paths")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
@@ -27,7 +28,7 @@ local function e(
 		oldMode = oldMode or (if status == "A" then "000000" else "100644"),
 		newMode = newMode or (if status == "D" then "000000" else "100644"),
 		oldBlob = if status == "A" then "0" else b,
-		newBlob = if status == "D" then "0" else b,
+		newBlob = if status == "D" then "0" elseif status == "M" and not blob then b .. "e" else b,
 		status = status,
 		path = path,
 	}
@@ -109,6 +110,79 @@ return t.spec("c0117 tracker state and the broker", function(it)
 		t.expect(trackerstate.judge({ e("M", check) }, ROOTS)).toBe(nil)
 	end)
 
+	it(
+		"a sequestered file is judged per item: a decoy move, another case, and a new file standing in are refused",
+		function()
+			-- review 003 F1 case S: the item's check.sh "moves" to another item, and a weak one is added in its new folder
+			t.expect(trackerstate.judge({
+				e("D", "tracker/issues/c0091/c0091.md", nil, nil, "d0c"),
+				e("A", "tracker/issues/done/c0091/c0091.md", nil, nil, "d0c"),
+				e("D", "tracker/issues/c0091/check.sh", nil, nil, "f00d"),
+				e("A", "tracker/issues/c0099/check.sh", nil, nil, "f00d"),
+				e("A", "tracker/issues/done/c0091/check.sh", nil, nil, "beef"),
+			}, ROOTS, true) ~= nil).toBe(true)
+			-- a spec moved to another item
+			t.expect(trackerstate.judge({
+				e("D", "tracker/issues/c0091/acceptance/hard.spec.luau", nil, nil, "5bec"),
+				e("A", "tracker/issues/c0099/acceptance/hard.spec.luau", nil, nil, "5bec"),
+			}, ROOTS, true) ~= nil).toBe(true)
+			-- CHECK.SH beside check.sh (macOS would overwrite it), and any sequestered name in another case
+			t.expect(
+				has(
+					trackerstate.judge({ e("A", "tracker/issues/c0091/CHECK.SH") }, ROOTS, true),
+					"another case"
+				)
+			).toBe(true)
+			t.expect(
+				trackerstate.judge({ e("A", "tracker/issues/c0091/Acceptance/x.spec.luau") }, ROOTS, true)
+					~= nil
+			).toBe(true)
+			t.expect(has(
+				trackerstate.judge({ e("A", "tracker/issues/c0091/Notes.md") }, ROOTS, {
+					result = {
+						["tracker/issues/c0091/Notes.md"] = "a",
+						["tracker/issues/c0091/notes.md"] = "b",
+					},
+				}),
+				"only in case"
+			)).toBe(true)
+			-- an item that exists may not gain a sequestered file through the broker; a new one may
+			t.expect(trackerstate.judge({ e("A", "tracker/issues/c0091/check.sh") }, ROOTS, {
+				sequestered = true,
+				base = { ["tracker/issues/c0091/c0091.md"] = "d0c" },
+				result = {
+					["tracker/issues/c0091/c0091.md"] = "d0c",
+					["tracker/issues/c0091/check.sh"] = "f00d",
+				},
+			}) ~= nil).toBe(true)
+			-- a gate's own item may change its own
+			t.expect(trackerstate.judge({ e("M", "tracker/issues/c0091/check.sh") }, ROOTS, {
+				sequestered = true,
+				own = { c0091 = true },
+			})).toBe(nil)
+		end
+	)
+
+	it(
+		"git's and the dispatcher's configuration in any case, and odd path components, are never tracker state",
+		function()
+			t.expect(trackerstate.judge({ e("A", "tracker/.GITATTRIBUTES") }, ROOTS) ~= nil).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/x/.GitModules") }, ROOTS) ~= nil).toBe(true)
+			t.expect(
+				has(
+					trackerstate.judge({ e("A", "tracker/issues/c0106/.models.toml") }, ROOTS),
+					"grants authority"
+				)
+			).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/.MODELS.TOML") }, ROOTS) ~= nil).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/../x") }, ROOTS) ~= nil).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/./x") }, ROOTS) ~= nil).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/.git/config") }, ROOTS) ~= nil).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/caf\\303.md") }, ROOTS) ~= nil).toBe(true)
+			t.expect(trackerstate.judge({ e("A", "tracker/caf\u{e9}.md") }, ROOTS) ~= nil).toBe(true)
+		end
+	)
+
 	it("sets up a fixture repository with a bare origin", function()
 		local root = fixture.physical(".") :: string
 		base = `{root}/.cache/c0117-trackerstate`
@@ -171,6 +245,83 @@ return t.spec("c0117 tracker state and the broker", function(it)
 			t.expect(ok3).toBe(false)
 			t.expect(has(why3, "not a fast-forward")).toBe(true)
 			t.expect(fixture.git(origin, { "rev-parse", "main" })).toBe(good)
+		end
+	)
+
+	it(
+		"the broker refuses the decoy move, a .models.toml, a .GITATTRIBUTES, and a history the watermark would refuse",
+		function()
+			fixture.git(repo, { "reset", "-q", "--hard", fixture.git(origin, { "rev-parse", "main" }) })
+			local start = fixture.git(repo, { "rev-parse", "HEAD" })
+			local function refused(message: string, needle: string?)
+				local sha = commit(message)
+				local ok, why = broker.push(repo, sha, roots)
+				t.expect(ok).toBe(false)
+				if needle then
+					t.expect(has(why, needle)).toBe(true)
+				end
+				t.expect(fixture.git(origin, { "rev-parse", "main" })).toBe(start)
+				fixture.git(repo, { "reset", "-q", "--hard", start })
+			end
+			-- case S: the decoy
+			fs.writeDir(`{repo}/tracker/issues/done/c0010`)
+			fs.writeDir(`{repo}/tracker/issues/c0099`)
+			fixture.git(repo, { "mv", "tracker/issues/c0010/c0010.md", "tracker/issues/done/c0010/c0010.md" })
+			fixture.git(repo, { "mv", "tracker/issues/c0010/check.sh", "tracker/issues/c0099/check.sh" })
+			fs.writeFile(`{repo}/tracker/issues/done/c0010/check.sh`, "exit 0\n")
+			refused("decoy", "sequestered")
+			-- case MT: an item's own settings
+			fs.writeFile(`{repo}/tracker/issues/c0010/.models.toml`, '[dispatch]\nauto_merge = ["prep"]\n')
+			refused("settings", "grants authority")
+			-- case GA
+			fs.writeFile(`{repo}/tracker/.GITATTRIBUTES`, "* -text\n")
+			refused("attributes", ".GITATTRIBUTES")
+			-- case B: code, then its revert: the combined change is empty, the history is not
+			fs.writeFile(`{repo}/c.lua`, "return 1\n")
+			commit("code")
+			fixture.git(repo, { "rm", "-q", "c.lua" })
+			refused("revert", "c.lua")
+		end
+	)
+
+	it(
+		"a ready that rewrites its own check.sh's paths passes the broker; any other change to it does not",
+		function()
+			local start = fixture.git(origin, { "rev-parse", "main" })
+			fixture.git(repo, { "reset", "-q", "--hard", start })
+			fs.writeFile(
+				`{repo}/tracker/issues/c0010/check.sh`,
+				"lune run tests/run -- tracker/issues/c0010/acceptance/a.spec.luau\n"
+			)
+			fs.writeDir(`{repo}/tracker/issues/c0010/acceptance`)
+			fs.writeFile(`{repo}/tracker/issues/c0010/acceptance/a.spec.luau`, "return nil\n")
+			-- (the item's sequestered files change here only by a reviewed PR; the fixture pushes it straight)
+			local seeded = commit("seed the check")
+			fixture.git(repo, { "push", "-q", "origin", "HEAD:main" })
+			local old = fs.readFile(`{repo}/tracker/issues/c0010/check.sh`)
+			fs.writeDir(`{repo}/tracker/issues/active`)
+			-- the move with one more change to the check is refused
+			fixture.git(repo, { "mv", "tracker/issues/c0010", "tracker/issues/active/c0010" })
+			fs.writeFile(`{repo}/tracker/issues/active/c0010/check.sh`, "exit 0\n")
+			local weak = commit("weak ready")
+			local okWeak, whyWeak = broker.push(repo, weak, roots)
+			t.expect(okWeak).toBe(false)
+			t.expect(has(whyWeak, "sequestered")).toBe(true)
+			fixture.git(repo, { "reset", "-q", "--hard", seeded })
+			if fs.isDir(`{repo}/tracker/issues/active/c0010`) then
+				fs.removeDir(`{repo}/tracker/issues/active/c0010`)
+			end
+			-- ready's own rewrite of the paths passes
+			fs.writeDir(`{repo}/tracker/issues/active`)
+			fixture.git(repo, { "mv", "tracker/issues/c0010", "tracker/issues/active/c0010" })
+			fs.writeFile(
+				`{repo}/tracker/issues/active/c0010/check.sh`,
+				paths.rewrite(old, { c0010 = "tracker/issues/active/c0010" })
+			)
+			local ready = commit("ready")
+			local ok, said = broker.push(repo, ready, roots)
+			t.expect(said).toBe("pushed")
+			t.expect(ok).toBe(true)
 		end
 	)
 

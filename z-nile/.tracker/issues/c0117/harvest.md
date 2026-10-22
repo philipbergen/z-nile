@@ -26,3 +26,14 @@
 - design-review-002 F10: architecture/children-need-a-lifeline
 - design-review-002 F11: one-off: a name picked by a check before the folder was made (made atomic)
 - design-review-002 F12: one-off: two numbers said twice and differently
+- design-review-003 F1: architecture/sequestered-files-judged-per-item, testing/seed-every-enumerated-case
+- design-review-003 F2: architecture/guard-state-out-of-reach-or-checked, architecture/tripwire-covers-every-interval
+- design-review-003 F3: architecture/guard-state-out-of-reach-or-checked, testing/derive-after-stripping-overrides
+- design-review-003 F4: architecture/authority-config-is-not-tracker-state
+- design-review-003 F5: architecture/merge-gate-checks-what-it-merges, architecture/one-definition-of-tracker-state
+- design-review-003 F6: architecture/tripwire-covers-every-interval
+- design-review-003 F7: architecture/guard-no-is-explicit
+- design-review-003 F8: architecture/one-definition-of-tracker-state
+- design-review-003 F9: one-off: a flag the usage offered and the command ignored
+- design-review-003 F10: architecture/one-definition-of-tracker-state
+- design-review-003 F11: architecture/merge-gate-checks-what-it-merges

@@ -200,6 +200,15 @@ return t.spec("c0117 adapters", function(it)
 			t.expect(feed("cursor-cli", { '{"type":"surprise"}' }).unknown ~= nil).toBe(true)
 			t.expect(feed("cursor-cli", { "not json" }).unknown ~= nil).toBe(true)
 			t.expect(feed("cursor-app", noIds).unknown ~= nil).toBe(true)
+			-- bare tool calls, no thinking, no assistant line, no id (review 003 F7): each is a turn, and the cap is unknown
+			local bare: { string } = {}
+			for i = 1, 50 do
+				table.insert(bare, `\{"type":"tool_call","subtype":"started","call_id":"x{i}"\}`)
+				table.insert(bare, `\{"type":"tool_call","subtype":"completed","call_id":"x{i}"\}`)
+			end
+			local tools = feed("cursor-cli", bare)
+			t.expect(tools.calls).toBe(50)
+			t.expect(tools.unknown ~= nil).toBe(true)
 			local acc = feed("cursor-cli", AGENT)
 			t.expect(acc.final).toBe(15155 + 28)
 			t.expect(adapters.tokens(acc)).toBe(15183)

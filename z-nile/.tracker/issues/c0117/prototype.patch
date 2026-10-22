@@ -1,9 +1,9 @@
 diff --git a/.models.toml b/.models.toml
 new file mode 100644
-index 00000000..bec08ee5
+index 00000000..d955dcfc
 --- /dev/null
 +++ b/.models.toml
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,137 @@
 +# Which model runs each model step (c0117). Files stack like .gitignore: a .models.toml closer to the work (a
 +# project's home, an issue's folder) replaces only the keys it sets. A step about one issue reads that issue's walk; a
 +# step about a raft takes, for each CLI, the strongest of its members' specs (higher rank, then larger max_tokens).
@@ -43,6 +43,8 @@ index 00000000..bec08ee5
 +runtime = "cursor-cli"
 +# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 +max_calls = 200
++# and a wall-time ceiling, since a stream can hide its calls (fail closed)
++max_minutes = 240
 +max_tokens = 300000
 +
 +[z-design.claude]
@@ -65,6 +67,8 @@ index 00000000..bec08ee5
 +runtime = "cursor-cli"
 +# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 +max_calls = 200
++# and a wall-time ceiling, since a stream can hide its calls (fail closed)
++max_minutes = 240
 +max_tokens = 3000000
 +
 +[z-raft.claude]
@@ -86,6 +90,8 @@ index 00000000..bec08ee5
 +runtime = "cursor-cli"
 +# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 +max_calls = 200
++# and a wall-time ceiling, since a stream can hide its calls (fail closed)
++max_minutes = 240
 +max_tokens = 600000
 +
 +[z-run.claude]
@@ -108,6 +114,8 @@ index 00000000..bec08ee5
 +runtime = "cursor-cli"
 +# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 +max_calls = 200
++# and a wall-time ceiling, since a stream can hide its calls (fail closed)
++max_minutes = 240
 +max_tokens = 12000000
 +
 +# The review model belongs to the CLI (the user's decision): Opus through claude or agent, grok-4.7-xhigh through grok.
@@ -130,6 +138,8 @@ index 00000000..bec08ee5
 +runtime = "cursor-cli"
 +# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 +max_calls = 200
++# and a wall-time ceiling, since a stream can hide its calls (fail closed)
++max_minutes = 240
 +max_tokens = 2000000
 diff --git a/AGENTS.md b/AGENTS.md
 index d63b5de0..7e64b9e4 100644
@@ -316,10 +326,10 @@ index 1bfecaf6..41321e22 100644
  	},
 diff --git a/tests/lib/fakecli.luau b/tests/lib/fakecli.luau
 new file mode 100644
-index 00000000..9e17752a
+index 00000000..aa134875
 --- /dev/null
 +++ b/tests/lib/fakecli.luau
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,239 @@
 +--!strict
 +-- Fake model CLIs for the dispatcher's specs (c0117): `claude`, `grok` and `agent` scripts that print the stream
 +-- lines each real CLI prints (from c0117's probes) and act as a mode file says: `<fakes>/<cli>.<step>`, else
@@ -417,6 +427,10 @@ index 00000000..9e17752a
 +		'reviewer) git status --short > /dev/null; echo "gitstatus=$?" >> "$FAKE_DIR/log"; d=$(./zn find "$id"); printf "# Review 001\\n\\nVerdict: approve\\n" > "$d/design-review-001.md"; '
 +			.. ok
 +			.. " ;;",
++		-- whatever <fakes>/script.sh does, inside the step (a spec's own misbehaving step), with a heartbeat
++		'script) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; sh "$FAKE_DIR/script.sh" >> "$FAKE_DIR/log" 2>&1; echo "script=$?" >> "$FAKE_DIR/log"; kill $hb; '
++			.. ok
++			.. " ;;",
 +		"esac",
 +		"",
 +	}, "\n")
@@ -445,8 +459,8 @@ index 00000000..9e17752a
 +		table.concat({
 +			"#!/bin/sh",
 +			'echo "realgh $*" >> "$FAKE_DIR/log"',
-+			-- a commit is a merged PR's merge commit when <fakes>/merged-<sha> exists (the watermark's PR rule)
-+			'if [ "$1" = api ]; then sha=$(printf "%s" "$2" | sed -n "s#.*/commits/\\([0-9a-f]*\\)/pulls#\\1#p"); [ -n "$sha" ] && [ -f "$FAKE_DIR/merged-$sha" ] && echo 1; exit 0; fi',
++			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (the watermark's PR rule)
++			'if [ "$1" = api ]; then sha=$(printf "%s" "$2" | sed -n "s#.*/commits/\\([0-9a-f]*\\)/pulls#\\1#p"); cat "$FAKE_DIR/pulls-$sha.json" 2>/dev/null || echo "[]"; exit 0; fi',
 +			'if [ "$1" = pr ] && [ "$2" = view ]; then cat "$FAKE_DIR/pr-$3.json" 2>/dev/null || exit 1; exit 0; fi',
 +			'if [ "$1" = pr ] && [ "$2" = merge ]; then for p in "$FAKE_DIR"/pr-*.json; do sed -i.bak "s/\\"OPEN\\"/\\"MERGED\\"/" "$p"; done; exit 0; fi',
 +			"exit 0",
@@ -456,7 +470,47 @@ index 00000000..9e17752a
 +	process.exec("chmod", { "+x", `{bin}/gh` })
 +	local token = `{f.base}/agent-token`
 +	fs.writeFile(token, "fake-agent-token\n")
-+	return { f = f, bin = bin, fakes = fakes, token = token }
++	local h = { f = f, bin = bin, fakes = fakes, token = token }
++	-- the user's first vet: no run trusts a missing watermark (review 003 F2)
++	local vet = fakecli.zn(h, { "dispatch", "vet" })
++	assert(vet.ok, `dispatch vet failed in the fixture: {vet.stdout}{vet.stderr}`)
++	fakecli.clear(h)
++	return h
++end
++
++-- A pull request `n` on the fixture's origin: a commit on main's tip with `files` written and `moves` (from -> to)
++-- made, pushed to `refs/pull/<n>/head` as GitHub keeps it. Returns its sha.
++function fakecli.pullRequest(
++	h: Harness,
++	n: number,
++	files: { [string]: string },
++	moves: { [string]: string }?,
++	message: string?
++): string
++	local other = h.f.other
++	fixture.git(other, { "fetch", "-q", "origin", "main" })
++	fixture.git(other, { "checkout", "-q", "-B", `pr-{n}`, "FETCH_HEAD" })
++	local renames: { [string]: string } = moves or {}
++	for from, to in renames do
++		local parent = string.match(to, "^(.*)/[^/]+$")
++		if parent then
++			fs.writeDir(`{other}/{parent}`)
++		end
++		fixture.git(other, { "mv", from, to })
++	end
++	for path, text in files do
++		local parent = string.match(path, "^(.*)/[^/]+$")
++		if parent then
++			fs.writeDir(`{other}/{parent}`)
++		end
++		fs.writeFile(`{other}/{path}`, text)
++	end
++	fixture.git(other, { "add", "-A" })
++	fixture.git(other, { "commit", "-q", "-m", message or `pull request {n}` })
++	local sha = fixture.git(other, { "rev-parse", "HEAD" })
++	fixture.git(other, { "push", "-q", "-f", "origin", `HEAD:refs/pull/{n}/head` })
++	fixture.git(other, { "checkout", "-q", "main" })
++	return sha
 +end
 +
 +function fakecli.mode(h: Harness, name: string, value: string?)
@@ -543,10 +597,10 @@ index 01ea0ef1..72c3cbd6 100644
  		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/adapters.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/adapters.spec.luau
 new file mode 100644
-index 00000000..631ef0ca
+index 00000000..baeb81ba
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/adapters.spec.luau
-@@ -0,0 +1,269 @@
+@@ -0,0 +1,278 @@
 +--!strict
 +-- c0117 AC6: one adapter per runtime. Each starts its CLI headless and unattended with the flags pinned here, and
 +-- reads its stream into one token count (input + cache writes + output, cache reads left out), the same for every
@@ -749,6 +803,15 @@ index 00000000..631ef0ca
 +			t.expect(feed("cursor-cli", { '{"type":"surprise"}' }).unknown ~= nil).toBe(true)
 +			t.expect(feed("cursor-cli", { "not json" }).unknown ~= nil).toBe(true)
 +			t.expect(feed("cursor-app", noIds).unknown ~= nil).toBe(true)
++			-- bare tool calls, no thinking, no assistant line, no id (review 003 F7): each is a turn, and the cap is unknown
++			local bare: { string } = {}
++			for i = 1, 50 do
++				table.insert(bare, `\{"type":"tool_call","subtype":"started","call_id":"x{i}"\}`)
++				table.insert(bare, `\{"type":"tool_call","subtype":"completed","call_id":"x{i}"\}`)
++			end
++			local tools = feed("cursor-cli", bare)
++			t.expect(tools.calls).toBe(50)
++			t.expect(tools.unknown ~= nil).toBe(true)
 +			local acc = feed("cursor-cli", AGENT)
 +			t.expect(acc.final).toBe(15155 + 28)
 +			t.expect(adapters.tokens(acc)).toBe(15183)
@@ -818,10 +881,10 @@ index 00000000..631ef0ca
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
 new file mode 100644
-index 00000000..e1f101d2
+index 00000000..50b2b1e7
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
-@@ -0,0 +1,433 @@
+@@ -0,0 +1,595 @@
 +--!strict
 +-- c0117 AC10: the dispatcher's control of a run, for real with fake CLIs (@tests/lib/fakecli): the chain stops at
 +-- questions.md and retry keeps the answers; `dispatch new` captures and chains; a review the author starts through the
@@ -829,6 +892,7 @@ index 00000000..e1f101d2
 +-- main through the publish broker; a push past the wrapper trips the wire; a step dies with its dispatcher, a dead
 +-- run is lost (never resumed or signalled), a live run is never dispatched twice, and `stop` signals only a group that
 +-- is still the run's; the merge gates come from the item's own walk. Fixture under .cache/c0117-control.
++local adapters = require("@znile/engine/adapters")
 +local fakecli = require("@tests/lib/fakecli")
 +local fixture = require("@tests/lib/fixture")
 +local fs = require("@lune/fs")
@@ -871,6 +935,7 @@ index 00000000..e1f101d2
 +runtime = "cursor-cli"
 +max_tokens = 5000
 +max_calls = 2
++max_minutes = 60
 +
 +[zz-review.claude]
 +model = "claude-opus-5-5"
@@ -1070,6 +1135,102 @@ index 00000000..e1f101d2
 +		t.expect(zn({ "dispatch", "z-design", "c0010" }).code ~= 5).toBe(true)
 +	end)
 +
++	it("a step that removes or rewrites the watermark trips the wire after that same step", function()
++		local function step(script: string): fixture.Result
++			fakecli.clear(h)
++			fs.writeFile(`{h.fakes}/script.sh`, script)
++			mode("claude", "script")
++			return zn({ "dispatch", "z-design", "c0010" })
++		end
++		local function push(name: string): string
++			return `git fetch -q origin main; git checkout -q -B {name} FETCH_HEAD; echo {name} > {name}.lua; git add {name}.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m {name}; "$ZN_REAL_GIT" push -q origin HEAD:main; `
++		end
++		local removed = step(push("w1") .. [[find "$ZN_WATERMARK_DIR" -name main-seen -exec rm {} \;]])
++		t.expect(removed.code).toBe(5)
++		t.expect(fakecli.state(h, "c0010").outcome).toBe("tripwire")
++		t.expect(has(fakecli.state(h, "c0010").detail, "the watermark changed under this run")).toBe(true)
++		-- between runs a missing watermark is never trusted
++		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
++		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
++		local rewritten =
++			step(push("w2") .. [[git rev-parse HEAD > "$(find "$ZN_WATERMARK_DIR" -name main-seen)"]])
++		t.expect(rewritten.code).toBe(5)
++		t.expect(has(fakecli.state(h, "c0010").detail, "the watermark changed under this run")).toBe(true)
++		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
++		-- no watermark, and an item with no run yet (so no mirror): never trusted on first use
++		do
++			local dir = h.f.base .. "/watermark"
++			local only = ""
++			for _, d in fs.readDir(dir) do
++				only = `{dir}/{d}/main-seen`
++			end
++			local saved = fs.readFile(only)
++			fs.removeFile(only)
++			local first = zn({ "dispatch", "z-design", "c0012" })
++			t.expect(first.code).toBe(5)
++			t.expect(has(first.stdout, "there is no watermark")).toBe(true)
++			fs.writeFile(only, saved)
++		end
++		-- a watermark set back between runs (to a commit main still has) is behind the item's mirror
++		fakecli.clear(h)
++		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
++		local mark = h.f.base .. "/watermark"
++		local file = ""
++		for _, d in fs.readDir(mark) do
++			file = `{mark}/{d}/main-seen`
++		end
++		local now = fs.readFile(file)
++		fs.writeFile(file, fixture.git(h.f.origin, { "rev-parse", "main~2" }) .. "\n")
++		local back = zn({ "dispatch", "z-design", "c0010" })
++		t.expect(back.code).toBe(5)
++		t.expect(has(back.stdout, "the watermark went back")).toBe(true)
++		fs.writeFile(file, now)
++	end)
++
++	it(
++		"a step that repoints origin, or adds a push URL, trips the wire; a URL changed between runs stops the next",
++		function()
++			local function step(script: string): fixture.Result
++				fakecli.clear(h)
++				fs.writeFile(`{h.fakes}/script.sh`, script)
++				mode("claude", "script")
++				return zn({ "dispatch", "z-design", "c0010" })
++			end
++			local frozen = `{h.f.base}/frozen.git`
++			fixture.git(h.f.main, { "clone", "-q", "--bare", h.f.origin, frozen })
++			local blind = step(
++				`git fetch -q origin main; git checkout -q -B r FETCH_HEAD; echo r > r.lua; git add r.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m r; "$ZN_REAL_GIT" push -q origin HEAD:main; git config remote.origin.url {frozen}; git config remote.origin.pushurl {h.f.origin}`
++			)
++			t.expect(blind.code).toBe(5)
++			t.expect(has(fakecli.state(h, "c0010").detail, "origin's configuration changed during the step"))
++				.toBe(true)
++			fixture.git(h.f.main, { "config", "--unset", "remote.origin.pushurl" })
++			-- the URL as the step left it, at the next run: changed since the last run
++			local next = zn({ "dispatch", "z-design", "c0010" })
++			t.expect(next.code).toBe(5)
++			t.expect(has(next.stdout, "origin's URL changed since the last run")).toBe(true)
++			fixture.git(h.f.main, { "config", "remote.origin.url", h.f.origin })
++			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
++			local pushurl = step(`git config remote.origin.pushurl {frozen}`)
++			t.expect(pushurl.code).toBe(5)
++			fixture.git(h.f.main, { "config", "--unset", "remote.origin.pushurl" })
++			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
++		end
++	)
++
++	it("vet --dry-run lists what it would accept and writes nothing", function()
++		fakecli.clear(h)
++		trackerfix.elsewhere(h.f, { ["src/dry.lua"] = "return 1\n" }, "a code commit")
++		local dry = zn({ "dispatch", "vet", "--dry-run" })
++		t.expect(dry.ok).toBe(true)
++		t.expect(has(dry.stdout, "NOT VETTED, you accept it")).toBe(true)
++		t.expect(has(dry.stdout, "src/dry.lua")).toBe(true)
++		t.expect(has(dry.stdout, "dry run: nothing written")).toBe(true)
++		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
++		local vet = zn({ "dispatch", "vet" })
++		t.expect(has(vet.stdout, "main vetted at")).toBe(true)
++	end)
++
 +	it("a detached process's late code push after a step is caught at the next run", function()
 +		fakecli.clear(h)
 +		mode("claude", "late")
@@ -1087,6 +1248,30 @@ index 00000000..e1f101d2
 +		t.expect(next.code).toBe(5)
 +		t.expect(has(next.stdout, "late.lua")).toBe(true)
 +		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
++	end)
++
++	it("a cursor step that never shows a call still stops at its wall-time ceiling (max_minutes)", function()
++		local dir = `{h.f.base}/wall`
++		fs.writeDir(dir)
++		local r = runner.run({
++			-- calls with ids, one a second: under max_calls, never quiet, never unknown
++			argv = {
++				"sh",
++				"-c",
++				[[i=0; while :; do i=$((i+1)); echo '{"type":"assistant","message":{"content":[]},"model_call_id":"m-'$i'"}'; echo '{"type":"user"}'; sleep 0.2; done]],
++			},
++			cwd = dir,
++			env = { PATH = process.env.PATH or "" },
++			adapter = adapters.get("cursor-cli"),
++			cap = 1000000,
++			maxCalls = 1000,
++			maxSeconds = 1,
++			stallSeconds = 30,
++			toolSeconds = 30,
++			stateDir = dir,
++		})
++		t.expect(r.outcome).toBe("cap")
++		t.expect(has(r.detail, "of wall time")).toBe(true)
 +	end)
 +
 +	it("a stop while the step is starting is a request, never a lost run", function()
@@ -1209,58 +1394,98 @@ index 00000000..e1f101d2
 +			local url = "https://github.com/zn-fixture/c0117.git"
 +			fixture.git(h.f.main, { "config", `url.{h.f.origin}.insteadOf`, url })
 +			fixture.git(h.f.main, { "remote", "set-url", "origin", url })
-+			for _, slug in { "seventh-thing", "eighth-thing" } do
-+				fs.writeFile(
-+					`{h.fakes}/pr-prep-{slug}.json`,
-+					'{"number":7,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],'
-+						.. `"headRefOid":"feedface","files":[\{"path":"tracker/issues/{if slug
-+								== "seventh-thing"
-+							then "c0070"
-+							else "c0080"}/x.md"\}]\}`
-+				)
++			-- each PR is a real head on origin (refs/pull/<n>/head), which the gate fetches and judges (review 003 F5)
++			local function prJson(n: number, head: string): string
++				return `\{"number":{n},"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{head}"\}`
 +			end
++			local head7 = fakecli.pullRequest(h, 7, { ["tracker/issues/c0070/x.md"] = "notes\n" })
++			fs.writeFile(`{h.fakes}/pr-prep-seventh-thing.json`, prJson(7, head7))
 +			mode("claude", "claim")
 +			-- auto_merge = ["prep"] at the root: the dispatcher merges, then sees origin unchanged and stops
 +			local merged = zn({ "dispatch", "c0070" })
-+			t.expect(has(fakecli.log(h), "realgh pr merge 7 --squash --match-head-commit feedface"))
-+				.toBe(true)
++			t.expect(has(fakecli.log(h), `realgh pr merge 7 --squash --match-head-commit {head7}`)).toBe(true)
 +			t.expect(merged.code).toBe(1)
 +			t.expect(has(merged.stdout, "merged but origin/main does not show it")).toBe(true)
 +			-- an item-level auto_merge = [] wins: the chain waits at the gate, and nothing is merged
-+			fs.writeFile(
-+				`{h.fakes}/pr-prep-eighth-thing.json`,
-+				'{"number":8,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],'
-+					.. '"headRefOid":"beef","files":[{"path":"tracker/issues/c0080/c0080.md"}]}'
-+			)
++			local head8 = fakecli.pullRequest(h, 8, { ["tracker/issues/c0080/x.md"] = "notes\n" })
++			fs.writeFile(`{h.fakes}/pr-prep-eighth-thing.json`, prJson(8, head8))
 +			local waiting = zn({ "dispatch", "c0080" })
 +			t.expect(waiting.code).toBe(4)
 +			t.expect(has(waiting.stdout, "#8 waits for a merge")).toBe(true)
 +			t.expect(has(fakecli.log(h), "realgh pr merge 8")).toBe(false)
-+			-- a prep PR that carries code waits for a human, whatever auto_merge says
-+			fs.writeFile(
-+				`{h.fakes}/pr-prep-tenth-thing.json`,
-+				'{"number":9,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],'
-+					.. '"headRefOid":"c0de","files":[{"path":"tracker/issues/c0091/c0091.md"},{"path":"src/x.lua"}]}'
++			-- a prep PR whose head carries code waits for a human, whatever auto_merge says
++			local head9 = fakecli.pullRequest(
++				h,
++				9,
++				{ ["tracker/issues/c0091/x.md"] = "x\n", ["src/x.lua"] = "return 1\n" }
 +			)
++			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(9, head9))
 +			local carries = zn({ "dispatch", "c0091" })
 +			t.expect(carries.code).toBe(4)
-+			t.expect(has(carries.stdout, "carries src/x.lua")).toBe(true)
++			t.expect(has(carries.stdout, "src/x.lua")).toBe(true)
 +			t.expect(has(fakecli.log(h), "realgh pr merge 9")).toBe(false)
-+			-- a code commit on main that GitHub reports as a pull request's merge is vetted
++			-- a prep PR that touches another item's documents waits too
++			local other = fakecli.pullRequest(h, 14, { ["tracker/issues/c0070/y.md"] = "y\n" })
++			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(14, other))
++			local elsewhere = zn({ "dispatch", "c0091" })
++			t.expect(elsewhere.code).toBe(4)
++			t.expect(has(elsewhere.stdout, "outside the issue's own folder")).toBe(true)
++			-- a rename of code into the issue's folder: gh would list only the new path; the head's raw diff shows both
++			trackerfix.elsewhere(h.f, { ["src/guard.lua"] = "return 1\n" }, "code a human merged")
++			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
++			local head10 = fakecli.pullRequest(
++				h,
++				10,
++				{},
++				{ ["src/guard.lua"] = "tracker/issues/c0091/guard.lua" }
++			)
++			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(10, head10))
++			local renamed = zn({ "dispatch", "c0091" })
++			t.expect(renamed.code).toBe(4)
++			t.expect(has(renamed.stdout, "src/guard.lua")).toBe(true)
++			t.expect(has(fakecli.log(h), "realgh pr merge 10")).toBe(false)
++			-- the issue's own .models.toml in a prep PR: configuration that grants authority, a human's (review 003 F4)
++			local head11 = fakecli.pullRequest(
++				h,
++				11,
++				{ ["tracker/issues/c0091/.models.toml"] = '[dispatch]\nauto_merge = ["prep"]\n' }
++			)
++			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(11, head11))
++			t.expect(has(zn({ "dispatch", "c0091" }).stdout, "configuration")).toBe(true)
++			-- a head gh reports that isn't the one on origin waits
++			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(9, head7))
++			local stale = zn({ "dispatch", "c0091" })
++			t.expect(stale.code).toBe(4)
++			t.expect(has(stale.stdout, "is not the head GitHub reports")).toBe(true)
++			-- a code commit on main that GitHub reports as a pull request's merge into main is vetted; into another
++			-- branch, never (review 003 F6)
++			trackerfix.elsewhere(h.f, { ["src/side.lua"] = "return 1\n" }, "merged into a side branch")
++			local side = fixture.git(h.f.origin, { "rev-parse", "main" })
++			fs.writeFile(
++				`{h.fakes}/pulls-{side}.json`,
++				`[\{"number":12,"merged_at":"2026-10-21T00:00:00Z","merge_commit_sha":"{side}","base":\{"ref":"side"\}\}]`
++			)
++			local sideRun = zn({ "dispatch", "c0099" })
++			t.expect(sideRun.code).toBe(5)
++			t.expect(has(sideRun.stdout, "src/side.lua")).toBe(true)
++			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 +			trackerfix.elsewhere(h.f, { ["src/merged.lua"] = "return 1\n" }, "a merged PR")
 +			local sha = fixture.git(h.f.origin, { "rev-parse", "main" })
-+			fs.writeFile(`{h.fakes}/merged-{sha}`, "1\n")
++			fs.writeFile(
++				`{h.fakes}/pulls-{sha}.json`,
++				`[\{"number":13,"merged_at":"2026-10-21T00:00:00Z","merge_commit_sha":"{sha}","base":\{"ref":"main"\}\}]`
++			)
 +			t.expect(zn({ "dispatch", "z-design", "c0010", "--dry-run" }).ok).toBe(true)
-+			t.expect(zn({ "dispatch", "c0010" }).code ~= 5).toBe(true)
++			t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
 +		end
 +	)
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/dispatch-cli.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/dispatch-cli.spec.luau
 new file mode 100644
-index 00000000..4b27e1ea
+index 00000000..5403a567
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/dispatch-cli.spec.luau
-@@ -0,0 +1,338 @@
+@@ -0,0 +1,339 @@
 +--!strict
 +-- c0117 AC6: `./zn dispatch` runs one model step for real, with fake CLIs (@tests/lib/fakecli). It runs in its worktree
 +-- with the wrapper first on PATH, the agent's own token (never the user's) and a prompt that names its skill; it moves
@@ -1303,6 +1528,7 @@ index 00000000..4b27e1ea
 +runtime = "cursor-cli"
 +max_tokens = 5000
 +max_calls = 30
++max_minutes = 60
 +
 +[z-ready.claude]
 +model = "nobody"
@@ -1384,7 +1610,7 @@ index 00000000..4b27e1ea
 +				"step=z-design id=c0010 kind=model",
 +				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5 rank=3 max_tokens=5000",
 +				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
-+				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30",
++				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60",
 +			})
 +			local closer = zn({ "dispatch", "z-design", "c0020", "--dry-run" })
 +			t.expect(
@@ -1601,10 +1827,10 @@ index 00000000..4b27e1ea
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/dispatch.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/dispatch.spec.luau
 new file mode 100644
-index 00000000..98fcab90
+index 00000000..f072e11e
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/dispatch.spec.luau
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,339 @@
 +--!strict
 +-- c0117 AC3, AC4, AC5: which steps are scripts and which need a model (every z-nile skill classified, an unknown
 +-- name an error), the prompt a model step gets (the skill's file and the lessons command, nothing pasted), and the
@@ -1657,7 +1883,6 @@ index 00000000..98fcab90
 +		green = true,
 +		mergeable = true,
 +		head = "abc123",
-+		files = { "tracker/issues/c0010/c0010.md" },
 +	}
 +	local more_over: { [string]: any } = over or {}
 +	for k, v in more_over do
@@ -1827,6 +2052,22 @@ index 00000000..98fcab90
 +		end
 +	)
 +
++	it(
++		"a commit is a pull request's merge only when GitHub says it merged into main (review 003 F6)",
++		function()
++			local sha = "abc123"
++			local function answer(base: string, merged: string?, commitSha: string?): string
++				return `[\{"number":12,"merged_at":{if merged then '"' .. merged .. '"' else "null"},"merge_commit_sha":"{commitSha or sha}","base":\{"ref":"{base}"\}\}]`
++			end
++			t.expect(dispatch.prMergedFrom(answer("main", "2026-10-21T00:00:00Z"), sha)).toBe(true)
++			t.expect(dispatch.prMergedFrom(answer("side", "2026-10-21T00:00:00Z"), sha)).toBe(false)
++			t.expect(dispatch.prMergedFrom(answer("main", nil), sha)).toBe(false)
++			t.expect(dispatch.prMergedFrom(answer("main", "2026-10-21T00:00:00Z", "other"), sha)).toBe(false)
++			t.expect(dispatch.prMergedFrom("[]", sha)).toBe(false)
++			t.expect(dispatch.prMergedFrom("not json", sha)).toBe(false)
++		end
++	)
++
 +	it("captures, designs, and waits at or passes the prep gate", function()
 +		t.expect(act(facts({ kind = "none", where = "none", status = "none", description = "words" })))
 +			.toBe("step z-ticket ")
@@ -1835,6 +2076,15 @@ index 00000000..98fcab90
 +		t.expect(act(facts({ status = "preparing", ownClaim = true }))).toBe("step z-design c0010")
 +		t.expect(act(facts({ status = "preparing", ownClaim = false }))).toBe("stop 1")
 +		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr() }))).toBe("merge prep 7")
++		-- the dispatcher's judgment of the PR's fetched head (review 003 F5): any refusal waits for a human
++		local judged = dispatch.next(
++			facts({ status = "preparing", ownClaim = true, pr = pr({ judged = "it carries src/x.lua" }) })
++		)
++		t.expect(judged.kind).toBe("stop")
++		t.expect(judged.code).toBe(4)
++		t.expect(has(judged.why or "", "it carries src/x.lua")).toBe(true)
++		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ head = "" }) })))
++			.toBe("stop 4 prep")
 +		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ green = false }) })))
 +			.toBe("stop 4 prep")
 +		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr({ draft = true }) })))
@@ -1922,10 +2172,10 @@ index 00000000..98fcab90
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
 new file mode 100644
-index 00000000..5f1e1e8b
+index 00000000..88bf4607
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,204 @@
 +--!strict
 +-- c0117 AC14: the skills, the README, AGENTS.md, the usage and the prompt template say what the design's Docs part
 +-- says: the headless rules in every model step's skill, word for word; the review model of the CLI wherever a skill
@@ -2036,15 +2286,24 @@ index 00000000..5f1e1e8b
 +				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 +				"`claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`)",
 +				"Nothing defaults",
-+				"an `agent` table also `max_calls`",
++				"an `agent` table also `max_calls` and `max_minutes`",
++				'- **What the guards are** (the user\'s "Keep same user, accept detection", 2026-10-21).',
++				"none is a security boundary against a determined agent",
++				"**Known limits:**",
++				"A `.models.toml` is never tracker state",
++				"judged per item",
++				"origin's URL as the run pinned it at its start",
++				"A missing watermark is never trusted",
++				"fetched from `refs/pull/<n>/head`",
 +				"calls are not tokens, so the user tunes it",
 +				'- **The agent credential** (the user\'s "Bot token, no bypass").',
 +				"can't merge, bypass `main`'s protection or write protection or rulesets",
 +				"Not enforceable: the agent runs as the user",
 +				"- **Tracker state from inside a step.**",
 +				"- **Tracker state** has one definition",
-+				'- **The watermark and the tripwire** (the user\'s "Persisted watermark").',
-+				"it never prevents one",
++				'- **The watermark and the tripwire** (the user\'s "Persisted watermark", framed by "Keep same user, accept detection").',
++				"where a well-behaved step never writes, and detects if it changes",
++				"and never prevents one",
 +				"`./zn dispatch vet`",
 +				"--match-head-commit <head>`",
 +				"never forced",
@@ -2086,6 +2345,7 @@ index 00000000..5f1e1e8b
 +		at(readme, 'models[".models.toml: the model and CLI per step"]', "the README picture")
 +		absent(readme, "(c0117, planned)", "the README")
 +		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
++		at(readme, "none of them is a security boundary against a determined agent", "the README")
 +		at(readme, "- **`.models.toml`.**", "the README")
 +	end)
 +
@@ -2308,10 +2568,10 @@ index 00000000..6bb52c75
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/models.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/models.spec.luau
 new file mode 100644
-index 00000000..35b11ae7
+index 00000000..c1cf10e4
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/models.spec.luau
-@@ -0,0 +1,344 @@
+@@ -0,0 +1,352 @@
 +--!strict
 +-- c0117 AC1, AC2: .models.toml stacks like .gitignore (a closer file replaces only the keys it sets), a raft takes the
 +-- stronger spec whole per CLI (higher rank, then larger max_tokens), only the three CLIs and their runtimes exist,
@@ -2551,7 +2811,7 @@ index 00000000..35b11ae7
 +		)).toBe(true)
 +	end)
 +
-+	it("agent's specs need max_calls, never unlimited; the other CLIs' don't", function()
++	it("agent's specs need max_calls and max_minutes, never unlimited; the other CLIs' don't", function()
 +		local base =
 +			'order = ["agent", "claude"]\n[z-design.agent]\nmodel = "m"\nrank = 1\nruntime = "cursor-cli"\nmax_tokens = 5\n'
 +		local e = errorOf(function()
@@ -2559,8 +2819,16 @@ index 00000000..35b11ae7
 +		end)
 +		t.expect(has(e, "z-design.agent: no max_calls")).toBe(true)
 +		t.expect(has(e, "calls are not tokens")).toBe(true)
-+		local r = models.resolve({ layer(base .. "max_calls = 30\n") }, "z-design")
++		-- and a wall-time ceiling beside it (review 003 F7)
++		t.expect(has(
++			errorOf(function()
++				models.resolve({ layer(base .. "max_calls = 30\n") }, "z-design")
++			end),
++			"z-design.agent: no max_minutes"
++		)).toBe(true)
++		local r = models.resolve({ layer(base .. "max_calls = 30\nmax_minutes = 60\n") }, "z-design")
 +		t.expect(r.specs.agent.maxCalls).toBe(30)
++		t.expect(r.specs.agent.maxMinutes).toBe(60)
 +		t.expect(models.resolve({ layer(ROOT) }, "z-design").specs.claude.maxCalls).toBe(nil)
 +		t.expect(has(
 +			errorOf(function()
@@ -2608,7 +2876,7 @@ index 00000000..35b11ae7
 +		function()
 +			local function review(cli: string, model: string, effort: string?): string?
 +				local text =
-+					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\nmax_calls = 9\n`
++					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\nmax_calls = 9\nmax_minutes = 9\n`
 +				if effort then
 +					text ..= `effort = "{effort}"\n`
 +				end
@@ -2658,10 +2926,10 @@ index 00000000..35b11ae7
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/trackerstate.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/trackerstate.spec.luau
 new file mode 100644
-index 00000000..a9c26773
+index 00000000..4fe708bb
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/trackerstate.spec.luau
-@@ -0,0 +1,216 @@
+@@ -0,0 +1,367 @@
 +--!strict
 +-- c0117 AC11: one definition of tracker state (design review 002 F1 to F3, F7), shared by the wrapper, the publish
 +-- broker, the tripwire and the watermark: git's raw diff with renames off and both sides' modes; only paths under a
@@ -2672,6 +2940,7 @@ index 00000000..a9c26773
 +local broker = require("@znile/engine/broker")
 +local fixture = require("@tests/lib/fixture")
 +local fs = require("@lune/fs")
++local paths = require("@znile/engine/paths")
 +local process = require("@lune/process")
 +local serde = require("@lune/serde")
 +local t = require("@tests/lib/t")
@@ -2691,7 +2960,7 @@ index 00000000..a9c26773
 +		oldMode = oldMode or (if status == "A" then "000000" else "100644"),
 +		newMode = newMode or (if status == "D" then "000000" else "100644"),
 +		oldBlob = if status == "A" then "0" else b,
-+		newBlob = if status == "D" then "0" else b,
++		newBlob = if status == "D" then "0" elseif status == "M" and not blob then b .. "e" else b,
 +		status = status,
 +		path = path,
 +	}
@@ -2773,6 +3042,79 @@ index 00000000..a9c26773
 +		t.expect(trackerstate.judge({ e("M", check) }, ROOTS)).toBe(nil)
 +	end)
 +
++	it(
++		"a sequestered file is judged per item: a decoy move, another case, and a new file standing in are refused",
++		function()
++			-- review 003 F1 case S: the item's check.sh "moves" to another item, and a weak one is added in its new folder
++			t.expect(trackerstate.judge({
++				e("D", "tracker/issues/c0091/c0091.md", nil, nil, "d0c"),
++				e("A", "tracker/issues/done/c0091/c0091.md", nil, nil, "d0c"),
++				e("D", "tracker/issues/c0091/check.sh", nil, nil, "f00d"),
++				e("A", "tracker/issues/c0099/check.sh", nil, nil, "f00d"),
++				e("A", "tracker/issues/done/c0091/check.sh", nil, nil, "beef"),
++			}, ROOTS, true) ~= nil).toBe(true)
++			-- a spec moved to another item
++			t.expect(trackerstate.judge({
++				e("D", "tracker/issues/c0091/acceptance/hard.spec.luau", nil, nil, "5bec"),
++				e("A", "tracker/issues/c0099/acceptance/hard.spec.luau", nil, nil, "5bec"),
++			}, ROOTS, true) ~= nil).toBe(true)
++			-- CHECK.SH beside check.sh (macOS would overwrite it), and any sequestered name in another case
++			t.expect(
++				has(
++					trackerstate.judge({ e("A", "tracker/issues/c0091/CHECK.SH") }, ROOTS, true),
++					"another case"
++				)
++			).toBe(true)
++			t.expect(
++				trackerstate.judge({ e("A", "tracker/issues/c0091/Acceptance/x.spec.luau") }, ROOTS, true)
++					~= nil
++			).toBe(true)
++			t.expect(has(
++				trackerstate.judge({ e("A", "tracker/issues/c0091/Notes.md") }, ROOTS, {
++					result = {
++						["tracker/issues/c0091/Notes.md"] = "a",
++						["tracker/issues/c0091/notes.md"] = "b",
++					},
++				}),
++				"only in case"
++			)).toBe(true)
++			-- an item that exists may not gain a sequestered file through the broker; a new one may
++			t.expect(trackerstate.judge({ e("A", "tracker/issues/c0091/check.sh") }, ROOTS, {
++				sequestered = true,
++				base = { ["tracker/issues/c0091/c0091.md"] = "d0c" },
++				result = {
++					["tracker/issues/c0091/c0091.md"] = "d0c",
++					["tracker/issues/c0091/check.sh"] = "f00d",
++				},
++			}) ~= nil).toBe(true)
++			-- a gate's own item may change its own
++			t.expect(trackerstate.judge({ e("M", "tracker/issues/c0091/check.sh") }, ROOTS, {
++				sequestered = true,
++				own = { c0091 = true },
++			})).toBe(nil)
++		end
++	)
++
++	it(
++		"git's and the dispatcher's configuration in any case, and odd path components, are never tracker state",
++		function()
++			t.expect(trackerstate.judge({ e("A", "tracker/.GITATTRIBUTES") }, ROOTS) ~= nil).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/x/.GitModules") }, ROOTS) ~= nil).toBe(true)
++			t.expect(
++				has(
++					trackerstate.judge({ e("A", "tracker/issues/c0106/.models.toml") }, ROOTS),
++					"grants authority"
++				)
++			).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/.MODELS.TOML") }, ROOTS) ~= nil).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/../x") }, ROOTS) ~= nil).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/./x") }, ROOTS) ~= nil).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/.git/config") }, ROOTS) ~= nil).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/caf\\303.md") }, ROOTS) ~= nil).toBe(true)
++			t.expect(trackerstate.judge({ e("A", "tracker/caf\u{e9}.md") }, ROOTS) ~= nil).toBe(true)
++		end
++	)
++
 +	it("sets up a fixture repository with a bare origin", function()
 +		local root = fixture.physical(".") :: string
 +		base = `{root}/.cache/c0117-trackerstate`
@@ -2835,6 +3177,83 @@ index 00000000..a9c26773
 +			t.expect(ok3).toBe(false)
 +			t.expect(has(why3, "not a fast-forward")).toBe(true)
 +			t.expect(fixture.git(origin, { "rev-parse", "main" })).toBe(good)
++		end
++	)
++
++	it(
++		"the broker refuses the decoy move, a .models.toml, a .GITATTRIBUTES, and a history the watermark would refuse",
++		function()
++			fixture.git(repo, { "reset", "-q", "--hard", fixture.git(origin, { "rev-parse", "main" }) })
++			local start = fixture.git(repo, { "rev-parse", "HEAD" })
++			local function refused(message: string, needle: string?)
++				local sha = commit(message)
++				local ok, why = broker.push(repo, sha, roots)
++				t.expect(ok).toBe(false)
++				if needle then
++					t.expect(has(why, needle)).toBe(true)
++				end
++				t.expect(fixture.git(origin, { "rev-parse", "main" })).toBe(start)
++				fixture.git(repo, { "reset", "-q", "--hard", start })
++			end
++			-- case S: the decoy
++			fs.writeDir(`{repo}/tracker/issues/done/c0010`)
++			fs.writeDir(`{repo}/tracker/issues/c0099`)
++			fixture.git(repo, { "mv", "tracker/issues/c0010/c0010.md", "tracker/issues/done/c0010/c0010.md" })
++			fixture.git(repo, { "mv", "tracker/issues/c0010/check.sh", "tracker/issues/c0099/check.sh" })
++			fs.writeFile(`{repo}/tracker/issues/done/c0010/check.sh`, "exit 0\n")
++			refused("decoy", "sequestered")
++			-- case MT: an item's own settings
++			fs.writeFile(`{repo}/tracker/issues/c0010/.models.toml`, '[dispatch]\nauto_merge = ["prep"]\n')
++			refused("settings", "grants authority")
++			-- case GA
++			fs.writeFile(`{repo}/tracker/.GITATTRIBUTES`, "* -text\n")
++			refused("attributes", ".GITATTRIBUTES")
++			-- case B: code, then its revert: the combined change is empty, the history is not
++			fs.writeFile(`{repo}/c.lua`, "return 1\n")
++			commit("code")
++			fixture.git(repo, { "rm", "-q", "c.lua" })
++			refused("revert", "c.lua")
++		end
++	)
++
++	it(
++		"a ready that rewrites its own check.sh's paths passes the broker; any other change to it does not",
++		function()
++			local start = fixture.git(origin, { "rev-parse", "main" })
++			fixture.git(repo, { "reset", "-q", "--hard", start })
++			fs.writeFile(
++				`{repo}/tracker/issues/c0010/check.sh`,
++				"lune run tests/run -- tracker/issues/c0010/acceptance/a.spec.luau\n"
++			)
++			fs.writeDir(`{repo}/tracker/issues/c0010/acceptance`)
++			fs.writeFile(`{repo}/tracker/issues/c0010/acceptance/a.spec.luau`, "return nil\n")
++			-- (the item's sequestered files change here only by a reviewed PR; the fixture pushes it straight)
++			local seeded = commit("seed the check")
++			fixture.git(repo, { "push", "-q", "origin", "HEAD:main" })
++			local old = fs.readFile(`{repo}/tracker/issues/c0010/check.sh`)
++			fs.writeDir(`{repo}/tracker/issues/active`)
++			-- the move with one more change to the check is refused
++			fixture.git(repo, { "mv", "tracker/issues/c0010", "tracker/issues/active/c0010" })
++			fs.writeFile(`{repo}/tracker/issues/active/c0010/check.sh`, "exit 0\n")
++			local weak = commit("weak ready")
++			local okWeak, whyWeak = broker.push(repo, weak, roots)
++			t.expect(okWeak).toBe(false)
++			t.expect(has(whyWeak, "sequestered")).toBe(true)
++			fixture.git(repo, { "reset", "-q", "--hard", seeded })
++			if fs.isDir(`{repo}/tracker/issues/active/c0010`) then
++				fs.removeDir(`{repo}/tracker/issues/active/c0010`)
++			end
++			-- ready's own rewrite of the paths passes
++			fs.writeDir(`{repo}/tracker/issues/active`)
++			fixture.git(repo, { "mv", "tracker/issues/c0010", "tracker/issues/active/c0010" })
++			fs.writeFile(
++				`{repo}/tracker/issues/active/c0010/check.sh`,
++				paths.rewrite(old, { c0010 = "tracker/issues/active/c0010" })
++			)
++			local ready = commit("ready")
++			local ok, said = broker.push(repo, ready, roots)
++			t.expect(said).toBe("pushed")
++			t.expect(ok).toBe(true)
 +		end
 +	)
 +
@@ -3617,7 +4036,7 @@ index 483fdee1..dcaae837 100644
 +- Mutation check (E11): 50 of 50 killed on an assertion of their case. Two needed a stronger case or mutant first: M41 (the wrapper's allow-list from the working tree) survived until the wrapper spec pushed code under a root only the working tree's registry names (a registry with an invalid root made both versions refuse); M35 first only dropped the in-loop stop check, which the post-exit check also catches, so the mutant now drops both and is killed.
 +- CLI probes (E1 to E3): four tiny model calls and local reads, in the scratchpad, never this repository.
 diff --git a/z-nile/.tracker/issues/c0117/check.sh b/z-nile/.tracker/issues/c0117/check.sh
-index d7e3b205..08c25131 100755
+index d7e3b205..65aca764 100755
 --- a/z-nile/.tracker/issues/c0117/check.sh
 +++ b/z-nile/.tracker/issues/c0117/check.sh
 @@ -2,13 +2,33 @@
@@ -3656,7 +4075,7 @@ index d7e3b205..08c25131 100755
 +  bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
 +check "AC10: the dispatcher controls a run: questions, capture, a nested review, the broker, the tripwire and the watermark, the lifeline, the lock, stop, the call cap and the gates" \
 +  lune run tests/run -- "$A/control-cli.spec.luau"
-+check "AC11: one definition of tracker state, and a broker that pushes only a fast-forward of it, bound to its run" \
++check "AC11: one definition of tracker state (sequestered files judged per item, configuration never), and a broker that pushes only a fast-forward of it, commit by commit, bound to its run" \
 +  lune run tests/run -- "$A/trackerstate.spec.luau"
  finish
 diff --git a/z-nile/.tracker/issues/c0116/c0116.md b/z-nile/.tracker/issues/done/c0116/c0116.md
@@ -3716,7 +4135,7 @@ similarity index 100%
 rename from z-nile/.tracker/issues/c0116/spend.md
 rename to z-nile/.tracker/issues/done/c0116/spend.md
 diff --git a/z-nile/README.md b/z-nile/README.md
-index d5aa79a0..4822bfcb 100644
+index d5aa79a0..8133f29a 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -10,8 +10,8 @@ flowchart LR
@@ -3736,7 +4155,7 @@ index d5aa79a0..4822bfcb 100644
  - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
 -- **The dispatcher** (c0117, planned). It will run a step's skill on an item with the model `.models.toml` names, through that model's CLI, and record the spend.
 -- **`.models.toml`** (c0117, planned). It will say which model runs each skill, stacking from the repository root down to the work, as `.gitignore` does.
-+- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. The rules are in the zz-rules skill, Dispatch.
++- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the watermark, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. The rules are in the zz-rules skill, Dispatch.
 +- **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
  - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`), with the next command for each row. c0118 (planned) draws it again, with a tab per project.
  
@@ -3793,10 +4212,10 @@ index 00000000..377c5995
 +exec "$real" "$@"
 diff --git a/z-nile/engine/adapters.luau b/z-nile/engine/adapters.luau
 new file mode 100644
-index 00000000..db45061d
+index 00000000..44cc3bc9
 --- /dev/null
 +++ b/z-nile/engine/adapters.luau
-@@ -0,0 +1,473 @@
+@@ -0,0 +1,475 @@
 +--!strict
 +-- One adapter per runtime (c0117): the command line that starts a model step headless and unattended, the reader of
 +-- its output stream (a token count as it runs, the final count, a quota or error signal), and the outcome. Pure: the
@@ -4068,9 +4487,11 @@ index 00000000..db45061d
 +			acc.inTurn = false
 +		end
 +	end
-+	-- a turn starts at the first thinking or assistant line after a user line or a finished tool call: a model call,
-+	-- counted even when it carries no model_call_id (the fallback count)
-+	if (j.type == "thinking" or j.type == "assistant") and not acc.inTurn then
++	-- a turn starts at the first thinking or assistant line, or tool call started without a model_call_id, after a user
++	-- line or a finished tool call: a model call, counted even when it carries no model_call_id (the fallback count;
++	-- review 003 F7: a stream of bare tool calls is turns too)
++	local bareTool = j.type == "tool_call" and j.subtype == "started" and type(j.model_call_id) ~= "string"
++	if (j.type == "thinking" or j.type == "assistant" or bareTool) and not acc.inTurn then
 +		if acc.turns > 0 and not acc.turnHasId then
 +			acc.noIdTurns += 1
 +		elseif acc.turnHasId then
@@ -4272,17 +4693,18 @@ index 00000000..db45061d
 +return adapters
 diff --git a/z-nile/engine/broker.luau b/z-nile/engine/broker.luau
 new file mode 100644
-index 00000000..4bd9b3e0
+index 00000000..6f3f2f6a
 --- /dev/null
 +++ b/z-nile/engine/broker.luau
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,129 @@
 +--!strict
 +-- The publish broker (c0117): a dispatched agent's credential can't push to `main`, so the tracker's own pushes of
 +-- tracker state (`publish`'s push, `land`) from inside a step are handed to the dispatcher that runs the step, which
 +-- pushes them with the user's credential after checking them. A request is a file in that dispatcher's own broker
 +-- folder (`ZN_PUBLISH_BROKER`), bound to it by its run token (`ZN_PUBLISH_TOKEN`); the answer is a file beside it.
 +-- The push is a fast-forward of a freshly fetched `main` only (never forced), and only of tracker state as
-+-- trackerstate.luau defines it, sequestered files moved but never changed (design review 002 F1 to F3, F7).
++-- trackerstate.luau defines it, commit by commit (design review 002 F1 to F3, F7; 003 F1, F3, F10). Like every guard
++-- here it detects honest mistakes and casual misbehaviour, not a determined agent of the same OS user.
 +local fs = require("@lune/fs")
 +local process = require("@lune/process")
 +local serde = require("@lune/serde")
@@ -4363,31 +4785,40 @@ index 00000000..4bd9b3e0
 +	end)
 +end
 +
-+-- The push itself, in the repository `root`: fetch `main` fresh, refuse anything but a fast-forward of it, refuse what
-+-- isn't tracker state by the fresh main's registry (sequestered files only moved), then a plain push (never forced:
-+-- a `main` that moved since the fetch refuses it, and the client rebuilds on it and asks again). `roots` reads the
-+-- registry's roots at a ref.
-+function broker.push(root: string, sha: string, roots: (ref: string) -> { string }?): (boolean, string)
++-- The URLs a run pinned at its start (review 003 F3): every fetch and push names them, never `origin` as the shared
++-- configuration resolves it later.
++export type Origin = { fetch: string, push: string }
++
++-- The push itself, in the repository `root`: fetch `main` fresh from the pinned URL, refuse anything but a fast-forward
++-- of it, refuse a history the watermark would refuse (each first-parent commit judged against its parent, by its
++-- parent's registry, sequestered: review 003 F10), then a plain push to the pinned push URL (never forced: a `main` that
++-- moved since the fetch refuses it, and the client rebuilds on it and asks again). `roots` reads the registry's roots at
++-- a ref.
++function broker.push(
++	root: string,
++	sha: string,
++	roots: (ref: string) -> { string }?,
++	origin: Origin?
++): (boolean, string)
 +	local function git(args: { string }): (boolean, string)
 +		local r = process.exec("git", args, { cwd = root })
-+		return r.ok, (string.gsub(r.stdout, "%s+$", "")), r.stderr
++		return r.ok, (string.gsub(r.stdout, "%s+$", ""))
 +	end
-+	if not git({ "fetch", "-q", "origin", `+refs/heads/main:{broker.FRESH}` }) then
++	local from = if origin then origin.fetch else "origin"
++	local to = if origin then origin.push else "origin"
++	if not git({ "fetch", "-q", from, `+refs/heads/main:{broker.FRESH}` }) then
 +		return false, "the dispatcher could not fetch origin's main"
 +	end
 +	local _, fresh = git({ "rev-parse", broker.FRESH })
 +	if not process.exec("git", { "merge-base", "--is-ancestor", fresh, sha }, { cwd = root }).ok then
 +		return false, `{sha} is not a fast-forward of main ({fresh}): rebuild it on main and ask again`
 +	end
-+	local list = roots(broker.FRESH)
-+	if not list then
-+		return false, "could not read the fresh main's registry"
-+	end
-+	local why = trackerstate.check(git, fresh, sha, list :: { string }, true)
++	local why = trackerstate.checkEach(git, fresh, sha, roots, true)
 +	if why then
-+		return false, `the dispatcher pushes only tracker state to main: {why}`
++		return false,
++			`the dispatcher pushes only tracker state to main, commit by commit (squash it and ask again): {why}`
 +	end
-+	local r = process.exec("git", { "push", "-q", "origin", `{sha}:refs/heads/main` }, { cwd = root })
++	local r = process.exec("git", { "push", "-q", to, `{sha}:refs/heads/main` }, { cwd = root })
 +	if r.ok then
 +		return true, "pushed"
 +	end
@@ -4479,15 +4910,16 @@ index 00000000..3023d828
 +return credential
 diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
 new file mode 100644
-index 00000000..9b605fa2
+index 00000000..df8d7fe8
 --- /dev/null
 +++ b/z-nile/engine/dispatch.luau
-@@ -0,0 +1,363 @@
+@@ -0,0 +1,371 @@
 +--!strict
 +-- The dispatcher's rules (c0117), pure: which steps are scripts and which need a model, the prompt a model step gets,
 +-- and the chain: from an item's tracker state, the next step, merge or stop. dispatcher.luau reads the state, runs the
 +-- steps and records their spend; it never reads a model's prose to decide.
 +local models = require("./models")
++local serde = require("@lune/serde")
 +
 +local dispatch = {}
 +
@@ -4633,7 +5065,9 @@ index 00000000..9b605fa2
 +	green: boolean,
 +	mergeable: boolean,
 +	head: string, -- the head commit the gate checked (the merge is pinned to it)
-+	files: { string }, -- the PR's changed paths
++	-- why its fetched head is not this gate's to merge (the one tracker-state function on the head, review 003 F5),
++	-- or nil; the dispatcher judges it before the chain decides
++	judged: string?,
 +}
 +export type Facts = {
 +	id: string,
@@ -4676,25 +5110,31 @@ index 00000000..9b605fa2
 +end
 +
 +-- A skill lesson's path (`<z-nile or a project>/skills/<skill>/lessons/<name>.md`): a prep PR may carry those.
-+local function isLesson(path: string): boolean
++function dispatch.isLesson(path: string): boolean
 +	return string.match(path, "^[^/]+/skills/[^/]+/lessons/[^/]+%.md$") ~= nil
 +end
 +
-+-- What a gate may merge (review 002 F6): a prep PR only the item's own folder and skill lessons, a rafting PR only
-+-- tracker documents of the item's project root. Returns why not, or nil. An unknown file list is never mergeable.
-+function dispatch.prFiles(name: string, files: { string }, folder: string, root: string): string?
-+	if #files == 0 then
-+		return "its changed files are unknown"
++-- Whether GitHub's `commits/<sha>/pulls` answer names a pull request merged into main whose merge commit is `sha`
++-- (the watermark's pull-request rule, G20; review 003 F6: into main only, never another branch).
++function dispatch.prMergedFrom(text: string, sha: string): boolean
++	local ok, list = pcall(function()
++		return serde.decode("json", text)
++	end)
++	if not ok or type(list) ~= "table" then
++		return false
 +	end
-+	for _, path in files do
-+		local ok = if name == "prep"
-+			then (folder ~= "" and string.sub(path, 1, #folder + 1) == folder .. "/") or isLesson(path)
-+			else root ~= "" and string.sub(path, 1, #root + 1) == root .. "/"
-+		if not ok then
-+			return `it carries {path}, which is not the {name}'s own tracker state`
++	for _, pr in list :: { any } do
++		if
++			type(pr) == "table"
++			and type(pr.merged_at) == "string"
++			and pr.merge_commit_sha == sha
++			and type(pr.base) == "table"
++			and pr.base.ref == "main"
++		then
++			return true
 +		end
 +	end
-+	return nil
++	return false
 +end
 +
 +local function gate(f: Facts, name: string, pr: Pr): Action
@@ -4707,9 +5147,7 @@ index 00000000..9b605fa2
 +			`the {name} PR #{pr.number} merged but origin/main does not show it: ./zn sync`
 +		)
 +	end
-+	local carries = if name ~= "run"
-+		then dispatch.prFiles(name, pr.files or {}, f.folder or "", f.root or "")
-+		else nil
++	local carries = if name ~= "run" then pr.judged else nil
 +	local head = pr.head or ""
 +	if
 +		name ~= "run"
@@ -4840,6 +5278,7 @@ index 00000000..9b605fa2
 +			out,
 +			`try={i} cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} rank={spec.rank} max_tokens={spec.maxTokens}`
 +				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
++				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
 +		)
 +	end
 +	return out
@@ -4848,10 +5287,10 @@ index 00000000..9b605fa2
 +return dispatch
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
 new file mode 100644
-index 00000000..8ceb2bfc
+index 00000000..e8ca4835
 --- /dev/null
 +++ b/z-nile/engine/dispatcher.luau
-@@ -0,0 +1,1245 @@
+@@ -0,0 +1,1435 @@
 +--!strict
 +-- `./zn dispatch` (c0117): runs script steps itself and model steps on .models.toml's CLIs, headless and unattended,
 +-- and chains them from an item's tracker state up to the run's pull request. The rules are dispatch.luau's (pure);
@@ -4907,6 +5346,7 @@ index 00000000..8ceb2bfc
 +export type Row = { id: string, phase: string, tokens: number, model: string, minutes: number, note: string }
 +export type State = {
 +	id: string,
++	watermark: string?, -- the watermark as this item's last run left it (the mirror: review 003 F2)
 +	dir: string, -- the folder this state lives in
 +	mode: string, -- "chain" or "step"
 +	step: string?,
@@ -4975,7 +5415,13 @@ index 00000000..8ceb2bfc
 +	return loadAt(id, dirOf(ctx, id))
 +end
 +
++-- see pinOrigin and vetMain
++local guard: { origin: broker.Origin?, config: string?, mark: string? } = {}
++
 +local function save(st: State)
++	if guard.mark then
++		st.watermark = guard.mark
++	end
 +	fs.writeDir(st.dir)
 +	sh.writeReplacing(`{st.dir}/state.json`, serde.encode("json", st, true) .. "\n")
 +end
@@ -5215,10 +5661,35 @@ index 00000000..8ceb2bfc
 +	return out
 +end
 +
-+-- origin's main, freshly fetched into a ref of the dispatcher's own (never the tracking ref an agent can rewrite).
++-- What this dispatcher pinned at its start, held in memory for the whole run (review 003 F2, F3): origin's fetch and
++-- push URLs and the configuration that resolves them, and the watermark as it last read or wrote it. A step can rewrite
++-- the repository's configuration or the watermark file; it can't reach these. Under the user's "Keep same user, accept
++-- detection" this detects such a rewrite within a run; between runs only the persisted copies (beside the watermark)
++-- and the item's own mirror are checked, which a step could rewrite too.
++
++local function originConfig(root: string): string
++	local _, out = git(root, { "config", "--get-regexp", "^(remote\\.origin\\.|url\\.)" })
++	return out
++end
++
++local function pinOrigin(ctx: Ctx): broker.Origin
++	if not guard.origin then
++		local root = ctx.mainRoot()
++		local _, fetchUrl = git(root, { "ls-remote", "--get-url", "origin" })
++		local _, pushUrl = git(root, { "remote", "get-url", "--push", "origin" })
++		guard.origin = { fetch = fetchUrl, push = pushUrl }
++		guard.config = originConfig(root)
++	end
++	return guard.origin :: broker.Origin
++end
++dispatcher.pinOrigin = pinOrigin
++
++-- origin's main, freshly fetched from the pinned URL into a ref of the dispatcher's own (never the tracking ref an agent
++-- can rewrite, never `origin` as the configuration says later).
 +local function freshMain(ctx: Ctx): string?
 +	local root = ctx.mainRoot()
-+	if not git(root, { "fetch", "-q", "origin", `+refs/heads/main:{broker.FRESH}` }) then
++	local origin = pinOrigin(ctx)
++	if not git(root, { "fetch", "-q", origin.fetch, `+refs/heads/main:{broker.FRESH}` }) then
 +		return nil
 +	end
 +	local ok, sha = git(root, { "rev-parse", broker.FRESH })
@@ -5232,11 +5703,11 @@ index 00000000..8ceb2bfc
 +	return if reg then projects.roots(reg :: projects.Registry) else nil
 +end
 +
-+-- The watermark (the user's "Persisted watermark", 2026-10-21): the last commit of main the dispatcher vetted, in a
-+-- file outside the repository and every worktree: `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else
-+-- `~/.local/state/zn-dispatch`, then a folder named for the repository's git directory, file `main-seen`. No agent's
-+-- working directory or skill names it; an agent of the same OS user that goes looking can still write it (said in
-+-- zz-rules): it detects a late push after the fact, it never prevents one.
++-- The watermark (the user's "Persisted watermark", 2026-10-21, as framed by "Keep same user, accept detection"): the
++-- last commit of main the dispatcher vetted, kept where a well-behaved step never writes, and detected if it changes:
++-- `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the
++-- repository's git directory, file `main-seen` (and `origin-url` beside it). A step of the same OS user can write it;
++-- within a run the dispatcher compares it with its own copy, across runs with the item's mirror (state.json).
 +function dispatcher.watermarkPath(ctx: Ctx): string
 +	local base = process.env.ZN_WATERMARK_DIR
 +	if not base or base == "" then
@@ -5248,6 +5719,10 @@ index 00000000..8ceb2bfc
 +	local _, common = git(ctx.mainRoot(), { "rev-parse", "--path-format=absolute", "--git-common-dir" })
 +	local key = string.gsub(common, "[^%w]+", "-")
 +	return `{base}/{key}/main-seen`
++end
++
++local function originPath(ctx: Ctx): string
++	return (string.gsub(dispatcher.watermarkPath(ctx), "main%-seen$", "origin-url"))
 +end
 +
 +local function readWatermark(ctx: Ctx): string?
@@ -5263,13 +5738,23 @@ index 00000000..8ceb2bfc
 +	local path = dispatcher.watermarkPath(ctx)
 +	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
 +	sh.writeReplacing(path, sha .. "\n")
++	guard.mark = sha
 +end
 +dispatcher.writeWatermark = writeWatermark
 +
++local function originText(o: broker.Origin): string
++	return `{o.fetch}\n{o.push}\n`
++end
++
++local function isAncestor(root: string, a: string, b: string): boolean
++	return process.exec("git", { "merge-base", "--is-ancestor", a, b }, { cwd = root }).ok
++end
++
 +-- Vets main since the watermark (every run, every step, after every step): each commit, first parent by first parent,
-+-- must be tracker state by the registry of its parent (trackerstate.luau, sequestered files only moved), or a pull
-+-- request's merge on GitHub. Advances the watermark when all are; returns the first unvetted commit's reason, or nil.
-+-- A missing watermark is set to the fresh main unchecked (trust on first use, said in zz-rules).
++-- must be tracker state by the registry of its parent (trackerstate.checkEach, the broker's own rule), or a pull
++-- request's merge into main on GitHub. Advances the watermark when all are; returns why not, or nil. A missing
++-- watermark, or one that differs from what this run last read or wrote, is never trusted (review 003 F2): only
++-- `./zn dispatch vet` (the user's) writes one then.
 +function dispatcher.vetMain(ctx: Ctx): string?
 +	local root = ctx.mainRoot()
 +	local fresh = freshMain(ctx)
@@ -5277,38 +5762,59 @@ index 00000000..8ceb2bfc
 +		return "origin's main could not be fetched to vet it"
 +	end
 +	local mark = readWatermark(ctx)
-+	if not mark then
-+		writeWatermark(ctx, fresh :: string)
-+		return nil
++	if guard.mark and mark ~= guard.mark then
++		return `the watermark changed under this run (it was {guard.mark}, the file says {mark or "nothing"}): look, then ./zn dispatch vet`
 +	end
++	if not mark then
++		return "there is no watermark (none yet, or something removed it): look at main, then ./zn dispatch vet"
++	end
++	guard.mark = mark
 +	if mark == fresh then
 +		return nil
 +	end
-+	if
-+		not process.exec(
-+			"git",
-+			{ "merge-base", "--is-ancestor", mark :: string, fresh :: string },
-+			{ cwd = root }
-+		).ok
-+	then
-+		return `origin's main was rewritten: {mark} (the last vetted commit) is no longer in it`
++	if not isAncestor(root, mark :: string, fresh :: string) then
++		return `origin's main was rewritten: {mark} (the last vetted commit) is no longer in it (look, then ./zn dispatch vet)`
 +	end
-+	local _, list = git(root, { "rev-list", "--reverse", "--first-parent", `{mark}..{fresh}` })
-+	for sha in string.gmatch(list, "%x+") do
-+		local okParent, parent = git(root, { "rev-parse", "--verify", "-q", `{sha}^1` })
-+		local base = if okParent then parent else trackerstate.EMPTY_TREE
-+		local roots = rootsAt(ctx, if okParent then parent else sha)
-+		local why = if roots
-+			then trackerstate.check(function(a: { string }): (boolean, string)
-+				return git(root, a)
-+			end, base, sha, roots :: { string }, true)
-+			else "the registry could not be read"
-+		if why and not ctx.prMerged(sha) then
-+			return `main has {sha}, which the dispatcher did not vet: {why} (look, then ./zn dispatch vet)`
-+		end
++	local why = trackerstate.checkEach(
++		function(a: { string }): (boolean, string)
++			return git(root, a)
++		end,
++		mark :: string,
++		fresh :: string,
++		function(ref: string): { string }?
++			return rootsAt(ctx, ref)
++		end,
++		true,
++		ctx.prMerged
++	)
++	if why then
++		return `main has {why}, which the dispatcher did not vet (look, then ./zn dispatch vet)`
 +	end
 +	writeWatermark(ctx, fresh :: string)
 +	return nil
++end
++
++-- At the start of a top-level run: origin's URLs as the last run left them, the watermark not behind the item's mirror
++-- and not gone, then main vetted (review 003 F2, F3). Returns why the run stops, or nil.
++function dispatcher.guardStart(ctx: Ctx, st: State): string?
++	local origin = pinOrigin(ctx)
++	local saved = originPath(ctx)
++	if fs.isFile(saved) and fs.readFile(saved) ~= originText(origin) then
++		return `origin's URL changed since the last run (it was {trim(fs.readFile(saved))}, now {origin.fetch} / {origin.push}): look, then ./zn dispatch vet`
++	end
++	local mark = readWatermark(ctx)
++	if st.watermark and not mark then
++		return "the watermark is gone since this item's last run: look, then ./zn dispatch vet"
++	end
++	if
++		st.watermark
++		and mark
++		and mark ~= st.watermark
++		and isAncestor(ctx.mainRoot(), mark :: string, st.watermark :: string)
++	then
++		return `the watermark went back since this item's last run ({st.watermark} to {mark}): look, then ./zn dispatch vet`
++	end
++	return dispatcher.vetMain(ctx)
 +end
 +
 +export type Snapshot = { head: string, status: string, diff: string }
@@ -5329,6 +5835,10 @@ index 00000000..8ceb2bfc
 +	local after = snapshot(ctx)
 +	if after.status ~= before.status or after.diff ~= before.diff then
 +		return `the main checkout changed during the step: {after.status}`
++	end
++	-- origin's URLs and what resolves them, as this run pinned them (review 003 F3)
++	if guard.config and originConfig(root) ~= guard.config then
++		return `origin's configuration changed during the step (remote.origin.* or url.*): {originConfig(root)}`
 +	end
 +	local unvetted = dispatcher.vetMain(ctx)
 +	if unvetted then
@@ -5505,7 +6015,7 @@ index 00000000..8ceb2bfc
 +		local function push(sha: string): (boolean, string)
 +			local ok, said = broker.push(ctx.mainRoot(), sha, function(ref: string): { string }?
 +				return rootsAt(ctx, ref)
-+			end)
++			end, pinOrigin(ctx))
 +			if ok then
 +				table.insert(st.pushed, sha)
 +			end
@@ -5519,6 +6029,9 @@ index 00000000..8ceb2bfc
 +			adapter = adapter,
 +			cap = spec.maxTokens,
 +			maxCalls = if adapter.callCapped then spec.maxCalls else nil,
++			maxSeconds = if adapter.callCapped and spec.maxMinutes
++				then (spec.maxMinutes :: number) * 60
++				else nil,
 +			stallSeconds = resolved.settings.stallSeconds,
 +			toolSeconds = resolved.settings.toolSeconds,
 +			stateDir = stateDir,
@@ -5664,12 +6177,6 @@ index 00000000..8ceb2bfc
 +			green = false
 +		end
 +	end
-+	local files: { string } = {}
-+	for _, f in (if type(j.files) == "table" then j.files else {}) :: { any } do
-+		if type(f) == "table" and type(f.path) == "string" then
-+			table.insert(files, f.path)
-+		end
-+	end
 +	return {
 +		number = j.number,
 +		state = tostring(j.state),
@@ -5677,8 +6184,92 @@ index 00000000..8ceb2bfc
 +		green = green,
 +		mergeable = j.mergeable == "MERGEABLE",
 +		head = if type(j.headRefOid) == "string" then j.headRefOid else "",
-+		files = files,
 +	}
++end
++
++-- Whether a gate may merge PR `pr` (review 003 F5): its head, fetched from the pinned URL into a private ref, must be
++-- the head gh reports, and `merge-base(main, head)..head` must be tracker state by the one function, sequestered, with
++-- the gate's own narrower rule: a prep PR only its issue's folder (whose sequestered files it may change) and skill
++-- lessons; a rafting PR only the files of its own items (the issue, any raft it adds and that raft's members), never
++-- another item's sequestered files. Returns why not, or nil.
++function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch.Pr, folder: string): string?
++	local root = ctx.mainRoot()
++	local origin = pinOrigin(ctx)
++	local ref = `refs/zn-dispatch/pr-{pr.number}`
++	if pr.head == "" then
++		return "its head commit is unknown"
++	end
++	if not freshMain(ctx) then
++		return "origin's main could not be fetched"
++	end
++	if not git(root, { "fetch", "-q", origin.fetch, `+refs/pull/{pr.number}/head:{ref}` }) then
++		return "its head could not be fetched"
++	end
++	local _, got = git(root, { "rev-parse", ref })
++	if got ~= pr.head then
++		return `its fetched head {got} is not the head GitHub reports ({pr.head})`
++	end
++	local okBase, base = git(root, { "merge-base", broker.FRESH, ref })
++	local roots = rootsAt(ctx, broker.FRESH)
++	if not roots then
++		return "the registry could not be read"
++	end
++	local function gitFn(a: { string }): (boolean, string)
++		return git(root, a)
++	end
++	local own: { [string]: boolean } = { [id] = true }
++	local only: (path: string) -> string?
++	if gateName == "prep" then
++		only = function(path: string): string?
++			if
++				(folder ~= "" and string.sub(path, 1, #folder + 1) == folder .. "/")
++				or dispatch.isLesson(path)
++			then
++				return nil
++			end
++			return `it carries {path}, outside the issue's own folder and the skill lessons`
++		end
++	else
++		-- the rafts this PR touches, and their members
++		local _, names = git(
++			root,
++			{ "diff", "--name-only", "--no-renames", if okBase then base else trackerstate.EMPTY_TREE, ref }
++		)
++		for path in string.gmatch(names, "[^\n]+") do
++			local rid, _, rel = trackerstate.itemOf(path, roots :: { string })
++			if rid and store.isRaftId(rid :: string) and rel == `{rid}.md` then
++				own[rid :: string] = true
++				local _, text = git(root, { "show", `{ref}:{path}` })
++				local members = string.match(text, "\nissues:%s*%[([^%]]*)%]")
++				for m in string.gmatch(members or "", "[%w]+") do
++					own[m] = true
++				end
++			end
++		end
++		only = function(path: string): string?
++			if path == trackerstate.COUNTER then
++				return nil
++			end
++			local pid = trackerstate.itemOf(path, roots :: { string })
++			if pid and own[pid :: string] then
++				return nil
++			end
++			return `it carries {path}, which is not one of the raft's own items`
++		end
++	end
++	local why = trackerstate.check(
++		gitFn,
++		if okBase then base else trackerstate.EMPTY_TREE,
++		ref,
++		roots :: { string },
++		{
++			sequestered = true,
++			own = own,
++			allow = if gateName == "prep" then dispatch.isLesson else nil,
++			only = only,
++		}
++	)
++	return why
 +end
 +
 +-- What the chain sees of `id` now.
@@ -5727,6 +6318,11 @@ index 00000000..8ceb2bfc
 +	end
 +	local settings = dispatcher.settings(id)
 +	local folder = if o then (string.match(o.path, "^(.*)/[^/]+$") or "") else ""
++	if pr and pr.state == "OPEN" and o and o.status ~= "active" and kind == "issue" then
++		local gateName = if o.status == "preparing" then "prep" else "raft"
++		local p = pr :: dispatch.Pr
++		p.judged = dispatcher.judgePr(ctx, gateName, id, p, folder)
++	end
 +	local root = ""
 +	if o then
 +		local known: { string } = rootsAt(ctx, broker.FRESH) or {}
@@ -5919,14 +6515,46 @@ index 00000000..8ceb2bfc
 +		)
 +	end
 +	if first == "vet" then
-+		-- the user's act after a tripwire stop: main as it is now is vetted (the agent could run this too, as the same OS
-+		-- user: zz-rules says it is the user's)
-+		local why = dispatcher.vetMain(ctx)
++		-- the user's act after a tripwire stop: lists every commit since the watermark with its verdict, then takes main
++		-- as it is now as vetted (an agent of the same OS user could run this too: zz-rules says it is the user's)
++		local root = ctx.mainRoot()
++		local origin = pinOrigin(ctx)
 +		local fresh = freshMain(ctx) or ctx.fail("origin's main could not be fetched")
-+		if why then
-+			print(`dispatch: {why}`)
++		local mark = readWatermark(ctx)
++		if not mark then
++			print(`dispatch: no watermark yet: you take main as it is ({fresh})`)
++		elseif not isAncestor(root, mark :: string, fresh) then
++			print(
++				`dispatch: the last vetted commit {mark} is no longer in main (rewritten): you take main as it is`
++			)
++		else
++			local _, list = git(root, { "rev-list", "--reverse", "--first-parent", `{mark}..{fresh}` })
++			for sha in string.gmatch(list, "%x+") do
++				local _, subject = git(root, { "log", "-1", "--format=%s", sha })
++				local why = trackerstate.checkEach(
++					function(a: { string }): (boolean, string)
++						return git(root, a)
++					end,
++					`{sha}^`,
++					sha,
++					function(ref: string): { string }?
++						return rootsAt(ctx, ref)
++					end,
++					true
++				)
++				local verdict = if not why
++					then "tracker state"
++					elseif ctx.prMerged(sha) then "a pull request's merge into main"
++					else `NOT VETTED, you accept it: {why}`
++				print(`dispatch: {string.sub(sha, 1, 12)} {subject}: {verdict}`)
++			end
++		end
++		if opts["--dry-run"] then
++			print("dispatch: dry run: nothing written")
++			return 0
 +		end
 +		writeWatermark(ctx, fresh)
++		sh.writeReplacing(originPath(ctx), originText(origin))
 +		print(`dispatch: main vetted at {fresh}`)
 +		return 0
 +	elseif first == "status" then
@@ -6015,8 +6643,9 @@ index 00000000..8ceb2bfc
 +		print(`stop: {key}'s last step was lost (its dispatcher died): ./zn dispatch retry {key}`)
 +		return dispatch.EXIT.failure
 +	end
-+	-- main is vetted since the watermark at the start of every run (the user's "Persisted watermark")
-+	local unvetted = dispatcher.vetMain(ctx)
++	-- main is vetted since the watermark at the start of every run (the user's "Persisted watermark"), after the
++	-- checks of origin's URL and the item's mirror of the watermark
++	local unvetted = dispatcher.guardStart(ctx, st)
 +	if unvetted then
 +		st.outcome, st.detail = "tripwire", unvetted
 +		save(st)
@@ -6228,21 +6857,22 @@ index 59222432..bb21e318 100644
  
  -- True when every row of `prefix` is field-equal to the same position in `rows` (minutes in tenths,
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 61a5a99c..57c2d159 100644
+index 61a5a99c..74f1e06b 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -2,8 +2,10 @@
+@@ -2,8 +2,11 @@
  -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
  local audit = require("./audit")
  local board = require("./board")
 +local brokerLib = require("./broker")
  local claimsLib = require("./claims")
  local compactLib = require("./compact")
++local dispatchLib = require("./dispatch")
 +local dispatcherLib = require("./dispatcher")
  local fs = require("@lune/fs")
  local gateLib = require("./gate")
  local idsLib = require("./ids")
-@@ -63,9 +65,17 @@ usage: ./zn <command> ...
+@@ -63,9 +66,17 @@ usage: ./zn <command> ...
    start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
    focus <issue-id>                              attribute following commits to this issue
    commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
@@ -6263,7 +6893,7 @@ index 61a5a99c..57c2d159 100644
    done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
    worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
    worktree-prune                                remove worktrees of rafts that are done on main
-@@ -135,7 +145,8 @@ end
+@@ -135,7 +146,8 @@ end
  
  -- Only a GitHub origin gets draft PRs: anything else (a local bare remote in a spec) has no `gh`.
  local function onGitHub(): boolean
@@ -6273,7 +6903,7 @@ index 61a5a99c..57c2d159 100644
  	return r.ok and string.find(r.stdout, "github.com", 1, true) ~= nil
  end
  
-@@ -246,6 +257,17 @@ local function guarded(): boolean
+@@ -246,6 +258,17 @@ local function guarded(): boolean
  	return guardedRun == true
  end
  
@@ -6291,7 +6921,7 @@ index 61a5a99c..57c2d159 100644
  local function publishing(): boolean
  	local v = process.env.PICKMAN_PUBLISH
  	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
-@@ -751,6 +773,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+@@ -751,6 +774,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  			or a == "--tags"
  			or a == "--uncovered"
  			or a == "--apply"
@@ -6299,7 +6929,7 @@ index 61a5a99c..57c2d159 100644
  		then
  			opts[a] = { "true" }
  		elseif string.sub(a, 1, 1) == "-" then
-@@ -2147,7 +2170,19 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+@@ -2147,7 +2171,19 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
  			message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
  		end
  		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
@@ -6320,7 +6950,7 @@ index 61a5a99c..57c2d159 100644
  		if pushed.ok then
  			sh.git({ "reset", "--hard", "--quiet", sha })
  			sh.run("git", { "fetch", "--quiet", "origin", "main" })
-@@ -3360,6 +3395,18 @@ function cmd.focus(pos: { string })
+@@ -3360,6 +3396,18 @@ function cmd.focus(pos: { string })
  	print(`focus: {issue.id}`)
  end
  
@@ -6339,7 +6969,7 @@ index 61a5a99c..57c2d159 100644
  local function recordAndCommit(
  	raft: store.Item,
  	message: string,
-@@ -3367,7 +3414,8 @@ local function recordAndCommit(
+@@ -3367,7 +3415,8 @@ local function recordAndCommit(
  	explicitMinutes: number?,
  	isDone: boolean?,
  	phase: string?,
@@ -6349,7 +6979,7 @@ index 61a5a99c..57c2d159 100644
  )
  	phase = if phase and phase ~= "" then phase else "build"
  	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
-@@ -3397,7 +3445,7 @@ local function recordAndCommit(
+@@ -3397,7 +3446,7 @@ local function recordAndCommit(
  		if share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0 then
  			continue
  		end
@@ -6358,7 +6988,7 @@ index 61a5a99c..57c2d159 100644
  		local trailer =
  			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
  		if phase ~= "build" then
-@@ -3406,6 +3454,9 @@ local function recordAndCommit(
+@@ -3406,6 +3455,9 @@ local function recordAndCommit(
  		if share.tokens ~= nil then
  			trailer ..= ` {share.tokens} tokens`
  		end
@@ -6368,7 +6998,7 @@ index 61a5a99c..57c2d159 100644
  		table.insert(trailers, trailer)
  	end
  	spend.writeRaft(raft)
-@@ -3423,7 +3474,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -3423,7 +3475,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
  	local message = opts["-m"] and opts["-m"][1]
  	if not message or message == "" then
  		fail(
@@ -6377,7 +7007,7 @@ index 61a5a99c..57c2d159 100644
  		)
  	end
  	-- phase and tokens are checked before anything is staged
-@@ -3444,8 +3495,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -3444,8 +3496,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
  		end
  		tokens = tonumber(raw)
  	end
@@ -6388,7 +7018,7 @@ index 61a5a99c..57c2d159 100644
  end
  
  -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
-@@ -3763,6 +3815,20 @@ local function buildLessons(project: string?): string
+@@ -3763,6 +3816,20 @@ local function buildLessons(project: string?): string
  	return (string.gsub(text, "\n$", ""))
  end
  
@@ -6409,7 +7039,7 @@ index 61a5a99c..57c2d159 100644
  local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
  	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
  
-@@ -3952,12 +4018,12 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+@@ -3952,12 +4019,12 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -6425,7 +7055,7 @@ index 61a5a99c..57c2d159 100644
  		else `({raft.root} has no architecture.md: this project has none)`
  end
  
-@@ -4016,11 +4082,12 @@ local function renderPrompt(raft: store.Item): string
+@@ -4016,11 +4083,12 @@ local function renderPrompt(raft: store.Item): string
  			end
  		end
  	end
@@ -6440,7 +7070,7 @@ index 61a5a99c..57c2d159 100644
  	end
  	local plan, _, planError = workstreamPlan(raft)
  	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
-@@ -4032,10 +4099,11 @@ local function renderPrompt(raft: store.Item): string
+@@ -4032,10 +4100,11 @@ local function renderPrompt(raft: store.Item): string
  		ITEMS = items,
  		SKILLS = skills,
  		ARCHITECTURE = architectureOf(raft),
@@ -6453,7 +7083,7 @@ index 61a5a99c..57c2d159 100644
  		PROJECT = project or raft.root,
  	})
  	for _, m in store.members(raft.id) do
-@@ -4528,7 +4596,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+@@ -4528,7 +4597,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
  	local id = pos[1]
  	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
  		fail(
@@ -6462,7 +7092,7 @@ index 61a5a99c..57c2d159 100644
  		)
  	end
  	local phase = opts["--phase"] and opts["--phase"][1] or ""
-@@ -4551,6 +4619,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+@@ -4551,6 +4620,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
  		end
  		tokens = tonumber(raw)
  	end
@@ -6470,7 +7100,7 @@ index 61a5a99c..57c2d159 100644
  	local note = phase
  	if opts["--note"] and opts["--note"][1] ~= "" then
  		note = opts["--note"][1]
-@@ -4661,6 +4730,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+@@ -4661,6 +4731,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
  				how = share.how,
  				phase = phase,
  				tokens = share.tokens,
@@ -6478,7 +7108,7 @@ index 61a5a99c..57c2d159 100644
  			}
  			local itemTitle = frontOf(text).title or share.id
  			local okAppend, content = pcall(ledger.append, read(spendPath), share.id, itemTitle, row)
-@@ -5155,6 +5225,76 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
+@@ -5155,6 +5226,71 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -6527,13 +7157,8 @@ index 61a5a99c..57c2d159 100644
 +			if not onGitHub() then
 +				return false
 +			end
-+			local r = sh.run("gh", {
-+				"api",
-+				`repos/\{owner\}/\{repo\}/commits/{sha}/pulls`,
-+				"--jq",
-+				`.[] | select(.merged_at != null and .merge_commit_sha == "{sha}") | .number`,
-+			})
-+			return r.ok and sh.trim(r.stdout) ~= ""
++			local r = sh.run("gh", { "api", `repos/\{owner\}/\{repo\}/commits/{sha}/pulls` })
++			return r.ok and dispatchLib.prMergedFrom(r.stdout, sha)
 +		end,
 +		prView = function(branch: string): string?
 +			if not onGitHub() then
@@ -6544,7 +7169,7 @@ index 61a5a99c..57c2d159 100644
 +				"view",
 +				branch,
 +				"--json",
-+				"number,state,isDraft,mergeable,statusCheckRollup,headRefOid,files",
++				"number,state,isDraft,mergeable,statusCheckRollup,headRefOid",
 +			})
 +			return if r.ok then r.stdout else nil
 +		end,
@@ -6557,10 +7182,10 @@ index 61a5a99c..57c2d159 100644
  	table.remove(args, 1)
 diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
 new file mode 100644
-index 00000000..b5f5d54b
+index 00000000..2b1cdd5e
 --- /dev/null
 +++ b/z-nile/engine/models.luau
-@@ -0,0 +1,396 @@
+@@ -0,0 +1,405 @@
 +--!strict
 +-- .models.toml (c0117): which model runs each model step, on which CLI, and in which order the CLIs are tried.
 +-- The files stack like .gitignore: from the repository root down to the work, a closer file replaces only the keys
@@ -6601,6 +7226,7 @@ index 00000000..b5f5d54b
 +	runtime = "string",
 +	max_tokens = "count",
 +	max_calls = "count",
++	max_minutes = "count",
 +}
 +-- the CLIs whose stream has no running token count: their step stops after `max_calls` model calls (the user's decision,
 +-- 2026-10-21: "Cap model calls, record real total"); a spec of theirs without it is an error, never unlimited
@@ -6615,6 +7241,7 @@ index 00000000..b5f5d54b
 +	runtime: string,
 +	maxTokens: number,
 +	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
++	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
 +}
 +export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
 +-- One parsed file: its order and settings when it sets them, and its skill tables (skill -> cli -> field -> value).
@@ -6727,7 +7354,7 @@ index 00000000..b5f5d54b
 +					local want = FIELDS[field]
 +					if not want then
 +						error(
-+							`{path}: {key}.{cli}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls)`,
++							`{path}: {key}.{cli}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls, max_minutes)`,
 +							0
 +						)
 +					end
@@ -6865,6 +7492,12 @@ index 00000000..b5f5d54b
 +				0
 +			)
 +		end
++		if models.CALL_CAPPED[cli] and f.max_minutes == nil then
++			error(
++				`{skill}.{cli}: no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
++				0
++			)
++		end
 +		local spec: Spec = {
 +			cli = cli,
 +			model = f.model,
@@ -6873,6 +7506,7 @@ index 00000000..b5f5d54b
 +			runtime = f.runtime,
 +			maxTokens = f.max_tokens,
 +			maxCalls = f.max_calls,
++			maxMinutes = f.max_minutes,
 +		}
 +		local why = models.reviewRule(skill, spec)
 +		if why then
@@ -7001,10 +7635,10 @@ index d9b27b03..3eef63c4 100644
  		end
 diff --git a/z-nile/engine/runner.luau b/z-nile/engine/runner.luau
 new file mode 100644
-index 00000000..9289e463
+index 00000000..44a301df
 --- /dev/null
 +++ b/z-nile/engine/runner.luau
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,268 @@
 +--!strict
 +-- Runs one model step's CLI (c0117) under a supervisor: the CLI leads a process group of its own (so the cap, a
 +-- stall or `./zn dispatch stop` kills every process the step started, a `check.sh` or a Bash tool's children
@@ -7030,6 +7664,7 @@ index 00000000..9289e463
 +	adapter: adapters.Adapter,
 +	cap: number, -- max_tokens: the running count past it kills the step
 +	maxCalls: number?, -- a call-capped runtime's max_calls: the next model call past it kills the step
++	maxSeconds: number?, -- its wall-time ceiling (max_minutes): past it the step is killed as cap
 +	stallSeconds: number,
 +	toolSeconds: number, -- the stall limit while a tool call runs
 +	stateDir: string, -- holds the pid file, the stdin file and the stop marker
@@ -7196,9 +7831,11 @@ index 00000000..9289e463
 +	local pgid: number? = nil
 +	local early: Outcome? = nil
 +	local detail = ""
++	local elapsed = 0
 +	while not (outDone and errDone) do
 +		local dt = task.wait(0.05)
 +		quiet += dt
++		elapsed += dt
 +		if not pgid then
 +			pgid = readPid(pidFile)
 +			if pgid and r.onStart then
@@ -7215,6 +7852,8 @@ index 00000000..9289e463
 +			early, detail = "cap-unknown", `the call cap can't be trusted on this stream: {acc.unknown}`
 +		elseif r.maxCalls and acc.calls > (r.maxCalls :: number) then
 +			early, detail = "cap", `passed max_calls {r.maxCalls} at call {acc.calls}`
++		elseif r.maxSeconds and elapsed > (r.maxSeconds :: number) then
++			early, detail = "cap", `passed max_minutes {(r.maxSeconds :: number) / 60} of wall time`
 +		elseif acc.live > r.cap then
 +			early, detail = "cap", `passed max_tokens {r.cap} at {acc.live} tokens`
 +		elseif acc.quota then
@@ -7292,20 +7931,35 @@ index abbc452c..c39865e1 100644
  end
 diff --git a/z-nile/engine/trackerstate.luau b/z-nile/engine/trackerstate.luau
 new file mode 100644
-index 00000000..1cb751a4
+index 00000000..9baaf157
 --- /dev/null
 +++ b/z-nile/engine/trackerstate.luau
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,359 @@
 +--!strict
-+-- What counts as tracker state (c0117 design review 002 F1, F2): the one definition every guard that lets
-+-- "tracker-only" changes reach `main` uses: the git wrapper, the dispatcher's publish broker, the tripwire after a
-+-- step and the watermark check at every run and step. It reads git's raw diff with renames off
-+-- (`git diff-tree -r --raw --no-renames`), so a rename's source is a deletion it sees, and every side's file mode.
-+-- A change is tracker state when every path is under a project root of the registry it is judged against (`<root>/`,
-+-- with the slash) or is exactly `z-nile/next`, every mode is a regular file (100644 or 100755: no symlink, no
-+-- submodule), and no path is `.gitattributes` or `.gitmodules`. With `sequestered`, a content change to an existing
-+-- `check.sh` or to anything under an `acceptance/` folder is refused too; a pure move of one (the same blob and mode
-+-- deleted at one path and added at another, as `ready` and `stop` move item folders) is not a content change.
++-- What counts as tracker state (c0117 design reviews 002 F1, F2 and 003 F1, F4, F8, F10): the one definition every
++-- guard that lets "tracker-only" changes reach `main` uses: the git wrapper, the dispatcher's publish broker, the
++-- tripwire and the watermark, and the merge gates on a PR's fetched head. Like every guard here it catches honest
++-- mistakes and casual misbehaviour; it is not a boundary against a determined agent of the same OS user (the user's
++-- "Keep same user, accept detection", 2026-10-21).
++--
++-- It reads git's raw diff with renames off (`git diff-tree -r --raw --no-renames`), so a rename's source is a deletion
++-- it sees, and every side's file mode. A change is tracker state when every path:
++--   - is under a project root of the registry it is judged against (`<root>/`, with the slash) or is exactly
++--     `z-nile/next`;
++--   - is plain: ASCII with no quote or backslash (so no Unicode normalisation games), and no component that is empty,
++--     `.`, `..` or `.git` (any case);
++--   - is a regular file (100644 or 100755: no symlink, no submodule);
++--   - is not git's or the dispatcher's configuration, in any case: `.gitattributes`, `.gitmodules`, `.models.toml`
++--     (a setting that grants authority, a gate or a cap, is never tracker state: review 003 F4);
++--   - added, doesn't differ only in case from another path of the resulting tree (macOS would overwrite it).
++-- With `sequestered`, each item's sequestered files (its `check.sh` and everything under its `acceptance/`, names in
++-- that exact case) are judged per item, never per blob (review 003 F1): for every item the change touches, the set of
++-- its sequestered files (relative to its folder) is the same before and after, each with the same content, or, for a
++-- `check.sh` whose item folder moved, the content `paths.rewrite` gives for that move (as `ready`, `stop` and `done`
++-- write it); the item lies in one folder after; and only an item that has no file on the base may add them (a new
++-- item's stub). A gate passes `own`, the ids whose sequestered files its PR may change.
++local paths = require("./paths")
++
 +local trackerstate = {}
 +
 +export type Entry = {
@@ -7316,12 +7970,25 @@ index 00000000..1cb751a4
 +	status: string,
 +	path: string,
 +}
++-- a tree: path -> blob
++export type Tree = { [string]: string }
++export type Options = {
++	sequestered: boolean?,
++	own: { [string]: boolean }?, -- ids whose sequestered files may change (a gate's own items)
++	allow: ((path: string) -> boolean)?, -- paths accepted beyond the roots (a prep gate's skill lessons)
++	only: ((path: string) -> string?)?, -- a narrower rule: why a path is not this caller's, or nil
++	base: Tree?, -- the trees before and after; without them, what the entries show
++	result: Tree?,
++	read: ((blob: string) -> string?)?, -- a blob's content (for the rewrite of a moved check.sh)
++}
 +
 +trackerstate.COUNTER = "z-nile/next"
 +-- git's empty tree: the base of a branch that shares no history with main
 +trackerstate.EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 +local REGULAR = { ["100644"] = true, ["100755"] = true }
 +local NONE = "000000"
++local CONFIG = { [".gitattributes"] = true, [".gitmodules"] = true, [".models.toml"] = true }
++local LIFECYCLE = { active = true, done = true, retired = true }
 +
 +-- `git diff-tree -r --raw --no-renames` lines (`:<old mode> <new mode> <old blob> <new blob> <status>\t<path>`).
 +function trackerstate.parseRaw(text: string): ({ Entry }?, string?)
@@ -7345,6 +8012,18 @@ index 00000000..1cb751a4
 +	return out, nil
 +end
 +
++-- `git ls-tree -r --full-tree` lines (`<mode> <type> <blob>\t<path>`) as a tree.
++function trackerstate.parseTree(text: string): Tree
++	local out: Tree = {}
++	for line in string.gmatch(text, "[^\n]+") do
++		local blob, path = string.match(line, "^%d+ %a+ (%x+)\t(.+)$")
++		if blob and path then
++			out[path] = blob
++		end
++	end
++	return out
++end
++
 +local function under(path: string, roots: { string }): boolean
 +	if path == trackerstate.COUNTER then
 +		return true
@@ -7362,66 +8041,202 @@ index 00000000..1cb751a4
 +	return string.match(path, "([^/]+)$") or path
 +end
 +
-+local function isSequestered(path: string): boolean
-+	return basename(path) == "check.sh" or string.find("/" .. path, "/acceptance/", 1, true) ~= nil
-+end
-+
-+-- Whether `entries` are tracker state against `roots` (the project roots of the registry they are judged by). Returns
-+-- nil when they are, else why not, naming the first path.
-+function trackerstate.judge(entries: { Entry }, roots: { string }, sequestered: boolean?): string?
-+	-- a pure move: a deletion and an addition of the same blob and mode
-+	local added: { [string]: { Entry } } = {}
-+	for _, e in entries do
-+		if e.status == "A" then
-+			local k = e.newBlob .. ":" .. e.newMode
-+			added[k] = added[k] or {}
-+			table.insert(added[k], e)
++-- why `path` is not plain, or nil
++local function plain(path: string): string?
++	if string.find(path, "[^%w%._%-/]") then
++		return "a character outside ASCII letters, digits, `.`, `_`, `-` and `/`"
++	end
++	for _, seg in string.split(path, "/") do
++		local low = string.lower(seg)
++		if seg == "" or seg == "." or seg == ".." or low == ".git" then
++			return `a path component "{seg}"`
 +		end
 +	end
-+	local moved: { [Entry]: boolean } = {}
-+	for _, e in entries do
-+		if e.status == "D" then
-+			local list = added[e.oldBlob .. ":" .. e.oldMode]
-+			if list then
-+				for _, a in list do
-+					if not moved[a] and basename(a.path) == basename(e.path) then
-+						moved[a] = true
-+						moved[e] = true
-+						break
-+					end
++	return nil
++end
++
++-- The item a path belongs to: `<root>/<issues|rafts>/[active/|done/|retired/]<ID>/<rel>` -> id, its folder, rel.
++function trackerstate.itemOf(path: string, roots: { string }): (string?, string?, string?)
++	for _, r in roots do
++		local prefix = r .. "/"
++		if string.sub(path, 1, #prefix) == prefix then
++			local rest = string.sub(path, #prefix + 1)
++			local kind, tail = string.match(rest, "^(%a+)/(.+)$")
++			if (kind == "issues" or kind == "rafts") and tail then
++				local life, after = string.match(tail :: string, "^(%a+)/(.+)$")
++				local lead = ""
++				if life and LIFECYCLE[life :: string] then
++					lead, tail = life .. "/", after
++				end
++				local id, rel = string.match(tail :: string, "^([%w]+)/(.+)$")
++				local okId = id
++					and (
++						if kind == "issues"
++							then string.match(id, "^[fdc]%d%d%d%d$") ~= nil
++							else string.match(id, "^R%d%d%d%d$") ~= nil
++					)
++				if okId then
++					return id, `{r}/{kind}/{lead}{id}`, rel
 +				end
 +			end
 +		end
 +	end
++	return nil, nil, nil
++end
++
++local function isSequesteredRel(rel: string): boolean
++	return rel == "check.sh" or string.sub(rel, 1, 11) == "acceptance/"
++end
++
++-- an item's sequestered files in a tree: rel -> { blob, dir }, and every folder the item has there
++local function seqMap(
++	tree: Tree,
++	id: string,
++	roots: { string }
++): ({ [string]: { blob: string, dir: string } }, { [string]: boolean }, boolean)
++	local out: { [string]: { blob: string, dir: string } } = {}
++	local dirs: { [string]: boolean } = {}
++	local any = false
++	for path, blob in tree do
++		local pid, dir, rel = trackerstate.itemOf(path, roots)
++		if pid == id then
++			any = true
++			dirs[dir :: string] = true
++			if isSequesteredRel(rel :: string) then
++				out[rel :: string] = { blob = blob, dir = dir :: string }
++			end
++		end
++	end
++	return out, dirs, any
++end
++
++local function count(set: { [string]: any }): number
++	local n = 0
++	for _ in set do
++		n += 1
++	end
++	return n
++end
++
++-- Whether `entries` are tracker state against `roots`. Returns nil when they are, else why not, naming the first path.
++-- `opts` may be `true` (sequestered, judged from the entries alone).
++function trackerstate.judge(entries: { Entry }, roots: { string }, given: (boolean | Options)?): string?
++	local opts: Options = if type(given) == "table" then given :: Options else { sequestered = given == true }
++	-- the trees: given, or what the entries show (enough for the per-item rule: files they don't touch are equal)
++	local base: Tree = opts.base or {}
++	local result: Tree = opts.result or {}
++	if not opts.base or not opts.result then
++		for _, e in entries do
++			if e.oldMode ~= NONE and not opts.base then
++				base[e.path] = e.oldBlob
++			end
++			if e.newMode ~= NONE and not opts.result then
++				result[e.path] = e.newBlob
++			end
++		end
++	end
++	local folded: { [string]: number } = {}
++	for path in result do
++		local low = string.lower(path)
++		folded[low] = (folded[low] or 0) + 1
++	end
++	local touched: { [string]: boolean } = {}
 +	for _, e in entries do
-+		local name = basename(e.path)
-+		if not under(e.path, roots) then
++		local name = string.lower(basename(e.path))
++		local bad = plain(e.path)
++		if bad then
++			return `{e.path} is not tracker state ({bad})`
++		end
++		if not under(e.path, roots) and not (opts.allow and opts.allow(e.path)) then
 +			return `{e.path} is not tracker state (not under a project root's folder or {trackerstate.COUNTER})`
 +		end
-+		if name == ".gitattributes" or name == ".gitmodules" then
-+			return `{e.path} is not tracker state (git configuration)`
++		if CONFIG[name] then
++			return `{e.path} is not tracker state (configuration: git's, or a setting that grants authority)`
 +		end
 +		for _, mode in { e.oldMode, e.newMode } do
 +			if mode ~= NONE and not REGULAR[mode] then
 +				return `{e.path} is not tracker state (mode {mode}: a link or a submodule)`
 +			end
 +		end
-+		-- a new one (a new item's stub) is an addition and passes; an existing one only moves
-+		if sequestered and isSequestered(e.path) and not moved[e] and e.status ~= "A" then
-+			return `{e.path} is sequestered: a step may move it, never change it`
++		if e.status == "A" and (folded[string.lower(e.path)] or 0) > 1 then
++			return `{e.path} is not tracker state (another path differs from it only in case)`
++		end
++		if opts.only then
++			local why = opts.only(e.path)
++			if why then
++				return why
++			end
++		end
++		local id, _, rel = trackerstate.itemOf(e.path, roots)
++		if opts.sequestered and id then
++			local r = rel :: string
++			if isSequesteredRel(string.lower(r)) and not isSequesteredRel(r) then
++				return `{e.path} is a sequestered name in another case`
++			end
++			if isSequesteredRel(r) and not (opts.own and opts.own[id :: string]) then
++				touched[id :: string] = true
++			end
++		end
++	end
++	if not next(touched) then
++		return nil
++	end
++	-- the folders every touched item moved to (for paths.rewrite, as moveOnOrigin computes them)
++	local moved: { [string]: string } = {}
++	for _, e in entries do
++		local id = trackerstate.itemOf(e.path, roots)
++		if id and not moved[id :: string] then
++			local _, before = seqMap(base, id :: string, roots)
++			local _, after = seqMap(result, id :: string, roots)
++			local only = next(after)
++			if count(after) == 1 and not before[only :: string] then
++				moved[id :: string] = only :: string
++			end
++		end
++	end
++	for id in touched do
++		local before, _, existed = seqMap(base, id, roots)
++		local after, afterDirs = seqMap(result, id, roots)
++		if existed then
++			if count(afterDirs) > 1 then
++				return `{id}'s files lie in two folders after the change (its sequestered files may only move with it)`
++			end
++			for rel, b in before do
++				local a = after[rel]
++				if not a then
++					return `{b.dir}/{rel} is sequestered: a step may move it with its item, never remove it`
++				end
++				if a.blob ~= b.blob then
++					local same = false
++					if rel == "check.sh" and a.dir ~= b.dir and opts.read then
++						local old, new = opts.read(b.blob), opts.read(a.blob)
++						same = old ~= nil and new ~= nil and paths.rewrite(old :: string, moved) == new
++					end
++					if not same then
++						return `{a.dir}/{rel} is sequestered: a step may move it with its item, never change it`
++					end
++				end
++			end
++			for rel, a in after do
++				if not before[rel] then
++					return `{a.dir}/{rel} is sequestered: a step may not add one to an item that exists`
++				end
++			end
 +		end
 +	end
 +	return nil
 +end
 +
-+-- The raw diff of `base..sha` through `git` (a function running git in the repository), judged. Returns nil when it is
-+-- tracker state, else why not (a git failure is a refusal: fail closed).
++export type Git = (args: { string }) -> (boolean, string)
++
++-- The raw diff of `base..sha` through `git` (a function running git in the repository), judged with both trees.
++-- Returns nil when it is tracker state, else why not (a git failure is a refusal: fail closed).
 +function trackerstate.check(
-+	git: (args: { string }) -> (boolean, string),
++	git: Git,
 +	base: string,
 +	sha: string,
 +	roots: { string },
-+	sequestered: boolean?
++	given: (boolean | Options)?
 +): string?
 +	local ok, raw = git({ "diff-tree", "-r", "--raw", "--no-renames", "--no-abbrev", base, sha })
 +	if not ok then
@@ -7431,7 +8246,51 @@ index 00000000..1cb751a4
 +	if not entries then
 +		return err
 +	end
-+	return trackerstate.judge(entries :: { Entry }, roots, sequestered)
++	local opts: Options = if type(given) == "table"
++		then table.clone(given :: Options)
++		else { sequestered = given == true }
++	local okBase, baseTree = git({ "ls-tree", "-r", "--full-tree", base })
++	local okResult, resultTree = git({ "ls-tree", "-r", "--full-tree", sha })
++	if not okBase or not okResult then
++		return `could not read the trees of {base}..{sha}`
++	end
++	opts.base = trackerstate.parseTree(baseTree)
++	opts.result = trackerstate.parseTree(resultTree)
++	opts.read = function(blob: string): string?
++		local okRead, text = git({ "cat-file", "blob", blob })
++		return if okRead then text else nil
++	end
++	return trackerstate.judge(entries :: { Entry }, roots, opts)
++end
++
++-- Each first-parent commit of `from..to`, judged against its own parent by its parent's registry (`rootsAt`), as the
++-- watermark vets main (review 003 F10: the broker judges the same way, so it never pushes what the watermark refuses).
++-- `pass(sha)` may accept a commit that isn't tracker state (the watermark's pull-request merges). Returns nil, or why
++-- the first refused commit is refused.
++function trackerstate.checkEach(
++	git: Git,
++	from: string,
++	to: string,
++	rootsAt: (ref: string) -> { string }?,
++	given: (boolean | Options)?,
++	pass: ((sha: string) -> boolean)?
++): string?
++	local ok, list = git({ "rev-list", "--reverse", "--first-parent", `{from}..{to}` })
++	if not ok then
++		return `could not list {from}..{to}`
++	end
++	for sha in string.gmatch(list, "%x+") do
++		local okParent, parent = git({ "rev-parse", "--verify", "-q", `{sha}^1` })
++		local base = if okParent then parent else trackerstate.EMPTY_TREE
++		local roots = rootsAt(if okParent then parent else sha)
++		local why = if roots
++			then trackerstate.check(git, base, sha, roots :: { string }, given)
++			else "the registry could not be read"
++		if why and not (pass and pass(sha)) then
++			return `{sha}: {why}`
++		end
++	end
++	return nil
 +end
 +
 +return trackerstate
@@ -7967,7 +8826,7 @@ index 5bec93c9..ac9c3fd2 100644
  
  ## Code mode (before the PR is marked ready)
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 2d090998..a5f3c048 100644
+index 2d090998..d28111e5 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -45,6 +45,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -8004,7 +8863,7 @@ index 2d090998..a5f3c048 100644
  - `capture`: `./zn spend <issue> --phase capture` after `./zn land`, before the capture worktree is removed. No lines.
  - `prep`: `./zn spend <issue> --phase prep` once, when the issue's design PR is opened, before anyone readies it. Lines are that branch's own `check.sh`, `acceptance/` and `experiments/` files.
  - `design-review`: `./zn spend <issue> --phase design-review` for the reviewer's run and again for the answering time; z-raft's coherence review is `./zn spend <R-id> --phase design-review` (shared among the members). No lines. Design reviews live where they ran (the issue's folder, or the raft's for the coherence review), and `./zn metrics` rolls an issue's up to its raft through `raft:`.
-@@ -163,6 +165,22 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+@@ -163,6 +165,23 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
  - `./zn raft-plan [--apply]`, `./zn fold <R-id> <issue>...`, `./zn unfold <R-id> <issue>...`, `./zn recombine <keeper> <other> [<issue>...]`, `./zn release <R-id> [--force]`
  - `./zn compact [--force]`
  - `./zn remap`
@@ -8012,17 +8871,18 @@ index 2d090998..a5f3c048 100644
 +
 +## Dispatch
 +`./zn dispatch` runs the pipeline headless and unattended. The rules are `z-nile/engine/dispatch.luau`'s; the stacked model files are `models.luau`'s.
++- **What the guards are** (the user's "Keep same user, accept detection", 2026-10-21). Unattended agents run as the user's own OS user. Every guard below (the wrapper, the broker, the tripwire, the watermark and the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent, which can read the user's credentials, rewrite the watermark or the repository's configuration between runs, or merge with the user's token. Known limits are said where each guard is.
 +- **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test` and a project's skills are read inside a step and are never one; any other name is an error.
-+- **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (`order` whole, each `[dispatch]` setting, each field of each `[<skill>.<cli>]` table). `order` is the CLI priority, top first; the supported CLIs are `claude`, `grok` and `agent` (Cursor), and a table naming any other is an error. Each `[<skill>.<cli>]` has `model`, `rank`, `runtime` and `max_tokens` (and optionally `effort`), and an `agent` table also `max_calls`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` table without it is an error, never unlimited (the user's "Cap model calls, record real total"); the runtime belongs to its CLI: `claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`). Nothing defaults: a skill no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's order; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. `zz-review` follows the review rule: Opus (`claude-opus-…`) through `claude` and `agent`, `grok-4.7` at `effort = "xhigh"` through `grok`; any other is an error.
++- **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (`order` whole, each `[dispatch]` setting, each field of each `[<skill>.<cli>]` table). `order` is the CLI priority, top first; the supported CLIs are `claude`, `grok` and `agent` (Cursor), and a table naming any other is an error. Each `[<skill>.<cli>]` has `model`, `rank`, `runtime` and `max_tokens` (and optionally `effort`), and an `agent` table also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` table without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`). Nothing defaults: a skill no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's order; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`). `zz-review` follows the review rule: Opus (`claude-opus-…`) through `claude` and `agent`, `grok-4.7` at `effort = "xhigh"` through `grok`; any other is an error.
 +- **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the watermark and the server's protection are what catch its use.
-+- **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire and the watermark all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, only regular files (no symlink, no submodule), no `.gitattributes` or `.gitmodules`, and no change to an existing `check.sh` or `acceptance/` file but a move.
-+- **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential only as a fast-forward of a freshly fetched `main`, never forced, and only when they are tracker state by that main's registry. Nothing else in a step can push to `main`.
-+- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
-+- **The watermark and the tripwire** (the user's "Persisted watermark"). The dispatcher keeps the last commit of `main` it vetted in a file outside the repository and every worktree: `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the repository, file `main-seen`. At the start of every run, before every step and after every step, every commit of `main` since the watermark must be tracker state (as above) or a pull request's merge on GitHub; and after a step the main checkout's tracked and untracked files must be unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch vet`. This detects a late push (a process the step left behind, a stolen credential) after the fact, at the next run; it never prevents one. A first run with no watermark takes `main` as it is. An agent of the same OS user that goes looking can still write the watermark file or run `vet`: they are the user's, by rule.
++- **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire, the watermark and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
++- **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the watermark judges it). Nothing else in a step is meant to push to `main`.
++- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
++- **The watermark and the tripwire** (the user's "Persisted watermark", framed by "Keep same user, accept detection"). The dispatcher keeps the last commit of `main` it vetted where a well-behaved step never writes, and detects if it changes: `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the repository, file `main-seen`, with `origin-url` beside it; and it mirrors it in each item's `state.json`. At the start of every run, before every step and after every step, every commit of `main` since the watermark must be tracker state (as above) or a pull request's merge into `main` on GitHub. A missing watermark is never trusted (only `./zn dispatch vet` writes one), one that differs from what the run last read or wrote trips it, one behind the item's mirror stops the next run, and so does origin's URL changed since the last run. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch vet` (`--dry-run` lists each commit's verdict and writes nothing; plain `vet` lists them too). **Known limits:** this detects a late push after the fact, at the next run, and never prevents one; a process left behind can rewrite the watermark, its mirror and the URL file between runs; a merge made with the user's credential (stolen or not) is a pull request's merge and passes; an agent can run `vet` itself. They are the user's, by rule.
 +- **Spend.** The dispatcher records each step's session tokens and model id (with its effort: `grok-4.7-xhigh`): `spend <id> --phase <the step's phase> --tokens <n> --model <id> --note "dispatch <step>"` from the `zn-dispatch` worktree while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --tokens --model` line it prints for the author, and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. A step under the dispatcher records its own rows without `--tokens` for its session.
-+- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and it carries only the item's own tracker state (a prep PR: the issue's folder and skill lessons; a rafting PR: its project root's documents), pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts and writes nothing.
-+- **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
-+- **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the tripwire: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the watermark catches what they miss.
++- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: only its own items' files, the raft it adds and that raft's members, never another item's sequestered files), pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts and writes nothing.
++- **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
++- **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the watermark: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the watermark catches what they miss.
 +- **Inside a check.** A spec or `check.sh` that runs `./zn dispatch` may start only a CLI whose real path is under the checkout's `.cache` (a fake); any other is refused before it starts.
  
  ## Sync and claim
