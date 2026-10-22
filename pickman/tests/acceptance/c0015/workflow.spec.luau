@@ -121,6 +121,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		"the workflow's triggers and the gate job are unchanged, and nothing runs on pull_request_target",
 		function()
 			local on: any = wf["on"]
+			-- c0120 override: CI's paths-ignore names the roots in the homes (pickman/.tracker, z-nile/.tracker), as below
 			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it. c0114 override: every
 			-- project root and the shared counter are tracker state. c0120 override: pickman's root is pickman/.tracker,
 			-- and tracker/ (retired) is not ignored, so a push that brings it back runs the gate
