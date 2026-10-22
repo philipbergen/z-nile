@@ -27,16 +27,77 @@ local RESTAMPED: { [string]: string } = {
 }
 local PREFIXES =
 	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
+-- A file named alone (no folder) is a path only outside double quotes: in quotes it is a message, a case's name or
+-- a grep pattern (c0099's), found by running the finished checks by hand
 local FILES = {
 	["default.project.json"] = true,
 	["lobby.project.json"] = true,
 	zn = true,
+	-- the repository root's own files (found by running the finished checks by hand)
+	["AGENTS.md"] = true,
+	["CLAUDE.md"] = true,
+	["SETUP.md"] = true,
+	["rokit.toml"] = true,
+	["selene.toml"] = true,
+	["stylua.toml"] = true,
+	[".luaurc"] = true,
+	[".gitignore"] = true,
 }
+-- A file named alone is a path only outside quotes and not right after one (c0053's `merging='zn sync…'` is a
+-- pattern, c0042's `for s in "./zn board"` a list of patterns), or as the command of a command substitution, quoted
+-- or not (`"$(./zn find f0014)/check.sh"`)
+local function substituted(line: string, first: number): boolean
+	return first > 2 and string.sub(line, first - 2, first - 1) == "$("
+end
 -- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
 local FOLDERS = { tracker = true, src = true, tests = true }
 
 local function blob(text: string): string
 	return serde.hash("sha1", `blob {#text}\0{text}`)
+end
+
+-- The words of a grep's pattern (a pattern names text, not a file: c0046's `grep -qF "./zn worktree" …`): after
+-- `grep` or `rg` and its options, the first other word, or each `-e`'s; a quoted pattern runs to its closing quote.
+-- `line` is the scanned line, `raw[k]` the k-th word as written and `starts[k]` its first byte.
+local function patternWords(line: string, raw: { string }, starts: { number }): { [number]: boolean }
+	local marked: { [number]: boolean } = {}
+	local function mark(k: number)
+		local s = starts[k]
+		local q = if s > 1 then string.sub(line, s - 1, s - 1) else ""
+		if q == '"' or q == "'" then
+			local close = string.find(line, q, s, true) or (#line + 1)
+			for j = k, #raw do
+				if starts[j] < close then
+					marked[j] = true
+				end
+			end
+		else
+			marked[k] = true
+		end
+	end
+	for k, w in raw do
+		if w == "grep" or w == "rg" or w == "egrep" then
+			local j, named = k + 1, false
+			while raw[j] and string.sub(raw[j], 1, 1) == "-" and raw[j] ~= "--" do
+				if raw[j] == "-e" or raw[j] == "--regexp" then
+					if raw[j + 1] then
+						mark(j + 1)
+						named = true
+					end
+					j += 2
+				else
+					j += 1
+				end
+			end
+			if raw[j] == "--" then
+				j += 1
+			end
+			if not named and raw[j] then
+				mark(j)
+			end
+		end
+	end
+	return marked
 end
 
 -- the literal paths of a check.sh, in order (a path may repeat)
@@ -48,13 +109,43 @@ local function literals(text: string): { string }
 			-- a check's label is prose, not a command
 			line = string.gsub(line, '^(%s*check%s+)"[^"]*"', "%1")
 			local words: { string } = {}
-			for w in string.gmatch(line, "[^%s\"'();|&<>`]+") do
-				table.insert(words, (string.gsub(w, "[\\,]+$", "")))
+			local quoted: { boolean } = {}
+			local starts: { number } = {}
+			local at = 1
+			while true do
+				local s, e = string.find(line, "[^%s\"'();|&<>`]+", at)
+				if not s then
+					break
+				end
+				at = (e :: number) + 1
+				local _, quotes = string.gsub(string.sub(line, 1, s - 1), '"', "")
+				table.insert(quoted, quotes % 2 == 1)
+				table.insert(starts, s)
+				local w = string.sub(line, s, e :: number)
+				local word = string.gsub(w, "[\\,]+$", "")
+				-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
+				local name = string.match(word, "^[%a_][%w_]*=")
+				if name and #word > #name then
+					word = string.sub(word, #name + 1)
+				end
+				-- a word that goes on with a variable: its literal folder is the path
+				local dollar = string.find(word, "$", 1, true)
+				if dollar and dollar > 1 then
+					local folder = string.match(string.sub(word, 1, dollar - 1), "^(.*)/[^/]*$")
+					if folder and folder ~= "" then
+						word = folder .. "/"
+					end
+				end
+				table.insert(words, word)
 			end
+			local pattern = patternWords(line, words, starts)
 			local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
 			local finding = false -- the words after `find`, before its first option, are the folders it searches
 			for i, w in words do
 				local path: string? = nil
+				if pattern[i] then
+					continue
+				end
 				if w == "find" then
 					finding = true
 					continue
@@ -72,7 +163,18 @@ local function literals(text: string): { string }
 				then
 					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
 						path = if string.match(w, "%.luau$") then w else w .. ".luau"
-					elseif FILES[w] or (finding and FOLDERS[w]) then
+					elseif
+						(
+							FILES[w]
+							and (
+								substituted(line, starts[i])
+								or not (
+									quoted[i]
+									or string.find(string.sub(line, starts[i] - 1, starts[i] - 1), "[\"']")
+								)
+							)
+						) or (finding and FOLDERS[w])
+					then
 						path = w
 					else
 						for _, p in PREFIXES do

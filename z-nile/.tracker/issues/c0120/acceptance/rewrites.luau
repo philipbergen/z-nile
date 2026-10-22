@@ -20,14 +20,75 @@ rewrites.MARK = "tracker/rafts/done/R0001/check.sh"
 -- or an option, and either after `lune run` (then with .luau), a root file of a home, or under a top-level folder.
 local PREFIXES =
 	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
+-- A file named alone (no folder) is a path only outside double quotes: in quotes it is a message, a case's name or
+-- a grep pattern (c0099's), found by running the finished checks by hand
 local FILES = {
 	["default.project.json"] = true,
 	["lobby.project.json"] = true,
 	zn = true,
 	["./zn"] = true,
+	-- the repository root's own files (found by running the finished checks by hand)
+	["AGENTS.md"] = true,
+	["CLAUDE.md"] = true,
+	["SETUP.md"] = true,
+	["rokit.toml"] = true,
+	["selene.toml"] = true,
+	["stylua.toml"] = true,
+	[".luaurc"] = true,
+	[".gitignore"] = true,
 }
+-- A file named alone is a path only outside quotes and not right after one (c0053's `merging='zn sync…'` is a
+-- pattern, c0042's `for s in "./zn board"` a list of patterns), or as the command of a command substitution, quoted
+-- or not (`"$(./zn find f0014)/check.sh"`)
+local function substituted(line: string, first: number): boolean
+	return first > 2 and string.sub(line, first - 2, first - 1) == "$("
+end
 -- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
 local FOLDERS = { tracker = true, src = true, tests = true }
+
+-- The words of a grep's pattern (a pattern names text, not a file: c0046's `grep -qF "./zn worktree" …`): after
+-- `grep` or `rg` and its options, the first other word, or each `-e`'s; a quoted pattern runs to its closing quote.
+-- `line` is the scanned line, `raw[k]` the k-th word as written and `starts[k]` its first byte.
+local function patternWords(line: string, raw: { string }, starts: { number }): { [number]: boolean }
+	local marked: { [number]: boolean } = {}
+	local function mark(k: number)
+		local s = starts[k]
+		local q = if s > 1 then string.sub(line, s - 1, s - 1) else ""
+		if q == '"' or q == "'" then
+			local close = string.find(line, q, s, true) or (#line + 1)
+			for j = k, #raw do
+				if starts[j] < close then
+					marked[j] = true
+				end
+			end
+		else
+			marked[k] = true
+		end
+	end
+	for k, w in raw do
+		if w == "grep" or w == "rg" or w == "egrep" then
+			local j, named = k + 1, false
+			while raw[j] and string.sub(raw[j], 1, 1) == "-" and raw[j] ~= "--" do
+				if raw[j] == "-e" or raw[j] == "--regexp" then
+					if raw[j + 1] then
+						mark(j + 1)
+						named = true
+					end
+					j += 2
+				else
+					j += 1
+				end
+			end
+			if raw[j] == "--" then
+				j += 1
+			end
+			if not named and raw[j] then
+				mark(j)
+			end
+		end
+	end
+	return marked
+end
 
 export type Literal = { line: number, first: number, last: number, word: string, path: string, dir: string }
 
@@ -52,7 +113,7 @@ function rewrites.literals(text: string): { Literal }
 				.. string.rep(" ", (le :: number) - q + 1)
 				.. string.sub(scanned, (le :: number) + 1)
 		end
-		local words: { { w: string, first: number, last: number } } = {}
+		local words: { { w: string, first: number, last: number, quoted: boolean } } = {}
 		local i = 1
 		while true do
 			local s, e = string.find(scanned, "[^%s\"'();|&<>`]+", i)
@@ -61,13 +122,40 @@ function rewrites.literals(text: string): { Literal }
 			end
 			local w = string.sub(scanned, s, e :: number)
 			local trimmed = string.gsub(w, "[\\,]+$", "")
-			table.insert(words, { w = trimmed, first = s, last = s + #trimmed - 1 })
+			-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
+			local name = string.match(trimmed, "^[%a_][%w_]*=")
+			if name and #trimmed > #name then
+				trimmed = string.sub(trimmed, #name + 1)
+				s += #name
+			end
+			local _, quotes = string.gsub(string.sub(scanned, 1, s - 1), '"', "")
+			table.insert(words, { w = trimmed, first = s, last = s + #trimmed - 1, quoted = quotes % 2 == 1 })
 			i = (e :: number) + 1
 		end
+		local raw: { string } = {}
+		local starts: { number } = {}
+		for k, word in words do
+			raw[k] = word.w
+			starts[k] = word.first
+		end
+		local pattern = patternWords(scanned, raw, starts)
 		local dir = ""
 		local finding = false -- the words after `find`, before its first option, are the folders it searches
 		for k, word in words do
+			if pattern[k] then
+				continue
+			end
 			local w = word.w
+			local last = word.last
+			-- a word that goes on with a variable: its literal folder is the path (`.claude/skills/$f/SKILL.md`)
+			local dollar = string.find(w, "$", 1, true)
+			if dollar and dollar > 1 then
+				local folder = string.match(string.sub(w, 1, dollar - 1), "^(.*)/[^/]*$")
+				if folder and folder ~= "" then
+					w = folder .. "/"
+					last = word.first + #w - 1
+				end
+			end
 			if w == "find" then
 				finding = true
 				continue
@@ -89,7 +177,16 @@ function rewrites.literals(text: string): { Literal }
 				and string.find(w, "/", 1, true)
 			then
 				path = if string.match(w, "%.luau$") then w else w .. ".luau"
-			elseif FILES[w] then
+			elseif
+				FILES[w]
+				and (
+					substituted(scanned, word.first)
+					or not (
+						word.quoted
+						or string.find(string.sub(scanned, word.first - 1, word.first - 1), "[\"']")
+					)
+				)
+			then
 				path = if w == "./zn" then "zn" else w
 			elseif finding and FOLDERS[w] then
 				path = w
@@ -103,7 +200,7 @@ function rewrites.literals(text: string): { Literal }
 			if path then
 				table.insert(
 					out,
-					{ line = n, first = word.first, last = word.last, word = w, path = path, dir = dir }
+					{ line = n, first = word.first, last = last, word = w, path = path, dir = dir }
 				)
 			end
 		end

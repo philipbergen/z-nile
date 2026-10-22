@@ -178,6 +178,18 @@ return t.spec("c0120 every project's files live in its home", function(it)
 		end
 	)
 
+	-- a finished check.sh that formats and lints its specs runs stylua and selene from its home, where they look for
+	-- their configuration
+	-- (found by running the finished checks by hand: c0047, c0048, c0050)
+	it("each home carries the root's stylua.toml and selene.toml, unchanged", function()
+		for _, file in { "stylua.toml", "selene.toml" } do
+			local root = fs.readFile(`{TOP}/{file}`)
+			for _, home in { "pickman", "z-nile" } do
+				t.expect(exists(`{home}/{file}`) and fs.readFile(`{TOP}/{home}/{file}`) == root).toBe(true)
+			end
+		end
+	end)
+
 	it("pickman's runner is z-nile's, and its t and renamed are z-nile's modules", function()
 		local R = "req" .. "uire" -- keeps literal require text out of this file (the graph scanner)
 		local runner = fs.readFile(`{TOP}/pickman/tests/run.luau`)

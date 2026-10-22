@@ -41,6 +41,11 @@ local ZNILE_DONE = table.concat({
 	'check "AC3: a pickman spec" test -f tests/acceptance/f0001/a.spec.luau',
 	'check "AC4: the gate" z-nile/check.sh --full',
 	'check "AC5: a folder most of whose files stayed" test -d scripts/lib',
+	'f=.claude/skills/x.md; grep -q rule "$f" AGENTS.md',
+	[[check "AC6: a quoted root file stays" bash -c 'grep -qF "x = default.project.json" AGENTS.md || echo "AGENTS.md"']],
+	[[for f in skills; do grep -qF "./zn worktree" ".claude/skills/$f/x.md"; done]],
+	[[p='zn sync'; grep -q "$p" zn]],
+	[[for s in "./zn board"; do grep -qF "$s" "$(./zn find f0001)/f0001.md"; done]],
 	"",
 }, "\n")
 
@@ -66,6 +71,9 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		put("scripts/lib/beta.luau", "--!strict\nreturn 1\n")
 		put("src/server/Main.server.luau", "--!strict\nreturn nil\n")
 		put("tests/run.luau", "--!strict\nreturn nil\n")
+		put("AGENTS.md", "rule\n")
+		put("default.project.json", "{}\n")
+		put(".claude/skills/x.md", "rule\n")
 		put("tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
 		put("tests/acceptance/f0001/a.spec.luau", "--!strict\nreturn nil\n")
 		put("tracker/architecture.md", "deps\n")
@@ -133,6 +141,11 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			'check "AC3: a pickman spec" test -f ../pickman/tests/acceptance/f0001/a.spec.luau',
 			'check "AC4: the gate" ./check.sh --full',
 			'check "AC5: a folder most of whose files stayed" test -d ../scripts/lib',
+			'f=../.claude/skills/x.md; grep -q rule "$f" ../AGENTS.md',
+			[[check "AC6: a quoted root file stays" bash -c 'grep -qF "x = default.project.json" ../AGENTS.md || echo "AGENTS.md"']],
+			[[for f in skills; do grep -qF "./zn worktree" "../.claude/skills/$f/x.md"; done]],
+			[[p='zn sync'; grep -q "$p" ../zn]],
+			[[for s in "./zn board"; do grep -qF "$s" "$(../zn find f0001)/f0001.md"; done]],
 			"",
 		}, "\n"))
 		-- written and run again, it changes nothing
