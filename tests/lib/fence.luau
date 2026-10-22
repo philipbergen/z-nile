@@ -138,8 +138,9 @@ function fence.holds(isAlive: boolean, recorded: string?, current: string?): boo
 end
 
 -- Writes `text` to `path` whole or not at all: a reader sees the old file or the new one, never a part (c0127).
-local function writeWhole(path: string, text: string)
-	local temp = `{path}.part-{myPid()}`
+-- `me` (this process's pid, read once by the caller) names the temp file, so no subprocess runs here.
+local function writeWhole(path: string, text: string, me: string)
+	local temp = `{path}.part-{me}`
 	if pcall(fs.writeFile, temp, text) then
 		if not pcall(fs.move, temp, path, true) then
 			pcall(fs.removeFile, temp)
@@ -227,7 +228,7 @@ local function takeOverIfStale(lock: string, unownedFor: number, me: string, myI
 		return
 	end
 	if myId then
-		writeWhole(`{mutex}/owner`, `{me} {myId}`)
+		writeWhole(`{mutex}/owner`, `{me} {myId}`, me)
 	end
 	fs.writeFile(`{mutex}/pid`, me)
 	local records = lockRecords(lock)
@@ -270,7 +271,7 @@ local function takeLock(lock: string)
 		end
 	end
 	if myId then
-		writeWhole(`{lock}/start-{me}`, myId)
+		writeWhole(`{lock}/start-{me}`, myId, me)
 	end
 	fs.writeFile(`{lock}/pid`, me)
 end
@@ -711,7 +712,7 @@ function fence.enter()
 		if fs.isDir(lock) then
 			local me = myPid()
 			-- the record and its start id are one file, written whole: a reader sees no record, or both
-			writeWhole(`{lock}/pid-{me}`, fence.startOf(me) or "")
+			writeWhole(`{lock}/pid-{me}`, fence.startOf(me) or "", me)
 		end
 		return
 	end

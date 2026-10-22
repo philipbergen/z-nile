@@ -157,8 +157,15 @@ return t.spec("R0047 lock start ids", function(it)
 			error(`refusing to run git in {repo}: it is not a fixture repository this spec created`)
 		end
 		must(process.exec("git", { "add", "-A" }, { cwd = repo }), "git add")
-		local commit =
-			{ "-c", "user.name=c0127", "-c", "user.email=c0127@example.invalid", "commit", "-qm", "runner" }
+		local commit = {
+			"-c",
+			"user.name=lock-start-ids",
+			"-c",
+			"user.email=lock-start-ids@example.invalid",
+			"commit",
+			"-qm",
+			"runner",
+		}
 		must(process.exec("git", commit, { cwd = repo }), "git commit")
 		fs.writeDir(`{repo}/.cache`)
 		write(

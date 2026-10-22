@@ -21,6 +21,7 @@
 | 17 | 2026-10-22 21:04 | R0047: review-001 F1 F2: read own start id once before waiting; lock-start-ids spec | 245 | 17 | 35.0 | explicit | code-review |  |
 | 18 | 2026-10-22 21:05 | R0047: refute-001 | 0 | 0 | 5.0 | focus | code-review |  |
 | 19 | 2026-10-22 21:10 | R0047: review-002 | 0 | 0 | 3.0 | focus | code-review |  |
+| 20 | 2026-10-22 21:11 | R0047: review-002 F1 F2: no subprocess in writeWhole; fixture identity | 15 | 7 | 6.0 | explicit | code-review |  |
 
-**Total:** +904 / -34 lines, 485.0 agent-minutes, 597953 tokens over 19 records
-<!-- totals: added=904 removed=34 minutes=485.0 records=19 tokens=597953 -->
+**Total:** +919 / -41 lines, 491.0 agent-minutes, 597953 tokens over 20 records
+<!-- totals: added=919 removed=41 minutes=491.0 records=20 tokens=597953 -->
