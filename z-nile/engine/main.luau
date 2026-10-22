@@ -779,13 +779,19 @@ end
 
 -- c0114's execution window: origin/main can be read but has no registry (c0114 has not landed). The branch's engine
 -- then makes no item, offline (PICKMAN_PUBLISH=0) included: it would number from the local tracker/next, the number
--- main's next capture takes. Captures come from the main checkout, whose engine predates the registry.
+-- main's next capture takes. Captures come from the main checkout, whose engine predates the registry. Called after
+-- refuseStale, which fetches when publishing; offline, origin/main is as last fetched, and the message says so.
 local function refuseInWindow(what: string)
 	if not hasOrigin() or not sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok then
 		return
 	end
 	local _, why = projects.at("origin/main")
 	if why and string.find(why, `has no {projects.FILE}`, 1, true) then
+		if not publishing() then
+			fail(
+				`{what}: origin/main as last fetched has no {projects.FILE}: fetch (./zn sync) if c0114 has landed; otherwise capture from the main checkout until it does, never offline here`
+			)
+		end
 		fail(
 			`{what}: origin/main has no {projects.FILE} (c0114 has not landed): capture from the main checkout until it does, never offline here`
 		)
@@ -910,10 +916,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if not (rtype and store.PREFIX[rtype] and slug) then
 			fail("usage: new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]")
 		end
-		refuseInWindow("new raft")
 		-- the raft's project comes from --project or the directory, and holds every member (c0114)
 		local wanted = projectRoot(opts, "new raft")
 		refuseStale()
+		refuseInWindow("new raft")
 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
