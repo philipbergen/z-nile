@@ -24,6 +24,7 @@
 | 20 | 2026-10-22 20:30 | R0035: refute-002 and harvest | 0 | 0 | 1.3 | raft+proportional | code-review |  |
 | 21 | 2026-10-22 20:30 | R0035: final verification logs | 0 | 0 | 0.8 | raft+proportional | deliver |  |
 | 22 | 2026-10-22 20:41 | tracker: done R0035 | 0 | 0 | 2.7 | raft+proportional | deliver |  |
+| 23 | 2026-10-22 20:47 | deliver | 0 | 0 | 3.0 | spend+proportional | deliver |  |
 
-**Total:** +723 / -52 lines, 131.1 agent-minutes, 73971 tokens over 22 records
-<!-- totals: added=723 removed=52 minutes=131.1 records=22 tokens=73971 -->
+**Total:** +723 / -52 lines, 134.1 agent-minutes, 73971 tokens over 23 records
+<!-- totals: added=723 removed=52 minutes=134.1 records=23 tokens=73971 -->
