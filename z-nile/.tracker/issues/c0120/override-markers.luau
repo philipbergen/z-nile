@@ -48,7 +48,7 @@ local argvMain = { "diff", "-U0", "-M", base, head, "--" }
 local status = diffOf({ "diff", "--name-status", "-M", base, head, "--", ACC[1], ACC[2] })
 for line in string.gmatch(status, "[^\n]+") do
 	local st, path = string.match(line, "^(%a)%d*\t([^\t]+)$")
-	local id, rest = if path then string.match(path, "/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$") else nil, nil
+	local id, rest = string.match(path or "", "/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
 	local old = if st == "A" and id then before(id, rest :: string) else nil
 	if old then
 		local blob = diffOf({ "diff", "-U0", `{pre}:{old}`, `{head}:{path}` })
