@@ -96,7 +96,7 @@ source z-nile/lib/fence.sh
 # (they only read) (the builds write
 # <home>/.cache/check*.rbxl): a symlinked or bad .cache, which an unjailed spec could leave, refuses (code review 004 F3)
 for i in "${!names[@]}"; do
-  pickman_fence_refusals "$(pwd -P)/$(prefix "${homes[$i]}")" || exit 1
+  pickman_fence_refusals "$(pwd -P)/${homes[$i]}" || exit 1
 done
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
