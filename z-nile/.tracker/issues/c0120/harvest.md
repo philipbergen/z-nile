@@ -38,3 +38,11 @@
 - review-004 F5: testing/specs-set-host-markers-explicitly
 - review-004 F6: testing/guards-move-with-the-working-directory
 - review-004 F7: ticket-prep/restated-rules-move-together
+
+- review-005 F1: review/sequestration-reference-not-a-ref
+- review-005 F2: testing/guards-move-with-the-working-directory
+- review-005 F3: testing/seed-every-enumerated-case
+- review-005 F4: testing/allowlist-keys-exist
+- review-005 F5: architecture/parsers-refuse-ambiguity
+- review-005 F6: ticket-prep/spec-design-correspondence
+- review-005 F7: testing/no-live-counts-in-promoted-specs
