@@ -98,6 +98,23 @@ return t.spec("c0120 a check.sh fences every home's .cache", function(it)
 		)
 	end
 
+	it(
+		"the registry without its reader refuses instead of guessing the homes (code review 006 F4)",
+		function()
+			local copy = `{base}/no-reader`
+			fs.writeDir(`{copy}/z-nile/lib`)
+			fs.writeDir(`{copy}/pickman/.tracker`)
+			fs.writeFile(`{copy}/z-nile/lib/fence.sh`, fs.readFile(`{root}/z-nile/lib/fence.sh`))
+			fs.writeFile(`{copy}/z-nile/projects.toml`, engine.REGISTRY)
+			local r = process.exec(
+				"bash",
+				{ "-c", '. "$1/z-nile/lib/fence.sh" && pickman_fence_dirs "$1"', "_", copy }
+			)
+			t.expect(r.ok).toBe(false)
+			t.expect(string.find(r.stderr, "has no reader (z-nile/roots.luau)", 1, true) ~= nil).toBe(true)
+		end
+	)
+
 	it("a symlinked .cache in another home refuses a pickman check.sh before any check", function()
 		local away = `{base}/away`
 		fs.writeDir(away)

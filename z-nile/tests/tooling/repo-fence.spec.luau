@@ -608,19 +608,36 @@ return t.spec("repository fence", function(it)
 		if not fs.isFile(`{checkout}/z-nile/check.sh`) then
 			return -- a partial copy of the guards (see above)
 		end
+		-- every tracked shell and Luau file, not a hand list (code review 006 F2): the fence's own file, items'
+		-- sequestered and promoted specs, and specs (they fence fixtures on purpose) aside; cachepaths quotes fence.sh's
+		-- lines as strings of its reviewed list
+		local allowedFns = { pickman_fence_all = true, pickman_fence_dirs = true, pickman_guarded = true }
+		-- the runner's jailed shell: its own home's whole fence, and the ceiling over pickman_fence_dirs' list
+		local allowedLine =
+			'for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs'
+		local listing =
+			process.exec("git", { "ls-files", "--", "*.sh", "*.luau", "zn" }, { cwd = checkout }).stdout
 		local bad: { string } = {}
-		for _, path in
-			{ "z-nile/check.sh", "z-nile/lib/ac.sh", "z-nile/tests/lib/fence.luau", "z-nile/tests/run.luau" }
-		do
-			local text = fs.readFile(`{checkout}/{path}`)
-			for _, fn in { "pickman_fence_refusals", "pickman_fence_sentinel", "pickman_home_fence" } do
-				for line in string.gmatch(text, "[^\n]+") do
-					if
-						string.find(line, fn, 1, true)
-						and not string.match(line, "^%s*%-%-")
-						and not string.match(line, "^%s*#")
-					then
-						table.insert(bad, `{path} calls {fn}: {line}`)
+		for path in string.gmatch(listing, "[^\n]+") do
+			local skip = path == "z-nile/lib/fence.sh"
+				or path == "z-nile/tests/lib/cachepaths.luau"
+				or string.find(path, ".tracker/", 1, true) ~= nil
+				or string.find(path, "/tests/acceptance/", 1, true) ~= nil
+				or string.match(path, "%.spec%.luau$") ~= nil
+			if not skip and fs.isFile(`{checkout}/{path}`) then
+				for line in string.gmatch(fs.readFile(`{checkout}/{path}`), "[^\n]+") do
+					if not string.match(line, "^%s*%-%-") and not string.match(line, "^%s*#") then
+						for fn in string.gmatch(line, "pickman_[%w_]*") do
+							local isFence = string.find(fn, "fence", 1, true) ~= nil
+								or fn == "pickman_guarded"
+							if
+								isFence
+								and not allowedFns[fn]
+								and not string.find(line, allowedLine, 1, true)
+							then
+								table.insert(bad, `{path} calls {fn}: {line}`)
+							end
+						end
 					end
 				end
 			end

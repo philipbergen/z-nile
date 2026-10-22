@@ -186,11 +186,16 @@ pickman_fence() {
 # The one owner of the set of folders the guards cover (c0120 code review 005 F2): the checkout's top and every
 # project home its registry lists (`z-nile/roots -- --projects`), one per line. The runner, the gate and ac.sh all
 # take the set from here. A copy without the engine or the registry (some fixtures copy only z-nile/lib and the
-# runner) lists the top folders that hold a .tracker/.
+# runner) lists the top folders that hold a .tracker/; only a copy without the registry itself does.
 pickman_fence_dirs() {
   local top=$1 out name home root d
   printf '%s\n' "$top"
-  if [[ -f $top/z-nile/roots.luau && -f $top/z-nile/projects.toml ]]; then
+  # the registry present but its reader missing is a broken copy, never a reason to guess (code review 006 F4)
+  if [[ -f $top/z-nile/projects.toml && ! -f $top/z-nile/roots.luau ]]; then
+    echo "fence: $top/z-nile/projects.toml has no reader (z-nile/roots.luau); refusing to guess the homes. Stop and report this." >&2
+    return 1
+  fi
+  if [[ -f $top/z-nile/projects.toml ]]; then
     out=$(cd "$top" && PATH="$HOME/.rokit/bin:$PATH" lune run z-nile/roots -- --projects) || {
       echo "fence: cannot read $top/z-nile/projects.toml's homes; refusing. Stop and report this." >&2
       return 1

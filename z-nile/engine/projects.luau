@@ -156,6 +156,14 @@ function projects.homeOf(reg: Registry, path: string): string
 	return "."
 end
 
+-- Where `done` promotes the acceptance specs of the item `id` in the root `root` (c0120): its project's
+-- `<home>/tests/acceptance/<id>`, `tests/acceptance/<id>` for the root's. The one reader of that place: `done`,
+-- `promote-check` and c0120's sequestration check (AC18) all take it from here (code review 006 F1).
+function projects.promotedDir(reg: Registry, root: string, id: string): string
+	local home = projects.homeOf(reg, `{root}/{id}`)
+	return if home == "." then `tests/acceptance/{id}` else `{home}/tests/acceptance/{id}`
+end
+
 -- Every project's promoted-spec folder (c0120): `<home>/tests/acceptance`, `tests/acceptance` for the root's, once
 -- each, in registry order.
 function projects.acceptanceRoots(reg: Registry): { string }

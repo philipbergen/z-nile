@@ -2641,7 +2641,7 @@ end
 
 -- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
 local function promotedDir(m: store.Item): string
-	return inHome(homeOf(m), `tests/acceptance/{m.id}`)
+	return projects.promotedDir(projects.load(), m.root, m.id)
 end
 
 -- Copy each member's acceptance specs into its project's tests/acceptance/<id>, run `check`, then remove the
