@@ -45,13 +45,13 @@ return t.spec("f0100 blaster adapters", function(it)
 		t.expect(node ~= nil and node.ClassName).toBe("ModuleScript")
 	end)
 
-	it("the remotes are the same four: a shot rides the Intent remote", function()
+	it("the remotes are the game place's five: a shot rides the Intent remote", function()
 		local names = {}
 		for _, child in find({ "ReplicatedStorage", "Remotes" }):GetChildren() do
 			table.insert(names, child.Name)
 		end
 		table.sort(names)
-		t.expect(names).toEqual({ "Intent", "PlayAgain", "Ready", "Snapshot" })
+		t.expect(names).toEqual({ "Intent", "LobbyStatus", "Ready", "Snapshot", "ToLobby" })
 	end)
 
 	it("the server adapter is untouched by the blaster: it hands every intent to Session.submit", function()
