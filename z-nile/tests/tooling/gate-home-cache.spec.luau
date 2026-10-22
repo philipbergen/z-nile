@@ -13,7 +13,8 @@ local base = `{here}/.cache/c0120-gate-home-cache`
 
 local function plan(dir: string, extra: { string }?): (boolean, string)
 	local argv = { "z-nile/check.sh", "--plan" }
-	for _, a in extra or {} do
+	local more: { string } = extra or {}
+	for _, a in more do
 		table.insert(argv, a)
 	end
 	local r = process.exec("bash", argv, { cwd = dir })
