@@ -266,15 +266,15 @@ index beffa77c..4227a344 100644
  ## CI
  `.github/workflows/check.yml` bootstraps the runner with `z-nile/setup.sh --tools`, the same script as a new host, then runs one project's gate per job (`gate (pickman)`, `gate (z-nile)`, c0120), so every CI run also proves this document on a clean Linux machine. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root. setup.sh ends with `z-nile/check.sh --full`.
 diff --git a/pickman/.tracker/issues/done/c0010/check.sh b/pickman/.tracker/issues/done/c0010/check.sh
-index 2feb8f47..5a100f63 100755
+index 2feb8f47..8915ed41 100755
 --- a/pickman/.tracker/issues/done/c0010/check.sh
 +++ b/pickman/.tracker/issues/done/c0010/check.sh
-@@ -14,6 +14,6 @@ check "AC4: per-seed reproducibility and assertDeterministic" lune run tests/run
+@@ -13,7 +13,5 @@ check "AC3: failures write a replay that sim.replay reproduces" lune run tests/r
+ check "AC4: per-seed reproducibility and assertDeterministic" lune run tests/run -- "$A/determinism.spec.luau"
  check "AC5: harness misuse fails before any step" lune run tests/run -- "$A/misuse.spec.luau"
  check "AC6: bench interleaves worlds within the budget" lune run tests/run -- "$A/bench.spec.luau"
- check "AC7: testing skill documents tests/scenario and the sim harness" \
+-check "AC7: testing skill documents tests/scenario and the sim harness" \
 -  bash -c 'f=../.claude/skills/testing/SKILL.md; for s in "tests/scenario/" "@tests/lib/sim" "sim.replay" "Step k moves the world from time k to time k+1" "Events returned by step k are visible at time k+1" "An intent at k is delivered in step k" "timing exception" "tests/integration/ is for"; do grep -qF "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
-+  bash -c 'f=../z-nile/skills/zz-test/SKILL.md; for s in "tests/scenario/" "@tests/lib/sim" "sim.replay" "Step k moves the world from time k to time k+1" "Events returned by step k are visible at time k+1" "An intent at k is delivered in step k" "timing exception" "tests/integration/ is for"; do grep -qF "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
  
  finish
 diff --git a/pickman/.tracker/issues/done/c0041/check.sh b/pickman/.tracker/issues/done/c0041/check.sh
@@ -2796,7 +2796,7 @@ index 00000000..cb2f48b5
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/c0115/c0115.md
-index 258a3a73..34c68849 100644
+index 258a3a73..7865a531 100644
 --- a/z-nile/.tracker/issues/c0115/c0115.md
 +++ b/z-nile/.tracker/issues/c0115/c0115.md
 @@ -6,7 +6,7 @@ slug: skill-names-readme
@@ -2808,7 +2808,7 @@ index 258a3a73..34c68849 100644
  created: 2026-10-20
  status: new-falcon-lucky-mongoose
  ---
-@@ -38,53 +38,585 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -38,53 +38,587 @@ Decided with the user (2026-10-20), from the programme review:
  - Move and rename the skill files under `z-nile/` to the `z-` and `zz-` names. `scripts/tracker.sh` verbs stay (`new issue`, `new raft`, `ready`, `start`, `done`).
  - Write `z-nile/README.md` so it opens with the flow diagram and a short account of the five parts.
  
@@ -2978,8 +2978,9 @@ index 258a3a73..34c68849 100644
 +**Finished `check.sh` files** (the user's decision for c0114 and c0120, 2026-10-21: a move that breaks a finished file's paths rewrites them). The skills' move breaks every finished check that reads a skill through `.claude/skills/<old>`. `experiments/rewrite-finished.luau`, run once after the move (Implementation step 5c), rewrites them with two rules, nothing else:
 +- a literal `<up>.claude/skills/<old>` (then `/` or the word's end), where `<up>` climbs from the item's home exactly to the repository root (`../` from `z-nile/` or `pickman/`), becomes the path from the home to the real folder (`skills.RENAMED_PATH`, through c0120's `rewrites.relative`): `../.claude/skills/tracker/SKILL.md` from `z-nile/` becomes `skills/zz-rules/SKILL.md`, and `../.claude/skills/testing/SKILL.md` from `pickman/` becomes `../z-nile/skills/zz-test/SKILL.md`;
 +- (decided with the user, 2026-10-21, G12) a variable-built path (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop: a `for <v> in <words>; do` line whose words are all old skill names, in a file that names `.claude/skills/$<v>/`, gets each word renamed (`for s in review metrics; do` becomes `for s in zz-review zz-stats; do`), so the path reads through the skill's new link.
++- (decided with the user, 2026-10-21, G13) a skills-folder variable: where a variable is assigned exactly `<up>.claude/skills` (c0058's `local s=../.claude/skills`), each `$<v>/<old>/` or `${<v>}/<old>/` gets the new link's name (`$s/review/` becomes `$s/zz-review/`).
 +
-+On the prototype: 31 files by the first rule (the paths all resolve from their homes afterwards) and 4 of them by the second too (c0005, c0046, c0053, R0025: nine loops). One criterion neither rule carries is deleted (G12, like c0120's G17): R0025's RC2, whose `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md` can't pass now that AGENTS.md names real paths. The script lists it (`DELETED`), removes that one `check` statement with its quoted continuation lines (`-- --delete`), and the deletion is its own commit, after the rewrite's (JC1). `--check` (AC14) accepts exactly this: every finished `check.sh` that existed before c0115's move must equal its text there (the parent of the commit that removed `.claude/skills/testing/SKILL.md`), rewritten by the two rules, with `DELETED`'s statements removed and nothing else; a file finished after the move only has to need no rewrite, and no history is red. A second run of either mode changes nothing. This is the same exception c0120 has for its own move.
++On the prototype: 31 files by the first rule (the paths all resolve from their homes afterwards), 4 of them by the second too (c0005, c0046, c0053, R0025: nine loops), and 3 by the third (c0035, c0058, c0084), 33 files in all. Six criteria no rule carries are deleted (G12 and G13, like c0120's G17): R0025's RC2, whose `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md` can't pass now that AGENTS.md names real paths, and five that read text c0115 changes on purpose: c0010 AC7 (its game phrases moved to `pickman-test`), c0045 AC6 (the prompt template's hard rule 1), c0067 AC11 (the c0047 override's text), c0068 AC7 and c0069 AC5 (`name: stop-raft`, `name: launch-raft`). The script lists them (`DELETED`), removes each `check` statement with its quoted continuation lines (`-- --delete`), and the deletion is its own commit, after the rewrite's (JC1). `--check` (AC14) accepts exactly this: every finished `check.sh` that existed before c0115's move must equal its text there (the parent of the commit that removed `.claude/skills/testing/SKILL.md`), rewritten by the three rules, with `DELETED`'s statements removed and nothing else; a file finished after the move only has to need no rewrite, and no history is red. A second run of either mode changes nothing. This is the same exception c0120 has for its own move.
 +
 +Decided with the user (2026-10-21), G4: "Rewrite in c0115." This is the user's exception to the rule that no unfinished item's document is edited: the rename script's third pass rewrites the old skill names and old lesson ids in live backlog designs, by the name rule and the prose-id rule (§5):
 +- **which items:** every unfinished item (backlog and `active/`, under every current root) but c0115 itself, whose document is the record of the rename;
@@ -3194,7 +3195,8 @@ index 258a3a73..34c68849 100644
 +| c0115's raft holds c0113 (G9) | check.sh AC15 | no raft yet, or a raft without c0113 | reasoned: red on the prototype today (no raft); `./zn members` is the tracker's own reader |
 +| a missing registry refuses, never guessing the folders (c0114) | skills :: a missing registry refuses…; lessons :: a tree with no registry refuses… | `skills.load` falls back to an empty registry (M59); `lessons.load` skips its refusal (M60) | run: killed |
 +| finished `check.sh` files read the skills' new places (§8, G12) | check.sh AC14 (`rewrite-finished --check`) | c0053's loop left on `review metrics` (M62, state); c0005's `skills/zz-rules/SKILL.md` back to `../.claude/skills/tracker/SKILL.md` (M63, state) | run: killed |
-+| only R0025's RC2 is deleted from a finished file (G12) | check.sh AC14 (`rewrite-finished --check`, exact against the pre-move text) | RC2 not yet deleted (the rewrite commit's state); RC3 deleted too (M64, state); RC2's last quoted line left behind (M65, state) | run: all red |
++| only the six listed criteria are deleted from finished files (G12, G13) | check.sh AC14 (`rewrite-finished --check`, exact against the pre-move text) | the deletions not yet made (the rewrite commit's state); R0025's RC3 deleted too (M64) or c0068's AC6 (M66), state; RC2's last quoted line left behind (M65, state) | run: all red |
++| a skills-folder variable reads the new link names (G13's rule 3) | check.sh AC14 | c0058's `$s/zz-review/` back to `$s/review/` (M67, state) | run: killed |
 +| AC13 passes an empty range and stays strict on a live branch (G11) | check.sh AC13 | — | run (scratch clone): a live branch passes, an edit in the moves commit (M44) and a later rename (M45) fail, `origin/main` itself (empty range) passes |
 +| the testing split is a move, not a copy | docs :: zz-test keeps the gate… | zz-test keeps a Simulations section (M33) | run: killed |
 +| the gate runs `skills --check` | check.sh AC2 (the exact stage line) | the stage deleted, the plan line kept (M34) | run: killed |
@@ -3279,13 +3281,7 @@ index 258a3a73..34c68849 100644
 +10. G10: Decided with the user (2026-10-21): "Accepted." `zz-arch` stays as written; the user skims it on #103.
 +11. G11: Decided with the user (2026-10-21): "Pass when the range is empty." AC13 passes an empty range and stays strict on a live branch; JC1 covers an empty range on a live branch.
 +12. G12: Decided with the user (2026-10-21): "Rename loop words; delete R0025's". Finished `check.sh` files are rewritten when a move breaks their paths (the user's decision for c0114 and c0120), and the skills' move breaks some that build the path from a loop variable (`for s in review metrics; do … "../.claude/skills/$s/SKILL.md"`). The nine loops in c0005, c0046, c0053 and R0025 get their words renamed where every word is an old skill name; R0025's RC2 (its grep of AGENTS.md for `.claude/skills/$s/SKILL.md`), which no rewrite carries, is deleted, listed and committed alone after the rewrite, as c0120's G17 does; AC14's `rewrite-finished --check` accepts exactly that deletion (§8).
-+13. G13: **Guess (pending user), 2026-10-22, found running every edited finished check by hand after G12.** Of the 31 finished `check.sh` files c0115 edits, six criteria pass before c0115 and fail after it, for reasons no path rewrite carries; they read text c0115 deliberately changes:
-+    - c0010 AC7: its game phrases (`tests/scenario/` …) moved from the testing skill to `pickman-test` (§2), and the rewrite points it at `zz-test`;
-+    - c0045 AC6: "prompt template: hard rule 1 is gone" (the template's text, §6);
-+    - c0058 AC8: it reads `$s/review/SKILL.md`, `$s/execute-raft/…` and `$s/ticket-prep/…` with `s=../.claude/skills`, a variable folder neither rule sees; renaming those three skill words (`$s/zz-review/` …) makes it pass (tried by hand);
-+    - c0067 AC11: "c0047 spec: not repointed" (the c0047 override's text);
-+    - c0068 AC7 and c0069 AC5: `^name: stop-raft` and `^name: launch-raft` in the renamed skills' frontmatter.
-+    The guess: carry c0058's with a third rule (a `$<v>/<old>/` where `<v>` is assigned exactly `<up>.claude/skills` gets the new name), and delete the other five the way R0025's RC2 is deleted (listed in `DELETED`, committed alone, accepted exactly by AC14). The alternative is to leave them red: finished checks aren't rerun by any gate. Not applied yet: the prototype carries G12 only, and `rewrite-finished --check` stays exact on that.
++13. G13: Decided with the user (2026-10-21): "Carry c0058, delete five". Running every edited finished check by hand after G12 found six criteria that pass before c0115 and fail after it. c0058 AC8 reads `$s/review/` with `s=../.claude/skills`, which a third rule now carries (§8; it also carries c0035 and c0084, found by the rule). The other five read text c0115 changes on purpose, and are deleted with R0025's RC2: c0010 AC7 (its game phrases moved to `pickman-test`), c0045 AC6 (the prompt template's hard rule 1), c0067 AC11 (the c0047 override's text), c0068 AC7 and c0069 AC5 (`name: stop-raft`, `name: launch-raft`). Listed in `DELETED`, in the one deletion commit, accepted exactly by AC14.
 +
 +## Programme review of c0115: how each finding is answered
 +- F1 (`zz-arch`/`zz-test` vs the reservation): answered by the user's decision "z-nile owns zz-arch/zz-test" (option a). `zz-arch` is new (§3), `zz-test` holds the gate and the guards (§2), and pickman's halves are `pickman-arch` and `pickman-test` (G1). The generator refuses a `zz-`/`z-` project skill even in a project named `zz` (AC1, M4).
@@ -3317,7 +3313,7 @@ index 258a3a73..34c68849 100644
 +| overrides (promoted specs) | 29 | 174 | 145 |
 +| **total, renames, tracker files and prep aside** | 97 | **1,437** | **519** |
 +| G4's live backlog designs and their sequestered files (tracker) | 7 | 88 | 88 |
-+| finished `check.sh` files (tracker, §8; R0025's RC2 deleted) | 31 | 64 | 69 |
++| finished `check.sh` files (tracker, §8; six criteria deleted) | 33 | 68 | 117 |
 +| ledgers (tracker) | 6 | 204 | 204 |
 +| this issue's and c0113's documents, specs, `check.sh` files and the two scripts (prep's lines) | 13 | 2,717 | 116 |
 +
@@ -3325,6 +3321,12 @@ index 258a3a73..34c68849 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++G13 decided with the user, 2026-10-21 ("Carry c0058, delete five"), on the prototype:
++- `rewrite-finished.luau`'s third rule carries c0058 and, found by the rule, c0035 and c0084 (19 paths); `DELETED` lists the five with R0025's RC2. History: the rewrite commits, then one deletion commit holding all six (the earlier RC2-only deletion commit was dropped and redone). `--check`: exit 0; red at the rewrite commit's state; a second run of each mode changes nothing.
++- Mutants M62 to M67 (a loop, a path or a skills-folder variable left old; RC3 or c0068's AC6 deleted too; RC2's last quoted line left behind) against `--check`: all killed.
++- Every edited finished check (33 files) run by hand on the prototype and on the base (a scratchpad clone): no criterion is red on the prototype that is green on the base. The reds left are red on both, from before c0115: c0036 AC1 to AC3, c0037 AC2 and AC6, c0049 AC4a, c0053 AC8, c0058 AC6, c0059 AC1, c0060 AC4 and AC5, c0067 AC10, c0084 AC7, R0013 RC1, R0025 RC0 (the full-gate run inside it) and RC6, R0031 RC0, RC1 and RC3. Red on the base and green on the prototype: c0005 AC5, c0049 AC6, c0053 AC4, c0059 AC3, R0013 RC0, and R0025's member runs of c0067, c0068 and c0069.
++- The old backup branches `proto-c0115-v1` and `proto-c0115-v2` are deleted; every experiment this round ran in a scratchpad clone or as a reverted edit in the prototype worktree.
++
 +G12 decided with the user, 2026-10-22 ("Rename loop words; delete R0025's"), on the prototype at the rebase's tip:
 +- `rewrite-finished.luau` gained `DELETED` (R0025's RC2), `-- --delete` (the statement with its quoted continuation lines) and an exact `--check`: every finished file equals its pre-move text, rewritten, less `DELETED`. The deletion is its own commit, after the rewrite's. Red before the deletion ("R0025/check.sh: not its pre-move text rewritten less RC2"), green after, and a second run of each mode changes nothing.
 +- Mutants M62 to M65 (a loop or a path left old, RC3 deleted too, RC2's last quoted line left behind) against `--check`: all killed.
@@ -3749,10 +3751,10 @@ index 00000000..fff578ba
 +end
 diff --git a/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
 new file mode 100644
-index 00000000..0e90881c
+index 00000000..699debc5
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,265 @@
 +--!strict
 +-- c0115, Implementation step 5c: rewrites the skill paths in every finished item's check.sh for the skills' move (the
 +-- user's decision for c0114 and c0120, 2026-10-21: finished check.sh files are rewritten when a move breaks their
@@ -3764,9 +3766,10 @@ index 00000000..0e90881c
 +-- 2026-10-21, G12: "Rename loop words; delete R0025's"): a `for <v> in <words>; do` line whose words are all old skill
 +-- names, in a file that names `.claude/skills/$<v>/` or `.claude/skills/${<v>}/`, gets each word renamed (`for s in
 +-- tracker review; do` becomes `for s in zz-rules zz-review; do`), so the path reads through the skill's new link.
-+-- Nothing else changes. The one criterion neither rule carries is deleted, in a commit of its own after the rewrite's
-+-- (DELETED, like c0120's G17): R0025's RC2 greps AGENTS.md for `.claude/skills/$s/SKILL.md`, and AGENTS.md now names
-+-- real paths. Run from the repository root, after the renames are committed:
++-- A third rule (decided with the user, G13: "Carry c0058, delete five"): a variable assigned exactly `<up>.claude/skills`
++-- and read as `$<v>/<old>/` gets the new link's name (`$s/review/` becomes `$s/zz-review/`). Nothing else changes. The
++-- criteria no rule carries are deleted, in a commit of its own after the rewrite's (DELETED, like c0120's G17): R0025's
++-- RC2 (AGENTS.md now names real paths) and G13's five, which read text c0115 changes on purpose. Run from the repository root, after the renames are committed:
 +--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished             -- the rewrite (its own commit)
 +--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --delete  -- the deletion (the next commit)
 +--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --check   -- AC14: writes nothing
@@ -3787,6 +3790,12 @@ index 00000000..0e90881c
 +-- The finished criteria no rewrite carries, deleted (G12): file -> the ids of its `check "<id>: …"` statements.
 +local DELETED: { [string]: { string } } = {
 +	["z-nile/.tracker/rafts/done/R0025/check.sh"] = { "RC2" },
++	-- G13 (decided with the user: "Carry c0058, delete five"): they read text c0115 changes on purpose
++	["pickman/.tracker/issues/done/c0010/check.sh"] = { "AC7" }, -- game phrases moved to pickman-test
++	["z-nile/.tracker/issues/done/c0045/check.sh"] = { "AC6" }, -- the prompt template's hard rule 1
++	["z-nile/.tracker/issues/done/c0067/check.sh"] = { "AC11" }, -- the c0047 override's text
++	["z-nile/.tracker/issues/done/c0068/check.sh"] = { "AC7" }, -- `name: stop-raft`
++	["z-nile/.tracker/issues/done/c0069/check.sh"] = { "AC5" }, -- `name: launch-raft`
 +}
 +-- A file the move takes away: its parent is the tree before c0115's move.
 +local MARK = ".claude/skills/testing/SKILL.md"
@@ -3848,7 +3857,34 @@ index 00000000..0e90881c
 +			end
 +		end
 +	end
-+	return table.concat(lines, "\n"), n
++	text = table.concat(lines, "\n")
++	-- rule 3 (G13): a variable assigned exactly `<up>.claude/skills` (c0058's `local s=../.claude/skills`) and read as
++	-- `$<v>/<old>/` or `${<v>}/<old>/`: the old name becomes the new link's name, so the path reads through it
++	local vars: { string } = {}
++	for v, after in
++		string.gmatch(
++			text,
++			"([%a_][%w_]*)=" .. string.gsub(`{up}.claude/skills`, "%p", "%%%0") .. "([^%w_/%-]?)"
++		)
++	do
++		if after ~= "/" then
++			table.insert(vars, v)
++		end
++	end
++	for _, v in vars do
++		for old, real in skills.RENAMED_PATH do
++			local link = string.match(real, "[^/]+$") :: string
++			for _, form in { `${v}/{old}/`, `${"{"}{v}{"}"}/{old}/` } do
++				local new =
++					string.gsub(form, "/" .. string.gsub(old, "%p", "%%%0") .. "/$", "/" .. link .. "/")
++				local count
++				text, count =
++					string.gsub(text, string.gsub(form, "%p", "%%%0"), (string.gsub(new, "%%", "%%%%")))
++				n += count
++			end
++		end
++	end
++	return text, n
 +end
 +
 +-- `text` without the `check "<id>: …"` statement of each id: the statement runs to the line where its single quotes
@@ -4070,6 +4106,36 @@ index 3711dece..27e30e85 100755
    for s in "AC_LIST=1" "[[ -d \$A ]] || A=\"\$PWD/tests/acceptance/" "Work outside \`check\`"; do
      grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }
    done
+diff --git a/z-nile/.tracker/issues/done/c0035/check.sh b/z-nile/.tracker/issues/done/c0035/check.sh
+index 56773a5a..c53525fb 100755
+--- a/z-nile/.tracker/issues/done/c0035/check.sh
++++ b/z-nile/.tracker/issues/done/c0035/check.sh
+@@ -3,7 +3,7 @@
+ A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
+ S=../.claude/skills
+-X="$S/execute-raft/SKILL.md"
++X="$S/zz-execute/SKILL.md"
+ 
+ # Text of one numbered Phase 4 step (the step's line plus its indented continuation lines).
+ step() {
+@@ -22,14 +22,14 @@ ac1() { step 1 | has 'Review NNN started at' && step 1 | has './zn commit' && st
+ # holds, and any raft id in the example (a compaction rewrote it once).
+ ac2() { step 3 | grep -Eq 'zn commit -m "R[0-9]+: review-NNN" (--time 0|--phase code-review)' && step 3 | has 'finding count by severity'; }
+ ac3() { step 5 | has './zn commit' && step 5 | has 'Review NNN addressed' && step 5 | has 'refute'; }
+-ac4() { grep -q '^## The PR is the visible record' "$S/tracker/SKILL.md" && grep -q 'BLOCKED' "$S/tracker/SKILL.md" && grep -q '^## Visible record' "$S/review/SKILL.md"; }
++ac4() { grep -q '^## The PR is the visible record' "$S/zz-rules/SKILL.md" && grep -q 'BLOCKED' "$S/zz-rules/SKILL.md" && grep -q '^## Visible record' "$S/zz-review/SKILL.md"; }
+ ac5() {
+   sed -n '/^## Phase 1/,/^## Phase 2/p' "$X" | has 'PR comment' &&
+     sed -n '/^## Phase 2/,/^## Phase 3/p' "$X" | has 'PR comment' &&
+     sed -n '/^## Phase 3/,/^## Phase 4/p' "$X" | has 'PR comment'
+ }
+ ac6() { step 4 | has 'approve' && step 4 | has 'Phase 5'; }
+-ac7() { grep -q 'Dropped from review-' "$S/review/SKILL.md" && grep -q 'repeat of review-' "$S/review/SKILL.md"; }
++ac7() { grep -q 'Dropped from review-' "$S/zz-review/SKILL.md" && grep -q 'repeat of review-' "$S/zz-review/SKILL.md"; }
+ 
+ check "AC1: review start is committed, pushed and announced (step 1)" ac1
+ check "AC2: review file is committed by the author, pushed and summarized (step 3)" ac2
 diff --git a/z-nile/.tracker/issues/done/c0036/check.sh b/z-nile/.tracker/issues/done/c0036/check.sh
 index 05214aaa..c16c3a30 100755
 --- a/z-nile/.tracker/issues/done/c0036/check.sh
@@ -4144,29 +4210,30 @@ index bcfd3e9f..c177c978 100755
    [ -z "$bad" ] || { echo "$bad"; exit 1; }'
  check "AC10: no spec names a legacy document path (the permanent guard)" \
 diff --git a/z-nile/.tracker/issues/done/c0045/check.sh b/z-nile/.tracker/issues/done/c0045/check.sh
-index e7e86721..30503d22 100755
+index e7e86721..39b48e03 100755
 --- a/z-nile/.tracker/issues/done/c0045/check.sh
 +++ b/z-nile/.tracker/issues/done/c0045/check.sh
-@@ -34,14 +34,14 @@ check "AC3: stream review files are not review rounds" cases_pass "stream review
+@@ -33,20 +33,6 @@ check "AC2: worktree --from bases on the ref; unknown ref and raft id rejected"
+ check "AC3: stream review files are not review rounds" cases_pass "stream review files are not review rounds"
  # AC4 (the prompt embeds the plan, or its error) moved to c0067's ready.spec in R0025: prompt is now a reader
  check "AC5: ./zn commit refuses while merge conflicts are unresolved" cases_pass "tracker.sh commit refuses"
- check "AC6: skills and template carry the parallel protocol" bash -c '
+-check "AC6: skills and template carry the parallel protocol" bash -c '
 -  e=../.claude/skills/execute-raft/SKILL.md
-+  e=skills/zz-execute/SKILL.md
-   for k in "Phase 2B" "./zn workstreams" "--from" "stream-review" "git merge --squash" "model: \"sonnet\"" "model: \"opus\""; do
-     grep -qF -- "$k" "$e" || { echo "execute-raft: missing $k"; exit 1; }
-   done
+-  for k in "Phase 2B" "./zn workstreams" "--from" "stream-review" "git merge --squash" "model: \"sonnet\"" "model: \"opus\""; do
+-    grep -qF -- "$k" "$e" || { echo "execute-raft: missing $k"; exit 1; }
+-  done
 -  grep -qiE "^#+ +stream mode" ../.claude/skills/review/SKILL.md || { echo "review: no Stream mode section"; exit 1; }
 -  grep -qF "./zn workstreams" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: workstreams"; exit 1; }
 -  grep -qF -- "--from" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: --from"; exit 1; }
 -  grep -qF "parallel:" ../.claude/skills/ready-raft/SKILL.md || { echo "ready-raft: parallel line"; exit 1; }
-+  grep -qiE "^#+ +stream mode" skills/zz-review/SKILL.md || { echo "review: no Stream mode section"; exit 1; }
-+  grep -qF "./zn workstreams" skills/zz-rules/SKILL.md || { echo "tracker skill: workstreams"; exit 1; }
-+  grep -qF -- "--from" skills/zz-rules/SKILL.md || { echo "tracker skill: --from"; exit 1; }
-+  grep -qF "parallel:" skills/z-ready/SKILL.md || { echo "ready-raft: parallel line"; exit 1; }
-   grep -qF "## Workstreams plan" templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
-   grep -qF "{{WORKSTREAMS}}" templates/prompt.md || { echo "prompt template: variable"; exit 1; }
-   grep -qF "stream branches are committed with plain git" templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
+-  grep -qF "## Workstreams plan" templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
+-  grep -qF "{{WORKSTREAMS}}" templates/prompt.md || { echo "prompt template: variable"; exit 1; }
+-  grep -qF "stream branches are committed with plain git" templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
+-  grep -qF "One raft branch and one PR" templates/prompt.md || { echo "prompt template: hard rule 2 (one raft branch)"; exit 1; }
+-  grep -qF "Follow the \`execute-raft\` skill" templates/prompt.md || { echo "prompt template: hard rule 1 is gone"; exit 1; }'
+ check "AC1-AC5: every case of the workstreams spec passes" all_cases_pass
+ 
+ finish
 diff --git a/z-nile/.tracker/issues/done/c0046/check.sh b/z-nile/.tracker/issues/done/c0046/check.sh
 index 08561723..0a01bdf2 100755
 --- a/z-nile/.tracker/issues/done/c0046/check.sh
@@ -4246,10 +4313,10 @@ index 4ee37f31..36c5af52 100755
  
  finish
 diff --git a/z-nile/.tracker/issues/done/c0058/check.sh b/z-nile/.tracker/issues/done/c0058/check.sh
-index 6bf19929..7a14fb76 100755
+index 6bf19929..d46ecc33 100755
 --- a/z-nile/.tracker/issues/done/c0058/check.sh
 +++ b/z-nile/.tracker/issues/done/c0058/check.sh
-@@ -66,7 +66,7 @@ overrides() {
+@@ -66,17 +66,17 @@ overrides() {
  }
  check "AC7: the overridden specs (c0034 in a fixture, five without their own git config) still pass" overrides
  docs() {
@@ -4258,6 +4325,20 @@ index 6bf19929..7a14fb76 100755
    grep -qF "No check may ever change the real repository" ../AGENTS.md || { echo "AGENTS.md lacks the rule"; return 1; }
    grep -qF "## Specs never touch the real repository" "$t" || { echo "testing skill lacks its section"; return 1; }
    for p in "Enforced at run time" "Caught only by review" "Allowed writers" "If the tripwire fires" "Jail" '$TMPDIR'; do
+     grep -qF "$p" "$t" || { echo "testing skill section lacks: $p"; return 1; }
+   done
+   if grep -qF "Run one suite per worktree at a time" "$t"; then echo "the Speed section still has the manual one-suite rule"; return 1; fi
+-  [[ $(grep "Repository safety" $s/review/SKILL.md | grep -c "high") -eq 2 ]] || { echo "review: Repository safety, high, in design and code mode"; return 1; }
+-  grep -qF "REPOSITORY CHANGED" $s/execute-raft/SKILL.md || { echo "execute-raft lacks the stop condition"; return 1; }
+-  grep -qF "never change the real repository" $s/ticket-prep/SKILL.md || { echo "ticket-prep lacks the rule"; return 1; }
+-  grep -qF '$TMPDIR' $s/ticket-prep/SKILL.md || { echo "ticket-prep: run acceptance specs against unguarded code only in a clone under $TMPDIR"; return 1; }
++  [[ $(grep "Repository safety" $s/zz-review/SKILL.md | grep -c "high") -eq 2 ]] || { echo "review: Repository safety, high, in design and code mode"; return 1; }
++  grep -qF "REPOSITORY CHANGED" $s/zz-execute/SKILL.md || { echo "execute-raft lacks the stop condition"; return 1; }
++  grep -qF "never change the real repository" $s/z-design/SKILL.md || { echo "ticket-prep lacks the rule"; return 1; }
++  grep -qF '$TMPDIR' $s/z-design/SKILL.md || { echo "ticket-prep: run acceptance specs against unguarded code only in a clone under $TMPDIR"; return 1; }
+ }
+ check "AC8: AGENTS.md and the testing, review, execute-raft and ticket-prep skills state the rule, what is enforced (the jail included) and what only review catches" docs
+ 
 diff --git a/z-nile/.tracker/issues/done/c0059/check.sh b/z-nile/.tracker/issues/done/c0059/check.sh
 index 855b892d..655f19e4 100755
 --- a/z-nile/.tracker/issues/done/c0059/check.sh
@@ -4285,7 +4366,7 @@ index b0c67ec7..39c6e72b 100755
    grep -qF "c0053" "$s" || { echo "the rule does not name the specs not yet converted"; exit 1; }
    if grep -qF "in new and edited specs" "$s"; then echo "the rule still says new and edited specs only"; exit 1; fi
 diff --git a/z-nile/.tracker/issues/done/c0067/check.sh b/z-nile/.tracker/issues/done/c0067/check.sh
-index c7c2419c..db9b97cc 100755
+index c7c2419c..fa6cd70b 100755
 --- a/z-nile/.tracker/issues/done/c0067/check.sh
 +++ b/z-nile/.tracker/issues/done/c0067/check.sh
 @@ -39,7 +39,7 @@ check "AC8: the current raft is found by branch; emergent issues only on the raf
@@ -4312,46 +4393,62 @@ index c7c2419c..db9b97cc 100755
    bad=$(grep -rnIi -e "pbcopy" -e "clipboard" .claude ./templates scripts ../AGENTS.md || true)
    [ -z "$bad" ] || { echo "$bad"; exit 1; }
    # the 13 phrases c0005 AC5 bans
+@@ -62,12 +62,6 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
+     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
+     ../.claude/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
+   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
+-check "AC11: the overridden c0047 spec passes; no done check.sh names make-prompt (edited in prep)" bash -c '
+-  lune run tests/run -- tests/acceptance/c0047/override-check.spec.luau || exit 1
+-  grep -qF "ready-raft/SKILL.md" tests/acceptance/c0047/override-check.spec.luau || { echo "c0047 spec: not repointed"; exit 1; }
+-  # only the five done checks prep edited: c0067 and R0025 name make-prompt themselves (review 003 F1)
+-  bad=$(grep -lF "make-prompt" z-nile/.tracker/issues/done/{c0005,c0045,c0046,c0047,c0053}/check.sh || true)
+-  [ -z "$bad" ] || { echo "$bad"; exit 1; }'
+ check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
+   "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
+ check "AC13: CI dispatched gate runs only the acceptance specs of the branch raft" bash -c '
 diff --git a/z-nile/.tracker/issues/done/c0068/check.sh b/z-nile/.tracker/issues/done/c0068/check.sh
-index ee48fd91..147564c6 100755
+index ee48fd91..f537cf03 100755
 --- a/z-nile/.tracker/issues/done/c0068/check.sh
 +++ b/z-nile/.tracker/issues/done/c0068/check.sh
-@@ -33,13 +33,13 @@ check "AC4: a started raft's branch is left and named; the raft can be readied a
+@@ -32,14 +32,5 @@ check "AC4: a started raft's branch is left and named; the raft can be readied a
+   "stop of a started raft" "a stopped raft can be readied again"
  check "AC5: status refuses any move of a readied item and names stop" cases_pass "status refuses to move a readied item"
  check "AC6: stop gives back a legacy-started raft without moving it" cases_pass "stop gives back a raft claimed by the legacy start"
- check "AC7: the stop-raft skill, the tracker skill and AGENTS.md" bash -c '
+-check "AC7: the stop-raft skill, the tracker skill and AGENTS.md" bash -c '
 -  s=../.claude/skills/stop-raft/SKILL.md
-+  s=skills/z-stop/SKILL.md
-   [ -f "$s" ] || { echo "no $s"; exit 1; }
-   grep -q "^name: stop-raft$" "$s" || { echo "stop-raft: name"; exit 1; }
-   grep -qF "./zn stop" "$s" || { echo "stop-raft: ./zn stop"; exit 1; }
-   grep -qi "main checkout" "$s" || { echo "stop-raft: main checkout"; exit 1; }
-   grep -qiE "(branch|pull request|PR).*(left|leave)|(left|leave).*(branch|pull request|PR)" "$s" || { echo "stop-raft: branch and PR are left"; exit 1; }
-   grep -qF "stop-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: stop-raft row"; exit 1; }
+-  [ -f "$s" ] || { echo "no $s"; exit 1; }
+-  grep -q "^name: stop-raft$" "$s" || { echo "stop-raft: name"; exit 1; }
+-  grep -qF "./zn stop" "$s" || { echo "stop-raft: ./zn stop"; exit 1; }
+-  grep -qi "main checkout" "$s" || { echo "stop-raft: main checkout"; exit 1; }
+-  grep -qiE "(branch|pull request|PR).*(left|leave)|(left|leave).*(branch|pull request|PR)" "$s" || { echo "stop-raft: branch and PR are left"; exit 1; }
+-  grep -qF "stop-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: stop-raft row"; exit 1; }
 -  grep -qF "./zn stop" ../.claude/skills/tracker/SKILL.md || grep -qE "^\| stop \|" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: stop"; exit 1; }'
-+  grep -qF "./zn stop" skills/zz-rules/SKILL.md || grep -qE "^\| stop \|" skills/zz-rules/SKILL.md || { echo "tracker skill: stop"; exit 1; }'
  
  finish
 diff --git a/z-nile/.tracker/issues/done/c0069/check.sh b/z-nile/.tracker/issues/done/c0069/check.sh
-index e1be160f..1d6194e9 100755
+index e1be160f..11bb420c 100755
 --- a/z-nile/.tracker/issues/done/c0069/check.sh
 +++ b/z-nile/.tracker/issues/done/c0069/check.sh
-@@ -28,13 +28,13 @@ check "AC3: prompt refuses a missing prompt.md and a non-raft id" cases_pass \
+@@ -27,19 +27,6 @@ check "AC2: prompt prints prompt.md exactly (or --path), from anywhere, writing
+ check "AC3: prompt refuses a missing prompt.md and a non-raft id" cases_pass \
    "prompt refuses a missing prompt.md" "prompt takes only a raft id"
  check "AC4: ./zn launch is gone" cases_pass "./zn launch is gone"
- check "AC5: the launch-raft skill; docs point to /launch-raft; no ./zn launch anywhere" bash -c '
+-check "AC5: the launch-raft skill; docs point to /launch-raft; no ./zn launch anywhere" bash -c '
 -  s=../.claude/skills/launch-raft/SKILL.md
-+  s=skills/z-run/SKILL.md
-   [ -f "$s" ] || { echo "no $s"; exit 1; }
-   grep -q "^name: launch-raft$" "$s" || { echo "launch-raft: name"; exit 1; }
-   for k in "./zn prompt" "--path" "Read" "./zn worktree" "/ready-raft"; do
-     grep -qF -- "$k" "$s" || { echo "launch-raft: missing $k"; exit 1; }
-   done
+-  [ -f "$s" ] || { echo "no $s"; exit 1; }
+-  grep -q "^name: launch-raft$" "$s" || { echo "launch-raft: name"; exit 1; }
+-  for k in "./zn prompt" "--path" "Read" "./zn worktree" "/ready-raft"; do
+-    grep -qF -- "$k" "$s" || { echo "launch-raft: missing $k"; exit 1; }
+-  done
 -  for f in ../AGENTS.md ../SETUP.md ../.claude/skills/tracker/SKILL.md ../.claude/skills/ready-raft/SKILL.md; do
-+  for f in ../AGENTS.md ../SETUP.md skills/zz-rules/SKILL.md skills/z-ready/SKILL.md; do
-     grep -qF "/launch-raft" "$f" || { echo "$f: /launch-raft"; exit 1; }
-   done
-   grep -qF "launch-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
+-    grep -qF "/launch-raft" "$f" || { echo "$f: /launch-raft"; exit 1; }
+-  done
+-  grep -qF "launch-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
+-  bad=$(grep -rnF "./zn launch" .claude ../AGENTS.md ../SETUP.md ./templates scripts || true)
+-  [ -z "$bad" ] || { echo "$bad"; exit 1; }'
+ check "AC6: the overridden c0046, c0045 and c0005 specs pass; c0053's replacement copy is still there" bash -c '
+   lune run tests/run -- tests/acceptance/c0046/launch.spec.luau || exit 1
+   ! grep -qF "it(\"launch" tests/acceptance/c0046/launch.spec.luau || { echo "c0046: launch cases remain"; exit 1; }
 diff --git a/z-nile/.tracker/issues/done/c0070/check.sh b/z-nile/.tracker/issues/done/c0070/check.sh
 index e0b75ed3..bf035890 100755
 --- a/z-nile/.tracker/issues/done/c0070/check.sh
@@ -4452,6 +4549,46 @@ index 2fc87df8..161f6b23 100755
  check "AC4: the overridden specs (c0001 lifecycle, c0038 deferred) pass" lune run tests/run -- \
    tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0038/deferred.spec.luau
  
+diff --git a/z-nile/.tracker/issues/done/c0084/check.sh b/z-nile/.tracker/issues/done/c0084/check.sh
+index 065aaddf..a85f0b72 100755
+--- a/z-nile/.tracker/issues/done/c0084/check.sh
++++ b/z-nile/.tracker/issues/done/c0084/check.sh
+@@ -45,27 +45,27 @@ skills_record_every_phase() {
+   local S=../.claude/skills
+   # sec <file> <line that starts the section> <line that starts the next one, empty: to the end>
+   sec() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 {p=1} p && e != "" && index($0, e) == 1 && index($0, s) != 1 {p=0} p' "$1"; }
+-  grep -E "^6\. " "$S/make-issue/SKILL.md" | grep -qF -- "./zn spend <id> --phase capture" ||
++  grep -E "^6\. " "$S/z-ticket/SKILL.md" | grep -qF -- "./zn spend <id> --phase capture" ||
+     { echo "make-issue step 6 does not record the capture"; return 1; }
+-  sec "$S/ticket-prep/SKILL.md" "## 5." "## 6." |
++  sec "$S/z-design/SKILL.md" "## 5." "## 6." |
+     grep -qF -- "--phase design-review --time <reviewer minutes> --tokens <reviewer tokens> --note design-review-NNN" ||
+     { echo "ticket-prep 5 does not record each round's reviewer run"; return 1; }
+-  sec "$S/ticket-prep/SKILL.md" "## 5." "## 6." | grep -qF -- "--note design-refute-NNN" ||
++  sec "$S/z-design/SKILL.md" "## 5." "## 6." | grep -qF -- "--note design-refute-NNN" ||
+     { echo "ticket-prep 5 does not record the answering time"; return 1; }
+-  sec "$S/ticket-prep/SKILL.md" "## 6." "" | grep -qF -- "--phase prep" || { echo "ticket-prep 6 does not record prep"; return 1; }
+-  sec "$S/execute-raft/SKILL.md" "## Phase 4" "## Phase 5" | grep -qF -- "--phase code-review --time <reviewer minutes> --tokens <reviewer tokens>" ||
++  sec "$S/z-design/SKILL.md" "## 6." "" | grep -qF -- "--phase prep" || { echo "ticket-prep 6 does not record prep"; return 1; }
++  sec "$S/zz-execute/SKILL.md" "## Phase 4" "## Phase 5" | grep -qF -- "--phase code-review --time <reviewer minutes> --tokens <reviewer tokens>" ||
+     { echo "execute-raft Phase 4 does not record code review with the reviewer's minutes and tokens"; return 1; }
+-  sec "$S/execute-raft/SKILL.md" "## Phase 6" "## Stop" | grep -Eq -- 'zn spend R[0-9]+ --phase deliver' ||
++  sec "$S/zz-execute/SKILL.md" "## Phase 6" "## Stop" | grep -Eq -- 'zn spend R[0-9]+ --phase deliver' ||
+     { echo "execute-raft Phase 6 does not record delivery after the merge"; return 1; }
+   if grep -rnF -- "--time 0" "$S"; then echo "a skill still records with --time 0"; return 1; fi
+-  local t="$S/tracker/SKILL.md" p
++  local t="$S/zz-rules/SKILL.md" p
+   grep -qE '^\| spend \|' "$t" || { echo "tracker skill: no spend row in the command table"; return 1; }
+   for p in capture prep design-review build code-review deliver; do
+     sec "$t" "## Spend" "## " | grep -qF "\`$p\`" || { echo "tracker skill: ## Spend does not name $p"; return 1; }
+   done
+   grep -F "**The direct-push exception.**" "$t" | grep -qF "spend.md" || { echo "tracker skill: the direct-push exception does not name spend.md"; return 1; }
+   sec "$t" "## Other commands" "## Sync" | grep -qF "./zn spend" || { echo "tracker skill: Other commands lacks spend"; return 1; }
+-  grep -qiF "by phase" "$S/metrics/SKILL.md" && grep -qiF "per round" "$S/metrics/SKILL.md" ||
++  grep -qiF "by phase" "$S/zz-stats/SKILL.md" && grep -qiF "per round" "$S/zz-stats/SKILL.md" ||
+     { echo "metrics skill does not explain the phase tables"; return 1; }
+ }
+ check "AC6: the skills record every phase, and none keeps --time 0" skills_record_every_phase
 diff --git a/z-nile/.tracker/issues/c0114/c0114.md b/z-nile/.tracker/issues/done/c0114/c0114.md
 similarity index 100%
 rename from z-nile/.tracker/issues/c0114/c0114.md

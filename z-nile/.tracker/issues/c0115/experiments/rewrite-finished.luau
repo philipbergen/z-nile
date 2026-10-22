@@ -9,9 +9,10 @@
 -- 2026-10-21, G12: "Rename loop words; delete R0025's"): a `for <v> in <words>; do` line whose words are all old skill
 -- names, in a file that names `.claude/skills/$<v>/` or `.claude/skills/${<v>}/`, gets each word renamed (`for s in
 -- tracker review; do` becomes `for s in zz-rules zz-review; do`), so the path reads through the skill's new link.
--- Nothing else changes. The one criterion neither rule carries is deleted, in a commit of its own after the rewrite's
--- (DELETED, like c0120's G17): R0025's RC2 greps AGENTS.md for `.claude/skills/$s/SKILL.md`, and AGENTS.md now names
--- real paths. Run from the repository root, after the renames are committed:
+-- A third rule (decided with the user, G13: "Carry c0058, delete five"): a variable assigned exactly `<up>.claude/skills`
+-- and read as `$<v>/<old>/` gets the new link's name (`$s/review/` becomes `$s/zz-review/`). Nothing else changes. The
+-- criteria no rule carries are deleted, in a commit of its own after the rewrite's (DELETED, like c0120's G17): R0025's
+-- RC2 (AGENTS.md now names real paths) and G13's five, which read text c0115 changes on purpose. Run from the repository root, after the renames are committed:
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished             -- the rewrite (its own commit)
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --delete  -- the deletion (the next commit)
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --check   -- AC14: writes nothing
@@ -32,6 +33,12 @@ local deleteMode = table.find(process.args, "--delete") ~= nil
 -- The finished criteria no rewrite carries, deleted (G12): file -> the ids of its `check "<id>: …"` statements.
 local DELETED: { [string]: { string } } = {
 	["z-nile/.tracker/rafts/done/R0025/check.sh"] = { "RC2" },
+	-- G13 (decided with the user: "Carry c0058, delete five"): they read text c0115 changes on purpose
+	["pickman/.tracker/issues/done/c0010/check.sh"] = { "AC7" }, -- game phrases moved to pickman-test
+	["z-nile/.tracker/issues/done/c0045/check.sh"] = { "AC6" }, -- the prompt template's hard rule 1
+	["z-nile/.tracker/issues/done/c0067/check.sh"] = { "AC11" }, -- the c0047 override's text
+	["z-nile/.tracker/issues/done/c0068/check.sh"] = { "AC7" }, -- `name: stop-raft`
+	["z-nile/.tracker/issues/done/c0069/check.sh"] = { "AC5" }, -- `name: launch-raft`
 }
 -- A file the move takes away: its parent is the tree before c0115's move.
 local MARK = ".claude/skills/testing/SKILL.md"
@@ -93,7 +100,34 @@ local function rewrite(text: string, home: string): (string, number)
 			end
 		end
 	end
-	return table.concat(lines, "\n"), n
+	text = table.concat(lines, "\n")
+	-- rule 3 (G13): a variable assigned exactly `<up>.claude/skills` (c0058's `local s=../.claude/skills`) and read as
+	-- `$<v>/<old>/` or `${<v>}/<old>/`: the old name becomes the new link's name, so the path reads through it
+	local vars: { string } = {}
+	for v, after in
+		string.gmatch(
+			text,
+			"([%a_][%w_]*)=" .. string.gsub(`{up}.claude/skills`, "%p", "%%%0") .. "([^%w_/%-]?)"
+		)
+	do
+		if after ~= "/" then
+			table.insert(vars, v)
+		end
+	end
+	for _, v in vars do
+		for old, real in skills.RENAMED_PATH do
+			local link = string.match(real, "[^/]+$") :: string
+			for _, form in { `${v}/{old}/`, `${"{"}{v}{"}"}/{old}/` } do
+				local new =
+					string.gsub(form, "/" .. string.gsub(old, "%p", "%%%0") .. "/$", "/" .. link .. "/")
+				local count
+				text, count =
+					string.gsub(text, string.gsub(form, "%p", "%%%0"), (string.gsub(new, "%%", "%%%%")))
+				n += count
+			end
+		end
+	end
+	return text, n
 end
 
 -- `text` without the `check "<id>: …"` statement of each id: the statement runs to the line where its single quotes
