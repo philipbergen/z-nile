@@ -20,7 +20,44 @@ local fence = {}
 local MARKER = "PICKMAN_TEST_FENCE"
 -- The repository root: three folders above this file (z-nile/tests/lib/). A run starts in a project's home inside it
 -- (pickman/, z-nile/, c0120); the guards' shell half is always the root's z-nile/lib/fence.sh.
-local ROOT = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "." -- z-nile/tests/lib/<file>
+-- a path with its `.` and `..` segments resolved (`lune run ../z-nile/tests/run` keeps them in debug.info, code review
+-- 004 F6)
+local function normalize(path: string): string
+	local out: { string } = {}
+	for seg in string.gmatch(path, "[^/]+") do
+		if seg == ".." and #out > 0 and out[#out] ~= ".." then
+			table.remove(out)
+		elseif seg ~= "." then
+			table.insert(out, seg)
+		end
+	end
+	return (if string.sub(path, 1, 1) == "/" then "/" else "") .. table.concat(out, "/")
+end
+fence.normalize = normalize
+local ROOT = string.match(normalize(debug.info(1, "s")), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "." -- z-nile/tests/lib/<file>
+
+-- Every project's home (a folder name; the root's legacy "." aside), from the registry (code review 004 F3, F6). A
+-- copy of the runner with no engine (some fixtures copy only tests/ and z-nile/lib/) has the folders at the top that
+-- hold a .tracker/.
+function fence.homes(): { string }
+	local out: { string } = {}
+	if fs.isFile(`{ROOT}/z-nile/engine/projects.luau`) and fs.isFile(`{ROOT}/z-nile/projects.toml`) then
+		local projects = require("@znile/engine/projects")
+		for _, p in projects.load(ROOT, true).projects do
+			if p.home ~= "." then
+				table.insert(out, p.home)
+			end
+		end
+	else
+		for _, name in fs.readDir(ROOT) do
+			if fs.isDir(`{ROOT}/{name}`) and fs.isDir(`{ROOT}/{name}/.tracker`) then
+				table.insert(out, name)
+			end
+		end
+		table.sort(out)
+	end
+	return out
+end
 local DEFAULT_WAIT_SECONDS = 240 -- under the Stop hook's 300 s budget
 local UNOWNED_SECONDS = 2
 local FIXTURE_EMAIL = "@example.invalid" -- every fixture commits as <name>@example.invalid
@@ -645,20 +682,34 @@ function fence.enter()
 	-- The checkout's own .cache, when the run starts in a project's home below it (c0120, design review 005 F2): the
 	-- folder every spec wrote fixtures in before the move keeps its fence. Its refusals and its sentinel now, while
 	-- unjailed (the jail lets the run write only its home's .cache); its ceiling below, inside the jail's shell.
-	if ROOT ~= here then
+	-- Every other home's .cache too (code review 004 F3): unjailed (Linux), a spec here could reach them, and git there
+	-- must find no repository either. The jail still lets this run write only its own home's .cache.
+	local others: { string } = {}
+	local dirs = { ROOT }
+	for _, home in fence.homes() do
+		table.insert(dirs, `{ROOT}/{home}`)
+	end
+	for _, dir in dirs do
+		if dir ~= here then
+			table.insert(others, dir)
+		end
+	end
+	for _, dir in others do
 		local top = process.exec("bash", {
 			"-c",
-			'. "$1/z-nile/lib/fence.sh" && pickman_fence_refusals "$1" && pickman_fence_sentinel "$1"',
+			'. "$2/z-nile/lib/fence.sh" && pickman_fence_refusals "$1" && pickman_fence_sentinel "$1"',
 			"_",
+			dir,
 			ROOT,
 		})
 		if not top.ok then
 			stdio.ewrite(
-				`tests/run: cannot fence {ROOT}/.cache: {top.stderr}refusing. Stop and report this.\n`
+				`tests/run: cannot fence {dir}/.cache: {top.stderr}refusing. Stop and report this.\n`
 			)
 			process.exit(1)
 		end
 	end
+	local ceilings = table.concat(others, ":")
 	-- the guards protect the repository git finds here; finding none refuses, never "nothing to protect" (code review
 	-- 002 F1): the tripwire, the protected paths and the fence would all read nothing
 	if (git({ "rev-parse", "--path-format=absolute", "--git-common-dir" }) or "") == "" then
@@ -709,12 +760,13 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && pickman_fence_ceiling "$4" && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 4 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
 		runTemp,
 		ROOT,
+		ceilings,
 	}
 	for _, a in process.args do
 		if a ~= "--" then

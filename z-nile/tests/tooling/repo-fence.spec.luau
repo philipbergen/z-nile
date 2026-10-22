@@ -141,13 +141,19 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	-- c0120: its fixture check.sh files print the git guards they see, and one fence call in a fixture gets an empty
 	-- hook folder and no jail marker, to prove a refused home fence leaves the inherited guards whole; its fixture
 	-- check.sh runs get the jail's three markers set explicitly, so they test the same path on every host
-	["tests/acceptance/c0120/homes.spec.luau"] = {
+	["z-nile/tests/acceptance/c0120/homes.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "a fixture check.sh prints the ceiling it sees",
 		GIT_CONFIG_ = "a fixture check.sh and a fence call compare the guard config they see",
 		PICKMAN_FENCE_ = "points PICKMAN_FENCE_HOOKS at an empty folder for one fence call in a fixture, and sets PICKMAN_FENCE_SPECS for a fixture check.sh",
 		PICKMAN_TEST_FENCE = "a fixture check.sh gets the jail's markers set explicitly, naming the fixture (review 003 F1)",
 		GIT_DIR = "a fixture shell inherits GIT_DIR (relative, or another fixture repository) to prove the fence strips it before it reads the repository it protects (code review 001 F1)",
 		["sandbox-exec"] = "a fixture check.sh gets the jail's markers set explicitly, with chmod 555 standing in for the jail",
+	},
+	-- c0120: a nested top-level run from a fixture's home clears the inherited fence marker and asserts the ceiling it
+	-- gets (design review 005 F2, code review 004 F3)
+	["z-nile/tests/acceptance/c0120/runner-home.spec.luau"] = {
+		GIT_CEILING_DIRECTORIES = "a probe in a fixture run asserts the ceiling names every home's and the checkout's .cache",
+		PICKMAN_TEST_FENCE = "a nested fixture run is started as a top-level run (the marker cleared)",
 	},
 	-- c0120 code review 002: fixture shells inherit a ceiling at a fixture checkout's root and a GIT_COMMON_DIR at
 	-- another fixture repository, to prove the guards read what they protect in a clean environment; a nested run
@@ -534,6 +540,40 @@ return t.spec("repository fence", function(it)
 			error("checks must not override the repository guards:\n  " .. table.concat(bad, "\n  "))
 		end
 	end)
+
+	-- code review 004 F2: an allow-list keyed by path goes stale when its file moves; every ALLOWED key (EXEMPT lists every
+	-- place c0058's own files can be, on purpose) names a tracked file, or
+	-- an unfinished item's acceptance spec at the place `done` promotes it to (<home>/tests/acceptance/<id>/<file>)
+	it(
+		"every allow-list key names a file, or an unfinished item's spec where done will promote it",
+		function()
+			local stale: { string } = {}
+			local keys: { string } = {}
+			for key in ALLOWED do
+				table.insert(keys, key)
+			end
+			for _, key in keys do
+				if not fs.isFile(`{checkout}/{key}`) then
+					local id, file = string.match(key, "^[^/]+/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
+					local found = false
+					if id then
+						for _, root in ROOTS do
+							for _, kind in { "issues", "issues/active", "rafts", "rafts/active" } do
+								if fs.isFile(`{checkout}/{root}/{kind}/{id}/acceptance/{file}`) then
+									found = true
+								end
+							end
+						end
+					end
+					if not found then
+						table.insert(stale, key)
+					end
+				end
+			end
+			table.sort(stale)
+			t.expect(table.concat(stale, "\n")).toBe("")
+		end
+	)
 
 	it("every fixture commits as <name>@example.invalid", function()
 		local bad: { string } = {}

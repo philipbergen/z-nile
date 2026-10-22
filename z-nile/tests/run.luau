@@ -17,16 +17,19 @@ type Spec = { name: string, cases: { { name: string, fn: () -> () } } }
 -- Where this file is (z-nile/tests/run.luau), and so the repository root, two folders above its own: every project's
 -- home requires it from its own tests/run.luau, and specs are loaded relative to this file, so a spec path relative to
 -- the current folder needs the current folder's place under the root in front of it ("pickman/", "z-nile/").
-local RUNNER_DIR = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "."
+local fenceLib = require("./lib/fence")
+-- normalized: `lune run ../z-nile/tests/run` from a home keeps the `..` in debug.info (code review 004 F6)
+local RUNNER_DIR = string.match(fenceLib.normalize(debug.info(1, "s")), "^(.*)/[^/]+$") or "."
 local ROOT = string.match(RUNNER_DIR, "^(.*)/[^/]+/[^/]+$") or "."
 local HERE = (string.gsub(process.cwd, "/+$", ""))
--- specs run from a project's home, a folder at the top of the repository (c0120: the root belongs to no project)
+-- specs run from a project's home, a folder of the registry at the top of the repository (c0120: the root belongs to
+-- no project; code review 004 F6: any other top-level folder refuses too)
 local HOME = if string.sub(HERE, 1, #ROOT + 1) == ROOT .. "/" then string.sub(HERE, #ROOT + 2) else nil
-if HOME == nil or HOME == "" or string.find(HOME, "/", 1, true) then
+if HOME == nil or not table.find(fenceLib.homes(), HOME :: string) then
 	stdio.ewrite(
 		"tests/run: "
 			.. HERE
-			.. " is no project's home: run specs from a project's folder (pickman/, z-nile/), as cd pickman && lune run tests/run\n"
+			.. " is no project's home (z-nile/projects.toml): run specs from a project's folder (pickman/, z-nile/), as cd pickman && lune run tests/run\n"
 	)
 	process.exit(2)
 end

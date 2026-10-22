@@ -105,6 +105,12 @@ if [[ -n $plan ]]; then
 fi
 
 # prerequisites the static stages read: serial and fast
+source z-nile/lib/fence.sh
+# every home's .cache gets the fence's refusals before anything here writes there (the builds write
+# <home>/.cache/check*.rbxl): a symlinked or bad .cache, which an unjailed spec could leave, refuses (code review 004 F3)
+for i in "${!names[@]}"; do
+  pickman_fence_refusals "$(pwd -P)/$(prefix "${homes[$i]}")" || exit 1
+done
 for i in "${!names[@]}"; do
   picked "${names[$i]}" || continue
   c="$(prefix "${homes[$i]}").cache"
@@ -116,7 +122,6 @@ for i in "${!names[@]}"; do
 done
 # the root's .cache is no project's home (c0120) but holds the board and the gate's downloads; it gets the fence's
 # refusals and sentinel, so git finds no repository there (design review 005 F2)
-source z-nile/lib/fence.sh
 pickman_fence_refusals "$(pwd -P)" || exit 1
 mkdir -p .cache
 find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +
