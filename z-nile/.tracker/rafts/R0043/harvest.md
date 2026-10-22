@@ -27,3 +27,14 @@
 - review-001 F3: one-off: a forwarder's file mode and stale comments after the move
 - review-002 F1: execute-raft/fix-rounds-rerun-every-member-check
 - review-002 F2: one-off: a PR description missed a post-review sequestered edit
+- design-review-006 F1: testing/no-live-counts-in-promoted-specs
+- design-review-006 F2: ticket-prep/design-the-execution-window, ticket-prep/restated-rules-move-together
+- design-review-006 F3: ticket-prep/instructions-runnable-where-they-run
+- design-review-006 F4: architecture/guard-no-is-explicit
+- design-review-006 F5: ticket-prep/restated-rules-move-together
+- design-review-006 F6: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-007 F1: ticket-prep/restated-rules-move-together
+- design-review-007 F2: ticket-prep/design-the-execution-window
+- design-review-007 F3: ticket-prep/restated-rules-move-together
+- design-review-007 F4: ticket-prep/restated-rules-move-together
+- review-004 F1: one-off: the PR description kept the guesses after the user decided them

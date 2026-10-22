@@ -6,14 +6,14 @@ local process = require("@lune/process")
 local claims = {}
 
 -- Whether any tracker document on `ref` (default origin/main), in the repository at `cwd`, under any of `roots` (every
--- project root of that ref's registry, c0114; default the legacy `tracker`), has the line `status: <value>`. True or false, or nil and git's message
+-- project root of that ref's registry, c0114; no default: the caller names them), has the line `status: <value>`. True or false, or nil and git's message
 -- when the question could not be answered: the caller refuses then, never guesses. One `git grep` (exit 0: found, 1:
 -- not found, anything else: an error).
-function claims.taken(cwd: string, value: string, ref: string?, roots: { string }?): (boolean?, string?)
+function claims.taken(cwd: string, value: string, ref: string?, roots: { string }): (boolean?, string?)
 	if not string.match(value, "^[%a%-]+$") then
 		return nil, `not a stamp: {value}`
 	end
-	local within: { string } = roots or { "tracker" }
+	local within: { string } = roots
 	if #within == 0 then
 		return nil, "no project roots to search"
 	end

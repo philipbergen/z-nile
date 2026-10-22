@@ -134,12 +134,17 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 		end
 	end)
 
-	it("./zn runs the engine from the repository root", function()
+	it("./zn runs the engine from the repository root, passing on the directory it was run from", function()
 		local zn = commands("zn")
-		t.expect(table.find(zn, 'cd "$(dirname "$0")"') ~= nil).toBe(true)
+		t.expect(table.find(zn, 'top="$(cd "$(dirname "$0")" && pwd -P)"') ~= nil).toBe(true)
+		t.expect(table.find(zn, 'export ZN_TOP="$top" ZN_CWD="${rel#/}"') ~= nil).toBe(true)
+		t.expect(table.find(zn, 'cd "$top"') ~= nil).toBe(true)
 		t.expect(table.find(zn, 'exec lune run z-nile/engine/main -- "$@"') ~= nil).toBe(true)
 		local usage = process.exec("bash", { "zn" })
 		t.expect(has(usage.stdout, "usage: ./zn <command>")).toBe(true)
+		-- run from a folder below the root, it still runs the engine there
+		local below = process.exec("bash", { "../../zn" }, { cwd = "z-nile/engine" })
+		t.expect(has(below.stdout, "usage: ./zn <command>")).toBe(true)
 	end)
 
 	it("each forwarder is one command that runs the moved file", function()

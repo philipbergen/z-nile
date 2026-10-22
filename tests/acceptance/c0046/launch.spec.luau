@@ -97,10 +97,10 @@ return t.spec("launch", function(it)
 		end
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
 		engine.empty(seed)
-		must(tr(seed, { "new", "issue", "f", "alpha" }), "new f0010")
-		must(tr(seed, { "new", "issue", "f", "beta" }), "new f0020")
-		must(tr(seed, { "new", "raft", "feature", "demo", "f0010" }), "raft demo")
-		must(tr(seed, { "new", "raft", "feature", "old", "f0020" }), "raft old")
+		must(tr(seed, { "new", "issue", "f", "alpha", "--project", "pickman" }), "new f0010")
+		must(tr(seed, { "new", "issue", "f", "beta", "--project", "pickman" }), "new f0020")
+		must(tr(seed, { "new", "raft", "feature", "demo", "f0010", "--project", "pickman" }), "raft demo")
+		must(tr(seed, { "new", "raft", "feature", "old", "f0020", "--project", "pickman" }), "raft old")
 		-- R0020 is finished
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })

@@ -19,7 +19,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 3. **Never edit** any `check.sh`, `tracker/architecture.md` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
 4. **Experiments come before any production code.** If an experiment fails and has no fallback, stop.
 5. **Tests come first** for each issue. Watch them fail for the right reason, then implement.
-6. **Stay inside the designs.** Anything not covered by an issue must become a new issue first (`./zn new issue …`).
+6. **Stay inside the designs.** Anything not covered by an issue must become a new issue first (`./zn new issue … --project <name>`, or `--raft <R-id>` for an emergent issue).
 
 ## Environment
 - **Never edit the main checkout.** You work only in the raft's worktree under `.worktree/`.

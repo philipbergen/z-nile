@@ -2,8 +2,8 @@
 # Acceptance checks for c0071. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0071 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0071 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0071"
 
@@ -44,6 +44,6 @@ check "AC6: ticket-prep step 5.5 sets design: ready from the final round" bash -
   r=\$(review)
   grep -i 'design: ready' <<<\"\$r\" | grep -qi 'final round' || { echo 'step 5.5: design: ready is not tied to the final round'; exit 1; }
   grep -qF 'status <R-id> prepared' <<<\"\$r\" || { echo 'step 5.5: status <R-id> prepared lost'; exit 1; }"
-check "AC5: c0038's skill-doc check still passes" bash -c 'bash tracker/issues/done/c0038/check.sh 2>&1 | grep -F "AC3" | grep -q "^PASS"'
+check "AC5: c0038's skill-doc check still passes" bash -c 'bash z-nile/.tracker/issues/done/c0038/check.sh 2>&1 | grep -F "AC3" | grep -q "^PASS"'
 
 finish

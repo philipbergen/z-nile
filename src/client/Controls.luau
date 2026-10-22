@@ -1,13 +1,22 @@
 --!strict
--- Client adapter: binds the key map from View and relays intents to the server.
+-- Client adapter: binds the key map from View and relays intents to the server. On a touch screen it feeds
+-- every finger through Touch's fold and applies what it emits.
 local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
+local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
 local Controls = {}
 
-function Controls.start(onSnap: () -> ())
+function Controls.start(
+	onSnap: () -> (),
+	onLook: ((dx: number, dy: number) -> ())?,
+	snapRect: (() -> Touch.Rect?)?,
+	onTouch: ((held: boolean) -> ())?
+)
 	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
 
 	local function handle(
@@ -37,6 +46,90 @@ function Controls.start(onSnap: () -> ())
 		Enum.ContextActionPriority.High.Value,
 		table.unpack(keys)
 	)
+
+	-- the platform thumbstick would take the left half, which is the turn zone
+	GuiService.TouchControlsEnabled = false
+	local camera = workspace.CurrentCamera :: Camera
+	local fingers = Touch.empty()
+	local ids: { [InputObject]: number } = {}
+	local lastId = 0
+	local held = false
+
+	-- Held while any physical touch is down, including one the fold ignored: it still moves the locked mouse.
+	local function hold()
+		local down = next(ids) ~= nil
+		if down ~= held then
+			held = down
+			if onTouch then
+				onTouch(held)
+			end
+		end
+	end
+
+	-- Every touch event is converted to screen pixels and measured against the full screen, read afresh each
+	-- time: the first frames can report an empty area, and a rotation changes it.
+	local function onInput(input: InputObject, phase: Touch.Phase)
+		if input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local id = ids[input]
+		if id == nil then
+			if phase ~= "begin" then
+				return
+			end
+			lastId += 1
+			id = lastId
+			ids[input] = id
+		end
+		if phase == "end" then
+			ids[input] = nil
+		end
+		local sx, sy = Touch.toScreen(
+			GuiService:GetInsetArea(Enum.ScreenInsets.None),
+			input.Position.X,
+			input.Position.Y
+		)
+		local sw = Touch.screenSize(
+			GuiService:GetInsetArea(Enum.ScreenInsets.None),
+			camera.ViewportSize.X,
+			camera.ViewportSize.Y
+		)
+		local rect = if snapRect then snapRect() else nil
+		local effects
+		fingers, effects = Touch.track(
+			fingers,
+			{ id = id, phase = phase, x = sx, y = sy },
+			{ width = sw, snap = rect }
+		)
+		for _, effect in effects do
+			if effect.kind == "turn" then
+				intent:FireServer(effect.intent)
+			elseif effect.kind == "look" then
+				if onLook then
+					onLook(effect.dx, effect.dy)
+				end
+			elseif effect.kind == "snap" then
+				onSnap()
+			end
+		end
+		hold()
+	end
+
+	UserInputService.InputBegan:Connect(function(input: InputObject, _: boolean)
+		onInput(input, "begin")
+	end)
+	UserInputService.InputChanged:Connect(function(input: InputObject, _: boolean)
+		onInput(input, "move")
+	end)
+	UserInputService.InputEnded:Connect(function(input: InputObject, _: boolean)
+		onInput(input, "end")
+	end)
+	-- a touch held while the window loses focus may never end; drop every finger so no zone stays locked
+	UserInputService.WindowFocusReleased:Connect(function()
+		fingers = Touch.empty()
+		ids = {}
+		hold()
+	end)
 end
 
 return Controls

@@ -2,8 +2,8 @@
 # Acceptance checks for c0005. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0005 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0005 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0005"
 
@@ -38,20 +38,20 @@ check "AC4: hooks act on the edited file's / session cwd's tree" cases_pass \
   "post-edit hook lints" "post-edit hook ignores" "stop hook gates the session" "stop hook gates the worktree root"
 check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
   for f in execute-raft tracker make-issue ticket-prep ready-raft; do
-    grep -qF "scripts/tracker.sh worktree" ".claude/skills/$f/SKILL.md" || { echo "$f: no worktree command"; exit 1; }
+    grep -qF "./zn worktree" ".claude/skills/$f/SKILL.md" || { echo "$f: no worktree command"; exit 1; }
   done
-  grep -qF "scripts/tracker.sh worktree {{RAFT_ID}}" tracker/templates/prompt.md || { echo "prompt template"; exit 1; }
+  grep -qF "./zn worktree {{RAFT_ID}}" z-nile/templates/prompt.md || { echo "prompt template"; exit 1; }
   grep -qi "worktree" AGENTS.md || { echo "AGENTS.md"; exit 1; }
   grep -qiE "^#+ +worktrees" .claude/skills/tracker/SKILL.md || { echo "tracker: no Worktrees section"; exit 1; }
   grep -qiE "^#+ +landing a change" .claude/skills/tracker/SKILL.md || { echo "tracker: no Landing a change section"; exit 1; }
   for c in "worktree:\*" "worktree-prune:\*"; do
-    grep -q "Bash(scripts/tracker.sh $c)" .claude/settings.json || { echo "settings: missing $c"; exit 1; }
+    grep -q "Bash(./zn $c)" .claude/settings.json || { echo "settings: missing $c"; exit 1; }
   done
   bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
     -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
     -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
-    .claude/skills tracker/templates AGENTS.md SETUP.md scripts/tracker/main.luau || true)
+    .claude/skills z-nile/templates AGENTS.md SETUP.md z-nile/engine/main.luau || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC6: named worktrees; bad names, item ids, done rafts rejected; new/start refused in the main checkout" cases_pass \
   "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft" \

@@ -1,7 +1,8 @@
 --!strict
 -- c0114 AC1: z-nile/projects.toml lists the projects and their tracker roots, and its one parser refuses anything
--- ambiguous or out of shape (lesson architecture/parsers-refuse-ambiguity). A tree or commit without the file is a
--- tree from before c0114: exactly the legacy root `tracker`.
+-- ambiguous or out of shape (lesson architecture/parsers-refuse-ambiguity). A tree or commit without the file refuses,
+-- like one with a bad file (decided with the user, 2026-10-21: "Missing also refuses"). A project's folder holds the
+-- directories it is chosen from: `z-nile` for `z-nile/.tracker`; the legacy `tracker` has none.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -73,6 +74,24 @@ return t.spec("c0114 the project registry", function(it)
 		refused('retired = ["a/.tracker"]\n' .. project("a", "a/.tracker"), "both a root and retired")
 	end)
 
+	it("a project's folder holds the directories it is chosen from; the legacy root has none", function()
+		local reg =
+			projects.parse(project("pickman", "tracker") .. project("z-nile", "z-nile/.tracker")) :: projects.Registry
+		t.expect(projects.folderOf("z-nile/.tracker")).toBe("z-nile")
+		t.expect(projects.folderOf("tracker")).toBe(nil)
+		local function at(dir: string): string?
+			local p = projects.inDir(reg, dir)
+			return if p then p.name else nil
+		end
+		t.expect(at("z-nile")).toBe("z-nile")
+		t.expect(at("z-nile/engine")).toBe("z-nile")
+		t.expect(at("z-nile/.tracker/issues")).toBe("z-nile")
+		t.expect(at("")).toBe(nil) -- the checkout's root
+		t.expect(at("tracker")).toBe(nil) -- pickman has no folder until c0120
+		t.expect(at("src")).toBe(nil)
+		t.expect(at("z-nile-old")).toBe(nil) -- by whole segments
+	end)
+
 	it("rootOf names the root a path lies under, by whole segments", function()
 		local roots = { "tracker", "z-nile/.tracker" }
 		t.expect({ projects.rootOf("z-nile/.tracker/issues/c0001/c0001.md", roots) })
@@ -83,37 +102,57 @@ return t.spec("c0114 the project registry", function(it)
 		t.expect((projects.rootOf("z-nile/engine/main.luau", roots))).toBe(nil)
 	end)
 
-	it(
-		"a commit without the registry has the legacy root alone; one with a bad registry is an error",
-		function()
-			local base = fixture.physical(".") :: string .. "/.cache/c0114-registry"
-			if fs.isDir(base) then
-				fs.removeDir(base)
-			end
-			fs.writeDir(base)
-			t.expect(process.exec("git", { "init", "-q", "-b", "main", base }).ok).toBe(true)
-			fixture.git(base, { "config", "user.name", "c0114-registry" })
-			fixture.git(base, { "config", "user.email", "c0114-registry@example.invalid" })
-			fs.writeFile(`{base}/readme`, "x\n")
-			fixture.git(base, { "add", "-A" })
-			fixture.git(base, { "commit", "-q", "-m", "before" })
-			local before = fixture.git(base, { "rev-parse", "HEAD" })
-			fs.writeDir(`{base}/z-nile`)
-			fs.writeFile(`{base}/z-nile/projects.toml`, "[[project]\n")
-			fixture.git(base, { "add", "-A" })
-			fixture.git(base, { "commit", "-q", "-m", "bad registry" })
-			-- projects.at reads the commit through git in the directory it is given, the fixture
-			local function at(rev: string): (projects.Registry?, string?)
-				return projects.at(rev, base)
-			end
-			local found = at(before)
-			t.expect(found ~= nil).toBe(true)
-			local legacy = found :: projects.Registry
-			t.expect(projects.roots(legacy)).toEqual({ "tracker" })
-			local bad, why = at("HEAD")
-			t.expect(bad).toBe(nil)
-			t.expect(string.find(why or "", "not valid TOML", 1, true) ~= nil).toBe(true)
+	it("a tree or commit without the registry is an error, like one with a bad registry", function()
+		local base = fixture.physical(".") :: string .. "/.cache/c0114-registry"
+		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
-	)
+		fs.writeDir(base)
+		t.expect(process.exec("git", { "init", "-q", "-b", "main", base }).ok).toBe(true)
+		fixture.git(base, { "config", "user.name", "c0114-registry" })
+		fixture.git(base, { "config", "user.email", "c0114-registry@example.invalid" })
+		fs.writeFile(`{base}/readme`, "x\n")
+		fixture.git(base, { "add", "-A" })
+		fixture.git(base, { "commit", "-q", "-m", "before" })
+		local before = fixture.git(base, { "rev-parse", "HEAD" })
+		-- the working tree without the file refuses too, and so does one whose file does not parse
+		local okMissing, errMissing = pcall(projects.load, base, true)
+		t.expect(okMissing).toBe(false)
+		t.expect(string.find(tostring(errMissing), "no z-nile/projects.toml", 1, true) ~= nil).toBe(true)
+		-- and every command that reads the items refuses there instead of scanning a guessed root (list, audit's scan,
+		-- offline numbering; remap reads the items through the same scan, after it fetches origin)
+		fs.writeDir(`{base}/tracker/issues/c0010`)
+		fs.writeFile(`{base}/tracker/issues/c0010/c0010.md`, "---\nid: c0010\nslug: s\n---\n")
+		fixture.git(base, { "add", "-A" })
+		fixture.git(base, { "commit", "-q", "-m", "an item" }) -- remap needs a clean tree before it reads anything
+		for _, args in { { "list" }, { "audit" }, { "new", "issue", "c", "offline", "--project", "pickman" } } do
+			local all = { "run", `{fixture.physical(".")}/z-nile/engine/main`, "--" }
+			for _, a in args do
+				table.insert(all, a)
+			end
+			local r = process.exec("lune", all, { cwd = base, env = { PICKMAN_PUBLISH = "0" } })
+			t.expect(r.ok).toBe(false)
+			if not string.find(r.stdout .. r.stderr, "projects.toml", 1, true) then
+				error(`{table.concat(args, " ")} did not refuse for the registry: {r.stdout}{r.stderr}`)
+			end
+		end
+		fixture.git(base, { "rm", "-q", "-r", "tracker" })
+		fs.writeDir(`{base}/z-nile`)
+		fs.writeFile(`{base}/z-nile/projects.toml`, "[[project]\n")
+		fixture.git(base, { "add", "-A" })
+		fixture.git(base, { "commit", "-q", "-m", "bad registry" })
+		-- projects.at reads the commit through git in the directory it is given, the fixture
+		local function at(rev: string): (projects.Registry?, string?)
+			return projects.at(rev, base)
+		end
+		local none, whyNone = at(before)
+		t.expect(none).toBe(nil)
+		t.expect(string.find(whyNone or "", "has no z-nile/projects.toml", 1, true) ~= nil).toBe(true)
+		local bad, why = at("HEAD")
+		t.expect(bad).toBe(nil)
+		t.expect(string.find(why or "", "not valid TOML", 1, true) ~= nil).toBe(true)
+		local okBad = pcall(projects.load, base, true)
+		t.expect(okBad).toBe(false)
+		fs.removeDir(base)
+	end)
 end)

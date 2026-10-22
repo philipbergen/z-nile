@@ -137,8 +137,11 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		engine.empty(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker, stub gate", "--allow-empty" })
-		must(tr({ "new", "issue", "f", "alpha" }), "new issue")
-		must(tr({ "new", "raft", "feature", "demo", "f0010", "--single" }), "new raft")
+		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+		must(
+			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
+			"new raft"
+		)
 		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end

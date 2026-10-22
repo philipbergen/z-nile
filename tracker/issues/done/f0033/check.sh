@@ -2,13 +2,13 @@
 # Acceptance checks for f0033. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/f0033 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/f0033 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/f0033"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+# `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the radar and the edge indicators are computed as specified: bearing, border point, path distance, field of view, nearest first, strictly growing and brightening as a ghost nears" lune run tests/run -- "$A/awareness.spec.luau"
 check "AC2: the danger HUD is a thin client module that draws only what Awareness returns, and the camera hands over its pose without a second interpolation" lune run tests/run -- "$A/adapters.spec.luau"
 existing_ac3_pass() { # the runner takes files, not directories

@@ -1,6 +1,7 @@
 --!strict
 -- Regression guard (c0500): `tracker.sh new` keeps its multiple-of-10 spacing, which leaves room to insert
 -- issues. Only `renumber` advances by one.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -17,6 +18,7 @@ process.exec("git", { "init", "-q" }, { cwd = base })
 -- c0114 override: the templates and the engine moved to z-nile/
 fs.writeDir(`{base}/z-nile`)
 process.exec("cp", { "-R", `{root}/z-nile/templates`, `{base}/z-nile/templates` })
+engine.registry(base) -- c0114: a tree without the registry refuses
 fs.writeDir(`{base}/tracker`)
 
 local function put(id: string)
@@ -29,6 +31,9 @@ local function new(args: { string }): process.ExecResult
 	for _, a in args do
 		table.insert(all, a)
 	end
+	-- c0114: at a checkout's root the project is named
+	table.insert(all, "--project")
+	table.insert(all, "pickman")
 	return process.exec("lune", all, { cwd = base })
 end
 

@@ -10,8 +10,8 @@ local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local f: trackerfix.Fixture
 local wt = ""
 

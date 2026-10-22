@@ -87,7 +87,7 @@ t.expect(sim.firstTick(trace, "Bump")).toBe(6)
 `z-nile/affected.luau` builds the static require graph of `src/` and `tests/`. It selects every spec whose transitive requires include a changed file.
 - **Full run**: changes to `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, or any config file (`.luaurc`, `rokit.toml`, `default.project.json`, `selene.toml`, `stylua.toml`) force one.
 - **Reliability** depends on the architecture rules: literal requires, and features used only through `init`. `tests/meta` enforces those rules.
-- **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a chore, since CI and test bugs are always chores: `./zn new issue c affected-graph-miss-…`.
+- **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a chore, since CI and test bugs are always chores: `./zn new issue c affected-graph-miss-… --project z-nile`.
 
 ## Acceptance checks (`check.sh`)
 Every issue and raft has a `check.sh` that uses `z-nile/lib/ac.sh`:
@@ -127,7 +127,7 @@ If something could be expressed as a measurable proxy, it's not Judged or Observ
 ## Speed
 A standing rule, not a one-off. Tests and checks run very often, so they must run **concurrently** and as swiftly as possible.
 - **What exists**: `z-nile/lib/par.sh` runs the independent static stages together (`par_start` / `par_wait`: buffered, timed, reported in start order); `tests/run` runs spec files in concurrent workers (`--jobs N`, `PICKMAN_JOBS`). `PICKMAN_JOBS=1` restores serial runs when you suspect an ordering bug.
-- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what>`). Never add a serial dependency between stages without a reason.
+- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
 - **Writing specs for speed**: no wall-clock assertions and no fixed sleeps to let something finish (a bounded poll or rendezvous with a timeout is fine). Shell-heavy fixtures own a unique `.cache/<name>` (a literal `.cache/<dir>` in two spec files under `tests/` fails the gate, a mere mention counts, and `sim` is exempt). No shared mutable state across spec files. Prefer in-process Logic specs, and split or stub a spec that takes more than about a second. Two suites in one checkout queue on the runner's lock; separate worktrees run in parallel (see "Specs never touch the real repository").
 
 ## Specs never touch the real repository
@@ -176,4 +176,4 @@ Before you start, read this skill's lessons: `./zn lessons --skill testing --ful
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
 - **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.

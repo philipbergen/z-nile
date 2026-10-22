@@ -12,4 +12,6 @@ c0120 design review 002 F2: the design still named a superseded prototype commit
 
 c0120 code review 001 F3: the build's log named R0043 as the active raft holding the old paths; `./zn busy` said R0034 (the check log's tail had cut that line). A tool's answer copied into a document is a restatement: copy it from the tool's full output.
 
+c0120 design review 005 F1: c0114's promoted `finished.spec` restated c0114's rewrite as a rule over the live tree; c0120 moved and rewrote those files again, and the override list missed it. A promoted spec is a restatement of its item's rule: when a design changes what the rule reads, list every promoted spec that reads it (measure, by running them on the prototype), and give each rule one owner.
+
 **How to apply:** when a refute line changes a rule, grep the repo for its old wording and its key terms, update every restatement in the same change, and pin the new wording where a spec already reads that file.

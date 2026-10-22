@@ -20,11 +20,16 @@ return t.spec("d0105 danger hud corner", function(it)
 		"places the radar from the current screen size on every render step, before the snapshot guard",
 		function()
 			local src = source()
-			local block = "RenderStepped:Connect(function()\n"
+			-- the radarBox call may take more arguments after radarSize (f0029 adds two), so its line is matched
+			-- as a prefix; the Position line must follow it directly
+			local head = "RenderStepped:Connect(function()\n"
 				.. "\t\tlocal view = gui.AbsoluteSize\n"
-				.. "\t\tlocal box = Hud.radarBox(view.X, view.Y, radarSize)\n"
-				.. "\t\tradar.Position = UDim2.fromOffset(box.x, box.y)\n"
-			t.expect(string.find(src, block, 1, true) ~= nil).toBe(true)
+				.. "\t\tlocal box = Hud.radarBox(view.X, view.Y, radarSize"
+			local tail = "\n\t\tradar.Position = UDim2.fromOffset(box.x, box.y)\n"
+			local start = string.find(src, head, 1, true)
+			t.expect(start ~= nil).toBe(true)
+			local rest = string.sub(src, (start :: number) + #head)
+			t.expect(string.match(rest, "^[,)][^\n]*" .. string.gsub(tail, "%p", "%%%0")) ~= nil).toBe(true)
 			local function count(needle: string): number
 				local n, i = 0, 1
 				while true do

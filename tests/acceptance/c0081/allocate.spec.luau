@@ -129,7 +129,8 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 
 	it("new issue takes the counter and pushes it raised by one in the same commit", function()
 		local wt = worktree("cap-a")
-		t.expect(trOk(wt, { "new", "issue", "c", "alpha" })).toBe("tracker/issues/c0891/c0891.md")
+		t.expect(trOk(wt, { "new", "issue", "c", "alpha", "--project", "pickman" }))
+			.toBe("tracker/issues/c0891/c0891.md")
 		t.expect(lastChanged()).toEqual({
 			"tracker/issues/c0891/c0891.md",
 			"tracker/issues/c0891/check.sh",
@@ -150,7 +151,8 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 
 	it("the next issue is 892: counting by one, not the next multiple of 10", function()
 		local wt = worktree("cap-b")
-		t.expect(trOk(wt, { "new", "issue", "f", "beta" })).toBe("tracker/issues/f0892/f0892.md")
+		t.expect(trOk(wt, { "new", "issue", "f", "beta", "--project", "pickman" }))
+			.toBe("tracker/issues/f0892/f0892.md")
 		t.expect(counters().issue).toBe(893)
 		table.insert(phrases, phraseOf(onOrigin(ids.FILE) :: string))
 	end)
@@ -161,7 +163,8 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			"an old tracker made c0950"
 		)
 		local wt = worktree("cap-c")
-		t.expect(trOk(wt, { "new", "issue", "c", "gamma" })).toBe("tracker/issues/c0951/c0951.md")
+		t.expect(trOk(wt, { "new", "issue", "c", "gamma", "--project", "pickman" }))
+			.toBe("tracker/issues/c0951/c0951.md")
 		t.expect(counters().issue).toBe(952)
 		table.insert(phrases, phraseOf(onOrigin(ids.FILE) :: string))
 		-- three writes by the tracker, not all one phrase: a fixed phrase would let two writes merge silently
@@ -188,7 +191,11 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 				.. `exec "{real}" "$@"\n`,
 			true
 		)
-		local out = trOk(wt, { "new", "issue", "c", "delta" }, { PATH = `{shim}:{process.env.PATH or ""}` })
+		local out = trOk(
+			wt,
+			{ "new", "issue", "c", "delta", "--project", "pickman" },
+			{ PATH = `{shim}:{process.env.PATH or ""}` }
+		)
 		t.expect(fs.isFile(marker)).toBe(true)
 		t.expect(out).toBe("tracker/issues/c0953/c0953.md")
 		t.expect(
@@ -201,7 +208,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 
 	it("new raft takes the raft counter and leaves the issue counter alone", function()
 		local wt = worktree("cap-e")
-		t.expect(trOk(wt, { "new", "raft", "chore", "solo", "c0891", "--single" }))
+		t.expect(trOk(wt, { "new", "raft", "chore", "solo", "c0891", "--single", "--project", "pickman" }))
 			.toBe("tracker/rafts/R0271/R0271.md")
 		local c = counters()
 		t.expect(c.raft).toBe(272)
@@ -236,7 +243,8 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 
 	it("renumber takes its number from the counter and reserves it on origin", function()
 		local wt = worktree("cap-g")
-		t.expect(trOk(wt, { "new", "issue", "c", "zeta" })).toBe("tracker/issues/c0955/c0955.md")
+		t.expect(trOk(wt, { "new", "issue", "c", "zeta", "--project", "pickman" }))
+			.toBe("tracker/issues/c0955/c0955.md")
 		local r = trOk(wt, { "renumber", "c0955" })
 		t.expect(string.find(r, "c0955 -> c0956", 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(`{wt}/tracker/issues/c0956/c0956.md`)).toBe(true)
@@ -250,13 +258,19 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		local localNext = fs.readFile(`{wt}/{ids.FILE}`)
 		t.expect((ids.parse(localNext) :: ids.Counters).issue).toBe(957)
 		local before = git(origin, { "rev-parse", "main" })
-		local out = trOk(wt, { "new", "issue", "c", "eta" }, { PICKMAN_PUBLISH = "0" })
+		local out = trOk(
+			wt,
+			{ "new", "issue", "c", "eta", "--project", "pickman" },
+			{ PICKMAN_PUBLISH = "0" }
+		)
 		t.expect(out).toBe("tracker/issues/c0957/c0957.md")
 		t.expect(fs.readFile(`{wt}/{ids.FILE}`)).toBe(localNext)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		-- a local counter behind the local ids is passed too
 		write(`{wt}/tracker/issues/c0970/c0970.md`, stub("c0970", "local"))
-		t.expect(trOk(wt, { "new", "issue", "c", "theta" }, { PICKMAN_PUBLISH = "0" }))
+		t.expect(
+			trOk(wt, { "new", "issue", "c", "theta", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
+		)
 			.toBe("tracker/issues/c0971/c0971.md")
 	end)
 
@@ -296,7 +310,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			end
 			local want = (math.floor(highest / 10) + 1) * 10
 			local wt = worktree("cap-i")
-			t.expect(trOk(wt, { "new", "issue", "c", "iota" }))
+			t.expect(trOk(wt, { "new", "issue", "c", "iota", "--project", "pickman" }))
 				.toBe(string.format("tracker/issues/c%04d/c%04d.md", want, want))
 			t.expect(onOrigin(ids.FILE)).toBe(nil)
 			t.expect(fs.isFile(`{wt}/{ids.FILE}`)).toBe(false)

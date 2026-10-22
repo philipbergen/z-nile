@@ -187,7 +187,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		local tip, head = originTip(), git(wt, { "rev-parse", "HEAD" })
 		local guarded = process.exec("bash", {
 			"-c",
-			'source z-nile/lib/fence.sh || exit 1; pickman_fence "$PWD" && bash scripts/tracker.sh new issue c probe-one',
+			'source z-nile/lib/fence.sh || exit 1; pickman_fence "$PWD" && bash scripts/tracker.sh new issue c probe-one --project pickman',
 		}, { cwd = wt })
 		local said = guarded.stdout .. guarded.stderr
 		if not guarded.ok then
@@ -210,7 +210,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		local tip = originTip()
 		local r = process.exec(
 			"bash",
-			{ "scripts/tracker.sh", "new", "issue", "c", "probe-two" },
+			{ "scripts/tracker.sh", "new", "issue", "c", "probe-two", "--project", "pickman" },
 			{ cwd = wt }
 		)
 		if not r.ok then

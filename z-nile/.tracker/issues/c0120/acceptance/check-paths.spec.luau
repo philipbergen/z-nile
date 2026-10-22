@@ -1,7 +1,8 @@
 --!strict
 -- c0120 AC11: every path a check.sh names exists, from its project's home, so no check passes because the path it
 -- guards moved away (`git diff --quiet -- src/server` is green on a path that is not there). It covers the check.sh of
--- every unfinished item (backlog and active, every project root): a finished one is never run again. A literal path is
+-- every unfinished item (backlog and active, every project root), read from its home (pickman/, z-nile/); finished
+-- items' files are finished.spec.luau's (the user's 2026-10-21 decision rewrites them). A literal path is
 -- a word of a command (comments aside) with no `$`, that starts with a top-level folder of the repository or a home
 -- (src/, tests/, scripts/, z-nile/, pickman/, tracker/, .tracker/, .github/, .claude/) or is a root file of a home
 -- (default.project.json, lobby.project.json, zn), or follows `lune run` (then with .luau). A glob matches at least one
@@ -9,9 +10,13 @@
 -- which its own work will create, and the check.sh files of the rafts the user restamps for a re-prep after c0120
 -- (R0030 with c0083, R0039 with c0075), by their exact content, so a re-prep that rewrites them is checked again.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
+
+-- the checkout's top, with a slash: these specs run from z-nile/ (c0120), and the scan reads the checkout from there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")) .. "/"
 
 -- git blob ids of the check.sh files restamped for a re-prep after c0120 (the user's decision), as they are now
 local RESTAMPED: { [string]: string } = {
@@ -22,10 +27,77 @@ local RESTAMPED: { [string]: string } = {
 }
 local PREFIXES =
 	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
-local FILES = { ["default.project.json"] = true, ["lobby.project.json"] = true, zn = true }
+-- A file named alone (no folder) is a path only outside double quotes: in quotes it is a message, a case's name or
+-- a grep pattern (c0099's), found by running the finished checks by hand
+local FILES = {
+	["default.project.json"] = true,
+	["lobby.project.json"] = true,
+	zn = true,
+	-- the repository root's own files (found by running the finished checks by hand)
+	["AGENTS.md"] = true,
+	["CLAUDE.md"] = true,
+	["SETUP.md"] = true,
+	["rokit.toml"] = true,
+	["selene.toml"] = true,
+	["stylua.toml"] = true,
+	[".luaurc"] = true,
+	[".gitignore"] = true,
+}
+-- A file named alone is a path only outside quotes and not right after one (c0053's `merging='zn sync…'` is a
+-- pattern, c0042's `for s in "./zn board"` a list of patterns), or as the command of a command substitution, quoted
+-- or not (`"$(./zn find f0014)/check.sh"`)
+local function substituted(line: string, first: number): boolean
+	return first > 2 and string.sub(line, first - 2, first - 1) == "$("
+end
+-- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
+local FOLDERS = { tracker = true, src = true, tests = true }
 
 local function blob(text: string): string
 	return serde.hash("sha1", `blob {#text}\0{text}`)
+end
+
+-- The words of a grep's pattern (a pattern names text, not a file: c0046's `grep -qF "./zn worktree" …`): after
+-- `grep` or `rg` and its options, the first other word, or each `-e`'s; a quoted pattern runs to its closing quote.
+-- `line` is the scanned line, `raw[k]` the k-th word as written and `starts[k]` its first byte.
+local function patternWords(line: string, raw: { string }, starts: { number }): { [number]: boolean }
+	local marked: { [number]: boolean } = {}
+	local function mark(k: number)
+		local s = starts[k]
+		local q = if s > 1 then string.sub(line, s - 1, s - 1) else ""
+		if q == '"' or q == "'" then
+			local close = string.find(line, q, s, true) or (#line + 1)
+			for j = k, #raw do
+				if starts[j] < close then
+					marked[j] = true
+				end
+			end
+		else
+			marked[k] = true
+		end
+	end
+	for k, w in raw do
+		if w == "grep" or w == "rg" or w == "egrep" then
+			local j, named = k + 1, false
+			while raw[j] and string.sub(raw[j], 1, 1) == "-" and raw[j] ~= "--" do
+				if raw[j] == "-e" or raw[j] == "--regexp" then
+					if raw[j + 1] then
+						mark(j + 1)
+						named = true
+					end
+					j += 2
+				else
+					j += 1
+				end
+			end
+			if raw[j] == "--" then
+				j += 1
+			end
+			if not named and raw[j] then
+				mark(j)
+			end
+		end
+	end
+	return marked
 end
 
 -- the literal paths of a check.sh, in order (a path may repeat)
@@ -37,12 +109,49 @@ local function literals(text: string): { string }
 			-- a check's label is prose, not a command
 			line = string.gsub(line, '^(%s*check%s+)"[^"]*"', "%1")
 			local words: { string } = {}
-			for w in string.gmatch(line, "[^%s\"'();|&<>`]+") do
-				table.insert(words, (string.gsub(w, "[\\,]+$", "")))
+			local quoted: { boolean } = {}
+			local starts: { number } = {}
+			local at = 1
+			while true do
+				local s, e = string.find(line, "[^%s\"'();|&<>`]+", at)
+				if not s then
+					break
+				end
+				at = (e :: number) + 1
+				local _, quotes = string.gsub(string.sub(line, 1, s - 1), '"', "")
+				table.insert(quoted, quotes % 2 == 1)
+				table.insert(starts, s)
+				local w = string.sub(line, s, e :: number)
+				local word = string.gsub(w, "[\\,]+$", "")
+				-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
+				local name = string.match(word, "^[%a_][%w_]*=")
+				if name and #word > #name then
+					word = string.sub(word, #name + 1)
+				end
+				-- a word that goes on with a variable: its literal folder is the path
+				local dollar = string.find(word, "$", 1, true)
+				if dollar and dollar > 1 then
+					local folder = string.match(string.sub(word, 1, dollar - 1), "^(.*)/[^/]*$")
+					if folder and folder ~= "" then
+						word = folder .. "/"
+					end
+				end
+				table.insert(words, word)
 			end
+			local pattern = patternWords(line, words, starts)
 			local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
+			local finding = false -- the words after `find`, before its first option, are the folders it searches
 			for i, w in words do
 				local path: string? = nil
+				if pattern[i] then
+					continue
+				end
+				if w == "find" then
+					finding = true
+					continue
+				elseif string.sub(w, 1, 1) == "-" then
+					finding = false
+				end
 				if words[i - 1] == "cd" and not string.find(w, "$", 1, true) then
 					dir = w .. "/"
 					continue
@@ -54,7 +163,18 @@ local function literals(text: string): { string }
 				then
 					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
 						path = if string.match(w, "%.luau$") then w else w .. ".luau"
-					elseif FILES[w] then
+					elseif
+						(
+							FILES[w]
+							and (
+								substituted(line, starts[i])
+								or not (
+									quoted[i]
+									or string.find(string.sub(line, starts[i] - 1, starts[i] - 1), "[\"']")
+								)
+							)
+						) or (finding and FOLDERS[w])
+					then
 						path = w
 					else
 						for _, p in PREFIXES do
@@ -188,8 +308,8 @@ end
 
 -- a checkout with one item per home (review 001 F3: the scan's reach is proved here, never by counting live items)
 local FX = ".cache/c0120-check-paths/"
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local function put(rel: string, text: string)
 	fs.writeDir(string.match(FX .. rel, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(FX .. rel, text)
@@ -230,8 +350,8 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		put("z-nile/projects.toml", REGISTRY)
 		put("pickman/src/server/Main.server.luau", "--!strict\nreturn nil\n")
 		put("pickman/tests/acceptance/f0031/a.spec.luau", "--!strict\nreturn nil\n")
-		put("tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
-		put("tests/run.luau", "--!strict\nreturn nil\n")
+		put("z-nile/tests/tooling/x.spec.luau", "--!strict\nreturn nil\n")
+		put("z-nile/tests/run.luau", "--!strict\nreturn nil\n")
 		-- pickman's: a path that exists only from pickman/, a glob, its own work, and one that vanished
 		put(
 			"pickman/.tracker/issues/f0001/f0001.md",
@@ -244,7 +364,7 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		-- its raft names a member's own work too
 		put("pickman/.tracker/rafts/R0001/R0001.md", "---\nid: R0001\n---\n")
 		put("pickman/.tracker/rafts/R0001/check.sh", "test -d src/shared/Logic/New\n")
-		-- z-nile's, from the root
+		-- z-nile's, from z-nile/
 		put("z-nile/.tracker/issues/c0002/c0002.md", "---\nid: c0002\n---\n")
 		put(
 			"z-nile/.tracker/issues/c0002/check.sh",
@@ -253,10 +373,10 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 		local s = scan(FX)
 		t.expect(s.bad).toEqual({
 			"pickman/.tracker/issues/f0001/check.sh: src/gone.luau (from pickman)",
-			"z-nile/.tracker/issues/c0002/check.sh: src/server (from .)",
+			"z-nile/.tracker/issues/c0002/check.sh: src/server (from z-nile)",
 		})
 		t.expect(s.checked).toBe(3)
-		t.expect(s.byHome).toEqual({ pickman = 2, ["."] = 1 })
+		t.expect(s.byHome).toEqual({ pickman = 2, ["z-nile"] = 1 })
 		t.expect(present(FX, ".", "src/server")).toBe(false)
 		t.expect(present(FX, "pickman", "tests/acceptance/f0031/*.nope")).toBe(false)
 		t.expect(under("tests/unit", { "tests/unit/Touch" })).toBe(true)
@@ -267,7 +387,7 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 	it(
 		"every unfinished item's check.sh, in every project root, names only paths that exist from its home",
 		function()
-			local s = scan("")
+			local s = scan(TOP)
 			t.expect(table.concat(s.bad, "\n")).toBe("")
 			-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
 			t.expect(s.checked).toBe(s.found)
@@ -275,8 +395,8 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 	)
 
 	it("the restamped check.sh files are exempt only as they are now", function()
-		for _, i in items("") do
-			local file = `{i.dir}/check.sh`
+		for _, i in items(TOP) do
+			local file = `{TOP}{i.dir}/check.sh`
 			if fs.isFile(file) and RESTAMPED[blob(fs.readFile(file))] then
 				t.expect(RESTAMPED[blob(fs.readFile(file))]).toBe(i.id)
 			end

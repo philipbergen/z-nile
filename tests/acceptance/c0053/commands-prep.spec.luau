@@ -43,10 +43,11 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 
 	it("a published move abandons prep for a raft and its members in one commit", function()
 		trOk(cap, { "sync" })
-		trOk(cap, { "new", "issue", "c", "zeta", "--desc", "Zeta." })
+		trOk(cap, { "new", "issue", "c", "zeta", "--desc", "Zeta.", "--project", "pickman" })
 		zeta =
 			string.match(trOk(cap, { "list", "backlog" }), "(c%d+)%s+backlog%s+chore%s+%S*%s+Zeta") :: string
-		local raftDoc = trOk(cap, { "new", "raft", "chore", "zraft", zeta, "--single" })
+		local raftDoc =
+			trOk(cap, { "new", "raft", "chore", "zraft", zeta, "--single", "--project", "pickman" })
 		rz = string.match(raftDoc, "(R%d+)") :: string
 		t.expect(trOk(cap, { "status", rz })).toBe("preparing")
 		local before = git(origin, { "rev-parse", "main" })
@@ -77,8 +78,10 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 	it(
 		"a raft move follows the local member list: unclaimed members refuse, dropped members are untouched",
 		function()
-			local cnew =
-				string.match(trOk(cap, { "new", "issue", "c", "iota", "--desc", "Iota." }), "(c%d+)") :: string
+			local cnew = string.match(
+				trOk(cap, { "new", "issue", "c", "iota", "--desc", "Iota.", "--project", "pickman" }),
+				"(c%d+)"
+			) :: string
 			-- prep adds cnew to the raft locally (the document the prep PR will carry)
 			local doc = `{cap}/tracker/rafts/{rz}/{rz}.md`
 			-- the designs are ready (the move to prepared refuses otherwise)
@@ -123,10 +126,13 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		local r = tr(cap, { "new", "issue", "c", "kappa", "--raft", rz })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "--raft")).toBe(true)
-		local id = string.match(trOk(cap, { "new", "issue", "c", "lambda" }), "(c%d+)") :: string
+		local id = string.match(
+			trOk(cap, { "new", "issue", "c", "lambda", "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
 		fs.writeFile(`{cap}/stray.txt`, "x")
 		local mid = git(origin, { "rev-parse", "main" })
-		local dirty = tr(cap, { "new", "raft", "chore", "dirty", id, "--single" })
+		local dirty = tr(cap, { "new", "raft", "chore", "dirty", id, "--single", "--project", "pickman" })
 		fs.removeFile(`{cap}/stray.txt`)
 		t.expect(dirty.ok).toBe(false)
 		t.expect(has(dirty.stderr, "clean")).toBe(true)
@@ -150,7 +156,8 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(trOk(cap, { "status", "c0801" })).toBe("preparing")
 			-- an issue that names a raft cannot be taken into another raft
 			local before = git(origin, { "rev-parse", "main" })
-			local steal = tr(cap, { "new", "raft", "chore", "steal", "c0801", "--single" })
+			local steal =
+				tr(cap, { "new", "raft", "chore", "steal", "c0801", "--single", "--project", "pickman" })
 			t.expect(steal.ok).toBe(false)
 			t.expect(has(steal.stderr, "R0800")).toBe(true)
 			t.expect(git(origin, { "rev-parse", "main" })).toBe(before)

@@ -2,8 +2,8 @@
 # Acceptance checks for c0076. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0076 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0076 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0076"
 
@@ -50,7 +50,7 @@ real_sweep() {
   [[ $(uname -s) == Darwin ]] || { echo "not macOS: no jail, nothing to check"; return 0; }
   local fx="$PWD/.cache/c0076-real" rel out rc pid
   rm -rf "$fx" && mkdir -p "$fx/repo" || return 1
-  for rel in tests/run.luau tests/lib scripts/lib .luaurc rokit.toml .gitignore; do
+  for rel in tests/run.luau tests/lib scripts/lib z-nile/lib .luaurc rokit.toml .gitignore; do
     mkdir -p "$fx/repo/$(dirname "$rel")" && cp -R "$rel" "$fx/repo/$rel" || return 1
   done
   mkdir -p "$fx/repo/tests/probe" "$fx/repo/.cache"
@@ -97,7 +97,7 @@ interrupted_sweep() {
   [[ $(uname -s) == Darwin ]] || { echo "not macOS: no jail, nothing to check"; return 0; }
   local fx="$PWD/.cache/c0076-interrupted" rel job pid waited
   rm -rf "$fx" && mkdir -p "$fx/repo" || return 1
-  for rel in tests/run.luau tests/lib scripts/lib .luaurc rokit.toml .gitignore; do
+  for rel in tests/run.luau tests/lib scripts/lib z-nile/lib .luaurc rokit.toml .gitignore; do
     mkdir -p "$fx/repo/$(dirname "$rel")" && cp -R "$rel" "$fx/repo/$rel" || return 1
   done
   mkdir -p "$fx/repo/tests/probe" "$fx/repo/.cache"

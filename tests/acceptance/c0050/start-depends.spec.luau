@@ -77,18 +77,21 @@ return t.spec("c0480 start checks depends_on", function(it)
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
 		engine.empty(dir)
 		for _, slug in { "base", "needs-base", "pair-a", "pair-b", "ghost", "late-a", "late-b" } do
-			must(tr({ "new", "issue", "f", slug }), "new issue " .. slug)
+			must(tr({ "new", "issue", "f", slug, "--project", "pickman" }), "new issue " .. slug)
 		end
 		-- f0010 base; f0020 needs it; f0040 needs its raft-mate f0030; f0050 needs a missing id; f0070 (second member) needs its raft-mate f0060 and then f0010
 		edit("tracker/issues/f0020/f0020.md", "depends_on: %[%]", "depends_on: [f0010]")
 		edit("tracker/issues/f0040/f0040.md", "depends_on: %[%]", "depends_on: [f0030]")
 		edit("tracker/issues/f0050/f0050.md", "depends_on: %[%]", "depends_on: [f9999]")
 		edit("tracker/issues/f0070/f0070.md", "depends_on: %[%]", "depends_on: [f0060, f0010]")
-		must(tr({ "new", "raft", "feature", "base", "f0010" }), "raft base")
-		must(tr({ "new", "raft", "feature", "needs-base", "f0020" }), "raft needs-base")
-		must(tr({ "new", "raft", "feature", "pair", "f0030", "f0040" }), "raft pair")
-		must(tr({ "new", "raft", "feature", "ghost", "f0050" }), "raft ghost")
-		must(tr({ "new", "raft", "feature", "late", "f0060", "f0070" }), "raft late")
+		must(tr({ "new", "raft", "feature", "base", "f0010", "--project", "pickman" }), "raft base")
+		must(
+			tr({ "new", "raft", "feature", "needs-base", "f0020", "--project", "pickman" }),
+			"raft needs-base"
+		)
+		must(tr({ "new", "raft", "feature", "pair", "f0030", "f0040", "--project", "pickman" }), "raft pair")
+		must(tr({ "new", "raft", "feature", "ghost", "f0050", "--project", "pickman" }), "raft ghost")
+		must(tr({ "new", "raft", "feature", "late", "f0060", "f0070", "--project", "pickman" }), "raft late")
 		for _, doc in
 			{
 				"tracker/issues/f0010/f0010.md",
