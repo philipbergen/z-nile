@@ -23,7 +23,7 @@ created: {{DATE}}
 
 ## Design
 <!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
-     client/server authority. Must agree with the raft's whole-raft design and the project's architecture.md (pickman/.tracker/). -->
+     client/server authority. Must agree with the raft's whole-raft design and the project's architecture.md (in its root, as pickman/.tracker/). -->
 
 ### Scalability
 ### Maintainability

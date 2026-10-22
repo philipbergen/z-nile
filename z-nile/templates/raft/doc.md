@@ -16,7 +16,7 @@ created: {{DATE}}
 
 ## Whole-raft design
 <!-- Module map, the interfaces between member issues, data flow. Diagram if it helps.
-     Every issue design must agree with this. Include any changes to the project's architecture.md (pickman/.tracker/). -->
+     Every issue design must agree with this. Include any changes to the project's architecture.md (in its root, as pickman/.tracker/). -->
 
 ## Order & dependencies
 <!-- Execution order of member issues and why. -->
