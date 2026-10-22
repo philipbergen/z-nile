@@ -38,8 +38,9 @@ local ROOT = string.match(normalize(debug.info(1, "s")), "^(.*)/[^/]+/[^/]+/[^/]
 
 -- Every project's home (a folder name; the root's legacy "." aside), from the registry (code review 004 F3, F6). A
 -- copy of the runner with no engine (some fixtures copy only tests/ and z-nile/lib/) has the folders at the top that
--- hold a .tracker/.
-function fence.homes(): { string }
+-- hold a .tracker/; a copy with neither has none known (nil): the runner then takes any folder one level below the
+-- root, as before the registry named homes.
+function fence.homes(): { string }?
 	local out: { string } = {}
 	if fs.isFile(`{ROOT}/z-nile/engine/projects.luau`) and fs.isFile(`{ROOT}/z-nile/projects.toml`) then
 		local projects = require("@znile/engine/projects")
@@ -55,6 +56,9 @@ function fence.homes(): { string }
 			end
 		end
 		table.sort(out)
+		if #out == 0 then
+			return nil
+		end
 	end
 	return out
 end
@@ -686,7 +690,7 @@ function fence.enter()
 	-- must find no repository either. The jail still lets this run write only its own home's .cache.
 	local others: { string } = {}
 	local dirs = { ROOT }
-	for _, home in fence.homes() do
+	for _, home in fence.homes() or {} do
 		table.insert(dirs, `{ROOT}/{home}`)
 	end
 	for _, dir in dirs do

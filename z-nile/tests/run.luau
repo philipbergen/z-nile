@@ -25,7 +25,16 @@ local HERE = (string.gsub(process.cwd, "/+$", ""))
 -- specs run from a project's home, a folder of the registry at the top of the repository (c0120: the root belongs to
 -- no project; code review 004 F6: any other top-level folder refuses too)
 local HOME = if string.sub(HERE, 1, #ROOT + 1) == ROOT .. "/" then string.sub(HERE, #ROOT + 2) else nil
-if HOME == nil or not table.find(fenceLib.homes(), HOME :: string) then
+local known = fenceLib.homes()
+if
+	HOME == nil
+	or HOME == ""
+	or (
+		if known
+			then not table.find(known, HOME :: string)
+			else string.find(HOME :: string, "/", 1, true) ~= nil
+	)
+then
 	stdio.ewrite(
 		"tests/run: "
 			.. HERE
