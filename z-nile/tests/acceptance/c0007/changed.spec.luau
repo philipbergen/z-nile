@@ -10,7 +10,9 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0060-changed`
+-- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays for reading repo files
+local here = fixture.physical(".") or "."
+local base = `{here}/.cache/c0060-changed`
 local repo = `{base}/repo`
 local origin = `{base}/origin.git`
 

@@ -14,9 +14,15 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0800-done-gate`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local base = `{fixture.physical(".") :: string}/.cache/c0800-done-gate`
 local work = `{base}/work`
 local gateLog = `{base}/gate.log`
+
+-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout), and done promotes its specs
+-- into its home's tests/, pickman/tests/acceptance
+local TR = "pickman/.tracker"
+local PROMOTED = "pickman/tests/acceptance/f0010/alpha.spec.luau"
 
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
@@ -26,9 +32,10 @@ local STUB_GATE = table.concat({
 	"#!/usr/bin/env bash",
 	'cd "$(dirname "$0")/.."',
 	'{ echo "args: $*"',
-	'  [[ -f tests/acceptance/f0010/alpha.spec.luau ]] && echo "promoted: yes" || echo "promoted: no"',
-	'  [[ -d tracker/rafts/done/R0010 ]] && echo "raft: done" || echo "raft: not done"',
-	'  [[ -d tracker/issues/done/f0010 ]] && echo "issue: done" || echo "issue: not done"',
+	-- c0120 override: pickman's raft on the fixtures' layout (see TR)
+	`  [[ -f {PROMOTED} ]] && echo "promoted: yes" || echo "promoted: no"`,
+	`  [[ -d {TR}/rafts/done/R0010 ]] && echo "raft: done" || echo "raft: not done"`,
+	`  [[ -d {TR}/issues/done/f0010 ]] && echo "issue: done" || echo "issue: not done"`,
 	'} >> "$GATE_LOG"',
 	'exit "${GATE_EXIT:-0}"',
 	"",
@@ -138,30 +145,27 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker, stub gate", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+		-- c0120 override: pickman's raft on the fixtures' layout (see TR)
 		must(
 			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
 			"new raft"
 		)
-		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
+		for _, doc in { `{TR}/issues/f0010/f0010.md`, `{TR}/rafts/R0010/R0010.md` } do
 			edit(doc, "design: draft", "design: ready")
 		end
-		edit(
-			"tracker/issues/f0010/f0010.md",
-			"### Touched modules\n",
-			"### Touched modules\n- `notes/alpha`\n"
-		)
+		edit(`{TR}/issues/f0010/f0010.md`, "### Touched modules\n", "### Touched modules\n- `notes/alpha`\n")
 		write(
-			"tracker/issues/f0010/acceptance/alpha.spec.luau",
+			`{TR}/issues/f0010/acceptance/alpha.spec.luau`,
 			"--!strict\nlocal t = "
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
 		)
-		write("tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
-		write("tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		write(`{TR}/issues/f0010/check.sh`, TRIVIAL_CHECK)
+		write(`{TR}/rafts/R0010/check.sh`, TRIVIAL_CHECK)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
-		write("tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		reviewed = git({ "rev-parse", "HEAD" })
 	end)
@@ -174,13 +178,14 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(has(log(), "args: --full")).toBe(true) -- it did run, and failed
 		t.expect(git({ "rev-parse", "HEAD" })).toBe(reviewed)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
-		t.expect(fs.isDir(`{work}/tracker/rafts/active/R0010`)).toBe(true)
-		t.expect(fs.isDir(`{work}/tracker/issues/active/f0010`)).toBe(true)
-		t.expect(fs.isFile(`{work}/tracker/issues/active/f0010/acceptance/alpha.spec.luau`)).toBe(true)
-		t.expect(fs.isFile(`{work}/tests/acceptance/f0010/alpha.spec.luau`)).toBe(false)
+		-- c0120 override: pickman's raft on the fixtures' layout (see TR)
+		t.expect(fs.isDir(`{work}/{TR}/rafts/active/R0010`)).toBe(true)
+		t.expect(fs.isDir(`{work}/{TR}/issues/active/f0010`)).toBe(true)
+		t.expect(fs.isFile(`{work}/{TR}/issues/active/f0010/acceptance/alpha.spec.luau`)).toBe(true)
+		t.expect(fs.isFile(`{work}/{PROMOTED}`)).toBe(false)
 		-- no empty done/ folder is left beside the active one (one id in two places breaks every tracker command)
-		t.expect(fs.isDir(`{work}/tracker/rafts/done/R0010`)).toBe(false)
-		t.expect(fs.isDir(`{work}/tracker/issues/done/f0010`)).toBe(false)
+		t.expect(fs.isDir(`{work}/{TR}/rafts/done/R0010`)).toBe(false)
+		t.expect(fs.isDir(`{work}/{TR}/issues/done/f0010`)).toBe(false)
 		must(tr({ "list" }), "tracker list after the rollback")
 	end)
 
@@ -194,7 +199,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 			end
 			t.expect(log()).toBe("")
 			t.expect(has(r.stdout .. r.stderr, "full gate is skipped")).toBe(true)
-			t.expect(fs.isFile(`{work}/tests/acceptance/f0010/alpha.spec.luau`)).toBe(true)
+			t.expect(fs.isFile(`{work}/{PROMOTED}`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
 			t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
 		end
 	)
@@ -214,7 +219,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(has(seen, "issue: done")).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
 		t.expect(git({ "status", "--porcelain" })).toBe("")
-		t.expect(fs.isDir(`{work}/tracker/rafts/done/R0010`)).toBe(true)
+		t.expect(fs.isDir(`{work}/{TR}/rafts/done/R0010`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
 	end)
 
 	it("the gate decision: full, unless inside a spec run without the switch", function()

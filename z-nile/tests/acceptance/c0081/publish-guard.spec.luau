@@ -37,7 +37,8 @@ end
 
 return t.spec("c0870 every publish checks for a stale tree", function(it)
 	it("main.luau refuses a stale tree right before every publish.commit but remap's", function()
-		local found = mentions(fs.readFile("z-nile/engine/main.luau"))
+		-- c0120 override: specs run from z-nile's home, so the engine is z-nile's engine/
+		local found = mentions(fs.readFile("engine/main.luau"))
 		t.expect(#found > 0).toBe(true)
 		local others = 0
 		for _, m in found do

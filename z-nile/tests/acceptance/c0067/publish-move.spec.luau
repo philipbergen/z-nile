@@ -13,8 +13,11 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0730-publish`
+-- c0120 override: fixtures live under the home's .cache (z-nile/.cache), where the spec runs
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/c0730-publish`
+-- c0120 override: the repository's files are read from the checkout's top, not the home the spec runs in
+local TOP = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 local origin, work = `{base}/origin.git`, `{base}/work`
 
 local function git(cwd: string, args: { string }): string
@@ -29,12 +32,13 @@ end
 
 local DOC =
 	"---\nid: c0010\ntype: chore\ntitle: Movable\nstatus: prepared-quiet-copper-falcon\n---\n\n# c0010\n"
-local CHECK = '#!/usr/bin/env bash\ncheck "AC1: a" lune run tests/run -- tracker/issues/c0010/acceptance/a.spec.luau\n'
-	.. 'check "AC2: b" test -f tracker/issues/c0020/c0020.md\nfinish\n'
+-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
+local CHECK = '#!/usr/bin/env bash\ncheck "AC1: a" lune run tests/run -- pickman/.tracker/issues/c0010/acceptance/a.spec.luau\n'
+	.. 'check "AC2: b" test -f pickman/.tracker/issues/c0020/c0020.md\nfinish\n'
 local SPEC = "-- c0010 acceptance marker\nreturn nil\n"
 local RUN = "#!/bin/sh\necho spike\n"
 local CRLF = "spike output\r\nline two\r\n" -- a moved file is byte-checked, so its carriage returns are kept
-local FROM, TO = "tracker/issues/c0010", "tracker/issues/active/c0010"
+local FROM, TO = "pickman/.tracker/issues/c0010", "pickman/.tracker/issues/active/c0010"
 
 local function write(path: string, text: string, exec: boolean?)
 	local full = `{base}/seed/{path}`
@@ -94,6 +98,7 @@ end
 
 return t.spec("tracker publish moves", function(it)
 	it("sets up a bare origin and a clone with items to move", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -102,26 +107,26 @@ return t.spec("tracker publish moves", function(it)
 		git(`{base}/seed`, { "config", "user.name", "t" })
 		git(`{base}/seed`, { "config", "user.email", "t@example.invalid" })
 		write("src/x.luau", "return 1\n")
-		write("z-nile/projects.toml", fs.readFile("z-nile/projects.toml")) -- c0114: origin needs the registry
-		write("tracker/issues/active/.gitkeep", "")
-		write("tracker/rafts/active/.gitkeep", "")
+		write("z-nile/projects.toml", fs.readFile(`{TOP}/z-nile/projects.toml`)) -- c0114: origin needs the registry
+		write("pickman/.tracker/issues/active/.gitkeep", "")
+		write("pickman/.tracker/rafts/active/.gitkeep", "")
 		write(`{FROM}/c0010.md`, DOC)
 		write(`{FROM}/check.sh`, CHECK, true)
 		write(`{FROM}/acceptance/a.spec.luau`, SPEC)
 		write(`{FROM}/experiments/run.sh`, RUN, true)
 		write(`{FROM}/experiments/out.txt`, CRLF)
-		write("tracker/issues/c0020/c0020.md", "---\nid: c0020\nstatus: new\n---\n")
-		write("tracker/issues/c0020/check.sh", "#!/bin/sh\n", true)
+		write("pickman/.tracker/issues/c0020/c0020.md", "---\nid: c0020\nstatus: new\n---\n")
+		write("pickman/.tracker/issues/c0020/check.sh", "#!/bin/sh\n", true)
 		-- c0040 is done: a published move may not take it out of done/
-		write("tracker/issues/done/c0040/c0040.md", "---\nid: c0040\nstatus: done\n---\n")
+		write("pickman/.tracker/issues/done/c0040/c0040.md", "---\nid: c0040\nstatus: done\n---\n")
 		write(
-			"tracker/issues/done/c0040/check.sh",
-			"#!/bin/sh\ntest -f tracker/issues/done/c0040/c0040.md\n",
+			"pickman/.tracker/issues/done/c0040/check.sh",
+			"#!/bin/sh\ntest -f pickman/.tracker/issues/done/c0040/c0040.md\n",
 			true
 		)
 		-- c0030 exists in both places: a move onto it must be refused
-		write("tracker/issues/c0030/c0030.md", "---\nid: c0030\nstatus: prepared\n---\n")
-		write("tracker/issues/active/c0030/c0030.md", "---\nid: c0030\nstatus: active\n---\n")
+		write("pickman/.tracker/issues/c0030/c0030.md", "---\nid: c0030\nstatus: prepared\n---\n")
+		write("pickman/.tracker/issues/active/c0030/c0030.md", "---\nid: c0030\nstatus: active\n---\n")
 		git(`{base}/seed`, { "add", "-A" })
 		git(`{base}/seed`, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", `{base}/seed`, origin }) -- raw: clone to a named path
@@ -191,6 +196,7 @@ return t.spec("tracker publish moves", function(it)
 	end)
 
 	it("a moved check.sh may change only its item paths' state segments", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		local before = tip()
 		refused(
 			attempt(function(changes)
@@ -212,7 +218,13 @@ return t.spec("tracker publish moves", function(it)
 		refused(
 			attempt(function(changes)
 				local c = find(changes, "check.sh")
-				c.content = (string.gsub(c.content, "tracker/issues/c0020/", "tracker/issues/active/c0020/"))
+				c.content = (
+					string.gsub(
+						c.content,
+						"pickman/%.tracker/issues/c0020/",
+						"pickman/.tracker/issues/active/c0020/"
+					)
+				)
 			end),
 			before,
 			"check.sh"
@@ -220,13 +232,14 @@ return t.spec("tracker publish moves", function(it)
 	end)
 
 	it("a move onto an existing path, across ids or to another relative path is refused", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		local before = tip()
 		local onto = publish.commit(work, function(_list, read)
 			return {
 				{
-					path = "tracker/issues/active/c0030/c0030.md",
-					from = "tracker/issues/c0030/c0030.md",
-					content = read("tracker/issues/c0030/c0030.md") :: string,
+					path = "pickman/.tracker/issues/active/c0030/c0030.md",
+					from = "pickman/.tracker/issues/c0030/c0030.md",
+					content = read("pickman/.tracker/issues/c0030/c0030.md") :: string,
 				},
 			}
 		end, "tracker: onto")
@@ -234,7 +247,7 @@ return t.spec("tracker publish moves", function(it)
 		refused(
 			attempt(function(changes)
 				find(changes, "acceptance/a.spec.luau").path =
-					"tracker/issues/active/c0020/acceptance/a.spec.luau"
+					"pickman/.tracker/issues/active/c0020/acceptance/a.spec.luau"
 			end),
 			before
 		)
@@ -257,15 +270,18 @@ return t.spec("tracker publish moves", function(it)
 	end)
 
 	it("a move into or out of done/ is refused", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		local before = tip()
 		local r = publish.commit(work, function(list, read)
 			local out = moveChanges(list, read)
 			for _, c in out do
-				c.path = (string.gsub(c.path, "^tracker/issues/active/", "tracker/issues/done/"))
+				c.path = (
+					string.gsub(c.path, "^pickman/%.tracker/issues/active/", "pickman/.tracker/issues/done/")
+				)
 				if c.from == `{FROM}/check.sh` then -- a consistent move in every other respect
 					c.content = paths.rewrite(
 						read(c.from :: string) :: string,
-						{ c0010 = "tracker/issues/done/c0010" }
+						{ c0010 = "pickman/.tracker/issues/done/c0010" }
 					)
 				end
 			end
@@ -274,24 +290,26 @@ return t.spec("tracker publish moves", function(it)
 		refused(r, before)
 		-- and out of done/, consistent in every other respect: only the source side is wrong
 		local out = publish.commit(work, function(_list, read)
-			local doc = read("tracker/issues/done/c0040/c0040.md") :: string
-			local check = read("tracker/issues/done/c0040/check.sh") :: string
+			local doc = read("pickman/.tracker/issues/done/c0040/c0040.md") :: string
+			local check = read("pickman/.tracker/issues/done/c0040/check.sh") :: string
 			return {
 				{
-					path = "tracker/issues/c0040/c0040.md",
-					from = "tracker/issues/done/c0040/c0040.md",
+					path = "pickman/.tracker/issues/c0040/c0040.md",
+					from = "pickman/.tracker/issues/done/c0040/c0040.md",
 					content = (string.gsub(doc, "status: done", "status: prepared-quiet-copper-falcon")),
 				},
 				{
-					path = "tracker/issues/c0040/check.sh",
-					from = "tracker/issues/done/c0040/check.sh",
-					content = paths.rewrite(check, { c0040 = "tracker/issues/c0040" }),
+					path = "pickman/.tracker/issues/c0040/check.sh",
+					from = "pickman/.tracker/issues/done/c0040/check.sh",
+					content = paths.rewrite(check, { c0040 = "pickman/.tracker/issues/c0040" }),
 				},
 			}
 		end, "tracker: out of done")
 		refused(out, before)
-		t.expect(git(origin, { "ls-tree", "--name-only", "main", "tracker/issues/done/c0040/c0040.md" }))
-			.toBe("tracker/issues/done/c0040/c0040.md")
+		t.expect(
+			git(origin, { "ls-tree", "--name-only", "main", "pickman/.tracker/issues/done/c0040/c0040.md" })
+		)
+			.toBe("pickman/.tracker/issues/done/c0040/c0040.md")
 	end)
 
 	it("a from outside an item directory is refused, and that file stays on origin", function()
@@ -341,6 +359,7 @@ return t.spec("tracker publish moves", function(it)
 	end)
 
 	it("a whole-directory move lands as one commit with every file, mode and sibling kept", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		local before = tip()
 		local r = attempt(nil)
 		t.expect(r.ok).toBe(true)
@@ -364,8 +383,8 @@ return t.spec("tracker publish moves", function(it)
 		table.sort(got)
 		t.expect(got).toEqual(want)
 		t.expect(git(origin, { "ls-tree", "main", FROM })).toBe("") -- the emptied directory is gone
-		t.expect(git(origin, { "ls-tree", "--name-only", "main", "tracker/issues/active/.gitkeep" }))
-			.toBe("tracker/issues/active/.gitkeep")
+		t.expect(git(origin, { "ls-tree", "--name-only", "main", "pickman/.tracker/issues/active/.gitkeep" }))
+			.toBe("pickman/.tracker/issues/active/.gitkeep")
 		t.expect(git(origin, { "show", `main:{TO}/acceptance/a.spec.luau` }) .. "\n").toBe(SPEC)
 		t.expect(git(origin, { "show", `main:{TO}/experiments/run.sh` }) .. "\n").toBe(RUN)
 		local crlf = fixture.exec(origin, "git", { "show", `main:{TO}/experiments/out.txt` })
@@ -374,12 +393,13 @@ return t.spec("tracker publish moves", function(it)
 			.toBe("100755")
 		t.expect(string.sub(git(origin, { "ls-tree", "main", `{TO}/check.sh` }), 1, 6)).toBe("100755")
 		local check = git(origin, { "show", `main:{TO}/check.sh` }) .. "\n"
-		t.expect(check).toBe((string.gsub(CHECK, "tracker/issues/c0010/", "tracker/issues/active/c0010/")))
-		t.expect(has(check, "tracker/issues/c0020/c0020.md")).toBe(true)
+		t.expect(check)
+			.toBe((string.gsub(CHECK, "pickman/%.tracker/issues/c0010/", "pickman/.tracker/issues/active/c0010/")))
+		t.expect(has(check, "pickman/.tracker/issues/c0020/c0020.md")).toBe(true)
 		local doc = git(origin, { "show", `main:{TO}/c0010.md` })
 		t.expect(has(doc, "status: active-brisk-amber-otter")).toBe(true)
 		t.expect(has(doc, "title: Movable")).toBe(true)
-		t.expect(git(origin, { "show", "main:tracker/issues/c0020/c0020.md" }))
+		t.expect(git(origin, { "show", "main:pickman/.tracker/issues/c0020/c0020.md" }))
 			.toBe("---\nid: c0020\nstatus: new\n---")
 	end)
 end)

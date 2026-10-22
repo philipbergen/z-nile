@@ -2,11 +2,14 @@
 -- c0119 AC2: the two scope lessons are valid design lessons, sourced from the user's R0042 correction.
 -- Reads the real files; writes nothing.
 local lessons = require("@scripts/tracker/lessons")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home; the repository files live at the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 return t.spec("c0119 scope lessons", function(it)
 	it("the two scope lessons are valid design lessons sourced from the R0042 correction", function()
-		local tree = lessons.load(".")
+		local tree = lessons.load(TOP)
 		local sources = lessons.sources(tree.items)
 		for _, id in { "ticket-prep/never-narrow-captured-scope", "review/no-scope-cut-as-fix" } do
 			local text = tree.lessons[id]

@@ -5,8 +5,12 @@
 -- c0111's Design specifies. Reads the real files; writes nothing.
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home (z-nile/); the repository's files are read from the checkout's top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
-local SKILLS = ".claude/skills"
+local SKILLS = `{TOP}/.claude/skills` -- c0120 override: read from the checkout's top
 
 local function read(path: string): string
 	return fs.readFile(path)
@@ -131,12 +135,12 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			at(section(tracker, "Worktrees"), "`lessons`") -- it may run in the main checkout
 			at(read(`{SKILLS}/ready-raft/SKILL.md`), "build lessons")
 			at(read(`{SKILLS}/metrics/SKILL.md`), "./zn lessons")
-			local agents = read("AGENTS.md")
+			local agents = read(`{TOP}/AGENTS.md`)
 			at(agents, "lessons/")
 			at(agents, "./zn lessons")
 			at(agents, "capture a new lesson as an issue")
 			t.expect(string.find(agents, "records new ones when it finishes", 1, true) == nil).toBe(true)
-			local prompt = read("z-nile/templates/prompt.md")
+			local prompt = read(`{TOP}/z-nile/templates/prompt.md`) -- c0120 override: read from the checkout's top
 			local h = at(prompt, "\n## Lessons")
 			t.expect(h < at(prompt, "{{LESSONS}}")).toBe(true)
 			t.expect(at(prompt, "{{LESSONS}}") < at(prompt, "\n## Work items")).toBe(true)

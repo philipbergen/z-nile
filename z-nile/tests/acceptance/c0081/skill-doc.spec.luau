@@ -2,10 +2,14 @@
 -- c0870: the tracker skill describes numbering from tracker/next, the legacy rule for a tree without it, and the
 -- compact and remap commands.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+-- c0120 override: specs run from z-nile's home, so the skills are read from the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+
 local function skill(): string
-	return fs.readFile(".claude/skills/tracker/SKILL.md")
+	return fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`)
 end
 local function bullet(prefix: string): string
 	for line in string.gmatch(skill(), "[^\n]+") do
@@ -47,7 +51,7 @@ return t.spec("c0870 tracker skill", function(it)
 	end)
 
 	it("the testing skill tells spec writers how to survive a compaction", function()
-		local testing = fs.readFile(".claude/skills/testing/SKILL.md")
+		local testing = fs.readFile(`{TOP}/.claude/skills/testing/SKILL.md`) -- c0120 override: see TOP
 		t.expect(says(testing, "tests/lib/renamed")).toBe(true)
 		t.expect(says(testing, "in two parts")).toBe(true)
 	end)

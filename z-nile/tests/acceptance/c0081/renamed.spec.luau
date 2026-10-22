@@ -4,6 +4,7 @@
 -- hold before and after the user's one-time compaction.
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
+local process = require("@lune/process")
 local renamed = require("@tests/lib/renamed")
 local t = require("@tests/lib/t")
 
@@ -27,7 +28,12 @@ return t.spec("c0870 renamed ids", function(it)
 	it(
 		"without map text it reads the real tracker/compaction.txt, or maps nothing when there is none",
 		function()
-			local text = if fs.isFile(ids.MAP_FILE) then fs.readFile(ids.MAP_FILE) else nil
+			-- c0120 override: specs run from z-nile's home, so the real map is read from the checkout's top
+			local top = (
+				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+			)
+			local map = `{top}/{ids.MAP_FILE}`
+			local text = if fs.isFile(map) then fs.readFile(map) else nil
 			local want = if text
 				then (ids.parseMap(text) :: { [string]: string }).R0010 or "R0010"
 				else "R0010"

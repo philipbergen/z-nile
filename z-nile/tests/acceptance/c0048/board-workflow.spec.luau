@@ -1,10 +1,13 @@
 --!strict
 -- c0460: the board workflow builds the tracker board on pushes to main and uploads it as an Actions artifact.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local PATH = ".github/workflows/board.yml"
+-- c0120 override: the spec runs from z-nile/; the workflow is read from the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local PATH = `{TOP}/.github/workflows/board.yml`
 
 local function load(): any
 	return serde.decode("yaml" :: any, fs.readFile(PATH))

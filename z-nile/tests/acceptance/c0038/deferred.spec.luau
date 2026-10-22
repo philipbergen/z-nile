@@ -12,7 +12,9 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local work = `{root}/.cache/c0360-deferred`
+-- c0120 override: a spec writes only under its home's .cache (the jail refuses the checkout top's); root stays the
+-- repository it clones
+local work = `{fixture.physical(".")}/.cache/c0360-deferred`
 
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "RC1: fixture" true\nfinish\n'
@@ -54,8 +56,9 @@ end
 
 -- answers: the lines of refute-001.md. Commits them (done needs a clean tree), then runs done.
 local function attempt(answers: { string }, review: string?): Result
-	write("tracker/rafts/active/R0010/review-001.md", review or REVIEW)
-	write("tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+	write("pickman/.tracker/rafts/active/R0010/review-001.md", review or REVIEW)
+	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
 	must(tr({ "commit", "-m", "round", "--time", "1" }), "commit")
 	return tr({ "done", "R0010" })
 end
@@ -65,7 +68,8 @@ local function refused(r: Result, ...: string)
 	for _, needle in { ... } do
 		t.expect(string.find(r.stderr, needle, 1, true) ~= nil).toBe(true)
 	end
-	t.expect(fs.isDir(`{work}/tracker/rafts/active/R0010`)).toBe(true) -- nothing was moved
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+	t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/active/R0010`)).toBe(true) -- nothing was moved
 end
 
 return t.spec("c0360 done accepts deferred answers", function(it)
@@ -108,20 +112,22 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
 			"new raft"
 		)
-		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
-			"tracker/issues/f0010/f0010.md",
+			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
-		write("tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
-		write("tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
-		t.expect(fs.isDir(`{work}/tracker/issues/c0020`)).toBe(true) -- the follow-up stays in the backlog
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up stays in the backlog
 	end)
 
 	it("refuses to defer a high finding", function()
@@ -237,10 +243,11 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
-		t.expect(fs.isDir(`{work}/tracker/rafts/done/R0010`)).toBe(true)
-		t.expect(fs.isDir(`{work}/tracker/issues/done/f0010`)).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/done/f0010`)).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
-		t.expect(fs.isDir(`{work}/tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
 	end)
 
 	it("cleans up", function()

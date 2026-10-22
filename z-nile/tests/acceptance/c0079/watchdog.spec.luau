@@ -10,7 +10,8 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local task = require("@lune/task")
 
-local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+-- c0120 override: the fixture lives under the home's .cache (the spec's working directory), not the checkout top's
+local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{root}/.cache/c0850-watchdog`
 
 local function trim(s: string): string

@@ -3,7 +3,7 @@
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
-local design = fs.readFile("tracker/game-design.md")
+local design = fs.readFile(".tracker/game-design.md")
 
 local function has(needle: string): boolean
 	return string.find(design, needle, 1, true) ~= nil

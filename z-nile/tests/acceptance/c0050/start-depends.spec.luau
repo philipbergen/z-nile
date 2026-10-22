@@ -11,7 +11,9 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local dir = `{root}/.cache/c0480-start-depends`
+-- c0120 override: a spec writes only under its home's .cache (the jail refuses the checkout top's); root stays the
+-- repository it clones
+local dir = `{fixture.physical(".")}/.cache/c0480-start-depends`
 
 local function run(cmd: string, args: { string }): Result
 	return fixture.exec(dir, cmd, args)
@@ -80,10 +82,11 @@ return t.spec("c0480 start checks depends_on", function(it)
 			must(tr({ "new", "issue", "f", slug, "--project", "pickman" }), "new issue " .. slug)
 		end
 		-- f0010 base; f0020 needs it; f0040 needs its raft-mate f0030; f0050 needs a missing id; f0070 (second member) needs its raft-mate f0060 and then f0010
-		edit("tracker/issues/f0020/f0020.md", "depends_on: %[%]", "depends_on: [f0010]")
-		edit("tracker/issues/f0040/f0040.md", "depends_on: %[%]", "depends_on: [f0030]")
-		edit("tracker/issues/f0050/f0050.md", "depends_on: %[%]", "depends_on: [f9999]")
-		edit("tracker/issues/f0070/f0070.md", "depends_on: %[%]", "depends_on: [f0060, f0010]")
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		edit("pickman/.tracker/issues/f0020/f0020.md", "depends_on: %[%]", "depends_on: [f0010]")
+		edit("pickman/.tracker/issues/f0040/f0040.md", "depends_on: %[%]", "depends_on: [f0030]")
+		edit("pickman/.tracker/issues/f0050/f0050.md", "depends_on: %[%]", "depends_on: [f9999]")
+		edit("pickman/.tracker/issues/f0070/f0070.md", "depends_on: %[%]", "depends_on: [f0060, f0010]")
 		must(tr({ "new", "raft", "feature", "base", "f0010", "--project", "pickman" }), "raft base")
 		must(
 			tr({ "new", "raft", "feature", "needs-base", "f0020", "--project", "pickman" }),
@@ -94,18 +97,19 @@ return t.spec("c0480 start checks depends_on", function(it)
 		must(tr({ "new", "raft", "feature", "late", "f0060", "f0070", "--project", "pickman" }), "raft late")
 		for _, doc in
 			{
-				"tracker/issues/f0010/f0010.md",
-				"tracker/issues/f0020/f0020.md",
-				"tracker/issues/f0030/f0030.md",
-				"tracker/issues/f0040/f0040.md",
-				"tracker/issues/f0050/f0050.md",
-				"tracker/issues/f0060/f0060.md",
-				"tracker/issues/f0070/f0070.md",
-				"tracker/rafts/R0010/R0010.md",
-				"tracker/rafts/R0020/R0020.md",
-				"tracker/rafts/R0030/R0030.md",
-				"tracker/rafts/R0040/R0040.md",
-				"tracker/rafts/R0050/R0050.md",
+				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+				"pickman/.tracker/issues/f0010/f0010.md",
+				"pickman/.tracker/issues/f0020/f0020.md",
+				"pickman/.tracker/issues/f0030/f0030.md",
+				"pickman/.tracker/issues/f0040/f0040.md",
+				"pickman/.tracker/issues/f0050/f0050.md",
+				"pickman/.tracker/issues/f0060/f0060.md",
+				"pickman/.tracker/issues/f0070/f0070.md",
+				"pickman/.tracker/rafts/R0010/R0010.md",
+				"pickman/.tracker/rafts/R0020/R0020.md",
+				"pickman/.tracker/rafts/R0030/R0030.md",
+				"pickman/.tracker/rafts/R0040/R0040.md",
+				"pickman/.tracker/rafts/R0050/R0050.md",
 			}
 		do
 			edit(doc, "design: draft", "design: ready")
@@ -143,9 +147,10 @@ return t.spec("c0480 start checks depends_on", function(it)
 
 	it("a refusal changes nothing: same branch, raft still in the backlog, tree clean", function()
 		t.expect(git({ "branch", "--show-current" })).toBe(branch0)
-		t.expect(fs.isDir(`{dir}/tracker/rafts/R0020`)).toBe(true)
-		t.expect(fs.isDir(`{dir}/tracker/rafts/active/R0020`)).toBe(false)
-		t.expect(fs.isDir(`{dir}/tracker/issues/f0020`)).toBe(true)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/R0020`)).toBe(true)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/active/R0020`)).toBe(false)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/f0020`)).toBe(true)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
 	end)
 
@@ -159,17 +164,20 @@ return t.spec("c0480 start checks depends_on", function(it)
 	end)
 
 	it("starts the raft once the dependency is done", function()
-		git({ "mv", "tracker/issues/active/f0010", "tracker/issues/done/f0010" })
-		git({ "mv", "tracker/rafts/active/R0010", "tracker/rafts/done/R0010" })
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		git({ "mv", "pickman/.tracker/issues/active/f0010", "pickman/.tracker/issues/done/f0010" })
+		git({ "mv", "pickman/.tracker/rafts/active/R0010", "pickman/.tracker/rafts/done/R0010" })
 		git({ "commit", "-qm", "R0010 done" })
 		must(tr({ "start", "R0020" }), "start R0020")
-		t.expect(fs.isDir(`{dir}/tracker/rafts/active/R0020`)).toBe(true)
-		t.expect(fs.isDir(`{dir}/tracker/issues/active/f0020`)).toBe(true)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/active/R0020`)).toBe(true)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/active/f0020`)).toBe(true)
 	end)
 
 	it("a dependency on a raft-mate is fine", function()
 		must(tr({ "start", "R0030" }), "start R0030")
-		t.expect(fs.isDir(`{dir}/tracker/issues/active/f0040`)).toBe(true)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/active/f0040`)).toBe(true)
 	end)
 
 	it("the tracker skill's start row says start refuses unfinished dependencies", function()

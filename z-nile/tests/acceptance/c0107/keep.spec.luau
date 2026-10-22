@@ -9,6 +9,14 @@ local t = require("@tests/lib/t")
 
 local ROOT = ".cache/c0107-keep"
 
+-- c0120 override: the spec runs from its home (z-nile/), but the board names its template and the vendored
+-- marked from the checkout's top (where ./zn runs), so both are read there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+if string.sub(board.TEMPLATE_PATH, 1, 1) ~= "/" then
+	board.TEMPLATE_PATH = `{TOP}/{board.TEMPLATE_PATH}`
+end
+local MARKED = `{TOP}/{board.MARKED_PATH}`
+
 local function dirname(path: string): string
 	return string.match(path, "^(.*)/[^/]*$") or "."
 end
@@ -101,7 +109,7 @@ return t.spec("c0107 board keep", function(it)
 	}, "# c9102: LooseFeature\n\nThe loose body sentence stays visible.\n")
 
 	local page = `{ROOT}/page.html`
-	local html = board.render(board.collect(ROOT) :: any, fs.readFile(board.MARKED_PATH))
+	local html = board.render(board.collect(ROOT) :: any, fs.readFile(MARKED))
 	fs.writeFile(page, html)
 	fs.writeFile(`{ROOT}/harness.js`, HARNESS)
 
@@ -115,8 +123,9 @@ return t.spec("c0107 board keep", function(it)
 	end)
 
 	it("the tracker skill's board row names Rafts, Issues and mix, and still names the artifact", function()
+		-- c0120 override: the skill is read from the checkout's top
 		local row = ""
-		for line in string.gmatch(fs.readFile(".claude/skills/tracker/SKILL.md"), "[^\n]+") do
+		for line in string.gmatch(fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
 			if string.sub(line, 1, 10) == "| board | " then
 				row = line
 			end

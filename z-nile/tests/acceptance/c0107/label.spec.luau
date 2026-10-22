@@ -2,9 +2,18 @@
 -- c0107 AC2: a raft's shown type comes from its issues, and the row colors are not the type colors.
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local ROOT = ".cache/c0107-label"
+
+-- c0120 override: the spec runs from its home (z-nile/), but the board names its template and the vendored
+-- marked from the checkout's top (where ./zn runs), so both are read there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+if string.sub(board.TEMPLATE_PATH, 1, 1) ~= "/" then
+	board.TEMPLATE_PATH = `{TOP}/{board.TEMPLATE_PATH}`
+end
+local MARKED = `{TOP}/{board.MARKED_PATH}`
 
 local function dirname(path: string): string
 	return string.match(path, "^(.*)/[^/]*$") or "."
@@ -123,7 +132,7 @@ return t.spec("c0107 board labels", function(it)
 	end)
 
 	it("colors the readiness bar and the type word with different rules", function()
-		local html = board.render(m, fs.readFile(board.MARKED_PATH))
+		local html = board.render(m, fs.readFile(MARKED))
 		for _, rule in
 			{
 				"#list li.row.ready { box-shadow: inset 4px 0 #22c55e; }",

@@ -8,8 +8,9 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
-local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0078-signals`
+-- c0120 override: the spec runs from its home (z-nile/), whose .cache is the one the jail lets it write
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0078-signals`
 local jailed = process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
 
 local function trim(s: string): string
@@ -119,7 +120,8 @@ return t.spec("c0840 jail signals and the link probe", function(it)
 		if not jailed then
 			return
 		end
-		local verdict = fence.linkProbe(`{root}/.cache`)
+		-- c0120 override: the run's .cache is its home's (z-nile/.cache); the checkout's top has none
+		local verdict = fence.linkProbe(`{here}/.cache`)
 		t.expect(verdict).toBe("refused")
 	end)
 end)

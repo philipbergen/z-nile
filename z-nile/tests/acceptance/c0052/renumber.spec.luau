@@ -24,11 +24,15 @@ local function git(cwd: string, args: { string })
 	t.expect(r.ok).toBe(true)
 end
 
--- An item path is relative to tracker/ and ends in the id: "issues/c0100", "issues/done/c0300", "rafts/R0120".
+-- c0120 override: pickman's items live in pickman/.tracker (tracker/ is retired), here, in `has` and below
+-- An item path is relative to pickman/.tracker/ and ends in the id: "issues/c0100", "issues/done/c0300", "rafts/R0120".
 local function put(base: string, path: string, body: string?)
 	local id = string.match(path, "[^/]+$") :: string
-	fs.writeDir(`{base}/tracker/{path}`)
-	fs.writeFile(`{base}/tracker/{path}/{id}.md`, `---\nid: {id}\ntitle: T\nslug: s\n---\n\n{body or ""}\n`)
+	fs.writeDir(`{base}/pickman/.tracker/{path}`)
+	fs.writeFile(
+		`{base}/pickman/.tracker/{path}/{id}.md`,
+		`---\nid: {id}\ntitle: T\nslug: s\n---\n\n{body or ""}\n`
+	)
 end
 
 -- Starts an unrelated root commit on `branch` holding exactly `items`, so that commit differs from every
@@ -79,7 +83,7 @@ local function tracker(base: string, args: { string }): process.ExecResult
 end
 
 local function has(base: string, path: string): boolean
-	return fs.isFile(`{base}/tracker/{path}`)
+	return fs.isFile(`{base}/pickman/.tracker/{path}`)
 end
 
 local function say(s: string, needle: string): boolean
@@ -158,7 +162,7 @@ return t.spec("renumber without <new>", function(it)
 			{ ["issues/c0120"] = "blocked by f0100 (not f01000)" }
 		)
 		t.expect(tracker(base, { "renumber", "f0100" }).ok).toBe(true)
-		local doc = fs.readFile(`{base}/tracker/issues/c0120/c0120.md`)
+		local doc = fs.readFile(`{base}/pickman/.tracker/issues/c0120/c0120.md`)
 		t.expect(say(doc, "blocked by f0151 (not f01000)")).toBe(true)
 	end)
 

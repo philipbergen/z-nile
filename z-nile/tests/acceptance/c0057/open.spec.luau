@@ -6,11 +6,16 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+-- c0120 override: specs run from their project's home; the repository files live at the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local DIR = ".cache/c0550-open"
-local OUT = `{DIR}/page.html`
-local ABS = `{process.cwd}{OUT}`
+-- c0120 override: ./zn resolves --out from the repository root, not from the home specs run in, and a spec may write
+-- only under its home's .cache: the page is named by its absolute path, which is also what board prints
+local OUT = `{process.cwd}{DIR}/page.html`
+local ABS = OUT
 local LOG = `{process.cwd}{DIR}/opened.log`
 
 local function trim(s: string): string
@@ -117,10 +122,11 @@ return t.spec("c0550 board opens by default", function(it)
 	end)
 
 	it("the usage line and the tracker skill's board row document -O", function()
+		-- c0120 override: the skill and the workflow are read at the checkout's top, not in the home the spec runs from
 		local usage = process.exec("scripts/tracker.sh", {})
 		t.expect(string.find(usage.stdout, "board [--out PATH] [-O]", 1, true) ~= nil).toBe(true)
 		local row = ""
-		for line in string.gmatch(fs.readFile(".claude/skills/tracker/SKILL.md"), "[^\n]+") do
+		for line in string.gmatch(fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
 			if string.sub(line, 1, 10) == "| board | " then
 				row = line
 			end
@@ -130,7 +136,7 @@ return t.spec("c0550 board opens by default", function(it)
 	end)
 
 	it("the board workflow builds with -O, so CI never tries to start a browser", function()
-		local text = fs.readFile(".github/workflows/board.yml")
+		local text = fs.readFile(`{TOP}/.github/workflows/board.yml`) -- c0120 override: read at the checkout's top
 		t.expect(string.find(text, "run: ./zn board --out dist/board.html -O\n", 1, true) ~= nil).toBe(true)
 	end)
 end)

@@ -3,7 +3,6 @@
 -- each), so a new writer under .cache can't land without a reviewer seeing how it writes. The scan is a pure
 -- function: tested here on planted text, then run on the real scripts/.
 local cachepaths = require("@tests/lib/cachepaths")
-local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
 local function has(list: { string }, part: string): boolean
@@ -51,22 +50,8 @@ return t.spec("c0830 every .cache path in scripts/ is reviewed", function(it)
 	it(
 		"every .cache line in scripts/ and z-nile/ is on the reviewed list, and every listed line exists",
 		function()
-			local files: { [string]: string } = {}
-			local function walk(dir: string)
-				for _, name in fs.readDir(dir) do
-					local path = `{dir}/{name}`
-					if cachepaths.SKIP[path] then
-						continue
-					elseif fs.isDir(path) then
-						walk(path)
-					elseif string.match(name, "%.luau$") or string.match(name, "%.sh$") then
-						files[path] = fs.readFile(path)
-					end
-				end
-			end
-			for _, dir in cachepaths.ROOTS do
-				walk(dir)
-			end
+			-- c0120 override: the spec runs from z-nile/, so the walk reads the checkout from its top (cachepaths.files)
+			local files = cachepaths.files()
 			t.expect(files["z-nile/check.sh"] ~= nil).toBe(true) -- the walk found the gate
 			t.expect(files["z-nile/lib/sh.luau"] ~= nil).toBe(true)
 			local found = cachepaths.scan(files, cachepaths.ALLOWED)

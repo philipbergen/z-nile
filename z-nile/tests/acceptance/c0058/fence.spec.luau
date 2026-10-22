@@ -12,8 +12,12 @@ local task = require("@lune/task")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0640-fence`
+-- c0120 override: specs run from their project's home (z-nile/): the fixtures live under its .cache (the jail refuses
+-- the top's), and the copied runner runs from the copy's z-nile/ home, whose .cache (`cache`) holds the probes' files
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0640-fence`
 local repo = `{base}/real`
+local cache = `{repo}/z-nile/.cache`
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
 
 local function trim(s: string): string
@@ -100,8 +104,9 @@ end
 -- A repository holding the runner and its guards (plus `extra` files), committed by a non-fixture identity.
 local function runnerRepo(dir: string, extra: { string })
 	fs.writeDir(dir)
-	local parts = { "tests/run.luau", "tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
-	for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
+	-- c0120 override: the runner, its harness and its aliases are z-nile's (z-nile/tests/, z-nile/.luaurc)
+	local parts = { "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
+	for _, rel in { "z-nile/lib/git-hooks", "z-nile/.luaurc", ".luaurc", "rokit.toml", ".gitignore" } do
 		table.insert(parts, rel)
 	end
 	for _, rel in extra do
@@ -119,18 +124,20 @@ local function runnerRepo(dir: string, extra: { string })
 	git(dir, as(DEV, { "commit", "-qm", "runner" }))
 end
 
--- A probe spec whose single case runs `body`; `fs`, `process`, `task`, `t`, `here` (the repo's physical
--- path) and `sh` (a shell command in `here`) are in scope.
+-- A probe spec whose single case runs `body`; `fs`, `process`, `task`, `t`, `here` (the physical path of the repo's
+-- z-nile/ home, where it runs), `repo` (the repo's physical path) and `sh` (a shell command in `here`) are in scope.
+-- c0120 override: probes are z-nile's specs, run from the copy's z-nile/ home, one folder below the repository's top
 local function probe(name: string, body: string)
 	write(
 		repo,
-		`tests/probe/{name}.spec.luau`,
+		`z-nile/tests/probe/{name}.spec.luau`,
 		`--!strict\nlocal fs = {REQ}("@lune/fs")\nlocal process = {REQ}("@lune/process")\n`
 			.. `local task = {REQ}("@lune/task")\nlocal t = {REQ}("@tests/lib/t")\n`
 			.. 'local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))\n'
+			.. 'local repo = string.match(here, "^(.*)/z%-nile$") or ""\n'
 			.. 'local function sh(c: string) return process.exec("sh", { "-c", c }, { cwd = here }) end\n'
 			.. 'local top = sh("git rev-parse --show-toplevel")\n'
-			.. 'if not top.ok or (string.gsub(top.stdout, "%s+$", "")) ~= here then error("refusing: not the fixture repository") end\n'
+			.. 'if not top.ok or (string.gsub(top.stdout, "%s+$", "")) ~= repo then error("refusing: not the fixture repository") end\n'
 			.. `return t.spec("{name}", function(it)\n\tit("probe", function()\n{body}\n\tend)\nend)\n`
 	)
 end
@@ -146,7 +153,7 @@ local function runIn(dir: string, args: { string }, extra: { [string]: string }?
 	for _, a in args do
 		table.insert(argv, a)
 	end
-	return process.exec("lune", argv, { cwd = dir, env = env })
+	return process.exec("lune", argv, { cwd = `{dir}/z-nile`, env = env }) -- c0120 override: from the copy's z-nile/ home
 end
 
 local function run(probes: { string }, extra: { [string]: string }?): Result
@@ -160,8 +167,8 @@ end
 -- Runs the `hold` probe; while it waits, `meanwhile` acts on the repository from outside the run.
 local function during(meanwhile: () -> ()): Result
 	for _, f in { "f-held", "f-go" } do
-		if fs.isFile(`{repo}/.cache/{f}`) then
-			fs.removeFile(`{repo}/.cache/{f}`)
+		if fs.isFile(`{cache}/{f}`) then -- c0120 override: the home's .cache
+			fs.removeFile(`{cache}/{f}`)
 		end
 	end
 	local result: Result? = nil
@@ -169,12 +176,12 @@ local function during(meanwhile: () -> ()): Result
 		result = run({ "hold" })
 	end)
 	local waited = 0
-	while not fs.isFile(`{repo}/.cache/f-held`) and waited < 20 do
+	while not fs.isFile(`{cache}/f-held`) and waited < 20 do
 		task.wait(0.05)
 		waited += 0.05
 	end
 	meanwhile()
-	fs.writeFile(`{repo}/.cache/f-go`, "")
+	fs.writeFile(`{cache}/f-go`, "")
 	while result == nil and waited < 40 do
 		task.wait(0.05)
 		waited += 0.05
@@ -195,7 +202,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 			fs.removeDir(base)
 		end
 		runnerRepo(repo, {})
-		fs.writeDir(`{repo}/.cache`)
+		fs.writeDir(cache) -- c0120 override: the home's .cache
 		probe("ok", "\t\tt.expect(1).toBe(1)")
 		probe("fails", "\t\tt.expect(1).toBe(2)")
 		probe(
@@ -227,14 +234,15 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		)
 		probe(
 			"push",
-			'\t\tlocal r = sh("rm -rf .cache/f-pushfx .cache/f-bare.git && git clone -q --no-hardlinks . .cache/f-pushfx '
+			-- c0120 override: the repository is `..` (and `../../..` from a fixture in .cache) of the home the probe runs in
+			'\t\tlocal r = sh("rm -rf .cache/f-pushfx .cache/f-bare.git && git clone -q --no-hardlinks .. .cache/f-pushfx '
 				.. "&& git init -q --bare .cache/f-bare.git && cd .cache/f-pushfx && git -c user.name=e2e "
 				.. '-c user.email=e2e@example.invalid commit -q --allow-empty -m fx")\n'
 				.. "\t\tt.expect(r.ok).toBe(true)\n"
 				-- into the repository: by its configured origin, by a relative path and by a file:// URL
 				.. '\t\tt.expect(sh("cd .cache/f-pushfx && git push -q origin HEAD:refs/heads/pushed").ok).toBe(false)\n'
-				.. '\t\tt.expect(sh("cd .cache/f-pushfx && git push -q ../.. HEAD:refs/heads/pushed-rel").ok).toBe(false)\n'
-				.. "\t\tt.expect(sh(`cd .cache/f-pushfx && git push -q file://{here} HEAD:refs/heads/pushed-url`).ok).toBe(false)\n"
+				.. '\t\tt.expect(sh("cd .cache/f-pushfx && git push -q ../../.. HEAD:refs/heads/pushed-rel").ok).toBe(false)\n'
+				.. "\t\tt.expect(sh(`cd .cache/f-pushfx && git push -q file://{repo} HEAD:refs/heads/pushed-url`).ok).toBe(false)\n"
 				-- into a fixture: by a relative and by an absolute path
 				.. '\t\tt.expect(sh("cd .cache/f-pushfx && git push -q ../f-bare.git HEAD:refs/heads/ok").ok).toBe(true)\n'
 				.. "\t\tt.expect(sh(`cd .cache/f-pushfx && git push -q {here}/.cache/f-bare.git HEAD:refs/heads/ok2`).ok).toBe(true)"
@@ -294,7 +302,8 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 			"chain",
 			-- the guard hooks named explicitly, as on an unjailed run: they hand the fixture's own hooks the same
 			-- arguments and input, and pass on their exit status
-			"\t\tlocal G = `-c core.hooksPath={here}/z-nile/lib/git-hooks -c user.name=e2e -c user.email=e2e@example.invalid`\n"
+			-- c0120 override: the guard hooks are the repository's, one folder above the home
+			"\t\tlocal G = `-c core.hooksPath={repo}/z-nile/lib/git-hooks -c user.name=e2e -c user.email=e2e@example.invalid`\n"
 				.. "\t\tlocal fx, tgt = `{here}/.cache/f-chain`, `{here}/.cache/f-chain-tgt.git`\n"
 				.. "\t\tsh(`rm -rf {fx} {tgt} && git init -q -b main {fx} && git init -q --bare {tgt}`)\n"
 				.. '\t\tfs.writeFile(`{fx}/.git/hooks/pre-push`, `#!/bin/sh\\necho "$2" > {fx}/pp.args\\ncat > {fx}/pp.in\\n[ ! -f {fx}/fail ] || exit 3\\n`)\n'
@@ -356,10 +365,11 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 	it("the guards reach everything the run starts and keep the outer ceiling", function()
 		setUp()
 		must(run({ "env" }), "env run")
-		local lines = string.split(fs.readFile(`{repo}/.cache/f-env.txt`), "\n")
+		-- c0120 override: each run fences its home's .cache: the copy's z-nile/, and this run's (here)
+		local lines = string.split(fs.readFile(`{cache}/f-env.txt`), "\n")
 		local ceiling = ":" .. lines[1] .. ":"
-		t.expect(has(ceiling, `:{physical(repo)}/.cache:`)).toBe(true)
-		t.expect(has(ceiling, `:{physical(root)}/.cache:`)).toBe(true)
+		t.expect(has(ceiling, `:{physical(repo)}/z-nile/.cache:`)).toBe(true)
+		t.expect(has(ceiling, `:{physical(here)}/.cache:`)).toBe(true)
 		t.expect(fs.isFile(`{trim(lines[2] or "")}/reference-transaction`)).toBe(true)
 	end)
 
@@ -390,7 +400,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		local before = branches()
 		local r = run({ "refs" })
 		t.expect(branches()).toBe(before)
-		t.expect(fs.isDir(`{repo}/.cache/f-wt-escaped`)).toBe(false)
+		t.expect(fs.isDir(`{cache}/f-wt-escaped`)).toBe(false) -- c0120 override: the home's .cache
 		if not r.ok then
 			error(r.stdout .. r.stderr)
 		end
@@ -472,8 +482,9 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 			error(r.stdout .. r.stderr)
 		end
 		t.expect(has(r.stderr, "ignoring")).toBe(true)
-		local ceiling = ":" .. string.split(fs.readFile(`{repo}/.cache/f-env.txt`), "\n")[1] .. ":"
-		t.expect(has(ceiling, `:{physical(repo)}/.cache:`)).toBe(true)
+		-- c0120 override: the home's .cache
+		local ceiling = ":" .. string.split(fs.readFile(`{cache}/f-env.txt`), "\n")[1] .. ":"
+		t.expect(has(ceiling, `:{physical(repo)}/z-nile/.cache:`)).toBe(true)
 	end)
 
 	it("list mode is still refused before anything else", function()
@@ -486,7 +497,8 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 	it("the gate spec fails on a spec, script or identity that would bypass a guard", function()
 		setUp()
 		local scan = `{base}/scan`
-		runnerRepo(scan, { "tests/tooling/repo-fence.spec.luau" })
+		-- c0120 override: the gate spec is z-nile's, run from the copy's z-nile/ home
+		runnerRepo(scan, { "z-nile/tests/tooling/repo-fence.spec.luau" })
 		local spec = { "tests/tooling/repo-fence.spec.luau" }
 		-- this repository sits inside this run's own jail, which can't be nested: the gate's jail case
 		-- rightly fails here, and every other case must pass
@@ -504,11 +516,12 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		if #failures(clean) > 0 or not has(clean.stdout, " spec files") then
 			error(clean.stdout .. clean.stderr)
 		end
-		write(scan, "tests/planted/bad.luau", "-- points git elsewhere: GIT_" .. "DIR\n")
+		-- c0120 override: specs and their libraries are scanned in the homes (no tests/ at the root any more)
+		write(scan, "z-nile/tests/planted/bad.luau", "-- points git elsewhere: GIT_" .. "DIR\n")
 		write(scan, "scripts/planted-env.sh", "env -" .. 'i PATH="$PATH" git status\n') -- clears every guard
 		write(scan, "scripts/planted-push.sh", "git push --no-" .. "verify origin HEAD\n") -- skips the push guard
 		write(scan, "scripts/planted-osa.sh", "osa" .. "script -e 'do shell script \"git push\"'\n") -- runs outside the jail
-		write(scan, "tests/planted/id.luau", "-- git config user.email dev@example.com\n")
+		write(scan, "z-nile/tests/planted/id.luau", "-- git config user.email dev@example.com\n")
 		write(scan, "scripts/planted-tool", "#!/bin/sh\ngit -c core.hooks" .. "Path=/dev/null push\n") -- an extensionless script
 		local dirty = runIn(scan, spec)
 		t.expect(#failures(dirty) > 0).toBe(true)
@@ -568,15 +581,20 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		setUp()
 		local other = `{repo}/.worktree/X`
 		git(repo, as(DEV, { "worktree", "add", "-q", "-b", "x", other }))
-		write(other, "tests/probe/env.spec.luau", fs.readFile(`{repo}/tests/probe/env.spec.luau`))
-		local ceiling = (process.env.GIT_CEILING_DIRECTORIES or "") .. `:{physical(repo)}/.cache`
+		-- c0120 override: the probe, the run and its .cache are the other checkout's z-nile/ home's
+		write(
+			other,
+			"z-nile/tests/probe/env.spec.luau",
+			fs.readFile(`{repo}/z-nile/tests/probe/env.spec.luau`)
+		)
+		local ceiling = (process.env.GIT_CEILING_DIRECTORIES or "") .. `:{physical(repo)}/z-nile/.cache`
 		local r = runIn(other, { "tests/probe/env.spec.luau" }, {
 			PICKMAN_TEST_FENCE = physical(repo),
 			GIT_CEILING_DIRECTORIES = ceiling,
 		})
-		local fence = `:{physical(other)}/.cache:` -- before the worktree goes
-		local env = if fs.isFile(`{other}/.cache/f-env.txt`)
-			then fs.readFile(`{other}/.cache/f-env.txt`)
+		local fence = `:{physical(other)}/z-nile/.cache:` -- before the worktree goes
+		local env = if fs.isFile(`{other}/z-nile/.cache/f-env.txt`)
+			then fs.readFile(`{other}/z-nile/.cache/f-env.txt`)
 			else ""
 		gitTry(repo, { "worktree", "remove", "--force", other })
 		gitTry(repo, { "branch", "-q", "-D", "x" })
@@ -593,7 +611,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		if not r.ok then
 			error(r.stdout .. r.stderr)
 		end
-		local jail = trim(fs.readFile(`{repo}/.cache/f-jail.txt`))
+		local jail = trim(fs.readFile(`{cache}/f-jail.txt`)) -- c0120 override: the home's .cache
 		if process.os == "macos" then
 			-- this spec runs jailed, and macOS can't nest sandboxes
 			t.expect(has(r.stderr, "already inside a sandbox")).toBe(true)
@@ -624,8 +642,11 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 			t.expect(has(r.stderr, "cannot jail this run")).toBe(true)
 			t.expect(has(r.stdout .. r.stderr, "1 passed")).toBe(false)
 		end
-		for _, name in fs.readDir(repo) do
-			t.expect(string.match(name, "^%.pickman%-jail%-probe")).toBe(nil) -- its probe files are gone
+		-- c0120 override: the run starts in the copy's z-nile/ home: neither it nor the top keeps a probe file
+		for _, dir in { repo, `{repo}/z-nile` } do
+			for _, name in fs.readDir(dir) do
+				t.expect(string.match(name, "^%.pickman%-jail%-probe")).toBe(nil) -- its probe files are gone
+			end
 		end
 	end)
 

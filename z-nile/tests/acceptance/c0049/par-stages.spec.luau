@@ -10,7 +10,9 @@ local function trim(s: string): string
 	return (string.gsub(s, "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0470-par`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/c0470-par`
 
 local function reset()
 	if fs.isDir(base) then

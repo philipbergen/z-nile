@@ -15,7 +15,9 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0870-remap`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/c0870-remap`
 local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
 
 local function git(cwd: string, args: { string }): string
@@ -63,6 +65,7 @@ local branch = ""
 
 return t.spec("c0870 remap", function(it)
 	it("sets up an origin and a branch with its own edits and an item of its own", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -72,33 +75,35 @@ return t.spec("c0870 remap", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
 		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
-		write(`{seed}/tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
-		write(`{seed}/tracker/issues/f0020/f0020.md`, doc("f0020", "raft: R0030\n"))
-		write(`{seed}/tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010, f0020]\n"))
-		write(`{seed}/tests/acceptance/c0010/a.spec.luau`, "return 1\n")
+		write(`{seed}/pickman/.tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
+		write(`{seed}/pickman/.tracker/issues/f0020/f0020.md`, doc("f0020", "raft: R0030\n"))
+		write(`{seed}/pickman/.tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010, f0020]\n"))
+		-- c0120 override: pickman's promoted specs live in its home, pickman/tests/acceptance
+		write(`{seed}/pickman/tests/acceptance/c0010/a.spec.luau`, "return 1\n")
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
 		process.exec("git", { "clone", "-q", origin, main }) -- raw: clone to a named path
 		identity(main)
 		branch = worktree("prep-y")
-		local c10 = `{branch}/tracker/issues/c0010/c0010.md`
+		local c10 = `{branch}/pickman/.tracker/issues/c0010/c0010.md`
 		fs.writeFile(c10, (string.gsub(fs.readFile(c10), "line b", "line B, edited on the branch (c0010)")))
 		fs.writeFile(
-			`{branch}/tracker/issues/f0020/f0020.md`,
-			fs.readFile(`{branch}/tracker/issues/f0020/f0020.md`) .. "Appended on the branch for f0020.\n"
+			`{branch}/pickman/.tracker/issues/f0020/f0020.md`,
+			fs.readFile(`{branch}/pickman/.tracker/issues/f0020/f0020.md`)
+				.. "Appended on the branch for f0020.\n"
 		)
 		t.expect(
 			trOk(branch, { "new", "issue", "c", "mine", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
 		)
-			.toBe("tracker/issues/c0041/c0041.md")
+			.toBe("pickman/.tracker/issues/c0041/c0041.md")
 		t.expect(
 			trOk(branch, { "new", "issue", "c", "also", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
 		)
-			.toBe("tracker/issues/c0042/c0042.md")
+			.toBe("pickman/.tracker/issues/c0042/c0042.md")
 		git(branch, { "add", "-A" })
 		git(branch, { "commit", "-q", "-m", "branch work" })
 		git(branch, { "push", "-q", "-u", "origin", "prep-y" })
@@ -139,6 +144,7 @@ return t.spec("c0870 remap", function(it)
 	end)
 
 	it("remap renames the branch's items, numbers its own from origin's counter and commits", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local head = git(branch, { "rev-parse", "HEAD" })
 		local out = trOk(branch, { "remap" })
 		-- the branch's own items in plan order (number, then prefix), one reservation past the last
@@ -149,14 +155,14 @@ return t.spec("c0870 remap", function(it)
 		t.expect(git(branch, { "log", "-1", "--format=%s", "HEAD^1" })).toBe("tracker: remap ids")
 		t.expect(git(branch, { "rev-parse", "HEAD^2" })).toBe(git(branch, { "rev-parse", "origin/main" }))
 		t.expect(git(branch, { "status", "--porcelain" })).toBe("")
-		t.expect(fs.isFile(`{branch}/tracker/issues/c0001/c0001.md`)).toBe(true)
-		t.expect(fs.isFile(`{branch}/tracker/issues/f0002/f0002.md`)).toBe(true)
-		t.expect(fs.isFile(`{branch}/tracker/issues/c0003/c0003.md`)).toBe(true)
-		t.expect(fs.isFile(`{branch}/tracker/issues/c0004/c0004.md`)).toBe(true)
-		t.expect(fs.isDir(`{branch}/tracker/issues/c0042`)).toBe(false)
-		t.expect(fs.isDir(`{branch}/tracker/issues/c0041`)).toBe(false)
-		t.expect(fs.isFile(`{branch}/tests/acceptance/c0001/a.spec.luau`)).toBe(true)
-		t.expect(has(fs.readFile(`{branch}/tracker/rafts/R0001/R0001.md`), "issues: [c0001, f0002]"))
+		t.expect(fs.isFile(`{branch}/pickman/.tracker/issues/c0001/c0001.md`)).toBe(true)
+		t.expect(fs.isFile(`{branch}/pickman/.tracker/issues/f0002/f0002.md`)).toBe(true)
+		t.expect(fs.isFile(`{branch}/pickman/.tracker/issues/c0003/c0003.md`)).toBe(true)
+		t.expect(fs.isFile(`{branch}/pickman/.tracker/issues/c0004/c0004.md`)).toBe(true)
+		t.expect(fs.isDir(`{branch}/pickman/.tracker/issues/c0042`)).toBe(false)
+		t.expect(fs.isDir(`{branch}/pickman/.tracker/issues/c0041`)).toBe(false)
+		t.expect(fs.isFile(`{branch}/pickman/tests/acceptance/c0001/a.spec.luau`)).toBe(true)
+		t.expect(has(fs.readFile(`{branch}/pickman/.tracker/rafts/R0001/R0001.md`), "issues: [c0001, f0002]"))
 			.toBe(true)
 		-- the number is reserved on origin
 		local c = ids.parse(git(origin, { "show", "main:z-nile/next" }) .. "\n") :: ids.Counters
@@ -164,18 +170,21 @@ return t.spec("c0870 remap", function(it)
 	end)
 
 	it("the branch then holds origin/main, with the branch's edits kept", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local r = fixture.exec(branch, "git", { "merge-base", "--is-ancestor", "origin/main", "HEAD" })
 		t.expect(r.ok).toBe(true)
 		t.expect(git(branch, { "status", "--porcelain" })).toBe("")
-		local c1 = fs.readFile(`{branch}/tracker/issues/c0001/c0001.md`)
+		local c1 = fs.readFile(`{branch}/pickman/.tracker/issues/c0001/c0001.md`)
 		t.expect(has(c1, "line B, edited on the branch (c0001)")).toBe(true)
 		t.expect(has(c1, "See c0001 and f0002.")).toBe(true)
 		t.expect(
-			has(fs.readFile(`{branch}/tracker/issues/f0002/f0002.md`), "Appended on the branch for f0002.")
-		)
-			.toBe(true)
-		t.expect(fs.isDir(`{branch}/tracker/issues/c0010`)).toBe(false)
-		t.expect(fs.isDir(`{branch}/tracker/rafts/R0030`)).toBe(false)
+			has(
+				fs.readFile(`{branch}/pickman/.tracker/issues/f0002/f0002.md`),
+				"Appended on the branch for f0002."
+			)
+		).toBe(true)
+		t.expect(fs.isDir(`{branch}/pickman/.tracker/issues/c0010`)).toBe(false)
+		t.expect(fs.isDir(`{branch}/pickman/.tracker/rafts/R0030`)).toBe(false)
 		t.expect(fs.isFile(`{branch}/{ids.MAP_FILE}`)).toBe(true)
 		t.expect(trOk(branch, { "audit" }) ~= nil).toBe(true)
 	end)

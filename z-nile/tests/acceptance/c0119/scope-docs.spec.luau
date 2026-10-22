@@ -3,9 +3,12 @@
 -- execute-raft say so in the places c0119's Design names (AC1).
 -- Reads the real files; writes nothing.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home; the repository files live at the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
-local SKILLS = ".claude/skills"
+local SKILLS = `{TOP}/.claude/skills`
 
 local function read(path: string): string
 	return fs.readFile(path)

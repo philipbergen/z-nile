@@ -11,8 +11,9 @@ local t = require("@tests/lib/t")
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local repo = `{root}/.cache/c0790-history`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local repo = `{here}/.cache/c0790-history`
 
 local function doc(id: string, status: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nstatus: {status}\n---\n\n# {id}\n`

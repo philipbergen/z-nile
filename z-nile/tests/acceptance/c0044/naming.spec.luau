@@ -17,7 +17,9 @@ local function trim(s: string): string
 end
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/naming-e2e`
+-- c0120 override: the fixture lives under the home's .cache (specs run from z-nile/, and the jail refuses the top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/naming-e2e`
 local seed = `{base}/seed`
 
 -- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
@@ -79,6 +81,7 @@ end
 
 return t.spec("document naming", function(it)
 	it("new issue writes <ID>.md with a slug in the frontmatter", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -111,55 +114,59 @@ return t.spec("document naming", function(it)
 		engine.empty(seed)
 
 		local out = must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
-		t.expect(out).toBe("tracker/issues/f0010/f0010.md")
-		t.expect(fs.isFile(`{seed}/tracker/issues/f0010/f0010.md`)).toBe(true)
-		t.expect(fs.isFile(`{seed}/tracker/issues/f0010/f0010-alpha.md`)).toBe(false)
-		local doc = read("tracker/issues/f0010/f0010.md")
+		t.expect(out).toBe("pickman/.tracker/issues/f0010/f0010.md")
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/issues/f0010/f0010.md`)).toBe(true)
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/issues/f0010/f0010-alpha.md`)).toBe(false)
+		local doc = read("pickman/.tracker/issues/f0010/f0010.md")
 		t.expect(has(doc, "\nslug: alpha\n")).toBe(true)
 		t.expect(has(doc, "\ntitle: Alpha\n")).toBe(true)
 	end)
 
 	it("new raft writes <ID>.md with a slug in the frontmatter", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local out =
 			must(tr({ "new", "raft", "feature", "demo", "f0010", "--project", "pickman" }), "new raft")
-		t.expect(out).toBe("tracker/rafts/R0010/R0010.md")
-		t.expect(fs.isFile(`{seed}/tracker/rafts/R0010/R0010-demo.md`)).toBe(false)
-		local doc = read("tracker/rafts/R0010/R0010.md")
+		t.expect(out).toBe("pickman/.tracker/rafts/R0010/R0010.md")
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/rafts/R0010/R0010-demo.md`)).toBe(false)
+		local doc = read("pickman/.tracker/rafts/R0010/R0010.md")
 		t.expect(has(doc, "\nslug: demo\n")).toBe(true)
-		t.expect(has(read("tracker/issues/f0010/f0010.md"), "\nraft: R0010\n")).toBe(true)
+		t.expect(has(read("pickman/.tracker/issues/f0010/f0010.md"), "\nraft: R0010\n")).toBe(true)
 	end)
 
 	it("new rejects a bad slug and creates nothing", function()
-		local before = ids("tracker/issues")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		local before = ids("pickman/.tracker/issues")
 		for _, bad in { "Bad Slug", "a/b", "UPPER", "9lead", "under_score", "" } do
 			local r = tr({ "new", "issue", "f", bad, "--project", "pickman" })
 			if r.ok then
 				error(`new accepted the slug "{bad}"`)
 			end
 		end
-		t.expect(ids("tracker/issues")).toBe(before)
+		t.expect(ids("pickman/.tracker/issues")).toBe(before)
 	end)
 
 	it("find, list, members and start work on the new layout", function()
-		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			write(doc, (string.gsub(read(doc), "design: draft", "design: ready")))
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "fixture" })
-		t.expect(must(tr({ "find", "f0010" }), "find")).toBe("tracker/issues/f0010")
+		t.expect(must(tr({ "find", "f0010" }), "find")).toBe("pickman/.tracker/issues/f0010")
 		local list = must(tr({ "list" }), "list")
 		t.expect(has(list, "f0010") and has(list, "Alpha")).toBe(true)
-		t.expect(has(must(tr({ "members", "R0010" }), "members"), "tracker/issues/f0010")).toBe(true)
+		t.expect(has(must(tr({ "members", "R0010" }), "members"), "pickman/.tracker/issues/f0010")).toBe(true)
 		must(tr({ "start", "R0010" }), "start")
 		-- the branch name comes from the slug in the frontmatter
 		t.expect(git({ "branch", "--show-current" })).toBe("R0010-demo")
-		t.expect(fs.isFile(`{seed}/tracker/rafts/active/R0010/R0010.md`)).toBe(true)
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/rafts/active/R0010/R0010.md`)).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")
 	end)
 
 	it("a document without a slug is an error naming the file", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		must(tr({ "new", "issue", "f", "beta", "--project", "pickman" }), "new beta")
-		local path = "tracker/issues/f0020/f0020.md"
+		local path = "pickman/.tracker/issues/f0020/f0020.md"
 		local original = read(path)
 		write(path, (string.gsub(original, "\nslug: beta\n", "\n")))
 		local r = tr({ "find", "f0020" })
@@ -170,24 +177,26 @@ return t.spec("document naming", function(it)
 	end)
 
 	it("a legacy-named document is an error that points at migrate", function()
-		write("tracker/issues/d0030/d0030-legacy.md", legacy("d0030", "defect", "Legacy"))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		write("pickman/.tracker/issues/d0030/d0030-legacy.md", legacy("d0030", "defect", "Legacy"))
 		local r = tr({ "find", "d0030" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "migrate") and has(r.stderr, "d0030-legacy.md")).toBe(true)
 		-- a legacy name is refused even when the document already carries a slug
-		write("tracker/issues/d0031/d0031-named.md", migrated("d0031", "defect", "Named", "named"))
+		write("pickman/.tracker/issues/d0031/d0031-named.md", migrated("d0031", "defect", "Named", "named"))
 		local named = tr({ "find", "d0031" })
 		t.expect(named.ok).toBe(false)
 		t.expect(has(named.stderr, "migrate") and has(named.stderr, "d0031-named.md")).toBe(true)
-		fs.removeDir(`{seed}/tracker/issues/d0031`)
+		fs.removeDir(`{seed}/pickman/.tracker/issues/d0031`)
 	end)
 
 	it("migrate converts legacy documents in every state", function()
-		write("tracker/issues/active/c0040/c0040-act.md", legacy("c0040", "chore", "Act"))
-		write("tracker/issues/done/c0050/c0050-fin.md", legacy("c0050", "chore", "Fin"))
-		write("tracker/rafts/R0020/R0020-rb.md", legacy("R0020", "chore", "Rb"))
-		write("tracker/rafts/active/R0030/R0030-ra.md", legacy("R0030", "chore", "Ra"))
-		write("tracker/rafts/done/R0040/R0040-rd.md", legacy("R0040", "chore", "Rd"))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		write("pickman/.tracker/issues/active/c0040/c0040-act.md", legacy("c0040", "chore", "Act"))
+		write("pickman/.tracker/issues/done/c0050/c0050-fin.md", legacy("c0050", "chore", "Fin"))
+		write("pickman/.tracker/rafts/R0020/R0020-rb.md", legacy("R0020", "chore", "Rb"))
+		write("pickman/.tracker/rafts/active/R0030/R0030-ra.md", legacy("R0030", "chore", "Ra"))
+		write("pickman/.tracker/rafts/done/R0040/R0040-rd.md", legacy("R0040", "chore", "Rd"))
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "legacy documents" })
 		legacyTip = git({ "rev-parse", "HEAD" })
@@ -195,12 +204,12 @@ return t.spec("document naming", function(it)
 		local r = tr({ "migrate" })
 		local out = must(r, "migrate")
 		local cases = {
-			{ "tracker/issues/d0030/d0030", "d0030", "defect", "Legacy", "legacy" },
-			{ "tracker/issues/active/c0040/c0040", "c0040", "chore", "Act", "act" },
-			{ "tracker/issues/done/c0050/c0050", "c0050", "chore", "Fin", "fin" },
-			{ "tracker/rafts/R0020/R0020", "R0020", "chore", "Rb", "rb" },
-			{ "tracker/rafts/active/R0030/R0030", "R0030", "chore", "Ra", "ra" },
-			{ "tracker/rafts/done/R0040/R0040", "R0040", "chore", "Rd", "rd" },
+			{ "pickman/.tracker/issues/d0030/d0030", "d0030", "defect", "Legacy", "legacy" },
+			{ "pickman/.tracker/issues/active/c0040/c0040", "c0040", "chore", "Act", "act" },
+			{ "pickman/.tracker/issues/done/c0050/c0050", "c0050", "chore", "Fin", "fin" },
+			{ "pickman/.tracker/rafts/R0020/R0020", "R0020", "chore", "Rb", "rb" },
+			{ "pickman/.tracker/rafts/active/R0030/R0030", "R0030", "chore", "Ra", "ra" },
+			{ "pickman/.tracker/rafts/done/R0040/R0040", "R0040", "chore", "Rd", "rd" },
 		}
 		local renames = 0
 		for line in string.gmatch(git({ "status", "--porcelain" }), "[^\n]+") do
@@ -221,34 +230,37 @@ return t.spec("document naming", function(it)
 	end)
 
 	it("migrate is idempotent and refuses an ambiguous directory", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local again = tr({ "migrate" })
 		t.expect(again.ok).toBe(true)
 		t.expect(has(again.stdout, "->")).toBe(false)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
 
-		write("tracker/issues/d0060/d0060.md", migrated("d0060", "defect", "Both", "both"))
-		write("tracker/issues/d0060/d0060-x.md", legacy("d0060", "defect", "Both"))
-		write("tracker/issues/d0070/d0070-ok.md", legacy("d0070", "defect", "Ok"))
+		write("pickman/.tracker/issues/d0060/d0060.md", migrated("d0060", "defect", "Both", "both"))
+		write("pickman/.tracker/issues/d0060/d0060-x.md", legacy("d0060", "defect", "Both"))
+		write("pickman/.tracker/issues/d0070/d0070-ok.md", legacy("d0070", "defect", "Ok"))
 		local r = tr({ "migrate" })
 		t.expect(r.ok).toBe(false)
 		t.expect(r.code).toBe(1)
 		t.expect(has(r.stderr .. r.stdout, "d0060") and has(r.stderr .. r.stdout, "ambiguous")).toBe(true)
-		t.expect(fs.isFile(`{seed}/tracker/issues/d0060/d0060-x.md`)).toBe(true) -- untouched
-		t.expect(read("tracker/issues/d0060/d0060.md")).toBe(migrated("d0060", "defect", "Both", "both"))
-		t.expect(fs.isFile(`{seed}/tracker/issues/d0070/d0070.md`)).toBe(true) -- the rest still converted
-		fs.removeDir(`{seed}/tracker/issues/d0060`)
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/issues/d0060/d0060-x.md`)).toBe(true) -- untouched
+		t.expect(read("pickman/.tracker/issues/d0060/d0060.md"))
+			.toBe(migrated("d0060", "defect", "Both", "both"))
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/issues/d0070/d0070.md`)).toBe(true) -- the rest still converted
+		fs.removeDir(`{seed}/pickman/.tracker/issues/d0060`)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "more" })
 	end)
 
 	it("a branch that added a legacy document merges a migrated main, then migrate converts it", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local branch = git({ "branch", "--show-current" })
 		local migratedTip = git({ "rev-parse", "HEAD" })
 		-- a branch cut before the migration adds one legacy document and edits another
 		git({ "checkout", "-q", "-b", "inflight", legacyTip })
-		write("tracker/issues/d0080/d0080-fresh.md", legacy("d0080", "defect", "Fresh"))
+		write("pickman/.tracker/issues/d0080/d0080-fresh.md", legacy("d0080", "defect", "Fresh"))
 		write(
-			"tracker/issues/d0030/d0030-legacy.md",
+			"pickman/.tracker/issues/d0030/d0030-legacy.md",
 			legacy("d0030", "defect", "Legacy") .. "\nan edit on the branch\n"
 		)
 		git({ "add", "-A" })
@@ -256,32 +268,37 @@ return t.spec("document naming", function(it)
 		local merge = run(seed, "git", { "merge", "-q", "--no-edit", migratedTip })
 		t.expect(merge.ok).toBe(true)
 		-- the edited document followed the rename; the new one is still legacy until migrate runs
-		t.expect(has(read("tracker/issues/d0030/d0030.md"), "an edit on the branch")).toBe(true)
-		t.expect(fs.isFile(`{seed}/tracker/issues/d0080/d0080-fresh.md`)).toBe(true)
+		t.expect(has(read("pickman/.tracker/issues/d0030/d0030.md"), "an edit on the branch")).toBe(true)
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/issues/d0080/d0080-fresh.md`)).toBe(true)
 		local r = tr({ "migrate" })
 		local out = must(r, "migrate after merging")
-		t.expect(has(out, "tracker/issues/d0080/d0080-fresh.md -> tracker/issues/d0080/d0080.md")).toBe(true)
+		t.expect(
+			has(out, "pickman/.tracker/issues/d0080/d0080-fresh.md -> pickman/.tracker/issues/d0080/d0080.md")
+		)
+			.toBe(true)
 		t.expect(select(2, string.gsub(out, "%->", ""))).toBe(1)
-		t.expect(read("tracker/issues/d0080/d0080.md")).toBe(migrated("d0080", "defect", "Fresh", "fresh"))
+		t.expect(read("pickman/.tracker/issues/d0080/d0080.md"))
+			.toBe(migrated("d0080", "defect", "Fresh", "fresh"))
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "migrated on the branch" })
 		git({ "checkout", "-q", branch })
 	end)
 
 	it("renumber renames the document and rewrites references", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		-- f0010 was moved to active/ when R0010 started
 		write(
-			"tracker/issues/active/f0010/f0010.md",
-			read("tracker/issues/active/f0010/f0010.md") .. "\nsee f0020 too\n"
+			"pickman/.tracker/issues/active/f0010/f0010.md",
+			read("pickman/.tracker/issues/active/f0010/f0010.md") .. "\nsee f0020 too\n"
 		)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "reference" })
 		must(tr({ "renumber", "f0020", "f0025" }), "renumber")
-		t.expect(fs.isDir(`{seed}/tracker/issues/f0020`)).toBe(false)
-		t.expect(fs.isFile(`{seed}/tracker/issues/f0025/f0025.md`)).toBe(true)
-		local doc = read("tracker/issues/f0025/f0025.md")
+		t.expect(fs.isDir(`{seed}/pickman/.tracker/issues/f0020`)).toBe(false)
+		t.expect(fs.isFile(`{seed}/pickman/.tracker/issues/f0025/f0025.md`)).toBe(true)
+		local doc = read("pickman/.tracker/issues/f0025/f0025.md")
 		t.expect(has(doc, "\nid: f0025\n") and has(doc, "\nslug: beta\n")).toBe(true)
-		t.expect(has(read("tracker/issues/active/f0010/f0010.md"), "see f0025 too")).toBe(true)
+		t.expect(has(read("pickman/.tracker/issues/active/f0010/f0010.md"), "see f0025 too")).toBe(true)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "renumbered" })
 	end)

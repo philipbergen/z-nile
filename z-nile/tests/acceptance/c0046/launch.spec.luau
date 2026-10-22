@@ -22,7 +22,9 @@ end
 local NO_GC: { [string]: string } = {}
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/launch-e2e`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = fixture.physical(".") or "."
+local base = `{here}/.cache/launch-e2e`
 local seed = `{base}/seed`
 local origin = `{base}/origin.git`
 local main = `{base}/main`
@@ -104,10 +106,11 @@ return t.spec("launch", function(it)
 		-- R0020 is finished
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })
-		fs.writeDir(`{seed}/tracker/rafts/done`)
-		fs.writeDir(`{seed}/tracker/issues/done`)
-		git(seed, { "mv", "tracker/rafts/R0020", "tracker/rafts/done/R0020" })
-		git(seed, { "mv", "tracker/issues/f0020", "tracker/issues/done/f0020" })
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		fs.writeDir(`{seed}/pickman/.tracker/rafts/done`)
+		fs.writeDir(`{seed}/pickman/.tracker/issues/done`)
+		git(seed, { "mv", "pickman/.tracker/rafts/R0020", "pickman/.tracker/rafts/done/R0020" })
+		git(seed, { "mv", "pickman/.tracker/issues/f0020", "pickman/.tracker/issues/done/f0020" })
 		git(seed, { "commit", "-qm", "R0020 is done" })
 		must(process.exec("git", { "clone", "-q", "--bare", seed, origin }), "bare origin")
 		must(process.exec("git", { "clone", "-q", origin, main }), "clone main")

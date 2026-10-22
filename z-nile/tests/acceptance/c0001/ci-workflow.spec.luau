@@ -2,10 +2,13 @@
 -- c0010 AC2: CI bootstraps exactly like a new host (z-nile/setup.sh), can be dispatched by an
 -- agent, and skips only draft pull_request events.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home; the repository files live at the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
-local text = fs.readFile(".github/workflows/check.yml")
+local text = fs.readFile(`{TOP}/.github/workflows/check.yml`)
 local wf = serde.decode("yaml", text)
 -- YAML 1.1 parsers may read the bare key `on` as boolean true
 local on = wf.on or wf[true]
@@ -14,17 +17,23 @@ local job = wf.jobs and wf.jobs.gate
 return t.spec("ci workflow", function(it)
 	it("bootstraps via exactly `run: z-nile/setup.sh` (which runs the full gate) with GH_TOKEN", function()
 		t.expect(job ~= nil).toBe(true)
-		local found = false
+		-- c0120 override: one gate job per project (matrix), so the bootstrap is `z-nile/setup.sh --tools` (setup.sh
+		-- without its gate stage) followed by this job's project's full gate, each with GH_TOKEN
+		local found, gated = false, false
 		for _, step in job.steps do
 			local run = if type(step.run) == "string"
 				then (string.gsub(string.gsub(step.run, "^%s+", ""), "%s+$", ""))
 				else ""
-			if run == "z-nile/setup.sh" then
+			if run == "z-nile/setup.sh --tools" then
 				found = true
+				t.expect(step.env and step.env.GH_TOKEN).toBe("${{ github.token }}")
+			elseif found and run == 'z-nile/check.sh --project "$PROJECT" --full' then
+				gated = true
 				t.expect(step.env and step.env.GH_TOKEN).toBe("${{ github.token }}")
 			end
 		end
 		t.expect(found).toBe(true)
+		t.expect(gated).toBe(true)
 	end)
 
 	it("does not use the setup-rokit action", function()

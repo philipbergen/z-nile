@@ -8,6 +8,10 @@ local fs = require("@lune/fs")
 local lessons = require("@scripts/tracker/lessons")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
+-- c0120 override: specs run from their project's home (z-nile/); the repository's files are read from the checkout's top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
 local function lesson(id: string, tags: { string }): lessons.Lesson
 	local skill, slug = string.match(id, "^([^/]+)/(.+)$")
@@ -107,22 +111,28 @@ return t.spec("c0111 metrics over lessons", function(it)
 				[".claude/skills/testing/SKILL.md"] = skillDoc("testing"),
 				[".claude/skills/testing/lessons/pin.md"] = "---\ntitle: Pin\nwhen: build\ntags: [wiring, seams]\n"
 					.. "check: Pinned?\n---\nPin them.\n",
-				["tracker/rafts/R0010/design-review-001.md"] = review("F1", "F2"),
-				["tracker/rafts/R0010/design-review-002.md"] = review("F1"),
-				["tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n- design-review-001 F1: testing/pin\n"
+				-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+				["pickman/.tracker/rafts/R0010/design-review-001.md"] = review("F1", "F2"),
+				["pickman/.tracker/rafts/R0010/design-review-002.md"] = review("F1"),
+				["pickman/.tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n- design-review-001 F1: testing/pin\n"
 					.. "- design-review-001 F2: one-off: x\n- design-review-002 F1: testing/pin\n",
-				["tracker/rafts/done/R0020/design-review-001.md"] = review("F1") .. "R0020 round 1\n",
-				["tracker/rafts/R0010/R0010.md"] = raft("R0010", "2030-06-01"),
-				["tracker/rafts/done/R0020/R0020.md"] = raft("R0020", "2099-01-01"),
+				["pickman/.tracker/rafts/done/R0020/design-review-001.md"] = review("F1")
+					.. "R0020 round 1\n",
+				["pickman/.tracker/rafts/R0010/R0010.md"] = raft("R0010", "2030-06-01"),
+				["pickman/.tracker/rafts/done/R0020/R0020.md"] = raft("R0020", "2099-01-01"),
 				-- created the day before lessons land, though every one of its commits is made today; it is active
-				["tracker/rafts/active/R0030/R0030.md"] = raft("R0030", "2030-05-31"),
-				["tracker/rafts/active/R0030/design-review-001.md"] = review("F1") .. "R0030 round 1\n",
-				["tracker/rafts/active/R0030/design-review-002.md"] = review("F1") .. "R0030 round 2\n",
+				["pickman/.tracker/rafts/active/R0030/R0030.md"] = raft("R0030", "2030-05-31"),
+				["pickman/.tracker/rafts/active/R0030/design-review-001.md"] = review("F1")
+					.. "R0030 round 1\n",
+				["pickman/.tracker/rafts/active/R0030/design-review-002.md"] = review("F1")
+					.. "R0030 round 2\n",
 			})
 			-- a compaction-like commit rewrites R0020's review in place: a dater that reads history would lose it
-			fs.writeFile(`{f.main}/tracker/compaction.txt`, "# tracker.sh compact, test\nR0200 R0020\n")
+			-- c0120 override: the fixture has no tracker/ (a retired root), so the map is written where it lives since c0114
+			fs.writeFile(`{f.main}/z-nile/compaction.txt`, "# tracker.sh compact, test\nR0200 R0020\n")
+			-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 			fs.writeFile(
-				`{f.main}/tracker/rafts/done/R0020/design-review-001.md`,
+				`{f.main}/pickman/.tracker/rafts/done/R0020/design-review-001.md`,
 				review("F1") .. "R0020 round 1, compacted\n"
 			)
 			-- lessons.luau is added on 2030-06-01 in Los Angeles (2030-06-02 in UTC), not with the seed: rafts created
@@ -152,7 +162,7 @@ return t.spec("c0111 metrics over lessons", function(it)
 	)
 
 	it("the metrics skill names the two tables", function()
-		local doc = fs.readFile(".claude/skills/metrics/SKILL.md")
+		local doc = fs.readFile(`{TOP}/.claude/skills/metrics/SKILL.md`) -- c0120 override: read from the checkout's top
 		t.expect(has(doc, '"Findings per lesson tag"')).toBe(true)
 		t.expect(has(doc, '"Design rounds before and after lessons"')).toBe(true)
 	end)

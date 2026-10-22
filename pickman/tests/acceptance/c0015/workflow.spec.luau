@@ -7,7 +7,7 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local text = fs.readFile(".github/workflows/check.yml")
+local text = fs.readFile("../.github/workflows/check.yml")
 local wf: any = serde.decode("yaml" :: "yaml", text)
 local beta: any = wf.jobs.beta
 local gate: any = wf.jobs.gate
@@ -78,7 +78,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
 	)
 
 	it(
-		"every step has exactly the keys designed: no with, shell, working-directory, continue-on-error or extra if",
+		"every step has exactly the keys designed: no with, shell, continue-on-error or extra if; pickman's from its home",
 		function()
 			local steps: any = beta.steps
 			t.expect(#steps >= 4 and #steps <= 6).toBe(true) -- 5 once c0030 adds the runtime step, 6 with c0064's lobby
@@ -87,7 +87,9 @@ return t.spec("c0140 beta job in check.yml", function(it)
 			t.expect(keysOf(steps[2])).toEqual({ "env", "run" })
 			t.expect(steps[2].run).toBe("z-nile/setup.sh --tools")
 			t.expect(steps[2].env).toEqual({ GH_TOKEN = "${{ github.token }}" })
-			t.expect(keysOf(steps[3])).toEqual({ "env", "id", "run" })
+			-- c0120 override: the deploy and runtime steps run from pickman's home, and that is their one extra key
+			t.expect(keysOf(steps[3])).toEqual({ "env", "id", "run", "working-directory" })
+			t.expect(steps[3]["working-directory"]).toBe("pickman")
 			t.expect(keysOf(steps[4])).toEqual({ "env", "if", "run" })
 			t.expect(steps[4].env).toEqual({
 				GH_TOKEN = "${{ github.token }}",
@@ -97,7 +99,8 @@ return t.spec("c0140 beta job in check.yml", function(it)
 			})
 			if #steps >= 5 then
 				-- exactly the runtime step c0030 adds, and nothing else (c0064 pins the lobby's sixth)
-				t.expect(keysOf(steps[5])).toEqual({ "env", "if", "run" })
+				t.expect(keysOf(steps[5])).toEqual({ "env", "if", "run", "working-directory" })
+				t.expect(steps[5]["working-directory"]).toBe("pickman")
 				t.expect(steps[5].run).toBe('lune run scripts/runtime-test -- "$VERSION"')
 				t.expect(steps[5]["if"]).toBe("steps.deploy.outputs.version != ''")
 			end
@@ -116,10 +119,11 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		function()
 			local on: any = wf["on"]
 			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it. c0114 override: every
-			-- project root and the shared counter are tracker state
+			-- project root and the shared counter are tracker state. c0120 override: pickman's root is pickman/.tracker,
+			-- and tracker/ (retired) is not ignored, so a push that brings it back runs the gate
 			t.expect(on.push).toEqual({
 				branches = { "main" },
-				["paths-ignore"] = { "tracker/**", "z-nile/.tracker/**", "z-nile/next" },
+				["paths-ignore"] = { "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" },
 			})
 			t.expect(on.pull_request)
 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })

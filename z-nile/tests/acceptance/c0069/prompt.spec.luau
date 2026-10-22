@@ -14,7 +14,8 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0750-prompt`
+-- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0750-prompt`
 local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
 local bin, agentLog = `{base}/bin`, `{base}/claude.log`
 
@@ -91,16 +92,17 @@ local function raftDoc(
 end
 local HEAD =
 	'#!/usr/bin/env bash\nsource "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
+-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 -- check.sh texts with literal backlog paths; {S} is the state segment ("" or "active/" or "done/")
 local function c0010Check(s: string): string
 	return HEAD
-		.. `check "AC1: spec" test -f tracker/issues/{s}c0010/acceptance/a.spec.luau\n`
-		.. `check "AC2: sibling" test -f tracker/issues/{s}c0020/c0020.md\n`
-		.. "# untouched: tracker/issues/c0090/c0090.md tracker/issues/c00100\nfinish\n"
+		.. `check "AC1: spec" test -f pickman/.tracker/issues/{s}c0010/acceptance/a.spec.luau\n`
+		.. `check "AC2: sibling" test -f pickman/.tracker/issues/{s}c0020/c0020.md\n`
+		.. "# untouched: pickman/.tracker/issues/c0090/c0090.md pickman/.tracker/issues/c00100\nfinish\n"
 end
 local function r0010Check(s: string): string
 	return HEAD
-		.. `check "RC1: member" bash tracker/issues/{s}c0010/check.sh\n# raft: tracker/rafts/{s}R0010\nfinish\n`
+		.. `check "RC1: member" bash pickman/.tracker/issues/{s}c0010/check.sh\n# raft: pickman/.tracker/rafts/{s}R0010\nfinish\n`
 end
 local function simpleCheck(id: string, kind: string, s: string): string
 	return HEAD .. `check "AC1: ok" test -n "tracker/{kind}/{s}{id}/check.sh"\nfinish\n`
@@ -112,6 +114,7 @@ local promptFile = ""
 
 return t.spec("tracker prompt", function(it)
 	it("sets up an origin with a readied and a prepared raft", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -126,37 +129,39 @@ return t.spec("tracker prompt", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		process.exec("cp", { `{root}/tracker/architecture.md`, `{seed}/tracker/architecture.md` })
-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			write(seed, `tracker/{d}/.gitkeep`, "")
-		end
+		-- c0120 override: the fixture is on the final layout: pickman's root is pickman/.tracker (engine.roots lays out
+		-- every root's folders), and pickman's architecture.md lives there
+		engine.roots(seed)
+		process.exec(
+			"cp",
+			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+		)
 		write(
 			seed,
-			"tracker/rafts/R0010/R0010.md",
+			"pickman/.tracker/rafts/R0010/R0010.md",
 			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
 		)
-		write(seed, "tracker/rafts/R0010/check.sh", r0010Check(""), true)
+		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
 		write(
 			seed,
-			"tracker/issues/c0010/c0010.md",
+			"pickman/.tracker/issues/c0010/c0010.md",
 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
 		)
-		write(seed, "tracker/issues/c0010/check.sh", c0010Check(""), true)
-		write(seed, "tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
 		write(
 			seed,
-			"tracker/rafts/R0020/R0020.md",
+			"pickman/.tracker/rafts/R0020/R0020.md",
 			raftDoc("R0020", "Waiting", "waiting", "c0020", "ready", PREPARED)
 		)
-		write(seed, "tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
+		write(seed, "pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
 		write(
 			seed,
-			"tracker/issues/c0020/c0020.md",
+			"pickman/.tracker/issues/c0020/c0020.md",
 			issueDoc("c0020", "Beta", "R0020", "", "ready", PREPARED)
 		)
-		write(seed, "tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
@@ -165,16 +170,18 @@ return t.spec("tracker prompt", function(it)
 		git(main, { "config", "user.email", "t@example.invalid" })
 		cap = trOk(main, { "worktree", "cap-a" })
 		trOk(main, { "ready", "R0010" })
-		promptFile = `{git(main, { "rev-parse", "--show-toplevel" })}/tracker/rafts/active/R0010/prompt.md`
+		promptFile =
+			`{git(main, { "rev-parse", "--show-toplevel" })}/pickman/.tracker/rafts/active/R0010/prompt.md`
 		t.expect(fs.isFile(promptFile)).toBe(true)
-		t.expect(onOrigin("tracker/rafts/active/R0010/R0010.md") ~= nil).toBe(true)
+		t.expect(onOrigin("pickman/.tracker/rafts/active/R0010/R0010.md") ~= nil).toBe(true)
 		trOk(cap, { "sync" })
 	end)
 
 	it("prompt refuses a raft that is not readied and names ready-raft", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		-- even with a stale prompt.md left for it in the main checkout: origin/main decides
-		local stale = `{main}/tracker/rafts/active/R0020`
-		write(main, "tracker/rafts/active/R0020/prompt.md", "stale prompt\n")
+		local stale = `{main}/pickman/.tracker/rafts/active/R0020`
+		write(main, "pickman/.tracker/rafts/active/R0020/prompt.md", "stale prompt\n")
 		for _, cwd in { main, cap } do
 			local r = tr(cwd, { "prompt", "R0020" })
 			t.expect(r.ok).toBe(false)
@@ -204,20 +211,21 @@ return t.spec("tracker prompt", function(it)
 	end)
 
 	it("prompt writes nothing", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local before = {
-			git(main, { "status", "--porcelain", "--ignored", "--", "tracker" }),
+			git(main, { "status", "--porcelain", "--ignored", "--", "pickman/.tracker" }),
 			fs.readFile(promptFile),
 			tip(),
 		}
 		trOk(cap, { "prompt", "R0010" })
 		trOk(main, { "prompt", "R0010", "--path" })
 		t.expect({
-			git(main, { "status", "--porcelain", "--ignored", "--", "tracker" }),
+			git(main, { "status", "--porcelain", "--ignored", "--", "pickman/.tracker" }),
 			fs.readFile(promptFile),
 			tip(),
 		}).toEqual(before)
 		t.expect(git(cap, { "status", "--porcelain" })).toBe("")
-		t.expect(fs.isFile(`{cap}/tracker/rafts/active/R0010/prompt.md`)).toBe(false)
+		t.expect(fs.isFile(`{cap}/pickman/.tracker/rafts/active/R0010/prompt.md`)).toBe(false)
 	end)
 
 	it("prompt refuses a missing prompt.md and names ready", function()

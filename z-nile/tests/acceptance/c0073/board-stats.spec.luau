@@ -11,7 +11,9 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local tree = `{root}/.cache/c0790-board`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local tree = `{here}/.cache/c0790-board`
 
 local function write(path: string, text: string)
 	local full = `{tree}/{path}`
@@ -20,6 +22,12 @@ local function write(path: string, text: string)
 end
 local function issue(id: string, kind: string, created: string): string
 	return `---\nid: {id}\ntype: {kind}\ntitle: {id}\nslug: {id}\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: {created}\n---\n\n# {id}\n`
+end
+-- c0120 override: the spec runs from z-nile/, so the vendored marked (a checkout-relative path) is read from the top
+local MARKED = `{root}/{board.MARKED_PATH}`
+-- c0120 override: render reads its template by a checkout-relative path, so point it at the checkout's top
+if string.sub(board.TEMPLATE_PATH, 1, 1) ~= "/" then
+	board.TEMPLATE_PATH = `{root}/{board.TEMPLATE_PATH}`
 end
 local SPEND_HEAD =
 	"# Spend\n\n| # | when | commit | +lines | -lines | minutes | attribution |\n|---|---|---|---|---|---|---|\n"
@@ -62,7 +70,7 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("the page has the Stats button and section, beside Rafts and Issues", function()
-		local html = board.render(m, fs.readFile(board.MARKED_PATH))
+		local html = board.render(m, fs.readFile(MARKED))
 		for _, id in { "stats-toggle", "stats", "tab-rafts", "tab-issues", "search", "board-data" } do
 			t.expect(string.find(html, `id="{id}"`, 1, true) ~= nil).toBe(true)
 		end
@@ -75,7 +83,7 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("builds of one tree are identical", function()
-		local marked = fs.readFile(board.MARKED_PATH)
+		local marked = fs.readFile(MARKED)
 		t.expect(
 			board.render(board.collect(tree .. "/tracker"), marked)
 				== board.render(board.collect(tree .. "/tracker"), marked)
@@ -96,13 +104,14 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(u.stats.today).toBe("")
 		t.expect(#u.stats.views.month).toBe(0)
 		t.expect(u.stats.periods).toBe(nil)
-		local html = board.render(u, fs.readFile(board.MARKED_PATH))
+		local html = board.render(u, fs.readFile(MARKED))
 		t.expect(string.find(html, "no dated data", 1, true) ~= nil).toBe(true)
 		fs.removeDir(bare)
 	end)
 
 	it("the real tracker's board has history and non-empty views", function()
-		local real = board.collect()
+		-- c0120 override: the spec runs from z-nile/, so the real tracker is collected from the checkout's top
+		local real = board.collect(nil, root)
 		t.expect(real.stats.history).toBe(true)
 		t.expect(#real.stats.views.year).toBe(13)
 		local opened = 0
@@ -118,7 +127,7 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("the page has every chart for every view and type filter, with themed series colors", function()
-		local html = board.render(m, fs.readFile(board.MARKED_PATH))
+		local html = board.render(m, fs.readFile(MARKED))
 		local section = string.match(html, '<section id="stats".-</section>') or ""
 		local figures: { [string]: string } = {}
 		for tag, id in
@@ -184,7 +193,7 @@ return t.spec("tracker board statistics", function(it)
 	it(
 		"the Table view has one table per view, the periods and the time in state, with units in the headers",
 		function()
-			local html = board.render(m, fs.readFile(board.MARKED_PATH))
+			local html = board.render(m, fs.readFile(MARKED))
 			local tables = string.match(html, '<div id="stats%-tables".-</div>') or ""
 			local _, n = string.gsub(tables, "<table", "")
 			t.expect(n >= 5).toBe(true) -- month, quarter, year, the periods, time in state
@@ -216,7 +225,7 @@ return t.spec("tracker board statistics", function(it)
 				SPEND_HEAD .. `| 1 | {created} 10:00 | abc1234 | {i * 3} | {i} | {i % 50 + 5} | explicit |\n`
 			)
 		end
-		local html = board.render(board.collect(`{busy}/tracker`), fs.readFile(board.MARKED_PATH))
+		local html = board.render(board.collect(`{busy}/tracker`), fs.readFile(MARKED))
 		local section = string.match(html, '<section id="stats".-</section>') or ""
 		t.expect(#section > 0).toBe(true)
 		t.expect(#section < 450 * 1024).toBe(true)
@@ -224,7 +233,8 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("the board workflow checks out full history", function()
-		local wf = serde.decode("yaml", fs.readFile(".github/workflows/board.yml"))
+		-- c0120 override: the spec runs from z-nile/, so the workflow is read from the checkout's top
+		local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/board.yml`))
 		local steps = wf.jobs.board.steps
 		t.expect(steps[1].uses).toBe("actions/checkout@v4")
 		t.expect(steps[1].with["fetch-depth"]).toBe(0)

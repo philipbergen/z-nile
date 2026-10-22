@@ -42,9 +42,11 @@ local function build()
 	end
 	fs.writeDir(SB)
 	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/
-	fs.copy(".luaurc", `{SB}/.luaurc`)
-	fs.copy("rokit.toml", `{SB}/rokit.toml`)
-	local tr = `{SB}/tracker`
+	-- c0120 override: the spec runs from z-nile/; the root's .luaurc and rokit.toml are at the checkout's top
+	fs.copy(`{engine.TOP}/.luaurc`, `{SB}/.luaurc`)
+	fs.copy(`{engine.TOP}/rokit.toml`, `{SB}/rokit.toml`)
+	-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+	local tr = `{SB}/pickman/.tracker`
 	-- R0910: a done feature raft, two design rounds, every phase on f0910 and an old seven-cell ledger on f0911
 	write(`{tr}/rafts/done/R0910/R0910.md`, raftDoc("R0910", "feature"))
 	write(`{tr}/rafts/done/R0910/design-review-001.md`, REVIEW)

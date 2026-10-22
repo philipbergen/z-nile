@@ -17,7 +17,9 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0870-allocate`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/c0870-allocate`
 local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
 local SEED_NEXT = "issue 891 seed-seed-seed\nraft 271 seed-seed-seed\n"
 
@@ -99,6 +101,7 @@ local phrases: { string } = {}
 
 return t.spec("c0870 allocation from z-nile/next", function(it)
 	it("sets up a bare origin holding z-nile/next, a main checkout and a second clone", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -108,12 +111,12 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
 		write(`{seed}/{ids.FILE}`, SEED_NEXT)
-		write(`{seed}/tracker/issues/c0890/c0890.md`, stub("c0890", "older"))
+		write(`{seed}/pickman/.tracker/issues/c0890/c0890.md`, stub("c0890", "older"))
 		write(
-			`{seed}/tracker/rafts/done/R0270/R0270.md`,
+			`{seed}/pickman/.tracker/rafts/done/R0270/R0270.md`,
 			"---\nid: R0270\ntype: chore\ntitle: Old\nslug: old\nissues: []\ndesign: ready\n---\n\n# R0270\n"
 		)
 		git(seed, { "add", "-A" })
@@ -128,12 +131,13 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 	end)
 
 	it("new issue takes the counter and pushes it raised by one in the same commit", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-a")
 		t.expect(trOk(wt, { "new", "issue", "c", "alpha", "--project", "pickman" }))
-			.toBe("tracker/issues/c0891/c0891.md")
+			.toBe("pickman/.tracker/issues/c0891/c0891.md")
 		t.expect(lastChanged()).toEqual({
-			"tracker/issues/c0891/c0891.md",
-			"tracker/issues/c0891/check.sh",
+			"pickman/.tracker/issues/c0891/c0891.md",
+			"pickman/.tracker/issues/c0891/check.sh",
 			"z-nile/next",
 		})
 		local c = counters()
@@ -150,21 +154,23 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 	end)
 
 	it("the next issue is 892: counting by one, not the next multiple of 10", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-b")
 		t.expect(trOk(wt, { "new", "issue", "f", "beta", "--project", "pickman" }))
-			.toBe("tracker/issues/f0892/f0892.md")
+			.toBe("pickman/.tracker/issues/f0892/f0892.md")
 		t.expect(counters().issue).toBe(893)
 		table.insert(phrases, phraseOf(onOrigin(ids.FILE) :: string))
 	end)
 
 	it("a counter behind the ids on origin is passed, never reused", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		elsewhere(
-			{ ["tracker/issues/c0950/c0950.md"] = stub("c0950", "oldcode") },
+			{ ["pickman/.tracker/issues/c0950/c0950.md"] = stub("c0950", "oldcode") },
 			"an old tracker made c0950"
 		)
 		local wt = worktree("cap-c")
 		t.expect(trOk(wt, { "new", "issue", "c", "gamma", "--project", "pickman" }))
-			.toBe("tracker/issues/c0951/c0951.md")
+			.toBe("pickman/.tracker/issues/c0951/c0951.md")
 		t.expect(counters().issue).toBe(952)
 		table.insert(phrases, phraseOf(onOrigin(ids.FILE) :: string))
 		-- three writes by the tracker, not all one phrase: a fixed phrase would let two writes merge silently
@@ -172,6 +178,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 	end)
 
 	it("a lost race keeps the other terminal's number and takes the next one", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-d")
 		-- A git shim first on PATH: before the tracker's first push it lets another terminal take c0952 and raise the
 		-- counter, so the lease push is rejected and the tracker must start over on the new origin/main. Reviewed
@@ -184,8 +191,8 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			`{shim}/git`,
 			`#!/bin/bash\nif [ "$1" = push ] && [ ! -e "{marker}" ]; then\n  touch "{marker}"\n`
 				.. `  [ -d "{other}/.git" ] || exit 1\n`
-				.. `  ( cd "{other}" && "{real}" pull -q origin main && mkdir -p tracker/issues/c0952 && `
-				.. `printf -- '---\\nid: c0952\\ntype: chore\\ntitle: theirs\\nslug: theirs\\nraft: \\ndepends_on: []\\nstatus: new\\n---\\n' > tracker/issues/c0952/c0952.md && `
+				.. `  ( cd "{other}" && "{real}" pull -q origin main && mkdir -p pickman/.tracker/issues/c0952 && `
+				.. `printf -- '---\\nid: c0952\\ntype: chore\\ntitle: theirs\\nslug: theirs\\nraft: \\ndepends_on: []\\nstatus: new\\n---\\n' > pickman/.tracker/issues/c0952/c0952.md && `
 				.. `printf 'issue 953 other-other-other\\nraft 271 other-other-other\\n' > z-nile/next && `
 				.. `"{real}" add -A && "{real}" commit -qm theirs && "{real}" push -q origin HEAD:main ) || exit 1\nfi\n`
 				.. `exec "{real}" "$@"\n`,
@@ -197,19 +204,20 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			{ PATH = `{shim}:{process.env.PATH or ""}` }
 		)
 		t.expect(fs.isFile(marker)).toBe(true)
-		t.expect(out).toBe("tracker/issues/c0953/c0953.md")
+		t.expect(out).toBe("pickman/.tracker/issues/c0953/c0953.md")
 		t.expect(
-			string.find(onOrigin("tracker/issues/c0952/c0952.md") or "", "title: theirs", 1, true) ~= nil
-		)
-			.toBe(true)
+			string.find(onOrigin("pickman/.tracker/issues/c0952/c0952.md") or "", "title: theirs", 1, true)
+				~= nil
+		).toBe(true)
 		t.expect(counters().issue).toBe(954)
 		t.expect(git(origin, { "log", "-1", "--format=%s", "main^" })).toBe("theirs")
 	end)
 
 	it("new raft takes the raft counter and leaves the issue counter alone", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-e")
 		t.expect(trOk(wt, { "new", "raft", "chore", "solo", "c0891", "--single", "--project", "pickman" }))
-			.toBe("tracker/rafts/R0271/R0271.md")
+			.toBe("pickman/.tracker/rafts/R0271/R0271.md")
 		local c = counters()
 		t.expect(c.raft).toBe(272)
 		t.expect(c.issue).toBe(954)
@@ -217,9 +225,10 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 	end)
 
 	it("an emergent issue reserves its number on origin and is created only locally", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-f")
 		write(
-			`{wt}/tracker/rafts/active/R0900/R0900.md`,
+			`{wt}/pickman/.tracker/rafts/active/R0900/R0900.md`,
 			"---\nid: R0900\ntype: chore\ntitle: Busy\nslug: busy\nissues: []\ndesign: ready\n---\n\n# R0900\n"
 		)
 		git(wt, { "add", "-A" })
@@ -228,12 +237,12 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		local before = git(origin, { "rev-parse", "main" })
 		local localNext = fs.readFile(`{wt}/{ids.FILE}`)
 		t.expect(trOk(wt, { "new", "issue", "c", "eps", "--raft", "R0900" }))
-			.toBe("tracker/issues/active/c0954/c0954.md")
+			.toBe("pickman/.tracker/issues/active/c0954/c0954.md")
 		t.expect(git(origin, { "rev-parse", "main^" })).toBe(before) -- exactly one commit
 		t.expect(lastChanged()).toEqual({ "z-nile/next" })
 		t.expect(counters().issue).toBe(955)
-		t.expect(onOrigin("tracker/issues/c0954/c0954.md")).toBe(nil)
-		t.expect(onOrigin("tracker/issues/active/c0954/c0954.md")).toBe(nil)
+		t.expect(onOrigin("pickman/.tracker/issues/c0954/c0954.md")).toBe(nil)
+		t.expect(onOrigin("pickman/.tracker/issues/active/c0954/c0954.md")).toBe(nil)
 		-- the local counter is not raised (it moves only on origin/main), so it now lags: a warning, never an error
 		t.expect(fs.readFile(`{wt}/{ids.FILE}`)).toBe(localNext)
 		local audited = tr(wt, { "audit" })
@@ -242,18 +251,20 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 	end)
 
 	it("renumber takes its number from the counter and reserves it on origin", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-g")
 		t.expect(trOk(wt, { "new", "issue", "c", "zeta", "--project", "pickman" }))
-			.toBe("tracker/issues/c0955/c0955.md")
+			.toBe("pickman/.tracker/issues/c0955/c0955.md")
 		local r = trOk(wt, { "renumber", "c0955" })
 		t.expect(string.find(r, "c0955 -> c0956", 1, true) ~= nil).toBe(true)
-		t.expect(fs.isFile(`{wt}/tracker/issues/c0956/c0956.md`)).toBe(true)
-		t.expect(fs.isDir(`{wt}/tracker/issues/c0955`)).toBe(false)
+		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/c0956/c0956.md`)).toBe(true)
+		t.expect(fs.isDir(`{wt}/pickman/.tracker/issues/c0955`)).toBe(false)
 		t.expect(counters().issue).toBe(957)
 		t.expect(lastChanged()).toEqual({ "z-nile/next" })
 	end)
 
 	it("PICKMAN_PUBLISH=0 numbers from the local counter and ids, and writes no counter", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("cap-h")
 		local localNext = fs.readFile(`{wt}/{ids.FILE}`)
 		t.expect((ids.parse(localNext) :: ids.Counters).issue).toBe(957)
@@ -263,15 +274,15 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			{ "new", "issue", "c", "eta", "--project", "pickman" },
 			{ PICKMAN_PUBLISH = "0" }
 		)
-		t.expect(out).toBe("tracker/issues/c0957/c0957.md")
+		t.expect(out).toBe("pickman/.tracker/issues/c0957/c0957.md")
 		t.expect(fs.readFile(`{wt}/{ids.FILE}`)).toBe(localNext)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		-- a local counter behind the local ids is passed too
-		write(`{wt}/tracker/issues/c0970/c0970.md`, stub("c0970", "local"))
+		write(`{wt}/pickman/.tracker/issues/c0970/c0970.md`, stub("c0970", "local"))
 		t.expect(
 			trOk(wt, { "new", "issue", "c", "theta", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
 		)
-			.toBe("tracker/issues/c0971/c0971.md")
+			.toBe("pickman/.tracker/issues/c0971/c0971.md")
 	end)
 
 	it("a published counter may only go up, and must parse", function()
@@ -298,10 +309,14 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 	it(
 		"without z-nile/next on origin, numbering is the next multiple of 10 and no counter appears",
 		function()
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			elsewhere({ [ids.FILE] = false }, "no counter")
 			local highest = 0
 			for _, p in
-				string.split(git(origin, { "ls-tree", "-r", "--name-only", "main", "tracker/issues" }), "\n")
+				string.split(
+					git(origin, { "ls-tree", "-r", "--name-only", "main", "pickman/.tracker/issues" }),
+					"\n"
+				)
 			do
 				local n = string.match(p, "/[fdc](%d%d%d%d)/[^/]+$")
 				if n then
@@ -311,7 +326,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			local want = (math.floor(highest / 10) + 1) * 10
 			local wt = worktree("cap-i")
 			t.expect(trOk(wt, { "new", "issue", "c", "iota", "--project", "pickman" }))
-				.toBe(string.format("tracker/issues/c%04d/c%04d.md", want, want))
+				.toBe(string.format("pickman/.tracker/issues/c%04d/c%04d.md", want, want))
 			t.expect(onOrigin(ids.FILE)).toBe(nil)
 			t.expect(fs.isFile(`{wt}/{ids.FILE}`)).toBe(false)
 		end

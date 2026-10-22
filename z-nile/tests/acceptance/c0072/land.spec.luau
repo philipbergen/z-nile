@@ -15,7 +15,9 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0780-land`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = fixture.physical(".") or "."
+local base = `{here}/.cache/c0780-land`
 local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
@@ -50,15 +52,16 @@ local function identity(dir: string)
 	git(dir, { "config", "user.email", "land@example.invalid" })
 end
 -- a capture worktree with one new issue, its Problem filled in and committed
+-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 local function capture(name: string, slug: string): (string, string)
 	local wt = trOk(main, { "worktree", name })
 	identity(wt)
 	local made =
 		trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
 	local id = string.match(made, "(c%d%d%d%d)") :: string
-	local doc = `{wt}/tracker/issues/{id}/{id}.md`
+	local doc = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
 	fs.writeFile(doc, fs.readFile(doc) .. `\nMore about {slug}.\n`)
-	git(wt, { "add", "tracker" })
+	git(wt, { "add", "pickman/.tracker" })
 	git(wt, { "commit", "-q", "-m", `tracker: new {id} {slug}` })
 	return wt, id
 end
@@ -74,11 +77,8 @@ return t.spec("tracker land", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			write(`{seed}/tracker/{d}/.gitkeep`, "")
-		end
+		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
@@ -92,6 +92,7 @@ return t.spec("tracker land", function(it)
 	it(
 		"land pushes one commit with the capture's issue edits on top of origin/main, and the branch equals main",
 		function()
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local wt, id = capture("capture-a", "alpha")
 			local before = tip() -- the stub is already on origin (new issue published it)
 			local out = trOk(wt, { "land" })
@@ -99,8 +100,10 @@ return t.spec("tracker land", function(it)
 			t.expect(git(origin, { "rev-parse", "main^" })).toBe(before)
 			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 			t.expect(git(origin, { "diff", "--name-only", before, "main" }))
-				.toBe(`tracker/issues/{id}/{id}.md`)
-			t.expect(has(git(origin, { "show", `main:tracker/issues/{id}/{id}.md` }), "More about alpha."))
+				.toBe(`pickman/.tracker/issues/{id}/{id}.md`)
+			t.expect(
+				has(git(origin, { "show", `main:pickman/.tracker/issues/{id}/{id}.md` }), "More about alpha.")
+			)
 				.toBe(true)
 			t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(tip())
 			t.expect(git(origin, { "log", "-1", "--format=%s", "main" })).toBe(`tracker: new {id} alpha`)
@@ -113,10 +116,11 @@ return t.spec("tracker land", function(it)
 	end)
 
 	it("land merges what others pushed meanwhile, and the result is linear (one parent)", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt, id = capture("capture-b", "beta")
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
-			`{other}/tracker/issues/f0500/f0500.md`,
+			`{other}/pickman/.tracker/issues/f0500/f0500.md`,
 			"---\nid: f0500\ntype: feature\ntitle: Elsewhere\nslug: elsewhere\n---\n"
 		)
 		git(other, { "add", "-A" })
@@ -126,7 +130,8 @@ return t.spec("tracker land", function(it)
 		trOk(wt, { "land" })
 		t.expect(git(origin, { "rev-parse", "main^" })).toBe(before)
 		t.expect(git(origin, { "rev-list", "--count", "--merges", `{before}..main` })).toBe("0")
-		t.expect(git(origin, { "diff", "--name-only", before, "main" })).toBe(`tracker/issues/{id}/{id}.md`)
+		t.expect(git(origin, { "diff", "--name-only", before, "main" }))
+			.toBe(`pickman/.tracker/issues/{id}/{id}.md`)
 	end)
 
 	it("land refuses a change outside the capture's issue documents, and pushes nothing", function()
@@ -142,15 +147,16 @@ return t.spec("tracker land", function(it)
 	end)
 
 	it("land refuses anything but edits to draft issue documents", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		-- a ready issue on origin, as a merged prep would have left it
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
-			`{other}/tracker/issues/f0600/f0600.md`,
+			`{other}/pickman/.tracker/issues/f0600/f0600.md`,
 			"---\nid: f0600\ntype: feature\ntitle: Ready\nslug: ready\ndesign: ready\nstatus: prepared-a-b-c\n---\n"
 		)
 		-- a draft raft document: draft frontmatter, but not an issue document
 		write(
-			`{other}/tracker/rafts/R0900/R0900.md`,
+			`{other}/pickman/.tracker/rafts/R0900/R0900.md`,
 			"---\nid: R0900\ntype: chore\ntitle: Draft raft\nslug: draft-raft\ndesign: draft\n---\n"
 		)
 		git(other, { "add", "-A" })
@@ -172,49 +178,52 @@ return t.spec("tracker land", function(it)
 		local alpha =
 			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) alpha") :: string
 		refused(function() -- a deletion
-			fs.removeFile(`{wt}/tracker/issues/{alpha}/{alpha}.md`)
-		end, `tracker/issues/{alpha}/{alpha}.md`)
+			fs.removeFile(`{wt}/pickman/.tracker/issues/{alpha}/{alpha}.md`)
+		end, `pickman/.tracker/issues/{alpha}/{alpha}.md`)
 		refused(function() -- an acceptance file
-			write(`{wt}/tracker/issues/{id}/acceptance/x.spec.luau`, "return nil\n")
-		end, `tracker/issues/{id}/acceptance/x.spec.luau`)
+			write(`{wt}/pickman/.tracker/issues/{id}/acceptance/x.spec.luau`, "return nil\n")
+		end, `pickman/.tracker/issues/{id}/acceptance/x.spec.luau`)
 		refused(function() -- a done item
-			write(`{wt}/tracker/issues/done/c0990/c0990.md`, "---\nid: c0990\n---\n")
-		end, "tracker/issues/done/c0990/c0990.md")
+			write(`{wt}/pickman/.tracker/issues/done/c0990/c0990.md`, "---\nid: c0990\n---\n")
+		end, "pickman/.tracker/issues/done/c0990/c0990.md")
 		refused(function() -- an existing check.sh (sequestered once written)
-			local p = `{wt}/tracker/issues/{id}/check.sh`
+			local p = `{wt}/pickman/.tracker/issues/{id}/check.sh`
 			fs.writeFile(p, fs.readFile(p) .. "# edited\n")
-		end, `tracker/issues/{id}/check.sh`)
+		end, `pickman/.tracker/issues/{id}/check.sh`)
 		refused(function() -- an issue whose design is past draft
-			local p = `{wt}/tracker/issues/f0600/f0600.md`
+			local p = `{wt}/pickman/.tracker/issues/f0600/f0600.md`
 			fs.writeFile(p, fs.readFile(p) .. "\nEdited after prep.\n")
-		end, "tracker/issues/f0600/f0600.md")
+		end, "pickman/.tracker/issues/f0600/f0600.md")
 		refused(function() -- demoting a prepared issue to draft, then rewriting it (status untouched)
-			local p = `{wt}/tracker/issues/f0600/f0600.md`
+			local p = `{wt}/pickman/.tracker/issues/f0600/f0600.md`
 			fs.writeFile(
 				p,
 				(string.gsub(fs.readFile(p), "design: ready", "design: draft")) .. "\nRewritten.\n"
 			)
-		end, "tracker/issues/f0600/f0600.md")
+		end, "pickman/.tracker/issues/f0600/f0600.md")
 		refused(function() -- an edit to a draft raft document (the path decides, not the frontmatter)
-			local p = `{wt}/tracker/rafts/R0900/R0900.md`
+			local p = `{wt}/pickman/.tracker/rafts/R0900/R0900.md`
 			fs.writeFile(p, fs.readFile(p) .. "\nEdited.\n")
-		end, "tracker/rafts/R0900/R0900.md")
+		end, "pickman/.tracker/rafts/R0900/R0900.md")
 		refused(function() -- an edit to the issue template, which carries `design: draft` too
 			local p = `{wt}/z-nile/templates/issue/doc.md`
 			fs.writeFile(p, fs.readFile(p) .. "\n<!-- edited -->\n")
 		end, "z-nile/templates/issue/doc.md")
 		refused(function() -- a capture promoting its own issue past draft, with no prep
-			local p = `{wt}/tracker/issues/{id}/{id}.md`
+			local p = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
 			fs.writeFile(p, (string.gsub(fs.readFile(p), "design: draft", "design: ready")))
-		end, `tracker/issues/{id}/{id}.md`)
+		end, `pickman/.tracker/issues/{id}/{id}.md`)
 		refused(function() -- a capture changing its own status line
-			local p = `{wt}/tracker/issues/{id}/{id}.md`
+			local p = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
 			fs.writeFile(p, (string.gsub(fs.readFile(p), "status: [^\n]*", "status: prepared-a-b-c")))
-		end, `tracker/issues/{id}/{id}.md`)
+		end, `pickman/.tracker/issues/{id}/{id}.md`)
 		refused(function() -- an issue added locally instead of published by new issue
-			write(`{wt}/tracker/issues/c0980/c0980.md`, "---\nid: c0980\ntype: chore\ndesign: draft\n---\n")
-			write(`{wt}/tracker/issues/c0980/check.sh`, "#!/bin/sh\n", true)
-		end, "tracker/issues/c0980/c0980.md")
+			write(
+				`{wt}/pickman/.tracker/issues/c0980/c0980.md`,
+				"---\nid: c0980\ntype: chore\ndesign: draft\n---\n"
+			)
+			write(`{wt}/pickman/.tracker/issues/c0980/check.sh`, "#!/bin/sh\n", true)
+		end, "pickman/.tracker/issues/c0980/c0980.md")
 	end)
 
 	it("land refuses when the gate fails, and pushes nothing", function()
@@ -252,10 +261,11 @@ return t.spec("tracker land", function(it)
 		-- rule: this gate script runs raw git, only in `other`, a fixture clone under this spec's .cache directory.
 		local marker = `{base}/raced`
 		local gate = `{base}/racing-gate`
+		-- c0120 override: the racing commit's file goes under pickman/.tracker (the fixture has no tracker/)
 		write(
 			gate,
 			`#!/bin/bash\n[ -e "{marker}" ] && exit 0\ntouch "{marker}"\ncd "{other}" || exit 1\n`
-				.. "git pull -q origin main && echo raced > tracker/raced.txt && git add -A && "
+				.. "git pull -q origin main && echo raced > pickman/.tracker/raced.txt && git add -A && "
 				.. "git commit -qm 'race' && git push -q origin HEAD:main\n",
 			true
 		)

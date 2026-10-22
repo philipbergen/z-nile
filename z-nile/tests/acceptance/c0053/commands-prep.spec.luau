@@ -42,6 +42,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 	end)
 
 	it("a published move abandons prep for a raft and its members in one commit", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		trOk(cap, { "sync" })
 		trOk(cap, { "new", "issue", "c", "zeta", "--desc", "Zeta.", "--project", "pickman" })
 		zeta =
@@ -53,8 +54,8 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		local before = git(origin, { "rev-parse", "main" })
 		trOk(cap, { "status", rz, "new" })
 		local files = git(origin, { "diff", "--name-only", before, "main" })
-		t.expect(has(files, `tracker/rafts/{rz}/{rz}.md`)).toBe(true)
-		t.expect(has(files, `tracker/issues/{zeta}/{zeta}.md`)).toBe(true)
+		t.expect(has(files, `pickman/.tracker/rafts/{rz}/{rz}.md`)).toBe(true)
+		t.expect(has(files, `pickman/.tracker/issues/{zeta}/{zeta}.md`)).toBe(true)
 		t.expect(#string.split(files, "\n")).toBe(2)
 		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 		t.expect(trOk(cap, { "status", rz })).toBe("new")
@@ -71,10 +72,11 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		trOk(cap, { "status", rz, "preparing" })
 		t.expect(trOk(cap, { "status", rz })).toBe("preparing")
 		-- the status line is a fresh stamp each time, so a double move is a git conflict, not a silent merge
-		local a = onOrigin(`tracker/rafts/{rz}/{rz}.md`)
+		local a = onOrigin(`pickman/.tracker/rafts/{rz}/{rz}.md`)
 		t.expect(string.match(a or "", "\nstatus: preparing%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)
 	end)
 
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	it(
 		"a raft move follows the local member list: unclaimed members refuse, dropped members are untouched",
 		function()
@@ -83,7 +85,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 				"(c%d+)"
 			) :: string
 			-- prep adds cnew to the raft locally (the document the prep PR will carry)
-			local doc = `{cap}/tracker/rafts/{rz}/{rz}.md`
+			local doc = `{cap}/pickman/.tracker/rafts/{rz}/{rz}.md`
 			-- the designs are ready (the move to prepared refuses otherwise)
 			local function ready(path: string)
 				fs.writeFile(path, (string.gsub(fs.readFile(path), "design: draft", "design: ready")))
@@ -94,7 +96,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(has(rawRaft.stderr, rz)).toBe(true)
 			t.expect(has(rawRaft.stderr, "design: ready")).toBe(true)
 			ready(doc)
-			ready(`{cap}/tracker/issues/{zeta}/{zeta}.md`)
+			ready(`{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`)
 			local original = fs.readFile(doc)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [%1, {cnew}]`)))
 			local before = git(origin, { "rev-parse", "main" })
@@ -110,13 +112,14 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(early.ok).toBe(false)
 			t.expect(has(early.stderr, cnew)).toBe(true)
 			t.expect(has(early.stderr, "design: ready")).toBe(true)
-			ready(`{cap}/tracker/issues/{cnew}/{cnew}.md`)
+			ready(`{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [{cnew}]`)))
-			local zetaDoc = `{cap}/tracker/issues/{zeta}/{zeta}.md`
+			local zetaDoc = `{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`
 			local zetaBefore = fs.readFile(zetaDoc)
 			trOk(cap, { "status", rz, "prepared" })
 			t.expect(has(fs.readFile(doc), "status: prepared")).toBe(true)
-			t.expect(has(fs.readFile(`{cap}/tracker/issues/{cnew}/{cnew}.md`), "status: prepared")).toBe(true)
+			t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`), "status: prepared"))
+				.toBe(true)
 			t.expect(fs.readFile(zetaDoc)).toBe(zetaBefore)
 			git(cap, { "checkout", "-q", "--", "." })
 		end
@@ -139,6 +142,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(mid)
 	end)
 
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	it(
 		"an existing draft raft is claimed with status preparing, once; an issue in a raft is not stolen",
 		function()
@@ -147,8 +151,8 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			local legacyIssue =
 				"---\nid: c0801\ntype: chore\ntitle: Legacy issue\nslug: legacy-issue\nraft: R0800\ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-01-01\n---\n"
 			elsewhere({
-				["tracker/rafts/R0800/R0800.md"] = legacyRaft,
-				["tracker/issues/c0801/c0801.md"] = legacyIssue,
+				["pickman/.tracker/rafts/R0800/R0800.md"] = legacyRaft,
+				["pickman/.tracker/issues/c0801/c0801.md"] = legacyIssue,
 			}, "other legacy raft")
 			trOk(cap, { "sync" })
 			-- nothing stored, but the status is derived from the raft membership
@@ -163,8 +167,8 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 			-- claim it: the raft and its members get a stored stamp
 			trOk(cap, { "status", "R0800", "preparing" })
-			t.expect(has(onOrigin("tracker/rafts/R0800/R0800.md"), "status: preparing-")).toBe(true)
-			t.expect(has(onOrigin("tracker/issues/c0801/c0801.md"), "status: preparing-")).toBe(true)
+			t.expect(has(onOrigin("pickman/.tracker/rafts/R0800/R0800.md"), "status: preparing-")).toBe(true)
+			t.expect(has(onOrigin("pickman/.tracker/issues/c0801/c0801.md"), "status: preparing-")).toBe(true)
 			-- a second terminal is refused: it is stamped now
 			local again = tr(cap, { "status", "R0800", "preparing" })
 			t.expect(again.ok).toBe(false)

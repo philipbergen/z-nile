@@ -35,8 +35,9 @@ local cap = "" -- the capture worktree
 
 return t.spec("tracker commands publish state to origin/main (claim)", function(it)
 	it("sets up the claim fixture", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		-- issues up to c0230 exist, so `new issue` returns c0240 and c0250
-		local seed = { ["tracker/issues/c0230/c0230.md"] = stub("c0230", "seed", "new") }
+		local seed = { ["pickman/.tracker/issues/c0230/c0230.md"] = stub("c0230", "seed", "new") }
 		f = trackerfix.new("c0053-commands-claim", seed)
 		origin, main = f.origin, f.main
 		cap = trOk(main, { "worktree", "cap-a" })
@@ -44,14 +45,14 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 	end)
 
 	it("new raft claims its members in one commit, or none of them", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		trOk(cap, { "new", "issue", "c", "delta", "--project", "pickman" }) -- c0240
 		trOk(cap, { "new", "issue", "c", "epsilon", "--project", "pickman" }) -- c0250
 		-- another terminal claims c0250 first
 		elsewhere({
-			["tracker/issues/c0250/c0250.md"] = (onOrigin("tracker/issues/c0250/c0250.md") :: string):gsub(
-				"status: new",
-				"status: preparing"
-			),
+			["pickman/.tracker/issues/c0250/c0250.md"] = (
+				onOrigin("pickman/.tracker/issues/c0250/c0250.md") :: string
+			):gsub("status: new", "status: preparing"),
 		}, "other claims c0250")
 		local before = git(origin, { "rev-parse", "main" })
 		local r = tr(cap, { "new", "raft", "chore", "demo", "c0240", "c0250", "--project", "pickman" })
@@ -59,23 +60,27 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 		t.expect(has(r.stderr, "c0250")).toBe(true)
 		t.expect(has(r.stderr, "preparing")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
-		t.expect(has(onOrigin("tracker/issues/c0240/c0240.md"), "status: new")).toBe(true)
-		t.expect(onOrigin("tracker/rafts/R0010/R0010.md")).toBe(nil)
+		t.expect(has(onOrigin("pickman/.tracker/issues/c0240/c0240.md"), "status: new")).toBe(true)
+		t.expect(onOrigin("pickman/.tracker/rafts/R0010/R0010.md")).toBe(nil)
 		trOk(cap, { "new", "raft", "chore", "demo", "c0240", "--single", "--project", "pickman" })
-		local raft = onOrigin("tracker/rafts/R0010/R0010.md")
+		local raft = onOrigin("pickman/.tracker/rafts/R0010/R0010.md")
 		t.expect(has(raft, "status: preparing")).toBe(true)
 		t.expect(has(raft, "issues: [c0240]")).toBe(true)
-		local member = onOrigin("tracker/issues/c0240/c0240.md")
+		local member = onOrigin("pickman/.tracker/issues/c0240/c0240.md")
 		t.expect(has(member, "status: preparing")).toBe(true)
 		t.expect(has(member, "raft: R0010")).toBe(false) -- origin never carries `raft:`: it sits beside depends_on
-		t.expect(has(fs.readFile(`{cap}/tracker/issues/c0240/c0240.md`), "raft: R0010")).toBe(true)
+		t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/c0240/c0240.md`), "raft: R0010")).toBe(true)
 		t.expect(git(cap, { "log", "-1", "--format=%s" })).toBe("tracker: R0010 members")
 		t.expect(git(cap, { "status", "--porcelain" })).toBe("")
 	end)
 
 	it("status lists what origin says, even when this checkout is stale", function()
-		elsewhere({ ["tracker/issues/f0300/f0300.md"] = stub("f0300", "remote-only", "new") }, "other f0300")
-		t.expect(fs.isFile(`{cap}/tracker/issues/f0300/f0300.md`)).toBe(false)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		elsewhere(
+			{ ["pickman/.tracker/issues/f0300/f0300.md"] = stub("f0300", "remote-only", "new") },
+			"other f0300"
+		)
+		t.expect(fs.isFile(`{cap}/pickman/.tracker/issues/f0300/f0300.md`)).toBe(false)
 		local list = trOk(cap, { "status" })
 		t.expect(has(list, "f0300 new remote-only")).toBe(true)
 		t.expect(has(list, "c0240 preparing")).toBe(true)
@@ -91,18 +96,21 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 	end)
 
 	it("a move to prepared is carried by the PR: local edit only, nothing published", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local before = git(origin, { "rev-parse", "main" })
 		-- it refuses while the design is not ready: the two fields move together
 		local early = tr(cap, { "status", "c0240", "prepared" })
 		t.expect(early.ok).toBe(false)
 		t.expect(has(early.stderr, "design: ready")).toBe(true)
-		t.expect(has(fs.readFile(`{cap}/tracker/issues/c0240/c0240.md`), "status: prepared")).toBe(false)
-		local c0240 = `{cap}/tracker/issues/c0240/c0240.md`
+		t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/c0240/c0240.md`), "status: prepared"))
+			.toBe(false)
+		local c0240 = `{cap}/pickman/.tracker/issues/c0240/c0240.md`
 		fs.writeFile(c0240, (string.gsub(fs.readFile(c0240), "design: draft", "design: ready")))
 		trOk(cap, { "status", "c0240", "prepared" })
-		t.expect(has(fs.readFile(`{cap}/tracker/issues/c0240/c0240.md`), "status: prepared")).toBe(true)
+		t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/c0240/c0240.md`), "status: prepared"))
+			.toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
-		t.expect(has(onOrigin("tracker/issues/c0240/c0240.md"), "status: preparing")).toBe(true)
+		t.expect(has(onOrigin("pickman/.tracker/issues/c0240/c0240.md"), "status: preparing")).toBe(true)
 	end)
 
 	it("a move is checked against origin, not the local file; invalid moves change nothing", function()

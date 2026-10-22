@@ -9,7 +9,9 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0330-locator`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local here = fixture.physical(".") :: string
+local base = `{here}/.cache/c0330-locator`
 
 local function frontmatter(path: string): string
 	if not fs.isFile(path) then
@@ -64,8 +66,9 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 	end)
 
 	it("the spec runner refuses to run specs when AC_LIST is set", function()
+		-- c0120 override: the runner runs from z-nile's home, not the repository root
 		local r = process.exec("lune", { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }, {
-			cwd = root,
+			cwd = here,
 			env = { AC_LIST = "1" },
 		})
 		t.expect(r.ok).toBe(false)
@@ -95,7 +98,8 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 			table.concat({
 				"#!/usr/bin/env bash",
 				`source "{root}/scripts/lib/ac.sh"`,
-				`spec_out=$(lune run tests/run -- "{dir}/marker.spec.luau" 2>&1)`,
+				-- c0120 override: the runner runs from z-nile's home; ac.sh leaves a check.sh under no project root at the repository's
+				`spec_out=$(cd "$ZN_ROOT/z-nile" && lune run tests/run -- "{dir}/marker.spec.luau" 2>&1)`,
 				'check "AC1: fixture" true',
 				"finish",
 				"",
@@ -167,7 +171,7 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		local repo = `{base}/repo`
 		fs.writeDir(`{repo}/scripts/lib`)
 		fs.writeFile(`{repo}/scripts/lib/ac.sh`, fs.readFile(`{root}/scripts/lib/ac.sh`))
-		-- c0114 override: scripts/lib/ac.sh forwards to z-nile/lib/, which brings the guards it needs
+		-- c0114 override: scripts/lib/ac.sh forwards to z-nile/lib/, which brings the guards it needs (c0120: pickman's root is pickman/.tracker)
 		fs.writeDir(`{repo}/z-nile`)
 		process.exec("cp", { "-R", `{root}/z-nile/lib`, `{repo}/z-nile/lib` })
 		t.expect(process.exec("git", { "init", "-q", repo }).ok).toBe(true)
@@ -205,11 +209,11 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 			error("AC_LIST list mode is not safe (ac.sh or tests/run): not running every done check.sh")
 		end
 		local checked = 0
-		-- c0114 override: finished items live under every project root
+		-- c0114 override: finished items live under every project root (c0120: pickman's root is pickman/.tracker)
 		for _, kind in
 			{
-				"tracker/issues",
-				"tracker/rafts",
+				"pickman/.tracker/issues",
+				"pickman/.tracker/rafts",
 				"z-nile/.tracker/issues",
 				"z-nile/.tracker/rafts",
 			}
@@ -243,10 +247,10 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 
 	it("no live check.sh or the template uses the locator that needs acceptance/ to exist", function()
 		local old = '"$A/.."'
-		-- c0114 override: the template moved to z-nile/templates, and items live under every project root
+		-- c0114 override: the template moved to z-nile/templates, and items live under every project root (c0120: pickman's root is pickman/.tracker)
 		local paths: { string } = { `{root}/z-nile/templates/issue/check.sh` }
 		local dirs: { string } = {}
-		for _, top in { "tracker", "z-nile/.tracker" } do
+		for _, top in { "pickman/.tracker", "z-nile/.tracker" } do
 			for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 				table.insert(dirs, `{top}/{d}`)
 			end

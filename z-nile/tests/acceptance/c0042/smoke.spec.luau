@@ -7,6 +7,8 @@ local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home (z-nile/); the vendored marked is read from the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local fixture = {} :: any
 
@@ -208,12 +210,12 @@ return t.spec("c0400 page smoke test (node)", function(it)
 	fixture.write(`{DIR}/tracker`)
 	fs.writeFile(
 		`{DIR}/page.html`,
-		board.render(board.collect(`{DIR}/tracker`), fs.readFile(board.MARKED_PATH))
+		board.render(board.collect(`{DIR}/tracker`), fs.readFile(`{TOP}/{board.MARKED_PATH}`))
 	)
 	fixture.write(`{DIR}/quiet`, "rafts/")
 	fs.writeFile(
 		`{DIR}/quiet.html`,
-		board.render(board.collect(`{DIR}/quiet`), fs.readFile(board.MARKED_PATH))
+		board.render(board.collect(`{DIR}/quiet`), fs.readFile(`{TOP}/{board.MARKED_PATH}`))
 	)
 	fs.writeFile(`{DIR}/harness.js`, HARNESS)
 

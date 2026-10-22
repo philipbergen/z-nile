@@ -3,9 +3,13 @@
 -- multiple of 10, but the tool picks one above the highest number across the local tree and origin/main.
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home (z-nile/); the repository's files are read from the checkout's top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
 local function conflicts(): string
-	for line in string.gmatch(fs.readFile(".claude/skills/tracker/SKILL.md"), "[^\n]+") do
+	for line in string.gmatch(fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
 		if string.sub(line, 1, 15) == "- **Conflicts**" then
 			return line
 		end
@@ -44,7 +48,7 @@ return t.spec("tracker skill: Conflicts bullet", function(it)
 	)
 
 	it("the Numbering bullet says new takes its number from tracker/next (c0870)", function()
-		local text = fs.readFile(".claude/skills/tracker/SKILL.md")
+		local text = fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`)
 		t.expect(says(text, "`z-nile/next` holds the next number")).toBe(true)
 	end)
 end)

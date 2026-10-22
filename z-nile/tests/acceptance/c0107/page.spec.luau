@@ -8,6 +8,14 @@ local t = require("@tests/lib/t")
 
 local ROOT = ".cache/c0107-page"
 
+-- c0120 override: the spec runs from its home (z-nile/), but the board names its template and the vendored
+-- marked from the checkout's top (where ./zn runs), so both are read there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+if string.sub(board.TEMPLATE_PATH, 1, 1) ~= "/" then
+	board.TEMPLATE_PATH = `{TOP}/{board.TEMPLATE_PATH}`
+end
+local MARKED = `{TOP}/{board.MARKED_PATH}`
+
 local function dirname(path: string): string
 	return string.match(path, "^(.*)/[^/]*$") or "."
 end
@@ -271,7 +279,7 @@ return t.spec("c0107 board page", function(it)
 	}, "# d9104: DoneDefect\n")
 
 	local page = `{ROOT}/page.html`
-	fs.writeFile(page, board.render(board.collect(ROOT) :: any, fs.readFile(board.MARKED_PATH)))
+	fs.writeFile(page, board.render(board.collect(ROOT) :: any, fs.readFile(MARKED)))
 	fs.writeFile(`{ROOT}/harness.js`, HARNESS)
 
 	it("replaces Active, Waiting and Done with Rafts and Issues", function()
@@ -366,7 +374,7 @@ return t.spec("c0107 board page", function(it)
 		place(sent.views.issues, "c9102", "done")
 		findItem(sent.issues, "c9102").command = nil
 		local sentinel = `{ROOT}/sentinel.html`
-		fs.writeFile(sentinel, board.render(sent, fs.readFile(board.MARKED_PATH)))
+		fs.writeFile(sentinel, board.render(sent, fs.readFile(MARKED)))
 		local run = process.exec("node", { `{ROOT}/harness.js`, sentinel, "sentinel" })
 		if not run.ok then
 			error(run.stderr)

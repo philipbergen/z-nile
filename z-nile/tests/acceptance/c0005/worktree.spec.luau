@@ -18,7 +18,9 @@ local function trim(s: string): string
 end
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/wt-e2e`
+-- c0120 override: the fixture lives under the home's .cache (specs run from z-nile/, and the jail refuses the top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/wt-e2e`
 local seed = `{base}/seed`
 local origin = `{base}/origin.git`
 local main = `{base}/main`
@@ -100,8 +102,9 @@ end
 -- Finish a raft on its own branch, as `tracker.sh done` would (plain git: this spec is about
 -- worktrees, not done's checks). `from` is the raft's directory state: "" (backlog) or "active/".
 local function finishOnBranch(wt: string, raft: string, issue: string, from: string)
-	git(wt, { "mv", `tracker/rafts/{from}{raft}`, `tracker/rafts/done/{raft}` })
-	git(wt, { "mv", `tracker/issues/{from}{issue}`, `tracker/issues/done/{issue}` })
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+	git(wt, { "mv", `pickman/.tracker/rafts/{from}{raft}`, `pickman/.tracker/rafts/done/{raft}` })
+	git(wt, { "mv", `pickman/.tracker/issues/{from}{issue}`, `pickman/.tracker/issues/done/{issue}` })
 	git(wt, { "commit", "-qm", `finish {raft}` })
 	git(wt, { "push", "-q", "-u", "origin", "HEAD" })
 end
@@ -163,10 +166,11 @@ return t.spec("worktrees", function(it)
 				"new raft " .. pair[2]
 			)
 		end
-		edit(`{seed}/tracker/issues/f0050/f0050.md`, "design: draft", "design: ready")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		edit(`{seed}/pickman/.tracker/issues/f0050/f0050.md`, "design: draft", "design: ready")
 		for i = 1, #rafts do
-			edit(`{seed}/tracker/issues/f00{i}0/f00{i}0.md`, "design: draft", "design: ready")
-			edit(`{seed}/tracker/rafts/R00{i}0/R00{i}0.md`, "design: draft", "design: ready")
+			edit(`{seed}/pickman/.tracker/issues/f00{i}0/f00{i}0.md`, "design: draft", "design: ready")
+			edit(`{seed}/pickman/.tracker/rafts/R00{i}0/R00{i}0.md`, "design: draft", "design: ready")
 		end
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })
@@ -246,7 +250,8 @@ return t.spec("worktrees", function(it)
 		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
 		t.expect(git(wt1, { "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")
 		t.expect(git(wt1, { "rev-parse", "HEAD~1" })).toBe(git(main, { "rev-parse", "origin/main" }))
-		t.expect(fs.isDir(`{wt1}/tracker/rafts/active/R0010`)).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		t.expect(fs.isDir(`{wt1}/pickman/.tracker/rafts/active/R0010`)).toBe(true)
 		t.expect(git(origin, { "rev-parse", "R0010-demo" })).toBe(git(wt1, { "rev-parse", "HEAD" }))
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
 	end)
@@ -315,11 +320,13 @@ return t.spec("worktrees", function(it)
 
 	it("duplicate ids are reported", function()
 		-- the same id in two state directories
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		must(
-			process.exec(
-				"cp",
-				{ "-R", `{named}/tracker/issues/f0020`, `{named}/tracker/issues/active/f0020` }
-			),
+			process.exec("cp", {
+				"-R",
+				`{named}/pickman/.tracker/issues/f0020`,
+				`{named}/pickman/.tracker/issues/active/f0020`,
+			}),
 			"cp"
 		)
 		for _, args in { { "find", "f0020" }, { "list" } } do
@@ -333,9 +340,10 @@ return t.spec("worktrees", function(it)
 
 	it("a number shared by two prefixes is a warning", function()
 		-- f0050 exists; a chore with the same number is harmless but worth a warning
-		fs.writeDir(`{named}/tracker/issues/c0050`)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		fs.writeDir(`{named}/pickman/.tracker/issues/c0050`)
 		fs.writeFile(
-			`{named}/tracker/issues/c0050/c0050.md`,
+			`{named}/pickman/.tracker/issues/c0050/c0050.md`,
 			"---\nid: c0050\ntype: chore\ntitle: Twin\nslug: twin\n---\n"
 		)
 		local r = tr(named, { "list" })
@@ -439,12 +447,13 @@ return t.spec("worktrees", function(it)
 		-- the worktree allows unused variables; the main checkout denies them
 		fs.writeFile(`{wt2}/selene.toml`, 'std = "roblox"\n\n[rules]\nunused_variable = "allow"\n')
 		fs.writeFile(`{main}/selene.toml`, 'std = "roblox"\n\n[rules]\nunused_variable = "deny"\n')
-		fs.writeFile(`{wt2}/src/shared/Probe.luau`, probe)
-		fs.writeFile(`{main}/src/shared/Probe.luau`, probe)
-		local inWorktree = run(main, "bash", { hook }, editJson(`{wt2}/src/shared/Probe.luau`))
-		local inMain = run(main, "bash", { hook }, editJson(`{main}/src/shared/Probe.luau`))
-		fs.removeFile(`{wt2}/src/shared/Probe.luau`)
-		fs.removeFile(`{main}/src/shared/Probe.luau`)
+		-- c0120 override: the game's src/ is pickman/src/
+		fs.writeFile(`{wt2}/pickman/src/shared/Probe.luau`, probe)
+		fs.writeFile(`{main}/pickman/src/shared/Probe.luau`, probe)
+		local inWorktree = run(main, "bash", { hook }, editJson(`{wt2}/pickman/src/shared/Probe.luau`))
+		local inMain = run(main, "bash", { hook }, editJson(`{main}/pickman/src/shared/Probe.luau`))
+		fs.removeFile(`{wt2}/pickman/src/shared/Probe.luau`)
+		fs.removeFile(`{main}/pickman/src/shared/Probe.luau`)
 		git(wt2, { "checkout", "--", "selene.toml" })
 		git(main, { "checkout", "--", "selene.toml" })
 		t.expect(inWorktree.code).toBe(0)
@@ -463,19 +472,20 @@ return t.spec("worktrees", function(it)
 
 	it("stop hook gates the session's cwd worktree", function()
 		local hook = `{main}/scripts/hooks/stop.sh`
-		fs.writeFile(`{wt2}/src/shared/Broken.luau`, "--!strict\nlocal = \n")
+		-- c0120 override: the game's src/ is pickman/src/
+		fs.writeFile(`{wt2}/pickman/src/shared/Broken.luau`, "--!strict\nlocal = \n")
 		local inWorktree = run(main, "bash", { hook }, stopJson(wt2))
 		local inMain = run(main, "bash", { hook }, stopJson(main))
-		fs.removeFile(`{wt2}/src/shared/Broken.luau`)
+		fs.removeFile(`{wt2}/pickman/src/shared/Broken.luau`)
 		t.expect(inWorktree.code).toBe(2)
 		t.expect(inMain.code).toBe(0)
 	end)
 
 	it("stop hook gates the worktree root when cwd is a subdirectory", function()
 		local hook = `{main}/scripts/hooks/stop.sh`
-		fs.writeFile(`{wt2}/src/shared/Broken.luau`, "--!strict\nlocal = \n")
-		local fromSubdir = run(main, "bash", { hook }, stopJson(`{wt2}/src/shared`))
-		fs.removeFile(`{wt2}/src/shared/Broken.luau`)
+		fs.writeFile(`{wt2}/pickman/src/shared/Broken.luau`, "--!strict\nlocal = \n")
+		local fromSubdir = run(main, "bash", { hook }, stopJson(`{wt2}/pickman/src/shared`))
+		fs.removeFile(`{wt2}/pickman/src/shared/Broken.luau`)
 		t.expect(fromSubdir.code).toBe(2)
 	end)
 end)

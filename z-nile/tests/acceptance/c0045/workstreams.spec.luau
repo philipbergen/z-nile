@@ -17,7 +17,8 @@ local function trim(s: string): string
 end
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/ws-e2e`
+-- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+local base = `{fixture.physical(".") or "."}/.cache/ws-e2e`
 local seed = `{base}/seed`
 local origin = `{base}/origin.git`
 local main = `{base}/main`
@@ -65,7 +66,8 @@ end
 
 -- Replace the issue's Touched modules section with these bullets (none: keep the template comment).
 local function touches(id: string, paths: { string })
-	local doc = `{seed}/tracker/issues/{id}/{id}.md`
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+	local doc = `{seed}/pickman/.tracker/issues/{id}/{id}.md`
 	local text = fs.readFile(doc)
 	local a = string.find(text, "### Touched modules", 1, true)
 	local b = string.find(text, "### Affected specs", 1, true)
@@ -85,8 +87,9 @@ local function touches(id: string, paths: { string })
 end
 
 local function depends(id: string, deps: { string })
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 	edit(
-		`{seed}/tracker/issues/{id}/{id}.md`,
+		`{seed}/pickman/.tracker/issues/{id}/{id}.md`,
 		"depends_on: %[%]",
 		"depends_on: [" .. table.concat(deps, ", ") .. "]"
 	)
@@ -240,9 +243,10 @@ return t.spec("workstreams", function(it)
 		touches("f0200", { "src/s4" })
 		depends("f0200", { "f0180", "f0190" })
 		-- R0010 and its issues are ready to start
-		edit(`{seed}/tracker/rafts/R0010/R0010.md`, "design: draft", "design: ready")
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		edit(`{seed}/pickman/.tracker/rafts/R0010/R0010.md`, "design: draft", "design: ready")
 		for _, id in { "f0010", "f0020", "f0030", "f0040" } do
-			edit(`{seed}/tracker/issues/{id}/{id}.md`, "design: draft", "design: ready")
+			edit(`{seed}/pickman/.tracker/issues/{id}/{id}.md`, "design: draft", "design: ready")
 		end
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })
@@ -373,7 +377,8 @@ return t.spec("workstreams", function(it)
 	end)
 
 	it("stream review files are not review rounds", function()
-		local dir = `{wt1}/tracker/rafts/active/R0010`
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		local dir = `{wt1}/pickman/.tracker/rafts/active/R0010`
 		fs.writeFile(
 			`{dir}/stream-review-f0010-001.md`,
 			"# Review 001\n\n### F1 [high] x\n\nVerdict: changes\n"

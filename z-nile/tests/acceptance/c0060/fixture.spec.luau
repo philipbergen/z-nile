@@ -10,7 +10,8 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0660-fixture`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local base = `{fixture.physical(".") :: string}/.cache/c0660-fixture`
 local fx, wt, bare, norepo = `{base}/fx`, `{base}/fx-wt`, `{base}/bare.git`, `{base}/norepo`
 local outside = "" -- a repository outside any .cache folder
 local foreign = "" -- a repository under some other .cache folder

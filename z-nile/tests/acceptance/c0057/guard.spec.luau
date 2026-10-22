@@ -91,7 +91,10 @@ return t.spec("c0550 runner browser guard", function(it)
 
 	it("a spec that runs tracker.sh board without -O fails the run, which names the page", function()
 		fresh()
-		local body = `process.exec("scripts/tracker.sh", \{ "board", "--out", "{DIR}/page.html" \})`
+		-- c0120 override: ./zn resolves --out from the repository root, not from the home specs run in, and a spec may
+		-- write only under its home's .cache: the page is named by its absolute path
+		local body =
+			`process.exec("scripts/tracker.sh", \{ "board", "--out", "{process.cwd}{DIR}/page.html" \})`
 		local r = runner("1", { plant("board", body) })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout .. r.stderr, `{process.cwd}{DIR}/page.html`)).toBe(true)

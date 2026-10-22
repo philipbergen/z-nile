@@ -9,7 +9,9 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0050-clone`
+-- c0120 override: the fixture lives under the home's .cache (specs run from z-nile/, and the jail refuses the top's)
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0050-clone`
 
 local function linkedObjects(dir: string): string
 	local r = process.exec("find", { `{dir}/.git/objects`, "-type", "f", "-links", "+1" })
@@ -71,8 +73,10 @@ return t.spec("c0050 isolated clones", function(it)
 
 	it("no spec clones the repository with a plain git clone", function()
 		local files: { string } = {}
-		specs(`{root}/tests`, files)
-		specs(`{root}/tracker`, files)
+		-- c0120 override: specs live in each project's home tests/ and tracker root, not the repository root's
+		for _, dir in { "z-nile/tests", "z-nile/.tracker", "pickman/tests", "pickman/.tracker" } do
+			specs(`{root}/{dir}`, files)
+		end
 		local offenders: { string } = {}
 		for _, file in files do
 			for literal in string.gmatch(fs.readFile(file), '{%s*"clone"[^}]*}') do

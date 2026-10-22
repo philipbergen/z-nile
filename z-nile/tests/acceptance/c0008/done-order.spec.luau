@@ -12,7 +12,9 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0070-done`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = fixture.physical(".") or "."
+local base = `{here}/.cache/c0070-done`
 local work = `{base}/work`
 local bare = `{base}/github.com/fixture.git`
 local bin = `{base}/bin`
@@ -96,6 +98,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		end
 		git({ "config", "gc.auto", "0" })
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		-- c0120 override: engine.empty lays the clone out on the final layout (pickman's items in pickman/.tracker, so done
+		-- checks the promoted specs from pickman/, their home, with the clone's own pickman/tests/run.luau)
 		engine.empty(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
@@ -104,28 +108,29 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
 			"new raft"
 		)
-		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
+		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
+		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
-			"tracker/issues/f0010/f0010.md",
+			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
 		-- an acceptance spec, so that done has something to promote (and to roll back)
-		fs.writeDir(`{work}/tracker/issues/f0010/acceptance`)
+		fs.writeDir(`{work}/pickman/.tracker/issues/f0010/acceptance`)
 		write(
-			"tracker/issues/f0010/acceptance/alpha.spec.luau",
+			"pickman/.tracker/issues/f0010/acceptance/alpha.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
 		)
-		write("tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
-		write("tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
-		write("tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		-- an origin whose URL contains github.com, and a pushed branch with an upstream
 		fs.writeDir(bare)
@@ -168,9 +173,10 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 
 	it("does not mark the PR ready when done refuses", function()
 		installGh()
+		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
 		-- an unresolved review: one open finding and no answer to it
 		write(
-			"tracker/rafts/active/R0010/review-001.md",
+			"pickman/.tracker/rafts/active/R0010/review-001.md",
 			"# Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
 		)
 		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
@@ -180,12 +186,12 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local log = if fs.isFile(`{base}/gh.log`) then fs.readFile(`{base}/gh.log`) else ""
 		t.expect((string.find(log, "pr ready", 1, true))).toBe(nil)
 		-- restore the approving review for the cases that follow
-		write("tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready
 		write(
-			"tracker/issues/active/f0010/acceptance/bad.spec.luau",
+			"pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("bad", function(it)\n\tit("fails", function()\n\t\tt.expect(1).toBe(2)\n\tend)\nend)\n'
@@ -197,8 +203,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local after = if fs.isFile(`{base}/gh.log`) then fs.readFile(`{base}/gh.log`) else ""
 		t.expect((string.find(after, "pr ready", 1, true))).toBe(nil)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
-		t.expect(fs.isFile(`{work}/tracker/issues/active/f0010/acceptance/bad.spec.luau`)).toBe(true)
-		fs.removeFile(`{work}/tracker/issues/active/f0010/acceptance/bad.spec.luau`)
+		t.expect(fs.isFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau`)).toBe(true)
+		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau`)
 		must(tr({ "commit", "-m", "drop the failing spec", "--time", "1" }), "commit")
 	end)
 
@@ -210,16 +216,19 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		t.expect(string.find(r.stderr, "ready", 1, true) ~= nil).toBe(true)
 		t.expect(git({ "rev-parse", "HEAD" })).toBe(before)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
-		t.expect(fs.isDir(`{work}/tracker/rafts/active/R0010`)).toBe(true)
-		t.expect(fs.isDir(`{work}/tracker/issues/active/f0010`)).toBe(true)
-		t.expect(fs.isFile(`{work}/tracker/issues/active/f0010/acceptance/alpha.spec.luau`)).toBe(true)
-		t.expect(fs.isDir(`{work}/tests/acceptance/f0010`)).toBe(false) -- the promotion was undone
+		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
+		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/active/R0010`)).toBe(true)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/active/f0010`)).toBe(true)
+		t.expect(fs.isFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`))
+			.toBe(true)
+		t.expect(fs.isDir(`{work}/pickman/tests/acceptance/f0010`)).toBe(false) -- the promotion was undone
 		t.expect(git({ "rev-parse", "origin/R0010-demo" })).toBe(before) -- nothing was pushed
 	end)
 
 	it("marks the PR ready while origin still has the previous head, then pushes the done commit", function()
 		-- this raft has nothing to promote: the ready call must not depend on a promotion happening
-		fs.removeFile(`{work}/tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
+		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
+		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
 		must(tr({ "commit", "-m", "no acceptance spec", "--time", "1" }), "commit")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)
@@ -229,7 +238,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local after = git({ "rev-parse", "HEAD" })
 		t.expect(after ~= before).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
-		t.expect(fs.isDir(`{work}/tests/acceptance/f0010`)).toBe(false) -- nothing was promoted
+		t.expect(fs.isDir(`{work}/pickman/tests/acceptance/f0010`)).toBe(false) -- nothing was promoted
 		-- gh was asked to mark the PR ready, and to edit its body with the spend summary
 		local log = fs.readFile(`{base}/gh.log`)
 		t.expect(string.find(log, "pr ready", 1, true) ~= nil).toBe(true)

@@ -9,21 +9,24 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0650-adapt`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0650-adapt`
 local repo = `{base}/scan` -- the runner, the guards, the gate spec and c0510's specs
 local work = `{base}/work` -- a tracker clone with an origin
 local wt = `{base}/wt` -- a linked worktree of it: tracker.sh new refuses to run in a main checkout with an origin
 local origin = `{base}/origin.git`
 -- c0062 split the commands spec into parts: every `commands-*.spec.luau`, then the publish spec
+-- c0120 override: c0053 is z-nile's, its promoted specs in z-nile/tests/acceptance (root-relative, as the scan names them)
 local function c0510Specs(): { string }
 	local out: { string } = {}
-	for _, name in fs.readDir(`{root}/tests/acceptance/c0053`) do
+	for _, name in fs.readDir(`{root}/z-nile/tests/acceptance/c0053`) do
 		if string.match(name, "^commands%-.+%.spec%.luau$") then
-			table.insert(out, `tests/acceptance/c0053/{name}`)
+			table.insert(out, `z-nile/tests/acceptance/c0053/{name}`)
 		end
 	end
 	table.sort(out)
-	table.insert(out, "tests/acceptance/c0053/publish.spec.luau")
+	table.insert(out, "z-nile/tests/acceptance/c0053/publish.spec.luau")
 	return out
 end
 local C0510 = c0510Specs()
@@ -79,11 +82,12 @@ local function copyInto(dest: string, rels: { string })
 	end
 end
 
+-- c0120 override: the runner runs from the scan copy's z-nile home
 local function gate(): string
 	local r = process.exec(
 		"lune",
 		{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
-		{ cwd = repo, env = { PICKMAN_TEST_FENCE = "" } }
+		{ cwd = `{repo}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
 	)
 	return r.stdout .. r.stderr
 end
@@ -101,9 +105,11 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
+		-- c0120 override: the runner, its harness and the scan spec moved into z-nile/tests, which has its own .luaurc
 		copyInto(repo, {
-			"tests/run.luau",
-			"tests/lib",
+			"z-nile/tests/run.luau",
+			"z-nile/tests/lib",
+			"z-nile/.luaurc",
 			"zn",
 			"scripts",
 			"z-nile/engine",
@@ -111,7 +117,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			"z-nile/templates",
 			"z-nile/vendor",
 			"z-nile/projects.toml",
-			"tests/tooling/repo-fence.spec.luau",
+			"z-nile/tests/tooling/repo-fence.spec.luau",
 			".luaurc",
 		})
 		copyInto(repo, C0510)
@@ -201,7 +207,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			process.exec("git", { "status", "--porcelain", "--untracked-files=all" }, { cwd = wt }).stdout
 		t.expect(
 			string.find(status, "probe-one", 1, true) ~= nil
-				or string.find(status, "tracker/issues/c", 1, true) ~= nil
+				or string.find(status, "pickman/.tracker/issues/c", 1, true) ~= nil
 		).toBe(true)
 	end)
 
@@ -224,8 +230,9 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		setUp()
 		-- the issue the previous case published
 		local id: string? = nil
-		for _, dir in fs.readDir(`{wt}/tracker/issues`) do
-			local doc = `{wt}/tracker/issues/{dir}/{dir}.md`
+		-- c0120 override: the copied registry puts pickman's items in pickman/.tracker
+		for _, dir in fs.readDir(`{wt}/pickman/.tracker/issues`) do
+			local doc = `{wt}/pickman/.tracker/issues/{dir}/{dir}.md`
 			if fs.isFile(doc) and string.find(fs.readFile(doc), "probe-two", 1, true) then
 				id = dir
 			end

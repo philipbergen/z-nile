@@ -5,6 +5,10 @@ local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home (z-nile/); the vendored marked is read from the checkout's top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
 local fixture = {} :: any
 
@@ -261,7 +265,7 @@ end
 return t.spec("c0400 board page", function(it)
 	fixture.write(A)
 	fixture.write(B, true)
-	local marked = fs.readFile(board.MARKED_PATH)
+	local marked = fs.readFile(`{TOP}/{board.MARKED_PATH}`)
 	local mA = board.collect(A)
 	local htmlA = board.render(mA, marked)
 	local htmlA2 = board.render(board.collect(A), marked)

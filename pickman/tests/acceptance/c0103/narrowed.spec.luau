@@ -46,7 +46,7 @@ local GOLDEN = "--!strict -- ID AC5: the key map, by Enum.KeyCode name. -- Narro
 
 return t.spec("c0103 the key-map spec, narrowed", function(it)
 	it("the spec is still there, and f0014's check.sh still runs it", function()
-		local check = fs.readFile("tracker/issues/done/" .. renamed.id("f0014") .. "/check.sh")
+		local check = fs.readFile(".tracker/issues/done/" .. renamed.id("f0014") .. "/check.sh")
 		t.expect(fs.isFile(FILE)).toBe(true)
 		t.expect(string.find(check, '"$A/keys.spec.luau"', 1, true) ~= nil).toBe(true)
 	end)

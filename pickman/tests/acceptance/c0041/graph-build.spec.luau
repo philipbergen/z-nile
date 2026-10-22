@@ -2,14 +2,15 @@
 -- c0390 AC2: graph.resolve and graph.build follow @game requires, so the meta rules and the
 -- affected-spec selector see adapter -> Logic edges.
 local fs = require("@lune/fs")
-local graph = require("@scripts/lib/graph")
+-- c0120 override: this spec runs from pickman/; the graph fixture is z-nile's, z-nile/tests/fixtures/graph, so ../z-nile/ in front.
+local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 
 local DIR = ".cache/c0390-graph"
 local R = "req" .. "uire" -- never write a literal require call here; the scanner would read it
 
 local ROOTS: { graph.GameRoot } = {
-	{ instance = "ReplicatedStorage/Shared", path = "tests/fixtures/graph" },
+	{ instance = "ReplicatedStorage/Shared", path = "../z-nile/tests/fixtures/graph" },
 }
 
 local function setup()
@@ -26,13 +27,13 @@ end
 return t.spec("c0390 graph resolve and build with @game", function(it)
 	it("resolve delegates @game specs to the given roots", function()
 		t.expect(graph.resolve("src/server/X.luau", "@game/ReplicatedStorage/Shared/A", ROOTS))
-			.toBe("tests/fixtures/graph/A/init.luau")
+			.toBe("../z-nile/tests/fixtures/graph/A/init.luau")
 		t.expect(graph.resolve("src/server/X.luau", "@game/ReplicatedStorage/Shared/Nope", ROOTS)).toBe(nil)
 	end)
 
 	it("resolve still handles relative specs and .luaurc aliases as before", function()
-		t.expect(graph.resolve("tests/fixtures/graph/a_check.luau", "./A", ROOTS))
-			.toBe("tests/fixtures/graph/A/init.luau")
+		t.expect(graph.resolve("../z-nile/tests/fixtures/graph/a_check.luau", "./A", ROOTS))
+			.toBe("../z-nile/tests/fixtures/graph/A/init.luau")
 		t.expect(graph.resolve("tests/x.luau", "@tests/lib/t", ROOTS)).toBe("tests/lib/t.luau")
 	end)
 
@@ -40,7 +41,7 @@ return t.spec("c0390 graph resolve and build with @game", function(it)
 		setup()
 		local ok, err = pcall(function()
 			local g = graph.build({ DIR }, ROOTS)
-			t.expect(g.deps[`{DIR}/adapter.luau`]).toEqual({ "tests/fixtures/graph/A/init.luau" })
+			t.expect(g.deps[`{DIR}/adapter.luau`]).toEqual({ "../z-nile/tests/fixtures/graph/A/init.luau" })
 			t.expect(#g.unresolved).toBe(1)
 			t.expect(g.unresolved[1].spec).toBe("@game/ReplicatedStorage/Shared/Nope")
 			t.expect(#g.dynamic).toBe(0)
@@ -60,9 +61,9 @@ return t.spec("c0390 graph resolve and build with @game", function(it)
 		end
 		local ok, err = pcall(function()
 			t.expect(graph.resolve("src/server/X.luau", "@game/ReplicatedStorage/Shared/A"))
-				.toBe("tests/fixtures/graph/A/init.luau")
+				.toBe("../z-nile/tests/fixtures/graph/A/init.luau")
 			local g = graph.build({ DIR })
-			t.expect(g.deps[`{DIR}/adapter.luau`]).toEqual({ "tests/fixtures/graph/A/init.luau" })
+			t.expect(g.deps[`{DIR}/adapter.luau`]).toEqual({ "../z-nile/tests/fixtures/graph/A/init.luau" })
 			t.expect(#g.unresolved).toBe(1)
 		end)
 		graph.gameRoots = orig

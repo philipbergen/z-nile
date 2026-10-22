@@ -2,7 +2,10 @@
 -- c0410 AC3: the second-order rules sit in the right sections of the review
 -- skills (section-aware, so a phrase in the wrong place, or only inside the template, doesn't count).
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
+-- c0120 override: specs run from their project's home; the repository files live at the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 -- Text of the section whose "## " heading starts with `prefix`, up to the next "## " heading.
 local function section(path: string, prefix: string): string
@@ -22,7 +25,7 @@ local function has(text: string, phrase: string): boolean
 	return string.find(text, phrase, 1, true) ~= nil
 end
 
-local REVIEW = ".claude/skills/review/SKILL.md"
+local REVIEW = `{TOP}/.claude/skills/review/SKILL.md`
 
 return t.spec("c0410 review skill sections", function(it)
 	it("review: the one-step-further rule is prose, outside the template", function()

@@ -9,7 +9,9 @@ local t = require("@tests/lib/t")
 local function trim(s: string): string
 	return (string.gsub(s, "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+-- c0120 override: the runner runs from z-nile's home (it refuses the repository root), and fixtures live under the
+-- home's .cache (the jail refuses the checkout top's)
+local root = trim(process.exec("pwd", { "-P" }).stdout)
 local base = `{root}/.cache/c0470-runner`
 local rel = ".cache/c0470-runner" -- the runner takes repo-relative paths
 

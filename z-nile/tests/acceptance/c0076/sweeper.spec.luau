@@ -13,8 +13,9 @@ local task = require("@lune/task")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
-local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0076-sweeper`
+-- c0120 override: a spec writes only under its home's .cache (the jail refuses the checkout top's)
+local home = string.gsub(process.cwd, "/+$", "") -- c0120 override: written as /.cache/<name>, which c0096 reads
+local base = `{home}/.cache/c0076-sweeper`
 local jailed = process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
 
 local function trim(s: string): string

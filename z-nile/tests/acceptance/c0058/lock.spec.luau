@@ -11,9 +11,13 @@ local task = require("@lune/task")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0640-lock`
+-- c0120 override: specs run from their project's home (z-nile/): the fixtures live under its .cache (the jail refuses
+-- the top's), and the copied runner runs from the copy's z-nile/ home, whose .cache holds the lock and the probes' files
+local outer = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{outer}/.cache/c0640-lock`
 local repo = `{base}/real`
-local lock = `{repo}/.cache/tests-run.lock`
+local home = `{repo}/z-nile`
+local lock = `{home}/.cache/tests-run.lock`
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
 
 local function trim(s: string): string
@@ -54,7 +58,7 @@ end
 
 local function probe(name: string, body: string)
 	write(
-		`tests/probe/{name}.spec.luau`,
+		`z-nile/tests/probe/{name}.spec.luau`, -- c0120 override: a z-nile spec, in the copy's home
 		`--!strict\nlocal fs = {REQ}("@lune/fs")\nlocal process = {REQ}("@lune/process")\n`
 			.. `local task = {REQ}("@lune/task")\nlocal t = {REQ}("@tests/lib/t")\n`
 			.. 'local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))\n'
@@ -76,7 +80,7 @@ local function run(name: string, extra: { [string]: string }?): Result
 	return process.exec(
 		"lune",
 		{ "run", "tests/run", "--", `tests/probe/{name}.spec.luau` },
-		{ cwd = repo, env = env }
+		{ cwd = home, env = env } -- c0120 override: from the copy's z-nile/ home
 	)
 end
 
@@ -99,21 +103,22 @@ local function start(name: string, extra: { [string]: string }?): () -> Result
 	end
 end
 
+-- c0120 override (here and below): the probes' files are in the copy's home's .cache
 local function waitFor(f: string)
 	local waited = 0
-	while not fs.isFile(`{repo}/.cache/{f}`) and waited < 30 do
+	while not fs.isFile(`{home}/.cache/{f}`) and waited < 30 do
 		task.wait(0.05)
 		waited += 0.05
 	end
-	if not fs.isFile(`{repo}/.cache/{f}`) then
+	if not fs.isFile(`{home}/.cache/{f}`) then
 		error(`{f} never appeared`)
 	end
 end
 
 local function clear(names: { string })
 	for _, f in names do
-		if fs.isFile(`{repo}/.cache/{f}`) then
-			fs.removeFile(`{repo}/.cache/{f}`)
+		if fs.isFile(`{home}/.cache/{f}`) then
+			fs.removeFile(`{home}/.cache/{f}`)
 		end
 	end
 end
@@ -142,10 +147,13 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(repo)
-		for _, rel in { "tests/run.luau", "tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" } do
+		-- c0120 override: the runner, its harness and its aliases are z-nile's (z-nile/tests/, z-nile/.luaurc)
+		for _, rel in
+			{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
+		do
 			copyTree(rel)
 		end
-		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
+		for _, rel in { "z-nile/lib/git-hooks", "z-nile/.luaurc", ".luaurc", "rokit.toml", ".gitignore" } do
 			copyTree(rel)
 		end
 		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
@@ -164,7 +172,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		local commit =
 			{ "-c", "user.name=dev", "-c", "user.email=dev@example.com", "commit", "-qm", "runner" }
 		must(process.exec("git", commit, { cwd = repo }), "git commit")
-		fs.writeDir(`{repo}/.cache`)
+		fs.writeDir(`{home}/.cache`) -- c0120 override: the home's .cache
 		probe("ok", "\t\tt.expect(1).toBe(1)")
 		-- holds the lock until the second run has said that it waits
 		probe(
@@ -214,12 +222,12 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		local second = process.exec(
 			"sh",
 			{ "-c", "lune run tests/run -- tests/probe/second.spec.luau > .cache/l-second.out 2>&1" },
-			{ cwd = repo, env = ENV }
+			{ cwd = home, env = ENV } -- c0120 override: from the copy's z-nile/ home
 		)
 		t.expect(first().ok).toBe(true)
 		t.expect(second.ok).toBe(true)
-		t.expect(fs.readFile(`{repo}/.cache/l-second-saw`)).toBe("yes")
-		t.expect(has(fs.readFile(`{repo}/.cache/l-second.out`), "waiting for another test run")).toBe(true)
+		t.expect(fs.readFile(`{home}/.cache/l-second-saw`)).toBe("yes")
+		t.expect(has(fs.readFile(`{home}/.cache/l-second.out`), "waiting for another test run")).toBe(true)
 	end)
 
 	it("a lock whose every process is gone is taken over, and released at the end", function()
@@ -256,7 +264,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		process.exec("kill", { "-TERM", top })
 		-- the orphaned specs still hold the lock (their output keeps the held run open until they end)
 		local meanwhile = run("ok", { PICKMAN_TEST_LOCK_WAIT = "1" })
-		fs.writeFile(`{repo}/.cache/l-go`, "")
+		fs.writeFile(`{home}/.cache/l-go`, "")
 		waitFor("l-held-done")
 		held()
 		t.expect(meanwhile.ok).toBe(false)
@@ -284,7 +292,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		local b = start("exclusive", { PICKMAN_TEST_LOCK_WAIT = "30", PICKMAN_TEST_TAKEOVER_PAUSE = "1" })
 		local function running(): number
 			local n = 0
-			for _, name in fs.readDir(`{repo}/.cache`) do
+			for _, name in fs.readDir(`{home}/.cache`) do
 				if string.match(name, "^l%-running%-") then
 					n += 1
 				end
@@ -303,13 +311,13 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 			task.wait(0.05)
 			window += 0.05
 		end
-		fs.writeFile(`{repo}/.cache/l-go-exclusive`, "")
+		fs.writeFile(`{home}/.cache/l-go-exclusive`, "")
 		for _, finished in { a(), b() } do
 			if not finished.ok then
 				error(finished.stdout .. finished.stderr)
 			end
 		end
-		t.expect(fs.isFile(`{repo}/.cache/l-overlap`)).toBe(false)
+		t.expect(fs.isFile(`{home}/.cache/l-overlap`)).toBe(false)
 	end)
 
 	it("a run started from inside a run does not wait for the lock its parent holds", function()

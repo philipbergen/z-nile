@@ -85,7 +85,9 @@ local function build()
 	end
 	-- c0114 override: the bootstrap and the gate moved to z-nile/
 	link(STUB, `{REPO}/z-nile/check.sh`)
-	fs.writeFile(`{REPO}/z-nile/setup.sh`, fs.readFile("z-nile/setup.sh"))
+	-- c0120 override: specs run in z-nile's home, so the script is read from the checkout's top
+	local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+	fs.writeFile(`{REPO}/z-nile/setup.sh`, fs.readFile(`{top}/z-nile/setup.sh`))
 	built = true
 end
 

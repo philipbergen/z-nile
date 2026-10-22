@@ -16,7 +16,8 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local dir = `{root}/.cache/c0084-commit`
+-- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+local dir = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0084-commit`
 
 -- the identity rides in the environment: a runner nested in the fixture refuses a fixture identity in its config
 local ID: { [string]: string } = {
@@ -64,7 +65,8 @@ local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-par
 
 local a, b, raft = "", "", ""
 local function active(id: string): string
-	return `tracker/issues/active/{id}/spend.md`
+	-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+	return `pickman/.tracker/issues/active/{id}/spend.md`
 end
 
 return t.spec("tracker commit phases", function(it)
@@ -77,10 +79,12 @@ return t.spec("tracker commit phases", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{dir}/{p}` })
 		end
-		fs.writeDir(`{dir}/tracker`)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		fs.writeDir(`{dir}/pickman/.tracker`)
 		engine.copy(root, dir) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			write(`tracker/{d}/.gitkeep`, "")
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			write(`pickman/.tracker/{d}/.gitkeep`, "")
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-q", "-m", "seed" })
@@ -97,21 +101,41 @@ return t.spec("tracker commit phases", function(it)
 			"(R%d%d%d%d)"
 		) :: string
 		for _, doc in
-			{ `tracker/issues/{a}/{a}.md`, `tracker/issues/{b}/{b}.md`, `tracker/rafts/{raft}/{raft}.md` }
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			{
+				`pickman/.tracker/issues/{a}/{a}.md`,
+				`pickman/.tracker/issues/{b}/{b}.md`,
+				`pickman/.tracker/rafts/{raft}/{raft}.md`,
+			}
 		do
 			edit(doc, "design: draft", "design: ready")
 		end
-		edit(`tracker/issues/{a}/{a}.md`, "### Touched modules\n", "### Touched modules\n- `notes/alpha`\n")
-		edit(`tracker/issues/{b}/{b}.md`, "### Touched modules\n", "### Touched modules\n- `notes/beta`\n")
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		edit(
+			`pickman/.tracker/issues/{a}/{a}.md`,
+			"### Touched modules\n",
+			"### Touched modules\n- `notes/alpha`\n"
+		)
+		edit(
+			`pickman/.tracker/issues/{b}/{b}.md`,
+			"### Touched modules\n",
+			"### Touched modules\n- `notes/beta`\n"
+		)
 		for _, p in
-			{ `tracker/issues/{a}/check.sh`, `tracker/issues/{b}/check.sh`, `tracker/rafts/{raft}/check.sh` }
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			{
+				`pickman/.tracker/issues/{a}/check.sh`,
+				`pickman/.tracker/issues/{b}/check.sh`,
+				`pickman/.tracker/rafts/{raft}/check.sh`,
+			}
 		do
 			write(p, TRIVIAL_CHECK)
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-q", "-m", "prep ready" })
 		must(tr({ "start", raft }), "start")
-		t.expect(fs.isDir(`{dir}/tracker/rafts/active/{raft}`)).toBe(true)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/active/{raft}`)).toBe(true)
 	end)
 
 	it("records build by default, with no tokens and the trailer as before", function()
@@ -126,7 +150,8 @@ return t.spec("tracker commit phases", function(it)
 	end)
 
 	it("records the phase and tokens it is given, and names them in the trailer", function()
-		write(`tracker/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		write(`pickman/.tracker/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(
 			tr({
 				"commit",
@@ -209,10 +234,12 @@ return t.spec("tracker commit phases", function(it)
 
 	it("done records its own commit as deliver, and the raft summary shows each phase", function()
 		must(tr({ "done", raft }), "done")
-		local ra = rows(`tracker/issues/done/{a}/spend.md`)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local ra = rows(`pickman/.tracker/issues/done/{a}/spend.md`)
 		t.expect(ra[#ra].phase).toBe("deliver")
 		t.expect(ra[#ra].subject).toBe(`tracker: done {raft}`)
-		local summary = fs.readFile(`{dir}/tracker/rafts/done/{raft}/spend.md`)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local summary = fs.readFile(`{dir}/pickman/.tracker/rafts/done/{raft}/spend.md`)
 		t.expect(string.find(summary, "| phase | +lines | -lines | minutes | tokens |", 1, true) ~= nil)
 			.toBe(true)
 		t.expect(string.find(summary, "| code-review | 0 | 0 | 5.0 | 777 |", 1, true) ~= nil).toBe(true)

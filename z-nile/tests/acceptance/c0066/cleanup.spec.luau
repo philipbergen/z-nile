@@ -8,11 +8,8 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local task = require("@lune/task")
 
-local function trim(s: string): string
-	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
-end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0720-cleanup`
+-- c0120 override: a spec writes only under its home's .cache (the jail refuses the checkout top's)
+local base = `{process.cwd}.cache/c0720-cleanup`
 
 local function tree(name: string): string
 	local dir = `{base}/{name}`

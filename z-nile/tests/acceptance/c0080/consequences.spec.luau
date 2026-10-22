@@ -12,7 +12,9 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0860-consequences`
+-- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+local here = fixture.physical(".") or "."
+local base = `{here}/.cache/c0860-consequences`
 local work = `{base}/work`
 
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
@@ -69,7 +71,8 @@ local reviewed = ""
 -- every case starts from the reviewed commit, then answers the review with `lines` and runs done
 local function answer(lines: { string }): Result
 	git({ "reset", "-q", "--hard", reviewed })
-	write("tracker/rafts/active/R0010/refute-001.md", table.concat(lines, "\n") .. "\n")
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(lines, "\n") .. "\n")
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
 	return tr({ "done", "R0010" })
 end
@@ -108,21 +111,23 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
 			"new raft"
 		)
-		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
-			"tracker/issues/f0010/f0010.md",
+			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
-		write("tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
-		write("tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		write(
-			"tracker/rafts/active/R0010/review-001.md",
+			"pickman/.tracker/rafts/active/R0010/review-001.md",
 			"# Review 001\n\n### F1 [low] a small thing\nEvidence: x\n\n### F2 [high] a big thing\nEvidence: y\n\nVerdict: changes\n"
 		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
@@ -136,7 +141,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		t.expect(has(r.stderr, "F2")).toBe(true)
 		t.expect(has(r.stderr, "consequences")).toBe(true)
 		t.expect(has(r.stderr, "F1:")).toBe(false) -- F1 is answered properly
-		t.expect(fs.isDir(`{work}/tracker/rafts/active/R0010`)).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/active/R0010`)).toBe(true)
 	end)
 
 	it("a fixed answer with empty consequences is refused", function()

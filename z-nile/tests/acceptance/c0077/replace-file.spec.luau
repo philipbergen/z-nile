@@ -13,7 +13,9 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0830-replace`
+-- c0120 override: the stand-ins live under the home's .cache (specs run from z-nile/, and the jail refuses the top's)
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0830-replace`
 local REPLACE = `{root}/z-nile/lib/replace-file.pl`
 
 local function has(text: string, part: string): boolean
@@ -68,6 +70,18 @@ local function gateCopy(name: string): string
 	local dir = `{base}/{name}`
 	-- c0114 override: the gate and its libraries moved to z-nile/
 	fs.writeDir(`{dir}/z-nile/lib`)
+	-- c0120 override: the gate builds the places, makes the sourcemap and runs the specs of the folders that have
+	-- them (a tree without ./zn is one project at the root): a game's src/, project files and tests/
+	fs.writeDir(`{dir}/src`)
+	fs.writeDir(`{dir}/tests`)
+	fs.writeFile(
+		`{dir}/default.project.json`,
+		'{ "name": "stand-in", "tree": { "$className": "DataModel" } }\n'
+	)
+	fs.writeFile(
+		`{dir}/lobby.project.json`,
+		'{ "name": "stand-in-lobby", "tree": { "$className": "DataModel" } }\n'
+	)
 	fs.writeFile(`{dir}/z-nile/check.sh`, fs.readFile(`{root}/z-nile/check.sh`))
 	for _, lib in fs.readDir(`{root}/z-nile/lib`) do
 		if fs.isFile(`{root}/z-nile/lib/{lib}`) then

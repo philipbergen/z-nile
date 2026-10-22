@@ -1,7 +1,7 @@
 --!strict
 -- c0020 AC3: specs that load the built place are affected by any src/ or project-file change,
 -- even though they do not require src/ directly.
-local graph = require("@scripts/lib/graph")
+local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 
 local function isSpec(f: string): boolean

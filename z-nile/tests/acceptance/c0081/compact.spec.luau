@@ -18,7 +18,9 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0870-compact`
+-- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local base = `{here}/.cache/c0870-compact`
 local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
@@ -71,13 +73,14 @@ local function read(wt: string, path: string): string?
 end
 
 -- Issues sort as (1,c) (1,f) (2,f) (10,c) (100,c) (500,d): f0001 -> f0002 lands on the old f0002 before it moves.
+-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 local ISSUES = {
-	{ "tracker/issues/c0001", "c0001", "" },
-	{ "tracker/issues/f0001", "f0001", "" },
-	{ "tracker/issues/f0002", "f0002", "" },
-	{ "tracker/issues/done/c0010", "c0010", "raft: R0020\n" },
-	{ "tracker/issues/c0100", "c0100", "raft: R0280\ndepends_on: [c0010]\n" },
-	{ "tracker/issues/d0500", "d0500", "raft: R0280\n" },
+	{ "pickman/.tracker/issues/c0001", "c0001", "" },
+	{ "pickman/.tracker/issues/f0001", "f0001", "" },
+	{ "pickman/.tracker/issues/f0002", "f0002", "" },
+	{ "pickman/.tracker/issues/done/c0010", "c0010", "raft: R0020\n" },
+	{ "pickman/.tracker/issues/c0100", "c0100", "raft: R0280\ndepends_on: [c0010]\n" },
+	{ "pickman/.tracker/issues/d0500", "d0500", "raft: R0280\n" },
 }
 local WANT = {
 	c0001 = "c0001",
@@ -94,6 +97,7 @@ local busyWt = ""
 
 return t.spec("c0870 compact", function(it)
 	it("sets up an origin with items, promoted specs and references to them", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -103,8 +107,8 @@ return t.spec("c0870 compact", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
 		-- a template that names ids which the compaction moves: templates are never rewritten
 		write(`{seed}/z-nile/templates/issue/example.md`, "For example c0010, f0001 and R0020.\n")
 		write(`{seed}/z-nile/next`, "issue 501 a-b-c\nraft 281 a-b-c\n")
@@ -116,22 +120,26 @@ return t.spec("c0870 compact", function(it)
 			write(`{seed}/{i[1]}/check.sh`, checkSh(i[2]))
 		end
 		write(
-			`{seed}/tracker/issues/c0100/acceptance/a.spec.luau`,
+			`{seed}/pickman/.tracker/issues/c0100/acceptance/a.spec.luau`,
 			'local P = "' .. TA .. 'c0010/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n'
 		)
-		write(`{seed}/tracker/issues/c0100/experiments/e1.txt`, "c0100 and c0010 stay here\n")
-		write(`{seed}/tracker/rafts/done/R0020/R0020.md`, doc("R0020", "issues: [c0010]\n", "Done."))
-		write(`{seed}/tracker/rafts/R0280/R0280.md`, doc("R0280", "issues: [c0100, d0500]\n", "After R0020."))
-		write(`{seed}/tracker/architecture.md`, "# Architecture\n\nc0100 added the store.\n")
-		-- promoted specs: a fixture path inside one must stay as it is
+		write(`{seed}/pickman/.tracker/issues/c0100/experiments/e1.txt`, "c0100 and c0010 stay here\n")
+		write(`{seed}/pickman/.tracker/rafts/done/R0020/R0020.md`, doc("R0020", "issues: [c0010]\n", "Done."))
 		write(
-			`{seed}/tests/acceptance/c0010/x.spec.luau`,
+			`{seed}/pickman/.tracker/rafts/R0280/R0280.md`,
+			doc("R0280", "issues: [c0100, d0500]\n", "After R0020.")
+		)
+		write(`{seed}/pickman/.tracker/architecture.md`, "# Architecture\n\nc0100 added the store.\n")
+		-- promoted specs: a fixture path inside one must stay as it is
+		-- c0120 override: pickman's promoted specs (and its other specs) live in its home, pickman/tests/
+		write(
+			`{seed}/pickman/tests/acceptance/c0010/x.spec.luau`,
 			"local inside = `{dir}/tests/acceptance/c0010/y` -- c0100\n"
 		)
-		write(`{seed}/tests/acceptance/f0001/y.spec.luau`, "return 1\n")
-		write(`{seed}/tests/acceptance/f0002/z.spec.luau`, "return 2\n")
+		write(`{seed}/pickman/tests/acceptance/f0001/y.spec.luau`, "return 1\n")
+		write(`{seed}/pickman/tests/acceptance/f0002/z.spec.luau`, "return 2\n")
 		write(
-			`{seed}/tests/tooling/ref.spec.luau`,
+			`{seed}/pickman/tests/tooling/ref.spec.luau`,
 			'-- See c0010.\nlocal LIST = { "'
 				.. TA
 				.. 'c0010/x.spec.luau", "'
@@ -167,7 +175,8 @@ return t.spec("c0870 compact", function(it)
 	end)
 
 	it("refuses while a branch on origin changes tracker/, and names it", function()
-		pushBranch("prep-busy", "tracker/issues/c0100/notes.md")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		pushBranch("prep-busy", "pickman/.tracker/issues/c0100/notes.md")
 		pushBranch("code-only", "src/thing.luau")
 		local wt = worktree("compact-a")
 		local head = git(wt, { "rev-parse", "HEAD" })
@@ -182,7 +191,7 @@ return t.spec("c0870 compact", function(it)
 	end)
 
 	it("a branch that changes tests/acceptance/ is busy too", function()
-		pushBranch("spec-busy", TA .. "c0010/w.spec.luau")
+		pushBranch("spec-busy", "pickman/" .. TA .. "c0010/w.spec.luau") -- c0120 override: pickman's promoted specs
 		local r = tr(worktree("compact-b"), { "compact" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "spec-busy")).toBe(true)
@@ -190,10 +199,11 @@ return t.spec("c0870 compact", function(it)
 	end)
 
 	it("a local branch that changes tracker/ is busy too", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		git(main, { "branch", "-q", "local-busy", "origin/main" })
 		local wt = worktree("local-busy-wt")
 		git(wt, { "switch", "-q", "local-busy" })
-		write(`{wt}/tracker/issues/c0001/more.md`, "more\n")
+		write(`{wt}/pickman/.tracker/issues/c0001/more.md`, "more\n")
 		git(wt, { "add", "-A" })
 		git(wt, { "commit", "-q", "-m", "local work" })
 		local r = tr(worktree("compact-c"), { "compact" })
@@ -204,6 +214,7 @@ return t.spec("c0870 compact", function(it)
 	end)
 
 	it("refuses unless HEAD is origin/main, and on a dirty tree", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = worktree("compact-d")
 		write(`{wt}/scratch.txt`, "dirty\n")
 		t.expect(tr(wt, { "compact" }).ok).toBe(false)
@@ -212,14 +223,17 @@ return t.spec("c0870 compact", function(it)
 		local r = tr(wt, { "compact" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "origin/main")).toBe(true)
-		t.expect(fs.isDir(`{wt}/tracker/issues/c0010`) or fs.isDir(`{wt}/tracker/issues/done/c0010`))
-			.toBe(true)
+		t.expect(
+			fs.isDir(`{wt}/pickman/.tracker/issues/c0010`)
+				or fs.isDir(`{wt}/pickman/.tracker/issues/done/c0010`)
+		).toBe(true)
 	end)
 
 	it("refuses a tree the audit rejects (a duplicate id) and names the problem", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		git(other, { "checkout", "-q", "main" })
 		git(other, { "pull", "-q", "origin", "main" })
-		write(`{other}/tracker/issues/done/c0100/c0100.md`, doc("c0100", "", "a second copy"))
+		write(`{other}/pickman/.tracker/issues/done/c0100/c0100.md`, doc("c0100", "", "a second copy"))
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "duplicate" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
@@ -228,8 +242,8 @@ return t.spec("c0870 compact", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "duplicate")).toBe(true)
 		t.expect(has(r.stderr, "c0100")).toBe(true)
-		t.expect(fs.isDir(`{wt}/tracker/issues/c0100`)).toBe(true)
-		git(other, { "rm", "-rq", "tracker/issues/done/c0100" })
+		t.expect(fs.isDir(`{wt}/pickman/.tracker/issues/c0100`)).toBe(true)
+		git(other, { "rm", "-rq", "pickman/.tracker/issues/done/c0100" })
 		git(other, { "commit", "-q", "-m", "drop the duplicate" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 	end)
@@ -249,56 +263,63 @@ return t.spec("c0870 compact", function(it)
 	end)
 
 	it("renames every item directory and document, chains included", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = busyWt
 		for _, path in
 			{
-				"tracker/issues/c0001/c0001.md",
-				"tracker/issues/f0002/f0002.md",
-				"tracker/issues/f0003/f0003.md",
-				"tracker/issues/done/c0004/c0004.md",
-				"tracker/issues/c0005/c0005.md",
-				"tracker/issues/d0006/d0006.md",
-				"tracker/rafts/done/R0001/R0001.md",
-				"tracker/rafts/R0002/R0002.md",
+				"pickman/.tracker/issues/c0001/c0001.md",
+				"pickman/.tracker/issues/f0002/f0002.md",
+				"pickman/.tracker/issues/f0003/f0003.md",
+				"pickman/.tracker/issues/done/c0004/c0004.md",
+				"pickman/.tracker/issues/c0005/c0005.md",
+				"pickman/.tracker/issues/d0006/d0006.md",
+				"pickman/.tracker/rafts/done/R0001/R0001.md",
+				"pickman/.tracker/rafts/R0002/R0002.md",
 			}
 		do
 			t.expect(fs.isFile(`{wt}/{path}`)).toBe(true)
 		end
 		for _, gone in { "f0001", "done/c0010", "c0100", "d0500" } do
-			t.expect(fs.isDir(`{wt}/tracker/issues/{gone}`)).toBe(false)
+			t.expect(fs.isDir(`{wt}/pickman/.tracker/issues/{gone}`)).toBe(false)
 		end
-		t.expect(fs.isDir(`{wt}/tracker/rafts/R0280`)).toBe(false)
+		t.expect(fs.isDir(`{wt}/pickman/.tracker/rafts/R0280`)).toBe(false)
 		-- the old f0002 became f0003, with its own text (not overwritten by the old f0001)
-		t.expect(has(read(wt, "tracker/issues/f0003/f0003.md"), "id: f0003")).toBe(true)
-		t.expect(has(read(wt, "tracker/issues/f0002/f0002.md"), "id: f0002\n")).toBe(true)
-		t.expect(has(read(wt, "tracker/issues/f0002/f0002.md"), "# f0002: T")).toBe(true)
+		t.expect(has(read(wt, "pickman/.tracker/issues/f0003/f0003.md"), "id: f0003")).toBe(true)
+		t.expect(has(read(wt, "pickman/.tracker/issues/f0002/f0002.md"), "id: f0002\n")).toBe(true)
+		t.expect(has(read(wt, "pickman/.tracker/issues/f0002/f0002.md"), "# f0002: T")).toBe(true)
 	end)
 
 	it("rewrites ids in tracker documents and check.sh files in one pass", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = busyWt
-		local c5 = read(wt, "tracker/issues/c0005/c0005.md") :: string
+		local c5 = read(wt, "pickman/.tracker/issues/c0005/c0005.md") :: string
 		t.expect(has(c5, "Blocks c0005; see c0004 and R0002 (not c00100).")).toBe(true)
 		t.expect(has(c5, "raft: R0002")).toBe(true)
 		t.expect(has(c5, "depends_on: [c0004]")).toBe(true)
-		t.expect(has(read(wt, "tracker/rafts/R0002/R0002.md"), "issues: [c0005, d0006]")).toBe(true)
-		t.expect(has(read(wt, "tracker/architecture.md"), "c0005 added the store.")).toBe(true)
-		t.expect(has(read(wt, "tracker/issues/done/c0004/check.sh"), 'A="$PWD/tests/acceptance/c0004"'))
+		t.expect(has(read(wt, "pickman/.tracker/rafts/R0002/R0002.md"), "issues: [c0005, d0006]")).toBe(true)
+		t.expect(has(read(wt, "pickman/.tracker/architecture.md"), "c0005 added the store.")).toBe(true)
+		t.expect(
+			has(read(wt, "pickman/.tracker/issues/done/c0004/check.sh"), 'A="$PWD/tests/acceptance/c0004"')
+		)
 			.toBe(true)
 		-- not .md or .sh: left alone
-		t.expect(read(wt, "tracker/issues/c0005/experiments/e1.txt")).toBe("c0100 and c0010 stay here\n")
+		t.expect(read(wt, "pickman/.tracker/issues/c0005/experiments/e1.txt"))
+			.toBe("c0100 and c0010 stay here\n")
 	end)
 
 	it(
 		"renames promoted spec folders unchanged and rewrites real paths to them, not fixture paths",
 		function()
+			-- c0120 override: pickman's items live in pickman/.tracker, its promoted (and other) specs in pickman/tests/
 			local wt = busyWt
-			t.expect(read(wt, TA .. "c0004/x.spec.luau"))
+			local PTA = "pickman/" .. TA
+			t.expect(read(wt, PTA .. "c0004/x.spec.luau"))
 				.toBe("local inside = `{dir}/tests/acceptance/c0010/y` -- c0100\n")
-			t.expect(read(wt, TA .. "f0002/y.spec.luau")).toBe("return 1\n")
-			t.expect(read(wt, TA .. "f0003/z.spec.luau")).toBe("return 2\n")
-			t.expect(fs.isDir(`{wt}/tests/acceptance/c0010`)).toBe(false)
-			t.expect(fs.isDir(`{wt}/tests/acceptance/f0001`)).toBe(false)
-			t.expect(read(wt, "tests/tooling/ref.spec.luau")).toBe(
+			t.expect(read(wt, PTA .. "f0002/y.spec.luau")).toBe("return 1\n")
+			t.expect(read(wt, PTA .. "f0003/z.spec.luau")).toBe("return 2\n")
+			t.expect(fs.isDir(`{wt}/pickman/tests/acceptance/c0010`)).toBe(false)
+			t.expect(fs.isDir(`{wt}/pickman/tests/acceptance/f0001`)).toBe(false)
+			t.expect(read(wt, "pickman/tests/tooling/ref.spec.luau")).toBe(
 				'-- See c0010.\nlocal LIST = { "'
 					.. TA
 					.. 'c0004/x.spec.luau", "'
@@ -306,11 +327,13 @@ return t.spec("c0870 compact", function(it)
 					.. 'f0003/z.spec.luau" }\n'
 			)
 			t.expect(read(wt, "docs.md")).toBe("Run `" .. TA .. "f0002/y.spec.luau` (c0100).\n")
-			t.expect(read(wt, "tracker/issues/c0005/acceptance/a.spec.luau"))
+			t.expect(read(wt, "pickman/.tracker/issues/c0005/acceptance/a.spec.luau"))
 				.toBe('local P = "' .. TA .. 'c0004/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n')
 			-- git records the promoted specs as pure renames
-			local moved =
-				git(wt, { "diff", "--name-status", "-M100%", "HEAD^", "HEAD", "--", "tests/acceptance" })
+			local moved = git(
+				wt,
+				{ "diff", "--name-status", "-M100%", "HEAD^", "HEAD", "--", "pickman/tests/acceptance" }
+			)
 			for line in string.gmatch(moved, "[^\n]+") do
 				t.expect(string.sub(line, 1, 4)).toBe("R100")
 			end
@@ -338,14 +361,15 @@ return t.spec("c0870 compact", function(it)
 	end)
 
 	it("--force compacts despite a busy branch and tells its owner to remap", function()
-		pushBranch("prep-late", "tracker/issues/c0100/late.md")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		pushBranch("prep-late", "pickman/.tracker/issues/c0100/late.md")
 		local wt = worktree("compact-g")
 		local r = tr(wt, { "compact", "--force" })
 		t.expect(r.ok).toBe(true)
 		local said = r.stdout .. r.stderr
 		t.expect(has(said, "prep-late")).toBe(true)
 		t.expect(has(said, "remap")).toBe(true)
-		t.expect(fs.isFile(`{wt}/tracker/issues/c0005/c0005.md`)).toBe(true)
+		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/c0005/c0005.md`)).toBe(true)
 		dropBranch("prep-late")
 	end)
 

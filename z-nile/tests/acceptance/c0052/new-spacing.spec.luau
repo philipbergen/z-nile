@@ -19,11 +19,12 @@ process.exec("git", { "init", "-q" }, { cwd = base })
 fs.writeDir(`{base}/z-nile`)
 process.exec("cp", { "-R", `{root}/z-nile/templates`, `{base}/z-nile/templates` })
 engine.registry(base) -- c0114: a tree without the registry refuses
-fs.writeDir(`{base}/tracker`)
+-- c0120 override: pickman's items live in pickman/.tracker (tracker/ is retired), here and below
+fs.writeDir(`{base}/pickman/.tracker`)
 
 local function put(id: string)
-	fs.writeDir(`{base}/tracker/issues/{id}`)
-	fs.writeFile(`{base}/tracker/issues/{id}/{id}.md`, `---\nid: {id}\ntitle: T\nslug: s\n---\n`)
+	fs.writeDir(`{base}/pickman/.tracker/issues/{id}`)
+	fs.writeFile(`{base}/pickman/.tracker/issues/{id}/{id}.md`, `---\nid: {id}\ntitle: T\nslug: s\n---\n`)
 end
 
 local function new(args: { string }): process.ExecResult
@@ -45,15 +46,15 @@ return t.spec("new keeps multiple-of-10 spacing", function(it)
 			put("c0102")
 			local r = new({ "issue", "c", "next-one" })
 			t.expect(r.ok).toBe(true)
-			t.expect(fs.isFile(`{base}/tracker/issues/c0120/c0120.md`)).toBe(true)
+			t.expect(fs.isFile(`{base}/pickman/.tracker/issues/c0120/c0120.md`)).toBe(true)
 		end
 	)
 
 	it("after 0120 comes 0130, not 0121", function()
 		local r = new({ "issue", "d", "again" })
 		t.expect(r.ok).toBe(true)
-		t.expect(fs.isFile(`{base}/tracker/issues/d0130/d0130.md`)).toBe(true)
-		t.expect(fs.isFile(`{base}/tracker/issues/d0121/d0121.md`)).toBe(false)
+		t.expect(fs.isFile(`{base}/pickman/.tracker/issues/d0130/d0130.md`)).toBe(true)
+		t.expect(fs.isFile(`{base}/pickman/.tracker/issues/d0121/d0121.md`)).toBe(false)
 	end)
 
 	it("cleanup", function()

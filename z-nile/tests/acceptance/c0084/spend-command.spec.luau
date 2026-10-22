@@ -17,7 +17,8 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/c0084-spend`
+-- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0084-spend`
 local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
@@ -78,11 +79,17 @@ return t.spec("tracker spend", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		fs.writeDir(`{seed}/pickman/.tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		process.exec("cp", { `{root}/tracker/architecture.md`, `{seed}/tracker/architecture.md` }) -- ready's prompt
+		-- c0120 override: the checkout keeps pickman's architecture.md in pickman/.tracker, the fixtures' pickman root too
+		process.exec(
+			"cp",
+			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+		) -- ready's prompt
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			write(`{seed}/tracker/{d}/.gitkeep`, "")
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			write(`{seed}/pickman/.tracker/{d}/.gitkeep`, "")
 		end
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
@@ -106,7 +113,8 @@ return t.spec("tracker spend", function(it)
 			"(R%d%d%d%d)"
 		) :: string
 		t.expect(a ~= b).toBe(true)
-		t.expect(has(git(origin, { "show", `main:tracker/rafts/{raft}/{raft}.md` }), a)).toBe(true)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(has(git(origin, { "show", `main:pickman/.tracker/rafts/{raft}/{raft}.md` }), a)).toBe(true)
 	end)
 
 	it(
@@ -127,8 +135,9 @@ return t.spec("tracker spend", function(it)
 			})
 			t.expect(has(out, a)).toBe(true)
 			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
-			t.expect(changed(before)).toBe(`tracker/issues/{a}/spend.md`)
-			local l = onOrigin(`tracker/issues/{a}/spend.md`)
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			t.expect(changed(before)).toBe(`pickman/.tracker/issues/{a}/spend.md`)
+			local l = onOrigin(`pickman/.tracker/issues/{a}/spend.md`)
 			t.expect(#l.rows).toBe(1)
 			t.expect(l.id).toBe(a)
 			t.expect(l.rows[1].phase).toBe("capture")
@@ -136,11 +145,13 @@ return t.spec("tracker spend", function(it)
 			t.expect(l.rows[1].tokens).toBe(1200)
 			t.expect(l.rows[1].added).toBe(0)
 			t.expect(l.rows[1].subject).toBe("captured alpha")
-			local text = git(origin, { "show", `main:tracker/issues/{a}/spend.md` }) .. "\n"
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			local text = git(origin, { "show", `main:pickman/.tracker/issues/{a}/spend.md` }) .. "\n"
 			t.expect(ledger.appendOnly(nil, text, a)).toBe(nil) -- the ledger's own form
 			t.expect(git(prep, { "rev-parse", "HEAD" })).toBe(head)
 			t.expect(git(prep, { "status", "--porcelain" })).toBe("")
-			t.expect(fs.isFile(`{prep}/tracker/issues/{a}/spend.md`)).toBe(false)
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			t.expect(fs.isFile(`{prep}/pickman/.tracker/issues/{a}/spend.md`)).toBe(false)
 		end
 	)
 
@@ -161,33 +172,41 @@ return t.spec("tracker spend", function(it)
 		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 		local names = string.split(changed(before), "\n")
 		table.sort(names)
-		local want = { `tracker/issues/{a}/spend.md`, `tracker/issues/{b}/spend.md` }
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local want = { `pickman/.tracker/issues/{a}/spend.md`, `pickman/.tracker/issues/{b}/spend.md` }
 		table.sort(want)
 		t.expect(names).toEqual(want)
-		local ra, rb = last(`tracker/issues/{a}/spend.md`), last(`tracker/issues/{b}/spend.md`)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local ra, rb =
+			last(`pickman/.tracker/issues/{a}/spend.md`), last(`pickman/.tracker/issues/{b}/spend.md`)
 		t.expect(ra.phase).toBe("design-review")
 		t.expect(rb.phase).toBe("design-review")
 		t.expect(ra.minutes + rb.minutes).toBeNear(9, 0.11)
 		t.expect((ra.tokens or 0) + (rb.tokens or 0)).toBe(3001)
 		t.expect(ra.added + rb.added).toBe(0)
-		t.expect(#onOrigin(`tracker/issues/{a}/spend.md`).rows).toBe(2) -- the capture row is kept
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(#onOrigin(`pickman/.tracker/issues/{a}/spend.md`).rows).toBe(2) -- the capture row is kept
 	end)
 
 	it(
 		"prep counts the lines the prep branch wrote in check.sh, acceptance and experiments, by member",
 		function()
 			trOk(prep, { "sync" })
-			write(`{prep}/tracker/issues/{a}/acceptance/x.spec.luau`, "1\n2\n3\n4\n5\n6\n")
-			write(`{prep}/tracker/issues/{b}/experiments/e1.sh`, "echo 1\necho 2\n")
-			local rc = `{prep}/tracker/rafts/{raft}/check.sh`
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			write(`{prep}/pickman/.tracker/issues/{a}/acceptance/x.spec.luau`, "1\n2\n3\n4\n5\n6\n")
+			write(`{prep}/pickman/.tracker/issues/{b}/experiments/e1.sh`, "echo 1\necho 2\n")
+			local rc = `{prep}/pickman/.tracker/rafts/{raft}/check.sh`
 			fs.writeFile(rc, fs.readFile(rc) .. "# one\n# two\n")
-			local doc = `{prep}/tracker/issues/{a}/{a}.md`
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			local doc = `{prep}/pickman/.tracker/issues/{a}/{a}.md`
 			fs.writeFile(doc, fs.readFile(doc) .. "\nDesign text that is not counted.\nMore.\n")
 			write(`{prep}/notes.txt`, "a\nb\nc\nd\ne\n")
 			git(prep, { "add", "-A" })
 			git(prep, { "commit", "-q", "-m", "prep" })
 			trOk(prep, { "spend", raft, "--phase", "prep", "--time", "10" })
-			local ra, rb = last(`tracker/issues/{a}/spend.md`), last(`tracker/issues/{b}/spend.md`)
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			local ra, rb =
+				last(`pickman/.tracker/issues/{a}/spend.md`), last(`pickman/.tracker/issues/{b}/spend.md`)
 			t.expect(ra.phase).toBe("prep")
 			t.expect(ra.added).toBe(7) -- six spec lines and half of the raft's two check.sh lines
 			t.expect(rb.added).toBe(3) -- two experiment lines and the other half
@@ -195,7 +214,8 @@ return t.spec("tracker spend", function(it)
 			t.expect(rb.minutes).toBeNear(3, 0.01)
 			-- any other phase records no lines, whatever the branch wrote
 			trOk(prep, { "spend", b, "--phase", "design-review", "--time", "1" })
-			t.expect(last(`tracker/issues/{b}/spend.md`).added).toBe(0)
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			t.expect(last(`pickman/.tracker/issues/{b}/spend.md`).added).toBe(0)
 		end
 	)
 
@@ -207,7 +227,8 @@ return t.spec("tracker spend", function(it)
 		git(other, { "commit", "-q", "-m", "prep demo (#1)" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 		trOk(prep, { "spend", a, "--phase", "prep", "--time", "2" })
-		t.expect(last(`tracker/issues/{a}/spend.md`).added).toBe(6) -- its own spec lines; the raft's check.sh is not its
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(last(`pickman/.tracker/issues/{a}/spend.md`).added).toBe(6) -- its own spec lines; the raft's check.sh is not its
 	end)
 
 	it("refuses bad input and the main checkout, and pushes nothing", function()
@@ -254,13 +275,15 @@ return t.spec("tracker spend", function(it)
 		"refuses an item that is active on origin/main, readied or claimed, and names commit --phase",
 		function()
 			git(other, { "pull", "-q", "origin", "main" })
-			git(other, { "mv", `tracker/issues/{b}`, `tracker/issues/active/{b}` })
-			local bdoc = `{other}/tracker/issues/active/{b}/{b}.md`
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			git(other, { "mv", `pickman/.tracker/issues/{b}`, `pickman/.tracker/issues/active/{b}` })
+			local bdoc = `{other}/pickman/.tracker/issues/active/{b}/{b}.md`
 			fs.writeFile(
 				bdoc,
 				(string.gsub(fs.readFile(bdoc), "\nstatus: [^\n]*", "\nstatus: active-red-fox-kite"))
 			)
-			local adoc = `{other}/tracker/issues/{a}/{a}.md`
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			local adoc = `{other}/pickman/.tracker/issues/{a}/{a}.md`
 			fs.writeFile(
 				adoc,
 				(string.gsub(fs.readFile(adoc), "\nstatus: [^\n]*", "\nstatus: active-blue-owl-reef"))
@@ -289,13 +312,15 @@ return t.spec("tracker spend", function(it)
 			"(c%d%d%d%d)"
 		) :: string
 		git(other, { "pull", "-q", "origin", "main" })
-		git(other, { "mv", `tracker/issues/{g}`, `tracker/issues/done/{g}` })
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		git(other, { "mv", `pickman/.tracker/issues/{g}`, `pickman/.tracker/issues/done/{g}` })
 		git(other, { "commit", "-q", "-m", "gamma done" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 		local before = tip()
 		trOk(prep, { "spend", g, "--phase", "deliver", "--time", "3" })
-		t.expect(changed(before)).toBe(`tracker/issues/done/{g}/spend.md`)
-		t.expect(last(`tracker/issues/done/{g}/spend.md`).phase).toBe("deliver")
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(changed(before)).toBe(`pickman/.tracker/issues/done/{g}/spend.md`)
+		t.expect(last(`pickman/.tracker/issues/done/{g}/spend.md`).phase).toBe("deliver")
 	end)
 
 	it("keeps an existing ledger's rows and title, reading seven-cell rows as build", function()
@@ -309,18 +334,21 @@ return t.spec("tracker spend", function(it)
 			.. `| 1 | 2026-09-29 03:16 | {d}: old work | 66 | 9 | 20.0 | focus |\n`
 			.. "\n**Total:** +66 / -9 lines, 20.0 agent-minutes over 1 commits\n"
 			.. "<!-- totals: added=66 removed=9 minutes=20.0 commits=1 -->\n"
-		write(`{other}/tracker/issues/{d}/spend.md`, old)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		write(`{other}/pickman/.tracker/issues/{d}/spend.md`, old)
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "old ledger" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 		trOk(prep, { "spend", d, "--phase", "prep", "--time", "2" })
-		local l = onOrigin(`tracker/issues/{d}/spend.md`)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local l = onOrigin(`pickman/.tracker/issues/{d}/spend.md`)
 		t.expect(l.title).toBe("Delta as it was")
 		t.expect(#l.rows).toBe(2)
 		t.expect(l.rows[1].phase).toBe("build")
 		t.expect(l.rows[1].added).toBe(66)
 		t.expect(l.rows[2].phase).toBe("prep")
-		local text = git(origin, { "show", `main:tracker/issues/{d}/spend.md` }) .. "\n"
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local text = git(origin, { "show", `main:pickman/.tracker/issues/{d}/spend.md` }) .. "\n"
 		t.expect(ledger.appendOnly(old, text, d)).toBe(nil)
 	end)
 
@@ -330,7 +358,8 @@ return t.spec("tracker spend", function(it)
 		t.expect(publish.allowed(`tracker/rafts/{raft}/spend.md`, { "tracker" })).toBe(false)
 		t.expect(publish.allowed(`tracker/issues/{a}/acceptance/spend.md`, { "tracker" })).toBe(false)
 		git(other, { "pull", "-q", "origin", "main" })
-		local path = `tracker/issues/{a}/spend.md`
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local path = `pickman/.tracker/issues/{a}/spend.md`
 		local current = fs.readFile(`{other}/{path}`)
 		local l = ledger.parse(current) :: any
 		local before = tip()
@@ -345,7 +374,8 @@ return t.spec("tracker spend", function(it)
 		local raftLedger = publish.commit(other, function()
 			return {
 				{
-					path = `tracker/rafts/{raft}/spend.md`,
+					-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+					path = `pickman/.tracker/rafts/{raft}/spend.md`,
 					content = ledger.append(nil, raft, "x", l.rows[1]),
 				},
 			}
@@ -366,14 +396,16 @@ return t.spec("tracker spend", function(it)
 		local orphan = publish.commit(other, function()
 			return {
 				{
-					path = "tracker/issues/c0987/spend.md",
+					-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+					path = "pickman/.tracker/issues/c0987/spend.md",
 					content = ledger.append(nil, "c0987", "x", l.rows[1]),
 				},
 			}
 		end, "tracker: orphan spend")
 		t.expect(orphan.ok).toBe(false)
 		local activeLedger = publish.commit(other, function()
-			local p = `tracker/issues/active/{b}/spend.md`
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			local p = `pickman/.tracker/issues/active/{b}/spend.md`
 			local cur = git(origin, { "show", `main:{p}` }) .. "\n"
 			return { { path = p, content = ledger.append(cur, b, "", l.rows[1]) } }
 		end, "tracker: active spend")
@@ -405,30 +437,36 @@ return t.spec("tracker spend", function(it)
 		local head = '#!/usr/bin/env bash\nsource "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)'
 			.. '/scripts/lib/ac.sh"\ncheck "AC1: fixture" true\nfinish\n'
 		write(
-			`{other}/tracker/rafts/R0961/R0961.md`,
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			`{other}/pickman/.tracker/rafts/R0961/R0961.md`,
 			"---\nid: R0961\ntype: chore\ntitle: Carried\nslug: carried\nsingle: false\nissues: [c0961, c0962]\n"
 				.. `design: ready\ncreated: 2026-10-06\nstatus: {PREP}\n---\n\n# R0961: Carried\n`
 		)
-		write(`{other}/tracker/rafts/R0961/check.sh`, head)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		write(`{other}/pickman/.tracker/rafts/R0961/check.sh`, head)
 		for _, id in { "c0961", "c0962" } do
 			write(
-				`{other}/tracker/issues/{id}/{id}.md`,
+				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+				`{other}/pickman/.tracker/issues/{id}/{id}.md`,
 				`---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: R0961\ndepends_on: []\nemergent: false\n`
 					.. `design: ready\ncreated: 2026-10-06\nstatus: {PREP}\n---\n\n# {id}\n`
 			)
-			write(`{other}/tracker/issues/{id}/check.sh`, head)
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			write(`{other}/pickman/.tracker/issues/{id}/check.sh`, head)
 		end
 		write(
-			`{other}/tracker/issues/c0962/spend.md`,
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			`{other}/pickman/.tracker/issues/c0962/spend.md`,
 			"# Spend: c0962 c0962\n\n| # | when | commit | +lines | -lines | minutes | attribution |\n"
 				.. "|---|---|---|---|---|---|---|\n| 1 | 2026-09-29 03:16 | old | 3 | 0 | 2.0 | focus |\n"
 		)
 		git(other, { "add", "-A" })
 		for _, p in
 			{
-				"tracker/rafts/R0961/check.sh",
-				"tracker/issues/c0961/check.sh",
-				"tracker/issues/c0962/check.sh",
+				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+				"pickman/.tracker/rafts/R0961/check.sh",
+				"pickman/.tracker/issues/c0961/check.sh",
+				"pickman/.tracker/issues/c0962/check.sh",
 			}
 		do
 			git(other, { "update-index", "--chmod=+x", p })
@@ -438,16 +476,20 @@ return t.spec("tracker spend", function(it)
 		trOk(prep, { "spend", "c0961", "--phase", "capture", "--time", "1" })
 		local before: { [string]: string } = {}
 		for _, id in { "c0961", "c0962" } do
-			before[id] = git(origin, { "show", `main:tracker/issues/{id}/spend.md` })
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			before[id] = git(origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
 		end
 		git(main, { "pull", "-q", "--ff-only" })
 		trOk(main, { "ready", "R0961" }) -- R0025: readied on origin/main, members moved with every file
 		for _, id in { "c0961", "c0962" } do
-			t.expect(git(origin, { "show", `main:tracker/issues/active/{id}/spend.md` })).toBe(before[id])
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			t.expect(git(origin, { "show", `main:pickman/.tracker/issues/active/{id}/spend.md` }))
+				.toBe(before[id])
 		end
 		trOk(main, { "stop", "R0961" })
 		for _, id in { "c0961", "c0962" } do
-			t.expect(git(origin, { "show", `main:tracker/issues/{id}/spend.md` })).toBe(before[id])
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			t.expect(git(origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })).toBe(before[id])
 		end
 	end)
 
