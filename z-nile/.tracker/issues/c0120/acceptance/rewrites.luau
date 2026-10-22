@@ -286,7 +286,7 @@ function rewrites.premove(top: string): (string?, string?)
 end
 
 -- The World of the checkout at `top`, `pre` being the tree before the move: `before` reads that tree, `now` the
--- working tree, and `moved` the renames git finds between them.
+-- working tree, and `moved` the renames git finds between `pre` and the move itself.
 function rewrites.world(top: string, pre: string): World
 	local okL, listing = git(top, { "ls-tree", "-r", "--name-only", pre })
 	assert(okL, `git ls-tree {pre} failed`)
@@ -300,8 +300,13 @@ function rewrites.world(top: string, pre: string): World
 			d = string.match(d, "^(.*)/[^/]+$")
 		end
 	end
-	local okR, renames = git(top, { "diff", "-M", "--name-status", "--diff-filter=R", pre, "HEAD" })
-	assert(okR, `git diff {pre} HEAD failed`)
+	-- the move's own renames, pre to the commit that made them (code review 006 F1): a later merge that finishes an
+	-- item (done's promotion, a move to done/) must not change where a folder went
+	local okM, move = git(top, { "log", "-1", "--format=%H", "--", rewrites.MARK })
+	move = string.gsub(move, "%s+$", "")
+	assert(okM and move ~= "", `no commit removed {rewrites.MARK}`)
+	local okR, renames = git(top, { "diff", "-M", "--name-status", "--diff-filter=R", pre, move })
+	assert(okR, `git diff {pre} {move} failed`)
 	local map: { { old: string, new: string } } = {}
 	for line in string.gmatch(renames, "[^\n]+") do
 		local old, new = string.match(line, "^R%d*\t([^\t]+)\t([^\t]+)$")

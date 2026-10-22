@@ -46,3 +46,9 @@
 - review-005 F5: architecture/parsers-refuse-ambiguity
 - review-005 F6: ticket-prep/spec-design-correspondence
 - review-005 F7: testing/no-live-counts-in-promoted-specs
+
+- review-006 F1: review/sequestration-reference-not-a-ref
+- review-006 F2: testing/guards-move-with-the-working-directory
+- review-006 F3: architecture/parsers-refuse-ambiguity
+- review-006 F4: architecture/guard-no-is-explicit
+- review-006 F5: testing/no-vacuous-pass
