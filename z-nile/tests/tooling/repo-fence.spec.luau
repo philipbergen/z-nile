@@ -126,6 +126,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
 		GH_CONFIG_DIR = "quotes a fence.sh line in the reviewed .cache list",
 		PICKMAN_TEST_FENCE = "quotes a fence.sh line in the reviewed .cache list (the jail waiver, c0114)",
+		PICKMAN_FENCE_ = "quotes pickman_fence_all's sentinel line in the reviewed .cache list (c0120 code review 005 F2)",
 	},
 	["z-nile/tests/acceptance/c0053/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
