@@ -5,8 +5,27 @@
 -- pickman-arch the game's; z-design reads its three checklists; zz-rules states the skill folders, the links, the
 -- naming rule and the `skills` command in every list a command joins; every skill's lessons paragraph names the real
 -- folder; AGENTS.md and SETUP.md name the new skills and commands; `./zn`'s usage names `skills`. Reads the real tree.
-local fs = require("@lune/fs")
 local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
 local t = require("@tests/lib/t")
 
 local function read(path: string): string
@@ -146,7 +165,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 				"A branch from before c0115 that added a file inside an old skill folder (`.claude/skills/<old>/`) gets the same conflict",
 				"zz-rules Conflicts"
 			)
-			local usage = process.exec("bash", { "zn" })
+			local usage = process.exec("bash", { `{TOP}/zn` })
 			at(usage.stdout, "skills [--check]", "./zn usage")
 		end
 	)

@@ -2,20 +2,21 @@
 # Acceptance checks for c0115. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: the root
-# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0115 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: z-nile/
+# sequestered specs: here before `./zn done`, promoted to z-nile/tests/acceptance/c0115 after it. Every path below is
+# from z-nile/ (specs, its .cache) or anchored at $ZN_ROOT (the engine, the gate, git pathspecs of the whole tree).
 A="$HERE/acceptance"
-[[ -d $A ]] || A="$PWD/tests/acceptance/c0115"
+[[ -d $A ]] || A="$ZN_ROOT/z-nile/tests/acceptance/c0115"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: skills live in z-nile/skills and <project>/skills; ./zn skills links each from .claude/skills and refuses bad folders" lune run tests/run -- "$A/skills.spec.luau"
-# AC2 runs c0115's own `skills --check` and its changed `--plan` in a plain clone of HEAD under .cache (never
+# AC2 runs c0115's own `skills --check` and its changed `--plan` in a plain clone of HEAD under z-nile's .cache (never
 # `git worktree add`, which writes the real .git): a wrong --check that writes then fails the clean-status assertion
 # and the "ok" line, and the committed links are what is checked, as CI's fresh checkout sees them.
 links_check() {
   local copy="$PWD/.cache/c0115-ac2"
-  mkdir -p "$PWD/.cache" && rm -rf "$copy" && git clone -q --no-hardlinks "$PWD" "$copy" || return 1
+  mkdir -p "$PWD/.cache" && rm -rf "$copy" && git clone -q --no-hardlinks "$ZN_ROOT" "$copy" || return 1
   (
     cd "$copy" || exit 1
     out=$(./zn skills --check) || { echo "$out"; exit 1; }
@@ -24,24 +25,24 @@ links_check() {
     [[ -z $(git status --porcelain) ]] || { echo "the copy changed:"; git status --porcelain; exit 1; }
   ) || return 1
   rm -rf "$copy"
-  grep -qxF '[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check' z-nile/check.sh
+  grep -qxF '[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check' "$ZN_ROOT/z-nile/check.sh"
 }
 check "AC2: the committed links pass ./zn skills --check in a clean copy, which it leaves unchanged, and the gate runs it" links_check
 check "AC3: the eleven skills are renamed into their folders, nothing old is left, and z-raft is not made here" \
-  bash -c 'lune run tests/run -- "$1" && test -z "$(git ls-files -- z-nile/skills/z-raft .claude/skills/z-raft)"' _ "$A/layout.spec.luau"
+  bash -c 'lune run tests/run -- "$1" && test -z "$(git -C "$ZN_ROOT" ls-files -- z-nile/skills/z-raft .claude/skills/z-raft)"' _ "$A/layout.spec.luau"
 check "AC4: no live file names an old skill or cites an old lesson id, and no code or spec reads through a .claude/skills link" lune run tests/run -- "$A/absence.spec.luau"
 check "AC5: lessons live in the real skill folders under the new ids, and no ledger names an old id" lune run tests/run -- "$A/lessons.spec.luau"
 check "AC6: the real tree's lessons and harvest ledgers check clean, every finding covered" \
-  bash -c './zn lessons --check && ./zn lessons --uncovered R0040 R0042'
+  bash -c '"$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" lessons --uncovered R0040 R0042'
 check "AC7: a prompt inlines z-nile's step skills, then its own project's, with that project's lessons only" lune run tests/run -- "$A/prompt.spec.luau"
 check "AC8: the skills, AGENTS.md, SETUP.md, the usage, the board and the engine's messages use the new names" \
   lune run tests/run -- "$A/docs.spec.luau" tests/acceptance/c0042/model.spec.luau tests/acceptance/c0107/views.spec.luau tests/acceptance/c0069/prompt.spec.luau
 check "AC9: z-nile/README.md opens with the picture of the five parts, then names every skill and the three checklists" lune run tests/run -- "$A/readme.spec.luau"
 check "AC10: the guard, structure, lessons-paragraph and check-path specs pass in both homes" \
-  bash -c 'lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0111/skill-docs.spec.luau tests/acceptance/c0120/check-paths.spec.luau && cd pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau'
-check "AC11: the real tracker audits clean" ./zn audit
+  bash -c 'lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0111/skill-docs.spec.luau tests/acceptance/c0120/check-paths.spec.luau && cd ../pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau'
+check "AC11: the real tracker audits clean" "$ZN_ROOT/zn" audit
 check "AC12: as of the last fetch, nothing but this raft holds the skill folders or their links: no other raft active, no branch or worktree changing them" \
-  ./zn busy .claude/skills z-nile/skills pickman/skills
+  bash -c 'cd "$ZN_ROOT" && ./zn busy .claude/skills z-nile/skills pickman/skills'
 
 # AC13 reads the branch's own commits since it left origin/main (git reads only): exactly one commit whose subject
 # starts "c0115: move the skills", holding only R100 renames, and no other commit of the range renaming a skill file.
@@ -73,7 +74,7 @@ backlog_clean() {
   local all='(make-issue|ticket-prep|ready-raft|launch-raft|execute-raft|stop-raft|review|tracker|metrics|testing|architecture)'
   local re="(^|[^a-z0-9_./-])$old([^a-z0-9_-]|\$)|(^|[^a-z0-9_.-])/$old([^a-z0-9_-]|\$)|/$all/SKILL\.md|\.claude/skills/$all([^a-z0-9_-]|\$)"
   local roots bad="" dir id f n=0
-  roots=$(cd "$ZN_ROOT" && lune run z-nile/roots) || { echo "the roots command failed: nothing checked"; return 1; }
+  roots=$(cd "$ZN_ROOT" && lune run "$ZN_ROOT/z-nile/roots") || { echo "the roots command failed: nothing checked"; return 1; }
   [[ -n $roots ]] || { echo "the roots command printed no root: nothing checked"; return 1; }
   while IFS= read -r dir; do
     id=${dir##*/}
@@ -94,8 +95,12 @@ backlog_clean() {
   [[ -z $bad ]] || { echo "old skill names left in live backlog designs: $bad"; return 1; }
   echo "$n unfinished items' designs read, none names an old skill"
 }
-rename_finished() { lune run "$HERE/experiments/rename-lesson-ids" -- --check && backlog_clean; }
-check "AC14: the rename is finished: the rename script's check run finds nothing left, and no live backlog design names an old skill" \
+rename_finished() {
+  lune run "$HERE/experiments/rename-lesson-ids" -- --check &&
+    lune run "$HERE/experiments/rewrite-finished" -- --check &&
+    backlog_clean
+}
+check "AC14: the rename is finished: the rename and finished-file scripts' check runs find nothing left, and no live backlog design names an old skill" \
   rename_finished
 
 # AC15 (the user's G9): c0115's raft holds c0113, which it supersedes, so `./zn done` closes both. No raft yet is red.

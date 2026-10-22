@@ -51,22 +51,24 @@ end
 
 return t.spec("c0115 the skill folders and their links", function(it)
 	it(
-		"every project's folder is <name>/skills, z-nile's first, even in a registry without z-nile",
+		"every project's folder is <home>/skills, z-nile's first, even in a registry without z-nile",
 		function()
 			local reg = projects.parse(
-				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n'
-					.. 'home = "pickman"\n\n[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+					.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 			)
 			local paths = {}
 			for _, folder in skills.folders(reg :: projects.Registry) do
 				table.insert(paths, `{folder.project}:{folder.path}`)
 			end
 			t.expect(paths).toEqual({ "z-nile:z-nile/skills", "pickman:pickman/skills" })
-			local legacy = {}
-			for _, folder in skills.folders(projects.legacy()) do
-				table.insert(legacy, folder.path)
+			local solo =
+				projects.parse('retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n')
+			local only = {}
+			for _, folder in skills.folders(solo :: projects.Registry) do
+				table.insert(only, folder.path)
 			end
-			t.expect(legacy).toEqual({ "z-nile/skills", "pickman/skills" })
+			t.expect(only).toEqual({ "z-nile/skills", "pickman/skills" })
 		end
 	)
 
@@ -309,5 +311,16 @@ return t.spec("c0115 the skill folders and their links", function(it)
 		t.expect(w.code).toBe(1)
 		t.expect(has(w.stderr, ".claude: a link")).toBe(true)
 		t.expect(readlink(`{f.base}/outside-skills/someone-elses-skill`)).toBe("../nowhere")
+	end)
+
+	it("a missing registry refuses, writing nothing and never guessing the folders (c0114)", function()
+		process.exec("rm", { "-f", `{wt}/.claude` })
+		fs.removeFile(`{wt}/z-nile/projects.toml`)
+		for _, args in { { "skills", "--check" }, { "skills" } } do
+			local r = zn(args)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "projects.toml")).toBe(true)
+		end
+		t.expect(fs.isDir(`{wt}/.claude`) or fs.isFile(`{wt}/.claude`)).toBe(false)
 	end)
 end)

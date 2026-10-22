@@ -7,6 +7,9 @@
 -- tests/lib/engine REGISTRY) and a z-nile raft in z-nile/.tracker, with a pickman skill and lessons on both sides.
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
+-- the repository's top: this spec runs from z-nile/ (c0120), and the real tree's files are read from there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -59,12 +62,12 @@ end
 return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", function(it)
 	it("sets up a pickman raft, a z-nile raft, a pickman skill and lessons in both projects", function()
 		f = trackerfix.new("c0115-prompt", {
-			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = "# map\n",
-			["tracker/rafts/R0010/R0010.md"] = raft("R0010", "c0010"),
-			["tracker/rafts/R0010/check.sh"] = CHECK,
-			["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
-			["tracker/issues/c0010/check.sh"] = CHECK,
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			["pickman/.tracker/architecture.md"] = "# map\n",
+			["pickman/.tracker/rafts/R0010/R0010.md"] = raft("R0010", "c0010"),
+			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
+			["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
 			[`{Z}/rafts/R0020/R0020.md`] = raft("R0020", "c0020"),
 			[`{Z}/rafts/R0020/check.sh`] = CHECK,
 			[`{Z}/issues/c0020/c0020.md`] = issue("c0020", "R0020"),
@@ -81,11 +84,11 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 			local count = 0
 			-- the folders engine.copy copies (z-nile's skills), from its own constant: a project's lessons are not copied
 			for _, base in engine.COPIED_SKILLS do
-				if fs.isDir(base) then
-					for _, skill in fs.readDir(base) do
+				if fs.isDir(`{TOP}/{base}`) then
+					for _, skill in fs.readDir(`{TOP}/{base}`) do
 						local dir = `{base}/{skill}/lessons`
-						if fs.isDir(dir) then
-							for _, name in fs.readDir(dir) do
+						if fs.isDir(`{TOP}/{dir}`) then
+							for _, name in fs.readDir(`{TOP}/{dir}`) do
 								count += 1
 								if not fs.isFile(`{f.main}/{dir}/{name}`) then
 									error(`the fixture lacks {dir}/{name}`)
@@ -102,7 +105,7 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 	it(
 		"a pickman raft gets z-nile's five skills in order, then pickman's, from their real folders",
 		function()
-			local prompt = ready("R0010", "tracker")
+			local prompt = ready("R0010", "pickman/.tracker")
 			local paths = inlined(prompt)
 			local want = {}
 			for _, s in INLINED do

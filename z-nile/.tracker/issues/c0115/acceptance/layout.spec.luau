@@ -5,8 +5,27 @@
 -- folder is left anywhere, .claude/skills holds one committed link (mode 120000) per skill folder and nothing
 -- else, the old architecture lessons are zz-arch's, .claude/README.md is gone, and z-design
 -- has its three checklists. Reads the real tree only (fs, git ls-files, git show).
-local fs = require("@lune/fs")
 local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
 local t = require("@tests/lib/t")
 
 local OLD = {
@@ -38,7 +57,7 @@ local ZNILE = {
 local PICKMAN = { "pickman-arch", "pickman-test" }
 
 local function git(args: { string }): string
-	local r = process.exec("git", args)
+	local r = process.exec("git", args, { cwd = TOP })
 	if not r.ok then
 		error(`git {table.concat(args, " ")}: {r.stderr}`, 2)
 	end

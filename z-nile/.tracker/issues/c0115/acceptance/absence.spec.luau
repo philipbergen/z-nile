@@ -1,14 +1,33 @@
 --!strict
 -- c0115 AC4: the old skill names are gone from every live file: z-nile/ and pickman/ (their .tracker/ aside),
--- AGENTS.md, SETUP.md, .claude/, zn, scripts/, .github/ and the root's tests/ (promoted specs aside: they are
--- history). The forms: a path through .claude/skills/<old>, any of the six hyphenated names (make-issue, ticket-prep,
+-- AGENTS.md, SETUP.md, .claude/, zn, scripts/ and .github/ (every project's promoted specs aside, z-nile/tests/acceptance
+-- and pickman/tests/acceptance: they are history). The forms: a path through .claude/skills/<old>, any of the six hyphenated names (make-issue, ticket-prep,
 -- ready-raft, launch-raft, execute-raft, stop-raft, as a /command or a bare word), and `<old>` skill or <old> skill
 -- for the five ordinary words (review, tracker, metrics, testing, architecture). And no code or spec names a path
 -- through a .claude/skills link (.claude/skills/<name>/...): git can't add through one, so every tool reads the real
 -- folder. And no live file cites an old lesson id (`testing/no-vacuous-pass`) whose renamed lesson exists. Plain finds
 -- only (lesson zz-test/plain-find-for-literals); `scan` and `oldLessonIds` are also run on planted texts.
-local fs = require("@lune/fs")
 local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
 local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
@@ -59,7 +78,7 @@ local function oldLessonIds(text: string, existing: { [string]: boolean }): { st
 end
 
 local function tracked(): { string }
-	local r = process.exec("git", { "ls-files" })
+	local r = process.exec("git", { "ls-files" }, { cwd = TOP })
 	if not r.ok then
 		error(r.stderr)
 	end
@@ -71,13 +90,14 @@ local function tracked(): { string }
 end
 
 local LIVE_TOP = { "AGENTS.md", "SETUP.md", "zn" }
-local LIVE_DIRS = { "z-nile/", "pickman/", ".claude/", "scripts/", ".github/", "tests/" }
+local LIVE_DIRS = { "z-nile/", "pickman/", ".claude/", "scripts/", ".github/" }
 local function live(path: string): boolean
 	if string.find(path, "/.tracker/", 1, true) or starts(path, "tracker/") then
 		return false
 	end
 	if
-		starts(path, "tests/acceptance/")
+		-- promoted specs are sequestered, every project's (z-nile's home is z-nile/, c0120)
+		starts(path, "z-nile/tests/acceptance/")
 		or starts(path, "pickman/tests/acceptance/")
 		or starts(path, "z-nile/vendor/")
 	then
@@ -215,7 +235,7 @@ return t.spec("c0115 no old skill name is left in a live file", function(it)
 	end)
 
 	it("no live file, skills and comments included, cites an old lesson id", function()
-		local existing = skills.lessonIndex(".")
+		local existing = skills.lessonIndex(TOP)
 		local count = 0
 		for _ in existing do
 			count += 1

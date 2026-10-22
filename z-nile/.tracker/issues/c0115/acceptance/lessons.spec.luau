@@ -1,8 +1,8 @@
 --!strict
 -- c0115 AC5: lessons live in their skill's real folder (z-nile/skills/<skill>/lessons/ or
 -- <project>/skills/<skill>/lessons/), keep the id <skill>/<slug> with the new skill names, and `lessons --full` prints
--- the real path. A tree without either folder (from before c0115) still reads .claude/skills. One skill name in two
--- folders is a problem. On the real tree, no harvest.md entry and no lesson names an old skill's id. Fixtures under
+-- the real path. A tree without either folder (from before c0115) still reads .claude/skills; a tree without a
+-- registry refuses (c0114). One skill name in two folders is a problem. On the real tree, no harvest.md entry and no lesson names an old skill's id. Fixtures under
 -- .cache/c0115-lessons (tests/lib/trackerfix) and .cache/c0115-lessons-load (lessons.load on hand-made trees).
 local fs = require("@lune/fs")
 local lessons = require("@znile/engine/lessons")
@@ -53,7 +53,7 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 			local root = `{LOAD}/new`
 			write(
 				`{root}/z-nile/projects.toml`,
-				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "tracker"\n'
+				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n'
 			)
 			write(`{root}/z-nile/skills/zz-test/SKILL.md`, doc("zz-test"))
 			write(`{root}/z-nile/skills/zz-test/lessons/pin.md`, lesson("Pinned?"))
@@ -73,13 +73,25 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 		end
 	)
 
-	it("a tree with neither folder keeps reading .claude/skills, as before c0115", function()
+	it("a tree with a registry and neither folder keeps reading .claude/skills, as before c0115", function()
 		local root = `{LOAD}/old`
+		write(
+			`{root}/z-nile/projects.toml`,
+			'retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n'
+		)
 		write(`{root}/.claude/skills/testing/SKILL.md`, doc("testing"))
 		write(`{root}/.claude/skills/testing/lessons/pin.md`, lesson("Pinned?"))
 		local tree = lessons.load(root)
 		t.expect(tree.lessons["testing/pin"] ~= nil).toBe(true)
 		t.expect(lessons.folderOf(tree, "testing")).toBe(".claude/skills/testing")
+	end)
+
+	it("a tree with no registry refuses, never guessing the skills folders (c0114)", function()
+		local root = `{LOAD}/noreg`
+		write(`{root}/z-nile/skills/zz-test/SKILL.md`, doc("zz-test"))
+		local ok, err = pcall(lessons.load, root)
+		t.expect(ok).toBe(false)
+		t.expect(has(tostring(err), "projects.toml")).toBe(true)
 	end)
 
 	it(
@@ -88,7 +100,7 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 			local root = `{LOAD}/noskill`
 			write(
 				`{root}/z-nile/projects.toml`,
-				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "tracker"\n'
+				'retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n'
 			)
 			write(`{root}/z-nile/skills/zz-gone/lessons/pin.md`, lesson("Pinned?") .. "")
 			local joined = table.concat(lessons.check(lessons.load(root)), "\n")
@@ -102,7 +114,7 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 		local root = `{LOAD}/dup`
 		write(
 			`{root}/z-nile/projects.toml`,
-			'retired = []\n\n[[project]]\nname = "pickman"\nroot = "tracker"\n'
+			'retired = []\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n'
 		)
 		write(`{root}/z-nile/skills/zz-x/SKILL.md`, doc("zz-x"))
 		write(`{root}/pickman/skills/zz-x/SKILL.md`, doc("zz-x"))
@@ -117,8 +129,8 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 			["z-nile/skills/zz-test/lessons/pin.md"] = lesson("Are the inputs pinned?"),
 			["pickman/skills/pickman-play/SKILL.md"] = doc("pickman-play"),
 			["pickman/skills/pickman-play/lessons/feel.md"] = lesson("Does it feel fair?"),
-			["tracker/rafts/R0010/design-review-001.md"] = "# Review 001\n\n### F1 [low] a\n\n### F2 [low] b\n\nVerdict: changes\n",
-			["tracker/rafts/R0010/harvest.md"] = "- design-review-001 F1: zz-test/pin\n- design-review-001 F2: pickman-play/feel\n",
+			["pickman/.tracker/rafts/R0010/design-review-001.md"] = "# Review 001\n\n### F1 [low] a\n\n### F2 [low] b\n\nVerdict: changes\n",
+			["pickman/.tracker/rafts/R0010/harvest.md"] = "- design-review-001 F1: zz-test/pin\n- design-review-001 F2: pickman-play/feel\n",
 		}, { noLessons = true }) -- fixtures copy the real lessons (G7); this one counts its own
 	end)
 
@@ -135,7 +147,7 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 	end)
 
 	it("a harvest entry that still names an old skill's id fails --check", function()
-		local h = `{f.main}/tracker/rafts/R0010/harvest.md`
+		local h = `{f.main}/pickman/.tracker/rafts/R0010/harvest.md`
 		fs.writeFile(h, "- design-review-001 F1: testing/pin\n- design-review-001 F2: pickman-play/feel\n")
 		local r = trackerfix.tr(f, f.main, { "lessons", "--check" })
 		t.expect(r.code).toBe(1)
@@ -308,16 +320,18 @@ return t.spec("c0115 lessons live in the skills' real folders", function(it)
 	end)
 
 	it("no harvest.md under any root, and no lesson, names an old skill's id", function()
-		local r = process.exec("git", { "ls-files" })
-		local existing = skills.lessonIndex(".")
+		-- the repository's files, from its top (this spec runs from z-nile/, c0120)
+		local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+		local r = process.exec("git", { "ls-files" }, { cwd = TOP })
+		local existing = skills.lessonIndex(TOP)
 		local bad: { string } = {}
 		local n = 0
 		for path in string.gmatch(r.stdout, "[^\n]+") do
 			local ledger = string.match(path, "/harvest%.md$") ~= nil
 			local lessonFile = string.match(path, "^[%w%-]+/skills/[^/]+/lessons/[^/]+%.md$") ~= nil
-			if (ledger or lessonFile) and fs.isFile(path) then
+			if (ledger or lessonFile) and fs.isFile(`{TOP}/{path}`) then
 				n += 1
-				for _, id in oldIds(fs.readFile(path), existing, ledger) do
+				for _, id in oldIds(fs.readFile(`{TOP}/{path}`), existing, ledger) do
 					table.insert(bad, `{path}: {id}`)
 				end
 			end

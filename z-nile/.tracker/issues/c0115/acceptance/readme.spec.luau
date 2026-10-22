@@ -4,7 +4,27 @@
 -- its node says `planned`, and the unbuilt parts carry their issue: z-raft (c0116), the dispatcher and .models.toml
 -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
 -- the three design checklists by path, each of which exists. Reads the real tree.
-local fs = require("@lune/fs")
+local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
 local t = require("@tests/lib/t")
 
 local README = "z-nile/README.md"
