@@ -9,12 +9,13 @@ local function play(phase: string, timer: number): any
 end
 
 return t.spec("Flow extras", function(it)
-	it("every phase gets a fresh overlay with all three always-present fields", function()
+	it("every phase gets a fresh overlay with all its always-present fields", function()
 		for _, phase in { "ready", "playing", "dying", "levelclear", "gameover" } do
 			local o = Flow.overlay(play(phase, 10), Game.CLASSIC_CONFIG)
 			t.expect(type(o.fade)).toBe("number")
 			t.expect(type(o.flash)).toBe("boolean")
-			t.expect(type(o.playAgain)).toBe("boolean")
+			t.expect(type(o.tap)).toBe("boolean")
+			t.expect(type(o.cursor)).toBe("boolean")
 		end
 	end)
 
@@ -22,9 +23,12 @@ return t.spec("Flow extras", function(it)
 		t.expect(Flow.overlay(play("dying", 22.5), Game.CLASSIC_CONFIG).fade).toBeNear(0.3, 1e-9)
 	end)
 
-	it("the play-again keys can't be changed", function()
+	it("the continue keys and the prompts can't be changed", function()
 		t.expect(function()
-			(Flow.PLAY_AGAIN_KEYS :: any)[1] = "Space"
+			(Flow.CONTINUE_KEYS :: any)[1] = "Space"
+		end).toThrow()
+		t.expect(function()
+			(Flow.PROMPT :: any).idle = "PLAY AGAIN"
 		end).toThrow()
 	end)
 end)
