@@ -197,7 +197,7 @@ local B = trim(mergePre)
 assert(okB and B ~= "", `git merge-base {pre} {M} failed`)
 
 local preReg, mReg, bReg = regAt(pre :: string), regAt(M), regAt(B)
-local preSet, preDups = sequestered(tree(pre :: string), rootsOf(preReg), {})
+local preSet, preDups = sequestered(tree(pre :: string), rootsOf(preReg), promotedOf(preReg))
 local mSet, mDups = sequestered(tree(M), rootsOf(mReg), promotedOf(mReg))
 local bSet = sequestered(tree(B), rootsOf(bReg), promotedOf(bReg))
 local ownSet = sequestered(tree(ownBase :: string), rootsOf(regAt(ownBase :: string)), {})
@@ -260,17 +260,29 @@ local function withOverrides(promoted: string, old: string): string?
 	return out
 end
 
--- every key to judge: each item's before the move and on the merged main (c0120's own from the reviewed prep)
+-- every key to judge: each item's before the move and on the merged main (c0120's own from the reviewed prep). A spec
+-- already promoted before the move left sequestration then: the Overrides rule and override-markers judge it, not AC18
 local keys: { [string]: boolean } = {}
 local known: { [string]: boolean } = {}
+local promotedBefore: { [string]: boolean } = {}
 for key, e in preSet do
-	if e.id ~= OWN_ID then
+	if e.promoted then
+		promotedBefore[key] = true
+	end
+end
+for key, e in bSet do
+	if e.promoted then
+		promotedBefore[key] = true
+	end
+end
+for key, e in preSet do
+	if e.id ~= OWN_ID and not promotedBefore[key] then
 		keys[key] = true
 		known[e.id] = true
 	end
 end
 for key, e in mSet do
-	if e.id ~= OWN_ID then
+	if e.id ~= OWN_ID and not promotedBefore[key] then
 		keys[key] = true
 		known[e.id] = true
 	end
@@ -374,7 +386,7 @@ end
 -- a file at HEAD in the folder of an item the reference holds, which the reference doesn't: added (a capture since
 -- the move is a new item, and not judged)
 for key, h in headSet do
-	if not keys[key] and known[h.id] then
+	if not keys[key] and known[h.id] and not promotedBefore[key] then
 		table.insert(
 			bad,
 			`{h.path}: added (not in {h.id}'s folder {if h.id == OWN_ID
