@@ -210,25 +210,34 @@ local function rootNow(root: string): string
 end
 
 -- c0114's promoted specs carry c0120's overrides (Implementation step 9): their expected text is their text before the
--- move with c0114-overrides.patch applied, by git apply in a scratch folder under this home's .cache
+-- move with c0114-overrides.patch applied: that file's section of the patch, applied by patch(1) to a copy in a
+-- scratch folder under this home's .cache (no git, so no repository is in play)
 local PATCH = `{TOP}/{OWN}c0114-overrides.patch`
 local function withOverrides(promoted: string, old: string): string?
 	if not fs.isFile(PATCH) then
 		return nil
 	end
+	local text = fs.readFile(PATCH)
+	local header = `diff --git a/{promoted} b/{promoted}\n`
+	local s = string.find(text, header, 1, true)
+	if not s then
+		return old -- the patch leaves this file as it was
+	end
+	local e = string.find(text, "\ndiff --git ", s + #header, true)
+	local section = string.sub(text, s, if e then e else #text)
 	local scratch = `{TOP}/z-nile/.cache/c0120-ac18-patch`
 	if fs.isDir(scratch) then
 		fs.removeDir(scratch)
 	end
-	fs.writeDir(string.match(`{scratch}/{promoted}`, "^(.*)/[^/]+$") :: string)
-	fs.writeFile(`{scratch}/{promoted}`, old)
-	-- outside every repository: the scratch folder's parent is the ceiling, so git apply patches plain files there
+	fs.writeDir(scratch)
+	fs.writeFile(`{scratch}/file`, old)
+	fs.writeFile(`{scratch}/section.patch`, section)
 	local r = process.exec(
-		"git",
-		{ "apply", `--include={promoted}`, PATCH },
-		{ cwd = scratch, env = { GIT_CEILING_DIRECTORIES = `{TOP}/z-nile/.cache` } }
+		"patch",
+		{ "-s", "-f", `{scratch}/file`, `{scratch}/section.patch` },
+		{ cwd = scratch }
 	)
-	local out = if r.ok then fs.readFile(`{scratch}/{promoted}`) else nil
+	local out = if r.ok then fs.readFile(`{scratch}/file`) else nil
 	fs.removeDir(scratch)
 	return out
 end
