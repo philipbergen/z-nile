@@ -25,6 +25,7 @@
 | 21 | 2026-10-22 21:11 | R0047: refute-002 | 2 | 0 | 3.0 | focus | code-review |  |
 | 22 | 2026-10-22 21:11 | R0047: final verification log | 0 | 0 | 0.2 | explicit | deliver |  |
 | 23 | 2026-10-22 21:43 | tracker: done R0047 | 0 | 0 | 6.6 | raft+proportional | deliver |  |
+| 24 | 2026-10-22 21:49 | deliver | 0 | 0 | 10.0 | spend+proportional | deliver |  |
 
-**Total:** +921 / -41 lines, 500.8 agent-minutes, 597953 tokens over 23 records
-<!-- totals: added=921 removed=41 minutes=500.8 records=23 tokens=597953 -->
+**Total:** +921 / -41 lines, 510.8 agent-minutes, 597953 tokens over 24 records
+<!-- totals: added=921 removed=41 minutes=510.8 records=24 tokens=597953 -->
