@@ -3,18 +3,18 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ../z-nile/check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0011); do
+for dir in $(../zn members R0011); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0011
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0011
 
 # a sequestered issue spec before `./zn done`, its promoted copy after it
 spec() { # $1 issue id, $2 spec name
   local f
-  f="$(./zn find "$1")/acceptance/$2.spec.luau"
+  f="$(../zn find "$1")/acceptance/$2.spec.luau"
   [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
   echo "$f"
 }
@@ -23,12 +23,12 @@ check "RC1: a submitted score shows on the all-time panel and the day board, and
 
 hiscores_feature_has_no_edge() {
   local block
-  block="$(sed -n '/^```deps$/,/^```$/p' tracker/architecture.md)"
+  block="$(sed -n '/^```deps$/,/^```$/p' .tracker/architecture.md)"
   if grep -q 'Hiscores' <<<"$block"; then
     echo "the deps block names Hiscores"
     return 1
   fi
-  grep -q '^| Hiscores |' tracker/architecture.md || {
+  grep -q '^| Hiscores |' .tracker/architecture.md || {
     echo "the features table has no Hiscores row"
     return 1
   }

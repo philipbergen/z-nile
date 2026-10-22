@@ -3,18 +3,18 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ../z-nile/check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0010); do
+for dir in $(../zn members R0010); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0010
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0010
 
 # a sequestered issue spec before `./zn done`, its promoted copy after it
 spec() { # $1 issue id, $2 spec name
-  local f="tracker/issues/active/$1/acceptance/$2.spec.luau"
-  [[ -f $f ]] || f="tracker/issues/$1/acceptance/$2.spec.luau"
+  local f=".tracker/issues/active/$1/acceptance/$2.spec.luau"
+  [[ -f $f ]] || f=".tracker/issues/$1/acceptance/$2.spec.luau"
   [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
   echo "$f"
 }

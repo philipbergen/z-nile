@@ -66,8 +66,8 @@ overrides() {
 }
 check "AC7: the overridden specs (c0034 in a fixture, five without their own git config) still pass" overrides
 docs() {
-  local s=.claude/skills t=.claude/skills/testing/SKILL.md
-  grep -qF "No check may ever change the real repository" AGENTS.md || { echo "AGENTS.md lacks the rule"; return 1; }
+  local s=../.claude/skills t=../.claude/skills/testing/SKILL.md
+  grep -qF "No check may ever change the real repository" ../AGENTS.md || { echo "AGENTS.md lacks the rule"; return 1; }
   grep -qF "## Specs never touch the real repository" "$t" || { echo "testing skill lacks its section"; return 1; }
   for p in "Enforced at run time" "Caught only by review" "Allowed writers" "If the tripwire fires" "Jail" '$TMPDIR'; do
     grep -qF "$p" "$t" || { echo "testing skill section lacks: $p"; return 1; }
@@ -88,8 +88,8 @@ make_copy() { # $1: the copy; a copy of the runner and guards, plus a spec that 
   local copy=$1 real req="req""uire" # keeps literal require text out of this file (graph scanner)
   real=$(pwd -P)
   rm -rf "$copy" && mkdir -p "$copy/z-nile/lib" "$copy/tests/probe"
-  cp -R tests/run.luau tests/lib "$copy/tests/" && cp -R z-nile/lib/fence.sh z-nile/lib/git-hooks "$copy/z-nile/lib/"
-  cp .luaurc rokit.toml "$copy/"
+  cp -R tests/run.luau tests/lib "$copy/tests/" && cp -R lib/fence.sh lib/git-hooks "$copy/z-nile/lib/"
+  cp .luaurc ../rokit.toml "$copy/"
   cat >"$copy/tests/probe/chain.spec.luau" <<SPEC
 --!strict
 local fs = $req("@lune/fs")

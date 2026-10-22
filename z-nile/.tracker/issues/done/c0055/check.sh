@@ -15,6 +15,6 @@ check "AC5: an unknown argument exits 2 and runs nothing" lune run tests/run -- 
 check "AC6: a host without rokit installs the pinned release, then runs the gate" lune run tests/run -- "$A/setup-run.spec.luau"
 check "AC7: the spec leaves no fixture behind" bash -c 'lune run tests/run -- "$0" >/dev/null && [[ ! -e .cache/c0055-setup ]]' "$A/setup-run.spec.luau"
 check "AC8: the slice-based setup-tools spec is gone and no other check.sh names it" bash -c '[[ ! -e tests/acceptance/c0048/setup-tools.spec.luau ]] && ! grep -rl --include=check.sh "setup-tools.spec" tracker | grep -v "/c0055/check.sh$"'
-check "AC9: c0015's text spec still passes" lune run tests/run -- tests/acceptance/c0015/tools.spec.luau
+check "AC9: c0015's text spec still passes" lune run tests/run -- ../pickman/tests/acceptance/c0015/tools.spec.luau
 
 finish

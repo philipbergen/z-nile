@@ -14,6 +14,6 @@ check "AC2: design-mode review rates an unnamed override high" lune run tests/ru
 check "AC3: the issue template has a visible Overrides line outside its comment" lune run tests/run -- "$A/override-check.spec.luau"
 check "AC4: ready-raft's readiness step stops on an unfinished depends_on" lune run tests/run -- "$A/override-check.spec.luau"
 check "AC5: the acceptance spec is formatted and linted" bash -c 'stylua --check "$0" && selene --quiet "$0"' "$A"
-check "AC6: the full gate passes" z-nile/check.sh --full
+check "AC6: the full gate passes" ./check.sh --full
 
 finish

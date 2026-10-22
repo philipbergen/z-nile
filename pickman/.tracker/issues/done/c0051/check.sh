@@ -16,6 +16,6 @@ check "AC5: the pause is transientSeconds (default 5) on creation and polling" l
 check "AC6: retry pauses do not shorten the task timeout" lune run tests/run -- "$A/pauses.spec.luau"
 check "AC7: publish retries 409 and 429/5xx within one MAX_ATTEMPTS budget" lune run tests/run -- "$A/publish.spec.luau" "$OLD/c0015/publish.spec.luau" "$OLD/c0015/config.spec.luau"
 check "AC8: the API key never appears in an error after retries" lune run tests/run -- "$A/key.spec.luau" "$OLD/c0003/execute.spec.luau" "$OLD/c0003/suite.spec.luau"
-check "AC9: one line of the tracker skill covers a transient-red beta" bash -c 'grep -n "HTTP 429" .claude/skills/tracker/SKILL.md | grep "opencloud:" | grep "gh run rerun" | grep -qi "transient"'
+check "AC9: one line of the tracker skill covers a transient-red beta" bash -c 'grep -n "HTTP 429" ../.claude/skills/tracker/SKILL.md | grep "opencloud:" | grep "gh run rerun" | grep -qi "transient"'
 
 finish

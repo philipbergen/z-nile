@@ -3,17 +3,17 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ./check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0027); do
+for dir in $(../zn members R0027); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0027
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0027
 
-check "RC1: the real tracker tree passes ./zn audit" ./zn audit
-check "RC2: ./zn list succeeds on the real tracker tree" ./zn list
+check "RC1: the real tracker tree passes ./zn audit" ../zn audit
+check "RC2: ./zn list succeeds on the real tracker tree" ../zn list
 check "RC3: the real tracker/next is above every number in use" \
-  bash -c '! ./zn audit | grep -q "next-behind"'
+  bash -c '! ../zn audit | grep -q "next-behind"'
 
 finish

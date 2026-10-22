@@ -41,7 +41,7 @@ check "AC5: every .cache line in scripts/ is on the reviewed list; the scan flag
   "a new .cache mention in a Luau or a shell file is flagged" "a commented mention is not flagged" \
   "a listed line that is gone is reported" "every .cache line in scripts/ and z-nile/ is on the reviewed list"
 check "AC6: no mv -f is left in check.sh, fence.sh or sh.luau" bash -c '
-  if grep -nE "\bmv\b.*-f|\"mv\"" z-nile/check.sh z-nile/lib/fence.sh z-nile/lib/sh.luau; then
-    echo "a move is still used to put a file in place (use z-nile/lib/replace-file.pl)"; exit 1; fi'
+  if grep -nE "\bmv\b.*-f|\"mv\"" ./check.sh lib/fence.sh lib/sh.luau; then
+    echo "a move is still used to put a file in place (use lib/replace-file.pl)"; exit 1; fi'
 
 finish

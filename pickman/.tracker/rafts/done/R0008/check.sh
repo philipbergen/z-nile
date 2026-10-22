@@ -3,16 +3,16 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ../z-nile/check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0008); do
+for dir in $(../zn members R0008); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0008
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0008
 
 # the beta job's text: from `  beta:` to the end of the file (it is the last job)
-beta_job() { sed -n '/^  beta:$/,$p' .github/workflows/check.yml; }
+beta_job() { sed -n '/^  beta:$/,$p' ../.github/workflows/check.yml; }
 
 # RC1: the version the deploy step publishes is what the comment and the runtime tests use, in that order
 version_flows() {
@@ -30,9 +30,9 @@ check "RC1: the published version flows deploy -> PR comment -> runtime tests, i
 # RC2: the Roblox API key is named in exactly two places, the env of the deploy step and of the runtime step,
 # both inside the beta job, and nowhere is it echoed
 secret_scoped() {
-  [ "$(grep -c 'secrets.ROBLOX_API_KEY' .github/workflows/check.yml)" = 2 ] || { echo "secret should be named exactly twice"; return 1; }
+  [ "$(grep -c 'secrets.ROBLOX_API_KEY' ../.github/workflows/check.yml)" = 2 ] || { echo "secret should be named exactly twice"; return 1; }
   [ "$(beta_job | grep -c 'secrets.ROBLOX_API_KEY')" = 2 ] || { echo "secret named outside the beta job"; return 1; }
-  ! grep -rnE 'echo[^#]*ROBLOX_API_KEY|set -x' .github/workflows scripts/deploy-beta.luau scripts/runtime-test.luau scripts/lib/opencloud.luau
+  ! grep -rnE 'echo[^#]*ROBLOX_API_KEY|set -x' ../.github/workflows scripts/deploy-beta.luau scripts/runtime-test.luau scripts/lib/opencloud.luau
 }
 check "RC2: the API key is named only in the env of the deploy and runtime steps, and never echoed" secret_scoped
 

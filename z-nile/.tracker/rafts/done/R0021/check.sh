@@ -3,15 +3,15 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ./check.sh --full
 # every issue naming this raft, including emergent ones
-members=$(./zn members R0021) || members=""
+members=$(../zn members R0021) || members=""
 check "RC0: the raft has member issues" test -n "$members"
 for dir in $members; do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0021
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0021
 
 # The incident's trigger, end to end: two suites of the git-heaviest fixture specs at once in this checkout.
 # Both pass, the second waits for the first, and the repository is unchanged afterwards (config, branch, HEAD,

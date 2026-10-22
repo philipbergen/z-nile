@@ -27,14 +27,14 @@ check "AC1: done refuses a fixed answer without non-empty consequences, naming t
   "a fixed answer with empty consequences is refused" \
   "fixed answers with consequences, and refuted answers without, get past the review check"
 check "AC2: execute-raft Phase 4 runs the full gate first, gives the fixed format with consequences, and questions a twice-hit mechanism" bash -c '
-  phase4=$(sed -n "/^## Phase 4/,/^## Phase 5/p" .claude/skills/execute-raft/SKILL.md)
+  phase4=$(sed -n "/^## Phase 4/,/^## Phase 5/p" ../.claude/skills/execute-raft/SKILL.md)
   grep -qF "z-nile/check.sh --full" <<<"$phase4" || { echo "Phase 4 does not run the full gate before a review"; exit 1; }
   grep -qF "; consequences: " <<<"$phase4" || { echo "Phase 4'"'"'s fixed format has no consequences"; exit 1; }
   grep -qi "mechanism" <<<"$phase4" || { echo "Phase 4 says nothing about questioning a mechanism"; exit 1; }'
 check "AC3: the review skill reviews the fix delta on a re-review and questions a mechanism hit again" bash -c '
-  code=$(sed -n "/^## Code mode/,\$p" .claude/skills/review/SKILL.md)
+  code=$(sed -n "/^## Code mode/,\$p" ../.claude/skills/review/SKILL.md)
   grep -qi "fix delta" <<<"$code" || { echo "code mode does not review the fix delta"; exit 1; }
-  grep -qi "mechanism" .claude/skills/review/SKILL.md || { echo "the review skill says nothing about a mechanism hit again"; exit 1; }'
+  grep -qi "mechanism" ../.claude/skills/review/SKILL.md || { echo "the review skill says nothing about a mechanism hit again"; exit 1; }'
 check "AC4: the overridden specs (c0001 lifecycle, c0038 deferred) pass" lune run tests/run -- \
   tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0038/deferred.spec.luau
 

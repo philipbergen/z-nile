@@ -9,6 +9,6 @@ A="$HERE/acceptance"
 
 check "AC1: f0014's key-map spec pins only W, A, S and D and the shape of the map, not the arrows, Space or the key count" lune run tests/run -- "$A/narrowed.spec.luau"
 check "AC2: the narrowed key-map spec and the View unit spec pass on the code as it is" lune run tests/run -- tests/acceptance/f0014/keys.spec.luau tests/unit/View/view.spec.luau
-check "AC3: f0014's acceptance checks pass" bash "$(./zn find f0014)/check.sh"
+check "AC3: f0014's acceptance checks pass" bash "$(../zn find f0014)/check.sh"
 
 finish

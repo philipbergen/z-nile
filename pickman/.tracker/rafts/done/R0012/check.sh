@@ -3,19 +3,19 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ../z-nile/check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0012); do
+for dir in $(../zn members R0012); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0012
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0012
 
 # sequestered specs: in the issue directories before `./zn done`, promoted to tests/acceptance after it
 spec() { # spec <issue> <name>: path of that issue's acceptance spec, wherever it lives now
   local d
   d="$(git rev-parse --show-toplevel)"
-  [[ -f $d/tests/acceptance/$1/$2 ]] && echo "$d/tests/acceptance/$1/$2" || echo "$d/$(./zn find "$1")/acceptance/$2"
+  [[ -f $d/tests/acceptance/$1/$2 ]] && echo "$d/tests/acceptance/$1/$2" || echo "$d/$(../zn find "$1")/acceptance/$2"
 }
 check "RC1: a phone-sized session swipes to turn, drags to look, taps snap, and the HUD stays readable" \
   lune run tests/run -- "$(spec f0029 phone.spec.luau)"
