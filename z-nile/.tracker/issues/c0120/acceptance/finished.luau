@@ -3,7 +3,7 @@
 -- (check.sh and acceptance/**, in every current project root) is its text before the move, read at its old place when
 -- it moved (pickman's items were under tracker/): unchanged, or, for a finished item's check.sh, with exactly the
 -- rewrite of rewrites.luau (the user's exception, 2026-10-21: "Rewrite them too"). A file that wasn't there before the
--- move (a capture since) is not judged. Read-only. Usage: lune run finished.luau -- <the checkout's top>
+-- move (a capture since) is not judged; c0120's own files are judged against its prep (below). Read-only. Usage: lune run finished.luau -- <the checkout's top>
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
@@ -34,6 +34,19 @@ end
 local world = rewrites.world(TOP, pre :: string)
 local reg = projects.load(TOP, true)
 
+-- c0120's own item folder is its prep's: it changes after the move only by merging prep-c0120 (Guess 17's decision came
+-- that way), so its files are judged against the newest prep commit merged into HEAD, else the tree before the move
+local OWN = "z-nile/.tracker/issues/c0120/"
+local ownBase: string = pre :: string
+for _, ref in { "origin/prep-c0120", "prep-c0120" } do
+	local okB, base = git({ "merge-base", "HEAD", ref })
+	base = string.gsub(base, "%s+$", "")
+	if okB and base ~= "" then
+		ownBase = base
+		break
+	end
+end
+
 -- where a file of a current root was before the move: pickman's root was tracker/
 local function before(path: string): string
 	local rest = string.match(path, "^pickman/%.tracker/(.*)$")
@@ -49,7 +62,8 @@ for _, root in projects.roots(reg) do
 		local isCheck = string.match(path, "/check%.sh$") ~= nil
 		local isSpec = string.find(path, "/acceptance/", 1, true) ~= nil
 		if isCheck or isSpec then
-			local okOld, old = git({ "show", `{pre}:{before(path)}` })
+			local own = string.sub(path, 1, #OWN) == OWN
+			local okOld, old = git({ "show", `{if own then ownBase else pre}:{before(path)}` })
 			if okOld then
 				judged += 1
 				local now = fs.readFile(`{TOP}/{path}`)
