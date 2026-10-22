@@ -24,6 +24,7 @@
 | 20 | 2026-10-22 20:29 | R0035: review-002 | 0 | 0 | 5.0 | raft+proportional | code-review |  |
 | 21 | 2026-10-22 20:30 | R0035: review-002 F1: HudView spec checks the shot bars in screen pixels | 48 | 11 | 10.0 | explicit | code-review |  |
 | 22 | 2026-10-22 20:30 | R0035: refute-002 and harvest | 1 | 0 | 1.3 | raft+proportional | code-review |  |
+| 23 | 2026-10-22 20:30 | R0035: final verification logs | 0 | 0 | 0.8 | raft+proportional | deliver |  |
 
-**Total:** +1503 / -19 lines, 183.7 agent-minutes, 73972 tokens over 22 records
-<!-- totals: added=1503 removed=19 minutes=183.7 records=22 tokens=73972 -->
+**Total:** +1503 / -19 lines, 184.5 agent-minutes, 73972 tokens over 23 records
+<!-- totals: added=1503 removed=19 minutes=184.5 records=23 tokens=73972 -->
