@@ -75,7 +75,7 @@ return t.spec("new raft in c0114's execution window", function(it)
 			local off = raft({ PICKMAN_PUBLISH = "0" })
 			t.expect(off.ok).toBe(false)
 			t.expect(has(off.stderr, "origin/main as last fetched has no z-nile/projects.toml")).toBe(true)
-			t.expect(has(off.stderr, "fetch (./zn sync) if c0114 has landed")).toBe(true)
+			t.expect(has(off.stderr, "fetch (./zn sync --fetch) if c0114 has landed")).toBe(true)
 			t.expect(tip()).toBe(before)
 			local r = raft()
 			if not r.ok then

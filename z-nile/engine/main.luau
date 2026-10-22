@@ -789,7 +789,7 @@ local function refuseInWindow(what: string)
 	if why and string.find(why, `has no {projects.FILE}`, 1, true) then
 		if not publishing() then
 			fail(
-				`{what}: origin/main as last fetched has no {projects.FILE}: fetch (./zn sync) if c0114 has landed; otherwise capture from the main checkout until it does, never offline here`
+				`{what}: origin/main as last fetched has no {projects.FILE}: fetch (./zn sync --fetch) if c0114 has landed; otherwise capture from the main checkout until it does, never offline here`
 			)
 		end
 		fail(
