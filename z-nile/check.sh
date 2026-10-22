@@ -91,6 +91,13 @@ else
   for d in src tests scripts tracker; do [[ -d $d ]] && LUAU_DIRS+=("$d"); done
 fi
 
+source z-nile/lib/fence.sh
+# every home's .cache gets the fence's refusals before anything here writes there, and before --plan
+# (they only read) (the builds write
+# <home>/.cache/check*.rbxl): a symlinked or bad .cache, which an unjailed spec could leave, refuses (code review 004 F3)
+for i in "${!names[@]}"; do
+  pickman_fence_refusals "$(pwd -P)/$(prefix "${homes[$i]}")" || exit 1
+done
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
@@ -105,12 +112,6 @@ if [[ -n $plan ]]; then
 fi
 
 # prerequisites the static stages read: serial and fast
-source z-nile/lib/fence.sh
-# every home's .cache gets the fence's refusals before anything here writes there (the builds write
-# <home>/.cache/check*.rbxl): a symlinked or bad .cache, which an unjailed spec could leave, refuses (code review 004 F3)
-for i in "${!names[@]}"; do
-  pickman_fence_refusals "$(pwd -P)/$(prefix "${homes[$i]}")" || exit 1
-done
 for i in "${!names[@]}"; do
   picked "${names[$i]}" || continue
   c="$(prefix "${homes[$i]}").cache"
