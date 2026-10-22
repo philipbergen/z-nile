@@ -5,14 +5,21 @@
 -- exactly to the repository root (`../` from `z-nile/` or `pickman/`, nothing from the root), becomes the path from
 -- the home to the skill's real folder (skills.RENAMED_PATH, the one map): `../.claude/skills/tracker/` from `z-nile/`
 -- becomes `skills/zz-rules/`, `../.claude/skills/testing/` from `pickman/` becomes `../z-nile/skills/zz-test/`.
--- A variable-built folder (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop (Guess (pending user) G12): a
--- `for <v> in <words>; do` line whose words are all old skill names, in a file that names `.claude/skills/$<v>/` or
--- `.claude/skills/${<v>}/`, gets each word renamed (`for s in tracker review; do` becomes `for s in zz-rules
--- zz-review; do`), so the path reads through the skill's new link. Nothing else changes. Run once from the repository
--- root, after the renames are committed:
---   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished [-- --check]
--- It prints each file it changed and a count, and changes nothing when run again; --check writes nothing and exits 1
--- if anything is left to rewrite.
+-- A variable-built folder (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop (decided with the user,
+-- 2026-10-21, G12: "Rename loop words; delete R0025's"): a `for <v> in <words>; do` line whose words are all old skill
+-- names, in a file that names `.claude/skills/$<v>/` or `.claude/skills/${<v>}/`, gets each word renamed (`for s in
+-- tracker review; do` becomes `for s in zz-rules zz-review; do`), so the path reads through the skill's new link.
+-- Nothing else changes. The one criterion neither rule carries is deleted, in a commit of its own after the rewrite's
+-- (DELETED, like c0120's G17): R0025's RC2 greps AGENTS.md for `.claude/skills/$s/SKILL.md`, and AGENTS.md now names
+-- real paths. Run from the repository root, after the renames are committed:
+--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished             -- the rewrite (its own commit)
+--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --delete  -- the deletion (the next commit)
+--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --check   -- AC14: writes nothing
+-- Each prints what it changed and a count, and changes nothing when run again. --check exits 1 unless every finished
+-- check.sh is exactly its text before c0115's move (the parent of the commit that removed MARK), rewritten by the two
+-- rules, with DELETED's statements removed and nothing else: so a path left old, an extra line deleted or a listed
+-- criterion kept is red. A file that wasn't finished before the move only has to need no rewrite. No history (a
+-- shallow clone, or the move not made) is red.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
@@ -20,6 +27,14 @@ local rewrites = require("@tests/acceptance/c0120/rewrites") -- its `relative`, 
 local skills = require("@znile/engine/skills")
 
 local checkOnly = table.find(process.args, "--check") ~= nil
+local deleteMode = table.find(process.args, "--delete") ~= nil
+
+-- The finished criteria no rewrite carries, deleted (G12): file -> the ids of its `check "<id>: …"` statements.
+local DELETED: { [string]: { string } } = {
+	["z-nile/.tracker/rafts/done/R0025/check.sh"] = { "RC2" },
+}
+-- A file the move takes away: its parent is the tree before c0115's move.
+local MARK = ".claude/skills/testing/SKILL.md"
 local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 assert(top ~= "", "rewrite-finished: not in a git checkout")
 local reg = projects.load(top, true)
@@ -81,6 +96,86 @@ local function rewrite(text: string, home: string): (string, number)
 	return table.concat(lines, "\n"), n
 end
 
+-- `text` without the `check "<id>: …"` statement of each id: the statement runs to the line where its single quotes
+-- balance and it doesn't end in `\` (RC2's `bash -c '…'` spans five lines). Nil and why unless each id is exactly one
+-- statement.
+local function deleteCriteria(text: string, ids: { string }): (string?, string?)
+	local lines = string.split(text, "\n")
+	for _, id in ids do
+		local found = 0
+		local kept: { string } = {}
+		local i = 1
+		while i <= #lines do
+			if string.sub(lines[i], 1, #id + 8) == `check "{id}:` then
+				found += 1
+				local quotes = select(2, string.gsub(lines[i], "'", ""))
+				while (quotes % 2 == 1 or string.sub(lines[i], -1) == "\\") and i < #lines do
+					i += 1
+					quotes += select(2, string.gsub(lines[i], "'", ""))
+				end
+			else
+				table.insert(kept, lines[i])
+			end
+			i += 1
+		end
+		if found ~= 1 then
+			return nil, `{id}: {found} check statements`
+		end
+		lines = kept
+	end
+	return table.concat(lines, "\n"), nil
+end
+
+local function git(args: { string }): (boolean, string)
+	local r = process.exec("git", args, { cwd = top })
+	return r.ok, (string.gsub(r.stdout, "%s+$", ""))
+end
+-- the tree before c0115's move, or nil and why
+local function premove(): (string?, string?)
+	if fs.isFile(`{top}/{MARK}`) then
+		return nil, `{MARK} is still in the tree: the move hasn't happened`
+	end
+	local okM, moved = git({ "log", "-1", "--format=%H", "--", MARK })
+	if not okM or moved == "" then
+		return nil, `no commit removed {MARK}: the history is shallow or the move hasn't happened`
+	end
+	local okP, parent = git({ "rev-parse", "--verify", "-q", moved .. "^" })
+	if not okP or parent == "" then
+		return nil, `the move {moved} has no parent in this history`
+	end
+	return parent, nil
+end
+
+if deleteMode then
+	local files: { string } = {}
+	for file in DELETED do
+		table.insert(files, file)
+	end
+	table.sort(files)
+	local changed = 0
+	for _, file in files do
+		local text = fs.readFile(`{top}/{file}`)
+		local new = deleteCriteria(text, DELETED[file])
+		if new and new ~= text then
+			fs.writeFile(`{top}/{file}`, new)
+			changed += 1
+			print(`{file}: {table.concat(DELETED[file], ", ")} deleted`)
+		end
+	end
+	print(`delete: {changed} of {#files} files changed`)
+	process.exit(0)
+end
+
+local pre: string? = nil
+if checkOnly then
+	local why
+	pre, why = premove()
+	if not pre then
+		print(`rewrite-finished: {why}: nothing checked`)
+		process.exit(1)
+	end
+end
+local wrong = 0
 local changed, read = 0, 0
 for _, root in projects.roots(reg) do
 	for _, kind in { "issues", "rafts" } do
@@ -93,7 +188,27 @@ for _, root in projects.roots(reg) do
 				if string.match(id, "^[fdcR]%d%d%d%d$") and fs.isFile(`{top}/{file}`) then
 					read += 1
 					local text = fs.readFile(`{top}/{file}`)
-					local new, n = rewrite(text, projects.homeOf(reg, file))
+					local home = projects.homeOf(reg, file)
+					local new, n = rewrite(text, home)
+					if checkOnly then
+						-- exactly the pre-move text, rewritten, with DELETED's statements gone
+						local okB, before = git({ "show", `{pre}:{file}` })
+						if okB then
+							local want: string? = rewrite(before .. "\n", home)
+							local why: string? = nil
+							if DELETED[file] then
+								want, why = deleteCriteria(want :: string, DELETED[file])
+							end
+							if want ~= text then
+								wrong += 1
+								print(
+									`{file}: not its pre-move text rewritten{if DELETED[file]
+										then " less " .. table.concat(DELETED[file], ", ")
+										else ""}{if why then " (" .. why .. ")" else ""}`
+								)
+							end
+						end
+					end
 					if n > 0 then
 						changed += 1
 						print(`{n} {file}`)
@@ -111,6 +226,6 @@ if read == 0 then
 	print("no finished check.sh was read: nothing checked")
 	process.exit(1)
 end
-if checkOnly and changed > 0 then
+if checkOnly and (changed > 0 or wrong > 0) then
 	process.exit(1)
 end

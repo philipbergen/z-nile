@@ -2796,7 +2796,7 @@ index 00000000..cb2f48b5
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/c0115/c0115.md
-index 258a3a73..fa68609f 100644
+index 258a3a73..34c68849 100644
 --- a/z-nile/.tracker/issues/c0115/c0115.md
 +++ b/z-nile/.tracker/issues/c0115/c0115.md
 @@ -6,7 +6,7 @@ slug: skill-names-readme
@@ -2808,7 +2808,7 @@ index 258a3a73..fa68609f 100644
  created: 2026-10-20
  status: new-falcon-lucky-mongoose
  ---
-@@ -38,53 +38,571 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -38,53 +38,585 @@ Decided with the user (2026-10-20), from the programme review:
  - Move and rename the skill files under `z-nile/` to the `z-` and `zz-` names. `scripts/tracker.sh` verbs stay (`new issue`, `new raft`, `ready`, `start`, `done`).
  - Write `z-nile/README.md` so it opens with the flow diagram and a short account of the five parts.
  
@@ -2977,9 +2977,9 @@ index 258a3a73..fa68609f 100644
 +
 +**Finished `check.sh` files** (the user's decision for c0114 and c0120, 2026-10-21: a move that breaks a finished file's paths rewrites them). The skills' move breaks every finished check that reads a skill through `.claude/skills/<old>`. `experiments/rewrite-finished.luau`, run once after the move (Implementation step 5c), rewrites them with two rules, nothing else:
 +- a literal `<up>.claude/skills/<old>` (then `/` or the word's end), where `<up>` climbs from the item's home exactly to the repository root (`../` from `z-nile/` or `pickman/`), becomes the path from the home to the real folder (`skills.RENAMED_PATH`, through c0120's `rewrites.relative`): `../.claude/skills/tracker/SKILL.md` from `z-nile/` becomes `skills/zz-rules/SKILL.md`, and `../.claude/skills/testing/SKILL.md` from `pickman/` becomes `../z-nile/skills/zz-test/SKILL.md`;
-+- (Guess (pending user) G12) a variable-built path (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop: a `for <v> in <words>; do` line whose words are all old skill names, in a file that names `.claude/skills/$<v>/`, gets each word renamed (`for s in review metrics; do` becomes `for s in zz-review zz-stats; do`), so the path reads through the skill's new link.
++- (decided with the user, 2026-10-21, G12) a variable-built path (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop: a `for <v> in <words>; do` line whose words are all old skill names, in a file that names `.claude/skills/$<v>/`, gets each word renamed (`for s in review metrics; do` becomes `for s in zz-review zz-stats; do`), so the path reads through the skill's new link.
 +
-+On the prototype: 31 files by the first rule (the paths all resolve from their homes afterwards) and 4 by the second (c0005, c0046, c0053, R0025: nine loops). Its `--check` is part of AC14, and a second run changes nothing. One criterion stays red that neither rule can carry: R0025's `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md`, since AGENTS.md now names real paths (G12 lists it). This is the same exception c0120 has for its own move, in a commit of its own after the renames (JC1).
++On the prototype: 31 files by the first rule (the paths all resolve from their homes afterwards) and 4 of them by the second too (c0005, c0046, c0053, R0025: nine loops). One criterion neither rule carries is deleted (G12, like c0120's G17): R0025's RC2, whose `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md` can't pass now that AGENTS.md names real paths. The script lists it (`DELETED`), removes that one `check` statement with its quoted continuation lines (`-- --delete`), and the deletion is its own commit, after the rewrite's (JC1). `--check` (AC14) accepts exactly this: every finished `check.sh` that existed before c0115's move must equal its text there (the parent of the commit that removed `.claude/skills/testing/SKILL.md`), rewritten by the two rules, with `DELETED`'s statements removed and nothing else; a file finished after the move only has to need no rewrite, and no history is red. A second run of either mode changes nothing. This is the same exception c0120 has for its own move.
 +
 +Decided with the user (2026-10-21), G4: "Rewrite in c0115." This is the user's exception to the rule that no unfinished item's document is edited: the rename script's third pass rewrites the old skill names and old lesson ids in live backlog designs, by the name rule and the prose-id rule (§5):
 +- **which items:** every unfinished item (backlog and `active/`, under every current root) but c0115 itself, whose document is the record of the rename;
@@ -3194,6 +3194,7 @@ index 258a3a73..fa68609f 100644
 +| c0115's raft holds c0113 (G9) | check.sh AC15 | no raft yet, or a raft without c0113 | reasoned: red on the prototype today (no raft); `./zn members` is the tracker's own reader |
 +| a missing registry refuses, never guessing the folders (c0114) | skills :: a missing registry refuses…; lessons :: a tree with no registry refuses… | `skills.load` falls back to an empty registry (M59); `lessons.load` skips its refusal (M60) | run: killed |
 +| finished `check.sh` files read the skills' new places (§8, G12) | check.sh AC14 (`rewrite-finished --check`) | c0053's loop left on `review metrics` (M62, state); c0005's `skills/zz-rules/SKILL.md` back to `../.claude/skills/tracker/SKILL.md` (M63, state) | run: killed |
++| only R0025's RC2 is deleted from a finished file (G12) | check.sh AC14 (`rewrite-finished --check`, exact against the pre-move text) | RC2 not yet deleted (the rewrite commit's state); RC3 deleted too (M64, state); RC2's last quoted line left behind (M65, state) | run: all red |
 +| AC13 passes an empty range and stays strict on a live branch (G11) | check.sh AC13 | — | run (scratch clone): a live branch passes, an edit in the moves commit (M44) and a later rename (M45) fail, `origin/main` itself (empty range) passes |
 +| the testing split is a move, not a copy | docs :: zz-test keeps the gate… | zz-test keeps a Simulations section (M33) | run: killed |
 +| the gate runs `skills --check` | check.sh AC2 (the exact stage line) | the stage deleted, the plan line kept (M34) | run: killed |
@@ -3235,7 +3236,7 @@ index 258a3a73..fa68609f 100644
 +- AC11: `./zn audit` reports no error on the real tree.
 +- AC12: as of the last fetch, `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing on the raft branch.
 +- AC13: on a live branch, the branch's commits since it left `origin/main` hold exactly one commit whose subject starts `c0115: move the skills`, its `git show -M --find-renames=100% --name-status` lines are all `R100`, and no other commit of the range renames a file under `.claude/skills`, `z-nile/skills` or `pickman/skills`. An empty range (the PR squashed into main) passes (the user's G11).
-+- AC14: the rename is finished: the rename script's `--check` run finds nothing left to rename (ledgers, lessons, live backlog designs), `rewrite-finished --check` finds no finished `check.sh` left to rewrite, and, independently of the script, no unfinished item's design (c0115 aside) or its `check.sh` or acceptance files name a hyphenated old skill (bare or as a `/command`), a `/<old>/SKILL.md` path (literal or built from a variable) or a path through `.claude/skills/<old>`. Both halves are anchored at the repository root and fail closed: a roots command that fails or prints nothing, or a scan that reads no document, is red.
++- AC14: the rename is finished: the rename script's `--check` run finds nothing left to rename (ledgers, lessons, live backlog designs), `rewrite-finished --check` finds every finished `check.sh` exactly its pre-move text rewritten (R0025's RC2 deleted, G12, and nothing else), and, independently of the script, no unfinished item's design (c0115 aside) or its `check.sh` or acceptance files name a hyphenated old skill (bare or as a `/command`), a `/<old>/SKILL.md` path (literal or built from a variable) or a path through `.claude/skills/<old>`. Both halves are anchored at the repository root and fail closed: a roots command that fails or prints nothing, or a scan that reads no document, is red.
 +- AC15: c0115's raft (its `raft:` field) holds c0113, the item it supersedes (`./zn members`); no raft yet is red.
  
  ### Judged
@@ -3256,7 +3257,8 @@ index 258a3a73..fa68609f 100644
 +4. **The links.** `./zn skills` in the worktree; `git add .claude/skills`. Verify: `./zn skills --check`; the gate stage line in `z-nile/check.sh`.
 +5. **The ledgers.** `lune run "$(./zn find c0115)/experiments/rename-lesson-ids"`; then read its lesson-body diff line by line (`git diff -U0 -- 'z-nile/skills/*/lessons/*.md' 'pickman/skills/*/lessons/*.md'`): a renamed example or a half-renamed sentence is reworded by hand (§5 Text); then `./zn lessons --check` and `--uncovered R0040 R0042`. Rerun all of it after every merge of `origin/main`, since lessons keep arriving.
 +5b. **Live backlog designs (G4).** The same script run (step 5) rewrites them. Read pass 3's diff line by line, as step 5 does for lessons, and reword by hand any half-renamed sentence in a document (the name rule rightly skips bare `review` and `tracker`: "zz-execute, review, tracker or z-design skills" becomes "zz-execute, zz-review, zz-rules or z-design skills"); never hand-edit a sequestered file. Name every file the pass touched, and every reworded sentence, in the PR description. A sequestered file AC14 flags that the script's path gate skipped (one with only a bare old name) is escalated to the user under their G4 exception, never edited by hand.
-+5c. **Finished `check.sh` files** (§8; the user's decision for c0114 and c0120, and G12). `lune run "$(./zn find c0115)/experiments/rewrite-finished"`, from the root, after the move is committed; read its diff line by line; commit it alone, after the renames (JC1). Verify: `-- --check` prints `0 of … would be rewritten`, and each rewritten path resolves from its item's home.
++5c. **Finished `check.sh` files** (§8; the user's decision for c0114 and c0120, and G12). `lune run "$(./zn find c0115)/experiments/rewrite-finished"`, from the root, after the move is committed; read its diff line by line; commit it alone, after the renames (JC1).
++5d. **R0025's RC2** (G12): `… rewrite-finished -- --delete`; commit it alone, after 5c's commit. Verify: `-- --check` exits 0 (`0 of … would be rewritten`, no file "not its pre-move text rewritten"), and every edited finished check still passes by hand, or fails only where it failed before the move.
 +6. **Skill text.** Frontmatter names; `z-run` (the launch and hand-off) and `zz-execute` (the protocol); the testing split (§2) and `pickman-test`; `zz-arch` (§3); zz-rules' Skills bullet and lists; the lessons paragraph; the checklists and z-design's step 3; every cross-reference (§8). Verify: AC3, AC8.
 +7. **README and AGENTS.md**; delete `.claude/README.md`; the template (§6). Verify: AC9.
 +8. **Fixtures and overrides**: `z-nile/tests/lib/engine.luau` and `trackerfix.luau`, then each override group, running its specs from its home.
@@ -3276,7 +3278,14 @@ index 258a3a73..fa68609f 100644
 +9. G9: Decided with the user (2026-10-21): "Close c0113 as superseded." `z-nile/README.md` covers every ask of c0113 (a skill table, the command sequence, the state diagram with stop and a released claim, the separate `design:` field; no gap), pinned by `readme.spec`'s case "covers every ask of c0113". The tracker has no other way to retire an item, so c0113 joins c0115's raft when that raft is formed and `./zn done` closes it; its document says so and its `check.sh` runs that case and checks that `.claude/README.md` is gone.
 +10. G10: Decided with the user (2026-10-21): "Accepted." `zz-arch` stays as written; the user skims it on #103.
 +11. G11: Decided with the user (2026-10-21): "Pass when the range is empty." AC13 passes an empty range and stays strict on a live branch; JC1 covers an empty range on a live branch.
-+12. G12: **Guess (pending user), 2026-10-21, found at the rebase onto c0120.** Finished `check.sh` files are rewritten when a move breaks their paths (the user's decision for c0114 and c0120), and the skills' move breaks some that build the path from a loop variable (`for s in review metrics; do … "../.claude/skills/$s/SKILL.md"`), which no path rewrite can carry. The guess: rename the loop's words too, when every word is an old skill name and the loop feeds `.claude/skills/$<var>/` (nine loops in c0005, c0046, c0053 and R0025), so the check reads through the new link (§8). One criterion stays red anyway: R0025's `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md`, since AGENTS.md now names real paths. The alternatives: delete the criteria no path rewrite carries, as c0120's G17 ("delete them") does, or leave them red. The PR names the files.
++12. G12: Decided with the user (2026-10-21): "Rename loop words; delete R0025's". Finished `check.sh` files are rewritten when a move breaks their paths (the user's decision for c0114 and c0120), and the skills' move breaks some that build the path from a loop variable (`for s in review metrics; do … "../.claude/skills/$s/SKILL.md"`). The nine loops in c0005, c0046, c0053 and R0025 get their words renamed where every word is an old skill name; R0025's RC2 (its grep of AGENTS.md for `.claude/skills/$s/SKILL.md`), which no rewrite carries, is deleted, listed and committed alone after the rewrite, as c0120's G17 does; AC14's `rewrite-finished --check` accepts exactly that deletion (§8).
++13. G13: **Guess (pending user), 2026-10-22, found running every edited finished check by hand after G12.** Of the 31 finished `check.sh` files c0115 edits, six criteria pass before c0115 and fail after it, for reasons no path rewrite carries; they read text c0115 deliberately changes:
++    - c0010 AC7: its game phrases (`tests/scenario/` …) moved from the testing skill to `pickman-test` (§2), and the rewrite points it at `zz-test`;
++    - c0045 AC6: "prompt template: hard rule 1 is gone" (the template's text, §6);
++    - c0058 AC8: it reads `$s/review/SKILL.md`, `$s/execute-raft/…` and `$s/ticket-prep/…` with `s=../.claude/skills`, a variable folder neither rule sees; renaming those three skill words (`$s/zz-review/` …) makes it pass (tried by hand);
++    - c0067 AC11: "c0047 spec: not repointed" (the c0047 override's text);
++    - c0068 AC7 and c0069 AC5: `^name: stop-raft` and `^name: launch-raft` in the renamed skills' frontmatter.
++    The guess: carry c0058's with a third rule (a `$<v>/<old>/` where `<v>` is assigned exactly `<up>.claude/skills` gets the new name), and delete the other five the way R0025's RC2 is deleted (listed in `DELETED`, committed alone, accepted exactly by AC14). The alternative is to leave them red: finished checks aren't rerun by any gate. Not applied yet: the prototype carries G12 only, and `rewrite-finished --check` stays exact on that.
 +
 +## Programme review of c0115: how each finding is answered
 +- F1 (`zz-arch`/`zz-test` vs the reservation): answered by the user's decision "z-nile owns zz-arch/zz-test" (option a). `zz-arch` is new (§3), `zz-test` holds the gate and the guards (§2), and pickman's halves are `pickman-arch` and `pickman-test` (G1). The generator refuses a `zz-`/`z-` project skill even in a project named `zz` (AC1, M4).
@@ -3308,7 +3317,7 @@ index 258a3a73..fa68609f 100644
 +| overrides (promoted specs) | 29 | 174 | 145 |
 +| **total, renames, tracker files and prep aside** | 97 | **1,437** | **519** |
 +| G4's live backlog designs and their sequestered files (tracker) | 7 | 88 | 88 |
-+| finished `check.sh` files (tracker, §8) | 31 | 64 | 64 |
++| finished `check.sh` files (tracker, §8; R0025's RC2 deleted) | 31 | 64 | 69 |
 +| ledgers (tracker) | 6 | 204 | 204 |
 +| this issue's and c0113's documents, specs, `check.sh` files and the two scripts (prep's lines) | 13 | 2,717 | 116 |
 +
@@ -3316,6 +3325,11 @@ index 258a3a73..fa68609f 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++G12 decided with the user, 2026-10-22 ("Rename loop words; delete R0025's"), on the prototype at the rebase's tip:
++- `rewrite-finished.luau` gained `DELETED` (R0025's RC2), `-- --delete` (the statement with its quoted continuation lines) and an exact `--check`: every finished file equals its pre-move text, rewritten, less `DELETED`. The deletion is its own commit, after the rewrite's. Red before the deletion ("R0025/check.sh: not its pre-move text rewritten less RC2"), green after, and a second run of each mode changes nothing.
++- Mutants M62 to M65 (a loop or a path left old, RC3 deleted too, RC2's last quoted line left behind) against `--check`: all killed.
++- Every edited finished check (31 files) run by hand on the prototype, and on the base in a scratch clone: 25 have no new red. Six criteria pass on the base and fail on the prototype (G13, pending user). Several criteria red on the base pass on the prototype (c0005 AC5, c0053 AC4, c0059 AC3, R0013 RC0), and the rest of the reds are red on both, from before c0115 (c0036, c0037, c0049, c0060, R0025's member runs, R0031).
++
 +The §11 rebase onto c0120's implementation, 2026-10-21: `origin/prep-c0120` (aed3e6f) merged into `prep-c0115` (f5b40ea6, clean); the prototype rebuilt on `impl2-c0120` at 757a5fa1 (first on 9b885a08, then on c0120's G17 tip), with c0114's two simulations replayed, c0120 simulated done (its specs at `z-nile/tests/acceptance/c0120`), the move (44 files, all `R100`) and the edits cherry-picked, and the port in commits after them; 31 files conflicted and were resolved as §11 says. Two fixes c0120 needs once promoted were simulated in their own commits (§11 (o)).
 +- §11 (a) to (o) rechecked, each with its finding.
 +- New: `experiments/rewrite-finished.luau` (31 finished `check.sh` files by the path rule, 4 by G12's loop rule, every rewritten path resolving from its home; `--check` in AC14); c0115's and c0113's `check.sh` run from `z-nile/`; the specs read the real tree from `TOP`; `skills.spec` "a missing registry refuses" and `lessons.spec` "a tree with no registry refuses" replace the legacy cases; fixtures under `pickman/.tracker`; `zz-arch`'s and `pickman-test`'s lessons paragraph gained c0120's `--project z-nile`; `zz-arch` and AGENTS.md name `z-nile/tests`.
@@ -3735,10 +3749,10 @@ index 00000000..fff578ba
 +end
 diff --git a/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
 new file mode 100644
-index 00000000..a5154e71
+index 00000000..0e90881c
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,231 @@
 +--!strict
 +-- c0115, Implementation step 5c: rewrites the skill paths in every finished item's check.sh for the skills' move (the
 +-- user's decision for c0114 and c0120, 2026-10-21: finished check.sh files are rewritten when a move breaks their
@@ -3746,14 +3760,21 @@ index 00000000..a5154e71
 +-- exactly to the repository root (`../` from `z-nile/` or `pickman/`, nothing from the root), becomes the path from
 +-- the home to the skill's real folder (skills.RENAMED_PATH, the one map): `../.claude/skills/tracker/` from `z-nile/`
 +-- becomes `skills/zz-rules/`, `../.claude/skills/testing/` from `pickman/` becomes `../z-nile/skills/zz-test/`.
-+-- A variable-built folder (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop (Guess (pending user) G12): a
-+-- `for <v> in <words>; do` line whose words are all old skill names, in a file that names `.claude/skills/$<v>/` or
-+-- `.claude/skills/${<v>}/`, gets each word renamed (`for s in tracker review; do` becomes `for s in zz-rules
-+-- zz-review; do`), so the path reads through the skill's new link. Nothing else changes. Run once from the repository
-+-- root, after the renames are committed:
-+--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished [-- --check]
-+-- It prints each file it changed and a count, and changes nothing when run again; --check writes nothing and exits 1
-+-- if anything is left to rewrite.
++-- A variable-built folder (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop (decided with the user,
++-- 2026-10-21, G12: "Rename loop words; delete R0025's"): a `for <v> in <words>; do` line whose words are all old skill
++-- names, in a file that names `.claude/skills/$<v>/` or `.claude/skills/${<v>}/`, gets each word renamed (`for s in
++-- tracker review; do` becomes `for s in zz-rules zz-review; do`), so the path reads through the skill's new link.
++-- Nothing else changes. The one criterion neither rule carries is deleted, in a commit of its own after the rewrite's
++-- (DELETED, like c0120's G17): R0025's RC2 greps AGENTS.md for `.claude/skills/$s/SKILL.md`, and AGENTS.md now names
++-- real paths. Run from the repository root, after the renames are committed:
++--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished             -- the rewrite (its own commit)
++--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --delete  -- the deletion (the next commit)
++--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --check   -- AC14: writes nothing
++-- Each prints what it changed and a count, and changes nothing when run again. --check exits 1 unless every finished
++-- check.sh is exactly its text before c0115's move (the parent of the commit that removed MARK), rewritten by the two
++-- rules, with DELETED's statements removed and nothing else: so a path left old, an extra line deleted or a listed
++-- criterion kept is red. A file that wasn't finished before the move only has to need no rewrite. No history (a
++-- shallow clone, or the move not made) is red.
 +local fs = require("@lune/fs")
 +local process = require("@lune/process")
 +local projects = require("@znile/engine/projects")
@@ -3761,6 +3782,14 @@ index 00000000..a5154e71
 +local skills = require("@znile/engine/skills")
 +
 +local checkOnly = table.find(process.args, "--check") ~= nil
++local deleteMode = table.find(process.args, "--delete") ~= nil
++
++-- The finished criteria no rewrite carries, deleted (G12): file -> the ids of its `check "<id>: …"` statements.
++local DELETED: { [string]: { string } } = {
++	["z-nile/.tracker/rafts/done/R0025/check.sh"] = { "RC2" },
++}
++-- A file the move takes away: its parent is the tree before c0115's move.
++local MARK = ".claude/skills/testing/SKILL.md"
 +local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 +assert(top ~= "", "rewrite-finished: not in a git checkout")
 +local reg = projects.load(top, true)
@@ -3822,6 +3851,86 @@ index 00000000..a5154e71
 +	return table.concat(lines, "\n"), n
 +end
 +
++-- `text` without the `check "<id>: …"` statement of each id: the statement runs to the line where its single quotes
++-- balance and it doesn't end in `\` (RC2's `bash -c '…'` spans five lines). Nil and why unless each id is exactly one
++-- statement.
++local function deleteCriteria(text: string, ids: { string }): (string?, string?)
++	local lines = string.split(text, "\n")
++	for _, id in ids do
++		local found = 0
++		local kept: { string } = {}
++		local i = 1
++		while i <= #lines do
++			if string.sub(lines[i], 1, #id + 8) == `check "{id}:` then
++				found += 1
++				local quotes = select(2, string.gsub(lines[i], "'", ""))
++				while (quotes % 2 == 1 or string.sub(lines[i], -1) == "\\") and i < #lines do
++					i += 1
++					quotes += select(2, string.gsub(lines[i], "'", ""))
++				end
++			else
++				table.insert(kept, lines[i])
++			end
++			i += 1
++		end
++		if found ~= 1 then
++			return nil, `{id}: {found} check statements`
++		end
++		lines = kept
++	end
++	return table.concat(lines, "\n"), nil
++end
++
++local function git(args: { string }): (boolean, string)
++	local r = process.exec("git", args, { cwd = top })
++	return r.ok, (string.gsub(r.stdout, "%s+$", ""))
++end
++-- the tree before c0115's move, or nil and why
++local function premove(): (string?, string?)
++	if fs.isFile(`{top}/{MARK}`) then
++		return nil, `{MARK} is still in the tree: the move hasn't happened`
++	end
++	local okM, moved = git({ "log", "-1", "--format=%H", "--", MARK })
++	if not okM or moved == "" then
++		return nil, `no commit removed {MARK}: the history is shallow or the move hasn't happened`
++	end
++	local okP, parent = git({ "rev-parse", "--verify", "-q", moved .. "^" })
++	if not okP or parent == "" then
++		return nil, `the move {moved} has no parent in this history`
++	end
++	return parent, nil
++end
++
++if deleteMode then
++	local files: { string } = {}
++	for file in DELETED do
++		table.insert(files, file)
++	end
++	table.sort(files)
++	local changed = 0
++	for _, file in files do
++		local text = fs.readFile(`{top}/{file}`)
++		local new = deleteCriteria(text, DELETED[file])
++		if new and new ~= text then
++			fs.writeFile(`{top}/{file}`, new)
++			changed += 1
++			print(`{file}: {table.concat(DELETED[file], ", ")} deleted`)
++		end
++	end
++	print(`delete: {changed} of {#files} files changed`)
++	process.exit(0)
++end
++
++local pre: string? = nil
++if checkOnly then
++	local why
++	pre, why = premove()
++	if not pre then
++		print(`rewrite-finished: {why}: nothing checked`)
++		process.exit(1)
++	end
++end
++local wrong = 0
 +local changed, read = 0, 0
 +for _, root in projects.roots(reg) do
 +	for _, kind in { "issues", "rafts" } do
@@ -3834,7 +3943,27 @@ index 00000000..a5154e71
 +				if string.match(id, "^[fdcR]%d%d%d%d$") and fs.isFile(`{top}/{file}`) then
 +					read += 1
 +					local text = fs.readFile(`{top}/{file}`)
-+					local new, n = rewrite(text, projects.homeOf(reg, file))
++					local home = projects.homeOf(reg, file)
++					local new, n = rewrite(text, home)
++					if checkOnly then
++						-- exactly the pre-move text, rewritten, with DELETED's statements gone
++						local okB, before = git({ "show", `{pre}:{file}` })
++						if okB then
++							local want: string? = rewrite(before .. "\n", home)
++							local why: string? = nil
++							if DELETED[file] then
++								want, why = deleteCriteria(want :: string, DELETED[file])
++							end
++							if want ~= text then
++								wrong += 1
++								print(
++									`{file}: not its pre-move text rewritten{if DELETED[file]
++										then " less " .. table.concat(DELETED[file], ", ")
++										else ""}{if why then " (" .. why .. ")" else ""}`
++								)
++							end
++						end
++					end
 +					if n > 0 then
 +						changed += 1
 +						print(`{n} {file}`)
@@ -3852,7 +3981,7 @@ index 00000000..a5154e71
 +	print("no finished check.sh was read: nothing checked")
 +	process.exit(1)
 +end
-+if checkOnly and changed > 0 then
++if checkOnly and (changed > 0 or wrong > 0) then
 +	process.exit(1)
 +end
 diff --git a/z-nile/.tracker/issues/c0120/harvest.md b/z-nile/.tracker/issues/c0120/harvest.md
@@ -4622,19 +4751,22 @@ index 5162b2cf..64dd1451 100755
  
  finish
 diff --git a/z-nile/.tracker/rafts/done/R0025/check.sh b/z-nile/.tracker/rafts/done/R0025/check.sh
-index f7d54fbe..2af3eacf 100755
+index f7d54fbe..95a6b6a0 100755
 --- a/z-nile/.tracker/rafts/done/R0025/check.sh
 +++ b/z-nile/.tracker/rafts/done/R0025/check.sh
-@@ -15,7 +15,7 @@ check "RC1: no make-prompt or ./zn launch remains in the skills, docs, templates
+@@ -14,11 +14,6 @@ check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-c
+ check "RC1: no make-prompt or ./zn launch remains in the skills, docs, templates or scripts" bash -c '
    bad=$(grep -rnF -e "make-prompt" -e "./zn launch" .claude ../AGENTS.md ../SETUP.md ./templates scripts || true)
    [ -z "$bad" ] || { echo "$bad"; exit 1; }'
- check "RC2: AGENTS.md lists ready-raft, launch-raft and stop-raft, each with a matching SKILL.md" bash -c '
+-check "RC2: AGENTS.md lists ready-raft, launch-raft and stop-raft, each with a matching SKILL.md" bash -c '
 -  for s in ready-raft launch-raft stop-raft; do
-+  for s in z-ready z-run z-stop; do
-     grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: $s"; exit 1; }
-     grep -q "^name: $s\$" "../.claude/skills/$s/SKILL.md" || { echo "$s: SKILL.md name"; exit 1; }
-   done'
-@@ -34,31 +34,31 @@ check "RC6: c0053's replacement copies match and ready-raft syncs (c0053 AC6/AC8
+-    grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: $s"; exit 1; }
+-    grep -q "^name: $s\$" "../.claude/skills/$s/SKILL.md" || { echo "$s: SKILL.md name"; exit 1; }
+-  done'
+ check "RC3: .gitignore ignores every readied raft's prompt.md" grep -qxF "/tracker/rafts/active/*/prompt.md" ../.gitignore
+ check "RC4: the usage text lists ready, stop and prompt <R-id> [--path], and no launch" bash -c '
+   u=$(../zn 2>&1)
+@@ -34,31 +29,31 @@ check "RC6: c0053's replacement copies match and ready-raft syncs (c0053 AC6/AC8
    R=.tracker/issues/done/c0053/replacements
    cmp -s "$R/c0005-worktree.spec.luau" tests/acceptance/c0005/worktree.spec.luau || { echo "c0005 replacement differs"; exit 1; }
    cmp -s "$R/c0015-workflow.spec.luau" ../pickman/tests/acceptance/c0015/workflow.spec.luau || { echo "c0015 replacement differs"; exit 1; }
