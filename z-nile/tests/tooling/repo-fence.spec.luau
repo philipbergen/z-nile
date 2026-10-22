@@ -172,6 +172,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_CONFIG_ = "reads GIT_CONFIG_COUNT after a refused fence in a fixture shell",
 	},
 	-- c0120 (design review 005 F2): the gate gives the root's .cache, no project's home, the fence's refusals and sentinel
+	["z-nile/lib/ac.sh"] = {
+		PICKMAN_FENCE_ = "calls pickman_fence_all for the root's and every home's .cache, never switching a guard (code review 005 F2)",
+	},
 	["z-nile/check.sh"] = {
 		PICKMAN_FENCE_ = "calls pickman_fence_all for the root's and every home's .cache, never switching a guard",
 	},
