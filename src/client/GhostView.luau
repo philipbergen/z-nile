@@ -6,14 +6,6 @@ local RunService = game:GetService("RunService")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
-local COLORS: { [string]: Color3 } = {
-	blinky = Color3.fromRGB(255, 0, 0),
-	pinky = Color3.fromRGB(255, 184, 255),
-	inky = Color3.fromRGB(0, 255, 255),
-	clyde = Color3.fromRGB(255, 184, 82),
-}
-local FRIGHTENED = Color3.fromRGB(33, 33, 255)
-local FLASH_WHITE = Color3.fromRGB(255, 255, 255)
 local EYE = Color3.fromRGB(255, 255, 255)
 local PUPIL = Color3.fromRGB(33, 33, 255)
 local EYES = {
@@ -22,7 +14,8 @@ local EYES = {
 	{ name = "PupilL", offset = CFrame.new(-1.4, 1.2, -3.2) },
 	{ name = "PupilR", offset = CFrame.new(1.4, 1.2, -3.2) },
 }
-local BODY = Vector3.new(6, 7, 6) -- taller than the 4-stud eye height, so a ghost shows over the pellets
+-- the walls' old height, a stud over the lowered walls (f0101), and taller than the eye, so it shows over pellets
+local BODY = Vector3.new(View.GHOST.width, View.GHOST.height, View.GHOST.width)
 
 local GhostView = {}
 
@@ -49,7 +42,8 @@ end
 local function build(name: string): Model
 	local model = Instance.new("Model")
 	model.Name = name
-	local body = part(model, "Body", BODY, COLORS[name] or FLASH_WHITE, Enum.PartType.Block)
+	local rgb = View.ghostColor(name, "normal", false)
+	local body = part(model, "Body", BODY, Color3.fromRGB(rgb.r, rgb.g, rgb.b), Enum.PartType.Block)
 	model.PrimaryPart = body
 	for _, part_ in EYES do
 		local size = if string.sub(part_.name, 1, 3) == "Eye"
@@ -70,13 +64,8 @@ end
 local function paint(model: Model, name: string, look: string, flash: boolean)
 	local body = model:FindFirstChild("Body") :: Part
 	body.Transparency = if look == "eyes" then 1 else 0
-	if look == "frightened" then
-		body.Color = FRIGHTENED
-	elseif look == "blinking" then
-		body.Color = if flash then FLASH_WHITE else FRIGHTENED
-	else
-		body.Color = COLORS[name] or FLASH_WHITE
-	end
+	local rgb = View.ghostColor(name, look :: any, flash)
+	body.Color = Color3.fromRGB(rgb.r, rgb.g, rgb.b)
 end
 
 -- Snapshots only move forward, as in Camera.
