@@ -115,7 +115,11 @@ return t.spec("c0117 docs", function(it)
 				"A `.models.toml` is never tracker state",
 				"judged per item",
 				"origin's URL as the run pinned it at its start",
-				"A missing watermark is never trusted",
+				"A missing watermark at a run's start is never trusted",
+				"The file is shared by every dispatcher of the repository",
+				"another run's advance is never a trip",
+				"writes a heartbeat in its parent's state folder",
+				"`BASH_MAX_TIMEOUT_MS`",
 				"fetched from `refs/pull/<n>/head`",
 				"calls are not tokens, so the user tunes it",
 				'- **The agent credential** (the user\'s "Bot token, no bypass").',
@@ -168,6 +172,7 @@ return t.spec("c0117 docs", function(it)
 		absent(readme, "(c0117, planned)", "the README")
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 		at(readme, "none of them is a security boundary against a determined agent", "the README")
+		at(readme, "The watermark file is shared by every dispatcher of the repository", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)
 

@@ -326,10 +326,10 @@ index 1bfecaf6..41321e22 100644
  	},
 diff --git a/tests/lib/fakecli.luau b/tests/lib/fakecli.luau
 new file mode 100644
-index 00000000..aa134875
+index 00000000..b350c71f
 --- /dev/null
 +++ b/tests/lib/fakecli.luau
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,249 @@
 +--!strict
 +-- Fake model CLIs for the dispatcher's specs (c0117): `claude`, `grok` and `agent` scripts that print the stream
 +-- lines each real CLI prints (from c0117's probes) and act as a mode file says: `<fakes>/<cli>.<step>`, else
@@ -372,7 +372,7 @@ index 00000000..aa134875
 +		'{ echo "'
 +			.. cli
 +			.. ' step=$step mode=$mode cwd=$(pwd -P)"; echo "args=$*"; echo "dir=$ZN_DISPATCH_DIR"; '
-+			.. 'echo "path0=${PATH%%:*}"; echo "token=${GH_TOKEN:-} ${GITHUB_TOKEN:-}"; echo "ghdir=${GH_CONFIG_DIR:-}"; echo "broker=${ZN_PUBLISH_BROKER:-}"; } >> "$FAKE_DIR/log"',
++			.. 'echo "path0=${PATH%%:*}"; echo "token=${GH_TOKEN:-} ${GITHUB_TOKEN:-}"; echo "ghdir=${GH_CONFIG_DIR:-}"; echo "broker=${ZN_PUBLISH_BROKER:-}"; echo "bashmax=${BASH_MAX_TIMEOUT_MS:-}"; } >> "$FAKE_DIR/log"',
 +		'case "$mode" in',
 +		"ok) " .. ok .. " ;;",
 +		"quota) " .. quota .. " ;;",
@@ -428,9 +428,19 @@ index 00000000..aa134875
 +			.. ok
 +			.. " ;;",
 +		-- whatever <fakes>/script.sh does, inside the step (a spec's own misbehaving step), with a heartbeat
-+		'script) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; sh "$FAKE_DIR/script.sh" >> "$FAKE_DIR/log" 2>&1; echo "script=$?" >> "$FAKE_DIR/log"; kill $hb; '
++		'script) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; id="$id" step="$step" sh "$FAKE_DIR/script.sh" >> "$FAKE_DIR/log" 2>&1; echo "script=$?" >> "$FAKE_DIR/log"; kill $hb; '
 +			.. ok
 +			.. " ;;",
++		-- an author that runs a tool (its review, one shell command) and waits on it in silence, as a real CLI does
++		[[waitreview) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; ]]
++			.. ok
++			.. " ;;",
++		-- a reviewer that works for 16 s, printing every second, then writes its review
++		'slowreview) for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo \'{"type":"system"}\'; sleep 1; done; d=$(./zn find "$id"); printf "# Review 001\\n\\nVerdict: approve\\n" > "$d/design-review-001.md"; '
++			.. ok
++			.. " ;;",
++		-- a reviewer that goes quiet past its own stall limit
++		"quietreview) sleep 20; " .. ok .. " ;;",
 +		"esac",
 +		"",
 +	}, "\n")
@@ -881,10 +891,10 @@ index 00000000..baeb81ba
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
 new file mode 100644
-index 00000000..50b2b1e7
+index 00000000..eae3095e
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
-@@ -0,0 +1,595 @@
+@@ -0,0 +1,742 @@
 +--!strict
 +-- c0117 AC10: the dispatcher's control of a run, for real with fake CLIs (@tests/lib/fakecli): the chain stops at
 +-- questions.md and retry keeps the answers; `dispatch new` captures and chains; a review the author starts through the
@@ -893,6 +903,7 @@ index 00000000..50b2b1e7
 +-- run is lost (never resumed or signalled), a live run is never dispatched twice, and `stop` signals only a group that
 +-- is still the run's; the merge gates come from the item's own walk. Fixture under .cache/c0117-control.
 +local adapters = require("@znile/engine/adapters")
++local dispatcher = require("@znile/engine/dispatcher")
 +local fakecli = require("@tests/lib/fakecli")
 +local fixture = require("@tests/lib/fixture")
 +local fs = require("@lune/fs")
@@ -1001,6 +1012,17 @@ index 00000000..50b2b1e7
 +			["tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
 +			["tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
 +			["tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
++			["tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
++			["tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
++			["tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
++			["tracker/issues/c0096/c0096.md"] = string.gsub(
++				trackerfix.stub("c0096", "rafted-thing", "prepared-quiet-copper-falcon"),
++				"design: draft",
++				"design: ready"
++			),
++			["tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
++			["tracker/issues/c0091/check.sh"] = "lune run tests/run -- tracker/issues/c0091/acceptance/a.spec.luau\n",
++			["tracker/issues/c0102/c0102.md"] = issue("c0102", "conc-two"),
 +		})
 +	end)
 +
@@ -1148,14 +1170,15 @@ index 00000000..50b2b1e7
 +		local removed = step(push("w1") .. [[find "$ZN_WATERMARK_DIR" -name main-seen -exec rm {} \;]])
 +		t.expect(removed.code).toBe(5)
 +		t.expect(fakecli.state(h, "c0010").outcome).toBe("tripwire")
-+		t.expect(has(fakecli.state(h, "c0010").detail, "the watermark changed under this run")).toBe(true)
++		-- caught by what the step pushed, vetted from the run's own copy whatever the file says (review 004 F1)
++		t.expect(has(fakecli.state(h, "c0010").detail, "w1.lua")).toBe(true)
 +		-- between runs a missing watermark is never trusted
 +		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
 +		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 +		local rewritten =
 +			step(push("w2") .. [[git rev-parse HEAD > "$(find "$ZN_WATERMARK_DIR" -name main-seen)"]])
 +		t.expect(rewritten.code).toBe(5)
-+		t.expect(has(fakecli.state(h, "c0010").detail, "the watermark changed under this run")).toBe(true)
++		t.expect(has(fakecli.state(h, "c0010").detail, "w2.lua")).toBe(true)
 +		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 +		-- no watermark, and an item with no run yet (so no mirror): never trusted on first use
 +		do
@@ -1230,6 +1253,140 @@ index 00000000..50b2b1e7
 +		local vet = zn({ "dispatch", "vet" })
 +		t.expect(has(vet.stdout, "main vetted at")).toBe(true)
 +	end)
++
++	it(
++		"two dispatchers at once never trip each other: another run's honest advance of the watermark is no trip",
++		function()
++			-- review 004 case C: while B's step runs, the user's other terminal publishes tracker state and runs A
++			fakecli.clear(h)
++			mode("claude", "script")
++			local script = [==[if [ "$id" = c0102 ]; then echo "A step ran"; exit 0; fi
++userpath=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/z-nile/bin$' | paste -sd: -)
++G=$ZN_REAL_GIT
++( cd @OTHER@ && $G pull -q origin main && echo note > tracker/issues/c0101/note.md && $G add -A && $G -c user.name=u -c user.email=u@example.invalid commit -qm "other terminal: tracker state" && $G push -q origin HEAD:main; echo otherpush=$? )
++( cd @MAIN@ && env -i HOME="$HOME" PATH="$userpath" FAKE_DIR="$FAKE_DIR" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" ZN_WATERMARK_DIR="@BASE@/watermark" GH_TOKEN=the-users-token TMPDIR="$TMPDIR" bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
++]==]
++			script = string.gsub(
++				string.gsub(string.gsub(script, "@OTHER@", h.f.other), "@MAIN@", h.f.main),
++				"@BASE@",
++				h.f.base
++			)
++			fs.writeFile(`{h.fakes}/script.sh`, script)
++			local b = zn({ "dispatch", "z-design", "c0101" }, { ZN_AGENT_TOKEN_FILE_SAVED = h.token })
++			t.expect(has(fakecli.log(h), "otherpush=0")).toBe(true)
++			t.expect(has(fakecli.log(h), "A exit=0")).toBe(true)
++			t.expect(b.code).toBe(0)
++			t.expect(fakecli.state(h, "c0101").outcome).toBe("ok")
++		end
++	)
++
++	it("the shared watermark only moves forward: an older main never overwrites a newer one", function()
++		local dir = `{h.f.base}/mark-forward`
++		local path = `{dir}/main-seen`
++		local older = fixture.git(h.f.origin, { "rev-parse", "main~1" })
++		local newer = fixture.git(h.f.origin, { "rev-parse", "main" })
++		fixture.git(h.f.main, { "fetch", "-q", "origin", "main" })
++		t.expect(dispatcher.advanceMark(h.f.main, path, older)).toBe(nil)
++		t.expect(dispatcher.advanceMark(h.f.main, path, newer)).toBe(nil)
++		t.expect((string.gsub(fs.readFile(path), "%s+$", ""))).toBe(newer)
++		-- the late writer of the older main leaves the file as it is
++		t.expect(dispatcher.advanceMark(h.f.main, path, older)).toBe(nil)
++		t.expect((string.gsub(fs.readFile(path), "%s+$", ""))).toBe(newer)
++		-- a diverged commit is refused; the user's vet (force) writes it
++		fixture.git(h.f.other, { "fetch", "-q", "origin", "main" })
++		fixture.git(h.f.other, { "checkout", "-q", "-B", "diverged", "FETCH_HEAD~1" })
++		fs.writeFile(`{h.f.other}/diverged.md`, "x\n")
++		fixture.git(h.f.other, { "add", "-A" })
++		fixture.git(h.f.other, { "commit", "-q", "-m", "diverged" })
++		local side = fixture.git(h.f.other, { "rev-parse", "HEAD" })
++		fixture.git(h.f.other, { "push", "-q", "origin", "HEAD:refs/heads/diverged" })
++		fixture.git(h.f.other, { "checkout", "-q", "main" })
++		fixture.git(h.f.main, { "fetch", "-q", "origin", "diverged" })
++		t.expect(has(dispatcher.advanceMark(h.f.main, path, side) or "", "diverged")).toBe(true)
++		t.expect(dispatcher.advanceMark(h.f.main, path, side, true)).toBe(nil)
++		t.expect((string.gsub(fs.readFile(path), "%s+$", ""))).toBe(side)
++	end)
++
++	it(
++		"an author waiting on a long nested review stays alive by its heartbeat; a quiet one still stalls",
++		function()
++			-- review 004 F2: the author waits on one shell command (its review) for longer than tool_seconds (5 s here)
++			fakecli.clear(h)
++			mode("claude.z-design", "waitreview")
++			mode("claude.zz-review", "slowreview")
++			local r = zn({ "dispatch", "z-design", "c0095" })
++			local s = fakecli.state(h, "c0095")
++			t.expect(s.outcome).toBe("ok")
++			t.expect(r.code).toBe(0)
++			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
++			-- claude's own shell-command limits raised in the step's environment
++			t.expect(has(fakecli.log(h), "bashmax=7200000")).toBe(true)
++			-- a nested reviewer that goes quiet: nothing hangs, the step stalls at its limits
++			fakecli.clear(h)
++			mode("claude.z-design", "waitreview")
++			mode("claude.zz-review", "quietreview")
++			zn({ "dispatch", "z-design", "c0095" })
++			t.expect(fakecli.state(h, "c0095").outcome).toBe("stalled")
++		end
++	)
++
++	it(
++		"the rafting gate merges a PR of its own raft's files, and waits for code, another item's check, settings or a stale head",
++		function()
++			-- review 004 F3: real heads on the fixture origin, auto_merge = ["raft"] in the item's own walk
++			fakecli.clear(h)
++			-- a GitHub-looking origin, rewritten to the fixture's own (the chain asks the fake gh about PRs)
++			local url = "https://github.com/zn-fixture/c0117.git"
++			fixture.git(h.f.main, { "config", `url.{h.f.origin}.insteadOf`, url })
++			fixture.git(h.f.main, { "remote", "set-url", "origin", url })
++			local function prJson(n: number, head: string): string
++				return `\{"number":{n},"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{head}"\}`
++			end
++			local doc = fixture.git(h.f.origin, { "show", "main:tracker/issues/c0096/c0096.md" })
++			local raft = "---\nid: R0050\ntitle: a raft\nissues: [c0096]\n---\n"
++			local own = {
++				["tracker/rafts/R0050/R0050.md"] = raft,
++				["tracker/issues/c0096/c0096.md"] = (string.gsub(doc, "\nraft: \n", "\nraft: R0050\n")),
++			}
++			local function with(extra: { [string]: string }): { [string]: string }
++				local out = table.clone(own)
++				for k, v in extra do
++					out[k] = v
++				end
++				return out
++			end
++			local function gate(n: number, files: { [string]: string }, head: string?): fixture.Result
++				local sha = fakecli.pullRequest(h, n, files)
++				fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(n, head or sha))
++				return zn({ "dispatch", "c0096" })
++			end
++			-- waits: code
++			local code = gate(21, with({ ["src/x.lua"] = "return 1\n" }))
++			t.expect(code.code).toBe(4)
++			t.expect(has(code.stdout, "src/x.lua")).toBe(true)
++			-- waits: another item's check.sh (c0091 is no member)
++			local check = gate(22, with({ ["tracker/issues/c0091/check.sh"] = "exit 0\n" }))
++			t.expect(check.code).toBe(4)
++			t.expect(has(check.stdout, "c0091")).toBe(true)
++			-- waits: settings
++			local settings = gate(
++				23,
++				with({ ["tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft", "prep"]\n' })
++			)
++			t.expect(settings.code).toBe(4)
++			t.expect(has(settings.stdout, "configuration")).toBe(true)
++			-- waits: a stale head
++			local stale = gate(24, own, "0000000000000000000000000000000000000000")
++			t.expect(stale.code).toBe(4)
++			t.expect(has(stale.stdout, "is not the head GitHub reports")).toBe(true)
++			t.expect(has(fakecli.log(h), "realgh pr merge")).toBe(false)
++			-- merges: the raft's own document and its member's raft: line, pinned to the head
++			local sha = fakecli.pullRequest(h, 25, own)
++			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(25, sha))
++			zn({ "dispatch", "c0096" })
++			t.expect(has(fakecli.log(h), `realgh pr merge 25 --squash --match-head-commit {sha}`)).toBe(true)
++		end
++	)
 +
 +	it("a detached process's late code push after a step is caught at the next run", function()
 +		fakecli.clear(h)
@@ -2172,10 +2329,10 @@ index 00000000..f072e11e
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
 new file mode 100644
-index 00000000..88bf4607
+index 00000000..1c807acc
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,209 @@
 +--!strict
 +-- c0117 AC14: the skills, the README, AGENTS.md, the usage and the prompt template say what the design's Docs part
 +-- says: the headless rules in every model step's skill, word for word; the review model of the CLI wherever a skill
@@ -2293,7 +2450,11 @@ index 00000000..88bf4607
 +				"A `.models.toml` is never tracker state",
 +				"judged per item",
 +				"origin's URL as the run pinned it at its start",
-+				"A missing watermark is never trusted",
++				"A missing watermark at a run's start is never trusted",
++				"The file is shared by every dispatcher of the repository",
++				"another run's advance is never a trip",
++				"writes a heartbeat in its parent's state folder",
++				"`BASH_MAX_TIMEOUT_MS`",
 +				"fetched from `refs/pull/<n>/head`",
 +				"calls are not tokens, so the user tunes it",
 +				'- **The agent credential** (the user\'s "Bot token, no bypass").',
@@ -2346,6 +2507,7 @@ index 00000000..88bf4607
 +		absent(readme, "(c0117, planned)", "the README")
 +		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 +		at(readme, "none of them is a security boundary against a determined agent", "the README")
++		at(readme, "The watermark file is shared by every dispatcher of the repository", "the README")
 +		at(readme, "- **`.models.toml`.**", "the README")
 +	end)
 +
@@ -4135,7 +4297,7 @@ similarity index 100%
 rename from z-nile/.tracker/issues/c0116/spend.md
 rename to z-nile/.tracker/issues/done/c0116/spend.md
 diff --git a/z-nile/README.md b/z-nile/README.md
-index d5aa79a0..8133f29a 100644
+index d5aa79a0..22f0185e 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -10,8 +10,8 @@ flowchart LR
@@ -4155,7 +4317,7 @@ index d5aa79a0..8133f29a 100644
  - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
 -- **The dispatcher** (c0117, planned). It will run a step's skill on an item with the model `.models.toml` names, through that model's CLI, and record the spend.
 -- **`.models.toml`** (c0117, planned). It will say which model runs each skill, stacking from the repository root down to the work, as `.gitignore` does.
-+- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the watermark, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. The rules are in the zz-rules skill, Dispatch.
++- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the watermark, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. The watermark file is shared by every dispatcher of the repository and only moves forward. The rules are in the zz-rules skill, Dispatch.
 +- **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
  - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`), with the next command for each row. c0118 (planned) draws it again, with a tab per project.
  
@@ -4212,10 +4374,10 @@ index 00000000..377c5995
 +exec "$real" "$@"
 diff --git a/z-nile/engine/adapters.luau b/z-nile/engine/adapters.luau
 new file mode 100644
-index 00000000..44cc3bc9
+index 00000000..d622049a
 --- /dev/null
 +++ b/z-nile/engine/adapters.luau
-@@ -0,0 +1,475 @@
+@@ -0,0 +1,483 @@
 +--!strict
 +-- One adapter per runtime (c0117): the command line that starts a model step headless and unattended, the reader of
 +-- its output stream (a token count as it runs, the final count, a quota or error signal), and the outcome. Pure: the
@@ -4523,6 +4685,14 @@ index 00000000..44cc3bc9
 +-- claude's own sandbox off, whatever the user's settings say, so the gate's jail can engage inside the step
 +-- (programme review E6; macOS can't nest sandboxes)
 +adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
++
++-- What a runtime's step environment adds (review 004 F2): Claude Code stops one shell command after
++-- BASH_DEFAULT_TIMEOUT_MS (120 s by default) and never allows more than BASH_MAX_TIMEOUT_MS (600 s), but an author
++-- waits on its nested review as one command (`./zn dispatch zz-review …`), and reviews here take up to 29 minutes. Two
++-- hours (a guess, G22; E15 measures each CLI's own limit), while the heartbeat keeps the dispatcher's stall clock honest.
++adapters.STEP_ENV = {
++	["claude-cli"] = { BASH_DEFAULT_TIMEOUT_MS = "7200000", BASH_MAX_TIMEOUT_MS = "7200000" },
++} :: { [string]: { [string]: string } }
 +
 +local function withEffort(args: { string }, flag: string, effort: string?): { string }
 +	if effort then
@@ -5287,10 +5457,10 @@ index 00000000..df8d7fe8
 +return dispatch
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
 new file mode 100644
-index 00000000..e8ca4835
+index 00000000..4fcd729c
 --- /dev/null
 +++ b/z-nile/engine/dispatcher.luau
-@@ -0,0 +1,1435 @@
+@@ -0,0 +1,1478 @@
 +--!strict
 +-- `./zn dispatch` (c0117): runs script steps itself and model steps on .models.toml's CLIs, headless and unattended,
 +-- and chains them from an item's tracker state up to the run's pull request. The rules are dispatch.luau's (pure);
@@ -5318,6 +5488,7 @@ index 00000000..e8ca4835
 +local sh = require("../lib/sh")
 +local stdio = require("@lune/stdio")
 +local store = require("./store")
++local task = require("@lune/task")
 +local trackerstate = require("./trackerstate")
 +
 +local dispatcher = {}
@@ -5734,11 +5905,46 @@ index 00000000..e8ca4835
 +	return if string.match(sha, "^%x+$") then sha else nil
 +end
 +
-+local function writeWatermark(ctx: Ctx, sha: string)
-+	local path = dispatcher.watermarkPath(ctx)
-+	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
-+	sh.writeReplacing(path, sha .. "\n")
++local function isAncestor(root: string, a: string, b: string): boolean
++	return process.exec("git", { "merge-base", "--is-ancestor", a, b }, { cwd = root }).ok
++end
++
++-- The shared watermark file moves only forward (review 004 F1: every dispatcher of the repository, and `vet`, write it
++-- honestly). Under an flock on its folder: `sha` is written when the file is missing, equal, or an ancestor of it; an
++-- older `sha` (another dispatcher already wrote a newer main) leaves the file as it is; a file that has diverged from
++-- `sha` is refused (why). `force` (the user's `vet`) writes whatever is there.
++function dispatcher.advanceMark(root: string, path: string, sha: string, force: boolean?): string?
++	local dir = string.match(path, "^(.*)/[^/]+$") :: string
++	fs.writeDir(dir)
++	local held: any = nil
++	local waited = 0
++	while not held do
++		held = runner.holdLock(`{dir}/lock`)
++		if not held then
++			if waited > 30 then
++				return "the watermark's lock is held by another dispatcher for 30 s"
++			end
++			waited += task.wait(0.1)
++		end
++	end
++	local current: string? = nil
++	if fs.isFile(path) then
++		local text = trim(fs.readFile(path))
++		current = if string.match(text, "^%x+$") then text else nil
++	end
++	local why: string? = nil
++	if force or not current or current == sha or isAncestor(root, current :: string, sha) then
++		sh.writeReplacing(path, sha .. "\n")
++	elseif not isAncestor(root, sha, current :: string) then
++		why = `the watermark ({current}) and main ({sha}) have diverged: look, then ./zn dispatch vet`
++	end
++	held.stdin:close()
++	return why
++end
++
++local function writeWatermark(ctx: Ctx, sha: string, force: boolean?): string?
 +	guard.mark = sha
++	return dispatcher.advanceMark(ctx.mainRoot(), dispatcher.watermarkPath(ctx), sha, force)
 +end
 +dispatcher.writeWatermark = writeWatermark
 +
@@ -5746,52 +5952,51 @@ index 00000000..e8ca4835
 +	return `{o.fetch}\n{o.push}\n`
 +end
 +
-+local function isAncestor(root: string, a: string, b: string): boolean
-+	return process.exec("git", { "merge-base", "--is-ancestor", a, b }, { cwd = root }).ok
-+end
-+
 +-- Vets main since the watermark (every run, every step, after every step): each commit, first parent by first parent,
 +-- must be tracker state by the registry of its parent (trackerstate.checkEach, the broker's own rule), or a pull
-+-- request's merge into main on GitHub. Advances the watermark when all are; returns why not, or nil. A missing
-+-- watermark, or one that differs from what this run last read or wrote, is never trusted (review 003 F2): only
-+-- `./zn dispatch vet` (the user's) writes one then.
++-- request's merge into main on GitHub. Returns why not, or nil. Within a run it vets from the run's own copy of the
++-- watermark (`guard.mark`), whatever the shared file says (review 004 F1): another dispatcher's honest advance is never
++-- a trip, and a step that deletes or rewrites the file is still caught by the commits it pushed. The file is read only
++-- when the run has no copy yet; a missing one then is never trusted (review 003 F2): only `./zn dispatch vet` writes it.
 +function dispatcher.vetMain(ctx: Ctx): string?
 +	local root = ctx.mainRoot()
 +	local fresh = freshMain(ctx)
 +	if not fresh then
 +		return "origin's main could not be fetched to vet it"
 +	end
-+	local mark = readWatermark(ctx)
-+	if guard.mark and mark ~= guard.mark then
-+		return `the watermark changed under this run (it was {guard.mark}, the file says {mark or "nothing"}): look, then ./zn dispatch vet`
++	local from = guard.mark
++	if not from then
++		from = readWatermark(ctx)
++		if not from then
++			return "there is no watermark (none yet, or something removed it): look at main, then ./zn dispatch vet"
++		end
++		guard.mark = from
 +	end
-+	if not mark then
-+		return "there is no watermark (none yet, or something removed it): look at main, then ./zn dispatch vet"
++	local mark = from :: string
++	if mark ~= fresh then
++		if not isAncestor(root, mark, fresh :: string) then
++			return `origin's main was rewritten: {mark} (the last vetted commit) is no longer in it (look, then ./zn dispatch vet)`
++		end
++		local why = trackerstate.checkEach(
++			function(a: { string }): (boolean, string)
++				return git(root, a)
++			end,
++			mark,
++			fresh :: string,
++			function(ref: string): { string }?
++				return rootsAt(ctx, ref)
++			end,
++			true,
++			ctx.prMerged
++		)
++		if why then
++			return `main has {why}, which the dispatcher did not vet (look, then ./zn dispatch vet)`
++		end
 +	end
-+	guard.mark = mark
-+	if mark == fresh then
-+		return nil
++	if not fs.isFile(dispatcher.watermarkPath(ctx)) then
++		stdio.ewrite("dispatch: the watermark file was gone; writing this run's vetted main again\n")
 +	end
-+	if not isAncestor(root, mark :: string, fresh :: string) then
-+		return `origin's main was rewritten: {mark} (the last vetted commit) is no longer in it (look, then ./zn dispatch vet)`
-+	end
-+	local why = trackerstate.checkEach(
-+		function(a: { string }): (boolean, string)
-+			return git(root, a)
-+		end,
-+		mark :: string,
-+		fresh :: string,
-+		function(ref: string): { string }?
-+			return rootsAt(ctx, ref)
-+		end,
-+		true,
-+		ctx.prMerged
-+	)
-+	if why then
-+		return `main has {why}, which the dispatcher did not vet (look, then ./zn dispatch vet)`
-+	end
-+	writeWatermark(ctx, fresh :: string)
-+	return nil
++	return writeWatermark(ctx, fresh :: string)
 +end
 +
 +-- At the start of a top-level run: origin's URLs as the last run left them, the watermark not behind the item's mirror
@@ -6002,6 +6207,10 @@ index 00000000..e8ca4835
 +			break
 +		end
 +		argv[1] = bin :: string
++		local extra: { [string]: string } = adapters.STEP_ENV[spec.runtime] or {}
++		for k, v in extra do
++			env[k] = v
++		end
 +		local t0 = os.time()
 +		print(
 +			`dispatch: {step} {id} on {spec.cli} ({spec.runtime}, {models.id(spec)}, max_tokens {spec.maxTokens})`
@@ -6035,6 +6244,7 @@ index 00000000..e8ca4835
 +			stallSeconds = resolved.settings.stallSeconds,
 +			toolSeconds = resolved.settings.toolSeconds,
 +			stateDir = stateDir,
++			beatFile = if serving then nil else `{stateDir}/beat`,
 +			onStart = function(identity: runner.Identity)
 +				st.run = identity
 +				save(st)
@@ -6553,7 +6763,10 @@ index 00000000..e8ca4835
 +			print("dispatch: dry run: nothing written")
 +			return 0
 +		end
-+		writeWatermark(ctx, fresh)
++		local why = writeWatermark(ctx, fresh, true)
++		if why then
++			ctx.fail(why)
++		end
 +		sh.writeReplacing(originPath(ctx), originText(origin))
 +		print(`dispatch: main vetted at {fresh}`)
 +		return 0
@@ -7635,10 +7848,10 @@ index d9b27b03..3eef63c4 100644
  		end
 diff --git a/z-nile/engine/runner.luau b/z-nile/engine/runner.luau
 new file mode 100644
-index 00000000..44a301df
+index 00000000..2aab6704
 --- /dev/null
 +++ b/z-nile/engine/runner.luau
-@@ -0,0 +1,268 @@
+@@ -0,0 +1,295 @@
 +--!strict
 +-- Runs one model step's CLI (c0117) under a supervisor: the CLI leads a process group of its own (so the cap, a
 +-- stall or `./zn dispatch stop` kills every process the step started, a `check.sh` or a Bash tool's children
@@ -7670,6 +7883,7 @@ index 00000000..44a301df
 +	stateDir: string, -- holds the pid file, the stdin file and the stop marker
 +	onStart: ((id: Identity) -> ())?,
 +	onTick: (() -> ())?, -- called every tick while the step runs (the dispatcher's publish broker)
++	beatFile: string?, -- a nested step's heartbeat in its parent's state folder: touched while its CLI prints (004 F2)
 +}
 +export type Identity = { pgid: number, lockFile: string }
 +export type Outcome = "ok" | "failed" | "quota" | "cap" | "cap-unknown" | "stalled" | "stopped"
@@ -7832,10 +8046,36 @@ index 00000000..44a301df
 +	local early: Outcome? = nil
 +	local detail = ""
 +	local elapsed = 0
++	local lastBeat = -1 -- when this step last wrote its own heartbeat
++	local nextScan = 1 -- when it next reads its nested steps' heartbeats
++	local beats: { [string]: string } = {}
 +	while not (outDone and errDone) do
 +		local dt = task.wait(0.05)
 +		quiet += dt
 +		elapsed += dt
++		-- liveness both ways (review 004 F2): a nested step beats while its CLI prints, and a nested step's fresh beat
++		-- counts as this step's output, so an author waiting on a long review isn't stalled; a quiet nested step still
++		-- stalls at its own limits, so nothing hangs
++		if r.beatFile and quiet < 0.2 and elapsed - lastBeat >= 1 then
++			lastBeat = elapsed
++			pcall(fs.writeFile, r.beatFile :: string, tostring(os.clock()) .. " " .. tostring(elapsed))
++		end
++		if elapsed >= nextScan then
++			nextScan = elapsed + 1
++			local okDir, names = pcall(fs.readDir, r.stateDir)
++			for _, name in (if okDir then names else {}) :: { string } do
++				local beat = `{r.stateDir}/{name}/beat`
++				if fs.isDir(`{r.stateDir}/{name}`) and fs.isFile(beat) then
++					local okRead, text = pcall(fs.readFile, beat)
++					if okRead and beats[beat] ~= text then
++						if beats[beat] ~= nil then
++							quiet = 0
++						end
++						beats[beat] = text
++					end
++				end
++			end
++		end
 +		if not pgid then
 +			pgid = readPid(pidFile)
 +			if pgid and r.onStart then
@@ -8826,7 +9066,7 @@ index 5bec93c9..ac9c3fd2 100644
  
  ## Code mode (before the PR is marked ready)
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 2d090998..d28111e5 100644
+index 2d090998..97787848 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -45,6 +45,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -8877,8 +9117,8 @@ index 2d090998..d28111e5 100644
 +- **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the watermark and the server's protection are what catch its use.
 +- **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire, the watermark and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
 +- **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the watermark judges it). Nothing else in a step is meant to push to `main`.
-+- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
-+- **The watermark and the tripwire** (the user's "Persisted watermark", framed by "Keep same user, accept detection"). The dispatcher keeps the last commit of `main` it vetted where a well-behaved step never writes, and detects if it changes: `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the repository, file `main-seen`, with `origin-url` beside it; and it mirrors it in each item's `state.json`. At the start of every run, before every step and after every step, every commit of `main` since the watermark must be tracker state (as above) or a pull request's merge into `main` on GitHub. A missing watermark is never trusted (only `./zn dispatch vet` writes one), one that differs from what the run last read or wrote trips it, one behind the item's mirror stops the next run, and so does origin's URL changed since the last run. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch vet` (`--dry-run` lists each commit's verdict and writes nothing; plain `vet` lists them too). **Known limits:** this detects a late push after the fact, at the next run, and never prevents one; a process left behind can rewrite the watermark, its mirror and the URL file between runs; a merge made with the user's credential (stolen or not) is a pull request's merge and passes; an agent can run `vet` itself. They are the user's, by rule.
++- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's own shell-command limits (`BASH_DEFAULT_TIMEOUT_MS`, `BASH_MAX_TIMEOUT_MS`) are raised to two hours in its step's environment. It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
++- **The watermark and the tripwire** (the user's "Persisted watermark", framed by "Keep same user, accept detection"). The dispatcher keeps the last commit of `main` it vetted where a well-behaved step never writes, and detects if it changes: `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the repository, file `main-seen`, with `origin-url` beside it; and it mirrors it in each item's `state.json`. At the start of every run, before every step and after every step, every commit of `main` since the watermark must be tracker state (as above) or a pull request's merge into `main` on GitHub. The file is shared by every dispatcher of the repository (and `vet`): it only moves forward, under a lock, and another run's advance is never a trip, because within a run the dispatcher vets from its own copy of the watermark, whatever the file says, so a step that deletes or rewrites the file is still caught by what it pushed. A missing watermark at a run's start is never trusted (only `./zn dispatch vet` writes one), one behind the item's mirror stops the next run, a diverged one trips, and so does origin's URL changed since the last run. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch vet` (`--dry-run` lists each commit's verdict and writes nothing; plain `vet` lists them too). **Known limits:** this detects a late push after the fact, at the next run, and never prevents one; a process left behind can rewrite the watermark, its mirror and the URL file between runs; a merge made with the user's credential (stolen or not) is a pull request's merge and passes; an agent can run `vet` itself. They are the user's, by rule.
 +- **Spend.** The dispatcher records each step's session tokens and model id (with its effort: `grok-4.7-xhigh`): `spend <id> --phase <the step's phase> --tokens <n> --model <id> --note "dispatch <step>"` from the `zn-dispatch` worktree while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --tokens --model` line it prints for the author, and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. A step under the dispatcher records its own rows without `--tokens` for its session.
 +- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: only its own items' files, the raft it adds and that raft's members, never another item's sequestered files), pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts and writes nothing.
 +- **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.

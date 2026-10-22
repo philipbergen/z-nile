@@ -37,3 +37,8 @@
 - design-review-003 F9: one-off: a flag the usage offered and the command ignored
 - design-review-003 F10: architecture/one-definition-of-tracker-state
 - design-review-003 F11: architecture/merge-gate-checks-what-it-merges
+- design-review-004 F1: architecture/several-writers-check-the-subject, architecture/lock-reads-live-state, architecture/guard-state-out-of-reach-or-checked
+- design-review-004 F2: architecture/waiting-steps-show-liveness, ticket-prep/instructions-runnable-where-they-run
+- design-review-004 F3: ticket-prep/spec-design-correspondence, testing/guard-needs-its-own-case
+- design-review-004 F4: architecture/guard-state-out-of-reach-or-checked, architecture/merge-gate-checks-what-it-merges
+- design-review-004 F5: one-off: one fact said twice and differently (E10 against §8)
