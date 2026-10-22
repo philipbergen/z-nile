@@ -19,6 +19,7 @@
 | 15 | 2026-10-22 20:10 | R0035: implement f0100 f0101 f0102 f0104 from the prep prototype (Main.client hand-merged with R0034's FlowView.trip) | 353 | 6 | 8.1 | raft+proportional | build |  |
 | 16 | 2026-10-22 20:14 | R0035: verification logs | 0 | 0 | 1.3 | raft+proportional | build |  |
 | 17 | 2026-10-22 20:20 | R0035: review-001 | 0 | 0 | 6.3 | raft+proportional | code-review |  |
+| 18 | 2026-10-22 20:22 | R0035: review-001 F1 F2: run Controls' key handler and HudView's shot bars on stub engines | 107 | 0 | 8.0 | explicit | code-review |  |
 
-**Total:** +1346 / -8 lines, 158.1 agent-minutes, 73972 tokens over 17 records
-<!-- totals: added=1346 removed=8 minutes=158.1 records=17 tokens=73972 -->
+**Total:** +1453 / -8 lines, 166.1 agent-minutes, 73972 tokens over 18 records
+<!-- totals: added=1453 removed=8 minutes=166.1 records=18 tokens=73972 -->
