@@ -147,15 +147,6 @@ local function writeWhole(path: string, text: string)
 	end
 end
 
--- Records the top process's start id at `path`, before its `pid` record. Best effort: without an id the record
--- holds as before.
-local function recordStart(path: string, pid: string)
-	local id = fence.startOf(pid)
-	if id then
-		writeWhole(path, id)
-	end
-end
-
 -- Whether the process `pid`, whose start id was recorded in the file `idPath`, still holds. Its id is read only
 -- once the pid is known to be alive.
 local function stillHolds(pid: string, idPath: string): boolean
@@ -222,7 +213,9 @@ end
 -- Removes `lock` if no process recorded in it still holds it (`stillHolds`: gone, or a reused pid). Only the
 -- holder of the takeover mutex removes a lock, so two waiters can never both remove one (and so never remove a
 -- fresh lock).
-local function takeOverIfStale(lock: string, unownedFor: number)
+-- `me` and `myId` are this process's pid and start id, read once by takeLock before it waits (review 001 F1): the
+-- claim (mkdir) and its record (the owner file, then `pid`) stay a few writes apart, with no subprocess between.
+local function takeOverIfStale(lock: string, unownedFor: number, me: string, myId: string?)
 	local mutex = `{lock}.takeover`
 	if not process.exec("mkdir", { mutex }).ok then
 		local owner = readMaybe(`{mutex}/pid`)
@@ -233,10 +226,8 @@ local function takeOverIfStale(lock: string, unownedFor: number)
 		end
 		return
 	end
-	local me = myPid()
-	local id = fence.startOf(me)
-	if id then
-		writeWhole(`{mutex}/owner`, `{me} {id}`)
+	if myId then
+		writeWhole(`{mutex}/owner`, `{me} {myId}`)
 	end
 	fs.writeFile(`{mutex}/pid`, me)
 	local records = lockRecords(lock)
@@ -255,10 +246,13 @@ end
 local function takeLock(lock: string)
 	local limit = tonumber(process.env.PICKMAN_TEST_LOCK_WAIT or "") or DEFAULT_WAIT_SECONDS
 	local waited, unowned, said = 0, 0, false
+	-- this process's own facts, read once: they don't change while it waits
+	local me = myPid()
+	local myId = fence.startOf(me)
 	while not process.exec("mkdir", { lock }).ok do
 		local pids = lockPids(lock)
 		unowned = if #pids == 0 then unowned + 0.1 else 0
-		takeOverIfStale(lock, unowned)
+		takeOverIfStale(lock, unowned, me, myId)
 		if fs.isDir(lock) then
 			local holder = if #pids > 0 then table.concat(pids, ", ") else "starting"
 			if waited >= limit then
@@ -275,8 +269,9 @@ local function takeLock(lock: string)
 			waited += 0.1
 		end
 	end
-	local me = myPid()
-	recordStart(`{lock}/start-{me}`, me)
+	if myId then
+		writeWhole(`{lock}/start-{me}`, myId)
+	end
 	fs.writeFile(`{lock}/pid`, me)
 end
 
