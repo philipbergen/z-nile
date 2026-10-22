@@ -120,8 +120,8 @@ return t.spec("c0870 compact", function(it)
 			)
 			write(`{seed}/{i[1]}/check.sh`, checkSh(i[2]))
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{seed}/pickman/.tracker/issues/c0100/acceptance/a.spec.luau`,
 			'local P = "' .. TA .. 'c0010/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n'
 		)
@@ -142,8 +142,8 @@ return t.spec("c0870 compact", function(it)
 		-- c0120 override: pickman's files live in pickman/ (its home)
 		write(`{seed}/pickman/tests/acceptance/f0001/y.spec.luau`, "return 1\n")
 		write(`{seed}/pickman/tests/acceptance/f0002/z.spec.luau`, "return 2\n")
+		-- c0120 override: pickman's files live in pickman/ (its home)
 		write(
-			-- c0120 override: pickman's files live in pickman/ (its home)
 			`{seed}/pickman/tests/tooling/ref.spec.luau`,
 			'-- See c0010.\nlocal LIST = { "'
 				.. TA
@@ -274,8 +274,8 @@ return t.spec("c0870 compact", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt = busyWt
 		for _, path in
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues/c0001/c0001.md",
 				"pickman/.tracker/issues/f0002/f0002.md",
 				"pickman/.tracker/issues/f0003/f0003.md",

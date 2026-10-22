@@ -77,8 +77,8 @@ return t.spec("c0880 audit", function(it)
 			["issues/active/c0010"] = doc("c0010"),
 			["issues/c0020"] = doc("c0020"),
 		})
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(codes(audit.run(dir))).toEqual({
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"error duplicate pickman/.tracker/issues/active/c0010",
 			"error duplicate pickman/.tracker/issues/c0010",
 			"error duplicate pickman/.tracker/issues/done/c0010",
@@ -101,8 +101,8 @@ return t.spec("c0880 audit", function(it)
 		-- concatenated: c0420's guard bans a literal legacy document name in specs
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(`{dir}/pickman/.tracker/issues/c0030/c0030` .. "-old-name.md", doc("c0030"))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(codes(audit.run(dir))).toEqual({
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"error wrong-kind pickman/.tracker/issues/R0070",
 			"error duplicate pickman/.tracker/issues/c0010",
 			"error no-document pickman/.tracker/issues/c0020",

@@ -46,8 +46,8 @@ local SEED: { [string]: string } = {
 	["pickman/.tracker/rafts/R0010/review-001.md"] = review("F1", "F2"),
 	["pickman/.tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n\n- design-review-001 F1: testing/pin-inputs\n"
 		.. "- design-review-001 F2: ticket-prep/lifetimes\n- design-review-001 F3: one-off: a typo\n"
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		.. "- review-001 F2: testing/pin-inputs\n",
-	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	["pickman/.tracker/issues/done/c0020/review-001.md"] = review("F1"),
 	["pickman/.tracker/rafts/R0030/design-review-001.md"] = "# Review 001\n\nVerdict: approve\n",
 	-- a readied raft with an unharvested finding, and an item with no reviews at all

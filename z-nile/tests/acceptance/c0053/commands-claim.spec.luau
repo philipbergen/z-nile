@@ -49,8 +49,8 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 		trOk(cap, { "new", "issue", "c", "delta", "--project", "pickman" }) -- c0240
 		trOk(cap, { "new", "issue", "c", "epsilon", "--project", "pickman" }) -- c0250
 		-- another terminal claims c0250 first
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		elsewhere({
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			["pickman/.tracker/issues/c0250/c0250.md"] = (
 				onOrigin("pickman/.tracker/issues/c0250/c0250.md") :: string
 			):gsub("status: new", "status: preparing"),

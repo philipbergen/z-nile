@@ -213,8 +213,8 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
 		-- c0120 override: pickman's files live in pickman/ (its home)
 		-- c0114 override: finished items live under every project root (c0120: pickman's root is pickman/.tracker)
 		for _, kind in
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues",
 				"pickman/.tracker/rafts",
 				"z-nile/.tracker/issues",

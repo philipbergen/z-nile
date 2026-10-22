@@ -65,8 +65,8 @@ return t.spec("c0400 tracker.sh board", function(it)
 		-- c0120 override: pickman's files live in pickman/ (its home)
 		-- c0114 override: the board reads every project root (c0120: pickman's root is pickman/.tracker)
 		for _, base in
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/rafts",
 				"pickman/.tracker/rafts/active",
 				"pickman/.tracker/rafts/done",
@@ -84,8 +84,8 @@ return t.spec("c0400 tracker.sh board", function(it)
 		t.expect(rafts).toBe(onDisk)
 		-- every issue directory has a place on the page
 		for _, base in
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues",
 				"pickman/.tracker/issues/active",
 				"pickman/.tracker/issues/done",

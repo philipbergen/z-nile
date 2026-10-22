@@ -157,17 +157,17 @@ return t.spec("tracker board follows main", function(it)
 			"cp",
 			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			seed,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/rafts/R0010/R0010.md",
 			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			seed,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/c0010/c0010.md",
 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
 		)
@@ -230,9 +230,9 @@ return t.spec("tracker board follows main", function(it)
 	it("sync in the main checkout rebuilds the board after another terminal's push", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		git(other, { "pull", "-q", "origin", "main" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			other,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0500/f0500.md",
 			issueDoc("f0500", "Elsewhere", "", "", "draft", "new-a-b-c")
 		)

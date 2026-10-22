@@ -157,8 +157,8 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 				"---\nid: R0800\ntype: chore\ntitle: Legacy\nslug: legacy\nsingle: false\nissues: [c0801]\ndesign: draft\ncreated: 2026-01-01\n---\n"
 			local legacyIssue =
 				"---\nid: c0801\ntype: chore\ntitle: Legacy issue\nslug: legacy-issue\nraft: R0800\ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-01-01\n---\n"
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			elsewhere({
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				["pickman/.tracker/rafts/R0800/R0800.md"] = legacyRaft,
 				["pickman/.tracker/issues/c0801/c0801.md"] = legacyIssue,
 			}, "other legacy raft")

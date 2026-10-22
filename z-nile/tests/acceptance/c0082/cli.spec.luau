@@ -67,8 +67,8 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(`{repo}/pickman/.tracker/issues/c0010/c0010.md`, C10)
 		write(`{repo}/pickman/.tracker/issues/c0020/c0020.md`, C20)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{repo}/pickman/.tracker/rafts/R0010/R0010.md`,
 			"---\nid: R0010\ntype: chore\ntitle: Raft\nslug: raft\nissues: []\ndesign: draft\n---\n\n# R0010\n"
 		)
@@ -120,11 +120,11 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 	it("renumber refuses a path that is not an item directory", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		for _, bad in
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{
 				"pickman/.tracker/issues",
 				"pickman/.tracker/issues/done/c0099",
 				"src/c0010",
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues/done/c0010/c0010.md",
 			}
 		do

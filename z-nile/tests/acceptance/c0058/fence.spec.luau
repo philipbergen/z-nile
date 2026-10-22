@@ -129,11 +129,11 @@ end
 -- z-nile/ home, where it runs), `repo` (the repo's physical path) and `sh` (a shell command in `here`) are in scope.
 -- c0120 override: probes are z-nile's specs, run from the copy's z-nile/ home, one folder below the repository's top
 local function probe(name: string, body: string)
+	-- c0120 override: the tooling's files live in z-nile/ (its home)
+	-- c0120 override: the spec runs from its project's home after the move
 	write(
 		repo,
-		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		`z-nile/tests/probe/{name}.spec.luau`,
-		-- c0120 override: the spec runs from its project's home after the move
 		`--!strict\nlocal fs = {REQ}("@lune/fs")\nlocal process = {REQ}("@lune/process")\n`
 			.. `local task = {REQ}("@lune/task")\nlocal t = {REQ}("@tests/lib/t")\n`
 			.. 'local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))\n'

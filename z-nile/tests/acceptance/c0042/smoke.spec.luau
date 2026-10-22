@@ -208,15 +208,15 @@ local DIR = ".cache/c0400-smoke"
 
 return t.spec("c0400 page smoke test (node)", function(it)
 	fixture.write(`{DIR}/tracker`)
+	-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 	fs.writeFile(
 		`{DIR}/page.html`,
-		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		board.render(board.collect(`{DIR}/tracker`), fs.readFile(`{TOP}/{board.MARKED_PATH}`))
 	)
 	fixture.write(`{DIR}/quiet`, "rafts/")
+	-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 	fs.writeFile(
 		`{DIR}/quiet.html`,
-		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		board.render(board.collect(`{DIR}/quiet`), fs.readFile(`{TOP}/{board.MARKED_PATH}`))
 	)
 	fs.writeFile(`{DIR}/harness.js`, HARNESS)

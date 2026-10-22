@@ -140,34 +140,34 @@ return t.spec("tracker prompt", function(it)
 			"cp",
 			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			seed,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/rafts/R0010/R0010.md",
 			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			seed,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/c0010/c0010.md",
 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
 		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			seed,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/rafts/R0020/R0020.md",
 			raftDoc("R0020", "Waiting", "waiting", "c0020", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(seed, "pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			seed,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/c0020/c0020.md",
 			issueDoc("c0020", "Beta", "R0020", "", "ready", PREPARED)
 		)
@@ -232,8 +232,8 @@ return t.spec("tracker prompt", function(it)
 		}
 		trOk(cap, { "prompt", "R0010" })
 		trOk(main, { "prompt", "R0010", "--path" })
+		-- c0120 override: pickman's files live in pickman/ (its home)
 		t.expect({
-			-- c0120 override: pickman's files live in pickman/ (its home)
 			git(main, { "status", "--porcelain", "--ignored", "--", "pickman/.tracker" }),
 			fs.readFile(promptFile),
 			tip(),

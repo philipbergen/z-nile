@@ -86,10 +86,10 @@ end
 
 -- c0120 override: the runner runs from the scan copy's z-nile home
 local function gate(): string
+	-- c0120 override: the spec runs from its project's home after the move
 	local r = process.exec(
 		"lune",
 		{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
-		-- c0120 override: the spec runs from its project's home after the move
 		{ cwd = `{repo}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
 	)
 	return r.stdout .. r.stderr
@@ -109,6 +109,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 		end
 		fs.writeDir(base)
 		-- c0120 override: the runner, its harness and the scan spec moved into z-nile/tests, which has its own .luaurc
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		copyInto(repo, {
 			"z-nile/tests/run.luau",
 			"z-nile/tests/lib",
@@ -120,7 +121,6 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			"z-nile/templates",
 			"z-nile/vendor",
 			"z-nile/projects.toml",
-			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			"z-nile/tests/tooling/repo-fence.spec.luau",
 			".luaurc",
 		})

@@ -156,8 +156,8 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		end
 		-- c0120 override: the spec runs from its project's home after the move
 		edit(`{TR}/issues/f0010/f0010.md`, "### Touched modules\n", "### Touched modules\n- `notes/alpha`\n")
+		-- c0120 override: the spec runs from its project's home after the move
 		write(
-			-- c0120 override: the spec runs from its project's home after the move
 			`{TR}/issues/f0010/acceptance/alpha.spec.luau`,
 			"--!strict\nlocal t = "
 				.. REQ

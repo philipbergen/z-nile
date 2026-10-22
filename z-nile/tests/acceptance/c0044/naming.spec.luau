@@ -211,8 +211,8 @@ return t.spec("document naming", function(it)
 
 		local r = tr({ "migrate" })
 		local out = must(r, "migrate")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local cases = {
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{ "pickman/.tracker/issues/d0030/d0030", "d0030", "defect", "Legacy", "legacy" },
 			{ "pickman/.tracker/issues/active/c0040/c0040", "c0040", "chore", "Act", "act" },
 			{ "pickman/.tracker/issues/done/c0050/c0050", "c0050", "chore", "Fin", "fin" },
@@ -271,8 +271,8 @@ return t.spec("document naming", function(it)
 		git({ "checkout", "-q", "-b", "inflight", legacyTip })
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/d0080/d0080-fresh.md", legacy("d0080", "defect", "Fresh"))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/d0030/d0030-legacy.md",
 			legacy("d0030", "defect", "Legacy") .. "\nan edit on the branch\n"
 		)

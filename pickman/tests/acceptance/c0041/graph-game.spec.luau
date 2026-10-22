@@ -7,13 +7,13 @@ local t = require("@tests/lib/t")
 -- c0120 override: this spec runs from pickman/; the graph fixture is z-nile's, z-nile/tests/fixtures/graph, so ../z-nile/ in front.
 -- A project whose ReplicatedStorage.Shared is the existing graph fixture directory, with a nested
 -- $path node that shadows its A directory: Shared.A is tests/fixtures/graph/B, as in Rojo.
+-- c0120 override: the tooling's files live in z-nile/ (its home)
 local PROJECT = {
 	name = "fixture",
 	tree = {
 		["$className"] = "DataModel",
 		ReplicatedStorage = {
 			Shared = {
-				-- c0120 override: the tooling's files live in z-nile/ (its home)
 				["$path"] = "../z-nile/tests/fixtures/graph/", -- normalized to ../z-nile/tests/fixtures/graph
 				A = { ["$path"] = "../z-nile/tests/fixtures/graph/B" },
 			},
@@ -38,8 +38,8 @@ return t.spec("c0390 graph @game", function(it)
 	local roots = graph.gameRoots(PROJECT)
 
 	it("lists every $path node as an instance path and a repo path", function()
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(rootsMap(roots)).toEqual({
-			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			["ReplicatedStorage/Shared"] = "../z-nile/tests/fixtures/graph",
 			["ReplicatedStorage/Shared/A"] = "../z-nile/tests/fixtures/graph/B",
 			["ReplicatedStorage/Gr"] = "../tests/fixtures/gr",

@@ -62,8 +62,8 @@ local function sandbox(): string
 	write(`{SB}/pickman/.tracker/rafts/R0030/design-refute-001.md`, "- F1: fixed: x; consequences: none\n")
 	write(`{SB}/pickman/.tracker/rafts/R0030/review-001.md`, second)
 	-- reviews inside an issue directory are not counted for any raft
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	write(
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		`{SB}/pickman/.tracker/issues/c0010/c0010.md`,
 		"---\nid: c0010\ntype: chore\ntitle: X\nslug: x\nraft: R0030\n---\n\n# c0010\n"
 	)
@@ -126,8 +126,8 @@ return t.spec("c0410 review rounds in metrics", function(it)
 		-- c0120 override: pickman's files live in pickman/ (its home)
 		-- c0114 override: rafts live under every project root (c0120: pickman's root is pickman/.tracker)
 		for _, base in
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			{
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/rafts",
 				"pickman/.tracker/rafts/active",
 				"pickman/.tracker/rafts/done",

@@ -9,8 +9,8 @@ local t = require("@tests/lib/t")
 local DIR = ".cache/c0390-graph"
 local R = "req" .. "uire" -- never write a literal require call here; the scanner would read it
 
+-- c0120 override: the tooling's files live in z-nile/ (its home)
 local ROOTS: { graph.GameRoot } = {
-	-- c0120 override: the tooling's files live in z-nile/ (its home)
 	{ instance = "ReplicatedStorage/Shared", path = "../z-nile/tests/fixtures/graph" },
 }
 

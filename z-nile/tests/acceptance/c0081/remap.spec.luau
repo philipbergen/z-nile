@@ -93,20 +93,22 @@ return t.spec("c0870 remap", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local c10 = `{branch}/pickman/.tracker/issues/c0010/c0010.md`
 		fs.writeFile(c10, (string.gsub(fs.readFile(c10), "line b", "line B, edited on the branch (c0010)")))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.writeFile(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{branch}/pickman/.tracker/issues/f0020/f0020.md`,
 			fs.readFile(`{branch}/pickman/.tracker/issues/f0020/f0020.md`)
 				.. "Appended on the branch for f0020.\n"
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			trOk(branch, { "new", "issue", "c", "mine", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
-		).toBe("pickman/.tracker/issues/c0041/c0041.md")
+		)
+			.toBe("pickman/.tracker/issues/c0041/c0041.md")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			trOk(branch, { "new", "issue", "c", "also", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
-		).toBe("pickman/.tracker/issues/c0042/c0042.md")
+		)
+			.toBe("pickman/.tracker/issues/c0042/c0042.md")
 		git(branch, { "add", "-A" })
 		git(branch, { "commit", "-q", "-m", "branch work" })
 		git(branch, { "push", "-q", "-u", "origin", "prep-y" })
@@ -182,8 +184,8 @@ return t.spec("c0870 remap", function(it)
 		local c1 = fs.readFile(`{branch}/pickman/.tracker/issues/c0001/c0001.md`)
 		t.expect(has(c1, "line B, edited on the branch (c0001)")).toBe(true)
 		t.expect(has(c1, "See c0001 and f0002.")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			has(
 				fs.readFile(`{branch}/pickman/.tracker/issues/f0002/f0002.md`),
 				"Appended on the branch for f0002."

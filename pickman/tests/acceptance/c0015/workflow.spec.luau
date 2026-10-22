@@ -122,12 +122,10 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		function()
 			local on: any = wf["on"]
 			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it. c0114 override: every
-			-- c0120 override: pickman's files live in pickman/ (its home)
 			-- project root and the shared counter are tracker state. c0120 override: pickman's root is pickman/.tracker,
 			-- and tracker/ (retired) is not ignored, so a push that brings it back runs the gate
 			t.expect(on.push).toEqual({
 				branches = { "main" },
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				["paths-ignore"] = { "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" },
 			})
 			t.expect(on.pull_request)

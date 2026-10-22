@@ -112,8 +112,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		edit(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
@@ -121,8 +121,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- an acceptance spec, so that done has something to promote (and to roll back)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.writeDir(`{work}/pickman/.tracker/issues/f0010/acceptance`)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/acceptance/alpha.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
@@ -196,8 +196,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ

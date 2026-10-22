@@ -123,8 +123,8 @@ return t.spec("tracker land", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local wt, id = capture("capture-b", "beta")
 		git(other, { "pull", "-q", "origin", "main" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{other}/pickman/.tracker/issues/f0500/f0500.md`,
 			"---\nid: f0500\ntype: feature\ntitle: Elsewhere\nslug: elsewhere\n---\n"
 		)
@@ -156,14 +156,14 @@ return t.spec("tracker land", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		-- a ready issue on origin, as a merged prep would have left it
 		git(other, { "pull", "-q", "origin", "main" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{other}/pickman/.tracker/issues/f0600/f0600.md`,
 			"---\nid: f0600\ntype: feature\ntitle: Ready\nslug: ready\ndesign: ready\nstatus: prepared-a-b-c\n---\n"
 		)
 		-- a draft raft document: draft frontmatter, but not an issue document
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{other}/pickman/.tracker/rafts/R0900/R0900.md`,
 			"---\nid: R0900\ntype: chore\ntitle: Draft raft\nslug: draft-raft\ndesign: draft\n---\n"
 		)
@@ -286,9 +286,9 @@ return t.spec("tracker land", function(it)
 		local marker = `{base}/raced`
 		local gate = `{base}/racing-gate`
 		-- c0120 override: the racing commit's file goes under pickman/.tracker (the fixture has no tracker/)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			gate,
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`#!/bin/bash\n[ -e "{marker}" ] && exit 0\ntouch "{marker}"\ncd "{other}" || exit 1\n`
 				.. "git pull -q origin main && echo raced > pickman/.tracker/raced.txt && git add -A && "
 				.. "git commit -qm 'race' && git push -q origin HEAD:main\n",

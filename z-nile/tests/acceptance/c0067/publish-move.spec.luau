@@ -123,8 +123,8 @@ return t.spec("tracker publish moves", function(it)
 		-- c0040 is done: a published move may not take it out of done/
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/done/c0040/c0040.md", "---\nid: c0040\nstatus: done\n---\n")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/done/c0040/check.sh",
 			"#!/bin/sh\ntest -f pickman/.tracker/issues/done/c0040/c0040.md\n",
 			true
@@ -242,9 +242,9 @@ return t.spec("tracker publish moves", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		local before = tip()
 		local onto = publish.commit(work, function(_list, read)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			return {
 				{
-					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					path = "pickman/.tracker/issues/active/c0030/c0030.md",
 					from = "pickman/.tracker/issues/c0030/c0030.md",
 					content = read("pickman/.tracker/issues/c0030/c0030.md") :: string,
@@ -289,9 +289,9 @@ return t.spec("tracker publish moves", function(it)
 					string.gsub(c.path, "^pickman/%.tracker/issues/active/", "pickman/.tracker/issues/done/")
 				)
 				if c.from == `{FROM}/check.sh` then -- a consistent move in every other respect
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					c.content = paths.rewrite(
 						read(c.from :: string) :: string,
-						-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 						{ c0010 = "pickman/.tracker/issues/done/c0010" }
 					)
 				end
@@ -304,15 +304,15 @@ return t.spec("tracker publish moves", function(it)
 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local doc = read("pickman/.tracker/issues/done/c0040/c0040.md") :: string
 			local check = read("pickman/.tracker/issues/done/c0040/check.sh") :: string
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			return {
 				{
-					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					path = "pickman/.tracker/issues/c0040/c0040.md",
 					from = "pickman/.tracker/issues/done/c0040/c0040.md",
 					content = (string.gsub(doc, "status: done", "status: prepared-quiet-copper-falcon")),
 				},
 				{
-					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					path = "pickman/.tracker/issues/c0040/check.sh",
 					from = "pickman/.tracker/issues/done/c0040/check.sh",
 					content = paths.rewrite(check, { c0040 = "pickman/.tracker/issues/c0040" }),

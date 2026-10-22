@@ -236,9 +236,9 @@ return t.spec("tracker publish (git plumbing)", function(it)
 	it("files with spaces, tabs or other odd names beside a change are kept exactly", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (origin's registry has no root tracker/)
 		-- odd names at every level the publisher rebuilds: the root, pickman/.tracker/, pickman/.tracker/issues/
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local odd = {
 			"read me.txt",
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/odd\tname.md",
 			"pickman/.tracker/issues/na\u{ef}ve notes.md",
 			"pickman/.tracker/issues/x  y",
@@ -418,12 +418,14 @@ return t.spec("tracker publish (git plumbing)", function(it)
 			t.expect(calls).toBe(3)
 			t.expect(string.find(r.reason or "", "3", 1, true) ~= nil).toBe(true)
 			git(work, { "fetch", "-q", "origin", "main" })
-			t.expect(process.exec(
-				"git",
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-				{ "cat-file", "-e", "origin/main:pickman/.tracker/issues/c0900/c0900.md" },
-				{ cwd = work }
-			).ok).toBe(false)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+			t.expect(
+				process.exec(
+					"git",
+					{ "cat-file", "-e", "origin/main:pickman/.tracker/issues/c0900/c0900.md" },
+					{ cwd = work }
+				).ok
+			).toBe(false)
 		end
 	)
 end)

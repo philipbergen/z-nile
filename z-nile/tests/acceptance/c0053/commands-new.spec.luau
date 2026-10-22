@@ -118,8 +118,8 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 	it(
 		"an id taken by another terminal during the push is never overwritten: the next one is used",
 		function()
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			setHook(
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				`marker={base}/raced\n[ -e "$marker" ] && exit 0\ntouch "$marker"\ncd {other} && git pull -q origin main && mkdir -p pickman/.tracker/issues/c0220 && printf -- '---\\nid: c0220\\ntype: chore\\ntitle: theirs\\nslug: theirs\\nraft: \\ndepends_on: []\\nstatus: new\\n---\\n' > pickman/.tracker/issues/c0220/c0220.md && git add -A && git commit -qm theirs && git push -q origin HEAD:main\n`
 			)
 			local out = trOk(cap, { "new", "issue", "c", "gamma", "--project", "pickman" })

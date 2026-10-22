@@ -115,8 +115,8 @@ return t.spec("c0111 metrics over lessons", function(it)
 				["pickman/.tracker/rafts/R0010/design-review-001.md"] = review("F1", "F2"),
 				["pickman/.tracker/rafts/R0010/design-review-002.md"] = review("F1"),
 				["pickman/.tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n- design-review-001 F1: testing/pin\n"
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					.. "- design-review-001 F2: one-off: x\n- design-review-002 F1: testing/pin\n",
-				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				["pickman/.tracker/rafts/done/R0020/design-review-001.md"] = review("F1")
 					.. "R0020 round 1\n",
 				["pickman/.tracker/rafts/R0010/R0010.md"] = raft("R0010", "2030-06-01"),

@@ -115,8 +115,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		edit(
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"

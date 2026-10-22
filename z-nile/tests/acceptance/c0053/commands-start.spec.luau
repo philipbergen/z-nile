@@ -46,8 +46,8 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 			.. "\n---\n\n# R0001: Demo\n"
 		-- the member names its raft, as the local commit that "new raft claims" leaves in the capture worktree does
 		local member = string.gsub(trackerfix.stub("c0240", "member", claim), "\nraft: \n", "\nraft: R0001\n")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local seed = {
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			["pickman/.tracker/rafts/R0001/R0001.md"] = raft,
 			["pickman/.tracker/issues/c0240/c0240.md"] = member,
 		}
