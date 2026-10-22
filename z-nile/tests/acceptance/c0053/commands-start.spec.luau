@@ -47,6 +47,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		-- the member names its raft, as the local commit that "new raft claims" leaves in the capture worktree does
 		local member = string.gsub(trackerfix.stub("c0240", "member", claim), "\nraft: \n", "\nraft: R0001\n")
 		local seed = {
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			["pickman/.tracker/rafts/R0001/R0001.md"] = raft,
 			["pickman/.tracker/issues/c0240/c0240.md"] = member,
 		}
@@ -83,9 +84,11 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		t.expect(has(out, "R0001")).toBe(true)
 		-- the claim is remembered in the worktree, so this terminal can resume it
 		local saved = trim(fs.readFile(`{ws}/.cache/tracker-claim-R0001`))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(onOrigin("pickman/.tracker/rafts/R0001/R0001.md"), `status: {saved}`)).toBe(true)
 		t.expect(string.match(saved, "^active%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
 		-- origin shows active at the backlog path, for the raft and its member, in one commit
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(onOrigin("pickman/.tracker/rafts/R0001/R0001.md"), "status: active")).toBe(true)
 		t.expect(has(onOrigin("pickman/.tracker/issues/c0240/c0240.md"), "status: active")).toBe(true)
 		t.expect(fs.isDir(`{ws}/pickman/.tracker/rafts/active/R0001`)).toBe(true)
@@ -98,6 +101,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		t.expect(has(r.stderr, "active")).toBe(true)
 		t.expect(git(other, { "rev-parse", "HEAD" })).toBe(head)
 		t.expect(git(other, { "status", "--porcelain" })).toBe("")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{other}/pickman/.tracker/rafts/active/R0001`)).toBe(false)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(tip)
 	end)
@@ -112,6 +116,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 			t.expect(trOk(ws, { "status", "R0001" })).toBe("prepared")
 			t.expect(trOk(ws, { "status", "c0240" })).toBe("prepared")
 			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(
 				has(fs.readFile(`{ws}/pickman/.tracker/rafts/active/R0001/R0001.md`), "status: prepared")
 			)
@@ -129,6 +134,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		trOk(main, { "sync" })
 		local wt = trOk(main, { "worktree", "resume-r" })
 		-- a local commit edits the raft's status line, so merging origin's claim conflicts and start dies after it
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local doc = `{wt}/pickman/.tracker/rafts/R0001/R0001.md`
 		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nstatus: [^\n]*", "\nstatus: prepared-zz-zz-zz")))
 		git(wt, { "commit", "-q", "-am", "local edit of the status line" })
@@ -136,6 +142,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		t.expect(died.ok).toBe(false)
 		t.expect(has(died.stderr, "merge")).toBe(true)
 		local claim = trim(fs.readFile(`{wt}/.cache/tracker-claim-R0001`))
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(onOrigin("pickman/.tracker/rafts/R0001/R0001.md"), `status: {claim}`)).toBe(true)
 		t.expect(fs.isDir(`{wt}/pickman/.tracker/rafts/active/R0001`)).toBe(false) -- nothing moved locally
 		-- another terminal has no claim file and is refused
@@ -151,6 +158,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		t.expect(ok.stderr).toBe("")
 		t.expect(ok.ok).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(tip)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{wt}/pickman/.tracker/rafts/active/R0001`)).toBe(true)
 		-- `status <id> active` is not a way to take the lock: only start claims
 		local direct = tr(wt2, { "status", "R0001", "active" })
@@ -168,6 +176,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		"sync --fetch updates origin/main and leaves HEAD alone; new issue in a raft worktree does not merge",
 		function()
 			local ws = `{base}/main/.worktree/resume-r`
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			elsewhere(
 				{ ["pickman/.tracker/issues/f0500/f0500.md"] = stub("f0500", "remote-d", "new") },
 				"other f0500"
@@ -176,6 +185,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 			trOk(ws, { "sync", "--fetch" })
 			t.expect(git(ws, { "rev-parse", "HEAD" })).toBe(head)
 			t.expect(git(ws, { "rev-parse", "origin/main" })).toBe(git(origin, { "rev-parse", "main" }))
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(fs.isFile(`{ws}/pickman/.tracker/issues/f0500/f0500.md`)).toBe(false)
 			-- an active raft is on this branch: the new stub is published but the branch is not touched
 			local out = trOk(ws, { "new", "issue", "c", "postponed", "--project", "pickman" })

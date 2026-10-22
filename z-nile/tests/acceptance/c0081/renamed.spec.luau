@@ -4,6 +4,7 @@
 -- hold before and after the user's one-time compaction.
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local renamed = require("@tests/lib/renamed")
 local t = require("@tests/lib/t")

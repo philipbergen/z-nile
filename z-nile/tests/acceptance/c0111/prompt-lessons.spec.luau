@@ -31,6 +31,7 @@ local function seed(withLessons: boolean): { [string]: string }
 		["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
 	}
 	for _, name in { "execute-raft", "tracker", "architecture", "testing", "review", "ticket-prep" } do
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		s[`.claude/skills/{name}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{name}/SKILL.md`)
 	end
 	if withLessons then
@@ -72,6 +73,7 @@ return t.spec("c0111 the prompt carries the build lessons", function(it)
 			error(r.stderr .. r.stdout)
 		end
 		t.expect(has(r.stderr, "warning") and has(r.stderr, "testing/bad")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local s = lessonsSection(fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`))
 		-- exactly these lines, most sources first
 		t.expect(
@@ -93,6 +95,7 @@ return t.spec("c0111 the prompt carries the build lessons", function(it)
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local s = lessonsSection(fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`))
 		t.expect(has(s, "(none)")).toBe(true)
 		t.expect(has(s, "{{LESSONS}}")).toBe(false)

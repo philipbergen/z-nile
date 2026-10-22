@@ -10,6 +10,7 @@ local DIR = ".cache/c0390-graph"
 local R = "req" .. "uire" -- never write a literal require call here; the scanner would read it
 
 local ROOTS: { graph.GameRoot } = {
+	-- c0120 override: the tooling's files live in z-nile/ (its home)
 	{ instance = "ReplicatedStorage/Shared", path = "../z-nile/tests/fixtures/graph" },
 }
 
@@ -26,12 +27,14 @@ end
 
 return t.spec("c0390 graph resolve and build with @game", function(it)
 	it("resolve delegates @game specs to the given roots", function()
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(graph.resolve("src/server/X.luau", "@game/ReplicatedStorage/Shared/A", ROOTS))
 			.toBe("../z-nile/tests/fixtures/graph/A/init.luau")
 		t.expect(graph.resolve("src/server/X.luau", "@game/ReplicatedStorage/Shared/Nope", ROOTS)).toBe(nil)
 	end)
 
 	it("resolve still handles relative specs and .luaurc aliases as before", function()
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(graph.resolve("../z-nile/tests/fixtures/graph/a_check.luau", "./A", ROOTS))
 			.toBe("../z-nile/tests/fixtures/graph/A/init.luau")
 		t.expect(graph.resolve("tests/x.luau", "@tests/lib/t", ROOTS)).toBe("tests/lib/t.luau")
@@ -41,6 +44,7 @@ return t.spec("c0390 graph resolve and build with @game", function(it)
 		setup()
 		local ok, err = pcall(function()
 			local g = graph.build({ DIR }, ROOTS)
+			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			t.expect(g.deps[`{DIR}/adapter.luau`]).toEqual({ "../z-nile/tests/fixtures/graph/A/init.luau" })
 			t.expect(#g.unresolved).toBe(1)
 			t.expect(g.unresolved[1].spec).toBe("@game/ReplicatedStorage/Shared/Nope")
@@ -60,9 +64,11 @@ return t.spec("c0390 graph resolve and build with @game", function(it)
 			return ROOTS
 		end
 		local ok, err = pcall(function()
+			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			t.expect(graph.resolve("src/server/X.luau", "@game/ReplicatedStorage/Shared/A"))
 				.toBe("../z-nile/tests/fixtures/graph/A/init.luau")
 			local g = graph.build({ DIR })
+			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			t.expect(g.deps[`{DIR}/adapter.luau`]).toEqual({ "../z-nile/tests/fixtures/graph/A/init.luau" })
 			t.expect(#g.unresolved).toBe(1)
 		end)

@@ -150,21 +150,26 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
 			"new raft"
 		)
+		-- c0120 override: the spec runs from its project's home after the move
 		for _, doc in { `{TR}/issues/f0010/f0010.md`, `{TR}/rafts/R0010/R0010.md` } do
 			edit(doc, "design: draft", "design: ready")
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		edit(`{TR}/issues/f0010/f0010.md`, "### Touched modules\n", "### Touched modules\n- `notes/alpha`\n")
 		write(
+			-- c0120 override: the spec runs from its project's home after the move
 			`{TR}/issues/f0010/acceptance/alpha.spec.luau`,
 			"--!strict\nlocal t = "
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
 		)
+		-- c0120 override: the spec runs from its project's home after the move
 		write(`{TR}/issues/f0010/check.sh`, TRIVIAL_CHECK)
 		write(`{TR}/rafts/R0010/check.sh`, TRIVIAL_CHECK)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
+		-- c0120 override: the spec runs from its project's home after the move
 		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		reviewed = git({ "rev-parse", "HEAD" })
@@ -184,6 +189,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(fs.isFile(`{work}/{TR}/issues/active/f0010/acceptance/alpha.spec.luau`)).toBe(true)
 		t.expect(fs.isFile(`{work}/{PROMOTED}`)).toBe(false)
 		-- no empty done/ folder is left beside the active one (one id in two places breaks every tracker command)
+		-- c0120 override: the spec runs from its project's home after the move
 		t.expect(fs.isDir(`{work}/{TR}/rafts/done/R0010`)).toBe(false)
 		t.expect(fs.isDir(`{work}/{TR}/issues/done/f0010`)).toBe(false)
 		must(tr({ "list" }), "tracker list after the rollback")

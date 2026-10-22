@@ -1,6 +1,7 @@
 --!strict
 -- c0020 AC3: specs that load the built place are affected by any src/ or project-file change,
 -- even though they do not require src/ directly.
+-- c0120 override: the spec runs from its project's home after the move
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 

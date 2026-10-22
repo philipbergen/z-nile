@@ -38,6 +38,7 @@ local CHECK = '#!/usr/bin/env bash\ncheck "AC1: a" lune run tests/run -- pickman
 local SPEC = "-- c0010 acceptance marker\nreturn nil\n"
 local RUN = "#!/bin/sh\necho spike\n"
 local CRLF = "spike output\r\nline two\r\n" -- a moved file is byte-checked, so its carriage returns are kept
+-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 local FROM, TO = "pickman/.tracker/issues/c0010", "pickman/.tracker/issues/active/c0010"
 
 local function write(path: string, text: string, exec: boolean?)
@@ -107,6 +108,7 @@ return t.spec("tracker publish moves", function(it)
 		git(`{base}/seed`, { "config", "user.name", "t" })
 		git(`{base}/seed`, { "config", "user.email", "t@example.invalid" })
 		write("src/x.luau", "return 1\n")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("z-nile/projects.toml", fs.readFile(`{TOP}/z-nile/projects.toml`)) -- c0114: origin needs the registry
 		write("pickman/.tracker/issues/active/.gitkeep", "")
 		write("pickman/.tracker/rafts/active/.gitkeep", "")
@@ -115,16 +117,20 @@ return t.spec("tracker publish moves", function(it)
 		write(`{FROM}/acceptance/a.spec.luau`, SPEC)
 		write(`{FROM}/experiments/run.sh`, RUN, true)
 		write(`{FROM}/experiments/out.txt`, CRLF)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/c0020/c0020.md", "---\nid: c0020\nstatus: new\n---\n")
 		write("pickman/.tracker/issues/c0020/check.sh", "#!/bin/sh\n", true)
 		-- c0040 is done: a published move may not take it out of done/
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/done/c0040/c0040.md", "---\nid: c0040\nstatus: done\n---\n")
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/done/c0040/check.sh",
 			"#!/bin/sh\ntest -f pickman/.tracker/issues/done/c0040/c0040.md\n",
 			true
 		)
 		-- c0030 exists in both places: a move onto it must be refused
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/c0030/c0030.md", "---\nid: c0030\nstatus: prepared\n---\n")
 		write("pickman/.tracker/issues/active/c0030/c0030.md", "---\nid: c0030\nstatus: active\n---\n")
 		git(`{base}/seed`, { "add", "-A" })
@@ -218,6 +224,7 @@ return t.spec("tracker publish moves", function(it)
 		refused(
 			attempt(function(changes)
 				local c = find(changes, "check.sh")
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				c.content = (
 					string.gsub(
 						c.content,
@@ -237,6 +244,7 @@ return t.spec("tracker publish moves", function(it)
 		local onto = publish.commit(work, function(_list, read)
 			return {
 				{
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					path = "pickman/.tracker/issues/active/c0030/c0030.md",
 					from = "pickman/.tracker/issues/c0030/c0030.md",
 					content = read("pickman/.tracker/issues/c0030/c0030.md") :: string,
@@ -247,6 +255,7 @@ return t.spec("tracker publish moves", function(it)
 		refused(
 			attempt(function(changes)
 				find(changes, "acceptance/a.spec.luau").path =
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					"pickman/.tracker/issues/active/c0020/acceptance/a.spec.luau"
 			end),
 			before
@@ -275,12 +284,14 @@ return t.spec("tracker publish moves", function(it)
 		local r = publish.commit(work, function(list, read)
 			local out = moveChanges(list, read)
 			for _, c in out do
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				c.path = (
 					string.gsub(c.path, "^pickman/%.tracker/issues/active/", "pickman/.tracker/issues/done/")
 				)
 				if c.from == `{FROM}/check.sh` then -- a consistent move in every other respect
 					c.content = paths.rewrite(
 						read(c.from :: string) :: string,
+						-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 						{ c0010 = "pickman/.tracker/issues/done/c0010" }
 					)
 				end
@@ -290,15 +301,18 @@ return t.spec("tracker publish moves", function(it)
 		refused(r, before)
 		-- and out of done/, consistent in every other respect: only the source side is wrong
 		local out = publish.commit(work, function(_list, read)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local doc = read("pickman/.tracker/issues/done/c0040/c0040.md") :: string
 			local check = read("pickman/.tracker/issues/done/c0040/check.sh") :: string
 			return {
 				{
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					path = "pickman/.tracker/issues/c0040/c0040.md",
 					from = "pickman/.tracker/issues/done/c0040/c0040.md",
 					content = (string.gsub(doc, "status: done", "status: prepared-quiet-copper-falcon")),
 				},
 				{
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					path = "pickman/.tracker/issues/c0040/check.sh",
 					from = "pickman/.tracker/issues/done/c0040/check.sh",
 					content = paths.rewrite(check, { c0040 = "pickman/.tracker/issues/c0040" }),
@@ -306,6 +320,7 @@ return t.spec("tracker publish moves", function(it)
 			}
 		end, "tracker: out of done")
 		refused(out, before)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(
 			git(origin, { "ls-tree", "--name-only", "main", "pickman/.tracker/issues/done/c0040/c0040.md" })
 		)
@@ -383,6 +398,7 @@ return t.spec("tracker publish moves", function(it)
 		table.sort(got)
 		t.expect(got).toEqual(want)
 		t.expect(git(origin, { "ls-tree", "main", FROM })).toBe("") -- the emptied directory is gone
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(git(origin, { "ls-tree", "--name-only", "main", "pickman/.tracker/issues/active/.gitkeep" }))
 			.toBe("pickman/.tracker/issues/active/.gitkeep")
 		t.expect(git(origin, { "show", `main:{TO}/acceptance/a.spec.luau` }) .. "\n").toBe(SPEC)
@@ -393,12 +409,14 @@ return t.spec("tracker publish moves", function(it)
 			.toBe("100755")
 		t.expect(string.sub(git(origin, { "ls-tree", "main", `{TO}/check.sh` }), 1, 6)).toBe("100755")
 		local check = git(origin, { "show", `main:{TO}/check.sh` }) .. "\n"
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(check)
 			.toBe((string.gsub(CHECK, "pickman/%.tracker/issues/c0010/", "pickman/.tracker/issues/active/c0010/")))
 		t.expect(has(check, "pickman/.tracker/issues/c0020/c0020.md")).toBe(true)
 		local doc = git(origin, { "show", `main:{TO}/c0010.md` })
 		t.expect(has(doc, "status: active-brisk-amber-otter")).toBe(true)
 		t.expect(has(doc, "title: Movable")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(git(origin, { "show", "main:pickman/.tracker/issues/c0020/c0020.md" }))
 			.toBe("---\nid: c0020\nstatus: new\n---")
 	end)

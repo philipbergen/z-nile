@@ -279,6 +279,7 @@ return t.spec("c0107 board page", function(it)
 	}, "# d9104: DoneDefect\n")
 
 	local page = `{ROOT}/page.html`
+	-- c0120 override: the spec runs from its project's home after the move
 	fs.writeFile(page, board.render(board.collect(ROOT) :: any, fs.readFile(MARKED)))
 	fs.writeFile(`{ROOT}/harness.js`, HARNESS)
 
@@ -374,6 +375,7 @@ return t.spec("c0107 board page", function(it)
 		place(sent.views.issues, "c9102", "done")
 		findItem(sent.issues, "c9102").command = nil
 		local sentinel = `{ROOT}/sentinel.html`
+		-- c0120 override: the spec runs from its project's home after the move
 		fs.writeFile(sentinel, board.render(sent, fs.readFile(MARKED)))
 		local run = process.exec("node", { `{ROOT}/harness.js`, sentinel, "sentinel" })
 		if not run.ok then

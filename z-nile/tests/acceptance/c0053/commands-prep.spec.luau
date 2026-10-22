@@ -54,6 +54,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		local before = git(origin, { "rev-parse", "main" })
 		trOk(cap, { "status", rz, "new" })
 		local files = git(origin, { "diff", "--name-only", before, "main" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(files, `pickman/.tracker/rafts/{rz}/{rz}.md`)).toBe(true)
 		t.expect(has(files, `pickman/.tracker/issues/{zeta}/{zeta}.md`)).toBe(true)
 		t.expect(#string.split(files, "\n")).toBe(2)
@@ -72,6 +73,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		trOk(cap, { "status", rz, "preparing" })
 		t.expect(trOk(cap, { "status", rz })).toBe("preparing")
 		-- the status line is a fresh stamp each time, so a double move is a git conflict, not a silent merge
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local a = onOrigin(`pickman/.tracker/rafts/{rz}/{rz}.md`)
 		t.expect(string.match(a or "", "\nstatus: preparing%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)
 	end)
@@ -85,6 +87,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 				"(c%d+)"
 			) :: string
 			-- prep adds cnew to the raft locally (the document the prep PR will carry)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local doc = `{cap}/pickman/.tracker/rafts/{rz}/{rz}.md`
 			-- the designs are ready (the move to prepared refuses otherwise)
 			local function ready(path: string)
@@ -96,6 +99,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(has(rawRaft.stderr, rz)).toBe(true)
 			t.expect(has(rawRaft.stderr, "design: ready")).toBe(true)
 			ready(doc)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			ready(`{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`)
 			local original = fs.readFile(doc)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [%1, {cnew}]`)))
@@ -112,12 +116,15 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(early.ok).toBe(false)
 			t.expect(has(early.stderr, cnew)).toBe(true)
 			t.expect(has(early.stderr, "design: ready")).toBe(true)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			ready(`{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [{cnew}]`)))
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local zetaDoc = `{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`
 			local zetaBefore = fs.readFile(zetaDoc)
 			trOk(cap, { "status", rz, "prepared" })
 			t.expect(has(fs.readFile(doc), "status: prepared")).toBe(true)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`), "status: prepared"))
 				.toBe(true)
 			t.expect(fs.readFile(zetaDoc)).toBe(zetaBefore)
@@ -151,6 +158,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			local legacyIssue =
 				"---\nid: c0801\ntype: chore\ntitle: Legacy issue\nslug: legacy-issue\nraft: R0800\ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-01-01\n---\n"
 			elsewhere({
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				["pickman/.tracker/rafts/R0800/R0800.md"] = legacyRaft,
 				["pickman/.tracker/issues/c0801/c0801.md"] = legacyIssue,
 			}, "other legacy raft")
@@ -167,6 +175,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 			-- claim it: the raft and its members get a stored stamp
 			trOk(cap, { "status", "R0800", "preparing" })
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(has(onOrigin("pickman/.tracker/rafts/R0800/R0800.md"), "status: preparing-")).toBe(true)
 			t.expect(has(onOrigin("pickman/.tracker/issues/c0801/c0801.md"), "status: preparing-")).toBe(true)
 			-- a second terminal is refused: it is stamped now

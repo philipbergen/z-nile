@@ -3,6 +3,7 @@
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
+-- c0120 override: the spec runs from its project's home after the move
 local design = fs.readFile(".tracker/game-design.md")
 
 local function has(needle: string): boolean

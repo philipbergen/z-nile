@@ -23,6 +23,7 @@ engine.registry(base) -- c0114: a tree without the registry refuses
 fs.writeDir(`{base}/pickman/.tracker`)
 
 local function put(id: string)
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	fs.writeDir(`{base}/pickman/.tracker/issues/{id}`)
 	fs.writeFile(`{base}/pickman/.tracker/issues/{id}/{id}.md`, `---\nid: {id}\ntitle: T\nslug: s\n---\n`)
 end
@@ -46,6 +47,7 @@ return t.spec("new keeps multiple-of-10 spacing", function(it)
 			put("c0102")
 			local r = new({ "issue", "c", "next-one" })
 			t.expect(r.ok).toBe(true)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(fs.isFile(`{base}/pickman/.tracker/issues/c0120/c0120.md`)).toBe(true)
 		end
 	)
@@ -53,6 +55,7 @@ return t.spec("new keeps multiple-of-10 spacing", function(it)
 	it("after 0120 comes 0130, not 0121", function()
 		local r = new({ "issue", "d", "again" })
 		t.expect(r.ok).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{base}/pickman/.tracker/issues/d0130/d0130.md`)).toBe(true)
 		t.expect(fs.isFile(`{base}/pickman/.tracker/issues/d0121/d0121.md`)).toBe(false)
 	end)

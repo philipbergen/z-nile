@@ -6,6 +6,7 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
+-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 local text = fs.readFile("../.github/workflows/check.yml")
 local wf: any = serde.decode("yaml" :: "yaml", text)
 local beta: any = wf.jobs.beta

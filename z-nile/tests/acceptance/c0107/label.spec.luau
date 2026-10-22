@@ -2,6 +2,7 @@
 -- c0107 AC2: a raft's shown type comes from its issues, and the row colors are not the type colors.
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
@@ -132,6 +133,7 @@ return t.spec("c0107 board labels", function(it)
 	end)
 
 	it("colors the readiness bar and the type word with different rules", function()
+		-- c0120 override: the spec runs from its project's home after the move
 		local html = board.render(m, fs.readFile(MARKED))
 		for _, rule in
 			{

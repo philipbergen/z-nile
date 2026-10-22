@@ -2,6 +2,7 @@
 -- f0670: the tooling knows the second place: the place library builds either project, the test selector
 -- treats a change to the lobby's project file like any change to a place, and the gate builds both.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local graph = require("@znile/lib/graph")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
@@ -49,12 +50,14 @@ return t.spec("f0670 tooling", function(it)
 		-- stages that are run, not ones that are commented out
 		local each, build = false, false
 		for line in string.gmatch(text, "[^\n]+") do
+			-- c0120 override: the spec runs from its project's home after the move
 			if string.match(line, '^%s*for f in "%$%{p%}"%*%.project%.json; do') then
 				each = true
 			elseif string.match(line, '^%s*par_start .*rojo build "%$f"') then
 				build = true
 			end
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		t.expect(each).toBe(true)
 		t.expect(build).toBe(true)
 		t.expect(fs.isFile("lobby.project.json")).toBe(true)

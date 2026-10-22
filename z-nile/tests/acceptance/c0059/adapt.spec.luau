@@ -22,10 +22,12 @@ local function c0510Specs(): { string }
 	local out: { string } = {}
 	for _, name in fs.readDir(`{root}/z-nile/tests/acceptance/c0053`) do
 		if string.match(name, "^commands%-.+%.spec%.luau$") then
+			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			table.insert(out, `z-nile/tests/acceptance/c0053/{name}`)
 		end
 	end
 	table.sort(out)
+	-- c0120 override: the tooling's files live in z-nile/ (its home)
 	table.insert(out, "z-nile/tests/acceptance/c0053/publish.spec.luau")
 	return out
 end
@@ -87,6 +89,7 @@ local function gate(): string
 	local r = process.exec(
 		"lune",
 		{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
+		-- c0120 override: the spec runs from its project's home after the move
 		{ cwd = `{repo}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
 	)
 	return r.stdout .. r.stderr
@@ -117,6 +120,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			"z-nile/templates",
 			"z-nile/vendor",
 			"z-nile/projects.toml",
+			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			"z-nile/tests/tooling/repo-fence.spec.luau",
 			".luaurc",
 		})
@@ -207,6 +211,7 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			process.exec("git", { "status", "--porcelain", "--untracked-files=all" }, { cwd = wt }).stdout
 		t.expect(
 			string.find(status, "probe-one", 1, true) ~= nil
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				or string.find(status, "pickman/.tracker/issues/c", 1, true) ~= nil
 		).toBe(true)
 	end)

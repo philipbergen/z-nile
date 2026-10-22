@@ -116,10 +116,12 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
 		git({ "add", "-A" })

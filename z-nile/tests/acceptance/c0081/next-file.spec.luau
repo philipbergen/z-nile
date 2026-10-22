@@ -4,6 +4,7 @@
 -- c0114: the counter is z-nile/next once origin has moved it, and the old file until then (the branch never moves it).
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
@@ -12,6 +13,7 @@ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" })
 
 return t.spec("c0870 the real tracker/next", function(it)
 	it("exists and parses", function()
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		local file = if fs.isFile(`{TOP}/{ids.FILE}`) then `{TOP}/{ids.FILE}` else `{TOP}/{ids.OLD_FILE}`
 		t.expect(fs.isFile(file)).toBe(true)
 		t.expect(ids.parse(fs.readFile(file)) ~= nil).toBe(true)

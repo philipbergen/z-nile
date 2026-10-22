@@ -16,6 +16,7 @@ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }
 local outer = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{outer}/.cache/c0640-lock`
 local repo = `{base}/real`
+-- c0120 override: the spec runs from its project's home after the move
 local home = `{repo}/z-nile`
 local lock = `{home}/.cache/tests-run.lock`
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
@@ -103,13 +104,16 @@ local function start(name: string, extra: { [string]: string }?): () -> Result
 	end
 end
 
+-- c0120 override: the spec runs from its project's home after the move
 -- c0120 override (here and below): the probes' files are in the copy's home's .cache
 local function waitFor(f: string)
 	local waited = 0
+	-- c0120 override: the spec runs from its project's home after the move
 	while not fs.isFile(`{home}/.cache/{f}`) and waited < 30 do
 		task.wait(0.05)
 		waited += 0.05
 	end
+	-- c0120 override: the spec runs from its project's home after the move
 	if not fs.isFile(`{home}/.cache/{f}`) then
 		error(`{f} never appeared`)
 	end
@@ -117,6 +121,7 @@ end
 
 local function clear(names: { string })
 	for _, f in names do
+		-- c0120 override: the spec runs from its project's home after the move
 		if fs.isFile(`{home}/.cache/{f}`) then
 			fs.removeFile(`{home}/.cache/{f}`)
 		end
@@ -153,6 +158,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		do
 			copyTree(rel)
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		for _, rel in { "z-nile/lib/git-hooks", "z-nile/.luaurc", ".luaurc", "rokit.toml", ".gitignore" } do
 			copyTree(rel)
 		end
@@ -226,6 +232,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		)
 		t.expect(first().ok).toBe(true)
 		t.expect(second.ok).toBe(true)
+		-- c0120 override: the spec runs from its project's home after the move
 		t.expect(fs.readFile(`{home}/.cache/l-second-saw`)).toBe("yes")
 		t.expect(has(fs.readFile(`{home}/.cache/l-second.out`), "waiting for another test run")).toBe(true)
 	end)
@@ -264,6 +271,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		process.exec("kill", { "-TERM", top })
 		-- the orphaned specs still hold the lock (their output keeps the held run open until they end)
 		local meanwhile = run("ok", { PICKMAN_TEST_LOCK_WAIT = "1" })
+		-- c0120 override: the spec runs from its project's home after the move
 		fs.writeFile(`{home}/.cache/l-go`, "")
 		waitFor("l-held-done")
 		held()
@@ -292,6 +300,7 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 		local b = start("exclusive", { PICKMAN_TEST_LOCK_WAIT = "30", PICKMAN_TEST_TAKEOVER_PAUSE = "1" })
 		local function running(): number
 			local n = 0
+			-- c0120 override: the spec runs from its project's home after the move
 			for _, name in fs.readDir(`{home}/.cache`) do
 				if string.match(name, "^l%-running%-") then
 					n += 1
@@ -311,12 +320,14 @@ return t.spec("c0640 one run at a time per checkout", function(it)
 			task.wait(0.05)
 			window += 0.05
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		fs.writeFile(`{home}/.cache/l-go-exclusive`, "")
 		for _, finished in { a(), b() } do
 			if not finished.ok then
 				error(finished.stdout .. finished.stderr)
 			end
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		t.expect(fs.isFile(`{home}/.cache/l-overlap`)).toBe(false)
 	end)
 

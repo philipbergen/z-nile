@@ -66,15 +66,18 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			cap,
 			{ "new", "issue", "c", "alpha", "--desc", "First line of alpha.", "--project", "pickman" }
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(out).toBe("pickman/.tracker/issues/c0010/c0010.md")
 		local doc = onOrigin("pickman/.tracker/issues/c0010/c0010.md")
 		t.expect(has(doc, "status: new")).toBe(true)
 		t.expect(has(doc, "First line of alpha.")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(onOrigin("pickman/.tracker/issues/c0010/check.sh") ~= nil).toBe(true)
 		t.expect(
 			string.sub(git(origin, { "ls-tree", "main", "pickman/.tracker/issues/c0010/check.sh" }), 1, 6)
 		)
 			.toBe("100755")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{cap}/pickman/.tracker/issues/c0010/c0010.md`)).toBe(true)
 		t.expect(git(cap, { "status", "--porcelain" })).toBe("") -- tracked and clean, not an untracked stub
 		t.expect(git(cap, { "rev-parse", "HEAD" })).toBe(git(origin, { "rev-parse", "main" }))
@@ -86,11 +89,13 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 		fs.writeFile(doc, fs.readFile(doc) .. "\nMore detail.\n")
 		git(cap, { "add", "-A" })
 		git(cap, { "commit", "-q", "-m", "fill c0010" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		elsewhere(
 			{ ["pickman/.tracker/issues/f0100/f0100.md"] = stub("f0100", "remote-a", "new") },
 			"other f0100"
 		)
 		trOk(cap, { "sync" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{cap}/pickman/.tracker/issues/f0100/f0100.md`)).toBe(true)
 		t.expect(has(fs.readFile(doc), "More detail.")).toBe(true)
 	end)
@@ -102,7 +107,9 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			"other f0200"
 		)
 		-- cap has not fetched f0200
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{cap}/pickman/.tracker/issues/f0200/f0200.md`)).toBe(false)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(trOk(cap, { "new", "issue", "c", "beta", "--project", "pickman" }))
 			.toBe("pickman/.tracker/issues/c0210/c0210.md")
 	end)
@@ -112,10 +119,12 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 		"an id taken by another terminal during the push is never overwritten: the next one is used",
 		function()
 			setHook(
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				`marker={base}/raced\n[ -e "$marker" ] && exit 0\ntouch "$marker"\ncd {other} && git pull -q origin main && mkdir -p pickman/.tracker/issues/c0220 && printf -- '---\\nid: c0220\\ntype: chore\\ntitle: theirs\\nslug: theirs\\nraft: \\ndepends_on: []\\nstatus: new\\n---\\n' > pickman/.tracker/issues/c0220/c0220.md && git add -A && git commit -qm theirs && git push -q origin HEAD:main\n`
 			)
 			local out = trOk(cap, { "new", "issue", "c", "gamma", "--project", "pickman" })
 			setHook(nil)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(out).toBe("pickman/.tracker/issues/c0230/c0230.md")
 			t.expect(has(onOrigin("pickman/.tracker/issues/c0220/c0220.md"), "title: theirs")).toBe(true)
 			t.expect(onOrigin("pickman/.tracker/issues/c0230/c0230.md") ~= nil).toBe(true)
@@ -132,9 +141,11 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			{ PICKMAN_PUBLISH = "0" }
 		)
 		t.expect(r.ok).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		offlineId = string.match(trim(r.stdout), "pickman/.tracker/issues/(c%d+)/") :: string
 		t.expect(trim(r.stdout)).toBe(`pickman/.tracker/issues/{offlineId}/{offlineId}.md`)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(tip)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{cap}/pickman/.tracker/issues/{offlineId}/{offlineId}.md`)).toBe(true)
 		t.expect(git(cap, { "status", "--porcelain" })).toBe(`?? pickman/.tracker/issues/{offlineId}/`)
 	end)
@@ -153,6 +164,7 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			t.expect(local1.ok).toBe(true)
 			local localRaft = string.match(trim(local1.stdout), "(R%d+)") :: string
 			for _, path in
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				{
 					`pickman/.tracker/issues/{offlineId}/{offlineId}.md`,
 					`pickman/.tracker/rafts/{localRaft}/{localRaft}.md`,
@@ -183,6 +195,7 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			local wt = trOk(main, { "worktree", localRaft })
 			local started = tr(wt, { "start", localRaft })
 			t.expect(started.ok).toBe(true)
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(has(onOrigin(`pickman/.tracker/rafts/{localRaft}/{localRaft}.md`), "status: active"))
 				.toBe(true)
 		end
@@ -223,6 +236,7 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 		t.expect(#stamps).toBe(3)
 		t.expect(stamps[1] == stamps[2] or stamps[1] == stamps[3] or stamps[2] == stamps[3]).toBe(false)
 		-- the stubs the CLI publishes carry such stamps too
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local doc = onOrigin("pickman/.tracker/issues/c0010/c0010.md") or ""
 		t.expect(string.match(doc, "\nstatus: new%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)
 	end)

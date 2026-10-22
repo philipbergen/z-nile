@@ -4,6 +4,7 @@
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
+-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 local text = fs.readFile("../z-nile/setup.sh")
 
 local function at(needle: string): number?

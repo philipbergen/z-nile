@@ -28,6 +28,7 @@ end
 -- An item path is relative to pickman/.tracker/ and ends in the id: "issues/c0100", "issues/done/c0300", "rafts/R0120".
 local function put(base: string, path: string, body: string?)
 	local id = string.match(path, "[^/]+$") :: string
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	fs.writeDir(`{base}/pickman/.tracker/{path}`)
 	fs.writeFile(
 		`{base}/pickman/.tracker/{path}/{id}.md`,
@@ -83,6 +84,7 @@ local function tracker(base: string, args: { string }): process.ExecResult
 end
 
 local function has(base: string, path: string): boolean
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	return fs.isFile(`{base}/pickman/.tracker/{path}`)
 end
 
@@ -162,6 +164,7 @@ return t.spec("renumber without <new>", function(it)
 			{ ["issues/c0120"] = "blocked by f0100 (not f01000)" }
 		)
 		t.expect(tracker(base, { "renumber", "f0100" }).ok).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local doc = fs.readFile(`{base}/pickman/.tracker/issues/c0120/c0120.md`)
 		t.expect(say(doc, "blocked by f0151 (not f01000)")).toBe(true)
 	end)

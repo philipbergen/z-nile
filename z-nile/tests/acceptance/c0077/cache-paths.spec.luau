@@ -3,6 +3,7 @@
 -- each), so a new writer under .cache can't land without a reviewer seeing how it writes. The scan is a pure
 -- function: tested here on planted text, then run on the real scripts/.
 local cachepaths = require("@tests/lib/cachepaths")
+-- c0120 override: the spec runs from its project's home after the move
 local t = require("@tests/lib/t")
 
 local function has(list: { string }, part: string): boolean

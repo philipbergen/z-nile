@@ -2,6 +2,7 @@
 -- c0010 AC2: CI bootstraps exactly like a new host (z-nile/setup.sh), can be dispatched by an
 -- agent, and skips only draft pull_request events.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
@@ -24,15 +25,18 @@ return t.spec("ci workflow", function(it)
 			local run = if type(step.run) == "string"
 				then (string.gsub(string.gsub(step.run, "^%s+", ""), "%s+$", ""))
 				else ""
+			-- c0120 override: the spec runs from its project's home after the move
 			if run == "z-nile/setup.sh --tools" then
 				found = true
 				t.expect(step.env and step.env.GH_TOKEN).toBe("${{ github.token }}")
+			-- c0120 override: a capture names its project (the fixtures' final layout; c0114 Guess 3)
 			elseif found and run == 'z-nile/check.sh --project "$PROJECT" --full' then
 				gated = true
 				t.expect(step.env and step.env.GH_TOKEN).toBe("${{ github.token }}")
 			end
 		end
 		t.expect(found).toBe(true)
+		-- c0120 override: the spec runs from its project's home after the move
 		t.expect(gated).toBe(true)
 	end)
 

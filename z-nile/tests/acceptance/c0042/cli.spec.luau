@@ -3,6 +3,7 @@
 -- default or to --out, prints the path, and the file equals board.build(). `-O` (c0550) keeps the gate
 -- from starting a browser; it comes last, so the spec passes before and after c0550.
 local board = require("@scripts/tracker/board")
+-- c0120 override: the spec runs from its project's home after the move
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -26,6 +27,7 @@ return t.spec("c0400 tracker.sh board", function(it)
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stdout, OUT, 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(OUT)).toBe(true)
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		t.expect(fs.readFile(OUT) == board.build(nil, TOP)).toBe(true)
 		fs.removeDir(".cache/c0400-cli")
 	end)
@@ -43,6 +45,7 @@ return t.spec("c0400 tracker.sh board", function(it)
 		local r = process.exec(`{repo}/scripts/tracker.sh`, { "board", "-O" }, { cwd = repo })
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stdout, ".cache/board.html", 1, true) ~= nil).toBe(true)
+		-- c0120 override: the spec runs from its project's home after the move
 		t.expect(fs.readFile(`{repo}/.cache/board.html`) == board.build(nil, repo)).toBe(true)
 		fs.removeDir(`{HERE}/.cache/c0400-cli`)
 	end)
@@ -59,9 +62,11 @@ return t.spec("c0400 tracker.sh board", function(it)
 			issues += 1
 		end
 		local onDisk = 0
+		-- c0120 override: pickman's files live in pickman/ (its home)
 		-- c0114 override: the board reads every project root (c0120: pickman's root is pickman/.tracker)
 		for _, base in
 			{
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/rafts",
 				"pickman/.tracker/rafts/active",
 				"pickman/.tracker/rafts/done",
@@ -80,6 +85,7 @@ return t.spec("c0400 tracker.sh board", function(it)
 		-- every issue directory has a place on the page
 		for _, base in
 			{
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues",
 				"pickman/.tracker/issues/active",
 				"pickman/.tracker/issues/done",

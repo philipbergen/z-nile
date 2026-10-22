@@ -9,6 +9,7 @@
 -- read it, to find the run's top process (c0097).)
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+-- c0120 override: the spec runs from its project's home after the move
 local projects = require("@znile/engine/projects")
 local t = require("@tests/lib/t")
 

@@ -148,6 +148,7 @@ return t.spec("tracker board follows main", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		-- c0120 override: the fixture is on the final layout: pickman's root is pickman/.tracker (engine.roots lays out
 		-- every root's folders), and pickman's architecture.md lives there
@@ -158,15 +159,19 @@ return t.spec("tracker board follows main", function(it)
 		)
 		write(
 			seed,
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/rafts/R0010/R0010.md",
 			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
 		write(
 			seed,
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/c0010/c0010.md",
 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
 		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
 		write(
@@ -192,6 +197,7 @@ return t.spec("tracker board follows main", function(it)
 		local made = trOk(cap, { "new", "issue", "c", "zeta", "--project", "pickman" })
 		local id = string.match(made, "(c%d%d%d%d)") :: string
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{main}/pickman/.tracker/issues/{id}/{id}.md`)).toBe(true)
 		t.expect(has(board(), id)).toBe(true)
 		t.expect(fs.isFile(`{cap}/{BOARD}`)).toBe(false) -- the main checkout's board, not the worktree's
@@ -226,6 +232,7 @@ return t.spec("tracker board follows main", function(it)
 		git(other, { "pull", "-q", "origin", "main" })
 		write(
 			other,
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0500/f0500.md",
 			issueDoc("f0500", "Elsewhere", "", "", "draft", "new-a-b-c")
 		)

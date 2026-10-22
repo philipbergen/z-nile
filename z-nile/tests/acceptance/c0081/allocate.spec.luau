@@ -111,11 +111,13 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
 		write(`{seed}/{ids.FILE}`, SEED_NEXT)
 		write(`{seed}/pickman/.tracker/issues/c0890/c0890.md`, stub("c0890", "older"))
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{seed}/pickman/.tracker/rafts/done/R0270/R0270.md`,
 			"---\nid: R0270\ntype: chore\ntitle: Old\nslug: old\nissues: []\ndesign: ready\n---\n\n# R0270\n"
 		)
@@ -136,6 +138,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		t.expect(trOk(wt, { "new", "issue", "c", "alpha", "--project", "pickman" }))
 			.toBe("pickman/.tracker/issues/c0891/c0891.md")
 		t.expect(lastChanged()).toEqual({
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/c0891/c0891.md",
 			"pickman/.tracker/issues/c0891/check.sh",
 			"z-nile/next",
@@ -169,6 +172,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			"an old tracker made c0950"
 		)
 		local wt = worktree("cap-c")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(trOk(wt, { "new", "issue", "c", "gamma", "--project", "pickman" }))
 			.toBe("pickman/.tracker/issues/c0951/c0951.md")
 		t.expect(counters().issue).toBe(952)
@@ -189,6 +193,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		local marker = `{base}/raced`
 		write(
 			`{shim}/git`,
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`#!/bin/bash\nif [ "$1" = push ] && [ ! -e "{marker}" ]; then\n  touch "{marker}"\n`
 				.. `  [ -d "{other}/.git" ] || exit 1\n`
 				.. `  ( cd "{other}" && "{real}" pull -q origin main && mkdir -p pickman/.tracker/issues/c0952 && `
@@ -204,8 +209,10 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			{ PATH = `{shim}:{process.env.PATH or ""}` }
 		)
 		t.expect(fs.isFile(marker)).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(out).toBe("pickman/.tracker/issues/c0953/c0953.md")
 		t.expect(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			string.find(onOrigin("pickman/.tracker/issues/c0952/c0952.md") or "", "title: theirs", 1, true)
 				~= nil
 		).toBe(true)
@@ -236,11 +243,13 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 		git(wt, { "branch", "-m", "R0900-busy" })
 		local before = git(origin, { "rev-parse", "main" })
 		local localNext = fs.readFile(`{wt}/{ids.FILE}`)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(trOk(wt, { "new", "issue", "c", "eps", "--raft", "R0900" }))
 			.toBe("pickman/.tracker/issues/active/c0954/c0954.md")
 		t.expect(git(origin, { "rev-parse", "main^" })).toBe(before) -- exactly one commit
 		t.expect(lastChanged()).toEqual({ "z-nile/next" })
 		t.expect(counters().issue).toBe(955)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(onOrigin("pickman/.tracker/issues/c0954/c0954.md")).toBe(nil)
 		t.expect(onOrigin("pickman/.tracker/issues/active/c0954/c0954.md")).toBe(nil)
 		-- the local counter is not raised (it moves only on origin/main), so it now lags: a warning, never an error
@@ -257,6 +266,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			.toBe("pickman/.tracker/issues/c0955/c0955.md")
 		local r = trOk(wt, { "renumber", "c0955" })
 		t.expect(string.find(r, "c0955 -> c0956", 1, true) ~= nil).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/c0956/c0956.md`)).toBe(true)
 		t.expect(fs.isDir(`{wt}/pickman/.tracker/issues/c0955`)).toBe(false)
 		t.expect(counters().issue).toBe(957)
@@ -274,15 +284,17 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			{ "new", "issue", "c", "eta", "--project", "pickman" },
 			{ PICKMAN_PUBLISH = "0" }
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(out).toBe("pickman/.tracker/issues/c0957/c0957.md")
 		t.expect(fs.readFile(`{wt}/{ids.FILE}`)).toBe(localNext)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		-- a local counter behind the local ids is passed too
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(`{wt}/pickman/.tracker/issues/c0970/c0970.md`, stub("c0970", "local"))
 		t.expect(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			trOk(wt, { "new", "issue", "c", "theta", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
-		)
-			.toBe("pickman/.tracker/issues/c0971/c0971.md")
+		).toBe("pickman/.tracker/issues/c0971/c0971.md")
 	end)
 
 	it("a published counter may only go up, and must parse", function()
@@ -313,6 +325,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			elsewhere({ [ids.FILE] = false }, "no counter")
 			local highest = 0
 			for _, p in
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				string.split(
 					git(origin, { "ls-tree", "-r", "--name-only", "main", "pickman/.tracker/issues" }),
 					"\n"
@@ -325,6 +338,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
 			end
 			local want = (math.floor(highest / 10) + 1) * 10
 			local wt = worktree("cap-i")
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			t.expect(trOk(wt, { "new", "issue", "c", "iota", "--project", "pickman" }))
 				.toBe(string.format("pickman/.tracker/issues/c%04d/c%04d.md", want, want))
 			t.expect(onOrigin(ids.FILE)).toBe(nil)

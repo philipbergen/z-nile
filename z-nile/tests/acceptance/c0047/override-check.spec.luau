@@ -1,6 +1,7 @@
 --!strict
 -- c0450: prep and its design review look for promoted specs that a new issue overrides.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
@@ -32,6 +33,7 @@ return t.spec("c0450 override check", function(it)
 	it(
 		"ticket-prep step 3 has an Override check naming the selector, the promoted specs and the chore route",
 		function()
+			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 			local prep = fs.readFile(`{TOP}/.claude/skills/ticket-prep/SKILL.md`)
 			local step = section(prep, "**Override check**", "- **")
 			t.expect(step ~= "").toBe(true)
@@ -56,6 +58,7 @@ return t.spec("c0450 override check", function(it)
 	)
 
 	it("the Override check sits in step 3, before the Test plan bullet", function()
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		local prep = fs.readFile(`{TOP}/.claude/skills/ticket-prep/SKILL.md`)
 		local at = string.find(prep, "**Override check**", 1, true)
 		t.expect(at ~= nil).toBe(true)
@@ -65,6 +68,7 @@ return t.spec("c0450 override check", function(it)
 	end)
 
 	it("the design-mode review attacks an unnamed override as high", function()
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		local review = fs.readFile(`{TOP}/.claude/skills/review/SKILL.md`)
 		local design = section(review, "## Design mode", "## Stream mode")
 		local item = section(design, "4. **Regressions**", "5. ")
@@ -85,6 +89,7 @@ return t.spec("c0450 override check", function(it)
 	end)
 
 	it("ready-raft's readiness check refuses a raft whose issue depends on an unfinished item", function()
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		local skill = fs.readFile(`{TOP}/.claude/skills/ready-raft/SKILL.md`)
 		local ready = section(skill, "2. **Check readiness", "3. ")
 		for _, token in { "depends_on", "isn't a member", "done/", "stop" } do
@@ -93,6 +98,7 @@ return t.spec("c0450 override check", function(it)
 	end)
 
 	it("the issue template's Regression guard has a visible Overrides line, outside the comment", function()
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		local tpl = fs.readFile(`{TOP}/z-nile/templates/issue/doc.md`)
 		local guard = section(tpl, "## Regression guard", "## ")
 		local visible = string.gsub(guard, "<!%-%-.-%-%->", "")

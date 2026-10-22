@@ -201,6 +201,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 			refused(string.gsub(doc, "\n", "\r\n"), "crlf")
 			-- carriage returns are refused for a new document too, not only as a side effect of the status rule
 			local created = publish.commit(work, function()
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				return { change("pickman/.tracker/issues/c0702/c0702.md", "---\r\nid: c0702\r\n---\r\n") }
 			end, "tracker: crlf stub")
 			t.expect(created.ok).toBe(false)
@@ -237,6 +238,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		-- odd names at every level the publisher rebuilds: the root, pickman/.tracker/, pickman/.tracker/issues/
 		local odd = {
 			"read me.txt",
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/odd\tname.md",
 			"pickman/.tracker/issues/na\u{ef}ve notes.md",
 			"pickman/.tracker/issues/x  y",
@@ -248,6 +250,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 			end
 			fs.writeFile(`{other}/{p}`, `kept: {p}\n`)
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.writeDir(`{other}/pickman/.tracker/issues`)
 		fs.writeFile(`{other}/pickman/.tracker/issues/run me.sh`, "#!/bin/sh\n")
 		process.exec("chmod", { "+x", `{other}/pickman/.tracker/issues/run me.sh` })
@@ -256,6 +259,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		git(other, { "commit", "-q", "-m", "odd names" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 		local before = git(origin, { "rev-parse", "main" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local made = "pickman/.tracker/issues/c0401/c0401.md"
 		local r = publish.commit(work, function()
 			return { change(made, "---\nid: c0401\n---\n") }
@@ -287,9 +291,11 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 		local before = git(origin, { "rev-parse", "main" })
 		local r = publish.commit(work, function()
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			return { change("pickman/.tracker/issues/c0402/c0402.md", "x\n") }
 		end, "tracker: into a file")
 		t.expect(r.ok).toBe(false)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(string.find(r.reason or "", "pickman/.tracker/issues/c0402 is a file", 1, true) ~= nil)
 			.toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
@@ -300,6 +306,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		local before = git(origin, { "rev-parse", "main" })
 		git(work, { "config", "user.name", "" })
 		local r = publish.commit(work, function()
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			return { change("pickman/.tracker/issues/c0300/c0300.md", "x\n") }
 		end, "tracker: no identity")
 		git(work, { "config", "user.name", "t" })
@@ -319,12 +326,15 @@ return t.spec("tracker publish (git plumbing)", function(it)
 			calls += 1
 			if calls == 1 then
 				local theirs = publish.commit(sibling, function()
+					-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 					return { change("pickman/.tracker/issues/c0020/c0020.md", "THEIRS\n") }
 				end, "tracker: theirs")
 				t.expect(theirs.ok).toBe(true)
 			else
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				secondSaw = table.find(paths, "pickman/.tracker/issues/c0020/c0020.md") ~= nil
 			end
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			return { change("pickman/.tracker/issues/c0020/c0020.md", "MINE\n") }
 		end, "tracker: mine")
 		git(work, { "worktree", "remove", "--force", sibling })
@@ -332,6 +342,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		t.expect(calls).toBe(2)
 		t.expect(secondSaw).toBe(true)
 		t.expect(r.ok).toBe(false)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(git(origin, { "show", "main:pickman/.tracker/issues/c0020/c0020.md" })).toBe("THEIRS")
 	end)
 
@@ -370,8 +381,10 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		local r = publish.commit(work, function(paths)
 			calls += 1
 			if calls == 1 then
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				firstSaw = table.find(paths, "pickman/.tracker/issues/c0040/c0040.md") ~= nil
 			end
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local id = if table.find(paths, "pickman/.tracker/issues/c0040/c0040.md")
 				then "c0050"
 				else "c0040"
@@ -381,6 +394,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		t.expect(r.ok).toBe(true)
 		t.expect(calls).toBe(2)
 		t.expect(firstSaw).toBe(false)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(git(origin, { "show", "main:pickman/.tracker/issues/c0040/c0040.md" })).toBe("theirs")
 		t.expect(git(origin, { "show", "main:pickman/.tracker/issues/c0050/c0050.md" })).toBe("mine c0050")
 	end)
@@ -396,6 +410,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 			local calls = 0
 			local r = publish.commit(work, function()
 				calls += 1
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				return { change("pickman/.tracker/issues/c0900/c0900.md", "mine\n") }
 			end, "tracker: new", 3)
 			hook(nil)
@@ -403,13 +418,12 @@ return t.spec("tracker publish (git plumbing)", function(it)
 			t.expect(calls).toBe(3)
 			t.expect(string.find(r.reason or "", "3", 1, true) ~= nil).toBe(true)
 			git(work, { "fetch", "-q", "origin", "main" })
-			t.expect(
-				process.exec(
-					"git",
-					{ "cat-file", "-e", "origin/main:pickman/.tracker/issues/c0900/c0900.md" },
-					{ cwd = work }
-				).ok
-			).toBe(false)
+			t.expect(process.exec(
+				"git",
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+				{ "cat-file", "-e", "origin/main:pickman/.tracker/issues/c0900/c0900.md" },
+				{ cwd = work }
+			).ok).toBe(false)
 		end
 	)
 end)

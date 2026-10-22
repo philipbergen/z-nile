@@ -97,10 +97,13 @@ return t.spec("tracker lifecycle", function(it)
 		-- specs) in pickman/; every path below names that root and home
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new f"))
 			.toBe("pickman/.tracker/issues/f0010/f0010.md")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(must(tr({ "new", "issue", "d", "beta", "--project", "pickman" }), "new d"))
 			.toBe("pickman/.tracker/issues/d0020/d0020.md")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(must(tr({ "new", "issue", "f", "gamma", "--project", "pickman" }), "new f"))
 			.toBe("pickman/.tracker/issues/f0030/f0030.md")
 	end)
@@ -112,17 +115,17 @@ return t.spec("tracker lifecycle", function(it)
 	end)
 
 	it("renumber steps an id and rewrites references", function()
-		t.expect(
-			must(
-				tr({ "new", "raft", "feature", "demo", "f0010", "f0030", "--project", "pickman" }),
-				"new raft"
-			)
-		)
-			.toBe("pickman/.tracker/rafts/R0010/R0010.md")
+		t.expect(must(
+			tr({ "new", "raft", "feature", "demo", "f0010", "f0030", "--project", "pickman" }),
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+			"new raft"
+		)).toBe("pickman/.tracker/rafts/R0010/R0010.md")
 		must(tr({ "renumber", "f0030", "f0031" }), "renumber")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local raftDoc = read("pickman/.tracker/rafts/R0010/R0010.md")
 		t.expect(string.find(raftDoc, "f0031", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(raftDoc, "f0030", 1, true))).toBe(nil)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{dir}/pickman/.tracker/issues/f0031/f0031.md`)).toBe(true)
 	end)
 
@@ -137,6 +140,7 @@ return t.spec("tracker lifecycle", function(it)
 	it("start branches, moves items to active, and commits exactly once", function()
 		for _, doc in
 			{
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues/f0010/f0010.md",
 				"pickman/.tracker/issues/f0031/f0031.md",
 				"pickman/.tracker/rafts/R0010/R0010.md",
@@ -145,17 +149,20 @@ return t.spec("tracker lifecycle", function(it)
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
 		edit(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0031/f0031.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/gamma`\n"
 		)
 		for _, p in
 			{
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues/f0010/check.sh",
 				"pickman/.tracker/issues/f0031/check.sh",
 				"pickman/.tracker/rafts/R0010/check.sh",
@@ -163,8 +170,10 @@ return t.spec("tracker lifecycle", function(it)
 		do
 			write(p, TRIVIAL_CHECK)
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.writeDir(`{dir}/pickman/.tracker/issues/f0010/acceptance`)
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/acceptance/alpha.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
@@ -177,6 +186,7 @@ return t.spec("tracker lifecycle", function(it)
 		t.expect(git({ "branch", "--show-current" })).toBe("R0010-demo")
 		t.expect(tonumber(git({ "rev-list", "--count", "HEAD" }))).toBe(before + 1)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/active/R0010`)).toBe(true)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/active/f0010`)).toBe(true)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/active/f0031`)).toBe(true)
@@ -192,6 +202,7 @@ return t.spec("tracker lifecycle", function(it)
 		local added = 0
 		for line in
 			string.gmatch(
+				-- c0120 override: pickman's files live in pickman/ (its home)
 				git({ "show", "--numstat", "--format=", "HEAD", "--", ".", ":(exclude)pickman/.tracker" }),
 				"[^\n]+"
 			)
@@ -199,6 +210,7 @@ return t.spec("tracker lifecycle", function(it)
 			added += tonumber(string.match(line, "^(%d+)")) or 0
 		end
 		t.expect(added).toBe(8)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local a = read("pickman/.tracker/issues/active/f0010/spend.md")
 		local g = read("pickman/.tracker/issues/active/f0031/spend.md")
 		t.expect(string.match(a, "totals: added=(%d+)")).toBe("5")
@@ -215,9 +227,11 @@ return t.spec("tracker lifecycle", function(it)
 		t.expect(string.find(r1.stderr, "no review", 1, true) ~= nil).toBe(true)
 
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/rafts/active/R0010/review-001.md",
 			"# Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/refute-001.md",
 			"- F1: fixed abc: done; consequences: none\n"
@@ -234,11 +248,14 @@ return t.spec("tracker lifecycle", function(it)
 
 	it("done rolls back when a promoted acceptance spec fails", function()
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/rafts/active/R0010/refute-001.md",
 			"- F1: fixed abc: done; consequences: none\n- F2: refuted: by design\n"
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local good = read("pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau")
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau",
 			(string.gsub(good, "toBe%(1%)", "toBe(2)"))
 		)
@@ -249,6 +266,7 @@ return t.spec("tracker lifecycle", function(it)
 		t.expect(string.find(r.stderr, "rolled back", 1, true) ~= nil).toBe(true)
 		t.expect(git({ "rev-parse", "HEAD" })).toBe(head)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/active/R0010`)).toBe(true)
 		t.expect(fs.isFile(`{dir}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`))
 			.toBe(true)
@@ -258,6 +276,7 @@ return t.spec("tracker lifecycle", function(it)
 
 	it("done promotes acceptance specs and finishes", function()
 		must(tr({ "done", "R0010" }), "done")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/done/f0010`)).toBe(true)
 		t.expect(fs.isFile(`{dir}/pickman/tests/acceptance/f0010/alpha.spec.luau`)).toBe(true)

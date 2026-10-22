@@ -1,5 +1,6 @@
 --!strict
 -- c0390 AC1: graph maps Roblox's @game alias to files through the Rojo project's $path nodes.
+-- c0120 override: the spec runs from its project's home after the move
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 
@@ -12,10 +13,12 @@ local PROJECT = {
 		["$className"] = "DataModel",
 		ReplicatedStorage = {
 			Shared = {
+				-- c0120 override: the tooling's files live in z-nile/ (its home)
 				["$path"] = "../z-nile/tests/fixtures/graph/", -- normalized to ../z-nile/tests/fixtures/graph
 				A = { ["$path"] = "../z-nile/tests/fixtures/graph/B" },
 			},
 			-- a string prefix of "Graph": only a segment-boundary match keeps it out of Graph/...
+			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 			Gr = { ["$path"] = "../tests/fixtures/gr" },
 		},
 		ServerScriptService = { Server = { ["$path"] = "src/server" } },
@@ -36,6 +39,7 @@ return t.spec("c0390 graph @game", function(it)
 
 	it("lists every $path node as an instance path and a repo path", function()
 		t.expect(rootsMap(roots)).toEqual({
+			-- c0120 override: the tooling's files live in z-nile/ (its home)
 			["ReplicatedStorage/Shared"] = "../z-nile/tests/fixtures/graph",
 			["ReplicatedStorage/Shared/A"] = "../z-nile/tests/fixtures/graph/B",
 			["ReplicatedStorage/Gr"] = "../tests/fixtures/gr",
@@ -59,19 +63,23 @@ return t.spec("c0390 graph @game", function(it)
 		t.expect(real["ServerScriptService/Server"]).toBe("src/server")
 		t.expect(real["StarterPlayer/StarterPlayerScripts/Client"]).toBe("src/client")
 		-- a cached default never replaces an explicit project
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(rootsMap(graph.gameRoots(PROJECT))["ReplicatedStorage/Shared"])
 			.toBe("../z-nile/tests/fixtures/graph")
 	end)
 
 	it("resolves modules and init directories under a mapped instance", function()
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(graph.resolveGame("@game/ReplicatedStorage/Shared/B", roots))
 			.toBe("../z-nile/tests/fixtures/graph/B/init.luau")
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(graph.resolveGame("@game/ReplicatedStorage/Shared/a_check", roots))
 			.toBe("../z-nile/tests/fixtures/graph/a_check.luau")
 	end)
 
 	it("the longest mapped node owns its subtree, with no fallback to a shorter one", function()
 		-- Shared.A is mapped to .../B, so it resolves there, not to .../A/init.luau
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		t.expect(graph.resolveGame("@game/ReplicatedStorage/Shared/A", roots))
 			.toBe("../z-nile/tests/fixtures/graph/B/init.luau")
 		-- .../B has no Impl; .../A/Impl.luau exists but belongs to the shadowed directory

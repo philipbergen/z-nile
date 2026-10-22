@@ -70,6 +70,7 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("the page has the Stats button and section, beside Rafts and Issues", function()
+		-- c0120 override: the spec runs from its project's home after the move
 		local html = board.render(m, fs.readFile(MARKED))
 		for _, id in { "stats-toggle", "stats", "tab-rafts", "tab-issues", "search", "board-data" } do
 			t.expect(string.find(html, `id="{id}"`, 1, true) ~= nil).toBe(true)
@@ -83,6 +84,7 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("builds of one tree are identical", function()
+		-- c0120 override: the spec runs from its project's home after the move
 		local marked = fs.readFile(MARKED)
 		t.expect(
 			board.render(board.collect(tree .. "/tracker"), marked)
@@ -104,6 +106,7 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(u.stats.today).toBe("")
 		t.expect(#u.stats.views.month).toBe(0)
 		t.expect(u.stats.periods).toBe(nil)
+		-- c0120 override: the spec runs from its project's home after the move
 		local html = board.render(u, fs.readFile(MARKED))
 		t.expect(string.find(html, "no dated data", 1, true) ~= nil).toBe(true)
 		fs.removeDir(bare)
@@ -127,6 +130,7 @@ return t.spec("tracker board statistics", function(it)
 	end)
 
 	it("the page has every chart for every view and type filter, with themed series colors", function()
+		-- c0120 override: the spec runs from its project's home after the move
 		local html = board.render(m, fs.readFile(MARKED))
 		local section = string.match(html, '<section id="stats".-</section>') or ""
 		local figures: { [string]: string } = {}
@@ -193,6 +197,7 @@ return t.spec("tracker board statistics", function(it)
 	it(
 		"the Table view has one table per view, the periods and the time in state, with units in the headers",
 		function()
+			-- c0120 override: the spec runs from its project's home after the move
 			local html = board.render(m, fs.readFile(MARKED))
 			local tables = string.match(html, '<div id="stats%-tables".-</div>') or ""
 			local _, n = string.gsub(tables, "<table", "")
@@ -225,6 +230,7 @@ return t.spec("tracker board statistics", function(it)
 				SPEND_HEAD .. `| 1 | {created} 10:00 | abc1234 | {i * 3} | {i} | {i % 50 + 5} | explicit |\n`
 			)
 		end
+		-- c0120 override: the spec runs from its project's home after the move
 		local html = board.render(board.collect(`{busy}/tracker`), fs.readFile(MARKED))
 		local section = string.match(html, '<section id="stats".-</section>') or ""
 		t.expect(#section > 0).toBe(true)

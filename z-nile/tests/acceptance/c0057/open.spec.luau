@@ -126,6 +126,7 @@ return t.spec("c0550 board opens by default", function(it)
 		local usage = process.exec("scripts/tracker.sh", {})
 		t.expect(string.find(usage.stdout, "board [--out PATH] [-O]", 1, true) ~= nil).toBe(true)
 		local row = ""
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		for line in string.gmatch(fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
 			if string.sub(line, 1, 10) == "| board | " then
 				row = line

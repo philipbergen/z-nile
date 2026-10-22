@@ -117,10 +117,12 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
 		git({ "add", "-A" })
@@ -247,6 +249,7 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/done/f0010`)).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
 	end)
 

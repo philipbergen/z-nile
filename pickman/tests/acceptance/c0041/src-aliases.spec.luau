@@ -3,6 +3,7 @@
 -- ReplicatedStorage either never replicates to clients (ServerScriptService) or loads a second copy
 -- of a module (StarterPlayer). tests/meta applies this to every require in src.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
 

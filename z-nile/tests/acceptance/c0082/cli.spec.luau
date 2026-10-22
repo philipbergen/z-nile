@@ -64,9 +64,11 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 		fs.writeDir(`{repo}/tracker`)
 		engine.copy(root, repo) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		write(`{repo}/z-nile/next`, "issue 21 a-b-c\nraft 11 a-b-c\n")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(`{repo}/pickman/.tracker/issues/c0010/c0010.md`, C10)
 		write(`{repo}/pickman/.tracker/issues/c0020/c0020.md`, C20)
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			`{repo}/pickman/.tracker/rafts/R0010/R0010.md`,
 			"---\nid: R0010\ntype: chore\ntitle: Raft\nslug: raft\nissues: []\ndesign: draft\n---\n\n# R0010\n"
 		)
@@ -89,10 +91,12 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 		local r = tr({ "audit" })
 		t.expect(r.ok).toBe(false)
 		t.expect(r.code).toBe(1)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(r.stdout, "error duplicate pickman/.tracker/issues/c0010")).toBe(true)
 		t.expect(has(r.stdout, "error duplicate pickman/.tracker/issues/done/c0010")).toBe(true)
 		t.expect(has(r.stdout, "error no-document pickman/.tracker/issues/c0030")).toBe(true)
 		t.expect(has(r.stdout, "3 errors")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.removeDir(`{repo}/pickman/.tracker/issues/c0030`)
 	end)
 
@@ -105,6 +109,7 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 		t.expect(has(r.stdout, "c0020")).toBe(true)
 		t.expect(rows(r.stdout, "c0010")).toBe(2)
 		t.expect(has(r.stderr, "duplicate")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(r.stderr, "pickman/.tracker/issues/done/c0010")).toBe(true)
 		-- a state filter still prints what it can
 		local done = tr({ "list", "done" })
@@ -119,12 +124,14 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 				"pickman/.tracker/issues",
 				"pickman/.tracker/issues/done/c0099",
 				"src/c0010",
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				"pickman/.tracker/issues/done/c0010/c0010.md",
 			}
 		do
 			local r = tr({ "renumber", bad })
 			t.expect(r.ok).toBe(false)
 		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{repo}/pickman/.tracker/issues/done/c0010`)).toBe(true)
 	end)
 
@@ -143,12 +150,15 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 			error(r.stderr .. r.stdout)
 		end
 		t.expect(has(r.stdout, "c0010 -> c0021")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local moved = fs.readFile(`{repo}/pickman/.tracker/issues/c0021/c0021.md`)
 		t.expect(has(moved, "id: c0021")).toBe(true)
 		t.expect(has(moved, "# c0021: T")).toBe(true)
 		t.expect(has(moved, "The one in the backlog.")).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{repo}/pickman/.tracker/issues/c0010`)).toBe(false)
 		-- the other copy, and every reference elsewhere, still mean the done c0010
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.readFile(`{repo}/pickman/.tracker/issues/done/c0010/c0010.md`)).toBe(DONE10)
 		t.expect(fs.readFile(`{repo}/pickman/.tracker/issues/c0020/c0020.md`)).toBe(C20)
 		t.expect(tr({ "list" }).ok).toBe(true)

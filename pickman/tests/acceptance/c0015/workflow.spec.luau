@@ -7,6 +7,7 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
+-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 local text = fs.readFile("../.github/workflows/check.yml")
 local wf: any = serde.decode("yaml" :: "yaml", text)
 local beta: any = wf.jobs.beta
@@ -77,6 +78,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		end
 	)
 
+	-- c0120 override: the spec runs from its project's home after the move
 	it(
 		"every step has exactly the keys designed: no with, shell, continue-on-error or extra if; pickman's from its home",
 		function()
@@ -99,6 +101,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
 			})
 			if #steps >= 5 then
 				-- exactly the runtime step c0030 adds, and nothing else (c0064 pins the lobby's sixth)
+				-- c0120 override: the spec runs from its project's home after the move
 				t.expect(keysOf(steps[5])).toEqual({ "env", "if", "run", "working-directory" })
 				t.expect(steps[5]["working-directory"]).toBe("pickman")
 				t.expect(steps[5].run).toBe('lune run scripts/runtime-test -- "$VERSION"')
@@ -119,10 +122,12 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		function()
 			local on: any = wf["on"]
 			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it. c0114 override: every
+			-- c0120 override: pickman's files live in pickman/ (its home)
 			-- project root and the shared counter are tracker state. c0120 override: pickman's root is pickman/.tracker,
 			-- and tracker/ (retired) is not ignored, so a push that brings it back runs the gate
 			t.expect(on.push).toEqual({
 				branches = { "main" },
+				-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 				["paths-ignore"] = { "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" },
 			})
 			t.expect(on.pull_request)

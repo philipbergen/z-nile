@@ -2,6 +2,7 @@
 -- c0870: the tracker skill describes numbering from tracker/next, the legacy rule for a tree without it, and the
 -- compact and remap commands.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
@@ -9,6 +10,7 @@ local t = require("@tests/lib/t")
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local function skill(): string
+	-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 	return fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`)
 end
 local function bullet(prefix: string): string

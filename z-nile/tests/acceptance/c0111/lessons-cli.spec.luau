@@ -47,18 +47,22 @@ local SEED: { [string]: string } = {
 	["pickman/.tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n\n- design-review-001 F1: testing/pin-inputs\n"
 		.. "- design-review-001 F2: ticket-prep/lifetimes\n- design-review-001 F3: one-off: a typo\n"
 		.. "- review-001 F2: testing/pin-inputs\n",
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	["pickman/.tracker/issues/done/c0020/review-001.md"] = review("F1"),
 	["pickman/.tracker/rafts/R0030/design-review-001.md"] = "# Review 001\n\nVerdict: approve\n",
 	-- a readied raft with an unharvested finding, and an item with no reviews at all
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	["pickman/.tracker/rafts/active/R0050/design-review-001.md"] = review("F1"),
 	["pickman/.tracker/rafts/R0060/R0060.md"] = "# R0060\n",
 	-- one unharvested item in each remaining kind and state, so every folder load walks is seen:
 	-- rafts in the backlog (R0010), active/ (R0050) and done/ (R0070); issues in the backlog (c0090),
 	-- active/ (c0080) and done/ (c0020)
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	["pickman/.tracker/rafts/done/R0070/review-001.md"] = review("F1"),
 	["pickman/.tracker/issues/active/c0080/review-001.md"] = review("F1"),
 	["pickman/.tracker/issues/c0090/design-review-001.md"] = review("F1"),
 	-- not reviews: a stream review and an experiment copy
+	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	["pickman/.tracker/rafts/R0010/stream-review-c0010-001.md"] = review("F1"),
 	["pickman/.tracker/issues/c0040/experiments/old/design-review-001.md"] = review("F1"),
 }
@@ -238,6 +242,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 		fs.removeFile(`{f.main}/.claude/skills/testing/lessons/lonely.md`)
 		fs.removeFile(`{f.main}/.claude/skills/testing/lessons/bad.md`)
 		fs.removeFile(`{f.main}/.claude/skills/testing/lessons/notes.txt`)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local h = `{f.main}/pickman/.tracker/rafts/R0010/harvest.md`
 		fs.writeFile(h, fs.readFile(h) .. "- review-001 F1: testing/gone\n")
 		local gone, goneOut = run({ "--check" })

@@ -2,6 +2,7 @@
 -- c0410 AC4: the second-order rules sit in the right sections of the ticket-prep
 -- skills (section-aware, so a phrase in the wrong place, or only inside the template, doesn't count).
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 -- c0120 override: specs run from their project's home; the repository files live at the checkout's top
@@ -20,6 +21,7 @@ local function has(text: string, phrase: string): boolean
 	return string.find(text, phrase, 1, true) ~= nil
 end
 
+-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 local PREP = `{TOP}/.claude/skills/ticket-prep/SKILL.md`
 
 return t.spec("c0410 ticket-prep sections", function(it)

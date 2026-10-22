@@ -113,23 +113,28 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 			edit(doc, "design: draft", "design: ready")
 		end
 		edit(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/f0010.md",
 			"### Touched modules\n",
 			"### Touched modules\n- `notes/alpha`\n"
 		)
 		-- an acceptance spec, so that done has something to promote (and to roll back)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.writeDir(`{work}/pickman/.tracker/issues/f0010/acceptance`)
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/f0010/acceptance/alpha.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
 		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		-- an origin whose URL contains github.com, and a pushed branch with an upstream
@@ -186,11 +191,13 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local log = if fs.isFile(`{base}/gh.log`) then fs.readFile(`{base}/gh.log`) else ""
 		t.expect((string.find(log, "pr ready", 1, true))).toBe(nil)
 		-- restore the approving review for the cases that follow
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready
 		write(
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			"pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau",
 			"--!strict\nlocal t = "
 				.. REQ
@@ -203,6 +210,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local after = if fs.isFile(`{base}/gh.log`) then fs.readFile(`{base}/gh.log`) else ""
 		t.expect((string.find(after, "pr ready", 1, true))).toBe(nil)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau`)).toBe(true)
 		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau`)
 		must(tr({ "commit", "-m", "drop the failing spec", "--time", "1" }), "commit")
@@ -238,6 +246,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		local after = git({ "rev-parse", "HEAD" })
 		t.expect(after ~= before).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		-- c0120 override: pickman's files live in pickman/ (its home)
 		t.expect(fs.isDir(`{work}/pickman/tests/acceptance/f0010`)).toBe(false) -- nothing was promoted
 		-- gh was asked to mark the PR ready, and to edit its body with the spend summary
 		local log = fs.readFile(`{base}/gh.log`)

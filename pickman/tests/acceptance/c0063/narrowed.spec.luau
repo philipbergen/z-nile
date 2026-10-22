@@ -54,6 +54,7 @@ end
 
 return t.spec("c0063 the play-again specs, narrowed", function(it)
 	it("all four specs are still there, and f0031's check.sh still runs each of them", function()
+		-- c0120 override: the spec runs from its project's home after the move
 		local check = fs.readFile(".tracker/issues/done/" .. renamed.id("f0031") .. "/check.sh")
 		for _, name in FILES do
 			t.expect(fs.isFile(`{DIR}/{name}.spec.luau`)).toBe(true)

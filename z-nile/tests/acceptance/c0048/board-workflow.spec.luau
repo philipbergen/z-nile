@@ -1,6 +1,7 @@
 --!strict
 -- c0460: the board workflow builds the tracker board on pushes to main and uploads it as an Actions artifact.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")

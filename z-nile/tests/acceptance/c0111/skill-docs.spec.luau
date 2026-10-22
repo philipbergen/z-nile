@@ -135,6 +135,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			at(section(tracker, "Worktrees"), "`lessons`") -- it may run in the main checkout
 			at(read(`{SKILLS}/ready-raft/SKILL.md`), "build lessons")
 			at(read(`{SKILLS}/metrics/SKILL.md`), "./zn lessons")
+			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 			local agents = read(`{TOP}/AGENTS.md`)
 			at(agents, "lessons/")
 			at(agents, "./zn lessons")

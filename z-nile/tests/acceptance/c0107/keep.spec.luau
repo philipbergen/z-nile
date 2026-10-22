@@ -109,6 +109,7 @@ return t.spec("c0107 board keep", function(it)
 	}, "# c9102: LooseFeature\n\nThe loose body sentence stays visible.\n")
 
 	local page = `{ROOT}/page.html`
+	-- c0120 override: the spec runs from its project's home after the move
 	local html = board.render(board.collect(ROOT) :: any, fs.readFile(MARKED))
 	fs.writeFile(page, html)
 	fs.writeFile(`{ROOT}/harness.js`, HARNESS)

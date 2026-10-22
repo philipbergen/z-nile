@@ -265,6 +265,7 @@ end
 return t.spec("c0400 board page", function(it)
 	fixture.write(A)
 	fixture.write(B, true)
+	-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 	local marked = fs.readFile(`{TOP}/{board.MARKED_PATH}`)
 	local mA = board.collect(A)
 	local htmlA = board.render(mA, marked)

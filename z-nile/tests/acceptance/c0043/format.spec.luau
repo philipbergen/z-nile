@@ -2,6 +2,7 @@
 -- c0410 AC1: the review skill's finding template is second-order (Where, Evidence, Critique,
 -- Consequences, Recommendation; no bare Fix) and still parses the way `tracker.sh done` reads findings.
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from its project's home after the move
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 -- c0120 override: specs run from their project's home; the repository files live at the checkout's top

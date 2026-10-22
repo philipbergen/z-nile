@@ -17,6 +17,7 @@ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }
 local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{here}/.cache/c0640-fence`
 local repo = `{base}/real`
+-- c0120 override: the spec runs from its project's home after the move
 local cache = `{repo}/z-nile/.cache`
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
 
@@ -130,7 +131,9 @@ end
 local function probe(name: string, body: string)
 	write(
 		repo,
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		`z-nile/tests/probe/{name}.spec.luau`,
+		-- c0120 override: the spec runs from its project's home after the move
 		`--!strict\nlocal fs = {REQ}("@lune/fs")\nlocal process = {REQ}("@lune/process")\n`
 			.. `local task = {REQ}("@lune/task")\nlocal t = {REQ}("@tests/lib/t")\n`
 			.. 'local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))\n'
@@ -176,11 +179,13 @@ local function during(meanwhile: () -> ()): Result
 		result = run({ "hold" })
 	end)
 	local waited = 0
+	-- c0120 override: the spec runs from its project's home after the move
 	while not fs.isFile(`{cache}/f-held`) and waited < 20 do
 		task.wait(0.05)
 		waited += 0.05
 	end
 	meanwhile()
+	-- c0120 override: the spec runs from its project's home after the move
 	fs.writeFile(`{cache}/f-go`, "")
 	while result == nil and waited < 40 do
 		task.wait(0.05)
@@ -239,6 +244,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 				.. "&& git init -q --bare .cache/f-bare.git && cd .cache/f-pushfx && git -c user.name=e2e "
 				.. '-c user.email=e2e@example.invalid commit -q --allow-empty -m fx")\n'
 				.. "\t\tt.expect(r.ok).toBe(true)\n"
+				-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 				-- into the repository: by its configured origin, by a relative path and by a file:// URL
 				.. '\t\tt.expect(sh("cd .cache/f-pushfx && git push -q origin HEAD:refs/heads/pushed").ok).toBe(false)\n'
 				.. '\t\tt.expect(sh("cd .cache/f-pushfx && git push -q ../../.. HEAD:refs/heads/pushed-rel").ok).toBe(false)\n'
@@ -521,6 +527,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		write(scan, "scripts/planted-env.sh", "env -" .. 'i PATH="$PATH" git status\n') -- clears every guard
 		write(scan, "scripts/planted-push.sh", "git push --no-" .. "verify origin HEAD\n") -- skips the push guard
 		write(scan, "scripts/planted-osa.sh", "osa" .. "script -e 'do shell script \"git push\"'\n") -- runs outside the jail
+		-- c0120 override: the tooling's files live in z-nile/ (its home)
 		write(scan, "z-nile/tests/planted/id.luau", "-- git config user.email dev@example.com\n")
 		write(scan, "scripts/planted-tool", "#!/bin/sh\ngit -c core.hooks" .. "Path=/dev/null push\n") -- an extensionless script
 		local dirty = runIn(scan, spec)
@@ -592,6 +599,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 			PICKMAN_TEST_FENCE = physical(repo),
 			GIT_CEILING_DIRECTORIES = ceiling,
 		})
+		-- c0120 override: the spec runs from its project's home after the move
 		local fence = `:{physical(other)}/z-nile/.cache:` -- before the worktree goes
 		local env = if fs.isFile(`{other}/z-nile/.cache/f-env.txt`)
 			then fs.readFile(`{other}/z-nile/.cache/f-env.txt`)
