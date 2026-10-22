@@ -690,7 +690,8 @@ function fence.enter()
 	-- must find no repository either. The jail still lets this run write only its own home's .cache.
 	local others: { string } = {}
 	local dirs = { ROOT }
-	for _, home in fence.homes() or {} do
+	local known: { string } = fence.homes() or {}
+	for _, home in known do
 		table.insert(dirs, `{ROOT}/{home}`)
 	end
 	for _, dir in dirs do
