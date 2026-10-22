@@ -52,3 +52,10 @@
 - review-006 F3: architecture/parsers-refuse-ambiguity
 - review-006 F4: architecture/guard-no-is-explicit
 - review-006 F5: testing/no-vacuous-pass
+
+- review-007 F1: review/sequestration-reference-not-a-ref
+- review-007 F2: review/sequestration-reference-not-a-ref
+- review-007 F3: testing/no-vacuous-pass
+- review-007 F4: testing/seed-every-enumerated-case
+- review-007 F5: architecture/parsers-refuse-ambiguity
+- review-007 F6: testing/guards-move-with-the-working-directory

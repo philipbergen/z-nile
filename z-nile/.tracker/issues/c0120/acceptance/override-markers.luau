@@ -2,7 +2,7 @@
 -- c0120, JC1's group 3 (code review 004 F4): every changed spot of a promoted spec carries a `-- c0120 override:`
 -- marker, in the hunk or within NEAR lines above it. Prints each hunk without one and fails; read-only. Run from the
 -- repository root, naming the renames commit (the promoted specs' text before the overrides):
---   lune run z-nile/.tracker/issues/c0120/override-markers.luau -- <renames commit> [<head>]
+--   lune run z-nile/.tracker/issues/c0120/acceptance/override-markers.luau -- <renames commit> [<head>]
 local process = require("@lune/process")
 
 local NEAR = 3
@@ -30,9 +30,17 @@ local function diffOf(argv: { string }): string
 	assert(r.ok or r.code == 1, `git {table.concat(argv, " ")} failed: {r.stderr}`)
 	return r.stdout
 end
--- A spec promoted since the renames commit (a `done` merged in, code review 006 F1 (c)) is judged against its text in
--- its item's folder before the move, so only c0120's own edits need markers: its hunks are a blob diff from there.
-local pre = (string.gsub(git({ "rev-parse", base .. "^" }), "%s+$", ""))
+-- Each promoted spec at HEAD is judged against its own base, so only the branch's own edits need markers (code
+-- review 006 F1 (c), 007 F2):
+--   main's text, when main changed it after the move's base (a spec main promoted, for any item, captured before or
+--   after the move; M is the merge-base of HEAD and origin/main, B main as the move's base had it);
+--   else its text at the renames commit;
+--   else its text in its item's folder before the move (promoted by a done merged in, or c0114's on this branch);
+--   a spec in none of them is new, one whole-file hunk.
+local function trim(x: string): string
+	return (string.gsub(x, "%s+$", ""))
+end
+local pre = trim(git({ "rev-parse", base .. "^" }))
 local preTree = git({ "ls-tree", "-r", "--name-only", pre })
 local function before(id: string, rest: string): string?
 	for path in string.gmatch(preTree, "[^\n]+") do
@@ -43,23 +51,54 @@ local function before(id: string, rest: string): string?
 	end
 	return nil
 end
-local parts: { string } = {}
-local argvMain = { "diff", "-U0", "-M", base, head, "--" }
-local status = diffOf({ "diff", "--name-status", "-M", base, head, "--", ACC[1], ACC[2] })
-for line in string.gmatch(status, "[^\n]+") do
-	local st, path = string.match(line, "^(%a)%d*\t([^\t]+)$")
-	local id, rest = string.match(path or "", "/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
-	local old = if st == "A" and id then before(id, rest :: string) else nil
-	if old then
-		local blob = diffOf({ "diff", "-U0", `{pre}:{old}`, `{head}:{path}` })
-		table.insert(parts, `+++ b/{path}\n` .. (string.gsub(blob, "^.-\n%+%+%+ [^\n]*\n", "")))
-		table.insert(argvMain, `:(exclude){path}`)
+local function has(rev: string, path: string): boolean
+	return process.exec("git", { "cat-file", "-e", `{rev}:{path}` }).ok
+end
+local M = trim(diffOf({ "merge-base", head, "origin/main" }))
+local B = if M ~= "" then trim(diffOf({ "merge-base", pre, M })) else ""
+-- main's promoted-spec folders: the root's tests/acceptance (main has pickman at the root until c0120 lands) and any
+-- home's
+local function onMain(id: string, rest: string): string?
+	if M == "" then
+		return nil
 	end
+	for _, dir in { "tests/acceptance", "pickman/tests/acceptance", "z-nile/tests/acceptance" } do
+		local path = `{dir}/{id}/{rest}`
+		if has(M, path) then
+			local changed = not has(B, path)
+				or trim(git({ "rev-parse", `{M}:{path}` })) ~= trim(git({ "rev-parse", `{B}:{path}` }))
+			return if changed then path else nil
+		end
+	end
+	return nil
 end
-for _, d in ACC do
-	table.insert(argvMain, d)
+local parts: { string } = {}
+local listing = git({ "ls-tree", "-r", "--name-only", head, "--", ACC[1], ACC[2] })
+for path in string.gmatch(listing, "[^\n]+") do
+	local id, rest = string.match(path, "/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
+	local baseSpec: string? = nil
+	if id then
+		local mainPath = onMain(id, rest :: string)
+		local old = if mainPath then nil else before(id, rest :: string)
+		baseSpec = if mainPath
+			then `{M}:{mainPath}`
+			elseif has(base, path) then `{base}:{path}`
+			elseif old then `{pre}:{old}`
+			else nil
+	elseif has(base, path) then
+		baseSpec = `{base}:{path}`
+	end
+	local blob: string
+	if baseSpec then
+		blob = diffOf({ "diff", "-U0", baseSpec, `{head}:{path}` })
+	else
+		-- a new spec: one hunk over the whole file
+		local n = #string.split(git({ "show", `{head}:{path}` }), "\n")
+		blob = `@@ -0,0 +1,{n} @@\n`
+	end
+	table.insert(parts, `+++ b/{path}\n` .. (string.gsub(blob, "^.-\n%+%+%+ [^\n]*\n", "")))
 end
-local diff = diffOf(argvMain) .. "\n" .. table.concat(parts, "\n")
+local diff = table.concat(parts, "\n")
 local bad: { string } = {}
 local hunks = 0
 local file = ""

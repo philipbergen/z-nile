@@ -7,7 +7,6 @@
 -- resolves from the home, and a path that was already stale before the move all stay as they are. Used by
 -- finished.spec.luau (the rule and its fixture) and finished.luau (each finished file is its pre-move text, rewritten),
 -- and once by the executor to make the rewrite (z-nile/.tracker/issues/c0120/rewrite-finished.luau).
-local fs = require("@lune/fs")
 local process = require("@lune/process")
 
 local rewrites = {}
@@ -269,7 +268,7 @@ end
 -- The tree before the move, in the checkout at `top`: the parent of the commit that removed MARK. Nil and why when the
 -- move hasn't happened (MARK is still there) or the history can't tell (a shallow clone).
 function rewrites.premove(top: string): (string?, string?)
-	if fs.isFile(`{top}/{rewrites.MARK}`) then
+	if git(top, { "cat-file", "-e", `HEAD:{rewrites.MARK}` }) then
 		return nil, `{rewrites.MARK} is still in the tree: the move hasn't happened`
 	end
 	local ok, sha = git(top, { "log", "-1", "--format=%H", "--", rewrites.MARK })
@@ -285,8 +284,21 @@ function rewrites.premove(top: string): (string?, string?)
 	return parent, nil
 end
 
+-- a root-relative path with `.` and `..` resolved (`pickman/../zn` is `zn`)
+local function normal(p: string): string
+	local out: { string } = {}
+	for seg in string.gmatch(p, "[^/]+") do
+		if seg == ".." then
+			table.remove(out)
+		elseif seg ~= "." then
+			table.insert(out, seg)
+		end
+	end
+	return table.concat(out, "/")
+end
+
 -- The World of the checkout at `top`, `pre` being the tree before the move: `before` reads that tree, `now` the
--- working tree, and `moved` the renames git finds between `pre` and the move itself.
+-- tree of HEAD, and `moved` the renames git finds between `pre` and the move itself.
 function rewrites.world(top: string, pre: string): World
 	local okL, listing = git(top, { "ls-tree", "-r", "--name-only", pre })
 	assert(okL, `git ls-tree {pre} failed`)
@@ -314,15 +326,22 @@ function rewrites.world(top: string, pre: string): World
 			table.insert(map, { old = old, new = new })
 		end
 	end
-	-- the working tree's files (tracked and untracked, ignored ones aside), read once, for globs
+	-- HEAD's committed files, never the working tree (code review 007 F3: an untracked file must not change the
+	-- rewrite), read once
 	local nowFiles: { string }? = nil
+	local nowSet: { [string]: boolean } = {}
 	local function listNow(): { string }
 		if not nowFiles then
-			local okN, out = git(top, { "ls-files", "-co", "--exclude-standard" })
-			assert(okN, "git ls-files failed")
+			local okN, out = git(top, { "ls-tree", "-r", "--name-only", "HEAD" })
+			assert(okN, "git ls-tree HEAD failed")
 			local list: { string } = {}
 			for f in string.gmatch(out, "[^\n]+") do
 				table.insert(list, f)
+				local d: string? = f
+				while d do
+					nowSet[d :: string] = true
+					d = string.match(d :: string, "^(.*)/[^/]+$")
+				end
 			end
 			nowFiles = list
 		end
@@ -353,13 +372,15 @@ function rewrites.world(top: string, pre: string): World
 		local q = trimSlash(p)
 		return files[q] == true or dirs[q] == true
 	end
-	local function existsNow(p: string): boolean
+	local function existsNow(given: string): boolean
+		local p = normal(given) .. (if string.sub(given, -1) == "/" then "/" else "")
 		local lua = glob(p)
 		if lua then
 			return anyMatch(listNow(), lua)
 		end
-		local q = trimSlash(p)
-		return fs.isFile(`{top}/{q}`) or fs.isDir(`{top}/{q}`)
+		local q = normal(trimSlash(p))
+		listNow()
+		return nowSet[q] == true
 	end
 	local function movedTo(p: string): string?
 		local q = trimSlash(p)
