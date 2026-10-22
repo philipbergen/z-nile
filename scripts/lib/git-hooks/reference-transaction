@@ -3,7 +3,8 @@
 # every git a check runs at this directory (core.hooksPath), so this runs on every ref update. In a repository
 # listed in PICKMAN_FENCE_REAL_GIT (the checkouts' own git directories) it refuses every update. A check.sh flow
 # (not a spec run, PICKMAN_FENCE_SPECS) may still fetch: updates under refs/remotes/ that create or move a ref
-# (not delete one, which is what removing a remote does). Fixtures update their own refs freely.
+# (not delete one, which is what removing a remote does), and the empty transaction of a fetch with nothing new.
+# Fixtures update their own refs freely.
 # Whatever it allows, it then runs the repository's own reference-transaction hook, if any, with the same
 # arguments and input: core.hooksPath would otherwise skip a fixture's own hooks.
 input=$(cat)
@@ -42,7 +43,9 @@ while read -r old new ref; do
 done <<INPUT
 $input
 INPUT
-# allowed: at least one ref, and every one created or moved under refs/remotes/ (a fetch), outside spec runs
+# allowed, outside spec runs only: a transaction with no refs (a fetch with nothing new changes nothing, c0131),
+# or one whose every ref is created or moved under refs/remotes/ (a fetch)
+[ "$lines" -eq 0 ] && [ -z "$PICKMAN_FENCE_SPECS" ] && chain "$@"
 [ "$lines" -gt 0 ] && [ "$fetch_only" = yes ] && [ -z "$PICKMAN_FENCE_SPECS" ] && chain "$@"
 echo "fence: a check tried to change refs in the real repository ($protected); refused" >&2
 exit 1

@@ -98,6 +98,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["tests/tooling/fence-leftovers.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
+	-- R0047 review 001 F1, F2: clears the marker so a copied runner acts as a top-level run
+	["tests/tooling/lock-start-ids.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- review 004 F1: its runner case clears the marker so a copied runner acts as a top-level run
 	["tests/tooling/fence-cache-entry.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
@@ -151,6 +155,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 -- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
 -- rewrite never maps it a second time
 local C0640 = renamed.id("c0640")
+local C0127 = renamed.id("c0127") -- its reuse.spec clears the marker so a copied runner acts as a top-level run
 local EXEMPT: { [string]: boolean } = {
 	["tests/lib/fence.luau"] = true,
 	["scripts/lib/fence.sh"] = true,
@@ -167,6 +172,31 @@ do
 	EXEMPT[`{dir}/fence.spec.luau`] = true
 	EXEMPT[`{dir}/lock.spec.luau`] = true
 	EXEMPT[(string.gsub(dir, "/acceptance$", "")) .. "/check.sh"] = true -- the fence's own checks
+end
+for _, dir in
+	{
+		`tracker/issues/{C0127}/acceptance`,
+		`tracker/issues/active/{C0127}/acceptance`,
+		"tests/acceptance/" .. C0127,
+	}
+do
+	ALLOWED[`{dir}/reuse.spec.luau`] = { PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run" }
+end
+-- c0131's specs run the ref guard hook directly in a .cache fixture: they set PICKMAN_FENCE_REAL_GIT to the
+-- fixture's own git directory and PICKMAN_FENCE_SPECS for that one hook process, never for git or a run
+local C0131 = renamed.id("c0131")
+for _, dir in
+	{
+		`tracker/issues/{C0131}/acceptance`,
+		`tracker/issues/active/{C0131}/acceptance`,
+		"tests/acceptance/" .. C0131,
+	}
+do
+	for _, name in { "accept.spec.luau", "refuse.spec.luau" } do
+		ALLOWED[`{dir}/{name}`] = {
+			PICKMAN_FENCE_ = "drives the ref guard hook in a .cache fixture, naming only that fixture as protected",
+		}
+	end
 end
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
 local EXEMPT_DIRS = { "scripts/lib/git-hooks/" }

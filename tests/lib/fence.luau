@@ -92,45 +92,147 @@ local function readMaybe(path: string): string
 	return if ok then trim(text) else ""
 end
 
-local function lockPids(lock: string): { string }
-	local pids: { string } = {}
+-- Prints a process's start id, or exits 1: the start the kernel recorded for it, as exact as the kernel keeps it, and
+-- never derived from the clock, so the same process always prints the same id and a later process with the same pid
+-- prints another. Perl, so no setuid tool is needed (the jail and any sandbox refuse the setuid /bin/ps).
+-- macOS: sysctl kern.proc.pid.<pid>, a kinfo_proc that starts with the start time (a timeval: "<sec>.<usec>").
+-- Linux: /proc/sys/kernel/random/boot_id and /proc/<pid>/stat field 22, the start in clock ticks after boot.
+local STARTED = table.concat({
+	"my $pid = shift; exit 1 unless defined $pid && $pid =~ /^\\d+$/;",
+	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
+	"my $len = pack('Q', length $buf); exit 1 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0",
+	"&& unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
+	'print "$sec.$usec\\n"; exit 0 }',
+	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 1; my $boot = <$b>;",
+	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
+	"$line =~ s/^.*\\)\\s+//s or exit 1; my $ticks = (split /\\s+/, $line)[19];",
+	"exit 1 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
+	"exit 1;",
+}, " ")
+fence.STARTED = STARTED
+
+-- A process's start id (see STARTED), or nil when it can't be read (not a pid, an exited process, another system).
+function fence.startOf(pid: string): string?
+	if string.match(pid, "^%d+$") == nil then
+		return nil
+	end
+	local ok, r = pcall(process.exec, "perl", { "-e", STARTED, pid })
+	if not ok or not r.ok then
+		return nil
+	end
+	local id = trim(r.stdout)
+	return if id ~= "" then id else nil
+end
+
+-- Whether a recorded pid still holds what records it (c0127): it is alive, and it is not a reused pid, whose start
+-- id differs from the one recorded with it. No recorded id (a record from an older runner, or one whose id is not
+-- written yet) or an id that can't be read now leaves it holding, as before.
+function fence.holds(isAlive: boolean, recorded: string?, current: string?): boolean
+	if not isAlive then
+		return false
+	end
+	if recorded == nil or current == nil then
+		return true
+	end
+	return recorded == current
+end
+
+-- Writes `text` to `path` whole or not at all: a reader sees the old file or the new one, never a part (c0127).
+-- `me` (this process's pid, read once by the caller) names the temp file, so no subprocess runs here.
+local function writeWhole(path: string, text: string, me: string)
+	local temp = `{path}.part-{me}`
+	if pcall(fs.writeFile, temp, text) then
+		if not pcall(fs.move, temp, path, true) then
+			pcall(fs.removeFile, temp)
+		end
+	end
+end
+
+-- Whether the process `pid`, whose start id was recorded in the file `idPath`, still holds. Its id is read only
+-- once the pid is known to be alive.
+local function stillHolds(pid: string, idPath: string): boolean
+	if not alive(pid) then
+		return false
+	end
+	local recorded = readMaybe(idPath)
+	if recorded == "" then
+		return true
+	end
+	return fence.holds(true, recorded, fence.startOf(pid))
+end
+
+type Record = { pid: string, path: string }
+
+-- Every pid the lock records, with the file that holds its recorded start id: `pid-<n>` itself for a worker,
+-- `start-<pid>` for the top process (whose `pid` file holds its pid).
+local function lockRecords(lock: string): { Record }
+	local records: { Record } = {}
 	local listed, names = pcall(fs.readDir, lock)
 	if listed then
 		for _, name in names do
 			local pid = if name == "pid" then readMaybe(`{lock}/pid`) else string.match(name, "^pid%-(%d+)$")
 			if pid and pid ~= "" then
-				table.insert(pids, pid)
+				table.insert(records, {
+					pid = pid,
+					-- a worker's id is its record's content; the top's record holds its pid, so its id is beside it
+					path = if name == "pid" then `{lock}/start-{pid}` else `{lock}/{name}`,
+				})
 			end
 		end
+	end
+	return records
+end
+
+local function lockPids(lock: string): { string }
+	local pids: { string } = {}
+	for _, r in lockRecords(lock) do
+		table.insert(pids, r.pid)
 	end
 	return pids
 end
 
-local function anyAlive(pids: { string }): boolean
-	for _, pid in pids do
-		if alive(pid) then
+local function anyHolder(records: { Record }): boolean
+	for _, r in records do
+		if stillHolds(r.pid, r.path) then
 			return true
 		end
 	end
 	return false
 end
 
--- Removes `lock` if every process recorded in it is gone. Only the holder of the takeover mutex removes a
--- lock, so two waiters can never both remove one (and so never remove a fresh lock).
-local function takeOverIfStale(lock: string, unownedFor: number)
+-- Whether the takeover's owner still holds it. `<mutex>/owner` holds its pid and start id in one file ("<pid>
+-- <id>", written whole), so both are read at one moment; a mutex with only `pid` (an older runner, or an id that
+-- could not be read) is judged by that pid alone, as before.
+local function ownerHolds(mutex: string, owner: string): boolean
+	local pid, id = string.match(readMaybe(`{mutex}/owner`), "^(%d+) (%S+)$")
+	if pid == nil then
+		return alive(owner)
+	end
+	return alive(pid) and fence.holds(true, id, fence.startOf(pid))
+end
+
+-- Removes `lock` if no process recorded in it still holds it (`stillHolds`: gone, or a reused pid). Only the
+-- holder of the takeover mutex removes a lock, so two waiters can never both remove one (and so never remove a
+-- fresh lock).
+-- `me` and `myId` are this process's pid and start id, read once by takeLock before it waits (review 001 F1): the
+-- claim (mkdir) and its record (the owner file, then `pid`) stay a few writes apart, with no subprocess between.
+local function takeOverIfStale(lock: string, unownedFor: number, me: string, myId: string?)
 	local mutex = `{lock}.takeover`
 	if not process.exec("mkdir", { mutex }).ok then
-		local holder = readMaybe(`{mutex}/pid`)
+		local owner = readMaybe(`{mutex}/pid`)
 		local ok, meta = pcall(fs.metadata, mutex)
 		local age = if ok and meta.modifiedAt then os.time() - meta.modifiedAt.unixTimestamp else 0
-		if (holder ~= "" and not alive(holder)) or (holder == "" and age >= UNOWNED_SECONDS) then
+		if (owner ~= "" and not ownerHolds(mutex, owner)) or (owner == "" and age >= UNOWNED_SECONDS) then
 			pcall(fs.removeDir, mutex) -- its holder died mid-takeover, or never claimed it
 		end
 		return
 	end
-	fs.writeFile(`{mutex}/pid`, myPid())
-	local pids = lockPids(lock)
-	local stale = if #pids == 0 then unownedFor >= UNOWNED_SECONDS else not anyAlive(pids)
+	if myId then
+		writeWhole(`{mutex}/owner`, `{me} {myId}`, me)
+	end
+	fs.writeFile(`{mutex}/pid`, me)
+	local records = lockRecords(lock)
+	local stale = if #records == 0 then unownedFor >= UNOWNED_SECONDS else not anyHolder(records)
 	-- a test can widen the window between judging and removing, where a second waiter would race
 	local pause = tonumber(process.env.PICKMAN_TEST_TAKEOVER_PAUSE or "")
 	if stale and pause then
@@ -145,10 +247,13 @@ end
 local function takeLock(lock: string)
 	local limit = tonumber(process.env.PICKMAN_TEST_LOCK_WAIT or "") or DEFAULT_WAIT_SECONDS
 	local waited, unowned, said = 0, 0, false
+	-- this process's own facts, read once: they don't change while it waits
+	local me = myPid()
+	local myId = fence.startOf(me)
 	while not process.exec("mkdir", { lock }).ok do
 		local pids = lockPids(lock)
 		unowned = if #pids == 0 then unowned + 0.1 else 0
-		takeOverIfStale(lock, unowned)
+		takeOverIfStale(lock, unowned, me, myId)
 		if fs.isDir(lock) then
 			local holder = if #pids > 0 then table.concat(pids, ", ") else "starting"
 			if waited >= limit then
@@ -165,7 +270,10 @@ local function takeLock(lock: string)
 			waited += 0.1
 		end
 	end
-	fs.writeFile(`{lock}/pid`, myPid())
+	if myId then
+		writeWhole(`{lock}/start-{me}`, myId, me)
+	end
+	fs.writeFile(`{lock}/pid`, me)
 end
 
 type Snapshot = {
@@ -602,7 +710,9 @@ function fence.enter()
 	if guarded(here) then
 		local lock = `{process.env[MARKER]}/.cache/tests-run.lock`
 		if fs.isDir(lock) then
-			pcall(fs.writeFile, `{lock}/pid-{myPid()}`, "")
+			local me = myPid()
+			-- the record and its start id are one file, written whole: a reader sees no record, or both
+			writeWhole(`{lock}/pid-{me}`, fence.startOf(me) or "", me)
 		end
 		return
 	end
