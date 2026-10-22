@@ -23,6 +23,7 @@
 | 19 | 2026-10-22 21:10 | R0047: review-002 | 0 | 0 | 3.0 | focus | code-review |  |
 | 20 | 2026-10-22 21:11 | R0047: review-002 F1 F2: no subprocess in writeWhole; fixture identity | 15 | 7 | 6.0 | explicit | code-review |  |
 | 21 | 2026-10-22 21:11 | R0047: refute-002 | 2 | 0 | 3.0 | focus | code-review |  |
+| 22 | 2026-10-22 21:11 | R0047: final verification log | 0 | 0 | 0.2 | explicit | deliver |  |
 
-**Total:** +921 / -41 lines, 494.0 agent-minutes, 597953 tokens over 21 records
-<!-- totals: added=921 removed=41 minutes=494.0 records=21 tokens=597953 -->
+**Total:** +921 / -41 lines, 494.2 agent-minutes, 597953 tokens over 22 records
+<!-- totals: added=921 removed=41 minutes=494.2 records=22 tokens=597953 -->
