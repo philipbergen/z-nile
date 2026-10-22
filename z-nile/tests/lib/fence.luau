@@ -36,31 +36,24 @@ end
 fence.normalize = normalize
 local ROOT = string.match(normalize(debug.info(1, "s")), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "." -- z-nile/tests/lib/<file>
 
--- Every project's home (a folder name; the root's legacy "." aside), from the registry (code review 004 F3, F6). A
--- copy of the runner with no engine (some fixtures copy only tests/ and z-nile/lib/) has the folders at the top that
--- hold a .tracker/; a copy with neither has none known (nil): the runner then takes any folder one level below the
--- root, as before the registry named homes.
+-- Every project's home (a folder name), from fence.sh's pickman_fence_dirs, the one owner of that set (code review
+-- 005 F2): the registry's homes, or in a copy with no engine or registry the top folders holding a .tracker/. Nil
+-- when it names none (a copy with neither): the runner then takes any folder one level below the root, as before the
+-- registry named homes.
 function fence.homes(): { string }?
+	local r =
+		process.exec("bash", { "-c", '. "$1/z-nile/lib/fence.sh" && pickman_fence_dirs "$1"', "_", ROOT })
+	if not r.ok then
+		stdio.ewrite(`tests/run: cannot read {ROOT}'s homes: {r.stderr}refusing. Stop and report this.\n`)
+		process.exit(1)
+	end
 	local out: { string } = {}
-	if fs.isFile(`{ROOT}/z-nile/engine/projects.luau`) and fs.isFile(`{ROOT}/z-nile/projects.toml`) then
-		local projects = require("@znile/engine/projects")
-		for _, p in projects.load(ROOT, true).projects do
-			if p.home ~= "." then
-				table.insert(out, p.home)
-			end
-		end
-	else
-		for _, name in fs.readDir(ROOT) do
-			if fs.isDir(`{ROOT}/{name}`) and fs.isDir(`{ROOT}/{name}/.tracker`) then
-				table.insert(out, name)
-			end
-		end
-		table.sort(out)
-		if #out == 0 then
-			return nil
+	for line in string.gmatch(r.stdout, "[^\n]+") do
+		if string.sub(line, 1, #ROOT + 1) == ROOT .. "/" then
+			table.insert(out, string.sub(line, #ROOT + 2))
 		end
 	end
-	return out
+	return if #out > 0 then out else nil
 end
 local DEFAULT_WAIT_SECONDS = 240 -- under the Stop hook's 300 s budget
 local UNOWNED_SECONDS = 2
@@ -683,38 +676,25 @@ function fence.enter()
 			process.exec("rm", { "-f", `{cache}/{name}` })
 		end
 	end
-	-- The checkout's own .cache, when the run starts in a project's home below it (c0120, design review 005 F2): the
-	-- folder every spec wrote fixtures in before the move keeps its fence. Its refusals and its sentinel now, while
-	-- unjailed (the jail lets the run write only its home's .cache); its ceiling below, inside the jail's shell.
-	-- Every other home's .cache too (code review 004 F3): unjailed (Linux), a spec here could reach them, and git there
-	-- must find no repository either. The jail still lets this run write only its own home's .cache.
-	local others: { string } = {}
-	local dirs = { ROOT }
-	local known: { string } = fence.homes() or {}
-	for _, home in known do
-		table.insert(dirs, `{ROOT}/{home}`)
+	-- The checkout's own .cache and every project home's (c0120 design review 005 F2, code review 004 F3), from the one
+	-- owner of that set, fence.sh's pickman_fence_all (code review 005 F2): ceiling, refusals and sentinel now, while
+	-- unjailed (the jail lets the run write only its home's .cache); the ceiling again inside the jail's shell, from
+	-- the same list.
+	local all = process.exec("bash", {
+		"-c",
+		'. "$1/z-nile/lib/fence.sh" && pickman_fence_all "$1" strict && pickman_fence_dirs "$1"',
+		"_",
+		ROOT,
+	})
+	if not all.ok then
+		stdio.ewrite(`tests/run: cannot fence {ROOT}'s homes: {all.stderr}refusing. Stop and report this.\n`)
+		process.exit(1)
 	end
-	for _, dir in dirs do
-		if dir ~= here then
-			table.insert(others, dir)
-		end
+	local fenced: { string } = {}
+	for line in string.gmatch(all.stdout, "[^\n]+") do
+		table.insert(fenced, line)
 	end
-	for _, dir in others do
-		local top = process.exec("bash", {
-			"-c",
-			'. "$2/z-nile/lib/fence.sh" && pickman_fence_refusals "$1" && pickman_fence_sentinel "$1"',
-			"_",
-			dir,
-			ROOT,
-		})
-		if not top.ok then
-			stdio.ewrite(
-				`tests/run: cannot fence {dir}/.cache: {top.stderr}refusing. Stop and report this.\n`
-			)
-			process.exit(1)
-		end
-	end
-	local ceilings = table.concat(others, ":")
+	local ceilings = table.concat(fenced, ":")
 	-- the guards protect the repository git finds here; finding none refuses, never "nothing to protect" (code review
 	-- 002 F1): the tripwire, the protected paths and the fence would all read nothing
 	if (git({ "rev-parse", "--path-format=absolute", "--git-common-dir" }) or "") == "" then

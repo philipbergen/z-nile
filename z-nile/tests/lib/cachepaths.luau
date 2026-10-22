@@ -90,8 +90,7 @@ local RENAMED = "written through replace-file.pl (a rename onto the path, never 
 
 local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/check.sh"] = {
-		['pickman_fence_sentinel "$(pwd -P)" || { echo "check.sh: cannot write .cache\'s sentinel: refusing" >&2; exit 1; }'] = "a message; the sentinel is the fence's rename (c0120, design review 005 F2)",
-		["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",
+				["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
 		["find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +"] = "unlinks top-level links, never follows one",
 		["defs=.cache/globalTypes.d.luau"] = `downloaded to the user temp folder, then {RENAMED}`,

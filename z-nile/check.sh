@@ -92,12 +92,10 @@ else
 fi
 
 source z-nile/lib/fence.sh
-# every home's .cache gets the fence's refusals before anything here writes there, and before --plan
-# (they only read) (the builds write
-# <home>/.cache/check*.rbxl): a symlinked or bad .cache, which an unjailed spec could leave, refuses (code review 004 F3)
-for i in "${!names[@]}"; do
-  pickman_fence_refusals "$(pwd -P)/${homes[$i]}" || exit 1
-done
+# The root's .cache and every home's get the fence's refusals before anything here writes there (the builds write
+# each home's check*.rbxl), and before --plan (they only read): a symlinked or bad .cache, which an unjailed spec could
+# leave, refuses (code review 004 F3, 005 F3). The set is fence.sh's (pickman_fence_all, code review 005 F2).
+pickman_fence_all "$(pwd -P)" refusals || exit 1
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
@@ -121,12 +119,11 @@ for i in "${!names[@]}"; do
   # which renames a fresh file into place, so a link swapped in later is replaced instead of written through.
   find "$c" -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +
 done
-# the root's .cache is no project's home (c0120) but holds the board and the gate's downloads; it gets the fence's
-# refusals and sentinel, so git finds no repository there (design review 005 F2)
-pickman_fence_refusals "$(pwd -P)" || exit 1
+# the root's .cache is no project's home (c0120) but holds the board and the gate's downloads; it and every home's
+# get the fence's sentinel, so git finds no repository there (design review 005 F2)
 mkdir -p .cache
 find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +
-pickman_fence_sentinel "$(pwd -P)" || { echo "check.sh: cannot write .cache's sentinel: refusing" >&2; exit 1; }
+pickman_fence_all "$(pwd -P)" strict || exit 1
 defs=.cache/globalTypes.d.luau
 if [[ ! -s $defs || -L $defs ]]; then
   t=$(mktemp "${TMPDIR:-/tmp}/globalTypes.XXXXXX")

@@ -126,7 +126,6 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
 		GH_CONFIG_DIR = "quotes a fence.sh line in the reviewed .cache list",
 		PICKMAN_TEST_FENCE = "quotes a fence.sh line in the reviewed .cache list (the jail waiver, c0114)",
-		PICKMAN_FENCE_ = "quotes the gate's pickman_fence_sentinel line in the reviewed .cache list (c0120)",
 	},
 	["z-nile/tests/acceptance/c0053/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
@@ -158,6 +157,12 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	-- c0120 code review 002: fixture shells inherit a ceiling at a fixture checkout's root and a GIT_COMMON_DIR at
 	-- another fixture repository, to prove the guards read what they protect in a clean environment; a nested run
 	-- from the fixture's pickman/ is a top-level run with that ceiling; the shells print what the fence recorded
+	-- c0120 code review 005 F2: fixture check.sh runs get the jail's three markers set explicitly, both ways
+	["z-nile/tests/tooling/fence-every-home.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "a fixture check.sh gets the jail's markers set explicitly, naming this run's home",
+		PICKMAN_FENCE_ = "sets PICKMAN_FENCE_SPECS for a fixture check.sh, as the runner does",
+		["sandbox-exec"] = "a fixture check.sh runs with the jail's marker set to sandbox-exec, then to none",
+	},
 	["z-nile/tests/tooling/fence-inherited-env.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "a fixture shell and a nested fixture run inherit a ceiling at the fixture checkout's root",
 		GIT_COMMON_DIR = "a fixture shell inherits GIT_COMMON_DIR at another fixture repository",
@@ -168,7 +173,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	},
 	-- c0120 (design review 005 F2): the gate gives the root's .cache, no project's home, the fence's refusals and sentinel
 	["z-nile/check.sh"] = {
-		PICKMAN_FENCE_ = "calls pickman_fence_refusals and pickman_fence_sentinel for the root's .cache, never switching a guard",
+		PICKMAN_FENCE_ = "calls pickman_fence_all for the root's and every home's .cache, never switching a guard",
 	},
 	["z-nile/tests/acceptance/c0074/done-gate.spec.luau"] = {
 		PICKMAN_FENCE_ = "names PICKMAN_FENCE_SPECS only as a table key passed to the pure doneGate, never in a process's environment (c0074)",
@@ -579,6 +584,37 @@ return t.spec("repository fence", function(it)
 			t.expect(table.concat(stale, "\n")).toBe("")
 		end
 	)
+
+	-- code review 005 F2: the set of folders the guards cover has one owner, fence.sh's pickman_fence_all (fed from the
+	-- registry by pickman_fence_dirs). The runner, the gate and ac.sh take it from there; none fences a folder of its
+	-- own choosing (the runner's own home is fenced again inside its jail, with pickman_fence).
+	it("every caller of the fence outside fence.sh takes its folders from pickman_fence_all", function()
+		if not fs.isFile(`{checkout}/z-nile/check.sh`) then
+			return -- a partial copy of the guards (see above)
+		end
+		local bad: { string } = {}
+		for _, path in
+			{ "z-nile/check.sh", "z-nile/lib/ac.sh", "z-nile/tests/lib/fence.luau", "z-nile/tests/run.luau" }
+		do
+			local text = fs.readFile(`{checkout}/{path}`)
+			for _, fn in { "pickman_fence_refusals", "pickman_fence_sentinel", "pickman_home_fence" } do
+				for line in string.gmatch(text, "[^\n]+") do
+					if
+						string.find(line, fn, 1, true)
+						and not string.match(line, "^%s*%-%-")
+						and not string.match(line, "^%s*#")
+					then
+						table.insert(bad, `{path} calls {fn}: {line}`)
+					end
+				end
+			end
+		end
+		for _, path in { "z-nile/check.sh", "z-nile/lib/ac.sh", "z-nile/tests/lib/fence.luau" } do
+			t.expect(string.find(fs.readFile(`{checkout}/{path}`), "pickman_fence_all", 1, true) ~= nil)
+				.toBe(true)
+		end
+		t.expect(table.concat(bad, "\n")).toBe("")
+	end)
 
 	it("every fixture commits as <name>@example.invalid", function()
 		local bad: { string } = {}

@@ -30,9 +30,11 @@ if [[ ! -f z-nile/lib/fence.sh ]]; then
   exit 1
 fi
 source z-nile/lib/fence.sh || exit 1
-# the root's .cache is no project's (c0120): inside a jailed spec run that starts a check.sh from a home, the jail
-# refuses its sentinel, which pickman_home_fence waives by the jail's markers alone; anywhere else a refusal refuses
-pickman_home_fence "$(pwd -P)" || exit 1
+# The root's .cache and every project home's (c0120 code review 005 F2: pickman_fence_all owns the set, from the
+# registry): a check.sh's fixtures go in its home's .cache, and git must find no repository in any of them. Inside a
+# jailed spec run that starts a check.sh, the jail refuses the sentinels outside its own .cache, which
+# pickman_home_fence waives by the jail's markers alone; anywhere else a refusal refuses.
+pickman_fence_all "$(pwd -P)" check || exit 1
 # The repository root, for checks that name the engine or the gate from a project's home ("$ZN_ROOT/zn").
 ZN_ROOT="$(pwd -P)"
 export ZN_ROOT
@@ -40,7 +42,7 @@ export ZN_ROOT
 # it, so the paths a sequestered check.sh names (src/..., tests/..., git pathspecs) resolve where it was written for.
 # z-nile/roots reads the registry for the shell (c0114). A check.sh under a .tracker/ folder whose project can't be
 # read fails closed: run from the wrong folder, a guard like `git diff --quiet -- src/server` passes vacuously.
-# The fence above is the root's; a home other than the root is fenced too (c0120 review 001 F1), because the
+# The fence above covers the root and every home (c0120 review 001 F1, code review 005 F2), because the
 # check.sh's own fixtures go in the home's .cache: git must find no repository there or below it. In fence.sh's
 # steps (review 002 F1): its .cache joins the ceiling (cannot fail, always); a .cache that isn't a plain folder, or
 # a sentinel that is a folder, refuses (reads only, every mode); the environment's guards are set whole; then the
@@ -63,9 +65,6 @@ if [[ -z $_ac_home ]]; then
     exit 1
   fi
   _ac_home=.
-fi
-if [[ $_ac_home != . ]]; then
-  pickman_home_fence "$ZN_ROOT/$_ac_home" || exit 1
 fi
 cd "$_ac_home" || exit 1
 export PATH="$HOME/.rokit/bin:$PATH"

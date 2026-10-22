@@ -183,6 +183,53 @@ pickman_fence() {
 # `guarded` or `unguarded` and exits 0. Anything else (no answer, another exit code) means it could not tell, and the
 # caller must treat that as guarded (c0114: "unguarded" is the one explicit "no"). The tracker's publisher asks this
 # instead of reading the guards' variables itself (c0650).
+# The one owner of the set of folders the guards cover (c0120 code review 005 F2): the checkout's top and every
+# project home its registry lists (`z-nile/roots -- --projects`), one per line. The runner, the gate and ac.sh all
+# take the set from here. A copy without the engine or the registry (some fixtures copy only z-nile/lib and the
+# runner) lists the top folders that hold a .tracker/.
+pickman_fence_dirs() {
+  local top=$1 out name home root d
+  printf '%s\n' "$top"
+  if [[ -f $top/z-nile/roots.luau && -f $top/z-nile/projects.toml ]]; then
+    out=$(cd "$top" && PATH="$HOME/.rokit/bin:$PATH" lune run z-nile/roots -- --projects) || {
+      echo "fence: cannot read $top/z-nile/projects.toml's homes; refusing. Stop and report this." >&2
+      return 1
+    }
+    # process substitution, not a here-string: bash writes a here-string to a temp file, which a jail may refuse
+    while IFS=$'\t' read -r name home root; do
+      [[ -n $home && $home != . ]] && printf '%s\n' "$top/$home"
+    done < <(printf '%s\n' "$out")
+    return 0
+  fi
+  for d in "$top"/*/; do
+    if [[ -d $d.tracker ]]; then printf '%s\n' "${d%/}"; fi
+  done
+  return 0
+}
+
+# Fences every folder of pickman_fence_dirs <top>, in one of three modes:
+#   refusals  the refusals only (reads; the gate before --plan and its builds)
+#   strict    ceiling, refusals and sentinel, every failure refusing (the runner, before it enters its jail)
+#   check     pickman_home_fence: the four steps, the sentinel's write waived only where the jail forbids it (ac.sh)
+# Prints nothing; the set is pickman_fence_dirs'.
+pickman_fence_all() {
+  local top=$1 mode=$2 dirs d
+  dirs=$(pickman_fence_dirs "$top") || return 1
+  while IFS= read -r d; do
+    [[ -n $d ]] || continue
+    case $mode in
+    refusals) pickman_fence_refusals "$d" || return 1 ;;
+    strict)
+      pickman_fence_ceiling "$d"
+      pickman_fence_refusals "$d" || return 1
+      pickman_fence_sentinel "$d" || { echo "fence: cannot write $d/.cache's sentinel; refusing. Stop and report this." >&2; return 1; }
+      ;;
+    check) pickman_home_fence "$d" || return 1 ;;
+    *) echo "fence: pickman_fence_all: unknown mode $mode" >&2; return 1 ;;
+    esac
+  done < <(printf '%s\n' "$dirs")
+}
+
 pickman_guarded() {
   # Both ways (code review 003 F1): the clean read (no inherited override or ceiling hides the repository, code review
   # 002 F1) and the caller's own environment, which is how the caller's git will act (a GIT_DIR it set itself).
