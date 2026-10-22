@@ -8,7 +8,8 @@
 local Maze = require("./Maze")
 
 export type Look = "normal" | "frightened" | "blinking" | "eyes"
-export type Ghost = { x: number, y: number, look: Look }
+-- name and flash are carried through to the indicators and glows untouched (f0102: a glow is coloured as its ghost)
+export type Ghost = { x: number, y: number, look: Look, name: string?, flash: boolean? }
 export type Pose = { x: number, y: number, yaw: number }
 export type Options = {
 	verticalFieldOfView: number?, -- the camera's (Roblox's) vertical field of view in radians
@@ -17,6 +18,7 @@ export type Options = {
 	minSize: number?,
 	maxSize: number?,
 	minBrightness: number?,
+	inView: boolean?, -- also indicate ghosts inside the field of view (the glows, f0102); each says which it is
 }
 export type Indicator = {
 	index: number, -- the ghost's place in the input list
@@ -25,7 +27,24 @@ export type Indicator = {
 	size: number, -- 0..1: the larger, the closer
 	brightness: number, -- 0..1: the brighter, the closer
 	look: Look,
+	inView: boolean, -- inside the horizontal field of view (only with the inView option)
+	name: string?, -- the ghost's, as given
+	flash: boolean?, -- the ghost's, as given
 }
+-- One lit place on the screen edge (f0102). Sectors count from straight ahead (0, the top) to the left: 1 the
+-- top-left corner, 2 left, 3 bottom-left, 4 behind (the bottom), 5 bottom-right, 6 right, 7 top-right.
+export type Glow = {
+	sector: number,
+	bearing: number, -- the bearing Awareness.edgePoint takes to that sector's place (a corner for a diagonal)
+	index: number, -- the nearest ghost's place in the indicators' input list: it gives the colour
+	distance: number,
+	size: number,
+	brightness: number,
+	look: Look,
+	name: string?, -- the nearest ghost's
+	flash: boolean?, -- the nearest ghost's
+}
+export type Box = { x: number, y: number, w: number, h: number } -- pixels, top-left corner
 export type Blip = { x: number, y: number, look: Look } -- offsets from the player, x right and y down on the radar
 export type Radar = { radius: number, walls: { { x: number, y: number } }, blips: { Blip } }
 
@@ -41,6 +60,10 @@ local DEFAULTS = {
 local Awareness = {}
 Awareness.DEFAULTS = table.freeze(DEFAULTS)
 Awareness.RADAR_RADIUS = 7
+Awareness.SECTORS = 8
+-- A glow's square side at full size, as a share of the screen's smaller side; at most this far in from an edge,
+-- so the middle of the screen, the view ahead, stays clear.
+Awareness.GLOW = table.freeze({ side = 0.12 })
 
 -- Tiles to walk from `from` to `to` through the maze, ghosts' routes (doors and the house included), or
 -- nil when it is more than `limit`. Wrapping tunnels count.
@@ -181,7 +204,8 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
 			if d ~= nil then
 				local dx, dy, unseen = offsetVia(m, pose, here, g, tile, wrap)
 				local bearing = Awareness.bearing(pose, pose.x + dx, pose.y + dy)
-				if unseen or math.abs(bearing) > fov / 2 then
+				local inView = not unseen and math.abs(bearing) <= fov / 2
+				if o.inView or not inView then
 					local closeness = 1 - math.clamp(d / maxDistance, 0, 1)
 					table.insert(out, {
 						index = i,
@@ -190,6 +214,9 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
 						size = minSize + (maxSize - minSize) * closeness,
 						brightness = minBrightness + (1 - minBrightness) * closeness,
 						look = g.look,
+						inView = inView,
+						name = g.name,
+						flash = g.flash,
 					})
 				end
 			end
@@ -202,6 +229,81 @@ function Awareness.indicators(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, optio
 		return a.index < b.index
 	end)
 	return out
+end
+
+-- The sector (0..7, see Glow) a bearing falls in: the nearest eighth of a turn, positive left. A bearing exactly
+-- between two sectors goes to the one ahead, behind or to a side, not to a corner.
+function Awareness.sector(bearing: number): number
+	if bearing ~= bearing or math.abs(bearing) == math.huge then
+		return 0
+	end
+	local q = bearing / (math.pi / 4)
+	local n = math.floor(q + 0.5)
+	if q + 0.5 == n and n % 2 ~= 0 then
+		n -= 1
+	end
+	return n % 8
+end
+
+-- The bearing that Awareness.edgePoint maps to a sector's place on a screen of this aspect: the middle of an edge
+-- for 0, 2, 4 and 6, the corner for the diagonals. An aspect that is not a positive finite number counts as 1.
+function Awareness.sectorBearing(sector: number, aspect: number): number
+	local a = if aspect > 0 and aspect < math.huge then aspect else 1
+	local corner = math.atan(a)
+	local bearings =
+		{ 0, corner, math.pi / 2, math.pi - corner, math.pi, -(math.pi - corner), -math.pi / 2, -corner }
+	return bearings[(sector % 8) + 1]
+end
+
+-- One glow per sector that has a ghost, in sector order. The nearest ghost in a sector lights it: its look, size,
+-- brightness and index (a tie in distance: the earlier in the list, which Awareness.indicators sorts so).
+function Awareness.glows(list: { Indicator }, aspect: number): { Glow }
+	local best: { [number]: Indicator } = {}
+	for _, ind in list do
+		local k = Awareness.sector(ind.bearing)
+		local held = best[k]
+		if
+			held == nil
+			or ind.distance < held.distance
+			or (ind.distance == held.distance and ind.index < held.index)
+		then
+			best[k] = ind
+		end
+	end
+	local out: { Glow } = {}
+	for k = 0, Awareness.SECTORS - 1 do
+		local ind = best[k]
+		if ind then
+			table.insert(out, {
+				sector = k,
+				bearing = Awareness.sectorBearing(k, aspect),
+				index = ind.index,
+				distance = ind.distance,
+				size = ind.size,
+				brightness = ind.brightness,
+				look = ind.look,
+				name = ind.name,
+				flash = ind.flash,
+			})
+		end
+	end
+	return out
+end
+
+-- Where a glow of `size` (0..1) is drawn on a width x height screen: a square of Awareness.GLOW.side times the
+-- smaller side times `size`, centred on the edge point (u, v) from Awareness.edgePoint and moved in until it is
+-- whole on the screen. A side that is not a positive finite number counts as 0.
+function Awareness.glowBox(u: number, v: number, size: number, width: number, height: number): Box
+	local function side(n: number): number
+		return if n > 0 and n < math.huge then n else 0
+	end
+	local w, h = side(width), side(height)
+	local s = Awareness.GLOW.side * math.min(w, h) * math.clamp(if size == size then size else 0, 0, 1)
+	local cu = if u == u then math.clamp(u, -1, 1) else 0
+	local cv = if v == v then math.clamp(v, -1, 1) else 0
+	local x = math.clamp((cu * 0.5 + 0.5) * w - s / 2, 0, w - s)
+	local y = math.clamp((cv * 0.5 + 0.5) * h - s / 2, 0, h - s)
+	return { x = x, y = y, w = s, h = s }
 end
 
 -- The radar's content around the player, turned so that "up" is where the camera looks.

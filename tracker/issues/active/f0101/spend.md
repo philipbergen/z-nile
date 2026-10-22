@@ -16,6 +16,7 @@
 | 12 | 2026-10-21 23:58 | design-review-007 | 0 | 0 | 7.3 | spend+proportional | design-review |  |
 | 13 | 2026-10-21 23:59 | design-refute-007 | 0 | 0 | 4.0 | spend+proportional | design-review |  |
 | 14 | 2026-10-22 00:23 | design-review-008 | 0 | 0 | 5.5 | spend+proportional | design-review |  |
+| 15 | 2026-10-22 20:10 | R0035: implement f0100 f0101 f0102 f0104 from the prep prototype (Main.client hand-merged with R0034's FlowView.trip) | 199 | 14 | 4.6 | raft+proportional | build |  |
 
-**Total:** +359 / -1 lines, 95.5 agent-minutes, 73971 tokens over 14 records
-<!-- totals: added=359 removed=1 minutes=95.5 records=14 tokens=73971 -->
+**Total:** +558 / -15 lines, 100.1 agent-minutes, 73971 tokens over 15 records
+<!-- totals: added=558 removed=15 minutes=100.1 records=15 tokens=73971 -->

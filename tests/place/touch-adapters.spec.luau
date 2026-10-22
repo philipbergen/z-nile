@@ -3,6 +3,10 @@
 -- fold itself is pinned by the f0027-f0029 acceptance specs. Controls' real source runs here on its own small
 -- stub engine (touch signals, one inset area, a recording Intent remote) with the real Touch and View, so its
 -- wiring is pinned by what it does. Camera and HudView keep source pins for one line each.
+local Blaster = require("@logic/Blaster")
+local Hop = require("@logic/Hop")
+local Maze = require("@logic/Maze")
+local Movement = require("@logic/Movement")
 local Touch = require("@logic/Touch")
 local View = require("@logic/View")
 local luau = require("@lune/luau")
@@ -127,6 +131,10 @@ local function start(rect: Touch.Rect?): World
 		},
 	}
 	local modules: { [string]: any } = {
+		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
+		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
+		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
+		["@game/ReplicatedStorage/Shared/Logic/Movement"] = Movement,
 		["@game/ReplicatedStorage/Shared/Logic/Touch"] = Touch,
 		["@game/ReplicatedStorage/Shared/Logic/View"] = View,
 	}
