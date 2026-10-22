@@ -1,0 +1,82 @@
+--!strict
+-- d0124 AC4 (pure part): game over says the run's place on the all-time top-N list, or that it missed it. A miss is
+-- heard, kept for the next run, shown and dropped exactly as a rank is (f0026), and a run shows one line: the
+-- later of its rank and its miss. The rank line itself is f0026's and does not change.
+local Flow = require("@logic/Flow")
+local t = require("@tests/lib/t")
+
+local F = Flow :: any
+
+return t.spec("d0124 missed line", function(it)
+	it("a whole top of 1 or more is a missed line, and anything else is none", function()
+		t.expect(F.missLine(10)).toBe("NOT IN THE ALL-TIME TOP 10")
+		t.expect(F.missLine(3)).toBe("NOT IN THE ALL-TIME TOP 3")
+		t.expect(F.missLine(0)).toBe(nil)
+		t.expect(F.missLine(2.5)).toBe(nil)
+		t.expect(F.missLine(math.huge)).toBe(nil)
+		t.expect(F.missLine(nil)).toBe(nil)
+	end)
+
+	it("the rank line stays the place", function()
+		t.expect(F.rankLine(2)).toBe("ALL-TIME #2")
+	end)
+
+	it("a miss heard while its overlay is up shows, and only while it is up", function()
+		local up = F.follow({ over = 0 }, true, false)
+		local missed = F.hearMiss(up, 1, 10, true)
+		t.expect(F.shownRank(missed, true)).toBe("NOT IN THE ALL-TIME TOP 10")
+		t.expect(F.shownRank(missed, false)).toBe(nil)
+		local closed = F.follow(missed, false, true)
+		t.expect(F.shownRank(closed, true)).toBe(nil)
+	end)
+
+	it("an early miss waits for its overlay and shows on its edge", function()
+		local idle = F.follow(F.follow({ over = 0 }, true, false), false, true)
+		local early = F.hearMiss(idle, 2, 10, false)
+		t.expect(F.shownRank(early, false)).toBe(nil)
+		local opened = F.follow(early, true, false)
+		t.expect(opened.over).toBe(2)
+		t.expect(F.shownRank(opened, true)).toBe("NOT IN THE ALL-TIME TOP 10")
+	end)
+
+	it("a miss for a closed run, a run too far ahead or a run not yet over is not kept", function()
+		local closed = F.follow(F.follow({ over = 0 }, true, false), false, true)
+		t.expect(F.hearMiss(closed, 1, 10, false)).toBe(closed)
+		t.expect(F.hearMiss(closed, 3, 10, false)).toBe(closed)
+		t.expect(F.hearMiss({ over = 0 }, 0, 10, true)).toEqual({ over = 0 })
+		local up = F.follow(closed, true, false)
+		t.expect(F.hearMiss(up, 1, 10, true)).toBe(up)
+	end)
+
+	it("a broken top changes nothing", function()
+		local up = F.follow({ over = 0 }, true, false)
+		t.expect(F.hearMiss(up, 1, 0, true)).toBe(up)
+		t.expect(F.hearMiss(up, 1, nil, true)).toBe(up)
+	end)
+
+	it("a run shows one line: a later rank replaces a miss and a later miss replaces a rank", function()
+		local up = F.follow({ over = 0 }, true, false)
+		local ranked = F.hearRank(F.hearMiss(up, 1, 10, true), 1, 4, true)
+		t.expect(F.shownRank(ranked, true)).toBe("ALL-TIME #4")
+		local missed = F.hearMiss(F.hearRank(up, 1, 4, true), 1, 10, true)
+		t.expect(F.shownRank(missed, true)).toBe("NOT IN THE ALL-TIME TOP 10")
+		local closed = F.follow(up, false, true)
+		local pendingRank = F.hearRank(F.hearMiss(closed, 2, 10, false), 2, 6, false)
+		t.expect(F.shownRank(F.follow(pendingRank, true, false), true)).toBe("ALL-TIME #6")
+		local pendingMiss = F.hearMiss(F.hearRank(closed, 2, 6, false), 2, 10, false)
+		t.expect(F.shownRank(F.follow(pendingMiss, true, false), true)).toBe("NOT IN THE ALL-TIME TOP 10")
+	end)
+
+	it("the next run's overlay never shows the previous run's miss", function()
+		local up = F.hearMiss(F.follow({ over = 0 }, true, false), 1, 10, true)
+		local next = F.follow(F.follow(up, false, true), true, false)
+		t.expect(next.over).toBe(2)
+		t.expect(F.shownRank(next, true)).toBe(nil)
+	end)
+
+	it("a miss for the next run does not hide the rank of the run whose overlay is up", function()
+		local up = F.hearRank(F.follow({ over = 0 }, true, false), 1, 3, true)
+		local both = F.hearMiss(up, 2, 10, true)
+		t.expect(F.shownRank(both, true)).toBe("ALL-TIME #3")
+	end)
+end)

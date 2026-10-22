@@ -9,3 +9,5 @@ A rule is usually stated in one place and summarized in several others. A fix th
 **Why:** R0039's late rounds were mostly contradictions between the issue, the specs and the experiments. R0040 design review 2 (F5): round 1 split "every skill records lessons" into two forms, but the new AGENTS.md sentence still said every skill records them.
 
 **How to apply:** when a refute line changes a rule, grep the repo for its old wording and its key terms, update every restatement in the same change, and pin the new wording where a spec already reads that file.
+
+R0044 design review 2 (F4): rounds 1 and 2 changed the design behind a separate chore (c0128), whose Problem still described the first prototype. When a design changes, update every document that explains it, including dependent chores, or say in the raft which of their words are stale.
