@@ -32,3 +32,4 @@
 - design-review-007 F1: testing/age-uses-the-last-played-tick, ticket-prep/spec-design-correspondence
 - review-001 F1: testing/pin-call-site-arguments
 - review-001 F2: testing/pin-call-site-arguments
+- review-002 F1: testing/pin-call-site-arguments

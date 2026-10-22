@@ -21,6 +21,7 @@
 | 17 | 2026-10-22 20:20 | R0035: review-001 | 0 | 0 | 6.3 | raft+proportional | code-review |  |
 | 18 | 2026-10-22 20:22 | R0035: refute-001 and harvest | 0 | 0 | 1.3 | raft+proportional | code-review |  |
 | 19 | 2026-10-22 20:29 | R0035: review-002 | 0 | 0 | 5.0 | raft+proportional | code-review |  |
+| 20 | 2026-10-22 20:30 | R0035: refute-002 and harvest | 0 | 0 | 1.3 | raft+proportional | code-review |  |
 
-**Total:** +723 / -52 lines, 126.3 agent-minutes, 73971 tokens over 19 records
-<!-- totals: added=723 removed=52 minutes=126.3 records=19 tokens=73971 -->
+**Total:** +723 / -52 lines, 127.6 agent-minutes, 73971 tokens over 20 records
+<!-- totals: added=723 removed=52 minutes=127.6 records=20 tokens=73971 -->
