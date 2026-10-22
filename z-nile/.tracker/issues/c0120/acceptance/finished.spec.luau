@@ -155,6 +155,34 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		fs.removeDir(FX)
 	end)
 
+	it(
+		"deletes exactly the named criteria, continuation lines included, and refuses a missing one",
+		function()
+			local text = table.concat({
+				"helper() { true; }",
+				'check "AC1: kept" true',
+				'check "AC4: gone" \\',
+				"  helper",
+				'check "AC4a: kept, a longer id" true',
+				'check "AC10: gone too" true',
+				'check "AC1x: kept" true',
+				"finish",
+				"",
+			}, "\n")
+			t.expect(rewrites.deleteCriteria(text, { "AC4", "AC10" })).toBe(table.concat({
+				"helper() { true; }",
+				'check "AC1: kept" true',
+				'check "AC4a: kept, a longer id" true',
+				'check "AC1x: kept" true',
+				"finish",
+				"",
+			}, "\n"))
+			local none, why = rewrites.deleteCriteria(text, { "AC9" })
+			t.expect(none).toBe(nil)
+			t.expect(why).toBe("AC9: 0 check statements")
+		end
+	)
+
 	it("the path from one folder to another", function()
 		t.expect(rewrites.relative("pickman", "pickman/.tracker/x")).toBe(".tracker/x")
 		t.expect(rewrites.relative("pickman", "z-nile/check.sh")).toBe("../z-nile/check.sh")

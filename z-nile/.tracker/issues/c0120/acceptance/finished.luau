@@ -58,11 +58,19 @@ for _, root in projects.roots(reg) do
 				local want = if finished and isCheck
 					then rewrites.rewrite(old, projects.homeOf(reg, path), world)
 					else old
+				-- the deleted criteria (Guess 17): exactly those check statements go, after the rewrite
+				local deleted = rewrites.DELETED[path]
+				if deleted then
+					want = rewrites.deleteCriteria(want, deleted)
+						or `cannot delete {table.concat(deleted, ", ")}`
+				end
 				if now ~= want then
 					table.insert(
 						bad,
 						if finished and isCheck
-							then `{path}: not its text with exactly the rewrite`
+							then `{path}: not its text with exactly the rewrite{if rewrites.DELETED[path]
+								then " and the deleted criteria"
+								else ""}`
 							else `{path}: changed`
 					)
 				end
