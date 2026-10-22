@@ -17,6 +17,7 @@
 | 13 | 2026-10-22 20:20 | c0127: a reused pid no longer holds the test lock (start ids recorded with each pid) | 140 | 16 | 20.0 | focus | build |  |
 | 14 | 2026-10-22 20:38 | c0127: verification log | 0 | 0 | 2.0 | explicit | build |  |
 | 15 | 2026-10-22 20:54 | c0127: verification log (exit criteria) | 0 | 0 | 3.0 | explicit | build |  |
+| 16 | 2026-10-22 21:01 | R0047: review-001 | 0 | 0 | 30.0 | focus | code-review |  |
 
-**Total:** +659 / -17 lines, 412.0 agent-minutes, 597953 tokens over 15 records
-<!-- totals: added=659 removed=17 minutes=412.0 records=15 tokens=597953 -->
+**Total:** +659 / -17 lines, 442.0 agent-minutes, 597953 tokens over 16 records
+<!-- totals: added=659 removed=17 minutes=442.0 records=16 tokens=597953 -->
