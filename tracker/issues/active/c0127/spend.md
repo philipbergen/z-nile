@@ -16,6 +16,7 @@
 | 12 | 2026-10-22 19:30 | prep | 519 | 1 | 120.0 | spend | prep |  |
 | 13 | 2026-10-22 20:20 | c0127: a reused pid no longer holds the test lock (start ids recorded with each pid) | 140 | 16 | 20.0 | focus | build |  |
 | 14 | 2026-10-22 20:38 | c0127: verification log | 0 | 0 | 2.0 | explicit | build |  |
+| 15 | 2026-10-22 20:54 | c0127: verification log (exit criteria) | 0 | 0 | 3.0 | explicit | build |  |
 
-**Total:** +659 / -17 lines, 409.0 agent-minutes, 597953 tokens over 14 records
-<!-- totals: added=659 removed=17 minutes=409.0 records=14 tokens=597953 -->
+**Total:** +659 / -17 lines, 412.0 agent-minutes, 597953 tokens over 15 records
+<!-- totals: added=659 removed=17 minutes=412.0 records=15 tokens=597953 -->
