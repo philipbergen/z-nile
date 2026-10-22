@@ -41,9 +41,9 @@ local ownBase: string = pre :: string
 for _, ref in { "origin/prep-c0120", "prep-c0120" } do
 	local okB, base = git({ "merge-base", "HEAD", ref })
 	base = string.gsub(base, "%s+$", "")
-	if okB and base ~= "" then
+	-- the newer of the two: a base the current one is an ancestor of
+	if okB and base ~= "" and git({ "merge-base", "--is-ancestor", ownBase, base }) then
 		ownBase = base
-		break
 	end
 end
 
