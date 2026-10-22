@@ -38,3 +38,6 @@
 - design-review-007 F3: ticket-prep/restated-rules-move-together
 - design-review-007 F4: ticket-prep/restated-rules-move-together
 - review-004 F1: one-off: the PR description kept the guesses after the user decided them
+- review-005 F1: testing/seed-every-enumerated-case
+- review-005 F2: ticket-prep/design-the-execution-window
+- review-005 F3: tracker/exhaustive-lists-name-new-things
