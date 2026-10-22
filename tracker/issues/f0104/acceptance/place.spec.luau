@@ -1,8 +1,10 @@
 --!strict
 -- f0104 AC4: the keys' adapters. Controls binds every key in View.KEYS, hears key-up and cancel as well as key-down
 -- (the arrows are held), tracks them with View.press and hands them to the camera; E sends the aimed shot (only
--- Blaster.intent of a heading, on the Intent remote) and Space jumps, through Controls.keys. The touch side keeps what R0012 builds on: Controls.start(onSnap) and Camera.snap
--- stay, and Main still starts Controls with Camera.snap first. Camera looks with View.steer and aims with View.aim.
+-- Blaster.intent of a heading, on the Intent remote) and Space sends the hop (f0101's Hop.INTENT, checked in its
+-- place.spec). The camera's part, the arrows and the aim, comes in through Controls.keys. The touch side keeps what
+-- R0012 builds on: Controls.start(onSnap) and Camera.snap stay, and Main still starts Controls with Camera.snap
+-- first. Camera looks with View.steer and aims with View.aim.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -61,10 +63,10 @@ return t.spec("f0104 key adapters", function(it)
 		t.expect(has(src, "View.press(")).toBe(true)
 	end)
 
-	it("the camera's part comes in through Controls.keys: jump, arrows and aim", function()
+	it("the camera's part comes in through Controls.keys: arrows and aim", function()
 		local src = source("Controls")
 		t.expect(has(src, "function Controls.keys(")).toBe(true)
-		for _, field in { "jump", "arrows", "aim" } do
+		for _, field in { "arrows", "aim" } do
 			t.expect(string.find(src, "%." .. field .. "%(") ~= nil).toBe(true)
 		end
 	end)
@@ -76,10 +78,10 @@ return t.spec("f0104 key adapters", function(it)
 		t.expect(string.find(main, "Controls%.start%(%s*Camera%.snap") ~= nil).toBe(true)
 	end)
 
-	it("Main hands the camera's jump, arrows and aim to Controls.keys, before Ready", function()
+	it("Main hands the camera's arrows and aim to Controls.keys, before Ready", function()
 		local main = source("Main")
 		local call = string.match(main, "Controls%.keys%b()") or ""
-		for _, part in { "Camera.jump", "Camera.arrows", "Camera.aim" } do
+		for _, part in { "Camera.arrows", "Camera.aim" } do
 			t.expect(has(call, part)).toBe(true)
 		end
 		local keys = string.find(main, "Controls.keys(", 1, true)
@@ -118,7 +120,17 @@ return t.spec("f0104 key adapters", function(it)
 		end
 	)
 
-	it("the arrow look and the jump stay on the client: Camera sends nothing", function()
+	it("Space sends f0101's Hop.INTENT on the Intent remote, and never the string Jump", function()
+		local src = source("Controls")
+		t.expect(
+			string.find(src, 'action%s*==%s*"Jump"%s*then%s*intent:FireServer%(%s*Hop%.INTENT%s*%)') ~= nil
+		)
+			.toBe(true)
+		t.expect(has(src, 'FireServer("Jump")')).toBe(false)
+		t.expect(has(src, 'FireServer("Hop")')).toBe(false) -- the constant, not a copy of it
+	end)
+
+	it("the arrow look stays on the client: Camera sends nothing", function()
 		t.expect(has(source("Camera"), "FireServer")).toBe(false)
 		t.expect(has(source("Camera"), "Remotes")).toBe(false)
 	end)
