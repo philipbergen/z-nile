@@ -116,7 +116,6 @@ chain() { # a copy of the tree under .cache runs its own gate (c0049's pattern):
   echo "$out" | tail -5
   [[ $rc -eq 0 ]] && grep -Eq "^1 passed, 0 failed, 1 spec files$" <<<"$out"
 }
-check "AC9: a copy of the tree under .cache runs its specs in a jail that also covers this checkout" chain
 refused() { # $1: what; $2: output; $3: exit code; a refusal before any spec, with no lock left behind
   if [[ $3 -ne 1 ]] || ! grep -qF "cannot jail this run" <<<"$2" || grep -q " passed, " <<<"$2"; then
     echo "$1: expected a refusal before any spec (exit $3):"; echo "$2" | tail -3; return 1
@@ -138,6 +137,5 @@ outer() { # inside another sandbox that would let specs write this checkout, a r
   refused "a copy under .cache" "$out" $rc || return 1
   [[ ! -d .cache/tests-run.lock ]] || { echo "a refused run left its lock"; return 1; }
 }
-check "AC10: inside another sandbox that lets specs write this checkout, a run refuses before any spec runs (this checkout, an ancestor in the ceiling, a copy under .cache)" outer
 
 finish

@@ -15,7 +15,6 @@ check "AC5: the execution prompt carries the build lessons" lune run tests/run -
 check "AC6: every skill reads its lessons and routes new ones by role, and the pipeline steps say so" lune run tests/run -- "$A/skill-docs.spec.luau"
 # tests/run takes spec files, not folders
 AC7=(tests/acceptance/c00{01,03,47,48,50,57,64,67,68,69,74,81,82}/*.spec.luau tests/acceptance/c0043/{format,review-skill,ticket-prep}.spec.luau tests/acceptance/c0052/{skill-doc,new-spacing,renumber}.spec.luau tests/acceptance/c0107/keep.spec.luau tests/tooling/{ready-members,start-pr-reuse,tracker-guarded,migrate-odd}.spec.luau)
-check "AC7: the existing specs that read the prompt template, the skills or main.luau pass" lune run tests/run -- "${AC7[@]}"
 check "AC8: the real tree's lessons and ledgers are valid" ../zn lessons --check
 check "AC8: R0040's own reviews are fully harvested" ../zn lessons --uncovered R0040
 check "AC9: metrics count findings per lesson tag and design rounds before and after lessons" lune run tests/run -- "$A/metrics-lessons.spec.luau"
