@@ -19,6 +19,7 @@
 | 15 | 2026-10-22 20:10 | R0035: implement f0100 f0101 f0102 f0104 from the prep prototype (Main.client hand-merged with R0034's FlowView.trip) | 199 | 14 | 4.6 | raft+proportional | build |  |
 | 16 | 2026-10-22 20:14 | R0035: verification logs | 0 | 0 | 1.3 | raft+proportional | build |  |
 | 17 | 2026-10-22 20:20 | R0035: review-001 | 0 | 0 | 6.3 | raft+proportional | code-review |  |
+| 18 | 2026-10-22 20:22 | R0035: refute-001 and harvest | 1 | 0 | 1.3 | raft+proportional | code-review |  |
 
-**Total:** +558 / -15 lines, 107.7 agent-minutes, 73971 tokens over 17 records
-<!-- totals: added=558 removed=15 minutes=107.7 records=17 tokens=73971 -->
+**Total:** +559 / -15 lines, 109.0 agent-minutes, 73971 tokens over 18 records
+<!-- totals: added=559 removed=15 minutes=109.0 records=18 tokens=73971 -->

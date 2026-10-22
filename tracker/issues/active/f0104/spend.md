@@ -19,6 +19,7 @@
 | 15 | 2026-10-22 20:14 | R0035: verification logs | 0 | 0 | 1.3 | raft+proportional | build |  |
 | 16 | 2026-10-22 20:20 | R0035: review-001 | 0 | 0 | 6.3 | raft+proportional | code-review |  |
 | 17 | 2026-10-22 20:22 | R0035: review-001 F1 F2: run Controls' key handler and HudView's shot bars on stub engines | 227 | 3 | 17.0 | explicit | code-review |  |
+| 18 | 2026-10-22 20:22 | R0035: refute-001 and harvest | 0 | 0 | 1.3 | raft+proportional | code-review |  |
 
-**Total:** +902 / -17 lines, 134.8 agent-minutes, 73970 tokens over 17 records
-<!-- totals: added=902 removed=17 minutes=134.8 records=17 tokens=73970 -->
+**Total:** +902 / -17 lines, 136.1 agent-minutes, 73970 tokens over 18 records
+<!-- totals: added=902 removed=17 minutes=136.1 records=18 tokens=73970 -->
