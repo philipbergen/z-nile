@@ -438,9 +438,12 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			local r = fixture.exec(f.main, "bash", { "pickman/.tracker/issues/active/f0010/check.sh" }) -- readied above
 			fs.writeFile(at("z-nile/projects.toml"), good)
 			t.expect(r.ok).toBe(false)
-			-- refused by the fence (it reads the homes from the registry first, code review 005 F2) or by ac.sh's home
-			-- lookup; either way before any check
-			t.expect(has(r.stderr, "refusing") or has(r.stderr, "is under no project root")).toBe(true)
+			-- refused by the fence for the registry (it reads the homes from it first, code review 005 F2) or by ac.sh's
+			-- home lookup, by those messages (code review 006 F5); either way before any check
+			t.expect(
+				has(r.stderr, "projects.toml's homes; refusing") or has(r.stderr, "is under no project root")
+			)
+				.toBe(true)
 			t.expect(has(r.stdout, "PASS")).toBe(false)
 		end
 	)
