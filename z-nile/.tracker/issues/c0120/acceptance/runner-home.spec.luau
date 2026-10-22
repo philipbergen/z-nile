@@ -96,6 +96,12 @@ local TOP_SPEC = table.concat({
 	'\t\tlocal at = process.exec("git", { "rev-parse", "--absolute-git-dir" }, { cwd = top .. "/.cache" })',
 	"\t\tt.expect(below.ok).toBe(false)",
 	"\t\tt.expect(at.ok).toBe(false)",
+	-- code review 004 F3: another home's .cache too (the reviewer's Linux probe, from pickman/ into z-nile/.cache)
+	'\t\tt.expect(string.find(ceiling, ":" .. top .. "/z-nile/.cache:", 1, true) ~= nil).toBe(true)',
+	'\t\tlocal other = top .. "/z-nile/.cache/c0120-other-fx"',
+	"\t\tpcall(fs.writeDir, other) -- the jail refuses it on macOS; unjailed (Linux) it is made",
+	'\t\tlocal cwd = if fs.isDir(other) then other else top .. "/z-nile/.cache"',
+	'\t\tt.expect(process.exec("git", { "rev-parse", "--absolute-git-dir" }, { cwd = cwd }).ok).toBe(false)',
 	"\tend)",
 	"end)",
 	"",
@@ -120,6 +126,9 @@ return t.spec("c0120 the runner runs from a project's home", function(it)
 		do
 			copy(rel)
 		end
+		-- the homes: folders at the top holding a .tracker/ (this copy has no engine or registry)
+		write("pickman/.tracker/.gitkeep", "")
+		write("z-nile/.tracker/.gitkeep", "")
 		copy("pickman/tests/lib/t.luau")
 		copy("pickman/tests/lib/renamed.luau")
 		write("z-nile/compaction.txt", "# a map at the checkout's root\nf0001 f0002\n")
@@ -193,6 +202,56 @@ return t.spec("c0120 the runner runs from a project's home", function(it)
 		t.expect(has(out, "1 passed, 0 failed, 1 spec files")).toBe(true)
 		t.expect(ok).toBe(true)
 		t.expect(fs.isFile(`{base}/.cache/.git`)).toBe(true) -- the sentinel, written before the jail
+		t.expect(fs.isFile(`{base}/z-nile/.cache/.git`)).toBe(true) -- and the other home's (code review 004 F3)
+	end)
+
+	it("a symlinked .cache in another home refuses the run before any spec (code review 004 F3)", function()
+		local away = `{here}/.cache/c0120-runner-away`
+		fs.writeDir(away)
+		if fs.isDir(`{base}/z-nile/.cache`) then
+			fs.removeDir(`{base}/z-nile/.cache`)
+		end
+		t.expect(process.exec("ln", { "-s", away, `{base}/z-nile/.cache` }).ok).toBe(true)
+		local r = process.exec(
+			"lune",
+			{ "run", "tests/run", "--", "--jobs", "1", "probe/top.spec.luau" },
+			{ cwd = `{base}/pickman`, env = { PICKMAN_TEST_FENCE = "" } }
+		)
+		fs.removeFile(`{base}/z-nile/.cache`)
+		fs.removeDir(away)
+		local out = r.stdout .. r.stderr
+		t.expect(r.ok).toBe(false)
+		t.expect(has(out, "z-nile/.cache is not a plain folder")).toBe(true)
+		t.expect(has(out, "passed")).toBe(false)
+	end)
+
+	it(
+		"from a top-level folder that is no project's home it refuses, even by the runner's absolute path",
+		function()
+			write("scripts/stray.luau", "--!strict\nreturn nil\n")
+			local r = process.exec(
+				"lune",
+				{ "run", `{base}/z-nile/tests/run` },
+				{ cwd = `{base}/scripts`, env = { PICKMAN_TEST_FENCE = "" } }
+			)
+			local out = r.stdout .. r.stderr
+			local fenced = fs.isDir(`{base}/scripts/.cache`)
+			fs.removeDir(`{base}/scripts`)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(out, "is no project's home (z-nile/projects.toml)")).toBe(true)
+			t.expect(fenced).toBe(false) -- refused before the fence wrote anything there
+		end
+	)
+
+	it("from a home, the runner named as ../z-nile/tests/run runs that home's specs", function()
+		local r = process.exec(
+			"lune",
+			{ "run", "../z-nile/tests/run", "--", "--jobs", "1" },
+			{ cwd = `{base}/pickman` }
+		)
+		local out = r.stdout .. r.stderr
+		t.expect(has(out, "1 passed, 0 failed, 1 spec files")).toBe(true)
+		t.expect(r.ok).toBe(true)
 	end)
 
 	it("a root-relative path is not a pickman spec: from the home it names nothing", function()
