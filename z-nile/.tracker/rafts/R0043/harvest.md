@@ -41,3 +41,5 @@
 - review-005 F1: testing/seed-every-enumerated-case
 - review-005 F2: ticket-prep/design-the-execution-window
 - review-005 F3: tracker/exhaustive-lists-name-new-things
+- review-006 F1: tracker/audit-what-new-refuses
+- review-006 F2: one-off: a hint named the merging sync where the fetch-only form was meant
