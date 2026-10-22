@@ -9,6 +9,8 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: Submits has no play-again hook: exports ready, step, pending, close; no onAgain; no again hook in src/server" lune run tests/run -- "$A/submits.spec.luau"
+check "AC2: Hiscores.onAgain stays and an accepted play again is the next run" lune run tests/run -- "$A/onagain.spec.luau"
+check "AC3: the full gate passes" scripts/check.sh --full
 
 finish
