@@ -608,15 +608,18 @@ return t.spec("repository fence", function(it)
 		if not fs.isFile(`{checkout}/z-nile/check.sh`) then
 			return -- a partial copy of the guards (see above)
 		end
-		-- every tracked shell and Luau file, not a hand list (code review 006 F2): the fence's own file, items'
+		-- every tracked shell and Luau file, the git hooks and the workflows, not a hand list (code review 006 F2, 007 F6): the fence's own file, items'
 		-- sequestered and promoted specs, and specs (they fence fixtures on purpose) aside; cachepaths quotes fence.sh's
 		-- lines as strings of its reviewed list
 		local allowedFns = { pickman_fence_all = true, pickman_fence_dirs = true, pickman_guarded = true }
 		-- the runner's jailed shell: its own home's whole fence, and the ceiling over pickman_fence_dirs' list
 		local allowedLine =
 			'for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs'
-		local listing =
-			process.exec("git", { "ls-files", "--", "*.sh", "*.luau", "zn" }, { cwd = checkout }).stdout
+		local listing = process.exec(
+			"git",
+			{ "ls-files", "--", "*.sh", "*.luau", "zn", "z-nile/lib/git-hooks/*", ".github/workflows/*" },
+			{ cwd = checkout }
+		).stdout
 		local bad: { string } = {}
 		for path in string.gmatch(listing, "[^\n]+") do
 			local skip = path == "z-nile/lib/fence.sh"

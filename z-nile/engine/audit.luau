@@ -117,6 +117,26 @@ function audit.leftovers(root: string, found: { Found }, reg: projects.Registry)
 	for _, f in found do
 		homeById[f.id] = projects.homeOf(reg, f.path)
 	end
+	-- an item's acceptance/ left in its folder beside the copy done promoted (c0120 code review 007 F5): two texts of
+	-- one sequestered spec, of which the checks see only one
+	for _, f in found do
+		local acc = `{f.path}/acceptance`
+		local home = homeById[f.id] or "."
+		local promoted = if home == "." then `tests/acceptance/{f.id}` else `{home}/tests/acceptance/{f.id}`
+		if
+			fs.isDir(`{root}/{acc}`)
+			and #fs.readDir(`{root}/{acc}`) > 0
+			and fs.isDir(`{root}/{promoted}`)
+			and #fs.readDir(`{root}/{promoted}`) > 0
+		then
+			table.insert(out, {
+				level = "error",
+				code = "spec-left-beside",
+				path = acc,
+				message = `{f.id}'s specs are both in {acc} and promoted in {promoted}: keep one`,
+			})
+		end
+	end
 	for _, p in reg.projects do
 		local acc = if p.home == "." then "tests/acceptance" else `{p.home}/tests/acceptance`
 		local abs = `{root}/{acc}`
