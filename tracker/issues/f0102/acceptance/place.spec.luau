@@ -54,7 +54,9 @@ return t.spec("f0102 glow adapters", function(it)
 		"the glows have their own screen, in the device's safe area, under the radar, the Flow overlay and the HUD",
 		function()
 			local src = source("DangerHud")
-			t.expect(has(src, "Enum.ScreenInsets.DeviceSafeInsets")).toBe(true)
+			-- the screen itself is set to the safe area (R0012 also reads DeviceSafeInsets in this file, for the radar)
+			t.expect(string.find(src, "%.ScreenInsets%s*=%s*Enum%.ScreenInsets%.DeviceSafeInsets") ~= nil)
+				.toBe(true)
 			local orders = {}
 			for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
 				table.insert(orders, tonumber(n) :: number)

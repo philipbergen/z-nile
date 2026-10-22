@@ -1,7 +1,8 @@
 --!strict
--- f0101 AC4: the spy hop is the camera's alone. Camera starts a jump only when View.canJump says so and lifts the
--- eye by View.jumpRise every frame; the rail, the tiles and the server are untouched (no jump crosses the wire).
--- The ghosts are drawn GHOST-sized and the walls and doors at the lowered SCALE.wallHeight.
+-- f0101 AC5: the spy hop's adapters. The server decides the hop (airborne.spec); the clients only send it and show
+-- it (f0104 binds Space to send Hop.INTENT). Main hands each frame's `hopped` to Camera, and Camera lifts the eye
+-- by Hop.rise of it at the tick being shown (View.shownTick of the two latest snapshots, the blend the ghosts are
+-- drawn at), so the rise matches the server's airborne window. Camera keeps no jump of its own and sends nothing. The ghosts are drawn GHOST-sized and the walls and doors at the lowered SCALE.wallHeight.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -26,29 +27,42 @@ local function has(src: string, needle: string): boolean
 end
 
 return t.spec("f0101 spy hop adapters", function(it)
-	it("Camera has a jump that asks View.canJump and keeps when it started", function()
-		local src = source("Camera")
-		t.expect(has(src, "function Camera.jump(")).toBe(true)
-		t.expect(has(src, "View.canJump(")).toBe(true)
+	it("Main hands every frame's hopped to the camera", function()
+		local main = source("Main")
+		t.expect(string.find(main, "Camera%.hopped%(%s*frame%.hopped%s*%)") ~= nil).toBe(true)
 	end)
 
-	it("the eye is the standing height plus View.jumpRise, in the camera's one CFrame", function()
+	it("Camera keeps the server's hop and starts none of its own", function()
 		local src = source("Camera")
-		t.expect(string.find(src, "View%.SCALE%.eyeHeight%s*%+%s*View%.jumpRise%(") ~= nil).toBe(true)
-		local frames = 0
-		for _ in string.gmatch(src, "camera%.CFrame%s*=") do
-			frames += 1
-		end
-		t.expect(frames).toBe(1)
+		t.expect(has(src, "function Camera.hopped(")).toBe(true)
+		t.expect(has(src, "function Camera.jump(")).toBe(false)
+		t.expect(has(src, "View.canJump")).toBe(false)
+		t.expect(has(src, "Hop.canStart")).toBe(false)
+		t.expect(has(src, "FireServer")).toBe(false)
 	end)
 
-	it("the jump sends nothing to the server", function()
-		for _, name in { "Camera", "Controls" } do
-			local src = source(name)
-			t.expect(has(src, '"Jump")')).toBe(false) -- never a FireServer("Jump")
+	it(
+		"the eye is the standing height plus Hop.rise at the tick being shown, in the camera's one CFrame",
+		function()
+			local src = source("Camera")
+			local at =
+				string.match(src, "View%.SCALE%.eyeHeight%s*%+%s*Hop%.rise%(%s*hopped%s*,%s*([%w_]+)%s*%)")
+			t.expect(at ~= nil).toBe(true)
+			-- that tick is View.shownTick of the two snapshots the pose is blended from, at the same View.alpha
+			local blend = string.match(
+				src,
+				"local%s+"
+					.. (at :: string)
+					.. "%s*=%s*View%.shownTick%(%s*prev%s*,%s*snap%s*,%s*View%.alpha%(%s*os%.clock%(%)%s*%-%s*arrived%s*%)%s*%)"
+			)
+			t.expect(blend ~= nil).toBe(true)
+			local frames = 0
+			for _ in string.gmatch(src, "camera%.CFrame%s*=") do
+				frames += 1
+			end
+			t.expect(frames).toBe(1)
 		end
-		t.expect(has(source("Camera"), "FireServer")).toBe(false)
-	end)
+	)
 
 	it("GhostView sizes a ghost's body from View.GHOST", function()
 		local src = source("GhostView")
