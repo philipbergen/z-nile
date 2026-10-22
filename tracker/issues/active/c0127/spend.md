@@ -19,6 +19,7 @@
 | 15 | 2026-10-22 20:54 | c0127: verification log (exit criteria) | 0 | 0 | 3.0 | explicit | build |  |
 | 16 | 2026-10-22 21:01 | R0047: review-001 | 0 | 0 | 30.0 | focus | code-review |  |
 | 17 | 2026-10-22 21:04 | R0047: review-001 F1 F2: read own start id once before waiting; lock-start-ids spec | 245 | 17 | 35.0 | explicit | code-review |  |
+| 18 | 2026-10-22 21:05 | R0047: refute-001 | 0 | 0 | 5.0 | focus | code-review |  |
 
-**Total:** +904 / -34 lines, 477.0 agent-minutes, 597953 tokens over 17 records
-<!-- totals: added=904 removed=34 minutes=477.0 records=17 tokens=597953 -->
+**Total:** +904 / -34 lines, 482.0 agent-minutes, 597953 tokens over 18 records
+<!-- totals: added=904 removed=34 minutes=482.0 records=18 tokens=597953 -->
