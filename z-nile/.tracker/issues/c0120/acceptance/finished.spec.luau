@@ -133,6 +133,9 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			"check \"AC6: a folder find searches\" bash -c 'find ./.tracker -name x.md'",
 			"",
 		}, "\n"))
+		-- an untracked file at a rewritten path's home-relative place changes nothing: the rewrite reads HEAD's tree,
+		-- never the working tree (code review 007 F3)
+		put("z-nile/scripts/ci-verify.sh", "#!/usr/bin/env bash\n")
 		local znile =
 			rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
 		t.expect(znile).toBe(table.concat({
@@ -239,6 +242,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		g({ "add", "-A" })
 		g({ "commit", "-qm", "the prep" })
 		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
+		-- main as this branch merged it: here the prep itself (code review 007 F1: AC18 judges the branch's own delta)
+		g({ "update-ref", "refs/remotes/origin/main", prep })
 		fs.writeDir(`{OWNFX}/pickman/.tracker`)
 		g({ "mv", "tracker/rafts", "pickman/.tracker/rafts" })
 		g({ "mv", "tracker/issues", "pickman/.tracker/issues" })
@@ -391,6 +396,209 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		step("two references")
 		expectRed("records 2 Prep reference lines")
 		fs.removeDir(OWNFX)
+	end)
+
+	-- code review 007 F1: AC18 judges only the branch's own changes, three-way against the main it merged. Main's
+	-- reviewed changes after the move (a prep, a ready, a done with its promotion) are main's; the branch editing the
+	-- same file is its own; both sides changing one file differently refuses. A fixture with a real main.
+	it("AC18 takes main's own changes after the move as main's, and judges only the branch's", function()
+		local FX2 = `{here}/.cache/c0120-main-delta`
+		if fs.isDir(FX2) then
+			fs.removeDir(FX2)
+		end
+		fs.writeDir(FX2)
+		local function g(args: { string }): string
+			return fixture.git(FX2, args)
+		end
+		local function w(rel: string, text: string)
+			fs.writeDir(string.match(`{FX2}/{rel}`, "^(.*)/[^/]+$") :: string)
+			fs.writeFile(`{FX2}/{rel}`, text)
+		end
+		local function rm(rel: string)
+			g({ "rm", "-q", "-r", rel })
+		end
+		local function step(message: string)
+			g({ "add", "-A" })
+			g({ "commit", "-qm", message })
+		end
+		local function judge(): (boolean, string)
+			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/finished.luau`
+			if not fs.isFile(script) then
+				script = `{TOP}/z-nile/tests/acceptance/c0120/finished.luau`
+			end
+			local r = process.exec("lune", { "run", script, "--", FX2 })
+			return r.ok, r.stdout .. r.stderr
+		end
+		local function expectGreen()
+			local ok, out = judge()
+			if not ok then
+				print(out)
+			end
+			t.expect(ok).toBe(true)
+		end
+		local function expectRed(needle: string)
+			local ok, out = judge()
+			if ok or not string.find(out, needle, 1, true) then
+				print(out)
+			end
+			t.expect(ok).toBe(false)
+			t.expect(string.find(out, needle, 1, true) ~= nil).toBe(true)
+		end
+		-- main's side: on a detached main, a change, then origin/main moves to it; the branch merges it, placing main's
+		-- files where the move put them (tracker/ is pickman/.tracker/, tests/acceptance/ is pickman's)
+		local branch = "work"
+		local function onMain(change: () -> (), message: string)
+			g({ "checkout", "-q", "--detach", "refs/remotes/origin/main" })
+			change()
+			step(message)
+			g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
+			g({ "checkout", "-q", branch })
+		end
+		local function mergeMain(place: () -> ())
+			g({ "merge", "-q", "-s", "ours", "--no-commit", "refs/remotes/origin/main" })
+			place()
+			g({ "add", "-A" })
+			g({ "commit", "-qm", "merge origin/main" })
+		end
+		t.expect(process.exec("git", { "init", "-q", "-b", "main", FX2 }).ok).toBe(true)
+		g({ "config", "user.name", "c0120" })
+		g({ "config", "user.email", "c0120@example.invalid" })
+		-- main before the branch: pickman's items at tracker/
+		w(rewrites.MARK, "#!/usr/bin/env bash\n")
+		w("tracker/next", "10\n")
+		w("tracker/issues/active/f0070/check.sh", "check AC1 true\n")
+		w("tracker/issues/f0071/check.sh", "check AC1 test -d tracker/issues/f0071\n")
+		w("tracker/issues/active/f0072/check.sh", "check AC1 true\n")
+		w("tracker/issues/active/f0072/acceptance/c.spec.luau", "-- c\n")
+		w("tracker/issues/active/f0073/check.sh", "check AC1 true\n")
+		step("main base")
+		g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
+		g({ "checkout", "-q", "-b", branch })
+		-- the branch's prep: c0120's folder and the registry, then the move
+		w(
+			"z-nile/projects.toml",
+			'[[project]]\nname = "pickman"\nroot = "tracker"\n\n[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
+		)
+		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
+		-- a change of the stack's below the move (as c0114's build changed items before c0120's base)
+		w("tracker/issues/active/f0073/check.sh", "check AC1 stack\n")
+		step("the prep")
+		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
+		fs.writeDir(`{FX2}/pickman/.tracker`)
+		g({ "mv", "tracker/rafts", "pickman/.tracker/rafts" })
+		g({ "mv", "tracker/issues", "pickman/.tracker/issues" })
+		w(
+			"z-nile/projects.toml",
+			'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+				.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
+		)
+		step("the move")
+		w("z-nile/.tracker/issues/c0120/review-001.md", `Prep reference: {prep}\n\nVerdict: approve\n`)
+		step("review")
+		expectGreen()
+		-- a prep on main edits an unfinished item's check.sh and adds a spec: main's, green
+		onMain(function()
+			w("tracker/issues/active/f0070/check.sh", "check AC1 true\ncheck AC2 true\n")
+			w("tracker/issues/active/f0070/acceptance/n.spec.luau", "-- n\n")
+		end, "a prep on main")
+		mergeMain(function()
+			w("pickman/.tracker/issues/active/f0070/check.sh", "check AC1 true\ncheck AC2 true\n")
+			w("pickman/.tracker/issues/active/f0070/acceptance/n.spec.luau", "-- n\n")
+		end)
+		expectGreen()
+		-- the branch then edits that same check.sh: its own change, red
+		w("pickman/.tracker/issues/active/f0070/check.sh", "check AC1 true\n")
+		step("the branch edits f0070")
+		expectRed("pickman/.tracker/issues/active/f0070/check.sh: changed")
+		w("pickman/.tracker/issues/active/f0070/check.sh", "check AC1 true\ncheck AC2 true\n")
+		step("undo")
+		expectGreen()
+		-- main readies f0071: its folder to active/, its check.sh through ready's own paths.rewrite: main's, green
+		onMain(function()
+			g({ "mv", "tracker/issues/f0071", "tracker/issues/active/f0071" })
+			w("tracker/issues/active/f0071/check.sh", "check AC1 test -d tracker/issues/active/f0071\n")
+		end, "ready on main")
+		mergeMain(function()
+			fs.writeDir(`{FX2}/pickman/.tracker/issues/active`)
+			g({ "mv", "pickman/.tracker/issues/f0071", "pickman/.tracker/issues/active/f0071" })
+			w(
+				"pickman/.tracker/issues/active/f0071/check.sh",
+				"check AC1 test -d tracker/issues/active/f0071\n"
+			)
+		end)
+		expectGreen()
+		-- main finishes f0072 and promotes its spec: main's, green; the branch then edits the promoted spec: red
+		onMain(function()
+			fs.writeDir(`{FX2}/tests/acceptance`)
+			g({ "mv", "tracker/issues/active/f0072/acceptance", "tests/acceptance/f0072" })
+			fs.writeDir(`{FX2}/tracker/issues/done`)
+			g({ "mv", "tracker/issues/active/f0072", "tracker/issues/done/f0072" })
+		end, "done on main")
+		mergeMain(function()
+			fs.writeDir(`{FX2}/pickman/tests/acceptance`)
+			g({ "mv", "pickman/.tracker/issues/active/f0072/acceptance", "pickman/tests/acceptance/f0072" })
+			fs.writeDir(`{FX2}/pickman/.tracker/issues/done`)
+			g({ "mv", "pickman/.tracker/issues/active/f0072", "pickman/.tracker/issues/done/f0072" })
+		end)
+		expectGreen()
+		w("pickman/tests/acceptance/f0072/c.spec.luau", "-- weakened\n")
+		step("the branch edits a promoted spec")
+		expectRed("pickman/tests/acceptance/f0072/c.spec.luau: changed")
+		w("pickman/tests/acceptance/f0072/c.spec.luau", "-- c\n")
+		step("undo")
+		expectGreen()
+		-- an item captured and finished on main after the move, its spec promoted there: main's, green, and
+		-- override-markers finds nothing of the branch's to mark (code review 007 F2); one unmarked line the branch adds
+		-- to it is the branch's own: red, and one unmarked hunk
+		local function markers(): (boolean, string)
+			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/override-markers.luau`
+			if not fs.isFile(script) then
+				script = `{TOP}/z-nile/tests/acceptance/c0120/override-markers.luau`
+			end
+			local move = (string.gsub(g({ "log", "-1", "--format=%H", "--", rewrites.MARK }), "%s+$", ""))
+			local r = process.exec("lune", { "run", script, "--", move }, { cwd = FX2 })
+			return r.ok, r.stdout .. r.stderr
+		end
+		onMain(function()
+			w("tracker/issues/done/f0080/check.sh", "check AC1 true\n")
+			w("tests/acceptance/f0080/d.spec.luau", "-- d\n")
+		end, "capture, prep and done of f0080 on main")
+		mergeMain(function()
+			w("pickman/.tracker/issues/done/f0080/check.sh", "check AC1 true\n")
+			w("pickman/tests/acceptance/f0080/d.spec.luau", "-- d\n")
+		end)
+		expectGreen()
+		local okMk, outMk = markers()
+		if not okMk then
+			print(outMk)
+		end
+		t.expect(okMk).toBe(true)
+		w("pickman/tests/acceptance/f0080/d.spec.luau", "-- d\n-- the branch's\n")
+		step("the branch edits f0080's promoted spec")
+		expectRed("pickman/tests/acceptance/f0080/d.spec.luau: changed")
+		okMk, outMk = markers()
+		t.expect(okMk).toBe(false)
+		t.expect(string.find(outMk, "1 of ", 1, true) ~= nil).toBe(true)
+		w("pickman/tests/acceptance/f0080/d.spec.luau", "-- d\n")
+		step("undo")
+		expectGreen()
+		-- acceptance/ left beside its promoted copy: refused (code review 007 F5)
+		w("pickman/.tracker/issues/done/f0072/acceptance/c.spec.luau", "-- c\n")
+		step("left beside")
+		expectRed("duplicate item folders")
+		rm("pickman/.tracker/issues/done/f0072/acceptance")
+		step("undo")
+		expectGreen()
+		-- main and the stack change one file differently: refused, naming both
+		onMain(function()
+			w("tracker/issues/active/f0073/check.sh", "check AC1 main\n")
+		end, "main edits f0073")
+		mergeMain(function() end)
+		expectRed("f0073's check.sh: changed on main")
+		-- origin/main moved onto this branch (it then holds the move): refused
+		g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
+		expectRed("origin/main already holds the move")
+		fs.removeDir(FX2)
 	end)
 
 	it("the path from one folder to another", function()

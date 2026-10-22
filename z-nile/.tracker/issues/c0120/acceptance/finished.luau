@@ -6,7 +6,6 @@
 -- move (a capture since) is not judged; c0120's own files are judged against the prep commit a reviewer recorded
 -- (below). Read-only. Usage: lune run finished.luau -- <the checkout's top>
 local fs = require("@lune/fs")
-local paths = require("@znile/engine/paths")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
 local rewrites = require("./rewrites")
@@ -96,14 +95,25 @@ if not ownBase then
 	process.exit(1)
 end
 
--- Every sequestered file, keyed by its item and its path inside the item's folder (code review 005 F1): an item's
--- folder moves between state folders (active/, done/) and roots (tracker/ to pickman/.tracker/), so a path is no
--- identity. `listing` is `git ls-files` (HEAD's index) or `git ls-tree` of a commit; `roots` that tree's project roots.
--- A key listed twice (a duplicate item folder) is ambiguous: `dups` names it (code review 006 F3).
-type Entry = { id: string, path: string, root: string }
-local function sequestered(listing: string, roots: { string }): ({ [string]: Entry }, { string })
+-- Every sequestered file of a tree, keyed by its item and its path inside the item (code review 005 F1): an item's
+-- folder moves between state folders and roots, and done promotes its acceptance/ to the project's
+-- tests/acceptance/<id> (code review 006 F1), so a path is no identity. `listing` is `git ls-tree -r --name-only` of a
+-- commit; `roots` that tree's project roots; `promotedRoots` its promoted-spec folders. A key found twice (a duplicate
+-- item folder, or acceptance/ left beside its promoted copy, code review 007 F5) is ambiguous: `dups` names it.
+type Entry = { id: string, path: string, promoted: boolean }
+local function sequestered(
+	listing: string,
+	roots: { string },
+	promotedRoots: { string }
+): ({ [string]: Entry }, { string })
 	local out: { [string]: Entry } = {}
 	local dups: { string } = {}
+	local function put(key: string, e: Entry)
+		if out[key] then
+			table.insert(dups, `{out[key].path} and {e.path}`)
+		end
+		out[key] = e
+	end
 	for path in string.gmatch(listing, "[^\n]+") do
 		for _, root in roots do
 			if string.sub(path, 1, #root + 1) == root .. "/" then
@@ -117,71 +127,96 @@ local function sequestered(listing: string, roots: { string }): ({ [string]: Ent
 					if
 						id and (inner == "check.sh" or string.sub(inner :: string, 1, 11) == "acceptance/")
 					then
-						local key = `{id}|{inner}`
-						if out[key] then
-							table.insert(dups, `{out[key].path} and {path}`)
-						end
-						out[key] = { id = id, path = path, root = root }
+						put(`{id}|{inner}`, { id = id, path = path, promoted = false })
 					end
+				end
+			end
+		end
+		for _, dir in promotedRoots do
+			if string.sub(path, 1, #dir + 1) == dir .. "/" then
+				local id, rest = string.match(string.sub(path, #dir + 2), "^([fdcR]%d%d%d%d)/(.+)$")
+				if id then
+					put(`{id}|acceptance/{rest}`, { id = id, path = path, promoted = true })
 				end
 			end
 		end
 	end
 	return out, dups
 end
-local function rootsAt(rev: string): { string }
-	local at = projects.at(rev, TOP)
-	return if at then projects.roots(at) else { projects.LEGACY }
+local function regAt(rev: string): projects.Registry?
+	return projects.at(rev, TOP)
+end
+local function rootsOf(r: projects.Registry?): { string }
+	return if r then projects.roots(r) else { projects.LEGACY }
+end
+local function promotedOf(r: projects.Registry?): { string }
+	return if r then projects.acceptanceRoots(r) else { "tests/acceptance" }
 end
 local function tree(rev: string): string
 	local ok, listing = git({ "ls-tree", "-r", "--name-only", rev })
 	assert(ok, `git ls-tree {rev} failed`)
 	return listing
 end
+local function show(rev: string, path: string): string
+	local ok, text = git({ "show", `{rev}:{path}` })
+	assert(ok, `git show {rev}:{path} failed`)
+	return text
+end
 local function isDone(path: string): boolean
 	return string.match(path, "^[^/]+/%.tracker/[a-z]+/done/") ~= nil
 		or string.match(path, "^[^/]+/[^/]+/%.tracker/[a-z]+/done/") ~= nil
 		or string.match(path, "^tracker/[a-z]+/done/") ~= nil
 end
+local function trim(x: string): string
+	return (string.gsub(x, "%s+$", ""))
+end
 local OWN_ID = "c0120"
--- the reference set: every item's files before the move, c0120's own as the review recorded them
 local bad: { string } = {}
-local base: { [string]: Entry & { rev: string } } = {}
-local preSet, preDups = sequestered(tree(pre :: string), rootsAt(pre :: string))
-for key, e in preSet do
-	if e.id ~= OWN_ID then
-		base[key] = { id = e.id, path = e.path, root = e.root, rev = pre :: string }
-	end
+
+-- The main this branch merged (code review 007 F1): AC18 judges only the branch's own changes. M is the merge-base
+-- of HEAD and origin/main (as of the last fetch, as AC16 reads it); B is main as the move's base had it. A file main
+-- changed between B and M is main's reviewed change (a prep, a ready, a done), and its reference is M's text; any
+-- other file's is its text before the move. An origin/main that already holds the move (c0120 landed, or a ref moved
+-- to this branch) leaves nothing to judge against, and refuses.
+local okMain, mainTip = git({ "rev-parse", "--verify", "-q", "origin/main" })
+local okM, mergeBase = git({ "merge-base", "HEAD", "origin/main" })
+local M = trim(mergeBase)
+if not okMain or trim(mainTip) == "" or not okM or M == "" then
+	print("finished: no merge-base of HEAD and origin/main (git fetch origin main): refusing")
+	process.exit(1)
 end
-local ownSet = sequestered(tree(ownBase :: string), rootsAt(ownBase :: string))
-for key, e in ownSet do
-	if e.id == OWN_ID then
-		base[key] = { id = e.id, path = e.path, root = e.root, rev = ownBase :: string }
-	end
+local okMove, moveSha = git({ "log", "-1", "--format=%H", "--", rewrites.MARK })
+if okMove and trim(moveSha) ~= "" and git({ "merge-base", "--is-ancestor", trim(moveSha), M }) then
+	print(
+		"finished: origin/main already holds the move, so the branch's own changes can't be told apart: refusing"
+	)
+	process.exit(1)
 end
-local okL, headListing = git({ "ls-files" })
-assert(okL, "git ls-files failed")
-local tracked: { [string]: boolean } = {}
-for path in string.gmatch(headListing, "[^\n]+") do
-	tracked[path] = true
-end
-local head, headDups = sequestered(headListing, projects.roots(reg))
+local okB, mergePre = git({ "merge-base", pre :: string, M })
+local B = trim(mergePre)
+assert(okB and B ~= "", `git merge-base {pre} {M} failed`)
+
+local preReg, mReg, bReg = regAt(pre :: string), regAt(M), regAt(B)
+local preSet, preDups = sequestered(tree(pre :: string), rootsOf(preReg), {})
+local mSet, mDups = sequestered(tree(M), rootsOf(mReg), promotedOf(mReg))
+local bSet = sequestered(tree(B), rootsOf(bReg), promotedOf(bReg))
+local ownSet = sequestered(tree(ownBase :: string), rootsOf(regAt(ownBase :: string)), {})
+local headSet, headDups = sequestered(tree("HEAD"), projects.roots(reg), projects.acceptanceRoots(reg))
 for _, d in preDups do
 	table.insert(bad, `duplicate item folders before the move: {d}`)
+end
+for _, d in mDups do
+	table.insert(bad, `duplicate item folders on main: {d}`)
 end
 for _, d in headDups do
 	table.insert(bad, `duplicate item folders: {d}`)
 end
-local known: { [string]: boolean } = {}
-for _, e in base do
-	known[e.id] = true
-end
 
 -- A compaction merged in renumbers ids: refused, never read as deletions (code review 006 F1 (d))
 local function compacted(id: string): string?
-	local okM, map = git({ "show", "HEAD:z-nile/compaction.txt" })
+	local okC, map = git({ "show", "HEAD:z-nile/compaction.txt" })
 	local okP, preMap = git({ "show", `{pre}:z-nile/compaction.txt` })
-	if not okM then
+	if not okC then
 		return nil
 	end
 	for line in string.gmatch(map, "[^\n]+") do
@@ -193,31 +228,14 @@ local function compacted(id: string): string?
 	return nil
 end
 
--- the current root of a root before the move: the same project's (pickman's tracker/ is pickman/.tracker/ now)
-local preReg = projects.at(pre :: string, TOP)
-local function rootNow(root: string): string
-	if preReg then
-		for _, p in preReg.projects do
-			if p.root == root then
-				local now = projects.named(reg, p.name)
-				if now then
-					return now.root
-				end
-			end
-		end
-	end
-	return root
-end
-
 -- c0114's promoted specs carry c0120's overrides (Implementation step 9): their expected text is their text before the
 -- move with c0114-overrides.patch applied: that file's section of the patch, applied by patch(1) to a copy in a
 -- scratch folder under this home's .cache (no git, so no repository is in play)
-local PATCH = `{TOP}/{OWN}c0114-overrides.patch`
 local function withOverrides(promoted: string, old: string): string?
-	if not fs.isFile(PATCH) then
+	local ok, text = git({ "show", `HEAD:{OWN}c0114-overrides.patch` })
+	if not ok then
 		return nil
 	end
-	local text = fs.readFile(PATCH)
 	local header = `diff --git a/{promoted} b/{promoted}\n`
 	local s = string.find(text, header, 1, true)
 	if not s then
@@ -242,97 +260,126 @@ local function withOverrides(promoted: string, old: string): string?
 	return out
 end
 
+-- every key to judge: each item's before the move and on the merged main (c0120's own from the reviewed prep)
+local keys: { [string]: boolean } = {}
+local known: { [string]: boolean } = {}
+for key, e in preSet do
+	if e.id ~= OWN_ID then
+		keys[key] = true
+		known[e.id] = true
+	end
+end
+for key, e in mSet do
+	if e.id ~= OWN_ID then
+		keys[key] = true
+		known[e.id] = true
+	end
+end
+for key, e in ownSet do
+	if e.id == OWN_ID then
+		keys[key] = true
+		known[e.id] = true
+	end
+end
+
 local judged = 0
-for key, b in base do
-	local inner = string.match(key, "|(.*)$") :: string
-	local h = head[key]
-	local okOld, old = git({ "show", `{b.rev}:{b.path}` })
-	assert(okOld, `git show {b.rev}:{b.path} failed`)
+for key in keys do
+	local idM, innerM = string.match(key, "^([^|]+)|(.*)$")
+	local id: string = idM :: string
+	local inner: string = innerM :: string
+	-- the reference: c0120's own from the reviewed prep; else main's when main changed it after the move's base,
+	-- else the text before the move; both sides changing it differently is ambiguous and refuses
+	local ref: string? = nil
+	local refPath: string? = nil
+	local refPromoted = false
+	if id == OWN_ID then
+		local o = ownSet[key]
+		if o then
+			ref, refPath = show(ownBase :: string, o.path), o.path
+		end
+	else
+		local p, m, b = preSet[key], mSet[key], bSet[key]
+		local tP = if p then show(pre :: string, p.path) else nil
+		local tM = if m then show(M, m.path) else nil
+		local tB = if b then show(B, b.path) else nil
+		local mainChanged = tM ~= tB
+		local stackChanged = tP ~= tB
+		if mainChanged and stackChanged and tM ~= tP then
+			table.insert(
+				bad,
+				`{id}'s {inner}: changed on main ({if m then m.path else "removed"}) and before the move on this branch's base ({if p
+					then p.path
+					else "removed"}), differently: refusing`
+			)
+			continue
+		end
+		if mainChanged then
+			ref, refPath = tM, if m then m.path else nil
+			refPromoted = m ~= nil and m.promoted
+		else
+			ref, refPath = tP, if p then p.path else nil
+		end
+	end
+	local h = headSet[key]
+	if ref == nil then
+		if h then
+			table.insert(
+				bad,
+				`{h.path}: added (not in {id}'s folder {if id == OWN_ID
+					then "as reviewed"
+					else "on the main it merged, nor before the move"})`
+			)
+		end
+		continue
+	end
 	if not h then
-		local renamed = compacted(b.id)
-		-- done's promotion (code review 006 F1): a finished item's acceptance/<rest> now lives at the place
-		-- projects.promotedDir gives, the same file in its promoted place
-		local rest = string.match(inner, "^acceptance/(.*)$")
-		local promoted = if rest then `{projects.promotedDir(reg, rootNow(b.root), b.id)}/{rest}` else nil
+		local renamed = compacted(id)
 		if renamed then
 			table.insert(
 				bad,
-				`{b.path}: {b.id} was renumbered to {renamed} by a compaction merged in: refusing to judge it`
+				`{refPath}: {id} was renumbered to {renamed} by a compaction merged in: refusing to judge it`
 			)
-		elseif promoted and tracked[promoted] and fs.isFile(`{TOP}/{promoted}`) then
-			judged += 1
-			local now = fs.readFile(`{TOP}/{promoted}`)
-			local want: string? = if b.id == "c0114" then withOverrides(promoted, old) else old
-			if now ~= want then
-				table.insert(
-					bad,
-					`{promoted}: changed (promoted from {b.path}{if b.id == "c0114"
-						then ", with c0114-overrides.patch"
-						else ""})`
-				)
-			end
 		else
-			table.insert(
-				bad,
-				`{b.path}: deleted (no {inner} in {b.id}'s folder now{if promoted
-					then `, nor at {promoted}`
-					else ""})`
-			)
+			table.insert(bad, `{refPath}: deleted (no {inner} of {id}'s at HEAD, in its folder or promoted)`)
 		end
-		continue
-	end
-	if not fs.isFile(`{TOP}/{h.path}`) then
-		table.insert(bad, `{b.path}: deleted (no {inner} in {b.id}'s folder now)`)
 		continue
 	end
 	judged += 1
-	local now = fs.readFile(`{TOP}/{h.path}`)
-	local isCheck = inner == "check.sh"
-	local finished = b.id ~= OWN_ID and isDone(h.path)
-	local wants: { string } = {}
-	if finished and isCheck then
-		local home = projects.homeOf(reg, h.path)
-		if isDone(b.path) then
-			table.insert(wants, rewrites.rewrite(old, home, world))
-		else
-			-- finished after the move's base, by a merge: done's own rewrite of its item paths (paths.rewrite, to the
-			-- done folder in the root it was finished in, before or after the move), then the move's rewrite
-			local doneHere = string.match(h.path, "^(.*)/[^/]+$") :: string
-			local doneThen = string.gsub(doneHere, "^" .. string.gsub(rootNow(b.root), "%p", "%%%0"), b.root)
-			for _, dir in { doneThen, doneHere } do
-				table.insert(wants, rewrites.rewrite(paths.rewrite(old, { [b.id] = dir }), home, world))
-			end
-		end
-	else
-		table.insert(wants, old)
+	local now = show("HEAD", h.path)
+	local want: string? = ref
+	if inner == "check.sh" and id ~= OWN_ID and isDone(h.path) then
+		-- the move's rewrite, whoever finished it (main's done already rewrote its own item paths)
+		want = rewrites.rewrite(ref :: string, projects.homeOf(reg, h.path), world)
+	elseif h.promoted and not refPromoted and id == "c0114" then
+		-- promoted by this branch's own done of c0114 (the stacked build): with c0120's overrides
+		want = withOverrides(h.path, ref :: string)
 	end
-	-- the deleted criteria (Guess 17): exactly those check statements go, after the rewrite
 	local deleted = rewrites.DELETED[h.path]
-	if deleted then
-		for k, w in wants do
-			wants[k] = rewrites.deleteCriteria(w, deleted) or `cannot delete {table.concat(deleted, ", ")}`
-		end
+	if deleted and want then
+		want = rewrites.deleteCriteria(want, deleted) or `cannot delete {table.concat(deleted, ", ")}`
 	end
-	if not table.find(wants, now) then
+	if now ~= want then
 		table.insert(
 			bad,
-			if finished and isCheck
+			if inner == "check.sh" and isDone(h.path)
 				then `{h.path}: not its text with exactly the rewrite{if deleted
 					then " and the deleted criteria"
 					else ""}`
-				else `{h.path}: changed`
+				else `{h.path}: changed{if h.promoted and not refPromoted
+					then ` (promoted from {refPath})`
+					else ""}`
 		)
 	end
 end
--- a file in the folder of an item the reference holds, which the reference doesn't: added (a capture since the move
--- is a new item, and not judged)
-for key, h in head do
-	if not base[key] and known[h.id] then
+-- a file at HEAD in the folder of an item the reference holds, which the reference doesn't: added (a capture since
+-- the move is a new item, and not judged)
+for key, h in headSet do
+	if not keys[key] and known[h.id] then
 		table.insert(
 			bad,
 			`{h.path}: added (not in {h.id}'s folder {if h.id == OWN_ID
 				then "as reviewed"
-				else "before the move"})`
+				else "on the main it merged, nor before the move"})`
 		)
 	end
 end
@@ -340,10 +387,10 @@ table.sort(bad)
 if #bad > 0 then
 	print(table.concat(bad, "\n"))
 	print(
-		`finished: {#bad} of {judged} sequestered files differ from their text before the move ({pre}; c0120's own from {from})`
+		`finished: {#bad} of {judged} sequestered files differ from their reference (before the move {pre}, main {M}; c0120's own from {from})`
 	)
 	process.exit(1)
 end
 print(
-	`finished: {judged} sequestered files are their text before the move, finished check.sh files rewritten ({pre}; c0120's own as {from} records them)`
+	`finished: {judged} sequestered files are their reference (before the move {pre}, main {M}), finished check.sh files rewritten; c0120's own as {from} records them`
 )
