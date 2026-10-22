@@ -1,7 +1,9 @@
 --!strict
--- f0101 AC2: the heights the spy hop is built on. The walls are a stud lower (9, from 10); the ghosts keep the
+-- f0101 AC3: the heights the spy hop is built on. The walls are a stud lower (9, from 10); the ghosts keep the
 -- walls' old height (10) and the 6-stud width; the eye stays at 4, below the wall top, and the top of a jump is above
--- both the walls and the ghosts. Pellets stay below the eye and the walls.
+-- both the walls and the ghosts. Hop.CLEARANCE, the rise that makes the player airborne, is exactly the eye's climb
+-- to the wall top. Pellets stay below the eye and the walls.
+local Hop = require("@logic/Hop")
 local View = require("@logic/View")
 local t = require("@tests/lib/t")
 
@@ -23,10 +25,14 @@ return t.spec("f0101 heights", function(it)
 			local s = View.SCALE
 			t.expect(View.GHOST.height > s.wallHeight).toBe(true)
 			t.expect(s.eyeHeight < s.wallHeight).toBe(true)
-			t.expect(s.eyeHeight + View.JUMP.rise > View.GHOST.height).toBe(true)
+			t.expect(s.eyeHeight + Hop.RISE > View.GHOST.height).toBe(true)
 			t.expect(View.GHOST.width < s.tileStuds).toBe(true)
 		end
 	)
+
+	it("Hop.CLEARANCE is the studs from the standing eye up to the wall top", function()
+		t.expect(Hop.CLEARANCE).toBe(View.SCALE.wallHeight - View.SCALE.eyeHeight)
+	end)
 
 	it("every pellet is drawn below the eye and the walls", function()
 		local p = View.PELLET
