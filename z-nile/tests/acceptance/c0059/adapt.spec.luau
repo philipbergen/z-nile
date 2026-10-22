@@ -121,6 +121,8 @@ return t.spec("c0650 R0200 lives by the guards", function(it)
 			"z-nile/templates",
 			"z-nile/vendor",
 			"z-nile/projects.toml",
+			-- c0120 override: the registry's reader, which the fence needs to name the homes (it refuses without it)
+			"z-nile/roots.luau",
 			"z-nile/tests/tooling/repo-fence.spec.luau",
 			".luaurc",
 		})
