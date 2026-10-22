@@ -405,6 +405,12 @@ function Session.kill(s: Session, id: PlayerId): { Event }
 	return out
 end
 
+-- Whether this player's run is over (the results are up). A player the session doesn't know has no run.
+function Session.isOver(s: Session, id: PlayerId): boolean
+	local member = s.members[id]
+	return member ~= nil and member.play.phase == "gameover"
+end
+
 -- A new run, only once the run is over. Made between steps, so the first frame at the spawn is the next tick's.
 function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
 	local member = memberOf(s, id)

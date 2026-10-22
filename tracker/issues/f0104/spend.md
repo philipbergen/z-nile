@@ -10,6 +10,11 @@
 | 6 | 2026-10-20 16:05 | design-review-004 | 0 | 0 | 0.8 | spend+proportional | design-review | 21291 |
 | 7 | 2026-10-20 16:05 | design-refute-004 | 0 | 0 | 0.8 | spend+proportional | design-review |  |
 | 8 | 2026-10-20 16:08 | prep | 557 | 1 | 41.2 | spend+proportional | prep |  |
+| 9 | 2026-10-21 23:12 | design-review-006 | 0 | 0 | 7.5 | spend+proportional | design-review |  |
+| 10 | 2026-10-21 23:12 | design-refute-006 | 0 | 0 | 5.0 | spend+proportional | design-review |  |
+| 11 | 2026-10-21 23:58 | design-review-007 | 0 | 0 | 7.3 | spend+proportional | design-review |  |
+| 12 | 2026-10-21 23:59 | design-refute-007 | 0 | 0 | 4.0 | spend+proportional | design-review |  |
+| 13 | 2026-10-22 00:23 | design-review-008 | 0 | 0 | 5.5 | spend+proportional | design-review |  |
 
-**Total:** +557 / -1 lines, 78.2 agent-minutes, 73970 tokens over 8 records
-<!-- totals: added=557 removed=1 minutes=78.2 records=8 tokens=73970 -->
+**Total:** +557 / -1 lines, 107.5 agent-minutes, 73970 tokens over 13 records
+<!-- totals: added=557 removed=1 minutes=107.5 records=13 tokens=73970 -->

@@ -19,7 +19,10 @@
 -- keep failing: the mutants in f0061's Rules and mutants table that depend on it are re-run, as exact
 -- substitutions, whenever it changes).
 -- It models nothing about what the real engine does with TeleportAsync (E7 in f0061).
+local Flow = require("@logic/Flow")
 local Lobby = require("@logic/Lobby")
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
 local Travel = require("@logic/Travel")
 local luau = require("@lune/luau")
 
@@ -51,15 +54,27 @@ function fake.signal(): Signal
 	return s
 end
 
-local LOGIC: { [string]: any } = { Travel = Travel, Lobby = Lobby }
+local LOGIC: { [string]: any } =
+	{ Travel = Travel, Lobby = Lobby, Flow = Flow, Maze = Maze, Session = Session }
 
-local function fakeRequire(spec: string): any
-	local name = string.match(spec, "^@game/ReplicatedStorage/Shared/Logic/(%w+)$")
-	local found = name and LOGIC[name]
-	if found == nil then
-		error(`fake engine: no module for require("{spec}")`, 0)
+-- The require an adapter gets: the real Logic modules, or `overrides` for some of them (a spy on Session, say);
+-- an override can only replace a module the fake already serves.
+local function requirer(overrides: { [string]: any }?): (string) -> any
+	if overrides then
+		for name in overrides do
+			if LOGIC[name] == nil then
+				error(`fake engine: no Logic module "{name}" to override`, 0)
+			end
+		end
 	end
-	return found
+	return function(spec: string): any
+		local name = string.match(spec, "^@game/ReplicatedStorage/Shared/Logic/(%w+)$")
+		local found = name and ((overrides and overrides[name]) or LOGIC[name])
+		if found == nil then
+			error(`fake engine: no module for require("{spec}")`, 0)
+		end
+		return found
+	end
 end
 
 local function load(source: string, env: { [string]: any }, name: string): any
@@ -157,7 +172,12 @@ end
 
 -- ReplicatedStorage.Remotes with the RemoteEvents the built place has. Each remote has both ends: the
 -- server's (OnServerEvent, FireClient) and the client's (OnClientEvent, FireServer).
-local function replicatedStorage(lobbyPlace: any, sent: { Fired }, fired: { { any } }): any
+local function replicatedStorage(
+	lobbyPlace: any,
+	sent: { Fired },
+	fired: { { any } },
+	firedOn: { FiredOn }
+): any
 	local rs = fake.node("ReplicatedStorage")
 	local remotes = child(rs, "Folder", "Remotes")
 	for _, built in lobbyPlace.ReplicatedStorage.Remotes:GetChildren() do
@@ -165,18 +185,20 @@ local function replicatedStorage(lobbyPlace: any, sent: { Fired }, fired: { { an
 		r.OnServerEvent = fake.signal()
 		r.OnClientEvent = fake.signal()
 		r.FireClient = function(_: any, player: any, ...: any)
-			table.insert(sent, { player = player, args = { ... } })
+			table.insert(sent, { player = player, args = { ... }, remote = built.Name })
 		end
 		r.FireServer = function(_: any, ...: any)
 			table.insert(fired, { ... })
+			table.insert(firedOn, { remote = built.Name, args = { ... } })
 		end
 	end
 	return rs
 end
 
-export type Fired = { player: any, args: { any } }
+export type Fired = { player: any, args: { any }, remote: string }
+export type FiredOn = { remote: string, args: { any } }
 
-local function standardEnv(services: { [string]: any }): { [string]: any }
+local function standardEnv(services: { [string]: any }, overrides: { [string]: any }?): { [string]: any }
 	return {
 		game = {
 			GetService = function(_: any, name: string): any
@@ -187,7 +209,7 @@ local function standardEnv(services: { [string]: any }): { [string]: any }
 				return found
 			end,
 		},
-		require = fakeRequire,
+		require = requirer(overrides),
 		Enum = setmetatable({}, {
 			__index = function(_: any, group: string): any
 				return setmetatable({}, {
@@ -236,8 +258,10 @@ export type Server = {
 	clock: { now: number },
 	engine: { calls: { { destination: any, players: any, options: any } }, mode: string, held: { thread } },
 	sent: { Fired },
-	boot: (source: string) -> (),
+	boot: (source: string, ...any) -> any,
 	press: (player: any, ...any) -> (),
+	fire: (remote: string, player: any, ...any) -> (),
+	reports: (remote: string, player: any) -> { { any } },
 	tick: (seconds: number) -> (),
 	here: (player: any) -> (),
 	join: (player: any) -> (),
@@ -249,11 +273,11 @@ export type Server = {
 
 -- The lobby's server side, over `lobbyPlace` (place.load("lobby.project.json")). `attributes` overrides the
 -- values of attributes the built ServerScriptService carries (naming one it does not carry is an error).
-function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
+function fake.server(lobbyPlace: any, attributes: { [string]: any }, logic: { [string]: any }?): Server
 	local clock = { now = 0 }
 	local sent: { Fired } = {}
 	local fired: { { any } } = {}
-	local storage = replicatedStorage(lobbyPlace, sent, fired)
+	local storage = replicatedStorage(lobbyPlace, sent, fired, {})
 	local scripts = fake.node("ServerScriptService")
 	local builtAttributes = lobbyPlace.ServerScriptService:GetAttributes()
 	for name, value in builtAttributes do
@@ -336,7 +360,7 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
 		ServerScriptService = scripts,
 		TeleportService = teleport,
 	}
-	local env = standardEnv(services)
+	local env = standardEnv(services, logic)
 	env.os = {
 		clock = function(): number
 			return clock.now
@@ -350,12 +374,19 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
 		clock = clock,
 		engine = engine,
 		sent = sent,
-		boot = checked(function(source: string)
-			local module = load(source, env, "fake lobby server")
-			module.start()
-		end),
+		boot = function(source: string, ...: any): any
+			local module = load(source, env, "fake server")
+			checked(function(...: any)
+				module.start(...)
+			end)(...)
+			return module
+		end,
 		press = checked(function(player: any, ...: any)
 			startGame.OnServerEvent:fire(player, ...)
+		end),
+		-- a client's request on any remote the built place has (`press` is the lobby's StartGame)
+		fire = checked(function(remote: string, player: any, ...: any)
+			storage.Remotes:WaitForChild(remote).OnServerEvent:fire(player, ...)
 		end),
 		tick = checked(function(seconds: number)
 			clock.now += seconds
@@ -395,6 +426,16 @@ function fake.server(lobbyPlace: any, attributes: { [string]: any }): Server
 				error(err, 0)
 			end
 		end),
+		-- what the server sent this player on one remote, in order
+		reports = function(remote: string, player: any): { { any } }
+			local out: { { any } } = {}
+			for _, f in sent do
+				if f.player == player and f.remote == remote then
+					table.insert(out, f.args)
+				end
+			end
+			return out
+		end,
 		statuses = function(player: any): { { any } }
 			local out: { { any } } = {}
 			for _, f in sent do
@@ -418,25 +459,43 @@ end
 -- The client ------------------------------------------------------------------------------------------------
 
 export type Client = {
-	boot: (source: string) -> (),
+	boot: (source: string, ...any) -> any,
 	find: (name: string) -> any,
 	status: (phase: string, configured: boolean) -> (),
 	activate: () -> (),
 	fired: { { any } },
+	firedOn: { FiredOn },
+	receive: (remote: string, ...any) -> (),
+	click: (name: string) -> (),
+	key: (keyName: string, state: string?) -> { any },
+	bindings: { Binding },
 }
+
+-- a ContextActionService binding: its handler, its key codes ("KeyCode.<name>") and whether it asked for an
+-- on-screen touch button
+export type Binding = { fn: (...any) -> any, keys: { any }, touch: boolean }
 
 -- The lobby's client side over `lobbyPlace`: whatever the view builds is found only if it ends up, through
 -- its Parent links, under the PlayerGui.
 function fake.client(lobbyPlace: any): Client
 	local sent: { Fired } = {}
 	local fired: { { any } } = {}
-	local storage = replicatedStorage(lobbyPlace, sent, fired)
+	local firedOn: { FiredOn } = {}
+	local storage = replicatedStorage(lobbyPlace, sent, fired, firedOn)
+	-- ContextActionService: BindAction records the handler and its key codes ("KeyCode.<name>")
+	local bound: { Binding } = {}
+	local actions = {
+		BindAction = function(_: any, _name: string, fn: (...any) -> any, touch: boolean, ...: any)
+			table.insert(bound, { fn = fn, keys = { ... }, touch = touch })
+		end,
+	}
 	local playerGui = fake.node("PlayerGui")
 	local localPlayer = fake.node("Player", "LocalPlayer")
 	playerGui.Parent = localPlayer
 	local services: { [string]: any } = {
 		Players = { LocalPlayer = localPlayer },
 		ReplicatedStorage = storage,
+		ContextActionService = actions,
 	}
 	local env = standardEnv(services)
 	local function find(name: string): any
@@ -448,9 +507,10 @@ function fake.client(lobbyPlace: any): Client
 		return nil
 	end
 	return {
-		boot = function(source: string)
-			local module = load(source, env, "fake lobby client")
-			module.start()
+		boot = function(source: string, ...: any): any
+			local module = load(source, env, "fake client")
+			module.start(...)
+			return module
 		end,
 		find = find,
 		status = function(phase: string, configured: boolean)
@@ -460,6 +520,33 @@ function fake.client(lobbyPlace: any): Client
 			find("Start").Activated:fire()
 		end,
 		fired = fired,
+		firedOn = firedOn,
+		bindings = bound,
+		-- the server sends this client something on a remote the built place has
+		receive = function(remote: string, ...: any)
+			storage.Remotes:WaitForChild(remote).OnClientEvent:fire(...)
+		end,
+		-- a tap or click on a button the view put under the PlayerGui; a hidden button gets nothing
+		click = function(name: string)
+			local b = find(name)
+			if b == nil then
+				error(`fake engine: no {name} under the PlayerGui`, 0)
+			end
+			if b.Visible ~= false then
+				b.Activated:fire()
+			end
+		end,
+		-- a key event (state "Begin" unless given) to every handler bound to that key; returns their results
+		key = function(keyName: string, state: string?): { any }
+			local out: { any } = {}
+			for _, b in bound do
+				if table.find(b.keys, `KeyCode.{keyName}`) then
+					local input = { KeyCode = { Name = keyName } }
+					table.insert(out, b.fn("action", `UserInputState.{state or "Begin"}`, input))
+				end
+			end
+			return out
+		end,
 	}
 end
 

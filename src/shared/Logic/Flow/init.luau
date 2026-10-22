@@ -1,15 +1,21 @@
 --!strict
 -- Flow: what the screen shows over the maze in each phase of a run, engine-free. The client draws it;
--- only the server moves a run from phase to phase.
+-- only the server moves a run from phase to phase, and only the server sends a player back to the lobby.
 local Game = require("./Game")
 local Session = require("./Session")
+local Travel = require("./Travel")
+
+-- How the way back to the lobby stands, as the server last reported it.
+export type Trip = { phase: Travel.Phase, configured: boolean }
 
 export type Overlay = {
 	banner: string?, -- "READY!" or "GAME OVER"
 	detail: string?, -- the line under the banner
 	fade: number, -- 0..FADE_MAX: how dark the screen is
 	flash: boolean, -- the walls are lit in this frame
-	playAgain: boolean, -- the play-again prompt is up and its keys are live
+	prompt: string?, -- under the results: what a tap does now, or why it does nothing
+	tap: boolean, -- a tap, a click or a continue key asks the server for the lobby now
+	cursor: boolean, -- the mouse is free and shown
 }
 
 export type RankView = {
@@ -22,31 +28,56 @@ export type RankView = {
 local Flow = {}
 Flow.FADE_MAX = 0.6
 Flow.FLASH_TICKS = 6
-Flow.PLAY_AGAIN_KEYS = table.freeze({ "Return", "KeypadEnter" })
+Flow.CONTINUE_KEYS = table.freeze({ "Return", "KeypadEnter" })
+Flow.PROMPT = table.freeze({
+	idle = "TAP TO RETURN TO THE LOBBY",
+	going = "RETURNING TO THE LOBBY...",
+	cooling = "Could not return. Try again in a moment.",
+	unset = "The lobby is not set up yet.",
+})
+-- before the server has said anything: the request may go, and the server answers with the truth
+Flow.NO_REPORT = table.freeze({ phase = "idle", configured = true } :: Trip)
 
-function Flow.overlay(play: Session.PlayFrame, rules: Game.Config): Overlay
+local function prompt(trip: Trip): string
+	if not trip.configured then
+		return Flow.PROMPT.unset
+	end
+	return Flow.PROMPT[trip.phase]
+end
+
+function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?): Overlay
 	local phase = play.phase
 	if phase == "ready" then
-		return { banner = "READY!", detail = `LEVEL {play.level}`, fade = 0, flash = false, playAgain = false }
+		return {
+			banner = "READY!",
+			detail = `LEVEL {play.level}`,
+			fade = 0,
+			flash = false,
+			tap = false,
+			cursor = false,
+		}
 	elseif phase == "dying" then
 		-- from nothing at the moment of death to FADE_MAX at the end of the pause
 		local total = rules.dyingTicks
 		local fade = if total > 0
 			then Flow.FADE_MAX * math.clamp((total - play.timer) / total, 0, 1)
 			else Flow.FADE_MAX
-		return { fade = fade, flash = false, playAgain = false }
+		return { fade = fade, flash = false, tap = false, cursor = false }
 	elseif phase == "levelclear" then
-		return { fade = 0, flash = (play.timer // Flow.FLASH_TICKS) % 2 == 1, playAgain = false }
+		return { fade = 0, flash = (play.timer // Flow.FLASH_TICKS) % 2 == 1, tap = false, cursor = false }
 	elseif phase == "gameover" then
+		local now = trip or Flow.NO_REPORT
 		return {
 			banner = "GAME OVER",
 			detail = `SCORE {string.format("%d", play.score)}   LEVEL {play.level}`,
 			fade = Flow.FADE_MAX,
 			flash = false,
-			playAgain = true,
+			prompt = prompt(now),
+			tap = now.configured and now.phase == "idle",
+			cursor = true,
 		}
 	end
-	return { fade = 0, flash = false, playAgain = false }
+	return { fade = 0, flash = false, tap = false, cursor = false }
 end
 
 -- The extra line at the end of a run for an all-time rank the server sent. Flow does not know the board size.
@@ -95,8 +126,8 @@ function Flow.shownRank(view: RankView, gameOver: boolean): string?
 	return Flow.rankLine(view.rank)
 end
 
-function Flow.isPlayAgainKey(keyName: string): boolean
-	return table.find(Flow.PLAY_AGAIN_KEYS, keyName) ~= nil
+function Flow.isContinueKey(keyName: string): boolean
+	return table.find(Flow.CONTINUE_KEYS, keyName) ~= nil
 end
 
 return Flow
