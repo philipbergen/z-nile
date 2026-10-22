@@ -565,14 +565,26 @@ return t.spec("repository fence", function(it)
 			for key in ALLOWED do
 				table.insert(keys, key)
 			end
+			-- a root's home: the folder holding it (`pickman/.tracker` is pickman/'s), as the registry derives it
+			local function homeOfRoot(root: string): string
+				return string.match(root, "^(.*)/[^/]+$") or "."
+			end
 			for _, key in keys do
-				if not fs.isFile(`{checkout}/{key}`) then
-					local id, file = string.match(key, "^[^/]+/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
+				-- tracked, not only on disk (code review 005 F4)
+				local tracked =
+					process.exec("git", { "ls-files", "--error-unmatch", "--", key }, { cwd = checkout }).ok
+				if not tracked then
+					local home, id, file =
+						string.match(key, "^([^/]+)/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
 					local found = false
 					if id then
 						for _, root in ROOTS do
 							for _, kind in { "issues", "issues/active", "rafts", "rafts/active" } do
-								if fs.isFile(`{checkout}/{root}/{kind}/{id}/acceptance/{file}`) then
+								-- and under the home done promotes that item into (code review 005 F4)
+								if
+									homeOfRoot(root) == home
+									and fs.isFile(`{checkout}/{root}/{kind}/{id}/acceptance/{file}`)
+								then
 									found = true
 								end
 							end
