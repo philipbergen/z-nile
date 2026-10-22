@@ -52,20 +52,20 @@ for line in string.gmatch(diff, "[^\n]*") do
 			-- the statement the hunk is in starts where no line above goes on into it (a line ending in `,`, `(`, `{` or
 			-- `..`, or the hunk's line starting with `.`, `)` or `}`): a marker belongs above that statement, never
 			-- inside its argument list (code review 005 F6)
-			local start = first
-			while start > 1 and lines[start - 1] and lines[start] do
-				local above = string.gsub(lines[start - 1], "%s+$", "")
-				local this = lines[start]
+			local stmt = first
+			while stmt > 1 and lines[stmt - 1] and lines[stmt] do
+				local above = string.gsub(lines[stmt - 1], "%s+$", "")
+				local this = lines[stmt]
 				local goesOn = string.match(above, "[,({]$") ~= nil
 					or string.match(above, "%.%.$") ~= nil
 					or string.match(this, "^%s*[%.%)}]") ~= nil
 				if not goesOn or string.match(above, "^%s*%-%-") then
 					break
 				end
-				start -= 1
+				stmt -= 1
 			end
 			local found = false
-			for i = math.max(1, start - NEAR), math.max(last, first) do
+			for i = math.max(1, stmt - NEAR), math.max(last, first) do
 				if lines[i] and string.find(lines[i], MARK, 1, true) then
 					found = true
 					break
