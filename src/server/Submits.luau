@@ -23,14 +23,6 @@ function Submits.ready(s: any, player: Player)
 	held[s] = { state = Hiscores.newRun(), userId = tostring(player.UserId), name = name }
 end
 
--- Session.playAgain accepted: the next run.
-function Submits.again(s: any)
-	local h = held[s]
-	if h then
-		h.state = Hiscores.onAgain(h.state, true)
-	end
-end
-
 -- Hears one step's events. False tells Sessions to let a parked session go.
 function Submits.step(s: any, events: { any }, here: boolean): boolean
 	local h = held[s]
