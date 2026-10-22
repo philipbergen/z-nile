@@ -21,6 +21,8 @@ end
 local function facts(over: { [string]: any }): dispatch.Facts
 	local f: { [string]: any } = {
 		id = "c0010",
+		folder = "tracker/issues/c0010",
+		root = "tracker",
 		kind = "issue",
 		where = "backlog",
 		status = "new",
@@ -41,7 +43,15 @@ local function facts(over: { [string]: any }): dispatch.Facts
 	return f :: any
 end
 local function pr(over: { [string]: any }?): dispatch.Pr
-	local p: { [string]: any } = { number = 7, state = "OPEN", draft = false, green = true, mergeable = true }
+	local p: { [string]: any } = {
+		number = 7,
+		state = "OPEN",
+		draft = false,
+		green = true,
+		mergeable = true,
+		head = "abc123",
+		files = { "tracker/issues/c0010/c0010.md" },
+	}
 	local more_over: { [string]: any } = over or {}
 	for k, v in more_over do
 		p[k] = v

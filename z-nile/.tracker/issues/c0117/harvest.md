@@ -14,3 +14,15 @@
 - design-review-001 F13: one-off: a sentence named a file the folder did not hold
 - design-review-001 F14: ticket-prep/specify-every-named-artifact
 - design-review-001 F15: testing/specs-set-host-markers-explicitly
+- design-review-002 F1: architecture/one-definition-of-tracker-state, testing/plain-find-for-literals
+- design-review-002 F2: architecture/one-definition-of-tracker-state
+- design-review-002 F3: architecture/one-definition-of-tracker-state, architecture/guards-trust-only-origin
+- design-review-002 F4: architecture/tripwire-covers-every-interval, ticket-prep/required-steps-on-every-path
+- design-review-002 F5: architecture/guards-trust-only-origin
+- design-review-002 F6: architecture/merge-gate-checks-what-it-merges
+- design-review-002 F7: architecture/children-need-a-lifeline
+- design-review-002 F8: architecture/guard-no-is-explicit
+- design-review-002 F9: architecture/merge-gate-checks-what-it-merges
+- design-review-002 F10: architecture/children-need-a-lifeline
+- design-review-002 F11: one-off: a name picked by a check before the folder was made (made atomic)
+- design-review-002 F12: one-off: two numbers said twice and differently

@@ -111,6 +111,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			["tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
 			["tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
 			["tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
+			["tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
 		})
 	end)
 
@@ -184,7 +185,9 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			local author = fakecli.state(h, "c0020")
 			t.expect(author.outcome).toBe("ok")
 			t.expect(author.cli).toBe("grok")
-			local nestedState = fakecli.state(h, "c0020", "zz-review-design-1")
+			-- the nested folder names its item (review 002 F11)
+			t.expect(fs.isFile(`{dirOf("c0020")}/zz-review-design-c0020-1/state.json`)).toBe(true)
+			local nestedState = fakecli.state(h, "c0020", "zz-review-design-c0020-1")
 			t.expect(nestedState.cli).toBe("claude")
 			t.expect(nestedState.outcome).toBe("ok")
 		end
@@ -218,10 +221,72 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			t.expect(s.outcome).toBe("tripwire")
 			t.expect(has(s.detail, "code.lua")).toBe(true)
 			t.expect((fakecli.rows(h, "c0040") :: { any })[1].tokens).toBe(123)
-			-- the chain does not go on after it
+			-- the chain does not go on after it, and nor does any other run, until the user vets main
 			t.expect(zn({ "dispatch", "c0040" }).code).toBe(5)
+			t.expect(zn({ "dispatch", "z-design", "c0010", "--dry-run" }).ok).toBe(true)
+			t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
+			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 		end
 	)
+
+	it("a code push straight to main between runs stops the next run until the user vets main", function()
+		fakecli.clear(h)
+		trackerfix.elsewhere(h.f, { ["src/direct.lua"] = "return 1\n" }, "a direct code push")
+		local r = zn({ "dispatch", "z-design", "c0010" })
+		t.expect(r.code).toBe(5)
+		t.expect(has(r.stdout, "src/direct.lua")).toBe(true)
+		t.expect(fakecli.log(h)).toBe("")
+		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+		-- tracker state pushed by another terminal is vetted without the user
+		trackerfix.elsewhere(
+			h.f,
+			{ ["tracker/issues/c0010/notes.md"] = "notes\n" },
+			"tracker state elsewhere"
+		)
+		t.expect(zn({ "dispatch", "z-design", "c0010" }).code ~= 5).toBe(true)
+	end)
+
+	it("a detached process's late code push after a step is caught at the next run", function()
+		fakecli.clear(h)
+		mode("claude", "late")
+		local r = zn({ "dispatch", "z-design", "c0060" })
+		t.expect(r.ok).toBe(true)
+		local waited = 0
+		while
+			waited < 10
+			and fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:late.lua" }).ok == false
+		do
+			waited += task.wait(0.2)
+		end
+		t.expect(fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:late.lua" }).ok).toBe(true)
+		local next = zn({ "dispatch", "z-design", "c0060" })
+		t.expect(next.code).toBe(5)
+		t.expect(has(next.stdout, "late.lua")).toBe(true)
+		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+	end)
+
+	it("a stop while the step is starting is a request, never a lost run", function()
+		local dir = dirOf("c0050")
+		fs.writeDir(dir)
+		local held = runner.holdLock(`{dir}/lock`)
+		fs.writeFile(
+			`{dir}/state.json`,
+			serde.encode(
+				"json",
+				{ id = "c0050", mode = "step", outcome = "running", history = {}, pending = {} }
+			)
+		)
+		local r = zn({ "dispatch", "stop", "c0050" })
+		t.expect(has(r.stdout, "stop requested")).toBe(true)
+		t.expect(fakecli.state(h, "c0050").outcome).toBe("running")
+		t.expect(fs.isFile(`{dir}/stop`)).toBe(true);
+		(held :: any).stdin:close()
+		fs.removeFile(`{dir}/stop`)
+		fs.writeFile(
+			`{dir}/state.json`,
+			serde.encode("json", { id = "c0050", mode = "step", history = {}, pending = {} })
+		)
+	end)
 
 	it(
 		"a step dies with its dispatcher; the dead run is lost, never resumed, and retry takes it over",
@@ -296,6 +361,11 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			local s = fakecli.state(h, "c0090")
 			t.expect(s.outcome).toBe("cap")
 			t.expect(string.find(s.detail, "passed max_calls 2 at call 3", 1, true) ~= nil).toBe(true)
+			-- fail closed: a stream with no model_call_id stops as cap-unknown
+			fakecli.clear(h)
+			mode("agent", "noids")
+			t.expect(zn({ "dispatch", "z-design", "c0090" }).ok).toBe(false)
+			t.expect(fakecli.state(h, "c0090").outcome).toBe("cap-unknown")
 			fakecli.clear(h)
 			local ok = zn({ "dispatch", "z-design", "c0090" })
 			t.expect(ok.ok).toBe(true)
@@ -318,24 +388,46 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			for _, slug in { "seventh-thing", "eighth-thing" } do
 				fs.writeFile(
 					`{h.fakes}/pr-prep-{slug}.json`,
-					'{"number":7,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}]}'
+					'{"number":7,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],'
+						.. `"headRefOid":"feedface","files":[\{"path":"tracker/issues/{if slug
+								== "seventh-thing"
+							then "c0070"
+							else "c0080"}/x.md"\}]\}`
 				)
 			end
 			mode("claude", "claim")
 			-- auto_merge = ["prep"] at the root: the dispatcher merges, then sees origin unchanged and stops
 			local merged = zn({ "dispatch", "c0070" })
-			t.expect(has(fakecli.log(h), "realgh pr merge 7 --squash")).toBe(true)
+			t.expect(has(fakecli.log(h), "realgh pr merge 7 --squash --match-head-commit feedface"))
+				.toBe(true)
 			t.expect(merged.code).toBe(1)
 			t.expect(has(merged.stdout, "merged but origin/main does not show it")).toBe(true)
 			-- an item-level auto_merge = [] wins: the chain waits at the gate, and nothing is merged
 			fs.writeFile(
 				`{h.fakes}/pr-prep-eighth-thing.json`,
-				'{"number":8,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}]}'
+				'{"number":8,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],'
+					.. '"headRefOid":"beef","files":[{"path":"tracker/issues/c0080/c0080.md"}]}'
 			)
 			local waiting = zn({ "dispatch", "c0080" })
 			t.expect(waiting.code).toBe(4)
 			t.expect(has(waiting.stdout, "#8 waits for a merge")).toBe(true)
 			t.expect(has(fakecli.log(h), "realgh pr merge 8")).toBe(false)
+			-- a prep PR that carries code waits for a human, whatever auto_merge says
+			fs.writeFile(
+				`{h.fakes}/pr-prep-tenth-thing.json`,
+				'{"number":9,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],'
+					.. '"headRefOid":"c0de","files":[{"path":"tracker/issues/c0091/c0091.md"},{"path":"src/x.lua"}]}'
+			)
+			local carries = zn({ "dispatch", "c0091" })
+			t.expect(carries.code).toBe(4)
+			t.expect(has(carries.stdout, "carries src/x.lua")).toBe(true)
+			t.expect(has(fakecli.log(h), "realgh pr merge 9")).toBe(false)
+			-- a code commit on main that GitHub reports as a pull request's merge is vetted
+			trackerfix.elsewhere(h.f, { ["src/merged.lua"] = "return 1\n" }, "a merged PR")
+			local sha = fixture.git(h.f.origin, { "rev-parse", "main" })
+			fs.writeFile(`{h.fakes}/merged-{sha}`, "1\n")
+			t.expect(zn({ "dispatch", "z-design", "c0010", "--dry-run" }).ok).toBe(true)
+			t.expect(zn({ "dispatch", "c0010" }).code ~= 5).toBe(true)
 		end
 	)
 end)

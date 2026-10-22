@@ -27,6 +27,8 @@ check "AC8: the prompt names skill files and the architecture map (c0115 and c01
   lune run tests/run -- tests/acceptance/c0115/prompt.spec.luau tests/acceptance/c0120/homes.spec.luau tests/acceptance/c0115/readme.spec.luau
 check "AC9: the real tree's skill links, lessons and audit stay clean" \
   bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
-check "AC10: the dispatcher controls a run: questions, capture, a nested review, the broker, the tripwire, the lifeline, the lock, stop and the gates" \
+check "AC10: the dispatcher controls a run: questions, capture, a nested review, the broker, the tripwire and the watermark, the lifeline, the lock, stop, the call cap and the gates" \
   lune run tests/run -- "$A/control-cli.spec.luau"
+check "AC11: one definition of tracker state, and a broker that pushes only a fast-forward of it, bound to its run" \
+  lune run tests/run -- "$A/trackerstate.spec.luau"
 finish

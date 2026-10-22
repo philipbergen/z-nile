@@ -9,19 +9,34 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local trackerstate = require("@znile/engine/trackerstate")
 local wrapper = require("@znile/engine/wrapper")
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
-local ALLOWED = { "z-nile/next", "z-nile/.tracker/" }
+-- a push decided against the shared tracker-state check (trackerstate.luau), fed the paths `src` would change
+local ROOTS = { "z-nile/.tracker" }
 local function push(updates: { wrapper.Update }, paths: { string }?): wrapper.Decision
 	return wrapper.decidePush({
 		updates = updates,
-		changed = function(_src: string): { string }?
-			return paths
+		check = function(_src: string): string?
+			if not paths then
+				return "could not fetch a fresh copy of main"
+			end
+			local entries: { trackerstate.Entry } = {}
+			for _, p in paths :: { string } do
+				table.insert(entries, {
+					oldMode = "100644",
+					newMode = "100644",
+					oldBlob = "a",
+					newBlob = "b",
+					status = "M",
+					path = p,
+				})
+			end
+			return trackerstate.judge(entries, ROOTS, true)
 		end,
-		allowed = ALLOWED,
 	})
 end
 local function gh(args: { string }, aliases: { [string]: { string } }?): boolean

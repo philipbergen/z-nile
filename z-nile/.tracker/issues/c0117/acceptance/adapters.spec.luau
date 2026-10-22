@@ -171,9 +171,11 @@ return t.spec("c0117 adapters", function(it)
 			local running = feed("cursor-cli", {
 				AGENT[1],
 				AGENT[2],
+				'{"type":"assistant","message":{"content":[]},"model_call_id":"m-1"}',
 				'{"type":"tool_call","subtype":"started","call_id":"a","model_call_id":"m-1"}',
 				'{"type":"tool_call","subtype":"completed","call_id":"a","model_call_id":"m-1"}',
-				'{"type":"assistant","message":{"content":[]},"model_call_id":"m-1"}',
+				'{"type":"thinking","subtype":"delta"}',
+				'{"type":"assistant","message":{"content":[]},"model_call_id":"m-2"}',
 				'{"type":"tool_call","subtype":"started","call_id":"b","model_call_id":"m-2"}',
 			})
 			t.expect(running.final).toBe(nil)
@@ -183,6 +185,21 @@ return t.spec("c0117 adapters", function(it)
 			t.expect(adapters.get("cursor-app").callCapped).toBe(true)
 			t.expect(adapters.get("claude-cli").callCapped).toBe(false)
 			t.expect(adapters.get("grok-cli").callCapped).toBe(false)
+			t.expect(running.unknown).toBe(nil)
+			-- fail closed (review 002 F8): turns with no model_call_id are counted, and past NO_ID_TURNS the cap is unknown
+			local noIds: { string } = {}
+			for i = 1, adapters.NO_ID_TURNS + 1 do
+				table.insert(noIds, '{"type":"thinking","subtype":"delta"}')
+				table.insert(noIds, `\{"type":"tool_call","subtype":"started","call_id":"x{i}"\}`)
+				table.insert(noIds, `\{"type":"tool_call","subtype":"completed","call_id":"x{i}"\}`)
+			end
+			local blind = feed("cursor-cli", noIds)
+			t.expect(blind.calls).toBe(adapters.NO_ID_TURNS + 1)
+			t.expect(blind.unknown ~= nil).toBe(true)
+			t.expect(adapters.NO_ID_TURNS).toBe(3)
+			t.expect(feed("cursor-cli", { '{"type":"surprise"}' }).unknown ~= nil).toBe(true)
+			t.expect(feed("cursor-cli", { "not json" }).unknown ~= nil).toBe(true)
+			t.expect(feed("cursor-app", noIds).unknown ~= nil).toBe(true)
 			local acc = feed("cursor-cli", AGENT)
 			t.expect(acc.final).toBe(15155 + 28)
 			t.expect(adapters.tokens(acc)).toBe(15183)
