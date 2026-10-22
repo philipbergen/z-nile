@@ -216,11 +216,16 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			'[[project]]\nname = "pickman"\nroot = "tracker"\n\n[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 		)
 		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
+		-- an unfinished pickman item and a finished z-nile one, each with sequestered files (code review 005 F1)
+		w("tracker/issues/active/f0065/check.sh", "check AC1 true\n")
+		w("tracker/issues/active/f0065/acceptance/a.spec.luau", "-- a\n")
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 true\n")
 		g({ "add", "-A" })
 		g({ "commit", "-qm", "the prep" })
 		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
 		fs.writeDir(`{OWNFX}/pickman/.tracker`)
 		g({ "mv", "tracker/rafts", "pickman/.tracker/rafts" })
+		g({ "mv", "tracker/issues", "pickman/.tracker/issues" })
 		w(
 			"z-nile/projects.toml",
 			'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
@@ -228,48 +233,99 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		)
 		g({ "add", "-A" })
 		g({ "commit", "-qm", "the move" })
+		local function step(message: string)
+			g({ "add", "-A" })
+			g({ "commit", "-qm", message })
+		end
+		local function expectRed(needle: string)
+			local okR, outR = judge()
+			if okR or not string.find(outR, needle, 1, true) then
+				print(outR)
+			end
+			t.expect(okR).toBe(false)
+			t.expect(string.find(outR, needle, 1, true) ~= nil).toBe(true)
+		end
+		local function expectGreen()
+			local okG, outG = judge()
+			if not okG then
+				print(outG)
+			end
+			t.expect(okG).toBe(true)
+		end
 		-- no approved review records a reference: refused
-		local ok, out = judge()
-		t.expect(ok).toBe(false)
-		t.expect(string.find(out, 'records a "Prep reference', 1, true) ~= nil).toBe(true)
+		expectRed('records a "Prep reference')
 		-- an approved review records the prep commit: c0120's check.sh as the prep has it passes
 		w(
 			"z-nile/.tracker/issues/c0120/review-001.md",
 			`# Review\nPrep reference: {prep}\n\nVerdict: approve\n`
 		)
-		g({ "add", "-A" })
-		g({ "commit", "-qm", "review" })
-		ok, out = judge()
-		t.expect(ok).toBe(true)
+		step("review")
+		expectGreen()
+		-- c0120's own check.sh removed: deleted
+		g({ "rm", "-q", "z-nile/.tracker/issues/c0120/check.sh" })
+		step("rm")
+		expectRed("z-nile/.tracker/issues/c0120/check.sh: deleted")
+		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
+		-- a spec added to c0120's own folder beyond the reviewed one: added
+		w("z-nile/.tracker/issues/c0120/acceptance/x.spec.luau", "-- x\n")
+		step("add")
+		expectRed("z-nile/.tracker/issues/c0120/acceptance/x.spec.luau: added")
+		g({ "rm", "-q", "z-nile/.tracker/issues/c0120/acceptance/x.spec.luau" })
+		step("unadd")
+		expectGreen()
+		-- another item's check.sh removed (an unfinished one, and a finished one): deleted
+		g({
+			"rm",
+			"-q",
+			"pickman/.tracker/issues/active/f0065/check.sh",
+			"z-nile/.tracker/issues/done/c0001/check.sh",
+		})
+		step("rm others")
+		expectRed("tracker/issues/active/f0065/check.sh: deleted")
+		expectRed("z-nile/.tracker/issues/done/c0001/check.sh: deleted")
+		w("pickman/.tracker/issues/active/f0065/check.sh", "check AC1 true\n")
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 true\n")
+		step("restore")
+		expectGreen()
+		-- an item finished by a later merge moves to done/: judged there, unchanged is green
+		fs.writeDir(`{OWNFX}/pickman/.tracker/issues/done`)
+		g({ "mv", "pickman/.tracker/issues/active/f0065", "pickman/.tracker/issues/done/f0065" })
+		step("f0065 done")
+		expectGreen()
+		-- and its spec edited there: changed
+		w("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau", "-- edited\n")
+		step("edit")
+		expectRed("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau: changed")
+		w("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau", "-- a\n")
+		step("unedit")
 		-- an edit to its check.sh, with a local prep-c0120 at HEAD carrying it: still red
 		w("z-nile/.tracker/issues/c0120/check.sh", "check nothing\n")
-		g({ "add", "-A" })
-		g({ "commit", "-qm", "an edit" })
+		step("an edit")
 		g({ "branch", "-f", "prep-c0120", "HEAD" })
-		ok, out = judge()
-		t.expect(ok).toBe(false)
-		t.expect(string.find(out, "z-nile/.tracker/issues/c0120/check.sh: changed", 1, true) ~= nil)
-			.toBe(true)
+		expectRed("z-nile/.tracker/issues/c0120/check.sh: changed")
 		-- a recorded commit the branch doesn't hold: refused
 		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
 		w(
 			"z-nile/.tracker/issues/c0120/review-002.md",
 			"Prep reference: 0123456789abcdef\n\nVerdict: approve\n"
 		)
-		g({ "add", "-A" })
-		g({ "commit", "-qm", "a bad reference" })
-		ok, out = judge()
-		t.expect(ok).toBe(false)
-		t.expect(string.find(out, "is no commit here", 1, true) ~= nil).toBe(true)
-		-- a review that doesn't approve records nothing (its bad reference is not read)
+		step("a bad reference")
+		expectRed("is no commit here")
+		-- a review whose last verdict is changes records nothing, though it quotes `Verdict: approve` (code review
+		-- 005 F5); its bad reference is not read
 		w(
 			"z-nile/.tracker/issues/c0120/review-002.md",
-			"Prep reference: 0123456789abcdef\n\nVerdict: changes\n"
+			"Prep reference: 0123456789abcdef\nVerdict: approve\n\nVerdict: changes\n"
 		)
-		g({ "add", "-A" })
-		g({ "commit", "-qm", "changes" })
-		ok, out = judge()
-		t.expect(ok).toBe(true)
+		step("changes")
+		expectGreen()
+		-- two Prep reference lines: ambiguous, refused
+		w(
+			"z-nile/.tracker/issues/c0120/review-003.md",
+			`Prep reference: {prep}\nPrep reference: {prep}\n\nVerdict: approve\n`
+		)
+		step("two references")
+		expectRed("records 2 Prep reference lines")
 		fs.removeDir(OWNFX)
 	end)
 

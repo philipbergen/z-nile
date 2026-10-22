@@ -49,9 +49,25 @@ local function recorded(): (string?, string)
 		local code = string.match(name, "^review%-(%d+)%.md$")
 		local n = code or string.match(name, "^design%-review%-(%d+)%.md$")
 		if n then
-			local text = "\n" .. fs.readFile(`{TOP}/{OWN}{name}`)
-			local sha = string.match(text, "\nPrep reference: (%x+)")
-			if sha and string.find(text, "\nVerdict: approve", 1, true) then
+			-- the verdict is the last `Verdict:` line (an earlier one may quote the format, code review 005 F5); a second
+			-- `Prep reference:` line is ambiguous and refuses
+			local verdict: string? = nil
+			local refs: { string } = {}
+			for line in string.gmatch(fs.readFile(`{TOP}/{OWN}{name}`), "[^\n]+") do
+				local v = string.match(line, "^Verdict: (.-)%s*$")
+				if v then
+					verdict = v
+				end
+				local r = string.match(line, "^Prep reference: (%x+)%s*$")
+				if r then
+					table.insert(refs, r)
+				end
+			end
+			if #refs > 1 then
+				return nil, `{name} records {#refs} Prep reference lines`
+			end
+			local sha = refs[1]
+			if sha and verdict == "approve" then
 				local rank = (if code then 100000 else 0) + (tonumber(n) :: number)
 				if not best or rank > (best :: any).rank then
 					best = { rank = rank, file = name, sha = sha }
@@ -79,49 +95,110 @@ if not ownBase then
 	process.exit(1)
 end
 
--- where a file of a current root was before the move: pickman's root was tracker/
-local function before(path: string): string
-	local rest = string.match(path, "^pickman/%.tracker/(.*)$")
-	return if rest then `tracker/{rest}` else path
+-- Every sequestered file, keyed by its item and its path inside the item's folder (code review 005 F1): an item's
+-- folder moves between state folders (active/, done/) and roots (tracker/ to pickman/.tracker/), so a path is no
+-- identity. `listing` is `git ls-files` (HEAD's index) or `git ls-tree` of a commit; `roots` that tree's project roots.
+type Entry = { id: string, path: string }
+local function sequestered(listing: string, roots: { string }): { [string]: Entry }
+	local out: { [string]: Entry } = {}
+	for path in string.gmatch(listing, "[^\n]+") do
+		for _, root in roots do
+			if string.sub(path, 1, #root + 1) == root .. "/" then
+				local rest = string.sub(path, #root + 2)
+				local inKind = string.match(rest, "^issues/(.*)$") or string.match(rest, "^rafts/(.*)$")
+				if inKind then
+					inKind = string.match(inKind, "^active/(.*)$")
+						or string.match(inKind, "^done/(.*)$")
+						or inKind
+					local id, inner = string.match(inKind :: string, "^([fdcR]%d%d%d%d)/(.+)$")
+					if
+						id and (inner == "check.sh" or string.sub(inner :: string, 1, 11) == "acceptance/")
+					then
+						out[`{id}|{inner}`] = { id = id, path = path }
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+local function rootsAt(rev: string): { string }
+	local at = projects.at(rev, TOP)
+	return if at then projects.roots(at) else { projects.LEGACY }
+end
+local function tree(rev: string): string
+	local ok, listing = git({ "ls-tree", "-r", "--name-only", rev })
+	assert(ok, `git ls-tree {rev} failed`)
+	return listing
+end
+local OWN_ID = "c0120"
+-- the reference set: every item's files before the move, c0120's own as the review recorded them
+local base: { [string]: Entry & { rev: string } } = {}
+for key, e in sequestered(tree(pre :: string), rootsAt(pre :: string)) do
+	if e.id ~= OWN_ID then
+		base[key] = { id = e.id, path = e.path, rev = pre :: string }
+	end
+end
+for key, e in sequestered(tree(ownBase :: string), rootsAt(ownBase :: string)) do
+	if e.id == OWN_ID then
+		base[key] = { id = e.id, path = e.path, rev = ownBase :: string }
+	end
+end
+local okL, headListing = git({ "ls-files" })
+assert(okL, "git ls-files failed")
+local head = sequestered(headListing, projects.roots(reg))
+local known: { [string]: boolean } = {}
+for _, e in base do
+	known[e.id] = true
 end
 
 local bad: { string } = {}
 local judged = 0
-for _, root in projects.roots(reg) do
-	local ok, listing = git({ "ls-files", "--", root })
-	assert(ok, "git ls-files failed")
-	for path in string.gmatch(listing, "[^\n]+") do
-		local isCheck = string.match(path, "/check%.sh$") ~= nil
-		local isSpec = string.find(path, "/acceptance/", 1, true) ~= nil
-		if isCheck or isSpec then
-			local own = string.sub(path, 1, #OWN) == OWN
-			local okOld, old = git({ "show", `{if own then ownBase :: string else pre}:{before(path)}` })
-			if okOld then
-				judged += 1
-				local now = fs.readFile(`{TOP}/{path}`)
-				local finished = string.match(path, "^[^/]+/%.tracker/[a-z]+/done/") ~= nil
-					or string.match(path, "^[^/]+/[^/]+/%.tracker/[a-z]+/done/") ~= nil
-				local want = if finished and isCheck
-					then rewrites.rewrite(old, projects.homeOf(reg, path), world)
-					else old
-				-- the deleted criteria (Guess 17): exactly those check statements go, after the rewrite
-				local deleted = rewrites.DELETED[path]
-				if deleted then
-					want = rewrites.deleteCriteria(want, deleted)
-						or `cannot delete {table.concat(deleted, ", ")}`
-				end
-				if now ~= want then
-					table.insert(
-						bad,
-						if finished and isCheck
-							then `{path}: not its text with exactly the rewrite{if rewrites.DELETED[path]
-								then " and the deleted criteria"
-								else ""}`
-							else `{path}: changed`
-					)
-				end
-			end
-		end
+for key, b in base do
+	local h = head[key]
+	if not h or not fs.isFile(`{TOP}/{h.path}`) then
+		table.insert(bad, `{b.path}: deleted (no {string.match(key, "|(.*)$")} in {b.id}'s folder now)`)
+		continue
+	end
+	judged += 1
+	local okOld, old = git({ "show", `{b.rev}:{b.path}` })
+	assert(okOld, `git show {b.rev}:{b.path} failed`)
+	local now = fs.readFile(`{TOP}/{h.path}`)
+	local isCheck = string.match(key, "|check%.sh$") ~= nil
+	local finished = b.id ~= OWN_ID
+		and (
+			string.match(h.path, "^[^/]+/%.tracker/[a-z]+/done/") ~= nil
+			or string.match(h.path, "^[^/]+/[^/]+/%.tracker/[a-z]+/done/") ~= nil
+		)
+	local want = if finished and isCheck
+		then rewrites.rewrite(old, projects.homeOf(reg, h.path), world)
+		else old
+	-- the deleted criteria (Guess 17): exactly those check statements go, after the rewrite
+	local deleted = rewrites.DELETED[h.path]
+	if deleted then
+		want = rewrites.deleteCriteria(want, deleted) or `cannot delete {table.concat(deleted, ", ")}`
+	end
+	if now ~= want then
+		table.insert(
+			bad,
+			if finished and isCheck
+				then `{h.path}: not its text with exactly the rewrite{if deleted
+					then " and the deleted criteria"
+					else ""}`
+				else `{h.path}: changed`
+		)
+	end
+end
+-- a file in the folder of an item the reference holds, which the reference doesn't: added (a capture since the move
+-- is a new item, and not judged)
+for key, h in head do
+	if not base[key] and known[h.id] then
+		table.insert(
+			bad,
+			`{h.path}: added (not in {h.id}'s folder {if h.id == OWN_ID
+				then "as reviewed"
+				else "before the move"})`
+		)
 	end
 end
 table.sort(bad)
