@@ -547,6 +547,11 @@ return t.spec("repository fence", function(it)
 	it(
 		"every allow-list key names a file, or an unfinished item's spec where done will promote it",
 		function()
+			-- a partial copy of the guards (c0058's scan fixture: the runner and this spec, no gate) holds few of the
+			-- files; the keys are checked in a whole tree
+			if not fs.isFile(`{checkout}/z-nile/check.sh`) then
+				return
+			end
 			local stale: { string } = {}
 			local keys: { string } = {}
 			for key in ALLOWED do
