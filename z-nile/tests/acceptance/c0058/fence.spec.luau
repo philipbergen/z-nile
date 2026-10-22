@@ -137,9 +137,11 @@ local function probe(name: string, body: string)
 		`--!strict\nlocal fs = {REQ}("@lune/fs")\nlocal process = {REQ}("@lune/process")\n`
 			.. `local task = {REQ}("@lune/task")\nlocal t = {REQ}("@tests/lib/t")\n`
 			.. 'local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))\n'
+			-- c0120 override: the probe runs from the copy's z-nile/ home, one folder below the repository's top
 			.. 'local repo = string.match(here, "^(.*)/z%-nile$") or ""\n'
 			.. 'local function sh(c: string) return process.exec("sh", { "-c", c }, { cwd = here }) end\n'
 			.. 'local top = sh("git rev-parse --show-toplevel")\n'
+			-- c0120 override: the probe runs from the copy's z-nile/ home, one folder below the repository's top
 			.. 'if not top.ok or (string.gsub(top.stdout, "%s+$", "")) ~= repo then error("refusing: not the fixture repository") end\n'
 			.. `return t.spec("{name}", function(it)\n\tit("probe", function()\n{body}\n\tend)\nend)\n`
 	)
