@@ -1,7 +1,8 @@
 --!strict
 -- R0035 code review 001 F2: HudView's real source runs on a small stub engine, with the real Hud, Session and
 -- Touch, so the arguments it gives Hud.shotIcons (the lives shown and the shots held) are pinned by where the
--- bars end up, and so is the re-lay when either count changes.
+-- bars end up on the screen (the Shots frame's own place plus each bar's), and so is the re-lay when either count
+-- or the screen changes.
 local Hud = require("@logic/Hud")
 local Session = require("@logic/Session")
 local Touch = require("@logic/Touch")
@@ -19,8 +20,6 @@ local function script(name: string): any
 	t.expect(node ~= nil).toBe(true)
 	return node
 end
-
-local W, H = 1000, 600
 
 type Inst = { [string]: any }
 
@@ -79,12 +78,13 @@ local function enumProxy(): any
 end
 
 type Hv = { start: () -> (), show: (Session.PlayFrame) -> (), shots: (number?) -> () }
-type World = { hud: Hv, render: () -> (), gui: () -> Inst }
+type World = { hud: Hv, render: () -> (), gui: () -> Inst, resize: (number, number) -> () }
 
 local function start(): World
 	local rendered: { () -> () } = {}
 	local made: { Inst } = {}
-	local area = { Min = { X = 0, Y = 0 }, Max = { X = W, Y = H } }
+	local area = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
+	local viewport = { X = 1000, Y = 600 }
 	local services: { [string]: any } = {
 		GuiService = {
 			GetInsetArea = function(_: any, _which: any): any
@@ -110,7 +110,7 @@ local function start(): World
 				return assert(services[name], name)
 			end,
 		},
-		workspace = { CurrentCamera = { ViewportSize = { X = W, Y = H } } },
+		workspace = { CurrentCamera = { ViewportSize = viewport } },
 		Enum = enumProxy(),
 		Instance = {
 			new = function(class: string): Inst
@@ -150,6 +150,10 @@ local function start(): World
 				fn()
 			end
 		end,
+		resize = function(w: number, h: number)
+			area.Max = { X = w, Y = h }
+			viewport.X, viewport.Y = w, h
+		end,
 		gui = function(): Inst
 			for _, i in made do
 				if i.Name == "Shots" then
@@ -165,17 +169,38 @@ local function play(lives: number): Session.PlayFrame
 	return { phase = "playing", level = 1, score = 0, lives = lives, timer = 0, frightened = 0 }
 end
 
--- where the stub frames ended up, as Hud boxes
+-- where the bars ended up on the screen, in pixels: the Shots frame's place plus each bar's within it
 local function placed(shots: Inst): { Hud.Box }
 	local out = {}
+	local at = shots.Position or { x = 0, y = 0 }
 	for _, icon in shots:GetChildren() do
-		table.insert(out, { x = icon.Position.x, y = icon.Position.y, w = icon.Size.x, h = icon.Size.y })
+		table.insert(
+			out,
+			{ x = at.x + icon.Position.x, y = at.y + icon.Position.y, w = icon.Size.x, h = icon.Size.y }
+		)
 	end
 	return out
 end
 
-local function want(lives: number, shots: number): { Hud.Box }
-	return Hud.shotIcons(Hud.layout(W, H, { top = 0, bottom = 0, left = 0, right = 0 }), lives, shots)
+-- the bars on a w x h screen, in screen pixels: the lives block's corner plus Hud.shotIcons' boxes
+local function want(lives: number, shots: number, w: number?, h: number?): { Hud.Box }
+	local l = Hud.layout(w or 1000, h or 600, { top = 0, bottom = 0, left = 0, right = 0 })
+	local block = Touch.blocks(l).lives
+	local out = {}
+	for _, b in Hud.shotIcons(l, lives, shots) do
+		table.insert(out, { x = block.x + b.x, y = block.y + b.y, w = b.w, h = b.h })
+	end
+	return out
+end
+
+-- the Shots frame covers the lives block, so nothing it holds is clipped or placed against another box
+local function frameOf(shots: Inst): { number }
+	return { shots.Position.x, shots.Position.y, shots.Size.x, shots.Size.y }
+end
+
+local function livesBlock(w: number, h: number): { number }
+	local b = Touch.blocks(Hud.layout(w, h, { top = 0, bottom = 0, left = 0, right = 0 })).lives
+	return { b.x, b.y, b.w, b.h }
 end
 
 return t.spec("HudView shot bars", function(it)
@@ -187,7 +212,8 @@ return t.spec("HudView shot bars", function(it)
 		local got = placed(w.gui())
 		t.expect(#got).toBe(2)
 		t.expect(got).toEqual(want(3, 2))
-		t.expect(got[1].x > 0).toBe(true) -- after the lives, not over them
+		t.expect(got[1].y > 0).toBe(true) -- down in the lives row, not over the score at the top
+		t.expect(frameOf(w.gui())).toEqual(livesBlock(1000, 600))
 	end)
 
 	it("re-lays the bars when the lives change, and when the shots change", function()
@@ -210,5 +236,16 @@ return t.spec("HudView shot bars", function(it)
 		w.hud.shots(2)
 		w.render()
 		t.expect(placed(w.gui())).toEqual(want(1, 2))
+	end)
+	it("follows the screen: a new size re-lays the frame and the bars on the next render", function()
+		local w = start()
+		w.hud.show(play(2))
+		w.render()
+		w.hud.shots(2)
+		t.expect(placed(w.gui())).toEqual(want(2, 2))
+		w.resize(1600, 900)
+		w.render()
+		t.expect(placed(w.gui())).toEqual(want(2, 2, 1600, 900))
+		t.expect(frameOf(w.gui())).toEqual(livesBlock(1600, 900))
 	end)
 end)
