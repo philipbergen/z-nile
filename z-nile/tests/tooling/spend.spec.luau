@@ -1,6 +1,6 @@
 --!strict
 -- Spend attribution must be exact (lines sum to the diff) and follow Touched modules.
-local spend = require("../../scripts/tracker/spend")
+local spend = require("../../../scripts/tracker/spend")
 local t = require("@tests/lib/t")
 
 local function item(id: string, slug: string): any

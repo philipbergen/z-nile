@@ -6,6 +6,15 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
+-- The checkout's top: ./zn runs there and resolves a relative --out from there; MARKED_PATH is relative to it (c0120).
+-- Fixtures stay under this home's .cache (the working directory, HERE), the only place a spec may write.
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local HERE = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local HOME = string.sub(HERE, #TOP + 2) -- this home, relative to the top
+local function tracker(args: { string }, env: { [string]: string }?): process.ExecResult
+	return process.exec("scripts/tracker.sh", args, { cwd = TOP, env = env })
+end
+
 local EMPTY = ".cache/board-unit-empty"
 local HOSTILE = ".cache/board-unit-hostile"
 
@@ -94,12 +103,12 @@ return t.spec("board unit", function(it)
 		fs.writeDir(`{dir}/bin`)
 		-- fake openers, so the gate never launches a browser
 		for _, name in { "open", "xdg-open" } do
-			fs.writeFile(`{dir}/bin/{name}`, `#!/bin/sh\necho "$@" > "{process.cwd}{dir}/opened"\n`)
+			fs.writeFile(`{dir}/bin/{name}`, `#!/bin/sh\necho "$@" > "{HERE}/{dir}/opened"\n`)
 			process.exec("chmod", { "+x", `{dir}/bin/{name}` })
 		end
-		local out = `{dir}/page.html`
-		local r = process.exec("scripts/tracker.sh", { "board", "--open", "--out", out }, {
-			env = { PATH = `{process.cwd}{dir}/bin:{process.env.PATH or ""}` },
+		local out = `{HERE}/{dir}/page.html`
+		local r = tracker({ "board", "--open", "--out", out }, {
+			PATH = `{HERE}/{dir}/bin:{process.env.PATH or ""}`,
 		})
 		t.expect(r.ok).toBe(true)
 		t.expect(fs.isFile(out)).toBe(true)
@@ -123,7 +132,16 @@ return t.spec("board unit", function(it)
 			"---\nid: c0010\ntype: chore\ntitle: One\nraft: R0010\ndepends_on: [constructor]\n---\n\n# c0010\n"
 		)
 		local page = `{HOSTILE}/page.html`
-		fs.writeFile(page, board.render(board.collect(`{HOSTILE}/tracker`), fs.readFile(board.MARKED_PATH)))
+		-- render reads its template by the top-relative TEMPLATE_PATH; specs run in their home, so point it at the top
+		local template = board.TEMPLATE_PATH
+		board.TEMPLATE_PATH = `{TOP}/{template}`
+		local ok, html =
+			pcall(board.render, board.collect(`{HOSTILE}/tracker`), fs.readFile(`{TOP}/{board.MARKED_PATH}`))
+		board.TEMPLATE_PATH = template
+		if not ok then
+			error(html, 0)
+		end
+		fs.writeFile(page, html)
 		fs.writeFile(`{HOSTILE}/harness.js`, HARNESS)
 		return page
 	end
@@ -185,9 +203,9 @@ return t.spec("board unit", function(it)
 			fs.writeFile(`{dir}/bin/{name}`, "#!/bin/sh\nexit 3\n")
 			process.exec("chmod", { "+x", `{dir}/bin/{name}` })
 		end
-		local out = `{dir}/page.html`
-		local r = process.exec("scripts/tracker.sh", { "board", "--open", "--out", out }, {
-			env = { PATH = `{process.cwd}{dir}/bin:{process.env.PATH or ""}` },
+		local out = `{HERE}/{dir}/page.html`
+		local r = tracker({ "board", "--open", "--out", out }, {
+			PATH = `{HERE}/{dir}/bin:{process.env.PATH or ""}`,
 		})
 		t.expect(r.ok).toBe(true)
 		t.expect(fs.isFile(out)).toBe(true)
@@ -198,19 +216,19 @@ return t.spec("board unit", function(it)
 	end)
 
 	it("board refuses a positional path and an --out that looks like a flag, and writes nothing", function()
-		local stray = process.exec("scripts/tracker.sh", { "board", ".cache/board-unit-stray.html" })
+		local stray = tracker({ "board", `{HOME}/.cache/board-unit-stray.html` })
 		t.expect(stray.ok).toBe(false)
 		t.expect(fs.isFile(".cache/board-unit-stray.html")).toBe(false)
-		local flag = process.exec("scripts/tracker.sh", { "board", "--out", "--open" })
+		local flag = tracker({ "board", "--out", "--open" })
 		t.expect(flag.ok).toBe(false)
-		t.expect(fs.isFile("--open")).toBe(false)
+		t.expect(fs.isFile(`{TOP}/--open`)).toBe(false)
 	end)
 
 	it("board prints the absolute path of a relative --out", function()
-		local out = ".cache/board-unit-abs/page.html"
-		local r = process.exec("scripts/tracker.sh", { "board", "--out", out, "-O" })
+		local out = `{HOME}/.cache/board-unit-abs/page.html` -- relative to the top, where ./zn runs
+		local r = tracker({ "board", "--out", out, "-O" })
 		t.expect(r.ok).toBe(true)
-		t.expect(string.find(r.stdout, `{process.cwd}{out}`, 1, true) ~= nil).toBe(true)
+		t.expect(string.find(r.stdout, `{TOP}/{out}`, 1, true) ~= nil).toBe(true)
 		fs.removeDir(".cache/board-unit-abs")
 	end)
 end)

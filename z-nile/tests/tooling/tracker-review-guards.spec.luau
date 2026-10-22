@@ -4,7 +4,6 @@
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local store = require("@scripts/tracker/store")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -13,7 +12,8 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/tracker-review-guards`
+-- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/tracker-review-guards`
 local repo, other = `{base}/repo`, `{base}/other`
 -- built by concatenation: the repository guards' gate scan bans the literal name in tests/ (R0210)
 local GITDIR_VAR = "GIT_" .. "DIR"
@@ -95,9 +95,26 @@ return t.spec("tracker guards after review 001", function(it)
 	end)
 
 	it("local ids are numbered above the ids handed in from origin", function()
-		local mine = store.nextNumber("issue")
-		t.expect(store.nextNumber("issue", { "c9980" }) >= 9990).toBe(true)
-		t.expect(store.nextNumber("issue", {})).toBe(mine)
+		-- the store reads the tracker of the folder it runs in, and this spec runs from z-nile/ (c0120), which holds no
+		-- registry: the numbers are taken by a child run at the checkout's top (a script under this home's .cache)
+		fs.writeDir(base)
+		local script = `{base}/next-number.luau`
+		fs.writeFile(
+			script,
+			table.concat({
+				`local store = {"req" .. "uire"}("@znile/engine/store")`,
+				'print(store.nextNumber("issue"), store.nextNumber("issue", { "c9980" }), store.nextNumber("issue", {}))',
+				"",
+			}, "\n")
+		)
+		local r = process.exec("lune", { "run", script }, { cwd = root })
+		if not r.ok then
+			error(`numbering failed: {r.stderr}`)
+		end
+		local mine, above, none = string.match(r.stdout, "^(%d+)%s+(%d+)%s+(%d+)%s*$")
+		t.expect(mine ~= nil).toBe(true)
+		t.expect((tonumber(above) :: number) >= 9990).toBe(true)
+		t.expect(none).toBe(mine)
 	end)
 
 	it("cleans up", function()

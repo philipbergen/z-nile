@@ -35,10 +35,13 @@ usage: ./zn <command> ...
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
   stamp <state>                                 print a fresh status stamp (diagnostics)
-  find <id>                                     print the item's current directory
+  find <id>                                     print the item's current directory (from where ./zn was run)
   list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
-  members <R-id>                                print directories of every issue in the raft
+  members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
+  busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
+                                                folder): rafts active on origin/main, branches and worktrees that
+                                                change them; exits 1 when anything does (read-only)
   check <id>                                    run an item's check.sh (a raft runs its own)
   renumber <old|item directory> [<new>]         step an id (conflict resolution), or one copy of a duplicated id;
                                                 <new> defaults to the next free number (z-nile/next, by one)
@@ -79,6 +82,13 @@ end
 local function title(slug: string): string
 	local s = string.gsub(slug, "%-", " ")
 	return (string.upper(string.sub(s, 1, 1)) .. string.sub(s, 2))
+end
+
+-- The name of the project whose root is `root` (the raft template's {{PROJECT}}, c0120: its RC0 runs that project's
+-- gate); the working tree's registry decides, and a root no project holds is named as it is.
+local function projectNameOf(root: string): string
+	local p = projects.projectOf(projects.load(), root)
+	return if p then p.name else root
 end
 
 local function render(path: string, vars: { [string]: string }): string
@@ -773,7 +783,7 @@ local function projectRoot(opts: { [string]: { string } }, what: string): string
 	end
 	local where = if here == "" then "the checkout's root" else here
 	return fail(
-		`{what}: no project holds {where}: run it in a project's folder or pass --project <name> ({list}); pickman has no folder until c0120, so its work passes --project pickman`
+		`{what}: no project holds {where}: run it in a project's folder or pass --project <name> ({list})`
 	)
 end
 
@@ -994,6 +1004,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					SINGLE = if opts["--single"] then "true" else "false",
 					ISSUES = table.concat(ids, ", "),
 					DATE = today(),
+					PROJECT = projectNameOf(root),
 				}
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/{chosen}.md`,
@@ -1070,6 +1081,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			SINGLE = if opts["--single"] then "true" else "false",
 			ISSUES = table.concat(ids, ", "),
 			DATE = today(),
+			PROJECT = projectNameOf(root),
 		}
 		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
@@ -1402,13 +1414,72 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	fail("lost the race to main 3 times: run land again")
 end
 
+-- A repo-relative path as the caller can use it (c0120): relative to the directory ./zn was run from (hereDir, c0114's
+-- ZN_CWD in ZN_TOP), so `$(./zn find <id>)/...` works from a project's home as from the root.
+local function callerPath(rel: string): string
+	local from = hereDir()
+	if from == "" then
+		return rel
+	end
+	local a = string.split(from, "/")
+	local b = string.split(rel, "/")
+	local i = 1
+	while i <= #a and i <= #b and a[i] == b[i] do
+		i += 1
+	end
+	local parts: { string } = {}
+	for _ = i, #a do
+		table.insert(parts, "..")
+	end
+	for j = i, #b do
+		table.insert(parts, b[j])
+	end
+	return if #parts == 0 then "." else table.concat(parts, "/")
+end
+
 function cmd.find(pos: { string })
-	print(store.get(pos[1] or fail("usage: find <id>")).dir)
+	print(callerPath(store.get(pos[1] or fail("usage: find <id>")).dir))
 end
 
 function cmd.members(pos: { string })
 	for _, m in store.members(pos[1] or fail("usage: members <R-id>")) do
-		print(m.dir)
+		print(callerPath(m.dir))
+	end
+end
+
+-- What holds `paths` (c0120): every raft active on origin/main (but the current branch's own), every branch that
+-- changes them since it left origin/main (compaction's check, compact.busyRefs) and every other worktree with
+-- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
+function cmd.busy(pos: { string })
+	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
+	local own = string.match(current, "^(R%d%d%d%d)%-")
+	local paths = if #pos > 0 then pos else compactLib.guarded()
+	local found = 0
+	local ok, tree = originTree()
+	if not ok then
+		fail("busy: cannot read origin/main (git fetch origin main)")
+	end
+	local seen: { [string]: boolean } = {}
+	for _, p in tree do
+		local r = string.match(p, "/rafts/active/(R%d%d%d%d)/")
+			or string.match(p, "^rafts/active/(R%d%d%d%d)/")
+		if r and r ~= own and not seen[r] then
+			seen[r] = true
+			print(`raft {r} is active`)
+			found += 1
+		end
+	end
+	for _, ref in compactLib.busyRefs(current, paths) do
+		print(`branch {ref} changes {table.concat(paths, ", ")}`)
+		found += 1
+	end
+	local here = sh.trim(sh.run("pwd", { "-P" }).stdout)
+	for _, wt in compactLib.dirtyWorktrees(here, paths) do
+		print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
+		found += 1
+	end
+	if found > 0 then
+		process.exit(1)
 	end
 end
 
@@ -2557,13 +2628,30 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens)
 end
 
--- Copy each member's acceptance specs into tests/acceptance/<id>, run `check`, then remove the
--- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run).
+-- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
+-- tree's registry; "." for the root's project.
+local function homeOf(item: store.Item): string
+	return projects.homeOf(projects.load(), item.dir)
+end
+
+-- `<home>/<rel>`, or `<rel>` for the root's home.
+local function inHome(home: string, rel: string): string
+	return if home == "." then rel else `{home}/{rel}`
+end
+
+-- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
+local function promotedDir(m: store.Item): string
+	return inHome(homeOf(m), `tests/acceptance/{m.id}`)
+end
+
+-- Copy each member's acceptance specs into its project's tests/acceptance/<id>, run `check`, then remove the
+-- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run). `check` gets the copied
+-- spec paths, repo-relative.
 local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boolean): boolean
 	local copied: { string } = {}
 	for _, m in store.members(raft.id) do
 		local acc = `{m.dir}/acceptance`
-		local dest = `tests/acceptance/{m.id}`
+		local dest = promotedDir(m)
 		if fs.isDir(acc) and not fs.isDir(dest) then
 			fs.writeDir(dest)
 			for _, name in fs.readDir(acc) do
@@ -2577,7 +2665,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	local pok, result = pcall(check, copied)
 	local ok = pok and result == true
 	for _, m in store.members(raft.id) do
-		local dest = `tests/acceptance/{m.id}`
+		local dest = promotedDir(m)
 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
 			fs.removeDir(dest)
 		end
@@ -2588,24 +2676,50 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	return ok
 end
 
--- Structural checks promoted acceptance specs must pass in tests/: type check + meta spec
--- (+ the specs themselves when `runSpecs`).
-local function promotedChecks(specs: { string }, runSpecs: boolean): boolean
-	local ok = sh.stream("luau-lsp", { "analyze", "--base-luaurc=.luaurc", "--platform=standard", "tests" })
+-- Structural checks promoted acceptance specs must pass in their project's tests/ (c0120: `home`): type check +
+-- meta spec (+ the specs themselves when `runSpecs`), run from that home. `specs` are repo-relative.
+local function promotedChecks(home: string, specs: { string }, runSpecs: boolean): boolean
+	local ok = sh.stream("luau-lsp", {
+		"analyze",
+		"--base-luaurc=.luaurc",
+		"--platform=standard",
+		"--ignore=**/.tracker/**",
+		inHome(home, "tests"),
+	})
 	local args = { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }
 	if runSpecs then
+		local prefix = if home == "." then "" else home .. "/"
 		for _, p in specs do
-			table.insert(args, p)
+			if string.sub(p, 1, #prefix) == prefix then
+				table.insert(args, string.sub(p, #prefix + 1))
+			end
 		end
 	end
-	return sh.stream("lune", args) and ok
+	return sh.streamIn(home, "lune", args) and ok
+end
+
+-- promotedChecks for every home the specs land in (a raft's members share one project, c0114).
+local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: boolean): boolean
+	local seen: { [string]: boolean } = {}
+	local ok = true
+	for _, m in store.members(raft.id) do
+		local home = homeOf(m)
+		if not seen[home] then
+			seen[home] = true
+			ok = promotedChecks(home, specs, runSpecs) and ok
+		end
+	end
+	if next(seen) == nil then
+		ok = promotedChecks(homeOf(raft), specs, runSpecs)
+	end
+	return ok
 end
 
 cmd["promote-check"] = function(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: promote-check <R-id>"))
 	print(`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`)
 	if not withPromotedCopies(raft, function(specs)
-		return promotedChecks(specs, false)
+		return promotedChecksAll(raft, specs, false)
 	end) then
 		fail("promoted acceptance specs would break tests/ (see above)")
 	end
@@ -2698,11 +2812,12 @@ function cmd.done(pos: { string })
 	for _, m in store.members(raft.id) do
 		local acc = `{m.dir}/acceptance`
 		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
-			fs.writeDir("tests/acceptance")
-			sh.git({ "mv", acc, `tests/acceptance/{m.id}` })
-			for _, name in fs.readDir(`tests/acceptance/{m.id}`) do
+			local dest = promotedDir(m)
+			fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
+			sh.git({ "mv", acc, dest })
+			for _, name in fs.readDir(dest) do
 				if string.match(name, "%.spec%.luau$") then
-					table.insert(promoted, `tests/acceptance/{m.id}/{name}`)
+					table.insert(promoted, `{dest}/{name}`)
 				end
 			end
 		end
@@ -2750,7 +2865,7 @@ function cmd.done(pos: { string })
 		print("done: inside a spec run, so the full gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
 			print("\n=== promoted acceptance specs: type check + meta + run")
-			if not promotedChecks(promoted, true) then
+			if not promotedChecksAll(raft, promoted, true) then
 				rollback()
 				fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
 			end
@@ -2954,6 +3069,15 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- The raft's project's architecture map (c0120): `<root>/architecture.md`, pickman's in pickman/.tracker/; a project
+-- without one (z-nile) gets a line saying so.
+local function architectureOf(raft: store.Item): string
+	local path = `{raft.root}/architecture.md`
+	return if fs.isFile(path)
+		then fs.readFile(path)
+		else `({raft.root} has no architecture.md: this project has none)`
+end
+
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
 -- architecture map and workstream plan filled in.
 local function renderPrompt(raft: store.Item): string
@@ -2988,7 +3112,9 @@ local function renderPrompt(raft: store.Item): string
 		ISSUE_IDS = table.concat(ids, ", "),
 		ITEMS = items,
 		SKILLS = skills,
-		ARCHITECTURE = fs.readFile("tracker/architecture.md"),
+		ARCHITECTURE = architectureOf(raft),
+		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
+		ROOT = raft.root,
 		WORKSTREAMS = planText,
 		LESSONS = buildLessons(),
 	})

@@ -2,11 +2,12 @@
 -- R0025 review 001 F5: the commands this raft added change a repository (ready, stop and land publish; prompt reads
 -- the main checkout), so they run the repository guard: none is in main.luau's READ_ONLY table, which is exactly
 -- the read-only set c0053's lost-.git case exempts.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
 local function readOnly(): { string }
-	local text = fs.readFile("z-nile/engine/main.luau")
+	local text = fs.readFile(`{engine.TOP}/z-nile/engine/main.luau`) -- from the top: specs run in their home (c0120)
 	local block = string.match(text, "\nlocal READ_ONLY: { %[string%]: boolean } = {\n(.-)\n}\n")
 	assert(block, "main.luau has no READ_ONLY table")
 	local out: { string } = {}

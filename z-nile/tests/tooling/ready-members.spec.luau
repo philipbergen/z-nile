@@ -6,8 +6,12 @@
 -- issue whose raft: was edited since still comes back. Fixture under .cache/ready-members (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
+
+-- the checkout's top, for reading repository files: specs run in their home (c0120)
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local PREPARED = "prepared-quiet-copper-falcon"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
@@ -40,33 +44,33 @@ end
 return t.spec("ready and stop agree on a raft's members", function(it)
 	it("sets up prepared rafts whose issues: lists disagree with their members, both ways", function()
 		local seed: { [string]: string } = {
-			[".gitignore"] = fs.readFile(".gitignore"), -- ignores prompt.md
-			["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`), -- ignores prompt.md
+			["pickman/.tracker/architecture.md"] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
 			-- R0010 leaves out c0020, which names it
-			["tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0010"),
-			["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
-			["tracker/issues/c0020/c0020.md"] = issue("c0020", "R0010"),
+			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0010"),
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
+			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "R0010"),
 			-- R0020 owns c0030; R0030 lists it too, and its own member c0040
-			["tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "c0030"),
-			["tracker/issues/c0030/c0030.md"] = issue("c0030", "R0020"),
-			["tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "c0040, c0030"),
-			["tracker/issues/c0040/c0040.md"] = issue("c0040", "R0030"),
+			["pickman/.tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "c0030"),
+			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "R0020"),
+			["pickman/.tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "c0040, c0030"),
+			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "R0030"),
 		}
 		for _, dir in
 			{
-				"tracker/rafts/R0010",
-				"tracker/issues/c0010",
-				"tracker/issues/c0020",
-				"tracker/rafts/R0020",
-				"tracker/issues/c0030",
-				"tracker/rafts/R0030",
-				"tracker/issues/c0040",
+				"pickman/.tracker/rafts/R0010",
+				"pickman/.tracker/issues/c0010",
+				"pickman/.tracker/issues/c0020",
+				"pickman/.tracker/rafts/R0020",
+				"pickman/.tracker/issues/c0030",
+				"pickman/.tracker/rafts/R0030",
+				"pickman/.tracker/issues/c0040",
 			}
 		do
 			seed[`{dir}/check.sh`] = CHECK
 		end
 		for _, s in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`.claude/skills/{s}/SKILL.md`)
+			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{s}/SKILL.md`)
 		end
 		f = trackerfix.new("ready-members", seed)
 	end)
@@ -82,13 +86,13 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 	it("stop moves back every claimed issue, whatever its list or raft: field says since", function()
 		trackerfix.elsewhere(
 			f,
-			{ ["tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0010, c0020") },
+			{ ["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0010, c0020") },
 			"list"
 		)
 		trackerfix.trOk(f, f.main, { "ready", "R0010" })
-		t.expect(onOrigin("tracker/issues/active/c0020/c0020.md")).toBe(true)
+		t.expect(onOrigin("pickman/.tracker/issues/active/c0020/c0020.md")).toBe(true)
 		-- drift after ready: the raft's list loses c0020 and gains c0030, which R0020 owns
-		local doc = "tracker/rafts/active/R0010/R0010.md"
+		local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
 		local text = fs.readFile(`{f.main}/{doc}`)
 		trackerfix.elsewhere(
 			f,
@@ -96,89 +100,99 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 			"drift"
 		)
 		-- after the claim: c0050 is filed naming R0010 (never claimed), and c0020's raft: is edited away (still claimed)
-		local claimedC0020 = originText("tracker/issues/active/c0020/c0020.md")
+		local claimedC0020 = originText("pickman/.tracker/issues/active/c0020/c0020.md")
 		trackerfix.elsewhere(f, {
-			["tracker/issues/c0050/c0050.md"] = (string.gsub(issue("c0050", "R0010"), PREPARED, "new-a-b-c")),
-			["tracker/issues/active/c0020/c0020.md"] = (
+			["pickman/.tracker/issues/c0050/c0050.md"] = (
+				string.gsub(issue("c0050", "R0010"), PREPARED, "new-a-b-c")
+			),
+			["pickman/.tracker/issues/active/c0020/c0020.md"] = (
 				string.gsub(claimedC0020, "raft: R0010", "raft: R0099")
 			),
 		}, "after the claim")
-		local c0030 = originText("tracker/issues/c0030/c0030.md")
-		local c0050 = originText("tracker/issues/c0050/c0050.md")
+		local c0030 = originText("pickman/.tracker/issues/c0030/c0030.md")
+		local c0050 = originText("pickman/.tracker/issues/c0050/c0050.md")
 		local r = trackerfix.tr(f, f.main, { "stop", "R0010" })
 		t.expect(r.ok).toBe(true)
 		local out = r.stdout
 		t.expect(string.find(r.stderr, "c0050", 1, true) ~= nil).toBe(true) -- named in the warning
-		t.expect(originText("tracker/issues/c0050/c0050.md")).toBe(c0050) -- never claimed: untouched
+		t.expect(originText("pickman/.tracker/issues/c0050/c0050.md")).toBe(c0050) -- never claimed: untouched
 		for _, id in { "c0010", "c0020" } do
-			t.expect(onOrigin(`tracker/issues/active/{id}/{id}.md`)).toBe(false)
-			t.expect(onOrigin(`tracker/issues/{id}/{id}.md`)).toBe(true)
+			t.expect(onOrigin(`pickman/.tracker/issues/active/{id}/{id}.md`)).toBe(false)
+			t.expect(onOrigin(`pickman/.tracker/issues/{id}/{id}.md`)).toBe(true)
 		end
-		t.expect(onOrigin("tracker/rafts/R0010/R0010.md")).toBe(true)
-		t.expect(originText("tracker/issues/c0030/c0030.md")).toBe(c0030) -- only listed: untouched
+		t.expect(onOrigin("pickman/.tracker/rafts/R0010/R0010.md")).toBe(true)
+		t.expect(originText("pickman/.tracker/issues/c0030/c0030.md")).toBe(c0030) -- only listed: untouched
 		t.expect(string.find(out, "stopped R0010 (c0010, c0020)", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("stop gives back a legacy claim to exactly the claimed issues", function()
 		-- R0030 started the legacy way: start claims R0030 and c0040 (its raft: members), not the listed c0030
-		trackerfix.elsewhere(f, { ["tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "c0040") }, "agree")
+		trackerfix.elsewhere(
+			f,
+			{ ["pickman/.tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "c0040") },
+			"agree"
+		)
 		local wt = trackerfix.trOk(f, f.main, { "worktree", "R0030" })
 		trackerfix.trOk(f, wt, { "start", "R0030" })
 		t.expect(trackerfix.trOk(f, f.main, { "status", "c0040" })).toBe("active")
 		-- drift on main afterwards: R0030's list names c0030 again (only that line changes; the claim stays)
-		local claimed = originText("tracker/rafts/R0030/R0030.md")
+		local claimed = originText("pickman/.tracker/rafts/R0030/R0030.md")
 		trackerfix.elsewhere(f, {
-			["tracker/rafts/R0030/R0030.md"] = (
+			["pickman/.tracker/rafts/R0030/R0030.md"] = (
 				string.gsub(claimed, "issues: %[c0040%]", "issues: [c0040, c0030]")
 			),
 		}, "relist")
 		-- after the claim: c0060 is filed naming R0030; it carries no claim of R0030, so stop leaves it
 		trackerfix.elsewhere(f, {
-			["tracker/issues/c0060/c0060.md"] = (string.gsub(issue("c0060", "R0030"), PREPARED, "new-a-b-c")),
+			["pickman/.tracker/issues/c0060/c0060.md"] = (
+				string.gsub(issue("c0060", "R0030"), PREPARED, "new-a-b-c")
+			),
 		}, "late member")
-		local c0030 = originText("tracker/issues/c0030/c0030.md")
-		local c0060 = originText("tracker/issues/c0060/c0060.md")
+		local c0030 = originText("pickman/.tracker/issues/c0030/c0030.md")
+		local c0060 = originText("pickman/.tracker/issues/c0060/c0060.md")
 		local r = trackerfix.tr(f, f.main, { "stop", "R0030" })
 		t.expect(r.ok).toBe(true)
 		local out = r.stdout
 		t.expect(string.find(r.stderr, "c0060", 1, true) ~= nil).toBe(true)
-		t.expect(originText("tracker/issues/c0060/c0060.md")).toBe(c0060)
+		t.expect(originText("pickman/.tracker/issues/c0060/c0060.md")).toBe(c0060)
 		t.expect(trackerfix.trOk(f, f.main, { "status", "R0030" })).toBe("prepared")
 		t.expect(trackerfix.trOk(f, f.main, { "status", "c0040" })).toBe("prepared")
-		t.expect(originText("tracker/issues/c0030/c0030.md")).toBe(c0030)
+		t.expect(originText("pickman/.tracker/issues/c0030/c0030.md")).toBe(c0030)
 		t.expect(string.find(out, "stopped R0030 (c0040)", 1, true) ~= nil).toBe(true)
 	end)
 	it("stop refuses a raft with no claim stamp, and moves nothing", function()
 		-- a raft in active/ with no status: line (made by hand): its effective status is active, but no claim names it
 		local doc = (string.gsub(raftDoc("R0040", "c0090"), "status: [^\n]*\n", ""))
-		trackerfix.elsewhere(f, { ["tracker/rafts/active/R0040/R0040.md"] = doc }, "unstamped")
+		trackerfix.elsewhere(f, { ["pickman/.tracker/rafts/active/R0040/R0040.md"] = doc }, "unstamped")
 		refusedNaming({ "stop", "R0040" }, "R0040", "claim stamp", "by hand")
 	end)
 	it("a resumed legacy start claims a member published meanwhile with the raft's own stamp", function()
 		trackerfix.elsewhere(f, {
-			["tracker/rafts/R0050/R0050.md"] = raftDoc("R0050", "c0070"),
-			["tracker/rafts/R0050/check.sh"] = CHECK,
-			["tracker/issues/c0070/c0070.md"] = issue("c0070", "R0050"),
-			["tracker/issues/c0070/check.sh"] = CHECK,
+			["pickman/.tracker/rafts/R0050/R0050.md"] = raftDoc("R0050", "c0070"),
+			["pickman/.tracker/rafts/R0050/check.sh"] = CHECK,
+			["pickman/.tracker/issues/c0070/c0070.md"] = issue("c0070", "R0050"),
+			["pickman/.tracker/issues/c0070/check.sh"] = CHECK,
 		}, "R0050")
 		trackerfix.trOk(f, f.main, { "sync" })
 		local wt = trackerfix.trOk(f, f.main, { "worktree", "R0050" })
 		-- a local edit of the raft's status line makes the merge of origin's claim conflict: start dies after it
-		local doc = `{wt}/tracker/rafts/R0050/R0050.md`
+		local doc = `{wt}/pickman/.tracker/rafts/R0050/R0050.md`
 		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nstatus: [^\n]*", "\nstatus: prepared-zz-zz-zz")))
 		fixture.git(wt, { "commit", "-q", "-am", "local edit of the status line" })
 		t.expect(trackerfix.tr(f, wt, { "start", "R0050" }).ok).toBe(false)
 		-- meanwhile another terminal adds a member; this terminal resolves the conflict and starts again
 		trackerfix.elsewhere(f, {
-			["tracker/issues/c0080/c0080.md"] = issue("c0080", "R0050"),
-			["tracker/issues/c0080/check.sh"] = CHECK,
+			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "R0050"),
+			["pickman/.tracker/issues/c0080/check.sh"] = CHECK,
 		}, "a member meanwhile")
 		fixture.git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 		trackerfix.trOk(f, wt, { "sync" })
 		trackerfix.trOk(f, wt, { "start", "R0050" })
-		local claim = string.match(originText("tracker/rafts/R0050/R0050.md"), "\nstatus: (%S+)")
-		t.expect(string.match(originText("tracker/issues/c0080/c0080.md"), "\nstatus: (%S+)")).toBe(claim)
-		t.expect(string.match(originText("tracker/issues/c0070/c0070.md"), "\nstatus: (%S+)")).toBe(claim)
+		local claim = string.match(originText("pickman/.tracker/rafts/R0050/R0050.md"), "\nstatus: (%S+)")
+		t.expect(string.match(originText("pickman/.tracker/issues/c0080/c0080.md"), "\nstatus: (%S+)"))
+			.toBe(claim)
+		t.expect(string.match(originText("pickman/.tracker/issues/c0070/c0070.md"), "\nstatus: (%S+)"))
+			.toBe(claim)
 		local r = trackerfix.tr(f, f.main, { "stop", "R0050" })
 		t.expect(r.ok).toBe(true)
 		t.expect(string.find(r.stderr, "warning", 1, true) == nil).toBe(true)

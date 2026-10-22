@@ -14,8 +14,8 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/sweeper-interlock`
+-- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/sweeper-interlock`
 local jailed = process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
 
 local function alive(pid: string): boolean

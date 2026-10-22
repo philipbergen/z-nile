@@ -7,8 +7,12 @@ local process = require("@lune/process")
 
 local engine = {}
 
--- z-nile/ entries that are tracker state, never tooling
-engine.STATE = { [".tracker"] = true, next = true, ["compaction.txt"] = true }
+-- z-nile/ entries a fixture never copies: tracker state, and z-nile's own specs and harness (its home's tests/, c0120),
+-- which no command a fixture runs needs; a fixture that runs specs copies the runner itself
+engine.STATE =
+	{ [".tracker"] = true, next = true, ["compaction.txt"] = true, tests = true, [".cache"] = true }
+-- The checkout that holds this harness: three folders above z-nile/tests/lib/engine.luau (c0120)
+engine.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
 -- The same tooling as `git ls-files` pathspecs, for specs that overlay a clone with the working tree's tooling.
 engine.PATHSPECS = {
 	"zn",
@@ -18,8 +22,25 @@ engine.PATHSPECS = {
 	":(exclude)z-nile/next",
 	":(exclude)z-nile/compaction.txt",
 }
--- Every project root of the repository's registry, and the shared counter (c0114).
-engine.ROOTS = { "tracker", "z-nile/.tracker" }
+-- The layout tracker fixtures run under: the repository's own since c0120 (decided with the user, 2026-10-21: "Move
+-- fixtures to new layout"): pickman's items in pickman/.tracker (its home pickman/), z-nile's in z-nile/.tracker (its home
+-- z-nile/), and tracker/ retired.
+engine.REGISTRY = table.concat({
+	'retired = ["tracker"]',
+	"",
+	"[[project]]",
+	'name = "pickman"',
+	'root = "pickman/.tracker"',
+	"",
+	"[[project]]",
+	'name = "z-nile"',
+	'root = "z-nile/.tracker"',
+	"",
+}, "\n")
+-- The fixtures' project roots (engine.REGISTRY's), and the shared counter (c0114).
+engine.ROOTS = { "pickman/.tracker", "z-nile/.tracker" }
+-- Every root a clone of the repository may hold items in: the fixtures' and the retired one (c0120).
+engine.CLONE_ROOTS = { "tracker", "z-nile/.tracker", "pickman/.tracker" }
 engine.COUNTER = "z-nile/next"
 -- Both places the counter can be: tracker/next stays the counter until origin moves it (the first publish after c0114).
 engine.COUNTERS = { "z-nile/next", "tracker/next" }
@@ -28,11 +49,14 @@ engine.COUNTERS = { "z-nile/next", "tracker/next" }
 -- (c0114, decided with the user: "Missing also refuses"), so a hand-built fixture writes it like the engine copy does.
 function engine.registry(dest: string)
 	fs.writeDir(`{dest}/z-nile`)
-	fs.writeFile(`{dest}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
+	-- the fixtures' registry, the shipped one since c0120 (Guess 11); read from no folder, so it works from a home
+	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
 end
 
 -- Copies the tooling from the checkout `root` into `dest` (an existing folder under .cache). Raises when a copy fails.
-function engine.copy(root: string, dest: string)
+-- A `root` with no ./zn (a project's home, where specs run since c0120) means the checkout that holds this harness.
+function engine.copy(given: string, dest: string)
+	local root = if fs.isFile(`{given}/zn`) then given else engine.TOP
 	local function cp(from: string, to: string)
 		local r = process.exec("cp", { "-R", from, to })
 		if not r.ok then
@@ -47,6 +71,7 @@ function engine.copy(root: string, dest: string)
 			cp(`{root}/z-nile/{name}`, `{dest}/z-nile/{name}`)
 		end
 	end
+	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
 end
 
 -- Empty tracker folders under every root of the copied registry, each kept by a .gitkeep so a commit holds them.
@@ -60,9 +85,12 @@ function engine.roots(dest: string)
 end
 
 -- A clone of the repository with no items: every item folder under every root removed, and the counter too (wherever it is) (ids
--- then follow the old rule, the next multiple of 10, c0870).
+-- then follow the old rule, the next multiple of 10, c0870), on the fixtures' layout (engine.REGISTRY).
 function engine.empty(dir: string)
-	for _, root in engine.ROOTS do
+	if fs.isDir(`{dir}/z-nile`) then
+		fs.writeFile(`{dir}/z-nile/projects.toml`, engine.REGISTRY)
+	end
+	for _, root in engine.CLONE_ROOTS do
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "active/", "done/" } do
 				local base = `{dir}/{root}/{kind}/{state}`
@@ -80,6 +108,10 @@ function engine.empty(dir: string)
 		if fs.isFile(`{dir}/{counter}`) then
 			fs.removeFile(`{dir}/{counter}`)
 		end
+	end
+	-- the fixtures' roots, laid out (a clone's tracker/ holds only the old counter's tombstone since c0120)
+	if fs.isDir(`{dir}/z-nile`) then
+		engine.roots(dir)
 	end
 end
 

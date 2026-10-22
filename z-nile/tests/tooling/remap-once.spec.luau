@@ -14,7 +14,8 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/remap-once`
+-- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/remap-once`
 local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
 
 local function git(cwd: string, args: { string }): string
@@ -73,18 +74,18 @@ return t.spec("remap runs once, even after a conflicting merge", function(it)
 		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
-		fs.writeDir(`{seed}/tracker`)
+		fs.writeDir(`{seed}/pickman/.tracker`)
 		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
-		write(`{seed}/tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
-		write(`{seed}/tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010]\n"))
+		write(`{seed}/pickman/.tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
+		write(`{seed}/pickman/.tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010]\n"))
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
 		process.exec("git", { "clone", "-q", origin, main }) -- raw: clone to a named path
 		identity(main)
 		branch = worktree("prep-x")
-		edit(`{branch}/tracker/issues/c0010/c0010.md`, "line b", "line b, the branch's version")
+		edit(`{branch}/pickman/.tracker/issues/c0010/c0010.md`, "line b", "line b, the branch's version")
 		git(branch, { "add", "-A" })
 		git(branch, { "commit", "-q", "-m", "branch work" })
 		git(branch, { "push", "-q", "-u", "origin", "prep-x" })
@@ -97,7 +98,7 @@ return t.spec("remap runs once, even after a conflicting merge", function(it)
 			error(r.stderr .. r.stdout)
 		end
 		git(wt, { "push", "-q", "origin", "HEAD:main" })
-		edit(`{wt}/tracker/issues/c0001/c0001.md`, "line b", "line b, main's version")
+		edit(`{wt}/pickman/.tracker/issues/c0001/c0001.md`, "line b", "line b, main's version")
 		git(wt, { "add", "-A" })
 		git(wt, { "commit", "-q", "-m", "main edits line b" })
 		git(wt, { "push", "-q", "origin", "HEAD:main" })
@@ -115,7 +116,7 @@ return t.spec("remap runs once, even after a conflicting merge", function(it)
 		process.exec("rm", { "-f", `{branch}/.cache/tracker-remap-base` })
 		t.expect(r.ok).toBe(false)
 		t.expect(git(branch, { "log", "-1", "--format=%s" })).toBe("tracker: remap ids")
-		t.expect(fs.isFile(`{branch}/tracker/issues/c0001/c0001.md`)).toBe(true)
+		t.expect(fs.isFile(`{branch}/pickman/.tracker/issues/c0001/c0001.md`)).toBe(true)
 	end)
 
 	it("a second remap refuses and changes nothing", function()
@@ -126,7 +127,7 @@ return t.spec("remap runs once, even after a conflicting merge", function(it)
 		t.expect(has(r.stderr, "git merge origin/main")).toBe(true)
 		t.expect(git(branch, { "rev-parse", "HEAD" })).toBe(head)
 		t.expect(git(branch, { "status", "--porcelain" })).toBe("")
-		t.expect(fs.isFile(`{branch}/tracker/issues/c0001/c0001.md`)).toBe(true)
+		t.expect(fs.isFile(`{branch}/pickman/.tracker/issues/c0001/c0001.md`)).toBe(true)
 	end)
 
 	it("cleans up", function()

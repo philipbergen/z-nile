@@ -3,6 +3,7 @@
 -- malformed tree (which store.find refuses) can still be described. See c0880.
 local fs = require("@lune/fs")
 local ids = require("./ids")
+local process = require("@lune/process")
 local projects = require("./projects")
 
 export type Level = "error" | "warning"
@@ -67,6 +68,73 @@ function audit.scan(root: string): { Found }
 	table.sort(out, function(a, b)
 		return a.path < b.path
 	end)
+	return out
+end
+
+-- The files under `dir` (relative to the checkout at `root`): the tracked ones when `root` is a repository, else every
+-- file on disk. Relative paths.
+local function filesUnder(root: string, dir: string): { string }
+	local out: { string } = {}
+	local ok, r = pcall(process.exec, "git", { "ls-files", "--", dir }, { cwd = root })
+	if ok and r.ok then
+		for line in string.gmatch(r.stdout, "[^\n]+") do
+			table.insert(out, line)
+		end
+		return out
+	end
+	local function walk(rel: string)
+		local abs = `{root}/{rel}`
+		if fs.isDir(abs) then
+			for _, name in fs.readDir(abs) do
+				walk(`{rel}/{name}`)
+			end
+		elseif fs.isFile(abs) then
+			table.insert(out, rel)
+		end
+	end
+	walk(dir)
+	return out
+end
+
+-- c0120: what a move between roots must never leave or bring back. A retired root holds nothing but the old counter's
+-- tombstone (tracker/next); a promoted-spec folder (`<home>/tests/acceptance/<id>`) sits in the home of its item's
+-- project, so a branch from before the move that re-adds one at the old place is an error.
+function audit.leftovers(root: string, found: { Found }, reg: projects.Registry): { Problem }
+	local out: { Problem } = {}
+	for _, r in reg.retired do
+		for _, f in filesUnder(root, r) do
+			if f ~= ids.OLD_FILE then
+				table.insert(out, {
+					level = "error",
+					code = "old-root",
+					path = f,
+					message = `{r} is a retired root: it holds nothing but {ids.OLD_FILE} (see {projects.FILE})`,
+				})
+			end
+		end
+	end
+	local homeById: { [string]: string } = {}
+	for _, f in found do
+		homeById[f.id] = projects.homeOf(reg, f.path)
+	end
+	for _, p in reg.projects do
+		local acc = if p.home == "." then "tests/acceptance" else `{p.home}/tests/acceptance`
+		local abs = `{root}/{acc}`
+		if fs.isDir(abs) then
+			for _, name in fs.readDir(abs) do
+				local home = homeById[name]
+				if home and home ~= p.home and fs.isDir(`{abs}/{name}`) then
+					local want = if home == "." then "tests/acceptance" else `{home}/tests/acceptance`
+					table.insert(out, {
+						level = "error",
+						code = "misplaced-spec",
+						path = `{acc}/{name}`,
+						message = `{name}'s project keeps its promoted specs in {want}/{name}`,
+					})
+				end
+			end
+		end
+	end
 	return out
 end
 
@@ -149,6 +217,12 @@ function audit.run(root: string): { Problem }
 				table.insert(names, f.id)
 			end
 			add("warning", "shared-number", list[1].path, `one number for {table.concat(names, ", ")}`)
+		end
+	end
+	local okReg, reg = pcall(projects.load, root)
+	if okReg then
+		for _, p in audit.leftovers(root, found, reg :: projects.Registry) do
+			table.insert(problems, p)
 		end
 	end
 	-- The live counter (c0114): z-nile/next once origin has moved it there, and tracker/next before. Both parsing at once

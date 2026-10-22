@@ -20,7 +20,8 @@ end
 local NO_GC: { [string]: string } = {}
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local base = `{root}/.cache/wt-fetch`
+-- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/wt-fetch`
 local seed = `{base}/seed`
 local origin = `{base}/origin.git`
 local main = `{base}/main`

@@ -10,6 +10,9 @@ local renamed = {}
 
 -- the map's home since c0114, and before it (a tree from before the move)
 local MAP_FILES = { "z-nile/compaction.txt", "tracker/compaction.txt" }
+-- A spec in a project's home (pickman/, c0120) runs there, below the checkout's root: the root of the tree holding
+-- this file (three folders up from z-nile/tests/lib/) is read when the working directory has no map.
+local ROOT = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "." -- z-nile/tests/lib/<file>
 
 local function parse(text: string): { [string]: string }?
 	local map: { [string]: string } = {}
@@ -37,10 +40,11 @@ function renamed.id(old: string, mapText: string?): string
 	local text = mapText
 	local file = MAP_FILES[1]
 	if text == nil then
-		for _, f in MAP_FILES do
-			if fs.isFile(f) then
-				text, file = fs.readFile(f), f
-				break
+		for _, base in { "", `{ROOT}/` } do
+			for _, f in MAP_FILES do
+				if text == nil and fs.isFile(base .. f) then
+					text, file = fs.readFile(base .. f), base .. f
+				end
 			end
 		end
 	end

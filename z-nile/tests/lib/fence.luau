@@ -18,6 +18,9 @@ local task = require("@lune/task")
 local fence = {}
 
 local MARKER = "PICKMAN_TEST_FENCE"
+-- The repository root: three folders above this file (z-nile/tests/lib/). A run starts in a project's home inside it
+-- (pickman/, z-nile/, c0120); the guards' shell half is always the root's z-nile/lib/fence.sh.
+local ROOT = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "." -- z-nile/tests/lib/<file>
 local DEFAULT_WAIT_SECONDS = 240 -- under the Stop hook's 300 s budget
 local UNOWNED_SECONDS = 2
 local FIXTURE_EMAIL = "@example.invalid" -- every fixture commits as <name>@example.invalid
@@ -33,13 +36,17 @@ local OVERRIDES = {
 	"GIT_PREFIX",
 	"GIT_CONFIG_PARAMETERS",
 	"GIT_CONFIG_COUNT",
+	-- and, for the guards' own reads only, the ceiling: from a project home an inherited ceiling at the checkout's
+	-- root would hide the repository they protect (code review 002 F1). The specs keep theirs.
+	"GIT_CEILING_DIRECTORIES",
 }
 
 local function trim(s: string): string
 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
 end
 
--- git in the current directory with every inherited override removed; trimmed stdout, or nil on failure.
+-- git in the current directory with every inherited override and the ceiling removed; trimmed stdout, or nil on
+-- failure. A caller that takes the answer for a repository treats an empty one as "found nothing", never as an answer.
 local function git(args: { string }): string?
 	local argv: { string } = {}
 	for _, name in OVERRIDES do
@@ -187,9 +194,15 @@ local function snapshot(cache: string): Snapshot
 			table.insert(config, line)
 		end
 	end
+	-- under this run's .cache, or any .cache of the checkout: a run from a project's home (c0120) must not register
+	-- one under the root's .cache either, which its jail closes only on macOS
 	local inside: { string } = {}
+	local top = git({ "rev-parse", "--show-toplevel" }) or ""
 	for path in string.gmatch(git({ "worktree", "list", "--porcelain" }) or "", "worktree ([^\n]+)") do
-		if string.sub(path, 1, #cache + 1) == cache .. "/" then
+		local underTop = top ~= ""
+			and string.sub(path, 1, #top + 1) == top .. "/"
+			and string.find(path, "/.cache/", #top, true)
+		if string.sub(path, 1, #cache + 1) == cache .. "/" or underTop then
 			table.insert(inside, path)
 		end
 	end
@@ -275,13 +288,18 @@ end
 local function protectedPaths(here: string): { string }
 	local repos: { string } = {}
 	local common = git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
-	if common then
+	if common and common ~= "" then
 		table.insert(repos, common)
 	end
 	for real in string.gmatch(process.env.PICKMAN_FENCE_REAL_GIT or "", "[^:]+") do
 		table.insert(repos, real)
 	end
 	local paths = { here }
+	-- the checkout's own root, when the run starts in a project's home inside it (c0120)
+	local top = git({ "rev-parse", "--show-toplevel" })
+	if top and top ~= "" and top ~= here then
+		table.insert(paths, top)
+	end
 	for _, repo in repos do
 		table.insert(paths, repo)
 		table.insert(paths, (string.gsub(repo, "/%.git$", "")))
@@ -411,7 +429,12 @@ end
 local function fixtureOfGuarded(here: string, open: { string }): boolean
 	local own = git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
 	local mine: { [string]: boolean } = { [here] = true }
-	if own then
+	-- the checkout's own top too: a run starts in a project's home below it (c0120)
+	local top = git({ "rev-parse", "--show-toplevel" })
+	if top and top ~= "" then
+		mine[top] = true
+	end
+	if own and own ~= "" then
 		mine[own] = true
 		mine[(string.gsub(own, "/%.git$", ""))] = true
 	end
@@ -619,6 +642,31 @@ function fence.enter()
 			process.exec("rm", { "-f", `{cache}/{name}` })
 		end
 	end
+	-- The checkout's own .cache, when the run starts in a project's home below it (c0120, design review 005 F2): the
+	-- folder every spec wrote fixtures in before the move keeps its fence. Its refusals and its sentinel now, while
+	-- unjailed (the jail lets the run write only its home's .cache); its ceiling below, inside the jail's shell.
+	if ROOT ~= here then
+		local top = process.exec("bash", {
+			"-c",
+			'. "$1/z-nile/lib/fence.sh" && pickman_fence_refusals "$1" && pickman_fence_sentinel "$1"',
+			"_",
+			ROOT,
+		})
+		if not top.ok then
+			stdio.ewrite(
+				`tests/run: cannot fence {ROOT}/.cache: {top.stderr}refusing. Stop and report this.\n`
+			)
+			process.exit(1)
+		end
+	end
+	-- the guards protect the repository git finds here; finding none refuses, never "nothing to protect" (code review
+	-- 002 F1): the tripwire, the protected paths and the fence would all read nothing
+	if (git({ "rev-parse", "--path-format=absolute", "--git-common-dir" }) or "") == "" then
+		stdio.ewrite(
+			`tests/run: {here} is in no git repository (or git can't read it); refusing. Stop and report this.\n`
+		)
+		process.exit(1)
+	end
 	-- the tripwire tells fixture writes by their author; that only works while this repository has a real identity
 	local email = git({ "config", "user.email" }) or ""
 	if string.find(email, FIXTURE_EMAIL, 1, true) then
@@ -661,11 +709,12 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . z-nile/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && pickman_fence_ceiling "$4" && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 4 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
 		runTemp,
+		ROOT,
 	}
 	for _, a in process.args do
 		if a ~= "--" then

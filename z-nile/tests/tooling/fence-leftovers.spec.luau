@@ -10,7 +10,8 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local repo = `{root}/.cache/fence-leftovers`
+-- the fixture under this home's .cache (the working directory, c0120); root is for reading the tooling
+local repo = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/fence-leftovers`
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
 
 local function must(r: Result, what: string): string
@@ -33,7 +34,7 @@ local function copyTree(rel: string)
 end
 
 local function read(name: string): string
-	local path = `{repo}/.cache/{name}`
+	local path = `{repo}/z-nile/.cache/{name}` -- the probe runs in the fixture's z-nile home
 	return if fs.isFile(path) then (string.gsub(fs.readFile(path), "%s+$", "")) else ""
 end
 
@@ -42,12 +43,13 @@ return t.spec("a run leaves no process behind", function(it)
 		if fs.isDir(repo) then
 			fs.removeDir(repo)
 		end
-		fs.writeDir(`{repo}/tests/probe`)
+		fs.writeDir(`{repo}/z-nile/tests/probe`)
 		fs.writeDir(`{repo}/z-nile/lib`)
 		for _, rel in
 			{
-				"tests/run.luau",
-				"tests/lib",
+				"z-nile/tests/run.luau",
+				"z-nile/tests/lib",
+				"z-nile/.luaurc",
 				"z-nile/lib/ac.sh",
 				"z-nile/lib/fence.sh",
 				"z-nile/lib/git-hooks",
@@ -60,7 +62,7 @@ return t.spec("a run leaves no process behind", function(it)
 		end
 		must(process.exec("chmod", { "-R", "+x", `{repo}/z-nile/lib/git-hooks` }), "chmod")
 		fs.writeFile(
-			`{repo}/tests/probe/leave.spec.luau`,
+			`{repo}/z-nile/tests/probe/leave.spec.luau`,
 			`--!strict\nlocal process = {REQ}("@lune/process")\nlocal t = {REQ}("@tests/lib/t")\n`
 				.. 'return t.spec("leave", function(it)\n\tit("starts two processes and returns", function()\n'
 				.. '\t\tprocess.exec("sh", { "-c", "sleep 60 >/dev/null 2>&1 & echo $! > .cache/bg.pid" })\n'
@@ -84,7 +86,7 @@ return t.spec("a run leaves no process behind", function(it)
 		local r = process.exec(
 			"lune",
 			{ "run", "tests/run", "--", "tests/probe/leave.spec.luau" },
-			{ cwd = repo, env = { PICKMAN_TEST_FENCE = "" } }
+			{ cwd = `{repo}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
 		)
 		local bg, detached = read("bg.pid"), read("detached.pid")
 		local function alive(pid: string): boolean

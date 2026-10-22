@@ -63,6 +63,13 @@ export type Model = {
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
 board.MARKED_SHA256 = "21568877a938d2c4e7d74e27f18e60da96bb73a68809610ca39216e1efebae62"
 board.TEMPLATE_PATH = "z-nile/engine/board.html"
+-- The checkout that holds this module (two folders above z-nile/engine/board.luau): the paths above are relative to it,
+-- and the board reads them from there, wherever it runs (c0120: specs run from a project's home)
+board.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+$") or "."
+-- a path above, read from the checkout; an absolute one as it is
+local function fromTop(path: string): string
+	return if string.sub(path, 1, 1) == "/" then path else `{board.TOP}/{path}`
+end
 
 -- Errors unless the vendored marked is the pinned build.
 function board.checkMarked(js: string)
@@ -813,7 +820,7 @@ end
 -- Assembled from pieces, never with gsub, so `%` or a placeholder-looking string in marked, the
 -- section or the data can't be misread.
 function board.render(m: Model, markedJs: string): string
-	local template = fs.readFile(board.TEMPLATE_PATH)
+	local template = fs.readFile(fromTop(board.TEMPLATE_PATH))
 	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
 	local statsAt, statsEnd = string.find(template, "{{STATS}}", 1, true)
 	local dataAt, dataEnd = string.find(template, "{{DATA}}", 1, true)
@@ -848,7 +855,7 @@ end
 -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
 -- marked.
 function board.build(root: string?, checkout: string?): string
-	local markedJs = fs.readFile(board.MARKED_PATH)
+	local markedJs = fs.readFile(fromTop(board.MARKED_PATH))
 	board.checkMarked(markedJs)
 	return board.render(board.collect(root, checkout), markedJs)
 end

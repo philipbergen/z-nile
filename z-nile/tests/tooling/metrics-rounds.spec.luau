@@ -27,19 +27,20 @@ local function build()
 	end
 	fs.writeDir(SB)
 	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/
-	fs.copy(".luaurc", `{SB}/.luaurc`)
-	fs.copy("rokit.toml", `{SB}/rokit.toml`)
+	-- the root files come from the checkout's top: specs run in their home (c0120)
+	fs.copy(`{engine.TOP}/.luaurc`, `{SB}/.luaurc`)
+	fs.copy(`{engine.TOP}/rokit.toml`, `{SB}/rokit.toml`)
 	local front = "---\nid: %s\ntype: chore\ntitle: T\nslug: t\n---\n\n# %s\n"
 	-- RA: a mixed raft. Its first round is classic and its latest is second-order.
-	write(`{SB}/tracker/rafts/R0010/R0010.md`, string.format(front, "R0010", "R0010"))
-	write(`{SB}/tracker/rafts/R0010/design-review-001.md`, CLASSIC)
-	write(`{SB}/tracker/rafts/R0010/design-review-002.md`, SECOND)
+	write(`{SB}/pickman/.tracker/rafts/R0010/R0010.md`, string.format(front, "R0010", "R0010"))
+	write(`{SB}/pickman/.tracker/rafts/R0010/design-review-001.md`, CLASSIC)
+	write(`{SB}/pickman/.tracker/rafts/R0010/design-review-002.md`, SECOND)
 	-- RB: `Consequences:` only mid-line
-	write(`{SB}/tracker/rafts/R0020/R0020.md`, string.format(front, "R0020", "R0020"))
-	write(`{SB}/tracker/rafts/R0020/design-review-001.md`, MIDLINE)
+	write(`{SB}/pickman/.tracker/rafts/R0020/R0020.md`, string.format(front, "R0020", "R0020"))
+	write(`{SB}/pickman/.tracker/rafts/R0020/design-review-001.md`, MIDLINE)
 	-- RC: second-order from its first round
-	write(`{SB}/tracker/rafts/R0030/R0030.md`, string.format(front, "R0030", "R0030"))
-	write(`{SB}/tracker/rafts/R0030/design-review-001.md`, SECOND)
+	write(`{SB}/pickman/.tracker/rafts/R0030/R0030.md`, string.format(front, "R0030", "R0030"))
+	write(`{SB}/pickman/.tracker/rafts/R0030/design-review-001.md`, SECOND)
 end
 
 -- { raft id, design rounds, code rounds, format } for each row of the review-rounds table

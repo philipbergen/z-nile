@@ -6,8 +6,8 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
-local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/fixture-elsewhere`
+-- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/fixture-elsewhere`
 local fx = `{base}/fx`
 -- built by concatenation: the gate scan bans the literal name in tests/
 local CONFIG_COUNT = "GIT_CONF" .. "IG_COUNT"

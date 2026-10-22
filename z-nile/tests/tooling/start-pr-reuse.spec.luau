@@ -9,6 +9,9 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
+-- the checkout's top, for reading repository files: specs run in their home (c0120)
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+
 local PREPARED = "prepared-quiet-copper-falcon"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
@@ -43,20 +46,25 @@ end
 return t.spec("a readied raft's start reuses its open pull request", function(it)
 	it("sets up two readied rafts behind an origin whose path names github.com", function()
 		local seed: { [string]: string } = {
-			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
-			["tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "kept", "c0010"),
-			["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
-			["tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "fresh", "c0020"),
-			["tracker/issues/c0020/c0020.md"] = issue("c0020", "R0020"),
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			["pickman/.tracker/architecture.md"] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "kept", "c0010"),
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
+			["pickman/.tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "fresh", "c0020"),
+			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "R0020"),
 		}
 		for _, dir in
-			{ "tracker/rafts/R0010", "tracker/issues/c0010", "tracker/rafts/R0020", "tracker/issues/c0020" }
+			{
+				"pickman/.tracker/rafts/R0010",
+				"pickman/.tracker/issues/c0010",
+				"pickman/.tracker/rafts/R0020",
+				"pickman/.tracker/issues/c0020",
+			}
 		do
 			seed[`{dir}/check.sh`] = CHECK
 		end
 		for _, s in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`.claude/skills/{s}/SKILL.md`)
+			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{s}/SKILL.md`)
 		end
 		f = trackerfix.new("start-pr-reuse-github.com", seed)
 		bin, log = `{f.base}/bin`, `{f.base}/gh.log`

@@ -10,7 +10,8 @@ end
 
 return t.spec("tests/run when workers cannot start", function(it)
 	it("reports each file as a failure instead of hanging", function()
-		local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+		-- the runner runs from a project's home (c0120): this one, whose .cache holds the fixture
+		local root = trim(process.exec("pwd", { "-P" }).stdout)
 		local dir = `{root}/.cache/run-lane-error`
 		if fs.isDir(dir) then
 			fs.removeDir(dir)

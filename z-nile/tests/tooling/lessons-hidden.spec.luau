@@ -1,6 +1,7 @@
 --!strict
 -- c0111 (review 002 F1): `lessons.load` skips hidden files in a lessons/ folder (a Finder .DS_Store) but still reports
 -- any other name that is not <slug>.md. Builds its own tree under .cache/lessons-hidden; reads nothing else.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local lessons = require("@scripts/tracker/lessons")
 local t = require("@tests/lib/t")
@@ -17,7 +18,7 @@ return t.spec("lessons.load and hidden files", function(it)
 		fs.writeFile(`{root}/.claude/skills/testing/SKILL.md`, "---\nname: testing\ndescription: x\n---\n")
 		fs.writeFile(`{folder}/.DS_Store`, "binary")
 		fs.writeDir(`{root}/z-nile`) -- c0114: a tree without the registry refuses
-		fs.writeFile(`{root}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
+		fs.writeFile(`{root}/z-nile/projects.toml`, fs.readFile(`{engine.TOP}/z-nile/projects.toml`)) -- c0120: specs run in z-nile/
 		fs.writeFile(`{folder}/notes.txt`, "not a lesson")
 		fs.writeFile(
 			`{folder}/pin.md`,

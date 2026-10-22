@@ -10,7 +10,8 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/fence-cache-entry`
+-- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/fence-cache-entry`
 
 local function fresh(name: string): string
 	local dir = `{base}/{name}`
@@ -81,14 +82,14 @@ return t.spec("the guards never delete through .cache", function(it)
 	it("the runner refuses a checkout whose .cache is a symlink before doing anything", function()
 		local fx = fresh("link-runner")
 		local victim = standIn("victim-c")
-		fs.writeDir(`{fx}/tests`)
+		-- the runner and its harness live in z-nile's home and run there (c0120)
+		fs.writeDir(`{fx}/z-nile/tests`)
 		fs.writeDir(`{fx}/z-nile/lib`)
-		for _, rel in { "tests/run.luau", "z-nile/lib/fence.sh" } do
+		for _, rel in { "z-nile/tests/run.luau", "z-nile/lib/fence.sh", "z-nile/.luaurc", ".luaurc" } do
 			fs.writeFile(`{fx}/{rel}`, fs.readFile(`{root}/{rel}`))
 		end
-		process.exec("cp", { "-R", `{root}/tests/lib`, `{fx}/tests/lib` })
-		fs.writeFile(`{fx}/.luaurc`, fs.readFile(`{root}/.luaurc`))
-		t.expect(process.exec("ln", { "-s", victim, `{fx}/.cache` }).ok).toBe(true)
+		process.exec("cp", { "-R", `{root}/z-nile/tests/lib`, `{fx}/z-nile/tests/lib` })
+		t.expect(process.exec("ln", { "-s", victim, `{fx}/z-nile/.cache` }).ok).toBe(true)
 		-- nothing may be written behind the symlink, not even a lock that is removed again: its folder stays untouched
 		local function stamp(): string
 			local args = if process.os == "macos" then { "-f", "%Fm", victim } else { "-c", "%y", victim }
@@ -100,7 +101,7 @@ return t.spec("the guards never delete through .cache", function(it)
 		local r = process.exec(
 			"lune",
 			{ "run", "tests/run", "--" },
-			{ cwd = fx, env = { PICKMAN_TEST_FENCE = "" } }
+			{ cwd = `{fx}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
 		)
 		t.expect(r.ok).toBe(false)
 		t.expect(string.find(r.stderr, "not a plain folder", 1, true) ~= nil).toBe(true)

@@ -1,6 +1,6 @@
 --!strict
 -- The affected-test selector must pick exactly the specs that depend on a change.
-local graph = require("../../scripts/lib/graph")
+local graph = require("../../../scripts/lib/graph")
 local t = require("@tests/lib/t")
 
 local ROOT = "tests/fixtures/graph"

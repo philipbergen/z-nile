@@ -18,9 +18,12 @@ fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
 fs.writeDir(`{base}/z-nile`) -- c0114: a tree without the registry refuses
 fs.writeFile(`{base}/z-nile/projects.toml`, fs.readFile(`{root}/z-nile/projects.toml`))
 
+-- the game's root (c0120: tracker/ is retired; pickman's items are in pickman/.tracker)
+local R = "pickman/.tracker"
+
 -- legacy document names are built from parts: the guard spec rejects literal ones
 local function legacy(id: string, slug: string): string
-	return `tracker/issues/{id}/{id}-{slug}.md`
+	return `{R}/issues/{id}/{id}-{slug}.md`
 end
 
 local function migrate(): process.ExecResult
@@ -45,20 +48,20 @@ return t.spec("migrate on odd documents", function(it)
 		t.expect(string.find(r.stderr, `{legacy("f0010", "bare")}: no frontmatter`, 1, true) ~= nil)
 			.toBe(true)
 		t.expect(fs.isFile(`{base}/{legacy("f0010", "bare")}`)).toBe(true) -- untouched
-		t.expect(fs.isFile(`{base}/tracker/issues/f0010/f0010.md`)).toBe(false)
-		t.expect(fs.isFile(`{base}/tracker/issues/f0020/f0020.md`)).toBe(true)
+		t.expect(fs.isFile(`{base}/{R}/issues/f0010/f0010.md`)).toBe(false)
+		t.expect(fs.isFile(`{base}/{R}/issues/f0020/f0020.md`)).toBe(true)
 		t.expect(
-			string.find(fs.readFile(`{base}/tracker/issues/f0020/f0020.md`), "\nslug: fine\n", 1, true) ~= nil
+			string.find(fs.readFile(`{base}/{R}/issues/f0020/f0020.md`), "\nslug: fine\n", 1, true) ~= nil
 		)
 			.toBe(true)
 	end)
 
 	it("an empty slug line is filled from the old filename", function()
-		fs.removeDir(`{base}/tracker`)
+		fs.removeDir(`{base}/{R}`)
 		write(legacy("f0030", "filled"), "---\nid: f0030\ntitle: Filled\nslug:\n---\n\nbody\n")
 		local r = migrate()
 		t.expect(r.ok).toBe(true)
-		local doc = fs.readFile(`{base}/tracker/issues/f0030/f0030.md`)
+		local doc = fs.readFile(`{base}/{R}/issues/f0030/f0030.md`)
 		t.expect(string.find(doc, "\nslug: filled\n", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(doc, "\nslug:\n", 1, true))).toBe(nil)
 		fs.removeDir(base)

@@ -1,7 +1,8 @@
 --!strict
--- Spec runner. Usage:
---   lune run tests/run            -- every tests/**/*.spec.luau
---   lune run tests/run -- a b     -- only the listed spec files (repo-relative paths)
+-- Spec runner. Usage, from a project's home (c0120: every other home's `tests/run.luau`, `pickman/tests/run.luau`, is this
+-- runner, run there), which is then the folder specs run in and whose .cache holds their fixtures:
+--   lune run tests/run            -- every tests/**/*.spec.luau under the current folder
+--   lune run tests/run -- a b     -- only the listed spec files (paths relative to the current folder)
 --   --jobs N / PICKMAN_JOBS=N     -- run spec files in N concurrent workers (default min(max(cpus, 2), 8);
 --                                    1 or a single file runs in-process). --jobs wins over the environment.
 -- Exits non-zero if any case fails or any spec fails to load.
@@ -12,6 +13,24 @@ local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
 type Spec = { name: string, cases: { { name: string, fn: () -> () } } }
+
+-- Where this file is (z-nile/tests/run.luau), and so the repository root, two folders above its own: every project's
+-- home requires it from its own tests/run.luau, and specs are loaded relative to this file, so a spec path relative to
+-- the current folder needs the current folder's place under the root in front of it ("pickman/", "z-nile/").
+local RUNNER_DIR = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "."
+local ROOT = string.match(RUNNER_DIR, "^(.*)/[^/]+/[^/]+$") or "."
+local HERE = (string.gsub(process.cwd, "/+$", ""))
+-- specs run from a project's home, a folder at the top of the repository (c0120: the root belongs to no project)
+local HOME = if string.sub(HERE, 1, #ROOT + 1) == ROOT .. "/" then string.sub(HERE, #ROOT + 2) else nil
+if HOME == nil or HOME == "" or string.find(HOME, "/", 1, true) then
+	stdio.ewrite(
+		"tests/run: "
+			.. HERE
+			.. " is no project's home: run specs from a project's folder (pickman/, z-nile/), as cd pickman && lune run tests/run\n"
+	)
+	process.exit(2)
+end
+local HOME_PREFIX = (HOME :: string) .. "/"
 
 local function collect(dir: string, out: { string })
 	for _, name in fs.readDir(dir) do
@@ -224,8 +243,9 @@ end
 
 local passed, failed = 0, 0
 for _, file in files do
-	-- require paths are relative to this file (tests/run.luau)
-	local modPath = "../" .. string.gsub(file, "%.luau$", "")
+	-- require paths are relative to this file (z-nile/tests/run.luau); a spec path is relative to the folder the run
+	-- started in (a project's home, c0120)
+	local modPath = "../../" .. HOME_PREFIX .. string.gsub(file, "%.luau$", "")
 	local ok, spec = pcall(require, modPath)
 	if not ok or type(spec) ~= "table" or type((spec :: any).cases) ~= "table" then
 		failed += 1
@@ -248,3 +268,5 @@ end
 
 print(`{passed} passed, {failed} failed, {#files} spec files`)
 process.exit(if failed == 0 then 0 else 1)
+-- a project home requires this file as its own runner (pickman/tests/run.luau, c0120); a module returns one value
+return nil
