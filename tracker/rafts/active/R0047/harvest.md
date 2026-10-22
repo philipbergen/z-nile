@@ -34,3 +34,5 @@
 - review-001 F3: one-off: a backlog chore whose outcome an emergent issue delivered was left open; closing it is the user's call
 - review-001 F4: one-off: a header comment left from splitting one spec file into two
 - note in execution c0127's AC5 could not pass because the ref guard refused a check's fetch with nothing new (c0122), so emergent chore c0131 fixed the guard: ticket-prep/prove-specs-pass-on-a-prototype
+- review-002 F1: architecture/read-own-facts-before-claiming
+- review-002 F2: one-off: a refute line described a fixture identity the spec didn't use
