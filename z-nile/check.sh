@@ -4,7 +4,7 @@
 #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
 # With no --project it runs every project of z-nile/projects.toml (CI, `./zn done`, `./zn land`); each --project adds
 # one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
-# (`--projects`): the repository root for z-nile, pickman/ for pickman.
+# (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
 # Static stages run concurrently (z-nile/lib/par.sh); any failure fails the gate before the tests.
 set -euo pipefail
 cd "$(dirname "$0")/.."
