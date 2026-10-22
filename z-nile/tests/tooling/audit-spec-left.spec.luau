@@ -32,7 +32,7 @@ return t.spec("c0120 audit reports specs left beside their promoted copy", funct
 		write("pickman/.tracker/issues/done/f0065/f0065.md", doc)
 		write("pickman/.tracker/issues/done/f0065/check.sh", "check AC1 true\n")
 		write("pickman/tests/acceptance/f0065/a.spec.luau", "-- a\n")
-		t.expect(string.find(audit(), "spec-left-beside", 1, true)).toBe(nil)
+		t.expect((string.find(audit(), "spec-left-beside", 1, true))).toBe(nil)
 		write("pickman/.tracker/issues/done/f0065/acceptance/a.spec.luau", "-- a\n")
 		local out = audit()
 		t.expect(string.find(out, "spec-left-beside", 1, true) ~= nil).toBe(true)
