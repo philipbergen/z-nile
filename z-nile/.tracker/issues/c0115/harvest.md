@@ -40,3 +40,7 @@
 - design-review-008 F1: ticket-prep/required-steps-on-every-path, ticket-prep/specify-every-named-artifact
 - design-review-008 F2: architecture/one-reader-per-format
 - note c0115 prep round 8: the mutation runner's git checkout restore reverted an uncommitted edit; commit before running any tool that resets files: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-010 F1: ticket-prep/exact-checks-compare-against-the-merge-base, ticket-prep/design-the-execution-window
+- design-review-010 F2: ticket-prep/new-rules-migrate-existing-work
+- design-review-010 F3: testing/no-vacuous-pass
+- design-review-010 F4: ticket-prep/restated-rules-move-together

@@ -11,3 +11,5 @@ A coverage or validation check that treats "nothing found" as success passes whe
 **How to apply:** for every check that can find zero things, write a spec case that names something that does not exist, and assert it fails or says so.
 
 A check that loops over a list it computes (roots, items, files) must also fail when the list is empty or the command that computes it fails: c0115's AC14 looped over `lune run z-nile/roots` in a process substitution, so a failing command gave an empty loop and a pass. Count what the loop read, and fail on zero.
+
+A scan whose operand stops holding what it scanned passes silently: after c0115 made `.claude/skills/<name>` links, the finished absence checks' `grep -r … ../.claude/skills` found nothing, because `grep -r` doesn't follow links (c0115 design review 010 F3). When a move changes what a path holds, rerun each absence check with a planted phrase, and see it go red.

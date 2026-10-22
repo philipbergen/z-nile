@@ -1,26 +1,35 @@
 --!strict
 -- c0115, Implementation step 5c: rewrites the skill paths in every finished item's check.sh for the skills' move (the
 -- user's decision for c0114 and c0120, 2026-10-21: finished check.sh files are rewritten when a move breaks their
--- paths). A literal `<up>.claude/skills/<old>` (then `/` or the word's end), where `<up>` climbs from the item's home
--- exactly to the repository root (`../` from `z-nile/` or `pickman/`, nothing from the root), becomes the path from
--- the home to the skill's real folder (skills.RENAMED_PATH, the one map): `../.claude/skills/tracker/` from `z-nile/`
--- becomes `skills/zz-rules/`, `../.claude/skills/testing/` from `pickman/` becomes `../z-nile/skills/zz-test/`.
--- A variable-built folder (`"../.claude/skills/$s/SKILL.md"`) is carried by its loop (decided with the user,
--- 2026-10-21, G12: "Rename loop words; delete R0025's"): a `for <v> in <words>; do` line whose words are all old skill
--- names, in a file that names `.claude/skills/$<v>/` or `.claude/skills/${<v>}/`, gets each word renamed (`for s in
--- tracker review; do` becomes `for s in zz-rules zz-review; do`), so the path reads through the skill's new link.
--- A third rule (decided with the user, G13: "Carry c0058, delete five"): a variable assigned exactly `<up>.claude/skills`
--- and read as `$<v>/<old>/` gets the new link's name (`$s/review/` becomes `$s/zz-review/`). Nothing else changes. The
--- criteria no rule carries are deleted, in a commit of its own after the rewrite's (DELETED, like c0120's G17): R0025's
--- RC2 (AGENTS.md now names real paths) and G13's five, which read text c0115 changes on purpose. Run from the repository root, after the renames are committed:
+-- paths). `<up>` is the climb from the item's home to the repository root (`../` from `z-nile/` or `pickman/`). Four
+-- rules, nothing else:
+-- 1. A literal `<up>.claude/skills/<old>` (then `/` or the word's end) becomes the path from the home to the skill's
+--    real folder (skills.RENAMED_PATH, the one map): `../.claude/skills/tracker/` from `z-nile/` becomes
+--    `skills/zz-rules/`, `../.claude/skills/testing/` from `pickman/` becomes `../z-nile/skills/zz-test/`.
+-- 1b. A bare `<up>.claude/skills` operand (a word of its own: not after `=` or `/`, and then a space, a quote, `)`,
+--    `;` or the line's end) becomes the real skills folders from the home (`skills ../pickman/skills` from `z-nile/`):
+--    `grep -r` doesn't follow the links, so an absence scan over the links would pass vacuously (design review 010 F3).
+-- 2. (decided with the user, 2026-10-21, G12: "Rename loop words; delete R0025's") a `for <v> in <words>; do` line
+--    whose words are all old skill names, in a file that names `.claude/skills/$<v>/` or `.claude/skills/${<v>}/`, gets
+--    each word renamed (`for s in tracker review; do` becomes `for s in zz-rules zz-review; do`).
+-- 3. (decided with the user, G13: "Carry c0058, delete five"; widened by design review 010 F2) a variable assigned a
+--    value that ends in `.claude/skills` (c0058's `local s=../.claude/skills`, c0040's
+--    `R="$(git … --show-toplevel)/.claude/skills"`) and read as `$<v>/<old>/` or `${<v>}/<old>/` gets the new link's
+--    name (`$s/review/` becomes `$s/zz-review/`).
+-- The criteria no rule carries are deleted, in a commit of their own (DELETED, like c0120's G17): R0025's RC2 (G12) and
+-- G13's five, which read text c0115 changes on purpose. Run from the repository root:
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished             -- the rewrite (its own commit)
---   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --delete  -- the deletion (the next commit)
+--   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --delete  -- the deletion (its own commit)
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --check   -- AC14: writes nothing
--- Each prints what it changed and a count, and changes nothing when run again. --check exits 1 unless every finished
--- check.sh is exactly its text before c0115's move (the parent of the commit that removed MARK), rewritten by the two
--- rules, with DELETED's statements removed and nothing else: so a path left old, an extra line deleted or a listed
--- criterion kept is red. A file that wasn't finished before the move only has to need no rewrite. No history (a
--- shallow clone, or the move not made) is red.
+-- Rerun the rewrite (then --check) after every merge of origin/main, as its own commit: an item that finished on main
+-- meanwhile arrives with old paths. Each mode prints what it changed and a count, and changes nothing when run again.
+-- --check is three-way (design review 010 F1, the same as c0120's AC18): against `git merge-base HEAD origin/main`,
+-- every finished check.sh that is at the base must be exactly its base text rewritten by the four rules, with DELETED's
+-- statements removed (an id with no statement at the base stays absent), and nothing else; a file that isn't at the
+-- base, and every file when the range is empty (the branch landed), only has to need no rewrite; a non-empty range
+-- that compares no file with its base (origin/main from before the layout) is red. Independently of
+-- the rules, no finished check.sh may still name `.claude/skills/<old>` or `/<old>/SKILL.md` for an old skill. No
+-- origin/main, or no merge-base (a shallow clone), is red.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
@@ -30,9 +39,9 @@ local skills = require("@znile/engine/skills")
 local checkOnly = table.find(process.args, "--check") ~= nil
 local deleteMode = table.find(process.args, "--delete") ~= nil
 
--- The finished criteria no rewrite carries, deleted (G12): file -> the ids of its `check "<id>: …"` statements.
+-- The finished criteria no rewrite carries, deleted: file -> the ids of its `check "<id>: …"` statements.
 local DELETED: { [string]: { string } } = {
-	["z-nile/.tracker/rafts/done/R0025/check.sh"] = { "RC2" },
+	["z-nile/.tracker/rafts/done/R0025/check.sh"] = { "RC2" }, -- G12: AGENTS.md now names real paths
 	-- G13 (decided with the user: "Carry c0058, delete five"): they read text c0115 changes on purpose
 	["pickman/.tracker/issues/done/c0010/check.sh"] = { "AC7" }, -- game phrases moved to pickman-test
 	["z-nile/.tracker/issues/done/c0045/check.sh"] = { "AC6" }, -- the prompt template's hard rule 1
@@ -40,21 +49,33 @@ local DELETED: { [string]: { string } } = {
 	["z-nile/.tracker/issues/done/c0068/check.sh"] = { "AC7" }, -- `name: stop-raft`
 	["z-nile/.tracker/issues/done/c0069/check.sh"] = { "AC5" }, -- `name: launch-raft`
 }
--- A file the move takes away: its parent is the tree before c0115's move.
-local MARK = ".claude/skills/testing/SKILL.md"
 local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 assert(top ~= "", "rewrite-finished: not in a git checkout")
 local reg = projects.load(top, true)
 
+local function esc(s: string): string
+	return (string.gsub(s, "%p", "%%%0"))
+end
 local function nameChar(c: string): boolean
 	return c ~= "" and string.match(c, "[%w_%-]") ~= nil
 end
--- the finished file's text with every literal old skill path that names the root's .claude rewritten for `home`
+-- the old skill names, longest first, so `ready-raft` never matches inside a longer name
+local OLD: { string } = {}
+for old in skills.RENAMED_PATH do
+	table.insert(OLD, old)
+end
+table.sort(OLD, function(a: string, b: string): boolean
+	return #a > #b or (#a == #b and a < b)
+end)
+
+-- `text` (a finished check.sh in `home`) rewritten by the four rules, and how many places changed
 local function rewrite(text: string, home: string): (string, number)
 	local depth = if home == "." then 0 else #string.split(home, "/")
 	local up = string.rep("../", depth)
 	local n = 0
-	for old, real in skills.RENAMED_PATH do
+	-- rule 1
+	for _, old in OLD do
+		local real = skills.RENAMED_PATH[old]
 		local needle = `{up}.claude/skills/{old}`
 		local from = 1
 		while true do
@@ -64,7 +85,6 @@ local function rewrite(text: string, home: string): (string, number)
 			end
 			local before = string.sub(text, (a :: number) - 1, (a :: number) - 1)
 			local after = string.sub(text, (b :: number) + 1, (b :: number) + 1)
-			-- the literal starts the word (after a space, a quote, `=` or the line start) and the old name ends there
 			if (before == "" or not string.match(before, "[%w_%./%-]")) and not nameChar(after) then
 				local new = if home == "." then real else rewrites.relative(home, real)
 				text = string.sub(text, 1, (a :: number) - 1) .. new .. string.sub(text, (b :: number) + 1)
@@ -75,7 +95,34 @@ local function rewrite(text: string, home: string): (string, number)
 			end
 		end
 	end
-	-- the loops that feed a variable-built skill path (G12)
+	-- rule 1b: a bare operand becomes every real skills folder, z-nile's first
+	do
+		local folders: { string } = {}
+		for _, f in skills.folders(reg) do
+			table.insert(folders, if home == "." then f.path else rewrites.relative(home, f.path))
+		end
+		local new = table.concat(folders, " ")
+		local needle = `{up}.claude/skills`
+		local from = 1
+		while true do
+			local a, b = string.find(text, needle, from, true)
+			if not a then
+				break
+			end
+			local before = string.sub(text, (a :: number) - 1, (a :: number) - 1)
+			local after = string.sub(text, (b :: number) + 1, (b :: number) + 1)
+			local opens = before == "" or string.match(before, "[%s\"'%(]") ~= nil
+			local closes = after == "" or string.match(after, "[%s\"'%);]") ~= nil
+			if opens and closes then
+				text = string.sub(text, 1, (a :: number) - 1) .. new .. string.sub(text, (b :: number) + 1)
+				n += 1
+				from = (a :: number) + #new
+			else
+				from = (b :: number) + 1
+			end
+		end
+	end
+	-- rule 2: the loops that feed a variable-built skill path
 	local lines = string.split(text, "\n")
 	for i, line in lines do
 		local lead, var, words, tail =
@@ -101,28 +148,37 @@ local function rewrite(text: string, home: string): (string, number)
 		end
 	end
 	text = table.concat(lines, "\n")
-	-- rule 3 (G13): a variable assigned exactly `<up>.claude/skills` (c0058's `local s=../.claude/skills`) and read as
-	-- `$<v>/<old>/` or `${<v>}/<old>/`: the old name becomes the new link's name, so the path reads through it
-	local vars: { string } = {}
-	for v, after in
-		string.gmatch(
-			text,
-			"([%a_][%w_]*)=" .. string.gsub(`{up}.claude/skills`, "%p", "%%%0") .. "([^%w_/%-]?)"
-		)
-	do
-		if after ~= "/" then
-			table.insert(vars, v)
+	-- rule 3: a variable whose assigned value ends in `.claude/skills` (the nearest `<v>=` starting a word before it, on
+	-- its line)
+	local vars: { [string]: boolean } = {}
+	for _, line in string.split(text, "\n") do
+		local from = 1
+		while true do
+			local a, b = string.find(line, ".claude/skills", from, true)
+			if not a then
+				break
+			end
+			local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
+			if after == "" or string.match(after, "[%s\"']") then
+				local prefix = string.sub(line, 1, (a :: number) - 1)
+				local last: string? = nil
+				for v in string.gmatch(" " .. prefix, "%s([%a_][%w_]*)=") do
+					last = v
+				end
+				if last then
+					vars[last] = true
+				end
+			end
+			from = (b :: number) + 1
 		end
 	end
-	for _, v in vars do
-		for old, real in skills.RENAMED_PATH do
-			local link = string.match(real, "[^/]+$") :: string
+	for v in vars do
+		for _, old in OLD do
+			local link = string.match(skills.RENAMED_PATH[old], "[^/]+$") :: string
 			for _, form in { `${v}/{old}/`, `${"{"}{v}{"}"}/{old}/` } do
-				local new =
-					string.gsub(form, "/" .. string.gsub(old, "%p", "%%%0") .. "/$", "/" .. link .. "/")
+				local new = string.sub(form, 1, #form - #old - 1) .. link .. "/"
 				local count
-				text, count =
-					string.gsub(text, string.gsub(form, "%p", "%%%0"), (string.gsub(new, "%%", "%%%%")))
+				text, count = string.gsub(text, esc(form), (string.gsub(new, "%%", "%%%%")))
 				n += count
 			end
 		end
@@ -130,10 +186,24 @@ local function rewrite(text: string, home: string): (string, number)
 	return text, n
 end
 
+-- every old skill path a finished check.sh still names, independently of the rules: `.claude/skills/<old>` (then a
+-- non-name character or the end) or `/<old>/SKILL.md`
+local function oldPaths(text: string): { string }
+	local out: { string } = {}
+	for _, old in OLD do
+		for _, pat in { "%.claude/skills/" .. esc(old) .. "%f[^%w_%-]", "/" .. esc(old) .. "/SKILL%.md" } do
+			if string.find(text, pat) then
+				table.insert(out, (string.gsub(pat, "%%", "")))
+			end
+		end
+	end
+	return out
+end
+
 -- `text` without the `check "<id>: …"` statement of each id: the statement runs to the line where its single quotes
--- balance and it doesn't end in `\` (RC2's `bash -c '…'` spans five lines). Nil and why unless each id is exactly one
--- statement.
-local function deleteCriteria(text: string, ids: { string }): (string?, string?)
+-- balance and it doesn't end in `\`. Nil and why unless each id is exactly one statement; `absentOk` lets an id with
+-- no statement stay absent.
+local function deleteCriteria(text: string, ids: { string }, absentOk: boolean?): (string?, string?)
 	local lines = string.split(text, "\n")
 	for _, id in ids do
 		local found = 0
@@ -152,7 +222,7 @@ local function deleteCriteria(text: string, ids: { string }): (string?, string?)
 			end
 			i += 1
 		end
-		if found ~= 1 then
+		if found > 1 or (found == 0 and not absentOk) then
 			return nil, `{id}: {found} check statements`
 		end
 		lines = kept
@@ -164,21 +234,6 @@ local function git(args: { string }): (boolean, string)
 	local r = process.exec("git", args, { cwd = top })
 	return r.ok, (string.gsub(r.stdout, "%s+$", ""))
 end
--- the tree before c0115's move, or nil and why
-local function premove(): (string?, string?)
-	if fs.isFile(`{top}/{MARK}`) then
-		return nil, `{MARK} is still in the tree: the move hasn't happened`
-	end
-	local okM, moved = git({ "log", "-1", "--format=%H", "--", MARK })
-	if not okM or moved == "" then
-		return nil, `no commit removed {MARK}: the history is shallow or the move hasn't happened`
-	end
-	local okP, parent = git({ "rev-parse", "--verify", "-q", moved .. "^" })
-	if not okP or parent == "" then
-		return nil, `the move {moved} has no parent in this history`
-	end
-	return parent, nil
-end
 
 if deleteMode then
 	local files: { string } = {}
@@ -189,7 +244,7 @@ if deleteMode then
 	local changed = 0
 	for _, file in files do
 		local text = fs.readFile(`{top}/{file}`)
-		local new = deleteCriteria(text, DELETED[file])
+		local new = deleteCriteria(text, DELETED[file], true)
 		if new and new ~= text then
 			fs.writeFile(`{top}/{file}`, new)
 			changed += 1
@@ -200,16 +255,27 @@ if deleteMode then
 	process.exit(0)
 end
 
-local pre: string? = nil
+-- --check's base: the merge-base with origin/main, or nil when the range is empty (the branch landed)
+local base: string? = nil
 if checkOnly then
-	local why
-	pre, why = premove()
-	if not pre then
-		print(`rewrite-finished: {why}: nothing checked`)
+	local okO = git({ "rev-parse", "--verify", "-q", "origin/main" })
+	local okB, mb = git({ "merge-base", "HEAD", "origin/main" })
+	if not okO or not okB or mb == "" then
+		print(
+			"rewrite-finished: no origin/main or no merge-base with it (fetch it; a shallow clone can't tell): nothing checked"
+		)
 		process.exit(1)
 	end
+	local _, head = git({ "rev-parse", "HEAD" })
+	if head ~= mb then
+		base = mb
+	else
+		print("rewrite-finished: no commits since origin/main: checking only that nothing needs a rewrite")
+	end
 end
+
 local wrong = 0
+local compared = 0 -- finished files judged against their base text: zero with a base is red (no vacuous pass)
 local changed, read = 0, 0
 for _, root in projects.roots(reg) do
 	for _, kind in { "issues", "rafts" } do
@@ -225,18 +291,25 @@ for _, root in projects.roots(reg) do
 					local home = projects.homeOf(reg, file)
 					local new, n = rewrite(text, home)
 					if checkOnly then
-						-- exactly the pre-move text, rewritten, with DELETED's statements gone
-						local okB, before = git({ "show", `{pre}:{file}` })
+						for _, p in oldPaths(text) do
+							wrong += 1
+							print(`{file}: still names {p}`)
+						end
+						local okB, before = false, ""
+						if base then
+							okB, before = git({ "show", `{base}:{file}` })
+						end
 						if okB then
+							compared += 1
 							local want: string? = rewrite(before .. "\n", home)
 							local why: string? = nil
 							if DELETED[file] then
-								want, why = deleteCriteria(want :: string, DELETED[file])
+								want, why = deleteCriteria(want :: string, DELETED[file], true)
 							end
 							if want ~= text then
 								wrong += 1
 								print(
-									`{file}: not its pre-move text rewritten{if DELETED[file]
+									`{file}: not its base text rewritten{if DELETED[file]
 										then " less " .. table.concat(DELETED[file], ", ")
 										else ""}{if why then " (" .. why .. ")" else ""}`
 								)
@@ -259,6 +332,15 @@ print(`{changed} of {read} finished check.sh files {if checkOnly then "would be 
 if read == 0 then
 	print("no finished check.sh was read: nothing checked")
 	process.exit(1)
+end
+if checkOnly and base and compared == 0 then
+	print(
+		`no finished check.sh is at the base {base}: nothing compared (does origin/main predate the layout?)`
+	)
+	process.exit(1)
+end
+if checkOnly and base then
+	print(`{compared} finished check.sh files compared with their base text`)
 end
 if checkOnly and (changed > 0 or wrong > 0) then
 	process.exit(1)
