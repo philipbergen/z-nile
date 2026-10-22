@@ -450,4 +450,42 @@ function rewrites.rewrite(text: string, home: string, world: World): string
 	return table.concat(out, "\n")
 end
 
+-- The finished criteria the user deleted (decided with the user, 2026-10-21: "delete them", Guess 17): criteria
+-- that build a copy of the tree in its old shape, or run another home's specs, which no path rewrite carries. The
+-- second exception to sequestration, for exactly these `check` statements: each is removed with its continuation lines
+-- (a line ending in `\`), and nothing else (helpers they called stay, unused).
+rewrites.DELETED = {
+	["z-nile/.tracker/issues/done/c0049/check.sh"] = { "AC4", "AC5" },
+	["z-nile/.tracker/issues/done/c0058/check.sh"] = { "AC9", "AC10" },
+	["z-nile/.tracker/issues/done/c0076/check.sh"] = { "AC5", "AC6" },
+	["z-nile/.tracker/issues/done/c0111/check.sh"] = { "AC7" },
+} :: { [string]: { string } }
+
+-- `text` without the `check "<id>: …"` statement of each id in `ids`; nil and why when an id names no such statement,
+-- or more than one
+function rewrites.deleteCriteria(text: string, ids: { string }): (string?, string?)
+	local lines = string.split(text, "\n")
+	for _, id in ids do
+		local found = 0
+		local kept: { string } = {}
+		local i = 1
+		while i <= #lines do
+			if string.sub(lines[i], 1, #id + 8) == `check "{id}:` then
+				found += 1
+				while string.sub(lines[i], -1) == "\\" and i < #lines do
+					i += 1
+				end
+			else
+				table.insert(kept, lines[i])
+			end
+			i += 1
+		end
+		if found ~= 1 then
+			return nil, `{id}: {found} check statements`
+		end
+		lines = kept
+	end
+	return table.concat(lines, "\n"), nil
+end
+
 return rewrites
