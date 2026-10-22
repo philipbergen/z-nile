@@ -116,7 +116,7 @@ return t.spec("c0120 the graph and the selector know the homes", function(it)
 				.. "for _, u in g.unresolved do print(`UNRESOLVED {u.file}: {u.spec}`) end\n"
 				.. "print(`FILES {#g.files}`)"
 		)
-		t.expect(string.find(out, "UNRESOLVED", 1, true)).toBe(nil)
+		t.expect((string.find(out, "UNRESOLVED", 1, true))).toBe(nil)
 		t.expect((tonumber(string.match(out, "FILES (%d+)")) or 0) > 100).toBe(true)
 	end)
 

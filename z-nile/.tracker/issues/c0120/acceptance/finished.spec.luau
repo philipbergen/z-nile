@@ -169,7 +169,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 				"finish",
 				"",
 			}, "\n")
-			t.expect(rewrites.deleteCriteria(text, { "AC4", "AC10" })).toBe(table.concat({
+			t.expect((rewrites.deleteCriteria(text, { "AC4", "AC10" }))).toBe(table.concat({
 				"helper() { true; }",
 				'check "AC1: kept" true',
 				'check "AC4a: kept, a longer id" true',

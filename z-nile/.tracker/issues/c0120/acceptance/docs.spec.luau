@@ -160,7 +160,7 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		"the settings add no ../zn entries, and keep the scripts/tracker.sh ones a home's forwarder matches",
 		function()
 			local settings = read(".claude/settings.json")
-			t.expect(string.find(settings, "Bash(../zn", 1, true)).toBe(nil)
+			t.expect((string.find(settings, "Bash(../zn", 1, true))).toBe(nil)
 			t.expect(string.find(settings, "Bash(scripts/tracker.sh", 1, true) ~= nil).toBe(true)
 		end
 	)

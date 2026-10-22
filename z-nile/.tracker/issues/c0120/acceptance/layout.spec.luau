@@ -97,10 +97,12 @@ end
 return t.spec("c0120 every project's files live in its home", function(it)
 	it("every moved path is in its home, tracked, and gone from its old place", function()
 		local bad: { string } = {}
-		for _, pair in { { "pickman", PICKMAN }, { "z-nile", ZNILE } } do
-			for _, p in pair[2] do
-				if #tracked(`{pair[1]}/{p}`) == 0 then
-					table.insert(bad, `{pair[1]}/{p} is not tracked`)
+		local homes: { { name: string, paths: { string } } } =
+			{ { name = "pickman", paths = PICKMAN }, { name = "z-nile", paths = ZNILE } }
+		for _, home in homes do
+			for _, p in home.paths do
+				if #tracked(`{home.name}/{p}`) == 0 then
+					table.insert(bad, `{home.name}/{p} is not tracked`)
 				end
 				if exists(p) or #tracked(p) > 0 then
 					table.insert(bad, `{p} is still at the root`)
