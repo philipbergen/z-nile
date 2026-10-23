@@ -117,23 +117,27 @@ function audit.leftovers(root: string, found: { Found }, reg: projects.Registry)
 	for _, f in found do
 		homeById[f.id] = projects.homeOf(reg, f.path)
 	end
-	-- an item's acceptance/ left in its folder beside the copy done promoted (c0120 code review 007 F5): two texts of
-	-- one sequestered spec, of which the checks see only one
+	-- a finished item's acceptance/ still in its done/ folder (c0120 code review 007 F5, 008 F2): done promotes it to
+	-- <home>/tests/acceptance/<id>; a copy left beside the promoted one, or specs moved back, keep their text and lose
+	-- their gate
 	for _, f in found do
 		local acc = `{f.path}/acceptance`
-		local home = homeById[f.id] or "."
-		local promoted = if home == "." then `tests/acceptance/{f.id}` else `{home}/tests/acceptance/{f.id}`
 		if
-			fs.isDir(`{root}/{acc}`)
+			string.find(f.path, "/done/", 1, true)
+			and fs.isDir(`{root}/{acc}`)
 			and #fs.readDir(`{root}/{acc}`) > 0
-			and fs.isDir(`{root}/{promoted}`)
-			and #fs.readDir(`{root}/{promoted}`) > 0
 		then
+			local home = homeById[f.id] or "."
+			local promoted = if home == "."
+				then `tests/acceptance/{f.id}`
+				else `{home}/tests/acceptance/{f.id}`
 			table.insert(out, {
 				level = "error",
-				code = "spec-left-beside",
+				code = "spec-not-promoted",
 				path = acc,
-				message = `{f.id}'s specs are both in {acc} and promoted in {promoted}: keep one`,
+				message = if fs.isDir(`{root}/{promoted}`)
+					then `{f.id} is done: its specs are both in {acc} and promoted in {promoted}: keep the promoted ones`
+					else `{f.id} is done: its specs belong in {promoted}, where done promotes them`,
 			})
 		end
 	end
