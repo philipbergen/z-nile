@@ -183,6 +183,7 @@ if not mainBase then
 	process.exit(1)
 end
 local M: string = mainBase :: string
+local ORIGIN = rewrites.originUrl(TOP)
 local okB, mergePre = git({ "merge-base", pre :: string, M })
 local B = trim(mergePre)
 assert(okB and B ~= "", `git merge-base {pre} {M} failed`)
@@ -222,17 +223,28 @@ end
 -- c0114's promoted specs carry c0120's overrides (Implementation step 9): their expected text is their text before the
 -- move with c0114-overrides.patch applied: that file's section of the patch, applied by patch(1) to a copy in a
 -- scratch folder under this home's .cache (no git, so no repository is in play)
-local function withOverrides(promoted: string, old: string): string?
-	local ok, text = git({ "show", `HEAD:{OWN}c0114-overrides.patch` })
-	if not ok then
-		return nil
+-- The reviewed overrides patches (decided with the user, 2026-10-23: "Reviewed overrides patch"): c0114's for its
+-- own promoted specs, and main-overrides.patch for every spec main promoted during c0120's window that the move must
+-- override (its layout). Both are read from the prep commit the review pinned, never from HEAD: they change only in
+-- prep, under the reviewer's pin.
+local PATCHES: string = ""
+for _, name in { "c0114-overrides.patch", "main-overrides.patch" } do
+	local okP, text = git({ "show", `{ownBase}:{OWN}{name}` })
+	if okP then
+		PATCHES ..= text .. "\n"
 	end
+end
+local function withOverrides(promoted: string, old: string): string?
+	local text = PATCHES
 	local header = `diff --git a/{promoted} b/{promoted}\n`
 	local s = string.find(text, header, 1, true)
 	if not s then
 		return old -- the patch leaves this file as it was
 	end
 	local e = string.find(text, "\ndiff --git ", s + #header, true)
+	if string.find(text, header, (e or #text) + 1, true) then
+		return nil -- two sections for one file: ambiguous
+	end
 	local section = string.sub(text, s, if e then e else #text)
 	local scratch = `{TOP}/z-nile/.cache/c0120-ac18-patch`
 	if fs.isDir(scratch) then
@@ -288,7 +300,8 @@ end
 -- branch must follow main there too; its files are in neither pre nor M, only in main's history between B and M
 local removedOnMain: { [string]: boolean } = {}
 do
-	local okD, removed = git({ "log", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
+	local okD, removed =
+		git({ "log", "--no-renames", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
 	if okD then
 		local gone = sequestered(removed, rootsOf(mReg), promotedOf(mReg))
 		for key, e in gone do
@@ -305,7 +318,10 @@ end
 -- The finished rewrite (JC1's group 2) ran with the hand-written core (group 4) in the working tree, so a file whose text
 -- comes from group 2 or earlier is rewritten against group 4's tree: the third commit after the move on the branch's
 -- first-parent line (the user decided the groups, "One PR, reviewed by commit group"; they are never rewritten).
-local worlds: { [string]: rewrites.World } = {}
+-- Two worlds, neither chosen per file (code review 009 F2: a commit the author makes must not choose the world): group
+-- 4's tree, pinned by its subject, and HEAD's. A finished check.sh's text is accepted when it equals the rewrite under
+-- either.
+local CORE_SUBJECT = "c0120: run each project from its home"
 local okMv, moveCommit = git({ "log", "-1", "--format=%H", "--", rewrites.MARK })
 local okFp, firstParents = git({ "rev-list", "--first-parent", "--reverse", `{trim(moveCommit)}..HEAD` })
 local coreRev: string? = nil
@@ -318,17 +334,17 @@ if okMv and okFp then
 		end
 	end
 end
-local function worldAt(path: string): rewrites.World
-	local okT, sha = git({ "log", "-1", "--format=%H", "HEAD", "--", path })
-	local rev = if okT and trim(sha) ~= "" then trim(sha) else "HEAD"
-	if coreRev and git({ "merge-base", "--is-ancestor", rev, coreRev :: string }) then
-		rev = coreRev :: string
-	end
-	if not worlds[rev] then
-		worlds[rev] = rewrites.world(TOP, pre :: string, rev)
-	end
-	return worlds[rev]
+local coreSubject = if coreRev
+	then trim(select(2, git({ "log", "-1", "--format=%s", coreRev :: string })))
+	else ""
+if string.sub(coreSubject, 1, #CORE_SUBJECT) ~= CORE_SUBJECT then
+	print(
+		`finished: the third commit after the move is not the hand-written core ("{CORE_SUBJECT} …"): refusing`
+	)
+	process.exit(1)
 end
+local worldCore = rewrites.world(TOP, pre :: string, coreRev :: string)
+local worldHead = rewrites.world(TOP, pre :: string, "HEAD")
 local function finishedAtHead(id: string): boolean
 	local c = headSet[`{id}|check.sh`]
 	return c ~= nil and isDone(c.path)
@@ -413,13 +429,21 @@ for key in keys do
 	local want: string? = ref
 	if inner == "check.sh" and id ~= OWN_ID and isDone(h.path) then
 		-- the move's rewrite, whoever finished it (main's done already rewrote its own item paths)
-		want = rewrites.rewrite(ref :: string, projects.homeOf(reg, h.path), worldAt(h.path))
-	elseif h.promoted and not refPromoted and id == "c0114" then
-		-- promoted by this branch's own done of c0114 (the stacked build): with c0120's overrides
+		local home = projects.homeOf(reg, h.path)
+		local deletedHere = rewrites.DELETED[h.path]
+		local function form(w: rewrites.World): string
+			local text = rewrites.rewrite(ref :: string, home, w)
+			return if deletedHere then rewrites.deleteCriteria(text, deletedHere) or "" else text
+		end
+		local underCore = form(worldCore)
+		want = if now == underCore then underCore else form(worldHead)
+	elseif h.promoted then
+		-- a promoted spec: with the reviewed overrides patch's section for it, if any (c0114's own, promoted by this
+		-- branch's done or main's; or one main promoted during the window, main-overrides.patch)
 		want = withOverrides(h.path, ref :: string)
 	end
 	local deleted = rewrites.DELETED[h.path]
-	if deleted and want then
+	if deleted and want and not (inner == "check.sh" and isDone(h.path)) then
 		want = rewrites.deleteCriteria(want, deleted) or `cannot delete {table.concat(deleted, ", ")}`
 	end
 	if now ~= want then
@@ -457,10 +481,10 @@ table.sort(bad)
 if #bad > 0 then
 	print(table.concat(bad, "\n"))
 	print(
-		`finished: {#bad} of {judged} sequestered files differ from their reference (before the move {pre}, main {M}; c0120's own from {from})`
+		`finished: {#bad} of {judged} sequestered files differ from their reference (before the move {pre}, main {M} from {ORIGIN}; c0120's own from {from})`
 	)
 	process.exit(1)
 end
 print(
-	`finished: {judged} sequestered files are their reference (before the move {pre}, main {M}), finished check.sh files rewritten; c0120's own as {from} records them`
+	`finished: {judged} sequestered files are their reference (before the move {pre}, main {M} from {ORIGIN}), finished check.sh files rewritten; c0120's own as {from} records them`
 )
