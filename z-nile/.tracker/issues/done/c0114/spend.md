@@ -27,6 +27,7 @@
 | 23 | 2026-10-21 08:03 | design-review-005 tokens | 0 | 0 | 0.0 | spend | design-review | 61646 |
 | 24 | 2026-10-21 08:05 | prep | 2157 | 3 | 120.0 | spend | prep |  |
 | 25 | 2026-10-23 23:26 | tracker: done R0043 | 0 | 0 | 7.1 | raft | deliver |  |
+| 26 | 2026-10-23 23:43 | done to merged | 0 | 0 | 15.0 | spend | deliver |  |
 
-**Total:** +2157 / -3 lines, 366.5 agent-minutes, 711712 tokens over 25 records
-<!-- totals: added=2157 removed=3 minutes=366.5 records=25 tokens=711712 -->
+**Total:** +2157 / -3 lines, 381.5 agent-minutes, 711712 tokens over 26 records
+<!-- totals: added=2157 removed=3 minutes=381.5 records=26 tokens=711712 -->
