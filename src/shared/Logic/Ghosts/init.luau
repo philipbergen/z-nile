@@ -385,6 +385,7 @@ local function tickMode(set: Set, input: Input, out: { Event })
 	if set.frightened > 0 then
 		set.frightened -= 1
 		if set.frightened == 0 then
+			set.chain = 0 -- the power period is over: a shot after it starts a chain of its own
 			for _, g in set.ghosts do
 				g.frightened = false
 			end
@@ -600,7 +601,8 @@ function Ghosts.contacts(
 	return out
 end
 
--- The player eats a frightened ghost: it becomes eyes and the chain pays 200, 400, 800, 1600.
+-- The player eats a ghost (on contact a frightened one, or any active one with a blaster shot): it becomes eyes and
+-- the chain pays 200, 400, 800, 1600. The chain restarts with every power pellet and when the power runs out.
 function Ghosts.eat(set: Set, name: Name): number
 	local g = Ghosts.ghost(set, name)
 	g.status = "eyes"

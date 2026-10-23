@@ -15,3 +15,5 @@ c0120 code review 001 F3: the build's log named R0043 as the active raft holding
 c0120 design review 005 F1: c0114's promoted `finished.spec` restated c0114's rewrite as a rule over the live tree; c0120 moved and rewrote those files again, and the override list missed it. A promoted spec is a restatement of its item's rule: when a design changes what the rule reads, list every promoted spec that reads it (measure, by running them on the prototype), and give each rule one owner.
 
 **How to apply:** when a refute line changes a rule, grep the repo for its old wording and its key terms, update every restatement in the same change, and pin the new wording where a spec already reads that file.
+
+R0044 design review 2 (F4): rounds 1 and 2 changed the design behind a separate chore (c0128), whose Problem still described the first prototype. When a design changes, update every document that explains it, including dependent chores, or say in the raft which of their words are stale.

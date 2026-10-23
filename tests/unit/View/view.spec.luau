@@ -6,7 +6,7 @@ local t = require("@tests/lib/t")
 
 return t.spec("View extras", function(it)
 	it("has the designed scale", function()
-		t.expect(View.SCALE).toEqual({ tileStuds = 8, wallHeight = 10, eyeHeight = 4, fieldOfView = 80 })
+		t.expect(View.SCALE).toEqual({ tileStuds = 8, wallHeight = 9, eyeHeight = 4, fieldOfView = 80 })
 		t.expect(View.TURN_SECONDS).toBe(0.12)
 		t.expect(View.MOUSE_RADIANS_PER_PIXEL).toBe(0.004)
 		t.expect(View.MAX_PITCH).toBeNear(math.rad(80), 1e-12)

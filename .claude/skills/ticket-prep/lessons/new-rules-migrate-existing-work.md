@@ -2,7 +2,7 @@
 title: A new rule says how existing work gets through it
 when: design
 tags: [process, migration, rollout]
-check: When this adds a rule or a check, which existing items (prepared, active, mid-prep, done) fail it on the day it lands, and what does the design say they do?
+check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up?
 ---
 A new requirement is written for the work that comes after it, but it is checked against everything already in flight. Prepared rafts, active ones and preps open on a branch were made under the old rules and fail the new check the moment it lands, unless the design gives them a path (a migration, a harvest-at-confirm, an exemption, or an order).
 
@@ -11,3 +11,5 @@ A new requirement is written for the work that comes after it, but it is checked
 c0120 design review 005 F6: when c0120's redesign moved z-nile's home from the root to `z-nile/`, c0115's prep (approved against the first revision) still ran its `check.sh` from the root. A change to a decision other preps were designed against is a new rule for them: name each one and its path (here: re-prepped before c0120 is readied, and a Phase 1 check that every unfinished `check.sh` resolves from its home).
 
 **How to apply:** list the items on `main` and on open branches that the new rule applies to, run the new check against them in prep, and write their path into the design. Where the path is a cost or an ordering, put it to the user.
+
+R0044 design review 1 (F1): the new all-time list of runs was seeded once from the per-player bests, when no list existed. Beta publishes the last ready PR and leaves running servers alone, so builds without the list kept writing per-player bests after the seed, and those runs never reached the list. The fix merged the per-player bests on every write. A one-time migration is only safe when nothing keeps writing the old shape after it.

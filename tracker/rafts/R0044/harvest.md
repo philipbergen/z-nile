@@ -1,0 +1,15 @@
+# Harvest: R0044
+- design-review-001 F1: ticket-prep/new-rules-migrate-existing-work
+- design-review-001 F2: architecture/client-triggered-reads-guarded
+- design-review-001 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-001 F4: one-off: the listener waited for drive only because of F1's write order, which F1's fix reversed
+- design-review-002 F1: architecture/one-id-per-thing
+- design-review-002 F2: architecture/one-id-per-thing
+- design-review-002 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-002 F4: ticket-prep/restated-rules-move-together
+- design-review-003 F1: architecture/one-id-per-thing
+- design-review-003 F2: architecture/one-id-per-thing
+- design-review-003 F3: ticket-prep/restated-rules-move-together
+- design-review-004 F1: ticket-prep/spec-design-correspondence
+- design-review-004 F2: ticket-prep/never-narrow-captured-scope
+- design-review-005 F1: ticket-prep/prove-specs-pass-on-a-prototype
