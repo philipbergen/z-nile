@@ -1,5 +1,5 @@
 diff --git a/z-nile/tests/acceptance/c0127/reuse.spec.luau b/z-nile/tests/acceptance/c0127/reuse.spec.luau
-index 919c1f39..0809f56a 100644
+index 6f299435..bceb1927 100644
 --- a/z-nile/tests/acceptance/c0127/reuse.spec.luau
 +++ b/z-nile/tests/acceptance/c0127/reuse.spec.luau
 @@ -17,11 +17,15 @@ local task = require("@lune/task")
@@ -46,32 +46,24 @@ index 919c1f39..0809f56a 100644
  		end
  	end
  end
-@@ -211,14 +218,20 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
+@@ -211,10 +218,14 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
  			fs.removeDir(base)
  		end
  		fs.writeDir(repo)
--		for _, rel in { "tests/run.luau", "tests/lib", "scripts/lib/ac.sh", "scripts/lib/fence.sh" } do
+-		for _, rel in { "tests/run.luau", "tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" } do -- c0114: the guards moved
 +		-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
 +		for _, rel in
 +			{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
-+		do
++		do -- c0114: the guards moved
  			copyTree(rel)
  		end
--		for _, rel in { "scripts/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
+-		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
 +		-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
 +		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "z-nile/.luaurc", "rokit.toml", ".gitignore" } do
  			copyTree(rel)
  		end
--		if fs.isDir(`{repo}/scripts/lib/git-hooks`) then
--			must(process.exec("chmod", { "-R", "+x", `{repo}/scripts/lib/git-hooks` }), "chmod hooks")
-+		-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
-+		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
-+			-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
-+			must(process.exec("chmod", { "-R", "+x", `{repo}/z-nile/lib/git-hooks` }), "chmod hooks")
- 		end
- 		must(process.exec("git", { "init", "-q", "-b", "main", repo }), "git init")
- 		-- git below acts only once `repo` is proven to be the repository this spec just created
-@@ -231,13 +244,16 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
+ 		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
+@@ -231,13 +242,16 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
  		local commit =
  			{ "-c", "user.name=c0127", "-c", "user.email=c0127@example.invalid", "commit", "-qm", "runner" }
  		must(process.exec("git", commit, { cwd = repo }), "git commit")
@@ -91,7 +83,7 @@ index 919c1f39..0809f56a 100644
  		ready = true
  	end)
  
-@@ -247,7 +263,8 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
+@@ -247,7 +261,8 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
  		fs.removeDir(lock) -- no lock: the run takes it at once
  		clearSignals()
  		local finish = start("hold")
@@ -101,7 +93,7 @@ index 919c1f39..0809f56a 100644
  		-- judged here, outside the run, while it holds the lock: each record's id is the id of the pid it names
  		local seen = {}
  		for _, name in fs.readDir(lock) do
-@@ -261,7 +278,8 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
+@@ -261,7 +276,8 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
  				table.insert(seen, `{kind} {recorded ~= "" and recorded == fence.startOf(pid)}`)
  			end
  		end
@@ -112,38 +104,34 @@ index 919c1f39..0809f56a 100644
  		table.sort(seen)
  		t.expect(r.ok).toBe(true)
 diff --git a/z-nile/tests/acceptance/c0131/accept.spec.luau b/z-nile/tests/acceptance/c0131/accept.spec.luau
-index 80ba58ae..7333cd4e 100644
+index 7a9b6a89..58d807ef 100644
 --- a/z-nile/tests/acceptance/c0131/accept.spec.luau
 +++ b/z-nile/tests/acceptance/c0131/accept.spec.luau
-@@ -9,8 +9,12 @@ local process = require("@lune/process")
+@@ -9,8 +9,11 @@ local process = require("@lune/process")
  local t = require("@tests/lib/t")
  
  local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
--local hook = `{root}/scripts/lib/git-hooks/reference-transaction`
--local base = `{root}/.cache/c0131-accept`
 +-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
 +local home = (string.gsub(process.cwd, "/+$", ""))
-+-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
-+local hook = `{root}/z-nile/lib/git-hooks/reference-transaction`
+ local hook = `{root}/z-nile/lib/git-hooks/reference-transaction` -- c0114: the guards moved
+-local base = `{root}/.cache/c0131-accept`
 +-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
 +local base = `{home}/.cache/c0131-accept`
  local ZERO = string.rep("0", 40)
  local ONE = string.rep("1", 40)
  local TWO = string.rep("2", 40)
 diff --git a/z-nile/tests/acceptance/c0131/refuse.spec.luau b/z-nile/tests/acceptance/c0131/refuse.spec.luau
-index bf2faf34..dd99a8da 100644
+index d451f046..25bade3b 100644
 --- a/z-nile/tests/acceptance/c0131/refuse.spec.luau
 +++ b/z-nile/tests/acceptance/c0131/refuse.spec.luau
-@@ -9,8 +9,12 @@ local process = require("@lune/process")
+@@ -9,8 +9,11 @@ local process = require("@lune/process")
  local t = require("@tests/lib/t")
  
  local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
--local hook = `{root}/scripts/lib/git-hooks/reference-transaction`
--local base = `{root}/.cache/c0131-refuse`
 +-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
 +local home = (string.gsub(process.cwd, "/+$", ""))
-+-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
-+local hook = `{root}/z-nile/lib/git-hooks/reference-transaction`
+ local hook = `{root}/z-nile/lib/git-hooks/reference-transaction` -- c0114: the guards moved
+-local base = `{root}/.cache/c0131-refuse`
 +-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
 +local base = `{home}/.cache/c0131-refuse`
  local ZERO = string.rep("0", 40)
