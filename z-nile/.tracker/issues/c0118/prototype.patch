@@ -1,0 +1,3336 @@
+From 84b02d6dc8fa51ed0b8f7dbb8ebb07948b9b95e2 Mon Sep 17 00:00:00 2001
+From: Philip Bergen <philip.bergen@me.com>
+Date: Fri, 23 Oct 2026 15:56:12 -0700
+Subject: [PATCH] c0118 prototype: the board per project (tabs, columns, raft
+ bands, the done window, review charts, card facts), done times in history,
+ shared round counting, docs, overrides, acceptance
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tests/acceptance/c0042/model.spec.luau        |   8 +-
+ tests/acceptance/c0042/smoke.spec.luau        |   4 +
+ tests/acceptance/c0107/keep.spec.luau         |   2 +
+ tests/acceptance/c0107/page.spec.luau         |   2 +
+ tests/acceptance/c0107/views.spec.luau        |   4 +-
+ tests/acceptance/c0115/readme.spec.luau       |   2 +-
+ tests/lib/cachepaths.luau                     |   3 +
+ tests/tooling/board.spec.luau                 |   9 +-
+ .../issues/c0118/acceptance/docs.spec.luau    |  70 +++
+ .../issues/c0118/acceptance/history.spec.luau | 120 +++++
+ .../issues/c0118/acceptance/model.spec.luau   | 367 ++++++++++++++
+ .../issues/c0118/acceptance/page.spec.luau    | 287 +++++++++++
+ .../issues/c0118/acceptance/real.spec.luau    |  41 ++
+ .../issues/c0118/acceptance/view.spec.luau    | 285 +++++++++++
+ z-nile/.tracker/issues/c0118/c0118.md         | 334 ++++++++++++-
+ z-nile/.tracker/issues/c0118/check.sh         |  32 +-
+ z-nile/README.md                              |   4 +-
+ z-nile/engine/board.html                      | 222 ++++++++-
+ z-nile/engine/board.luau                      | 455 ++++++++++++++++--
+ z-nile/engine/boardview.luau                  | 329 +++++++++++++
+ z-nile/engine/history.luau                    |  64 ++-
+ z-nile/engine/main.luau                       |  24 +-
+ z-nile/skills/zz-rules/SKILL.md               |   2 +-
+ 23 files changed, 2556 insertions(+), 114 deletions(-)
+ create mode 100644 z-nile/.tracker/issues/c0118/acceptance/docs.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0118/acceptance/page.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0118/acceptance/real.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0118/acceptance/view.spec.luau
+ create mode 100644 z-nile/engine/boardview.luau
+
+diff --git a/tests/acceptance/c0042/model.spec.luau b/tests/acceptance/c0042/model.spec.luau
+index fc626084..86faa832 100644
+--- a/tests/acceptance/c0042/model.spec.luau
++++ b/tests/acceptance/c0042/model.spec.luau
+@@ -346,7 +346,7 @@ return t.spec("c0400 board model", function(it)
+ 		t.expect(m.views.issues.ready).toEqual({ "f0020", "f0030", "f0031" })
+ 		t.expect(m.views.issues["not"]).toEqual({ "c0050", "f0040", "f0060", "f0070", "f0080" })
+ 		t.expect(m.views.issues.done).toEqual({ "c0010", "c0070" })
+-		t.expect(m.initialView).toBe("rafts")
++		t.expect(m.initialView).toBe("board")
+ 		t.expect(rafts.R0020.command).toBe("/z-run R0020")
+ 		t.expect(rafts.R0030.command).toBe("/z-ready R0030")
+ 		t.expect(rafts.R0040.command).toBe(nil)
+@@ -360,12 +360,12 @@ return t.spec("c0400 board model", function(it)
+ 		end
+ 	end)
+ 
+-	it("opens on Rafts even when nothing is active", function()
+-		t.expect(m.initialView).toBe("rafts")
++	it("opens on the Board (c0118) even when nothing is active", function()
++		t.expect(m.initialView).toBe("board")
+ 		fixture.write(ROOT .. "-noactive", false, "/active/")
+ 		local quiet = board.collect(ROOT .. "-noactive")
+ 		fs.removeDir(ROOT .. "-noactive")
+-		t.expect(quiet.initialView).toBe("rafts")
++		t.expect(quiet.initialView).toBe("board")
+ 		t.expect(quiet.views.rafts.ready).toEqual({ "R0030" })
+ 	end)
+ 
+diff --git a/tests/acceptance/c0042/smoke.spec.luau b/tests/acceptance/c0042/smoke.spec.luau
+index a5866b0b..a05170c4 100644
+--- a/tests/acceptance/c0042/smoke.spec.luau
++++ b/tests/acceptance/c0042/smoke.spec.luau
+@@ -124,6 +124,8 @@ vm.createContext(sandbox);
+ for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
+ loadingAt = -1;
+ doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
++// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
++if (!hash) els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
+ function key(k, target) {
+   const ev = { key: k, target: target || body, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+   if (target) target.dispatch("keydown", ev);
+@@ -155,9 +157,11 @@ if (mode === "walk") {
+   expect(/Second/.test(pane()), "the first issue is selected");
+   key("ArrowLeft");
+   expect(/Beta/.test(pane()) && /R0020/.test(list()), "ArrowLeft returns to Rafts");
++  key("ArrowLeft"); // c0118: Board sits before Rafts
+   key("ArrowLeft");
+   expect(/data-id="f0020"/.test(list()) && !/data-id="R0020"/.test(list()), "ArrowLeft wraps to Issues");
+   key("ArrowRight");
++  key("ArrowRight");
+   expect(/R0020/.test(list()), "ArrowRight wraps to Rafts");
+   expect(key("/") === true, "/ calls preventDefault, so the / is not typed into the field");
+   expect(sandbox.document.activeElement === els.search, "/ focuses the search field");
+diff --git a/tests/acceptance/c0107/keep.spec.luau b/tests/acceptance/c0107/keep.spec.luau
+index 32cf06df..d2d29f94 100644
+--- a/tests/acceptance/c0107/keep.spec.luau
++++ b/tests/acceptance/c0107/keep.spec.luau
+@@ -60,6 +60,8 @@ vm.createContext(sandbox);
+ for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
+ loadingAt = -1;
+ doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
++// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
++els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
+ const out = { pane: els.pane.innerHTML };
+ els.search.value = "f9100";
+ els.search.dispatch("keydown", { key: "Enter", target: els.search });
+diff --git a/tests/acceptance/c0107/page.spec.luau b/tests/acceptance/c0107/page.spec.luau
+index aeef17ab..32b485e2 100644
+--- a/tests/acceptance/c0107/page.spec.luau
++++ b/tests/acceptance/c0107/page.spec.luau
+@@ -126,6 +126,8 @@ vm.createContext(sandbox);
+ for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
+ loadingAt = -1;
+ doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
++// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
++els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
+ function key(k, target) {
+   const ev = { key: k, target: target || body, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+   if (target) target.dispatch("keydown", ev);
+diff --git a/tests/acceptance/c0107/views.spec.luau b/tests/acceptance/c0107/views.spec.luau
+index 8decf487..03ba2d48 100644
+--- a/tests/acceptance/c0107/views.spec.luau
++++ b/tests/acceptance/c0107/views.spec.luau
+@@ -236,8 +236,8 @@ return t.spec("c0107 board views", function(it)
+ 	local rafts = byId(m.rafts)
+ 	local issues = byId(m.issues)
+ 
+-	it("opens on Rafts and drops the Active, Waiting and Done lists", function()
+-		t.expect(m.initialView).toBe("rafts")
++	it("opens on the Board (c0118) and drops the Active, Waiting and Done lists", function()
++		t.expect(m.initialView).toBe("board")
+ 		t.expect(m.tabs).toBe(nil)
+ 		t.expect(m.initialTab).toBe(nil)
+ 		t.expect(rafts.R9001.tab).toBe(nil)
+diff --git a/tests/acceptance/c0115/readme.spec.luau b/tests/acceptance/c0115/readme.spec.luau
+index cb7506de..4ba26cd1 100644
+--- a/tests/acceptance/c0115/readme.spec.luau
++++ b/tests/acceptance/c0115/readme.spec.luau
+@@ -118,7 +118,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
+ 		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
+ 		at(pic, 'dispatcher["dispatcher: ./zn dispatch"]', "the picture") -- c0117 override: the dispatcher is built
+ 		at(pic, 'models[".models.toml: the model and CLI per step"]', "the picture") -- c0117 override
+-		at(pic, "c0118, planned", "the picture")
++		at(pic, 'board["board: ./zn board, a tab per project"]', "the picture") -- c0118 override: the board is built
+ 	end)
+ 
+ 	it("a short account of the five parts follows the picture", function()
+diff --git a/tests/lib/cachepaths.luau b/tests/lib/cachepaths.luau
+index 41321e22..a61d3689 100644
+--- a/tests/lib/cachepaths.luau
++++ b/tests/lib/cachepaths.luau
+@@ -94,6 +94,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
+ 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
+ 	},
++	["z-nile/engine/board.luau"] = {
++		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
++	},
+ 	["z-nile/engine/dispatcher.luau"] = {
+ 		["checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start"] = "a comment in a type",
+ 		['local HOME = ".cache/dispatch"'] = `the dispatcher's run state (c0117) in the main checkout: state.json and the markers through sh.writeReplacing ({RENAMED}); the runner's pid file is a nested file the launcher creates`,
+diff --git a/tests/tooling/board.spec.luau b/tests/tooling/board.spec.luau
+index e182de78..8d0bbe75 100644
+--- a/tests/tooling/board.spec.luau
++++ b/tests/tooling/board.spec.luau
+@@ -25,7 +25,7 @@ function el(id) {
+     focus() {}, blur() {}, select() {}, scrollIntoView() {}, getAttribute: () => null, closest: () => null };
+ }
+ const els = {};
+-["tab-rafts", "tab-issues", "search", "list", "pane", "board-data"].forEach(i => (els[i] = el(i)));
++["tab-rafts", "tab-issues", "search", "list", "pane", "board-data", "columns"].forEach(i => (els[i] = el(i)));
+ els["board-data"].textContent = scripts.find(x => /id="board-data"/.test(x[1]))[2];
+ const doc = el("document");
+ const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
+@@ -34,13 +34,14 @@ const sandbox = { document: { getElementById: i => els[i] || null, querySelector
+ sandbox.window = sandbox; sandbox.globalThis = sandbox;
+ vm.createContext(sandbox);
+ for (const x of scripts) if (!/json/.test(x[1])) vm.runInContext(x[2], sandbox);
++if (!hash) els["tab-rafts"].dispatch("click", {}); // c0118: the page opens on Board; these cases read the Rafts pane
+ const key = (k, extra) => { const ev = Object.assign({ key: k, target: {}, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, extra); doc.dispatch("keydown", ev); return ev.defaultPrevented; };
+-const out = { listBefore: els.list.innerHTML };
++const out = { listBefore: els.list.innerHTML + els.columns.innerHTML };
+ if (query) { els.search.value = query; els.search.dispatch("keydown", { key: "Enter", target: els.search }); }
+ out.miss = els.search.classList.contains("miss");
+ out.metaPrevented = key("ArrowLeft", { metaKey: true });
+ out.altPrevented = key("ArrowLeft", { altKey: true });
+-out.list = els.list.innerHTML; out.pane = els.pane.innerHTML;
++out.list = els.list.innerHTML + els.columns.innerHTML; out.pane = els.pane.innerHTML;
+ console.log(JSON.stringify(out));
+ ]==]
+ 
+@@ -80,7 +81,7 @@ return t.spec("board unit", function(it)
+ 			issues = { ready = {}, ["not"] = {}, done = {} },
+ 		})
+ 		t.expect(m.home).toEqual({})
+-		t.expect(m.initialView).toBe("rafts")
++		t.expect(m.initialView).toBe("board")
+ 		local raw = m :: any
+ 		t.expect(raw.tabs).toBe(nil)
+ 		t.expect(raw.initialTab).toBe(nil)
+diff --git a/z-nile/.tracker/issues/c0118/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/docs.spec.luau
+new file mode 100644
+index 00000000..56a7e548
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0118/acceptance/docs.spec.luau
+@@ -0,0 +1,70 @@
++--!strict
++-- c0118 AC5: the zz-rules board row and the README say what the new board does, in the Design's words, and the old
++-- row's pinned words stay (the views, the artifact, -O).
++local fs = require("@lune/fs")
++local t = require("@tests/lib/t")
++
++local function boardRow(): string
++	local row = ""
++	for line in string.gmatch(fs.readFile("z-nile/skills/zz-rules/SKILL.md"), "[^\n]+") do
++		if string.sub(line, 1, 10) == "| board | " then
++			row = line
++		end
++	end
++	return row
++end
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++
++return t.spec("c0118 board docs", function(it)
++	it("the board row describes tabs, columns, bands, the done window, the card and both charts", function()
++		local row = boardRow()
++		t.expect(row ~= "").toBe(true)
++		for _, phrase in
++			{
++				"One tab per project in `z-nile/projects.toml`, on the left, the first selected (c0118)",
++				"every view shows the selected project only",
++				"It opens on Board",
++				"ticket (`new`), design (`preparing`), raft (`prepared`)",
++				"ready (readied, in `active/`, its raft has no branch yet)",
++				"run (its raft has a branch `<R-id>-…`, local or on origin)",
++				"done (in `done/`), each raft a band behind its members",
++				"24 hours by default, from 1 hour to 30 days",
++				"counted back from the page's as-of time (HEAD's commit time)",
++				"PR and checks are live only on the served board (c0121)",
++				"90 days by default, 30 days, 1 year or all history",
++				"each file once",
++				"a row with no model is the unrecorded series",
++			}
++		do
++			if not has(row, phrase) then
++				error(`the board row lacks: {phrase}`)
++			end
++		end
++	end)
++
++	it("the old row's words stay: the views, Stats, the artifact and -O", function()
++		local row = boardRow()
++		for _, phrase in
++			{
++				"Views Rafts and Issues",
++				"not a third view",
++				"tracker-board",
++				"unless `-O`",
++				"`./zn board [--out PATH] [-O]`",
++			}
++		do
++			if not has(row, phrase) then
++				error(`the board row lost: {phrase}`)
++			end
++		end
++	end)
++
++	it("the README draws the built board and names the served one as planned", function()
++		local text = fs.readFile("z-nile/README.md")
++		t.expect(has(text, 'board["board: ./zn board, a tab per project"]')).toBe(true)
++		t.expect(has(text, "new board c0118, planned")).toBe(false)
++		t.expect(has(text, "`./zn board --serve` (c0121, planned) serves the same page live")).toBe(true)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
+new file mode 100644
+index 00000000..019d6a6b
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
+@@ -0,0 +1,120 @@
++--!strict
++-- c0118 AC2: history gives every issue and raft the UTC instant it first arrived in done/ (doneAt, epoch seconds):
++-- whatever offset the commit carries, unchanged by a later move between roots or by leaving and re-entering done/, and
++-- unknown (nil) when the arrival is a compaction's re-add under a new id. A retired raft's folder is no arrival, and
++-- rafts stay out of `closed` and `spells`. Fixture under .cache/c0118-history; git runs through @tests/lib/fixture.
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local history = require("@znile/engine/history")
++local process = require("@lune/process")
++local stats = require("@znile/engine/stats")
++local t = require("@tests/lib/t")
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
++local repo = `{root}/.cache/c0118-history`
++local ROOTS = { "tracker", "z-nile/.tracker" }
++
++local function doc(id: string, status: string): string
++	return `---\nid: {id}\ntype: chore\ntitle: {id}\nstatus: {status}\n---\n\n# {id}\n`
++end
++local function write(path: string, text: string)
++	local full = `{repo}/{path}`
++	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
++	fs.writeFile(full, text)
++end
++local function commit(at: string, message: string)
++	local env = { GIT_AUTHOR_DATE = at, GIT_COMMITTER_DATE = at }
++	fixture.git(repo, { "add", "-A" }, { env = env })
++	fixture.git(repo, { "commit", "-q", "-m", message }, { env = env })
++end
++local function move(from: string, to: string)
++	fs.writeDir(string.match(`{repo}/{to}`, "^(.*)/[^/]+$") :: string)
++	fixture.git(repo, { "mv", from, to })
++end
++
++local parsed: any = nil
++
++return t.spec("c0118 done times", function(it)
++	it("sets up a repository with dated landings, a move between roots and a compaction", function()
++		if fs.isDir(repo) then
++			fs.removeDir(repo)
++		end
++		fs.writeDir(repo)
++		process.exec("git", { "init", "-q", "-b", "main", repo }) -- raw: init to a named path
++		fixture.git(repo, { "config", "user.name", "c0118-history" })
++		fixture.git(repo, { "config", "user.email", "c0118-history@example.invalid" })
++		write("tracker/issues/c0010/c0010.md", doc("c0010", "prepared-a-b-c"))
++		write("tracker/rafts/R0010/R0010.md", doc("R0010", "prepared-a-b-c"))
++		write("tracker/issues/c0020/c0020.md", doc("c0020", "prepared-a-b-c"))
++		commit("2026-10-10T10:00:00Z", "prepared")
++		move("tracker/issues/c0010", "tracker/issues/active/c0010")
++		move("tracker/rafts/R0010", "tracker/rafts/active/R0010")
++		commit("2026-10-12T10:00:00Z", "ready R0010")
++		-- lands on a Sunday evening in -07:00: Monday 06:30 UTC
++		move("tracker/issues/active/c0010", "tracker/issues/done/c0010")
++		move("tracker/rafts/active/R0010", "tracker/rafts/done/R0010")
++		commit("2026-10-18T23:30:00-07:00", "R0010: land (#1)")
++		-- c0020 lands, is taken back out of done/, and lands again
++		move("tracker/issues/c0020", "tracker/issues/done/c0020")
++		commit("2026-10-19T09:00:00+02:00", "c0020 done")
++		move("tracker/issues/done/c0020", "tracker/issues/c0020")
++		commit("2026-10-19T12:00:00Z", "c0020 reopened")
++		move("tracker/issues/c0020", "tracker/issues/done/c0020")
++		commit("2026-10-20T12:00:00Z", "c0020 done again")
++		-- the move into z-nile/.tracker: a delete and an add of each document in one commit
++		move("tracker/issues/done/c0010", "z-nile/.tracker/issues/done/c0010")
++		move("tracker/rafts/done/R0010", "z-nile/.tracker/rafts/done/R0010")
++		move("tracker/issues/done/c0020", "z-nile/.tracker/issues/done/c0020")
++		commit("2026-10-21T08:00:00Z", "move into z-nile/")
++		-- a compaction: c0090 and R0090 appear in done/ under new ids in the commit that writes the map
++		write("z-nile/.tracker/issues/done/c0090/c0090.md", doc("c0090", "active-a-b-c"))
++		write("z-nile/.tracker/rafts/done/R0090/R0090.md", doc("R0090", "active-a-b-c"))
++		write("z-nile/compaction.txt", "# compaction map\nc0901 c0090\nR0901 R0090\n")
++		commit("2026-10-21T09:00:00Z", "tracker: compact ids")
++		-- a raft retired into R0010 (c0116): its folder beside the lifecycle folders
++		write("z-nile/.tracker/rafts/retired/R0030/R0030.md", doc("R0030", "prepared-a-b-c"))
++		commit("2026-10-21T10:00:00Z", "recombine: R0030 retired into R0010")
++		-- a squash adds an emergent issue straight into done/
++		write("z-nile/.tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o"))
++		commit("2026-10-21T11:00:00Z", "R0040: land (#2)")
++		parsed = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
++		t.expect(parsed ~= nil).toBe(true)
++	end)
++
++	it("dates an issue's and a raft's landing at the commit's instant in UTC", function()
++		local landing = stats.seconds("2026-10-19T06:30:00Z")
++		t.expect(parsed.doneAt.c0010).toBe(landing)
++		t.expect(parsed.doneAt.R0010).toBe(landing)
++		t.expect(parsed.doneAt.c0040).toBe(stats.seconds("2026-10-21T11:00:00Z"))
++	end)
++
++	it("keeps the first landing across a move between roots and a later return to done/", function()
++		t.expect(parsed.doneAt.c0020).toBe(stats.seconds("2026-10-19T07:00:00Z"))
++	end)
++
++	it("an arrival in a commit that writes the compaction map is no landing time", function()
++		t.expect(parsed.doneAt.c0090).toBe(nil)
++		t.expect(parsed.doneAt.R0090).toBe(nil)
++		t.expect(parsed.closed.c0090 ~= nil).toBe(true) -- the close day stats reads is unchanged
++	end)
++
++	it("a retired raft's folder is no landing, and rafts stay out of closed and spells", function()
++		t.expect(parsed.doneAt.R0030).toBe(nil)
++		t.expect(parsed.closed.R0010).toBe(nil)
++		t.expect(parsed.spells.R0010).toBe(nil)
++		t.expect(parsed.closed.c0010).toBe("2026-10-18") -- the committer's day, as before
++	end)
++
++	it("the log reads the compaction maps beside the item documents", function()
++		local args = history.logArgs(ROOTS)
++		t.expect(table.find(args, "z-nile/compaction.txt") ~= nil).toBe(true)
++		t.expect(table.find(args, "tracker/compaction.txt") ~= nil).toBe(true)
++	end)
++
++	it("cleans up", function()
++		fs.removeDir(repo)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0118/acceptance/model.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
+new file mode 100644
+index 00000000..d6ac688d
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
+@@ -0,0 +1,367 @@
++--!strict
++-- c0118 AC3: board.collect over a checkout with two projects: the tabs in registry order, each issue in its project's
++-- column (ready or run by its raft's branch), raft bands, done times from history (or, across a compaction, from the
++-- newest spend row), the done age, a raft's rounds with its members' and its retired rafts', each project's two charts,
++-- the card facts (model, spend, branch, worktree, dispatcher state), problems named, and board.readFacts on a repository.
++-- Fixture under .cache/c0118-model, a repository of its own; git runs through @tests/lib/fixture.
++local board = require("@znile/engine/board")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local stats = require("@znile/engine/stats")
++local t = require("@tests/lib/t")
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
++local repo = `{top}/.cache/c0118-model`
++
++local REGISTRY = [==[
++[[project]]
++name = "game"
++root = "game/.tracker"
++home = "game"
++
++[[project]]
++name = "tool"
++root = "tool/.tracker"
++home = "."
++]==]
++
++local function write(path: string, text: string)
++	local full = `{repo}/{path}`
++	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
++	fs.writeFile(full, text)
++end
++local function item(path: string, front: { string })
++	local id = string.match(path, "([^/]+)$") :: string
++	write(
++		`{path}/{id}.md`,
++		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n"
++	)
++end
++local HEADER = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n"
++	.. "|---|---|---|---|---|---|---|---|---|---|\n"
++local function spend(dir: string, id: string, rows: { string })
++	write(`{dir}/spend.md`, `# Spend: {id} t\n\n` .. HEADER .. table.concat(rows, "\n") .. "\n")
++end
++local function commit(at: string, message: string)
++	local env = { GIT_AUTHOR_DATE = at, GIT_COMMITTER_DATE = at }
++	fixture.git(repo, { "add", "-A" }, { env = env })
++	fixture.git(repo, { "commit", "-q", "-m", message }, { env = env })
++end
++local function move(from: string, to: string)
++	fs.writeDir(string.match(`{repo}/{to}`, "^(.*)/[^/]+$") :: string)
++	fixture.git(repo, { "mv", from, to })
++end
++
++local G, T = "game/.tracker", "tool/.tracker"
++-- the fixture's own dispatcher folder, spelled in two parts: c0049 counts a literal .cache/<dir> as a fixture name
++local DISPATCH = "." .. "cache/dispatch"
++local AS_OF = stats.seconds("2026-10-21T10:00:00Z")
++local LANDED = stats.seconds("2026-10-20T10:00:00Z")
++local FACTS = {
++	asOf = AS_OF,
++	refs = { "main", "origin/R0020-alpha", "R00300-x", "feature/R0030-x", "xR0030-y", "origin/main" },
++	worktrees = { { path = "/w/R0020", branch = "R0020-alpha" }, { path = "/w/main", branch = "main" } },
++	dispatch = { f0021 = { step = "z-run", outcome = "running", model = "grok-y", questions = true } },
++}
++
++local m: any = nil
++local function byId(list: { any }): { [string]: any }
++	local out = {}
++	for _, x in list do
++		out[x.id] = x
++	end
++	return out
++end
++local function bandsOf(project: string, column: string): { any }
++	return m.columns[project][column]
++end
++local function band(raft: string?, ids: { string }): any
++	return { raft = raft, ids = ids }
++end
++local function idsIn(project: string): { [string]: boolean }
++	local out = {}
++	for _, bands in m.columns[project] do
++		for _, b in bands do
++			for _, id in b.ids do
++				out[id] = true
++			end
++		end
++	end
++	return out
++end
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++
++return t.spec("c0118 board model", function(it)
++	it("sets up a two-project repository with landed, running, readied, prepared and new work", function()
++		if fs.isDir(repo) then
++			fs.removeDir(repo)
++		end
++		fs.writeDir(repo)
++		process.exec("git", { "init", "-q", "-b", "main", repo }) -- raw: init to a named path
++		fixture.git(repo, { "config", "user.name", "c0118-model" })
++		fixture.git(repo, { "config", "user.email", "c0118-model@example.invalid" })
++		write("z-nile/projects.toml", REGISTRY)
++		-- game: R0010 lands with c0011; reviews on the raft, on its member, and on two rafts retired into it
++		item(
++			`{G}/rafts/active/R0010`,
++			{ "type: chore", "title: Landed", "design: ready", "status: active-a-b-c" }
++		)
++		item(
++			`{G}/issues/active/c0011`,
++			{ "type: chore", "title: Member", "raft: R0010", "status: active-a-b-c" }
++		)
++		write(`{G}/rafts/active/R0010/design-review-001.md`, "# Review 001\n")
++		write(`{G}/rafts/active/R0010/design-refute-001.md`, "# Refute 001\n")
++		write(`{G}/rafts/active/R0010/review-001.md`, "# Review 001\n")
++		write(`{G}/issues/active/c0011/design-review-001.md`, "# Review 001\n")
++		write(`{G}/issues/active/c0011/design-review-002.md`, "# Review 002\n")
++		item(`{G}/rafts/retired/R0019`, { "type: chore", "title: Retired", "retired: R0010" })
++		write(`{G}/rafts/retired/R0019/design-review-001.md`, "# Review 001\n")
++		item(`{G}/rafts/retired/R0018`, { "type: chore", "title: Retired earlier", "retired: R0019" })
++		write(`{G}/rafts/retired/R0018/design-review-001.md`, "# Review 001\n")
++		spend(`{G}/issues/active/c0011`, "c0011", {
++			"| 1 | 2026-10-19 10:00 | s | 0 | 0 | 2.0 | spend | design-review | 1000 | opus-x |",
++			"| 2 | 2026-10-20 09:00 | s | 0 | 0 | 1.0 | spend | code-review | 500 |  |",
++			"| 3 | 2026-10-20 09:30 | s | 10 | 2 | 5.0 | raft | build | 99999 | build-model |",
++		})
++		-- running: R0020 has a branch on origin and a worktree; readied: R0030 has only look-alike branches
++		item(
++			`{G}/rafts/active/R0020`,
++			{ "type: feature", "title: Running", "design: ready", "status: active-d-e-f" }
++		)
++		item(
++			`{G}/issues/active/f0021`,
++			{ "type: feature", "title: Runs", "raft: R0020", "status: active-d-e-f" }
++		)
++		spend(
++			`{G}/issues/active/f0021`,
++			"f0021",
++			{ "| 1 | 2026-10-20 11:00 | s | 0 | 0 | 3.0 | spend | code-review | 300 | grok-y |" }
++		)
++		item(
++			`{G}/rafts/active/R0030`,
++			{ "type: feature", "title: Readied", "design: ready", "status: active-g-h-i" }
++		)
++		item(
++			`{G}/issues/active/f0031`,
++			{ "type: feature", "title: Waits", "raft: R0030", "status: active-g-h-i" }
++		)
++		-- prepared: one in a backlog raft, one with no raft yet; preparing; new
++		item(
++			`{G}/rafts/R0040`,
++			{ "type: feature", "title: Prepared", "design: ready", "status: prepared-j-k-l" }
++		)
++		item(
++			`{G}/issues/f0041`,
++			{ "type: feature", "title: Rafted", "raft: R0040", "status: prepared-j-k-l" }
++		)
++		item(
++			`{G}/issues/f0042`,
++			{ "type: feature", "title: Unrafted", "raft:", "design: ready", "status: prepared-m-n-o" }
++		)
++		item(`{G}/issues/f0050`, { "type: feature", "title: Designing", "raft:", "status: preparing-p-q-r" })
++		write(`{G}/issues/f0050/spend.md`, "# Spend: f0050 t\n\n| 1 | 2026-10-20 10:00 | unterminated\n")
++		item(`{G}/issues/f0060`, { "type: feature", "title: Captured", "raft:", "design: draft" })
++		-- tool: R0110 landed two weeks earlier
++		item(
++			`{T}/rafts/active/R0110`,
++			{ "type: chore", "title: Tool raft", "design: ready", "status: active-s-t-u" }
++		)
++		item(
++			`{T}/issues/active/c0111`,
++			{ "type: chore", "title: Tool member", "raft: R0110", "status: active-s-t-u" }
++		)
++		write(`{T}/issues/active/c0111/design-review-001.md`, "# Review 001\n")
++		spend(
++			`{T}/issues/active/c0111`,
++			"c0111",
++			{ "| 1 | 2026-10-05 10:00 | s | 0 | 0 | 2.0 | spend | design-review | 7000 | tool-model |" }
++		)
++		item(`{T}/issues/c0120`, { "type: chore", "title: Tool ticket", "raft:" })
++		commit("2026-10-01T10:00:00Z", "the trackers")
++		move(`{T}/rafts/active/R0110`, `{T}/rafts/done/R0110`)
++		move(`{T}/issues/active/c0111`, `{T}/issues/done/c0111`)
++		commit("2026-10-06T10:00:00Z", "R0110: land")
++		move(`{G}/rafts/active/R0010`, `{G}/rafts/done/R0010`)
++		move(`{G}/issues/active/c0011`, `{G}/issues/done/c0011`)
++		commit("2026-10-20T10:00:00Z", "R0010: land")
++		-- a compaction re-adds c0070 in done/ under its new id: no landing time from history
++		item(`{G}/issues/done/c0070`, { "type: chore", "title: Compacted", "raft:", "status: active-v-w-x" })
++		spend(`{G}/issues/done/c0070`, "c0070", {
++			"| 1 | 2026-10-14 08:00 | s | 1 | 0 | 2.0 | focus | build |  |  |",
++			"| 2 | 2026-10-15 08:00 | s | 0 | 0 | 1.0 | raft | deliver |  |  |",
++		})
++		write("z-nile/compaction.txt", "# map\nc0700 c0070\n")
++		commit("2026-10-21T09:00:00Z", "tracker: compact ids")
++		m = board.collect(nil, repo, FACTS)
++		t.expect(m ~= nil).toBe(true)
++	end)
++
++	it("has one tab per project, in registry order, and tags every item with its project", function()
++		t.expect(m.projects).toEqual({ { name = "game", root = G }, { name = "tool", root = T } })
++		local issues, rafts = byId(m.issues), byId(m.rafts)
++		t.expect(issues.c0011.project).toBe("game")
++		t.expect(issues.c0111.project).toBe("tool")
++		t.expect(rafts.R0110.project).toBe("tool")
++		t.expect(idsIn("tool")).toEqual({ c0111 = true, c0120 = true })
++		local game = idsIn("game")
++		t.expect(game.c0111).toBe(nil)
++		t.expect(game.f0021).toBe(true)
++	end)
++
++	it("puts each issue in its column, with each raft a band and the raftless cards last", function()
++		t.expect(bandsOf("game", "ticket")).toEqual({ band(nil, { "f0060" }) })
++		t.expect(bandsOf("game", "design")).toEqual({ band(nil, { "f0050" }) })
++		t.expect(bandsOf("game", "raft")).toEqual({ band("R0040", { "f0041" }), band(nil, { "f0042" }) })
++		t.expect(bandsOf("game", "ready")).toEqual({ band("R0030", { "f0031" }) })
++		t.expect(bandsOf("game", "run")).toEqual({ band("R0020", { "f0021" }) })
++		t.expect(bandsOf("game", "done")).toEqual({ band("R0010", { "c0011" }), band(nil, { "c0070" }) })
++		t.expect(bandsOf("tool", "ticket")).toEqual({ band(nil, { "c0120" }) })
++		t.expect(byId(m.issues).f0021.column).toBe("run")
++	end)
++
++	it(
++		"a raft runs when a branch <R-id>-… exists locally or on origin, and look-alike names do not count",
++		function()
++			local rafts = byId(m.rafts)
++			t.expect(rafts.R0020.launched).toBe(true)
++			t.expect(rafts.R0020.branch).toBe("R0020-alpha")
++			t.expect(rafts.R0020.worktree).toBe("/w/R0020")
++			t.expect(rafts.R0030.launched).toBe(false)
++			t.expect(rafts.R0030.branch).toBe(nil)
++			local local_ = board.collect(nil, repo, {
++				asOf = AS_OF,
++				refs = { "R0030-local" },
++				worktrees = {},
++				dispatch = {},
++			})
++			t.expect(byId(local_.rafts).R0030.launched).toBe(true)
++			t.expect(byId(local_.issues).f0031.column).toBe("run")
++		end
++	)
++
++	it("dates landings from history, and an arrival under a compaction from the newest spend row", function()
++		local issues, rafts = byId(m.issues), byId(m.rafts)
++		t.expect(rafts.R0010.doneAt).toBe(LANDED)
++		t.expect(rafts.R0010.doneFrom).toBe("history")
++		t.expect(issues.c0011.doneAt).toBe(LANDED)
++		t.expect(issues.c0011.age).toBe(AS_OF - LANDED)
++		t.expect(issues.c0070.doneAt).toBe(stats.seconds("2026-10-15T08:00:00Z"))
++		t.expect(issues.c0070.doneFrom).toBe("spend")
++		t.expect(issues.f0021.doneAt).toBe(nil)
++		t.expect(issues.f0021.age).toBe(nil)
++	end)
++
++	it(
++		"counts a raft's rounds over its folder, its members' and its retired rafts' (followed through), once each",
++		function()
++			local rafts = byId(m.rafts)
++			t.expect(rafts.R0010.rounds).toEqual({ design = 5, code = 1 })
++			t.expect(rafts.R0110.rounds).toEqual({ design = 1, code = 0 })
++			t.expect(rafts.R0020.rounds).toEqual({ design = 0, code = 0 })
++		end
++	)
++
++	it("draws each project's rounds chart for every range from that project's landed rafts only", function()
++		for _, r in m.ranges do
++			t.expect(type(m.charts.game.rounds[r.key])).toBe("string")
++			t.expect(type(m.charts.game.tokens[r.key])).toBe("string")
++		end
++		local game, tool = m.charts.game.rounds.all, m.charts.tool.rounds.all
++		t.expect(has(game, "Design reviews, Oct 19: 5 rounds")).toBe(true)
++		t.expect(has(game, "Code reviews, Oct 19: 1 rounds")).toBe(true)
++		t.expect(has(game, "Oct 5")).toBe(false)
++		t.expect(has(tool, "Design reviews, Oct 5: 1 rounds")).toBe(true)
++		t.expect(has(m.charts.tool.rounds["90d"], "Design reviews, Oct 5: 1 rounds")).toBe(true)
++		t.expect(has(m.charts.tool.rounds["30d"], "Design reviews, Oct 5: 1 rounds")).toBe(true)
++	end)
++
++	it(
++		"draws the tokens chart from review rows by model, the unrecorded series included, build rows not",
++		function()
++			local svg = m.charts.game.tokens["90d"]
++			t.expect(has(svg, "opus-x, Oct 19: 1000 tokens")).toBe(true)
++			t.expect(has(svg, "grok-y, Oct 19: 300 tokens")).toBe(true)
++			t.expect(has(svg, "unrecorded model, Oct 19: 500 tokens")).toBe(true)
++			t.expect(has(svg, "build-model")).toBe(false)
++			t.expect(has(svg, "tool-model")).toBe(false)
++			t.expect(has(m.charts.tool.tokens["90d"], "tool-model, Oct 5: 7000 tokens")).toBe(true)
++		end
++	)
++
++	it("gives each card its spend, models and dispatcher state", function()
++		local issues = byId(m.issues)
++		t.expect(issues.c0011.spend).toEqual({
++			minutes = 8,
++			tokens = 101499,
++			added = 10,
++			removed = 2,
++			models = { "build-model", "opus-x" },
++		})
++		t.expect(issues.f0021.dispatch)
++			.toEqual({ step = "z-run", outcome = "running", model = "grok-y", questions = true })
++		t.expect(issues.c0011.dispatch).toBe(nil)
++	end)
++
++	it("names a spend.md that does not parse, and still builds", function()
++		t.expect(#m.problems).toBe(1)
++		t.expect(has(m.problems[1], "game/.tracker/issues/f0050/spend.md")).toBe(true)
++		t.expect(byId(m.issues).f0050.spend.tokens).toBe(0)
++	end)
++
++	it(
++		"opens on the Board with a 24-hour done window and a 90-day chart range, and keeps the old views",
++		function()
++			t.expect(m.initialView).toBe("board")
++			t.expect(m.window).toBe(86400)
++			t.expect(m.range).toBe("90d")
++			t.expect(m.asOf).toBe(AS_OF)
++			t.expect(table.find(m.views.rafts.done, "R0010") ~= nil).toBe(true)
++			t.expect(table.find(m.views.rafts.done, "R0110") ~= nil).toBe(true)
++			t.expect(m.views.issues ~= nil).toBe(true)
++		end
++	)
++
++	it("without an as-of time there are no done ages and no charts", function()
++		local bare = board.collect(nil, repo, { asOf = nil, refs = {}, worktrees = {}, dispatch = {} })
++		t.expect(byId(bare.issues).c0011.age).toBe(nil)
++		t.expect((next(bare.charts.game.rounds))).toBe(nil)
++	end)
++
++	it(
++		"readFacts reads HEAD's time, the branches, the worktrees and the dispatcher's state, writing nothing",
++		function()
++			fixture.git(repo, { "branch", "R0020-alpha" })
++			write(
++				DISPATCH .. "/f0021/state.json",
++				'{"id":"f0021","step":"z-run","outcome":"failed","model":"grok-y"}'
++			)
++			write(DISPATCH .. "/f0021/questions.md", "# questions\n")
++			write(DISPATCH .. "/notanid/state.json", '{"step":"x"}')
++			local before = fixture.git(repo, { "status", "--porcelain", "--ignored" })
++			local facts = board.readFacts(repo)
++			t.expect(facts.asOf).toBe(stats.seconds("2026-10-21T09:00:00Z"))
++			t.expect(table.find(facts.refs, "R0020-alpha") ~= nil).toBe(true)
++			t.expect(table.find(facts.refs, "main") ~= nil).toBe(true)
++			t.expect(#facts.worktrees).toBe(1)
++			t.expect(facts.worktrees[1].branch).toBe("main")
++			t.expect(facts.dispatch.f0021)
++				.toEqual({ step = "z-run", outcome = "failed", model = "grok-y", questions = true })
++			t.expect(facts.dispatch.notanid).toBe(nil)
++			t.expect(fixture.git(repo, { "status", "--porcelain", "--ignored" })).toBe(before)
++			local real = board.collect(nil, repo)
++			t.expect(byId(real.rafts).R0020.launched).toBe(true)
++			t.expect(byId(real.issues).f0021.dispatch.outcome).toBe("failed")
++		end
++	)
++
++	it("cleans up", function()
++		fs.removeDir(repo)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0118/acceptance/page.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/page.spec.luau
+new file mode 100644
+index 00000000..a1d26af3
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0118/acceptance/page.spec.luau
+@@ -0,0 +1,287 @@
++--!strict
++-- c0118 AC4: the page's own script, run by node against a fake DOM: it opens on the Board of the first project, with a
++-- tab per project; the done window hides and shows done cards by age (61 minutes old: hidden at 1 hour, shown at 3);
++-- raft bands; the charts follow the range; a card click shows its run details; a project tab, a search and a #project
++-- link switch the project; the arrow keys cycle Board, Rafts and Issues, each showing the selected project only; and
++-- znBoard.load (c0121's seam) swaps the model and keeps the project, the window and the range.
++local board = require("@znile/engine/board")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++local stats = require("@znile/engine/stats")
++local t = require("@tests/lib/t")
++
++local DIR = ".cache/c0118-page"
++local REGISTRY = [==[
++[[project]]
++name = "game"
++root = "game/.tracker"
++home = "game"
++
++[[project]]
++name = "tool"
++root = "tool/.tracker"
++home = "."
++]==]
++
++local function write(path: string, text: string)
++	local full = `{DIR}/{path}`
++	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
++	fs.writeFile(full, text)
++end
++local function item(path: string, front: { string })
++	local id = string.match(path, "([^/]+)$") :: string
++	write(
++		`{path}/{id}.md`,
++		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n"
++	)
++end
++local function spend(dir: string, id: string, when: string, phase: string, tokens: string, model: string)
++	write(
++		`{dir}/spend.md`,
++		`# Spend: {id} t\n\n| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n`
++			.. "|---|---|---|---|---|---|---|---|---|---|\n"
++			.. `| 1 | {when} | s | 4 | 1 | 2.5 | spend | {phase} | {tokens} | {model} |\n`
++	)
++end
++
++local G, T = "game/.tracker", "tool/.tracker"
++local AS_OF = stats.seconds("2026-10-21T10:00:00Z")
++
++-- The fake DOM: elements by id, attributes, class lists, listeners, and `closest` for the selectors the page uses.
++-- Never literal require text: the repo scanner would read it.
++local HARNESS = [==[
++const load = m => module["req" + "uire"](m);
++const fs = load("fs"), vm = load("vm");
++const html = fs.readFileSync(process.argv[2], "utf8"), hash = process.argv[3] || "";
++const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
++const els = {};
++function el(id) {
++  const ls = {}, cl = new Set(), attrs = {};
++  return els[id] = { id, innerHTML: "", textContent: "", value: "", scrollTop: 0,
++    classList: { add: c => cl.add(c), remove: c => cl.delete(c), contains: c => cl.has(c),
++      toggle: (c, f) => { const on = f === undefined ? !cl.has(c) : !!f; on ? cl.add(c) : cl.delete(c); return on; } },
++    addEventListener: (t, f) => (ls[t] = ls[t] || []).push(f), dispatch: (t, e) => (ls[t] || []).forEach(f => f(e)),
++    setAttribute: (n, v) => (attrs[n] = String(v)), removeAttribute: n => delete attrs[n], hasAttribute: n => n in attrs,
++    getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
++    querySelectorAll: () => [] };
++}
++["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "window", "range", "as-of",
++ "list", "pane", "board-data"].forEach(el);
++els.board.setAttribute("hidden", "");
++els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
++const doc = el("document");
++const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
++  location: { hash }, history: { replaceState: (a, b, h) => (sandbox.location.hash = h) }, navigator: {},
++  console, JSON, Math, String, Array, Object, Number, Date, decodeURIComponent, encodeURIComponent };
++sandbox.window = sandbox; sandbox.globalThis = sandbox;
++vm.createContext(sandbox);
++for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
++const target = (sel, attr, value) => ({ closest: s => (s === sel ? { getAttribute: n => (n === attr ? value : null) } : null) });
++const key = k => doc.dispatch("keydown", { key: k, target: {}, preventDefault() {} });
++const snap = () => ({ projects: els.projects.innerHTML, columns: els.columns.innerHTML, charts: els.charts.innerHTML,
++  pane: els.pane.innerHTML, list: els.list.innerHTML, boardHidden: els.board.hasAttribute("hidden"),
++  listHidden: els.list.hasAttribute("hidden"), hash: sandbox.location.hash, windowOptions: els.window.innerHTML,
++  rangeOptions: els.range.innerHTML, tabBoard: els["tab-board"].classList.contains("on") });
++const out = { open: snap() };
++if (!hash) {
++  const setWindow = s => { els.window.value = String(s); els.window.dispatch("change", {}); return snap(); };
++  out.w1h = setWindow(3600); out.w3h = setWindow(10800); out.w30d = setWindow(2592000); out.w24h = setWindow(86400);
++  els.range.value = "all"; els.range.dispatch("change", {}); out.rangeAll = snap();
++  els.columns.dispatch("click", { target: target("button.card", "data-id", "f0021"), preventDefault() {} }); out.card = snap();
++  els.projects.dispatch("click", { target: target("button[data-project]", "data-project", "tool") }); out.tool = snap();
++  els.search.value = "f0031"; els.search.dispatch("keydown", { key: "Enter", target: els.search }); out.search = snap();
++  key("ArrowRight"); out.rafts = snap();
++  key("ArrowRight"); out.issues = snap();
++  key("ArrowRight"); out.wrap = snap();
++  els.projects.dispatch("click", { target: target("button[data-project]", "data-project", "tool") });
++  els.window.value = "2592000"; els.window.dispatch("change", {});
++  const next = JSON.parse(els["board-data"].textContent);
++  next.issues.push(Object.assign({}, next.issues.find(i => i.id === "c0120"), { id: "c0125", title: "Arrived live" }));
++  next.columns.tool.ticket[0].ids.push("c0125");
++  sandbox.znBoard.load(next); out.loaded = snap();
++}
++console.log(JSON.stringify(out));
++]==]
++
++local shown: any = nil
++local hashed: any = nil
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++local function node(page: string, hash: string): any
++	local ok, r = pcall(process.exec, "node", { `{DIR}/harness.js`, page, hash })
++	if not ok then
++		error(`node is required for this spec (preinstalled on GitHub runners): {r}`)
++	end
++	if not r.ok then
++		error(r.stderr)
++	end
++	return serde.decode("json", r.stdout)
++end
++
++return t.spec("c0118 board page", function(it)
++	it("builds a two-project page", function()
++		if fs.isDir(DIR) then
++			fs.removeDir(DIR)
++		end
++		write("z-nile/projects.toml", REGISTRY)
++		item(
++			`{G}/rafts/active/R0020`,
++			{ "type: feature", "title: Running", "design: ready", "status: active-a-b-c" }
++		)
++		item(
++			`{G}/issues/active/f0021`,
++			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" }
++		)
++		spend(`{G}/issues/active/f0021`, "f0021", "2026-10-20 11:00", "code-review", "300", "grok-y")
++		item(
++			`{G}/rafts/active/R0030`,
++			{ "type: feature", "title: Readied", "design: ready", "status: active-d-e-f" }
++		)
++		item(
++			`{G}/issues/active/f0031`,
++			{ "type: feature", "title: Waits", "raft: R0030", "status: active-d-e-f" }
++		)
++		item(`{G}/rafts/done/R0010`, { "type: chore", "title: Landed", "design: ready" })
++		write(`{G}/rafts/done/R0010/design-review-001.md`, "# r\n")
++		item(`{G}/issues/done/c0011`, { "type: chore", "title: Just landed", "raft: R0010" })
++		spend(`{G}/issues/done/c0011`, "c0011", "2026-10-21 08:59", "deliver", "", "") -- 61 minutes before as-of
++		item(`{G}/issues/done/c0012`, { "type: chore", "title: Landed yesterday", "raft: R0010" })
++		spend(`{G}/issues/done/c0012`, "c0012", "2026-10-20 12:00", "deliver", "", "") -- 22 hours
++		item(`{G}/issues/done/c0013`, { "type: chore", "title: Landed long ago", "raft:" })
++		spend(`{G}/issues/done/c0013`, "c0013", "2026-10-10 12:00", "deliver", "", "") -- 11 days
++		item(
++			`{T}/rafts/R0110`,
++			{ "type: chore", "title: Tool raft", "design: ready", "status: prepared-g-h-i" }
++		)
++		item(
++			`{T}/issues/c0111`,
++			{ "type: chore", "title: Tool rafted", "raft: R0110", "status: prepared-g-h-i" }
++		)
++		item(`{T}/issues/c0120`, { "type: chore", "title: Tool ticket", "raft:" })
++		local facts = { asOf = AS_OF, refs = { "origin/R0020-alpha" }, worktrees = {}, dispatch = {} }
++		fs.writeFile(`{DIR}/page.html`, board.build(nil, DIR, facts))
++		fs.writeFile(`{DIR}/harness.js`, HARNESS)
++		shown = node(`{DIR}/page.html`, "")
++		hashed = node(`{DIR}/page.html`, "#tool")
++	end)
++
++	it("opens on the Board of the first project, with a tab per project and the list hidden", function()
++		local open = shown.open
++		t.expect(open.tabBoard).toBe(true)
++		t.expect(open.boardHidden).toBe(false)
++		t.expect(open.listHidden).toBe(true)
++		t.expect(has(open.projects, 'data-project="game" class="on"')).toBe(true)
++		t.expect(has(open.projects, 'data-project="tool"')).toBe(true)
++		local game = (string.find(open.projects, "game", 1, true)) :: number
++		t.expect(game < ((string.find(open.projects, "tool", 1, true)) :: number)).toBe(true)
++		for _, c in { "ticket", "design", "raft", "ready", "run", "done" } do
++			t.expect(has(open.columns, `data-column="{c}"`)).toBe(true)
++		end
++		t.expect(has(open.columns, 'data-id="c0111"')).toBe(false) -- tool's card
++	end)
++
++	it("draws each raft as a band behind its cards, in its column", function()
++		local cols = shown.open.columns
++		local run = string.match(cols, 'data%-column="run".-data%-column="done"') or ""
++		t.expect(has(run, 'class="band" data-raft="R0020"')).toBe(true)
++		t.expect(has(run, 'data-id="f0021"')).toBe(true)
++		local ready = string.match(cols, 'data%-column="ready".-data%-column="run"') or ""
++		t.expect(has(ready, 'data-raft="R0030"')).toBe(true)
++		t.expect(has(ready, 'data-id="f0031"')).toBe(true)
++	end)
++
++	it(
++		"shows done cards while their age is within the window: 24 hours by default, 1 hour up to 30 days",
++		function()
++			local function shows(s: any, id: string): boolean
++				return has(s.columns, `class="card" data-id="{id}"`)
++					or has(s.columns, `class="card sel" data-id="{id}"`)
++			end
++			t.expect(shows(shown.open, "c0012")).toBe(true)
++			t.expect(shows(shown.open, "c0011")).toBe(true)
++			t.expect(shows(shown.open, "c0013")).toBe(false)
++			t.expect(shows(shown.w1h, "c0011")).toBe(false) -- 61 minutes old
++			t.expect(shows(shown.w1h, "c0012")).toBe(false)
++			t.expect(shows(shown.w3h, "c0011")).toBe(true)
++			t.expect(shows(shown.w3h, "c0012")).toBe(false)
++			t.expect(shows(shown.w30d, "c0013")).toBe(true)
++			t.expect(shows(shown.w24h, "c0013")).toBe(false)
++			t.expect(has(shown.open.windowOptions, 'value="86400" selected')).toBe(true)
++			t.expect(has(shown.open.windowOptions, 'value="3600"')).toBe(true)
++			t.expect(has(shown.open.windowOptions, 'value="2592000"')).toBe(true)
++		end
++	)
++
++	it("shows both charts for the chosen range, 90 days by default", function()
++		t.expect(has(shown.open.rangeOptions, 'value="90d" selected')).toBe(true)
++		t.expect(has(shown.open.charts, 'data-chart="game/rounds/90d"')).toBe(true)
++		t.expect(has(shown.open.charts, 'data-chart="game/tokens/90d"')).toBe(true)
++		t.expect(has(shown.rangeAll.charts, 'data-chart="game/rounds/all"')).toBe(true)
++		t.expect(has(shown.rangeAll.charts, 'data-chart="game/tokens/all"')).toBe(true)
++		t.expect(has(shown.rangeAll.charts, "game/rounds/90d")).toBe(false)
++	end)
++
++	it(
++		"a card click shows its column, model, spend and document, and says PR and checks are live elsewhere",
++		function()
++			local pane = shown.card.pane
++			t.expect(has(pane, '<h2><span class="id">f0021</span>')).toBe(true)
++			t.expect(has(pane, "<dd>Run</dd>")).toBe(true)
++			t.expect(has(pane, "grok-y")).toBe(true)
++			t.expect(has(pane, "2.5 min, 300 tokens, +4/-1 lines")).toBe(true)
++			t.expect(has(pane, "R0020-alpha")).toBe(true)
++			t.expect(has(pane, "zn board --serve")).toBe(true)
++			t.expect(has(shown.card.columns, 'class="card sel" data-id="f0021"')).toBe(true)
++		end
++	)
++
++	it("a project tab shows that project's columns only, and names it in the link", function()
++		local s = shown.tool
++		t.expect(has(s.projects, 'data-project="tool" class="on"')).toBe(true)
++		t.expect(has(s.columns, 'data-id="c0120"')).toBe(true)
++		t.expect(has(s.columns, 'data-raft="R0110"')).toBe(true)
++		t.expect(has(s.columns, 'data-id="f0021"')).toBe(false)
++		t.expect(s.hash).toBe("#tool")
++	end)
++
++	it("a search for another project's card switches to that project and stays on the Board", function()
++		local s = shown.search
++		t.expect(has(s.projects, 'data-project="game" class="on"')).toBe(true)
++		t.expect(s.boardHidden).toBe(false)
++		t.expect(has(s.pane, '<h2><span class="id">f0031</span>')).toBe(true)
++		t.expect(has(s.columns, 'class="card sel" data-id="f0031"')).toBe(true)
++	end)
++
++	it(
++		"the arrow keys cycle Board, Rafts and Issues, and the lists show the selected project only",
++		function()
++			t.expect(shown.rafts.boardHidden).toBe(true)
++			t.expect(shown.rafts.listHidden).toBe(false)
++			t.expect(has(shown.rafts.list, 'data-id="R0020"')).toBe(true)
++			t.expect(has(shown.rafts.list, 'data-id="R0110"')).toBe(false)
++			t.expect(has(shown.issues.list, 'data-id="f0031"')).toBe(true)
++			t.expect(has(shown.issues.list, 'data-id="c0120"')).toBe(false)
++			t.expect(shown.wrap.boardHidden).toBe(false)
++			t.expect(shown.wrap.tabBoard).toBe(true)
++		end
++	)
++
++	it("a #project link opens that project's Board", function()
++		t.expect(has(hashed.open.projects, 'data-project="tool" class="on"')).toBe(true)
++		t.expect(has(hashed.open.columns, 'data-id="c0120"')).toBe(true)
++		t.expect(hashed.open.boardHidden).toBe(false)
++	end)
++
++	it("znBoard.load swaps the model and keeps the project and the done window", function()
++		local s = shown.loaded
++		t.expect(has(s.projects, 'data-project="tool" class="on"')).toBe(true)
++		t.expect(has(s.columns, 'data-id="c0125"')).toBe(true)
++		t.expect(has(s.columns, "Arrived live")).toBe(true)
++	end)
++
++	it("cleans up", function()
++		fs.removeDir(DIR)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0118/acceptance/real.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/real.spec.luau
+new file mode 100644
+index 00000000..0c947776
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0118/acceptance/real.spec.luau
+@@ -0,0 +1,41 @@
++--!strict
++-- c0118 AC6: the real tracker's board: one tab per registered project in registry order, and every issue on exactly
++-- one column of its own project's board. No counts of live items: only that each item found behaves.
++local board = require("@znile/engine/board")
++local projects = require("@znile/engine/projects")
++local t = require("@tests/lib/t")
++
++return t.spec("c0118 real board", function(it)
++	local m = board.collect(nil, ".")
++
++	it("has one tab per project in z-nile/projects.toml, in its order", function()
++		local want = {}
++		for _, p in projects.load(".").projects do
++			table.insert(want, { name = p.name, root = p.root })
++		end
++		t.expect(m.projects).toEqual(want)
++	end)
++
++	it("puts every issue on exactly one column of its own project", function()
++		local seen: { [string]: number } = {}
++		for project, columns in m.columns do
++			for _, bands in columns do
++				for _, band in bands do
++					for _, id in band.ids do
++						seen[id] = (seen[id] or 0) + 1
++						for _, issue in m.issues do
++							if issue.id == id and issue.project ~= project then
++								error(`{id} is on {project}'s board but belongs to {issue.project}`)
++							end
++						end
++					end
++				end
++			end
++		end
++		for _, issue in m.issues do
++			if seen[issue.id] ~= 1 then
++				error(`{issue.id} is on {seen[issue.id] or 0} columns`)
++			end
++		end
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0118/acceptance/view.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/view.spec.luau
+new file mode 100644
+index 00000000..8a12da59
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0118/acceptance/view.spec.luau
+@@ -0,0 +1,285 @@
++--!strict
++-- c0118 AC1: the board's pure rules (boardview): every effective status maps to one column (ready against run by the
++-- raft's branch), raft bands, the done age, UTC ISO weeks, a raft's review rounds counted once, and the two charts'
++-- weekly series (the range, zero weeks, the review phases, the model order and cap, the unrecorded series).
++local boardview = require("@znile/engine/boardview")
++local stats = require("@znile/engine/stats")
++local t = require("@tests/lib/t")
++
++local function at(ts: string): number
++	return stats.seconds(ts)
++end
++local DAY = 86400
++
++local function seriesOf(w: boardview.Weekly, key: string): { number? }?
++	for _, s in w.series do
++		if s.key == key then
++			return s.values
++		end
++	end
++	return nil
++end
++local function labelsOf(w: boardview.Weekly): { string }
++	local out = {}
++	for _, s in w.series do
++		table.insert(out, s.label)
++	end
++	return out
++end
++
++return t.spec("c0118 board rules", function(it)
++	it("maps each effective status to its column, and active by the raft's branch to ready or run", function()
++		t.expect(boardview.column("new", false)).toBe("ticket")
++		t.expect(boardview.column("new", true)).toBe("ticket")
++		t.expect(boardview.column("preparing", false)).toBe("design")
++		t.expect(boardview.column("prepared", false)).toBe("raft")
++		t.expect(boardview.column("prepared", true)).toBe("raft")
++		t.expect(boardview.column("active", false)).toBe("ready")
++		t.expect(boardview.column("active", true)).toBe("run")
++		t.expect(boardview.column("done", false)).toBe("done")
++		t.expect(boardview.column("done", true)).toBe("done")
++	end)
++
++	it("has six columns in pipeline order", function()
++		t.expect(boardview.COLUMNS).toEqual({ "ticket", "design", "raft", "ready", "run", "done" })
++	end)
++
++	it("refuses a status that is not an effective status, naming it", function()
++		t.expect(function()
++			boardview.column("blocked", false)
++		end).toThrow("blocked")
++		t.expect(function()
++			boardview.column("", true)
++		end).toThrow("effective status")
++	end)
++
++	it("bands a column by raft in id order, the raftless cards last, ids sorted", function()
++		local bands = boardview.bands({
++			{ id = "f0031", raft = "R0030" },
++			{ id = "c0090", raft = nil },
++			{ id = "f0030", raft = "R0030" },
++			{ id = "d0012", raft = "R0010" },
++			{ id = "c0080", raft = nil },
++		})
++		local want: { boardview.Band } = {
++			{ raft = "R0010", ids = { "d0012" } },
++			{ raft = "R0030", ids = { "f0030", "f0031" } },
++			{ raft = nil, ids = { "c0080", "c0090" } },
++		}
++		t.expect(bands).toEqual(want)
++		t.expect(boardview.bands({})).toEqual({})
++	end)
++
++	it(
++		"ages a done card from the page's as-of time, never below zero, and unknown when either time is",
++		function()
++			t.expect(boardview.age(1000, 4600)).toBe(3600)
++			t.expect(boardview.age(5000, 4600)).toBe(0)
++			t.expect(boardview.age(nil, 4600)).toBe(nil)
++			t.expect(boardview.age(1000, nil)).toBe(nil)
++		end
++	)
++
++	it("the done window is 24 hours by default and runs from 1 hour to 30 days", function()
++		t.expect(boardview.WINDOW).toBe(DAY)
++		t.expect(boardview.WINDOWS[1]).toBe(3600)
++		t.expect(boardview.WINDOWS[#boardview.WINDOWS]).toBe(30 * DAY)
++		t.expect(table.find(boardview.WINDOWS, DAY) ~= nil).toBe(true)
++		for i = 2, #boardview.WINDOWS do
++			t.expect(boardview.WINDOWS[i] > boardview.WINDOWS[i - 1]).toBe(true)
++		end
++	end)
++
++	it("the charts' range is 90 days by default and opens to all history", function()
++		t.expect(boardview.RANGE).toBe("90d")
++		local keys, all = {}, nil
++		for _, r in boardview.RANGES do
++			table.insert(keys, r.key)
++			if r.key == "all" then
++				all = r
++			end
++		end
++		t.expect(table.find(keys, "90d") ~= nil).toBe(true)
++		t.expect(all ~= nil and (all :: any).days == nil).toBe(true)
++	end)
++
++	it("weeks are ISO weeks in UTC: a Sunday-evening landing in -07:00 is the next week", function()
++		-- Sunday 2026-10-18 23:30 -07:00 is Monday 2026-10-19 06:30 UTC
++		t.expect(boardview.weekOf(at("2026-10-18T23:30:00-07:00"))).toBe("2026-10-19")
++		t.expect(boardview.weekOf(at("2026-10-18T22:59:59-01:00"))).toBe("2026-10-12") -- 23:59:59 UTC Sunday
++		t.expect(boardview.weekOf(at("2026-10-19T00:00:00Z"))).toBe("2026-10-19")
++		t.expect(boardview.weekOf(at("2026-01-01T12:00:00Z"))).toBe("2025-12-29") -- ISO week 1 of 2026
++	end)
++
++	it(
++		"counts a raft's rounds from its files: design reviews and code reviews, each path once, nothing else",
++		function()
++			local design, code = boardview.rounds({
++				"z/rafts/done/R0010/design-review-001.md",
++				"z/rafts/done/R0010/design-review-001.md", -- the same file offered twice
++				"z/issues/done/c0011/design-review-001.md", -- a member's: another file of the same name
++				"z/rafts/done/R0010/review-001.md",
++				"z/rafts/done/R0010/review-002.md",
++				"z/rafts/done/R0010/design-refute-001.md",
++				"z/rafts/done/R0010/refute-001.md",
++				"z/rafts/done/R0010/stream-review-c0011-001.md",
++				"z/rafts/done/R0010/design-review-notes.md",
++				"z/rafts/done/R0010/harvest.md",
++			})
++			t.expect(design).toBe(2)
++			t.expect(code).toBe(2)
++		end
++	)
++
++	it(
++		"review rounds by week cover every week of the range, landed rafts in their UTC week, none outside",
++		function()
++			local asOf = at("2026-10-21T12:00:00Z") -- a Wednesday
++			local landed = {
++				{ id = "R0010", at = at("2026-10-18T23:30:00-07:00"), design = 3, code = 1 }, -- week of Oct 19
++				{ id = "R0011", at = at("2026-10-20T08:00:00Z"), design = 1, code = 2 }, -- week of Oct 19
++				{ id = "R0012", at = at("2026-10-07T08:00:00Z"), design = 2, code = 0 }, -- week of Oct 5
++				{ id = "R0013", at = asOf - 31 * DAY, design = 9, code = 9 }, -- outside 30 days
++				{ id = "R0014", at = asOf + 3600, design = 7, code = 7 }, -- after the page's as-of time
++			}
++			local w = boardview.roundsByWeek(landed, asOf, 30)
++			t.expect(w.weeks)
++				.toEqual({ "2026-09-21", "2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19" })
++			t.expect(w.labels).toEqual({ "Sep 21", "Sep 28", "Oct 5", "Oct 12", "Oct 19" })
++			t.expect(seriesOf(w, "design")).toEqual({ 0, 0, 2, 0, 4 })
++			t.expect(seriesOf(w, "code")).toEqual({ 0, 0, 0, 0, 3 })
++			t.expect(labelsOf(w)).toEqual({ "Design reviews", "Code reviews" })
++		end
++	)
++
++	it("a raft that landed exactly at the range's start counts, one second earlier does not", function()
++		local asOf = at("2026-10-21T12:00:00Z")
++		local start = asOf - 30 * DAY
++		local w = boardview.roundsByWeek({ { id = "R1", at = start, design = 1, code = 0 } }, asOf, 30)
++		t.expect((seriesOf(w, "design") :: { number? })[1]).toBe(1)
++		local w2 = boardview.roundsByWeek({ { id = "R1", at = start - 1, design = 1, code = 0 } }, asOf, 30)
++		local sum = 0
++		for _, v in seriesOf(w2, "design") :: { number } do
++			sum += v
++		end
++		t.expect(sum).toBe(0)
++	end)
++
++	it("all history starts at the earliest landing, and nothing landed gives no weeks", function()
++		local asOf = at("2026-10-21T12:00:00Z")
++		local w = boardview.roundsByWeek({
++			{ id = "R1", at = at("2026-09-30T10:00:00Z"), design = 5, code = 1 },
++			{ id = "R2", at = at("2026-10-13T10:00:00Z"), design = 1, code = 1 },
++		}, asOf, nil)
++		t.expect(w.weeks).toEqual({ "2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19" })
++		t.expect(seriesOf(w, "design")).toEqual({ 5, 0, 1, 0 })
++		local empty = boardview.roundsByWeek({}, asOf, nil)
++		t.expect(empty.weeks).toEqual({})
++		t.expect(empty.series).toEqual({})
++	end)
++
++	it(
++		"tokens by model read only design-review and code-review rows with tokens, dated in the range",
++		function()
++			local asOf = at("2026-10-21T12:00:00Z")
++			local w = boardview.tokensByWeek({
++				{
++					at = at("2026-10-20T10:00:00Z"),
++					phase = "design-review",
++					tokens = 500,
++					model = "claude-opus-5-5-high",
++				},
++				{
++					at = at("2026-10-14T13:00:00Z"),
++					phase = "code-review",
++					tokens = 300,
++					model = "claude-opus-5-5-high",
++				},
++				{
++					at = at("2026-10-20T11:00:00Z"),
++					phase = "code-review",
++					tokens = 900,
++					model = "grok-4.7-xhigh",
++				},
++				{
++					at = at("2026-10-20T12:00:00Z"),
++					phase = "build",
++					tokens = 99999,
++					model = "build-only-model",
++				},
++				{ at = at("2026-10-20T12:00:00Z"), phase = "prep", tokens = 77777, model = nil },
++				{
++					at = at("2026-10-20T13:00:00Z"),
++					phase = "design-review",
++					tokens = 0,
++					model = "zero-model",
++				},
++				{ at = at("2026-10-15T13:00:00Z"), phase = "design-review", tokens = 40, model = nil },
++				{ at = asOf - 8 * DAY, phase = "design-review", tokens = 5000, model = "old-model" }, -- outside 7 days
++				{ at = asOf + 60, phase = "design-review", tokens = 6000, model = "future-model" }, -- after as-of
++			}, asOf, 7)
++			t.expect(w.weeks).toEqual({ "2026-10-12", "2026-10-19" })
++			-- largest total first: grok 900, opus 800; the unrecorded series last
++			t.expect(labelsOf(w)).toEqual({ "grok-4.7-xhigh", "claude-opus-5-5-high", "unrecorded model" })
++			t.expect(seriesOf(w, "m1")).toEqual({ 0, 900 })
++			t.expect(seriesOf(w, "m2")).toEqual({ 300, 500 })
++			t.expect(seriesOf(w, "unrecorded")).toEqual({ 40, 0 })
++		end
++	)
++
++	it("ties between models go by id, and models past the cap are summed as other models", function()
++		local asOf = at("2026-10-21T12:00:00Z")
++		local rows = {}
++		for i = 1, boardview.MAX_MODELS + 2 do
++			table.insert(rows, {
++				at = at("2026-10-20T10:00:00Z"),
++				phase = "code-review",
++				tokens = if i <= 2 then 100 else 1000 - i,
++				model = string.format("model-%02d", i),
++			})
++		end
++		local w = boardview.tokensByWeek(rows, asOf, 7)
++		local labels = labelsOf(w)
++		t.expect(#labels).toBe(boardview.MAX_MODELS + 1)
++		t.expect(labels[1]).toBe("model-03")
++		t.expect(labels[#labels]).toBe("other models")
++		-- model-01 and model-02 tie at 100 and are the two smallest: both fall into other models
++		t.expect(table.find(labels, "model-01")).toBe(nil)
++		t.expect(seriesOf(w, "other")).toEqual({ 0, 200 }) -- weeks of Oct 12 and Oct 19
++	end)
++
++	it("models with equal totals are ordered by id", function()
++		local asOf = at("2026-10-21T12:00:00Z")
++		local w = boardview.tokensByWeek({
++			{ at = at("2026-10-20T10:00:00Z"), phase = "code-review", tokens = 100, model = "zeta" },
++			{ at = at("2026-10-20T10:00:00Z"), phase = "code-review", tokens = 100, model = "alpha" },
++			{ at = at("2026-10-20T10:00:00Z"), phase = "design-review", tokens = 100, model = "mid" },
++		}, asOf, 7)
++		t.expect(labelsOf(w)).toEqual({ "alpha", "mid", "zeta" })
++	end)
++
++	it("scales a tall token axis to k or M tokens, and leaves a short one alone", function()
++		local function weekly(v: number): boardview.Weekly
++			return {
++				labels = { "Oct 19" },
++				weeks = { "2026-10-19" },
++				series = { { key = "m1", label = "a", values = { v } } },
++			}
++		end
++		local w1, u1 = boardview.scaled(weekly(9000), "tokens")
++		t.expect(u1).toBe("tokens")
++		t.expect(w1.series[1].values[1]).toBe(9000)
++		local w2, u2 = boardview.scaled(weekly(123456), "tokens")
++		t.expect(u2).toBe("k tokens")
++		t.expect(w2.series[1].values[1]).toBe(123.5)
++		local w3, u3 = boardview.scaled(weekly(25000000), "tokens")
++		t.expect(u3).toBe("M tokens")
++		t.expect(w3.series[1].values[1]).toBe(25)
++	end)
++
++	it("reads a spend row's UTC minute, or a bare day, and nothing else", function()
++		t.expect(boardview.rowInstant("2026-10-21 10:00")).toBe(at("2026-10-21T10:00:00Z"))
++		t.expect(boardview.rowInstant("2026-10-21")).toBe(at("2026-10-21T00:00:00Z"))
++		t.expect(boardview.rowInstant("yesterday")).toBe(nil)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0118/c0118.md b/z-nile/.tracker/issues/c0118/c0118.md
+index 414d138c..0d272c28 100644
+--- a/z-nile/.tracker/issues/c0118/c0118.md
++++ b/z-nile/.tracker/issues/c0118/c0118.md
+@@ -29,59 +29,355 @@ Decided with the user (2026-10-20), from the programme review:
+ - Replacing `tracker.sh board` until this page covers the same navigation.
+ - Editing the workflow from the canvas. The page reads the tracker, worktrees, and GitHub.
+ - Starting a model. Stop, retry, and open call the dispatcher from c0117.
++- (Moved by the Scope decision above, not cut:) the localhost server, live PR and checks data from `gh`, and the stop, retry and open actions are c0121's. This page leaves c0121 one seam to fill (Design §9).
+ 
+ ## Solution
+ - Draw the page from that project's tracker documents, `git worktree list`, and `gh`.
+ - Count `design-review-NNN.md` and `review-NNN.md` on rafts that landed that week.
+ - Split spend tokens by the model id c0117 records. A row with no model is the unrecorded line.
+ 
++Added in prep (detail after the captured bullets, nothing above changed):
++- `gh` is read only by c0121's server (the Scope decision moves live PR and checks there). The static page reads the tracker documents, `git worktree list`, the branch names and HEAD's commit time, all local, and says on each card that PR and checks are live on the served board.
++- "Landed that week" is the raft's first arrival in `done/`, in UTC, from history; a raft's rounds are its own folder's, its members' and those of every raft retired into it, each file once (c0116 puts z-design's reviews on the issue).
++- "Ready" and "run" are told apart by the raft's branch (`<R-id>-…`, local or on origin), which `start` and z-run create and the CI checkout fetches.
++
+ ## Design
+-<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
+-     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
++c0118 replaces the board page in place: the same command (`./zn board [--out PATH] [-O]`), the same output path, the same CI workflow and the same refresh of the main checkout's copy after every publish and `sync` (c0070), so nothing that builds or ships the page changes. What changes is what the page holds and shows. The old board's model, views, search, id jump, rendered documents, copy buttons and Stats section stay field for field (the "Carry navigation and Stats" decision); the new parts are added beside them.
++
++### 1. Modules and data flow
++```
++z-nile/projects.toml ──► projects.load ──► board.collect(root?, checkout?, facts?) ──► board.render ──► one HTML page
++<root>/{issues,rafts}/{,active/,done/}<id>/<id>.md ──► scan (per project) ┘   │                      (board.html + marked
++<root>/rafts/retired/<R-id>/ (c0116) ─────────────────────────────────────────┤                       + Stats + JSON model)
++<issue>/spend.md ──► ledger.parse (c0084, c0117: tokens, model) ───────────────┤
++git log (item docs + compaction maps) ──► history.read: closed, spells, doneAt ┤
++git log -1 / for-each-ref / worktree list, .cache/dispatch/<id>/state.json ──► board.readFacts ┘
++                                     pure rules: boardview (column, bands, age, weekOf, rounds, roundsByWeek, tokensByWeek)
++```
++| module | change | pure or I/O |
++|---|---|---|
++| `z-nile/engine/boardview.luau` | **new**: the board's rules | pure (data in, data out; `os.date("!…")` only as a calendar) |
++| `z-nile/engine/board.luau` | the model gains projects, columns, card facts, rounds, charts; `board.readFacts`; spend read through `ledger.parse` | the reads (`scan`, `readFacts`, spend files) and the assembly |
++| `z-nile/engine/history.luau` | `Parsed.doneAt`; raft documents classified; compaction commits cut; cache key `v3` | `parse` pure, `read` I/O |
++| `z-nile/engine/board.html` | the project tabs, the Board view, the done window and range controls, the card's run details, the c0121 seam | the page |
++| `z-nile/engine/main.luau` | `metrics` counts rounds through `boardview.rounds` (one rule with the chart) | CLI |
++| `z-nile/skills/zz-rules/SKILL.md`, `z-nile/README.md` | the board row and the README say what the board does | docs |
++
++### 2. Public types and signatures
++`boardview.luau` (all exported, all pure):
++```lua
++export type Column = "ticket" | "design" | "raft" | "ready" | "run" | "done"
++export type Band = { raft: string?, ids: { string } }
++export type Landed = { id: string, at: number, design: number, code: number }        -- at: UTC epoch seconds
++export type TokenRow = { at: number, phase: string, tokens: number, model: string? }
++export type Series = { key: string, label: string, values: { number? } }
++export type Range = { key: string, label: string, days: number? }                    -- days nil: all history
++export type Weekly = { labels: { string }, weeks: { string }, series: { Series } }
++boardview.COLUMNS: { Column }        -- { "ticket", "design", "raft", "ready", "run", "done" }
++boardview.WINDOWS: { number }        -- 1 h, 3 h, 6 h, 12 h, 24 h, 2 d, 3 d, 7 d, 14 d, 30 d (seconds)
++boardview.WINDOW = 86400             -- the default done window
++boardview.RANGES: { Range }          -- 30d, 90d, 1y, all
++boardview.RANGE = "90d"
++boardview.REVIEW_PHASES = { ["design-review"] = true, ["code-review"] = true }
++boardview.MAX_MODELS = 8
++function boardview.column(stage: string, launched: boolean): Column
++function boardview.bands(cards: { { id: string, raft: string? } }): { Band }
++function boardview.age(doneAt: number?, asOf: number?): number?
++function boardview.weekOf(at: number): string                                       -- the UTC Monday, YYYY-MM-DD
++function boardview.rounds(paths: { string }): (number, number)                      -- design, code
++function boardview.roundsByWeek(landed: { Landed }, asOf: number, days: number?): Weekly
++function boardview.tokensByWeek(rows: { TokenRow }, asOf: number, days: number?): Weekly
++function boardview.scaled(w: Weekly, unit: string): (Weekly, string)
++function boardview.rowInstant(when: string): number?
++```
++`board.luau`:
++```lua
++export type Dispatch = { step: string, outcome: string, model: string, questions: boolean }
++export type Spend = { minutes: number, tokens: number, added: number, removed: number, models: { string } }
++export type Facts = { asOf: number?, refs: { string }, worktrees: { { path: string, branch: string } },
++	dispatch: { [string]: Dispatch } }
++export type Project = { name: string, root: string }
++export type ProjectCharts = { rounds: { [string]: string }, tokens: { [string]: string } }  -- range key -> svg
++-- Raft gains: project, launched, branch?, worktree?, doneAt?, doneFrom?, rounds = { design, code }, dispatch?
++-- Issue gains: project, column, doneAt?, doneFrom?, age?, spend: Spend, dispatch?
++-- Model gains: projects, columns (project -> column -> { Band }), charts (project -> ProjectCharts), asOf?,
++--   windows, window, ranges ({ key, label }), range, problems ({ string }); initialView becomes "board".
++function board.readFacts(dir: string): Facts
++function board.collect(root: string?, checkout: string?, facts: Facts?): Model
++function board.build(root: string?, checkout: string?, facts: Facts?): string
++```
++`collect(root)` (one tracker folder, as specs pass) keeps working: one project named after the folder (or, for `<name>/.tracker`, the folder above), its `root` field that name, so no path from outside the tree reaches the page, and no facts unless given. `collect(nil, checkout)` reads every project of the checkout's registry in registry order and the checkout's own facts.
++
++`history.luau`: `Parsed` gains `doneAt: { [string]: number }?` (issues and rafts). `history.logArgs(roots)` appends the compaction maps `ids.MAP_FILES` (`z-nile/compaction.txt`, `tracker/compaction.txt`) to the pathspec.
++
++### 3. The columns (programme review F6)
++A total function of the issue's effective status (`status.effective`, the five words) and whether its raft is launched:
++
++| effective status | raft launched? | column | the pipeline step behind it (c0115) |
++|---|---|---|---|
++| `new` | any | ticket | z-ticket captured it |
++| `preparing` | any | design | z-design is designing it |
++| `prepared` | any (a backlog raft, or no raft yet: c0116's "prepared, no raft") | raft | waiting for z-raft or z-ready |
++| `active` | no | ready | z-ready moved it to `active/`; nobody launched it |
++| `active` | yes | run | z-run (or `start`, or the dispatcher) made its branch |
++| `done` | any | done | `done/` |
++| anything else | | refused: `boardview.column: <word> is not an effective status (new, preparing, prepared, active, done)` | |
++
++**Launched** means a ref named `<R-id>-…` exists, as plain text and anchored at the start, in `git for-each-ref --format=%(refname:short) refs/heads refs/remotes/origin` (an `origin/` prefix is dropped first). `start` creates and pushes `R0010-<slug>`, z-run's worktree checks it out, and the dispatcher's z-run step goes through the same `start`, so the branch exists from the moment a raft is launched until its worktree is pruned after the merge, by which time the raft is in `done/`. The CI workflow already checks out with `fetch-depth: 0`, which fetches every branch, so the artifact tells ready from run too. An issue in `active/` with no raft (legacy) is ready. `R00200-x`, `feature/R0020-x` and `xR0020-y` are not R0020's branch.
++
++### 4. Raft bands
++Within each column, `boardview.bands` groups the cards by raft, in raft id order, then the raftless cards; ids sorted. A raft whose members sit in two columns (an emergent issue already done, say) gets a band in each. The band's head is the raft's id link, title and status badge.
++
++### 5. Done times and the done window (programme review F5)
++- `history.parse` records, for every issue **and raft** (raft documents are now classified; a retired raft's folder `rafts/retired/` is no area), `doneAt`: the instant of the first commit in which the item arrives in `done/`, converted to UTC epoch seconds with `stats.seconds` (the offset `%cI` writes is honoured, so a Sunday 23:30 −07:00 landing is Monday 06:30 UTC). A move between roots (c0114, c0120) is a delete and an add in one commit, which history already reads as no change; a later return to `done/` keeps the first instant.
++- **Compaction.** The 2026-10-05 compaction re-added every item under a new id, so "first arrival under this id" would be the compaction commit for every item done before it (prep found this on the real tree: 61 z-nile cards dated 2026-10-06). Following the old id is what the zz-rules lesson `item-history-spans-moves-and-compaction` forbids. So a commit that changes a compaction map is a **cut**: an item first seen in `done/` in it gets no `doneAt` from history. The board then dates it by the newest row of its own `spend.md` (a raft by its members' newest row), a field no id change rewrites, and marks `doneFrom = "spend"`; a raft's rows end at its `done` commit (phase `deliver`), so the date is the landing to within the delivery. An item with neither is undated: hidden in the done column, absent from the charts.
++- `closed` and `spells` stay issues only and unchanged (Stats reads them). The cache key gains `v3` so no cache from before c0118 is reused.
++- **As-of time.** The page is a snapshot: `asOf` is HEAD's commit time (`git log -1 --format=%ct HEAD`), so two builds of one tree are byte-identical (c0042, c0073 and c0070 pin that). Each done card carries `age = max(0, asOf − doneAt)`. The page shows a done card while `age ≤ window`; the window select offers 1 h, 3 h, 6 h, 12 h, 24 h (selected), 2 d, 3 d, 7 d, 14 d, 30 d. Guess (pending user): see G1. c0121's server passes its own `asOf` (the request time) through `facts`.
++
++### 6. Review rounds by week (programme review F7)
++- A raft's rounds are the `design-review-NNN.md` and `review-NNN.md` files of: its own folder; every issue whose `raft:` names it (z-design's reviews live on the issue, c0116 §6); and every retired raft whose `retired:` names it, followed through chains (R0018 retired into R0019, retired into R0010, counts for R0010; at most 100 hops). Each path is counted once (`boardview.rounds`). `design-refute-*`, `refute-*`, `stream-review-*` and `harvest.md` are not rounds.
++- `metrics` counts its per-raft and per-issue rounds through the same `boardview.rounds`, so the chart and the table share one rule. Its per-raft table keeps its own scope (the raft's folder plus members for design, the raft's folder for code; retired rafts as their own rows), unchanged.
++- The chart: for each project, the rafts in its `rafts/done/` with a `doneAt`, bucketed by the UTC ISO week of `doneAt` (Monday labels, "Oct 19"), two stacked series "Design reviews" and "Code reviews". Every week from the range's start to the as-of week has a value (0 when nothing landed). The range starts at `asOf − days` (a raft landing exactly then counts), or at the earliest landing for all history.
++
++### 7. Tokens by model
++- Rows: every issue's `spend.md` in the project, read with `ledger.parse` (one reader per format; the old board's private seven-column reader is gone). A raft's `spend.md` is a summary, never read for rows. Kept rows: phase `design-review` or `code-review`, `tokens > 0`, dated (`rowInstant` of `when`, UTC minute) in the range and not after `asOf`.
++- One series per model id, largest total first, ties by id, at most 8; the rest summed as "other models"; a row with no model is the "unrecorded model" series, always last. Tokens are split across a raft's members when recorded (`spend.attribute`), so the sum over issues counts each token once.
++- A tall axis is scaled to "k tokens" above 10,000 a week and "M tokens" above 10,000,000 (prep found the raw axis labels clipped at millions).
++- The charts are drawn by the existing `chart.svg` (stacked bars), one SVG per project, chart and range key, embedded in the model; the page shows the selected range's. Series colours are CSS classes (`ser-design`, `ser-code`, `ser-m1`…`ser-m8`, `ser-other`, `ser-unrecorded`) with light and dark values.
++
++### 8. The page
++- **Layout**: header (title, the view switch Board · Rafts · Issues, Stats, search); then the project tabs on the left (`#projects`, one button per registry project, the selected one marked), then the Board (`#board`: the done-window and range selects and the as-of time, the six columns, the two charts) or the list (`#list`), then the pane (`#pane`, the document). On the Board the pane is 30em wide.
++- **Opening**: the first project in the registry, the Board view (`initialView = "board"`). Guess (pending user): see G2.
++- **Every view shows the selected project only**: the Board's columns, and the Rafts and Issues lists (filtered by each item's `project`). The Stats section stays as it is: the whole repository. Guess (pending user): see G3.
++- **Keys**: Left and Right cycle Board, Rafts, Issues; Up and Down move through the visible cards in column order, or the list; `/` focuses the search.
++- **Search and links**: an id jumps to it in its own project (the tab follows). On the Board an issue that is a visible card stays on the Board and is selected; anything else opens in Rafts or Issues as before. A project name, typed or as `#<name>`, selects that project; selecting a tab sets `#<name>`.
++- **A card click** selects it and shows the pane: the old document pane plus a "Run" block: column, model (the distinct model ids in its spend rows, else the dispatcher state's model, else "unrecorded"), spend (minutes, tokens, lines), the dispatcher's state from `.cache/dispatch/<id>/state.json` (step, outcome, model, and "waiting for answers (questions.md)" when that file exists; c0117 §12 hands this to the board), the raft's branch and worktree, and "PR and checks: live on the served board (`zn board --serve`, c0121)". A raft pane gets the same block with its members' spend summed and its review rounds.
++- Undated history (a shallow clone): the done column says "history unavailable (shallow or no git): no done times" and the chart area "charts need the git history".
++
++### 9. One page, two modes: the seam for c0121
++`zn board` writes the page; c0121's `zn board --serve` serves the same `board.render` output and polls. The page defines `window.znBoard.load(model)`: it replaces the model, re-indexes, and keeps the view, the project (unless it is gone), the selected item, the done window and the range, then re-renders. c0121 builds each polled model with `board.collect(nil, root, facts)` where `facts.asOf` is the request time, and fills PR and checks in the card's "PR and checks" row. The static page never calls `load`. Nothing in c0118 opens a port, calls `gh` or runs an action.
++
++### 10. Facts
++`board.readFacts(dir)` runs, in `dir`, `git log -1 --format=%ct HEAD`, `git for-each-ref --format=%(refname:short) refs/heads refs/remotes/origin` and `git worktree list --porcelain`, and reads `dir/.cache/dispatch/<id>/state.json` (top level only, ids only; `step`, `outcome`, `model` strings; anything else ignored) and the presence of `questions.md` beside it. A git call that fails leaves that fact empty; a state file that does not decode is skipped. It writes nothing, fetches nothing and needs no network: no `gh`. Its one `.cache` line (`local home = \`{dir}/.cache/dispatch\``) is on the reviewed list in `tests/lib/cachepaths.luau` as a read ("nothing is written"), as c0077's scan requires.
+ 
+ ### Scalability
++- Per build: the existing history log (one `git log`, cached by HEAD under `.cache/tracker-history.json`), three more git calls (`log -1`, `for-each-ref`, `worktree list`: about 20 ms together), one read of each issue's `spend.md` (cached in-process, read once per build though both the card and the charts use it), a `readDir` of each raft and member folder for review files, and the dispatcher's state files. Linear in items; measured 0.47 s for the real tree (two projects, 145 items) against the old board's 0.43 s (programme review's timing).
++- The page: 16 small SVGs (2 projects × 2 charts × 4 ranges, about 3 KB each) and a few fields per item add about 80 KB to the 2.93 MB page (3.01 MB). Each project adds 8 SVGs. The done column holds every done item's id; the page filters by age in the browser, so a wider window needs no rebuild.
++- `boardview` is O(items + weeks); `tokensByWeek` sorts the models once.
++
+ ### Maintainability
++- A new project is a `[[project]]` in `z-nile/projects.toml`: it gets a tab, columns and charts with no code change. A new pipeline column is one row in `boardview.column`, one entry in `COLUMNS`/`LABELS` and one CSS-free label in the page. A new range or window is one entry in `RANGES` or `WINDOWS`. A new review kind is one pattern in `boardview.rounds`, which `metrics` shares.
++- One reader per format: spend through `ledger.parse`, the registry through `projects.load`, history through `history.read`.
++- Everything the page decides that could be wrong is in `boardview` (pure, unit-specced); the page's script only filters by `age ≤ window` and by project, and both are specced through node.
++
+ ### Usability
++- The command line is unchanged (`./zn board [--out PATH] [-O]`), so no exhaustive list changes: the main checkout's list already names `sync`, which rebuilds the board; `board` stays in `READ_ONLY`; the usage text is unchanged. `--serve` is c0121's and is not accepted yet.
++- The page opens where the user looks first (the first project's pipeline), keeps every old key and link, and a project is one click, one `#name` or one search away. Cards say their type by colour and word, as the old rows did.
+ 
+ ### Touched modules
+-<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
+-     paths (e.g. `tests/unit/Maze`). Used for spend attribution
+-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
++- `z-nile/engine/boardview.luau`
++- `z-nile/engine/board.luau`
++- `z-nile/engine/board.html`
++- `z-nile/engine/history.luau`
++- `z-nile/engine/main.luau`
++- `z-nile/skills/zz-rules/SKILL.md`
++- `z-nile/README.md`
++- `tests/lib/cachepaths.luau`
++- `tests/acceptance/c0042/model.spec.luau`
++- `tests/acceptance/c0042/smoke.spec.luau`
++- `tests/acceptance/c0107/keep.spec.luau`
++- `tests/acceptance/c0107/page.spec.luau`
++- `tests/acceptance/c0107/views.spec.luau`
++- `tests/acceptance/c0115/readme.spec.luau`
++- `tests/tooling/board.spec.luau`
++- `tests/acceptance/c0118`
+ 
+ ### Affected specs
+-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
++`lune run z-nile/affected -- z-nile/engine/board.luau z-nile/engine/boardview.luau z-nile/engine/history.luau z-nile/engine/board.html` prints `ALL` (engine paths force a full run). The promoted specs that read the touched files as text or require them, from the override grep: c0042 (all five), c0048 (both), c0053 `commands-sync`, c0057 `open`, c0067 `ready`, c0070 `board-refresh`, c0073 (all four), c0107 (all four), c0114 `layout`, `gate-cover`, `registry`, `docs`, c0115 `docs`, `readme`, c0116 `docs`, `plan`, c0117 `docs`, c0119 `scope-docs`, c0120 `docs`, the zz-rules readers (c0050, c0052, c0081, c0082, c0111, pickman c0003), and `tests/tooling/{board,metrics-rounds}.spec.luau`. New: `tests/acceptance/c0118/{view,history,model,page,docs,real}.spec.luau`. All green on the prototype's full gate (Verification log).
+ 
+ ## Unknowns & experiments
+-<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
+-     result if already run during prep, and the fallback design if it fails. -->
++- **E1: can history date landings to the hour, in UTC, across the root moves?** Run on the prototype's real tree. Pass for moves: c0114's and c0120's moves keep each item's landing. **Found a defect**: every item done before the 2026-10-05 compaction got the compaction commit as its landing (61 z-nile cards in a 30-day done window, every old raft's rounds in one week). Fixed by the compaction cut and the spend-row fallback (§5); rechecked: c0001, c0042, R0001, R0006 now have no history `doneAt` and are dated from spend. Fallback if the spend date proves wrong for some old raft: it is only shown, never stored; G4 asks the user whether undated pre-compaction rafts should instead be left out of the charts.
++- **E2: can the page be tested headlessly?** Pass: node runs the page's scripts against a fake DOM (c0042's precedent); `page.spec` drives tabs, windows, ranges, cards, search, keys and `znBoard.load`.
++- **E3: can the page be seen?** Headless Brave hangs in this environment (two attempts, also outside the sandbox); Quick Look renders a static dump of the node-rendered DOM. Screenshots in the Verification log. The real browser check is JC1.
++- **E4: page size and build time.** Pass: +80 KB (3.01 MB), 0.47 s.
++- **E5: chart readability.** Found: the token axis clipped at millions; fixed by `boardview.scaled`.
++- **E6: does the `origin/` ref exist in CI?** By reading: `board.yml` checks out with `fetch-depth: 0`, which fetches all branches (actions/checkout). Not run in CI during prep; if CI lacks the refs, every active raft shows as ready in the artifact only; the local page (c0070) is unaffected. The executor runs `scripts/ci-verify.sh` on the raft branch and checks one artifact (Implementation step 9).
++- **E7: types.** `luau-lsp analyze` of the sequestered specs against the prototype: clean after typing the band literals and wrapping a two-value `next`.
++- **Mutation check**: every row of Rules and mutants was run on the committed prototype in a scratch clone; outcomes in the table. The first run had three survivors. Two were real gaps, now closed with cases: M12 (no token row after the as-of time; a row at as-of + 60 s added) and M17 (no tie among shown models; "models with equal totals are ordered by id" added). Two were equivalent mutants and were replaced by ones that change behaviour: dropping `r.at <= asOf` from the token filter (the weekly loop already bounds by as-of; M12 now drops that bound) and rotating the view list to `rafts, issues, board` (the same cycle from Board; M43 now leaves Board out).
+ 
+ ## Regression guard
+-<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+-Overrides: <promoted specs (tests/acceptance/) this issue deliberately changes, each with its chore, or none>
++- Kept field for field: the old model (`rafts`, `issues`, `views`, `home`, `stats`), the Rafts and Issues views, Ready / Not ready / Done, copy buttons, search, `#id`, arrow keys, rendered documents with the pinned marked, Stats and its tables, `-O`, `--open`, `--out`, the artifact workflow, the c0070 refresh, byte-identical rebuilds. AC7 runs every promoted board spec.
++- The old private spend reader is replaced by `ledger.parse`; Stats numbers are unchanged on the real tree (c0073 `board-stats` real case green), and a `spend.md` that does not parse is now named in `problems` instead of half-read.
++- `history.parse`'s `closed`, `spells` and `today` are unchanged for issues (c0073 `history.spec` green); `metrics` tables unchanged (c0043 `rounds`, c0111 `metrics-lessons`, c0116 `issue-design` and `retired`, `tests/tooling/metrics-rounds` green).
++- New regression specs: `tests/acceptance/c0118/*`.
++
++Overrides: c0042 `model.spec.luau` (two `initialView` asserts and one case name: the page opens on the Board), c0042 `smoke.spec.luau` (the walk clicks Rafts first and takes one more Left and Right past Board), c0107 `keep.spec.luau` and `page.spec.luau` (their harnesses click Rafts first), c0107 `views.spec.luau` (`initialView` and the case name), c0115 `readme.spec.luau` (the picture's board node is built: `board["board: ./zn board, a tab per project"]` replaces `c0118, planned`). c0118 is a chore, so it changes these in its own raft; no chore of another raft is needed. Not promoted, also changed: `tests/tooling/board.spec.luau` (opens Rafts when no hash is given, reads the Board's columns beside the list, `initialView`).
+ 
+ ## Test plan
+-<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
++- `view.spec.luau` :: maps each effective status to its column … → AC1
++- `view.spec.luau` :: has six columns in pipeline order → AC1
++- `view.spec.luau` :: refuses a status that is not an effective status, naming it → AC1
++- `view.spec.luau` :: bands a column by raft in id order, the raftless cards last, ids sorted → AC1
++- `view.spec.luau` :: ages a done card from the page's as-of time … → AC1
++- `view.spec.luau` :: the done window is 24 hours by default and runs from 1 hour to 30 days → AC1
++- `view.spec.luau` :: the charts' range is 90 days by default and opens to all history → AC1
++- `view.spec.luau` :: weeks are ISO weeks in UTC … → AC1
++- `view.spec.luau` :: counts a raft's rounds from its files … → AC1
++- `view.spec.luau` :: review rounds by week cover every week of the range … → AC1
++- `view.spec.luau` :: a raft that landed exactly at the range's start counts … → AC1
++- `view.spec.luau` :: all history starts at the earliest landing … → AC1
++- `view.spec.luau` :: tokens by model read only design-review and code-review rows … → AC1
++- `view.spec.luau` :: ties between models go by id, and models past the cap … → AC1
++- `view.spec.luau` :: models with equal totals are ordered by id → AC1
++- `view.spec.luau` :: scales a tall token axis … → AC1
++- `view.spec.luau` :: reads a spend row's UTC minute … → AC1
++- `history.spec.luau` :: dates an issue's and a raft's landing at the commit's instant in UTC → AC2
++- `history.spec.luau` :: keeps the first landing across a move between roots and a later return → AC2
++- `history.spec.luau` :: an arrival in a commit that writes the compaction map is no landing time → AC2
++- `history.spec.luau` :: a retired raft's folder is no landing, and rafts stay out of closed and spells → AC2
++- `history.spec.luau` :: the log reads the compaction maps beside the item documents → AC2
++- `model.spec.luau` :: has one tab per project … → AC3
++- `model.spec.luau` :: puts each issue in its column … → AC3
++- `model.spec.luau` :: a raft runs when a branch <R-id>-… exists … → AC3
++- `model.spec.luau` :: dates landings from history, and an arrival under a compaction from the newest spend row → AC3
++- `model.spec.luau` :: counts a raft's rounds over its folder, its members' and its retired rafts' … → AC3
++- `model.spec.luau` :: draws each project's rounds chart for every range … → AC3
++- `model.spec.luau` :: draws the tokens chart from review rows by model … → AC3
++- `model.spec.luau` :: gives each card its spend, models and dispatcher state → AC3
++- `model.spec.luau` :: names a spend.md that does not parse, and still builds → AC3
++- `model.spec.luau` :: opens on the Board with a 24-hour done window … → AC3
++- `model.spec.luau` :: without an as-of time there are no done ages and no charts → AC3
++- `model.spec.luau` :: readFacts reads HEAD's time, the branches, the worktrees and the dispatcher's state, writing nothing → AC3
++- `page.spec.luau` :: opens on the Board of the first project … → AC4
++- `page.spec.luau` :: draws each raft as a band behind its cards, in its column → AC4
++- `page.spec.luau` :: shows done cards while their age is within the window … → AC4
++- `page.spec.luau` :: shows both charts for the chosen range, 90 days by default → AC4
++- `page.spec.luau` :: a card click shows its column, model, spend and document … → AC4
++- `page.spec.luau` :: a project tab shows that project's columns only … → AC4
++- `page.spec.luau` :: a search for another project's card switches to that project and stays on the Board → AC4
++- `page.spec.luau` :: the arrow keys cycle Board, Rafts and Issues … → AC4
++- `page.spec.luau` :: a #project link opens that project's Board → AC4
++- `page.spec.luau` :: znBoard.load swaps the model and keeps the project and the done window → AC4
++- `docs.spec.luau` :: (three cases) → AC5
++- `real.spec.luau` :: (two cases) → AC6
++- the promoted board specs, overridden where named → AC7
++- `tests/tooling/metrics-rounds.spec.luau`, c0043 `rounds`, c0111 `metrics-lessons`, c0116 `issue-design`, `retired`, c0115 `readme` → AC8
+ 
+ ### Rules and mutants
+-<!-- One row per behavioural rule in the Design. The mutant is a plausible wrong implementation
+-     that the spec case must fail for (from the prep mutation check, or reasoned). -->
++All rows `run`: applied one at a time to the committed prototype in a scratch clone, each spec run through `tests/run`; "killed" means an assertion failed (no load error). Results in Unknowns & experiments and the Verification log.
++
+ | rule | spec :: case | mutant it kills | checked |
+ |---|---|---|---|
++| active with a launched raft is run, without is ready | view :: maps each effective status…; model :: puts each issue in its column | M1 ready and run swapped | run |
++| prepared is the raft column (with or without a raft) | view :: maps each…; model :: puts each issue… | M2 prepared goes to ready | run |
++| a word that is not an effective status is refused, naming it | view :: refuses a status… | M3 falls to ticket | run |
++| raftless cards are the last band | view :: bands a column…; model :: puts each issue… | M4 raftless band first | run |
++| band ids are sorted | view :: bands a column… | M5 unsorted | run |
++| a done age is never negative | view :: ages a done card… | M6 negative age | run |
++| weeks are UTC ISO weeks | view :: weeks are ISO weeks in UTC… | M7 local-time weeks | run |
++| only design-review and review files are rounds | view :: counts a raft's rounds… | M8 refutes counted | run |
++| each path counts once | view :: counts a raft's rounds… | M9 double count | run |
++| every week of the range has a value | view :: review rounds by week cover every week… | M10 empty weeks skipped | run |
++| the range start is inclusive | view :: a raft that landed exactly at the range's start… | M11 exclusive start | run |
++| nothing after as-of is charted | view :: tokens by model read only…; model :: draws the tokens chart… | M12 the range's upper bound dropped | run |
++| only the two review phases are charted | view :: tokens by model…; model :: draws the tokens chart… | M13 every phase | run |
++| the unrecorded series is last | view :: tokens by model… | M14 unrecorded first | run |
++| at most 8 model series, the rest "other models" | view :: ties between models… | M15 no cap | run |
++| rows with no tokens are not charted | view :: tokens by model… | M16 zero rows kept | run |
++| equal totals order by model id | view :: models with equal totals are ordered by id | M17 ties reversed | run |
++| doneAt is the commit's instant, not its day | history :: dates an issue's and a raft's landing… | M18 day only | run |
++| a compaction commit's arrivals have no doneAt | history :: an arrival in a commit that writes the compaction map…; model :: dates landings… | M19 cut ignored | run |
++| the first landing is kept | history :: keeps the first landing… | M20 re-add restamps | run |
++| rafts stay out of closed and spells | history :: a retired raft's folder is no landing… | M21 rafts in closed | run |
++| a retired folder is no arrival | history :: a retired raft's folder is no landing… | M22 retired is an area | run |
++| a branch is `<R-id>-…` anchored | model :: a raft runs when a branch… | M23 look-alike launches | run |
++| an origin branch launches | model :: a raft runs…; page :: draws each raft as a band… | M24 origin ignored | run |
++| a compacted done item is dated by its newest spend row | model :: dates landings… | M25 no fallback | run |
++| retired chains are followed | model :: counts a raft's rounds… | M26 chain not followed | run |
++| members' reviews count for their raft | model :: counts a raft's rounds… | M27 members not counted | run |
++| a project's rounds chart reads its own rafts only | model :: draws each project's rounds chart… | M28 every project | run |
++| a project's tokens chart reads its own rows only | model :: draws the tokens chart… | M29 every project | run |
++| a launched raft names its worktree | model :: a raft runs… | M30 worktree dropped | run |
++| a card carries the dispatcher's state | model :: gives each card… | M31 dispatch dropped | run |
++| a spend.md that does not parse is named | model :: names a spend.md… | M32 not named | run |
++| the page opens on the Board | model :: opens on the Board…; page :: opens on the Board… | M33 opens on Rafts | run |
++| readFacts sees questions.md | model :: readFacts reads… | M34 never seen | run |
++| as-of is HEAD's commit time | model :: readFacts reads… | M35 the clock | run |
++| the page hides done cards older than the window | page :: shows done cards while their age… | M36 window ignored | run |
++| the lists show the selected project only | page :: the arrow keys cycle… | M37 not filtered | run |
++| a search for a visible card stays on the Board | page :: a search for another project's card… | M38 always leaves | run |
++| `#project` selects the project | page :: a #project link… | M39 ignored | run |
++| `znBoard.load` keeps the project | page :: znBoard.load swaps… | M40 resets the project | run |
++| the range select switches the charts | page :: shows both charts for the chosen range… | M41 range ignored | run |
++| a card shows its run details | page :: a card click shows… | M42 no run block | run |
++| Board is in the arrow cycle | page :: opens on the Board…; the arrow keys cycle… | M43 Board left out of the cycle | run |
++| a project tab switches the project | page :: a project tab shows… | M44 tab does nothing | run |
++| metrics counts code rounds by the shared rule | tooling metrics-rounds; c0043 rounds | M45 code read as design | run |
++| the board row states the done window | docs :: the board row describes… | M46 sentence dropped | run |
++| the selected card is marked | page :: a card click shows…; a search for another project's card… | M47 no selection mark | run |
+ 
+ ## Acceptance criteria
+ 
+ ### Checked
+-<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
++- AC1: every effective status maps to exactly one column (ready or run by the raft's branch, anything else refused); bands, the done age, UTC ISO weeks, a raft's rounds counted once, and both charts' weekly series follow §3 to §7.
++- AC2: history dates each issue's and raft's first arrival in `done/` in UTC seconds, unchanged by root moves and returns to `done/`, never from a compaction's re-add; rafts stay out of `closed` and `spells`.
++- AC3: `board.collect` over two projects gives a tab per project in registry order, each issue in its project's column, bands, done times (history, else spend across a compaction) and ages, rounds with members and retired chains, both charts per project per range from that project's data only, the card facts, named problems, and `readFacts` reads HEAD's time, refs, worktrees and the dispatcher's state without writing.
++- AC4: the page opens on the first project's Board; the done window hides and shows done cards by age; raft bands; the charts follow the range; a card shows its run details; project tabs, search and `#project` switch the project; Left and Right cycle Board, Rafts and Issues, each filtered to the project; `znBoard.load` keeps the project and window.
++- AC5: the zz-rules board row and the README say what the board does, and the old row's pinned words stay.
++- AC6: the real tracker's board has every registered project, and every issue on exactly one column of its own project.
++- AC7: the old navigation, Stats, the CLI, the artifact workflow and the main checkout's refresh stay (every promoted board spec, overridden where named).
++- AC8: `metrics` counts rounds by the board's rule, and the README picture spec (overridden) stays green.
+ 
+ ### Judged
+-<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
+-     Ruled on by the adversarial code reviewer. -->
++- JC1: the page reads well in a real browser at 1440×900, light and dark. Rubric: pass if, on the main checkout's page, the six columns fit without horizontal scroll beside the pane at 1440 px, every band's head names its raft, cards wrap without overlap, both charts have legible axes and a legend whenever there is more than one series, and the dark scheme keeps every series distinguishable; fail on any clipped label, overlapped card, or unreadable series. (Prep could only render a Quick Look dump; the reviewer opens the real page.)
+ 
+ ### Observed
+-<!-- Minimal Studio playtest steps for the human (OCn). -->
++None: the board is tooling, not a Studio feature.
+ 
+ ## Implementation steps
+-<!-- Ordered, small, each verifiable. -->
++1. Check the base: `git diff <prep base> origin/main -- z-nile/engine/board.luau z-nile/engine/board.html z-nile/engine/history.luau z-nile/engine/main.luau z-nile/skills/zz-rules/SKILL.md z-nile/README.md` and the six overridden specs. If c0117 or any other raft changed them since prep, stop and escalate for a re-prep (the overrides are whole-case edits).
++2. `history.luau`: classify raft documents (not `rafts/retired/`), record `doneAt` with `stats.seconds`, the compaction cut from `ids.MAP_FILES` in the pathspec, rafts out of `closed`/`spells`, cache key `v3`. Run AC2 and c0073 `history.spec`.
++3. `boardview.luau` as §2. Run AC1.
++4. `board.luau`: the types, `sources` with projects, `readFacts`, spend through `ledger.parse` with `problems`, the card facts, the spend fallback for `doneAt`, columns and bands, rounds with members and retired chains, the charts via `chart.svg` and `boardview.scaled`, `initialView = "board"`. Run AC3, AC6.
++5. `board.html`: the CSS series classes and layout, the markup (`#projects`, `#board` with `#window`, `#range`, `#as-of`, `#columns`, `#charts`; `tab-board`), the script (views, project filter, done filter, card pane run block, keys, search, `#project`, `znBoard.load`). Run AC4.
++6. `main.luau`: `metrics` rounds through `boardview.rounds`. Run AC8.
++7. The six overrides exactly as Regression guard says, and `tests/tooling/board.spec.luau`. Run AC7.
++8. Docs: the zz-rules board row and the README, as AC5's phrases. Run AC5, c0048 `board-docs`, c0057 `open`, c0107 `keep`.
++9. `z-nile/check.sh --full`; then push the raft branch and run `scripts/ci-verify.sh`, download its board artifact into a fresh `.cache/` folder, and check that an active raft with a branch shows in run (E6).
++
++## Programme review answers
++- F1 (high, parity scope): settled by the user's "Carry navigation and Stats" (option a). Design §8; AC7 runs every promoted page spec.
++- F2 (high, static page and CI): settled by "One page, two modes". The command, the artifact, the c0070 refresh and the c0048, c0057, c0070 specs are unchanged; the cachepaths entries are untouched (no new `.cache` writer).
++- F3 (high, CSRF and rebinding): moved to c0121 by the Scope decision (the server and actions). c0118 opens no port and has no endpoint; c0121's prep must take F3's recommendation whole.
++- F4 (high, who runs stop and retry): moved to c0121 (actions). c0118 reads c0117's run state read-only; c0117 §12 names `dispatch stop|retry|status` for c0121.
++- F5 (high, hour-resolution UTC done times across c0120's move): §5, AC2, AC3. Prep found a worse case than the move: the compaction (E1).
++- F6 (high, column mapping): §3, a total function with its table; launched = the raft's branch. AC1, AC3.
++- F7 (medium, where design reviews live): §6, members' and retired rafts' files, one rule with `metrics`. AC1, AC3, AC8.
++- F8 (medium, live data and `gh` cache): moved to c0121 (live data). The static page reads no `gh`; the card names where PR and checks are.
++- F9 (medium, server test seams): moved to c0121. c0118's page seam (`znBoard.load`) is specced in AC4.
++- F10 (medium, Overrides computed on the post-c0117 tree): done on the prototype that simulates c0117 done; Regression guard.
++- F11 (low, stale server): c0121 (a long-running server). The static page states its as-of time.
++- Found while simulating c0117 done (both would fail c0117's own `done` gate; the prototype's simulation commit carries a stand-in fix, and c0117's prep must choose and make its own; reported to the lead):
++  - c0117's promoted `control-cli.spec.luau` names `env -i`, which the repo-fence scan refuses and c0117's `ALLOWED` list misses. Stand-in: an `ALLOWED` entry for that file, that name.
++  - c0117's four specs (`control-cli`, `dispatch-cli`, `dispatch`, `docs`) all name `.cache/dispatch`, which c0049's isolation scan counts as a shared fixture. Stand-in: `dispatch` in c0049's `SHARED_BY_DESIGN` (an override of c0049 that c0117 would have to name); the alternative is spelling the name in two parts in each spec. c0118's own spec spells it in two parts, so it passes either way.
++
++## Guess list
++- G1. Guess (pending user): the done window and the charts' range count back from the page's as-of time, HEAD's commit time, so the static page is a snapshot of one commit (rebuilds stay byte-identical, which c0042, c0073 and c0070 pin). The alternative, the viewer's clock, would make an old artifact show no done cards at all.
++- G2. Guess (pending user): the page opens on the Board view of the first project in `projects.toml` (pickman). The old views are one key or click away. Costs five promoted-spec overrides, named.
++- G3. Guess (pending user): Stats (c0073) stays repository-wide, unchanged, while the Board, Rafts and Issues show the selected project. Per-project Stats would add a project filter to `stats.compute` and override c0073's page specs.
++- G4. Guess (pending user): items done before the 2026-10-05 compaction are dated by their newest spend row, so the "all history" charts include them (in roughly the right week); the alternative is to leave them out of the charts and the done column as undated.
++- G5. Guess (pending user): the charts offer 30 days, 90 days (default), 1 year and all history; the done window offers 1 h, 3 h, 6 h, 12 h, 24 h (default), 2 d, 3 d, 7 d, 14 d, 30 d.
++- G6. Guess (pending user): "ready" means readied and not launched; "run" means the raft's branch exists. A raft whose branch was pushed but whose run died stays in run until it lands or is stopped (`stop` leaves the branch; c0121's card shows the dispatcher's outcome).
++- G7. Guess (pending user): at most 8 model series, the rest "other models"; tokens scaled to k or M on tall axes.
++- G8. Guess (pending user): the card's worktree and branch come from local git at build time; in the CI artifact the worktree is always empty (CI has none), which is correct for that checkout.
+ 
+ ## Verification log
+-<!-- Appended at the end of execution: date, commands run, results. -->
++Prep, 2026-10-23, on `proto-c0118` (base `proto-c0117` 6ff822f5; commit 1 `SIMULATION (not part of c0118): c0117 done` cbeb2657, commit 2 the c0118 edits).
++- `bash z-nile/.tracker/issues/done/c0117/check.sh` on the simulation: 11/11 passed (7 min 40 s).
++- `bash z-nile/.tracker/issues/c0118/check.sh` on the prototype: 8/8 passed (30 s).
++- The same `check.sh` and specs on the base (the simulation commit, in a scratch clone): 2/8. AC1 fails to load `@znile/engine/boardview` (the module c0118 creates); AC2 to AC6 fail on assertions (`doneAt` nil, `projects` nil, `initialView` "rafts", the docs phrases missing). AC7 and AC8 pass: they guard behaviour that exists on both sides.
++- `z-nile/check.sh --full` on the prototype: format, lint, types, builds and skills clean; pickman 1068 passed, 0 failed (157 files); z-nile 1236 passed, 0 failed (169 files); gate wall time 383 s (dominated by c0117's `control-cli.spec` at 279 s, which is not c0118's). The first two gate runs failed on c0117's promoted specs (the `env -i` allowance, the shared `.cache/dispatch` name) and on c0118's own unlisted `.cache` read and a `Range` type; all fixed as above.
++- `luau-lsp analyze` of the sequestered specs against the prototype: clean.
++- Mutation check: 47 mutants (M1 to M47), all killed on an assertion, after two cases were added and two equivalent mutants replaced (Unknowns & experiments).
++- Render: node fake-DOM dump of the real page plus Quick Look PNGs: the pickman Board, the z-nile Board with a 30-day window (61 done cards before the compaction fix, fewer after), and both charts over 90 days and all history.
++- Build: 0.47 s, 3.01 MB on the real tree (the old board 0.43 s, 2.93 MB).
+diff --git a/z-nile/.tracker/issues/c0118/check.sh b/z-nile/.tracker/issues/c0118/check.sh
+index 4cbea1e4..86deeb74 100755
+--- a/z-nile/.tracker/issues/c0118/check.sh
++++ b/z-nile/.tracker/issues/c0118/check.sh
+@@ -2,13 +2,35 @@
+ # Acceptance checks for c0118. SEQUESTERED: never edit during execution.
+ # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
+ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0118 after it
++source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: the root
++# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0118 after it
+ A="$HERE/acceptance"
+ [[ -d $A ]] || A="$PWD/tests/acceptance/c0118"
+ 
+ # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
+-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+-
++# `./zn members` and other cheap reads; everything else goes inside `check`.
++check "AC1: every effective status has one column (ready or run by the raft's branch), bands, UTC weeks, rounds once, both charts' series" \
++  lune run tests/run -- "$A/view.spec.luau"
++check "AC2: history dates each issue's and raft's first arrival in done/ in UTC, across root moves, never across a compaction" \
++  lune run tests/run -- "$A/history.spec.luau"
++check "AC3: the model has a tab per project, columns, bands, done times and ages, rounds with members and retired rafts, two charts per project, card facts" \
++  lune run tests/run -- "$A/model.spec.luau"
++check "AC4: the page opens on the first project's Board; the done window, bands, range, card pane, project tabs, search, #project, arrows and znBoard.load work" \
++  lune run tests/run -- "$A/page.spec.luau"
++check "AC5: the zz-rules board row and the README say what the board does" \
++  lune run tests/run -- "$A/docs.spec.luau"
++check "AC6: the real tracker's board has every registered project and every issue on one column of its project" \
++  lune run tests/run -- "$A/real.spec.luau"
++check "AC7: the old navigation, Stats, the CLI, the artifact workflow and the main checkout's refresh stay (promoted board specs, overridden where they assumed the page opens on Rafts)" \
++  lune run tests/run -- tests/acceptance/c0042/cli.spec.luau tests/acceptance/c0042/model.spec.luau \
++  tests/acceptance/c0042/page.spec.luau tests/acceptance/c0042/smoke.spec.luau tests/acceptance/c0042/vendor.spec.luau \
++  tests/acceptance/c0107/keep.spec.luau tests/acceptance/c0107/label.spec.luau tests/acceptance/c0107/page.spec.luau \
++  tests/acceptance/c0107/views.spec.luau tests/acceptance/c0073/board-stats.spec.luau tests/acceptance/c0073/chart.spec.luau \
++  tests/acceptance/c0073/history.spec.luau tests/acceptance/c0073/stats.spec.luau tests/acceptance/c0057/open.spec.luau \
++  tests/acceptance/c0048/board-docs.spec.luau tests/acceptance/c0048/board-workflow.spec.luau \
++  tests/acceptance/c0070/board-refresh.spec.luau tests/tooling/board.spec.luau
++check "AC8: metrics counts review rounds by the board's rule, and the README picture spec (overridden) stays green" \
++  lune run tests/run -- tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
++  tests/acceptance/c0111/metrics-lessons.spec.luau tests/acceptance/c0116/issue-design.spec.luau \
++  tests/acceptance/c0116/retired.spec.luau tests/acceptance/c0115/readme.spec.luau
+ finish
+diff --git a/z-nile/README.md b/z-nile/README.md
+index 22f0185e..496e9468 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -12,7 +12,7 @@ flowchart LR
+   tracker[("tracker: ./zn, z-nile/.tracker, pickman/.tracker")]
+   models[".models.toml: the model and CLI per step"]
+   dispatcher["dispatcher: ./zn dispatch"]
+-  board["board: ./zn board (new board c0118, planned)"]
++  board["board: ./zn board, a tab per project"]
+   skills <--> tracker
+   models --> dispatcher
+   dispatcher -->|"runs a skill on an item"| skills
+@@ -27,7 +27,7 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
+ - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
+ - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the watermark, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. The watermark file is shared by every dispatcher of the repository and only moves forward. The rules are in the zz-rules skill, Dispatch.
+ - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+-- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`), with the next command for each row. c0118 (planned) draws it again, with a tab per project.
++- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+ 
+ ## Skills
+ | skill | step | what it does |
+diff --git a/z-nile/engine/board.html b/z-nile/engine/board.html
+index face218a..72356dab 100644
+--- a/z-nile/engine/board.html
++++ b/z-nile/engine/board.html
+@@ -73,31 +73,72 @@ ul.links { margin: 0; padding-left: 20px; }
+ .ser-chore { fill: var(--ser-chore); stroke: var(--ser-chore); }
+ .ser-net { fill: var(--ser-net); stroke: var(--ser-net); }
+ .line { fill: none; stroke-width: 2px; }
++/* c0118: project tabs, the six columns, raft bands, cards and the two review charts */
++:root { --ser-design: #7c3aed; --ser-code: #2a78d6; --ser-m1: #2a78d6; --ser-m2: #eb6834; --ser-m3: #1baf7a; --ser-m4: #7c3aed; --ser-m5: #d6a12a; --ser-m6: #d6336c; --ser-m7: #0e9fb5; --ser-m8: #6b8e23; --ser-other: #8b95a1; --ser-unrecorded: #c4c9d0; --band: #f5f7fa; }
++@media (prefers-color-scheme: dark) {
++  :root { --ser-design: #9b6cf0; --ser-code: #3987e5; --ser-m1: #3987e5; --ser-m2: #d95926; --ser-m3: #199e70; --ser-m4: #9b6cf0; --ser-m5: #c99520; --ser-m6: #e0507f; --ser-m7: #22b3c9; --ser-m8: #8fb34a; --ser-other: #76808b; --ser-unrecorded: #4a5058; --band: #1c1f23; }
++}
++.ser-design { fill: var(--ser-design); stroke: var(--ser-design); }
++.ser-code { fill: var(--ser-code); stroke: var(--ser-code); }
++.ser-m1 { fill: var(--ser-m1); } .ser-m2 { fill: var(--ser-m2); } .ser-m3 { fill: var(--ser-m3); } .ser-m4 { fill: var(--ser-m4); }
++.ser-m5 { fill: var(--ser-m5); } .ser-m6 { fill: var(--ser-m6); } .ser-m7 { fill: var(--ser-m7); } .ser-m8 { fill: var(--ser-m8); }
++.ser-other { fill: var(--ser-other); } .ser-unrecorded { fill: var(--ser-unrecorded); }
++#projects { display: flex; flex-direction: column; gap: 2px; padding: 8px 4px; border-right: 1px solid var(--line); min-width: 8em; overflow-y: auto; }
++#projects button { font: inherit; color: inherit; background: none; border: none; border-radius: 6px; padding: 4px 10px; text-align: left; cursor: pointer; }
++#projects button.on { background: var(--sel); font-weight: 600; }
++#board { flex: 2; overflow: auto; padding: 8px 12px; min-width: 0; }
++#board:not([hidden]) ~ #pane { flex: 0 0 30em; max-width: 30em; }
++#board[hidden], #list[hidden] { display: none; }
++#board-controls { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; color: var(--mut); flex-wrap: wrap; }
++#board-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
++#columns { display: grid; grid-template-columns: repeat(6, minmax(9em, 1fr)); gap: 8px; }
++.col h3 { margin: 0 0 6px; }
++.band { background: var(--band); border: 1px solid var(--line); border-radius: 8px; padding: 4px; margin-bottom: 6px; }
++.band .raft { font-size: 11px; color: var(--mut); padding: 0 4px 2px; }
++.card { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin: 2px 0; cursor: pointer; }
++.card.sel { outline: 2px solid #2563eb; }
++.card .id { font-family: ui-monospace, monospace; color: var(--mut); font-size: 12px; }
++.note { color: var(--mut); font-size: 12px; }
++#charts { margin-top: 16px; }
++dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
++dl.run dt { color: var(--mut); }
++dl.run dd { margin: 0; }
+ </style>
+ <script>{{MARKED}}</script>
+ </head>
+ <body>
+ <header>
+ <h1>pickman tracker</h1>
+-<nav><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
++<nav><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
+ <button id="stats-toggle" type="button">Stats</button>
+ <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
+ </header>
+ <section id="stats" hidden>{{STATS}}</section>
+-<main><ul id="list"></ul><section id="pane"></section></main>
++<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
+ <script type="application/json" id="board-data">{{DATA}}</script>
+ <script>
+ (function () {
+   var $ = function (id) { return document.getElementById(id); };
+   var model = JSON.parse($("board-data").textContent);
+-  var VIEWS = ["rafts", "issues"];
++  var VIEWS = ["board", "rafts", "issues"];
+   var GROUPS = ["ready", "not", "done"];
+   var GROUP_LABEL = { ready: "Ready", not: "Not ready", done: "Done" };
++  var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
++  var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
+   var search = $("search"), list = $("list"), pane = $("pane");
+-  var byId = {}, issueById = {};
+-  model.rafts.forEach(function (r) { byId[r.id] = r; });
+-  model.issues.forEach(function (i) { issueById[i.id] = i; });
++  var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts");
++  var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
++  var byId, issueById, projectNames;
++  function index() {
++    byId = {}; issueById = {}; projectNames = {};
++    model.rafts.forEach(function (r) { byId[r.id] = r; });
++    model.issues.forEach(function (i) { issueById[i.id] = i; });
++    model.projects.forEach(function (p) { projectNames[p.name] = true; });
++  }
++  index();
+   var view = model.initialView, sel = -1;
++  var project = model.projects.length ? model.projects[0].name : "";
++  var windowSec = model.window, range = model.range;
+ 
+   // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
+   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+@@ -116,21 +157,75 @@ ul.links { margin: 0; padding-left: 20px; }
+     if (!ids.length) return "";
+     return "<h3>" + title + '</h3><ul class="links">' + ids.map(function (id) { return "<li>" + idLink(id) + "</li>"; }).join("") + "</ul>";
+   }
+-
++  function itemOf(id) { return has(byId, id) ? byId[id] : issueById[id]; }
++  function inProject(id) { var it = itemOf(id); return !!it && it.project === project; }
++  // The done window: a done card shows while its age (seconds before the page's asOf) is at most the window.
++  function shown(issue) { return issue.column !== "done" || (issue.age !== undefined && issue.age !== null && issue.age <= windowSec); }
++  function bandsOf(column) { return (model.columns[project] && model.columns[project][column]) || []; }
++  function boardIds() {
++    var out = [];
++    COLUMNS.forEach(function (c) {
++      bandsOf(c).forEach(function (b) { b.ids.forEach(function (id) { if (shown(issueById[id])) out.push(id); }); });
++    });
++    return out;
++  }
+   function idsOf(name) {
++    if (name === "board") return boardIds();
+     var out = [];
+-    GROUPS.forEach(function (g) { model.views[name][g].forEach(function (id) { out.push(id); }); });
++    GROUPS.forEach(function (g) { model.views[name][g].forEach(function (id) { if (inProject(id)) out.push(id); }); });
+     return out;
+   }
+-  function itemOf(id) { return has(byId, id) ? byId[id] : issueById[id]; }
++  function span(sec) { return sec % 86400 === 0 ? sec / 86400 + (sec === 86400 ? " day" : " days") : sec / 3600 + (sec === 3600 ? " hour" : " hours"); }
++
++  function renderProjects() {
++    if (!projectsEl) return;
++    projectsEl.innerHTML = model.projects.map(function (p) {
++      return '<button type="button" data-project="' + esc(p.name) + '"' + (p.name === project ? ' class="on"' : "") + ">" + esc(p.name) + "</button>";
++    }).join("");
++  }
++
++  function card(id, n) {
++    var i = issueById[id];
++    return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
++      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
++  }
++  function renderBoard() {
++    if (!columnsEl) return;
++    var html = "", n = 0;
++    COLUMNS.forEach(function (c) {
++      var body = "", count = 0;
++      bandsOf(c).forEach(function (b) {
++        var cards = "";
++        b.ids.forEach(function (id) { if (shown(issueById[id])) { cards += card(id, n); n++; count++; } });
++        if (!cards) return;
++        var head = b.raft ? '<div class="raft">' + idLink(b.raft) + "</div>" : "";
++        body += '<div class="band"' + (b.raft ? ' data-raft="' + esc(b.raft) + '"' : "") + ">" + head + cards + "</div>";
++      });
++      if (c === "done" && model.asOf === undefined) body += '<p class="note">history unavailable (shallow or no git): no done times</p>';
++      html += '<div class="col" data-column="' + c + '"><h3>' + COLUMN_LABEL[c] + ' <span class="n">' + count + "</span></h3>" + body + "</div>";
++    });
++    columnsEl.innerHTML = html;
++    if (chartsEl) {
++      var ch = model.charts[project];
++      chartsEl.innerHTML = ch && ch.rounds[range]
++        ? '<figure class="chart-fig" data-chart="rounds">' + ch.rounds[range] + "<figcaption>Review rounds by week</figcaption></figure>" +
++          '<figure class="chart-fig" data-chart="tokens">' + ch.tokens[range] + "<figcaption>Review tokens by model</figcaption></figure>"
++        : '<p class="note">charts need the git history</p>';
++    }
++    if (asOfEl) asOfEl.innerHTML = model.asOf !== undefined ? "as of " + esc(new Date(model.asOf * 1000).toISOString().slice(0, 16).replace("T", " ")) + " UTC" : "";
++  }
+ 
+   function renderList() {
+-    VIEWS.forEach(function (v) { $("tab-" + v).classList.toggle("on", v === view); });
++    VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.classList.toggle("on", v === view); });
++    renderProjects();
++    if (boardEl) { if (view === "board") boardEl.removeAttribute("hidden"); else boardEl.setAttribute("hidden", ""); }
++    if (list.setAttribute && list.removeAttribute) { if (view === "board") list.setAttribute("hidden", ""); else list.removeAttribute("hidden"); }
++    if (view === "board") { renderBoard(); return; }
+     var ids = idsOf(view);
+     if (!ids.length) { list.innerHTML = '<li class="empty">Nothing here</li>'; return; }
+     var html = "", n = 0;
+     GROUPS.forEach(function (g) {
+-      var groupIds = model.views[view][g];
++      var groupIds = model.views[view][g].filter(inProject);
+       if (!groupIds.length) return;
+       html += '<li class="group">' + GROUP_LABEL[g] + "</li>";
+       groupIds.forEach(function (id) {
+@@ -149,6 +244,49 @@ ul.links { margin: 0; padding-left: 20px; }
+     if (row) row.scrollIntoView({ block: "nearest" });
+   }
+ 
++  function dl(rows) {
++    var h = "";
++    rows.forEach(function (r) { if (r[1] !== "") h += "<dt>" + esc(r[0]) + "</dt><dd>" + r[1] + "</dd>"; });
++    return h ? '<dl class="run">' + h + "</dl>" : "";
++  }
++  function spendText(s) {
++    return esc(s.minutes + " min, " + s.tokens + " tokens, +" + s.added + "/-" + s.removed + " lines");
++  }
++  function dispatchText(d) {
++    return d ? esc(d.step + " " + d.outcome + (d.model ? " on " + d.model : "") + (d.questions ? ", waiting for answers (questions.md)" : "")) : "";
++  }
++  var LIVE = '<span class="note">live on the served board (<code>zn board --serve</code>, c0121)</span>';
++  // The card's run details: column, model, spend, and for its raft the branch and worktree; PR and checks are live.
++  function runOfIssue(issue) {
++    var raft = issue.raft && has(byId, issue.raft) ? byId[issue.raft] : null;
++    return "<h3>Run</h3>" + dl([
++      ["column", esc(COLUMN_LABEL[issue.column])],
++      ["model", esc(issue.spend.models.join(", ") || (issue.dispatch && issue.dispatch.model) || "unrecorded")],
++      ["spend", spendText(issue.spend)],
++      ["dispatch", dispatchText(issue.dispatch)],
++      ["branch", raft && raft.branch ? esc(raft.branch) : ""],
++      ["worktree", raft && raft.worktree ? esc(raft.worktree) : ""],
++      ["PR and checks", LIVE],
++    ]);
++  }
++  function runOfRaft(r) {
++    var models = {}, total = { minutes: 0, tokens: 0, added: 0, removed: 0 };
++    r.issues.forEach(function (iid) {
++      var s = issueById[iid].spend;
++      s.models.forEach(function (m) { models[m] = true; });
++      total.minutes = Math.round((total.minutes + s.minutes) * 10) / 10; total.tokens += s.tokens; total.added += s.added; total.removed += s.removed;
++    });
++    return "<h3>Run</h3>" + dl([
++      ["model", esc(Object.keys(models).sort().join(", ") || (r.dispatch && r.dispatch.model) || "unrecorded")],
++      ["spend", spendText(total)],
++      ["review rounds", esc(r.rounds.design + " design, " + r.rounds.code + " code")],
++      ["dispatch", dispatchText(r.dispatch)],
++      ["branch", r.branch ? esc(r.branch) : ""],
++      ["worktree", r.worktree ? esc(r.worktree) : ""],
++      ["PR and checks", LIVE],
++    ]);
++  }
++
+   function renderIssue(issue) {
+     var meta = [];
+     if (issue.label) meta.push(issue.label);
+@@ -156,6 +294,7 @@ ul.links { margin: 0; padding-left: 20px; }
+     var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
+       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
+     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
++    h += runOfIssue(issue);
+     h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
+     if (issue.body) h += '<h3>Document</h3><div class="md">' + marked.parse(issue.body) + "</div>";
+     pane.innerHTML = h;
+@@ -178,6 +317,7 @@ ul.links { margin: 0; padding-left: 20px; }
+         return "<li>" + idLink(iid) + "</li>";
+       }).join("") + "</ul>";
+     }
++    h += runOfRaft(r);
+     if (r.body) h += '<h3>Document</h3><div class="md">' + marked.parse(r.body) + "</div>";
+     pane.innerHTML = h;
+     pane.scrollTop = 0;
+@@ -195,12 +335,24 @@ ul.links { margin: 0; padding-left: 20px; }
+     sel = -1;
+     if (idsOf(view).length) select(0); else { renderList(); renderPane(null); }
+   }
++  function setProject(name) {
++    project = name;
++    sel = -1;
++  }
+ 
+   function go(raw) {
+-    var q = String(raw).trim();
+-    q = q.charAt(0).toUpperCase() === "R" ? "R" + q.slice(1) : q.toLowerCase();
+-    if (!has(model.home, q)) return false;
+-    view = has(byId, q) ? "rafts" : "issues";
++    var text = String(raw).trim();
++    var q = text.charAt(0).toUpperCase() === "R" ? "R" + text.slice(1) : text.toLowerCase();
++    if (!has(model.home, q)) {
++      var name = text.toLowerCase();
++      if (!has(projectNames, name)) return false;
++      setProject(name);
++      switchView(view);
++      try { history.replaceState(null, "", "#" + name); } catch (e) { /* file:// quirks */ }
++      return true;
++    }
++    project = itemOf(q).project;
++    if (!(view === "board" && boardIds().indexOf(q) >= 0)) view = has(byId, q) ? "rafts" : "issues";
+     sel = idsOf(view).indexOf(q);
+     renderList();
+     renderPane(q);
+@@ -222,7 +374,32 @@ ul.links { margin: 0; padding-left: 20px; }
+     if (e.key === "Escape") search.blur();
+     else if (e.key === "Enter" && search.value.trim()) search.classList.toggle("miss", !go(search.value));
+   });
+-  VIEWS.forEach(function (v) { $("tab-" + v).addEventListener("click", function () { switchView(v); }); });
++  VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.addEventListener("click", function () { switchView(v); }); });
++  if (projectsEl) projectsEl.addEventListener("click", function (e) {
++    var b = e.target.closest("button[data-project]");
++    if (!b) return;
++    setProject(b.getAttribute("data-project"));
++    switchView(view);
++    try { history.replaceState(null, "", "#" + project); } catch (err) { /* file:// quirks */ }
++  });
++  if (columnsEl) columnsEl.addEventListener("click", function (e) {
++    var a = e.target.closest("a.jump");
++    if (a) { e.preventDefault(); go(a.getAttribute("data-id")); return; }
++    var c = e.target.closest("button.card");
++    if (c) select(boardIds().indexOf(c.getAttribute("data-id")));
++  });
++  if (windowEl) {
++    windowEl.innerHTML = model.windows.map(function (w) {
++      return '<option value="' + w + '"' + (w === windowSec ? " selected" : "") + ">" + span(w) + "</option>";
++    }).join("");
++    windowEl.addEventListener("change", function () { windowSec = Number(windowEl.value); sel = -1; renderList(); });
++  }
++  if (rangeEl) {
++    rangeEl.innerHTML = model.ranges.map(function (r) {
++      return '<option value="' + esc(r.key) + '"' + (r.key === range ? " selected" : "") + ">" + esc(r.label) + "</option>";
++    }).join("");
++    rangeEl.addEventListener("change", function () { range = rangeEl.value; renderList(); });
++  }
+   list.addEventListener("click", function (e) {
+     var copy = e.target.closest("button.copy");
+     if (copy) {
+@@ -245,6 +422,19 @@ ul.links { margin: 0; padding-left: 20px; }
+     search.classList.remove("miss");
+     go(a.getAttribute("data-id"));
+   });
++  // c0121's seam: the served page (zn board --serve) polls for a new model and hands it here. The view, the project
++  // (unless it is gone), the selected item, the done window and the range stay; the static page never calls it.
++  if (typeof window !== "undefined") window.znBoard = {
++    load: function (next) {
++      var current = idsOf(view)[sel];
++      model = next;
++      index();
++      if (!has(projectNames, project)) project = model.projects.length ? model.projects[0].name : "";
++      sel = current ? idsOf(view).indexOf(current) : -1;
++      renderList();
++      if (sel >= 0) renderPane(current);
++    },
++  };
+ 
+   // Stats is reached only through $("stats"); the old DOM stubs have no such element and no querySelectorAll.
+   var statsRoot = $("stats");
+diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
+index 5ba53451..c266f595 100644
+--- a/z-nile/engine/board.luau
++++ b/z-nile/engine/board.luau
+@@ -1,8 +1,11 @@
+ --!strict
+ -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
++local boardview = require("./boardview")
+ local chart = require("./chart")
+ local fs = require("@lune/fs")
+ local history = require("./history")
++local ledger = require("./ledger")
++local process = require("@lune/process")
+ local projects = require("./projects")
+ local serde = require("@lune/serde")
+ local stats = require("./stats")
+@@ -12,7 +15,7 @@ local store = require("./store")
+ local board = {}
+ 
+ export type Bucket = "ready" | "not" | "done"
+-export type ViewName = "rafts" | "issues"
++export type ViewName = "board" | "rafts" | "issues"
+ export type Groups = { ready: { string }, ["not"]: { string }, done: { string } }
+ export type Raft = {
+ 	id: string,
+@@ -33,7 +36,19 @@ export type Raft = {
+ 	topLevel: boolean, -- #blockedBy == 0
+ 	command: string?, -- nil when this row has no next command
+ 	body: string,
++	project: string, -- the project whose root holds it (c0118)
++	launched: boolean, -- a branch <R-id>-… exists, local or on origin
++	branch: string?, -- that branch's name
++	worktree: string?, -- the worktree that has it checked out
++	doneAt: number?, -- first arrival in done/, UTC epoch seconds (history, else the members' newest spend row)
++	doneFrom: string?, -- "history" or "spend": where doneAt came from
++	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
++	dispatch: Dispatch?,
+ }
++-- The dispatcher's run state for an id (c0117's .cache/dispatch/<id>/state.json): its step, outcome and model, and
++-- whether it waits for answers in questions.md.
++export type Dispatch = { step: string, outcome: string, model: string, questions: boolean }
++export type Spend = { minutes: number, tokens: number, added: number, removed: number, models: { string } }
+ export type Issue = {
+ 	id: string,
+ 	kind: string, -- always "issue"
+@@ -50,14 +65,40 @@ export type Issue = {
+ 	emergent: boolean,
+ 	command: string?,
+ 	body: string,
++	project: string,
++	column: boardview.Column, -- c0118: ticket, design, raft, ready, run or done
++	doneAt: number?,
++	doneFrom: string?,
++	age: number?, -- seconds between doneAt and the model's asOf
++	spend: Spend, -- from its spend.md (ledger.parse)
++	dispatch: Dispatch?,
+ }
++export type Project = { name: string, root: string }
++-- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
++-- commit time), the branch names (refs/heads and refs/remotes/origin, short), the worktrees, the dispatcher's state.
++export type Facts = {
++	asOf: number?,
++	refs: { string },
++	worktrees: { { path: string, branch: string } },
++	dispatch: { [string]: Dispatch },
++}
++export type ProjectCharts = { rounds: { [string]: string }, tokens: { [string]: string } }
+ export type Model = {
+ 	rafts: { Raft }, -- sorted by id
+ 	issues: { Issue }, -- sorted by id
+ 	views: { rafts: Groups, issues: Groups },
+ 	home: { [string]: string }, -- every id maps to itself
+-	initialView: ViewName, -- always "rafts"
++	initialView: ViewName, -- always "board" (c0118)
+ 	stats: stats.Stats,
++	projects: { Project }, -- the registry's order; the first is selected when the page opens
++	columns: { [string]: { [string]: { boardview.Band } } }, -- project -> column -> bands
++	charts: { [string]: ProjectCharts }, -- project -> chart -> range key -> svg
++	asOf: number?,
++	windows: { number },
++	window: number,
++	ranges: { { key: string, label: string } },
++	range: string,
++	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+ }
+ 
+ board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
+@@ -113,7 +154,7 @@ local function bodyOf(text: string): string
+ 	return (string.gsub(string.sub(text, closeEnd + 1), "^\n+", ""))
+ end
+ 
+-type Raw = { id: string, state: string, front: { [string]: string }, body: string, root: string }
++type Raw = { id: string, state: string, front: { [string]: string }, body: string, root: string, dir: string }
+ 
+ -- { id, state, front, body, root } for every item directory of one kind under root.
+ local function scan(root: string, kind: string): { Raw }
+@@ -136,6 +177,7 @@ local function scan(root: string, kind: string): { Raw }
+ 					front = store.readFront(doc),
+ 					body = bodyOf(fs.readFile(doc)),
+ 					root = root,
++					dir = `{dir}/{name}`,
+ 				})
+ 			end
+ 		end
+@@ -193,35 +235,42 @@ local function spendPath(root: string, state: string, id: string): string
+ 	return `{root}/issues/{state}/{id}/spend.md`
+ end
+ 
+-local function cellsOf(line: string): { string }
+-	local out: { string } = {}
+-	for cell in string.gmatch(line, "|([^|]*)") do
+-		table.insert(out, (string.gsub(cell, "^%s*(.-)%s*$", "%1")))
++-- An issue's spend rows through the one reader of spend.md (ledger.parse, c0084 and c0117). A file that does not
++-- parse gives no rows and is named in `problems`.
++local spendCache: { [string]: { ledger.Row } } = {}
++local function spendRows(path: string, problems: { string }): { ledger.Row }
++	local hit = spendCache[path]
++	if hit then
++		return hit
+ 	end
+-	return out
++	local rows: { ledger.Row } = {}
++	if fs.isFile(path) then
++		local parsed, err = ledger.parse(fs.readFile(path))
++		if parsed then
++			rows = parsed.rows
++		else
++			table.insert(problems, `{path} does not parse: {err}`)
++		end
++	end
++	spendCache[path] = rows
++	return rows
+ end
+ 
+--- Spend rows share the seven-column shape. Extra columns, if a later ledger adds them, are ignored.
+-local function readSpend(path: string): { { day: string, added: number, removed: number, minutes: number } }
++local function readSpend(
++	path: string,
++	problems: { string }
++): { { day: string, added: number, removed: number, minutes: number } }
+ 	local out = {}
+-	if not fs.isFile(path) then
+-		return out
+-	end
+-	for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+-		if string.sub(line, 1, 1) == "|" then
+-			local cells = cellsOf(line)
+-			local day = dayOf(cells[2])
+-			local added, removed, minutes = tonumber(cells[4]), tonumber(cells[5]), tonumber(cells[6])
+-			if tonumber(cells[1]) and day and added and removed and minutes then
+-				table.insert(out, { day = day, added = added, removed = removed, minutes = minutes })
+-			end
++	for _, row in spendRows(path, problems) do
++		local day = dayOf(row.when)
++		if day then
++			table.insert(out, { day = day, added = row.added, removed = row.removed, minutes = row.minutes })
+ 		end
+ 	end
+ 	return out
+ end
+ 
+-local function statistics(checkout: string, rawIssues: { Raw }): stats.Stats
+-	local hist = history.read(checkout)
++local function statistics(hist: history.Parsed?, rawIssues: { Raw }, problems: { string }): stats.Stats
+ 	local items: { stats.Item } = {}
+ 	local spends: { stats.Spend } = {}
+ 	local latest = ""
+@@ -246,7 +295,7 @@ local function statistics(checkout: string, rawIssues: { Raw }): stats.Stats
+ 				items,
+ 				{ id = raw.id, type = kind, opened = opened, closed = closed, spells = spells }
+ 			)
+-			for _, row in readSpend(spendPath(raw.root, raw.state, raw.id)) do
++			for _, row in readSpend(spendPath(raw.root, raw.state, raw.id), problems) do
+ 				consider(row.day)
+ 				table.insert(spends, {
+ 					id = raw.id,
+@@ -539,36 +588,193 @@ local function statsHtml(s: stats.Stats): string
+ 	return (string.gsub(table.concat(parts), "[\r\n]", ""))
+ end
+ 
+--- The tracker roots to read and the checkout whose history the stats come from: `root` alone (one tracker folder, as
+--- specs pass) with its parent, or else every project root of `checkout` (default ".") from its registry (c0114).
+-local function sources(root: string?, checkout: string?): ({ string }, string)
++-- The projects to read and the checkout whose history the stats come from: `root` alone (one tracker folder, as
++-- specs pass; its project is named after the folder above it) with its parent, or else every project of `checkout`
++-- (default ".") from its registry, in registry order (c0114, c0118). `base` is the root as read from here.
++local function sources(
++	root: string?,
++	checkout: string?
++): ({ { name: string, root: string, base: string } }, string)
+ 	if root then
+-		return { root }, parentOf(root)
++		local parent = parentOf(root)
++		-- named by the folder (or, for `<name>/.tracker`, the folder above it), so the page is the same wherever it is
++		local name = string.match(root, "([^/]+)$") or root
++		if name == ".tracker" then
++			name = string.match(parent, "([^/]+)$") or name
++		end
++		return { { name = name, root = name, base = root } }, parent -- no path from outside the tree reaches the page
+ 	end
+ 	local dir = checkout or "."
+-	local out: { string } = {}
+-	for _, r in projects.roots(projects.load(dir)) do
+-		table.insert(out, if dir == "." then r else `{dir}/{r}`)
++	local out = {}
++	for _, p in projects.load(dir).projects do
++		table.insert(
++			out,
++			{ name = p.name, root = p.root, base = if dir == "." then p.root else `{dir}/{p.root}` }
++		)
+ 	end
+ 	return out, dir
+ end
+ 
++local function run(dir: string, args: { string }): string?
++	local ok, r = pcall(process.exec, "git", args, { cwd = dir })
++	if not ok or not r.ok then
++		return nil
++	end
++	return r.stdout
++end
++
++-- The facts of the checkout `dir` (c0118): HEAD's commit time, the branch names, the worktrees, and the dispatcher's
++-- run state under `<dir>/.cache/dispatch/<id>/` (c0117). A git call that fails leaves its fact empty; nothing here
++-- writes, fetches or reaches the network.
++function board.readFacts(dir: string): Facts
++	local facts: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
++	local head = run(dir, { "log", "-1", "--format=%ct", "HEAD" })
++	facts.asOf = if head then tonumber((string.gsub(head, "%s+", ""))) else nil
++	local refs =
++		run(dir, { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
++	for line in string.gmatch(refs or "", "[^\n]+") do
++		table.insert(facts.refs, line)
++	end
++	local wt = run(dir, { "worktree", "list", "--porcelain" })
++	local path: string? = nil
++	for line in string.gmatch(wt or "", "[^\n]+") do
++		local p = string.match(line, "^worktree (.+)$")
++		local b = string.match(line, "^branch refs/heads/(.+)$")
++		if p then
++			path = p
++		elseif b and path then
++			table.insert(facts.worktrees, { path = path, branch = b })
++		end
++	end
++	local home = `{dir}/.cache/dispatch`
++	if fs.isDir(home) then
++		for _, name in fs.readDir(home) do
++			local file = `{home}/{name}/state.json`
++			if (store.isRaftId(name) or store.isIssueId(name)) and fs.isFile(file) then
++				local ok, decoded = pcall(serde.decode, "json" :: "json", fs.readFile(file))
++				if ok and type(decoded) == "table" then
++					local st = decoded :: { [string]: any }
++					facts.dispatch[name] = {
++						step = if type(st.step) == "string" then st.step else "",
++						outcome = if type(st.outcome) == "string" then st.outcome else "",
++						model = if type(st.model) == "string" then st.model else "",
++						questions = fs.isFile(`{home}/{name}/questions.md`),
++					}
++				end
++			end
++		end
++	end
++	return facts
++end
++
++local NO_FACTS: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
++
++-- The branch of raft `id`: the first ref, in sorted order, named `<id>-…` (local) or `origin/<id>-…`, as plain text.
++local function branchOf(id: string, refs: { string }): string?
++	local sorted = table.clone(refs)
++	table.sort(sorted)
++	for _, ref in sorted do
++		local name = if string.sub(ref, 1, 7) == "origin/" then string.sub(ref, 8) else ref
++		if string.sub(name, 1, #id + 1) == id .. "-" then
++			return name
++		end
++	end
++	return nil
++end
++
++local function spendOf(rows: { ledger.Row }): Spend
++	local out: Spend = { minutes = 0, tokens = 0, added = 0, removed = 0, models = {} }
++	local seen: { [string]: boolean } = {}
++	for _, row in rows do
++		out.minutes += row.minutes
++		out.tokens += row.tokens or 0
++		out.added += row.added
++		out.removed += row.removed
++		if row.model and not seen[row.model] then
++			seen[row.model] = true
++			table.insert(out.models, row.model)
++		end
++	end
++	table.sort(out.models)
++	out.minutes = math.floor(out.minutes * 10 + 0.5) / 10
++	return out
++end
++
++local function reviewFiles(dir: string, into: { string })
++	if not fs.isDir(dir) then
++		return
++	end
++	for _, name in fs.readDir(dir) do
++		if string.match(name, "^design%-review%-%d+%.md$") or string.match(name, "^review%-%d+%.md$") then
++			table.insert(into, `{dir}/{name}`)
++		end
++	end
++end
++
++-- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
++local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
++	local out = {}
++	local dir = `{base}/rafts/retired`
++	if not fs.isDir(dir) then
++		return out
++	end
++	for _, name in fs.readDir(dir) do
++		local doc = `{dir}/{name}/{name}.md`
++		if store.isRaftId(name) and fs.isFile(doc) then
++			table.insert(
++				out,
++				{ id = name, dir = `{dir}/{name}`, keeper = store.readFront(doc).retired or "" }
++			)
++		end
++	end
++	return out
++end
++
++local function chartSvg(id: string, title: string, rawUnit: string, raw: boardview.Weekly): string
++	local w, unit = boardview.scaled(raw, rawUnit)
++	local series: { chart.Series } = {}
++	for _, s in w.series do
++		table.insert(series, { key = s.key, label = s.label, values = s.values })
++	end
++	return chart.svg(series, { id = id, title = title, unit = unit, labels = w.labels, kind = "stacked" })
++end
++
+ local function sortById(list: { Raw })
+ 	table.sort(list, function(a, b)
+ 		return a.id < b.id
+ 	end)
+ end
+ 
+-function board.collect(root: string?, checkout: string?): Model
+-	local roots, checkoutDir = sources(root, checkout)
++-- The model of every project (c0118). `facts` default to the checkout's own (board.readFacts), or to none when
++-- `root` names one tracker folder (specs pass theirs).
++function board.collect(root: string?, checkout: string?, given: Facts?): Model
++	local sourceList, checkoutDir = sources(root, checkout)
++	local facts: Facts = given or (if root then NO_FACTS else board.readFacts(checkoutDir))
++	local problems: { string } = {}
++	table.clear(spendCache)
+ 	local rawRafts: { Raw }, rawIssues: { Raw } = {}, {}
+-	for _, base in roots do
+-		for _, r in scan(base, "rafts") do
++	local projectOf: { [string]: string } = {}
++	local retired = {}
++	local projectList: { Project } = {}
++	for _, src in sourceList do
++		table.insert(projectList, { name = src.name, root = src.root })
++		for _, r in scan(src.base, "rafts") do
++			projectOf[r.id] = src.name
+ 			table.insert(rawRafts, r)
+ 		end
+-		for _, i in scan(base, "issues") do
++		for _, i in scan(src.base, "issues") do
++			projectOf[i.id] = src.name
+ 			table.insert(rawIssues, i)
+ 		end
++		for _, r in retiredOf(src.base) do
++			table.insert(retired, r)
++		end
++	end
++	local hist = history.read(checkoutDir)
++	local doneAt: { [string]: number } = if hist and hist.doneAt then hist.doneAt else {}
++	local worktreeOf: { [string]: string } = {}
++	for _, w in facts.worktrees do
++		worktreeOf[w.branch] = w.path
+ 	end
+ 	sortById(rawRafts)
+ 	sortById(rawIssues)
+@@ -598,6 +804,13 @@ function board.collect(root: string?, checkout: string?): Model
+ 			dependents = {},
+ 			emergent = i.front.emergent == "true",
+ 			body = i.body,
++			project = projectOf[i.id],
++			column = "ticket",
++			doneAt = doneAt[i.id],
++			doneFrom = if doneAt[i.id] then "history" else nil,
++			age = nil,
++			spend = spendOf(spendRows(spendPath(i.root, i.state, i.id), problems)),
++			dispatch = facts.dispatch[i.id],
+ 		}
+ 		table.insert(issues, issue)
+ 		issueById[i.id] = issue
+@@ -665,7 +878,21 @@ function board.collect(root: string?, checkout: string?): Model
+ 			topLevel = true,
+ 			command = command,
+ 			body = r.body,
++			project = projectOf[r.id],
++			launched = false,
++			branch = nil,
++			worktree = nil,
++			doneAt = doneAt[r.id],
++			doneFrom = if doneAt[r.id] then "history" else nil,
++			rounds = { design = 0, code = 0 },
++			dispatch = facts.dispatch[r.id],
+ 		}
++		local branch = branchOf(r.id, facts.refs)
++		if branch then
++			raft.launched = true
++			raft.branch = branch
++			raft.worktree = worktreeOf[branch]
++		end
+ 		table.insert(rafts, raft)
+ 		raftById[r.id] = raft
+ 	end
+@@ -751,13 +978,161 @@ function board.collect(root: string?, checkout: string?): Model
+ 		home[issue.id] = issue.id
+ 	end
+ 
++	-- c0118: a done item whose arrival history cannot date (it arrived under an older id, before a compaction) is dated
++	-- by its newest spend row (a raft by its members'), a field no id change rewrites; else it stays undated
++	local function newestRow(i: Raw): number?
++		local best: number? = nil
++		for _, row in spendRows(spendPath(i.root, i.state, i.id), problems) do
++			local at = boardview.rowInstant(row.when)
++			if at and (best == nil or at > best) then
++				best = at
++			end
++		end
++		return best
++	end
++	local newestOf: { [string]: number } = {}
++	for _, i in rawIssues do
++		local issue = issueById[i.id]
++		local at = newestRow(i)
++		if at then
++			newestOf[i.id] = at
++		end
++		if issue.state == "done" and not issue.doneAt and at then
++			issue.doneAt, issue.doneFrom = at, "spend"
++		end
++	end
++	for _, raft in rafts do
++		if raft.state == "done" and not raft.doneAt then
++			for _, id in raft.issues do
++				local at = newestOf[id]
++				if at and (raft.doneAt == nil or at > raft.doneAt :: number) then
++					raft.doneAt, raft.doneFrom = at, "spend"
++				end
++			end
++		end
++	end
++
++	-- c0118: columns and bands per project, from each issue's effective status and its raft's branch
++	local columns: { [string]: { [string]: { boardview.Band } } } = {}
++	for _, p in projectList do
++		local cards: { [string]: { { id: string, raft: string? } } } = {}
++		for _, c in boardview.COLUMNS do
++			cards[c] = {}
++		end
++		for _, issue in issues do
++			if issue.project == p.name then
++				local raft = if issue.raft then raftById[issue.raft] else nil
++				issue.column = boardview.column(issue.stage, raft ~= nil and raft.launched)
++				issue.age = boardview.age(issue.doneAt, facts.asOf)
++				table.insert(cards[issue.column], { id = issue.id, raft = issue.raft })
++			end
++		end
++		columns[p.name] = {}
++		for _, c in boardview.COLUMNS do
++			columns[p.name][c] = boardview.bands(cards[c])
++		end
++	end
++
++	-- c0118: review rounds of each raft (its folder, its members', and the rafts retired into it, followed to the
++	-- raft that kept them), and the two charts per project and range
++	local rawRaftById: { [string]: Raw } = {}
++	for _, r in rawRafts do
++		rawRaftById[r.id] = r
++	end
++	local files: { [string]: { string } } = {}
++	for _, raft in rafts do
++		files[raft.id] = {}
++		reviewFiles(rawRaftById[raft.id].dir, files[raft.id])
++	end
++	for _, i in rawIssues do
++		local issue = issueById[i.id]
++		if issue.raft then
++			reviewFiles(i.dir, files[issue.raft])
++		end
++	end
++	local keeperOf: { [string]: string } = {}
++	for _, r in retired do
++		keeperOf[r.id] = r.keeper
++	end
++	for _, r in retired do
++		local keeper, hops = r.keeper, 0
++		while keeperOf[keeper] and hops < 100 do
++			keeper, hops = keeperOf[keeper], hops + 1
++		end
++		if files[keeper] then
++			reviewFiles(r.dir, files[keeper])
++		end
++	end
++	for _, raft in rafts do
++		local design, code = boardview.rounds(files[raft.id])
++		raft.rounds = { design = design, code = code }
++	end
++	local charts: { [string]: ProjectCharts } = {}
++	for _, p in projectList do
++		local landed: { boardview.Landed } = {}
++		for _, raft in rafts do
++			if raft.project == p.name and raft.state == "done" and raft.doneAt then
++				table.insert(
++					landed,
++					{ id = raft.id, at = raft.doneAt, design = raft.rounds.design, code = raft.rounds.code }
++				)
++			end
++		end
++		local rows: { boardview.TokenRow } = {}
++		for _, i in rawIssues do
++			if projectOf[i.id] == p.name then
++				for _, row in spendRows(spendPath(i.root, i.state, i.id), problems) do
++					local at = boardview.rowInstant(row.when)
++					if at and row.tokens then
++						table.insert(
++							rows,
++							{ at = at, phase = row.phase, tokens = row.tokens, model = row.model }
++						)
++					end
++				end
++			end
++		end
++		local pc: ProjectCharts = { rounds = {}, tokens = {} }
++		for _, range in boardview.RANGES do
++			if facts.asOf then
++				pc.rounds[range.key] = chartSvg(
++					`{p.name}/rounds/{range.key}`,
++					"Review rounds by week (rafts landed that week)",
++					"rounds",
++					boardview.roundsByWeek(landed, facts.asOf, range.days)
++				)
++				pc.tokens[range.key] = chartSvg(
++					`{p.name}/tokens/{range.key}`,
++					"Review tokens by model (design-review and code-review)",
++					"tokens",
++					boardview.tokensByWeek(rows, facts.asOf, range.days)
++				)
++			end
++		end
++		charts[p.name] = pc
++	end
++	local ranges = {}
++	for _, range in boardview.RANGES do
++		table.insert(ranges, { key = range.key, label = range.label })
++	end
++	table.sort(problems)
++
+ 	return {
+ 		rafts = rafts,
+ 		issues = issues,
+ 		views = views,
+ 		home = home,
+-		initialView = "rafts",
+-		stats = statistics(checkoutDir, rawIssues),
++		initialView = "board",
++		stats = statistics(hist, rawIssues, problems),
++		projects = projectList,
++		columns = columns,
++		charts = charts,
++		asOf = facts.asOf,
++		windows = boardview.WINDOWS,
++		window = boardview.WINDOW,
++		ranges = ranges,
++		range = boardview.RANGE,
++		problems = problems,
+ 	}
+ end
+ 
+@@ -847,10 +1222,10 @@ end
+ 
+ -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
+ -- marked.
+-function board.build(root: string?, checkout: string?): string
++function board.build(root: string?, checkout: string?, facts: Facts?): string
+ 	local markedJs = fs.readFile(board.MARKED_PATH)
+ 	board.checkMarked(markedJs)
+-	return board.render(board.collect(root, checkout), markedJs)
++	return board.render(board.collect(root, checkout, facts), markedJs)
+ end
+ 
+ return board
+diff --git a/z-nile/engine/boardview.luau b/z-nile/engine/boardview.luau
+new file mode 100644
+index 00000000..1e5a4a65
+--- /dev/null
++++ b/z-nile/engine/boardview.luau
+@@ -0,0 +1,329 @@
++--!strict
++-- The board's pure rules (c0118): an issue's column, raft bands, the done window's age, the UTC week of an instant, a
++-- landed raft's review rounds, and the two charts' weekly series. No reads: board.luau gathers the inputs.
++local stats = require("./stats")
++
++local boardview = {}
++
++export type Column = "ticket" | "design" | "raft" | "ready" | "run" | "done"
++export type Band = { raft: string?, ids: { string } }
++export type Landed = { id: string, at: number, design: number, code: number }
++export type TokenRow = { at: number, phase: string, tokens: number, model: string? }
++export type Series = { key: string, label: string, values: { number? } }
++export type Range = { key: string, label: string, days: number? }
++export type Weekly = { labels: { string }, weeks: { string }, series: { Series } }
++
++-- The six columns, left to right, and the pipeline step behind each (zz-rules, Board).
++boardview.COLUMNS = { "ticket", "design", "raft", "ready", "run", "done" } :: { Column }
++boardview.LABELS = {
++	ticket = "Ticket",
++	design = "Design",
++	raft = "Raft",
++	ready = "Ready",
++	run = "Run",
++	done = "Done",
++}
++
++local HOUR, DAY = 3600, 86400
++-- The done window: 24 hours by default, from 1 hour to 30 days.
++boardview.WINDOWS =
++	{ HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 3 * DAY, 7 * DAY, 14 * DAY, 30 * DAY }
++boardview.WINDOW = DAY
++-- The charts' range: 90 days by default, open to all history (`days` nil).
++local RANGES: { Range } = {
++	{ key = "30d", label = "30 days", days = 30 },
++	{ key = "90d", label = "90 days", days = 90 },
++	{ key = "1y", label = "1 year", days = 365 },
++	{ key = "all", label = "All", days = nil },
++}
++boardview.RANGES = RANGES
++boardview.RANGE = "90d"
++-- The spend phases the tokens chart reads, and its cap on named model series (the rest are "other models").
++boardview.REVIEW_PHASES = { ["design-review"] = true, ["code-review"] = true }
++boardview.MAX_MODELS = 8
++boardview.UNRECORDED = "unrecorded"
++
++-- The column of an issue whose effective status (status.effective) is `stage`; `launched` is whether its raft has a
++-- branch (local or origin). Every effective status maps to exactly one column; anything else is refused.
++function boardview.column(stage: string, launched: boolean): Column
++	if stage == "done" then
++		return "done"
++	elseif stage == "active" then
++		return if launched then "run" else "ready"
++	elseif stage == "prepared" then
++		return "raft"
++	elseif stage == "preparing" then
++		return "design"
++	elseif stage == "new" then
++		return "ticket"
++	end
++	error(`boardview.column: {stage} is not an effective status (new, preparing, prepared, active, done)`, 0)
++end
++
++-- Cards of one column grouped into bands: one per raft, in raft id order, then the raftless cards; ids sorted.
++function boardview.bands(cards: { { id: string, raft: string? } }): { Band }
++	local byRaft: { [string]: { string } } = {}
++	local loose: { string } = {}
++	local rafts: { string } = {}
++	for _, c in cards do
++		local r = c.raft
++		if r then
++			if not byRaft[r] then
++				byRaft[r] = {}
++				table.insert(rafts, r)
++			end
++			table.insert(byRaft[r], c.id)
++		else
++			table.insert(loose, c.id)
++		end
++	end
++	table.sort(rafts)
++	local out: { Band } = {}
++	for _, r in rafts do
++		table.sort(byRaft[r])
++		table.insert(out, { raft = r, ids = byRaft[r] })
++	end
++	if #loose > 0 then
++		table.sort(loose)
++		table.insert(out, { raft = nil, ids = loose })
++	end
++	return out
++end
++
++-- How long before `asOf` a card arrived in done/, in seconds (never negative); nil when either instant is unknown.
++-- The page shows a done card while its age is at most the chosen window.
++function boardview.age(doneAt: number?, asOf: number?): number?
++	if doneAt == nil or asOf == nil then
++		return nil
++	end
++	return math.max(0, asOf - doneAt)
++end
++
++-- The Monday (UTC) that starts the ISO week holding the instant `at` (epoch seconds), as YYYY-MM-DD.
++function boardview.weekOf(at: number): string
++	return stats.floor(os.date("!%Y-%m-%d", math.floor(at)) :: string, "week")
++end
++
++local function addDays(day: string, n: number): string
++	local y, m, d = string.match(day, "^(%d+)%-(%d+)%-(%d+)$")
++	local t = os.time({
++		year = tonumber(y) :: number,
++		month = tonumber(m) :: number,
++		day = (tonumber(d) :: number) + n,
++		hour = 12,
++	})
++	return os.date("%Y-%m-%d", t) :: string
++end
++
++-- Every week from the week of `from` to the week of `to`, inclusive.
++local function weeks(from: number, to: number): { string }
++	local out: { string } = {}
++	local last = boardview.weekOf(to)
++	local w = boardview.weekOf(from)
++	while w <= last do
++		table.insert(out, w)
++		w = addDays(w, 7)
++	end
++	return out
++end
++
++local MONTHS = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }
++local function label(week: string): string
++	local _, m, d = string.match(week, "^(%d+)%-(%d+)%-(%d+)$")
++	return `{MONTHS[tonumber(m) :: number]} {tonumber(d)}`
++end
++
++-- A landed raft's review rounds from the files of its folders (its own, its members', and those of rafts retired into
++-- it): `design-review-NNN.md` and `review-NNN.md`, each path counted once.
++function boardview.rounds(paths: { string }): (number, number)
++	local seen: { [string]: boolean } = {}
++	local design, code = 0, 0
++	for _, p in paths do
++		if seen[p] then
++			continue
++		end
++		seen[p] = true
++		local name = string.match(p, "([^/]+)$") or p
++		if string.match(name, "^design%-review%-%d+%.md$") then
++			design += 1
++		elseif string.match(name, "^review%-%d+%.md$") then
++			code += 1
++		end
++	end
++	return design, code
++end
++
++-- The range's first instant: `asOf` minus its days, or the earliest of `ats` for all history (nil when empty).
++local function start(ats: { number }, asOf: number, days: number?): number?
++	if days then
++		return asOf - days * DAY
++	end
++	local lo: number? = nil
++	for _, at in ats do
++		if lo == nil or at < lo then
++			lo = at
++		end
++	end
++	return lo
++end
++
++local function within(at: number, from: number, to: number): boolean
++	return at >= from and at <= to
++end
++
++-- Review rounds by week: each landed raft's design and code rounds in the UTC week it landed, for the rafts that
++-- landed between the range's start and `asOf`; every week in the range has a value (0 when nothing landed).
++function boardview.roundsByWeek(landed: { Landed }, asOf: number, days: number?): Weekly
++	local ats: { number } = {}
++	for _, l in landed do
++		if l.at <= asOf then
++			table.insert(ats, l.at)
++		end
++	end
++	local from = start(ats, asOf, days)
++	if from == nil then
++		return { labels = {}, weeks = {}, series = {} }
++	end
++	local ws = weeks(from, asOf)
++	local index: { [string]: number } = {}
++	local design, code, labels = {}, {}, {}
++	for i, w in ws do
++		index[w] = i
++		design[i] = 0
++		code[i] = 0
++		labels[i] = label(w)
++	end
++	for _, l in landed do
++		if within(l.at, from, asOf) then
++			local i = index[boardview.weekOf(l.at)]
++			design[i] += l.design
++			code[i] += l.code
++		end
++	end
++	return {
++		labels = labels,
++		weeks = ws,
++		series = {
++			{ key = "design", label = "Design reviews", values = design },
++			{ key = "code", label = "Code reviews", values = code },
++		},
++	}
++end
++
++-- Tokens by model by week, for spend rows of the design-review and code-review phases with tokens, dated in the range.
++-- One series per model id, largest total first (ties by id), at most MAX_MODELS of them, the rest summed as "other
++-- models"; a row with no model is the "unrecorded" series, always last.
++function boardview.tokensByWeek(rows: { TokenRow }, asOf: number, days: number?): Weekly
++	local kept: { TokenRow } = {}
++	local ats: { number } = {}
++	for _, r in rows do
++		if boardview.REVIEW_PHASES[r.phase] and r.tokens > 0 and r.at <= asOf then
++			table.insert(kept, r)
++			table.insert(ats, r.at)
++		end
++	end
++	local from = start(ats, asOf, days)
++	if from == nil then
++		return { labels = {}, weeks = {}, series = {} }
++	end
++	local ws = weeks(from, asOf)
++	local index: { [string]: number } = {}
++	local labels = {}
++	for i, w in ws do
++		index[w] = i
++		labels[i] = label(w)
++	end
++	local totals: { [string]: number } = {}
++	local perWeek: { [string]: { number } } = {}
++	for _, r in kept do
++		if within(r.at, from, asOf) then
++			local m = r.model or boardview.UNRECORDED
++			if not perWeek[m] then
++				perWeek[m] = table.create(#ws, 0)
++				totals[m] = 0
++			end
++			local i = index[boardview.weekOf(r.at)]
++			perWeek[m][i] += r.tokens
++			totals[m] += r.tokens
++		end
++	end
++	local named: { string } = {}
++	for m in perWeek do
++		if m ~= boardview.UNRECORDED then
++			table.insert(named, m)
++		end
++	end
++	table.sort(named, function(a, b)
++		if totals[a] ~= totals[b] then
++			return totals[a] > totals[b]
++		end
++		return a < b
++	end)
++	local series: { Series } = {}
++	local other: { number }? = nil
++	for i, m in named do
++		if i <= boardview.MAX_MODELS then
++			table.insert(series, { key = `m{i}`, label = m, values = perWeek[m] })
++		else
++			local sum = other or table.create(#ws, 0)
++			for w, v in perWeek[m] do
++				sum[w] += v
++			end
++			other = sum
++		end
++	end
++	if other then
++		table.insert(series, { key = "other", label = "other models", values = other })
++	end
++	if perWeek[boardview.UNRECORDED] then
++		table.insert(
++			series,
++			{ key = "unrecorded", label = "unrecorded model", values = perWeek[boardview.UNRECORDED] }
++		)
++	end
++	return { labels = labels, weeks = ws, series = series }
++end
++
++-- The weekly series scaled so the axis stays short: by 1,000 ("k tokens") when the largest week tops 10,000, by
++-- 1,000,000 ("M tokens") when it tops 10,000,000; returns the scaled copy and its unit.
++function boardview.scaled(w: Weekly, unit: string): (Weekly, string)
++	local top = 0
++	for i = 1, #w.labels do
++		local sum = 0
++		for _, s in w.series do
++			sum += s.values[i] or 0
++		end
++		top = math.max(top, sum)
++	end
++	local div, prefix = 1, ""
++	if top > 10000000 then
++		div, prefix = 1000000, "M "
++	elseif top > 10000 then
++		div, prefix = 1000, "k "
++	end
++	if div == 1 then
++		return w, unit
++	end
++	local series: { Series } = {}
++	for _, s in w.series do
++		local values: { number? } = {}
++		for i = 1, #w.labels do
++			values[i] = math.floor((s.values[i] or 0) / div * 10 + 0.5) / 10
++		end
++		table.insert(series, { key = s.key, label = s.label, values = values })
++	end
++	return { labels = w.labels, weeks = w.weeks, series = series }, prefix .. unit
++end
++
++-- A spend row's `when` (UTC "YYYY-MM-DD HH:MM", or a bare day) as epoch seconds; nil when it is neither.
++function boardview.rowInstant(when: string): number?
++	local y, m, d, rest = string.match(when, "^(%d%d%d%d)%-(%d%d)%-(%d%d)(.*)$")
++	if not y then
++		return nil
++	end
++	local hh, mi = string.match(rest :: string, "^[ T](%d%d):(%d%d)")
++	local stamp = `{y}-{m}-{d}T{hh or "00"}:{mi or "00"}:00Z`
++	return stats.seconds(stamp)
++end
++
++return boardview
+diff --git a/z-nile/engine/history.luau b/z-nile/engine/history.luau
+index 76844eba..91b8eb37 100644
+--- a/z-nile/engine/history.luau
++++ b/z-nile/engine/history.luau
+@@ -2,6 +2,7 @@
+ -- State spells and close days from `git log` of item documents. parse is pure; read is the only I/O.
+ -- A parsed log is cached under .cache keyed by HEAD: ten times today's history parses in 0.78 s, over the 0.5 s budget.
+ local fs = require("@lune/fs")
++local ids = require("./ids")
+ local process = require("@lune/process")
+ local projects = require("./projects")
+ local serde = require("@lune/serde")
+@@ -11,7 +12,14 @@ local stats = require("./stats")
+ local history = {}
+ 
+ export type Spell = stats.Spell
+-export type Parsed = { closed: { [string]: string }, spells: { [string]: { Spell } }, today: string? }
++-- `doneAt` (c0118): the UTC instant, in epoch seconds, of each issue's and raft's first arrival in `done/`; a move
++-- between roots is no arrival. `closed` and `spells` stay issues only.
++export type Parsed = {
++	closed: { [string]: string },
++	spells: { [string]: { Spell } },
++	today: string?,
++	doneAt: { [string]: number }?,
++}
+ 
+ -- The log of every item document under `roots` (every root that ever held items, c0114). A move between roots is a
+ -- delete plus an add in one commit, which `apply` reads as no change of state.
+@@ -21,6 +29,10 @@ function history.logArgs(roots: { string }): { string }
+ 		table.insert(args, `:(glob){r}/issues/**/[fdc][0-9][0-9][0-9][0-9]*.md`)
+ 		table.insert(args, `:(glob){r}/rafts/**/R[0-9][0-9][0-9][0-9]*.md`)
+ 	end
++	-- c0118: the compaction maps, so a commit that renumbered every item is known (its adds are no arrival)
++	for _, f in ids.MAP_FILES do
++		table.insert(args, f)
++	end
+ 	return args
+ end
+ 
+@@ -35,6 +47,8 @@ type Item = {
+ 	open: Spell?,
+ 	spells: { Spell },
+ 	closed: string?,
++	doneAt: number?,
++	raft: boolean,
+ 	seen: boolean,
+ }
+ type File = { path: string, added: boolean, deleted: boolean, plus: string? }
+@@ -43,13 +57,26 @@ local function stateOf(value: string): string
+ 	return string.match(value, "^([^-]+)") :: string
+ end
+ 
+--- id and area for an item document under one of `roots`, legacy `<ID>-<slug>.md` names included. Raft documents are
+--- ignored.
++-- id and area for an item document under one of `roots`, legacy `<ID>-<slug>.md` names included. Raft documents
++-- count only for `doneAt` (c0118): a retired raft's folder (`rafts/retired/`) is no area.
+ local function classify(path: string, roots: { string }): (string?, Area?)
+ 	local _, rest = projects.rootOf(path, roots)
+ 	if not rest then
+ 		return nil, nil
+ 	end
++	local rid, rfile = string.match(rest, "^rafts/(R%d%d%d%d)/(.+%.md)$")
++	if rid and rfile and string.sub(rfile, 1, #rid) == rid then
++		return rid, "backlog"
++	end
++	local rarea, rid2, rfile2 = string.match(rest, "^rafts/([^/]+)/(R%d%d%d%d)/(.+%.md)$")
++	if
++		rid2
++		and rfile2
++		and (rarea == "active" or rarea == "done")
++		and string.sub(rfile2, 1, #rid2) == rid2
++	then
++		return rid2, if rarea == "active" then "active" else "done"
++	end
+ 	local id, file = string.match(rest, "^issues/([fdc]%d%d%d%d)/(.+%.md)$")
+ 	if id and file and string.sub(file, 1, #id) == id then
+ 		return id, "backlog"
+@@ -76,7 +103,9 @@ local function startSpell(item: Item, state: string, at: string)
+ end
+ 
+ -- Apply one commit's surviving documents. A move is a delete plus an add (`--no-renames`); only the add remains.
+-local function apply(item: Item, touches: { Touch }, when: string, day: string)
++-- `cut`: the commit changed a compaction map, so an item first seen in done/ there arrived under an older id, at an
++-- instant this history cannot tell (zz-rules, item history never follows an id change): no doneAt.
++local function apply(item: Item, touches: { Touch }, when: string, day: string, cut: boolean)
+ 	local add: Touch? = nil
+ 	local modPlus: string? = nil
+ 	for _, touch in touches do
+@@ -91,6 +120,7 @@ local function apply(item: Item, touches: { Touch }, when: string, day: string)
+ 			return
+ 		elseif add.area == "done" then
+ 			item.closed = day
++			item.doneAt = if cut then nil else stats.seconds(when)
+ 			item.stamp = add.plus
+ 			item.loc = "done"
+ 			item.seen = true
+@@ -119,6 +149,7 @@ local function apply(item: Item, touches: { Touch }, when: string, day: string)
+ 		-- The re-added file still carries its old status line; that is not a new spell.
+ 		endOpen(item, when)
+ 		item.closed = day
++		item.doneAt = if cut then nil else stats.seconds(when)
+ 		item.loc = "done"
+ 		if stamp then
+ 			item.stamp = stamp
+@@ -148,10 +179,19 @@ function history.parse(log: string, roots: { string }?): Parsed
+ 	local day: string? = nil
+ 	local today: string? = nil
+ 	local cur: File? = nil
++	local cut = false
++	local isMap: { [string]: boolean } = {}
++	for _, f in ids.MAP_FILES do
++		isMap[f] = true
++	end
+ 
+ 	local function flushFile()
+ 		local file = cur
+ 		cur = nil
++		if file and isMap[file.path] then
++			cut = true
++			return
++		end
+ 		if not file or file.deleted then
+ 			return
+ 		end
+@@ -175,13 +215,14 @@ function history.parse(log: string, roots: { string }?): Parsed
+ 			for id, touches in pending do
+ 				local item = items[id]
+ 				if not item then
+-					item = { spells = {}, seen = false }
++					item = { spells = {}, seen = false, raft = string.sub(id, 1, 1) == "R" }
+ 					items[id] = item
+ 				end
+-				apply(item, touches, at, on)
++				apply(item, touches, at, on, cut)
+ 			end
+ 		end
+ 		pending = {}
++		cut = false
+ 	end
+ 
+ 	for line in string.gmatch(log .. "\n", "(.-)\n") do
+@@ -214,13 +255,20 @@ function history.parse(log: string, roots: { string }?): Parsed
+ 
+ 	local closed: { [string]: string } = {}
+ 	local spells: { [string]: { Spell } } = {}
++	local doneAt: { [string]: number } = {}
+ 	for id, item in items do
++		if item.doneAt then
++			doneAt[id] = item.doneAt
++		end
++		if item.raft then
++			continue
++		end
+ 		if item.closed then
+ 			closed[id] = item.closed
+ 		end
+ 		spells[id] = item.spells
+ 	end
+-	return { closed = closed, spells = spells, today = today }
++	return { closed = closed, spells = spells, today = today, doneAt = doneAt }
+ end
+ 
+ local function physical(path: string): string?
+@@ -294,7 +342,7 @@ function history.read(root: string?): Parsed?
+ 	end
+ 	local roots = projects.allRoots(reg :: projects.Registry)
+ 	-- keyed by HEAD and the roots read, so a cache of another root set is never reused
+-	local sha = sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",")
++	local sha = "v3 " .. sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",") -- v3: doneAt, compaction cuts (c0118)
+ 	local path = cacheFile(dir)
+ 	if path and fs.isFile(path) then
+ 		local hit = loadCache(path, sha)
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 74f1e06b..c58c5a09 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -2,6 +2,7 @@
+ -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
+ local audit = require("./audit")
+ local board = require("./board")
++local boardview = require("./boardview")
+ local brokerLib = require("./broker")
+ local claimsLib = require("./claims")
+ local compactLib = require("./compact")
+@@ -4787,14 +4788,18 @@ end
+ 
+ -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
+ -- c0116: the design-review-NNN.md files in one item's folder.
+-local function designRoundsIn(dir: string): number
+-	local n = 0
++-- c0118: the review files of one folder, counted by boardview.rounds, the one rule the board's chart uses too.
++local function roundsIn(dir: string): (number, number)
++	local paths: { string } = {}
+ 	for _, name in fs.readDir(dir) do
+-		if string.match(name, "^design%-review%-%d+%.md$") then
+-			n += 1
+-		end
++		table.insert(paths, `{dir}/{name}`)
+ 	end
+-	return n
++	return boardview.rounds(paths)
++end
++
++local function designRoundsIn(dir: string): number
++	local design = roundsIn(dir)
++	return design
+ end
+ 
+ -- A raft's design rounds: z-design's reviews live on each issue and z-raft's coherence review on the raft, so they
+@@ -5123,12 +5128,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+ 			else "classic"
+ 	end
+ 	local function codeRounds(dir: string): number
+-		local code = 0
+-		for _, name in fs.readDir(dir) do
+-			if string.match(name, "^review%-%d+%.md$") then
+-				code += 1
+-			end
+-		end
++		local _, code = roundsIn(dir)
+ 		return code
+ 	end
+ 	for _, raft in store.all("raft") do
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index a2fc5303..3baa4451 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -76,7 +76,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | start | `./zn start R0010` | clean tree required. A readied raft (in `active/` on `origin/main`): creates the branch, makes an empty `tracker: start` commit, pushes, and opens a **draft** PR; it claims and moves nothing. A backlog raft (legacy): checks members are `design: ready` and every `depends_on` of a member that isn't a member of the raft is `done` on `origin/main` (an unknown id is refused too); if `start` refuses, merge `origin/main` and retry, never edit `depends_on` or move items to get past it: stop and report. It then claims, creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. A worktree made before `ready` is told to `sync` first. Do this first, so the in-progress claim is visible right away. |
+ | worktree | `./zn worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `./zn worktree ws-<issue> --from <raft branch>`). |
+ | workstreams | `./zn workstreams <R-id>` | read-only plan for parallel execution (z-run Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
+-| board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as CI and the specs do; `--open`, the old opt-in, is still accepted and is the default). `.github/workflows/board.yml` rebuilds it on every push to `main` and keeps it as the `tracker-board` Actions artifact: `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci` fetches the latest into a fresh directory (gh won't overwrite an existing file, and `.cache/board.html` is the local default). Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
++| board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). One tab per project in `z-nile/projects.toml`, on the left, the first selected (c0118); every view shows the selected project only. It opens on Board: the project's issues as cards in six columns, ticket (`new`), design (`preparing`), raft (`prepared`), ready (readied, in `active/`, its raft has no branch yet), run (its raft has a branch `<R-id>-…`, local or on origin) and done (in `done/`), each raft a band behind its members. Done cards stay for the chosen window, 24 hours by default, from 1 hour to 30 days, counted back from the page's as-of time (HEAD's commit time). A click on a card shows its column, model, spend, dispatcher state, branch and worktree, and its document; PR and checks are live only on the served board (c0121). Under the columns, two charts with their own range (90 days by default, 30 days, 1 year or all history): review rounds by week (the `design-review-NNN.md` and `review-NNN.md` of each raft that landed that week, its members' and those of rafts retired into it, each file once) and review tokens by week and model (spend rows of `design-review` and `code-review`; a row with no model is the unrecorded series). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as CI and the specs do; `--open`, the old opt-in, is still accepted and is the default). `.github/workflows/board.yml` rebuilds it on every push to `main` and keeps it as the `tracker-board` Actions artifact: `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci` fetches the latest into a fresh directory (gh won't overwrite an existing file, and `.cache/board.html` is the local default). Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
+ | busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`) is readied only when it prints nothing |
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
+-- 
+2.54.0 (Apple Git-157)
+
