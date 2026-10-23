@@ -44,3 +44,7 @@
 - design-review-010 F2: ticket-prep/new-rules-migrate-existing-work
 - design-review-010 F3: testing/no-vacuous-pass
 - design-review-010 F4: ticket-prep/restated-rules-move-together
+- design-review-011 F1: ticket-prep/exact-checks-compare-against-the-merge-base
+- design-review-011 F2: ticket-prep/exact-checks-compare-against-the-merge-base, testing/no-vacuous-pass
+- design-review-011 F3: testing/no-vacuous-pass
+- design-review-011 F4: one-off: captured as c0137, c0120's home rewrite, outside c0115

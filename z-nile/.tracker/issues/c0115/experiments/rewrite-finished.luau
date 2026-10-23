@@ -1,7 +1,7 @@
 --!strict
 -- c0115, Implementation step 5c: rewrites the skill paths in every finished item's check.sh for the skills' move (the
 -- user's decision for c0114 and c0120, 2026-10-21: finished check.sh files are rewritten when a move breaks their
--- paths). `<up>` is the climb from the item's home to the repository root (`../` from `z-nile/` or `pickman/`). Four
+-- paths). `<up>` is the climb from the item's home to the repository root (`../` from `z-nile/` or `pickman/`). Five
 -- rules, nothing else:
 -- 1. A literal `<up>.claude/skills/<old>` (then `/` or the word's end) becomes the path from the home to the skill's
 --    real folder (skills.RENAMED_PATH, the one map): `../.claude/skills/tracker/` from `z-nile/` becomes
@@ -16,6 +16,8 @@
 --    value that ends in `.claude/skills` (c0058's `local s=../.claude/skills`, c0040's
 --    `R="$(git … --show-toplevel)/.claude/skills"`) and read as `$<v>/<old>/` or `${<v>}/<old>/` gets the new link's
 --    name (`$s/review/` becomes `$s/zz-review/`).
+-- 1c. (G13, design review 011 F3) such a variable used bare (`grep -rnF … "$S"`, c0084) becomes every real skills
+--    folder, unquoted, as in rule 1b.
 -- The criteria no rule carries are deleted, in a commit of their own (DELETED, like c0120's G17): R0025's RC2 (G12) and
 -- G13's five, which read text c0115 changes on purpose. Run from the repository root:
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished             -- the rewrite (its own commit)
@@ -23,18 +25,21 @@
 --   lune run z-nile/.tracker/issues/c0115/experiments/rewrite-finished -- --check   -- AC14: writes nothing
 -- Rerun the rewrite (then --check) after every merge of origin/main, as its own commit: an item that finished on main
 -- meanwhile arrives with old paths. Each mode prints what it changed and a count, and changes nothing when run again.
--- --check is three-way (design review 010 F1, the same as c0120's AC18): against `git merge-base HEAD origin/main`,
--- every finished check.sh that is at the base must be exactly its base text rewritten by the four rules, with DELETED's
--- statements removed (an id with no statement at the base stays absent), and nothing else; a file that isn't at the
--- base, and every file when the range is empty (the branch landed), only has to need no rewrite; a non-empty range
--- that compares no file with its base (origin/main from before the layout) is red. Independently of
--- the rules, no finished check.sh may still name `.claude/skills/<old>` or `/<old>/SKILL.md` for an old skill. No
--- origin/main, or no merge-base (a shallow clone), is red.
+-- --check is three-way (design review 010 F1, the same as c0120's AC18) against the trusted base (trusted-base.luau,
+-- design review 011 F1: `git merge-base HEAD <main's tip from git ls-remote origin>`, never the local
+-- refs/remotes/origin/main): every finished check.sh at the base must be exactly its base text rewritten by the five
+-- rules, with DELETED's statements removed (an id with no statement at the base stays absent), and nothing else; a
+-- file that isn't at the base, and every file when the range is empty (the branch landed), only has to need no
+-- rewrite; a non-empty range that compares no file with its base (a main from before the layout) is red. From the
+-- base's side too (011 F2): every finished check.sh at the base, under the base's own roots, must still be at HEAD at
+-- the same path. Independently of the rules, no finished check.sh may still name `.claude/skills/<old>` or
+-- `/<old>/SKILL.md`, or run a recursive grep over the links (011 F3). No trusted base is red.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
 local rewrites = require("@tests/acceptance/c0120/rewrites") -- its `relative`, the one path arithmetic
 local skills = require("@znile/engine/skills")
+local trustedBase = require("./trusted-base")
 
 local checkOnly = table.find(process.args, "--check") ~= nil
 local deleteMode = table.find(process.args, "--delete") ~= nil
@@ -68,7 +73,74 @@ table.sort(OLD, function(a: string, b: string): boolean
 	return #a > #b or (#a == #b and a < b)
 end)
 
--- `text` (a finished check.sh in `home`) rewritten by the four rules, and how many places changed
+-- every real skills folder seen from `home`, z-nile's first (`skills ../pickman/skills` from `z-nile/`)
+local function realFolders(home: string): string
+	local folders: { string } = {}
+	for _, f in skills.folders(reg) do
+		table.insert(folders, if home == "." then f.path else rewrites.relative(home, f.path))
+	end
+	return table.concat(folders, " ")
+end
+-- the variables whose assigned value ends in `.claude/skills` (the nearest `<v>=` starting a word before it, on its
+-- line): rule 3's and rule 1c's, and the recursive-grep scan's
+local function skillVars(text: string): { [string]: boolean }
+	local vars: { [string]: boolean } = {}
+	for _, line in string.split(text, "\n") do
+		local from = 1
+		while true do
+			local a, b = string.find(line, ".claude/skills", from, true)
+			if not a then
+				break
+			end
+			local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
+			if after == "" or string.match(after, "[%s\"']") then
+				local prefix = string.sub(line, 1, (a :: number) - 1)
+				local last: string? = nil
+				for v in string.gmatch(" " .. prefix, "%s([%a_][%w_]*)=") do
+					last = v
+				end
+				if last then
+					vars[last] = true
+				end
+			end
+			from = (b :: number) + 1
+		end
+	end
+	return vars
+end
+-- the bare uses of `$v` (`"$v"`, `$v`, `"${v}"`, `${v}`) as a word of its own: (start, end) pairs, quotes included
+local function bareUses(line: string, v: string): { { number } }
+	local out: { { number } } = {}
+	for _, form in { `"${v}"`, `"${"{"}{v}{"}"}"`, `${"{"}{v}{"}"}`, `${v}` } do
+		local from = 1
+		while true do
+			local a, b = string.find(line, form, from, true)
+			if not a then
+				break
+			end
+			local before = string.sub(line, (a :: number) - 1, (a :: number) - 1)
+			local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
+			local opens = before == "" or string.match(before, "[%s%(]") ~= nil
+			local closes = after == "" or string.match(after, "[%s%);]") ~= nil
+			local taken = false
+			for _, u in out do
+				if (a :: number) >= u[1] and (a :: number) <= u[2] then
+					taken = true
+				end
+			end
+			if opens and closes and not taken then
+				table.insert(out, { a :: number, b :: number })
+			end
+			from = (b :: number) + 1
+		end
+	end
+	table.sort(out, function(x: { number }, y: { number }): boolean
+		return x[1] > y[1]
+	end)
+	return out
+end
+
+-- `text` (a finished check.sh in `home`) rewritten by the five rules, and how many places changed
 local function rewrite(text: string, home: string): (string, number)
 	local depth = if home == "." then 0 else #string.split(home, "/")
 	local up = string.rep("../", depth)
@@ -97,11 +169,7 @@ local function rewrite(text: string, home: string): (string, number)
 	end
 	-- rule 1b: a bare operand becomes every real skills folder, z-nile's first
 	do
-		local folders: { string } = {}
-		for _, f in skills.folders(reg) do
-			table.insert(folders, if home == "." then f.path else rewrites.relative(home, f.path))
-		end
-		local new = table.concat(folders, " ")
+		local new = realFolders(home)
 		local needle = `{up}.claude/skills`
 		local from = 1
 		while true do
@@ -148,30 +216,8 @@ local function rewrite(text: string, home: string): (string, number)
 		end
 	end
 	text = table.concat(lines, "\n")
-	-- rule 3: a variable whose assigned value ends in `.claude/skills` (the nearest `<v>=` starting a word before it, on
-	-- its line)
-	local vars: { [string]: boolean } = {}
-	for _, line in string.split(text, "\n") do
-		local from = 1
-		while true do
-			local a, b = string.find(line, ".claude/skills", from, true)
-			if not a then
-				break
-			end
-			local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
-			if after == "" or string.match(after, "[%s\"']") then
-				local prefix = string.sub(line, 1, (a :: number) - 1)
-				local last: string? = nil
-				for v in string.gmatch(" " .. prefix, "%s([%a_][%w_]*)=") do
-					last = v
-				end
-				if last then
-					vars[last] = true
-				end
-			end
-			from = (b :: number) + 1
-		end
-	end
+	-- rule 3: a variable whose assigned value ends in `.claude/skills`, read as `$<v>/<old>/`
+	local vars = skillVars(text)
 	for v in vars do
 		for _, old in OLD do
 			local link = string.match(skills.RENAMED_PATH[old], "[^/]+$") :: string
@@ -183,7 +229,65 @@ local function rewrite(text: string, home: string): (string, number)
 			end
 		end
 	end
+	-- rule 1c (design review 011 F3): such a variable used bare (`grep -rnF … "$S"`) becomes every real skills folder,
+	-- unquoted (two words), as rule 1b does for a literal operand
+	if next(vars) then
+		local folders = realFolders(home)
+		local out: { string } = {}
+		for _, line in string.split(text, "\n") do
+			-- never the assignment itself (`S=../.claude/skills`): only uses
+			for v in vars do
+				for _, u in bareUses(line, v) do
+					line = string.sub(line, 1, u[1] - 1) .. folders .. string.sub(line, u[2] + 1)
+					n += 1
+				end
+			end
+			table.insert(out, line)
+		end
+		text = table.concat(out, "\n")
+	end
 	return text, n
+end
+
+-- every recursive grep (`grep -…r…`, which doesn't follow links) still reading the link folder, independently of
+-- the rules: a bare `.claude/skills` operand, or a bare use of a variable assigned it (design review 011 F3)
+local function linkScans(text: string): { string }
+	local out: { string } = {}
+	local vars = skillVars(text)
+	local n = 0
+	for _, line in string.split(text, "\n") do
+		n += 1
+		local recursive = false
+		for flags in string.gmatch(line, "grep%s+(%-[%w]+)") do
+			if string.find(flags, "r", 1, true) then
+				recursive = true
+			end
+		end
+		if recursive then
+			local bare = false
+			local from = 1
+			while true do
+				local a, b = string.find(line, ".claude/skills", from, true)
+				if not a then
+					break
+				end
+				local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
+				if after ~= "/" then
+					bare = true
+				end
+				from = (b :: number) + 1
+			end
+			for v in vars do
+				if #bareUses(line, v) > 0 then
+					bare = true
+				end
+			end
+			if bare then
+				table.insert(out, `line {n}`)
+			end
+		end
+	end
+	return out
 end
 
 -- every old skill path a finished check.sh still names, independently of the rules: `.claude/skills/<old>` (then a
@@ -191,9 +295,14 @@ end
 local function oldPaths(text: string): { string }
 	local out: { string } = {}
 	for _, old in OLD do
-		for _, pat in { "%.claude/skills/" .. esc(old) .. "%f[^%w_%-]", "/" .. esc(old) .. "/SKILL%.md" } do
-			if string.find(text, pat) then
-				table.insert(out, (string.gsub(pat, "%%", "")))
+		for _, form in
+			{
+				{ "%.claude/skills/" .. esc(old) .. "%f[^%w_%-]", `.claude/skills/{old}` },
+				{ "/" .. esc(old) .. "/SKILL%.md", `/{old}/SKILL.md` },
+			}
+		do
+			if string.find(text, form[1]) then
+				table.insert(out, form[2])
 			end
 		end
 	end
@@ -258,19 +367,16 @@ end
 -- --check's base: the merge-base with origin/main, or nil when the range is empty (the branch landed)
 local base: string? = nil
 if checkOnly then
-	local okO = git({ "rev-parse", "--verify", "-q", "origin/main" })
-	local okB, mb = git({ "merge-base", "HEAD", "origin/main" })
-	if not okO or not okB or mb == "" then
-		print(
-			"rewrite-finished: no origin/main or no merge-base with it (fetch it; a shallow clone can't tell): nothing checked"
-		)
+	-- the one trusted base (design review 011 F1): main's tip from the remote, never refs/remotes/origin/main
+	local b = trustedBase.get(top)
+	if not b.ok then
+		print(`rewrite-finished: {b.why}: nothing checked`)
 		process.exit(1)
 	end
-	local _, head = git({ "rev-parse", "HEAD" })
-	if head ~= mb then
-		base = mb
+	if not b.empty then
+		base = b.base
 	else
-		print("rewrite-finished: no commits since origin/main: checking only that nothing needs a rewrite")
+		print("rewrite-finished: no commits since origin's main: checking only that nothing needs a rewrite")
 	end
 end
 
@@ -294,6 +400,10 @@ for _, root in projects.roots(reg) do
 						for _, p in oldPaths(text) do
 							wrong += 1
 							print(`{file}: still names {p}`)
+						end
+						for _, at in linkScans(text) do
+							wrong += 1
+							print(`{file}: {at}: a recursive grep still reads the .claude/skills links`)
 						end
 						local okB, before = false, ""
 						if base then
@@ -327,6 +437,35 @@ for _, root in projects.roots(reg) do
 			end
 		end
 	end
+end
+-- the base's side (design review 011 F2): every finished check.sh at the base, under the base's own roots, must still
+-- be at HEAD at the same path; a deleted, renamed or moved finished file drops its criteria
+if checkOnly and base then
+	local okT, regText = git({ "show", `{base}:z-nile/projects.toml` })
+	local baseReg = if okT then projects.parse(regText) else nil
+	if not baseReg then
+		print(`rewrite-finished: no readable z-nile/projects.toml at the base {base}: nothing compared`)
+		process.exit(1)
+	end
+	local okL, listing = git({ "ls-tree", "-r", "--name-only", base :: string })
+	assert(okL, "git ls-tree of the base failed")
+	local roots: { [string]: boolean } = {}
+	for _, r in projects.allRoots(baseReg :: projects.Registry) do
+		roots[r] = true
+	end
+	local atBase = 0
+	for path in string.gmatch(listing, "[^\n]+") do
+		local root = string.match(path, "^(.-)/[a-z]+/done/[fdcR]%d%d%d%d/check%.sh$")
+		local kind = string.match(path, "/([a-z]+)/done/[fdcR]%d%d%d%d/check%.sh$")
+		if root and roots[root] and (kind == "issues" or kind == "rafts") then
+			atBase += 1
+			if not fs.isFile(`{top}/{path}`) then
+				wrong += 1
+				print(`{path}: at the base, gone at HEAD`)
+			end
+		end
+	end
+	print(`{atBase} finished check.sh files at the base, each still at HEAD or named above`)
 end
 print(`{changed} of {read} finished check.sh files {if checkOnly then "would be rewritten" else "rewritten"}`)
 if read == 0 then

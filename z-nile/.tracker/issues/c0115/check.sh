@@ -44,14 +44,17 @@ check "AC11: the real tracker audits clean" "$ZN_ROOT/zn" audit
 check "AC12: as of the last fetch, nothing but this raft holds the skill folders or their links: no other raft active, no branch or worktree changing them" \
   bash -c 'cd "$ZN_ROOT" && ./zn busy .claude/skills z-nile/skills pickman/skills'
 
-# AC13 reads the branch's own commits since it left origin/main (git reads only): exactly one commit whose subject
+# AC13 reads the branch's own commits since it left origin's main, as the trusted base gives it (git reads only): exactly one commit whose subject
 # starts "c0115: move the skills", holding only R100 renames, and no other commit of the range renaming a skill file.
 # On a live branch it is strict. An empty range (the PR squashed into main, so nothing is left to read) passes, the
 # user's decision on G11; JC1's reviewer judges a live branch that has no commits since origin/main.
 moves_only() {
-  local base moves bad c
-  base=$(git merge-base origin/main HEAD) || return 1
-  if [[ -z $(git rev-list "$base..HEAD") ]]; then echo "no commits since origin/main: nothing to check (G11)"; return 0; fi
+  local tb base moves bad c
+  # the one trusted base (design review 011 F1, shared with AC14): main's tip from `git ls-remote origin`, never the
+  # local refs/remotes/origin/main, which one update-ref forges; red when origin can't be read or its tip isn't local
+  tb=$(lune run "$HERE/experiments/trusted-base" -- --print "$ZN_ROOT") || { echo "$tb"; return 1; }
+  base=${tb%% *}
+  if [[ $tb == *" empty" ]]; then echo "no commits since origin's main: nothing to check (G11)"; return 0; fi
   moves=$(git log --format=%H --grep='^c0115: move the skills' "$base..HEAD")
   if [[ $(printf '%s\n' "$moves" | grep -c .) != 1 ]]; then echo "want one moves commit since $base, got: ${moves:-none}"; return 1; fi
   bad=$(git show -M --find-renames=100% --name-status --format= "$moves" | grep -v '^R100' || true)
@@ -96,7 +99,8 @@ backlog_clean() {
   echo "$n unfinished items' designs read, none names an old skill"
 }
 rename_finished() {
-  lune run "$HERE/experiments/rename-lesson-ids" -- --check &&
+  lune run tests/run -- "$A/trusted-base.spec.luau" &&
+    lune run "$HERE/experiments/rename-lesson-ids" -- --check &&
     lune run "$HERE/experiments/rewrite-finished" -- --check &&
     backlog_clean
 }
