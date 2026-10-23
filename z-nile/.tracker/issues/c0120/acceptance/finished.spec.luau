@@ -223,7 +223,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- an unfinished pickman item and a finished z-nile one, each with sequestered files (code review 005 F1)
 		w("tracker/issues/active/f0065/check.sh", "check AC1 true\n")
 		w("tracker/issues/active/f0065/acceptance/a.spec.luau", "-- a\n")
-		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 true\n")
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 test -f AGENTS.md\n")
+		w("AGENTS.md", "agents\n")
 		-- c0114: unfinished before the move, its promoted specs later carry c0120's overrides (c0114-overrides.patch)
 		w("z-nile/.tracker/issues/c0114/check.sh", "check AC1 true\n")
 		w("z-nile/.tracker/issues/c0114/acceptance/b.spec.luau", "-- b\n")
@@ -266,6 +267,18 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			g({ "add", "-A" })
 			g({ "commit", "-qm", message })
 		end
+		-- the user's commit groups after the move: the finished rewrite, the overrides, the hand-written core (AC18 pins
+		-- the core's tree by its subject, code review 009 F2)
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 test -f ../AGENTS.md\n")
+		step("c0120: rewrite finished check.sh paths for their homes (the fixture's)")
+		g({ "commit", "-q", "--allow-empty", "-m", "c0120: overrides of promoted specs (the fixture's)" })
+		g({
+			"commit",
+			"-q",
+			"--allow-empty",
+			"-m",
+			"c0120: run each project from its home (the fixture's core)",
+		})
 		local function expectRed(needle: string)
 			local okR, outR = judge()
 			if okR or not string.find(outR, needle, 1, true) then
@@ -290,6 +303,21 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		)
 		step("review")
 		expectGreen()
+		-- a commit the author makes can't choose the rewrite's world (code review 009 F2): a stray z-nile/AGENTS.md
+		-- planted with c0001's check.sh un-rewritten, then removed: red; a tracked file left at that place: still green
+		w("z-nile/AGENTS.md", "stray\n")
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 test -f AGENTS.md\n")
+		step("plant")
+		g({ "rm", "-q", "z-nile/AGENTS.md" })
+		step("unplant")
+		expectRed("z-nile/.tracker/issues/done/c0001/check.sh: not its text with exactly the rewrite")
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 test -f ../AGENTS.md\n")
+		w("z-nile/AGENTS.md", "an unrelated file\n")
+		step("an unrelated file")
+		expectGreen()
+		g({ "rm", "-q", "z-nile/AGENTS.md" })
+		step("undo")
+		expectGreen()
 		-- c0120's own check.sh removed: deleted
 		g({ "rm", "-q", "z-nile/.tracker/issues/c0120/check.sh" })
 		step("rm")
@@ -313,7 +341,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		expectRed("tracker/issues/active/f0065/check.sh: deleted")
 		expectRed("z-nile/.tracker/issues/done/c0001/check.sh: deleted")
 		w("pickman/.tracker/issues/active/f0065/check.sh", "check AC1 true\n")
-		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 true\n")
+		w("z-nile/.tracker/issues/done/c0001/check.sh", "check AC1 test -f ../AGENTS.md\n")
 		step("restore")
 		expectGreen()
 		-- done, as the tracker does it (code review 006 F1): acceptance/ to projects.promotedDir, the folder to done/,
@@ -497,6 +525,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
 		g({ "remote", "add", "origin", origin })
 		publish("HEAD")
+		-- a look-alike branch whose name ends in /refs/heads/main and sorts first: the real tip is still read (009 F5)
+		g({ "push", "-q", "origin", "HEAD:refs/heads/a/refs/heads/main" })
 		g({ "checkout", "-q", "-b", branch })
 		-- the branch's prep: c0120's folder and the registry, then the move
 		w(
@@ -504,6 +534,21 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			'[[project]]\nname = "pickman"\nroot = "tracker"\n\n[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 		)
 		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
+		-- the reviewed overrides patch for a spec main will promote during the window (decided with the user,
+		-- 2026-10-23: "Reviewed overrides patch")
+		w(
+			"z-nile/.tracker/issues/c0120/main-overrides.patch",
+			table.concat({
+				"diff --git a/pickman/tests/acceptance/f0081/t.spec.luau b/pickman/tests/acceptance/f0081/t.spec.luau",
+				"--- a/pickman/tests/acceptance/f0081/t.spec.luau",
+				"+++ b/pickman/tests/acceptance/f0081/t.spec.luau",
+				"@@ -1 +1,2 @@",
+				"--- reads {root}/scripts/lib/x",
+				"+-- c0120 override: the tooling's files live in z-nile/",
+				"+-- reads {root}/z-nile/lib/x",
+				"",
+			}, "\n")
+		)
 		-- a change of the stack's below the move (as c0114's build changed items before c0120's base)
 		w("tracker/issues/active/f0073/check.sh", "check AC1 stack\n")
 		step("the prep")
@@ -517,6 +562,21 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 				.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 		)
 		step("the move")
+		g({
+			"commit",
+			"-q",
+			"--allow-empty",
+			"-m",
+			"c0120: rewrite finished check.sh paths for their homes (the fixture's)",
+		})
+		g({ "commit", "-q", "--allow-empty", "-m", "c0120: overrides of promoted specs (the fixture's)" })
+		g({
+			"commit",
+			"-q",
+			"--allow-empty",
+			"-m",
+			"c0120: run each project from its home (the fixture's core)",
+		})
 		w("z-nile/.tracker/issues/c0120/review-001.md", `Prep reference: {prep}\n\nVerdict: approve\n`)
 		step("review")
 		expectGreen()
@@ -606,6 +666,32 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		w("pickman/tests/acceptance/f0080/d.spec.luau", "-- d\n")
 		step("undo")
 		expectGreen()
+		-- main promotes a spec written for the old layout; the branch overrides it exactly by main-overrides.patch:
+		-- green; one line beyond the patch: red (code review 009 F1)
+		onMain(function()
+			w("tracker/issues/done/f0081/check.sh", "check AC1 true\n")
+			w("tests/acceptance/f0081/t.spec.luau", "-- reads {root}/scripts/lib/x\n")
+		end, "capture, prep and done of f0081 on main")
+		mergeMain(function()
+			w("pickman/.tracker/issues/done/f0081/check.sh", "check AC1 true\n")
+			w(
+				"pickman/tests/acceptance/f0081/t.spec.luau",
+				"-- c0120 override: the tooling's files live in z-nile/\n-- reads {root}/z-nile/lib/x\n"
+			)
+		end)
+		expectGreen()
+		w(
+			"pickman/tests/acceptance/f0081/t.spec.luau",
+			"-- c0120 override: the tooling's files live in z-nile/\n-- reads {root}/z-nile/lib/x\nreturn nil\n"
+		)
+		step("beyond the patch")
+		expectRed("pickman/tests/acceptance/f0081/t.spec.luau: changed")
+		w(
+			"pickman/tests/acceptance/f0081/t.spec.luau",
+			"-- c0120 override: the tooling's files live in z-nile/\n-- reads {root}/z-nile/lib/x\n"
+		)
+		step("undo")
+		expectGreen()
 		-- acceptance/ left beside its promoted copy: refused (code review 007 F5)
 		w("pickman/.tracker/issues/done/f0072/acceptance/c.spec.luau", "-- c\n")
 		step("left beside")
@@ -662,6 +748,23 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		rm("pickman/.tracker/issues/f0093")
 		step("the branch follows")
 		expectGreen()
+		-- an item captured on main after the move and renumbered there, an old copy kept by the branch: red (009 F3)
+		onMain(function()
+			w("tracker/issues/f0094/check.sh", "check AC1 true\n")
+		end, "capture f0094 on main")
+		mergeMain(function()
+			w("pickman/.tracker/issues/f0094/check.sh", "check AC1 true\n")
+		end)
+		onMain(function()
+			g({ "mv", "tracker/issues/f0094", "tracker/issues/f0095" })
+		end, "main renumbers f0094")
+		mergeMain(function()
+			w("pickman/.tracker/issues/f0095/check.sh", "check AC1 true\n")
+		end)
+		expectRed("pickman/.tracker/issues/f0094/check.sh: kept, though the main it merged removed it")
+		rm("pickman/.tracker/issues/f0094")
+		step("the branch follows")
+		expectGreen()
 		-- a finished item's promoted spec moved back into its done/ folder, unchanged: red (008 F2)
 		fs.writeDir(`{FX2}/pickman/.tracker/issues/done/f0072/acceptance`)
 		g({
@@ -711,6 +814,16 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		g({ "fetch", "-q", "origin" })
 		expectGreen()
 		fs.removeDir(other)
+		-- the verdict names the URL origin resolves to, after any insteadOf: AC18 trusts that origin, and a reviewer
+		-- checks this line (code review 009 F4)
+		local _, said = judge()
+		t.expect(string.find(said, `from {origin}`, 1, true) ~= nil).toBe(true)
+		g({ "config", `url.{origin}.insteadOf`, "elsewhere:" })
+		g({ "remote", "set-url", "origin", "elsewhere:" })
+		local okI, saidI = judge()
+		t.expect(okI).toBe(true)
+		t.expect(string.find(saidI, `from {origin}`, 1, true) ~= nil).toBe(true)
+		g({ "remote", "set-url", "origin", origin })
 		-- main and the stack change one file differently: refused, naming both
 		onMain(function()
 			w("tracker/issues/active/f0073/check.sh", "check AC1 main\n")

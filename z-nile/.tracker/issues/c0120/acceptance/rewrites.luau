@@ -272,10 +272,21 @@ end
 -- already holds the move. The one reader of that base: AC18 (finished.luau) and override-markers.luau.
 function rewrites.mainBase(top: string): (string?, string?)
 	local okR, out = git(top, { "ls-remote", "origin", "refs/heads/main" })
-	local tip = if okR then string.match(out, "^(%x+)%s+refs/heads/main") else nil
-	if not tip then
+	-- exactly one line naming refs/heads/main itself: ls-remote matches the pattern against each ref's tail, so
+	-- refs/heads/a/refs/heads/main is listed too (code review 009 F5)
+	local tips: { string } = {}
+	if okR then
+		for line in string.gmatch(out, "[^\n]+") do
+			local sha = string.match(line, "^(%x+)\trefs/heads/main$")
+			if sha then
+				table.insert(tips, sha)
+			end
+		end
+	end
+	if #tips ~= 1 then
 		return nil, "cannot read origin's main (git ls-remote origin refs/heads/main): refusing"
 	end
+	local tip = tips[1]
 	if not git(top, { "cat-file", "-e", tip .. "^{commit}" }) then
 		return nil, `origin's main {tip} is not here: run ./zn sync --fetch, then again`
 	end
@@ -291,6 +302,13 @@ function rewrites.mainBase(top: string): (string?, string?)
 			"origin's main already holds the move, so the branch's own changes can't be told apart: refusing"
 	end
 	return base, nil
+end
+
+-- the URL `origin` resolves to (after any insteadOf), printed with every verdict: AC18 trusts the origin it resolves,
+-- and a reviewer checks this line (code review 009 F4; the testing skill's "Caught only by review")
+function rewrites.originUrl(top: string): string
+	local ok, url = git(top, { "ls-remote", "--get-url", "origin" })
+	return if ok then (string.gsub(url, "%s+$", "")) else "(none)"
 end
 
 -- The tree before the move, in the checkout at `top`: the parent of the commit that removed MARK. Nil and why when the
