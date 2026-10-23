@@ -32,7 +32,6 @@ if not pre then
 	print(`finished: {why}`)
 	process.exit(1)
 end
-local world = rewrites.world(TOP, pre :: string)
 local reg = projects.load(TOP, true)
 
 -- c0120's own item folder changes after the move only through its prep (Guess 17's decision came that way). Its files
@@ -178,20 +177,12 @@ local bad: { string } = {}
 -- changed between B and M is main's reviewed change (a prep, a ready, a done), and its reference is M's text; any
 -- other file's is its text before the move. An origin/main that already holds the move (c0120 landed, or a ref moved
 -- to this branch) leaves nothing to judge against, and refuses.
-local okMain, mainTip = git({ "rev-parse", "--verify", "-q", "origin/main" })
-local okM, mergeBase = git({ "merge-base", "HEAD", "origin/main" })
-local M = trim(mergeBase)
-if not okMain or trim(mainTip) == "" or not okM or M == "" then
-	print("finished: no merge-base of HEAD and origin/main (git fetch origin main): refusing")
+local mainBase, mainWhy = rewrites.mainBase(TOP)
+if not mainBase then
+	print(`finished: {mainWhy}`)
 	process.exit(1)
 end
-local okMove, moveSha = git({ "log", "-1", "--format=%H", "--", rewrites.MARK })
-if okMove and trim(moveSha) ~= "" and git({ "merge-base", "--is-ancestor", trim(moveSha), M }) then
-	print(
-		"finished: origin/main already holds the move, so the branch's own changes can't be told apart: refusing"
-	)
-	process.exit(1)
-end
+local M: string = mainBase :: string
 local okB, mergePre = git({ "merge-base", pre :: string, M })
 local B = trim(mergePre)
 assert(okB and B ~= "", `git merge-base {pre} {M} failed`)
@@ -293,6 +284,37 @@ for key, e in ownSet do
 		known[e.id] = true
 	end
 end
+-- an item main captured after the move's base and later removed or renamed stays known (code review 008 F5): the
+-- branch must follow main there too; its files are in neither pre nor M, only in main's history between B and M
+local removedOnMain: { [string]: boolean } = {}
+do
+	local okD, removed = git({ "log", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
+	if okD then
+		local gone = sequestered(removed, rootsOf(mReg), promotedOf(mReg))
+		for key, e in gone do
+			if e.id ~= OWN_ID then
+				known[e.id] = true
+				removedOnMain[key] = true
+			end
+		end
+	end
+end
+
+-- the world a finished check.sh's rewrite saw: the tree of the commit that made its text (code review 008 F4), so a
+-- file committed later, at a path it names, can't change what is expected
+local worlds: { [string]: rewrites.World } = {}
+local function worldAt(path: string): rewrites.World
+	local okT, sha = git({ "log", "-1", "--format=%H", "HEAD", "--", path })
+	local rev = if okT and trim(sha) ~= "" then trim(sha) else "HEAD"
+	if not worlds[rev] then
+		worlds[rev] = rewrites.world(TOP, pre :: string, rev)
+	end
+	return worlds[rev]
+end
+local function finishedAtHead(id: string): boolean
+	local c = headSet[`{id}|check.sh`]
+	return c ~= nil and isDone(c.path)
+end
 
 local judged = 0
 for key in keys do
@@ -337,9 +359,9 @@ for key in keys do
 		if h then
 			table.insert(
 				bad,
-				`{h.path}: added (not in {id}'s folder {if id == OWN_ID
-					then "as reviewed"
-					else "on the main it merged, nor before the move"})`
+				if id == OWN_ID
+					then `{h.path}: added (not in c0120's folder as reviewed)`
+					else `{h.path}: kept, though the main it merged removed it`
 			)
 		end
 		continue
@@ -357,11 +379,23 @@ for key in keys do
 		continue
 	end
 	judged += 1
+	-- a finished item's specs live in its promoted place (code review 008 F2): one moved back into its done/ folder
+	-- keeps its text and loses its gate
+	if string.sub(inner, 1, 11) == "acceptance/" and not h.promoted and finishedAtHead(id) then
+		table.insert(
+			bad,
+			`{h.path}: not promoted ({id} is done: its specs belong in {projects.promotedDir(
+				reg,
+				string.match(h.path, "^(.-)/[a-z]+/done/") or "",
+				id
+			)})`
+		)
+	end
 	local now = show("HEAD", h.path)
 	local want: string? = ref
 	if inner == "check.sh" and id ~= OWN_ID and isDone(h.path) then
 		-- the move's rewrite, whoever finished it (main's done already rewrote its own item paths)
-		want = rewrites.rewrite(ref :: string, projects.homeOf(reg, h.path), world)
+		want = rewrites.rewrite(ref :: string, projects.homeOf(reg, h.path), worldAt(h.path))
 	elseif h.promoted and not refPromoted and id == "c0114" then
 		-- promoted by this branch's own done of c0114 (the stacked build): with c0120's overrides
 		want = withOverrides(h.path, ref :: string)
@@ -389,10 +423,16 @@ for key, h in headSet do
 	if not keys[key] and known[h.id] and not promotedBefore[key] then
 		table.insert(
 			bad,
-			`{h.path}: added (not in {h.id}'s folder {if h.id == OWN_ID
-				then "as reviewed"
-				else "on the main it merged, nor before the move"})`
+			if removedOnMain[key]
+				then `{h.path}: kept, though the main it merged removed it`
+				else `{h.path}: added (not in {h.id}'s folder {if h.id == OWN_ID
+					then "as reviewed"
+					else "on the main it merged, nor before the move"})`
 		)
+	end
+	-- a spec promoted before the move, moved back into its item's folder (code review 008 F2)
+	if promotedBefore[key] and not h.promoted then
+		table.insert(bad, `{h.path}: not promoted ({h.id}'s specs were promoted before the move)`)
 	end
 end
 table.sort(bad)

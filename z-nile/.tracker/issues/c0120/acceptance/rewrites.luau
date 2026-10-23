@@ -265,6 +265,34 @@ local function glob(p: string): (string?, string?)
 	return lua, table.concat(fixed, "/")
 end
 
+-- The main this checkout merged, from the published tip, never the local ref (code review 008 F1: the author can move
+-- refs/remotes/origin/main to an unpublished commit and merge it). `git ls-remote origin refs/heads/main` gives the tip
+-- (read-only; the fence allows it); it must be a commit here (fetched), and M is `git merge-base HEAD <tip>`, an
+-- ancestor of the tip by construction. Nil and why on any doubt: unreadable, not fetched, no merge-base, or a main that
+-- already holds the move. The one reader of that base: AC18 (finished.luau) and override-markers.luau.
+function rewrites.mainBase(top: string): (string?, string?)
+	local okR, out = git(top, { "ls-remote", "origin", "refs/heads/main" })
+	local tip = if okR then string.match(out, "^(%x+)%s+refs/heads/main") else nil
+	if not tip then
+		return nil, "cannot read origin's main (git ls-remote origin refs/heads/main): refusing"
+	end
+	if not git(top, { "cat-file", "-e", tip .. "^{commit}" }) then
+		return nil, `origin's main {tip} is not here: run ./zn sync --fetch, then again`
+	end
+	local okM, base = git(top, { "merge-base", "HEAD", tip })
+	base = string.gsub(base, "%s+$", "")
+	if not okM or base == "" then
+		return nil, `no merge-base of HEAD and origin's main {tip}: refusing`
+	end
+	local okMove, move = git(top, { "log", "-1", "--format=%H", "--", rewrites.MARK })
+	move = string.gsub(move, "%s+$", "")
+	if okMove and move ~= "" and git(top, { "merge-base", "--is-ancestor", move, base }) then
+		return nil,
+			"origin's main already holds the move, so the branch's own changes can't be told apart: refusing"
+	end
+	return base, nil
+end
+
 -- The tree before the move, in the checkout at `top`: the parent of the commit that removed MARK. Nil and why when the
 -- move hasn't happened (MARK is still there) or the history can't tell (a shallow clone).
 function rewrites.premove(top: string): (string?, string?)
@@ -298,8 +326,9 @@ local function normal(p: string): string
 end
 
 -- The World of the checkout at `top`, `pre` being the tree before the move: `before` reads that tree, `now` the
--- tree of HEAD, and `moved` the renames git finds between `pre` and the move itself.
-function rewrites.world(top: string, pre: string): World
+-- tree of `nowRev` (HEAD by default; code review 008 F4: AC18 pins it to the commit that made a file's text), and
+-- `moved` the renames git finds between `pre` and the move itself.
+function rewrites.world(top: string, pre: string, nowRev: string?): World
 	local okL, listing = git(top, { "ls-tree", "-r", "--name-only", pre })
 	assert(okL, `git ls-tree {pre} failed`)
 	local files: { [string]: boolean } = {}
@@ -332,8 +361,9 @@ function rewrites.world(top: string, pre: string): World
 	local nowSet: { [string]: boolean } = {}
 	local function listNow(): { string }
 		if not nowFiles then
-			local okN, out = git(top, { "ls-tree", "-r", "--name-only", "HEAD" })
-			assert(okN, "git ls-tree HEAD failed")
+			local rev = nowRev or "HEAD"
+			local okN, out = git(top, { "ls-tree", "-r", "--name-only", rev })
+			assert(okN, `git ls-tree {rev} failed`)
 			local list: { string } = {}
 			for f in string.gmatch(out, "[^\n]+") do
 				table.insert(list, f)

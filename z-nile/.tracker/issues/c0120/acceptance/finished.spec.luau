@@ -242,8 +242,16 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		g({ "add", "-A" })
 		g({ "commit", "-qm", "the prep" })
 		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
-		-- main as this branch merged it: here the prep itself (code review 007 F1: AC18 judges the branch's own delta)
-		g({ "update-ref", "refs/remotes/origin/main", prep })
+		-- main as this branch merged it: here the prep itself, published to a bare origin (code review 007 F1: AC18
+		-- judges the branch's own delta; 008 F1: against the published main, read with ls-remote)
+		local origin = `{OWNFX}-origin.git`
+		if fs.isDir(origin) then
+			fs.removeDir(origin)
+		end
+		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
+		g({ "remote", "add", "origin", origin })
+		g({ "push", "-q", "origin", `{prep}:refs/heads/main` })
+		g({ "fetch", "-q", "origin" })
 		fs.writeDir(`{OWNFX}/pickman/.tracker`)
 		g({ "mv", "tracker/rafts", "pickman/.tracker/rafts" })
 		g({ "mv", "tracker/issues", "pickman/.tracker/issues" })
@@ -447,11 +455,25 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- main's side: on a detached main, a change, then origin/main moves to it; the branch merges it, placing main's
 		-- files where the move put them (tracker/ is pickman/.tracker/, tests/acceptance/ is pickman's)
 		local branch = "work"
-		local function onMain(change: () -> (), message: string)
+		-- main is published in a bare origin (code review 008 F1): a change on main is pushed there and fetched
+		local origin = `{FX2}-origin.git`
+		if fs.isDir(origin) then
+			fs.removeDir(origin)
+		end
+		local function publish(rev: string)
+			g({ "push", "-q", "origin", `{rev}:refs/heads/main` })
+			g({ "fetch", "-q", "origin" })
+		end
+		local function onMain(change: () -> (), message: string, unpublished: boolean?)
 			g({ "checkout", "-q", "--detach", "refs/remotes/origin/main" })
 			change()
 			step(message)
-			g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
+			if unpublished then
+				-- the author's own ref moved, nothing published (the forged main)
+				g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
+			else
+				publish("HEAD")
+			end
 			g({ "checkout", "-q", branch })
 		end
 		local function mergeMain(place: () -> ())
@@ -472,7 +494,9 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		w("tracker/issues/active/f0072/acceptance/c.spec.luau", "-- c\n")
 		w("tracker/issues/active/f0073/check.sh", "check AC1 true\n")
 		step("main base")
-		g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
+		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
+		g({ "remote", "add", "origin", origin })
+		publish("HEAD")
 		g({ "checkout", "-q", "-b", branch })
 		-- the branch's prep: c0120's folder and the registry, then the move
 		w(
@@ -589,16 +613,115 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		rm("pickman/.tracker/issues/done/f0072/acceptance")
 		step("undo")
 		expectGreen()
+		-- main removes a spec of an unfinished item; the branch keeps it: red; deletes it too: green (008 F3)
+		onMain(function()
+			g({ "rm", "-q", "tracker/issues/active/f0070/acceptance/n.spec.luau" })
+		end, "main removes a spec")
+		mergeMain(function() end)
+		expectRed(
+			"pickman/.tracker/issues/active/f0070/acceptance/n.spec.luau: kept, though the main it merged removed it"
+		)
+		rm("pickman/.tracker/issues/active/f0070/acceptance/n.spec.luau")
+		step("the branch follows")
+		expectGreen()
+		-- main renumbers f0071 to f0091 (a compaction): the branch follows: green; edits the renamed check.sh: red;
+		-- keeps the old folder too: red (008 F3)
+		onMain(function()
+			g({ "mv", "tracker/issues/active/f0071", "tracker/issues/active/f0091" })
+			w("tracker/compaction.txt", "f0071 f0091\n")
+		end, "main renumbers f0071")
+		mergeMain(function()
+			g({ "mv", "pickman/.tracker/issues/active/f0071", "pickman/.tracker/issues/active/f0091" })
+		end)
+		expectGreen()
+		w("pickman/.tracker/issues/active/f0091/check.sh", "check AC1 true\n")
+		step("the branch edits f0091")
+		expectRed("pickman/.tracker/issues/active/f0091/check.sh: changed")
+		w("pickman/.tracker/issues/active/f0091/check.sh", "check AC1 test -d tracker/issues/active/f0071\n")
+		step("undo")
+		expectGreen()
+		w("pickman/.tracker/issues/active/f0071/check.sh", "check AC1 test -d tracker/issues/active/f0071\n")
+		step("the branch keeps the old folder")
+		expectRed("pickman/.tracker/issues/active/f0071/check.sh: kept, though the main it merged removed it")
+		rm("pickman/.tracker/issues/active/f0071")
+		step("undo")
+		expectGreen()
+		-- an item captured on main after the move and removed there again, kept by the branch: red (008 F5)
+		onMain(function()
+			w("tracker/issues/f0093/check.sh", "check AC1 true\n")
+		end, "capture f0093 on main")
+		mergeMain(function()
+			w("pickman/.tracker/issues/f0093/check.sh", "check AC1 true\n")
+		end)
+		expectGreen()
+		onMain(function()
+			rm("tracker/issues/f0093")
+		end, "main removes f0093")
+		mergeMain(function() end)
+		expectRed("pickman/.tracker/issues/f0093/check.sh: kept, though the main it merged removed it")
+		rm("pickman/.tracker/issues/f0093")
+		step("the branch follows")
+		expectGreen()
+		-- a finished item's promoted spec moved back into its done/ folder, unchanged: red (008 F2)
+		fs.writeDir(`{FX2}/pickman/.tracker/issues/done/f0072/acceptance`)
+		g({
+			"mv",
+			"pickman/tests/acceptance/f0072/c.spec.luau",
+			"pickman/.tracker/issues/done/f0072/acceptance/c.spec.luau",
+		})
+		step("moved back")
+		expectRed("pickman/.tracker/issues/done/f0072/acceptance/c.spec.luau: not promoted")
+		g({
+			"mv",
+			"pickman/.tracker/issues/done/f0072/acceptance/c.spec.luau",
+			"pickman/tests/acceptance/f0072/c.spec.luau",
+		})
+		step("undo")
+		expectGreen()
+		-- the published main: forged locally, unreadable, or not fetched, each refuses or judges the branch (008 F1)
+		onMain(function()
+			w("tracker/issues/active/f0070/check.sh", "check AC1 true\n")
+		end, "a weakening on an unpublished main", true)
+		mergeMain(function()
+			w("pickman/.tracker/issues/active/f0070/check.sh", "check AC1 true\n")
+		end)
+		expectRed("pickman/.tracker/issues/active/f0070/check.sh: changed")
+		publish("refs/remotes/origin/main")
+		expectGreen()
+		local url = g({ "remote", "get-url", "origin" })
+		g({ "remote", "set-url", "origin", `{FX2}-nowhere.git` })
+		expectRed("cannot read origin's main")
+		g({ "remote", "set-url", "origin", (string.gsub(url, "%s+$", "")) })
+		-- a commit published by someone else, not fetched here
+		local other = `{FX2}-other`
+		t.expect(process.exec("git", { "clone", "-q", origin, other }).ok).toBe(true)
+		fixture.git(other, {
+			"-c",
+			"user.name=c0120",
+			"-c",
+			"user.email=c0120@example.invalid",
+			"commit",
+			"-q",
+			"--allow-empty",
+			"-m",
+			"elsewhere",
+		})
+		fixture.git(other, { "push", "-q", "origin", "HEAD:refs/heads/main" })
+		expectRed("is not here: run ./zn sync --fetch")
+		g({ "fetch", "-q", "origin" })
+		expectGreen()
+		fs.removeDir(other)
 		-- main and the stack change one file differently: refused, naming both
 		onMain(function()
 			w("tracker/issues/active/f0073/check.sh", "check AC1 main\n")
 		end, "main edits f0073")
 		mergeMain(function() end)
 		expectRed("f0073's check.sh: changed on main")
-		-- origin/main moved onto this branch (it then holds the move): refused
-		g({ "update-ref", "refs/remotes/origin/main", "HEAD" })
-		expectRed("origin/main already holds the move")
+		-- origin's main moved onto this branch (it then holds the move): refused
+		publish("HEAD")
+		expectRed("origin's main already holds the move")
 		fs.removeDir(FX2)
+		fs.removeDir(origin)
 	end)
 
 	it("the path from one folder to another", function()

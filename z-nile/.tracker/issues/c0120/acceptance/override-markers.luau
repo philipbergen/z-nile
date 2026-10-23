@@ -4,6 +4,7 @@
 -- repository root, naming the renames commit (the promoted specs' text before the overrides):
 --   lune run z-nile/.tracker/issues/c0120/acceptance/override-markers.luau -- <renames commit> [<head>]
 local process = require("@lune/process")
+local rewrites = require("./rewrites")
 
 local NEAR = 3
 local MARK = "-- c0120 override:"
@@ -54,7 +55,14 @@ end
 local function has(rev: string, path: string): boolean
 	return process.exec("git", { "cat-file", "-e", `{rev}:{path}` }).ok
 end
-local M = trim(diffOf({ "merge-base", head, "origin/main" }))
+-- main from its published tip, never the local ref (code review 008 F1): the same reader as AC18
+local top = trim(git({ "rev-parse", "--show-toplevel" }))
+local mainBase, mainWhy = rewrites.mainBase(top)
+if not mainBase then
+	print(`override-markers: {mainWhy}`)
+	process.exit(1)
+end
+local M = mainBase :: string
 local B = if M ~= "" then trim(diffOf({ "merge-base", pre, M })) else ""
 -- main's promoted-spec folders: the root's tests/acceptance (main has pickman at the root until c0120 lands) and any
 -- home's
@@ -149,6 +157,8 @@ local misplaced: { string } = {}
 local files = git({
 	"diff",
 	"--name-only",
+	-- added or changed only: a spec moved out of the acceptance folders is AC18's to report (code review 008 F2)
+	"--diff-filter=AMR",
 	"-M",
 	base,
 	head,
