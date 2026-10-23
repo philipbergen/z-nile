@@ -9,7 +9,8 @@ C="$ZN_ROOT/$(cd "$ZN_ROOT" && ./zn find c0115)/acceptance"
 [[ -d $C ]] || C="$ZN_ROOT/z-nile/tests/acceptance/c0115"
 
 check "AC1: z-nile/README.md, which supersedes this page, covers each of its asks" lune run tests/run -- "$C/readme.spec.luau"
+# the path is built from $ZN_ROOT: c0120's check-paths would read a literal one, which the deletion leaves unresolved
 check "AC2: the page this item added, .claude/README.md, is gone" \
-  bash -c '! git -C "$1" ls-files --error-unmatch -- .claude/README.md >/dev/null 2>&1' _ "$ZN_ROOT"
+  bash -c '! git -C "$1" ls-files --error-unmatch -- "$1/.claude/README.md" >/dev/null 2>&1' _ "$ZN_ROOT"
 
 finish

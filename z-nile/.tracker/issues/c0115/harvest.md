@@ -51,3 +51,4 @@
 - design-review-012 F1: ticket-prep/exact-checks-compare-against-the-merge-base
 - design-review-012 F2: testing/no-vacuous-pass
 - design-review-012 F3: review/lists-paste-their-search
+- note c0115 prep, after round 12: c0115's and c0113's check.sh named cwd-relative paths after a variable cd, red under c0120's finished.spec once done; simulate the item done before approving: ticket-prep/prove-specs-pass-on-a-prototype

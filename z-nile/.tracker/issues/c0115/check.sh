@@ -8,6 +8,9 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$ZN_ROOT/z-nile/tests/acceptance/c0115"
 
+# Paths a command reads from another folder are anchored where the check-path rule can see it (c0120's
+# check-paths reads a literal `cd <dir>` only): `cd ..` from z-nile/ is the repository root, and the AC2 copy's
+# commands are named through "$copy".
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: skills live in z-nile/skills and <project>/skills; ./zn skills links each from .claude/skills and refuses bad folders" lune run tests/run -- "$A/skills.spec.luau"
@@ -19,9 +22,9 @@ links_check() {
   mkdir -p "$PWD/.cache" && rm -rf "$copy" && git clone -q --no-hardlinks "$ZN_ROOT" "$copy" || return 1
   (
     cd "$copy" || exit 1
-    out=$(./zn skills --check) || { echo "$out"; exit 1; }
+    out=$("$copy/zn" skills --check) || { echo "$out"; exit 1; }
     [[ $out == *"one link each, ok"* ]] || { echo "skills --check said: $out"; exit 1; }
-    z-nile/check.sh --plan | grep -qx "skills: .claude/skills" || { echo "no skills: line in --plan"; exit 1; }
+    "$copy/z-nile/check.sh" --plan | grep -qx "skills: .claude/skills" || { echo "no skills: line in --plan"; exit 1; }
     [[ -z $(git status --porcelain) ]] || { echo "the copy changed:"; git status --porcelain; exit 1; }
   ) || return 1
   rm -rf "$copy"
@@ -42,7 +45,7 @@ check "AC10: the guard, structure, lessons-paragraph and check-path specs pass i
   bash -c 'lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0111/skill-docs.spec.luau tests/acceptance/c0120/check-paths.spec.luau && cd ../pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau'
 check "AC11: the real tracker audits clean" "$ZN_ROOT/zn" audit
 check "AC12: as of the last fetch, nothing but this raft holds the skill folders or their links: no other raft active, no branch or worktree changing them" \
-  bash -c 'cd "$ZN_ROOT" && ./zn busy .claude/skills z-nile/skills pickman/skills'
+  bash -c 'cd .. && ./zn busy .claude/skills z-nile/skills pickman/skills'
 
 # AC13 reads the branch's own commits since it left origin's main, as the trusted base gives it (git reads only): exactly one commit whose subject
 # starts "c0115: move the skills", holding only R100 renames, and no other commit of the range renaming a skill file.
@@ -113,7 +116,7 @@ raft_holds_c0113() {
   local raft
   raft=$(awk '/^raft:/ {print $2; exit}' "$HERE/c0115.md")
   [[ -n $raft ]] || { echo "c0115 has no raft yet: form it with c0113 (z-design)"; return 1; }
-  (cd "$ZN_ROOT" && ./zn members "$raft") | grep -qE '(^|/)c0113$' || { echo "$raft does not hold c0113"; return 1; }
+  (cd .. && ./zn members "$raft") | grep -qE '(^|/)c0113$' || { echo "$raft does not hold c0113"; return 1; }
 }
 check "AC15: c0115's raft holds c0113, the item it supersedes" raft_holds_c0113
 

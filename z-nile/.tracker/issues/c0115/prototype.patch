@@ -1057,10 +1057,10 @@ index 52221609..6df307c1 100644
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
 diff --git a/z-nile/.tracker/issues/c0113/check.sh b/z-nile/.tracker/issues/c0113/check.sh
-index 14607b1b..ae03d29b 100755
+index 14607b1b..348e1af4 100755
 --- a/z-nile/.tracker/issues/c0113/check.sh
 +++ b/z-nile/.tracker/issues/c0113/check.sh
-@@ -2,13 +2,14 @@
+@@ -2,13 +2,15 @@
  # Acceptance checks for c0113. SEQUESTERED: never edit during execution.
  # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
@@ -1078,8 +1078,9 @@ index 14607b1b..ae03d29b 100755
 -# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 -# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 +check "AC1: z-nile/README.md, which supersedes this page, covers each of its asks" lune run tests/run -- "$C/readme.spec.luau"
++# the path is built from $ZN_ROOT: c0120's check-paths would read a literal one, which the deletion leaves unresolved
 +check "AC2: the page this item added, .claude/README.md, is gone" \
-+  bash -c '! git -C "$1" ls-files --error-unmatch -- .claude/README.md >/dev/null 2>&1' _ "$ZN_ROOT"
++  bash -c '! git -C "$1" ls-files --error-unmatch -- "$1/.claude/README.md" >/dev/null 2>&1' _ "$ZN_ROOT"
  
  finish
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
@@ -2919,7 +2920,7 @@ index 00000000..8ddd869b
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/c0115/c0115.md
-index 258a3a73..3ec3f3f6 100644
+index 258a3a73..78a5544c 100644
 --- a/z-nile/.tracker/issues/c0115/c0115.md
 +++ b/z-nile/.tracker/issues/c0115/c0115.md
 @@ -6,7 +6,7 @@ slug: skill-names-readme
@@ -2931,7 +2932,7 @@ index 258a3a73..3ec3f3f6 100644
  created: 2026-10-20
  status: new-falcon-lucky-mongoose
  ---
-@@ -38,53 +38,618 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -38,53 +38,623 @@ Decided with the user (2026-10-20), from the programme review:
  - Move and rename the skill files under `z-nile/` to the `z-` and `zz-` names. `scripts/tracker.sh` verbs stay (`new issue`, `new raft`, `ready`, `start`, `done`).
  - Write `z-nile/README.md` so it opens with the flow diagram and a short account of the five parts.
  
@@ -3454,6 +3455,11 @@ index 258a3a73..3ec3f3f6 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++After round 12, 2026-10-23 (found by c0116's rebase): with c0115 done, c0120's promoted `finished.spec` read c0115's `check.sh` from `z-nile/` and flagged five literal paths on lines that run after `cd "$copy"` or `cd "$ZN_ROOT"` (`./zn` three times, `.claude/skills`, `z-nile/check.sh`), and c0113's AC2 named the deleted `.claude/README.md` literally.
++- c0115's `check.sh`: AC2's copy commands are named through `"$copy/zn"` and `"$copy/z-nile/check.sh"`; AC12 and AC15 run after a literal `cd ..` (the root, from `z-nile/`), which check-paths reads. c0113's AC2 builds its pathspec as `"$1/.claude/README.md"` (`$1` is `$ZN_ROOT`); with `.claude/README.md` restored it is still red.
++- Simulated c0115 and c0113 done in a scratchpad clone (c0115's specs promoted to `z-nile/tests/acceptance/c0115`): c0120's `finished.spec` and `check-paths.spec` pass (8 cases); the full gate per project passes there, z-nile 1081 and pickman 1160 cases.
++- `./zn check c0115` in the prototype worktree: 12/15, unchanged (AC12, AC14, AC15 for the reasons above); `./zn check c0113`: 2/2.
++
 +Design review 012 approved, 2026-10-23 (design-refute-012), with three lows fixed:
 +- F1: the trusted base prints the URL it read (`from <url>` on `--print`, `main's tip read from <url>` in `rewrite-finished`); AC13 and §8 state the swapped-origin limit.
 +- F2: the recursive-grep scan treats `../.claude/skills/` and `…/skills/*` as bare; `rewrite-finished-sim.sh` gained the two c0198 cases, both red. All 23 cases end as expected; `trusted-base.spec` 7 passed (its honest case also checks the URL line).
@@ -3570,10 +3576,10 @@ index 258a3a73..3ec3f3f6 100644
 +
 +Prep round 0, 2026-10-21, on 080d247 (superseded by the rebases): the full gate passed (1068 and 982 cases, 90.6 s against the base's 94.1 s); `check.sh` 11/12 (AC12); the base 2/12; the promotion dry run clean (65 cases, 11 files, `luau-lsp analyze tests` exit 0); 34 mutants killed.
 diff --git a/z-nile/.tracker/issues/c0115/check.sh b/z-nile/.tracker/issues/c0115/check.sh
-index 50ea286e..832582c5 100755
+index 50ea286e..5c10e1c3 100755
 --- a/z-nile/.tracker/issues/c0115/check.sh
 +++ b/z-nile/.tracker/issues/c0115/check.sh
-@@ -2,13 +2,119 @@
+@@ -2,13 +2,122 @@
  # Acceptance checks for c0115. SEQUESTERED: never edit during execution.
  # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
@@ -3586,6 +3592,9 @@ index 50ea286e..832582c5 100755
 -[[ -d $A ]] || A="$PWD/tests/acceptance/c0115"
 +[[ -d $A ]] || A="$ZN_ROOT/z-nile/tests/acceptance/c0115"
  
++# Paths a command reads from another folder are anchored where the check-path rule can see it (c0120's
++# check-paths reads a literal `cd <dir>` only): `cd ..` from z-nile/ is the repository root, and the AC2 copy's
++# commands are named through "$copy".
  # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 -# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
 -# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
@@ -3599,9 +3608,9 @@ index 50ea286e..832582c5 100755
 +  mkdir -p "$PWD/.cache" && rm -rf "$copy" && git clone -q --no-hardlinks "$ZN_ROOT" "$copy" || return 1
 +  (
 +    cd "$copy" || exit 1
-+    out=$(./zn skills --check) || { echo "$out"; exit 1; }
++    out=$("$copy/zn" skills --check) || { echo "$out"; exit 1; }
 +    [[ $out == *"one link each, ok"* ]] || { echo "skills --check said: $out"; exit 1; }
-+    z-nile/check.sh --plan | grep -qx "skills: .claude/skills" || { echo "no skills: line in --plan"; exit 1; }
++    "$copy/z-nile/check.sh" --plan | grep -qx "skills: .claude/skills" || { echo "no skills: line in --plan"; exit 1; }
 +    [[ -z $(git status --porcelain) ]] || { echo "the copy changed:"; git status --porcelain; exit 1; }
 +  ) || return 1
 +  rm -rf "$copy"
@@ -3622,7 +3631,7 @@ index 50ea286e..832582c5 100755
 +  bash -c 'lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0111/skill-docs.spec.luau tests/acceptance/c0120/check-paths.spec.luau && cd ../pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau'
 +check "AC11: the real tracker audits clean" "$ZN_ROOT/zn" audit
 +check "AC12: as of the last fetch, nothing but this raft holds the skill folders or their links: no other raft active, no branch or worktree changing them" \
-+  bash -c 'cd "$ZN_ROOT" && ./zn busy .claude/skills z-nile/skills pickman/skills'
++  bash -c 'cd .. && ./zn busy .claude/skills z-nile/skills pickman/skills'
 +
 +# AC13 reads the branch's own commits since it left origin's main, as the trusted base gives it (git reads only): exactly one commit whose subject
 +# starts "c0115: move the skills", holding only R100 renames, and no other commit of the range renaming a skill file.
@@ -3693,7 +3702,7 @@ index 50ea286e..832582c5 100755
 +  local raft
 +  raft=$(awk '/^raft:/ {print $2; exit}' "$HERE/c0115.md")
 +  [[ -n $raft ]] || { echo "c0115 has no raft yet: form it with c0113 (z-design)"; return 1; }
-+  (cd "$ZN_ROOT" && ./zn members "$raft") | grep -qE '(^|/)c0113$' || { echo "$raft does not hold c0113"; return 1; }
++  (cd .. && ./zn members "$raft") | grep -qE '(^|/)c0113$' || { echo "$raft does not hold c0113"; return 1; }
 +}
 +check "AC15: c0115's raft holds c0113, the item it supersedes" raft_holds_c0113
  
