@@ -3,10 +3,12 @@
 -- "Rewrite finished files"; the user's exception to "sequestered files never change", for finished items only, in
 -- c0114's PR). rewrites.luau is the one rewrite and the fixed list of files it covers (those finished when c0114
 -- lands); finished.luau (run by check.sh) checks each file against its base text. Reads the real tree, read-only;
--- writes only under .cache/c0114-finished.
+-- writes only under .cache/c0114-finished and .cache/c0114-finished-tip.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local rewrites = require("./rewrites")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 -- every item id whose folder is under z-nile/.tracker in the tree at `base`
 local function movedIds(base: string): { [string]: boolean }
@@ -133,4 +135,53 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
 		end
 		t.expect(movedIds(".").c0114).toBe(true)
 	end)
+
+	it(
+		"finished.luau reads main's tip from origin: a forged local ref stays red, and it refuses three ways",
+		function()
+			-- decided with the user, 2026-10-23 ("Allow the locked edit"): never the local origin/main
+			local f = trackerfix.new("c0114-finished-tip", {
+				["tracker/issues/c0200/c0200.md"] = trackerfix.stub("c0200", "c0200", "new-a-b-c"),
+				["tracker/issues/c0200/check.sh"] = "echo base\n",
+				["z-nile/.tracker/issues/active/c0114/c0114.md"] = "---\nid: c0114\nraft: R0043\n---\n",
+			})
+			local item = `{f.main}/z-nile/.tracker/issues/active/c0114`
+			-- this folder before `done`, tests/acceptance/c0114 after it
+			local script =
+				`{fixture.physical(".")}/z-nile/.tracker/issues/active/c0114/acceptance/finished.luau`
+			if not fs.isFile(script) then
+				script = `{fixture.physical(".")}/tests/acceptance/c0114/finished.luau`
+			end
+			local function run(): fixture.Result
+				return fixture.exec(f.main, "lune", { "run", script, item })
+			end
+			local function said(r: fixture.Result, needle: string)
+				t.expect(r.ok).toBe(false)
+				if not string.find(r.stdout .. r.stderr, needle, 1, true) then
+					error(`finished.luau did not say "{needle}": {r.stdout}{r.stderr}`)
+				end
+			end
+			t.expect(run().ok).toBe(true) -- nothing changed yet
+			-- an unfinished item's check.sh changed on the branch: red
+			fs.writeFile(`{f.main}/tracker/issues/c0200/check.sh`, "echo changed\n")
+			fixture.git(f.main, { "commit", "-q", "-am", "edit a sequestered file" })
+			said(run(), "changed: tracker/issues/c0200/check.sh")
+			-- the author moves the local ref onto the branch: still red, since origin is asked
+			fixture.git(f.main, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+			said(run(), "changed: tracker/issues/c0200/check.sh")
+			-- origin's tip not in this checkout: refuse, asking for a fetch
+			fixture.git(f.other, { "commit", "-q", "--allow-empty", "-m", "main moves on" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			said(run(), "which this checkout doesn't have: fetch")
+			-- no shared history with origin's tip: refuse
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			fixture.git(f.main, { "checkout", "-q", "--orphan", "unrelated" })
+			fixture.git(f.main, { "commit", "-q", "-m", "no shared history" })
+			said(run(), "share no history")
+			-- origin can't be read: refuse
+			fixture.git(f.main, { "remote", "set-url", "origin", `{f.base}/missing.git` })
+			said(run(), "cannot read main's tip from origin")
+			fs.removeDir(f.base)
+		end
+	)
 end)

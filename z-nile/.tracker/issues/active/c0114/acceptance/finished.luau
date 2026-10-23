@@ -1,21 +1,44 @@
 --!strict
 -- c0114 AC14, run by check.sh (never by the spec runner: it reads git): every item file that sequestration covers
--- (check.sh and acceptance/**, in every project root) is its text at `base` (the newest commit of origin/main the
--- branch holds), at its old path when it moved, unchanged for an unfinished item, and for a finished one with exactly
+-- (check.sh and acceptance/**, in every project root) is its text at `base`, the merge base of HEAD and main's tip as
+-- the origin repository reports it (`git ls-remote origin refs/heads/main`, never a local ref the author can move:
+-- decided with the user, 2026-10-23, "Allow the locked edit"), at its old path when it moved, unchanged for an unfinished item, and for a finished one with exactly
 -- the rewrites of rewrites.luau (the user's exception: "Rewrite finished files"). c0114 and its raft are left out:
--- their prep edits them. Read-only. Usage: lune run finished.luau <base> <c0114's folder>
+-- their prep edits them. Read-only; refuses when main's tip can't be read, isn't a local commit (fetch), or shares no
+-- history with HEAD. Usage: lune run finished.luau <c0114's folder> (in the checkout to check)
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local rewrites = require("./rewrites")
 
-local base = process.args[1] or error("usage: finished.luau <base> <item folder>")
-local here = process.args[2] or error("usage: finished.luau <base> <item folder>")
+local here = process.args[1] or error("usage: finished.luau <item folder>")
 local ROOTS = { "tracker", "z-nile/.tracker" }
 
 local function git(args: { string }): (boolean, string)
 	local r = process.exec("git", args)
 	return r.ok, r.stdout
 end
+local function refuse(why: string): never
+	print(`finished: {why}`)
+	process.exit(1)
+	error(why)
+end
+
+-- main's tip from origin itself, then the newest commit the branch shares with it
+local listed, remote = git({ "ls-remote", "origin", "refs/heads/main" })
+local tip = if listed then string.match(remote, "^(%x+)%s+refs/heads/main") else nil
+if not tip then
+	refuse("cannot read main's tip from origin (git ls-remote origin refs/heads/main)")
+end
+if not git({ "cat-file", "-e", (tip :: string) .. "^{commit}" }) then
+	refuse(
+		`origin's main is at {tip}, which this checkout doesn't have: fetch (git fetch origin main) and rerun`
+	)
+end
+local based, mb = git({ "merge-base", "HEAD", tip :: string })
+if not based or not string.match(mb, "%x") then
+	refuse(`HEAD and origin's main ({tip}) share no history`)
+end
+local base = (string.gsub(mb, "%s+$", ""))
 
 -- c0114 and its raft
 local self = string.match(here, "([fdcR]%d%d%d%d)$") or "c0114"

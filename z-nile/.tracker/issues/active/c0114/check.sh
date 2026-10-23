@@ -26,6 +26,6 @@ check "AC12: the real tracker audits with no errors across both roots (an unmove
 check "AC13: the branch never touches tracker/next; the first publish after landing moves the counter to z-nile/next with a tombstone, and only z-nile/next is written after" lune run tests/run -- "$A/window.spec.luau"
 check "AC13: this branch changes neither tracker/next nor z-nile/next" git diff --quiet origin/main...HEAD -- tracker/next z-nile/next
 check "AC14: finished items' check.sh files name the moved paths' new locations (the user's exception for finished items)" lune run tests/run -- "$A/finished.spec.luau"
-check "AC14: every item's check.sh and acceptance files are their origin/main text: unchanged if unfinished, with only the listed rewrites if finished" bash -c 'lune run "$1/finished.luau" "$(git merge-base HEAD origin/main)" "$2"' _ "$A" "$HERE"
+check "AC14: every item's check.sh and acceptance files are their origin/main text: unchanged if unfinished, with only the listed rewrites if finished" lune run "$A/finished.luau" "$HERE"
 
 finish
