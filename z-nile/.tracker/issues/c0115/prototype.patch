@@ -2797,10 +2797,10 @@ index 00000000..cb2f48b5
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/acceptance/trusted-base.spec.luau b/z-nile/.tracker/issues/c0115/acceptance/trusted-base.spec.luau
 new file mode 100644
-index 00000000..75cfba5c
+index 00000000..8ddd869b
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/acceptance/trusted-base.spec.luau
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,117 @@
 +--!strict
 +-- c0115 AC13 and AC14's one trusted base (design review 011 F1): `experiments/trusted-base.luau` takes main's tip
 +-- from the remote (`git ls-remote origin refs/heads/main`), never the local refs/remotes/origin/main, and is red when
@@ -2836,6 +2836,10 @@ index 00000000..75cfba5c
 +local function helper(dir: string): fixture.Result
 +	return fixture.exec(dir, "lune", { "run", HELPER, "--", "--print", dir })
 +end
++-- `<base> empty|range`; the second line names the URL ls-remote read (design review 012 F1)
++local function firstLine(out: string): string
++	return trim(string.match(out, "^[^\n]*") or "")
++end
 +local function has(text: string, needle: string): boolean
 +	return string.find(text, needle, 1, true) ~= nil
 +end
@@ -2861,7 +2865,8 @@ index 00000000..75cfba5c
 +	it("an honest clone gets the merge-base and a range", function()
 +		local r = helper(main)
 +		t.expect(r.ok).toBe(true)
-+		t.expect(trim(r.stdout)).toBe(`{git(main, { "rev-parse", "origin/main" })} range`)
++		t.expect(firstLine(r.stdout)).toBe(`{git(main, { "rev-parse", "origin/main" })} range`)
++		t.expect(has(r.stdout, `\nfrom {origin}`)).toBe(true)
 +	end)
 +
 +	it(
@@ -2869,11 +2874,11 @@ index 00000000..75cfba5c
 +		function()
 +			local honest = git(main, { "rev-parse", "origin/main" })
 +			git(main, { "update-ref", "refs/remotes/origin/main", "HEAD" })
-+			t.expect(trim(helper(main).stdout)).toBe(`{honest} range`)
++			t.expect(firstLine(helper(main).stdout)).toBe(`{honest} range`)
 +			git(main, { "commit", "-q", "--allow-empty", "-m", "work 2" })
 +			-- forged to the first branch commit, so a ref-based base would already hold the branch's edit
 +			git(main, { "update-ref", "refs/remotes/origin/main", "HEAD~1" })
-+			t.expect(trim(helper(main).stdout)).toBe(`{honest} range`)
++			t.expect(firstLine(helper(main).stdout)).toBe(`{honest} range`)
 +			git(main, { "update-ref", "refs/remotes/origin/main", honest })
 +		end
 +	)
@@ -2914,7 +2919,7 @@ index 00000000..75cfba5c
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/c0115/c0115.md
-index 258a3a73..e6c9f18a 100644
+index 258a3a73..3ec3f3f6 100644
 --- a/z-nile/.tracker/issues/c0115/c0115.md
 +++ b/z-nile/.tracker/issues/c0115/c0115.md
 @@ -6,7 +6,7 @@ slug: skill-names-readme
@@ -2926,7 +2931,7 @@ index 258a3a73..e6c9f18a 100644
  created: 2026-10-20
  status: new-falcon-lucky-mongoose
  ---
-@@ -38,53 +38,611 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -38,53 +38,618 @@ Decided with the user (2026-10-20), from the programme review:
  - Move and rename the skill files under `z-nile/` to the `z-` and `zz-` names. `scripts/tracker.sh` verbs stay (`new issue`, `new raft`, `ready`, `start`, `done`).
  - Write `z-nile/README.md` so it opens with the flow diagram and a short account of the five parts.
  
@@ -3100,7 +3105,7 @@ index 258a3a73..e6c9f18a 100644
 +- (decided with the user, 2026-10-21, G13; widened by design review 010 F2, under the same decision) a skills-folder variable: where a variable is assigned a value that ends in `.claude/skills` (then a quote, a space or the line's end: c0058's `local s=../.claude/skills`, c0040's `R="$(git … --show-toplevel)/.claude/skills"`), each `$<v>/<old>/` or `${<v>}/<old>/` gets the new link's name (`$s/review/` becomes `$s/zz-review/`).
 +- (rule 1c, G13's decision, design review 011 F3) such a variable used bare as an operand (`grep -rnF -- "--time 0" "$S"`, c0084) becomes every real skills folder, unquoted, as rule 1b does for a literal one.
 +
-+On the prototype: 31 files by the first rule (the paths all resolve from their homes afterwards), 4 of them by the second too (c0005, c0046, c0053, R0025: nine loops), 4 by the third (c0035, c0040, c0058, c0084), 6 by rule 1b (the six absence scans) and 1 by rule 1c (c0084 AC6), 34 files in all. Six criteria no rule carries are deleted (G12 and G13, like c0120's G17): R0025's RC2, whose `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md` can't pass now that AGENTS.md names real paths, and five that read text c0115 changes on purpose: c0010 AC7 (its game phrases moved to `pickman-test`), c0045 AC6 (the prompt template's hard rule 1), c0067 AC11 (the c0047 override's text), c0068 AC7 and c0069 AC5 (`name: stop-raft`, `name: launch-raft`). The script lists them (`DELETED`), removes each `check` statement with its quoted continuation lines (`-- --delete`), and the deletion is its own commit, after the rewrite's (JC1). `--check` (AC14) accepts exactly this, three-way against the trusted base (design review 010 F1, the same as c0120's AC18; 011 F1): `experiments/trusted-base.luau`, which AC13 uses too, takes main's tip from `git ls-remote origin refs/heads/main`, never from the local `refs/remotes/origin/main` (one `git update-ref` forges it), and the base is `git merge-base HEAD <tip>`; red when origin can't be read, the tip isn't a local commit ("fetch origin") or there is no merge-base. Every finished `check.sh` at the base must equal its base text rewritten by the five rules, with `DELETED`'s statements removed (an id with no statement at the base stays absent) and nothing else; a file not at the base (one finishing on the branch) only has to need no rewrite; an empty range (the branch landed, or main itself) checks only that nothing needs a rewrite; a non-empty range that compares no file with its base is red (a main from before c0120's layout, as on the prototype's real remote today). From the base's side too (011 F2): every finished `check.sh` at the base, under the base's own roots (its `z-nile/projects.toml`), must still be at HEAD at the same path, so a finished file the branch deletes, renames or moves out of `done/` is red (`at the base, gone at HEAD`); main deleting or renaming one stays green, since after the merge the base no longer has it. Independently of the rules, it fails on any finished `check.sh` that still names `.claude/skills/<old>` or `/<old>/SKILL.md` for an old skill (010 F2), or runs a recursive grep (`grep -…r…`, which doesn't follow links) over a bare `.claude/skills` operand or a variable assigned it (011 F3). A second run of either mode changes nothing. Main keeps finishing items and editing finished files during the raft, so step 5c reruns after every merge of `origin/main`, as its own commit. This is the same exception c0120 has for its own move.
++On the prototype: 31 files by the first rule (the paths all resolve from their homes afterwards), 4 of them by the second too (c0005, c0046, c0053, R0025: nine loops), 4 by the third (c0035, c0040, c0058, c0084), 6 by rule 1b (the six absence scans) and 1 by rule 1c (c0084 AC6), 34 files in all. Six criteria no rule carries are deleted (G12 and G13, like c0120's G17): R0025's RC2, whose `grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md` can't pass now that AGENTS.md names real paths, and five that read text c0115 changes on purpose: c0010 AC7 (its game phrases moved to `pickman-test`), c0045 AC6 (the prompt template's hard rule 1), c0067 AC11 (the c0047 override's text), c0068 AC7 and c0069 AC5 (`name: stop-raft`, `name: launch-raft`). The script lists them (`DELETED`), removes each `check` statement with its quoted continuation lines (`-- --delete`), and the deletion is its own commit, after the rewrite's (JC1). `--check` (AC14) accepts exactly this, three-way against the trusted base (design review 010 F1, the same as c0120's AC18; 011 F1): `experiments/trusted-base.luau`, which AC13 uses too, takes main's tip from `git ls-remote origin refs/heads/main`, never from the local `refs/remotes/origin/main` (one `git update-ref` forges it), and the base is `git merge-base HEAD <tip>`; red when origin can't be read, the tip isn't a local commit ("fetch origin") or there is no merge-base. Every finished `check.sh` at the base must equal its base text rewritten by the five rules, with `DELETED`'s statements removed (an id with no statement at the base stays absent) and nothing else; a file not at the base (one finishing on the branch) only has to need no rewrite; an empty range (the branch landed, or main itself) checks only that nothing needs a rewrite; a non-empty range that compares no file with its base is red (a main from before c0120's layout, as on the prototype's real remote today). From the base's side too (011 F2): every finished `check.sh` at the base, under the base's own roots (its `z-nile/projects.toml`), must still be at HEAD at the same path, so a finished file the branch deletes, renames or moves out of `done/` is red (`at the base, gone at HEAD`); main deleting or renaming one stays green, since after the merge the base no longer has it. Independently of the rules, it fails on any finished `check.sh` that still names `.claude/skills/<old>` or `/<old>/SKILL.md` for an old skill (010 F2), or runs a recursive grep (`grep -…r…`, which doesn't follow links) over a bare `.claude/skills` operand (then an optional `/` and a non-name character, so `../.claude/skills/` and `…/skills/*` count, 012 F2) or a variable assigned it (011 F3). Rule 1b stays as it is: nothing at the base needs the trailing-slash form, so the scan alone covers an item finishing on main. A second run of either mode changes nothing. Main keeps finishing items and editing finished files during the raft, so step 5c reruns after every merge of `origin/main`, as its own commit. This is the same exception c0120 has for its own move.
 +
 +Decided with the user (2026-10-21), G4: "Rewrite in c0115." This is the user's exception to the rule that no unfinished item's document is edited: the rename script's third pass rewrites the old skill names and old lesson ids in live backlog designs, by the name rule and the prose-id rule (§5):
 +- **which items:** every unfinished item (backlog and `active/`, under every current root) but c0115 itself, whose document is the record of the rename;
@@ -3319,6 +3324,7 @@ index 258a3a73..e6c9f18a 100644
 +| only the six listed criteria are deleted from finished files (G12, G13) | check.sh AC14 (`rewrite-finished --check`, three-way against the merge-base) | the deletions not yet made; R0025's RC3 deleted too (M64) or c0068's AC6 (M66), state; RC2's last quoted line left behind (M65, state) | run (a clone whose `origin/main` is the c0120-done base): all red |
 +| AC14 judges c0115's diff, not main's later work (F1) | check.sh AC14 | main edits two finished files after the move, merged; an item finishes on main with an old path, merged (red until 5c reruns); the branch lands, then main edits a finished file; no `origin/main` | run (`experiments/rewrite-finished-sim.sh`, a scratchpad clone): green, red then green, green, red, as each should be |
 +| AC13 and AC14 take the base from the remote (011 F1) | trusted-base.spec; check.sh AC13 and AC14 | the branch weakens c0004 AC1 and forges the ref to HEAD, or to the edit commit with one more commit; AC13 with a skill renamed outside the moves commit and the ref forged to HEAD; the helper reading the local ref again (M71) | run (`rewrite-finished-sim.sh`, a bare origin; the spec): all red |
++| the recursive-grep scan sees a trailing slash and a glob (012 F2) | check.sh AC14 | c0198 finished on the branch with `grep -rn x ../.claude/skills/`, and with `…/skills/*` | run (`rewrite-finished-sim.sh`): both red, "a recursive grep still reads the .claude/skills links" |
 +| a finished file the branch deletes, renames or moves is red (011 F2) | check.sh AC14 (the base-side listing) | B `git rm` c0004's check.sh; C c0006 renamed to c0206 with a criterion swapped; C2 c0006's check.sh moved out of `done/`; the listing dropped (M72) | run: all red; main deleting c0007 and renaming c0008, merged: green |
 +| a skills variable used bare reads the real folders (011 F3, rule 1c) | the finished check itself; AC14 (the recursive-grep scan) | `--time 0` planted in `zz-rules`; c0084's operand back to `"$S"` (M70) | run: c0084 AC6 green clean, red planted; M70 red |
 +| every old form is carried, independently of the rules (F2) | check.sh AC14 (the old-path scan) | c0040 left unrewritten (sim), or its `$R/zz-execute/` back to `$R/execute-raft/` (M68) | run: red |
@@ -3364,7 +3370,7 @@ index 258a3a73..e6c9f18a 100644
 +- AC10: the repository-fence, structure, lessons-paragraph and check-path specs pass in both homes.
 +- AC11: `./zn audit` reports no error on the real tree.
 +- AC12: as of the last fetch, `./zn busy .claude/skills z-nile/skills pickman/skills` prints nothing on the raft branch.
-+- AC13: on a live branch, the branch's commits since the trusted base (main's tip from `git ls-remote origin`, never the local ref; `experiments/trusted-base.luau`, shared with AC14) hold exactly one commit whose subject starts `c0115: move the skills`, its `git show -M --find-renames=100% --name-status` lines are all `R100`, and no other commit of the range renames a file under `.claude/skills`, `z-nile/skills` or `pickman/skills`. An empty range (the PR squashed into main) passes (the user's G11).
++- AC13: on a live branch, the branch's commits since the trusted base (main's tip from `git ls-remote origin`, never the local ref; `experiments/trusted-base.luau`, shared with AC14) hold exactly one commit whose subject starts `c0115: move the skills`, its `git show -M --find-renames=100% --name-status` lines are all `R100`, and no other commit of the range renames a file under `.claude/skills`, `z-nile/skills` or `pickman/skills`. An empty range (the PR squashed into main) passes (the user's G11). An origin swapped before the run (`remote set-url`, `url.*.insteadOf`) feeds any tip to AC13 and AC14: under the user's "detect, not prevent" that is review's to catch, and both print the URL `git ls-remote --get-url origin` resolved with the base (design review 012 F1).
 +- AC14: the rename is finished: the rename script's `--check` run finds nothing left to rename (ledgers, lessons, live backlog designs), `rewrite-finished --check` finds every finished `check.sh` exactly its text at the trusted base (main's tip from the remote) rewritten by the five rules, with the six `DELETED` criteria (G12, G13) removed and nothing else, every finished file of the base still in place, and none still naming an old skill path or recursively grepping the links, and, independently of the script, no unfinished item's design (c0115 aside) or its `check.sh` or acceptance files name a hyphenated old skill (bare or as a `/command`), a `/<old>/SKILL.md` path (literal or built from a variable) or a path through `.claude/skills/<old>`. Both halves are anchored at the repository root and fail closed: a roots command that fails or prints nothing, or a scan that reads no document, is red.
 +- AC15: c0115's raft (its `raft:` field) holds c0113, the item it supersedes (`./zn members`); no raft yet is red.
  
@@ -3448,6 +3454,12 @@ index 258a3a73..e6c9f18a 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++Design review 012 approved, 2026-10-23 (design-refute-012), with three lows fixed:
++- F1: the trusted base prints the URL it read (`from <url>` on `--print`, `main's tip read from <url>` in `rewrite-finished`); AC13 and §8 state the swapped-origin limit.
++- F2: the recursive-grep scan treats `../.claude/skills/` and `…/skills/*` as bare; `rewrite-finished-sim.sh` gained the two c0198 cases, both red. All 23 cases end as expected; `trusted-base.spec` 7 passed (its honest case also checks the URL line).
++- F3: c0137's Problem names c0069 `check.sh:41` and the search that finds all five, landed on main.
++- `design: ready`. c0115 is readied only after c0114 and c0120 land (§11, Implementation step 1).
++
 +Design review 011 answered, 2026-10-23 (design-refute-011):
 +- `experiments/trusted-base.luau` (main's tip from `git ls-remote origin`) for AC13 and AC14; the base-side listing; rule 1c (c0084 AC6) and the recursive-grep scan. The rewrite commit after it changed c0084 only.
 +- `trusted-base.spec`: 7 cases pass, in a fixture with a bare origin.
@@ -3558,10 +3570,10 @@ index 258a3a73..e6c9f18a 100644
 +
 +Prep round 0, 2026-10-21, on 080d247 (superseded by the rebases): the full gate passed (1068 and 982 cases, 90.6 s against the base's 94.1 s); `check.sh` 11/12 (AC12); the base 2/12; the promotion dry run clean (65 cases, 11 files, `luau-lsp analyze tests` exit 0); 34 mutants killed.
 diff --git a/z-nile/.tracker/issues/c0115/check.sh b/z-nile/.tracker/issues/c0115/check.sh
-index 50ea286e..a03e1dd0 100755
+index 50ea286e..832582c5 100755
 --- a/z-nile/.tracker/issues/c0115/check.sh
 +++ b/z-nile/.tracker/issues/c0115/check.sh
-@@ -2,13 +2,118 @@
+@@ -2,13 +2,119 @@
  # Acceptance checks for c0115. SEQUESTERED: never edit during execution.
  # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
@@ -3622,7 +3634,8 @@ index 50ea286e..a03e1dd0 100755
 +  # local refs/remotes/origin/main, which one update-ref forges; red when origin can't be read or its tip isn't local
 +  tb=$(lune run "$HERE/experiments/trusted-base" -- --print "$ZN_ROOT") || { echo "$tb"; return 1; }
 +  base=${tb%% *}
-+  if [[ $tb == *" empty" ]]; then echo "no commits since origin's main: nothing to check (G11)"; return 0; fi
++  echo "${tb#*$'\n'}" # the URL ls-remote read: a swapped origin is review's to catch (detect, not prevent)
++  if [[ ${tb%%$'\n'*} == *" empty" ]]; then echo "no commits since origin's main: nothing to check (G11)"; return 0; fi
 +  moves=$(git log --format=%H --grep='^c0115: move the skills' "$base..HEAD")
 +  if [[ $(printf '%s\n' "$moves" | grep -c .) != 1 ]]; then echo "want one moves commit since $base, got: ${moves:-none}"; return 1; fi
 +  bad=$(git show -M --find-renames=100% --name-status --format= "$moves" | grep -v '^R100' || true)
@@ -3897,10 +3910,10 @@ index 00000000..fff578ba
 +end
 diff --git a/z-nile/.tracker/issues/c0115/experiments/rewrite-finished-sim.sh b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished-sim.sh
 new file mode 100644
-index 00000000..c40d7fb4
+index 00000000..9b99485a
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished-sim.sh
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,110 @@
 +#!/usr/bin/env bash
 +# c0115 design reviews 010 and 011: rewrite-finished --check (AC14) and AC13 across the execution window, in throwaway
 +# clones whose origin is a local bare repository (main's tip is read from it with ls-remote, design review 011 F1).
@@ -3986,6 +3999,14 @@ index 00000000..c40d7fb4
 +git show "$BASE":z-nile/.tracker/issues/done/c0040/check.sh > z-nile/.tracker/issues/done/c0040/check.sh && git commit -qam "branch: c0040 unrewritten"
 +ck "c0040 left unrewritten" 1
 +git reset -q --hard HEAD~1
++# 012 F2: a recursive grep over the links with a trailing slash, or a glob, finished on the branch
++for op in '../.claude/skills/' '../.claude/skills/*'; do
++  mkdir -p z-nile/.tracker/issues/done/c0198
++  printf '#!/usr/bin/env bash\ncheck "AC1: x" bash -c "! grep -rn x %s"\nfinish\n' "$op" > z-nile/.tracker/issues/done/c0198/check.sh
++  git add -A && git commit -qm "branch: c0198 scans $op"
++  ck "c0198 finished on the branch, grep -rn over $op" 1
++  git reset -q --hard HEAD~1
++done
 +# 011 F1 for AC13: a skill renamed outside the moves commit, then the ref forged to HEAD
 +moves_only_from_check() { awk '/^moves_only\(\) \{/{p=1} p{print} p&&/^}/{exit}' z-nile/.tracker/issues/c0115/check.sh; }
 +ac13() { (export ZN_ROOT=$B HERE=$B/z-nile/.tracker/issues/c0115; eval "$(moves_only_from_check)"; moves_only >/dev/null 2>&1; echo "--- AC13 $1: exit=$? (expect $2)"); }
@@ -4005,10 +4026,10 @@ index 00000000..c40d7fb4
 +ck "a later main edit after landing" 0
 diff --git a/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
 new file mode 100644
-index 00000000..696bd245
+index 00000000..2aa49da3
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
-@@ -0,0 +1,486 @@
+@@ -0,0 +1,489 @@
 +--!strict
 +-- c0115, Implementation step 5c: rewrites the skill paths in every finished item's check.sh for the skills' move (the
 +-- user's decision for c0114 and c0120, 2026-10-21: finished check.sh files are rewritten when a move breaks their
@@ -4282,8 +4303,10 @@ index 00000000..696bd245
 +				if not a then
 +					break
 +				end
-+				local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
-+				if after ~= "/" then
++				-- bare: then an optional `/` and a non-name character (`../.claude/skills/`, `…/skills/*`): grep -r
++				-- follows no link, not even one named on the command line (design review 012 F2)
++				local rest = string.sub(line, (b :: number) + 1)
++				if string.match(rest, "^/?[^%w_%-%.]") or string.match(rest, "^/?$") then
 +					bare = true
 +				end
 +				from = (b :: number) + 1
@@ -4384,6 +4407,7 @@ index 00000000..696bd245
 +		print(`rewrite-finished: {b.why}: nothing checked`)
 +		process.exit(1)
 +	end
++	print(`rewrite-finished: main's tip read from {b.url}`)
 +	if not b.empty then
 +		base = b.base
 +	else
@@ -4497,22 +4521,23 @@ index 00000000..696bd245
 +end
 diff --git a/z-nile/.tracker/issues/c0115/experiments/trusted-base.luau b/z-nile/.tracker/issues/c0115/experiments/trusted-base.luau
 new file mode 100644
-index 00000000..1f9c2d1a
+index 00000000..de55ee3c
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0115/experiments/trusted-base.luau
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,70 @@
 +--!strict
 +-- c0115 (design review 011 F1): the one trusted base AC13 and AC14 judge the branch against, the same rule c0120
 +-- adopts for its AC18. Main's tip comes from the remote (`git ls-remote origin refs/heads/main`), never from the local
 +-- `refs/remotes/origin/main`, which one `git update-ref` forges. The base is `git merge-base HEAD <tip>`; the range
 +-- is empty when that is HEAD (the branch landed, or this is main). Red, naming why: ls-remote fails or prints nothing
 +-- (offline, no origin, no main), the tip isn't a local commit ("fetch origin"), or there is no merge-base (a shallow
-+-- clone). What review must still catch: an origin URL swapped before the run.
++-- clone). What review must still catch (the user's "detect, not prevent"): an origin swapped before the run
++-- (`remote set-url`, `url.*.insteadOf`); the URL ls-remote read is printed with the base so a reviewer sees it.
 +--   lune run <c0115>/experiments/trusted-base -- --print [<dir>]   -- prints `<base> empty|range`, or exits 1
 +-- Required by rewrite-finished.luau as a module: `trustedBase.get(dir)`.
 +local process = require("@lune/process")
 +
-+export type Base = { ok: boolean, base: string, empty: boolean, why: string }
++export type Base = { ok: boolean, base: string, empty: boolean, why: string, url: string }
 +
 +local trustedBase = {}
 +
@@ -4522,6 +4547,8 @@ index 00000000..1f9c2d1a
 +end
 +
 +function trustedBase.get(dir: string): Base
++	-- the URL ls-remote reads, `insteadOf` applied: printed with the base, so a swapped origin shows (design review 012 F1)
++	local _, url = git(dir, { "ls-remote", "--get-url", "origin" })
 +	local okR, remote = git(dir, { "ls-remote", "origin", "refs/heads/main" })
 +	local tip = string.match(remote, "^(%x+)%s+refs/heads/main$")
 +	if not okR or not tip then
@@ -4529,6 +4556,7 @@ index 00000000..1f9c2d1a
 +			ok = false,
 +			base = "",
 +			empty = false,
++			url = url,
 +			why = "can't read main's tip from origin (git ls-remote origin refs/heads/main): offline, or no origin or no main",
 +		}
 +	end
@@ -4537,6 +4565,7 @@ index 00000000..1f9c2d1a
 +			ok = false,
 +			base = "",
 +			empty = false,
++			url = url,
 +			why = `origin's main ({string.sub(tip, 1, 12)}) isn't a local commit: fetch origin`,
 +		}
 +	end
@@ -4546,11 +4575,12 @@ index 00000000..1f9c2d1a
 +			ok = false,
 +			base = "",
 +			empty = false,
++			url = url,
 +			why = `no merge-base of HEAD and origin's main ({string.sub(tip, 1, 12)}): a shallow clone, or unrelated history`,
 +		}
 +	end
 +	local _, head = git(dir, { "rev-parse", "HEAD" })
-+	return { ok = true, base = mb, empty = mb == head, why = "" }
++	return { ok = true, base = mb, empty = mb == head, why = "", url = url }
 +end
 +
 +local printAt = table.find(process.args, "--print")
@@ -4561,6 +4591,7 @@ index 00000000..1f9c2d1a
 +		process.exit(1)
 +	end
 +	print(`{b.base} {if b.empty then "empty" else "range"}`)
++	print(`from {b.url}`)
 +end
 +
 +return trustedBase

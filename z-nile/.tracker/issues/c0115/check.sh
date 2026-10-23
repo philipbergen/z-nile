@@ -54,7 +54,8 @@ moves_only() {
   # local refs/remotes/origin/main, which one update-ref forges; red when origin can't be read or its tip isn't local
   tb=$(lune run "$HERE/experiments/trusted-base" -- --print "$ZN_ROOT") || { echo "$tb"; return 1; }
   base=${tb%% *}
-  if [[ $tb == *" empty" ]]; then echo "no commits since origin's main: nothing to check (G11)"; return 0; fi
+  echo "${tb#*$'\n'}" # the URL ls-remote read: a swapped origin is review's to catch (detect, not prevent)
+  if [[ ${tb%%$'\n'*} == *" empty" ]]; then echo "no commits since origin's main: nothing to check (G11)"; return 0; fi
   moves=$(git log --format=%H --grep='^c0115: move the skills' "$base..HEAD")
   if [[ $(printf '%s\n' "$moves" | grep -c .) != 1 ]]; then echo "want one moves commit since $base, got: ${moves:-none}"; return 1; fi
   bad=$(git show -M --find-renames=100% --name-status --format= "$moves" | grep -v '^R100' || true)

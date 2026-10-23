@@ -4,12 +4,13 @@
 -- `refs/remotes/origin/main`, which one `git update-ref` forges. The base is `git merge-base HEAD <tip>`; the range
 -- is empty when that is HEAD (the branch landed, or this is main). Red, naming why: ls-remote fails or prints nothing
 -- (offline, no origin, no main), the tip isn't a local commit ("fetch origin"), or there is no merge-base (a shallow
--- clone). What review must still catch: an origin URL swapped before the run.
+-- clone). What review must still catch (the user's "detect, not prevent"): an origin swapped before the run
+-- (`remote set-url`, `url.*.insteadOf`); the URL ls-remote read is printed with the base so a reviewer sees it.
 --   lune run <c0115>/experiments/trusted-base -- --print [<dir>]   -- prints `<base> empty|range`, or exits 1
 -- Required by rewrite-finished.luau as a module: `trustedBase.get(dir)`.
 local process = require("@lune/process")
 
-export type Base = { ok: boolean, base: string, empty: boolean, why: string }
+export type Base = { ok: boolean, base: string, empty: boolean, why: string, url: string }
 
 local trustedBase = {}
 
@@ -19,6 +20,8 @@ local function git(dir: string, args: { string }): (boolean, string)
 end
 
 function trustedBase.get(dir: string): Base
+	-- the URL ls-remote reads, `insteadOf` applied: printed with the base, so a swapped origin shows (design review 012 F1)
+	local _, url = git(dir, { "ls-remote", "--get-url", "origin" })
 	local okR, remote = git(dir, { "ls-remote", "origin", "refs/heads/main" })
 	local tip = string.match(remote, "^(%x+)%s+refs/heads/main$")
 	if not okR or not tip then
@@ -26,6 +29,7 @@ function trustedBase.get(dir: string): Base
 			ok = false,
 			base = "",
 			empty = false,
+			url = url,
 			why = "can't read main's tip from origin (git ls-remote origin refs/heads/main): offline, or no origin or no main",
 		}
 	end
@@ -34,6 +38,7 @@ function trustedBase.get(dir: string): Base
 			ok = false,
 			base = "",
 			empty = false,
+			url = url,
 			why = `origin's main ({string.sub(tip, 1, 12)}) isn't a local commit: fetch origin`,
 		}
 	end
@@ -43,11 +48,12 @@ function trustedBase.get(dir: string): Base
 			ok = false,
 			base = "",
 			empty = false,
+			url = url,
 			why = `no merge-base of HEAD and origin's main ({string.sub(tip, 1, 12)}): a shallow clone, or unrelated history`,
 		}
 	end
 	local _, head = git(dir, { "rev-parse", "HEAD" })
-	return { ok = true, base = mb, empty = mb == head, why = "" }
+	return { ok = true, base = mb, empty = mb == head, why = "", url = url }
 end
 
 local printAt = table.find(process.args, "--print")
@@ -58,6 +64,7 @@ if printAt then
 		process.exit(1)
 	end
 	print(`{b.base} {if b.empty then "empty" else "range"}`)
+	print(`from {b.url}`)
 end
 
 return trustedBase

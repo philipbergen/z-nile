@@ -83,6 +83,14 @@ git reset -q --hard HEAD~1
 git show "$BASE":z-nile/.tracker/issues/done/c0040/check.sh > z-nile/.tracker/issues/done/c0040/check.sh && git commit -qam "branch: c0040 unrewritten"
 ck "c0040 left unrewritten" 1
 git reset -q --hard HEAD~1
+# 012 F2: a recursive grep over the links with a trailing slash, or a glob, finished on the branch
+for op in '../.claude/skills/' '../.claude/skills/*'; do
+  mkdir -p z-nile/.tracker/issues/done/c0198
+  printf '#!/usr/bin/env bash\ncheck "AC1: x" bash -c "! grep -rn x %s"\nfinish\n' "$op" > z-nile/.tracker/issues/done/c0198/check.sh
+  git add -A && git commit -qm "branch: c0198 scans $op"
+  ck "c0198 finished on the branch, grep -rn over $op" 1
+  git reset -q --hard HEAD~1
+done
 # 011 F1 for AC13: a skill renamed outside the moves commit, then the ref forged to HEAD
 moves_only_from_check() { awk '/^moves_only\(\) \{/{p=1} p{print} p&&/^}/{exit}' z-nile/.tracker/issues/c0115/check.sh; }
 ac13() { (export ZN_ROOT=$B HERE=$B/z-nile/.tracker/issues/c0115; eval "$(moves_only_from_check)"; moves_only >/dev/null 2>&1; echo "--- AC13 $1: exit=$? (expect $2)"); }

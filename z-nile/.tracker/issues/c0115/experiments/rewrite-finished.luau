@@ -271,8 +271,10 @@ local function linkScans(text: string): { string }
 				if not a then
 					break
 				end
-				local after = string.sub(line, (b :: number) + 1, (b :: number) + 1)
-				if after ~= "/" then
+				-- bare: then an optional `/` and a non-name character (`../.claude/skills/`, `…/skills/*`): grep -r
+				-- follows no link, not even one named on the command line (design review 012 F2)
+				local rest = string.sub(line, (b :: number) + 1)
+				if string.match(rest, "^/?[^%w_%-%.]") or string.match(rest, "^/?$") then
 					bare = true
 				end
 				from = (b :: number) + 1
@@ -373,6 +375,7 @@ if checkOnly then
 		print(`rewrite-finished: {b.why}: nothing checked`)
 		process.exit(1)
 	end
+	print(`rewrite-finished: main's tip read from {b.url}`)
 	if not b.empty then
 		base = b.base
 	else

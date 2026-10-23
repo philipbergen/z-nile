@@ -33,6 +33,10 @@ end
 local function helper(dir: string): fixture.Result
 	return fixture.exec(dir, "lune", { "run", HELPER, "--", "--print", dir })
 end
+-- `<base> empty|range`; the second line names the URL ls-remote read (design review 012 F1)
+local function firstLine(out: string): string
+	return trim(string.match(out, "^[^\n]*") or "")
+end
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
@@ -58,7 +62,8 @@ return t.spec("c0115 the trusted base comes from the remote", function(it)
 	it("an honest clone gets the merge-base and a range", function()
 		local r = helper(main)
 		t.expect(r.ok).toBe(true)
-		t.expect(trim(r.stdout)).toBe(`{git(main, { "rev-parse", "origin/main" })} range`)
+		t.expect(firstLine(r.stdout)).toBe(`{git(main, { "rev-parse", "origin/main" })} range`)
+		t.expect(has(r.stdout, `\nfrom {origin}`)).toBe(true)
 	end)
 
 	it(
@@ -66,11 +71,11 @@ return t.spec("c0115 the trusted base comes from the remote", function(it)
 		function()
 			local honest = git(main, { "rev-parse", "origin/main" })
 			git(main, { "update-ref", "refs/remotes/origin/main", "HEAD" })
-			t.expect(trim(helper(main).stdout)).toBe(`{honest} range`)
+			t.expect(firstLine(helper(main).stdout)).toBe(`{honest} range`)
 			git(main, { "commit", "-q", "--allow-empty", "-m", "work 2" })
 			-- forged to the first branch commit, so a ref-based base would already hold the branch's edit
 			git(main, { "update-ref", "refs/remotes/origin/main", "HEAD~1" })
-			t.expect(trim(helper(main).stdout)).toBe(`{honest} range`)
+			t.expect(firstLine(helper(main).stdout)).toBe(`{honest} range`)
 			git(main, { "update-ref", "refs/remotes/origin/main", honest })
 		end
 	)

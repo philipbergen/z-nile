@@ -48,3 +48,6 @@
 - design-review-011 F2: ticket-prep/exact-checks-compare-against-the-merge-base, testing/no-vacuous-pass
 - design-review-011 F3: testing/no-vacuous-pass
 - design-review-011 F4: one-off: captured as c0137, c0120's home rewrite, outside c0115
+- design-review-012 F1: ticket-prep/exact-checks-compare-against-the-merge-base
+- design-review-012 F2: testing/no-vacuous-pass
+- design-review-012 F3: review/lists-paste-their-search
