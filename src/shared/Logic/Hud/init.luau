@@ -143,4 +143,21 @@ function Hud.radarBox(width: number, height: number, size: number, touch: boolea
 	return { x = right - s, y = y, w = s, h = s }
 end
 
+-- The blaster's shots in the lives row (f0100), in pixels from that row's top-left: after the last life's icon
+-- and one margin, one bar per shot, half an icon wide, an icon tall, half a margin apart (halves rounded half up).
+-- A count or a life total that is not a whole number >= 0 counts as 0 (rounded down).
+function Hud.shotIcons(l: Layout, lives: number, shots: number): { Box }
+	local function count(n: number): number
+		return if n >= 0 and n < math.huge then math.floor(n) else 0
+	end
+	local w = round(l.iconSize / 2)
+	local gap = round(l.margin / 2)
+	local x = count(lives) * (l.iconSize + l.margin)
+	local out: { Box } = {}
+	for i = 1, count(shots) do
+		table.insert(out, { x = x + (i - 1) * (w + gap), y = 0, w = w, h = l.iconSize })
+	end
+	return out
+end
+
 return Hud

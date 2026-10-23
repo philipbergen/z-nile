@@ -1,0 +1,39 @@
+# R0047 harvest
+
+- design-review-001 F1: ticket-prep/spec-design-correspondence, ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-001 F2: testing/stand-ins-answer-only-named-arguments
+- design-review-001 F3: ticket-prep/fallbacks-name-the-modes-they-cover, ticket-prep/never-narrow-captured-scope
+- design-review-001 F4: architecture/clock-before-subprocess
+- design-review-001 F5: testing/narrow-guard-allowances
+- design-review-001 F6: testing/no-vacuous-pass
+- design-review-001 F7: ticket-prep/instructions-runnable-where-they-run
+- note in prep a mutant reset with `git checkout HEAD --` wiped an uncommitted prototype (its commit had been in a command that was refused), so the prototype was rebuilt and committed before the mutants ran: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-002 F1: testing/pin-fail-safes-where-they-act, testing/stand-ins-answer-only-named-arguments
+- design-review-002 F2: architecture/clock-before-subprocess
+- design-review-002 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-002 F4: ticket-prep/restated-rules-move-together
+- design-review-002 F5: ticket-prep/spec-design-correspondence
+- design-review-003 F1: ticket-prep/accepted-risks-checked-and-decided, architecture/clock-before-subprocess
+- design-review-003 F2: testing/count-calls-in-poll-loops
+- design-review-003 F3: testing/stand-ins-answer-only-named-arguments
+- design-review-003 F4: ticket-prep/instructions-runnable-where-they-run
+- note the user decided on 2026-10-22 to store start ids compared for equality (design review 003 F1's option a): ticket-prep/accepted-risks-checked-and-decided
+- note in round 3 a splice of fence.luau deleted `myPid` and `readMaybe`, which sat between the replaced block and the next anchor; c0058's lock.spec caught it at once: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-004 F1: ticket-prep/design-the-execution-window
+- design-review-004 F2: architecture/read-paired-facts-at-one-moment
+- design-review-004 F3: testing/pin-fail-safes-where-they-act
+- design-review-004 F4: architecture/read-paired-facts-at-one-moment
+- note round 4's held probe reused c0058's signal names (`l-held`, `l-go`) and c0049's isolation spec failed the promoted gate: testing/narrow-guard-allowances
+- design-review-005 F1: ticket-prep/run-the-other-rafts-specs, ticket-prep/design-the-execution-window
+- design-review-005 F2: testing/pin-fail-safes-where-they-act
+- design-review-005 F3: architecture/companion-writes-share-the-record-gate
+- design-review-005 F4: architecture/read-paired-facts-at-one-moment
+- note the user decided on 2026-10-22 to store a worker's start id as its record's content (design review 005 F1, a final-round high): ticket-prep/run-the-other-rafts-specs
+- review-001 F1: architecture/read-own-facts-before-claiming, testing/count-calls-in-poll-loops
+- review-001 F2: testing/pin-fail-safes-where-they-act
+- review-001 F3: one-off: a backlog chore whose outcome an emergent issue delivered was left open; closing it is the user's call
+- review-001 F4: one-off: a header comment left from splitting one spec file into two
+- note in execution c0127's AC5 could not pass because the ref guard refused a check's fetch with nothing new (c0122), so emergent chore c0131 fixed the guard: ticket-prep/prove-specs-pass-on-a-prototype
+- review-002 F1: architecture/read-own-facts-before-claiming
+- review-002 F2: one-off: a refute line described a fixture identity the spec didn't use
+- note done's first attempt failed: c0131's promoted specs named a guard variable the scan refuses, which promote-check does not run: testing/narrow-guard-allowances

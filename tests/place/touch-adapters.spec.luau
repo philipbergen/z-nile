@@ -3,6 +3,10 @@
 -- fold itself is pinned by the f0027-f0029 acceptance specs. Controls' real source runs here on its own small
 -- stub engine (touch signals, one inset area, a recording Intent remote) with the real Touch and View, so its
 -- wiring is pinned by what it does. Camera and HudView keep source pins for one line each.
+local Blaster = require("@logic/Blaster")
+local Hop = require("@logic/Hop")
+local Maze = require("@logic/Maze")
+local Movement = require("@logic/Movement")
 local Touch = require("@logic/Touch")
 local View = require("@logic/View")
 local luau = require("@lune/luau")
@@ -70,10 +74,16 @@ type World = {
 	ended: Signal,
 	unfocused: Signal,
 	touch: () -> any,
+	enum: any,
+	bound: { handler: any, codes: { any } },
+	arrows: { View.Arrows },
 }
 
--- Starts Controls on an 800 x 400 screen with the snap rectangle `rect` (nil: none passed).
-local function start(rect: Touch.Rect?): World
+type Keys = { aim: () -> Maze.Heading? }
+
+-- Starts Controls on an 800 x 400 screen with the snap rectangle `rect` (nil: none passed). With `keys`,
+-- Controls.keys is called first with that aim and a recording arrows hook.
+local function start(rect: Touch.Rect?, keys: Keys?): World
 	local enum = setmetatable({}, {
 		__index = function(self: any, group: string): any
 			local g = enumGroup(group)
@@ -105,9 +115,24 @@ local function start(rect: Touch.Rect?): World
 		touch = function(): any
 			return { UserInputType = enum.UserInputType.Touch, Position = { X = 0, Y = 0 } }
 		end,
+		enum = enum,
+		bound = { handler = nil, codes = {} },
+		arrows = {},
 	}
 	local services: { [string]: any } = {
-		ContextActionService = { BindActionAtPriority = function() end },
+		ContextActionService = {
+			BindActionAtPriority = function(
+				_: any,
+				_name: string,
+				handler: any,
+				_button: boolean,
+				_p: number,
+				...: any
+			)
+				world.bound.handler = handler
+				world.bound.codes = { ... }
+			end,
+		},
 		GuiService = {
 			GetInsetArea = function(_: any, _which: any): any
 				return { Min = { X = 0, Y = 0 }, Max = { X = 800, Y = 400 } }
@@ -127,6 +152,10 @@ local function start(rect: Touch.Rect?): World
 		},
 	}
 	local modules: { [string]: any } = {
+		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
+		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
+		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
+		["@game/ReplicatedStorage/Shared/Logic/Movement"] = Movement,
 		["@game/ReplicatedStorage/Shared/Logic/Touch"] = Touch,
 		["@game/ReplicatedStorage/Shared/Logic/View"] = View,
 	}
@@ -143,6 +172,14 @@ local function start(rect: Touch.Rect?): World
 		end,
 	}
 	local Controls = luau.load(script("Controls").Source, { environment = env, debugName = "Controls" })()
+	if keys then
+		Controls.keys({
+			arrows = function(a: View.Arrows)
+				table.insert(world.arrows, table.clone(a))
+			end,
+			aim = keys.aim,
+		})
+	end
 	Controls.start(
 		function()
 			world.snaps += 1
@@ -229,5 +266,93 @@ return t.spec("touch adapters", function(it)
 	it("HudView shows the snap frame only on a touch screen", function()
 		local src = source("HudView")
 		t.expect(string.find(src, "s.Visible = UserInputService.TouchEnabled", 1, true) ~= nil).toBe(true)
+	end)
+	-- R0035 code review 001 F1: Controls' key handler runs here, so its branches are pinned by what it does.
+	local function press(w: World, key: string, state: string): any
+		return w.bound.handler("PickmanControls", w.enum.UserInputState[state], { KeyCode = { Name = key } })
+	end
+
+	local function arrowsOf(up: boolean, down: boolean, left: boolean, right: boolean): View.Arrows
+		return { up = up, down = down, left = left, right = right }
+	end
+
+	it("Controls binds exactly the keys of View.KEYS and sinks every one", function()
+		local w = start(nil)
+		local names = {}
+		for _, code in w.bound.codes do
+			table.insert(names, code.Name)
+		end
+		table.sort(names)
+		local wantNames = {}
+		for name in View.KEYS do
+			table.insert(wantNames, name)
+		end
+		table.sort(wantNames)
+		t.expect(names).toEqual(wantNames)
+		for name in View.KEYS do
+			t.expect(press(w, name, "Begin")).toBe(w.enum.ContextActionResult.Sink)
+			t.expect(press(w, name, "End")).toBe(w.enum.ContextActionResult.Sink)
+		end
+	end)
+
+	it("Controls sends W A S D as movement intents on the key going down only", function()
+		local w = start(nil)
+		for _, key in { "W", "A", "S", "D" } do
+			press(w, key, "Begin")
+			press(w, key, "End")
+		end
+		t.expect(w.fired).toEqual({ "Forward", "Left", "Back", "Right" })
+	end)
+
+	it("Controls holds an arrow from down to up, and a cancelled input lets it go", function()
+		local w = start(nil, {
+			aim = function(): Maze.Heading?
+				return "N"
+			end,
+		})
+		press(w, "Up", "Begin")
+		press(w, "Left", "Begin")
+		press(w, "Up", "Begin") -- no change: no second report
+		press(w, "Up", "End")
+		press(w, "Left", "Cancel")
+		press(w, "Right", "Change") -- neither down nor up: nothing
+		t.expect(w.arrows).toEqual({
+			arrowsOf(true, false, false, false),
+			arrowsOf(true, false, true, false),
+			arrowsOf(false, false, true, false),
+			arrowsOf(false, false, false, false),
+		})
+		press(w, "Down", "Begin")
+		press(w, "Down", "End")
+		t.expect(w.arrows[5]).toEqual(arrowsOf(false, true, false, false))
+		t.expect(w.arrows[6]).toEqual(arrowsOf(false, false, false, false))
+		t.expect(w.fired).toEqual({}) -- looking sends nothing to the server
+	end)
+
+	it("Controls fires the aimed shot on E, and nothing with no aim or no camera", function()
+		local aim: Maze.Heading? = "E"
+		local w = start(nil, {
+			aim = function(): Maze.Heading?
+				return aim
+			end,
+		})
+		press(w, "E", "Begin")
+		press(w, "E", "End")
+		aim = "S"
+		press(w, "E", "Begin")
+		aim = nil -- before the first snapshot
+		press(w, "E", "Begin")
+		t.expect(w.fired).toEqual({ Blaster.intent("E"), Blaster.intent("S") })
+		local bare = start(nil) -- Controls.keys never called
+		press(bare, "E", "Begin")
+		t.expect(bare.fired).toEqual({})
+	end)
+
+	it("Controls sends the hop intent on Space going down, and Space no longer snaps", function()
+		local w = start(nil)
+		press(w, "Space", "Begin")
+		press(w, "Space", "End")
+		t.expect(w.fired).toEqual({ Hop.INTENT })
+		t.expect(w.snaps).toBe(0)
 	end)
 end)

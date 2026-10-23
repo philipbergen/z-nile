@@ -9,6 +9,9 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `tracker.sh members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the narrowed f0024 adapter and f0026 adapters specs pass" lune run tests/run -- tests/acceptance/f0024/adapter.spec.luau tests/acceptance/f0026/adapters.spec.luau
+check "AC2: both files keep every case, in order, under its title" lune run tests/run -- "$A/titles.spec.luau"
+check "AC3: each of the seven narrowed cases keeps the guard it had for the per-player boards and allows only d0124's HiscoreTop besides" lune run tests/run -- "$A/guards.spec.luau"
+check "AC4: no other case changes: both files are exactly the narrowed ones" lune run tests/run -- "$A/golden.spec.luau"
 
 finish

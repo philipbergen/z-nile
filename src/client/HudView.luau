@@ -2,7 +2,8 @@
 -- Client adapter: the HUD as a ScreenGui over the whole screen. Hud.model of each frame's play record gives the
 -- content, Hud.layout of the screen and its safe inset the sizes, and Touch.blocks the places: score top-left,
 -- level top-right, a disc per life bottom-left, and the power bar bottom-right, hidden when no power is
--- running. The snap control sits left of the bar (Touch.snapRect); Controls hit-tests the same rectangle.
+-- running. The snap control sits left of the bar (Touch.snapRect); Controls hit-tests the same rectangle. The
+-- blaster's shots (f0100) are bars after the lives, placed by Hud.shotIcons.
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,6 +16,7 @@ local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
 local WHITE = Color3.fromRGB(255, 255, 255)
 local YELLOW = Color3.fromRGB(255, 255, 0)
 local BLUE = Color3.fromRGB(33, 33, 222)
+local CYAN = Color3.fromRGB(0, 255, 255)
 
 local HudView = {}
 
@@ -29,6 +31,8 @@ local snapAt: Touch.Rect? = nil
 -- the screen size and inset of the last layout, so a change of any of them re-lays
 type Key = { sw: number, sh: number, inset: Hud.Inset }
 local laidFor: Key? = nil
+local shots: Frame? = nil
+local shownShots = 0
 
 local function label(name: string, align: Enum.TextXAlignment, parent: Instance): TextLabel
 	local l = Instance.new("TextLabel")
@@ -67,6 +71,18 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 			end
 		end
 	end
+	if shots and lives then
+		shots.Position = lives.Position
+		shots.Size = lives.Size
+		local boxes = Hud.shotIcons(l, math.max(shownLives, 0), shownShots)
+		for i, icon in shots:GetChildren() do
+			local box = boxes[i]
+			if icon:IsA("Frame") and box then
+				icon.Position = UDim2.fromOffset(box.x, box.y)
+				icon.Size = UDim2.fromOffset(box.w, box.h)
+			end
+		end
+	end
 	if bar then
 		bar.Size = UDim2.fromOffset(blocks.power.w, blocks.power.h)
 		bar.Position = UDim2.fromOffset(blocks.power.x, blocks.power.y)
@@ -100,6 +116,11 @@ function HudView.start()
 	lf.BackgroundTransparency = 1
 	lf.Parent = gui
 	lives = lf
+	local sf = Instance.new("Frame")
+	sf.Name = "Shots"
+	sf.BackgroundTransparency = 1
+	sf.Parent = gui
+	shots = sf
 	local b = Instance.new("Frame")
 	b.Name = "Power"
 	b.BackgroundColor3 = BLUE
@@ -179,6 +200,26 @@ function HudView.show(play: Session.PlayFrame)
 	if bar and fill then
 		bar.Visible = m.power > 0
 		fill.Size = UDim2.fromScale(m.power, 1)
+	end
+end
+
+-- The shots held, from the frame (nil before a server that sends them: none).
+function HudView.shots(n: number?)
+	local count = n or 0
+	if shots == nil or count == shownShots then
+		return
+	end
+	shownShots = count
+	shots:ClearAllChildren()
+	for _ = 1, count do
+		local icon = Instance.new("Frame")
+		icon.BackgroundColor3 = CYAN
+		icon.BorderSizePixel = 0
+		icon.Parent = shots
+	end
+	local last = laidFor
+	if last then
+		lay(last.sw, last.sh, last.inset)
 	end
 end
 
