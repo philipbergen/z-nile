@@ -23,7 +23,7 @@ end
 local function sh(script: string, env: { [string]: string }?)
 	local r = process.exec(
 		"/bin/bash",
-		{ "-c", `set -euo pipefail\nsource scripts/lib/par.sh\n{script}` },
+		{ "-c", `set -euo pipefail\nsource z-nile/lib/par.sh\n{script}` },
 		{ cwd = root, env = env }
 	)
 	return { ok = r.ok, code = r.code, out = r.stdout .. r.stderr }

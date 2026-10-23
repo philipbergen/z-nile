@@ -1,0 +1,17 @@
+# The projects in this repository (c0114). Each one keeps its issues and rafts in its own tracker root and gets a
+# board tab. A directory that is not listed here is not a project. Read by z-nile/engine/projects.luau; the publish
+# guard reads this file from origin/main only.
+#   name: lowercase words joined by hyphens, unique
+#   root: "<name>/.tracker", or "tracker" (pickman's until c0120 moves it to pickman/.tracker)
+# A command works in --project's project, else in the one whose folder holds the directory ./zn runs in; pickman has
+# no folder until c0120, so its work passes --project pickman.
+# `retired` lists roots that once held items and hold none now; history and the trail still read them.
+retired = []
+
+[[project]]
+name = "pickman"
+root = "tracker"
+
+[[project]]
+name = "z-nile"
+root = "z-nile/.tracker"

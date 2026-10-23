@@ -2,6 +2,7 @@
 -- The `format` column of `tracker.sh metrics` comes from a raft's FIRST design review only, and only
 -- from a line that starts with `Consequences:`. That is how the before/after comparison of review
 -- rounds separates old rafts from new ones, so both edges are pinned here (c0410, review-001 F2).
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -25,7 +26,7 @@ local function build()
 		fs.removeDir(SB)
 	end
 	fs.writeDir(SB)
-	fs.copy("scripts", `{SB}/scripts`)
+	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/
 	fs.copy(".luaurc", `{SB}/.luaurc`)
 	fs.copy("rokit.toml", `{SB}/rokit.toml`)
 	local front = "---\nid: %s\ntype: chore\ntitle: T\nslug: t\n---\n\n# %s\n"

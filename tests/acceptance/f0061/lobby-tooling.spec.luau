@@ -43,7 +43,7 @@ return t.spec("f0670 tooling", function(it)
 	)
 
 	it("the gate builds the lobby project too", function()
-		local text = fs.readFile("scripts/check.sh")
+		local text = fs.readFile("z-nile/check.sh")
 		-- a stage that is run, not one that is commented out
 		local lobby, game = false, false
 		for line in string.gmatch(text, "[^\n]+") do

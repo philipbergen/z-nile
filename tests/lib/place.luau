@@ -4,7 +4,7 @@
 -- on the instance tree (what Roblox does). Specs that require this file are selected by
 -- scripts/affected for every src/ or project file change (graph.PLACE_LIB).
 local fs = require("@lune/fs")
-local graph = require("@scripts/lib/graph")
+local graph = require("@znile/lib/graph")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 

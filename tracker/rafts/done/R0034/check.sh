@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # Exit criteria for R0034. SEQUESTERED: never edit during execution.
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
-source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"
+source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" scripts/check.sh --full
+check "RC0: repo gate passes (full)" z-nile/check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(scripts/tracker.sh members R0034); do
+for dir in $(./zn members R0034); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0034
+check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0034
 
-# a sequestered issue spec before `tracker.sh done`, its promoted copy after it
+# a sequestered issue spec before `./zn done`, its promoted copy after it
 spec() { # $1 issue id, $2 spec name
   local f
-  f="$(scripts/tracker.sh find "$1")/acceptance/$2.spec.luau"
+  f="$(./zn find "$1")/acceptance/$2.spec.luau"
   [[ -f $f ]] || f="tests/acceptance/$1/$2.spec.luau"
   echo "$f"
 }

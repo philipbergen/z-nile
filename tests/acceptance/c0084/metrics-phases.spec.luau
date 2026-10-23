@@ -2,6 +2,7 @@
 -- c0084: `tracker.sh metrics` reports spend by phase and type, per raft by phase, and the design-review cost per
 -- round, and says that rework counts every phase. A sandbox copy of the tooling with its own small tracker tree
 -- (metrics only reads), under .cache/c0084-metrics. Ids are fixture ids no real item uses.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -40,7 +41,7 @@ local function build()
 		fs.removeDir(SB)
 	end
 	fs.writeDir(SB)
-	fs.copy("scripts", `{SB}/scripts`)
+	engine.copy(".", SB) -- c0114 override: ./zn, scripts/ and z-nile/
 	fs.copy(".luaurc", `{SB}/.luaurc`)
 	fs.copy("rokit.toml", `{SB}/rokit.toml`)
 	local tr = `{SB}/tracker`

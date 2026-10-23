@@ -5,6 +5,7 @@
 -- tree's tooling overlaid. The fixture pins its own `main` branch, so this spec passes from any
 -- branch and from a detached HEAD (CI's pull_request checkout).
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -126,11 +127,18 @@ return t.spec("worktrees", function(it)
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+			".gitignore",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -141,28 +149,19 @@ return t.spec("worktrees", function(it)
 			end
 		end
 		-- empty tracker, then four ready fixture rafts
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{seed}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(dir) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(dir .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{seed}/tracker/next`) then
-			fs.removeFile(`{seed}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(seed)
 		local rafts =
 			{ { "alpha", "demo" }, { "beta", "other" }, { "gamma", "third" }, { "delta", "fourth" } }
 		for _, pair in rafts do
-			must(tr(seed, { "new", "issue", "f", pair[1] }), "new issue " .. pair[1])
+			must(tr(seed, { "new", "issue", "f", pair[1], "--project", "pickman" }), "new issue " .. pair[1])
 		end
-		must(tr(seed, { "new", "issue", "f", "epsilon" }), "new issue epsilon") -- f0050: no raft
+		must(tr(seed, { "new", "issue", "f", "epsilon", "--project", "pickman" }), "new issue epsilon") -- f0050: no raft
 		for i, pair in rafts do
-			must(tr(seed, { "new", "raft", "feature", pair[2], `f00{i}0` }), "new raft " .. pair[2])
+			must(
+				tr(seed, { "new", "raft", "feature", pair[2], `f00{i}0`, "--project", "pickman" }),
+				"new raft " .. pair[2]
+			)
 		end
 		edit(`{seed}/tracker/issues/f0050/f0050.md`, "design: draft", "design: ready")
 		for i = 1, #rafts do
@@ -200,7 +199,7 @@ return t.spec("worktrees", function(it)
 		local start = tr(main, { "start", "R0030" })
 		t.expect(start.ok).toBe(false)
 		t.expect(string.find(start.stderr, "inside a worktree", 1, true) ~= nil).toBe(true)
-		local new = tr(main, { "new", "issue", "c", "probe" })
+		local new = tr(main, { "new", "issue", "c", "probe", "--project", "pickman" })
 		t.expect(new.ok).toBe(false)
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
@@ -305,7 +304,10 @@ return t.spec("worktrees", function(it)
 	end)
 
 	it("new issue works in a named worktree", function()
-		must(tr(named, { "new", "issue", "c", "probe" }), "new issue in a named worktree")
+		must(
+			tr(named, { "new", "issue", "c", "probe", "--project", "pickman" }),
+			"new issue in a named worktree"
+		)
 		t.expect(git(named, { "status", "--porcelain" }) ~= "").toBe(true)
 		git(named, { "clean", "-fdq" })
 		t.expect(git(named, { "status", "--porcelain" })).toBe("")

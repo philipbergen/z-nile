@@ -1,6 +1,6 @@
 --!strict
 -- No check may change the real repository (testing skill, "Specs never touch the real repository").
--- tests/lib/fence.luau and scripts/lib/fence.sh enforce it for every run; this spec proves, on every gate
+-- tests/lib/fence.luau and z-nile/lib/fence.sh enforce it for every run; this spec proves, on every gate
 -- run, that the guards are on here, and that no spec, check.sh or script switches them off. It never tries
 -- a write against this repository: the ref guard is proven by running its hook the way git would.
 local fs = require("@lune/fs")
@@ -123,6 +123,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["tests/lib/cachepaths.luau"] = {
 		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",
 		GH_CONFIG_DIR = "quotes a fence.sh line in the reviewed .cache list",
+		PICKMAN_TEST_FENCE = "quotes a fence.sh line in the reviewed .cache list (the jail waiver, c0114)",
 	},
 	["tests/acceptance/c0053/publish.spec.luau"] = {
 		GIT_DIR = "fixture hook",
@@ -131,7 +132,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	},
 	-- c0074: doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard; its
 	-- spec names it only as a table key passed to that pure function, never in a process's environment
-	["scripts/tracker/gate.luau"] = {
+	["z-nile/engine/gate.luau"] = {
 		PICKMAN_FENCE_ = "doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard (c0074)",
 	},
 	["tests/acceptance/c0074/done-gate.spec.luau"] = {
@@ -147,6 +148,17 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
 		["sandbox-exec"] = "tests whether it runs jailed, and clears that for one sweeper",
 	},
+	-- c0114: its nested gate run clears the marker so the copied runner acts as a top-level run
+	["tests/acceptance/c0114/gate-cover.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs the copied gate as a top-level run",
+	},
+	-- c0114: one fence call in a fixture gets the hook folder cleared and the jail marker unset or set, to prove the
+	-- fence refuses a checkout with no hooks outside the jail; this run's own environment is never changed
+	["tests/acceptance/c0114/guards.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs the copied runner as a top-level run",
+		PICKMAN_FENCE_ = "clears PICKMAN_FENCE_HOOKS for one fence call in a fixture",
+		["sandbox-exec"] = "sets the jail marker for one fence call in a fixture",
+	},
 	["tests/acceptance/c0078/jail-signals.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
 		["sandbox-exec"] = "tests whether it runs jailed",
@@ -158,17 +170,28 @@ local C0640 = renamed.id("c0640")
 local C0127 = renamed.id("c0127") -- its reuse.spec clears the marker so a copied runner acts as a top-level run
 local EXEMPT: { [string]: boolean } = {
 	["tests/lib/fence.luau"] = true,
-	["scripts/lib/fence.sh"] = true,
+	["z-nile/lib/fence.sh"] = true,
 	["tests/tooling/repo-fence.spec.luau"] = true,
-	[`tracker/issues/done/{C0640}/check.sh`] = true,
 }
-for _, dir in
-	{
-		`tracker/issues/{C0640}/acceptance`,
-		`tracker/issues/active/{C0640}/acceptance`,
-		"tests/acceptance/" .. C0640,
-	}
-do
+-- Every project root of the registry (design review 001 F5). Only a copy of the runner with no engine at all (some
+-- fixtures copy only tests/ and z-nile/lib/) uses the roots c0114 shipped with; an engine that is there but fails to
+-- load is an error, never a narrower scan (design review 002 F4).
+local ROOTS: { string } = { "tracker", "z-nile/.tracker" }
+if fs.isFile("z-nile/engine/projects.luau") then
+	local okP, lib = pcall(require, "@znile/engine/projects")
+	if not okP then
+		error(`repo-fence: z-nile/engine/projects.luau does not load: {lib}`)
+	end
+	ROOTS = (lib :: any).roots((lib :: any).load("."))
+end
+-- c0640 lives in z-nile's tracker root since c0114; every root and state is listed so a move never unexempts it
+local C0640_DIRS = { "tests/acceptance/" .. C0640 }
+for _, root in ROOTS do
+	for _, state in { "", "active/", "done/" } do
+		table.insert(C0640_DIRS, `{root}/issues/{state}{C0640}/acceptance`)
+	end
+end
+for _, dir in C0640_DIRS do
 	EXEMPT[`{dir}/fence.spec.luau`] = true
 	EXEMPT[`{dir}/lock.spec.luau`] = true
 	EXEMPT[(string.gsub(dir, "/acceptance$", "")) .. "/check.sh"] = true -- the fence's own checks
@@ -199,7 +222,7 @@ do
 	end
 end
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
-local EXEMPT_DIRS = { "scripts/lib/git-hooks/" }
+local EXEMPT_DIRS = { "z-nile/lib/git-hooks/" }
 local function exempt(path: string): boolean
 	for _, dir in EXEMPT_DIRS do
 		if string.sub(path, 1, #dir) == dir then
@@ -209,14 +232,16 @@ local function exempt(path: string): boolean
 	return EXEMPT[path] == true
 end
 
-local function files(dir: string, out: { string })
+local function files(dir: string, out: { string }, skip: { [string]: boolean }?)
 	if not fs.isDir(dir) then
 		return
 	end
 	for _, name in fs.readDir(dir) do
 		local path = `{dir}/{name}`
-		if fs.isDir(path) then
-			files(path, out)
+		if skip and skip[path] then
+			continue
+		elseif fs.isDir(path) then
+			files(path, out, skip)
 		elseif
 			string.match(name, "%.luau$")
 			or string.match(name, "%.sh$")
@@ -228,15 +253,22 @@ local function files(dir: string, out: { string })
 	end
 end
 
--- What runs as a check today: specs and their libraries (tests/), scripts, and every check.sh. Acceptance
--- specs prepared under tracker/ are scanned once promoted into tests/, which is when they start to run.
+-- What runs as a check today: specs and their libraries (tests/), scripts, z-nile's engine and gate (c0114) with its
+-- ./zn entry, and every check.sh under every project root. Acceptance specs prepared under a root are scanned once
+-- promoted into tests/, which is when they start to run.
 local function sources(): { string }
-	local all: { string } = {}
-	for _, dir in { "tests", "scripts" } do
-		files(dir, all)
+	local all: { string } = if fs.isFile("zn") then { "zn" } else {}
+	local skip: { [string]: boolean } = {}
+	for _, r in ROOTS do
+		skip[r] = true
+	end
+	for _, dir in { "tests", "scripts", "z-nile" } do
+		files(dir, all, skip)
 	end
 	local checks: { string } = {}
-	files("tracker", checks)
+	for _, r in ROOTS do
+		files(r, checks)
+	end
 	for _, path in checks do
 		if string.match(path, "/check%.sh$") then
 			table.insert(all, path)
@@ -277,7 +309,7 @@ return t.spec("repository fence", function(it)
 			t.expect(fs.isFile(`{configured}/reference-transaction`)).toBe(true)
 			t.expect(fs.isFile(`{configured}/pre-push`)).toBe(true)
 		end
-		local hooks = `{here}/scripts/lib/git-hooks`
+		local hooks = `{here}/z-nile/lib/git-hooks`
 		t.expect(fs.isFile(`{hooks}/reference-transaction`)).toBe(true)
 		t.expect(fs.isFile(`{hooks}/pre-push`)).toBe(true)
 		local refused = process.exec(`{hooks}/reference-transaction`, { "prepared" }, { cwd = here })
@@ -451,7 +483,7 @@ return t.spec("repository fence", function(it)
 			t.expect(string.find(r.stderr, "not allowed", 1, true) ~= nil).toBe(true)
 		end
 		-- and the push guard refuses them where hooks run
-		local hooks = `{here}/scripts/lib/git-hooks`
+		local hooks = `{here}/z-nile/lib/git-hooks`
 		for _, url in
 			{ "https://github.com/x/y.git", "github.com:x/y.git", "gh:x/y", "ssh://git@github.com/x/y" }
 		do

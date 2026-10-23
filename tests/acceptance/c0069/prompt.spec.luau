@@ -2,6 +2,7 @@
 -- c0750: `tracker.sh prompt <R>` reads a readied raft's prompt.md from the main checkout (the launch-raft skill's
 -- input), and `tracker.sh launch` is gone. Fixture under .cache/c0750-prompt: a seed with this tree's tooling and
 -- skills, a bare origin, a main clone (the main checkout), a named worktree. A recording `claude` is first on PATH.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -29,7 +30,7 @@ local function env(extra: { [string]: string }?): { [string]: string }
 	return out
 end
 local function run(cwd: string, cmd: string, args: { string }, extra: { [string]: string }?): Result
-	return fixture.exec(cwd, cmd, args, { env = env(extra) }) -- R0210: git and tracker.sh in a fixture only through the helper
+	return fixture.exec(cwd, cmd, args, { env = env(extra) }) -- R0210: git and ./zn in a fixture only through the helper
 end
 local function git(cwd: string, args: { string }): string
 	local r = run(cwd, "git", args)
@@ -122,11 +123,11 @@ return t.spec("tracker prompt", function(it)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		git(seed, { "config", "user.name", "t" })
 		git(seed, { "config", "user.email", "t@example.invalid" })
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		process.exec("cp", { `{root}/tracker/architecture.md`, `{seed}/tracker/architecture.md` })
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(seed, `tracker/{d}/.gitkeep`, "")
@@ -223,7 +224,7 @@ return t.spec("tracker prompt", function(it)
 		fs.removeFile(promptFile)
 		local r = tr(cap, { "prompt", "R0010" })
 		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "tracker.sh ready")).toBe(true)
+		t.expect(has(r.stderr, "./zn ready")).toBe(true)
 		t.expect(fs.isFile(promptFile)).toBe(false) -- the reader never regenerates
 		trOk(main, { "ready", "R0010" })
 		t.expect(fs.isFile(promptFile)).toBe(true)
@@ -238,7 +239,7 @@ return t.spec("tracker prompt", function(it)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
 
-	it("tracker.sh launch is gone and starts nothing", function()
+	it("./zn launch is gone and starts nothing", function()
 		local r = tr(main, { "launch", "R0010" })
 		t.expect(r.ok).toBe(false)
 		local withCmd = tr(main, { "launch", "R0010", "--", "claude", "x" })

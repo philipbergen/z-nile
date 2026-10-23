@@ -1,6 +1,7 @@
 --!strict
 -- c0880: `tracker.sh audit`, `list` on a tree with a duplicate id, and `renumber <item directory>` to separate the
 -- copies. A fixture repository without an origin under .cache/c0880-cli.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -54,12 +55,12 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 		process.exec("git", { "init", "-q", "-b", "main", repo }) -- raw: init to a named path
 		git({ "config", "user.name", "cli" })
 		git({ "config", "user.email", "cli@example.invalid" })
-		for _, p in { "scripts", ".luaurc" } do
+		for _, p in { ".luaurc" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{repo}/{p}` })
 		end
 		fs.writeDir(`{repo}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{repo}/tracker/templates` })
-		write(`{repo}/tracker/next`, "issue 21 a-b-c\nraft 11 a-b-c\n")
+		engine.copy(root, repo) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+		write(`{repo}/z-nile/next`, "issue 21 a-b-c\nraft 11 a-b-c\n")
 		write(`{repo}/tracker/issues/c0010/c0010.md`, C10)
 		write(`{repo}/tracker/issues/c0020/c0020.md`, C20)
 		write(
@@ -157,13 +158,13 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 	it("the tracker skill documents audit and renumbering a duplicate's copy", function()
 		local skill = fs.readFile(`{root}/.claude/skills/tracker/SKILL.md`)
 		local other = string.match(skill, "## Other commands\n(.-)\n## ") :: string
-		t.expect(has(other, "tracker.sh audit")).toBe(true)
+		t.expect(has(other, "./zn audit")).toBe(true)
 		local readOnly = string.match(skill, "the read%-only tracker commands ([^\n]+)") :: string
 		t.expect(has(readOnly, "`audit`")).toBe(true)
 		local dup = string.match(skill, "\n%- %*%*Duplicate ids%*%*([^\n]+)") :: string
 		t.expect(dup ~= nil).toBe(true)
-		t.expect(has(dup, "tracker.sh audit")).toBe(true)
-		t.expect(has(dup, "tracker.sh renumber <directory>")).toBe(true)
+		t.expect(has(dup, "./zn audit")).toBe(true)
+		t.expect(has(dup, "./zn renumber <directory>")).toBe(true)
 		t.expect(has(dup, "not in `done/`")).toBe(true)
 	end)
 

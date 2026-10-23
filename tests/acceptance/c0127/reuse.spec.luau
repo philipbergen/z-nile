@@ -211,14 +211,14 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(repo)
-		for _, rel in { "tests/run.luau", "tests/lib", "scripts/lib/ac.sh", "scripts/lib/fence.sh" } do
+		for _, rel in { "tests/run.luau", "tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" } do -- c0114: the guards moved
 			copyTree(rel)
 		end
-		for _, rel in { "scripts/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
+		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
 			copyTree(rel)
 		end
-		if fs.isDir(`{repo}/scripts/lib/git-hooks`) then
-			must(process.exec("chmod", { "-R", "+x", `{repo}/scripts/lib/git-hooks` }), "chmod hooks")
+		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
+			must(process.exec("chmod", { "-R", "+x", `{repo}/z-nile/lib/git-hooks` }), "chmod hooks")
 		end
 		must(process.exec("git", { "init", "-q", "-b", "main", repo }), "git init")
 		-- git below acts only once `repo` is proven to be the repository this spec just created

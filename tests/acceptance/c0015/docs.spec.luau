@@ -26,7 +26,7 @@ return t.spec("c0140 SETUP.md documents Beta publishing", function(it)
 	end)
 
 	it("documents the tools-only setup mode and how to publish by hand", function()
-		t.expect(has("scripts/setup.sh --tools")).toBe(true)
+		t.expect(has("z-nile/setup.sh --tools")).toBe(true)
 		t.expect(has("lune run scripts/deploy-beta")).toBe(true)
 	end)
 end)

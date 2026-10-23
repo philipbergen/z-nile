@@ -7,3 +7,4 @@ sourcemap.json
 .DS_Store
 .worktree/
 /tracker/rafts/active/*/prompt.md
+/*/.tracker/rafts/active/*/prompt.md

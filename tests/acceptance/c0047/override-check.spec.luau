@@ -33,7 +33,7 @@ return t.spec("c0450 override check", function(it)
 			t.expect(step ~= "").toBe(true)
 			for _, token in
 				{
-					"scripts/affected",
+					"z-nile/affected",
 					"grep -rlF",
 					"tests/acceptance",
 					"ALL",
@@ -67,7 +67,7 @@ return t.spec("c0450 override check", function(it)
 		for _, token in
 			{
 				"Overrides:",
-				"scripts/affected",
+				"z-nile/affected",
 				"grep -rlF",
 				"carries no list",
 				"tests/acceptance",
@@ -89,7 +89,7 @@ return t.spec("c0450 override check", function(it)
 	end)
 
 	it("the issue template's Regression guard has a visible Overrides line, outside the comment", function()
-		local tpl = fs.readFile("tracker/templates/issue/doc.md")
+		local tpl = fs.readFile("z-nile/templates/issue/doc.md")
 		local guard = section(tpl, "## Regression guard", "## ")
 		local visible = string.gsub(guard, "<!%-%-.-%-%->", "")
 		t.expect(has(visible, "Overrides:")).toBe(true)

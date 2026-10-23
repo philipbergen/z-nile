@@ -100,8 +100,8 @@ end
 -- A repository holding the runner and its guards (plus `extra` files), committed by a non-fixture identity.
 local function runnerRepo(dir: string, extra: { string })
 	fs.writeDir(dir)
-	local parts = { "tests/run.luau", "tests/lib", "scripts/lib/ac.sh", "scripts/lib/fence.sh" }
-	for _, rel in { "scripts/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
+	local parts = { "tests/run.luau", "tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
+	for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
 		table.insert(parts, rel)
 	end
 	for _, rel in extra do
@@ -110,8 +110,8 @@ local function runnerRepo(dir: string, extra: { string })
 	for _, rel in parts do
 		copyTree(dir, rel)
 	end
-	if fs.isDir(`{dir}/scripts/lib/git-hooks`) then
-		must(process.exec("chmod", { "-R", "+x", `{dir}/scripts/lib/git-hooks` }), "chmod hooks")
+	if fs.isDir(`{dir}/z-nile/lib/git-hooks`) then
+		must(process.exec("chmod", { "-R", "+x", `{dir}/z-nile/lib/git-hooks` }), "chmod hooks")
 	end
 	must(process.exec("git", { "init", "-q", "-b", "main", dir }), "git init")
 	-- no local identity: the runner refuses a repository whose identity is a fixture's
@@ -294,7 +294,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 			"chain",
 			-- the guard hooks named explicitly, as on an unjailed run: they hand the fixture's own hooks the same
 			-- arguments and input, and pass on their exit status
-			"\t\tlocal G = `-c core.hooksPath={here}/scripts/lib/git-hooks -c user.name=e2e -c user.email=e2e@example.invalid`\n"
+			"\t\tlocal G = `-c core.hooksPath={here}/z-nile/lib/git-hooks -c user.name=e2e -c user.email=e2e@example.invalid`\n"
 				.. "\t\tlocal fx, tgt = `{here}/.cache/f-chain`, `{here}/.cache/f-chain-tgt.git`\n"
 				.. "\t\tsh(`rm -rf {fx} {tgt} && git init -q -b main {fx} && git init -q --bare {tgt}`)\n"
 				.. '\t\tfs.writeFile(`{fx}/.git/hooks/pre-push`, `#!/bin/sh\\necho "$2" > {fx}/pp.args\\ncat > {fx}/pp.in\\n[ ! -f {fx}/fail ] || exit 3\\n`)\n'
@@ -376,7 +376,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		}, "\n")
 		local r = process.exec(
 			"bash",
-			{ "-c", script, "_", `{repo}/scripts/lib/ac.sh`, physical(repo) },
+			{ "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
 			{ cwd = repo, env = { GIT_DIR = `{repo}/.git` } }
 		)
 		t.expect(has(branches(), "ac-escaped")).toBe(false)
@@ -547,7 +547,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		-- as a check.sh that tracker.sh starts outside any spec run (one started by a spec keeps the spec's limits)
 		local check = process.exec(
 			"bash",
-			{ "-c", script, "_", `{repo}/scripts/lib/ac.sh`, physical(repo) },
+			{ "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
 			{ cwd = repo, env = { PICKMAN_FENCE_SPECS = "" } }
 		)
 		gitTry(repo, { "update-ref", "-d", "refs/remotes/self/main" })
@@ -640,7 +640,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		}, "\n")
 		local check = process.exec(
 			"bash",
-			{ "-c", script, "_", `{repo}/scripts/lib/ac.sh`, physical(repo) },
+			{ "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
 			{ cwd = repo }
 		)
 		gitTry(repo, { "update-ref", "-d", "refs/remotes/self/kept" })

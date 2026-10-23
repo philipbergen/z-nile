@@ -8,4 +8,4 @@ Some lists claim to be complete: the commands that may run in the main checkout,
 
 **Why:** R0040 design review 1 (F8): `lessons` was said to run in the main checkout, but the tracker skill's complete list of main-checkout commands did not name it.
 
-**How to apply:** grep the skills and `scripts/tracker/main.luau` for the lists a sibling command appears in, and add the new one to each, or say why not.
+**How to apply:** grep the skills and `z-nile/engine/main.luau` for the lists a sibling command appears in, and add the new one to each, or say why not.

@@ -138,7 +138,7 @@ return t.spec("c0060 changed files", function(it)
 	end)
 
 	it("scripts/affected takes its changed files from the module", function()
-		local text = fs.readFile(`{root}/scripts/affected.luau`)
+		local text = fs.readFile(`{root}/z-nile/affected.luau`)
 		local call = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
 		t.expect(string.find(text, call .. '("./lib/changed")', 1, true) ~= nil).toBe(true)
 		t.expect((string.find(text, "local function changedFiles", 1, true))).toBe(nil)

@@ -5,7 +5,7 @@ local t = require("@tests/lib/t")
 
 return t.spec("c0410 rules and mutants table", function(it)
 	it("the issue template has the table right after Test plan, before Acceptance criteria", function()
-		local doc = fs.readFile("tracker/templates/issue/doc.md")
+		local doc = fs.readFile("z-nile/templates/issue/doc.md")
 		local plan = string.find(doc, "\n## Test plan", 1, true)
 		local rules = string.find(doc, "\n### Rules and mutants", 1, true)
 		local ac = string.find(doc, "\n## Acceptance criteria", 1, true)

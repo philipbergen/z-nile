@@ -3,6 +3,7 @@
 -- ("; consequences: ..."), naming the finding; refuted answers need none. Driven in a throwaway clone (no origin,
 -- so no gh), inside this spec run (so done skips the full gate, c0800); each case starts from the same commit,
 -- a started raft with a two-finding review.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -81,35 +82,32 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		fs.writeDir(base)
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				write(path, fs.readFile(`{root}/{path}`))
 			end
 		end
 		git({ "config", "gc.auto", "0" })
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{work}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(dir) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(dir .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next the tracker numbers by the old rule (c0870)
-		if fs.isFile(`{work}/tracker/next`) then
-			fs.removeFile(`{work}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
-		must(tr({ "new", "issue", "f", "alpha" }), "new issue")
-		must(tr({ "new", "raft", "feature", "demo", "f0010", "--single" }), "new raft")
+		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+		must(
+			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
+			"new raft"
+		)
 		for _, doc in { "tracker/issues/f0010/f0010.md", "tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end

@@ -1,0 +1,39 @@
+#!/bin/sh
+# Push guard for checks (testing skill, "Specs never touch the real repository"). It runs in the pushing
+# repository, where z-nile/lib/fence.sh's config applies (the receiving side of a local push drops it, so the
+# reference-transaction guard can't see a push). $2 is the URL as given. A local one (an absolute path, a path
+# relative to the pushing worktree, or file://) is resolved to its repository, and a push into one listed in
+# PICKMAN_FENCE_REAL_GIT is refused. During spec runs (PICKMAN_FENCE_SPECS) a push goes only into an existing
+# local repository that isn't protected: anything else (https, ssh, host:path, an ssh alias) is refused.
+# Whatever it allows, it then runs the repository's own pre-push hook, if any (core.hooksPath would skip it).
+. "${0%/*}/.repo.sh"
+chain() {
+  own="$(repo_common)/hooks/pre-push"
+  [ -x "$own" ] && exec "$own" "$@"
+  exit 0
+}
+url=$2
+case $url in
+file://*) url=${url#file://} ;;
+esac
+if [ ! -d "$url" ]; then
+  if [ -n "$PICKMAN_FENCE_SPECS" ]; then
+    echo "fence: a spec may push only into a local fixture, not to $2; refused" >&2
+    exit 1
+  fi
+  chain "$@" # a network remote, from a check.sh flow
+fi
+[ -n "$PICKMAN_FENCE_REAL_GIT" ] || chain "$@"
+common=$(cd "$url" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+  git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || chain "$@"
+old_ifs=$IFS
+IFS=:
+for real in $PICKMAN_FENCE_REAL_GIT; do
+  if [ "$common" = "$real" ]; then
+    IFS=$old_ifs
+    echo "fence: a check tried to push into the real repository ($real); refused" >&2
+    exit 1
+  fi
+done
+IFS=$old_ifs
+chain "$@"

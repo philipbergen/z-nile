@@ -85,7 +85,7 @@ return t.spec("c0140 beta job in check.yml", function(it)
 			t.expect(keysOf(steps[1])).toEqual({ "uses" })
 			t.expect(steps[1].uses).toBe("actions/checkout@v4")
 			t.expect(keysOf(steps[2])).toEqual({ "env", "run" })
-			t.expect(steps[2].run).toBe("scripts/setup.sh --tools")
+			t.expect(steps[2].run).toBe("z-nile/setup.sh --tools")
 			t.expect(steps[2].env).toEqual({ GH_TOKEN = "${{ github.token }}" })
 			t.expect(keysOf(steps[3])).toEqual({ "env", "id", "run" })
 			t.expect(keysOf(steps[4])).toEqual({ "env", "if", "run" })
@@ -115,8 +115,12 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		"the workflow's triggers and the gate job are unchanged, and nothing runs on pull_request_target",
 		function()
 			local on: any = wf["on"]
-			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it
-			t.expect(on.push).toEqual({ branches = { "main" }, ["paths-ignore"] = { "tracker/**" } })
+			-- c0510: tracker-only pushes to main skip the gate; pull requests still run it. c0114 override: every
+			-- project root and the shared counter are tracker state
+			t.expect(on.push).toEqual({
+				branches = { "main" },
+				["paths-ignore"] = { "tracker/**", "z-nile/.tracker/**", "z-nile/next" },
+			})
 			t.expect(on.pull_request)
 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
 			t.expect(on.workflow_dispatch ~= nil).toBe(true)
@@ -171,12 +175,12 @@ return t.spec("c0140 beta job in check.yml", function(it)
 		"installs the tools without running the gate again, before it deploys, with no Roblox secret",
 		function()
 			local setup, setupAt = find(beta, function(s: any)
-				return has(s.run, "scripts/setup.sh")
+				return has(s.run, "z-nile/setup.sh")
 			end)
 			local _, deployAt = find(beta, function(s: any)
 				return s.id == "deploy"
 			end)
-			t.expect(setup.run).toBe("scripts/setup.sh --tools")
+			t.expect(setup.run).toBe("z-nile/setup.sh --tools")
 			t.expect(setupAt < deployAt).toBe(true)
 			t.expect(beta.steps[1].uses).toBe("actions/checkout@v4")
 		end

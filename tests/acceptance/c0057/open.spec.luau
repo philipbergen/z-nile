@@ -125,15 +125,12 @@ return t.spec("c0550 board opens by default", function(it)
 				row = line
 			end
 		end
-		t.expect(string.find(row, "`tracker.sh board [--out PATH] [-O]`", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(row, "`./zn board [--out PATH] [-O]`", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(row, "unless `-O`", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("the board workflow builds with -O, so CI never tries to start a browser", function()
 		local text = fs.readFile(".github/workflows/board.yml")
-		t.expect(
-			string.find(text, "run: scripts/tracker.sh board --out dist/board.html -O\n", 1, true) ~= nil
-		)
-			.toBe(true)
+		t.expect(string.find(text, "run: ./zn board --out dist/board.html -O\n", 1, true) ~= nil).toBe(true)
 	end)
 end)

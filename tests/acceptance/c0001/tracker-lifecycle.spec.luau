@@ -2,6 +2,7 @@
 -- c0010 AC1: the tracker CLI lifecycle works end to end, driven for real in a throwaway clone
 -- of the committed HEAD (no remote, so start/done skip push and gh).
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -67,11 +68,17 @@ return t.spec("tracker lifecycle", function(it)
 		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -82,35 +89,31 @@ return t.spec("tracker lifecycle", function(it)
 			end
 		end
 		-- start from an empty tracker so ids are predictable regardless of the real backlog
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local base = `{dir}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(base) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(base .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{dir}/tracker/next`) then
-			fs.removeFile(`{dir}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(dir)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
-		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new f")).toBe("tracker/issues/f0010/f0010.md")
-		t.expect(must(tr({ "new", "issue", "d", "beta" }), "new d")).toBe("tracker/issues/d0020/d0020.md")
-		t.expect(must(tr({ "new", "issue", "f", "gamma" }), "new f")).toBe("tracker/issues/f0030/f0030.md")
+		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new f"))
+			.toBe("tracker/issues/f0010/f0010.md")
+		t.expect(must(tr({ "new", "issue", "d", "beta", "--project", "pickman" }), "new d"))
+			.toBe("tracker/issues/d0020/d0020.md")
+		t.expect(must(tr({ "new", "issue", "f", "gamma", "--project", "pickman" }), "new f"))
+			.toBe("tracker/issues/f0030/f0030.md")
 	end)
 
 	it("rejects a raft that mixes types", function()
-		local r = tr({ "new", "raft", "feature", "mixed", "f0010", "d0020" })
+		local r = tr({ "new", "raft", "feature", "mixed", "f0010", "d0020", "--project", "pickman" })
 		t.expect(r.ok).toBe(false)
 		t.expect(string.find(r.stderr, "cannot contain", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("renumber steps an id and rewrites references", function()
-		t.expect(must(tr({ "new", "raft", "feature", "demo", "f0010", "f0030" }), "new raft"))
+		t.expect(
+			must(
+				tr({ "new", "raft", "feature", "demo", "f0010", "f0030", "--project", "pickman" }),
+				"new raft"
+			)
+		)
 			.toBe("tracker/rafts/R0010/R0010.md")
 		must(tr({ "renumber", "f0030", "f0031" }), "renumber")
 		local raftDoc = read("tracker/rafts/R0010/R0010.md")

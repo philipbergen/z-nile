@@ -2,6 +2,7 @@
 -- c0760: every tracker push to origin/main, and sync in the main checkout, brings the main checkout up to origin/main
 -- and rebuilds its board page (never opening a browser). Fixture under .cache/c0760-board: a seed with this
 -- tree's tooling and skills, a bare origin, a main clone (the main checkout), a named worktree and a second clone.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -140,11 +141,11 @@ return t.spec("tracker board follows main", function(it)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		git(seed, { "config", "user.name", "t" })
 		git(seed, { "config", "user.email", "t@example.invalid" })
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
 		process.exec("cp", { `{root}/tracker/architecture.md`, `{seed}/tracker/architecture.md` })
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(seed, `tracker/{d}/.gitkeep`, "")
@@ -177,7 +178,7 @@ return t.spec("tracker board follows main", function(it)
 	end)
 
 	it("new issue in a worktree brings the main checkout to origin/main and rebuilds its board", function()
-		local made = trOk(cap, { "new", "issue", "c", "zeta" })
+		local made = trOk(cap, { "new", "issue", "c", "zeta", "--project", "pickman" })
 		local id = string.match(made, "(c%d%d%d%d)") :: string
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
 		t.expect(fs.isFile(`{main}/tracker/issues/{id}/{id}.md`)).toBe(true)
@@ -193,9 +194,9 @@ return t.spec("tracker board follows main", function(it)
 		trOk(cap, { "status", "c0020", "preparing" })
 		current()
 		trOk(cap, { "status", "c0020", "new" })
-		local made = trOk(cap, { "new", "issue", "c", "eta" })
+		local made = trOk(cap, { "new", "issue", "c", "eta", "--project", "pickman" })
 		local id = string.match(made, "(c%d%d%d%d)") :: string
-		trOk(cap, { "new", "raft", "chore", "solo", id, "--single" })
+		trOk(cap, { "new", "raft", "chore", "solo", id, "--single", "--project", "pickman" })
 		current()
 		t.expect(has(board(), "Solo")).toBe(true)
 	end)
@@ -227,7 +228,7 @@ return t.spec("tracker board follows main", function(it)
 	it("a main checkout off main only warns, and the publish still succeeds", function()
 		git(main, { "switch", "-q", "-c", "side" })
 		local head = git(main, { "rev-parse", "HEAD" })
-		local r = tr(cap, { "new", "issue", "c", "theta" })
+		local r = tr(cap, { "new", "issue", "c", "theta", "--project", "pickman" })
 		t.expect(r.ok).toBe(true)
 		t.expect(has(r.stderr, "warning: board")).toBe(true)
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(head)
@@ -239,7 +240,7 @@ return t.spec("tracker board follows main", function(it)
 
 	it("no refresh without publishing (PICKMAN_PUBLISH=0)", function()
 		fs.removeFile(`{main}/{BOARD}`)
-		local r = tr(cap, { "new", "issue", "c", "iota" }, { PICKMAN_PUBLISH = "0" })
+		local r = tr(cap, { "new", "issue", "c", "iota", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
 		t.expect(r.ok).toBe(true)
 		t.expect(board()).toBe(nil)
 		git(cap, { "clean", "-fdq", "tracker" })

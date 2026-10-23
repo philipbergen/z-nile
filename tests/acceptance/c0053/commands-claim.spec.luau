@@ -44,8 +44,8 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 	end)
 
 	it("new raft claims its members in one commit, or none of them", function()
-		trOk(cap, { "new", "issue", "c", "delta" }) -- c0240
-		trOk(cap, { "new", "issue", "c", "epsilon" }) -- c0250
+		trOk(cap, { "new", "issue", "c", "delta", "--project", "pickman" }) -- c0240
+		trOk(cap, { "new", "issue", "c", "epsilon", "--project", "pickman" }) -- c0250
 		-- another terminal claims c0250 first
 		elsewhere({
 			["tracker/issues/c0250/c0250.md"] = (onOrigin("tracker/issues/c0250/c0250.md") :: string):gsub(
@@ -54,14 +54,14 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 			),
 		}, "other claims c0250")
 		local before = git(origin, { "rev-parse", "main" })
-		local r = tr(cap, { "new", "raft", "chore", "demo", "c0240", "c0250" })
+		local r = tr(cap, { "new", "raft", "chore", "demo", "c0240", "c0250", "--project", "pickman" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "c0250")).toBe(true)
 		t.expect(has(r.stderr, "preparing")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		t.expect(has(onOrigin("tracker/issues/c0240/c0240.md"), "status: new")).toBe(true)
 		t.expect(onOrigin("tracker/rafts/R0010/R0010.md")).toBe(nil)
-		trOk(cap, { "new", "raft", "chore", "demo", "c0240", "--single" })
+		trOk(cap, { "new", "raft", "chore", "demo", "c0240", "--single", "--project", "pickman" })
 		local raft = onOrigin("tracker/rafts/R0010/R0010.md")
 		t.expect(has(raft, "status: preparing")).toBe(true)
 		t.expect(has(raft, "issues: [c0240]")).toBe(true)

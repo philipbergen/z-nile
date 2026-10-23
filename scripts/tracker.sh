@@ -1,6 +1,3 @@
 #!/usr/bin/env bash
-# Tracker CLI entry point. See .claude/skills/tracker/SKILL.md.
-set -euo pipefail
-cd "$(dirname "$0")/.."
-export PATH="$HOME/.rokit/bin:$PATH"
-exec lune run scripts/tracker/main -- "$@"
+# Forwarder (c0114): the command is ./zn. Kept until every raft whose sequestered check.sh calls this path is done.
+exec bash "$(dirname "$0")/../zn" "$@"

@@ -2,6 +2,7 @@
 -- R0270 review 001 F6: a remap whose merge of origin/main conflicts keeps its remap commit, and a second remap must
 -- then refuse: the branch has no local compaction map yet, but its ids are already the new ones, and remapping again
 -- would renumber them a second time. Fixture under .cache/remap-once.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -69,12 +70,12 @@ return t.spec("remap runs once, even after a conflicting merge", function(it)
 		fs.writeDir(seed)
 		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
 		identity(seed)
-		for _, p in { "scripts", ".claude", ".luaurc", ".gitignore" } do
+		for _, p in { ".claude", ".luaurc", ".gitignore" } do
 			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
 		end
 		fs.writeDir(`{seed}/tracker`)
-		process.exec("cp", { "-R", `{root}/tracker/templates`, `{seed}/tracker/templates` })
-		write(`{seed}/tracker/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
+		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
 		write(`{seed}/tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
 		write(`{seed}/tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010]\n"))
 		git(seed, { "add", "-A" })

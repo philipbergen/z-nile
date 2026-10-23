@@ -4,6 +4,7 @@
 -- tree's tooling overlaid, tracker emptied) with raft R0010, a done raft R0020 and issues f0010,
 -- f0020; then a bare origin and a clone `main/`.
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -73,11 +74,18 @@ return t.spec("launch", function(it)
 		git(seed, { "config", "user.email", "e2e@example.invalid" })
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+			".gitignore",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -87,26 +95,12 @@ return t.spec("launch", function(it)
 				fs.writeFile(`{seed}/{path}`, fs.readFile(`{root}/{path}`))
 			end
 		end
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{seed}/tracker/{kind}/{state}`
-				if fs.isDir(dir) then
-					for _, name in fs.readDir(dir) do
-						if string.match(name, "^[fdcR]%d%d%d%d$") then
-							fs.removeDir(dir .. name)
-						end
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{seed}/tracker/next`) then
-			fs.removeFile(`{seed}/tracker/next`)
-		end
-		must(tr(seed, { "new", "issue", "f", "alpha" }), "new f0010")
-		must(tr(seed, { "new", "issue", "f", "beta" }), "new f0020")
-		must(tr(seed, { "new", "raft", "feature", "demo", "f0010" }), "raft demo")
-		must(tr(seed, { "new", "raft", "feature", "old", "f0020" }), "raft old")
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(seed)
+		must(tr(seed, { "new", "issue", "f", "alpha", "--project", "pickman" }), "new f0010")
+		must(tr(seed, { "new", "issue", "f", "beta", "--project", "pickman" }), "new f0020")
+		must(tr(seed, { "new", "raft", "feature", "demo", "f0010", "--project", "pickman" }), "raft demo")
+		must(tr(seed, { "new", "raft", "feature", "old", "f0020", "--project", "pickman" }), "raft old")
 		-- R0020 is finished
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-qm", "fixture" })

@@ -1,5 +1,5 @@
 --!strict
--- c0010 AC2: CI bootstraps exactly like a new host (scripts/setup.sh), can be dispatched by an
+-- c0010 AC2: CI bootstraps exactly like a new host (z-nile/setup.sh), can be dispatched by an
 -- agent, and skips only draft pull_request events.
 local fs = require("@lune/fs")
 local serde = require("@lune/serde")
@@ -12,14 +12,14 @@ local on = wf.on or wf[true]
 local job = wf.jobs and wf.jobs.gate
 
 return t.spec("ci workflow", function(it)
-	it("bootstraps via exactly `run: scripts/setup.sh` (which runs the full gate) with GH_TOKEN", function()
+	it("bootstraps via exactly `run: z-nile/setup.sh` (which runs the full gate) with GH_TOKEN", function()
 		t.expect(job ~= nil).toBe(true)
 		local found = false
 		for _, step in job.steps do
 			local run = if type(step.run) == "string"
 				then (string.gsub(string.gsub(step.run, "^%s+", ""), "%s+$", ""))
 				else ""
-			if run == "scripts/setup.sh" then
+			if run == "z-nile/setup.sh" then
 				found = true
 				t.expect(step.env and step.env.GH_TOKEN).toBe("${{ github.token }}")
 			end

@@ -4,6 +4,7 @@
 -- branch, no `origin` (so every tracker command runs freely), the working tree's tooling overlaid,
 -- and the tracker emptied. The spec passes from any branch and from a detached HEAD.
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -88,35 +89,28 @@ return t.spec("document naming", function(it)
 		git({ "checkout", "-q", "-B", "main" })
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates", ".gitignore" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+			".gitignore",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				write(path, fs.readFile(`{root}/{path}`))
 			end
 		end
 		-- empty tracker
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local dir = `{seed}/tracker/{kind}/{state}`
-				if fs.isDir(dir) then
-					for _, name in fs.readDir(dir) do
-						if string.match(name, "^[fdcR]%d%d%d%d$") then
-							fs.removeDir(dir .. name)
-						end
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{seed}/tracker/next`) then
-			fs.removeFile(`{seed}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(seed)
 
-		local out = must(tr({ "new", "issue", "f", "alpha" }), "new issue")
+		local out = must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
 		t.expect(out).toBe("tracker/issues/f0010/f0010.md")
 		t.expect(fs.isFile(`{seed}/tracker/issues/f0010/f0010.md`)).toBe(true)
 		t.expect(fs.isFile(`{seed}/tracker/issues/f0010/f0010-alpha.md`)).toBe(false)
@@ -126,7 +120,8 @@ return t.spec("document naming", function(it)
 	end)
 
 	it("new raft writes <ID>.md with a slug in the frontmatter", function()
-		local out = must(tr({ "new", "raft", "feature", "demo", "f0010" }), "new raft")
+		local out =
+			must(tr({ "new", "raft", "feature", "demo", "f0010", "--project", "pickman" }), "new raft")
 		t.expect(out).toBe("tracker/rafts/R0010/R0010.md")
 		t.expect(fs.isFile(`{seed}/tracker/rafts/R0010/R0010-demo.md`)).toBe(false)
 		local doc = read("tracker/rafts/R0010/R0010.md")
@@ -137,7 +132,7 @@ return t.spec("document naming", function(it)
 	it("new rejects a bad slug and creates nothing", function()
 		local before = ids("tracker/issues")
 		for _, bad in { "Bad Slug", "a/b", "UPPER", "9lead", "under_score", "" } do
-			local r = tr({ "new", "issue", "f", bad })
+			local r = tr({ "new", "issue", "f", bad, "--project", "pickman" })
 			if r.ok then
 				error(`new accepted the slug "{bad}"`)
 			end
@@ -163,7 +158,7 @@ return t.spec("document naming", function(it)
 	end)
 
 	it("a document without a slug is an error naming the file", function()
-		must(tr({ "new", "issue", "f", "beta" }), "new beta")
+		must(tr({ "new", "issue", "f", "beta", "--project", "pickman" }), "new beta")
 		local path = "tracker/issues/f0020/f0020.md"
 		local original = read(path)
 		write(path, (string.gsub(original, "\nslug: beta\n", "\n")))
@@ -294,11 +289,11 @@ return t.spec("document naming", function(it)
 	it("two branches creating the same id conflict on the document", function()
 		local tip = git({ "rev-parse", "HEAD" })
 		git({ "checkout", "-q", "-b", "collide-a" })
-		local a = must(tr({ "new", "issue", "c", "first" }), "new on a")
+		local a = must(tr({ "new", "issue", "c", "first", "--project", "pickman" }), "new on a")
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "a" })
 		git({ "checkout", "-q", "-b", "collide-b", tip })
-		local b = must(tr({ "new", "issue", "c", "second" }), "new on b")
+		local b = must(tr({ "new", "issue", "c", "second", "--project", "pickman" }), "new on b")
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "b" })
 		-- both branches picked the same number, so both wrote the same path

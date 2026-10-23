@@ -4,6 +4,7 @@
 -- command goes through fixture.git and fixture.exec (and so is checked), except `git init` and `git clone` to a
 -- path this module names itself. Each caller passes a name that no other spec file uses (the c0049 rule); the
 -- path is built by concatenation, so only that name counts.
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -29,7 +30,7 @@ local function identity(dir: string, name: string)
 	fixture.git(dir, { "config", "user.email", `{name}@example.invalid` })
 end
 
--- Builds `.cache/<name>`: a seed commit (the scripts, the templates, empty tracker folders, and `seed`'s extra files),
+-- Builds `.cache/<name>`: a seed commit (the tooling, empty tracker folders, and `seed`'s extra files),
 -- a bare origin made from it, and two clones of the origin. Removes what an earlier run left.
 function trackerfix.new(name: string, seed: { [string]: string }?): Fixture
 	local root = fixture.physical(".")
@@ -45,13 +46,10 @@ function trackerfix.new(name: string, seed: { [string]: string }?): Fixture
 	fs.writeDir(`{source}/tracker`)
 	create(base, { "init", "-q", "-b", "main", source })
 	identity(source, name)
-	process.exec("cp", { "-R", `{root}/scripts`, `{source}/scripts` })
-	process.exec("cp", { "-R", `{root}/tracker/templates`, `{source}/tracker/templates` })
+	-- ./zn, scripts/ and z-nile/'s tooling, with no items, counter or map; empty folders under both project roots
+	engine.copy(root, source)
+	engine.roots(source)
 	fs.writeFile(`{source}/.gitignore`, ".cache/\n.worktree/\n")
-	for _, dir in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-		fs.writeDir(`{source}/tracker/{dir}`)
-		fs.writeFile(`{source}/tracker/{dir}/.gitkeep`, "")
-	end
 	local extra: { [string]: string } = seed or {}
 	for path, text in extra do
 		local parent = string.match(path, "^(.*)/[^/]+$")

@@ -1,6 +1,7 @@
 --!strict
 -- Regression guard (c0500): `tracker.sh new` keeps its multiple-of-10 spacing, which leaves room to insert
 -- issues. Only `renumber` advances by one.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -14,9 +15,11 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 local base = trim(process.exec("mktemp", { "-d" }).stdout)
 fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
 process.exec("git", { "init", "-q" }, { cwd = base })
-process.exec("cp", { "-R", `{root}/tracker/templates`, `{base}/tracker-templates` })
+-- c0114 override: the templates and the engine moved to z-nile/
+fs.writeDir(`{base}/z-nile`)
+process.exec("cp", { "-R", `{root}/z-nile/templates`, `{base}/z-nile/templates` })
+engine.registry(base) -- c0114: a tree without the registry refuses
 fs.writeDir(`{base}/tracker`)
-process.exec("mv", { `{base}/tracker-templates`, `{base}/tracker/templates` })
 
 local function put(id: string)
 	fs.writeDir(`{base}/tracker/issues/{id}`)
@@ -24,10 +27,13 @@ local function put(id: string)
 end
 
 local function new(args: { string }): process.ExecResult
-	local all = { "run", `{root}/scripts/tracker/main`, "--", "new" }
+	local all = { "run", `{root}/z-nile/engine/main`, "--", "new" }
 	for _, a in args do
 		table.insert(all, a)
 	end
+	-- c0114: at a checkout's root the project is named
+	table.insert(all, "--project")
+	table.insert(all, "pickman")
 	return process.exec("lune", all, { cwd = base })
 end
 

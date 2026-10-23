@@ -30,23 +30,23 @@ return t.spec("claims.taken", function(it)
 	end)
 
 	it("a stamp on a whole status line under tracker/ is taken, done/ included", function()
-		t.expect((claims.taken(repo, "active-quiet-copper-falcon", "main"))).toBe(true)
+		t.expect((claims.taken(repo, "active-quiet-copper-falcon", "main", { "tracker" }))).toBe(true)
 	end)
 
 	it(
 		"a stamp nobody carries is free, and so is one only outside tracker/ or inside a longer line",
 		function()
-			t.expect((claims.taken(repo, "active-brisk-amber-otter", "main"))).toBe(false)
-			t.expect((claims.taken(repo, "active-outside-tracker-dir", "main"))).toBe(false)
-			t.expect((claims.taken(repo, "active-quiet-copper", "main"))).toBe(false) -- a prefix is not the value
+			t.expect((claims.taken(repo, "active-brisk-amber-otter", "main", { "tracker" }))).toBe(false)
+			t.expect((claims.taken(repo, "active-outside-tracker-dir", "main", { "tracker" }))).toBe(false)
+			t.expect((claims.taken(repo, "active-quiet-copper", "main", { "tracker" }))).toBe(false) -- a prefix is not the value
 		end
 	)
 
 	it("an error is no answer: a bad ref, or a value that is not a stamp", function()
-		local taken, err = claims.taken(repo, "active-brisk-amber-otter", "no-such-ref")
+		local taken, err = claims.taken(repo, "active-brisk-amber-otter", "no-such-ref", { "tracker" })
 		t.expect(taken).toBe(nil)
 		t.expect(err ~= nil and err ~= "").toBe(true)
-		local bad, why = claims.taken(repo, "active-a.*", "main")
+		local bad, why = claims.taken(repo, "active-a.*", "main", { "tracker" })
 		t.expect(bad).toBe(nil)
 		t.expect(why ~= nil).toBe(true)
 	end)

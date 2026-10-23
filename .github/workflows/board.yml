@@ -16,10 +16,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: scripts/setup.sh --tools
+      - run: z-nile/setup.sh --tools
         env:
           GH_TOKEN: ${{ github.token }}
-      - run: scripts/tracker.sh board --out dist/board.html -O
+      - run: ./zn board --out dist/board.html -O
       - uses: actions/upload-artifact@v4
         with:
           name: tracker-board

@@ -5,7 +5,7 @@
 -- A top-level run (no valid PICKMAN_TEST_FENCE for this checkout):
 --   1. takes this checkout's lock, .cache/tests-run.lock, so two runs never share the .cache fixtures;
 --   2. snapshots what no check may change (see `snapshot`);
---   3. re-runs itself under scripts/lib/fence.sh's guards (git fenced inside .cache, inherited repository
+--   3. re-runs itself under z-nile/lib/fence.sh's guards (git fenced inside .cache, inherited repository
 --      overrides unset, ref updates in the real repository refused, no pushes into it), with the marker;
 --   4. snapshots again, releases the lock, and fails the run if anything a check must not change did.
 -- A run with a valid marker (a worker, or a run started from inside a run) is already guarded: it only
@@ -771,7 +771,7 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . scripts/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . z-nile/lib/fence.sh && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 3 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,

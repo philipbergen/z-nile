@@ -2,6 +2,7 @@
 -- c0480: `tracker.sh start` refuses a raft whose member issue depends on an item outside the raft that is not done.
 -- Driven for real in a throwaway clone (no remote, so start skips push and gh), like the lifecycle spec.
 local clone = require("@tests/lib/clone")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -51,11 +52,17 @@ return t.spec("c0480 start checks depends_on", function(it)
 		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
-		local listed = process.exec(
-			"git",
-			{ "ls-files", "-co", "--exclude-standard", "scripts", "tracker/templates" },
-			{ cwd = root }
-		)
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")
@@ -67,33 +74,24 @@ return t.spec("c0480 start checks depends_on", function(it)
 		end
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local base = `{dir}/tracker/{kind}/{state}`
-				for _, name in fs.readDir(base) do
-					if string.match(name, "^[fdcR]%d%d%d%d$") then
-						fs.removeDir(base .. name)
-					end
-				end
-			end
-		end
-		-- and its counter: without tracker/next ids follow the old rule (c0870)
-		if fs.isFile(`{dir}/tracker/next`) then
-			fs.removeFile(`{dir}/tracker/next`)
-		end
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(dir)
 		for _, slug in { "base", "needs-base", "pair-a", "pair-b", "ghost", "late-a", "late-b" } do
-			must(tr({ "new", "issue", "f", slug }), "new issue " .. slug)
+			must(tr({ "new", "issue", "f", slug, "--project", "pickman" }), "new issue " .. slug)
 		end
 		-- f0010 base; f0020 needs it; f0040 needs its raft-mate f0030; f0050 needs a missing id; f0070 (second member) needs its raft-mate f0060 and then f0010
 		edit("tracker/issues/f0020/f0020.md", "depends_on: %[%]", "depends_on: [f0010]")
 		edit("tracker/issues/f0040/f0040.md", "depends_on: %[%]", "depends_on: [f0030]")
 		edit("tracker/issues/f0050/f0050.md", "depends_on: %[%]", "depends_on: [f9999]")
 		edit("tracker/issues/f0070/f0070.md", "depends_on: %[%]", "depends_on: [f0060, f0010]")
-		must(tr({ "new", "raft", "feature", "base", "f0010" }), "raft base")
-		must(tr({ "new", "raft", "feature", "needs-base", "f0020" }), "raft needs-base")
-		must(tr({ "new", "raft", "feature", "pair", "f0030", "f0040" }), "raft pair")
-		must(tr({ "new", "raft", "feature", "ghost", "f0050" }), "raft ghost")
-		must(tr({ "new", "raft", "feature", "late", "f0060", "f0070" }), "raft late")
+		must(tr({ "new", "raft", "feature", "base", "f0010", "--project", "pickman" }), "raft base")
+		must(
+			tr({ "new", "raft", "feature", "needs-base", "f0020", "--project", "pickman" }),
+			"raft needs-base"
+		)
+		must(tr({ "new", "raft", "feature", "pair", "f0030", "f0040", "--project", "pickman" }), "raft pair")
+		must(tr({ "new", "raft", "feature", "ghost", "f0050", "--project", "pickman" }), "raft ghost")
+		must(tr({ "new", "raft", "feature", "late", "f0060", "f0070", "--project", "pickman" }), "raft late")
 		for _, doc in
 			{
 				"tracker/issues/f0010/f0010.md",

@@ -1,10 +1,11 @@
 name: check
 # Runs only when a PR is ready for review (not drafts) and on main, to keep CI load low.
-# workflow_dispatch lets an agent prove its draft branch green: scripts/ci-verify.sh.
+# workflow_dispatch lets an agent prove its draft branch green: z-nile/ci-verify.sh.
 on:
   push:
     branches: [main]
-    paths-ignore: ['tracker/**'] # tracker state is pushed straight to main in tiny commits (c0510)
+    # tracker state is pushed straight to main in tiny commits (c0510): every project root and the shared counter (c0114)
+    paths-ignore: ['tracker/**', 'z-nile/.tracker/**', 'z-nile/next']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}
@@ -21,17 +22,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # the tracker lifecycle spec clones the repo and needs full history
-      # the same bootstrap a new host uses (SETUP.md); its last stage is scripts/check.sh --full
-      - run: scripts/setup.sh
+      # the same bootstrap a new host uses (SETUP.md); its last stage is z-nile/check.sh --full
+      - run: z-nile/setup.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      # sequestered acceptance specs of the dispatched branch's raft, proven on Linux before `tracker.sh done`
+      # sequestered acceptance specs of the dispatched branch's raft, proven on Linux before `./zn done`
       # (main holds other readied rafts, whose code does not exist on this branch)
       - if: github.event_name == 'workflow_dispatch'
         run: |
           # only a raft branch (R0025-ready-raft) has a raft: there, a failing `members` fails the step
           case $GITHUB_REF_NAME in
-            R[0-9][0-9][0-9][0-9]-*) r=${GITHUB_REF_NAME%%-*}; scripts/tracker.sh find "$r" >/dev/null; dirs=$(scripts/tracker.sh members "$r") ;;
+            R[0-9][0-9][0-9][0-9]-*) r=${GITHUB_REF_NAME%%-*}; ./zn find "$r" >/dev/null; dirs=$(./zn members "$r") ;;
             *) echo "not a raft branch: no sequestered acceptance specs to run"; dirs= ;;
           esac
           files=$(for d in $dirs; do find "$d" -path '*/active/*/acceptance/*.spec.luau'; done | sort)
@@ -57,7 +58,7 @@ jobs:
       cancel-in-progress: false # a running publish finishes; only the newest waiting one survives
     steps:
       - uses: actions/checkout@v4
-      - run: scripts/setup.sh --tools
+      - run: z-nile/setup.sh --tools
         env:
           GH_TOKEN: ${{ github.token }}
       - id: deploy

@@ -130,9 +130,14 @@ return t.spec("c0111 metrics over lessons", function(it)
 			local function at(d: string): fixture.Options
 				return { env = { GIT_COMMITTER_DATE = d, GIT_AUTHOR_DATE = d }, stdin = nil }
 			end
-			fixture.git(f.main, { "rm", "-q", "--cached", "scripts/tracker/lessons.luau" })
+			-- c0114 override: the module's home is z-nile/engine/lessons.luau, and its old path is a forwarder; both
+			-- are added on that day
+			fixture.git(
+				f.main,
+				{ "rm", "-q", "--cached", "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" }
+			)
 			fixture.git(f.main, { "commit", "-q", "--amend", "--no-edit" }, at("2020-01-01T00:00:00Z"))
-			fixture.git(f.main, { "add", "scripts/tracker/lessons.luau" })
+			fixture.git(f.main, { "add", "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" })
 			fixture.git(f.main, { "commit", "-q", "-m", "lessons" }, at("2030-06-01T20:00:00-07:00"))
 			fixture.git(f.main, { "add", "-A" })
 			fixture.git(f.main, { "commit", "-q", "-m", "tracker: compact ids" })

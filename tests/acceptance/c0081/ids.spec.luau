@@ -17,8 +17,8 @@ end
 
 return t.spec("c0870 ids", function(it)
 	it("names the two files", function()
-		t.expect(ids.FILE).toBe("tracker/next")
-		t.expect(ids.MAP_FILE).toBe("tracker/compaction.txt")
+		t.expect(ids.FILE).toBe("z-nile/next")
+		t.expect(ids.MAP_FILE).toBe("z-nile/compaction.txt")
 	end)
 
 	it("f, d and c share the issue space; R is the raft space; anything else has none", function()

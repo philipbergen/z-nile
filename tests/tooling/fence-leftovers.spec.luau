@@ -43,14 +43,14 @@ return t.spec("a run leaves no process behind", function(it)
 			fs.removeDir(repo)
 		end
 		fs.writeDir(`{repo}/tests/probe`)
-		fs.writeDir(`{repo}/scripts/lib`)
+		fs.writeDir(`{repo}/z-nile/lib`)
 		for _, rel in
 			{
 				"tests/run.luau",
 				"tests/lib",
-				"scripts/lib/ac.sh",
-				"scripts/lib/fence.sh",
-				"scripts/lib/git-hooks",
+				"z-nile/lib/ac.sh",
+				"z-nile/lib/fence.sh",
+				"z-nile/lib/git-hooks",
 			}
 		do
 			copyTree(rel)
@@ -58,7 +58,7 @@ return t.spec("a run leaves no process behind", function(it)
 		for _, rel in { ".luaurc", "rokit.toml", ".gitignore" } do
 			copyTree(rel)
 		end
-		must(process.exec("chmod", { "-R", "+x", `{repo}/scripts/lib/git-hooks` }), "chmod")
+		must(process.exec("chmod", { "-R", "+x", `{repo}/z-nile/lib/git-hooks` }), "chmod")
 		fs.writeFile(
 			`{repo}/tests/probe/leave.spec.luau`,
 			`--!strict\nlocal process = {REQ}("@lune/process")\nlocal t = {REQ}("@tests/lib/t")\n`

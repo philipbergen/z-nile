@@ -1,7 +1,7 @@
 --!strict
 -- Structural rules from the `architecture` and `testing` skills, enforced mechanically.
 local fs = require("@lune/fs")
-local graph = require("../../scripts/lib/graph")
+local graph = require("../../z-nile/lib/graph")
 local t = require("@tests/lib/t")
 
 local LOGIC = "src/shared/Logic"
@@ -69,7 +69,15 @@ return t.spec("architecture", function(it)
 
 	it("every Luau file is --!strict", function()
 		local bad = {}
-		for _, f in graph.listLuau("src", graph.listLuau("tests", graph.listLuau("scripts"))) do
+		-- z-nile/ is the engine and the gate (c0114); its .tracker/ holds tracker documents, like tracker/
+		local all = graph.listLuau(
+			"src",
+			graph.listLuau("tests", graph.listLuau("scripts", graph.listLuau("z-nile")))
+		)
+		for _, f in all do
+			if string.sub(f, 1, 15) == "z-nile/.tracker" then
+				continue
+			end
 			if not string.match(fs.readFile(f), "^%-%-!strict") then
 				table.insert(bad, f)
 			end

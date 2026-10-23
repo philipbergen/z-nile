@@ -9,7 +9,7 @@ local Beta = require("@scripts/lib/beta")
 local OpenCloud = require("@scripts/lib/opencloud")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local sh = require("@scripts/lib/sh")
+local sh = require("@znile/lib/sh")
 
 local okPlan, planned = pcall(Beta.plan, process.env)
 if not okPlan then

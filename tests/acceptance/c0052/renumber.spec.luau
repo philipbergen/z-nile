@@ -2,6 +2,7 @@
 -- `tracker.sh renumber <old>` with no <new> (c0500): the next free number is ONE above the highest number
 -- of that kind in the local tree and on origin/main. Each case builds a throwaway git repo outside this
 -- one: origin/main is a commit holding the "origin" items, the working tree holds the "local" ones.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -38,6 +39,7 @@ local function commitItems(base: string, branch: string, items: { string }, bodi
 	for _, path in items do
 		put(base, path, bodies and bodies[path])
 	end
+	engine.registry(base) -- c0114: every commit has the registry; a tree without one refuses
 	git(base, { "add", "-A" })
 	git(base, { "commit", "-q", "-m", branch })
 end
@@ -69,7 +71,7 @@ local function fixture(
 end
 
 local function tracker(base: string, args: { string }): process.ExecResult
-	local all = { "run", `{root}/scripts/tracker/main`, "--" }
+	local all = { "run", `{root}/z-nile/engine/main`, "--" }
 	for _, a in args do
 		table.insert(all, a)
 	end

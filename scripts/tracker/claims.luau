@@ -1,30 +1,5 @@
 --!strict
--- Claim stamps (R0025 review 004 F1, review 005 F1): `stop` gives back exactly the issues carrying a raft's claim
--- stamp, so a new claim must carry a value no item on origin/main already has, done/ included.
-local process = require("@lune/process")
-
-local claims = {}
-
--- Whether any tracker document on `ref` (default origin/main), in the repository at `cwd`, has the line
--- `status: <value>`. True or false, or nil and git's message when the question could not be answered: the caller
--- refuses then, never guesses. One `git grep` (exit 0: found, 1: not found, anything else: an error).
-function claims.taken(cwd: string, value: string, ref: string?): (boolean?, string?)
-	if not string.match(value, "^[%a%-]+$") then
-		return nil, `not a stamp: {value}`
-	end
-	local r = process.exec(
-		"git",
-		{ "grep", "-q", "-E", `^status: {value}$`, ref or "origin/main", "--", "tracker/" },
-		{
-			cwd = cwd,
-		}
-	)
-	if r.code == 0 then
-		return true, nil
-	elseif r.code == 1 then
-		return false, nil
-	end
-	return nil, (string.gsub(r.stderr .. r.stdout, "%s+$", ""))
-end
-
-return claims
+-- Forwarder (c0114): moved to z-nile/engine/claims.luau. Kept for the specs that require this path; removed with the
+-- scripts/tracker.sh forwarder.
+local m = require("../../z-nile/engine/claims")
+return m
