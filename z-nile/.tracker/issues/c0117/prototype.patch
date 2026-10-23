@@ -326,10 +326,10 @@ index 1bfecaf6..41321e22 100644
  	},
 diff --git a/tests/lib/fakecli.luau b/tests/lib/fakecli.luau
 new file mode 100644
-index 00000000..b350c71f
+index 00000000..93ee22bc
 --- /dev/null
 +++ b/tests/lib/fakecli.luau
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,272 @@
 +--!strict
 +-- Fake model CLIs for the dispatcher's specs (c0117): `claude`, `grok` and `agent` scripts that print the stream
 +-- lines each real CLI prints (from c0117's probes) and act as a mode file says: `<fakes>/<cli>.<step>`, else
@@ -439,6 +439,14 @@ index 00000000..b350c71f
 +		'slowreview) for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo \'{"type":"system"}\'; sleep 1; done; d=$(./zn find "$id"); printf "# Review 001\\n\\nVerdict: approve\\n" > "$d/design-review-001.md"; '
 +			.. ok
 +			.. " ;;",
++		-- an author that waits on its review outside any tool call (its own limit is stall_seconds)
++		[[waitplain) echo '{"type":"system"}'; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; ]]
++			.. ok
++			.. " ;;",
++		-- a reviewer silent for 12 s inside one tool call (within its tool_seconds), then its review
++		[[silenttool) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; sleep 12; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; d=$(./zn find "$id"); printf "# Review 001\n\nVerdict: approve\n" > "$d/design-review-001.md"; ]]
++			.. ok
++			.. " ;;",
 +		-- a reviewer that goes quiet past its own stall limit
 +		"quietreview) sleep 20; " .. ok .. " ;;",
 +		"esac",
@@ -478,6 +486,21 @@ index 00000000..b350c71f
 +		}, "\n")
 +	)
 +	process.exec("chmod", { "+x", `{bin}/gh` })
++	-- git itself, but a fetch into a run's own ref fails while <fakes>/fetchfail counts down (a lock another process
++	-- holds: review 005 F1's retry)
++	local real = (string.gsub(process.exec("sh", { "-c", "command -v git" }).stdout, "%s+$", ""))
++	fs.writeFile(
++		`{bin}/git`,
++		table.concat({
++			"#!/bin/sh",
++			'if [ "$1" = fetch ] && [ -f "$FAKE_DIR/fetchfail" ]; then case "$*" in *refs/zn-dispatch/run-*) '
++				.. 'n=$(cat "$FAKE_DIR/fetchfail"); if [ "$n" -gt 0 ]; then echo $((n-1)) > "$FAKE_DIR/fetchfail"; '
++				.. 'echo "error: cannot lock ref (fake)" >&2; exit 1; fi ;; esac; fi',
++			`exec "{real}" "$@"`,
++			"",
++		}, "\n")
++	)
++	process.exec("chmod", { "+x", `{bin}/git` })
 +	local token = `{f.base}/agent-token`
 +	fs.writeFile(token, "fake-agent-token\n")
 +	local h = { f = f, bin = bin, fakes = fakes, token = token }
@@ -891,10 +914,10 @@ index 00000000..baeb81ba
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
 new file mode 100644
-index 00000000..eae3095e
+index 00000000..d1f3f1ec
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/control-cli.spec.luau
-@@ -0,0 +1,742 @@
+@@ -0,0 +1,814 @@
 +--!strict
 +-- c0117 AC10: the dispatcher's control of a run, for real with fake CLIs (@tests/lib/fakecli): the chain stops at
 +-- questions.md and retry keeps the answers; `dispatch new` captures and chains; a review the author starts through the
@@ -1015,6 +1038,8 @@ index 00000000..eae3095e
 +			["tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
 +			["tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
 +			["tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
++			["tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
++			["tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 16\nstall_seconds = 6\n",
 +			["tracker/issues/c0096/c0096.md"] = string.gsub(
 +				trackerfix.stub("c0096", "rafted-thing", "prepared-quiet-copper-falcon"),
 +				"design: draft",
@@ -1280,6 +1305,54 @@ index 00000000..eae3095e
 +		end
 +	)
 +
++	it(
++		"each run fetches into refs of its own: two runs publishing at once both pass, even with a shared ref locked",
++		function()
++			-- review 005 F1: a lock on the old shared ref stands for another fetch holding it; a run of its own never sees it
++			fakecli.clear(h)
++			local lockDir = `{h.f.main}/.git/refs/zn-dispatch`
++			fs.writeDir(lockDir)
++			fs.writeFile(`{lockDir}/main.lock`, "")
++			mode("claude", "script")
++			fs.writeFile(
++				`{h.fakes}/script.sh`,
++				'for i in 1 2 3 4 5; do ./zn new issue c "$id-note-$i" --desc "from $id" > /dev/null 2>&1; echo "published=$?"; done\n'
++			)
++			local results: { [string]: fixture.Result } = {}
++			local done = 0
++			for _, id in { "c0101", "c0102" } do
++				task.spawn(function()
++					results[id] = zn({ "dispatch", "z-design", id })
++					done += 1
++				end)
++			end
++			local waited = 0
++			while done < 2 and waited < 240 do
++				waited += task.wait(0.2)
++			end
++			fs.removeFile(`{lockDir}/main.lock`)
++			t.expect(done).toBe(2)
++			t.expect(results.c0101.code).toBe(0)
++			t.expect(results.c0102.code).toBe(0)
++			t.expect(count(fakecli.log(h), "published=0")).toBe(10)
++			-- and each run's refs are gone at its end
++			t.expect(fixture.git(h.f.main, { "for-each-ref", "refs/zn-dispatch/" })).toBe("")
++		end
++	)
++
++	it("a fetch that fails on a lock is retried; a lost run's leftover refs are swept", function()
++		fakecli.clear(h)
++		fs.writeFile(`{h.fakes}/fetchfail`, "2\n")
++		local r = zn({ "dispatch", "z-design", "c0010" })
++		t.expect(r.code).toBe(0)
++		t.expect((string.gsub(fs.readFile(`{h.fakes}/fetchfail`), "%s+$", ""))).toBe("0")
++		fs.removeFile(`{h.fakes}/fetchfail`)
++		-- a ref a lost run left (no one holds its lock) goes at the next run's start
++		fixture.git(h.f.main, { "update-ref", "refs/zn-dispatch/run-dead/main", "HEAD" })
++		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
++		t.expect(fixture.git(h.f.main, { "for-each-ref", "refs/zn-dispatch/" })).toBe("")
++	end)
++
 +	it("the shared watermark only moves forward: an older main never overwrites a newer one", function()
 +		local dir = `{h.f.base}/mark-forward`
 +		local path = `{dir}/main-seen`
@@ -1321,12 +1394,34 @@ index 00000000..eae3095e
 +			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
 +			-- claude's own shell-command limits raised in the step's environment
 +			t.expect(has(fakecli.log(h), "bashmax=7200000")).toBe(true)
-+			-- a nested reviewer that goes quiet: nothing hangs, the step stalls at its limits
++			-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs
 +			fakecli.clear(h)
 +			mode("claude.z-design", "waitreview")
 +			mode("claude.zz-review", "quietreview")
 +			zn({ "dispatch", "z-design", "c0095" })
-+			t.expect(fakecli.state(h, "c0095").outcome).toBe("stalled")
++			local newest, n = "", 0
++			for _, name in fs.readDir(dirOf("c0095")) do
++				local k = tonumber(string.match(name, "^zz%-review%-design%-c0095%-(%d+)$") or "")
++				if k and k > n then
++					newest, n = name, k
++				end
++			end
++			t.expect(fakecli.state(h, "c0095", newest).outcome).toBe("stalled")
++		end
++	)
++
++	it(
++		"a reviewer silent but within its own limits keeps its author alive past the author's own limit",
++		function()
++			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 6 and
++			-- the reviewer is silent 12 s inside one tool call, within its tool_seconds = 16
++			fakecli.clear(h)
++			mode("claude.z-design", "waitplain")
++			mode("claude.zz-review", "silenttool")
++			local r = zn({ "dispatch", "z-design", "c0097" })
++			t.expect(fakecli.state(h, "c0097").outcome).toBe("ok")
++			t.expect(r.code).toBe(0)
++			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
 +		end
 +	)
 +
@@ -2329,10 +2424,10 @@ index 00000000..f072e11e
 +end)
 diff --git a/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
 new file mode 100644
-index 00000000..1c807acc
+index 00000000..ff336b47
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0117/acceptance/docs.spec.luau
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,211 @@
 +--!strict
 +-- c0117 AC14: the skills, the README, AGENTS.md, the usage and the prompt template say what the design's Docs part
 +-- says: the headless rules in every model step's skill, word for word; the review model of the CLI wherever a skill
@@ -2380,6 +2475,7 @@ index 00000000..1c807acc
 +			at(h, "with the agent's own GitHub credential", name)
 +			at(h, "without `--tokens` for your own session", name)
 +			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code|stream>`", name)
++			at(h, "give that one command a two-hour timeout", name)
 +			if first then
 +				t.expect(h).toBe(first)
 +			end
@@ -2455,6 +2551,7 @@ index 00000000..1c807acc
 +				"another run's advance is never a trip",
 +				"writes a heartbeat in its parent's state folder",
 +				"`BASH_MAX_TIMEOUT_MS`",
++				'a beat means "alive and within my limits"',
 +				"fetched from `refs/pull/<n>/head`",
 +				"calls are not tokens, so the user tunes it",
 +				'- **The agent credential** (the user\'s "Bot token, no bypass").',
@@ -4374,10 +4471,10 @@ index 00000000..377c5995
 +exec "$real" "$@"
 diff --git a/z-nile/engine/adapters.luau b/z-nile/engine/adapters.luau
 new file mode 100644
-index 00000000..d622049a
+index 00000000..f14fbf79
 --- /dev/null
 +++ b/z-nile/engine/adapters.luau
-@@ -0,0 +1,483 @@
+@@ -0,0 +1,484 @@
 +--!strict
 +-- One adapter per runtime (c0117): the command line that starts a model step headless and unattended, the reader of
 +-- its output stream (a token count as it runs, the final count, a quota or error signal), and the outcome. Pure: the
@@ -4686,12 +4783,13 @@ index 00000000..d622049a
 +-- (programme review E6; macOS can't nest sandboxes)
 +adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
 +
-+-- What a runtime's step environment adds (review 004 F2): Claude Code stops one shell command after
-+-- BASH_DEFAULT_TIMEOUT_MS (120 s by default) and never allows more than BASH_MAX_TIMEOUT_MS (600 s), but an author
-+-- waits on its nested review as one command (`./zn dispatch zz-review …`), and reviews here take up to 29 minutes. Two
-+-- hours (a guess, G22; E15 measures each CLI's own limit), while the heartbeat keeps the dispatcher's stall clock honest.
++-- What a runtime's step environment adds (review 004 F2, 005 F2): Claude Code never allows one shell command more than
++-- BASH_MAX_TIMEOUT_MS (600 s by default), but an author waits on its nested review as one command
++-- (`./zn dispatch zz-review …`), and reviews here take up to 29 minutes. Only the maximum is raised, to two hours (G22);
++-- the default (120 s) stays, so a hung command is still a two-minute tool error the model recovers from, and the
++-- headless section tells the author to pass a two-hour timeout on its review command alone. E15 measures the rest.
 +adapters.STEP_ENV = {
-+	["claude-cli"] = { BASH_DEFAULT_TIMEOUT_MS = "7200000", BASH_MAX_TIMEOUT_MS = "7200000" },
++	["claude-cli"] = { BASH_MAX_TIMEOUT_MS = "7200000" },
 +} :: { [string]: { [string]: string } }
 +
 +local function withEffort(args: { string }, flag: string, effort: string?): { string }
@@ -4863,10 +4961,10 @@ index 00000000..d622049a
 +return adapters
 diff --git a/z-nile/engine/broker.luau b/z-nile/engine/broker.luau
 new file mode 100644
-index 00000000..6f3f2f6a
+index 00000000..935387af
 --- /dev/null
 +++ b/z-nile/engine/broker.luau
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,139 @@
 +--!strict
 +-- The publish broker (c0117): a dispatched agent's credential can't push to `main`, so the tracker's own pushes of
 +-- tracker state (`publish`'s push, `land`) from inside a step are handed to the dispatcher that runs the step, which
@@ -4968,7 +5066,8 @@ index 00000000..6f3f2f6a
 +	root: string,
 +	sha: string,
 +	roots: (ref: string) -> { string }?,
-+	origin: Origin?
++	origin: Origin?,
++	ref: string? -- the run's own fetch ref (review 005 F1); a spec's single broker may use the default
 +): (boolean, string)
 +	local function git(args: { string }): (boolean, string)
 +		local r = process.exec("git", args, { cwd = root })
@@ -4976,10 +5075,19 @@ index 00000000..6f3f2f6a
 +	end
 +	local from = if origin then origin.fetch else "origin"
 +	local to = if origin then origin.push else "origin"
-+	if not git({ "fetch", "-q", from, `+refs/heads/main:{broker.FRESH}` }) then
-+		return false, "the dispatcher could not fetch origin's main"
++	local into = ref or broker.FRESH
++	local fetched = false
++	for attempt = 1, 4 do
++		if git({ "fetch", "-q", from, `+refs/heads/main:{into}` }) then
++			fetched = true
++			break
++		end
++		task.wait(0.2 * attempt)
 +	end
-+	local _, fresh = git({ "rev-parse", broker.FRESH })
++	if not fetched then
++		return false, "the dispatcher could not fetch origin's main (after retries: the network?)"
++	end
++	local _, fresh = git({ "rev-parse", into })
 +	if not process.exec("git", { "merge-base", "--is-ancestor", fresh, sha }, { cwd = root }).ok then
 +		return false, `{sha} is not a fast-forward of main ({fresh}): rebuild it on main and ask again`
 +	end
@@ -5457,10 +5565,10 @@ index 00000000..df8d7fe8
 +return dispatch
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
 new file mode 100644
-index 00000000..4fcd729c
+index 00000000..6c8c3b51
 --- /dev/null
 +++ b/z-nile/engine/dispatcher.luau
-@@ -0,0 +1,1478 @@
+@@ -0,0 +1,1560 @@
 +--!strict
 +-- `./zn dispatch` (c0117): runs script steps itself and model steps on .models.toml's CLIs, headless and unattended,
 +-- and chains them from an item's tracker state up to the run's pull request. The rules are dispatch.luau's (pure);
@@ -5587,7 +5695,7 @@ index 00000000..4fcd729c
 +end
 +
 +-- see pinOrigin and vetMain
-+local guard: { origin: broker.Origin?, config: string?, mark: string? } = {}
++local guard: { origin: broker.Origin?, config: string?, mark: string?, fresh: string? } = {}
 +
 +local function save(st: State)
 +	if guard.mark then
@@ -5609,6 +5717,74 @@ index 00000000..4fcd729c
 +local function git(dir: string, args: { string }): (boolean, string)
 +	local r = process.exec("git", args, { cwd = dir })
 +	return r.ok, trim(r.stdout)
++end
++
++-- This process's own fetch refs (review 005 F1): a dispatcher, its broker and its gates fetch into
++-- `refs/zn-dispatch/run-<id>/<name>`, never a ref another run shares (git compares and swaps a ref, so two fetches into
++-- one ref fail with "cannot lock ref", and a late one can set it back). The id's lock file
++-- (`<git common dir>/zn-dispatch-runs/<id>.lock`, held by a helper for the process's life) says the run is alive;
++-- `sweepRefs` deletes the refs of runs nobody holds, and `dropRefs` this run's own at its end.
++local runId: string? = nil
++local runLock: any = nil
++
++local function commonDir(dir: string): string
++	local _, common = git(dir, { "rev-parse", "--path-format=absolute", "--git-common-dir" })
++	return common
++end
++
++local function runRef(dir: string, name: string): string
++	if not runId then
++		runId = string.lower(trim(process.exec("uuidgen", {}).stdout))
++		local locks = `{commonDir(dir)}/zn-dispatch-runs`
++		fs.writeDir(locks)
++		runLock = runner.holdLock(`{locks}/{runId}.lock`)
++	end
++	return `refs/zn-dispatch/run-{runId}/{name}`
++end
++dispatcher.runRef = runRef
++
++-- A fetch into `ref`, retried three times with back-off (a lock another process holds on it: as publish.commit does);
++-- returns the fetched sha, or nil when it still fails (a network fault, said as such by the callers).
++local function fetchInto(dir: string, url: string, from: string, ref: string): string?
++	for attempt = 1, 4 do
++		if git(dir, { "fetch", "-q", url, `+{from}:{ref}` }) then
++			local ok, sha = git(dir, { "rev-parse", ref })
++			if ok and string.match(sha, "^%x+$") then
++				return sha
++			end
++		end
++		if attempt < 4 then
++			task.wait(0.2 * attempt)
++		end
++	end
++	return nil
++end
++
++-- Deletes the fetch refs of runs whose lock nobody holds (a lost run's leftovers), never this run's own.
++function dispatcher.sweepRefs(dir: string)
++	local locks = `{commonDir(dir)}/zn-dispatch-runs`
++	local _, refs = git(dir, { "for-each-ref", "--format=%(refname)", "refs/zn-dispatch/" })
++	for ref in string.gmatch(refs, "[^\n]+") do
++		local id = string.match(ref, "^refs/zn%-dispatch/run%-([%w%-]+)/")
++		if id and id ~= runId and not runner.held(`{locks}/{id}.lock`) then
++			git(dir, { "update-ref", "-d", ref })
++			pcall(fs.removeFile, `{locks}/{id}.lock`)
++		end
++	end
++end
++
++local function dropRefs(dir: string)
++	if not runId then
++		return
++	end
++	local _, refs = git(dir, { "for-each-ref", "--format=%(refname)", `refs/zn-dispatch/run-{runId}/` })
++	for ref in string.gmatch(refs, "[^\n]+") do
++		git(dir, { "update-ref", "-d", ref })
++	end
++	if runLock then
++		runLock.stdin:close()
++	end
++	pcall(fs.removeFile, `{commonDir(dir)}/zn-dispatch-runs/{runId}.lock`)
 +end
 +
 +-- The worktree named `name`, made (or reused) from the main checkout.
@@ -5683,9 +5859,8 @@ index 00000000..4fcd729c
 +
 +local function walk(dir: string): { models.Layer }
 +	if not pinned then
-+		local r = process.exec("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/zn-dispatch/main" })
-+		local sha = process.exec("git", { "rev-parse", "refs/zn-dispatch/main" })
-+		pinned = if r.ok and sha.ok then trim(sha.stdout) else "origin/main"
++		local here = process.cwd
++		pinned = fetchInto(here, "origin", "refs/heads/main", runRef(here, "models")) or "origin/main"
 +	end
 +	return models.walkAt(dir, function(path: string): string?
 +		local shown = process.exec("git", { "show", `{pinned}:{path}` })
@@ -5860,11 +6035,11 @@ index 00000000..4fcd729c
 +local function freshMain(ctx: Ctx): string?
 +	local root = ctx.mainRoot()
 +	local origin = pinOrigin(ctx)
-+	if not git(root, { "fetch", "-q", origin.fetch, `+refs/heads/main:{broker.FRESH}` }) then
-+		return nil
++	local sha = fetchInto(root, origin.fetch, "refs/heads/main", runRef(root, "main"))
++	if sha then
++		guard.fresh = sha
 +	end
-+	local ok, sha = git(root, { "rev-parse", broker.FRESH })
-+	return if ok then sha else nil
++	return sha
 +end
 +dispatcher.freshMain = freshMain
 +
@@ -5962,7 +6137,7 @@ index 00000000..4fcd729c
 +	local root = ctx.mainRoot()
 +	local fresh = freshMain(ctx)
 +	if not fresh then
-+		return "origin's main could not be fetched to vet it"
++		return "origin's main could not be fetched to vet it (after retries: the network?); ./zn dispatch retry once it is back"
 +	end
 +	local from = guard.mark
 +	if not from then
@@ -6002,6 +6177,7 @@ index 00000000..4fcd729c
 +-- At the start of a top-level run: origin's URLs as the last run left them, the watermark not behind the item's mirror
 +-- and not gone, then main vetted (review 003 F2, F3). Returns why the run stops, or nil.
 +function dispatcher.guardStart(ctx: Ctx, st: State): string?
++	dispatcher.sweepRefs(ctx.mainRoot())
 +	local origin = pinOrigin(ctx)
 +	local saved = originPath(ctx)
 +	if fs.isFile(saved) and fs.readFile(saved) ~= originText(origin) then
@@ -6052,7 +6228,7 @@ index 00000000..4fcd729c
 +	if after.head ~= before.head then
 +		local onMain = process.exec(
 +			"git",
-+			{ "merge-base", "--is-ancestor", after.head, broker.FRESH },
++			{ "merge-base", "--is-ancestor", after.head, guard.fresh or "HEAD" },
 +			{ cwd = root }
 +		).ok
 +		local forward =
@@ -6224,7 +6400,7 @@ index 00000000..4fcd729c
 +		local function push(sha: string): (boolean, string)
 +			local ok, said = broker.push(ctx.mainRoot(), sha, function(ref: string): { string }?
 +				return rootsAt(ctx, ref)
-+			end, pinOrigin(ctx))
++			end, pinOrigin(ctx), runRef(ctx.mainRoot(), "broker"))
 +			if ok then
 +				table.insert(st.pushed, sha)
 +			end
@@ -6405,22 +6581,23 @@ index 00000000..4fcd729c
 +function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch.Pr, folder: string): string?
 +	local root = ctx.mainRoot()
 +	local origin = pinOrigin(ctx)
-+	local ref = `refs/zn-dispatch/pr-{pr.number}`
++	local ref = runRef(root, `pr-{pr.number}`)
 +	if pr.head == "" then
 +		return "its head commit is unknown"
 +	end
 +	if not freshMain(ctx) then
 +		return "origin's main could not be fetched"
 +	end
-+	if not git(root, { "fetch", "-q", origin.fetch, `+refs/pull/{pr.number}/head:{ref}` }) then
++	local got = fetchInto(root, origin.fetch, `refs/pull/{pr.number}/head`, ref)
++	if not got then
 +		return "its head could not be fetched"
 +	end
-+	local _, got = git(root, { "rev-parse", ref })
 +	if got ~= pr.head then
 +		return `its fetched head {got} is not the head GitHub reports ({pr.head})`
 +	end
-+	local okBase, base = git(root, { "merge-base", broker.FRESH, ref })
-+	local roots = rootsAt(ctx, broker.FRESH)
++	local main = guard.fresh :: string
++	local okBase, base = git(root, { "merge-base", main, ref })
++	local roots = rootsAt(ctx, main)
 +	if not roots then
 +		return "the registry could not be read"
 +	end
@@ -6535,7 +6712,7 @@ index 00000000..4fcd729c
 +	end
 +	local root = ""
 +	if o then
-+		local known: { string } = rootsAt(ctx, broker.FRESH) or {}
++		local known: { string } = rootsAt(ctx, guard.fresh or "origin/main") or {}
 +		for _, r in known do
 +			if string.sub(o.path, 1, #r + 1) == r .. "/" then
 +				root = r
@@ -6717,7 +6894,19 @@ index 00000000..4fcd729c
 +end
 +
 +-- `./zn dispatch …`
++local mainInner: (ctx: Ctx, pos: { string }, opts: { [string]: { string } }) -> number
++
++-- `./zn dispatch …`; its own fetch refs go at its end, whatever happened (review 005 F1)
 +function dispatcher.main(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): number
++	local ok, code = pcall(mainInner, ctx, pos, opts)
++	pcall(dropRefs, ctx.mainRoot())
++	if not ok then
++		error(code, 0)
++	end
++	return code :: number
++end
++
++function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): number
 +	local first = pos[1]
 +	if not first then
 +		ctx.fail(
@@ -6728,6 +6917,7 @@ index 00000000..4fcd729c
 +		-- the user's act after a tripwire stop: lists every commit since the watermark with its verdict, then takes main
 +		-- as it is now as vetted (an agent of the same OS user could run this too: zz-rules says it is the user's)
 +		local root = ctx.mainRoot()
++		dispatcher.sweepRefs(root)
 +		local origin = pinOrigin(ctx)
 +		local fresh = freshMain(ctx) or ctx.fail("origin's main could not be fetched")
 +		local mark = readWatermark(ctx)
@@ -7848,10 +8038,10 @@ index d9b27b03..3eef63c4 100644
  		end
 diff --git a/z-nile/engine/runner.luau b/z-nile/engine/runner.luau
 new file mode 100644
-index 00000000..2aab6704
+index 00000000..6397ee13
 --- /dev/null
 +++ b/z-nile/engine/runner.luau
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,297 @@
 +--!strict
 +-- Runs one model step's CLI (c0117) under a supervisor: the CLI leads a process group of its own (so the cap, a
 +-- stall or `./zn dispatch stop` kills every process the step started, a `check.sh` or a Bash tool's children
@@ -7883,7 +8073,7 @@ index 00000000..2aab6704
 +	stateDir: string, -- holds the pid file, the stdin file and the stop marker
 +	onStart: ((id: Identity) -> ())?,
 +	onTick: (() -> ())?, -- called every tick while the step runs (the dispatcher's publish broker)
-+	beatFile: string?, -- a nested step's heartbeat in its parent's state folder: touched while its CLI prints (004 F2)
++	beatFile: string?, -- a nested step's heartbeat in its parent's state folder: touched every second it runs (005 F3)
 +}
 +export type Identity = { pgid: number, lockFile: string }
 +export type Outcome = "ok" | "failed" | "quota" | "cap" | "cap-unknown" | "stalled" | "stopped"
@@ -8053,10 +8243,12 @@ index 00000000..2aab6704
 +		local dt = task.wait(0.05)
 +		quiet += dt
 +		elapsed += dt
-+		-- liveness both ways (review 004 F2): a nested step beats while its CLI prints, and a nested step's fresh beat
++		-- liveness both ways (review 004 F2): a nested step beats while it runs, and a nested step's fresh beat
 +		-- counts as this step's output, so an author waiting on a long review isn't stalled; a quiet nested step still
 +		-- stalls at its own limits, so nothing hangs
-+		if r.beatFile and quiet < 0.2 and elapsed - lastBeat >= 1 then
++		-- a beat means "alive and within my limits" (review 005 F3), not "printing": once a second for as long as this
++		-- loop runs, which is only while the step is inside its own stall and tool limits
++		if r.beatFile and elapsed - lastBeat >= 1 then
 +			lastBeat = elapsed
 +			pcall(fs.writeFile, r.beatFile :: string, tostring(os.clock()) .. " " .. tostring(elapsed))
 +		end
@@ -8536,10 +8728,10 @@ index 00000000..9baaf157
 +return trackerstate
 diff --git a/z-nile/engine/wrap.luau b/z-nile/engine/wrap.luau
 new file mode 100644
-index 00000000..1f034ca6
+index 00000000..fb8709aa
 --- /dev/null
 +++ b/z-nile/engine/wrap.luau
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,138 @@
 +--!strict
 +-- The entry of z-nile/bin/git and z-nile/bin/gh (c0117): gathers what the tools themselves say (git's alias, git's own
 +-- dry run of the push, a private fresh copy of origin's main, gh's aliases), decides with wrapper.luau, then runs the
@@ -8629,9 +8821,12 @@ index 00000000..1f034ca6
 +		end
 +		local url = string.match(out, "To ([^\n]+)") or "origin"
 +		local fetched: boolean? = nil
++		-- a ref of this call's own (review 005 F1: concurrent steps' wrappers never share one), deleted after
++		local private =
++			`refs/zn-wrap/{string.lower((string.gsub(process.exec("uuidgen", {}).stdout, "%s+", "")))}/main`
 +		local function fresh(): boolean
 +			if fetched == nil then
-+				fetched = (run(with({ "fetch", "-q", url, "+refs/heads/main:refs/zn-wrap/main" })))
++				fetched = (run(with({ "fetch", "-q", url, `+refs/heads/main:{private}` })))
 +			end
 +			return fetched :: boolean
 +		end
@@ -8645,11 +8840,11 @@ index 00000000..1f034ca6
 +				if not okSha then
 +					return `could not resolve {src}`
 +				end
-+				local okBase, base = run(with({ "merge-base", "refs/zn-wrap/main", sha }))
++				local okBase, base = run(with({ "merge-base", private, sha }))
 +				-- tracker state by the fresh main's registry: a branch can't widen what may go to main (lesson
 +				-- zz-arch/guards-trust-only-origin)
 +				local _, top = run(with({ "rev-parse", "--show-toplevel" }))
-+				local reg = projects.at("refs/zn-wrap/main", top)
++				local reg = projects.at(private, top)
 +				if not reg then
 +					return "could not read the fresh main's registry"
 +				end
@@ -8659,6 +8854,9 @@ index 00000000..1f034ca6
 +				end, if okBase then base else trackerstate.EMPTY_TREE, sha, projects.roots(reg :: any), true)
 +			end,
 +		})
++		if fetched then
++			run(with({ "update-ref", "-d", private }))
++		end
 +		if not decision.ok then
 +			refuse(decision.why or "refused")
 +		end
@@ -8674,7 +8872,7 @@ index 00000000..1f034ca6
 +process.exit(r.code)
 diff --git a/z-nile/engine/wrapper.luau b/z-nile/engine/wrapper.luau
 new file mode 100644
-index 00000000..19104d83
+index 00000000..d9b11c0e
 --- /dev/null
 +++ b/z-nile/engine/wrapper.luau
 @@ -0,0 +1,236 @@
@@ -8685,7 +8883,7 @@ index 00000000..19104d83
 +-- decides, pure, from facts `wrap.luau` gathers from the tools themselves:
 +--   - git: what a push would do is read from git's own resolution (`push --dry-run --porcelain`, after aliases and
 +--     `-c` resolve), never parsed from the arguments, and what it would put on main is diffed from a private, freshly
-+--     fetched copy of origin's main (refs/zn-wrap/main), never from the tracking ref the agent can rewrite;
++--     fetched copy of origin's main (a private ref of the call's own, refs/zn-wrap/<id>/main), never from the tracking ref the agent can rewrite;
 +--   - gh: an allow-list of commands (no merge, no alias edits), and `gh api` reads plus an allow-list of write
 +--     endpoints (comments); a GraphQL mutation is a write.
 +local wrapper = {}
@@ -8934,7 +9132,7 @@ index b2567204..d67792a0 100644
 +  fi
 +}
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
-index 1bb549c9..0a6ebf5e 100644
+index 1bb549c9..32076599 100644
 --- a/z-nile/skills/z-design/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
 @@ -58,7 +58,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
@@ -8951,13 +9149,13 @@ index 1bb549c9..0a6ebf5e 100644
  - **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.
  
 +## Headless (under `./zn dispatch`)
-+When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch).
++When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
 +
  ## Lessons
  Before you start, read this skill's lessons: `./zn lessons --skill z-design --full`. Each is a mistake made before, with the question that catches it.
  
 diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
-index 70e21e7d..0b8bdf63 100644
+index 70e21e7d..c535443b 100644
 --- a/z-nile/skills/z-raft/SKILL.md
 +++ b/z-nile/skills/z-raft/SKILL.md
 @@ -38,7 +38,7 @@ In each raft document this branch changes (`R<NNNN>.md`):
@@ -8974,13 +9172,13 @@ index 70e21e7d..0b8bdf63 100644
  The rafts and their members, the plan's skips, the coherence findings and what changed because of them, and the next step: `/z-ready <R-id>`.
  
 +## Headless (under `./zn dispatch`)
-+When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch).
++When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
 +
  ## Lessons
  Before you start, read this skill's lessons: `./zn lessons --skill z-raft --full`. Each is a mistake made before, with the question that catches it.
  
 diff --git a/z-nile/skills/z-run/SKILL.md b/z-nile/skills/z-run/SKILL.md
-index 3cfcff07..33b40cdb 100644
+index 3cfcff07..7a396183 100644
 --- a/z-nile/skills/z-run/SKILL.md
 +++ b/z-nile/skills/z-run/SKILL.md
 @@ -64,8 +64,8 @@ Use this when `./zn workstreams <R-id>` ends with `parallel: yes` (the prompt em
@@ -9018,13 +9216,13 @@ index 3cfcff07..33b40cdb 100644
  ```
  
 +## Headless (under `./zn dispatch`)
-+When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch).
++When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
 +
  ## Lessons
  Before you start, read this skill's lessons: `./zn lessons --skill z-run --full`. Each is a mistake made before, with the question that catches it.
  
 diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
-index adeab978..ec3fa5dc 100644
+index adeab978..cbb98187 100644
 --- a/z-nile/skills/z-ticket/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
 @@ -23,7 +23,10 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
@@ -9035,7 +9233,7 @@ index adeab978..ec3fa5dc 100644
 +6. **Land it.** Commit in the capture worktree (`git add -A && git commit -m "tracker: new <id> <title>"`), run `./zn land`, and before the worktree is removed record `./zn spend <id> --phase capture --time <minutes>`, then remove the worktree with the command it prints. No PR: land runs the gate locally and pushes to `main`. Under the dispatcher, land without asking (the user started it); the dispatcher pushes the capture for you. Report the ID and path.
 +
 +## Headless (under `./zn dispatch`)
-+When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch).
++When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
  
  ## Lessons
  Before you start, read this skill's lessons: `./zn lessons --skill z-ticket --full`. Each is a mistake made before, with the question that catches it.
@@ -9066,7 +9264,7 @@ index 5bec93c9..ac9c3fd2 100644
  
  ## Code mode (before the PR is marked ready)
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 2d090998..97787848 100644
+index 2d090998..a2fc5303 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -45,6 +45,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -9117,7 +9315,7 @@ index 2d090998..97787848 100644
 +- **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the watermark and the server's protection are what catch its use.
 +- **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire, the watermark and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
 +- **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the watermark judges it). Nothing else in a step is meant to push to `main`.
-+- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's own shell-command limits (`BASH_DEFAULT_TIMEOUT_MS`, `BASH_MAX_TIMEOUT_MS`) are raised to two hours in its step's environment. It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
++- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and the `./zn lessons --when <design|build> --full` command and pastes nothing. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". It moves down `order` only on quota, which only the CLI's own signals report (claude's rejected rate-limit event, an error result or line, stderr); any other failure stops. The count is input + cache writes + output, cache reads left out, for every CLI.
 +- **The watermark and the tripwire** (the user's "Persisted watermark", framed by "Keep same user, accept detection"). The dispatcher keeps the last commit of `main` it vetted where a well-behaved step never writes, and detects if it changes: `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the repository, file `main-seen`, with `origin-url` beside it; and it mirrors it in each item's `state.json`. At the start of every run, before every step and after every step, every commit of `main` since the watermark must be tracker state (as above) or a pull request's merge into `main` on GitHub. The file is shared by every dispatcher of the repository (and `vet`): it only moves forward, under a lock, and another run's advance is never a trip, because within a run the dispatcher vets from its own copy of the watermark, whatever the file says, so a step that deletes or rewrites the file is still caught by what it pushed. A missing watermark at a run's start is never trusted (only `./zn dispatch vet` writes one), one behind the item's mirror stops the next run, a diverged one trips, and so does origin's URL changed since the last run. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch vet` (`--dry-run` lists each commit's verdict and writes nothing; plain `vet` lists them too). **Known limits:** this detects a late push after the fact, at the next run, and never prevents one; a process left behind can rewrite the watermark, its mirror and the URL file between runs; a merge made with the user's credential (stolen or not) is a pull request's merge and passes; an agent can run `vet` itself. They are the user's, by rule.
 +- **Spend.** The dispatcher records each step's session tokens and model id (with its effort: `grok-4.7-xhigh`): `spend <id> --phase <the step's phase> --tokens <n> --model <id> --note "dispatch <step>"` from the `zn-dispatch` worktree while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --tokens --model` line it prints for the author, and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. A step under the dispatcher records its own rows without `--tokens` for its session.
 +- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: only its own items' files, the raft it adds and that raft's members, never another item's sequestered files), pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts and writes nothing.

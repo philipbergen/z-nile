@@ -42,3 +42,6 @@
 - design-review-004 F3: ticket-prep/spec-design-correspondence, testing/guard-needs-its-own-case
 - design-review-004 F4: architecture/guard-state-out-of-reach-or-checked, architecture/merge-gate-checks-what-it-merges
 - design-review-004 F5: one-off: one fact said twice and differently (E10 against §8)
+- design-review-005 F1: architecture/several-writers-check-the-subject, architecture/lock-reads-live-state
+- design-review-005 F2: one-off: a raised default the guess didn't cost
+- design-review-005 F3: architecture/waiting-steps-show-liveness

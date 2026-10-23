@@ -9,3 +9,5 @@ A headless author that runs its review as one shell command is silent for as lon
 **Why:** c0117 design review 004 F2: no case covered a review longer than a few seconds, and reviews here take a median of 4 minutes and up to 29.
 
 **How to apply:** a heartbeat both ways in the runner, the CLI's limits in the step's environment, an experiment per CLI, and a spec with a child longer than the parent's stall limit (and a quiet child that still stalls).
+
+**Note** (c0117 design review 005 F3): a heartbeat means "alive and within my limits", not "printing". A child that is silent but healthy (inside one long tool, within its own limits) must keep beating, or its parent dies first when both limits are equal; the child's own limits still stop the beats when it hangs. Check: if the child is silent but healthy for as long as the parent's own limit, does the parent survive?

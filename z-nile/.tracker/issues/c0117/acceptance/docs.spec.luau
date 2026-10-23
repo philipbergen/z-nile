@@ -45,6 +45,7 @@ return t.spec("c0117 docs", function(it)
 			at(h, "with the agent's own GitHub credential", name)
 			at(h, "without `--tokens` for your own session", name)
 			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code|stream>`", name)
+			at(h, "give that one command a two-hour timeout", name)
 			if first then
 				t.expect(h).toBe(first)
 			end
@@ -120,6 +121,7 @@ return t.spec("c0117 docs", function(it)
 				"another run's advance is never a trip",
 				"writes a heartbeat in its parent's state folder",
 				"`BASH_MAX_TIMEOUT_MS`",
+				'a beat means "alive and within my limits"',
 				"fetched from `refs/pull/<n>/head`",
 				"calls are not tokens, so the user tunes it",
 				'- **The agent credential** (the user\'s "Bot token, no bypass").',

@@ -118,6 +118,8 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			["tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
 			["tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
 			["tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
+			["tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
+			["tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 16\nstall_seconds = 6\n",
 			["tracker/issues/c0096/c0096.md"] = string.gsub(
 				trackerfix.stub("c0096", "rafted-thing", "prepared-quiet-copper-falcon"),
 				"design: draft",
@@ -383,6 +385,54 @@ G=$ZN_REAL_GIT
 		end
 	)
 
+	it(
+		"each run fetches into refs of its own: two runs publishing at once both pass, even with a shared ref locked",
+		function()
+			-- review 005 F1: a lock on the old shared ref stands for another fetch holding it; a run of its own never sees it
+			fakecli.clear(h)
+			local lockDir = `{h.f.main}/.git/refs/zn-dispatch`
+			fs.writeDir(lockDir)
+			fs.writeFile(`{lockDir}/main.lock`, "")
+			mode("claude", "script")
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				'for i in 1 2 3 4 5; do ./zn new issue c "$id-note-$i" --desc "from $id" > /dev/null 2>&1; echo "published=$?"; done\n'
+			)
+			local results: { [string]: fixture.Result } = {}
+			local done = 0
+			for _, id in { "c0101", "c0102" } do
+				task.spawn(function()
+					results[id] = zn({ "dispatch", "z-design", id })
+					done += 1
+				end)
+			end
+			local waited = 0
+			while done < 2 and waited < 240 do
+				waited += task.wait(0.2)
+			end
+			fs.removeFile(`{lockDir}/main.lock`)
+			t.expect(done).toBe(2)
+			t.expect(results.c0101.code).toBe(0)
+			t.expect(results.c0102.code).toBe(0)
+			t.expect(count(fakecli.log(h), "published=0")).toBe(10)
+			-- and each run's refs are gone at its end
+			t.expect(fixture.git(h.f.main, { "for-each-ref", "refs/zn-dispatch/" })).toBe("")
+		end
+	)
+
+	it("a fetch that fails on a lock is retried; a lost run's leftover refs are swept", function()
+		fakecli.clear(h)
+		fs.writeFile(`{h.fakes}/fetchfail`, "2\n")
+		local r = zn({ "dispatch", "z-design", "c0010" })
+		t.expect(r.code).toBe(0)
+		t.expect((string.gsub(fs.readFile(`{h.fakes}/fetchfail`), "%s+$", ""))).toBe("0")
+		fs.removeFile(`{h.fakes}/fetchfail`)
+		-- a ref a lost run left (no one holds its lock) goes at the next run's start
+		fixture.git(h.f.main, { "update-ref", "refs/zn-dispatch/run-dead/main", "HEAD" })
+		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
+		t.expect(fixture.git(h.f.main, { "for-each-ref", "refs/zn-dispatch/" })).toBe("")
+	end)
+
 	it("the shared watermark only moves forward: an older main never overwrites a newer one", function()
 		local dir = `{h.f.base}/mark-forward`
 		local path = `{dir}/main-seen`
@@ -424,12 +474,34 @@ G=$ZN_REAL_GIT
 			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
 			-- claude's own shell-command limits raised in the step's environment
 			t.expect(has(fakecli.log(h), "bashmax=7200000")).toBe(true)
-			-- a nested reviewer that goes quiet: nothing hangs, the step stalls at its limits
+			-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs
 			fakecli.clear(h)
 			mode("claude.z-design", "waitreview")
 			mode("claude.zz-review", "quietreview")
 			zn({ "dispatch", "z-design", "c0095" })
-			t.expect(fakecli.state(h, "c0095").outcome).toBe("stalled")
+			local newest, n = "", 0
+			for _, name in fs.readDir(dirOf("c0095")) do
+				local k = tonumber(string.match(name, "^zz%-review%-design%-c0095%-(%d+)$") or "")
+				if k and k > n then
+					newest, n = name, k
+				end
+			end
+			t.expect(fakecli.state(h, "c0095", newest).outcome).toBe("stalled")
+		end
+	)
+
+	it(
+		"a reviewer silent but within its own limits keeps its author alive past the author's own limit",
+		function()
+			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 6 and
+			-- the reviewer is silent 12 s inside one tool call, within its tool_seconds = 16
+			fakecli.clear(h)
+			mode("claude.z-design", "waitplain")
+			mode("claude.zz-review", "silenttool")
+			local r = zn({ "dispatch", "z-design", "c0097" })
+			t.expect(fakecli.state(h, "c0097").outcome).toBe("ok")
+			t.expect(r.code).toBe(0)
+			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
 		end
 	)
 
