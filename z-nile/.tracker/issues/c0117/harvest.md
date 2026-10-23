@@ -45,3 +45,4 @@
 - design-review-005 F1: architecture/several-writers-check-the-subject, architecture/lock-reads-live-state
 - design-review-005 F2: one-off: a raised default the guess didn't cost
 - design-review-005 F3: architecture/waiting-steps-show-liveness
+- note c0118's simulation of c0117 done: the promoted control-cli spec named env -i (repo-fence), and four specs named .cache/dispatch (c0049 isolation), both caught only at the promoted location: ticket-prep/prove-specs-pass-on-a-prototype

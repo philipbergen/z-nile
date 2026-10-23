@@ -14,7 +14,7 @@ The user decided on 2026-10-23: "Fix, no more review". Each finding below is fix
   - **Consequences.** One lock helper process per dispatcher process. G18 names the per-run refs.
 - F2: fixed. `STEP_ENV["claude-cli"]` raises only `BASH_MAX_TIMEOUT_MS`, to two hours. The default stays at 120 s. The headless section (word for word in all four skills, pinned by docs.spec) tells the author to give its one review command a two-hour timeout. G22 names the cost of each choice. E15 settles whether claude honours the timeout in `-p` mode. The control-cli case keeps its `bashmax` check.
 - F3: fixed. A nested runner beats once a second for as long as its loop runs, which is only while it is alive and within its own limits. A beat now means "alive and within my limits".
-  - **New case.** The author's limit is `stall_seconds = 6`, and the reviewer is silent for 12 s inside one tool, within its `tool_seconds = 16`. The author ends `ok`.
+  - **New case.** The author's limit is `stall_seconds = 10`, and the reviewer is silent for 18 s inside one tool, within its `tool_seconds = 24`. The author ends `ok`.
   - **Mutant.** M142 (a beat only while the CLI prints).
   - **The quiet-reviewer case.** The reviewer stalls at its own limit, and its beats stop. The assertion is now on the reviewer's own state (`stalled`), since its author goes on once the review command returns.
 - Lesson: the note goes on `waiting-steps-show-liveness`, as the reviewer suggested.

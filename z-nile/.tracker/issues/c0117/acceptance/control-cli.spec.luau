@@ -119,7 +119,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			["tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
 			["tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
 			["tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
-			["tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 16\nstall_seconds = 6\n",
+			["tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 24\nstall_seconds = 10\n",
 			["tracker/issues/c0096/c0096.md"] = string.gsub(
 				trackerfix.stub("c0096", "rafted-thing", "prepared-quiet-copper-falcon"),
 				"design: draft",
@@ -362,14 +362,16 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 	it(
 		"two dispatchers at once never trip each other: another run's honest advance of the watermark is no trip",
 		function()
-			-- review 004 case C: while B's step runs, the user's other terminal publishes tracker state and runs A
+			-- review 004 case C: while B's step runs, the user's other terminal publishes tracker state and runs A (its
+			-- environment is the step's without the step's own variables: the spec's guards stay, so no `env` that clears
+			-- them all, which repo-fence refuses)
 			fakecli.clear(h)
 			mode("claude", "script")
 			local script = [==[if [ "$id" = c0102 ]; then echo "A step ran"; exit 0; fi
 userpath=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/z-nile/bin$' | paste -sd: -)
 G=$ZN_REAL_GIT
 ( cd @OTHER@ && $G pull -q origin main && echo note > tracker/issues/c0101/note.md && $G add -A && $G -c user.name=u -c user.email=u@example.invalid commit -qm "other terminal: tracker state" && $G push -q origin HEAD:main; echo otherpush=$? )
-( cd @MAIN@ && env -i HOME="$HOME" PATH="$userpath" FAKE_DIR="$FAKE_DIR" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" ZN_WATERMARK_DIR="@BASE@/watermark" GH_TOKEN=the-users-token TMPDIR="$TMPDIR" bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
+( cd @MAIN@ && env -u ZN_DISPATCH -u ZN_HEADLESS -u ZN_DISPATCH_DIR -u ZN_DISPATCH_HOME -u ZN_PUBLISH_BROKER -u ZN_PUBLISH_TOKEN -u ZN_DISPATCHER_PID -u ZN_REAL_GIT -u ZN_REAL_GH -u GITHUB_TOKEN PATH="$userpath" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" ZN_WATERMARK_DIR="@BASE@/watermark" GH_TOKEN=the-users-token bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
 ]==]
 			script = string.gsub(
 				string.gsub(string.gsub(script, "@OTHER@", h.f.other), "@MAIN@", h.f.main),
@@ -493,8 +495,8 @@ G=$ZN_REAL_GIT
 	it(
 		"a reviewer silent but within its own limits keeps its author alive past the author's own limit",
 		function()
-			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 6 and
-			-- the reviewer is silent 12 s inside one tool call, within its tool_seconds = 16
+			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 10 and
+			-- the reviewer is silent 18 s inside one tool call, within its tool_seconds = 24
 			fakecli.clear(h)
 			mode("claude.z-design", "waitplain")
 			mode("claude.zz-review", "silenttool")
