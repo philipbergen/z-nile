@@ -1,15 +1,34 @@
 --!strict
--- Client adapter: binds the key map from View and relays intents to the server. On a touch screen it feeds
--- every finger through Touch's fold and applies what it emits.
+-- Client adapter: binds the key map from View and relays intents to the server. The movement keys, the fire key
+-- and the jump (a hop, f0101) send intents; the arrow look is the camera's, handed in through Controls.keys (f0104). On a touch
+-- screen it feeds every finger through Touch's fold and applies what it emits.
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
+local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
+local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+local Movement = require("@game/ReplicatedStorage/Shared/Logic/Movement")
 local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
+-- What the keys drive besides the intents: the camera's arrow look, and the way a shot would go now (nil before the
+-- first snapshot).
+export type Keys = {
+	arrows: (View.Arrows) -> (),
+	aim: () -> Maze.Heading?,
+}
+
 local Controls = {}
+
+local keys: Keys? = nil
+local held: View.Arrows = { up = false, down = false, left = false, right = false }
+
+function Controls.keys(k: Keys)
+	keys = k
+end
 
 function Controls.start(
 	onSnap: () -> (),
@@ -24,27 +43,51 @@ function Controls.start(
 		state: Enum.UserInputState,
 		input: InputObject
 	): Enum.ContextActionResult
+		local action: View.Action? = View.action(input.KeyCode.Name)
+		local k = keys
 		if state == Enum.UserInputState.Begin then
-			local action = View.action(input.KeyCode.Name)
 			if action == "Snap" then
 				onSnap()
-			elseif action then
+			elseif Movement.isIntent(action) then
 				intent:FireServer(action)
+			elseif action == "Fire" and k then
+				local h: Maze.Heading? = k.aim()
+				if h then
+					intent:FireServer(Blaster.intent(h))
+				end
+			elseif action == "Jump" then
+				intent:FireServer(Hop.INTENT)
+			end
+		end
+		-- the arrows are held: they look while down, and a cancelled input (focus lost) lets go
+		local down = state == Enum.UserInputState.Begin
+		if down or state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+			local nextHeld = View.press(held, action, down)
+			if
+				nextHeld.up ~= held.up
+				or nextHeld.down ~= held.down
+				or nextHeld.left ~= held.left
+				or nextHeld.right ~= held.right
+			then
+				held = nextHeld
+				if k then
+					k.arrows(held)
+				end
 			end
 		end
 		return Enum.ContextActionResult.Sink
 	end
 
-	local keys: { EnumItem } = {}
+	local codes: { EnumItem } = {}
 	for name in View.KEYS do
-		table.insert(keys, (Enum.KeyCode :: any)[name])
+		table.insert(codes, (Enum.KeyCode :: any)[name])
 	end
 	ContextActionService:BindActionAtPriority(
 		"PickmanControls",
 		handle,
 		false,
 		Enum.ContextActionPriority.High.Value,
-		table.unpack(keys)
+		table.unpack(codes)
 	)
 
 	-- the platform thumbstick would take the left half, which is the turn zone
@@ -53,15 +96,15 @@ function Controls.start(
 	local fingers = Touch.empty()
 	local ids: { [InputObject]: number } = {}
 	local lastId = 0
-	local held = false
+	local touching = false
 
 	-- Held while any physical touch is down, including one the fold ignored: it still moves the locked mouse.
 	local function hold()
 		local down = next(ids) ~= nil
-		if down ~= held then
-			held = down
+		if down ~= touching then
+			touching = down
 			if onTouch then
-				onTouch(held)
+				onTouch(touching)
 			end
 		end
 	end

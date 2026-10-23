@@ -220,6 +220,46 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
+	-- An unfinished raft lives in its members' project (c0114, R0043 code review 006): `new raft` refuses one that spans
+	-- two, and this catches one that arrives by merge, as every capture does while c0114's branch waits to land.
+	-- Membership is read both ways: the raft's `issues:` list and each issue's `raft:` field. A finished raft is left as
+	-- it is: R0001 spans two projects by decision (c0114 §9).
+	local roots = rootsOf(root)
+	local first: { [string]: { path: string, top: string, fm: { [string]: string } } } = {}
+	for _, f in found do
+		local key = f.kind .. ":" .. f.id
+		local doc = `{root}/{f.path}/{f.id}.md`
+		if not first[key] and fs.isFile(doc) then
+			first[key] =
+				{ path = f.path, top = projects.rootOf(f.path, roots) or "", fm = front(fs.readFile(doc)) }
+		end
+	end
+	for key, r in first do
+		local rid = string.match(key, "^raft:(.+)$")
+		if rid and not string.find(r.path, "/done/", 1, true) then
+			local members: { [string]: boolean } = {}
+			for id in string.gmatch(r.fm.issues or "", "[fdc]%d%d%d%d") do
+				members[id] = true
+			end
+			for k, i in first do
+				local iid = string.match(k, "^issue:(.+)$")
+				if iid and i.fm.raft == rid then
+					members[iid] = true
+				end
+			end
+			for id in members do
+				local m = first["issue:" .. id]
+				if m and m.top ~= r.top then
+					add(
+						"error",
+						"raft-spans-projects",
+						r.path,
+						`{id} is in {m.top}, not {r.top}: a raft lives in its members' project`
+					)
+				end
+			end
+		end
+	end
 	-- one number, two issue prefixes
 	local byNumber: { [number]: { Found } } = {}
 	local seen: { [string]: boolean } = {}

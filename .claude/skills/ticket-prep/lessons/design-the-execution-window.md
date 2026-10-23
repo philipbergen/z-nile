@@ -2,7 +2,7 @@
 title: A branch never edits shared state main keeps writing; origin moves it when the branch lands
 when: design
 tags: [migration, shared-state, merges]
-check: Does the branch change any file that main writes during the raft's execution (a counter, a map, a registry)? If so, what resolves the conflict at every merge of main, the PR's own merge after `done` included, and which copy does the branch's tooling read and write on origin meanwhile?
+check: Does the branch change any file that main writes during the raft's execution (a counter, a map, a registry)? If so, what resolves the conflict at every merge of main, the PR's own merge after `done` included, and which copy does the branch's tooling read and write on origin meanwhile? And when another prepared raft changes the same mechanism, has its design been read for every writer and reader it adds, and do this raft's sequestered specs still pass once both have landed, whichever lands second?
 ---
 A raft that moves shared state runs its own new tooling for its whole execution against an origin that still has the old layout, and main keeps writing the old copy all that time. If the branch edits that copy (moves it, empties it, replaces it with a marker), every merge of main conflicts on it. That includes the last merge, after `done`, where the skills allow only clean merges, so one capture landing during CI blocks the raft. A repair at each merge, and a check that the repair happened, only adds more steps that can go red between merges.
 

@@ -12,10 +12,12 @@
         "Ready": { "$className": "RemoteEvent" },
         "Intent": { "$className": "RemoteEvent" },
         "Snapshot": { "$className": "RemoteEvent" },
-        "PlayAgain": { "$className": "RemoteEvent" }
+        "ToLobby": { "$className": "RemoteEvent" },
+        "LobbyStatus": { "$className": "RemoteEvent" }
       }
     },
     "ServerScriptService": {
+      "$attributes": { "LobbyPlaceId": 0 },
       "Server": { "$path": "src/server" }
     },
     "StarterPlayer": {

@@ -4,6 +4,8 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
+local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
+local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
@@ -13,6 +15,9 @@ local prev: Session.Snapshot? = nil
 local latest: Session.Snapshot? = nil
 local arrived = 0
 local look: View.Look = { yaw = 0, pitch = 0 }
+local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- the arrow look, as of the last frame
+local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
+local hopped: number? = nil -- the tick the latest hop started, from the server's frame (f0101)
 local yaw: number? = nil
 local cursor = false -- the mouse is free (and shown) for a prompt
 local current: Awareness.Pose? = nil
@@ -52,6 +57,26 @@ function Camera.holdMouse(held: boolean)
 	lookedThisFrame = true
 end
 
+-- The arrow keys held (f0104): they look, and the view springs back when they are let go.
+function Camera.arrows(a: View.Arrows)
+	arrows = { up = a.up, down = a.down, left = a.left, right = a.right }
+end
+
+-- The spy hop (f0101): the tick the latest hop started, as the server's frame says (nil: none yet). The server
+-- decides when a hop starts and when the player is airborne; the camera only shows it.
+function Camera.hopped(tick: number?)
+	hopped = tick
+end
+
+-- The heading a shot would go now (f0100, f0104), nil before the first snapshot.
+function Camera.aim(): Maze.Heading?
+	local last = latest
+	if last == nil then
+		return nil
+	end
+	return View.aim(last.player.heading, steer, arrows)
+end
+
 -- Frees the mouse and shows it (true), or locks it to the centre and hides it (false), from the next frame.
 function Camera.setCursor(free: boolean)
 	cursor = free
@@ -73,19 +98,22 @@ function Camera.start()
 		end
 		-- cleared here, after the guard read it: a touch that began and ended before this step still counts
 		lookedThisFrame = false
+		steer = View.steer(steer, look, arrows, dt)
+		look = steer.look
 
 		local snap = latest
 		if snap == nil then
 			return
 		end
 		local pose = View.interpolate(prev, snap, View.alpha(os.clock() - arrived))
+		local shown = View.shownTick(prev, snap, View.alpha(os.clock() - arrived))
 		local target = View.headingYaw(snap.player.heading)
 		local turned = View.approachYaw(yaw or target, target, View.turnRate() * dt)
 		yaw = turned
 
 		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
 		local x, z = View.world(pose.x, pose.y)
-		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight, z)
+		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight + Hop.rise(hopped, shown), z)
 			* CFrame.Angles(0, turned + look.yaw, 0)
 			* CFrame.Angles(look.pitch, 0, 0)
 	end)
