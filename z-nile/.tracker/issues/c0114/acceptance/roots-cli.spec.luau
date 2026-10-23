@@ -42,9 +42,25 @@ local wt = ""
 local function zn(args: { string }): fixture.Result
 	return trackerfix.tr(f, wt, args)
 end
-local function refused(args: { string }, needle: string)
+-- the same, run from the folder `sub` of the worktree (the directory gives the project, c0114)
+-- (fixture.exec runs only at a fixture's root, so the shell steps down into `sub` itself)
+local function znIn(sub: string, args: { string }, env: { [string]: string }?, at: string?): fixture.Result
+	local argv = { "-c", 'cd "$1" || exit 1; shift; exec bash "$OLDPWD/zn" "$@"', "_", sub }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	return fixture.exec(at or wt, "bash", argv, { env = env })
+end
+local function znInOk(sub: string, args: { string }): string
+	local r = znIn(sub, args)
+	if not r.ok then
+		error(`{sub}: zn {table.concat(args, " ")} failed: {r.stderr}{r.stdout}`, 2)
+	end
+	return (string.gsub(r.stdout, "%s+$", ""))
+end
+local function refused(args: { string }, needle: string, sub: string?)
 	local before = tip()
-	local r = zn(args)
+	local r = if sub then znIn(sub, args) else zn(args)
 	t.expect(r.ok).toBe(false)
 	if not has(r.stderr, needle) then
 		error(`{table.concat(args, " ")}: stderr lacks "{needle}": {r.stderr}`)
@@ -81,6 +97,21 @@ return t.spec("c0114 commands across project roots", function(it)
 		for _, id in { "R0010", "f0010", "c0020", "c0030" } do
 			t.expect(has(listed, id)).toBe(true)
 		end
+		-- list shows --project's items, else those of the project whose folder it runs in (every project at the root)
+		local game = trackerfix.trOk(f, f.main, { "list", "--project", "pickman" })
+		t.expect(has(game, "f0010")).toBe(true)
+		t.expect(has(game, "c0020")).toBe(false)
+		local function listIn(sub: string): string
+			local r = znIn(sub, { "list" }, nil, f.main)
+			if not r.ok then
+				error(r.stderr)
+			end
+			return r.stdout
+		end
+		local tools = listIn("z-nile")
+		t.expect(has(tools, "c0020")).toBe(true)
+		t.expect(has(tools, "R0010")).toBe(true)
+		t.expect(has(tools, "f0010")).toBe(false)
 		local status = trackerfix.trOk(f, f.main, { "status" })
 		t.expect(has(status, "c0020 new")).toBe(true)
 		t.expect(has(status, "f0010 new")).toBe(true)
@@ -88,15 +119,34 @@ return t.spec("c0114 commands across project roots", function(it)
 	end)
 
 	it(
-		"new issue files in the first project unless --project names another, from one shared counter",
+		"new issue files in --project's project, else in the one whose folder it runs in, from one shared counter",
 		function()
-			local a = trackerfix.trOk(f, wt, { "new", "issue", "f", "game-thing" })
+			-- at the checkout's root, and in a folder no project holds, it refuses and names --project
+			refused({ "new", "issue", "c", "nowhere" }, "no project holds the checkout's root")
+			fs.writeDir(`{wt}/src/deep`)
+			refused({ "new", "issue", "c", "nowhere" }, "no project holds src/deep", "src/deep")
+			-- pickman has no folder until c0120: tracker/ does not choose it either
+			refused({ "new", "issue", "c", "nowhere" }, "--project pickman", "tracker")
+			-- a directory inherited from another checkout's ./zn (a spec's fixture run inside a session) is that
+			-- checkout's, never this one's: the engine reads it as its own root
+			local before = tip()
+			local inherited = fixture.exec(
+				wt,
+				"lune",
+				{ "run", `{wt}/z-nile/engine/main`, "--", "new", "issue", "c", "nowhere" },
+				{ env = { ZN_TOP = fixture.physical(".") :: string, ZN_CWD = "z-nile" } }
+			)
+			t.expect(inherited.ok).toBe(false)
+			t.expect(has(inherited.stderr, "no project holds the checkout's root")).toBe(true)
+			t.expect(tip()).toBe(before)
+			local a = trackerfix.trOk(f, wt, { "new", "issue", "f", "game-thing", "--project", "pickman" })
 			t.expect(a).toBe("tracker/issues/f0041/f0041.md")
-			local b = trackerfix.trOk(f, wt, { "new", "issue", "c", "tool-thing", "--project", "z-nile" })
+			local b = znInOk("z-nile/engine", { "new", "issue", "c", "tool-thing" })
 			t.expect(b).toBe(`{Z}/issues/c0042/c0042.md`)
 			t.expect(onOrigin(`{Z}/issues/c0042/c0042.md`)).toBe(true)
 			t.expect(onOrigin(`{Z}/issues/c0042/check.sh`)).toBe(true)
-			local c = trackerfix.trOk(f, wt, { "new", "issue", "c", "game-chore" })
+			-- --project wins over the folder
+			local c = znInOk("z-nile", { "new", "issue", "c", "game-chore", "--project", "pickman" })
 			t.expect(c).toBe("tracker/issues/c0043/c0043.md")
 			-- one counter: three issues in two projects took 41, 42 and 43, and origin's counter says 44 next
 			t.expect(string.match(originText("z-nile/next"), "^issue 44 %S+\nraft 11 %S+$") ~= nil).toBe(true)
@@ -105,27 +155,41 @@ return t.spec("c0114 commands across project roots", function(it)
 		end
 	)
 
-	it("new raft lives in its members' project and never spans two", function()
-		local r = trackerfix.trOk(f, wt, { "new", "raft", "chore", "tools", "c0020", "--single" })
-		t.expect(r).toBe(`{Z}/rafts/R0011/R0011.md`)
-		t.expect(onOrigin(`{Z}/rafts/R0011/R0011.md`)).toBe(true)
-		t.expect(has(originText(`{Z}/issues/c0020/c0020.md`), "status: preparing-")).toBe(true)
-		refused({ "new", "raft", "chore", "mixed", "c0021", "c0043" }, "a raft holds issues of one project")
-		-- offline (PICKMAN_PUBLISH=0) the same rule holds, from the local items
-		fixture.git(wt, { "fetch", "-q", "origin" })
-		fixture.git(wt, { "merge", "-q", "origin/main" })
-		local before = tip()
-		local offline = trackerfix.tr(
-			f,
-			wt,
-			{ "new", "raft", "chore", "mixed", "c0021", "c0043" },
-			{ PICKMAN_PUBLISH = "0" }
-		)
-		t.expect(offline.ok).toBe(false)
-		t.expect(has(offline.stderr, "a raft holds issues of one project")).toBe(true)
-		t.expect(fs.isDir(`{wt}/tracker/rafts/R0012`) or fs.isDir(`{wt}/{Z}/rafts/R0012`)).toBe(false)
-		t.expect(tip()).toBe(before)
-	end)
+	it(
+		"new raft is made in --project's or the folder's project, holds only its issues, and never spans two",
+		function()
+			refused(
+				{ "new", "raft", "chore", "tools", "c0020", "--single" },
+				"no project holds the checkout's root"
+			)
+			refused(
+				{ "new", "raft", "chore", "tools", "c0020", "--single", "--project", "pickman" },
+				"the raft is made in tracker: c0020 is in z-nile/.tracker"
+			)
+			local r = znInOk("z-nile", { "new", "raft", "chore", "tools", "c0020", "--single" })
+			t.expect(r).toBe(`{Z}/rafts/R0011/R0011.md`)
+			t.expect(onOrigin(`{Z}/rafts/R0011/R0011.md`)).toBe(true)
+			t.expect(has(originText(`{Z}/issues/c0020/c0020.md`), "status: preparing-")).toBe(true)
+			refused(
+				{ "new", "raft", "chore", "mixed", "c0021", "c0043", "--project", "z-nile" },
+				"a raft holds issues of one project"
+			)
+			-- offline (PICKMAN_PUBLISH=0) the same rule holds, from the local items
+			fixture.git(wt, { "fetch", "-q", "origin" })
+			fixture.git(wt, { "merge", "-q", "origin/main" })
+			local before = tip()
+			local offline = trackerfix.tr(
+				f,
+				wt,
+				{ "new", "raft", "chore", "mixed", "c0021", "c0043", "--project", "z-nile" },
+				{ PICKMAN_PUBLISH = "0" }
+			)
+			t.expect(offline.ok).toBe(false)
+			t.expect(has(offline.stderr, "a raft holds issues of one project")).toBe(true)
+			t.expect(fs.isDir(`{wt}/tracker/rafts/R0012`) or fs.isDir(`{wt}/{Z}/rafts/R0012`)).toBe(false)
+			t.expect(tip()).toBe(before)
+		end
+	)
 
 	it("status moves an item in z-nile's root on origin/main", function()
 		trackerfix.trOk(f, wt, { "status", "c0021", "preparing" })

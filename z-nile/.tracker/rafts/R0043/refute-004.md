@@ -1,0 +1,2 @@
+# Refute 004: R0043
+- F1: fixed: PR #98's description is rewritten. G2–G5 are marked decided, with the user's words (and "list shows all projects", "Only items done at landing", "Fix it in the rewrite"). Under "Then:" it lists d72367f, 7d55fb9 and 4509e58, plus this round's commits. The Results give c0114 16/16 and R0043 5/5. They state the sequestration rule: with `':(exclude)*/done/*'` only `R100`, and `finished.luau` for the finished files. PR #97's description is updated the same way. consequences: text only.

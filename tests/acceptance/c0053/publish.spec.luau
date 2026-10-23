@@ -1,6 +1,7 @@
 --!strict
 -- c0510: scripts/tracker/publish.luau pushes a tracker-only commit to origin/main using git plumbing:
 -- it never touches the caller's working tree, index, HEAD or branch, and it retries a lost race.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local publish = require("@scripts/tracker/publish")
@@ -56,6 +57,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 		identity(`{base}/seed`)
 		fs.writeDir(`{base}/seed/src`)
 		fs.writeFile(`{base}/seed/src/x.luau`, "return 1\n")
+		engine.registry(`{base}/seed`) -- c0114: origin without the registry publishes nothing
 		git(`{base}/seed`, { "add", "-A" })
 		git(`{base}/seed`, { "commit", "-q", "-m", "seed" })
 		git(base, { "clone", "-q", "--bare", `{base}/seed`, origin })
@@ -77,7 +79,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 				"tracker/issues/c0010/spend.md",
 			}
 		do
-			t.expect(publish.allowed(ok)).toBe(true)
+			t.expect(publish.allowed(ok, { "tracker" })).toBe(true)
 		end
 		for _, bad in
 			{
@@ -95,7 +97,7 @@ return t.spec("tracker publish (git plumbing)", function(it)
 				"",
 			}
 		do
-			t.expect(publish.allowed(bad)).toBe(false)
+			t.expect(publish.allowed(bad, { "tracker" })).toBe(false)
 		end
 	end)
 

@@ -556,7 +556,10 @@ function lessons.load(root: string): Tree
 	end
 	-- items under every project root of the checkout (c0114): z-nile's rafts hold the harvests
 	local ok, reg = pcall(projects.load, root)
-	local roots: { string } = if ok then projects.roots(reg :: projects.Registry) else { projects.LEGACY }
+	if not ok then
+		error(`lessons: {reg}`, 0) -- never guess which roots hold the harvests (c0114)
+	end
+	local roots: { string } = projects.roots(reg :: projects.Registry)
 	for _, top in roots do
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "/active", "/done" } do

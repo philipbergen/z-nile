@@ -10,3 +10,44 @@
 - design-review-001 F9: one-off: a Judged criterion whose every test was a git read; the testing skill already says to turn such criteria into checks
 - note c0115 prep: layout.spec first pinned the exact skill set and "no pickman lesson", which c0116 and any lesson would turn red: testing/promoted-specs-pin-rules-not-sets
 - note c0115 prep: a bulk name substitution rewrote `{source}/tracker` and `architecture.md`, and was reverted: ticket-prep/bulk-renames-skip-ordinary-words
+- design-review-002 F1: testing/one-rule-one-function, testing/absence-scans-cover-every-form
+- design-review-002 F2: testing/new-commands-run-in-a-copy
+- design-review-002 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-002 F4: one-off: a lesson body quoted an old id as a token, which the rename then rewrote into a false example
+- design-review-003 F1: architecture/one-reader-per-format, testing/one-rule-one-function
+- design-review-003 F2: ticket-prep/bulk-renames-skip-ordinary-words
+- design-review-003 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-004 F1: testing/one-rule-one-function, testing/absence-scans-cover-every-form, architecture/one-reader-per-format
+- design-review-004 F2: ticket-prep/prove-specs-pass-on-a-prototype
+- note c0115 prep round 4: a rule built on parseHarvest left out the lines the reader skips (headings, paragraphs, sub-bullets): testing/one-rule-one-function
+- note c0115 prep round 4: the prototype's edits commit was amended before the promotion type check ran, and another agent read the unchecked commit: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-005 F1: testing/seed-every-enumerated-case, ticket-prep/spec-design-correspondence
+- design-review-005 F2: testing/absence-scans-cover-every-form
+- design-review-005 F3: ticket-prep/restated-rules-move-together
+- design-review-006 F1: testing/seed-every-enumerated-case
+- design-review-006 F2: one-off: a recheck list for the coming rebase onto the reworked c0114 and c0120, not a defect of this design
+- note c0115 prep round 6: the separators case renamed only unspaced ids, so dropping a renamed id's spaces passed; seed each value of every position (first, middle, last; spaced and unspaced): testing/seed-every-enumerated-case
+- design-review-007 F1: testing/no-vacuous-pass, testing/guards-move-with-the-working-directory
+- design-review-007 F2: testing/guards-move-with-the-working-directory, testing/no-vacuous-pass
+- design-review-007 F3: ticket-prep/required-steps-on-every-path, ticket-prep/new-rules-migrate-existing-work
+- design-review-007 F4: testing/promoted-specs-pin-rules-not-sets
+- design-review-007 F5: ticket-prep/restated-rules-move-together
+- design-review-007 F6: ticket-prep/bulk-renames-skip-ordinary-words
+- design-review-007 F7: testing/absence-scans-cover-every-form
+- design-review-007 F8: ticket-prep/restated-rules-move-together
+- note c0115 prep round 7: AC14 looped over roots it computed and passed when the computation failed or found nothing: testing/no-vacuous-pass
+- note c0115 prep round 7: the author's lint runs grepped selene errors only, and a warning failed the gate: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-008 F1: ticket-prep/required-steps-on-every-path, ticket-prep/specify-every-named-artifact
+- design-review-008 F2: architecture/one-reader-per-format
+- note c0115 prep round 8: the mutation runner's git checkout restore reverted an uncommitted edit; commit before running any tool that resets files: ticket-prep/rerun-skipped-checks-after-edits
+- design-review-010 F1: ticket-prep/exact-checks-compare-against-the-merge-base, ticket-prep/design-the-execution-window
+- design-review-010 F2: ticket-prep/new-rules-migrate-existing-work
+- design-review-010 F3: testing/no-vacuous-pass
+- design-review-010 F4: ticket-prep/restated-rules-move-together
+- design-review-011 F1: ticket-prep/exact-checks-compare-against-the-merge-base
+- design-review-011 F2: ticket-prep/exact-checks-compare-against-the-merge-base, testing/no-vacuous-pass
+- design-review-011 F3: testing/no-vacuous-pass
+- design-review-011 F4: one-off: captured as c0137, c0120's home rewrite, outside c0115
+- design-review-012 F1: ticket-prep/exact-checks-compare-against-the-merge-base
+- design-review-012 F2: testing/no-vacuous-pass
+- design-review-012 F3: review/lists-paste-their-search

@@ -1,6 +1,7 @@
 --!strict
 -- c0120 AC3: a check.sh runs from its project's home. ac.sh changes to the home of the project whose root holds the
--- check.sh (pickman/ for pickman's, the root for z-nile's), so the paths a sequestered check.sh names (src/...,
+-- check.sh (pickman/ for pickman's, z-nile/ for z-nile's: the root belongs to no project, decided with the user on
+-- 2026-10-21), so the paths a sequestered check.sh names (src/...,
 -- tests/..., git pathspecs) are its project's; $ZN_ROOT names the root; a check.sh under a .tracker/ folder that no
 -- project's root holds refuses to run. ./zn find and members print paths from the folder ./zn was run in, so
 -- `$(scripts/tracker.sh find <id>)/...` and `for dir in $(... members R...)` work from the home. Fixture under
@@ -10,8 +11,12 @@ local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+-- the checkout's top: these specs run from z-nile/, and the fixture copies its files from there
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local SOURCE = 'HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"\n'
 	.. 'source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 -- records where it ran, then checks a pathspec of its project and that a promoted-spec path resolves
@@ -30,7 +35,8 @@ local PROBE_CHECK = SOURCE
 	.. 'printf "%s\\n%s\\n" "$GIT_CEILING_DIRECTORIES" "${GIT_CONFIG_COUNT:-unset}" > "$HERE/guards.txt"\n'
 	.. 'check "AC1: the ref guard refuses" bash -c \'! git -C "$ZN_ROOT" update-ref refs/heads/zz-escaped HEAD\'\n'
 	.. "finish\n"
-local ZNILE_CHECK = SOURCE .. 'printf "%s\\n" "$(pwd -P)" > "$HERE/where.txt"\ncheck "AC1: ok" true\nfinish\n'
+local ZNILE_CHECK = SOURCE
+	.. 'printf "%s\\n%s\\n" "$(pwd -P)" "$GIT_CEILING_DIRECTORIES" > "$HERE/where.txt"\ncheck "AC1: ok" true\nfinish\n'
 -- both member loops pickman's rafts use: the forwarder's (R0035's) and the template's ($ZN_ROOT)
 local RAFT_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 	.. 'for dir in $(scripts/tracker.sh members R0010); do check "RC0: $(basename "$dir") (forwarder)" bash "$dir/check.sh"; done\n'
@@ -62,7 +68,8 @@ return t.spec("c0120 checks run from their project's home", function(it)
 	it("sets up a fixture with pickman's home and an issue, a raft and a z-nile issue", function()
 		local seed: { [string]: string } = {
 			["z-nile/projects.toml"] = REGISTRY,
-			["pickman/scripts/tracker.sh"] = fs.readFile("pickman/scripts/tracker.sh"),
+			["pickman/scripts/tracker.sh"] = fs.readFile(`{TOP}/pickman/scripts/tracker.sh`),
+			["z-nile/scripts/tracker.sh"] = fs.readFile(`{TOP}/z-nile/scripts/tracker.sh`),
 			["pickman/from-home.sh"] = 'cd "$(dirname "$0")" || exit 1\nexec bash "$@"\n',
 			["pickman/src/server/Main.server.luau"] = "--!strict\nreturn nil\n",
 			["pickman/.tracker/issues/f0010/f0010.md"] = doc("f0010", "feature", "raft: R0010\n"),
@@ -78,7 +85,7 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			["z-nile/.tracker/issues/c0020/check.sh"] = ZNILE_CHECK,
 			["other/.tracker/issues/c0030/check.sh"] = ZNILE_CHECK,
 			-- for `ready`: the ignore rules, pickman's architecture map, a z-nile raft, and the inlined skills
-			[".gitignore"] = fs.readFile(".gitignore") .. "where.txt\nceiling.txt\n",
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`) .. "where.txt\nceiling.txt\n",
 			-- sources a pickman check.sh instead of running it (F6): ac.sh must refuse
 			["pickman/source-it.sh"] = '. "$(bash scripts/tracker.sh find f0010)/check.sh"\necho "sourced and went on"\n',
 			["pickman/.tracker/architecture.md"] = "# Architecture\n\nARCH-MARKER pickman's map\n",
@@ -92,14 +99,14 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			["z-nile/.tracker/rafts/R0020/check.sh"] = ZNILE_CHECK,
 		}
 		for _, sk in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			seed[`.claude/skills/{sk}/SKILL.md`] = fs.readFile(`.claude/skills/{sk}/SKILL.md`)
+			seed[`.claude/skills/{sk}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{sk}/SKILL.md`)
 		end
 		for _, state in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			seed[`pickman/.tracker/{state}/.gitkeep`] = ""
 		end
 		f = trackerfix.new("c0120-homes", seed)
 		-- seeds are written as plain files: the forwarder is executable in the repository (mode 100755)
-		fixture.exec(f.main, "chmod", { "+x", "pickman/scripts/tracker.sh" })
+		fixture.exec(f.main, "chmod", { "+x", "pickman/scripts/tracker.sh", "z-nile/scripts/tracker.sh" })
 		fixture.git(f.main, { "commit", "-qam", "the forwarder is executable" })
 		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
 	end)
@@ -187,6 +194,42 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			t.expect(inJail.ok).toBe(false)
 			t.expect(has(inJail.stderr, "is not a plain folder")).toBe(true)
 			t.expect(#written).toBe(0)
+		end
+	)
+
+	-- design review 005 F3: the root's own fence (ac.sh step 2) refuses as the home's does; nothing waives it
+	it(
+		"the root's fence refuses too: a symlinked root .cache, and a folder at the root's sentinel even in the jail",
+		function()
+			local away = `{f.base}/elsewhere-root`
+			fs.writeDir(away)
+			if fs.isDir(at(".cache")) then
+				fs.removeDir(at(".cache"))
+			end
+			fixture.exec(f.main, "ln", { "-s", away, ".cache" })
+			local linked = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = NO_JAIL }
+			)
+			local written = fs.readDir(away)
+			fs.removeFile(at(".cache"))
+			fs.writeDir(at(".cache/.git"))
+			local folder = fixture.exec(
+				f.main,
+				"bash",
+				{ "pickman/.tracker/issues/f0010/check.sh" },
+				{ env = markers() }
+			)
+			fs.removeDir(at(".cache/.git"))
+			t.expect(linked.ok).toBe(false)
+			t.expect(has(linked.stderr, "is not a plain folder")).toBe(true)
+			t.expect(has(linked.stdout, "PASS")).toBe(false)
+			t.expect(#written).toBe(0)
+			t.expect(folder.ok).toBe(false)
+			t.expect(has(folder.stderr, "is a folder")).toBe(true)
+			t.expect(has(folder.stdout, "PASS")).toBe(false)
 		end
 	)
 
@@ -310,10 +353,13 @@ return t.spec("c0120 checks run from their project's home", function(it)
 		t.expect(has(r.stdout, "sourced and went on")).toBe(false)
 	end)
 
-	it("a z-nile item's check.sh runs from the root", function()
+	it("a z-nile item's check.sh runs from z-nile/, its project's home, which is fenced too", function()
 		t.expect(trackerfix.tr(f, f.main, { "check", "c0020" }).ok).toBe(true)
 		local root = fixture.physical(f.main) :: string
-		t.expect(fs.readFile(at("z-nile/.tracker/issues/c0020/where.txt"))).toBe(`{root}\n`)
+		local seen = string.split(fs.readFile(at("z-nile/.tracker/issues/c0020/where.txt")), "\n")
+		t.expect(seen[1]).toBe(`{root}/z-nile`)
+		t.expect(has(":" .. seen[2] .. ":", `:{root}/z-nile/.cache:`)).toBe(true)
+		t.expect(fs.isFile(at("z-nile/.cache/.git"))).toBe(true)
 	end)
 
 	it(
@@ -395,4 +441,18 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			t.expect(has(r.stderr, "is under no project root")).toBe(true)
 		end
 	)
+
+	it("a raft made online gets its project's gate in RC0", function()
+		-- captures run in a worktree (the tracker refuses the main checkout)
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "rc-capture" })
+		local issue = trackerfix.trOk(f, wt, { "new", "issue", "c", "rc-tool", "--project", "z-nile" })
+		local id = string.match(issue, "(c%d%d%d%d)%.md$") :: string
+		local raft = trackerfix.trOk(
+			f,
+			wt,
+			{ "new", "raft", "chore", "rc-tool", id, "--single", "--project", "z-nile" }
+		)
+		local check = fs.readFile(`{wt}/{(string.gsub(raft, "[^/]+%.md$", "check.sh"))}`)
+		t.expect(has(check, '"$ZN_ROOT/z-nile/check.sh" --project z-nile --full')).toBe(true)
+	end)
 end)

@@ -1,76 +1,50 @@
 --!strict
 -- c0115 AC4: the old skill names are gone from every live file: z-nile/ and pickman/ (their .tracker/ aside),
--- AGENTS.md, SETUP.md, .claude/, zn, scripts/, .github/ and the root's tests/ (promoted specs aside: they are
--- history). The forms: a path through .claude/skills/<old>, any of the six hyphenated names (make-issue, ticket-prep,
+-- AGENTS.md, SETUP.md, .claude/, zn, scripts/ and .github/ (every project's promoted specs aside, z-nile/tests/acceptance
+-- and pickman/tests/acceptance: they are history). The forms: a path through .claude/skills/<old>, any of the six hyphenated names (make-issue, ticket-prep,
 -- ready-raft, launch-raft, execute-raft, stop-raft, as a /command or a bare word), and `<old>` skill or <old> skill
 -- for the five ordinary words (review, tracker, metrics, testing, architecture). And no code or spec names a path
 -- through a .claude/skills link (.claude/skills/<name>/...): git can't add through one, so every tool reads the real
 -- folder. And no live file cites an old lesson id (`testing/no-vacuous-pass`) whose renamed lesson exists. Plain finds
 -- only (lesson zz-test/plain-find-for-literals); `scan` and `oldLessonIds` are also run on planted texts.
-local fs = require("@lune/fs")
 local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
-
-local HYPHENATED = { "make-issue", "ticket-prep", "ready-raft", "launch-raft", "execute-raft", "stop-raft" }
-local WORDS = { "review", "tracker", "metrics", "testing", "architecture" }
 
 local function starts(s: string, prefix: string): boolean
 	return string.sub(s, 1, #prefix) == prefix
 end
-local function nameChar(c: string): boolean
-	return c ~= "" and (string.match(c, "[%w_%-]") ~= nil)
-end
 
--- Every old form in `text`, as "<form> at <line>".
+-- Every old form in `text`, as "<form> at <line>": the one old-name rule, skills.oldNames (the rename script renames
+-- lesson bodies with it too).
 local function scan(text: string): { string }
 	local found: { string } = {}
-	local function lineAt(i: number): number
-		local n = 1
-		for _ in string.gmatch(string.sub(text, 1, i), "\n") do
-			n += 1
+	for _, f in skills.oldNames(text) do
+		local line = 1
+		for _ in string.gmatch(string.sub(text, 1, f.from), "\n") do
+			line += 1
 		end
-		return n
-	end
-	local function each(needle: string, ok: (number, number) -> boolean)
-		local from = 1
-		while true do
-			local a, b = string.find(text, needle, from, true)
-			if not a then
-				return
-			end
-			if ok(a :: number, b :: number) then
-				table.insert(found, `{needle} at line {lineAt(a :: number)}`)
-			end
-			from = (b :: number) + 1
-		end
-	end
-	local function before(a: number): string
-		return string.sub(text, a - 1, a - 1)
-	end
-	local function after(b: number): string
-		return string.sub(text, b + 1, b + 1)
-	end
-	for _, old in HYPHENATED do
-		each(old, function(a, b)
-			local prev = before(a)
-			-- a promoted spec's file name (tests/acceptance/c0043/ticket-prep.spec.luau) is history, not a skill
-			return not nameChar(prev)
-				and prev ~= "."
-				and not nameChar(after(b))
-				and string.sub(text, b + 1, b + 5) ~= ".spec"
-		end)
-	end
-	for _, old in WORDS do
-		each(`.claude/skills/{old}`, function(_, b)
-			return not nameChar(after(b))
-		end)
-		each(`\`{old}\` skill`, function()
-			return true
-		end)
-		each(`{old} skill`, function(a)
-			local prev = before(a)
-			return not nameChar(prev) and prev ~= "`"
-		end)
+		table.insert(found, `{f.form} at line {line}`)
 	end
 	return found
 end
@@ -92,63 +66,19 @@ local function throughLink(text: string): boolean
 	end
 end
 
--- c0115 §5: an old lesson id is `<old skill>/<slug>` whose renamed lesson `<new skill>/<slug>.md` exists (the rename
--- script's own rule), so look-alike paths (tracker/next, scripts/tracker/x.luau) never count.
-local LESSON_SKILL: { [string]: string } = {
-	["make-issue"] = "z-ticket",
-	["ticket-prep"] = "z-design",
-	["ready-raft"] = "z-ready",
-	["launch-raft"] = "z-run",
-	["execute-raft"] = "z-run",
-	["stop-raft"] = "z-stop",
-	review = "zz-review",
-	tracker = "zz-rules",
-	metrics = "zz-stats",
-	testing = "zz-test",
-	architecture = "zz-arch",
-}
-local function existingLessons(): { [string]: boolean }
-	local out: { [string]: boolean } = {}
-	for _, base in { "z-nile/skills", "pickman/skills" } do
-		if fs.isDir(base) then
-			for _, skill in fs.readDir(base) do
-				local dir = `{base}/{skill}/lessons`
-				if fs.isDir(dir) then
-					for _, name in fs.readDir(dir) do
-						local slug = string.match(name, "^(.+)%.md$")
-						if slug then
-							out[`{skill}/{slug}`] = true
-						end
-					end
-				end
-			end
-		end
-	end
-	return out
-end
+-- c0115 §5: the one old-id rule, skills.oldLessonIds, the rename script's own (prose mode: a token counts only where
+-- its renamed lesson exists, so look-alike paths such as tracker/next never count)
 local function oldLessonIds(text: string, existing: { [string]: boolean }): { string }
-	local found: { string } = {}
-	for old, new in LESSON_SKILL do
-		local from = 1
-		while true do
-			local a, b = string.find(text, old .. "/", from, true)
-			if not a then
-				break
-			end
-			local prev = string.sub(text, (a :: number) - 1, (a :: number) - 1)
-			local slug = string.match(string.sub(text, (b :: number) + 1), "^([%w][%w%-]*)")
-			if not nameChar(prev) and prev ~= "/" and prev ~= "." and slug and existing[`{new}/{slug}`] then
-				table.insert(found, `{old}/{slug}`)
-			end
-			from = (b :: number) + 1
-		end
+	local out: { string } = {}
+	for _, id in skills.oldLessonIds(text, existing) do
+		table.insert(out, `{id.old}/{id.slug}`)
 	end
-	table.sort(found)
-	return found
+	table.sort(out)
+	return out
 end
 
 local function tracked(): { string }
-	local r = process.exec("git", { "ls-files" })
+	local r = process.exec("git", { "ls-files" }, { cwd = TOP })
 	if not r.ok then
 		error(r.stderr)
 	end
@@ -160,13 +90,14 @@ local function tracked(): { string }
 end
 
 local LIVE_TOP = { "AGENTS.md", "SETUP.md", "zn" }
-local LIVE_DIRS = { "z-nile/", "pickman/", ".claude/", "scripts/", ".github/", "tests/" }
+local LIVE_DIRS = { "z-nile/", "pickman/", ".claude/", "scripts/", ".github/" }
 local function live(path: string): boolean
 	if string.find(path, "/.tracker/", 1, true) or starts(path, "tracker/") then
 		return false
 	end
 	if
-		starts(path, "tests/acceptance/")
+		-- promoted specs are sequestered, every project's (z-nile's home is z-nile/, c0120)
+		starts(path, "z-nile/tests/acceptance/")
 		or starts(path, "pickman/tests/acceptance/")
 		or starts(path, "z-nile/vendor/")
 	then
@@ -189,11 +120,26 @@ local function code(path: string): boolean
 		and not starts(path, "pickman/skills/")
 		and not string.match(path, "%.md$")
 end
+-- The one place an old name must stay: the rename map itself, between the "c0115 rename map" markers in
+-- z-nile/engine/skills.luau. Exactly that block is left out of the scan, nothing else in the file (a missing block is an
+-- error, never a skip).
+local RENAMED_FILE = "z-nile/engine/skills.luau"
+local function withoutRenamed(text: string): string
+	local a = string.find(text, "\n-- c0115 rename map: begin", 1, true)
+	local b = a and string.find(text, "\n-- c0115 rename map: end\n", a :: number, true)
+	if not a or not b then
+		error(`{RENAMED_FILE} has no skills.RENAMED block`)
+	end
+	return string.sub(text, 1, a :: number) .. string.sub(text, (b :: number) + 1)
+end
 local function readable(path: string): string?
 	if not fs.isFile(path) then
 		return nil -- a deleted file, or a link
 	end
 	local text = fs.readFile(path)
+	if path == RENAMED_FILE then
+		text = withoutRenamed(text)
+	end
 	if string.find(text, "\0", 1, true) then
 		return nil
 	end
@@ -216,6 +162,20 @@ return t.spec("c0115 no old skill name is left in a live file", function(it)
 		t.expect(throughLink('fs.readFile(".claude/skills/zz-test/SKILL.md")')).toBe(true)
 		t.expect(throughLink("`.claude/skills/<name>` is a link")).toBe(false)
 		t.expect(throughLink('skills.LINKS = ".claude/skills"')).toBe(false)
+	end)
+
+	it("the same rule renames: each form gets its new name, and look-alikes stay", function()
+		local out, n = skills.renameOldNames(
+			"see the ticket-prep skill and .claude/skills/testing/SKILL.md; run /launch-raft R0010; the `review` skill"
+		)
+		t.expect(out)
+			.toBe(
+				"see the z-design skill and z-nile/skills/zz-test/SKILL.md; run /z-run R0010; the `zz-review` skill"
+			)
+		t.expect(n).toBe(4)
+		local same =
+			"scripts/tracker.sh, tests/acceptance/c0043/ticket-prep.spec.luau, the zz-test skill, design-review-001"
+		t.expect((skills.renameOldNames(same))).toBe(same)
 	end)
 
 	it("no live file names an old skill", function()
@@ -275,7 +235,7 @@ return t.spec("c0115 no old skill name is left in a live file", function(it)
 	end)
 
 	it("no live file, skills and comments included, cites an old lesson id", function()
-		local existing = existingLessons()
+		local existing = skills.lessonIndex(TOP)
 		local count = 0
 		for _ in existing do
 			count += 1

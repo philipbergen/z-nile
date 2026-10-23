@@ -1,14 +1,18 @@
 --!strict
--- c0120 AC13: the skills, AGENTS.md, SETUP.md, the templates and the command's usage say where pickman lives and what
--- a home is: pickman's root and home, the retired tracker/, checks and specs run from their home, each project's gate,
--- promotion into the home, the new command (`busy`) in every list of commands, and no old path to
--- pickman's architecture map or game design.
+-- c0120 AC13: the skills, AGENTS.md, SETUP.md, the templates and the command's usage say where each project lives and
+-- what a home is: pickman/ and z-nile/ (the root belongs to no project, decided with the user on 2026-10-21), the
+-- retired tracker/, checks and specs run from their home, each project's gate and CI job (a new project needs a new
+-- required check), what a raft's RC0 proves, promotion into the home, the finished-file rewrite, the new command
+-- (`busy`) in every list of commands, and no old path to pickman's architecture map or game design.
+-- These specs run from z-nile/: the documents are read from the checkout's top.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local SKILLS = ".claude/skills"
 local function read(path: string): string
-	return fs.readFile(path)
+	return fs.readFile(`{TOP}/{path}`)
 end
 local function at(text: string, needle: string, where: string)
 	if not string.find(text, needle, 1, true) then
@@ -17,13 +21,13 @@ local function at(text: string, needle: string, where: string)
 end
 local function docs(): { [string]: string }
 	local out: { [string]: string } = { ["AGENTS.md"] = read("AGENTS.md"), ["SETUP.md"] = read("SETUP.md") }
-	for _, name in fs.readDir(SKILLS) do
+	for _, name in fs.readDir(`{TOP}/{SKILLS}`) do
 		local dir = `{SKILLS}/{name}`
-		if fs.isFile(`{dir}/SKILL.md`) then
+		if fs.isFile(`{TOP}/{dir}/SKILL.md`) then
 			out[`{dir}/SKILL.md`] = read(`{dir}/SKILL.md`)
 		end
-		if fs.isDir(`{dir}/lessons`) then
-			for _, l in fs.readDir(`{dir}/lessons`) do
+		if fs.isDir(`{TOP}/{dir}/lessons`) then
+			for _, l in fs.readDir(`{TOP}/{dir}/lessons`) do
 				out[`{dir}/lessons/{l}`] = read(`{dir}/lessons/{l}`)
 			end
 		end
@@ -41,10 +45,18 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		at(s, "pickman's is `pickman/.tracker/` and z-nile's, the tooling's, is `z-nile/.tracker/`", w)
 		at(
 			s,
-			"Each project also has a home, the folder its `check.sh` files and specs run in: `pickman/` for pickman",
+			"Each project also has a home, the folder that holds its root and in which its `check.sh` files and specs run: `pickman/` for pickman",
 			w
 		)
-		at(s, "`./zn check` runs a pickman item's `check.sh` from `pickman/`", w)
+		at(s, "`z-nile/` for z-nile", w)
+		at(s, "the repository root belongs to no project (c0120)", w)
+		at(
+			s,
+			"`./zn check` runs a pickman item's `check.sh` from `pickman/` and a z-nile item's from `z-nile/`",
+			w
+		)
+		at(s, "CI runs one gate job per project, `gate (<project>)`, and branch protection requires each", w)
+		at(s, "adding a project means a registry entry, a CI matrix entry and a new required check", w)
 		at(s, "`./zn find` and `members` print paths from the folder you run them in", w)
 		at(s, "`tracker/` is a retired root (c0120)", w)
 		at(s, "`./zn audit` and the gate fail if anything else appears there", w)
@@ -72,11 +84,21 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 			)
 			at(s, "| `z-nile/check.sh --plan` |", w)
 			at(s, "Each project's specs live under its home and run from it (c0120)", w)
+			at(s, "z-nile's (the tooling's) under `z-nile/tests/`", w)
+			at(s, "There is no `tests/` at the root.", w)
+			at(s, "The runner refuses any other folder: the repository root belongs to no project", w)
+			at(s, "`z-nile/tests/acceptance/<id>/` for z-nile's", w)
+			at(s, "A project's gate proves that project alone (c0120)", w)
+			at(s, "for **finished** items' `check.sh` files only", w)
 			at(s, "`pickman/tests/run.luau` runs it from `pickman/`", w)
 			at(s, "**Runs from its project's home** (c0120)", w)
 			at(s, "A `check.sh` under a `.tracker/` folder that no project's root holds refuses to run.", w)
 			at(s, "`$ZN_ROOT` is the repository root", w)
-			at(s, "in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's)", w)
+			at(
+				s,
+				"in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's, `z-nile/tests/acceptance/<id>/` for z-nile's)",
+				w
+			)
 			at(s, "one run at a time per checkout and home (`<home>/.cache/tests-run.lock`)", w)
 			at(s, "`lune run z-nile/affected -- --project <name>`", w)
 			at(
@@ -119,7 +141,11 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 
 	it("the templates run from any home and name the project's architecture map", function()
 		local raft = read("z-nile/templates/raft/check.sh")
-		at(raft, 'check "RC0: repo gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --full', "raft check.sh")
+		at(
+			raft,
+			'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --full',
+			"raft check.sh"
+		)
 		at(raft, 'for dir in $("$ZN_ROOT/zn" members {{ID}}); do', "raft check.sh")
 		at(raft, '"$ZN_ROOT/zn" promote-check {{ID}}', "raft check.sh")
 		at(read("z-nile/templates/issue/check.sh"), "# cds to the item's project home", "issue check.sh")
@@ -127,6 +153,17 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		at(prompt, "## Architecture map ({{ARCHITECTURE_PATH}})", "prompt.md")
 		at(prompt, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
 	end)
+
+	-- design review 005 F5: no ../zn settings entries (a settings entry is a prefix match, so `../zn` would allow it from
+	-- any folder one level down); from a home the forwarder scripts/tracker.sh already matches c0114's entries
+	it(
+		"the settings add no ../zn entries, and keep the scripts/tracker.sh ones a home's forwarder matches",
+		function()
+			local settings = read(".claude/settings.json")
+			t.expect(string.find(settings, "Bash(../zn", 1, true)).toBe(nil)
+			t.expect(string.find(settings, "Bash(scripts/tracker.sh", 1, true) ~= nil).toBe(true)
+		end
+	)
 
 	it("the command's usage names busy", function()
 		local main = read("z-nile/engine/main.luau")

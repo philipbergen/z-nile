@@ -1,11 +1,31 @@
 --!strict
--- c0115 AC8: the renamed skills say what they now hold: z-run opens with launch-raft's steps; zz-test keeps the gate,
+-- c0115 AC8: the renamed skills say what they now hold: z-run launches (launch-raft) and hands off to zz-execute
+-- (execute-raft); zz-test keeps the gate,
 -- check.sh, sequestration and the guards, and pickman-test the game's tiers; zz-arch holds the tooling's rules and
 -- pickman-arch the game's; z-design reads its three checklists; zz-rules states the skill folders, the links, the
 -- naming rule and the `skills` command in every list a command joins; every skill's lessons paragraph names the real
 -- folder; AGENTS.md and SETUP.md name the new skills and commands; `./zn`'s usage names `skills`. Reads the real tree.
-local fs = require("@lune/fs")
 local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
 local t = require("@tests/lib/t")
 
 local function read(path: string): string
@@ -34,6 +54,7 @@ local ALL = {
 	"z-ready",
 	"z-run",
 	"z-stop",
+	"zz-execute",
 	"zz-review",
 	"zz-rules",
 	"zz-arch",
@@ -42,16 +63,24 @@ local ALL = {
 }
 
 return t.spec("c0115 the renamed skills say what they hold", function(it)
-	it("z-run opens with the launch steps, and says when to skip them", function()
-		local launch = section(read(`{Z}/z-run/SKILL.md`), "## Launch (from the main checkout)")
+	it("z-run launches and hands off; zz-execute is the protocol it hands off to", function()
+		local run = read(`{Z}/z-run/SKILL.md`)
+		at(run, "`./zn prompt <R> --path`", "z-run")
+		at(run, "run `/z-ready <R>`", "z-run")
+		at(run, 'cd "$(./zn worktree <R>)"', "z-run")
 		at(
-			launch,
-			"Skip this section when you were handed the raft's prompt and already work in its worktree",
-			"z-run Launch"
+			run,
+			"**Hand off.** Follow the prompt as your instructions, from its first line: it carries the zz-execute skill",
+			"z-run"
 		)
-		at(launch, "`./zn prompt <R> --path`", "z-run Launch")
-		at(launch, "run `/z-ready <R>`", "z-run Launch")
-		at(launch, 'cd "$(./zn worktree <R>)"', "z-run Launch")
+		local exec = read(`{Z}/zz-execute/SKILL.md`)
+		at(exec, "\n## Phase 0: Claim", "zz-execute")
+		at(exec, "\n## Stop conditions", "zz-execute")
+		at(
+			read("z-nile/templates/prompt.md"),
+			"1. **Follow the `zz-execute` skill below, step by step.**",
+			"the prompt template"
+		)
 	end)
 
 	it(
@@ -136,7 +165,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 				"A branch from before c0115 that added a file inside an old skill folder (`.claude/skills/<old>/`) gets the same conflict",
 				"zz-rules Conflicts"
 			)
-			local usage = process.exec("bash", { "zn" })
+			local usage = process.exec("bash", { `{TOP}/zn` })
 			at(usage.stdout, "skills [--check]", "./zn usage")
 		end
 	)

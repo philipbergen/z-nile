@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0037. SEQUESTERED: never edit during execution.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$(git -C "$A" rev-parse --show-toplevel)/scripts/lib/ac.sh"
+source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 T=.claude/skills/tracker/SKILL.md
 X=.claude/skills/execute-raft/SKILL.md
 merging() { sed -n '/^## Merging/,/^## After merge/p' "$T"; }

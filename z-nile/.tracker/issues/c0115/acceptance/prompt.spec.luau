@@ -1,11 +1,15 @@
 --!strict
--- c0115 AC7: a raft's prompt inlines z-nile's step skills (z-run, zz-rules, zz-arch, zz-test, zz-review, in that
+-- c0115 AC7: a raft's prompt inlines z-nile's step skills (zz-execute, zz-rules, zz-arch, zz-test, zz-review, in that
 -- order) and then every skill of the raft's own project, each from its real folder, never through .claude/skills;
 -- a z-nile raft gets no project skill, and another project's skills and lessons never reach it. Its Lessons section
 -- lists the build lessons of z-nile's skills and the raft's project's only, and the prompt names the project.
 -- Fixture under .cache/c0115-prompt (tests/lib/trackerfix): a pickman raft in tracker/ (the fixtures' layout,
 -- tests/lib/engine REGISTRY) and a z-nile raft in z-nile/.tracker, with a pickman skill and lessons on both sides.
+local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
+-- the repository's top: this spec runs from z-nile/ (c0120), and the real tree's files are read from there
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -13,7 +17,7 @@ local PREPARED = "prepared-quiet-copper-falcon"
 local Z = "z-nile/.tracker"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
-local INLINED = { "z-run", "zz-rules", "zz-arch", "zz-test", "zz-review" }
+local INLINED = { "zz-execute", "zz-rules", "zz-arch", "zz-test", "zz-review" }
 
 local function raft(id: string, member: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {string.lower(id)}\nsingle: true\nissues: [{member}]\n`
@@ -58,12 +62,12 @@ end
 return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", function(it)
 	it("sets up a pickman raft, a z-nile raft, a pickman skill and lessons in both projects", function()
 		f = trackerfix.new("c0115-prompt", {
-			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = "# map\n",
-			["tracker/rafts/R0010/R0010.md"] = raft("R0010", "c0010"),
-			["tracker/rafts/R0010/check.sh"] = CHECK,
-			["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
-			["tracker/issues/c0010/check.sh"] = CHECK,
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			["pickman/.tracker/architecture.md"] = "# map\n",
+			["pickman/.tracker/rafts/R0010/R0010.md"] = raft("R0010", "c0010"),
+			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010"),
+			["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
 			[`{Z}/rafts/R0020/R0020.md`] = raft("R0020", "c0020"),
 			[`{Z}/rafts/R0020/check.sh`] = CHECK,
 			[`{Z}/issues/c0020/c0020.md`] = issue("c0020", "R0020"),
@@ -75,9 +79,33 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 	end)
 
 	it(
+		"the fixture's copied skills carry their lessons (the user's G7), for every folder engine.copy copies",
+		function()
+			local count = 0
+			-- the folders engine.copy copies (z-nile's skills), from its own constant: a project's lessons are not copied
+			for _, base in engine.COPIED_SKILLS do
+				if fs.isDir(`{TOP}/{base}`) then
+					for _, skill in fs.readDir(`{TOP}/{base}`) do
+						local dir = `{base}/{skill}/lessons`
+						if fs.isDir(`{TOP}/{dir}`) then
+							for _, name in fs.readDir(`{TOP}/{dir}`) do
+								count += 1
+								if not fs.isFile(`{f.main}/{dir}/{name}`) then
+									error(`the fixture lacks {dir}/{name}`)
+								end
+							end
+						end
+					end
+				end
+			end
+			t.expect(count > 0).toBe(true)
+		end
+	)
+
+	it(
 		"a pickman raft gets z-nile's five skills in order, then pickman's, from their real folders",
 		function()
-			local prompt = ready("R0010", "tracker")
+			local prompt = ready("R0010", "pickman/.tracker")
 			local paths = inlined(prompt)
 			local want = {}
 			for _, s in INLINED do

@@ -32,11 +32,11 @@ end
 
 export type Found = { id: string, path: string, kind: string }
 
--- The project roots of the checkout at `root` (c0114), or the legacy root and the registry's problem.
+-- The project roots of the checkout at `root` (c0114), or none and the registry's problem: never a guessed root.
 local function rootsOf(root: string): ({ string }, string?)
 	local ok, reg = pcall(projects.load, root)
 	if not ok then
-		return { projects.LEGACY }, tostring(reg)
+		return {}, tostring(reg)
 	end
 	return projects.roots(reg :: projects.Registry), nil
 end
@@ -45,7 +45,10 @@ end
 -- tree.
 function audit.scan(root: string): { Found }
 	local out: { Found } = {}
-	local roots = rootsOf(root)
+	local roots, problem = rootsOf(root)
+	if problem then
+		error(problem, 0) -- every reader of the items (list, offline numbering, remap) refuses without the registry
+	end
 	for _, base in roots do
 		for _, kind in KINDS do
 			for _, state in STATES do
@@ -75,6 +78,7 @@ function audit.run(root: string): { Problem }
 	local _, regProblem = rootsOf(root)
 	if regProblem then
 		add("error", "registry", projects.FILE, regProblem)
+		return problems -- nothing else can be read without the roots
 	end
 	local found = audit.scan(root)
 	local byId: { [string]: { string } } = {}

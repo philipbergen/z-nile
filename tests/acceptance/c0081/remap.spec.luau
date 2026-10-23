@@ -91,9 +91,13 @@ return t.spec("c0870 remap", function(it)
 			`{branch}/tracker/issues/f0020/f0020.md`,
 			fs.readFile(`{branch}/tracker/issues/f0020/f0020.md`) .. "Appended on the branch for f0020.\n"
 		)
-		t.expect(trOk(branch, { "new", "issue", "c", "mine" }, { PICKMAN_PUBLISH = "0" }))
+		t.expect(
+			trOk(branch, { "new", "issue", "c", "mine", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
+		)
 			.toBe("tracker/issues/c0041/c0041.md")
-		t.expect(trOk(branch, { "new", "issue", "c", "also" }, { PICKMAN_PUBLISH = "0" }))
+		t.expect(
+			trOk(branch, { "new", "issue", "c", "also", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
+		)
 			.toBe("tracker/issues/c0042/c0042.md")
 		git(branch, { "add", "-A" })
 		git(branch, { "commit", "-q", "-m", "branch work" })
@@ -122,7 +126,7 @@ return t.spec("c0870 remap", function(it)
 
 	it("a branch from before the compaction cannot allocate until it remaps", function()
 		local before = git(origin, { "rev-parse", "main" })
-		local r = tr(branch, { "new", "issue", "c", "stale" })
+		local r = tr(branch, { "new", "issue", "c", "stale", "--project", "pickman" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "a branch that changed tracker/ runs ./zn remap")).toBe(true)
 		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)

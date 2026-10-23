@@ -1,0 +1,15 @@
+---
+title: A check that a branch made exactly one change compares against the branch's merge-base, never a frozen tree
+when: design
+tags: [merges, acceptance, migration]
+check: Does this check compare the tree with a fixed commit (the parent of a move, a sha in the design)? What does it say after main edits one of the files it judges, after an item finishes on main, and after the branch lands and main moves on? Can the author make the base equal HEAD, or make a judged file absent?
+---
+A check that the branch's diff is exactly a rewrite ("every finished check.sh is its old text, rewritten, less the listed deletions") judges main's own later work when its "old text" comes from a commit frozen at the move. Main keeps writing those files during the raft (an item finishes, another move rewrites them, a comment is fixed), and after the landing the frozen commit never moves, so one reviewed edit on main turns the check red forever, with no edit the branch is allowed to make.
+
+**Why:** c0115 design review 010 F1, the same flaw as c0120's AC18: `rewrite-finished --check` read each finished file at the parent of the commit that removed `.claude/skills/testing/SKILL.md`. In a scratch clone, a comment main added to a finished file, and a later edit after the landing, both turned it red.
+
+**How to apply:** compare three-way against `git merge-base HEAD origin/main`: a file at the base must be exactly the base's text with the branch's change applied; a file not at the base (it finished on the branch) only has to need no change; an empty range (the branch landed) checks only that nothing needs the change. No `origin/main`, or no merge-base, is red. Rerun the change after every merge of main, as its own commit, and spec the three windows: main edits a judged file, an item finishes on main with the old form, and main moves on after the landing.
+
+The base must come from the remote, and the comparison must run from both sides (c0115 design review 011 F1, F2). A local `refs/remotes/origin/main` is one `git update-ref` from HEAD, which turns the check into an empty range or a base that already holds the edit; take main's tip from `git ls-remote origin refs/heads/main`, red when that fails or the tip isn't local. And a check driven from HEAD's files can't see a judged file the branch deleted, renamed or moved: list the base's files too, under the base's own roots, and make each one missing at HEAD red.
+
+What the remote can't prove stays review's, and the check says so in its output: an origin swapped before the run (`remote set-url`, `url.*.insteadOf`) feeds it any tip, so print the URL `git ls-remote --get-url origin` resolved with the base, and name the limit in the design (c0115 design review 012 F1; the user's "detect, not prevent").

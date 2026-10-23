@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance checks for c0035. SEQUESTERED: never edit during execution.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$(git -C "$A" rev-parse --show-toplevel)/scripts/lib/ac.sh"
+source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 S=.claude/skills
 X="$S/execute-raft/SKILL.md"
 
@@ -17,11 +17,11 @@ step() {
 }
 has() { grep -q -- "$1"; }
 
-ac1() { step 1 | has 'Review NNN started at' && step 1 | has 'tracker.sh commit' && step 1 | has 'comment'; }
+ac1() { step 1 | has 'Review NNN started at' && step 1 | has './zn commit' && step 1 | has 'comment'; }
 # c0084 (prep): the review commit records its spend as the code-review phase (it was `--time 0`); either form
 # holds, and any raft id in the example (a compaction rewrote it once).
-ac2() { step 3 | grep -Eq 'tracker\.sh commit -m "R[0-9]+: review-NNN" (--time 0|--phase code-review)' && step 3 | has 'finding count by severity'; }
-ac3() { step 5 | has 'tracker.sh commit' && step 5 | has 'Review NNN addressed' && step 5 | has 'refute'; }
+ac2() { step 3 | grep -Eq 'zn commit -m "R[0-9]+: review-NNN" (--time 0|--phase code-review)' && step 3 | has 'finding count by severity'; }
+ac3() { step 5 | has './zn commit' && step 5 | has 'Review NNN addressed' && step 5 | has 'refute'; }
 ac4() { grep -q '^## The PR is the visible record' "$S/tracker/SKILL.md" && grep -q 'BLOCKED' "$S/tracker/SKILL.md" && grep -q '^## Visible record' "$S/review/SKILL.md"; }
 ac5() {
   sed -n '/^## Phase 1/,/^## Phase 2/p' "$X" | has 'PR comment' &&
@@ -37,6 +37,6 @@ check "AC3: fixes and answers are pushed and commented (step 5)" ac3
 check "AC4: tracker and review skills name the PR as the visible record" ac4
 check "AC5: phases 1-3 each post a PR comment" ac5
 check "AC6: approve path skips the refute file" ac6
-check "AC7: re-review format cannot trip tracker.sh done" ac7
+check "AC7: re-review format cannot trip ./zn done" ac7
 
 finish

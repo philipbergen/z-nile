@@ -2,8 +2,8 @@
 # Acceptance checks for c0059. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0059 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0059 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0059"
 
@@ -28,7 +28,7 @@ check "AC2: a check run publishes nothing, says so and still works locally; outs
   "a check run publishes nothing, says so, and still works" \
   "outside the guards' protection the same command publishes" \
   "a check run's status move publishes nothing either, and says so"
-check "AC3: the full gate passes" scripts/check.sh --full
+check "AC3: the full gate passes" z-nile/check.sh --full
 check "AC4: the testing skill says a check never publishes tracker state" bash -c '
   s=.claude/skills/testing/SKILL.md
   grep -qiE "never publish|not publishing|publishes nothing" "$s" || { echo "the testing skill does not say checks never publish"; exit 1; }'

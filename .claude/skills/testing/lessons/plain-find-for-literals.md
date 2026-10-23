@@ -4,7 +4,7 @@ when: both
 tags: [lua-patterns, specs]
 check: Does every `string.find`, `string.match` or `string.gsub` on literal text (an id, a model name, a path, a heading) pass `plain = true` or escape the pattern characters, especially `-`, `.`, `%` and `[`? And is every fixed-string filter on paths (plain find, `grep -F`, `grep -vF`) anchored to the start of the path, where only a prefix is meant?
 ---
-In Lua patterns `-` is a quantifier and `.` matches anything, so `string.gsub(text, "grok-4.7", x)` and `string.find(s, "make-issue")` do not match the text they name. A spec that does this can fail for every correct implementation, or pass for a wrong one.
+In Lua patterns `-` is a quantifier and `.` matches anything, so `string.gsub(text, "grok-4.7", x)` and `string.find(s, "ab-cd")` do not match the text they name. A spec that does this can fail for every correct implementation, or pass for a wrong one.
 
 **Why:** R0042 design reviews 002 F1 and 004 F3: a skill-name swap and two model-id replacements used hyphenated literals as patterns, so sequestered criteria could not pass. The bug came back after the first fix because only one call was changed.
 

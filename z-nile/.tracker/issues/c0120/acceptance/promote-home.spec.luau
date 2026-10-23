@@ -18,13 +18,15 @@ local ACC = "tests/" .. "acceptance/"
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
+-- the checkout's top (cloned from) and this home's .cache (these specs run from z-nile/, c0120)
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0120-promote`
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0120-promote`
 local work = `{base}/work`
 
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
-local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\nhome = "pickman"\n\n'
-	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 	.. 'check "AC1: fixture" true\nfinish\n'
 -- a promoted spec that only passes from pickman/: pickman's @logic, and a path relative to the home
@@ -93,10 +95,10 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 			"pickman/tests/lib",
 			"pickman/tests/meta",
 			"pickman/.luaurc",
-			"tests/run.luau",
-			"tests/lib",
 			".luaurc",
 			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/tests/acceptance",
+			":(exclude)z-nile/tests/tooling",
 			":(exclude)z-nile/next",
 			":(exclude)z-nile/compaction.txt",
 		}, { cwd = root })
@@ -114,9 +116,22 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		end
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "empty tracker, pickman's home", "--allow-empty" })
-		t.expect(must(tr({ "new", "issue", "f", "alpha" }), "new issue"))
+		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue"))
 			.toBe("pickman/.tracker/issues/f0010/f0010.md")
-		must(tr({ "new", "raft", "feature", "demo", "f0010", "--single" }), "new raft")
+		must(
+			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
+			"new raft"
+		)
+		-- its RC0 runs its project's gate (decided with the user: "pickman's gate only"; the template's {{PROJECT}})
+		local raftCheck = fs.readFile(`{work}/pickman/.tracker/rafts/R0010/check.sh`)
+		t.expect(
+			string.find(
+				raftCheck,
+				'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project pickman --full',
+				1,
+				true
+			) ~= nil
+		).toBe(true)
 		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
 			edit(doc, "design: draft", "design: ready")
 		end
@@ -137,16 +152,16 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 
 	it("spend's lines leave out every project's promoted specs", function()
 		write("pickman/" .. ACC .. "f0099/x.spec.luau", "--!strict\nreturn nil\n")
-		write(ACC .. "c0099/y.spec.luau", "--!strict\nreturn nil\n")
+		write("z-nile/" .. ACC .. "c0099/y.spec.luau", "--!strict\nreturn nil\n")
 		write("pickman/src/counted.luau", "--!strict\nreturn 1\n")
 		write(
 			"probe-spend.luau",
 			`local spend = {REQ}("./z-nile/engine/spend")\nfor _, s in spend.stagedStats(true) do print(s.path) end\n`
 		)
-		git({ "add", "pickman/" .. ACC .. "f0099", ACC .. "c0099", "pickman/src/counted.luau" })
+		git({ "add", "pickman/" .. ACC .. "f0099", "z-nile/" .. ACC .. "c0099", "pickman/src/counted.luau" })
 		local r = fixture.exec(work, "lune", { "run", "probe-spend.luau" })
 		git({ "reset", "-q", "HEAD", "--", "." })
-		for _, rel in { "pickman/" .. ACC .. "f0099", ACC .. "c0099" } do
+		for _, rel in { "pickman/" .. ACC .. "f0099", "z-nile/" .. ACC .. "c0099" } do
 			fs.removeDir(`{work}/{rel}`)
 		end
 		fs.removeFile(`{work}/pickman/src/counted.luau`)

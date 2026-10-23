@@ -2,6 +2,7 @@
 -- c0114 AC9: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
 -- (scripts/tracker.sh is named once, as the forwarder), and they state the project-root rules the engine follows.
 local fs = require("@lune/fs")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
 local SKILLS = ".claude/skills"
@@ -130,8 +131,71 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		)
 		at(tracker, "never to another root")
 		local make = fs.readFile(`{SKILLS}/make-issue/SKILL.md`)
-		at(make, "with `--project z-nile` for tooling work")
+		-- the project: --project's, else the directory's, refused at the root (decided with the user, 2026-10-21)
+		at(make, "`./zn new issue <f|d|c> <kebab-slug> --project <name> --desc")
+		at(make, "The project is `--project`'s when given, else the one whose folder you run `./zn` in")
+		at(
+			make,
+			"at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`"
+		)
+		at(make, "Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`")
+		at(make, "game work is `--project pickman`, which has no folder until c0120")
+		at(tracker, "the directory gives the project unless `--project` names one")
+		at(
+			tracker,
+			"the commands that create an item, and so must choose its project (`new issue`, `new raft`), refuse and ask for `--project`"
+		)
+		at(
+			tracker,
+			"read-only ones read every project there (`list` shows them all), because reading needs no project"
+		)
+		-- every capture line a skill or template gives names its project, or its raft
+		for _, skill in fs.readDir(SKILLS) do
+			local doc = `{SKILLS}/{skill}/SKILL.md`
+			if fs.isFile(doc) then
+				for line in string.gmatch(fs.readFile(doc), "[^\n]+") do
+					for cmd in string.gmatch(line, "`(%./zn new [^`]*)`") do
+						if
+							not (
+								string.find(cmd, "--project", 1, true) or string.find(cmd, "--raft", 1, true)
+							)
+						then
+							error(`{doc}: {cmd} names no project`)
+						end
+					end
+				end
+			end
+		end
+		at(
+			fs.readFile("z-nile/templates/prompt.md"),
+			"`./zn new issue … --project <name>`, or `--raft <R-id>`"
+		)
 	end)
+
+	it(
+		"the settings allow ./zn wherever they allowed scripts/tracker.sh, and keep the old entries",
+		function()
+			local settings = serde.decode("json", fs.readFile(".claude/settings.json"))
+			local allow: { string } = settings.permissions.allow
+			local old = 0
+			for _, entry in allow do
+				local rest = string.match(entry, "^Bash%(scripts/tracker%.sh (.*)$")
+					or string.match(entry, "^Bash%(tracker%.sh (.*)$")
+				if rest then
+					old += 1
+					if not table.find(allow, "Bash(./zn " .. rest) then
+						error(`no ./zn entry beside {entry}`)
+					end
+				end
+			end
+			t.expect(old > 0).toBe(true)
+			-- the hooks are unchanged: they still run scripts/hooks/
+			t.expect(settings.hooks.Stop[1].hooks[1].command)
+				.toBe('"$CLAUDE_PROJECT_DIR"/scripts/hooks/stop.sh')
+			t.expect(settings.hooks.PostToolUse[1].hooks[1].command)
+				.toBe('"$CLAUDE_PROJECT_DIR"/scripts/hooks/post-edit.sh')
+		end
+	)
 
 	it("the sequestration check covers every project root", function()
 		local cmd =

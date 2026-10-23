@@ -35,10 +35,6 @@ function projects.shapeOk(root: string): boolean
 end
 
 -- The registry of a tree or commit from before c0114, which has no registry file: the one root `tracker`.
-function projects.legacy(): Registry
-	return { projects = { { name = "pickman", root = projects.LEGACY } }, retired = {} }
-end
-local legacy = projects.legacy
 
 -- The registry in `text`, or nil and the first problem. Every key is known, every name and root is valid and unique,
 -- and a project's root is `<name>/.tracker` or the legacy `tracker` (which at most one project holds).
@@ -145,6 +141,23 @@ function projects.projectOf(reg: Registry, root: string): Project?
 end
 
 -- The project named `name`, or nil.
+-- The folder a project's root sits in (`z-nile` for `z-nile/.tracker`); nil for the legacy `tracker`, whose project
+-- has no folder of its own (pickman, until c0120 gives it `pickman/`).
+function projects.folderOf(root: string): string?
+	return string.match(root, "^([^/]+)/%.tracker$")
+end
+
+-- The project whose folder holds `dir` (a path relative to the checkout; "" is its root), or nil when none does.
+function projects.inDir(reg: Registry, dir: string): Project?
+	for _, p in reg.projects do
+		local folder = projects.folderOf(p.root)
+		if folder and (dir == folder or string.sub(dir, 1, #folder + 1) == folder .. "/") then
+			return p
+		end
+	end
+	return nil
+end
+
 function projects.named(reg: Registry, name: string): Project?
 	for _, p in reg.projects do
 		if p.name == name then
@@ -157,8 +170,8 @@ end
 local cache: { [string]: Registry } = {}
 
 -- The working tree's registry under `dir` (default: the current directory, which tracker commands set to the
--- checkout). A tree without the file is a tree from before c0114: its one root is `tracker`. A file that does not
--- parse is an error: the tracker never guesses which roots a project has.
+-- checkout). A missing file and a file that does not parse are both errors: the tracker never guesses which roots a
+-- project has (c0114, decided with the user). A tree from before c0114 runs its own engine, which needs no registry.
 function projects.load(dir: string?, fresh: boolean?): Registry
 	local base = dir or "."
 	local hit = if fresh then nil else cache[base]
@@ -166,29 +179,27 @@ function projects.load(dir: string?, fresh: boolean?): Registry
 		return hit
 	end
 	local path = `{base}/{projects.FILE}`
-	local reg: Registry
-	if fs.isFile(path) then
-		local parsed, err = projects.parse(fs.readFile(path))
-		if not parsed then
-			error(err, 0)
-		end
-		reg = parsed
-	else
-		reg = legacy()
+	if not fs.isFile(path) then
+		error(`no {projects.FILE} in {base}: the tracker refuses to guess the project roots`, 0)
 	end
+	local parsed, err = projects.parse(fs.readFile(path))
+	if not parsed then
+		error(err, 0)
+	end
+	local reg: Registry = parsed
 	cache[base] = reg
 	return reg
 end
 
--- The registry at commit `rev` (as `git show <rev>:z-nile/projects.toml` in `cwd`), for readers of history. A commit
--- without the file predates c0114 and has the legacy root. Nil and the reason when the file is there but bad.
+-- The registry at commit `rev` (as `git show <rev>:z-nile/projects.toml` in `cwd`). Nil and the reason when the file
+-- is missing (a commit from before c0114) or bad: every reader refuses then, never guessing the roots.
 function projects.at(rev: string, cwd: string?): (Registry?, string?)
 	local listed = process.exec("git", { "ls-tree", "--name-only", rev, "--", projects.FILE }, { cwd = cwd })
 	if not listed.ok then
 		return nil, `cannot read {rev}: {listed.stderr}`
 	end
 	if string.match(listed.stdout, "%S") == nil then
-		return legacy(), nil
+		return nil, `{rev} has no {projects.FILE}`
 	end
 	local shown = process.exec("git", { "show", `{rev}:{projects.FILE}` }, { cwd = cwd })
 	if not shown.ok then

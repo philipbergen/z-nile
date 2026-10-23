@@ -2,13 +2,13 @@
 # Acceptance checks for c0084. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0084 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0084 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0084"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+# `./zn members` and other cheap reads; everything else goes inside `check`.
 spec_ok() { # $1: spec file; the rest: case-name prefixes that must exist in it. The whole spec must pass.
   local name=$1 spec="$A/$1" out c
   shift
@@ -24,7 +24,7 @@ spec_ok() { # $1: spec file; the rest: case-name prefixes that must exist in it.
 check "AC1: the ledger reads every spend.md shape and writes nine-column rows that never break" spec_ok ledger.spec.luau \
   "reads seven-cell rows as build" "reads c0073's fixture shape" "refuses malformed rows" "renders nine cells per row" \
   "never lets a cell break the table" "appends a numbered row"
-check "AC2: tracker.sh spend publishes appended rows, counts only prep's own lines, and refuses what it must" \
+check "AC2: ./zn spend publishes appended rows, counts only prep's own lines, and refuses what it must" \
   spec_ok spend-command.spec.luau "publishes one capture row" "splits a raft's row" "prep counts the lines" \
   "prep lines are the prep branch's own" "refuses bad input" "refuses an item that is active" "records deliver on a done item" \
   "keeps an existing ledger's rows"
@@ -45,7 +45,7 @@ skills_record_every_phase() {
   local S=.claude/skills
   # sec <file> <line that starts the section> <line that starts the next one, empty: to the end>
   sec() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 {p=1} p && e != "" && index($0, e) == 1 && index($0, s) != 1 {p=0} p' "$1"; }
-  grep -E "^6\. " "$S/make-issue/SKILL.md" | grep -qF -- "tracker.sh spend <id> --phase capture" ||
+  grep -E "^6\. " "$S/make-issue/SKILL.md" | grep -qF -- "./zn spend <id> --phase capture" ||
     { echo "make-issue step 6 does not record the capture"; return 1; }
   sec "$S/ticket-prep/SKILL.md" "## 5." "## 6." |
     grep -qF -- "--phase design-review --time <reviewer minutes> --tokens <reviewer tokens> --note design-review-NNN" ||
@@ -55,7 +55,7 @@ skills_record_every_phase() {
   sec "$S/ticket-prep/SKILL.md" "## 6." "" | grep -qF -- "--phase prep" || { echo "ticket-prep 6 does not record prep"; return 1; }
   sec "$S/execute-raft/SKILL.md" "## Phase 4" "## Phase 5" | grep -qF -- "--phase code-review --time <reviewer minutes> --tokens <reviewer tokens>" ||
     { echo "execute-raft Phase 4 does not record code review with the reviewer's minutes and tokens"; return 1; }
-  sec "$S/execute-raft/SKILL.md" "## Phase 6" "## Stop" | grep -Eq -- 'tracker\.sh spend R[0-9]+ --phase deliver' ||
+  sec "$S/execute-raft/SKILL.md" "## Phase 6" "## Stop" | grep -Eq -- 'zn spend R[0-9]+ --phase deliver' ||
     { echo "execute-raft Phase 6 does not record delivery after the merge"; return 1; }
   if grep -rnF -- "--time 0" "$S"; then echo "a skill still records with --time 0"; return 1; fi
   local t="$S/tracker/SKILL.md" p
@@ -64,7 +64,7 @@ skills_record_every_phase() {
     sec "$t" "## Spend" "## " | grep -qF "\`$p\`" || { echo "tracker skill: ## Spend does not name $p"; return 1; }
   done
   grep -F "**The direct-push exception.**" "$t" | grep -qF "spend.md" || { echo "tracker skill: the direct-push exception does not name spend.md"; return 1; }
-  sec "$t" "## Other commands" "## Sync" | grep -qF "tracker.sh spend" || { echo "tracker skill: Other commands lacks spend"; return 1; }
+  sec "$t" "## Other commands" "## Sync" | grep -qF "./zn spend" || { echo "tracker skill: Other commands lacks spend"; return 1; }
   grep -qiF "by phase" "$S/metrics/SKILL.md" && grep -qiF "per round" "$S/metrics/SKILL.md" ||
     { echo "metrics skill does not explain the phase tables"; return 1; }
 }
@@ -72,9 +72,9 @@ check "AC6: the skills record every phase, and none keeps --time 0" skills_recor
 
 one_ledger_format() {
   local f code bad=0
-  [[ -f scripts/tracker/ledger.luau ]] || { echo "scripts/tracker/ledger.luau is missing"; return 1; }
-  for f in scripts/tracker/*.luau; do
-    [[ $f == scripts/tracker/ledger.luau ]] && continue
+  [[ -f z-nile/engine/ledger.luau ]] || { echo "z-nile/engine/ledger.luau is missing"; return 1; }
+  for f in z-nile/engine/*.luau; do
+    [[ $f == z-nile/engine/ledger.luau ]] && continue
     code=$(grep -vE '^[[:space:]]*--' "$f") # comment lines don't count (store.luau's layout comment names spend.md)
     # the row format is spelled in the ledger alone
     if grep -nF "| when | commit |" <<<"$code"; then echo "$f spells the spend row format itself"; bad=1; fi
@@ -84,10 +84,10 @@ one_ledger_format() {
     fi
   done
   for f in spend publish; do
-    grep -qE 'ledger\.(parse|append|render|appendOnly)\(' "scripts/tracker/$f.luau" || { echo "$f.luau does not use the ledger"; bad=1; }
+    grep -qE 'ledger\.(parse|append|render|appendOnly)\(' "z-nile/engine/$f.luau" || { echo "$f.luau does not use the ledger"; bad=1; }
   done
   return $bad
 }
-check "AC7: spend.md is read and written only through scripts/tracker/ledger.luau" one_ledger_format
+check "AC7: spend.md is read and written only through z-nile/engine/ledger.luau" one_ledger_format
 
 finish

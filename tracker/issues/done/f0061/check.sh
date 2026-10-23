@@ -2,13 +2,13 @@
 # Acceptance checks for f0061. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/f0061 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/f0061 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/f0061"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+# `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: Travel validates the destination and lets one request per player run at a time, times out an unanswered one and cools down after a failure" lune run tests/run -- "$A/travel.spec.luau"
 check "AC2: Lobby gives the hiscore panel (the empty state, rank order, at most ten rows) and the start button for each status" lune run tests/run -- "$A/lobby.spec.luau"
 check "AC3: the lobby as a player lives it: a press, a failed teleport, the wait, a second try and the teleport, two players, and no destination" lune run tests/run -- "$A/lobby-run.spec.luau"

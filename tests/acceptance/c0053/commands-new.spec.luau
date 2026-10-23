@@ -61,7 +61,10 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 	end)
 
 	it("new issue publishes the stub to origin/main and syncs the worktree to it", function()
-		local out = trOk(cap, { "new", "issue", "c", "alpha", "--desc", "First line of alpha." })
+		local out = trOk(
+			cap,
+			{ "new", "issue", "c", "alpha", "--desc", "First line of alpha.", "--project", "pickman" }
+		)
 		t.expect(out).toBe("tracker/issues/c0010/c0010.md")
 		local doc = onOrigin("tracker/issues/c0010/c0010.md")
 		t.expect(has(doc, "status: new")).toBe(true)
@@ -89,7 +92,8 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 		elsewhere({ ["tracker/issues/f0200/f0200.md"] = stub("f0200", "remote-b", "new") }, "other f0200")
 		-- cap has not fetched f0200
 		t.expect(fs.isFile(`{cap}/tracker/issues/f0200/f0200.md`)).toBe(false)
-		t.expect(trOk(cap, { "new", "issue", "c", "beta" })).toBe("tracker/issues/c0210/c0210.md")
+		t.expect(trOk(cap, { "new", "issue", "c", "beta", "--project", "pickman" }))
+			.toBe("tracker/issues/c0210/c0210.md")
 	end)
 
 	it(
@@ -98,7 +102,7 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			setHook(
 				`marker={base}/raced\n[ -e "$marker" ] && exit 0\ntouch "$marker"\ncd {other} && git pull -q origin main && mkdir -p tracker/issues/c0220 && printf -- '---\\nid: c0220\\ntype: chore\\ntitle: theirs\\nslug: theirs\\nraft: \\ndepends_on: []\\nstatus: new\\n---\\n' > tracker/issues/c0220/c0220.md && git add -A && git commit -qm theirs && git push -q origin HEAD:main\n`
 			)
-			local out = trOk(cap, { "new", "issue", "c", "gamma" })
+			local out = trOk(cap, { "new", "issue", "c", "gamma", "--project", "pickman" })
 			setHook(nil)
 			t.expect(out).toBe("tracker/issues/c0230/c0230.md")
 			t.expect(has(onOrigin("tracker/issues/c0220/c0220.md"), "title: theirs")).toBe(true)
@@ -109,7 +113,11 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 	it("PICKMAN_PUBLISH=0 keeps a command local: ids step by 10 and nothing is pushed", function()
 		trOk(cap, { "sync" })
 		local tip = git(origin, { "rev-parse", "main" })
-		local r = tr(cap, { "new", "issue", "c", "offline" }, { PICKMAN_PUBLISH = "0" })
+		local r = tr(
+			cap,
+			{ "new", "issue", "c", "offline", "--project", "pickman" },
+			{ PICKMAN_PUBLISH = "0" }
+		)
 		t.expect(r.ok).toBe(true)
 		offlineId = string.match(trim(r.stdout), "tracker/issues/(c%d+)/") :: string
 		t.expect(trim(r.stdout)).toBe(`tracker/issues/{offlineId}/{offlineId}.md`)
@@ -125,7 +133,7 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			-- the offline issue from the previous case; make it a local-only raft and ready it the old way
 			local local1 = tr(
 				cap,
-				{ "new", "raft", "chore", "offline-raft", offlineId, "--single" },
+				{ "new", "raft", "chore", "offline-raft", offlineId, "--single", "--project", "pickman" },
 				{ PICKMAN_PUBLISH = "0" }
 			)
 			t.expect(local1.ok).toBe(true)
@@ -140,12 +148,15 @@ return t.spec("tracker commands publish state to origin/main (new)", function(it
 			end
 			git(cap, { "add", "-A" })
 			git(cap, { "commit", "-q", "-m", "offline prep" })
-			trOk(cap, { "new", "issue", "c", "theta" })
+			trOk(cap, { "new", "issue", "c", "theta", "--project", "pickman" })
 			local theta = string.match(
 				trOk(cap, { "list", "backlog" }),
 				"(c%d+)%s+backlog%s+chore%s+%S*%s+Theta"
 			) :: string
-			local made = trOk(cap, { "new", "raft", "chore", "published-raft", theta, "--single" })
+			local made = trOk(
+				cap,
+				{ "new", "raft", "chore", "published-raft", theta, "--single", "--project", "pickman" }
+			)
 			local made_id = tonumber(string.match(made, "R(%d+)") :: string) :: number
 			local local_id = tonumber(string.sub(localRaft, 2)) :: number
 			t.expect(made_id > local_id).toBe(true) -- not reusing the local-only raft's number

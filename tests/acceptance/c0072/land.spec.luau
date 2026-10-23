@@ -53,7 +53,8 @@ end
 local function capture(name: string, slug: string): (string, string)
 	local wt = trOk(main, { "worktree", name })
 	identity(wt)
-	local made = trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.` })
+	local made =
+		trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
 	local id = string.match(made, "(c%d%d%d%d)") :: string
 	local doc = `{wt}/tracker/issues/{id}/{id}.md`
 	fs.writeFile(doc, fs.readFile(doc) .. `\nMore about {slug}.\n`)

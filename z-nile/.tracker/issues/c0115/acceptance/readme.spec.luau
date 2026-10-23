@@ -4,7 +4,27 @@
 -- its node says `planned`, and the unbuilt parts carry their issue: z-raft (c0116), the dispatcher and .models.toml
 -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
 -- the three design checklists by path, each of which exists. Reads the real tree.
-local fs = require("@lune/fs")
+local process = require("@lune/process")
+local realfs = require("@lune/fs")
+-- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function top(p: string): string
+	return if string.sub(p, 1, 1) == "/" then p else `{TOP}/{p}`
+end
+local fs = {
+	readFile = function(p: string): string
+		return realfs.readFile(top(p))
+	end,
+	isFile = function(p: string): boolean
+		return realfs.isFile(top(p))
+	end,
+	isDir = function(p: string): boolean
+		return realfs.isDir(top(p))
+	end,
+	readDir = function(p: string): { string }
+		return realfs.readDir(top(p))
+	end,
+}
 local t = require("@tests/lib/t")
 
 local README = "z-nile/README.md"
@@ -154,4 +174,30 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			t.expect(fs.isFile(path)).toBe(true)
 		end
 	end)
+	it(
+		"covers every ask of c0113, which it supersedes: a skill table, the command sequence, the state diagram",
+		function()
+			local text = fs.readFile(README)
+			at(text, "\n## Skills\n| skill | step | what it does |", "README (c0113: a skill table)")
+			at(text, "\n## The flow\n", "README (c0113: the command sequence)")
+			local diagram = string.match(text, "```mermaid\nstateDiagram%-v2\n(.-)```")
+			if not diagram then
+				error("README (c0113: the state diagram) has no stateDiagram-v2 block")
+			end
+			for _, edge in
+				{
+					"[*] --> new",
+					"new --> preparing",
+					"preparing --> new: release the claim",
+					"preparing --> prepared",
+					"prepared --> active",
+					"active --> prepared: z-stop",
+					"active --> done",
+				}
+			do
+				at(diagram, edge, "README state diagram (c0113)")
+			end
+			at(text, "`design:` is separate from status", "README (c0113: the separate design field)")
+		end
+	)
 end)
