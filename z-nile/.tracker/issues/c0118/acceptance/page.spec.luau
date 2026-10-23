@@ -67,7 +67,7 @@ function el(id) {
     querySelectorAll: () => [] };
 }
 ["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "window", "range", "as-of",
- "list", "pane", "board-data"].forEach(el);
+ "list", "pane", "board-data", "stats"].forEach(el);
 els.board.setAttribute("hidden", "");
 els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
 const doc = el("document");
@@ -82,7 +82,7 @@ const key = k => doc.dispatch("keydown", { key: k, target: {}, preventDefault() 
 const snap = () => ({ projects: els.projects.innerHTML, columns: els.columns.innerHTML, charts: els.charts.innerHTML,
   pane: els.pane.innerHTML, list: els.list.innerHTML, boardHidden: els.board.hasAttribute("hidden"),
   listHidden: els.list.hasAttribute("hidden"), hash: sandbox.location.hash, windowOptions: els.window.innerHTML,
-  rangeOptions: els.range.innerHTML, tabBoard: els["tab-board"].classList.contains("on") });
+  rangeOptions: els.range.innerHTML, tabBoard: els["tab-board"].classList.contains("on"), stats: els.stats.innerHTML });
 const out = { open: snap() };
 if (!hash) {
   const setWindow = s => { els.window.value = String(s); els.window.dispatch("change", {}); return snap(); };
@@ -96,10 +96,14 @@ if (!hash) {
   key("ArrowRight"); out.wrap = snap();
   els.projects.dispatch("click", { target: target("button[data-project]", "data-project", "tool") });
   els.window.value = "2592000"; els.window.dispatch("change", {});
+  els.columns.dispatch("click", { target: target("button.card", "data-id", "c0120"), preventDefault() {} });
   const next = JSON.parse(els["board-data"].textContent);
   next.issues.push(Object.assign({}, next.issues.find(i => i.id === "c0120"), { id: "c0125", title: "Arrived live" }));
   next.columns.tool.ticket[0].ids.push("c0125");
-  sandbox.znBoard.load(next); out.loaded = snap();
+  next.rafts.find(r => r.id === "R0110").pr = { number: 7, url: "https://example.invalid/pr/7", state: "draft" };
+  next.issues.find(i => i.id === "c0111").checks = { state: "passing" };
+  sandbox.znBoard.load(next, "<p>fresh stats</p>"); out.loaded = snap();
+  els.columns.dispatch("click", { target: target("button.card", "data-id", "c0111"), preventDefault() {} }); out.live = snap();
 }
 console.log(JSON.stringify(out));
 ]==]
@@ -160,7 +164,12 @@ return t.spec("c0118 board page", function(it)
 			{ "type: chore", "title: Tool rafted", "raft: R0110", "status: prepared-g-h-i" }
 		)
 		item(`{T}/issues/c0120`, { "type: chore", "title: Tool ticket", "raft:" })
-		local facts = { asOf = AS_OF, refs = { "origin/R0020-alpha" }, worktrees = {}, dispatch = {} }
+		local facts = {
+			asOf = AS_OF,
+			refs = { { name = "origin/R0020-alpha", at = AS_OF } },
+			worktrees = {},
+			dispatch = {},
+		}
 		fs.writeFile(`{DIR}/page.html`, board.build(nil, DIR, facts))
 		fs.writeFile(`{DIR}/harness.js`, HARNESS)
 		shown = node(`{DIR}/page.html`, "")
@@ -279,6 +288,32 @@ return t.spec("c0118 board page", function(it)
 		t.expect(has(s.projects, 'data-project="tool" class="on"')).toBe(true)
 		t.expect(has(s.columns, 'data-id="c0125"')).toBe(true)
 		t.expect(has(s.columns, "Arrived live")).toBe(true)
+		t.expect(has(s.windowOptions, 'value="2592000"')).toBe(true)
+	end)
+
+	it(
+		"znBoard.load keeps the range and the selected card, and replaces the Stats section when given one",
+		function()
+			local s = shown.loaded
+			t.expect(has(s.charts, 'data-chart="tool/rounds/all"')).toBe(true)
+			t.expect(has(s.columns, 'class="card sel" data-id="c0120"')).toBe(true)
+			t.expect(has(s.pane, '<h2><span class="id">c0120</span>')).toBe(true)
+			t.expect(s.stats).toBe("<p>fresh stats</p>")
+		end
+	)
+
+	it(
+		"a card shows the PR and checks a served model carries, and the static page says where they live",
+		function()
+			t.expect(has(shown.live.pane, '<a href="https://example.invalid/pr/7">#7</a> draft')).toBe(true)
+			t.expect(has(shown.live.pane, "checks passing")).toBe(true)
+			t.expect(has(shown.live.pane, "zn board --serve")).toBe(false)
+			t.expect(has(shown.card.pane, "zn board --serve")).toBe(true)
+		end
+	)
+
+	it("without git history the done column says its times come from spend rows", function()
+		t.expect(has(shown.open.columns, "done times from spend rows")).toBe(true)
 	end)
 
 	it("cleans up", function()

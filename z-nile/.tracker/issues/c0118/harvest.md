@@ -1,0 +1,9 @@
+# Harvest: c0118
+- design-review-001 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
+- design-review-001 F2: tracker/item-history-spans-moves-and-compaction, architecture/one-reader-per-format
+- design-review-001 F3: one-off: `stop` keeps a raft's branch, so "a branch exists" outlived the run it marked; the launch rule now compares the branch tip with the raft's latest arrival in active/
+- design-review-001 F4: ticket-prep/never-narrow-captured-scope
+- design-review-001 F5: ticket-prep/spec-design-correspondence, ticket-prep/specify-every-named-artifact
+- design-review-001 F6: ticket-prep/spec-design-correspondence
+- design-review-001 F7: ticket-prep/prove-specs-pass-on-a-prototype
+- note c0118 prep, before review: arrival dates taken from an item's first add to done/ picked the 2026-10-05 compaction's re-add (the subagent's candidate, "arrival dates and compaction re-adds"): tracker/item-history-spans-moves-and-compaction

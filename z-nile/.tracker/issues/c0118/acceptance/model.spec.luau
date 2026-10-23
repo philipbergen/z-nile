@@ -63,7 +63,15 @@ local AS_OF = stats.seconds("2026-10-21T10:00:00Z")
 local LANDED = stats.seconds("2026-10-20T10:00:00Z")
 local FACTS = {
 	asOf = AS_OF,
-	refs = { "main", "origin/R0020-alpha", "R00300-x", "feature/R0030-x", "xR0030-y", "origin/main" },
+	refs = {
+		{ name = "main", at = AS_OF },
+		{ name = "origin/R0020-alpha", at = stats.seconds("2026-10-02T10:00:00Z") }, -- after R0020's ready
+		{ name = "R00300-x", at = AS_OF },
+		{ name = "feature/R0030-x", at = AS_OF },
+		{ name = "xR0030-y", at = AS_OF },
+		{ name = "R0030-left", at = stats.seconds("2026-09-30T10:00:00Z") }, -- left from before R0030's ready
+		{ name = "origin/main", at = AS_OF },
+	},
 	worktrees = { { path = "/w/R0020", branch = "R0020-alpha" }, { path = "/w/main", branch = "main" } },
 	dispatch = { f0021 = { step = "z-run", outcome = "running", model = "grok-y", questions = true } },
 }
@@ -227,7 +235,7 @@ return t.spec("c0118 board model", function(it)
 	end)
 
 	it(
-		"a raft runs when a branch <R-id>-… exists locally or on origin, and look-alike names do not count",
+		"a raft runs when a branch <R-id>-…, local or on origin, has a commit after its latest ready; look-alikes and a branch left from before do not count",
 		function()
 			local rafts = byId(m.rafts)
 			t.expect(rafts.R0020.launched).toBe(true)
@@ -237,12 +245,19 @@ return t.spec("c0118 board model", function(it)
 			t.expect(rafts.R0030.branch).toBe(nil)
 			local local_ = board.collect(nil, repo, {
 				asOf = AS_OF,
-				refs = { "R0030-local" },
+				refs = { { name = "R0030-left", at = stats.seconds("2026-10-01T10:00:01Z") } }, -- one second after the ready
 				worktrees = {},
 				dispatch = {},
 			})
 			t.expect(byId(local_.rafts).R0030.launched).toBe(true)
 			t.expect(byId(local_.issues).f0031.column).toBe("run")
+			local same = board.collect(nil, repo, {
+				asOf = AS_OF,
+				refs = { { name = "R0030-left", at = stats.seconds("2026-10-01T10:00:00Z") } }, -- the ready's own second
+				worktrees = {},
+				dispatch = {},
+			})
+			t.expect(byId(same.rafts).R0030.launched).toBe(false)
 		end
 	)
 
@@ -347,8 +362,12 @@ return t.spec("c0118 board model", function(it)
 			local before = fixture.git(repo, { "status", "--porcelain", "--ignored" })
 			local facts = board.readFacts(repo)
 			t.expect(facts.asOf).toBe(stats.seconds("2026-10-21T09:00:00Z"))
-			t.expect(table.find(facts.refs, "R0020-alpha") ~= nil).toBe(true)
-			t.expect(table.find(facts.refs, "main") ~= nil).toBe(true)
+			local at: { [string]: number } = {}
+			for _, ref in facts.refs do
+				at[ref.name] = ref.at
+			end
+			t.expect(at["R0020-alpha"]).toBe(stats.seconds("2026-10-21T09:00:00Z"))
+			t.expect(at.main).toBe(stats.seconds("2026-10-21T09:00:00Z"))
 			t.expect(#facts.worktrees).toBe(1)
 			t.expect(facts.worktrees[1].branch).toBe("main")
 			t.expect(facts.dispatch.f0021)
@@ -360,6 +379,48 @@ return t.spec("c0118 board model", function(it)
 			t.expect(byId(real.issues).f0021.dispatch.outcome).toBe("failed")
 		end
 	)
+
+	it(
+		"without git history every done item is dated by its newest spend row, and the model says so",
+		function()
+			local bare = `{repo}-nogit`
+			if fs.isDir(bare) then
+				fs.removeDir(bare)
+			end
+			fs.writeDir(`{bare}/z-nile`)
+			fs.writeFile(`{bare}/z-nile/projects.toml`, REGISTRY)
+			local function put(path: string, text: string)
+				fs.writeDir(string.match(`{bare}/{path}`, "^(.*)/[^/]+$") :: string)
+				fs.writeFile(`{bare}/{path}`, text)
+			end
+			put(`{G}/issues/done/c0011/c0011.md`, "---\nid: c0011\ntype: chore\ntitle: x\nraft: R0010\n---\n")
+			put(`{G}/rafts/done/R0010/R0010.md`, "---\nid: R0010\ntype: chore\ntitle: r\n---\n")
+			put(
+				`{G}/issues/done/c0011/spend.md`,
+				"# Spend: c0011 x\n\n"
+					.. HEADER
+					.. "| 1 | 2026-10-20 07:00 | s | 0 | 0 | 1.0 | raft | deliver |  |  |\n"
+			)
+			local nogit = board.collect(nil, bare, FACTS)
+			fs.removeDir(bare)
+			t.expect(nogit.history).toBe(false)
+			t.expect(m.history).toBe(true)
+			local issue, raft = byId(nogit.issues).c0011, byId(nogit.rafts).R0010
+			t.expect(issue.doneFrom).toBe("spend")
+			t.expect(issue.doneAt).toBe(stats.seconds("2026-10-20T07:00:00Z"))
+			t.expect(raft.doneFrom).toBe("spend") -- a raft from its members' newest row
+			t.expect(raft.doneAt).toBe(stats.seconds("2026-10-20T07:00:00Z"))
+		end
+	)
+
+	it("reserves pr and checks for the served page: nil in every model c0118 builds", function()
+		for _, list in { m.rafts, m.issues } do
+			for _, x in list do
+				t.expect(x.pr).toBe(nil)
+				t.expect(x.checks).toBe(nil)
+			end
+		end
+	end)
 
 	it("cleans up", function()
 		fs.removeDir(repo)
