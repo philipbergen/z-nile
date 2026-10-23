@@ -277,7 +277,7 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
 		t.expect(select(2, raftplan.parseGrouped("[c0001@aaaa, c0001@bbbb]")) ~= nil).toBe(true)
 		t.expect(select(2, raftplan.parseGrouped("[c0001]")) ~= nil).toBe(true)
 		t.expect(select(2, raftplan.parseGrouped("c0001@aaaa")) ~= nil).toBe(true)
-		t.expect(raftplan.parseGrouped(nil)).toEqual({})
+		t.expect((raftplan.parseGrouped(nil))).toEqual({})
 	end)
 
 	it(

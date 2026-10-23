@@ -38,7 +38,7 @@ end
 -- the raft whose document has this slug, after the ids changed
 local function raftBySlug(slug: string): string
 	for _, state in { "", "active/" } do
-		local base = `{f.main}/tracker/rafts/{state}`
+		local base = `{f.main}/pickman/.tracker/rafts/{state}`
 		for _, name in fs.readDir(base) do
 			local doc = `{base}{name}/{name}.md`
 			if
@@ -63,44 +63,49 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		local g5 = raftplan.renderGrouped({ c0510 = record("c0510", a), c0520 = record("c0520", b) })
 		local g7 = raftplan.renderGrouped({ c0710 = record("c0710", c), c0720 = record("c0720", d) })
 		local seed: { [string]: string } = {
-			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = "# Architecture\n",
+			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
+			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 			["z-nile/next"] = "issue 900 quiet-copper-falcon\nraft 900 quiet-copper-falcon\n",
-			["tracker/issues/c0510/c0510.md"] = a,
-			["tracker/issues/c0520/c0520.md"] = b,
-			["tracker/rafts/R0500/R0500.md"] = raftDoc("R0500", "kept", "c0510, c0520", g5),
-			["tracker/rafts/R0500/design-review-001.md"] = `# Review 001\n\nGrouped: {g5}\n\nVerdict: approve\n`,
-			["tracker/issues/c0710/c0710.md"] = c,
-			["tracker/issues/c0720/c0720.md"] = d,
-			["tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
-			["tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
-			["tracker/issues/c0610/c0610.md"] = e,
+			["pickman/.tracker/issues/c0510/c0510.md"] = a,
+			["pickman/.tracker/issues/c0520/c0520.md"] = b,
+			["pickman/.tracker/rafts/R0500/R0500.md"] = raftDoc("R0500", "kept", "c0510, c0520", g5),
+			["pickman/.tracker/rafts/R0500/design-review-001.md"] = `# Review 001\n\nGrouped: {g5}\n\nVerdict: approve\n`,
+			["pickman/.tracker/issues/c0710/c0710.md"] = c,
+			["pickman/.tracker/issues/c0720/c0720.md"] = d,
+			["pickman/.tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
+			["pickman/.tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
+			["pickman/.tracker/issues/c0610/c0610.md"] = e,
 			-- review 005 F1: renumbered while an untracked work file sits in a member's folder
-			["tracker/issues/c0951/c0951.md"] = w1,
-			["tracker/issues/c0952/c0952.md"] = w2,
-			["tracker/rafts/R0950/R0950.md"] = raftDoc("R0950", "wip", "c0951, c0952", g9),
-			["tracker/rafts/R0950/design-review-001.md"] = `# Review 001\n\nGrouped: {g9}\n\nVerdict: approve\n`,
+			["pickman/.tracker/issues/c0951/c0951.md"] = w1,
+			["pickman/.tracker/issues/c0952/c0952.md"] = w2,
+			["pickman/.tracker/rafts/R0950/R0950.md"] = raftDoc("R0950", "wip", "c0951, c0952", g9),
+			["pickman/.tracker/rafts/R0950/design-review-001.md"] = `# Review 001\n\nGrouped: {g9}\n\nVerdict: approve\n`,
 			-- prepared and raftless: rafted while the compaction lands (review 004 F2)
-			["tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
-			["tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
+			["pickman/.tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
+			["pickman/.tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
 			-- a record that already did not match: a rewrite must not make it match
-			["tracker/rafts/R0600/R0600.md"] = raftDoc("R0600", "stale", "c0610", "[c0610@000000000000]"),
+			["pickman/.tracker/rafts/R0600/R0600.md"] = raftDoc(
+				"R0600",
+				"stale",
+				"c0610",
+				"[c0610@000000000000]"
+			),
 		}
 		for _, p in
 			{
-				"tracker/issues/c0510",
-				"tracker/issues/c0520",
-				"tracker/issues/c0710",
-				"tracker/issues/c0720",
-				"tracker/issues/c0610",
-				"tracker/issues/c0951",
-				"tracker/issues/c0952",
-				"tracker/rafts/R0950",
-				"tracker/issues/c0810",
-				"tracker/issues/c0820",
-				"tracker/rafts/R0500",
-				"tracker/rafts/R0700",
-				"tracker/rafts/R0600",
+				"pickman/.tracker/issues/c0510",
+				"pickman/.tracker/issues/c0520",
+				"pickman/.tracker/issues/c0710",
+				"pickman/.tracker/issues/c0720",
+				"pickman/.tracker/issues/c0610",
+				"pickman/.tracker/issues/c0951",
+				"pickman/.tracker/issues/c0952",
+				"pickman/.tracker/rafts/R0950",
+				"pickman/.tracker/issues/c0810",
+				"pickman/.tracker/issues/c0820",
+				"pickman/.tracker/rafts/R0500",
+				"pickman/.tracker/rafts/R0700",
+				"pickman/.tracker/rafts/R0600",
 			}
 		do
 			seed[`{p}/check.sh`] = CHECK
@@ -112,15 +117,15 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 
 	it("renumber of a member re-records its raft, and the review's quote with it", function()
 		trOk(W, { "renumber", "c0710", "c0790" })
-		local doc = fs.readFile(`{W}/tracker/rafts/R0700/R0700.md`)
+		local doc = fs.readFile(`{W}/pickman/.tracker/rafts/R0700/R0700.md`)
 		local map = raftplan.parseGrouped(string.match(doc, "\ngrouped: ([^\n]*)\n"))
 		t.expect(map.c0710).toBe(nil)
-		local member = fs.readFile(`{W}/tracker/issues/c0790/c0790.md`)
+		local member = fs.readFile(`{W}/pickman/.tracker/issues/c0790/c0790.md`)
 		t.expect(map.c0790)
 			.toBe(raftplan.recordHash("c0790", { ["c0790.md"] = member, ["check.sh"] = CHECK }))
 		t.expect(
 			string.find(
-				fs.readFile(`{W}/tracker/rafts/R0700/design-review-001.md`),
+				fs.readFile(`{W}/pickman/.tracker/rafts/R0700/design-review-001.md`),
 				`c0790@{map.c0790}`,
 				1,
 				true
@@ -136,13 +141,16 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		function()
 			fixture.git(W, { "fetch", "-q", "origin" })
 			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
-			fs.writeDir(`{W}/tracker/issues/c0952/acceptance`)
-			fs.writeFile(`{W}/tracker/issues/c0952/acceptance/wip.spec.luau`, "--!strict\nreturn nil\n")
+			fs.writeDir(`{W}/pickman/.tracker/issues/c0952/acceptance`)
+			fs.writeFile(
+				`{W}/pickman/.tracker/issues/c0952/acceptance/wip.spec.luau`,
+				"--!strict\nreturn nil\n"
+			)
 			trOk(W, { "renumber", "c0952", "c0958" })
 			-- the work file is not committed: the rename alone lands
 			-- the work folder was never tracked (c0952 had no acceptance specs): remove it whole
-			if fs.isDir(`{W}/tracker/issues/c0958/acceptance`) then
-				fs.removeDir(`{W}/tracker/issues/c0958/acceptance`)
+			if fs.isDir(`{W}/pickman/.tracker/issues/c0958/acceptance`) then
+				fs.removeDir(`{W}/pickman/.tracker/issues/c0958/acceptance`)
 			end
 			fixture.git(W, { "add", "-A" })
 			fixture.git(W, { "commit", "-q", "-m", "renumber c0952" })
@@ -157,9 +165,11 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 			fixture.git(W, { "fetch", "-q", "origin" })
 			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
 			-- a rafting is open while the compaction lands; and an ignored file sits in a member's folder (review 004 F1)
-			local RO =
-				string.match(trOk(X, { "new", "raft", "chore", "open", "c0810", "c0820" }), "(R%d+)") :: string
-			local doc = `{X}/tracker/rafts/{RO}/{RO}.md`
+			local RO = string.match(
+				trOk(X, { "new", "raft", "chore", "open", "c0810", "c0820", "--project", "pickman" }),
+				"(R%d+)"
+			) :: string
+			local doc = `{X}/pickman/.tracker/rafts/{RO}/{RO}.md`
 			local text = fs.readFile(doc)
 			text = (string.gsub(text, "design: draft", "design: ready", 1))
 			text = (string.gsub(text, "## Theme\n<!%-%-.-%-%->", "## Theme\nTwo chores.", 1))
@@ -174,15 +184,15 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 			fs.writeFile(doc, text)
 			local grouped = string.match(text, "\ngrouped: ([^\n]*)\n") :: string
 			fs.writeFile(
-				`{X}/tracker/rafts/{RO}/design-review-001.md`,
+				`{X}/pickman/.tracker/rafts/{RO}/design-review-001.md`,
 				`# Review 001\n\nGrouped: {grouped}\n\nVerdict: approve\n`
 			)
 			fixture.git(X, { "add", "-A" })
 			fixture.git(X, { "commit", "-q", "-m", "tracker: raft (open)" })
 			fixture.git(W, { "fetch", "-q", "origin" })
 			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
-			fs.writeDir(`{W}/tracker/issues/c0510/acceptance`)
-			fs.writeFile(`{W}/tracker/issues/c0510/acceptance/.DS_Store`, "finder")
+			fs.writeDir(`{W}/pickman/.tracker/issues/c0510/acceptance`)
+			fs.writeFile(`{W}/pickman/.tracker/issues/c0510/acceptance/.DS_Store`, "finder")
 			trOk(W, { "compact", "--force" })
 			land(W)
 			local kept, renamed, stale = raftBySlug("kept"), raftBySlug("renamed"), raftBySlug("stale")
@@ -200,8 +210,8 @@ return t.spec("c0116 compact and renumber keep a grouped raft's record", functio
 		function()
 			trOk(X, { "remap" })
 			local open = nil :: string?
-			for _, name in fs.readDir(`{X}/tracker/rafts`) do
-				local d = `{X}/tracker/rafts/{name}/{name}.md`
+			for _, name in fs.readDir(`{X}/pickman/.tracker/rafts`) do
+				local d = `{X}/pickman/.tracker/rafts/{name}/{name}.md`
 				if
 					string.match(name, "^R%d+$")
 					and fs.isFile(d)

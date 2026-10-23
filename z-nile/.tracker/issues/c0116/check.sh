@@ -2,10 +2,11 @@
 # Acceptance checks for c0116. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: the root
-# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0116 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: z-nile/
+# sequestered specs: here before `./zn done`, promoted to z-nile/tests/acceptance/c0116 after it. Every path below is
+# from z-nile/ (specs, its .cache) or anchored at $ZN_ROOT (the engine and the tree's tracker state).
 A="$HERE/acceptance"
-[[ -d $A ]] || A="$PWD/tests/acceptance/c0116"
+[[ -d $A ]] || A="$ZN_ROOT/z-nile/tests/acceptance/c0116"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
@@ -24,7 +25,7 @@ check "AC6: the skills, the README, AGENTS.md and the usage split rafting out of
 check "AC7: promote-check takes an issue and copies its own acceptance specs (in a clone under .cache)" \
   lune run tests/run -- "$A/promote.spec.luau"
 check "AC8: the real tree's skill links, lessons and audit stay clean with z-raft added" \
-  bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
+  bash -c '"$ZN_ROOT/zn" skills --check && "$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" audit'
 check "AC9: the promoted claim, prep, start, board and remap specs, and c0115's overridden README spec, stay green" \
   lune run tests/run -- tests/acceptance/c0053/commands-prep.spec.luau tests/acceptance/c0053/commands-claim.spec.luau \
   tests/acceptance/c0053/commands-start.spec.luau tests/acceptance/c0067/*.spec.luau tests/acceptance/c0068/stop.spec.luau \

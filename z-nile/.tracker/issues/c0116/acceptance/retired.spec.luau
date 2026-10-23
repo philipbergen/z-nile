@@ -13,7 +13,8 @@ local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0116-retired`
+-- the fixture lives in this home's .cache (z-nile/.cache since c0120), the only place a spec may write
+local base = `{fixture.physical(".") :: string}/.cache/c0116-retired`
 local work = `{base}/work`
 local ACC = "tests/" .. "acceptance/"
 
@@ -115,13 +116,14 @@ return t.spec(
 					"git mv"
 				)
 				local specs = must(
-					fixture.exec(work, "lune", {
+					-- z-nile's specs run from its home, z-nile/ (c0120)
+					process.exec("lune", {
 						"run",
 						"tests/run",
 						"--",
 						`{ACC}c0114/classified.spec.luau`,
 						`{ACC}c0043/rounds.spec.luau`,
-					}),
+					}, { cwd = `{work}/z-nile` }),
 					"the classification and rounds specs"
 				)
 				t.expect(string.find(specs, " 0 failed", 1, true) ~= nil).toBe(true)
@@ -133,7 +135,9 @@ return t.spec(
 				)
 				local audit = fixture.exec(work, "bash", { "scripts/tracker.sh", "audit" })
 				t.expect(string.find(audit.stdout, "audit: 0 errors", 1, true) ~= nil).toBe(true)
-				t.expect(string.find(audit.stdout, `orphan-raft z-nile/.tracker/rafts/retired/{id}`, 1, true))
+				t.expect(
+					(string.find(audit.stdout, `orphan-raft z-nile/.tracker/rafts/retired/{id}`, 1, true))
+				)
 					.toBe(nil)
 			end
 		)

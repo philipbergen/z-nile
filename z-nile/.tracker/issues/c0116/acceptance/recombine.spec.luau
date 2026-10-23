@@ -81,56 +81,58 @@ end
 return t.spec("c0116 recombine moves members between backlog rafts and retires an emptied one", function(it)
 	it("sets up prepared rafts in two projects, an active raft, a feature raft and a solo member", function()
 		local seed: { [string]: string } = {
-			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = "# Architecture\n",
+			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
+			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 		}
 		local function add(path: string, text: string)
 			seed[path] = text
 			seed[string.gsub(path, "/[^/]+$", "/check.sh")] = CHECK
 		end
-		-- pickman's root in the fixtures is tracker/, z-nile's is z-nile/.tracker
-		add("tracker/rafts/R0010/R0010.md", raftDoc("R0010", "chore", "c0011, c0012"))
-		add("tracker/issues/c0011/c0011.md", issue("c0011", "chore", "R0010"))
-		add("tracker/issues/c0012/c0012.md", issue("c0012", "chore", "R0010"))
-		add("tracker/rafts/R0020/R0020.md", raftDoc("R0020", "chore", "c0021, c0022"))
-		add("tracker/issues/c0021/c0021.md", issue("c0021", "chore", "R0020"))
-		add("tracker/issues/c0022/c0022.md", issue("c0022", "chore", "R0020"))
-		add("tracker/rafts/R0030/R0030.md", raftDoc("R0030", "chore", "c0031"))
-		add("tracker/issues/c0031/c0031.md", issue("c0031", "chore", "R0030"))
-		add("tracker/rafts/R0040/R0040.md", raftDoc("R0040", "chore", "c0041"))
-		add("tracker/issues/c0041/c0041.md", issue("c0041", "chore", "R0040"))
+		-- pickman's root in the fixtures is pickman/.tracker/, z-nile's is z-nile/.tracker
+		add("pickman/.tracker/rafts/R0010/R0010.md", raftDoc("R0010", "chore", "c0011, c0012"))
+		add("pickman/.tracker/issues/c0011/c0011.md", issue("c0011", "chore", "R0010"))
+		add("pickman/.tracker/issues/c0012/c0012.md", issue("c0012", "chore", "R0010"))
+		add("pickman/.tracker/rafts/R0020/R0020.md", raftDoc("R0020", "chore", "c0021, c0022"))
+		add("pickman/.tracker/issues/c0021/c0021.md", issue("c0021", "chore", "R0020"))
+		add("pickman/.tracker/issues/c0022/c0022.md", issue("c0022", "chore", "R0020"))
+		add("pickman/.tracker/rafts/R0030/R0030.md", raftDoc("R0030", "chore", "c0031"))
+		add("pickman/.tracker/issues/c0031/c0031.md", issue("c0031", "chore", "R0030"))
+		add("pickman/.tracker/rafts/R0040/R0040.md", raftDoc("R0040", "chore", "c0041"))
+		add("pickman/.tracker/issues/c0041/c0041.md", issue("c0041", "chore", "R0040"))
 		add("z-nile/.tracker/rafts/R0050/R0050.md", raftDoc("R0050", "chore", "c0051"))
 		add("z-nile/.tracker/issues/c0051/c0051.md", issue("c0051", "chore", "R0050"))
 		add(
-			"tracker/rafts/active/R0060/R0060.md",
+			"pickman/.tracker/rafts/active/R0060/R0060.md",
 			raftDoc("R0060", "chore", "c0061", "active-jolly-silver-walrus")
 		)
 		add(
-			"tracker/issues/active/c0061/c0061.md",
+			"pickman/.tracker/issues/active/c0061/c0061.md",
 			(string.gsub(issue("c0061", "chore", "R0060"), PREPARED, "active-jolly-silver-walrus"))
 		)
-		add("tracker/rafts/R0070/R0070.md", raftDoc("R0070", "feature", "f0071"))
-		add("tracker/issues/f0071/f0071.md", issue("f0071", "feature", "R0070"))
+		add("pickman/.tracker/rafts/R0070/R0070.md", raftDoc("R0070", "feature", "f0071"))
+		add("pickman/.tracker/issues/f0071/f0071.md", issue("f0071", "feature", "R0070"))
 		-- a given-back feature raft with no member (an orphan)
-		add("tracker/rafts/R0075/R0075.md", raftDoc("R0075", "feature", "", "new-amber-otter-lynx"))
-		add("tracker/rafts/R0080/R0080.md", raftDoc("R0080", "chore", "c0081"))
-		add("tracker/issues/c0081/c0081.md", issue("c0081", "chore", "R0080", "solo: true\n"))
-		add("tracker/rafts/R0090/R0090.md", raftDoc("R0090", "chore", "c0091"))
-		add("tracker/issues/c0091/c0091.md", issue("c0091", "chore", "R0090"))
-		add("tracker/rafts/R0100/R0100.md", raftDoc("R0100", "chore", "c0101"))
-		add("tracker/issues/c0101/c0101.md", issue("c0101", "chore", "R0100"))
+		add("pickman/.tracker/rafts/R0075/R0075.md", raftDoc("R0075", "feature", "", "new-amber-otter-lynx"))
+		add("pickman/.tracker/rafts/R0080/R0080.md", raftDoc("R0080", "chore", "c0081"))
+		add("pickman/.tracker/issues/c0081/c0081.md", issue("c0081", "chore", "R0080", "solo: true\n"))
+		add("pickman/.tracker/rafts/R0090/R0090.md", raftDoc("R0090", "chore", "c0091"))
+		add("pickman/.tracker/issues/c0091/c0091.md", issue("c0091", "chore", "R0090"))
+		add("pickman/.tracker/rafts/R0100/R0100.md", raftDoc("R0100", "chore", "c0101"))
+		add("pickman/.tracker/issues/c0101/c0101.md", issue("c0101", "chore", "R0100"))
 		-- review 001 F2/F5: a keeper of two members, and an orphan holding review history a lesson cites
-		add("tracker/rafts/R0140/R0140.md", raftDoc("R0140", "chore", "c0141, c0142"))
-		add("tracker/issues/c0141/c0141.md", issue("c0141", "chore", "R0140"))
-		add("tracker/issues/c0142/c0142.md", issue("c0142", "chore", "R0140"))
-		add("tracker/rafts/R0150/R0150.md", raftDoc("R0150", "chore", "", "new-amber-otter-lynx"))
-		seed["tracker/rafts/R0150/design-review-001.md"] = REVIEW
-		seed["tracker/rafts/R0150/harvest.md"] = "# Harvest: R0150\n- design-review-001 F1: zz-test/demo\n"
+		add("pickman/.tracker/rafts/R0140/R0140.md", raftDoc("R0140", "chore", "c0141, c0142"))
+		add("pickman/.tracker/issues/c0141/c0141.md", issue("c0141", "chore", "R0140"))
+		add("pickman/.tracker/issues/c0142/c0142.md", issue("c0142", "chore", "R0140"))
+		add("pickman/.tracker/rafts/R0150/R0150.md", raftDoc("R0150", "chore", "", "new-amber-otter-lynx"))
+		seed["pickman/.tracker/rafts/R0150/design-review-001.md"] = REVIEW
+		seed["pickman/.tracker/rafts/R0150/harvest.md"] =
+			"# Harvest: R0150\n- design-review-001 F1: zz-test/demo\n"
 		seed["z-nile/skills/zz-test/lessons/demo.md"] = LESSON
 		-- a folder in retired/ that recombine did not make (no retired: line)
-		seed["tracker/rafts/retired/R0160/R0160.md"] = raftDoc("R0160", "chore", "", "new-amber-otter-lynx")
+		seed["pickman/.tracker/rafts/retired/R0160/R0160.md"] =
+			raftDoc("R0160", "chore", "", "new-amber-otter-lynx")
 		-- a retired raft whose document still says new: never an orphan
-		seed["tracker/rafts/retired/R0190/R0190.md"] = (
+		seed["pickman/.tracker/rafts/retired/R0190/R0190.md"] = (
 			string.gsub(
 				raftDoc("R0190", "chore", "", "new-amber-otter-lynx"),
 				"\ndesign: ready\n",
@@ -138,11 +140,11 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			)
 		)
 		-- review 001 F7: a pair whose other raft gains a member elsewhere while this terminal has not synced
-		add("tracker/rafts/R0170/R0170.md", raftDoc("R0170", "chore", "c0171"))
-		add("tracker/issues/c0171/c0171.md", issue("c0171", "chore", "R0170"))
-		add("tracker/rafts/R0180/R0180.md", raftDoc("R0180", "chore", "c0181"))
-		add("tracker/issues/c0181/c0181.md", issue("c0181", "chore", "R0180"))
-		add("tracker/issues/c0182/c0182.md", issue("c0182", "chore", ""))
+		add("pickman/.tracker/rafts/R0170/R0170.md", raftDoc("R0170", "chore", "c0171"))
+		add("pickman/.tracker/issues/c0171/c0171.md", issue("c0171", "chore", "R0170"))
+		add("pickman/.tracker/rafts/R0180/R0180.md", raftDoc("R0180", "chore", "c0181"))
+		add("pickman/.tracker/issues/c0181/c0181.md", issue("c0181", "chore", "R0180"))
+		add("pickman/.tracker/issues/c0182/c0182.md", issue("c0182", "chore", ""))
 		f = trackerfix.new("c0116-recombine", seed)
 		W = trOk(f.main, { "worktree", "raft-w" })
 		X = trOk(f.main, { "worktree", "raft-x" })
@@ -166,22 +168,26 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 
 	it("a partial move claims both rafts with one stamp and leaves the members' status alone", function()
 		local before = tip()
-		local texts = { onOrigin("tracker/issues/c0021/c0021.md"), onOrigin("tracker/issues/c0022/c0022.md") }
+		local texts = {
+			onOrigin("pickman/.tracker/issues/c0021/c0021.md"),
+			onOrigin("pickman/.tracker/issues/c0022/c0022.md"),
+		}
 		trOk(W, { "recombine", "R0010", "R0020", "c0021" })
 		t.expect(fixture.git(f.origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 		local changed = string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
-		t.expect(changed).toEqual({ "tracker/rafts/R0010/R0010.md", "tracker/rafts/R0020/R0020.md" })
-		local s1 = originStatus("tracker/rafts/R0010/R0010.md")
+		t.expect(changed)
+			.toEqual({ "pickman/.tracker/rafts/R0010/R0010.md", "pickman/.tracker/rafts/R0020/R0020.md" })
+		local s1 = originStatus("pickman/.tracker/rafts/R0010/R0010.md")
 		t.expect(string.match(s1, "^preparing%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
-		t.expect(originStatus("tracker/rafts/R0020/R0020.md")).toBe(s1)
-		t.expect(onOrigin("tracker/issues/c0021/c0021.md")).toBe(texts[1])
-		t.expect(onOrigin("tracker/issues/c0022/c0022.md")).toBe(texts[2])
+		t.expect(originStatus("pickman/.tracker/rafts/R0020/R0020.md")).toBe(s1)
+		t.expect(onOrigin("pickman/.tracker/issues/c0021/c0021.md")).toBe(texts[1])
+		t.expect(onOrigin("pickman/.tracker/issues/c0022/c0022.md")).toBe(texts[2])
 		-- the moves are the worktree's
-		t.expect(front(`{W}/tracker/issues/c0021/c0021.md`, "raft")).toBe("R0010")
-		t.expect(front(`{W}/tracker/issues/c0021/c0021.md`, "status")).toBe(PREPARED)
-		t.expect(front(`{W}/tracker/rafts/R0010/R0010.md`, "issues")).toBe("[c0011, c0012, c0021]")
-		t.expect(fs.isDir(`{W}/tracker/rafts/R0020`)).toBe(true)
-		t.expect(front(`{W}/tracker/rafts/R0020/R0020.md`, "issues")).toBe("[c0022]")
+		t.expect(front(`{W}/pickman/.tracker/issues/c0021/c0021.md`, "raft")).toBe("R0010")
+		t.expect(front(`{W}/pickman/.tracker/issues/c0021/c0021.md`, "status")).toBe(PREPARED)
+		t.expect(front(`{W}/pickman/.tracker/rafts/R0010/R0010.md`, "issues")).toBe("[c0011, c0012, c0021]")
+		t.expect(fs.isDir(`{W}/pickman/.tracker/rafts/R0020`)).toBe(true)
+		t.expect(front(`{W}/pickman/.tracker/rafts/R0020/R0020.md`, "issues")).toBe("[c0022]")
 		t.expect(fixture.git(W, { "status", "--porcelain" })).toBe("")
 		-- neither raft can be readied, claimed again or recombined while the claim stands
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
@@ -192,7 +198,7 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 	it(
 		"the carried move takes the moved member through the shared stamp, and both rafts are readyable after the merge",
 		function()
-			coherence(`{W}/tracker/rafts/R0010`, "001")
+			coherence(`{W}/pickman/.tracker/rafts/R0010`, "001")
 			local before = tip()
 			trOk(W, { "status", "R0010", "prepared" })
 			trOk(W, { "status", "R0020", "prepared" })
@@ -202,10 +208,10 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			land(W)
 			trOk(f.main, { "ready", "R0010" })
 			trOk(f.main, { "ready", "R0020" })
-			t.expect(onOrigin("tracker/issues/active/c0021/c0021.md") ~= nil).toBe(true)
-			t.expect(front(`{f.main}/tracker/rafts/active/R0010/R0010.md`, "issues"))
+			t.expect(onOrigin("pickman/.tracker/issues/active/c0021/c0021.md") ~= nil).toBe(true)
+			t.expect(front(`{f.main}/pickman/.tracker/rafts/active/R0010/R0010.md`, "issues"))
 				.toBe("[c0011, c0012, c0021]")
-			t.expect(front(`{f.main}/tracker/rafts/active/R0020/R0020.md`, "issues")).toBe("[c0022]")
+			t.expect(front(`{f.main}/pickman/.tracker/rafts/active/R0020/R0020.md`, "issues")).toBe("[c0022]")
 		end
 	)
 
@@ -215,16 +221,17 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			fixture.git(X, { "reset", "-q", "--hard", "origin/main" })
 			local out = trOk(X, { "recombine", "R0030", "R0040" })
 			t.expect(has(out, "retired R0040")).toBe(true)
-			t.expect(fs.isDir(`{X}/tracker/rafts/R0040`)).toBe(false)
-			t.expect(onOrigin("tracker/rafts/R0040/R0040.md") ~= nil).toBe(true) -- publish never deletes: the PR does
-			coherence(`{X}/tracker/rafts/R0030`, "001")
+			t.expect(fs.isDir(`{X}/pickman/.tracker/rafts/R0040`)).toBe(false)
+			t.expect(onOrigin("pickman/.tracker/rafts/R0040/R0040.md") ~= nil).toBe(true) -- publish never deletes: the PR does
+			coherence(`{X}/pickman/.tracker/rafts/R0030`, "001")
 			trOk(X, { "status", "R0030", "prepared" })
 			fixture.git(X, { "add", "-A" })
 			fixture.git(X, { "commit", "-q", "-m", "tracker: raft R0030" })
 			land(X)
-			t.expect(onOrigin("tracker/rafts/R0040/R0040.md")).toBe(nil)
+			t.expect(onOrigin("pickman/.tracker/rafts/R0040/R0040.md")).toBe(nil)
 			trOk(f.main, { "ready", "R0030" })
-			t.expect(front(`{f.main}/tracker/rafts/active/R0030/R0030.md`, "issues")).toBe("[c0031, c0041]")
+			t.expect(front(`{f.main}/pickman/.tracker/rafts/active/R0030/R0030.md`, "issues"))
+				.toBe("[c0031, c0041]")
 		end
 	)
 
@@ -235,12 +242,12 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 		fixture.git(X, { "fetch", "-q", "origin" })
 		fixture.git(X, { "merge", "-q", "--no-edit", "origin/main" })
 		trOk(X, { "status", "R0100", "preparing" })
-		local doc = `{X}/tracker/rafts/R0100/R0100.md`
+		local doc = `{X}/pickman/.tracker/rafts/R0100/R0100.md`
 		local text = fs.readFile(doc)
 		local s, e = string.find(text, "\nissues: [c0101]\n", 1, true)
 		assert(s and e, "R0100's issues: line")
 		fs.writeFile(doc, string.sub(text, 1, s) .. "issues: [c0101, c0091]\n" .. string.sub(text, e + 1))
-		local idoc = `{X}/tracker/issues/c0091/c0091.md`
+		local idoc = `{X}/pickman/.tracker/issues/c0091/c0091.md`
 		local itext = fs.readFile(idoc)
 		local a, b = string.find(itext, "\nraft: R0090\n", 1, true)
 		assert(a and b, "c0091's raft: line")
@@ -255,14 +262,17 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 		fixture.git(X, { "fetch", "-q", "origin" })
 		fixture.git(X, { "reset", "-q", "--hard", "origin/main" })
 		trOk(X, { "recombine", "R0090", "R0100" })
-		local stamp = originStatus("tracker/rafts/R0090/R0090.md")
-		t.expect(originStatus("tracker/rafts/R0100/R0100.md")).toBe(stamp)
+		local stamp = originStatus("pickman/.tracker/rafts/R0090/R0090.md")
+		t.expect(originStatus("pickman/.tracker/rafts/R0100/R0100.md")).toBe(stamp)
 		local before = tip()
 		trOk(X, { "release", "R0090" })
 		local changed = string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
-		t.expect(changed).toEqual({ "tracker/rafts/R0090/R0090.md", "tracker/rafts/R0100/R0100.md" })
-		t.expect(string.match(originStatus("tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil).toBe(true)
-		t.expect(string.match(originStatus("tracker/rafts/R0100/R0100.md"), "^prepared%-") ~= nil).toBe(true)
+		t.expect(changed)
+			.toEqual({ "pickman/.tracker/rafts/R0090/R0090.md", "pickman/.tracker/rafts/R0100/R0100.md" })
+		t.expect(string.match(originStatus("pickman/.tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil)
+			.toBe(true)
+		t.expect(string.match(originStatus("pickman/.tracker/rafts/R0100/R0100.md"), "^prepared%-") ~= nil)
+			.toBe(true)
 	end)
 
 	it(
@@ -272,9 +282,11 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 				local out = tr(Y, { "metrics" }).stdout
 				return string.match(out, "\n| R0150 | (%d+) | %d+ | [%w%-]+ |\n")
 			end
+			-- the fixture carries z-nile's real lessons (c0115's G7), whose sources are not in it: the case is that the
+			-- demo lesson, whose only source is R0150's harvest, never loses it
 			local function lessonsOk(): boolean
 				local r = tr(Y, { "lessons", "--check" })
-				return r.ok and has(r.stdout, "ok")
+				return not has(r.stdout .. r.stderr, "zz-test/demo")
 			end
 			fixture.git(Y, { "fetch", "-q", "origin" })
 			fixture.git(Y, { "reset", "-q", "--hard", "origin/main" })
@@ -282,11 +294,11 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			t.expect(rounds()).toBe("1")
 			local out = trOk(Y, { "recombine", "R0140", "R0150" })
 			t.expect(has(out, "retired R0150")).toBe(true)
-			local kept = `{Y}/tracker/rafts/retired/R0150`
+			local kept = `{Y}/pickman/.tracker/rafts/retired/R0150`
 			t.expect(fs.isFile(`{kept}/design-review-001.md`)).toBe(true)
 			t.expect(fs.isFile(`{kept}/harvest.md`)).toBe(true)
 			t.expect(front(`{kept}/R0150.md`, "retired")).toBe("R0140")
-			t.expect(fs.isDir(`{Y}/tracker/rafts/R0150`)).toBe(false)
+			t.expect(fs.isDir(`{Y}/pickman/.tracker/rafts/R0150`)).toBe(false)
 			t.expect(lessonsOk()).toBe(true)
 			t.expect(rounds()).toBe("1")
 			-- R0140's membership did not change: its carried move needs no new coherence review
@@ -294,7 +306,7 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			fixture.git(Y, { "add", "-A" })
 			fixture.git(Y, { "commit", "-q", "-m", "tracker: raft R0140 (retire R0150)" })
 			land(Y)
-			t.expect(onOrigin("tracker/rafts/retired/R0150/harvest.md") ~= nil).toBe(true)
+			t.expect(onOrigin("pickman/.tracker/rafts/retired/R0150/harvest.md") ~= nil).toBe(true)
 			trOk(f.main, { "ready", "R0140" })
 			-- audit: no orphan warning for the retired raft; a retired/ folder recombine did not make is an error
 			local audit = tr(f.main, { "audit" }).stdout
@@ -320,15 +332,16 @@ return t.spec("c0116 recombine moves members between backlog rafts and retires a
 			-- another terminal folds c0182 into R0180 and lands it; Z has not synced since
 			local V = trOk(f.main, { "worktree", "raft-v" })
 			trOk(V, { "fold", "R0180", "c0182" })
-			coherence(`{V}/tracker/rafts/R0180`, "001")
+			coherence(`{V}/pickman/.tracker/rafts/R0180`, "001")
 			trOk(V, { "status", "R0180", "prepared" })
 			fixture.git(V, { "add", "-A" })
 			fixture.git(V, { "commit", "-q", "-m", "tracker: fold c0182 into R0180" })
 			land(V)
 			local out = trOk(Z, { "recombine", "R0170", "R0180" })
 			t.expect(has(out, "c0181, c0182")).toBe(true)
-			t.expect(front(`{Z}/tracker/issues/c0182/c0182.md`, "raft")).toBe("R0170")
-			t.expect(front(`{Z}/tracker/rafts/R0170/R0170.md`, "issues")).toBe("[c0171, c0181, c0182]")
+			t.expect(front(`{Z}/pickman/.tracker/issues/c0182/c0182.md`, "raft")).toBe("R0170")
+			t.expect(front(`{Z}/pickman/.tracker/rafts/R0170/R0170.md`, "issues"))
+				.toBe("[c0171, c0181, c0182]")
 		end
 	)
 end)

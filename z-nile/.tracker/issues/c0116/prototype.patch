@@ -7,7 +7,7 @@ index 00000000..10252255
 +../../z-nile/skills/z-raft
 \ No newline at end of file
 diff --git a/AGENTS.md b/AGENTS.md
-index 40595f44..d63b5de0 100644
+index 4d3eff32..c03e3da1 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
 @@ -11,7 +11,8 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
@@ -18,230 +18,14 @@ index 40595f44..d63b5de0 100644
 +| `z-nile/skills/z-design/SKILL.md` | designing one issue to prepared (includes the design review) |
 +| `z-nile/skills/z-raft/SKILL.md` | grouping prepared issues into rafts, recombining backlog rafts |
  | `z-nile/skills/z-ready/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
- | `z-nile/skills/z-run/SKILL.md` | launching and executing a readied raft: one branch, one PR |
+ | `z-nile/skills/z-run/SKILL.md` | launching a readied raft from the main checkout (`/z-run R0010`) |
  | `z-nile/skills/z-stop/SKILL.md` | undoing z-ready or aborting a raft |
-diff --git a/tests/acceptance/c0043/rounds.spec.luau b/tests/acceptance/c0043/rounds.spec.luau
-index b14b6984..400ce6b7 100644
---- a/tests/acceptance/c0043/rounds.spec.luau
-+++ b/tests/acceptance/c0043/rounds.spec.luau
-@@ -56,7 +56,7 @@ local function sandbox(): string
- 	write(`{SB}/tracker/rafts/R0030/design-review-002.md`, second)
- 	write(`{SB}/tracker/rafts/R0030/design-refute-001.md`, "- F1: fixed: x; consequences: none\n")
- 	write(`{SB}/tracker/rafts/R0030/review-001.md`, second)
--	-- reviews inside an issue directory are not counted for any raft
-+	-- c0116 override: a member issue's design reviews roll up to its raft; its code reviews are not counted
- 	write(
- 		`{SB}/tracker/issues/c0010/c0010.md`,
- 		"---\nid: c0010\ntype: chore\ntitle: X\nslug: x\nraft: R0030\n---\n\n# c0010\n"
-@@ -67,13 +67,13 @@ local function sandbox(): string
- end
- 
- return t.spec("c0410 review rounds in metrics", function(it)
--	it("in a sandbox tracker: none for a raft without reviews, issue directories not counted", function()
-+	it("in a sandbox tracker: none for a raft without reviews, a member's design reviews roll up", function()
- 		local ok, err = pcall(function()
- 			local got = rows(metrics(sandbox()))
- 			t.expect(got).toEqual({
- 				{ "R0010", "1", "0", "classic" },
- 				{ "R0020", "0", "0", "none" },
--				{ "R0030", "2", "1", "second-order" },
-+				{ "R0030", "3", "1", "second-order" },
- 			})
- 		end)
- 		if fs.isDir(SB) then
-@@ -125,9 +125,13 @@ return t.spec("c0410 review rounds in metrics", function(it)
- 				"z-nile/.tracker/rafts",
- 				"z-nile/.tracker/rafts/active",
- 				"z-nile/.tracker/rafts/done",
-+				-- c0116 override: a raft recombine retired keeps its folder, and its rounds, in rafts/retired/
-+				"pickman/.tracker/rafts/retired",
-+				"z-nile/.tracker/rafts/retired",
- 			}
- 		do
--			for _, name in fs.readDir(base) do
-+			local names: { string } = if fs.isDir(base) then fs.readDir(base) else {}
-+			for _, name in names do
- 				if string.match(name, "^R%d%d%d%d$") then
- 					table.insert(want, name)
- 				end
-diff --git a/tests/acceptance/c0111/skill-docs.spec.luau b/tests/acceptance/c0111/skill-docs.spec.luau
-index c3129dd9..71001219 100644
---- a/tests/acceptance/c0111/skill-docs.spec.luau
-+++ b/tests/acceptance/c0111/skill-docs.spec.luau
-@@ -81,19 +81,19 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
- 
- 	it(
- 		"ticket-prep: the lessons pass before review, a harvest as each round is answered, a confirmation before prepared",
--		function()
-+		function() -- c0116 override: z-design works on one issue, so its commands take <id>, not <R-id>
- 			local s5 = section(read(`z-nile/skills/z-design/SKILL.md`), "5.")
- 			t.expect(at(s5, "lessons --when design --full") < at(s5, "`design: reviewed`")).toBe(true)
- 			local three, four = at(s5, "\n3. "), at(s5, "\n4. ")
- 			local harvest = at(s5, "harvest.md")
- 			t.expect(harvest > three and harvest < four).toBe(true) -- in the answering step
--			local rerun = at(s5, "rerun `./zn promote-check <R-id>`")
-+			local rerun = at(s5, "rerun `./zn promote-check <id>`")
- 			t.expect(rerun > three and rerun < four).toBe(true)
- 			t.expect(
--				at(s5, "first harvest anything `./zn lessons --uncovered <R-id>` still lists")
--					< at(s5, "status <R-id> prepared`")
-+				at(s5, "first harvest anything `./zn lessons --uncovered <id>` still lists")
-+					< at(s5, "status <id> prepared`")
- 			).toBe(true)
--			t.expect(at(s5, "lessons --uncovered <R-id>") < at(s5, "status <R-id> prepared`")).toBe(true)
-+			t.expect(at(s5, "lessons --uncovered <id>") < at(s5, "status <id> prepared`")).toBe(true)
- 			at(s5, "lessons --check")
- 		end
- 	)
-diff --git a/tests/acceptance/c0114/classified.spec.luau b/tests/acceptance/c0114/classified.spec.luau
-index 5925aa82..ff39d21d 100644
---- a/tests/acceptance/c0114/classified.spec.luau
-+++ b/tests/acceptance/c0114/classified.spec.luau
-@@ -187,6 +187,32 @@ local function bySlug(kind: string): { [string]: store.Item }
- 		end
- 		out[item.slug] = item
- 	end
-+	-- c0116 override: a raft recombine retired keeps its folder in <root>/rafts/retired/, where no finder looks, and is
-+	-- still filed in that root
-+	if kind == "raft" then
-+		for _, root in store.roots() do
-+			local base = `{root}/rafts/retired`
-+			local names: { string } = if fs.isDir(base) then fs.readDir(base) else {}
-+			for _, name in names do
-+				local doc = `{base}/{name}/{name}.md`
-+				if string.match(name, "^R%d%d%d%d$") and fs.isFile(doc) then
-+					local slug = store.readFront(doc).slug or ""
-+					if out[slug] then
-+						error(`two {kind}s share the slug {slug}: {out[slug].id}, {name}`)
-+					end
-+					out[slug] = {
-+						id = name,
-+						kind = "raft",
-+						state = "retired",
-+						dir = `{base}/{name}`,
-+						doc = doc,
-+						slug = slug,
-+						root = root,
-+					}
-+				end
-+			end
-+		end
-+	end
- 	return out
- end
- 
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau b/tests/acceptance/c0115/absence.spec.luau
-similarity index 100%
-rename from z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
-rename to tests/acceptance/c0115/absence.spec.luau
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau b/tests/acceptance/c0115/docs.spec.luau
-similarity index 100%
-rename from z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau
-rename to tests/acceptance/c0115/docs.spec.luau
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau b/tests/acceptance/c0115/layout.spec.luau
-similarity index 97%
-rename from z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau
-rename to tests/acceptance/c0115/layout.spec.luau
-index 1cc462b7..9df126c0 100644
---- a/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau
-+++ b/tests/acceptance/c0115/layout.spec.luau
-@@ -25,6 +25,7 @@ local OLD = {
- local ZNILE = {
- 	"z-ticket",
- 	"z-design",
-+	"z-raft", -- c0116 override: z-raft is made there
- 	"z-ready",
- 	"z-run",
- 	"z-stop",
-@@ -71,7 +72,7 @@ end
- 
- return t.spec("c0115 the skills are renamed and live in their projects' folders", function(it)
- 	it(
--		"z-nile/skills holds exactly the ten z- and zz- skills, each a SKILL.md named for its folder",
-+		"z-nile/skills holds exactly the z- and zz- skills (eleven since c0116), each a SKILL.md named for its folder",
- 		function()
- 			t.expect(folders("z-nile/skills")).toEqual(sorted(ZNILE))
- 			for _, name in ZNILE do
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau b/tests/acceptance/c0115/lessons.spec.luau
-similarity index 100%
-rename from z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau
-rename to tests/acceptance/c0115/lessons.spec.luau
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau b/tests/acceptance/c0115/prompt.spec.luau
-similarity index 100%
-rename from z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau
-rename to tests/acceptance/c0115/prompt.spec.luau
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau b/tests/acceptance/c0115/readme.spec.luau
-similarity index 97%
-rename from z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau
-rename to tests/acceptance/c0115/readme.spec.luau
-index 92f879cc..999927ca 100644
---- a/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau
-+++ b/tests/acceptance/c0115/readme.spec.luau
-@@ -1,7 +1,7 @@
- --!strict
- -- c0115 AC9: z-nile/README.md opens (right after its title) with a mermaid picture of the five parts: the tracker,
- -- the skills, the dispatcher, .models.toml and the board. Every z- or zz- skill it draws exists in z-nile/skills, or
---- its node says `planned`, and the unbuilt parts carry their issue: z-raft (c0116), the dispatcher and .models.toml
-+-- its node says `planned`, and the unbuilt parts carry their issue: the dispatcher and .models.toml
- -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
- -- the three design checklists by path, each of which exists. Reads the real tree.
- local fs = require("@lune/fs")
-@@ -115,7 +115,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
- 			end
- 		end
- 		t.expect(seen >= 10).toBe(true)
--		at(pic, "z-raft (c0116, planned)", "the picture")
-+		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
- 		at(pic, "dispatcher (c0117, planned)", "the picture")
- 		at(pic, ".models.toml (c0117, planned)", "the picture")
- 		at(pic, "c0118, planned", "the picture")
-diff --git a/z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau b/tests/acceptance/c0115/skills.spec.luau
-similarity index 100%
-rename from z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau
-rename to tests/acceptance/c0115/skills.spec.luau
-diff --git a/tests/acceptance/c0119/scope-docs.spec.luau b/tests/acceptance/c0119/scope-docs.spec.luau
-index a00b06c7..17aba961 100644
---- a/tests/acceptance/c0119/scope-docs.spec.luau
-+++ b/tests/acceptance/c0119/scope-docs.spec.luau
-@@ -48,7 +48,8 @@ return t.spec("c0119 scope rules in the skills", function(it)
- 	it("ticket-prep opens with the scope rule, before step 1", function()
- 		local doc = read(`z-nile/skills/z-design/SKILL.md`)
- 		local p = paragraph(doc, "**Scope is what was captured.**")
--		t.expect(at(doc, "**Scope is what was captured.**") < at(doc, "\n## 1. Form the raft")).toBe(true)
-+		-- c0116 override: z-design makes no raft, so its step 1 claims the issue
-+		t.expect(at(doc, "**Scope is what was captured.**") < at(doc, "\n## 1. Claim the issue")).toBe(true)
- 		at(p, "its title, its Problem and the ideas under its Solution as they stood at capture")
- 		at(p, "`./zn capture <id>` prints that version")
- 		at(
-@@ -92,7 +93,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
- 			local check = at(s5, "Then **check the scope**")
- 			t.expect(check > five and check < at(s5, "set `design: ready`")).toBe(true)
- 			local line = string.sub(s5, check, (string.find(s5, "\n", check, true) :: number) - 1)
--			at(line, "compare each member's document with `./zn capture <id>`")
-+			at(line, "compare the issue's document with `./zn capture <id>`") -- c0116 override: one issue
- 			at(line, "every captured outcome has a Design and an acceptance criterion")
- 			at(line, "goes to the user before `design: ready`")
- 		end
-diff --git a/tests/lib/engine.luau b/tests/lib/engine.luau
-index 643855db..731ffb35 100644
---- a/tests/lib/engine.luau
-+++ b/tests/lib/engine.luau
-@@ -89,7 +89,8 @@ function engine.empty(dir: string)
- 	end
- 	for _, root in engine.CLONE_ROOTS do
- 		for _, kind in { "issues", "rafts" } do
--			for _, state in { "", "active/", "done/" } do
-+			-- retired/: rafts recombine retired (c0116), which keep their folders
-+			for _, state in { "", "active/", "done/", "retired/" } do
- 				local base = `{dir}/{root}/{kind}/{state}`
- 				if fs.isDir(base) then
- 					for _, name in fs.readDir(base) do
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/claims.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/claims.spec.luau
 new file mode 100644
-index 00000000..deff3cd5
+index 00000000..6cdb36a8
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/claims.spec.luau
-@@ -0,0 +1,672 @@
+@@ -0,0 +1,724 @@
 +--!strict
 +-- c0116 AC1: rafting prepared issues. An issue's raft is its own `raft:` line, written in the rafting worktree and
 +-- carried by the rafting PR; the published claim stamps the raft only. Two rafting PRs over one issue conflict on that
@@ -336,47 +120,47 @@ index 00000000..deff3cd5
 +	function(it)
 +		it("sets up prepared, raftless chores, a landed prepared raft and rafting worktrees", function()
 +			local seed: { [string]: string } = {
-+				[".gitignore"] = fs.readFile(".gitignore"),
-+				["tracker/architecture.md"] = "# Architecture\n",
-+				["tracker/issues/c0010/c0010.md"] = issue("c0010", ""),
-+				["tracker/issues/c0020/c0020.md"] = issue("c0020", ""),
-+				["tracker/issues/c0030/c0030.md"] = draft("c0030"),
-+				["tracker/issues/c0040/c0040.md"] = issue("c0040", ""),
-+				["tracker/issues/c0050/c0050.md"] = issue("c0050", "", "solo: true\n"),
-+				["tracker/issues/c0060/c0060.md"] = issue("c0060", ""),
-+				["tracker/issues/c0070/c0070.md"] = issue("c0070", "R0090"),
++				[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
++				["pickman/.tracker/architecture.md"] = "# Architecture\n",
++				["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", ""),
++				["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", ""),
++				["pickman/.tracker/issues/c0030/c0030.md"] = draft("c0030"),
++				["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", ""),
++				["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "", "solo: true\n"),
++				["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", ""),
++				["pickman/.tracker/issues/c0070/c0070.md"] = issue("c0070", "R0090"),
 +				-- review 001 F1: chores rafted while another terminal re-claims one for design
-+				["tracker/issues/c0013/c0013.md"] = issue("c0013", ""),
-+				["tracker/issues/c0014/c0014.md"] = issue("c0014", ""),
-+				["tracker/issues/c0015/c0015.md"] = issue("c0015", ""),
-+				["tracker/issues/c0016/c0016.md"] = issue("c0016", ""),
++				["pickman/.tracker/issues/c0013/c0013.md"] = issue("c0013", ""),
++				["pickman/.tracker/issues/c0014/c0014.md"] = issue("c0014", ""),
++				["pickman/.tracker/issues/c0015/c0015.md"] = issue("c0015", ""),
++				["pickman/.tracker/issues/c0016/c0016.md"] = issue("c0016", ""),
 +				-- review 002: redesigns inside the rafting window, the unfold route, and release of remembered claims
-+				["tracker/issues/c0021/c0021.md"] = issue("c0021", ""),
-+				["tracker/issues/c0022/c0022.md"] = issue("c0022", ""),
-+				["tracker/issues/c0023/c0023.md"] = issue("c0023", ""),
-+				["tracker/issues/c0024/c0024.md"] = issue("c0024", ""),
-+				["tracker/issues/c0025/c0025.md"] = draft("c0025"),
-+				["tracker/issues/c0026/c0026.md"] = draft("c0026"),
++				["pickman/.tracker/issues/c0021/c0021.md"] = issue("c0021", ""),
++				["pickman/.tracker/issues/c0022/c0022.md"] = issue("c0022", ""),
++				["pickman/.tracker/issues/c0023/c0023.md"] = issue("c0023", ""),
++				["pickman/.tracker/issues/c0024/c0024.md"] = issue("c0024", ""),
++				["pickman/.tracker/issues/c0025/c0025.md"] = draft("c0025"),
++				["pickman/.tracker/issues/c0026/c0026.md"] = draft("c0026"),
 +				-- review 003: redesigns of check.sh and specs, re-folding, an empty record, a fold window
-+				["tracker/issues/c0031/c0031.md"] = issue("c0031", ""),
-+				["tracker/issues/c0032/c0032.md"] = issue("c0032", ""),
-+				["tracker/issues/c0033/c0033.md"] = issue("c0033", ""),
-+				["tracker/issues/c0034/c0034.md"] = issue("c0034", ""),
-+				["tracker/issues/c0035/c0035.md"] = issue("c0035", ""),
-+				["tracker/issues/c0036/c0036.md"] = issue("c0036", ""),
-+				["tracker/issues/c0037/c0037.md"] = issue("c0037", ""),
-+				["tracker/issues/c0038/c0038.md"] = issue("c0038", ""),
-+				["tracker/issues/c0039/c0039.md"] = issue("c0039", ""),
-+				["tracker/issues/c0041/c0041.md"] = issue("c0041", ""),
-+				["tracker/rafts/R0110/R0110.md"] = raftDoc("R0110", ""),
++				["pickman/.tracker/issues/c0031/c0031.md"] = issue("c0031", ""),
++				["pickman/.tracker/issues/c0032/c0032.md"] = issue("c0032", ""),
++				["pickman/.tracker/issues/c0033/c0033.md"] = issue("c0033", ""),
++				["pickman/.tracker/issues/c0034/c0034.md"] = issue("c0034", ""),
++				["pickman/.tracker/issues/c0035/c0035.md"] = issue("c0035", ""),
++				["pickman/.tracker/issues/c0036/c0036.md"] = issue("c0036", ""),
++				["pickman/.tracker/issues/c0037/c0037.md"] = issue("c0037", ""),
++				["pickman/.tracker/issues/c0038/c0038.md"] = issue("c0038", ""),
++				["pickman/.tracker/issues/c0039/c0039.md"] = issue("c0039", ""),
++				["pickman/.tracker/issues/c0041/c0041.md"] = issue("c0041", ""),
++				["pickman/.tracker/rafts/R0110/R0110.md"] = raftDoc("R0110", ""),
 +				-- another project's chore, and a feature, both prepared and raftless
 +				["z-nile/.tracker/issues/c0080/c0080.md"] = issue("c0080", ""),
-+				["tracker/issues/f0085/f0085.md"] = (
++				["pickman/.tracker/issues/f0085/f0085.md"] = (
 +					string.gsub(issue("f0085", ""), "type: chore", "type: feature")
 +				),
-+				["tracker/rafts/R0090/R0090.md"] = raftDoc("R0090", "c0070"),
++				["pickman/.tracker/rafts/R0090/R0090.md"] = raftDoc("R0090", "c0070"),
 +				-- lists c0070, which R0090 holds by its raft: line
-+				["tracker/rafts/R0100/R0100.md"] = raftDoc("R0100", "c0070"),
++				["pickman/.tracker/rafts/R0100/R0100.md"] = raftDoc("R0100", "c0070"),
 +			}
 +			for _, id in
 +				{
@@ -394,20 +178,20 @@ index 00000000..deff3cd5
 +					"c0016",
 +				}
 +			do
-+				seed[`tracker/issues/{id}/check.sh`] = CHECK
++				seed[`pickman/.tracker/issues/{id}/check.sh`] = CHECK
 +			end
 +			for _, id in { "c0021", "c0022", "c0023", "c0024", "c0025", "c0026" } do
-+				seed[`tracker/issues/{id}/check.sh`] = CHECK
++				seed[`pickman/.tracker/issues/{id}/check.sh`] = CHECK
 +			end
 +			for _, id in
 +				{ "c0031", "c0032", "c0033", "c0034", "c0035", "c0036", "c0037", "c0038", "c0039", "c0041" }
 +			do
-+				seed[`tracker/issues/{id}/check.sh`] = CHECK
++				seed[`pickman/.tracker/issues/{id}/check.sh`] = CHECK
 +			end
-+			seed["tracker/rafts/R0110/check.sh"] = CHECK
++			seed["pickman/.tracker/rafts/R0110/check.sh"] = CHECK
 +			seed["z-nile/.tracker/issues/c0080/check.sh"] = CHECK
-+			seed["tracker/rafts/R0090/check.sh"] = CHECK
-+			seed["tracker/rafts/R0100/check.sh"] = CHECK
++			seed["pickman/.tracker/rafts/R0090/check.sh"] = CHECK
++			seed["pickman/.tracker/rafts/R0100/check.sh"] = CHECK
 +			f = trackerfix.new("c0116-claims", seed)
 +			A = trOk(f.main, { "worktree", "raft-a" })
 +			B = trOk(f.main, { "worktree", "raft-b" })
@@ -437,19 +221,25 @@ index 00000000..deff3cd5
 +			function()
 +				local before = tip()
 +				local c10, c20 =
-+					onOrigin("tracker/issues/c0010/c0010.md"), onOrigin("tracker/issues/c0020/c0020.md")
-+				R =
-+					string.match(trOk(A, { "new", "raft", "chore", "pair", "c0010", "c0020" }), "(R%d+)") :: string
++					onOrigin("pickman/.tracker/issues/c0010/c0010.md"),
++					onOrigin("pickman/.tracker/issues/c0020/c0020.md")
++				R = string.match(
++					trOk(A, { "new", "raft", "chore", "pair", "c0010", "c0020", "--project", "pickman" }),
++					"(R%d+)"
++				) :: string
 +				-- the members' documents on origin are byte for byte as they were: no restamp, no raft: line
-+				t.expect(onOrigin("tracker/issues/c0010/c0010.md")).toBe(c10)
-+				t.expect(onOrigin("tracker/issues/c0020/c0020.md")).toBe(c20)
++				t.expect(onOrigin("pickman/.tracker/issues/c0010/c0010.md")).toBe(c10)
++				t.expect(onOrigin("pickman/.tracker/issues/c0020/c0020.md")).toBe(c20)
 +				local changed = fixture.git(f.origin, { "diff", "--name-only", before, "main" })
-+				t.expect(has(changed, "tracker/issues/")).toBe(false)
-+				local claim = originStatus(`tracker/rafts/{R}/{R}.md`)
++				t.expect(has(changed, "pickman/.tracker/issues/")).toBe(false)
++				local claim = originStatus(`pickman/.tracker/rafts/{R}/{R}.md`)
 +				t.expect(string.match(claim, "^preparing%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
 +				-- membership is the worktree's, committed there; the claim is remembered in this checkout
-+				t.expect(has(fs.readFile(`{A}/tracker/issues/c0010/c0010.md`), `\nraft: {R}\n`)).toBe(true)
-+				t.expect(has(fs.readFile(`{A}/tracker/issues/c0010/c0010.md`), `\nstatus: {PREPARED}\n`))
++				t.expect(has(fs.readFile(`{A}/pickman/.tracker/issues/c0010/c0010.md`), `\nraft: {R}\n`))
++					.toBe(true)
++				t.expect(
++					has(fs.readFile(`{A}/pickman/.tracker/issues/c0010/c0010.md`), `\nstatus: {PREPARED}\n`)
++				)
 +					.toBe(true)
 +				t.expect(fixture.git(A, { "status", "--porcelain" })).toBe("")
 +				t.expect(fixture.git(A, { "log", "-1", "--format=%s" })).toBe(`tracker: {R} members`)
@@ -459,8 +249,17 @@ index 00000000..deff3cd5
 +		)
 +
 +		it("new raft refuses new and prepared issues together, and a solo issue with others", function()
-+			refused(B, { "new", "raft", "chore", "mix", "c0030", "c0040" }, "not both")
-+			refused(B, { "new", "raft", "chore", "solo", "c0040", "c0050" }, "c0050", "solo")
++			refused(
++				B,
++				{ "new", "raft", "chore", "mix", "c0030", "c0040", "--project", "pickman" },
++				"not both"
++			)
++			refused(
++				B,
++				{ "new", "raft", "chore", "solo", "c0040", "c0050", "--project", "pickman" },
++				"c0050",
++				"solo"
++			)
 +			refused(B, { "fold", "R0090", "c0050" }, "c0050", "solo")
 +			-- the tracker's rules hold for fold too: one project, one type
 +			refused(B, { "fold", "R0090", "c0080" }, "c0080", "one project")
@@ -470,7 +269,7 @@ index 00000000..deff3cd5
 +		it(
 +			"the carried move needs the raft's Theme, Order and coherence review, then takes prepared members as they are",
 +			function()
-+				local doc = `{A}/tracker/rafts/{R}/{R}.md`
++				local doc = `{A}/pickman/.tracker/rafts/{R}/{R}.md`
 +				setLine(doc, "design", "ready")
 +				local before = tip()
 +				local noTheme = tr(A, { "status", R, "prepared" })
@@ -480,12 +279,14 @@ index 00000000..deff3cd5
 +				local noReview = tr(A, { "status", R, "prepared" })
 +				t.expect(noReview.ok).toBe(false)
 +				t.expect(has(noReview.stderr, "coherence review")).toBe(true)
-+				coherence(`{A}/tracker/rafts/{R}`, "001")
++				coherence(`{A}/pickman/.tracker/rafts/{R}`, "001")
 +				trOk(A, { "status", R, "prepared" })
 +				t.expect(tip()).toBe(before) -- carried: nothing published
 +				t.expect(string.match(fs.readFile(doc), "\nstatus: prepared%-%a+%-%a+%-%a+\n") ~= nil)
 +					.toBe(true)
-+				t.expect(has(fs.readFile(`{A}/tracker/issues/c0010/c0010.md`), `\nstatus: {PREPARED}\n`))
++				t.expect(
++					has(fs.readFile(`{A}/pickman/.tracker/issues/c0010/c0010.md`), `\nstatus: {PREPARED}\n`)
++				)
 +					.toBe(true)
 +				fixture.git(A, { "add", "-A" })
 +				fixture.git(A, { "commit", "-q", "-m", `tracker: raft {R}` })
@@ -495,21 +296,25 @@ index 00000000..deff3cd5
 +		it(
 +			"a second rafting of the same issue publishes, then conflicts on its raft: line once the first lands",
 +			function()
-+				R2 =
-+					string.match(trOk(B, { "new", "raft", "chore", "steal", "c0010", "--single" }), "(R%d+)") :: string
++				R2 = string.match(
++					trOk(B, { "new", "raft", "chore", "steal", "c0010", "--single", "--project", "pickman" }),
++					"(R%d+)"
++				) :: string
 +				t.expect(R2 ~= R).toBe(true)
 +				land(A) -- the first rafting PR merges
-+				t.expect(has(onOrigin("tracker/issues/c0010/c0010.md"), `\nraft: {R}\n`)).toBe(true)
++				t.expect(has(onOrigin("pickman/.tracker/issues/c0010/c0010.md"), `\nraft: {R}\n`)).toBe(true)
 +				fixture.git(B, { "fetch", "-q", "origin" })
 +				local merged = fixture.exec(B, "git", { "merge", "--no-edit", "origin/main" })
 +				t.expect(merged.ok).toBe(false)
 +				t.expect(
-+					has(merged.stdout, "CONFLICT (content): Merge conflict in tracker/issues/c0010/c0010.md")
-+				)
-+					.toBe(true)
++					has(
++						merged.stdout,
++						"CONFLICT (content): Merge conflict in pickman/.tracker/issues/c0010/c0010.md"
++					)
++				).toBe(true)
 +				fixture.git(B, { "merge", "--abort" })
 +				-- and the carried move, which reads origin's raft: line, refuses it early, naming the raft that holds it
-+				local doc = `{B}/tracker/rafts/{R2}/{R2}.md`
++				local doc = `{B}/pickman/.tracker/rafts/{R2}/{R2}.md`
 +				setLine(doc, "design", "ready")
 +				writeDesign(doc)
 +				refused(B, { "status", R2, "prepared" }, "c0010", R)
@@ -521,14 +326,15 @@ index 00000000..deff3cd5
 +			"release gives a new raft's claim back, publishing only that raft, and leaves an orphan audit names",
 +			function()
 +				local before = tip()
-+				local c10 = onOrigin("tracker/issues/c0010/c0010.md")
++				local c10 = onOrigin("pickman/.tracker/issues/c0010/c0010.md")
 +				trOk(B, { "release", R2 })
 +				local changed =
 +					string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
-+				t.expect(changed).toEqual({ `tracker/rafts/{R2}/{R2}.md` })
++				t.expect(changed).toEqual({ `pickman/.tracker/rafts/{R2}/{R2}.md` })
 +				t.expect(fixture.git(f.origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
-+				t.expect(string.match(originStatus(`tracker/rafts/{R2}/{R2}.md`), "^new%-") ~= nil).toBe(true)
-+				t.expect(onOrigin("tracker/issues/c0010/c0010.md")).toBe(c10)
++				t.expect(string.match(originStatus(`pickman/.tracker/rafts/{R2}/{R2}.md`), "^new%-") ~= nil)
++					.toBe(true)
++				t.expect(onOrigin("pickman/.tracker/issues/c0010/c0010.md")).toBe(c10)
 +				t.expect(fs.isFile(`{B}/.cache/tracker-claim-{R2}`)).toBe(false)
 +				fixture.git(f.main, { "pull", "-q", "origin", "main" })
 +				local audit = tr(f.main, { "audit" }).stdout -- the fixture has no counter: audit exits 1 for that alone
@@ -548,32 +354,36 @@ index 00000000..deff3cd5
 +				local before = tip()
 +				local texts: { [string]: string? } = {}
 +				for _, id in { "c0010", "c0020", "c0040" } do
-+					texts[id] = onOrigin(`tracker/issues/{id}/{id}.md`)
++					texts[id] = onOrigin(`pickman/.tracker/issues/{id}/{id}.md`)
 +				end
 +				trOk(C, { "fold", R, "c0040" })
 +				t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
-+					.toBe(`tracker/rafts/{R}/{R}.md`)
-+				t.expect(string.match(originStatus(`tracker/rafts/{R}/{R}.md`), "^preparing%-") ~= nil)
-+					.toBe(true)
-+				for id, text in texts do
-+					t.expect(onOrigin(`tracker/issues/{id}/{id}.md`)).toBe(text)
-+				end
-+				t.expect(has(fs.readFile(`{C}/tracker/issues/c0040/c0040.md`), `\nraft: {R}\n`)).toBe(true)
++					.toBe(`pickman/.tracker/rafts/{R}/{R}.md`)
 +				t.expect(
-+					has(fs.readFile(`{C}/tracker/rafts/{R}/{R}.md`), "\nissues: [c0010, c0020, c0040]\n")
++					string.match(originStatus(`pickman/.tracker/rafts/{R}/{R}.md`), "^preparing%-") ~= nil
 +				)
 +					.toBe(true)
++				for id, text in texts do
++					t.expect(onOrigin(`pickman/.tracker/issues/{id}/{id}.md`)).toBe(text)
++				end
++				t.expect(has(fs.readFile(`{C}/pickman/.tracker/issues/c0040/c0040.md`), `\nraft: {R}\n`))
++					.toBe(true)
++				t.expect(
++					has(
++						fs.readFile(`{C}/pickman/.tracker/rafts/{R}/{R}.md`),
++						"\nissues: [c0010, c0020, c0040]\n"
++					)
++				).toBe(true)
 +				-- this checkout's own claim is resumed: a second fold publishes nothing
 +				local mid = tip()
 +				trOk(C, { "fold", R, "c0060" })
 +				t.expect(tip()).toBe(mid)
 +				t.expect(
 +					has(
-+						fs.readFile(`{C}/tracker/rafts/{R}/{R}.md`),
++						fs.readFile(`{C}/pickman/.tracker/rafts/{R}/{R}.md`),
 +						"\nissues: [c0010, c0020, c0040, c0060]\n"
 +					)
-+				)
-+					.toBe(true)
++				).toBe(true)
 +				refused(D, { "fold", R, "c0060" }, R, "preparing")
 +				refused(D, { "status", R, "preparing" }, "cannot move")
 +				fixture.git(f.main, { "pull", "-q", "origin", "main" })
@@ -587,52 +397,62 @@ index 00000000..deff3cd5
 +				refused(D, { "release", R }, "not this checkout's")
 +				trOk(C, { "release", R })
 +				t.expect(trOk(C, { "status", R })).toBe("prepared")
-+				t.expect(string.match(originStatus(`tracker/rafts/{R}/{R}.md`), "^prepared%-") ~= nil)
++				t.expect(
++					string.match(originStatus(`pickman/.tracker/rafts/{R}/{R}.md`), "^prepared%-") ~= nil
++				)
 +					.toBe(true)
-+				t.expect(has(onOrigin(`tracker/rafts/{R}/{R}.md`), "\nissues: [c0010, c0020]\n")).toBe(true)
++				t.expect(has(onOrigin(`pickman/.tracker/rafts/{R}/{R}.md`), "\nissues: [c0010, c0020]\n"))
++					.toBe(true)
 +				fixture.git(C, { "reset", "-q", "--hard", "origin/main" })
 +			end
 +		)
 +
 +		it("a fold lands with its coherence review, and ready then claims the folded issue", function()
 +			trOk(C, { "fold", R, "c0040" })
-+			local doc = `{C}/tracker/rafts/{R}/{R}.md`
++			local doc = `{C}/pickman/.tracker/rafts/{R}/{R}.md`
 +			-- a coherence review already on origin does not count: this rafting needs its own
 +			local stale = tr(C, { "status", R, "prepared" })
 +			t.expect(stale.ok).toBe(false)
 +			t.expect(has(stale.stderr, "coherence review")).toBe(true)
-+			coherence(`{C}/tracker/rafts/{R}`, "002")
++			coherence(`{C}/pickman/.tracker/rafts/{R}`, "002")
 +			trOk(C, { "status", R, "prepared" })
 +			t.expect(string.match(fs.readFile(doc), "\nstatus: prepared%-") ~= nil).toBe(true)
 +			fixture.git(C, { "add", "-A" })
 +			fixture.git(C, { "commit", "-q", "-m", `tracker: fold c0040 into {R}` })
 +			land(C)
 +			-- review 004 F1: an ignored file in a member's folder (Finder's .DS_Store) never changes its record
-+			fs.writeDir(`{f.main}/tracker/issues/c0010/acceptance`)
-+			fs.writeFile(`{f.main}/tracker/issues/c0010/acceptance/.DS_Store`, "finder")
++			fs.writeDir(`{f.main}/pickman/.tracker/issues/c0010/acceptance`)
++			fs.writeFile(`{f.main}/pickman/.tracker/issues/c0010/acceptance/.DS_Store`, "finder")
 +			t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
 +			trOk(f.main, { "ready", R })
-+			t.expect(onOrigin("tracker/issues/active/c0040/c0040.md") ~= nil).toBe(true)
++			t.expect(onOrigin("pickman/.tracker/issues/active/c0040/c0040.md") ~= nil).toBe(true)
 +			-- an active raft is never folded into
 +			fixture.git(D, { "fetch", "-q", "origin" })
 +			fixture.git(D, { "reset", "-q", "--hard", "origin/main" })
 +			refused(D, { "fold", R, "c0060" }, R, "backlog")
-+			t.expect(string.match(originStatus("tracker/issues/active/c0040/c0040.md"), "^active%-") ~= nil)
++			t.expect(
++				string.match(originStatus("pickman/.tracker/issues/active/c0040/c0040.md"), "^active%-")
++					~= nil
++			)
 +				.toBe(true)
 +		end)
 +
 +		it("a raft move never restamps a prepared member, and release needs the claim or --force", function()
-+			local c70 = onOrigin("tracker/issues/c0070/c0070.md")
++			local c70 = onOrigin("pickman/.tracker/issues/c0070/c0070.md")
 +			trOk(E, { "status", "R0090", "preparing" })
-+			t.expect(string.match(originStatus("tracker/rafts/R0090/R0090.md"), "^preparing%-") ~= nil)
++			t.expect(
++				string.match(originStatus("pickman/.tracker/rafts/R0090/R0090.md"), "^preparing%-") ~= nil
++			)
 +				.toBe(true)
-+			t.expect(onOrigin("tracker/issues/c0070/c0070.md")).toBe(c70)
++			t.expect(onOrigin("pickman/.tracker/issues/c0070/c0070.md")).toBe(c70)
 +			refused(E, { "status", "R0090", "preparing" }, "cannot move")
 +			refused(E, { "release", "R0090" }, "not this checkout's")
 +			trOk(E, { "release", "R0090", "--force" })
-+			t.expect(string.match(originStatus("tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil)
++			t.expect(
++				string.match(originStatus("pickman/.tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil
++			)
 +				.toBe(true)
-+			t.expect(onOrigin("tracker/issues/c0070/c0070.md")).toBe(c70)
++			t.expect(onOrigin("pickman/.tracker/issues/c0070/c0070.md")).toBe(c70)
 +		end)
 +
 +		it(
@@ -646,23 +466,23 @@ index 00000000..deff3cd5
 +			"a member re-claimed for design during a rafting is refused by the carried move, naming that claim",
 +			function()
 +				local RX = string.match(
-+					trOk(F, { "new", "raft", "chore", "race", "c0013", "c0014" }),
++					trOk(F, { "new", "raft", "chore", "race", "c0013", "c0014", "--project", "pickman" }),
 +					"(R%d+)"
 +				) :: string
 +				-- z-design in another terminal claims c0013: nothing on origin says it is being rafted, so this succeeds
 +				trOk(G, { "status", "c0013", "preparing" })
-+				local claim = originStatus("tracker/issues/c0013/c0013.md")
++				local claim = originStatus("pickman/.tracker/issues/c0013/c0013.md")
 +				t.expect(string.match(claim, "^preparing%-") ~= nil).toBe(true)
 +				trOk(F, { "sync" }) -- the claim's status line merges in cleanly
-+				local doc = `{F}/tracker/rafts/{RX}/{RX}.md`
++				local doc = `{F}/pickman/.tracker/rafts/{RX}/{RX}.md`
 +				setLine(doc, "design", "ready")
 +				writeDesign(doc)
-+				coherence(`{F}/tracker/rafts/{RX}`, "001")
++				coherence(`{F}/pickman/.tracker/rafts/{RX}`, "001")
 +				refused(F, { "status", RX, "prepared" }, "c0013", "claimed by another terminal", claim)
-+				t.expect(originStatus("tracker/issues/c0013/c0013.md")).toBe(claim)
++				t.expect(originStatus("pickman/.tracker/issues/c0013/c0013.md")).toBe(claim)
 +				-- the rafting drops it and prepares the rest
 +				setLine(doc, "issues", "[c0014]")
-+				setLine(`{F}/tracker/issues/c0013/c0013.md`, "raft", "")
++				setLine(`{F}/pickman/.tracker/issues/c0013/c0013.md`, "raft", "")
 +				trOk(F, { "status", RX, "prepared" })
 +				fixture.git(F, { "add", "-A" })
 +				fixture.git(F, { "commit", "-q", "-m", `tracker: raft {RX}` })
@@ -670,18 +490,20 @@ index 00000000..deff3cd5
 +				-- once the rafting has landed, z-design can no longer claim a member past its raft
 +				refused(G, { "status", "c0014", "preparing" }, "c0014", RX, "z-raft takes it out")
 +				trOk(f.main, { "ready", RX })
-+				t.expect(onOrigin("tracker/issues/active/c0014/c0014.md") ~= nil).toBe(true)
-+				t.expect(originStatus("tracker/issues/c0013/c0013.md")).toBe(claim)
++				t.expect(onOrigin("pickman/.tracker/issues/active/c0014/c0014.md") ~= nil).toBe(true)
++				t.expect(originStatus("pickman/.tracker/issues/c0013/c0013.md")).toBe(claim)
 +			end
 +		)
 +
 +		it("a member claimed after the carried move but before the landing keeps ready refused", function()
-+			local RY =
-+				string.match(trOk(H, { "new", "raft", "chore", "late", "c0015", "c0016" }), "(R%d+)") :: string
-+			local doc = `{H}/tracker/rafts/{RY}/{RY}.md`
++			local RY = string.match(
++				trOk(H, { "new", "raft", "chore", "late", "c0015", "c0016", "--project", "pickman" }),
++				"(R%d+)"
++			) :: string
++			local doc = `{H}/pickman/.tracker/rafts/{RY}/{RY}.md`
 +			setLine(doc, "design", "ready")
 +			writeDesign(doc)
-+			coherence(`{H}/tracker/rafts/{RY}`, "001")
++			coherence(`{H}/pickman/.tracker/rafts/{RY}`, "001")
 +			trOk(H, { "status", RY, "prepared" })
 +			fixture.git(H, { "add", "-A" })
 +			fixture.git(H, { "commit", "-q", "-m", `tracker: raft {RY}` })
@@ -694,7 +516,7 @@ index 00000000..deff3cd5
 +		local function redesign(wt: string, id: string, mark: string)
 +			trOk(wt, { "sync" })
 +			trOk(wt, { "status", id, "preparing" })
-+			local path = `{wt}/tracker/issues/{id}/{id}.md`
++			local path = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
 +			fs.writeFile(path, fs.readFile(path) .. `\n## Design\n{mark}: a new interface\n`)
 +			trOk(wt, { "status", id, "prepared" })
 +			fixture.git(wt, { "add", "-A" })
@@ -702,22 +524,22 @@ index 00000000..deff3cd5
 +			land(wt)
 +		end
 +		local function prepareRaft(wt: string, rid: string)
-+			local doc = `{wt}/tracker/rafts/{rid}/{rid}.md`
++			local doc = `{wt}/pickman/.tracker/rafts/{rid}/{rid}.md`
 +			setLine(doc, "design", "ready")
 +			writeDesign(doc)
-+			coherence(`{wt}/tracker/rafts/{rid}`, "001")
++			coherence(`{wt}/pickman/.tracker/rafts/{rid}`, "001")
 +		end
 +
 +		it(
 +			"a redesign landed after the carried move is caught by ready, naming the member and both hashes",
 +			function()
 +				local RZ = string.match(
-+					trOk(J, { "new", "raft", "chore", "late2", "c0021", "c0022" }),
++					trOk(J, { "new", "raft", "chore", "late2", "c0021", "c0022", "--project", "pickman" }),
 +					"(R%d+)"
 +				) :: string
 +				t.expect(
 +					string.match(
-+						fs.readFile(`{J}/tracker/rafts/{RZ}/{RZ}.md`),
++						fs.readFile(`{J}/pickman/.tracker/rafts/{RZ}/{RZ}.md`),
 +						"\ngrouped: %[c0021@%x+, c0022@%x+%]\n"
 +					) ~= nil
 +				).toBe(true)
@@ -728,7 +550,7 @@ index 00000000..deff3cd5
 +				trOk(K, { "status", "c0022", "preparing" }) -- its raft: is still empty on origin
 +				land(J)
 +				-- K finishes the redesign (its claim was made before the landing) and lands it
-+				local path = `{K}/tracker/issues/c0022/c0022.md`
++				local path = `{K}/pickman/.tracker/issues/c0022/c0022.md`
 +				trOk(K, { "sync" })
 +				fs.writeFile(path, fs.readFile(path) .. "\n## Design\nREDESIGNED-LATE: a new interface\n")
 +				trOk(K, { "status", "c0022", "prepared" })
@@ -740,7 +562,7 @@ index 00000000..deff3cd5
 +				t.expect(has(r.stderr, "c0022 (")).toBe(true)
 +				t.expect(has(r.stderr, "changed on origin/main since")).toBe(true)
 +				t.expect(string.match(r.stderr, "c0022 %(%x+ → %x+%)") ~= nil).toBe(true)
-+				t.expect(onOrigin(`tracker/rafts/active/{RZ}/{RZ}.md`)).toBe(nil)
++				t.expect(onOrigin(`pickman/.tracker/rafts/active/{RZ}/{RZ}.md`)).toBe(nil)
 +			end
 +		)
 +
@@ -748,7 +570,7 @@ index 00000000..deff3cd5
 +			"a redesign landed before the carried move is refused by it, and unfold takes the member out",
 +			function()
 +				local RW = string.match(
-+					trOk(L, { "new", "raft", "chore", "early2", "c0023", "c0024" }),
++					trOk(L, { "new", "raft", "chore", "early2", "c0023", "c0024", "--project", "pickman" }),
 +					"(R%d+)"
 +				) :: string
 +				prepareRaft(L, RW)
@@ -759,9 +581,12 @@ index 00000000..deff3cd5
 +				fixture.git(L, { "add", "-A" })
 +				fixture.git(L, { "commit", "-q", "-m", "wip: the raft's design" })
 +				trOk(L, { "unfold", RW, "c0024" })
-+				t.expect(string.match(fs.readFile(`{L}/tracker/issues/c0024/c0024.md`), "\nraft: *\n") ~= nil)
++				t.expect(
++					string.match(fs.readFile(`{L}/pickman/.tracker/issues/c0024/c0024.md`), "\nraft: *\n")
++						~= nil
++				).toBe(true)
++				t.expect(has(fs.readFile(`{L}/pickman/.tracker/rafts/{RW}/{RW}.md`), "\nissues: [c0023]\n"))
 +					.toBe(true)
-+				t.expect(has(fs.readFile(`{L}/tracker/rafts/{RW}/{RW}.md`), "\nissues: [c0023]\n")).toBe(true)
 +				trOk(L, { "status", RW, "prepared" })
 +				fixture.git(L, { "add", "-A" })
 +				fixture.git(L, { "commit", "-q", "-m", `tracker: raft {RW}` })
@@ -781,7 +606,9 @@ index 00000000..deff3cd5
 +			fixture.git(N, { "add", "-A" })
 +			fixture.git(N, { "commit", "-q", "-m", "tracker: unfold c0070 from R0090" })
 +			land(N)
-+			t.expect(string.match(onOrigin("tracker/issues/c0070/c0070.md") or "", "\nraft: *\n") ~= nil)
++			t.expect(
++				string.match(onOrigin("pickman/.tracker/issues/c0070/c0070.md") or "", "\nraft: *\n") ~= nil
++			)
 +				.toBe(true)
 +			trOk(N, { "status", "c0070", "preparing" })
 +			-- review 003 F6: the raft unfold emptied is named by audit
@@ -792,14 +619,16 @@ index 00000000..deff3cd5
 +		it(
 +			"a cleared .cache names the way back, and release gives back the issue claims this checkout made",
 +			function()
-+				local RV =
-+					string.match(trOk(O, { "new", "raft", "chore", "oldflow", "c0025" }), "(R%d+)") :: string
++				local RV = string.match(
++					trOk(O, { "new", "raft", "chore", "oldflow", "c0025", "--project", "pickman" }),
++					"(R%d+)"
++				) :: string
 +				trOk(O, { "status", "c0026", "preparing" }) -- an issue added during the old prep, claimed here
-+				local doc = `{O}/tracker/rafts/{RV}/{RV}.md`
++				local doc = `{O}/pickman/.tracker/rafts/{RV}/{RV}.md`
 +				setLine(doc, "design", "ready")
-+				setLine(`{O}/tracker/issues/c0025/c0025.md`, "design", "ready")
++				setLine(`{O}/pickman/.tracker/issues/c0025/c0025.md`, "design", "ready")
 +				setLine(doc, "issues", "[c0025, c0026]")
-+				setLine(`{O}/tracker/issues/c0026/c0026.md`, "raft", RV)
++				setLine(`{O}/pickman/.tracker/issues/c0026/c0026.md`, "raft", RV)
 +				local claim = (string.gsub(fs.readFile(`{O}/.cache/tracker-claim-c0026`), "%s+$", ""))
 +				fs.removeFile(`{O}/.cache/tracker-claim-c0026`)
 +				refused(
@@ -816,11 +645,13 @@ index 00000000..deff3cd5
 +					string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
 +				table.sort(changed)
 +				t.expect(changed).toEqual({
-+					"tracker/issues/c0025/c0025.md",
-+					"tracker/issues/c0026/c0026.md",
-+					`tracker/rafts/{RV}/{RV}.md`,
++					"pickman/.tracker/issues/c0025/c0025.md",
++					"pickman/.tracker/issues/c0026/c0026.md",
++					`pickman/.tracker/rafts/{RV}/{RV}.md`,
 +				})
-+				t.expect(string.match(originStatus("tracker/issues/c0026/c0026.md"), "^new%-") ~= nil)
++				t.expect(
++					string.match(originStatus("pickman/.tracker/issues/c0026/c0026.md"), "^new%-") ~= nil
++				)
 +					.toBe(true)
 +				t.expect(fs.isFile(`{O}/.cache/tracker-claim-c0026`)).toBe(false)
 +			end
@@ -830,7 +661,7 @@ index 00000000..deff3cd5
 +		local function recontract(wt: string, id: string, check: boolean)
 +			trOk(wt, { "sync" })
 +			trOk(wt, { "status", id, "preparing" })
-+			local dir = `{wt}/tracker/issues/{id}`
++			local dir = `{wt}/pickman/.tracker/issues/{id}`
 +			if check then
 +				fs.writeFile(
 +					`{dir}/check.sh`,
@@ -855,7 +686,7 @@ index 00000000..deff3cd5
 +			"a redesign of only a member's check.sh or acceptance specs inside the window is refused",
 +			function()
 +				local R1 = string.match(
-+					trOk(P, { "new", "raft", "chore", "chk", "c0031", "c0032" }),
++					trOk(P, { "new", "raft", "chore", "chk", "c0031", "c0032", "--project", "pickman" }),
 +					"(R%d+)"
 +				) :: string
 +				prepareRaft(P, R1)
@@ -864,7 +695,7 @@ index 00000000..deff3cd5
 +				trOk(P, { "sync" })
 +				refused(P, { "status", R1, "prepared" }, "c0032 (", "changed on origin/main since")
 +				local RA = string.match(
-+					trOk(S, { "new", "raft", "chore", "acc", "c0033", "c0034" }),
++					trOk(S, { "new", "raft", "chore", "acc", "c0033", "c0034", "--project", "pickman" }),
 +					"(R%d+)"
 +				) :: string
 +				prepareRaft(S, RA)
@@ -877,7 +708,10 @@ index 00000000..deff3cd5
 +
 +		it("re-folding a redesigned member needs a new coherence review; an unfold alone does not", function()
 +			local R3 = string.match(
-+				trOk(U, { "new", "raft", "chore", "refold", "c0035", "c0036", "c0037" }),
++				trOk(
++					U,
++					{ "new", "raft", "chore", "refold", "c0035", "c0036", "c0037", "--project", "pickman" }
++				),
 +				"(R%d+)"
 +			) :: string
 +			prepareRaft(U, R3)
@@ -894,15 +728,17 @@ index 00000000..deff3cd5
 +			t.expect(has(stale.stderr, "Grouped: [")).toBe(false)
 +			t.expect(has(stale.stderr, "never edit a review")).toBe(true)
 +			refused(U, { "status", R3, "prepared" }, "predates its record")
-+			coherence(`{U}/tracker/rafts/{R3}`, "002")
++			coherence(`{U}/pickman/.tracker/rafts/{R3}`, "002")
 +			trOk(U, { "status", R3, "prepared" })
 +		end)
 +
 +		it("an empty grouped: record does not exempt the members this rafting grouped", function()
-+			local R4 =
-+				string.match(trOk(V, { "new", "raft", "chore", "empty", "c0038", "c0039" }), "(R%d+)") :: string
++			local R4 = string.match(
++				trOk(V, { "new", "raft", "chore", "empty", "c0038", "c0039", "--project", "pickman" }),
++				"(R%d+)"
++			) :: string
 +			prepareRaft(V, R4)
-+			setLine(`{V}/tracker/rafts/{R4}/{R4}.md`, "grouped", "[]")
++			setLine(`{V}/pickman/.tracker/rafts/{R4}/{R4}.md`, "grouped", "[]")
 +			refused(V, { "status", R4, "prepared" }, "has no grouped: record")
 +		end)
 +
@@ -916,10 +752,10 @@ index 00000000..deff3cd5
 +)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/compact-record.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/compact-record.spec.luau
 new file mode 100644
-index 00000000..78f9212f
+index 00000000..0c7fcf83
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/compact-record.spec.luau
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,233 @@
 +--!strict
 +-- c0116 AC10 (review 003 F4): `compact` and `renumber` rewrite ids in member documents, which changes their record
 +-- hash. Both re-record every `grouped:` entry that matched before the rewrite, in the raft's document and in the
@@ -960,7 +796,7 @@ index 00000000..78f9212f
 +-- the raft whose document has this slug, after the ids changed
 +local function raftBySlug(slug: string): string
 +	for _, state in { "", "active/" } do
-+		local base = `{f.main}/tracker/rafts/{state}`
++		local base = `{f.main}/pickman/.tracker/rafts/{state}`
 +		for _, name in fs.readDir(base) do
 +			local doc = `{base}{name}/{name}.md`
 +			if
@@ -985,44 +821,49 @@ index 00000000..78f9212f
 +		local g5 = raftplan.renderGrouped({ c0510 = record("c0510", a), c0520 = record("c0520", b) })
 +		local g7 = raftplan.renderGrouped({ c0710 = record("c0710", c), c0720 = record("c0720", d) })
 +		local seed: { [string]: string } = {
-+			[".gitignore"] = fs.readFile(".gitignore"),
-+			["tracker/architecture.md"] = "# Architecture\n",
++			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
++			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 +			["z-nile/next"] = "issue 900 quiet-copper-falcon\nraft 900 quiet-copper-falcon\n",
-+			["tracker/issues/c0510/c0510.md"] = a,
-+			["tracker/issues/c0520/c0520.md"] = b,
-+			["tracker/rafts/R0500/R0500.md"] = raftDoc("R0500", "kept", "c0510, c0520", g5),
-+			["tracker/rafts/R0500/design-review-001.md"] = `# Review 001\n\nGrouped: {g5}\n\nVerdict: approve\n`,
-+			["tracker/issues/c0710/c0710.md"] = c,
-+			["tracker/issues/c0720/c0720.md"] = d,
-+			["tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
-+			["tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
-+			["tracker/issues/c0610/c0610.md"] = e,
++			["pickman/.tracker/issues/c0510/c0510.md"] = a,
++			["pickman/.tracker/issues/c0520/c0520.md"] = b,
++			["pickman/.tracker/rafts/R0500/R0500.md"] = raftDoc("R0500", "kept", "c0510, c0520", g5),
++			["pickman/.tracker/rafts/R0500/design-review-001.md"] = `# Review 001\n\nGrouped: {g5}\n\nVerdict: approve\n`,
++			["pickman/.tracker/issues/c0710/c0710.md"] = c,
++			["pickman/.tracker/issues/c0720/c0720.md"] = d,
++			["pickman/.tracker/rafts/R0700/R0700.md"] = raftDoc("R0700", "renamed", "c0710, c0720", g7),
++			["pickman/.tracker/rafts/R0700/design-review-001.md"] = `# Review 001\n\nGrouped: {g7}\n\nVerdict: approve\n`,
++			["pickman/.tracker/issues/c0610/c0610.md"] = e,
 +			-- review 005 F1: renumbered while an untracked work file sits in a member's folder
-+			["tracker/issues/c0951/c0951.md"] = w1,
-+			["tracker/issues/c0952/c0952.md"] = w2,
-+			["tracker/rafts/R0950/R0950.md"] = raftDoc("R0950", "wip", "c0951, c0952", g9),
-+			["tracker/rafts/R0950/design-review-001.md"] = `# Review 001\n\nGrouped: {g9}\n\nVerdict: approve\n`,
++			["pickman/.tracker/issues/c0951/c0951.md"] = w1,
++			["pickman/.tracker/issues/c0952/c0952.md"] = w2,
++			["pickman/.tracker/rafts/R0950/R0950.md"] = raftDoc("R0950", "wip", "c0951, c0952", g9),
++			["pickman/.tracker/rafts/R0950/design-review-001.md"] = `# Review 001\n\nGrouped: {g9}\n\nVerdict: approve\n`,
 +			-- prepared and raftless: rafted while the compaction lands (review 004 F2)
-+			["tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
-+			["tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
++			["pickman/.tracker/issues/c0810/c0810.md"] = issue("c0810", ""),
++			["pickman/.tracker/issues/c0820/c0820.md"] = issue("c0820", "", "c0810"),
 +			-- a record that already did not match: a rewrite must not make it match
-+			["tracker/rafts/R0600/R0600.md"] = raftDoc("R0600", "stale", "c0610", "[c0610@000000000000]"),
++			["pickman/.tracker/rafts/R0600/R0600.md"] = raftDoc(
++				"R0600",
++				"stale",
++				"c0610",
++				"[c0610@000000000000]"
++			),
 +		}
 +		for _, p in
 +			{
-+				"tracker/issues/c0510",
-+				"tracker/issues/c0520",
-+				"tracker/issues/c0710",
-+				"tracker/issues/c0720",
-+				"tracker/issues/c0610",
-+				"tracker/issues/c0951",
-+				"tracker/issues/c0952",
-+				"tracker/rafts/R0950",
-+				"tracker/issues/c0810",
-+				"tracker/issues/c0820",
-+				"tracker/rafts/R0500",
-+				"tracker/rafts/R0700",
-+				"tracker/rafts/R0600",
++				"pickman/.tracker/issues/c0510",
++				"pickman/.tracker/issues/c0520",
++				"pickman/.tracker/issues/c0710",
++				"pickman/.tracker/issues/c0720",
++				"pickman/.tracker/issues/c0610",
++				"pickman/.tracker/issues/c0951",
++				"pickman/.tracker/issues/c0952",
++				"pickman/.tracker/rafts/R0950",
++				"pickman/.tracker/issues/c0810",
++				"pickman/.tracker/issues/c0820",
++				"pickman/.tracker/rafts/R0500",
++				"pickman/.tracker/rafts/R0700",
++				"pickman/.tracker/rafts/R0600",
 +			}
 +		do
 +			seed[`{p}/check.sh`] = CHECK
@@ -1034,15 +875,15 @@ index 00000000..78f9212f
 +
 +	it("renumber of a member re-records its raft, and the review's quote with it", function()
 +		trOk(W, { "renumber", "c0710", "c0790" })
-+		local doc = fs.readFile(`{W}/tracker/rafts/R0700/R0700.md`)
++		local doc = fs.readFile(`{W}/pickman/.tracker/rafts/R0700/R0700.md`)
 +		local map = raftplan.parseGrouped(string.match(doc, "\ngrouped: ([^\n]*)\n"))
 +		t.expect(map.c0710).toBe(nil)
-+		local member = fs.readFile(`{W}/tracker/issues/c0790/c0790.md`)
++		local member = fs.readFile(`{W}/pickman/.tracker/issues/c0790/c0790.md`)
 +		t.expect(map.c0790)
 +			.toBe(raftplan.recordHash("c0790", { ["c0790.md"] = member, ["check.sh"] = CHECK }))
 +		t.expect(
 +			string.find(
-+				fs.readFile(`{W}/tracker/rafts/R0700/design-review-001.md`),
++				fs.readFile(`{W}/pickman/.tracker/rafts/R0700/design-review-001.md`),
 +				`c0790@{map.c0790}`,
 +				1,
 +				true
@@ -1058,13 +899,16 @@ index 00000000..78f9212f
 +		function()
 +			fixture.git(W, { "fetch", "-q", "origin" })
 +			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
-+			fs.writeDir(`{W}/tracker/issues/c0952/acceptance`)
-+			fs.writeFile(`{W}/tracker/issues/c0952/acceptance/wip.spec.luau`, "--!strict\nreturn nil\n")
++			fs.writeDir(`{W}/pickman/.tracker/issues/c0952/acceptance`)
++			fs.writeFile(
++				`{W}/pickman/.tracker/issues/c0952/acceptance/wip.spec.luau`,
++				"--!strict\nreturn nil\n"
++			)
 +			trOk(W, { "renumber", "c0952", "c0958" })
 +			-- the work file is not committed: the rename alone lands
 +			-- the work folder was never tracked (c0952 had no acceptance specs): remove it whole
-+			if fs.isDir(`{W}/tracker/issues/c0958/acceptance`) then
-+				fs.removeDir(`{W}/tracker/issues/c0958/acceptance`)
++			if fs.isDir(`{W}/pickman/.tracker/issues/c0958/acceptance`) then
++				fs.removeDir(`{W}/pickman/.tracker/issues/c0958/acceptance`)
 +			end
 +			fixture.git(W, { "add", "-A" })
 +			fixture.git(W, { "commit", "-q", "-m", "renumber c0952" })
@@ -1079,9 +923,11 @@ index 00000000..78f9212f
 +			fixture.git(W, { "fetch", "-q", "origin" })
 +			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
 +			-- a rafting is open while the compaction lands; and an ignored file sits in a member's folder (review 004 F1)
-+			local RO =
-+				string.match(trOk(X, { "new", "raft", "chore", "open", "c0810", "c0820" }), "(R%d+)") :: string
-+			local doc = `{X}/tracker/rafts/{RO}/{RO}.md`
++			local RO = string.match(
++				trOk(X, { "new", "raft", "chore", "open", "c0810", "c0820", "--project", "pickman" }),
++				"(R%d+)"
++			) :: string
++			local doc = `{X}/pickman/.tracker/rafts/{RO}/{RO}.md`
 +			local text = fs.readFile(doc)
 +			text = (string.gsub(text, "design: draft", "design: ready", 1))
 +			text = (string.gsub(text, "## Theme\n<!%-%-.-%-%->", "## Theme\nTwo chores.", 1))
@@ -1096,15 +942,15 @@ index 00000000..78f9212f
 +			fs.writeFile(doc, text)
 +			local grouped = string.match(text, "\ngrouped: ([^\n]*)\n") :: string
 +			fs.writeFile(
-+				`{X}/tracker/rafts/{RO}/design-review-001.md`,
++				`{X}/pickman/.tracker/rafts/{RO}/design-review-001.md`,
 +				`# Review 001\n\nGrouped: {grouped}\n\nVerdict: approve\n`
 +			)
 +			fixture.git(X, { "add", "-A" })
 +			fixture.git(X, { "commit", "-q", "-m", "tracker: raft (open)" })
 +			fixture.git(W, { "fetch", "-q", "origin" })
 +			fixture.git(W, { "reset", "-q", "--hard", "origin/main" })
-+			fs.writeDir(`{W}/tracker/issues/c0510/acceptance`)
-+			fs.writeFile(`{W}/tracker/issues/c0510/acceptance/.DS_Store`, "finder")
++			fs.writeDir(`{W}/pickman/.tracker/issues/c0510/acceptance`)
++			fs.writeFile(`{W}/pickman/.tracker/issues/c0510/acceptance/.DS_Store`, "finder")
 +			trOk(W, { "compact", "--force" })
 +			land(W)
 +			local kept, renamed, stale = raftBySlug("kept"), raftBySlug("renamed"), raftBySlug("stale")
@@ -1122,8 +968,8 @@ index 00000000..78f9212f
 +		function()
 +			trOk(X, { "remap" })
 +			local open = nil :: string?
-+			for _, name in fs.readDir(`{X}/tracker/rafts`) do
-+				local d = `{X}/tracker/rafts/{name}/{name}.md`
++			for _, name in fs.readDir(`{X}/pickman/.tracker/rafts`) do
++				local d = `{X}/pickman/.tracker/rafts/{name}/{name}.md`
 +				if
 +					string.match(name, "^R%d+$")
 +					and fs.isFile(d)
@@ -1145,21 +991,24 @@ index 00000000..78f9212f
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/docs.spec.luau
 new file mode 100644
-index 00000000..2f1f1487
+index 00000000..eb6eb8e9
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/docs.spec.luau
-@@ -0,0 +1,247 @@
+@@ -0,0 +1,250 @@
 +--!strict
 +-- c0116 AC6: the skills, the README, AGENTS.md and the usage say what c0116's Design says. z-design designs one issue
 +-- and makes no raft (its reviews, harvest and spend on the issue, `size:` and `solo:` recorded, next step z-raft); the
 +-- new z-raft skill holds the policy, the lock, the commands, the raft's design and the coherence review; zz-rules,
 +-- zz-review, zz-stats and z-ready move with it; the README draws z-raft as built. Reads the real tree, plain finds only.
 +local fs = require("@lune/fs")
++local process = require("@lune/process")
 +local t = require("@tests/lib/t")
 +
 +local SKILLS = "z-nile/skills"
++-- c0116 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 +local function read(path: string): string
-+	return fs.readFile(path)
++	return fs.readFile(`{TOP}/{path}`)
 +end
 +local function at(text: string, needle: string, where: string)
 +	if string.find(text, needle, 1, true) == nil then
@@ -1398,10 +1247,10 @@ index 00000000..2f1f1487
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/issue-design.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/issue-design.spec.luau
 new file mode 100644
-index 00000000..cd09fdda
+index 00000000..7e02c6eb
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/issue-design.spec.luau
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,158 @@
 +--!strict
 +-- c0116 AC5: z-design works on one issue with no raft, and its design reviews live on the issue. `status <id>
 +-- preparing` claims the issue alone (published) and the carried `status <id> prepared` lands with the design PR; the
@@ -1456,15 +1305,17 @@ index 00000000..cd09fdda
 +		local f = trackerfix.new("c0116-issue-design", nil)
 +		local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-solo" })
 +		trackerfix.trOk(f, wt, { "sync" })
-+		local id =
-+			string.match(trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing" }), "(c%d+)") :: string
++		local id = string.match(
++			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
++			"(c%d+)"
++		) :: string
 +		local before = fixture.git(f.origin, { "rev-parse", "main" })
 +		trackerfix.trOk(f, wt, { "status", id, "preparing" })
 +		local changed = fixture.git(f.origin, { "diff", "--name-only", before, "main" })
-+		t.expect(changed).toBe(`tracker/issues/{id}/{id}.md`)
++		t.expect(changed).toBe(`pickman/.tracker/issues/{id}/{id}.md`)
 +		t.expect(trackerfix.trOk(f, wt, { "status", id })).toBe("preparing")
 +		-- the reviewer's file and the spend are the issue's
-+		local dir = `{wt}/tracker/issues/{id}`
++		local dir = `{wt}/pickman/.tracker/issues/{id}`
 +		write(`{dir}/design-review-001.md`, REVIEW)
 +		local uncovered = trackerfix.tr(f, wt, { "lessons", "--uncovered", id })
 +		t.expect(uncovered.ok).toBe(false)
@@ -1481,7 +1332,7 @@ index 00000000..cd09fdda
 +			"--note",
 +			"design-review-001",
 +		})
-+		local spent = fixture.git(f.origin, { "show", `main:tracker/issues/{id}/spend.md` })
++		local spent = fixture.git(f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
 +		t.expect(has(spent, "| design-review-001 | 0 | 0 | 4.0 |")).toBe(true)
 +		-- design ready, then the carried move: nothing published, the local document prepared, raft: still empty
 +		local path = `{dir}/{id}.md`
@@ -1514,9 +1365,9 @@ index 00000000..cd09fdda
 +			end
 +			fs.writeDir(SB)
 +			engine.copy(".", SB)
-+			fs.copy(".luaurc", `{SB}/.luaurc`)
-+			fs.copy("rokit.toml", `{SB}/rokit.toml`)
-+			local tr = `{SB}/tracker`
++			fs.copy(`{engine.TOP}/.luaurc`, `{SB}/.luaurc`) -- the checkout's top: specs run from z-nile/ (c0120)
++			fs.copy(`{engine.TOP}/rokit.toml`, `{SB}/rokit.toml`)
++			local tr = `{SB}/pickman/.tracker`
 +			-- R0910 (done): its own coherence review, and its members' design reviews in their folders
 +			write(`{tr}/rafts/done/R0910/R0910.md`, raftDoc("R0910"))
 +			write(`{tr}/rafts/done/R0910/design-review-001.md`, REVIEW)
@@ -1560,10 +1411,10 @@ index 00000000..cd09fdda
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/plan-cli.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/plan-cli.spec.luau
 new file mode 100644
-index 00000000..1080aa3a
+index 00000000..ac65ce07
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/plan-cli.spec.luau
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,161 @@
 +--!strict
 +-- c0116 AC4: `raft-plan [--apply]` reads the tree (each issue's type, project root, state, status, design, raft:,
 +-- size:, solo: and Touched modules; each raft's type, root, state, status, single: and members), prints raftplan's
@@ -1606,44 +1457,47 @@ index 00000000..1080aa3a
 +end
 +
 +local EXPECTED = {
-+	"./zn new raft feature f0060 f0060 f0070",
++	"./zn new raft feature f0060 f0060 f0070 --project pickman",
 +	"./zn fold R0030 d0010 d0020",
-+	"./zn new raft chore c0040 c0040 --single",
-+	"./zn new raft chore c0100 c0100",
-+	"./zn new raft chore c0080 c0080 c0090",
++	"./zn new raft chore c0040 c0040 --single --project pickman",
++	"./zn new raft chore c0100 c0100 --project pickman",
++	"./zn new raft chore c0080 c0080 c0090 --project z-nile",
 +	"skip c0050: no size: (z-design records its estimate of changed lines)",
 +}
 +
 +return t.spec("c0116 raft-plan prints z-raft's plan as commands, and --apply runs them", function(it)
 +	it("sets up a backlog that exercises every rule the plan reads from the documents", function()
 +		local seed: { [string]: string } = {
-+			[".gitignore"] = fs.readFile(".gitignore"),
-+			["tracker/architecture.md"] = "# Architecture\n",
++			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
++			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 +		}
 +		local function add(path: string, text: string)
 +			seed[path] = text
 +			seed[string.gsub(path, "/[^/]+$", "/check.sh")] = CHECK
 +		end
-+		add("tracker/issues/d0010/d0010.md", issue("d0010", "", "size: 200\n"))
-+		add("tracker/issues/d0020/d0020.md", issue("d0020", "", "size: 200\n"))
-+		add("tracker/issues/d0031/d0031.md", issue("d0031", "R0030", "size: 1000\n"))
-+		add("tracker/rafts/R0030/R0030.md", raftDoc("R0030", "defect", "d0031"))
++		add("pickman/.tracker/issues/d0010/d0010.md", issue("d0010", "", "size: 200\n"))
++		add("pickman/.tracker/issues/d0020/d0020.md", issue("d0020", "", "size: 200\n"))
++		add("pickman/.tracker/issues/d0031/d0031.md", issue("d0031", "R0030", "size: 1000\n"))
++		add("pickman/.tracker/rafts/R0030/R0030.md", raftDoc("R0030", "defect", "d0031"))
 +		-- a single raft and a raft being prepared take nothing
-+		add("tracker/issues/d0032/d0032.md", issue("d0032", "R0025", "size: 10\n"))
-+		add("tracker/rafts/R0025/R0025.md", raftDoc("R0025", "defect", "d0032", true))
-+		add("tracker/issues/c0040/c0040.md", issue("c0040", "", "size: 100\nsolo: true\n"))
-+		add("tracker/issues/c0050/c0050.md", issue("c0050", "", ""))
-+		add("tracker/issues/f0060/f0060.md", issue("f0060", "", "size: 100\n", { "pickman/src/Maze" }))
++		add("pickman/.tracker/issues/d0032/d0032.md", issue("d0032", "R0025", "size: 10\n"))
++		add("pickman/.tracker/rafts/R0025/R0025.md", raftDoc("R0025", "defect", "d0032", true))
++		add("pickman/.tracker/issues/c0040/c0040.md", issue("c0040", "", "size: 100\nsolo: true\n"))
++		add("pickman/.tracker/issues/c0050/c0050.md", issue("c0050", "", ""))
 +		add(
-+			"tracker/issues/f0070/f0070.md",
++			"pickman/.tracker/issues/f0060/f0060.md",
++			issue("f0060", "", "size: 100\n", { "pickman/src/Maze" })
++		)
++		add(
++			"pickman/.tracker/issues/f0070/f0070.md",
 +			issue("f0070", "", "size: 100\n", { "pickman/src/Maze/grid.luau" })
 +		)
 +		add("z-nile/.tracker/issues/c0080/c0080.md", issue("c0080", "", "size: 100\n"))
 +		add("z-nile/.tracker/issues/c0090/c0090.md", issue("c0090", "", "size: 100\n"))
-+		add("tracker/issues/c0100/c0100.md", issue("c0100", "", "size: 100\n"))
++		add("pickman/.tracker/issues/c0100/c0100.md", issue("c0100", "", "size: 100\n"))
 +		-- not candidates: a draft, and a prepared issue that is already in a raft
 +		add(
-+			"tracker/issues/c0110/c0110.md",
++			"pickman/.tracker/issues/c0110/c0110.md",
 +			(string.gsub(issue("c0110", "", "size: 100\n"), "design: ready", "design: draft"))
 +		)
 +		f = trackerfix.new("c0116-plan-cli", seed)
@@ -1677,8 +1531,8 @@ index 00000000..1080aa3a
 +		local function raftOf(path: string): string?
 +			return string.match(fs.readFile(`{W}/{path}`), "\nraft: (%S*)\n")
 +		end
-+		t.expect(raftOf("tracker/issues/f0060/f0060.md") ~= "").toBe(true) -- the first command ran
-+		t.expect(raftOf("tracker/issues/c0040/c0040.md")).toBe("") -- the commands after the refusal did not
++		t.expect(raftOf("pickman/.tracker/issues/f0060/f0060.md") ~= "").toBe(true) -- the first command ran
++		t.expect(raftOf("pickman/.tracker/issues/c0040/c0040.md")).toBe("") -- the commands after the refusal did not
 +		trOk(V, { "release", "R0030", "--force" })
 +		trOk(W, { "sync" }) -- raft-plan reads this tree: sync it after the give-back
 +	end)
@@ -1688,20 +1542,25 @@ index 00000000..1080aa3a
 +		function()
 +			trOk(W, { "raft-plan", "--apply" })
 +			t.expect(
-+				string.match(onOrigin("tracker/rafts/R0030/R0030.md") or "", "\nstatus: preparing%-") ~= nil
-+			)
-+				.toBe(true)
++				string.match(onOrigin("pickman/.tracker/rafts/R0030/R0030.md") or "", "\nstatus: preparing%-")
++					~= nil
++			).toBe(true)
 +			local function raftOf(path: string): string?
 +				return string.match(fs.readFile(`{W}/{path}`), "\nraft: (%S*)\n")
 +			end
-+			t.expect(raftOf("tracker/issues/d0010/d0010.md")).toBe("R0030")
-+			t.expect(raftOf("tracker/issues/f0060/f0060.md")).toBe(raftOf("tracker/issues/f0070/f0070.md"))
++			t.expect(raftOf("pickman/.tracker/issues/d0010/d0010.md")).toBe("R0030")
++			t.expect(raftOf("pickman/.tracker/issues/f0060/f0060.md"))
++				.toBe(raftOf("pickman/.tracker/issues/f0070/f0070.md"))
 +			t.expect(raftOf("z-nile/.tracker/issues/c0080/c0080.md"))
 +				.toBe(raftOf("z-nile/.tracker/issues/c0090/c0090.md"))
-+			local solo = raftOf("tracker/issues/c0040/c0040.md") :: string
++			local solo = raftOf("pickman/.tracker/issues/c0040/c0040.md") :: string
 +			t.expect(
-+				string.find(fs.readFile(`{W}/tracker/rafts/{solo}/{solo}.md`), "\nsingle: true\n", 1, true)
-+					~= nil
++				string.find(
++					fs.readFile(`{W}/pickman/.tracker/rafts/{solo}/{solo}.md`),
++					"\nsingle: true\n",
++					1,
++					true
++				) ~= nil
 +			).toBe(true)
 +			t.expect(fixture.git(W, { "status", "--porcelain" })).toBe("")
 +			t.expect(trOk(W, { "raft-plan" })).toBe(EXPECTED[6])
@@ -1711,7 +1570,7 @@ index 00000000..1080aa3a
 +	it("says so when there is nothing to raft", function()
 +		f = trackerfix.new(
 +			"c0116-plan-none",
-+			{ ["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010", "size: 5\n") }
++			{ ["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010", "size: 5\n") }
 +		)
 +		t.expect(trOk(f.main, { "raft-plan" }))
 +			.toBe("raft-plan: nothing to raft (no prepared issue without a raft)")
@@ -1719,7 +1578,7 @@ index 00000000..1080aa3a
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/plan.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/plan.spec.luau
 new file mode 100644
-index 00000000..d3d44db3
+index 00000000..7adaa7cf
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/plan.spec.luau
 @@ -0,0 +1,315 @@
@@ -2002,7 +1861,7 @@ index 00000000..d3d44db3
 +		t.expect(select(2, raftplan.parseGrouped("[c0001@aaaa, c0001@bbbb]")) ~= nil).toBe(true)
 +		t.expect(select(2, raftplan.parseGrouped("[c0001]")) ~= nil).toBe(true)
 +		t.expect(select(2, raftplan.parseGrouped("c0001@aaaa")) ~= nil).toBe(true)
-+		t.expect(raftplan.parseGrouped(nil)).toEqual({})
++		t.expect((raftplan.parseGrouped(nil))).toEqual({})
 +	end)
 +
 +	it(
@@ -2040,10 +1899,10 @@ index 00000000..d3d44db3
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/promote.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/promote.spec.luau
 new file mode 100644
-index 00000000..cdca0021
+index 00000000..d6c7fe68
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/promote.spec.luau
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +--!strict
 +-- c0116 AC7 (review 001 F4): `promote-check <issue>` takes an issue by itself: it copies that issue's own acceptance
 +-- specs into its project's tests/acceptance/<id>, says how many (`copied <n> acceptance specs`), type-checks and runs
@@ -2088,7 +1947,8 @@ index 00000000..cdca0021
 +
 +type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 +local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-+local base = `{root}/.cache/c0116-promote`
++-- the fixture lives in this home's .cache (z-nile/.cache since c0120), the only place a spec may write
++local base = `{fixture.physical(".") :: string}/.cache/c0116-promote`
 +local work = `{base}/work`
 +
 +local function must(r: Result, what: string): string
@@ -2148,22 +2008,22 @@ index 00000000..cdca0021
 +		end
 +		t.expect(string.find(r.stdout, "\ncopied 1 acceptance specs\n", 1, true) ~= nil).toBe(true)
 +		t.expect(string.find(r.stdout, "promote-check OK", 1, true) ~= nil).toBe(true)
-+		t.expect(fs.isDir(`{work}/{ACC}c0010`)).toBe(false)
++		t.expect(fs.isDir(`{work}/z-nile/{ACC}c0010`)).toBe(false) -- z-nile's home is z-nile/ (c0120)
 +	end)
 +
 +	it("fails on an issue spec that breaks the type check, and still removes the copy", function()
 +		local r = promote("c0020")
 +		t.expect(r.ok).toBe(false)
 +		t.expect(string.find(r.stdout, "\ncopied 1 acceptance specs\n", 1, true) ~= nil).toBe(true)
-+		t.expect(fs.isDir(`{work}/{ACC}c0020`)).toBe(false)
++		t.expect(fs.isDir(`{work}/z-nile/{ACC}c0020`)).toBe(false)
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/recombine.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/recombine.spec.luau
 new file mode 100644
-index 00000000..1c95a09d
+index 00000000..6c8ebaf8
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/recombine.spec.luau
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,347 @@
 +--!strict
 +-- c0116 AC2: `recombine <keeper> <other> [<issue>...]` moves the named members of the other backlog raft, or all of
 +-- them, into the keeper. It claims both rafts with one fresh stamp (status lines only, published), writes the moves in
@@ -2247,56 +2107,58 @@ index 00000000..1c95a09d
 +return t.spec("c0116 recombine moves members between backlog rafts and retires an emptied one", function(it)
 +	it("sets up prepared rafts in two projects, an active raft, a feature raft and a solo member", function()
 +		local seed: { [string]: string } = {
-+			[".gitignore"] = fs.readFile(".gitignore"),
-+			["tracker/architecture.md"] = "# Architecture\n",
++			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
++			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 +		}
 +		local function add(path: string, text: string)
 +			seed[path] = text
 +			seed[string.gsub(path, "/[^/]+$", "/check.sh")] = CHECK
 +		end
-+		-- pickman's root in the fixtures is tracker/, z-nile's is z-nile/.tracker
-+		add("tracker/rafts/R0010/R0010.md", raftDoc("R0010", "chore", "c0011, c0012"))
-+		add("tracker/issues/c0011/c0011.md", issue("c0011", "chore", "R0010"))
-+		add("tracker/issues/c0012/c0012.md", issue("c0012", "chore", "R0010"))
-+		add("tracker/rafts/R0020/R0020.md", raftDoc("R0020", "chore", "c0021, c0022"))
-+		add("tracker/issues/c0021/c0021.md", issue("c0021", "chore", "R0020"))
-+		add("tracker/issues/c0022/c0022.md", issue("c0022", "chore", "R0020"))
-+		add("tracker/rafts/R0030/R0030.md", raftDoc("R0030", "chore", "c0031"))
-+		add("tracker/issues/c0031/c0031.md", issue("c0031", "chore", "R0030"))
-+		add("tracker/rafts/R0040/R0040.md", raftDoc("R0040", "chore", "c0041"))
-+		add("tracker/issues/c0041/c0041.md", issue("c0041", "chore", "R0040"))
++		-- pickman's root in the fixtures is pickman/.tracker/, z-nile's is z-nile/.tracker
++		add("pickman/.tracker/rafts/R0010/R0010.md", raftDoc("R0010", "chore", "c0011, c0012"))
++		add("pickman/.tracker/issues/c0011/c0011.md", issue("c0011", "chore", "R0010"))
++		add("pickman/.tracker/issues/c0012/c0012.md", issue("c0012", "chore", "R0010"))
++		add("pickman/.tracker/rafts/R0020/R0020.md", raftDoc("R0020", "chore", "c0021, c0022"))
++		add("pickman/.tracker/issues/c0021/c0021.md", issue("c0021", "chore", "R0020"))
++		add("pickman/.tracker/issues/c0022/c0022.md", issue("c0022", "chore", "R0020"))
++		add("pickman/.tracker/rafts/R0030/R0030.md", raftDoc("R0030", "chore", "c0031"))
++		add("pickman/.tracker/issues/c0031/c0031.md", issue("c0031", "chore", "R0030"))
++		add("pickman/.tracker/rafts/R0040/R0040.md", raftDoc("R0040", "chore", "c0041"))
++		add("pickman/.tracker/issues/c0041/c0041.md", issue("c0041", "chore", "R0040"))
 +		add("z-nile/.tracker/rafts/R0050/R0050.md", raftDoc("R0050", "chore", "c0051"))
 +		add("z-nile/.tracker/issues/c0051/c0051.md", issue("c0051", "chore", "R0050"))
 +		add(
-+			"tracker/rafts/active/R0060/R0060.md",
++			"pickman/.tracker/rafts/active/R0060/R0060.md",
 +			raftDoc("R0060", "chore", "c0061", "active-jolly-silver-walrus")
 +		)
 +		add(
-+			"tracker/issues/active/c0061/c0061.md",
++			"pickman/.tracker/issues/active/c0061/c0061.md",
 +			(string.gsub(issue("c0061", "chore", "R0060"), PREPARED, "active-jolly-silver-walrus"))
 +		)
-+		add("tracker/rafts/R0070/R0070.md", raftDoc("R0070", "feature", "f0071"))
-+		add("tracker/issues/f0071/f0071.md", issue("f0071", "feature", "R0070"))
++		add("pickman/.tracker/rafts/R0070/R0070.md", raftDoc("R0070", "feature", "f0071"))
++		add("pickman/.tracker/issues/f0071/f0071.md", issue("f0071", "feature", "R0070"))
 +		-- a given-back feature raft with no member (an orphan)
-+		add("tracker/rafts/R0075/R0075.md", raftDoc("R0075", "feature", "", "new-amber-otter-lynx"))
-+		add("tracker/rafts/R0080/R0080.md", raftDoc("R0080", "chore", "c0081"))
-+		add("tracker/issues/c0081/c0081.md", issue("c0081", "chore", "R0080", "solo: true\n"))
-+		add("tracker/rafts/R0090/R0090.md", raftDoc("R0090", "chore", "c0091"))
-+		add("tracker/issues/c0091/c0091.md", issue("c0091", "chore", "R0090"))
-+		add("tracker/rafts/R0100/R0100.md", raftDoc("R0100", "chore", "c0101"))
-+		add("tracker/issues/c0101/c0101.md", issue("c0101", "chore", "R0100"))
++		add("pickman/.tracker/rafts/R0075/R0075.md", raftDoc("R0075", "feature", "", "new-amber-otter-lynx"))
++		add("pickman/.tracker/rafts/R0080/R0080.md", raftDoc("R0080", "chore", "c0081"))
++		add("pickman/.tracker/issues/c0081/c0081.md", issue("c0081", "chore", "R0080", "solo: true\n"))
++		add("pickman/.tracker/rafts/R0090/R0090.md", raftDoc("R0090", "chore", "c0091"))
++		add("pickman/.tracker/issues/c0091/c0091.md", issue("c0091", "chore", "R0090"))
++		add("pickman/.tracker/rafts/R0100/R0100.md", raftDoc("R0100", "chore", "c0101"))
++		add("pickman/.tracker/issues/c0101/c0101.md", issue("c0101", "chore", "R0100"))
 +		-- review 001 F2/F5: a keeper of two members, and an orphan holding review history a lesson cites
-+		add("tracker/rafts/R0140/R0140.md", raftDoc("R0140", "chore", "c0141, c0142"))
-+		add("tracker/issues/c0141/c0141.md", issue("c0141", "chore", "R0140"))
-+		add("tracker/issues/c0142/c0142.md", issue("c0142", "chore", "R0140"))
-+		add("tracker/rafts/R0150/R0150.md", raftDoc("R0150", "chore", "", "new-amber-otter-lynx"))
-+		seed["tracker/rafts/R0150/design-review-001.md"] = REVIEW
-+		seed["tracker/rafts/R0150/harvest.md"] = "# Harvest: R0150\n- design-review-001 F1: zz-test/demo\n"
++		add("pickman/.tracker/rafts/R0140/R0140.md", raftDoc("R0140", "chore", "c0141, c0142"))
++		add("pickman/.tracker/issues/c0141/c0141.md", issue("c0141", "chore", "R0140"))
++		add("pickman/.tracker/issues/c0142/c0142.md", issue("c0142", "chore", "R0140"))
++		add("pickman/.tracker/rafts/R0150/R0150.md", raftDoc("R0150", "chore", "", "new-amber-otter-lynx"))
++		seed["pickman/.tracker/rafts/R0150/design-review-001.md"] = REVIEW
++		seed["pickman/.tracker/rafts/R0150/harvest.md"] =
++			"# Harvest: R0150\n- design-review-001 F1: zz-test/demo\n"
 +		seed["z-nile/skills/zz-test/lessons/demo.md"] = LESSON
 +		-- a folder in retired/ that recombine did not make (no retired: line)
-+		seed["tracker/rafts/retired/R0160/R0160.md"] = raftDoc("R0160", "chore", "", "new-amber-otter-lynx")
++		seed["pickman/.tracker/rafts/retired/R0160/R0160.md"] =
++			raftDoc("R0160", "chore", "", "new-amber-otter-lynx")
 +		-- a retired raft whose document still says new: never an orphan
-+		seed["tracker/rafts/retired/R0190/R0190.md"] = (
++		seed["pickman/.tracker/rafts/retired/R0190/R0190.md"] = (
 +			string.gsub(
 +				raftDoc("R0190", "chore", "", "new-amber-otter-lynx"),
 +				"\ndesign: ready\n",
@@ -2304,11 +2166,11 @@ index 00000000..1c95a09d
 +			)
 +		)
 +		-- review 001 F7: a pair whose other raft gains a member elsewhere while this terminal has not synced
-+		add("tracker/rafts/R0170/R0170.md", raftDoc("R0170", "chore", "c0171"))
-+		add("tracker/issues/c0171/c0171.md", issue("c0171", "chore", "R0170"))
-+		add("tracker/rafts/R0180/R0180.md", raftDoc("R0180", "chore", "c0181"))
-+		add("tracker/issues/c0181/c0181.md", issue("c0181", "chore", "R0180"))
-+		add("tracker/issues/c0182/c0182.md", issue("c0182", "chore", ""))
++		add("pickman/.tracker/rafts/R0170/R0170.md", raftDoc("R0170", "chore", "c0171"))
++		add("pickman/.tracker/issues/c0171/c0171.md", issue("c0171", "chore", "R0170"))
++		add("pickman/.tracker/rafts/R0180/R0180.md", raftDoc("R0180", "chore", "c0181"))
++		add("pickman/.tracker/issues/c0181/c0181.md", issue("c0181", "chore", "R0180"))
++		add("pickman/.tracker/issues/c0182/c0182.md", issue("c0182", "chore", ""))
 +		f = trackerfix.new("c0116-recombine", seed)
 +		W = trOk(f.main, { "worktree", "raft-w" })
 +		X = trOk(f.main, { "worktree", "raft-x" })
@@ -2332,22 +2194,26 @@ index 00000000..1c95a09d
 +
 +	it("a partial move claims both rafts with one stamp and leaves the members' status alone", function()
 +		local before = tip()
-+		local texts = { onOrigin("tracker/issues/c0021/c0021.md"), onOrigin("tracker/issues/c0022/c0022.md") }
++		local texts = {
++			onOrigin("pickman/.tracker/issues/c0021/c0021.md"),
++			onOrigin("pickman/.tracker/issues/c0022/c0022.md"),
++		}
 +		trOk(W, { "recombine", "R0010", "R0020", "c0021" })
 +		t.expect(fixture.git(f.origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 +		local changed = string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
-+		t.expect(changed).toEqual({ "tracker/rafts/R0010/R0010.md", "tracker/rafts/R0020/R0020.md" })
-+		local s1 = originStatus("tracker/rafts/R0010/R0010.md")
++		t.expect(changed)
++			.toEqual({ "pickman/.tracker/rafts/R0010/R0010.md", "pickman/.tracker/rafts/R0020/R0020.md" })
++		local s1 = originStatus("pickman/.tracker/rafts/R0010/R0010.md")
 +		t.expect(string.match(s1, "^preparing%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
-+		t.expect(originStatus("tracker/rafts/R0020/R0020.md")).toBe(s1)
-+		t.expect(onOrigin("tracker/issues/c0021/c0021.md")).toBe(texts[1])
-+		t.expect(onOrigin("tracker/issues/c0022/c0022.md")).toBe(texts[2])
++		t.expect(originStatus("pickman/.tracker/rafts/R0020/R0020.md")).toBe(s1)
++		t.expect(onOrigin("pickman/.tracker/issues/c0021/c0021.md")).toBe(texts[1])
++		t.expect(onOrigin("pickman/.tracker/issues/c0022/c0022.md")).toBe(texts[2])
 +		-- the moves are the worktree's
-+		t.expect(front(`{W}/tracker/issues/c0021/c0021.md`, "raft")).toBe("R0010")
-+		t.expect(front(`{W}/tracker/issues/c0021/c0021.md`, "status")).toBe(PREPARED)
-+		t.expect(front(`{W}/tracker/rafts/R0010/R0010.md`, "issues")).toBe("[c0011, c0012, c0021]")
-+		t.expect(fs.isDir(`{W}/tracker/rafts/R0020`)).toBe(true)
-+		t.expect(front(`{W}/tracker/rafts/R0020/R0020.md`, "issues")).toBe("[c0022]")
++		t.expect(front(`{W}/pickman/.tracker/issues/c0021/c0021.md`, "raft")).toBe("R0010")
++		t.expect(front(`{W}/pickman/.tracker/issues/c0021/c0021.md`, "status")).toBe(PREPARED)
++		t.expect(front(`{W}/pickman/.tracker/rafts/R0010/R0010.md`, "issues")).toBe("[c0011, c0012, c0021]")
++		t.expect(fs.isDir(`{W}/pickman/.tracker/rafts/R0020`)).toBe(true)
++		t.expect(front(`{W}/pickman/.tracker/rafts/R0020/R0020.md`, "issues")).toBe("[c0022]")
 +		t.expect(fixture.git(W, { "status", "--porcelain" })).toBe("")
 +		-- neither raft can be readied, claimed again or recombined while the claim stands
 +		fixture.git(f.main, { "pull", "-q", "origin", "main" })
@@ -2358,7 +2224,7 @@ index 00000000..1c95a09d
 +	it(
 +		"the carried move takes the moved member through the shared stamp, and both rafts are readyable after the merge",
 +		function()
-+			coherence(`{W}/tracker/rafts/R0010`, "001")
++			coherence(`{W}/pickman/.tracker/rafts/R0010`, "001")
 +			local before = tip()
 +			trOk(W, { "status", "R0010", "prepared" })
 +			trOk(W, { "status", "R0020", "prepared" })
@@ -2368,10 +2234,10 @@ index 00000000..1c95a09d
 +			land(W)
 +			trOk(f.main, { "ready", "R0010" })
 +			trOk(f.main, { "ready", "R0020" })
-+			t.expect(onOrigin("tracker/issues/active/c0021/c0021.md") ~= nil).toBe(true)
-+			t.expect(front(`{f.main}/tracker/rafts/active/R0010/R0010.md`, "issues"))
++			t.expect(onOrigin("pickman/.tracker/issues/active/c0021/c0021.md") ~= nil).toBe(true)
++			t.expect(front(`{f.main}/pickman/.tracker/rafts/active/R0010/R0010.md`, "issues"))
 +				.toBe("[c0011, c0012, c0021]")
-+			t.expect(front(`{f.main}/tracker/rafts/active/R0020/R0020.md`, "issues")).toBe("[c0022]")
++			t.expect(front(`{f.main}/pickman/.tracker/rafts/active/R0020/R0020.md`, "issues")).toBe("[c0022]")
 +		end
 +	)
 +
@@ -2381,16 +2247,17 @@ index 00000000..1c95a09d
 +			fixture.git(X, { "reset", "-q", "--hard", "origin/main" })
 +			local out = trOk(X, { "recombine", "R0030", "R0040" })
 +			t.expect(has(out, "retired R0040")).toBe(true)
-+			t.expect(fs.isDir(`{X}/tracker/rafts/R0040`)).toBe(false)
-+			t.expect(onOrigin("tracker/rafts/R0040/R0040.md") ~= nil).toBe(true) -- publish never deletes: the PR does
-+			coherence(`{X}/tracker/rafts/R0030`, "001")
++			t.expect(fs.isDir(`{X}/pickman/.tracker/rafts/R0040`)).toBe(false)
++			t.expect(onOrigin("pickman/.tracker/rafts/R0040/R0040.md") ~= nil).toBe(true) -- publish never deletes: the PR does
++			coherence(`{X}/pickman/.tracker/rafts/R0030`, "001")
 +			trOk(X, { "status", "R0030", "prepared" })
 +			fixture.git(X, { "add", "-A" })
 +			fixture.git(X, { "commit", "-q", "-m", "tracker: raft R0030" })
 +			land(X)
-+			t.expect(onOrigin("tracker/rafts/R0040/R0040.md")).toBe(nil)
++			t.expect(onOrigin("pickman/.tracker/rafts/R0040/R0040.md")).toBe(nil)
 +			trOk(f.main, { "ready", "R0030" })
-+			t.expect(front(`{f.main}/tracker/rafts/active/R0030/R0030.md`, "issues")).toBe("[c0031, c0041]")
++			t.expect(front(`{f.main}/pickman/.tracker/rafts/active/R0030/R0030.md`, "issues"))
++				.toBe("[c0031, c0041]")
 +		end
 +	)
 +
@@ -2401,12 +2268,12 @@ index 00000000..1c95a09d
 +		fixture.git(X, { "fetch", "-q", "origin" })
 +		fixture.git(X, { "merge", "-q", "--no-edit", "origin/main" })
 +		trOk(X, { "status", "R0100", "preparing" })
-+		local doc = `{X}/tracker/rafts/R0100/R0100.md`
++		local doc = `{X}/pickman/.tracker/rafts/R0100/R0100.md`
 +		local text = fs.readFile(doc)
 +		local s, e = string.find(text, "\nissues: [c0101]\n", 1, true)
 +		assert(s and e, "R0100's issues: line")
 +		fs.writeFile(doc, string.sub(text, 1, s) .. "issues: [c0101, c0091]\n" .. string.sub(text, e + 1))
-+		local idoc = `{X}/tracker/issues/c0091/c0091.md`
++		local idoc = `{X}/pickman/.tracker/issues/c0091/c0091.md`
 +		local itext = fs.readFile(idoc)
 +		local a, b = string.find(itext, "\nraft: R0090\n", 1, true)
 +		assert(a and b, "c0091's raft: line")
@@ -2421,14 +2288,17 @@ index 00000000..1c95a09d
 +		fixture.git(X, { "fetch", "-q", "origin" })
 +		fixture.git(X, { "reset", "-q", "--hard", "origin/main" })
 +		trOk(X, { "recombine", "R0090", "R0100" })
-+		local stamp = originStatus("tracker/rafts/R0090/R0090.md")
-+		t.expect(originStatus("tracker/rafts/R0100/R0100.md")).toBe(stamp)
++		local stamp = originStatus("pickman/.tracker/rafts/R0090/R0090.md")
++		t.expect(originStatus("pickman/.tracker/rafts/R0100/R0100.md")).toBe(stamp)
 +		local before = tip()
 +		trOk(X, { "release", "R0090" })
 +		local changed = string.split(fixture.git(f.origin, { "diff", "--name-only", before, "main" }), "\n")
-+		t.expect(changed).toEqual({ "tracker/rafts/R0090/R0090.md", "tracker/rafts/R0100/R0100.md" })
-+		t.expect(string.match(originStatus("tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil).toBe(true)
-+		t.expect(string.match(originStatus("tracker/rafts/R0100/R0100.md"), "^prepared%-") ~= nil).toBe(true)
++		t.expect(changed)
++			.toEqual({ "pickman/.tracker/rafts/R0090/R0090.md", "pickman/.tracker/rafts/R0100/R0100.md" })
++		t.expect(string.match(originStatus("pickman/.tracker/rafts/R0090/R0090.md"), "^prepared%-") ~= nil)
++			.toBe(true)
++		t.expect(string.match(originStatus("pickman/.tracker/rafts/R0100/R0100.md"), "^prepared%-") ~= nil)
++			.toBe(true)
 +	end)
 +
 +	it(
@@ -2438,9 +2308,11 @@ index 00000000..1c95a09d
 +				local out = tr(Y, { "metrics" }).stdout
 +				return string.match(out, "\n| R0150 | (%d+) | %d+ | [%w%-]+ |\n")
 +			end
++			-- the fixture carries z-nile's real lessons (c0115's G7), whose sources are not in it: the case is that the
++			-- demo lesson, whose only source is R0150's harvest, never loses it
 +			local function lessonsOk(): boolean
 +				local r = tr(Y, { "lessons", "--check" })
-+				return r.ok and has(r.stdout, "ok")
++				return not has(r.stdout .. r.stderr, "zz-test/demo")
 +			end
 +			fixture.git(Y, { "fetch", "-q", "origin" })
 +			fixture.git(Y, { "reset", "-q", "--hard", "origin/main" })
@@ -2448,11 +2320,11 @@ index 00000000..1c95a09d
 +			t.expect(rounds()).toBe("1")
 +			local out = trOk(Y, { "recombine", "R0140", "R0150" })
 +			t.expect(has(out, "retired R0150")).toBe(true)
-+			local kept = `{Y}/tracker/rafts/retired/R0150`
++			local kept = `{Y}/pickman/.tracker/rafts/retired/R0150`
 +			t.expect(fs.isFile(`{kept}/design-review-001.md`)).toBe(true)
 +			t.expect(fs.isFile(`{kept}/harvest.md`)).toBe(true)
 +			t.expect(front(`{kept}/R0150.md`, "retired")).toBe("R0140")
-+			t.expect(fs.isDir(`{Y}/tracker/rafts/R0150`)).toBe(false)
++			t.expect(fs.isDir(`{Y}/pickman/.tracker/rafts/R0150`)).toBe(false)
 +			t.expect(lessonsOk()).toBe(true)
 +			t.expect(rounds()).toBe("1")
 +			-- R0140's membership did not change: its carried move needs no new coherence review
@@ -2460,7 +2332,7 @@ index 00000000..1c95a09d
 +			fixture.git(Y, { "add", "-A" })
 +			fixture.git(Y, { "commit", "-q", "-m", "tracker: raft R0140 (retire R0150)" })
 +			land(Y)
-+			t.expect(onOrigin("tracker/rafts/retired/R0150/harvest.md") ~= nil).toBe(true)
++			t.expect(onOrigin("pickman/.tracker/rafts/retired/R0150/harvest.md") ~= nil).toBe(true)
 +			trOk(f.main, { "ready", "R0140" })
 +			-- audit: no orphan warning for the retired raft; a retired/ folder recombine did not make is an error
 +			local audit = tr(f.main, { "audit" }).stdout
@@ -2486,24 +2358,25 @@ index 00000000..1c95a09d
 +			-- another terminal folds c0182 into R0180 and lands it; Z has not synced since
 +			local V = trOk(f.main, { "worktree", "raft-v" })
 +			trOk(V, { "fold", "R0180", "c0182" })
-+			coherence(`{V}/tracker/rafts/R0180`, "001")
++			coherence(`{V}/pickman/.tracker/rafts/R0180`, "001")
 +			trOk(V, { "status", "R0180", "prepared" })
 +			fixture.git(V, { "add", "-A" })
 +			fixture.git(V, { "commit", "-q", "-m", "tracker: fold c0182 into R0180" })
 +			land(V)
 +			local out = trOk(Z, { "recombine", "R0170", "R0180" })
 +			t.expect(has(out, "c0181, c0182")).toBe(true)
-+			t.expect(front(`{Z}/tracker/issues/c0182/c0182.md`, "raft")).toBe("R0170")
-+			t.expect(front(`{Z}/tracker/rafts/R0170/R0170.md`, "issues")).toBe("[c0171, c0181, c0182]")
++			t.expect(front(`{Z}/pickman/.tracker/issues/c0182/c0182.md`, "raft")).toBe("R0170")
++			t.expect(front(`{Z}/pickman/.tracker/rafts/R0170/R0170.md`, "issues"))
++				.toBe("[c0171, c0181, c0182]")
 +		end
 +	)
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/retired.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/retired.spec.luau
 new file mode 100644
-index 00000000..0dcd67a5
+index 00000000..317042fc
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/retired.spec.luau
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,145 @@
 +--!strict
 +-- c0116 AC2 (review 002 F2): a raft `recombine` retired keeps its folder in `<root>/rafts/retired/<R-id>` with
 +-- `retired: <keeper>`. On a clone of this checkout holding one (its lowest backlog z-nile raft, retired the way
@@ -2519,7 +2392,8 @@ index 00000000..0dcd67a5
 +
 +type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 +local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-+local base = `{root}/.cache/c0116-retired`
++-- the fixture lives in this home's .cache (z-nile/.cache since c0120), the only place a spec may write
++local base = `{fixture.physical(".") :: string}/.cache/c0116-retired`
 +local work = `{base}/work`
 +local ACC = "tests/" .. "acceptance/"
 +
@@ -2621,13 +2495,14 @@ index 00000000..0dcd67a5
 +					"git mv"
 +				)
 +				local specs = must(
-+					fixture.exec(work, "lune", {
++					-- z-nile's specs run from its home, z-nile/ (c0120)
++					process.exec("lune", {
 +						"run",
 +						"tests/run",
 +						"--",
 +						`{ACC}c0114/classified.spec.luau`,
 +						`{ACC}c0043/rounds.spec.luau`,
-+					}),
++					}, { cwd = `{work}/z-nile` }),
 +					"the classification and rounds specs"
 +				)
 +				t.expect(string.find(specs, " 0 failed", 1, true) ~= nil).toBe(true)
@@ -2639,14 +2514,16 @@ index 00000000..0dcd67a5
 +				)
 +				local audit = fixture.exec(work, "bash", { "scripts/tracker.sh", "audit" })
 +				t.expect(string.find(audit.stdout, "audit: 0 errors", 1, true) ~= nil).toBe(true)
-+				t.expect(string.find(audit.stdout, `orphan-raft z-nile/.tracker/rafts/retired/{id}`, 1, true))
++				t.expect(
++					(string.find(audit.stdout, `orphan-raft z-nile/.tracker/rafts/retired/{id}`, 1, true))
++				)
 +					.toBe(nil)
 +			end
 +		)
 +	end
 +)
 diff --git a/z-nile/.tracker/issues/c0116/c0116.md b/z-nile/.tracker/issues/c0116/c0116.md
-index c56ecfc3..da55825f 100644
+index c56ecfc3..997962f1 100644
 --- a/z-nile/.tracker/issues/c0116/c0116.md
 +++ b/z-nile/.tracker/issues/c0116/c0116.md
 @@ -6,7 +6,9 @@ slug: split-raft-step
@@ -2670,7 +2547,7 @@ index c56ecfc3..da55825f 100644
  ## Non-goals
  - Changing the design checklist for a feature, a defect, or a chore beyond taking raft creation out. The three checklists are named in the README by c0115; the signatures and specs of a designed issue stay ticket-prep's job.
  - Choosing models or drawing the board.
-@@ -37,53 +42,488 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -37,53 +42,498 @@ Decided with the user (2026-10-20), from the programme review:
  - Add `z-raft` with the policy above.
  - Add a backlog-only recombine command on `zz-rules` that moves `raft:` and `issues:` and retires the empty raft.
  
@@ -2691,9 +2568,9 @@ index c56ecfc3..da55825f 100644
 +
 +**The rule, once.** An issue belongs to the raft its `raft:` line names on `origin/main`. A command that claims or prepares a raft refuses an issue whose origin `raft:` names a different raft, unless that raft carries this raft's own stamp (recombine's other raft). No command restamps an issue that is `prepared` on `origin/main`. `ready` (unchanged) reads membership from `raft:` lines and refuses a raft whose `issues:` disagrees.
 +
-+**What was grouped is recorded** (review 002 F1; lesson architecture/locks-detect-change). A claim check sees only claims that are still open; a full z-design cycle (claim, redesign, carried prepare, land) inside the rafting window leaves none. So `new raft`, `fold` and `recombine` write into the raft's `grouped:` line a hash of each prepared member's document as it is on `origin/main` when it is grouped (`grouped: [c0013@1a2b3c4d5e6f, …]`; `raftplan.designHash` leaves out the `status:` and `raft:` lines, which ready, stop and the rafting PR itself change). The carried `status <R> prepared` and `ready <R>` refuse a member whose document no longer hashes to its record: "<id> (<recorded> → <now>): changed on origin/main since <R> grouped it". Old-flow members (stamped with the raft's value) have no record and are exempt. A single-member raft is checked too (its Theme quotes the design). I chose this over restamping members because the user's plan says the raft stamp claims only the raft, and because restamping would bring back review-004 F1's give-back problem (`prepared>new`) on every release (G16).
++**What was grouped is recorded** (review 002 F1; lesson zz-arch/locks-detect-change). A claim check sees only claims that are still open; a full z-design cycle (claim, redesign, carried prepare, land) inside the rafting window leaves none. So `new raft`, `fold` and `recombine` write into the raft's `grouped:` line a hash of each prepared member's document as it is on `origin/main` when it is grouped (`grouped: [c0013@1a2b3c4d5e6f, …]`; `raftplan.designHash` leaves out the `status:` and `raft:` lines, which ready, stop and the rafting PR itself change). The carried `status <R> prepared` and `ready <R>` refuse a member whose document no longer hashes to its record: "<id> (<recorded> → <now>): changed on origin/main since <R> grouped it". Old-flow members (stamped with the raft's value) have no record and are exempt. A single-member raft is checked too (its Theme quotes the design). I chose this over restamping members because the user's plan says the raft stamp claims only the raft, and because restamping would bring back review-004 F1's give-back problem (`prepared>new`) on every release (G16).
 +
-+**What the record covers** (review 003 F1; lesson architecture/records-cover-what-was-reviewed), stated once as `raftplan.isDesignFile(rel, id)`: the files of the member's folder that make up its reviewed design: its document (hashed without `status:` and `raft:`), `check.sh`, every file under `acceptance/`, and its `design-review-*`, `design-refute-*` and `harvest.md`. Not `spend.md` (`./zn spend` after the landing), `prompt.md` or `experiments/`. A new file kind in an issue folder is classified there. `raftplan.recordHash(id, files)` hashes the design files sorted by path, each path with its length and bytes. **Every hash reads git's view, never a directory walk** (review 004 F1; lesson architecture/one-reader-per-format): `recordGrouped` reads origin/main; the carried move and `ready` read the tree they publish (`treeFolderFiles` inside the build, so a redesign landing after `ready`'s pull is seen too); the carried move's raft reviews read `gitFolderFiles(dir)` (`git ls-files -co --exclude-standard`: tracked files, and untracked ones that aren't ignored, since a review may not be committed yet when the carried move runs); and `keepRecords` reads `gitFolderFiles(dir, true)`, the index (`git ls-files -c`), because a rewrite commits only tracked files (review 005 F1). So Finder's `.DS_Store`, an editor's swap file, a merge's `*.orig`, or a work file left in a member folder during a `renumber`, never change a hash. One reader, one view per caller, each chosen for what that caller's commit carries (lesson architecture/one-reader-per-format).
++**What the record covers** (review 003 F1; lesson zz-arch/records-cover-what-was-reviewed), stated once as `raftplan.isDesignFile(rel, id)`: the files of the member's folder that make up its reviewed design: its document (hashed without `status:` and `raft:`), `check.sh`, every file under `acceptance/`, and its `design-review-*`, `design-refute-*` and `harvest.md`. Not `spend.md` (`./zn spend` after the landing), `prompt.md` or `experiments/`. A new file kind in an issue folder is classified there. `raftplan.recordHash(id, files)` hashes the design files sorted by path, each path with its length and bytes. **Every hash reads git's view, never a directory walk** (review 004 F1; lesson zz-arch/one-reader-per-format): `recordGrouped` reads origin/main; the carried move and `ready` read the tree they publish (`treeFolderFiles` inside the build, so a redesign landing after `ready`'s pull is seen too); the carried move's raft reviews read `gitFolderFiles(dir)` (`git ls-files -co --exclude-standard`: tracked files, and untracked ones that aren't ignored, since a review may not be committed yet when the carried move runs); and `keepRecords` reads `gitFolderFiles(dir, true)`, the index (`git ls-files -c`), because a rewrite commits only tracked files (review 005 F1). So Finder's `.DS_Store`, an editor's swap file, a merge's `*.orig`, or a work file left in a member folder during a `renumber`, never change a hash. One reader, one view per caller, each chosen for what that caller's commit carries (lesson zz-arch/one-reader-per-format).
 +
 +**A review of the record** (review 003 F2). zz-review's raft mode quotes the raft's `grouped:` value in its Inputs as `Grouped: [...]`. For a raft of two or more members, the carried move (after its Theme check) and `ready` need a `design-review-NNN.md` in the raft's folder whose quoted record covers the current one: every current entry, with the same hash. A fold, re-fold or recombine changes the record, so it needs a new round; an `unfold` only drops entries, so it needs none. The check is on content, not commit order, so it holds after the rafting PR's squash merge. Refusal: "<R>'s coherence review predates its record (<ids>): run a new raft-mode round (zz-review); never edit a review that is already written". It names the record's ids, not the `Grouped:` line, so it hands no one text to paste into an old review (review 004 F4). z-raft and zz-review say a review file is never edited after it is written.
 +
@@ -2728,7 +2605,7 @@ index c56ecfc3..da55825f 100644
 +- *A redesign landed inside the rafting window* (review 002 F1, both orders): one that lands after the carried move is caught by `ready`, and one that lands before it by the carried move. Each refusal names the member and both hashes, and `./zn unfold` takes the member out.
 +- *Abandon* (review-004 F1): `release` (or `status R new`) never meets `prepared>new`, because prepared issues are never targets.
 +
-+**Who else can claim a member while a rafting is open** (review 001 F1; lesson architecture/claims-name-who-else-can-claim). The raft-only stamp leaves a member's `status:` unstamped from `new raft`/`fold`/`recombine` until the rafting PR lands. Every command that can stamp or take an issue in that window, and where it meets the rafting:
++**Who else can claim a member while a rafting is open** (review 001 F1; lesson zz-arch/claims-name-who-else-can-claim). The raft-only stamp leaves a member's `status:` unstamped from `new raft`/`fold`/`recombine` until the rafting PR lands. Every command that can stamp or take an issue in that window, and where it meets the rafting:
 +
 +| command, run by another terminal during the window | what stops it, or where the two meet |
 +|---|---|
@@ -2787,12 +2664,12 @@ index c56ecfc3..da55825f 100644
 +
 +`raft-plan` (main.luau) builds the records from the tree (`store.all`, `statusLib.effective`, `store.typeOf`, `Item.root`, `touchedModules`, `raftplan.parseSize(front.size)`, `front.solo == "true"`, `front.single == "true"`, `store.members`) and prints each op as the command that carries it out, then the skips:
 +```
-+./zn new raft feature f0060 f0060 f0070
++./zn new raft feature f0060 f0060 f0070 --project pickman
 +./zn fold R0030 d0010 d0020
-+./zn new raft chore c0040 c0040 --single
++./zn new raft chore c0040 c0040 --single --project pickman
 +skip c0050: no size: (z-design records its estimate of changed lines)
 +```
-+A new raft's slug is its first issue's slug. With no op and no skip it prints `raft-plan: nothing to raft (no prepared issue without a raft)`. Without `--apply` it only reads, so it may run in the main checkout (and it skips nothing: `guardRepoRoot` still runs, as for every command not in `READ_ONLY`). `--apply` refuses the main checkout, then runs each printed command in this process, in order (`cmd.new`, `cmd.fold`), each committing its own edits. `workstreams` keeps its own rule (an issue with no Touched modules overlaps everything there, the safe direction for parallel streams) and now calls `raftplan.overlaps`, one rule for both (lesson zz-arch/one-reader-per-format).
++A new raft's slug is its first issue's slug, and it names its project, `--project <name>` (the registry's name for the op's root, `projects.projectOf`): since c0115, `new raft` takes its project from `--project` or the folder it runs in, and z-raft runs in a rafting worktree at the checkout's top, which is no project's folder. `fold` and `recombine` find their raft, so they need none. With no op and no skip it prints `raft-plan: nothing to raft (no prepared issue without a raft)`. Without `--apply` it only reads, so it may run in the main checkout (and it skips nothing: `guardRepoRoot` still runs, as for every command not in `READ_ONLY`). `--apply` refuses the main checkout, then runs each printed command in this process, in order (`cmd.new`, `cmd.fold`), each committing its own edits. `workstreams` keeps its own rule (an issue with no Touched modules overlaps everything there, the safe direction for parallel streams) and now calls `raftplan.overlaps`, one rule for both (lesson zz-arch/one-reader-per-format).
 +
 +### 4. z-design: one issue, no raft
 +`z-nile/skills/z-design/SKILL.md` changes (quoted where a spec pins it):
@@ -2846,7 +2723,7 @@ index c56ecfc3..da55825f 100644
 +- **Preps open on branches with the old flow** (prep-radar-jump-button R0041, prep-ghost-hunter-tools R0035, prep-guard-follow-ups R0026, prep-z-nile-home R0043): `new raft` over `new` issues, `status <R> preparing` over draft members and the carried move over `preparing` members behave as before (c0053's specs are the regression guard, AC9), so they land as they are.
 +- **The z-nile programme's preps** (prep-c0120, prep-c0115): their design reviews are already in their issue folders, which metrics now counts and rolls up.
 +- **Prepared issues without `size:`**: none on today's tree is raftless (`./zn raft-plan` on the prototype: "nothing to raft"). One that appears is named by `raft-plan` and goes back to z-design for its estimate, or is rafted with an argument.
-+- **Prepared rafts whose members have no `size:`** (review 001 F3; lesson ticket-prep/new-rules-migrate-existing-work): every open raft today. R0012 (pickman, feature, `single: false`, f0027 to f0029) and R0035 (pickman, feature, four members) have no `size:` on any member, so the no-argument plan never folds into them: a new feature sharing their surface gets a raft of its own, and `raft-plan` prints `skip R0012: f0027 has no size:, …` when pickman features are being planned. They are readied and delivered as they are. To fold into one, z-raft runs with an argument (`./zn fold R0012 <id>`), or z-design adds `size:` to the members in a design PR. The single rafts (R0030, R0039, R0041 and the rest) take nothing anyway.
++- **Prepared rafts whose members have no `size:`** (review 001 F3; lesson z-design/new-rules-migrate-existing-work): every open raft today. R0012 (pickman, feature, `single: false`, f0027 to f0029) and R0035 (pickman, feature, four members) have no `size:` on any member, so the no-argument plan never folds into them: a new feature sharing their surface gets a raft of its own, and `raft-plan` prints `skip R0012: f0027 has no size:, …` when pickman features are being planned. They are readied and delivered as they are. To fold into one, z-raft runs with an argument (`./zn fold R0012 <id>`), or z-design adds `size:` to the members in a design PR. The single rafts (R0030, R0039, R0041 and the rest) take nothing anyway.
 +- **An issue prepared under the old flow but given back raftless** (status `prepared`, `raft:` empty): it is a z-raft candidate like any other.
 +- **Sessions**: z-raft is a new skill, so sessions in the main checkout pick it up after the landing and a restart (as c0115's landing note says).
 +
@@ -2913,8 +2790,8 @@ index c56ecfc3..da55825f 100644
 +- **U5. Where do design reviews live, and does anything promoted read them under a raft?** `grep -rl design-review` over the engine and `tests/acceptance`: the readers are `lessons.luau` (every item folder already), `metrics` (raft folders only: changed), `trail.luau` and `ledger.luau` (names only). Promoted specs pinning the raft-only count: c0043/rounds (overridden). **PASS.**
 +- **U6. Raft-level coherence for grouped features**: the user decided "Short coherence review" (Problem).
 +- **E2. A retired raft keeps what its readers count** (review 001 F2). Run 2026-10-21 on a copy of today's tree (a scratch clone with its own bare origin, in the scratchpad, never this repository): before, `./zn lessons --check` said "21 lessons, 118 harvest entries, ok" and `metrics` listed `| R0040 | 5 | 0 | second-order |`; `./zn recombine R0030 R0040` moved R0040's folder to `z-nile/.tracker/rafts/retired/R0040` with `retired: R0030`; after, `lessons --check` said the same, metrics kept `| R0040 | 5 | 0 | second-order |`, `audit` had no orphan warning, and the carried `status R0030 prepared` succeeded with no new review. **PASS.** The first draft's `git rm -r` turned `lessons --check` red (the reviewer's run).
-+- **E3. The full gate on a copy of today's tree with a raft retired** (review 002 F2; lesson testing/prove-state-folders-on-the-real-tree). Run 2026-10-21 in a scratch clone (in the scratchpad, with its own bare origin; its identity was set to a non-fixture one, because the tripwire refuses a checkout whose identity looks like a fixture's): `recombine R0030 R0040`, the carried `status R0030 prepared`, a commit, then `z-nile/check.sh --full`. Before the fixes: 1049 passed, 3 failed: c0005/worktree (`engine.empty` left the retired folder), c0043/rounds ("lists every raft once") and c0114/classified ("raft skill-lessons: not found"), exactly the reviewer's three. After them, retired.spec runs c0114/classified and c0043/rounds on a clone holding a retired raft, and they pass; `engine.empty` clears `retired/` (M77). **PASS.**
-+- **E1. Mutation check.** 88 mutants (M1 to M91 without M11, M12 and M60, whose guard round 3 removed as subsumed), each applied alone to the prototype in a scratch worktree (`.worktree/mut-c0116-{1,2,3}`, detached, removed after) by the scratchpad runner (`c0116-work/mutrun.sh`, `mutants.py`), its spec run, then reverted. Round 4 added M89 to M91 (review 004 F1 and F2) and reran the mutants the round's code touched; the final count is under Verification log. Round 2 added M69 to M78 (review 002 F1 to F4), and all were killed on the first run. Round 1 (round 1 added M57 to M68 for review 001 F1, F2, F3, F5 and F7; M66 first raised a Lua error instead of failing an assertion, so it was rewritten as "a sizeless member counts 0", the draft's rule, and killed; M64 first survived because the retired R0150 carries recombine's `preparing-` stamp, so no orphan warning could fire, and the case gained a retired raft whose document still says `new` (lesson testing/guard-needs-its-own-case)). Four needed a stronger case first: M24 (recombine's raft-level type check) survived because the members' own type check also refused, so the case gained an empty feature raft (an orphan of another type, where only the raft check can refuse); M27 (recombine's membership check) survived because the publish's origin check refuses the same input with another message, so the case now pins `c0031 is not a member of R0020`, the message §2 states; M4 and M21 first failed on a spec-side file read (a missing claim file, a deleted folder), and their cases now assert the file or folder before reading it. M54 to M56 were added after the first run, when the table showed `fold`'s own project, type and backlog refusals had no case.
++- **E3. The full gate on a copy of today's tree with a raft retired** (review 002 F2; lesson zz-test/prove-state-folders-on-the-real-tree). Run 2026-10-21 in a scratch clone (in the scratchpad, with its own bare origin; its identity was set to a non-fixture one, because the tripwire refuses a checkout whose identity looks like a fixture's): `recombine R0030 R0040`, the carried `status R0030 prepared`, a commit, then `z-nile/check.sh --full`. Before the fixes: 1049 passed, 3 failed: c0005/worktree (`engine.empty` left the retired folder), c0043/rounds ("lists every raft once") and c0114/classified ("raft skill-lessons: not found"), exactly the reviewer's three. After them, retired.spec runs c0114/classified and c0043/rounds on a clone holding a retired raft, and they pass; `engine.empty` clears `retired/` (M77). **PASS.**
++- **E1. Mutation check.** 88 mutants (M1 to M91 without M11, M12 and M60, whose guard round 3 removed as subsumed), each applied alone to the prototype in a scratch worktree (`.worktree/mut-c0116-{1,2,3}`, detached, removed after) by the scratchpad runner (`c0116-work/mutrun.sh`, `mutants.py`), its spec run, then reverted. Round 4 added M89 to M91 (review 004 F1 and F2) and reran the mutants the round's code touched; the final count is under Verification log. Round 2 added M69 to M78 (review 002 F1 to F4), and all were killed on the first run. Round 1 (round 1 added M57 to M68 for review 001 F1, F2, F3, F5 and F7; M66 first raised a Lua error instead of failing an assertion, so it was rewritten as "a sizeless member counts 0", the draft's rule, and killed; M64 first survived because the retired R0150 carries recombine's `preparing-` stamp, so no orphan warning could fire, and the case gained a retired raft whose document still says `new` (lesson zz-test/guard-needs-its-own-case)). Four needed a stronger case first: M24 (recombine's raft-level type check) survived because the members' own type check also refused, so the case gained an empty feature raft (an orphan of another type, where only the raft check can refuse); M27 (recombine's membership check) survived because the publish's origin check refuses the same input with another message, so the case now pins `c0031 is not a member of R0020`, the message §2 states; M4 and M21 first failed on a spec-side file read (a missing claim file, a deleted folder), and their cases now assert the file or folder before reading it. M54 to M56 were added after the first run, when the table showed `fold`'s own project, type and backlog refusals had no case.
 +- Lessons that changed this design (the lessons pass): zz-arch/lock-reads-live-state (the lock lives on the `raft:` line and the stamp; no `issues:` list is read for a hold), zz-test/no-vacuous-pass (`promote-check` prints what it copied; `raft-plan` says "nothing to raft"), zz-test/seed-every-enumerated-case (the plan spec seeds every raft state and `single`; the CLI fixture seeds every record field), zz-test/pin-call-site-arguments (M42 to M47 pass wrong arguments from `raft-plan`), zz-test/plain-find-for-literals (every spec edit of a document line uses plain find), z-design/prove-specs-pass-on-a-prototype (every case ran on the prototype), z-design/new-rules-migrate-existing-work (§10), zz-rules/exhaustive-lists-name-new-things (§9), z-design/never-narrow-captured-scope (every captured outcome has a criterion: Scope check below).
  
  ## Regression guard
@@ -2926,7 +2803,7 @@ index c56ecfc3..da55825f 100644
 +- `tests/acceptance/c0114/classified.spec.luau`, "the tooling items are in z-nile/.tracker/…": a raft in `<root>/rafts/retired/` is still filed in that root (review 002 F2; the first real retirement, R0040, would otherwise read "raft skill-lessons: not found").
 +- `tests/acceptance/c0043/rounds.spec.luau`, "lists every raft once, sorted by id": its walk includes `rafts/retired/` in both roots (review 002 F2).
 +- `tests/acceptance/c0043/rounds.spec.luau`, "in a sandbox tracker": a member issue's design review now rolls up to its raft (R0030's design rounds 2 → 3; the issue's code review still isn't counted). Case renamed "… a member's design reviews roll up".
-+- `tests/acceptance/c0111/skill-docs.spec.luau`, "ticket-prep: …": z-design's three commands take `<id>` (`promote-check <id>`, `lessons --uncovered <id>`, `status <id> prepared`), not `<R-id>`.
++- `tests/acceptance/c0111/skill-docs.spec.luau`, "z-design: …": z-design's three commands take `<id>` (`promote-check <id>`, `lessons --uncovered <id>`, `status <id> prepared`), not `<R-id>`.
 +- `tests/acceptance/c0119/scope-docs.spec.luau`: step 1's heading is "## 1. Claim the issue" (was "Form the raft"), and the scope check compares "the issue's document" (was "each member's").
 +- `tests/acceptance/c0115/readme.spec.luau`: the picture draws `zraft["z-raft"]` (was "z-raft (c0116, planned)").
 +- `tests/acceptance/c0115/layout.spec.luau`: `z-nile/skills` holds eleven skills, `z-raft` among them.
@@ -2996,6 +2873,7 @@ index c56ecfc3..da55825f 100644
 +| raft-plan passes each issue's Touched modules | plan-cli :: prints the plan as commands… | `touched = nil` (M42) | run: killed |
 +| raft-plan passes solo: | plan-cli :: prints the plan… | `solo = false` (M43) | run: killed |
 +| raft-plan passes each issue's project root | plan-cli :: prints the plan… | one root for all (M44) | run: killed |
++| a printed new raft names its project (c0115: `new raft` takes `--project` or its folder) | plan-cli :: prints the plan as commands…; `--apply` stops at the first refusal… | no `--project` (M93) | run: killed |
 +| raft-plan passes each raft's single: | plan-cli :: prints the plan… (R0025 single is lower than R0030) | `single = false` (M45) | run: killed |
 +| raft-plan --apply refuses the main checkout | plan-cli :: refuses --apply in the main checkout | refusal dropped (M46) | run: killed |
 +| raft-plan passes size: | plan-cli :: prints the plan… (c0050 skipped) | `size = 100` (M47) | run: killed |
@@ -3142,6 +3020,15 @@ index c56ecfc3..da55825f 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++Rebased onto c0115's final design, 2026-10-23: `origin/prep-c0115` at 5308d42f is merged into this branch, and the prototype is rebuilt on `proto-c0115` 77298f1e with a fresh simulation of c0115 done (689e29b9). `prototype.patch` is `git diff -M 77298f1e`. Seven cherry-pick conflicts were text where both sides edited one place: c0115's `check.sh` AC3, the README, z-design, z-raft, `main.luau`'s usage, zz-rules, and c0043's and c0111's overrides. In each, c0115's side was kept and c0116's change was put back on top. What c0115 changed under this design:
++- **Projects** (the project comes from the working directory or `--project`): `new raft` and `new issue` refuse a checkout root that no project holds, and a rafting worktree's top is such a root. So `raft-plan` now prints each new raft with `--project <name>`, the registry's name for the op's root, and `--apply` runs the same line (§3; new mutant M93, killed). z-raft, zz-rules and z-ready show `--project <name>` on every `./zn new raft` command (c0114/docs pins this). `fold`, `unfold`, `recombine` and `release` find their raft, so they take no project. A missing registry already refuses in `projects.load`, and nothing in c0116 reads the roots another way.
++- **The z-nile home** (`z-nile/`, promoted specs at `z-nile/tests/acceptance/`): `check.sh` runs from `z-nile/`. It falls back to `$ZN_ROOT/z-nile/tests/acceptance/c0116` and runs `"$ZN_ROOT/zn"` for AC8. AC9's paths already resolve from the home. The specs seed pickman's root as `pickman/.tracker`, pass `--project pickman` to `new raft` and `new issue`, read repository files from the top (docs, the metrics sandbox's `.luaurc` and `rokit.toml`), keep their fixtures in the home's `.cache`, and run retired's nested specs from the fixture's `z-nile/` through `process.exec`, as c0120's runner-home does: `fixture.exec` refuses a folder below a fixture. The fixtures' `.gitignore` carries the new `prompt.md` rule, without which `ready` saw its own prompt as dirt. c0114/classified's retired/ override reads the registry at the top. recombine's lesson case now asks only about its own `demo` lesson: the fixture copies z-nile's real lessons, whose sources it lacks.
++- **Skill names** (`z-run` with `zz-execute`; `pickman-arch`, `pickman-test`): c0115's absence spec passes on the prototype. z-raft's Lessons section is zz-rules' text again, which now cites zz-execute.
++- **Lesson ids**: c0115's `rename-lesson-ids` rewrote 9 old ids in this document on the prototype, after which `--check` reports 0. This branch keeps the old ids, because this tree's lessons still live at them; c0115's backlog pass renames them when it runs. c0116's six new lessons and one note sit at `zz-arch`, `zz-rules` and `zz-test` on the prototype. `lessons --check` gives "39 lessons, 243 harvest entries, ok", and `--uncovered c0116` gives "every finding is covered".
++- **The finished-file rewrite and its trusted base**: c0116 changes no finished `check.sh` except c0115's AC3, which it overrides to run only the layout spec, and the new line holds no literal path. `rewrite-finished --check` compares nothing on this machine: real `origin/main` has no `z-nile/projects.toml` yet, so it fails closed, which is a property of c0115's base, not of c0116. c0116's own `check.sh` resolves every path from its home, so c0120's finished rule will hold for it once it is done.
++- `z-nile/check.sh --full`: pickman ran 1160 cases in 173 files, 0 failed. z-nile ran 1080 in 154, with **1 failed**: c0120/finished flags five literals in c0115's own `check.sh` (`./zn` three times, `.claude/skills`, `z-nile/check.sh`, all read from `z-nile/`). The same spec, run on the simulation alone (689e29b9, without c0116, in a scratch clone), fails with the same five lines. So this is c0115 meeting c0120 once c0115 is done, not c0116: those lines run inside `cd "$copy"` or `cd "$ZN_ROOT"`, which the static rule cannot see. Guess (pending user): c0115 fixes it, by anchoring those lines at `$ZN_ROOT` or by extending its rewrite, and c0116 does not edit c0115's sequestered file for it. `./zn check c0116`: **10/10**. `promote-check c0116`: "copied 9 acceptance specs", OK.
++- Mutation check: all 91 rows (M1 to M93, without M11, M12 and M60, plus M79p) were applied one at a time in four scratch clones outside the repository, against their specs from `z-nile/`. 90 were killed. M90 survives, as it has since round 5, where it became `reasoned`: `keepRecords` reads the index, so an ignored file can't reach it. The runner's revert path is now `z-nile/engine z-nile/tests/lib`. No experiment branch or worktree was made in the real repository: rounds 1 to 5's `.worktree/mut-*` runs (E1) are history, and from this round on mutants run in scratch clones.
++
 +Design review 005 (**approve**, one low) answered, 2026-10-21, still on 0d574f3.
 +- F1: the reviewer recommended `refuseDirty("renumber")`. I tried it, and it turned 26 cases of three promoted specs red: c0001/tracker-lifecycle, c0052/renumber and c0082/cli all run `renumber` on trees with untracked files, as the duplicate-copy workflow does with a fresh stub. So I took the reviewer's own lesson instead: one reader, one view per caller. `keepRecords` hashes the index, and the review check keeps `-co`. The rv5 Q5 case passes, and M92 (round 4's `-co` view in `keepRecords`) is killed.
 +- `z-nile/check.sh --full`: **GATE PASSED (full)**. pickman ran 1068 cases in 157 files, z-nile 1053 in 151, 0 failed. Wall time 152.6 s. `./zn check c0116`: **10/10**.
@@ -3179,19 +3066,21 @@ index c56ecfc3..da55825f 100644
 +
 +Prep, 2026-10-21 (the draft): the full gate passed on the first prototype (1068 and 1028 cases, 101.2 s), `./zn check c0116` 9/9, the base 2/9, and 56 of 56 mutants were killed.
 diff --git a/z-nile/.tracker/issues/c0116/check.sh b/z-nile/.tracker/issues/c0116/check.sh
-index 43fed027..4601ecb2 100755
+index 43fed027..97eecf31 100755
 --- a/z-nile/.tracker/issues/c0116/check.sh
 +++ b/z-nile/.tracker/issues/c0116/check.sh
-@@ -2,13 +2,34 @@
+@@ -2,13 +2,35 @@
  # Acceptance checks for c0116. SEQUESTERED: never edit during execution.
  # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
 -source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
 -# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0116 after it
-+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: the root
-+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0116 after it
++source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: z-nile/
++# sequestered specs: here before `./zn done`, promoted to z-nile/tests/acceptance/c0116 after it. Every path below is
++# from z-nile/ (specs, its .cache) or anchored at $ZN_ROOT (the engine and the tree's tracker state).
  A="$HERE/acceptance"
- [[ -d $A ]] || A="$PWD/tests/acceptance/c0116"
+-[[ -d $A ]] || A="$PWD/tests/acceptance/c0116"
++[[ -d $A ]] || A="$ZN_ROOT/z-nile/tests/acceptance/c0116"
  
  # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 -# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
@@ -3212,7 +3101,7 @@ index 43fed027..4601ecb2 100755
 +check "AC7: promote-check takes an issue and copies its own acceptance specs (in a clone under .cache)" \
 +  lune run tests/run -- "$A/promote.spec.luau"
 +check "AC8: the real tree's skill links, lessons and audit stay clean with z-raft added" \
-+  bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
++  bash -c '"$ZN_ROOT/zn" skills --check && "$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" audit'
 +check "AC9: the promoted claim, prep, start, board and remap specs, and c0115's overridden README spec, stay green" \
 +  lune run tests/run -- tests/acceptance/c0053/commands-prep.spec.luau tests/acceptance/c0053/commands-claim.spec.luau \
 +  tests/acceptance/c0053/commands-start.spec.luau tests/acceptance/c0067/*.spec.luau tests/acceptance/c0068/stop.spec.luau \
@@ -3542,18 +3431,18 @@ similarity index 100%
 rename from z-nile/.tracker/issues/c0115/c0115.md
 rename to z-nile/.tracker/issues/done/c0115/c0115.md
 diff --git a/z-nile/.tracker/issues/c0115/check.sh b/z-nile/.tracker/issues/done/c0115/check.sh
-similarity index 95%
+similarity index 97%
 rename from z-nile/.tracker/issues/c0115/check.sh
 rename to z-nile/.tracker/issues/done/c0115/check.sh
-index 3780cfa7..968df97d 100755
+index 832582c5..82d3153a 100755
 --- a/z-nile/.tracker/issues/c0115/check.sh
 +++ b/z-nile/.tracker/issues/done/c0115/check.sh
-@@ -27,8 +27,8 @@ links_check() {
-   grep -qxF '[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check' z-nile/check.sh
+@@ -28,8 +28,8 @@ links_check() {
+   grep -qxF '[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check' "$ZN_ROOT/z-nile/check.sh"
  }
  check "AC2: the committed links pass ./zn skills --check in a clean copy, which it leaves unchanged, and the gate runs it" links_check
 -check "AC3: the eleven skills are renamed into their folders, nothing old is left, and z-raft is not made here" \
--  bash -c 'lune run tests/run -- "$1" && test -z "$(git ls-files -- z-nile/skills/z-raft .claude/skills/z-raft)"' _ "$A/layout.spec.luau"
+-  bash -c 'lune run tests/run -- "$1" && test -z "$(git -C "$ZN_ROOT" ls-files -- z-nile/skills/z-raft .claude/skills/z-raft)"' _ "$A/layout.spec.luau"
 +check "AC3: the eleven skills are renamed into their folders and nothing old is left (c0116 override: z-raft now exists)" \
 +  lune run tests/run -- "$A/layout.spec.luau"
  check "AC4: no live file names an old skill or cites an old lesson id, and no code or spec reads through a .claude/skills link" lune run tests/run -- "$A/absence.spec.luau"
@@ -3563,12 +3452,24 @@ diff --git a/z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau b/z
 similarity index 100%
 rename from z-nile/.tracker/issues/c0115/experiments/rename-lesson-ids.luau
 rename to z-nile/.tracker/issues/done/c0115/experiments/rename-lesson-ids.luau
+diff --git a/z-nile/.tracker/issues/c0115/experiments/rewrite-finished-sim.sh b/z-nile/.tracker/issues/done/c0115/experiments/rewrite-finished-sim.sh
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/experiments/rewrite-finished-sim.sh
+rename to z-nile/.tracker/issues/done/c0115/experiments/rewrite-finished-sim.sh
+diff --git a/z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau b/z-nile/.tracker/issues/done/c0115/experiments/rewrite-finished.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/experiments/rewrite-finished.luau
+rename to z-nile/.tracker/issues/done/c0115/experiments/rewrite-finished.luau
+diff --git a/z-nile/.tracker/issues/c0115/experiments/trusted-base.luau b/z-nile/.tracker/issues/done/c0115/experiments/trusted-base.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/experiments/trusted-base.luau
+rename to z-nile/.tracker/issues/done/c0115/experiments/trusted-base.luau
 diff --git a/z-nile/.tracker/issues/c0115/spend.md b/z-nile/.tracker/issues/done/c0115/spend.md
 similarity index 100%
 rename from z-nile/.tracker/issues/c0115/spend.md
 rename to z-nile/.tracker/issues/done/c0115/spend.md
 diff --git a/z-nile/README.md b/z-nile/README.md
-index e22fd2c0..d5aa79a0 100644
+index 5f2118e2..1148363e 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -4,7 +4,7 @@
@@ -3580,7 +3481,7 @@ index e22fd2c0..d5aa79a0 100644
      zready -.-> zstop["z-stop"]
      zrun -.-> zstop
    end
-@@ -33,12 +33,12 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
+@@ -33,13 +33,13 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
  | skill | step | what it does |
  |---|---|---|
  | `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
@@ -3589,14 +3490,15 @@ index e22fd2c0..d5aa79a0 100644
 +| `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
 +| `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
  | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
- | `z-run` | 5 | launches a readied raft from the main checkout (`/z-run R0010`), then delivers it: one branch, one PR, through the merge |
+ | `z-run` | 5 | launches a readied raft from the main checkout (`/z-run R0010`): reads its prompt, enters its worktree, hands off to zz-execute |
  | `z-stop` | any | gives a readied or started raft back; its branch and PR stay |
--| `zz-review` | from z-design and z-run | the clean adversarial reviewer: design, stream and code modes |
-+| `zz-review` | from z-design, z-raft and z-run | the clean adversarial reviewer: design, raft, stream and code modes |
+ | `zz-execute` | from z-run | the execution protocol: one branch, one PR, experiments, tests first, review, done, merge |
+-| `zz-review` | from z-design and zz-execute | the clean adversarial reviewer: design, stream and code modes |
++| `zz-review` | from z-design, z-raft and zz-execute | the clean adversarial reviewer: design, raft, stream and code modes |
  | `zz-rules` | every step | the tracker's rules: ids, roots, lifecycle, worktrees, landing, spend |
  | `zz-arch` | design and build of the tooling | the tooling's code structure |
  | `zz-test` | every step | the gate, the spec runner, `check.sh`, sequestration and the guards |
-@@ -52,14 +52,15 @@ z-design reads the checklist for the issue's type before it writes the Design:
+@@ -53,14 +53,15 @@ z-design reads the checklist for the issue's type before it writes the Design:
  - `z-nile/skills/z-design/checklists/chore.md`
  
  ## The flow
@@ -3605,12 +3507,12 @@ index e22fd2c0..d5aa79a0 100644
  1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
 -2. **z-design**, in `prep-<slug>`: `new raft` claims the issues (`preparing`); the designs, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and the prep PR merges.
 -3. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
--4. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt and enters `.worktree/R0010`. `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
+-4. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt, enters `.worktree/R0010` and hands off to zz-execute: `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
 -5. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
 +2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
 +3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
 +4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
-+5. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt and enters `.worktree/R0010`. `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
++5. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt, enters `.worktree/R0010` and hands off to zz-execute: `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
 +6. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
  
 -`design:` is separate from status, and only z-design changes it: `draft` → `reviewed` → `ready`.
@@ -3618,7 +3520,7 @@ index e22fd2c0..d5aa79a0 100644
  
  ```mermaid
  stateDiagram-v2
-@@ -82,5 +83,6 @@ The main checkout stays on `main`; every edit is made under `.worktree/` (zz-rul
+@@ -83,5 +84,6 @@ The main checkout stays on `main`; every edit is made under `.worktree/` (zz-rul
  |---|---|
  | capture | `capture-<slug>` |
  | prep | `prep-<slug>` |
@@ -3626,7 +3528,7 @@ index e22fd2c0..d5aa79a0 100644
  | execution | `R0010`, branch `R0010-<slug>`, one PR |
  | a skill, doc or config edit | `<area>-<slug>` |
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 8d410cd7..672e3627 100644
+index a05b9587..e2932e40 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
 @@ -15,7 +15,7 @@ local audit = {}
@@ -3638,7 +3540,7 @@ index 8d410cd7..672e3627 100644
  
  local function front(text: string): { [string]: string }
  	local out: { [string]: string } = {}
-@@ -215,6 +215,52 @@ function audit.run(root: string): { Problem }
+@@ -219,6 +219,52 @@ function audit.run(root: string): { Problem }
  			add("warning", "shared-number", list[1].path, `one number for {table.concat(names, ", ")}`)
  		end
  	end
@@ -3692,7 +3594,7 @@ index 8d410cd7..672e3627 100644
  	if okReg then
  		for _, p in audit.leftovers(root, found, reg :: projects.Registry) do
 diff --git a/z-nile/engine/claims.luau b/z-nile/engine/claims.luau
-index be83e23b..d4272dea 100644
+index c2fbf447..8ca3135c 100644
 --- a/z-nile/engine/claims.luau
 +++ b/z-nile/engine/claims.luau
 @@ -30,4 +30,33 @@ function claims.taken(cwd: string, value: string, ref: string?, roots: { string
@@ -3730,11 +3632,11 @@ index be83e23b..d4272dea 100644
 +
  return claims
 diff --git a/z-nile/engine/lessons.luau b/z-nile/engine/lessons.luau
-index 6728de98..18bdd4dd 100644
+index 77704afa..ffae7c73 100644
 --- a/z-nile/engine/lessons.luau
 +++ b/z-nile/engine/lessons.luau
-@@ -604,7 +604,8 @@ function lessons.load(root: string): Tree
- 	-- items under every project root of the checkout (c0114): z-nile's rafts hold the harvests
+@@ -607,7 +607,8 @@ function lessons.load(root: string): Tree
+ 	local roots: { string } = projects.roots(registry)
  	for _, top in roots do
  		for _, kind in { "issues", "rafts" } do
 -			for _, state in { "", "/active", "/done" } do
@@ -3744,7 +3646,7 @@ index 6728de98..18bdd4dd 100644
  				for _, id in dirs(parent) do
  					if not string.match(id, ITEM) then
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 61ed36ed..61a5a99c 100644
+index ddefdd8c..5767c75f 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -13,6 +13,7 @@ local pathsLib = require("./paths")
@@ -3756,9 +3658,9 @@ index 61ed36ed..61a5a99c 100644
  local skillsLib = require("./skills")
  local spend = require("./spend")
 @@ -32,6 +33,14 @@ usage: ./zn <command> ...
-                                                 create an issue (emergent if the raft is active) in a project
-                                                 of z-nile/projects.toml (default: the first)
-   new raft <feature|defect|chore> <slug> <issue>... [--single]
+                                                 create an issue (emergent if the raft is active) in the project
+                                                 whose folder you are in, or --project (refused elsewhere)
+   new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
 +                                                make a raft of new issues (claimed with it) or prepared ones (z-raft)
 +  fold <R-id> <issue>...                        put prepared, raftless issues into a prepared backlog raft (z-raft)
 +  unfold <R-id> <issue>...                      take members out of a backlog raft, back to no raft (z-raft)
@@ -3770,7 +3672,7 @@ index 61ed36ed..61a5a99c 100644
    status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
    sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
    land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
-@@ -61,7 +70,7 @@ usage: ./zn <command> ...
+@@ -62,7 +71,7 @@ usage: ./zn <command> ...
    worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
    worktree-prune                                remove worktrees of rafts that are done on main
    workstreams <R-id>                            plan parallel workstreams (waves) for a raft
@@ -3779,7 +3681,7 @@ index 61ed36ed..61a5a99c 100644
    prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
    capture <id>                                  print the item's document as captured (read-only)
    metrics [--include-active]                    cost per issue and rework %
-@@ -73,6 +82,7 @@ usage: ./zn <command> ...
+@@ -74,6 +83,7 @@ usage: ./zn <command> ...
                                                  <project>/skills); --check writes nothing and exits 1 on a problem]]
  
  local FOCUS_FILE = ".cache/tracker-focus"
@@ -3787,7 +3689,7 @@ index 61ed36ed..61a5a99c 100644
  -- the issue, raft and prompt templates: engine files, shared by every project (c0114)
  local TEMPLATES = "z-nile/templates"
  
-@@ -334,6 +344,26 @@ local function claimFile(raftId: string): string
+@@ -342,6 +352,26 @@ local function claimFile(raftId: string): string
  	return `.cache/tracker-claim-{raftId}`
  end
  
@@ -3814,7 +3716,7 @@ index 61ed36ed..61a5a99c 100644
  local function idsOf(paths: { string }, kind: string): { string }
  	local out: { string } = {}
  	for _, p in paths do
-@@ -511,11 +541,11 @@ end
+@@ -522,11 +552,11 @@ end
  -- The three words of a fresh stamp: the phrase that makes every write of tracker/next differ (c0870).
  -- A claim stamp (`active-…`) that no item on origin/main carries, done/ included: `stop` gives back exactly the
  -- issues that carry the raft's stamp, so two claims must never share one. One `git grep` over the fetched tree.
@@ -3828,7 +3730,7 @@ index 61ed36ed..61a5a99c 100644
  	end, function(v: string): boolean
  		local taken, err = claimsLib.taken(".", v, nil, roots)
  		if taken == nil then
-@@ -526,6 +556,10 @@ local function claimStamp(): string
+@@ -537,6 +567,10 @@ local function claimStamp(): string
  	return value or fail("could not draw a claim stamp that origin/main does not already carry")
  end
  
@@ -3839,7 +3741,7 @@ index 61ed36ed..61a5a99c 100644
  local function phrase(): string
  	return (string.match(stamp("new"), "^%a+%-(.+)$")) :: string
  end
-@@ -538,10 +572,18 @@ local function moveOnOrigin(
+@@ -549,10 +583,18 @@ local function moveOnOrigin(
  	to: store.State,
  	status: string,
  	message: string,
@@ -3859,7 +3761,7 @@ index 61ed36ed..61a5a99c 100644
  		local dirs: { [string]: string } = {}
  		local sources: { [string]: string } = {}
  		for _, id in ids do
-@@ -708,6 +750,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+@@ -719,6 +761,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  			or a == "--check"
  			or a == "--tags"
  			or a == "--uncovered"
@@ -3867,8 +3769,8 @@ index 61ed36ed..61a5a99c 100644
  		then
  			opts[a] = { "true" }
  		elseif string.sub(a, 1, 1) == "-" then
-@@ -752,6 +795,179 @@ local function projectRoot(opts: { [string]: { string } }): string
- 	return (p :: projects.Project).root
+@@ -805,6 +848,179 @@ local function refuseInWindow(what: string)
+ 	end
  end
  
 +-- c0116 (review 002 F1, 003 F1): an item folder's files as path (relative to the folder) -> text, read from the
@@ -4047,7 +3949,7 @@ index 61ed36ed..61a5a99c 100644
  local cmd = {}
  
  function cmd.new(pos: { string }, opts: { [string]: { string } })
-@@ -885,6 +1101,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -945,6 +1161,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			end
  			local chosen = ""
  			local root = ""
@@ -4056,7 +3958,7 @@ index 61ed36ed..61a5a99c 100644
  			refuseStale()
  			local r = published(publish.commit(".", function(paths, read, roots, counter)
  				-- a raft lives in its members' project, and never spans two (c0114)
-@@ -914,27 +1132,51 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -977,27 +1195,51 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  					return err
  				end
  				chosen = store.formatId("R", n or statusLib.nextNumber(known))
@@ -4114,7 +4016,7 @@ index 61ed36ed..61a5a99c 100644
  				end
  				local vars = {
  					ID = chosen,
-@@ -964,12 +1206,23 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1028,12 +1270,23 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			if not r.ok then
  				fail(`new raft: {r.reason}`)
  			end
@@ -4141,7 +4043,7 @@ index 61ed36ed..61a5a99c 100644
  			end
  			sh.git({ "commit", "--quiet", "-m", `tracker: {chosen} members` })
  			print(`{root}/rafts/{chosen}/{chosen}.md`)
-@@ -1027,6 +1280,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1095,6 +1348,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -4157,7 +4059,7 @@ index 61ed36ed..61a5a99c 100644
  local function originPaths(): { string }
  	sh.git({ "fetch", "--quiet", "origin", "main" })
  	local ok, paths = originTree()
-@@ -1065,6 +1327,9 @@ local function setStatus(id: string, to: string)
+@@ -1133,6 +1395,9 @@ local function setStatus(id: string, to: string)
  		end
  		local value = stamp(to)
  		local changes: { publish.Change } = {}
@@ -4167,7 +4069,7 @@ index 61ed36ed..61a5a99c 100644
  		for _, t in targets do
  			local tp = docPath(paths, t)
  			local tt = tp and read(tp)
-@@ -1077,6 +1342,53 @@ local function setStatus(id: string, to: string)
+@@ -1145,6 +1410,53 @@ local function setStatus(id: string, to: string)
  				return `{t} is readied (in active/): use ./zn stop {if raftId ~= "" then raftId else "<R-id>"}`
  			end
  			local cur = statusLib.effective(tf, stateOfPath(tp))
@@ -4221,7 +4123,7 @@ index 61ed36ed..61a5a99c 100644
  			if carried and t ~= id and cur ~= "preparing" then
  				return `{t} is {cur} on origin/main: claim it first with ./zn status {t} preparing`
  			end
-@@ -1098,6 +1410,48 @@ local function setStatus(id: string, to: string)
+@@ -1166,6 +1478,48 @@ local function setStatus(id: string, to: string)
  			table.insert(moved, { id = t, from = cur :: string })
  			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
  		end
@@ -4270,7 +4172,7 @@ index 61ed36ed..61a5a99c 100644
  		if carried then
  			return {}
  		end
-@@ -1115,6 +1469,14 @@ local function setStatus(id: string, to: string)
+@@ -1183,6 +1537,14 @@ local function setStatus(id: string, to: string)
  		end
  	else
  		mergeOrigin()
@@ -4285,7 +4187,7 @@ index 61ed36ed..61a5a99c 100644
  	end
  	-- giving a claim back ends this worktree's ownership of it
  	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
-@@ -1172,6 +1534,462 @@ function cmd.status(pos: { string })
+@@ -1240,6 +1602,462 @@ function cmd.status(pos: { string })
  	setStatus(id, to)
  end
  
@@ -4748,7 +4650,7 @@ index 61ed36ed..61a5a99c 100644
  -- Prints a fresh stamp for a state (diagnostics, and how specs prove that stamps differ between processes).
  function cmd.stamp(pos: { string })
  	local state = pos[1]
-@@ -1639,24 +2457,27 @@ function cmd.renumber(pos: { string })
+@@ -1723,24 +2541,27 @@ function cmd.renumber(pos: { string })
  	if fs.isDir(dest) then
  		fail(`{new} already exists`)
  	end
@@ -4792,7 +4694,7 @@ index 61ed36ed..61a5a99c 100644
  	print(`{old} -> {new}`)
  end
  
-@@ -1713,7 +2534,9 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
+@@ -1797,7 +2618,9 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
  		counts[space] += 1
  	end
  	local map = idsLib.plan(all)
@@ -4803,7 +4705,7 @@ index 61ed36ed..61a5a99c 100644
  	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
  	-- a compaction before origin moved the counter moves it too: the old file becomes the tombstone (c0114)
  	if fs.isFile(idsLib.OLD_FILE) and idsLib.parse(fs.readFile(idsLib.OLD_FILE)) then
-@@ -1827,7 +2650,9 @@ function cmd.remap()
+@@ -1911,7 +2734,9 @@ function cmd.remap()
  			number(c :: idsLib.Counters, used)
  		end
  	end
@@ -4814,7 +4716,7 @@ index 61ed36ed..61a5a99c 100644
  	local problems = audit.run(".")
  	if audit.errors(problems) > 0 then
  		for _, p in problems do
-@@ -1851,7 +2676,9 @@ function cmd.remap()
+@@ -1935,7 +2760,9 @@ function cmd.remap()
  	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
  	local built, baseTree = pcall(function(): string
  		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
@@ -4825,7 +4727,7 @@ index 61ed36ed..61a5a99c 100644
  		-- the scratch worktree's tracked state as a commit object, with no ref moved: empty when nothing changed
  		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
  		local saved = process.exec("git", { "stash", "create" }, { cwd = scratch })
-@@ -2196,10 +3023,9 @@ local function touchedModules(item: store.Item): { string }?
+@@ -2280,10 +3107,9 @@ local function touchedModules(item: store.Item): { string }?
  	return out
  end
  
@@ -4839,7 +4741,7 @@ index 61ed36ed..61a5a99c 100644
  
  -- The plan text for a raft, its warnings, and an error when it can't be built. Issues are placed in
  -- waves: one more than the latest wave they must follow (in-raft `depends_on`, and any issue already
-@@ -2326,6 +3152,84 @@ function cmd.workstreams(pos: { string })
+@@ -2410,6 +3236,90 @@ function cmd.workstreams(pos: { string })
  	print(text)
  end
  
@@ -4903,6 +4805,12 @@ index 61ed36ed..61a5a99c 100644
 +		if op.kind == "new" and op.single then
 +			table.insert(args, "--single")
 +		end
++		-- since c0115 a new raft names its project (or runs in its folder): the op's root, by its registry name
++		if op.kind == "new" then
++			local project = projects.projectOf(projects.load(), op.root)
++			table.insert(args, "--project")
++			table.insert(args, if project then project.name else op.root)
++		end
 +		table.insert(runs, args)
 +		print(`./zn {table.concat(args, " ")}`)
 +	end
@@ -4924,7 +4832,7 @@ index 61ed36ed..61a5a99c 100644
  function cmd.worktree(pos: { string }, opts: { [string]: { string } })
  	local target = pos[1] or fail("usage: worktree <R-id|name>")
  	local branch: string
-@@ -2563,9 +3467,15 @@ end
+@@ -2650,9 +3560,15 @@ end
  -- Copy each member's acceptance specs into its project's tests/acceptance/<id>, run `check`, then remove the
  -- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run). `check` gets the copied
  -- spec paths, repo-relative.
@@ -4941,7 +4849,7 @@ index 61ed36ed..61a5a99c 100644
  		local acc = `{m.dir}/acceptance`
  		local dest = promotedDir(m)
  		if fs.isDir(acc) and not fs.isDir(dest) then
-@@ -2580,7 +3490,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
+@@ -2667,7 +3583,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
  	end
  	local pok, result = pcall(check, copied)
  	local ok = pok and result == true
@@ -4950,7 +4858,7 @@ index 61ed36ed..61a5a99c 100644
  		local dest = promotedDir(m)
  		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
  			fs.removeDir(dest)
-@@ -2618,7 +3528,7 @@ end
+@@ -2705,7 +3621,7 @@ end
  local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: boolean): boolean
  	local seen: { [string]: boolean } = {}
  	local ok = true
@@ -4959,7 +4867,7 @@ index 61ed36ed..61a5a99c 100644
  		local home = homeOf(m)
  		if not seen[home] then
  			seen[home] = true
-@@ -2632,11 +3542,15 @@ local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs:
+@@ -2719,11 +3635,15 @@ local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs:
  end
  
  cmd["promote-check"] = function(pos: { string })
@@ -4979,7 +4887,7 @@ index 61ed36ed..61a5a99c 100644
  		fail("promoted acceptance specs would break tests/ (see above)")
  	end
  	print("promote-check OK")
-@@ -3222,7 +4136,7 @@ function cmd.ready(pos: { string })
+@@ -3309,7 +4229,7 @@ function cmd.ready(pos: { string })
  	if target.kind == "issue" then
  		local raftId = store.readFront(target.doc).raft
  		if not raftId or raftId == "" then
@@ -4988,7 +4896,7 @@ index 61ed36ed..61a5a99c 100644
  		end
  		raft = store.get(raftId)
  	end
-@@ -3317,6 +4231,43 @@ function cmd.ready(pos: { string })
+@@ -3404,6 +4324,43 @@ function cmd.ready(pos: { string })
  					return `{id} is {cur} on origin/main, not prepared`
  				end
  				return nil
@@ -5032,7 +4940,7 @@ index 61ed36ed..61a5a99c 100644
  			end
  		)
  		if not r.ok then
-@@ -3764,6 +4715,47 @@ local function addedAt(paths: { string }): number?
+@@ -3851,6 +4808,47 @@ local function addedAt(paths: { string }): number?
  end
  
  -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
@@ -5080,7 +4988,7 @@ index 61ed36ed..61a5a99c 100644
  local function metricsLessons()
  	local tree = lessonsLib.load(".")
  	local all: { lessonsLib.Lesson } = {}
-@@ -3780,12 +4772,7 @@ local function metricsLessons()
+@@ -3867,12 +4865,7 @@ local function metricsLessons()
  	end
  	local rafts: { lessonsLib.RaftRounds } = {}
  	for _, raft in store.all("raft") do
@@ -5094,7 +5002,7 @@ index 61ed36ed..61a5a99c 100644
  		if n > 0 then
  			-- a raft is dated by its `created:` day, which no compaction or renumber rewrites
  			local created = store.readFront(raft.doc).created
-@@ -3795,6 +4782,16 @@ local function metricsLessons()
+@@ -3882,6 +4875,16 @@ local function metricsLessons()
  			)
  		end
  	end
@@ -5111,7 +5019,7 @@ index 61ed36ed..61a5a99c 100644
  	-- the cutoff keeps the original add: c0114 moved the file to z-nile/engine/lessons.luau
  	local added = addedAt({ "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" })
  	-- `created:` is written as the local calendar day, so the cutoff is the local day of that commit too
-@@ -3997,12 +4994,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+@@ -4084,12 +5087,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
  		"| raft | design rounds | design-review minutes | minutes/round | tokens/round |\n|---|---|---|---|---|"
  	)
  	for _, raft in store.all("raft") do
@@ -5125,7 +5033,7 @@ index 61ed36ed..61a5a99c 100644
  		if rounds == 0 then
  			continue
  		end
-@@ -4030,6 +5022,13 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+@@ -4117,6 +5115,13 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
  			)
  		)
  	end
@@ -5139,7 +5047,7 @@ index 61ed36ed..61a5a99c 100644
  	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
  	local d = byType.defect or { added = 0, minutes = 0, count = 0 }
  	local function pct(def: number, feat: number): string
-@@ -4041,23 +5040,84 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+@@ -4128,23 +5133,84 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
  	end
  	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
  	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
@@ -5636,7 +5544,7 @@ index 00000000..6887665b
 +
 +return raftplan
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
-index c365ca50..1bb549c9 100644
+index a70ec5e8..9baa6675 100644
 --- a/z-nile/skills/z-design/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
 @@ -1,31 +1,25 @@
@@ -5662,7 +5570,7 @@ index c365ca50..1bb549c9 100644
 -- **Sync first**: `./zn sync` (zz-rules skill, Sync and claim). **Candidates**: `./zn status` (what is `new`, and what others have claimed) and `./zn list backlog`. Group issues by **functional adjacency**: they touch the same features or interfaces, or they're only meaningful together.
 -- **One type per raft.** Never mix feature, defect and chore. A defect found while planning a feature raft goes in its own raft.
 -- **Size**: aim for something that fits in one reviewable PR, roughly under 1,500 changed lines. Split larger groups into sequential rafts.
--- **Create it**: `./zn new raft <feature|defect|chore> <slug> <ids…>`: it claims the issues (status `preparing`) on `origin/main` at once, and refuses any issue another terminal holds. To prep a raft that already exists, claim it with `./zn status <R-id> preparing`; an issue added during prep is claimed first (`status <id> preparing`), a dropped one released (`status <id> new`). A single issue gets a raft too: add `--single`.
+-- **Create it**: `./zn new raft <feature|defect|chore> <slug> <ids…> --project <name>` (or run it in the project's folder; zz-rules skill, Projects): it claims the issues (status `preparing`) on `origin/main` at once, and refuses any issue another terminal holds. To prep a raft that already exists, claim it with `./zn status <R-id> preparing`; an issue added during prep is claimed first (`status <id> preparing`), a dropped one released (`status <id> new`). A single issue gets a raft too: add `--single`.
 +- **Sync first**: `./zn sync` (zz-rules skill, Sync and claim). **Candidates**: `./zn status` (what is `new`, and what others have claimed) and `./zn list backlog`.
 +- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. Give it back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
  - If an issue is missing, create it first with the `z-ticket` skill.
@@ -5698,7 +5606,7 @@ index c365ca50..1bb549c9 100644
  
  ## 4. Write the executable acceptance
  - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
--- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines. A raft check finds its members with `./zn find <id>` (or `members`), never a hard-coded backlog path: the directories move when the raft is readied. `./zn ready` rewrites only the moved items' own literal paths in their `check.sh` files.
+-- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines (RC0 runs the raft's project's gate, `--project <project>`: it proves that project alone, and CI's job per project covers the others, c0120). A raft check finds its members with `./zn find <id>` (or `members`), never a hard-coded backlog path: the directories move when the raft is readied. `./zn ready` rewrites only the moved items' own literal paths in their `check.sh` files.
 +- **Raft checks** are z-raft's (RCn lines in the raft's `check.sh`). `./zn ready` rewrites only the moved items' own literal paths in their `check.sh` files, so an issue check finds another item with `./zn find <id>`, never a hard-coded backlog path.
  - **Write the acceptance specs now** in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/`, `./zn find <id>`), as real spec files with the cases that pin the behavior. Require only through aliases, and see the zz-test skill for where these live.
    - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
@@ -5751,7 +5659,7 @@ index c365ca50..1bb549c9 100644
  Before you start, read this skill's lessons: `./zn lessons --skill z-design --full`. Each is a mistake made before, with the question that catches it.
 diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
 new file mode 100644
-index 00000000..70e21e7d
+index 00000000..61fcdaf7
 --- /dev/null
 +++ b/z-nile/skills/z-raft/SKILL.md
 @@ -0,0 +1,62 @@
@@ -5776,11 +5684,11 @@ index 00000000..70e21e7d
 +  - an open raft with a member that has no `size:` takes nothing, because the cap can't be kept: the plan prints `skip <R-id>: <member> has no size:, …` and opens another raft instead (with an argument you may still `fold` into it);
 +  - a `solo: true` issue is always a raft by itself (it records a user decision, such as sequenced rafts), and nothing is ever folded into a raft that holds one;
 +  - an issue with no `size:` is skipped and named: send it back to z-design.
-+- **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules and the cap. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
++- **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules and the cap. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
 +
 +## 2. Claim and group
 +Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or the ones the arguments name:
-+- `./zn new raft <type> <slug> <ids…> [--single]` makes a raft of prepared issues: it publishes the raft with a fresh `preparing-…` stamp, leaves the issues' status as it is, and writes their `raft:` here.
++- `./zn new raft <type> <slug> <ids…> [--single] --project <name>` makes a raft of prepared issues: it publishes the raft with a fresh `preparing-…` stamp, leaves the issues' status as it is, and writes their `raft:` here.
 +- `./zn fold <R-id> <ids…>` claims a prepared raft (its status only, published) and writes the issues' `raft:` and the raft's `issues:` here.
 +- `./zn unfold <R-id> <ids…>` takes members out of a raft (claiming it as `fold` does): their `raft:` is emptied and they leave `issues:`. It is how a member goes back to z-design, during a rafting or after it landed.
 +- `./zn recombine <keeper> <other> [<ids>…]` moves the listed members of the other raft, or all of them, into the keeper. It claims both rafts with one stamp, and retires the other only when it ends up empty: its folder moves to `<root>/rafts/retired/<R-id>` in this branch, with `retired: <keeper>`, so its design reviews, refutes and `harvest.md` stay where `lessons` and `metrics` read them.
@@ -5791,7 +5699,7 @@ index 00000000..70e21e7d
 +- **Theme**: why these issues belong together: the member titles and the surface they share (their common Touched paths), and the user decisions their designs quote.
 +- **Whole-raft design**: the interfaces between the members: for each module two members both touch, the public types and signatures each one adds or changes there, copied from their designs, and whether they agree.
 +- **Order & dependencies**: the members in `depends_on` order, then by id, and any order the interfaces force.
-+- **Risks & rollback**, and the raft's `check.sh` RCn checks after the generated RC0 lines (a raft check finds its members with `./zn find <id>` or `members`, never a hard-coded path).
++- **Risks & rollback**, and the raft's `check.sh` RCn checks after the generated RC0 lines (RC0 runs the raft's project's gate, `--project <project>`) (a raft check finds its members with `./zn find <id>` or `members`, never a hard-coded path).
 +Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
 +
 +## 4. Coherence review (a raft of several issues)
@@ -5815,10 +5723,10 @@ index 00000000..70e21e7d
 +
 +A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 +- **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
-+- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, z-run Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
++- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
++- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-ready/SKILL.md b/z-nile/skills/z-ready/SKILL.md
-index e84875cb..8b8f7a22 100644
+index e5b01f6b..7e8e396f 100644
 --- a/z-nile/skills/z-ready/SKILL.md
 +++ b/z-nile/skills/z-ready/SKILL.md
 @@ -1,11 +1,11 @@
@@ -5831,7 +5739,7 @@ index e84875cb..8b8f7a22 100644
  # Ready a raft
  
 -1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-design makes one (`--single` for a lone issue) in its prep worktree and merges it. A prompt for an undesigned issue defeats the purpose.
-+1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-raft makes one (`./zn raft-plan`, or `./zn new raft … <id>`) in its rafting worktree and merges it. A prompt for an undesigned issue defeats the purpose.
++1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-raft makes one (`./zn raft-plan`, or `./zn new raft … <id> --project <name>`) in its rafting worktree and merges it. A prompt for an undesigned issue defeats the purpose.
  2. **Check readiness.** First, **scope**: each member's title, Problem and Solution ideas match its capture (`./zn capture <id>`; z-design, **Scope is what was captured**) apart from added detail and decision lines, and a capture whose header carries any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) counts as not matching until the Problem has a `Scope decision (user, …)` line that confirms the item's scope. If one doesn't, stop and ask the user. Their answer lands as a `Scope decision` line through a pull request merged with the subject `tracker: scope <id> <what>` (a `tracker: new` subject would make the whole prepared document the new capture) before you ready the raft. If they restore the captured scope instead, the raft goes back to prep. `./zn ready` enforces every rule below except the acceptance specs one, and refuses with the reason, naming the item; read them so you can explain a refusal.
     - The raft and every member are `design: ready`.
     - Every issue has a `check.sh` with at least one `check`.
@@ -5852,25 +5760,6 @@ index 00000000..60b3b6c0
 +**Why:** c0116 design review 001 F1: the raft-only stamp left a prepared member open to z-design's `status <id> preparing`; the rafting worktree merged that status line cleanly, the carried move accepted any `preparing` stamp and restamped it, and `ready` then handed the issue out under a live design claim.
 +
 +**How to apply:** list the items the claim used to cover and every command that can stamp them (design, rafting, ready, stop, release, recombine). For each, say which check refuses it or which line conflicts, in both orders (before and after the claim's own carried step), and give the case a spec. A carried step accepts another holder's stamp only when it is provably the same claim (the same stamp, or one this checkout made).
-diff --git a/z-nile/skills/zz-arch/lessons/guard-no-is-explicit.md b/z-nile/skills/zz-arch/lessons/guard-no-is-explicit.md
-new file mode 100644
-index 00000000..6da238ee
---- /dev/null
-+++ b/z-nile/skills/zz-arch/lessons/guard-no-is-explicit.md
-@@ -0,0 +1,13 @@
-+---
-+title: A guard's "no" is one explicit answer
-+when: design
-+tags: [security, guards, fail-closed]
-+check: Which outcomes of this guard lookup lead to the unguarded action, and is each of them one explicit "no" answer, with every other outcome (a missing file, a parse error, a missing function, a crash, an unexpected output) treated as "guarded"? When a guard call's failure is tolerated, does the waiver test for the condition that makes it safe (the jail itself), and which of the variables the call reset are still in force?
-+---
-+A guard lookup that treats "it didn't say yes" as "no" fails open for every failure nobody listed. Patching it case by case (the file is missing, then it doesn't parse, then a function is renamed) never ends, because each new failure is another way to read as "no".
-+
-+**Why:** R0043 design review 001 F1: after the guards moved into `z-nile/lib/`, the publisher closed only the case where `fence.sh` was missing. A `fence.sh` that failed to source, or a renamed `pickman_guarded`, still read as "no check is running", so the tracker would have published from inside a check run.
-+
-+**How to apply:** make the unguarded answer a distinct, positive output (a word on stdout with exit 0), act on it only when it is exactly that, and count everything else as guarded. Add spec cases for a broken, a function-less and an other-answer guard, each publishing nothing, and a mutant that goes back to "anything but yes".
-+
-+**The same rule for waivers.** A waiver for "the jail refused this write" must test for the jail (the runner's markers), never for "the guard failed", and must never hide the guard's stderr. A guard function that can fail partway must not leave the guards it inherited weaker than before it ran: put its read-only refusals before its first change to the environment, set the replacement guards whole once it starts changing them, and put the writes that may be refused last. c0120 design review 002 F1: the home fence ran the full `pickman_fence` and waived any failure in a spec run. A symlinked `.cache` then ran silently, and `pickman_fence`'s early return had already unset `GIT_CONFIG_COUNT`, so the ref guard was off and `git update-ref` reached the real repository. Pin the order with cases: a refusal that holds in every mode, a waived failure whose guards equal the unwaived ones, and a refused call that leaves the inherited guards as they were.
 diff --git a/z-nile/skills/zz-arch/lessons/locks-detect-change.md b/z-nile/skills/zz-arch/lessons/locks-detect-change.md
 new file mode 100644
 index 00000000..e38130fc
@@ -5918,7 +5807,7 @@ index 00000000..cc4d4970
 +
 +**How to apply:** list the files the reviewed thing is made of once, as one function (c0116: `raftplan.isDesignFile`). Leave out files that change for other reasons (`spend.md`). Then grep for every command that rewrites those files (compact, remap, renumber, migrate) and make each re-record the entries that matched before its rewrite, and only those. Prove it by running that command on a tree holding a record, then the check.
 diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
-index e5bc4ecf..5bec93c9 100644
+index 985f181e..8371e951 100644
 --- a/z-nile/skills/zz-review/SKILL.md
 +++ b/z-nile/skills/zz-review/SKILL.md
 @@ -15,7 +15,7 @@ You have no shared context with the author. Judge only what's in front of you:
@@ -5941,7 +5830,7 @@ index e5bc4ecf..5bec93c9 100644
  Attack all of the following:
  0. **Rules and mutants**: audit each issue's Rules and mutants table. Every behavioural rule in the Design needs a row. Rows marked `run` were mutation-tested on a prototype in prep, with the outcome recorded in Unknowns & experiments; check that record, and spot-run only the rows you doubt. `reasoned` rows weren't run (the reason is in Unknowns & experiments), so judge them by reading, or spot-check them with a scratch copy. A missing row, a row whose spec case can't fail, or a plausible mutant nobody listed is a finding.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 149451ad..2d090998 100644
+index b94b441b..8c0b43ec 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -29,7 +29,7 @@ Each item is a directory named by its ID:
@@ -5992,7 +5881,7 @@ index 149451ad..2d090998 100644
  | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
  | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
  | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
-+| raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single]`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
++| raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
 +| fold | `./zn fold <R-id> <issue>...` | in a worktree, on a clean tree. Puts prepared backlog issues with no `raft:` into a prepared backlog raft of their type and project: publishes the raft's claim (its `status:` only; a raft this checkout already claimed is not claimed again), then writes each issue's `raft:` and the raft's `issues:` here and commits. Refuses a solo issue with others, and a raft that is new, being prepared, active or done |
 +| unfold | `./zn unfold <R-id> <issue>...` | in a worktree, on a clean tree. Takes members out of a backlog raft: claims it as `fold` does, then empties each issue's `raft:`, drops it from `issues:` and `grouped:` here and commits. The route back to z-design for a rafted issue, during a rafting or after it landed |
 +| recombine | `./zn recombine <keeper> <other> [<issue>...]` | in a worktree, on a clean tree. Moves the named members of the other backlog raft, or all of them, into the keeper (same project and type, both prepared or new, every member prepared). Publishes one fresh `preparing-…` stamp on both rafts (status lines only), then writes the moves here and commits; the other raft is retired only when it ends up empty: its folder moves to `<root>/rafts/retired/<R-id>` in this branch, with `retired: <keeper>`, keeping its reviews, refutes and `harvest.md` (read by `lessons` and `metrics`, never by `find`, the board or the plan) |
@@ -6025,7 +5914,7 @@ index 149451ad..2d090998 100644
  - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
 -- **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims its members), `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
 +- **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
- - **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips CI for the many tiny pushes is intended: `check.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`, not on `pull_request` (`tracker/**` no more: a push that brings the retired root back runs the gate).
+ - **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips CI for the many tiny pushes is intended: `check.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`, not on `pull_request` (`tracker/**` no more: a push that brings the retired root back runs the gate). CI runs one gate job per project, `gate (<project>)`, and branch protection requires each; adding a project means a registry entry, a CI matrix entry and a new required check (c0120).
 -- **Claims.** Prep claims with `new raft` (issues must be `new`). An existing draft raft is claimed with `./zn status <R-id> preparing`, which stamps the raft and its members; an issue added to a raft during prep is claimed first with `status <id> preparing`; one dropped is released with `status <id> new`. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
 +- **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
 +- **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids. `./zn release <R-id>` is the published give-back. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
@@ -6055,7 +5944,7 @@ index 00000000..2dbb4f9e
 +
 +**How to apply:** for a retirement, list every reader of the folder and keep the folder where they read it, in a state the item finders skip (c0116: `<root>/rafts/retired/<R-id>` with `retired: <keeper>`). Prove it on a copy of the real tree: the retirement leaves `lessons --check` green and the counts unchanged.
 diff --git a/z-nile/skills/zz-stats/SKILL.md b/z-nile/skills/zz-stats/SKILL.md
-index faeab497..42d10c3c 100644
+index d6ca941b..7951422a 100644
 --- a/z-nile/skills/zz-stats/SKILL.md
 +++ b/z-nile/skills/zz-stats/SKILL.md
 @@ -11,7 +11,9 @@ description: Report cost per issue (agent active time, lines) and the rework rat
@@ -6086,23 +5975,6 @@ index 00000000..73b0303b
 +**Why:** c0116 prep: the mutation run left M24 (recombine's raft type check) and M27 (recombine's membership check) alive. The members' type check and the publish's origin check refused the same inputs, so their cases passed with either guard removed.
 +
 +**How to apply:** in the mutation check, a surviving mutant whose case still sees a refusal means a second guard: give the case an input only this guard can refuse (an empty raft of another type), or assert the message the Design states for this guard.
-diff --git a/z-nile/skills/zz-test/lessons/new-commands-run-in-a-copy.md b/z-nile/skills/zz-test/lessons/new-commands-run-in-a-copy.md
-new file mode 100644
-index 00000000..6a99ea2c
---- /dev/null
-+++ b/z-nile/skills/zz-test/lessons/new-commands-run-in-a-copy.md
-@@ -0,0 +1,11 @@
-+---
-+title: A spec runs a new or changed command only in a fixture copy, never in the real tree
-+when: both
-+tags: [specs, fixtures, repository-safety]
-+check: Does any sequestered case run, against the real checkout, a command this raft adds or changes (a dry-run flag, a new mode, a new forwarder) whose wrong implementation would write the checkout or start a gate?
-+---
-+A case that runs a new `--plan` or dry-run flag in the real checkout trusts the code under test to write nothing. If the flag is wrong, a sequestered spec runs the real gate from inside a spec. It writes build output and sourcemaps in the checkout, unjailed on Linux and in CI's dispatch step. A separate fixture case that kills the wrong implementation doesn't help, because spec order guarantees nothing.
-+
-+**Why:** c0120 design review 001 F2. gate-homes ran `z-nile/check.sh --plan` (and `pickman/check.sh --plan`) in the real checkout, and layout ran both forwarders with `--plan` there.
-+
-+**How to apply:** build a copy of what the command reads (`engine.copy`, plus the registry and folders it needs) under `.cache/<name>`, run it there, and assert that nothing it would write appeared in the copy. Pin the real tree's files by reading them (their text, their registry), never by running the new command on them.
 diff --git a/z-nile/skills/zz-test/lessons/prove-state-folders-on-the-real-tree.md b/z-nile/skills/zz-test/lessons/prove-state-folders-on-the-real-tree.md
 new file mode 100644
 index 00000000..0bc79405
@@ -6120,3 +5992,232 @@ index 00000000..0bc79405
 +**Why:** c0116 design review 002 F2: E2 showed that `lessons` and `metrics` read `rafts/retired/`. But the first real retirement (R0040, on a copy of today's tree) turned three promoted specs red (c0114/classified, c0043/rounds, and c0005/worktree through `engine.empty`), which none of the design's lists named.
 +
 +**How to apply:** in prep, put a real item in the new folder on a copy of today's tree (the way the command does it, with a non-fixture identity so the tripwire accepts the copy) and run the full gate there. Every red spec goes on `Overrides:`, every helper that walks the folders gains the new one, and a sequestered case keeps one such copy green.
+diff --git a/z-nile/tests/acceptance/c0043/rounds.spec.luau b/z-nile/tests/acceptance/c0043/rounds.spec.luau
+index 28adf927..ca254902 100644
+--- a/z-nile/tests/acceptance/c0043/rounds.spec.luau
++++ b/z-nile/tests/acceptance/c0043/rounds.spec.luau
+@@ -61,7 +61,7 @@ local function sandbox(): string
+ 	write(`{SB}/pickman/.tracker/rafts/R0030/design-review-002.md`, second)
+ 	write(`{SB}/pickman/.tracker/rafts/R0030/design-refute-001.md`, "- F1: fixed: x; consequences: none\n")
+ 	write(`{SB}/pickman/.tracker/rafts/R0030/review-001.md`, second)
+-	-- reviews inside an issue directory are not counted for any raft
++	-- c0116 override: a member issue's design reviews roll up to its raft; its code reviews are not counted
+ 	write(
+ 		`{SB}/pickman/.tracker/issues/c0010/c0010.md`,
+ 		"---\nid: c0010\ntype: chore\ntitle: X\nslug: x\nraft: R0030\n---\n\n# c0010\n"
+@@ -72,13 +72,13 @@ local function sandbox(): string
+ end
+ 
+ return t.spec("c0410 review rounds in metrics", function(it)
+-	it("in a sandbox tracker: none for a raft without reviews, issue directories not counted", function()
++	it("in a sandbox tracker: none for a raft without reviews, a member's design reviews roll up", function()
+ 		local ok, err = pcall(function()
+ 			local got = rows(metrics(sandbox()))
+ 			t.expect(got).toEqual({
+ 				{ "R0010", "1", "0", "classic" },
+ 				{ "R0020", "0", "0", "none" },
+-				{ "R0030", "2", "1", "second-order" },
++				{ "R0030", "3", "1", "second-order" },
+ 			})
+ 		end)
+ 		if fs.isDir(SB) then
+@@ -130,9 +130,13 @@ return t.spec("c0410 review rounds in metrics", function(it)
+ 				"z-nile/.tracker/rafts",
+ 				"z-nile/.tracker/rafts/active",
+ 				"z-nile/.tracker/rafts/done",
++				-- c0116 override: a raft recombine retired keeps its folder, and its rounds, in rafts/retired/
++				"pickman/.tracker/rafts/retired",
++				"z-nile/.tracker/rafts/retired",
+ 			}
+ 		do
+-			for _, name in fs.readDir(`{TOP}/{base}`) do -- c0120 override: the roots are at the checkout's top
++			local names: { string } = if fs.isDir(`{TOP}/{base}`) then fs.readDir(`{TOP}/{base}`) else {} -- c0120 override: the roots are at the checkout's top
++			for _, name in names do
+ 				if string.match(name, "^R%d%d%d%d$") then
+ 					table.insert(want, name)
+ 				end
+diff --git a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+index b2880645..61c899da 100644
+--- a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
++++ b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+@@ -86,19 +86,19 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
+ 
+ 	it(
+ 		"ticket-prep: the lessons pass before review, a harvest as each round is answered, a confirmation before prepared",
+-		function()
++		function() -- c0116 override: z-design works on one issue, so its commands take <id>, not <R-id>
+ 			local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
+ 			t.expect(at(s5, "lessons --when design --full") < at(s5, "`design: reviewed`")).toBe(true)
+ 			local three, four = at(s5, "\n3. "), at(s5, "\n4. ")
+ 			local harvest = at(s5, "harvest.md")
+ 			t.expect(harvest > three and harvest < four).toBe(true) -- in the answering step
+-			local rerun = at(s5, "rerun `./zn promote-check <R-id>`")
++			local rerun = at(s5, "rerun `./zn promote-check <id>`")
+ 			t.expect(rerun > three and rerun < four).toBe(true)
+ 			t.expect(
+-				at(s5, "first harvest anything `./zn lessons --uncovered <R-id>` still lists")
+-					< at(s5, "status <R-id> prepared`")
++				at(s5, "first harvest anything `./zn lessons --uncovered <id>` still lists")
++					< at(s5, "status <id> prepared`")
+ 			).toBe(true)
+-			t.expect(at(s5, "lessons --uncovered <R-id>") < at(s5, "status <R-id> prepared`")).toBe(true)
++			t.expect(at(s5, "lessons --uncovered <id>") < at(s5, "status <id> prepared`")).toBe(true)
+ 			at(s5, "lessons --check")
+ 		end
+ 	)
+diff --git a/z-nile/tests/acceptance/c0114/classified.spec.luau b/z-nile/tests/acceptance/c0114/classified.spec.luau
+index 0290193c..6168bedb 100644
+--- a/z-nile/tests/acceptance/c0114/classified.spec.luau
++++ b/z-nile/tests/acceptance/c0114/classified.spec.luau
+@@ -7,6 +7,7 @@
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ local serde = require("@lune/serde")
+ local store = require("@znile/engine/store")
+ local t = require("@tests/lib/t")
+@@ -253,6 +254,33 @@ local function bySlug(kind: string): { [string]: store.Item }
+ 		end
+ 		out[item.slug] = item
+ 	end
++	-- c0116 override: a raft recombine retired keeps its folder in <root>/rafts/retired/, where no finder looks, and is
++	-- still filed in that root
++	if kind == "raft" then
++		-- read at the checkout's top, as the items are: this spec runs from z-nile/ (c0120)
++		for _, root in projects.roots(projects.load(TOP)) do
++			local base = `{TOP}/{root}/rafts/retired`
++			local names: { string } = if fs.isDir(base) then fs.readDir(base) else {}
++			for _, name in names do
++				local doc = `{base}/{name}/{name}.md`
++				if string.match(name, "^R%d%d%d%d$") and fs.isFile(doc) then
++					local slug = store.readFront(doc).slug or ""
++					if out[slug] then
++						error(`two {kind}s share the slug {slug}: {out[slug].id}, {name}`)
++					end
++					out[slug] = {
++						id = name,
++						kind = "raft",
++						state = "retired",
++						dir = `{base}/{name}`,
++						doc = doc,
++						slug = slug,
++						root = root,
++					}
++				end
++			end
++		end
++	end
+ 	return out
+ end
+ 
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau b/z-nile/tests/acceptance/c0115/absence.spec.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/acceptance/absence.spec.luau
+rename to z-nile/tests/acceptance/c0115/absence.spec.luau
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau b/z-nile/tests/acceptance/c0115/docs.spec.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/acceptance/docs.spec.luau
+rename to z-nile/tests/acceptance/c0115/docs.spec.luau
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau b/z-nile/tests/acceptance/c0115/layout.spec.luau
+similarity index 97%
+rename from z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau
+rename to z-nile/tests/acceptance/c0115/layout.spec.luau
+index b4025e42..7fc1defb 100644
+--- a/z-nile/.tracker/issues/c0115/acceptance/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0115/layout.spec.luau
+@@ -44,6 +44,7 @@ local OLD = {
+ local ZNILE = {
+ 	"z-ticket",
+ 	"z-design",
++	"z-raft", -- c0116 override: z-raft is made there
+ 	"z-ready",
+ 	"z-run",
+ 	"zz-execute",
+@@ -91,7 +92,7 @@ end
+ 
+ return t.spec("c0115 the skills are renamed and live in their projects' folders", function(it)
+ 	it(
+-		"z-nile/skills holds exactly the ten z- and zz- skills, each a SKILL.md named for its folder",
++		"z-nile/skills holds exactly the z- and zz- skills (eleven since c0116), each a SKILL.md named for its folder",
+ 		function()
+ 			t.expect(folders("z-nile/skills")).toEqual(sorted(ZNILE))
+ 			for _, name in ZNILE do
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau b/z-nile/tests/acceptance/c0115/lessons.spec.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/acceptance/lessons.spec.luau
+rename to z-nile/tests/acceptance/c0115/lessons.spec.luau
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau b/z-nile/tests/acceptance/c0115/prompt.spec.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/acceptance/prompt.spec.luau
+rename to z-nile/tests/acceptance/c0115/prompt.spec.luau
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau b/z-nile/tests/acceptance/c0115/readme.spec.luau
+similarity index 98%
+rename from z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau
+rename to z-nile/tests/acceptance/c0115/readme.spec.luau
+index 7bd7fd2c..c0621731 100644
+--- a/z-nile/.tracker/issues/c0115/acceptance/readme.spec.luau
++++ b/z-nile/tests/acceptance/c0115/readme.spec.luau
+@@ -1,7 +1,7 @@
+ --!strict
+ -- c0115 AC9: z-nile/README.md opens (right after its title) with a mermaid picture of the five parts: the tracker,
+ -- the skills, the dispatcher, .models.toml and the board. Every z- or zz- skill it draws exists in z-nile/skills, or
+--- its node says `planned`, and the unbuilt parts carry their issue: z-raft (c0116), the dispatcher and .models.toml
++-- its node says `planned`, and the unbuilt parts carry their issue: the dispatcher and .models.toml
+ -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
+ -- the three design checklists by path, each of which exists. Reads the real tree.
+ local process = require("@lune/process")
+@@ -135,7 +135,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
+ 			end
+ 		end
+ 		t.expect(seen >= 10).toBe(true)
+-		at(pic, "z-raft (c0116, planned)", "the picture")
++		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
+ 		at(pic, "dispatcher (c0117, planned)", "the picture")
+ 		at(pic, ".models.toml (c0117, planned)", "the picture")
+ 		at(pic, "c0118, planned", "the picture")
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau b/z-nile/tests/acceptance/c0115/skills.spec.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/acceptance/skills.spec.luau
+rename to z-nile/tests/acceptance/c0115/skills.spec.luau
+diff --git a/z-nile/.tracker/issues/c0115/acceptance/trusted-base.spec.luau b/z-nile/tests/acceptance/c0115/trusted-base.spec.luau
+similarity index 100%
+rename from z-nile/.tracker/issues/c0115/acceptance/trusted-base.spec.luau
+rename to z-nile/tests/acceptance/c0115/trusted-base.spec.luau
+diff --git a/z-nile/tests/acceptance/c0119/scope-docs.spec.luau b/z-nile/tests/acceptance/c0119/scope-docs.spec.luau
+index ce342e40..369042e0 100644
+--- a/z-nile/tests/acceptance/c0119/scope-docs.spec.luau
++++ b/z-nile/tests/acceptance/c0119/scope-docs.spec.luau
+@@ -51,7 +51,8 @@ return t.spec("c0119 scope rules in the skills", function(it)
+ 	it("ticket-prep opens with the scope rule, before step 1", function()
+ 		local doc = read(`{TOP}/z-nile/skills/z-design/SKILL.md`)
+ 		local p = paragraph(doc, "**Scope is what was captured.**")
+-		t.expect(at(doc, "**Scope is what was captured.**") < at(doc, "\n## 1. Form the raft")).toBe(true)
++		-- c0116 override: z-design makes no raft, so its step 1 claims the issue
++		t.expect(at(doc, "**Scope is what was captured.**") < at(doc, "\n## 1. Claim the issue")).toBe(true)
+ 		at(p, "its title, its Problem and the ideas under its Solution as they stood at capture")
+ 		at(p, "`./zn capture <id>` prints that version")
+ 		at(
+@@ -95,7 +96,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
+ 			local check = at(s5, "Then **check the scope**")
+ 			t.expect(check > five and check < at(s5, "set `design: ready`")).toBe(true)
+ 			local line = string.sub(s5, check, (string.find(s5, "\n", check, true) :: number) - 1)
+-			at(line, "compare each member's document with `./zn capture <id>`")
++			at(line, "compare the issue's document with `./zn capture <id>`") -- c0116 override: one issue
+ 			at(line, "every captured outcome has a Design and an acceptance criterion")
+ 			at(line, "goes to the user before `design: ready`")
+ 		end
+diff --git a/z-nile/tests/lib/engine.luau b/z-nile/tests/lib/engine.luau
+index 6f894c45..7764c936 100644
+--- a/z-nile/tests/lib/engine.luau
++++ b/z-nile/tests/lib/engine.luau
+@@ -116,7 +116,8 @@ function engine.empty(dir: string)
+ 	end
+ 	for _, root in engine.CLONE_ROOTS do
+ 		for _, kind in { "issues", "rafts" } do
+-			for _, state in { "", "active/", "done/" } do
++			-- retired/: rafts recombine retired (c0116), which keep their folders
++			for _, state in { "", "active/", "done/", "retired/" } do
+ 				local base = `{dir}/{root}/{kind}/{state}`
+ 				if fs.isDir(base) then
+ 					for _, name in fs.readDir(base) do

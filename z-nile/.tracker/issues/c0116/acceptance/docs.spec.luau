@@ -4,11 +4,14 @@
 -- new z-raft skill holds the policy, the lock, the commands, the raft's design and the coherence review; zz-rules,
 -- zz-review, zz-stats and z-ready move with it; the README draws z-raft as built. Reads the real tree, plain finds only.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local SKILLS = "z-nile/skills"
+-- c0116 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local function read(path: string): string
-	return fs.readFile(path)
+	return fs.readFile(`{TOP}/{path}`)
 end
 local function at(text: string, needle: string, where: string)
 	if string.find(text, needle, 1, true) == nil then
