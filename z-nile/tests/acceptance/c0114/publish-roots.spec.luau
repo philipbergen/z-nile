@@ -43,9 +43,10 @@ local function refusedPush(changes: { publish.Change }, needle: string)
 end
 
 return t.spec("c0114 publish roots come from origin/main", function(it)
-	it("sets up an origin whose registry lists tracker and z-nile/.tracker", function()
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout; tracker/ is retired)
+	it("sets up an origin whose registry lists pickman/.tracker and z-nile/.tracker", function()
 		f = trackerfix.new("c0114-publish", {
-			["tracker/issues/c0010/c0010.md"] = stub("c0010"),
+			["pickman/.tracker/issues/c0010/c0010.md"] = stub("c0010"),
 			[`{Z}/issues/c0020/c0020.md`] = stub("c0020"),
 		})
 	end)
@@ -54,7 +55,9 @@ return t.spec("c0114 publish roots come from origin/main", function(it)
 		local r = push({ { path = `{Z}/issues/c0030/c0030.md`, content = stub("c0030") } })
 		t.expect(r.ok).toBe(true)
 		t.expect(onOrigin(`{Z}/issues/c0030/c0030.md`)).toBe(true)
-		t.expect(push({ { path = "tracker/issues/c0040/c0040.md", content = stub("c0040") } }).ok).toBe(true)
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout; tracker/ is retired)
+		t.expect(push({ { path = "pickman/.tracker/issues/c0040/c0040.md", content = stub("c0040") } }).ok)
+			.toBe(true)
 	end)
 
 	it("a root only the working tree's registry lists is refused, whatever that tree says", function()
@@ -72,10 +75,11 @@ return t.spec("c0114 publish roots come from origin/main", function(it)
 	end)
 
 	it("a published move stays in its root", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout; tracker/ is retired)
 		refusedPush({
 			{
 				path = `{Z}/issues/active/c0010/c0010.md`,
-				from = "tracker/issues/c0010/c0010.md",
+				from = "pickman/.tracker/issues/c0010/c0010.md",
 				content = stub("c0010"),
 			},
 		}, "keeps the id, the root and the relative path")

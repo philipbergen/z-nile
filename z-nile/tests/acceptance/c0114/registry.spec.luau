@@ -20,17 +20,26 @@ local function project(name: string, root: string): string
 end
 
 return t.spec("c0114 the project registry", function(it)
-	it("the shipped registry lists pickman at tracker first, then z-nile at z-nile/.tracker", function()
-		local reg, err = projects.parse(fs.readFile("z-nile/projects.toml"))
-		t.expect(err).toBe(nil)
-		local r = reg :: projects.Registry
-		t.expect(r.projects).toEqual({
-			{ name = "pickman", root = "tracker" },
-			{ name = "z-nile", root = "z-nile/.tracker" },
-		})
-		t.expect(r.retired).toEqual({})
-		t.expect(projects.roots(r)).toEqual({ "tracker", "z-nile/.tracker" })
-	end)
+	-- c0120 override: pickman moved into pickman/, its root to pickman/.tracker and its home to pickman/; tracker/ is
+	-- retired, so history and the trail still read it. z-nile's home is z-nile/, and the spec runs there, so the
+	-- registry is read from the checkout's top
+	it(
+		"the shipped registry lists pickman at pickman/.tracker first, then z-nile at z-nile/.tracker",
+		function()
+			local top = (
+				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+			)
+			local reg, err = projects.parse(fs.readFile(`{top}/z-nile/projects.toml`))
+			t.expect(err).toBe(nil)
+			local r = reg :: projects.Registry
+			t.expect(r.projects).toEqual({
+				{ name = "pickman", root = "pickman/.tracker", home = "pickman" },
+				{ name = "z-nile", root = "z-nile/.tracker", home = "z-nile" },
+			})
+			t.expect(r.retired).toEqual({ "tracker" })
+			t.expect(projects.roots(r)).toEqual({ "pickman/.tracker", "z-nile/.tracker" })
+		end
+	)
 
 	it("parses the roots in file order, and the retired ones after them for history", function()
 		local text = 'retired = ["old/.tracker"]\n'
@@ -126,7 +135,11 @@ return t.spec("c0114 the project registry", function(it)
 		fixture.git(base, { "add", "-A" })
 		fixture.git(base, { "commit", "-q", "-m", "an item" }) -- remap needs a clean tree before it reads anything
 		for _, args in { { "list" }, { "audit" }, { "new", "issue", "c", "offline", "--project", "pickman" } } do
-			local all = { "run", `{fixture.physical(".")}/z-nile/engine/main`, "--" }
+			-- c0120 override: the engine is the checkout's, read from its top (this spec runs from z-nile/)
+			local top = (
+				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+			)
+			local all = { "run", `{top}/z-nile/engine/main`, "--" }
 			for _, a in args do
 				table.insert(all, a)
 			end

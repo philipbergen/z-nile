@@ -3,6 +3,8 @@
 -- for what it publishes. Driven through ./zn in a tracker fixture under .cache/c0114-roots (tests/lib/trackerfix): a
 -- bare origin, a main checkout and a second terminal that pushes straight to origin's main.
 local claims = require("@znile/engine/claims")
+-- c0120 override: the spec runs from z-nile/, its home, after the move
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@znile/engine/ids")
@@ -11,6 +13,10 @@ local trackerfix = require("@tests/lib/trackerfix")
 
 local PREPARED = "prepared-quiet-copper-falcon"
 local Z = "z-nile/.tracker"
+-- c0120 override: pickman's items live in pickman/.tracker (its home pickman/), tracker/ is retired
+local P = "pickman/.tracker"
+-- c0120 override: the spec runs from z-nile/, so files of the real checkout are read through its top
+local TOP = engine.TOP
 
 local function doc(id: string, raft: string, design: string, status: string): string
 	local extra = if string.sub(id, 1, 1) == "R" then "single: true\nissues: [c0030]\n" else `raft: {raft}\n`
@@ -71,10 +77,12 @@ end
 return t.spec("c0114 commands across project roots", function(it)
 	it("sets up items in both roots and a shared counter", function()
 		local seed: { [string]: string } = {
-			[".gitignore"] = fs.readFile(".gitignore"), -- ignores every root's prompt.md
-			["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
+			-- c0120 override: read through the top; architecture.md moved to pickman's root
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`), -- ignores every root's prompt.md
+			[`{P}/architecture.md`] = fs.readFile(`{TOP}/{P}/architecture.md`),
 			["z-nile/next"] = "issue 41 a-b-c\nraft 11 a-b-c\n",
-			["tracker/issues/f0010/f0010.md"] = doc("f0010", "", "draft", "new-a-b-c"),
+			--[[ c0120 override: pickman's root ]]
+			[`{P}/issues/f0010/f0010.md`] = doc("f0010", "", "draft", "new-a-b-c"),
 			[`{Z}/issues/c0020/c0020.md`] = doc("c0020", "", "draft", "new-a-b-c"),
 			[`{Z}/issues/c0021/c0021.md`] = doc("c0021", "", "draft", "new-a-b-c"),
 			[`{Z}/issues/c0030/c0030.md`] = doc("c0030", "R0010", "ready", PREPARED),
@@ -83,7 +91,8 @@ return t.spec("c0114 commands across project roots", function(it)
 			[`{Z}/rafts/R0010/check.sh`] = CHECK,
 		}
 		for _, s in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`.claude/skills/{s}/SKILL.md`)
+			-- c0120 override: read through the checkout's top
+			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{s}/SKILL.md`)
 		end
 		f = trackerfix.new("c0114-roots", seed)
 		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
@@ -91,7 +100,7 @@ return t.spec("c0114 commands across project roots", function(it)
 
 	it("find, list, members and status see every root", function()
 		t.expect(trackerfix.trOk(f, f.main, { "find", "c0020" })).toBe(`{Z}/issues/c0020`)
-		t.expect(trackerfix.trOk(f, f.main, { "find", "f0010" })).toBe("tracker/issues/f0010")
+		t.expect(trackerfix.trOk(f, f.main, { "find", "f0010" })).toBe(`{P}/issues/f0010`) -- c0120 override: pickman's root
 		t.expect(trackerfix.trOk(f, f.main, { "members", "R0010" })).toBe(`{Z}/issues/c0030`)
 		local listed = trackerfix.trOk(f, f.main, { "list" })
 		for _, id in { "R0010", "f0010", "c0020", "c0030" } do
@@ -112,6 +121,10 @@ return t.spec("c0114 commands across project roots", function(it)
 		t.expect(has(tools, "c0020")).toBe(true)
 		t.expect(has(tools, "R0010")).toBe(true)
 		t.expect(has(tools, "f0010")).toBe(false)
+		-- c0120 override: pickman has a folder now, and list run in it shows pickman's items
+		local game2 = listIn("pickman")
+		t.expect(has(game2, "f0010")).toBe(true)
+		t.expect(has(game2, "c0020")).toBe(false)
 		local status = trackerfix.trOk(f, f.main, { "status" })
 		t.expect(has(status, "c0020 new")).toBe(true)
 		t.expect(has(status, "f0010 new")).toBe(true)
@@ -125,8 +138,10 @@ return t.spec("c0114 commands across project roots", function(it)
 			refused({ "new", "issue", "c", "nowhere" }, "no project holds the checkout's root")
 			fs.writeDir(`{wt}/src/deep`)
 			refused({ "new", "issue", "c", "nowhere" }, "no project holds src/deep", "src/deep")
-			-- pickman has no folder until c0120: tracker/ does not choose it either
-			refused({ "new", "issue", "c", "nowhere" }, "--project pickman", "tracker")
+			-- c0120 override: tracker/ is retired and still chooses no project (the fixture keeps no tracker/ folder, so
+			-- the spec makes it); pickman's own folder pickman/ chooses pickman (below)
+			fs.writeDir(`{wt}/tracker`)
+			refused({ "new", "issue", "c", "nowhere" }, "no project holds tracker", "tracker")
 			-- a directory inherited from another checkout's ./zn (a spec's fixture run inside a session) is that
 			-- checkout's, never this one's: the engine reads it as its own root
 			local before = tip()
@@ -134,22 +149,28 @@ return t.spec("c0114 commands across project roots", function(it)
 				wt,
 				"lune",
 				{ "run", `{wt}/z-nile/engine/main`, "--", "new", "issue", "c", "nowhere" },
-				{ env = { ZN_TOP = fixture.physical(".") :: string, ZN_CWD = "z-nile" } }
+				-- c0120 override: the spec runs in z-nile/, so the other checkout is named by its top
+				{ env = { ZN_TOP = fixture.physical(TOP) :: string, ZN_CWD = "z-nile" } }
 			)
 			t.expect(inherited.ok).toBe(false)
 			t.expect(has(inherited.stderr, "no project holds the checkout's root")).toBe(true)
 			t.expect(tip()).toBe(before)
 			local a = trackerfix.trOk(f, wt, { "new", "issue", "f", "game-thing", "--project", "pickman" })
-			t.expect(a).toBe("tracker/issues/f0041/f0041.md")
+			t.expect(a).toBe(`{P}/issues/f0041/f0041.md`) -- c0120 override: pickman's root
 			local b = znInOk("z-nile/engine", { "new", "issue", "c", "tool-thing" })
 			t.expect(b).toBe(`{Z}/issues/c0042/c0042.md`)
 			t.expect(onOrigin(`{Z}/issues/c0042/c0042.md`)).toBe(true)
 			t.expect(onOrigin(`{Z}/issues/c0042/check.sh`)).toBe(true)
 			-- --project wins over the folder
 			local c = znInOk("z-nile", { "new", "issue", "c", "game-chore", "--project", "pickman" })
-			t.expect(c).toBe("tracker/issues/c0043/c0043.md")
-			-- one counter: three issues in two projects took 41, 42 and 43, and origin's counter says 44 next
-			t.expect(string.match(originText("z-nile/next"), "^issue 44 %S+\nraft 11 %S+$") ~= nil).toBe(true)
+			t.expect(c).toBe(`{P}/issues/c0043/c0043.md`) -- c0120 override: pickman's root
+			-- c0120 override: pickman has a folder now: new issue run below pickman/ files there (it takes 44)
+			local d = znInOk("pickman/.tracker", { "new", "issue", "c", "game-folder" })
+			t.expect(d).toBe(`{P}/issues/c0044/c0044.md`)
+			t.expect(onOrigin(`{P}/issues/c0044/c0044.md`)).toBe(true)
+			-- one counter: four issues in two projects took 41 to 44, and origin's counter says 45 next
+			-- c0120 override: 45, not 44, after the pickman folder case
+			t.expect(string.match(originText("z-nile/next"), "^issue 45 %S+\nraft 11 %S+$") ~= nil).toBe(true)
 			t.expect(onOrigin("tracker/next")).toBe(false) -- the fixture has no tombstone, and nothing writes one
 			refused({ "new", "issue", "c", "nowhere", "--project", "nope" }, "--project nope: not a project")
 		end
@@ -164,7 +185,7 @@ return t.spec("c0114 commands across project roots", function(it)
 			)
 			refused(
 				{ "new", "raft", "chore", "tools", "c0020", "--single", "--project", "pickman" },
-				"the raft is made in tracker: c0020 is in z-nile/.tracker"
+				"the raft is made in pickman/.tracker: c0020 is in z-nile/.tracker" -- c0120 override: pickman's root
 			)
 			local r = znInOk("z-nile", { "new", "raft", "chore", "tools", "c0020", "--single" })
 			t.expect(r).toBe(`{Z}/rafts/R0011/R0011.md`)
@@ -186,7 +207,11 @@ return t.spec("c0114 commands across project roots", function(it)
 			)
 			t.expect(offline.ok).toBe(false)
 			t.expect(has(offline.stderr, "a raft holds issues of one project")).toBe(true)
-			t.expect(fs.isDir(`{wt}/tracker/rafts/R0012`) or fs.isDir(`{wt}/{Z}/rafts/R0012`)).toBe(false)
+			-- c0120 override: the spec runs from z-nile/, its home, after the move
+			t.expect(
+				fs.isDir(`{wt}/{P}/rafts/R0012`) --[[ c0120 override: pickman's root ]]
+					or fs.isDir(`{wt}/{Z}/rafts/R0012`)
+			).toBe(false)
 			t.expect(tip()).toBe(before)
 		end
 	)
@@ -223,7 +248,8 @@ return t.spec("c0114 commands across project roots", function(it)
 		function()
 			trackerfix.elsewhere(
 				f,
-				{ ["tracker/issues/c0021/c0021.md"] = doc("c0021", "", "draft", "new-d-e-f") },
+				-- c0120 override: the copy is in pickman's root
+				{ [`{P}/issues/c0021/c0021.md`] = doc("c0021", "", "draft", "new-d-e-f") },
 				"copy"
 			)
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
@@ -232,7 +258,11 @@ return t.spec("c0114 commands across project roots", function(it)
 			t.expect(has(found.stderr, "duplicate id c0021")).toBe(true)
 			local audited = trackerfix.tr(f, f.main, { "audit" })
 			t.expect(audited.ok).toBe(false)
-			t.expect(has(audited.stdout, "error duplicate tracker/issues/c0021")).toBe(true)
+			-- c0120 override: the spec runs from z-nile/, its home, after the move
+			t.expect(
+				has(audited.stdout, `error duplicate {P}/issues/c0021` --[[ c0120 override: pickman's root ]])
+			)
+				.toBe(true)
 			t.expect(has(audited.stdout, `error duplicate {Z}/issues/c0021`)).toBe(true)
 			-- the copy under z-nile's root, named by its folder, takes the next number from the shared counter
 			fixture.git(wt, { "fetch", "-q", "origin" })
@@ -241,12 +271,16 @@ return t.spec("c0114 commands across project roots", function(it)
 			if not r.ok then
 				error(r.stderr .. r.stdout)
 			end
-			t.expect(has(r.stdout, "c0021 -> c0044")).toBe(true)
-			t.expect(fs.isFile(`{wt}/{Z}/issues/c0044/c0044.md`)).toBe(true)
-			t.expect(trackerfix.trOk(f, wt, { "find", "c0021" })).toBe("tracker/issues/c0021")
+			-- c0120 override: 45, since the pickman folder case took 44
+			t.expect(has(r.stdout, "c0021 -> c0045")).toBe(true)
+			t.expect(fs.isFile(`{wt}/{Z}/issues/c0045/c0045.md`)).toBe(true)
+			t.expect(trackerfix.trOk(f, wt, { "find", "c0021" })).toBe(`{P}/issues/c0021`) -- c0120 override: pickman's root
 			fixture.git(wt, { "reset", "-q", "--hard", "origin/main" })
 			fixture.git(f.other, { "pull", "-q", "origin", "main" })
-			fixture.git(f.other, { "rm", "-q", "-r", "tracker/issues/c0021" })
+			fixture.git(
+				f.other,
+				{ "rm", "-q", "-r", `{P}/issues/c0021` } --[[ c0120 override: pickman's root ]]
+			)
 			fixture.git(f.other, { "commit", "-q", "-m", "drop the copy" })
 			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
@@ -271,7 +305,8 @@ return t.spec("c0114 commands across project roots", function(it)
 
 	it("spend counts code lines, never the documents under any project root", function()
 		fs.writeFile(`{wt}/{Z}/issues/c0021/notes.md`, "one\ntwo\n")
-		fs.writeFile(`{wt}/tracker/issues/f0010/notes.md`, "one\n")
+		-- c0120 override: the spec runs from z-nile/, its home, after the move
+		fs.writeFile(`{wt}/{P}/issues/f0010/notes.md` --[[ c0120 override: pickman's root ]], "one\n")
 		fs.writeDir(`{wt}/src`)
 		fs.writeFile(`{wt}/src/x.luau`, "--!strict\nreturn 1\n")
 		fixture.git(wt, { "add", "-A" })
@@ -320,8 +355,9 @@ return t.spec("c0114 commands across project roots", function(it)
 		local stamp =
 			string.match(originText(`{Z}/rafts/active/R0010/R0010.md`), "\nstatus: (active%-[%a%-]+)\n")
 		t.expect(stamp ~= nil).toBe(true)
-		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { "tracker", Z }))).toBe(true)
-		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { "tracker" }))).toBe(false)
+		-- c0120 override: the roots are pickman/.tracker and z-nile/.tracker
+		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { P, Z }))).toBe(true)
+		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { P }))).toBe(false)
 		-- an emergent issue, made on the raft's branch in its worktree, is filed beside its raft in z-nile's root
 		local rwt = trackerfix.trOk(f, f.main, { "worktree", "R0010" })
 		trackerfix.trOk(f, rwt, { "start", "R0010" })
@@ -386,6 +422,8 @@ return t.spec("c0114 commands across project roots", function(it)
 		fs.writeFile(`{f.main}/z-nile/projects.toml`, reg)
 		t.expect(bad.ok).toBe(false)
 		t.expect(has(bad.stdout, "error registry z-nile/projects.toml")).toBe(true)
+		-- c0120 override: the fixture has no tracker/ folder (a retired root), so the spec makes it
+		fs.writeDir(`{f.main}/tracker`)
 		fs.writeFile(`{f.main}/tracker/next`, "issue 9 a-b-c\nraft 9 a-b-c\n")
 		local old = trackerfix.tr(f, f.main, { "audit" })
 		fs.removeFile(`{f.main}/tracker/next`)

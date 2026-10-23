@@ -35,6 +35,9 @@ local SHIMS: { { any } } = {
 	{ "changed", require("@scripts/lib/changed") :: any, require("@znile/lib/changed") :: any },
 }
 
+-- c0120 override: the spec runs from z-nile/, so it reads and runs the checkout from its top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
@@ -42,7 +45,7 @@ end
 -- the lines of a shell script that run something: no shebang, no comment, no blank
 local function commands(path: string): { string }
 	local out: { string } = {}
-	for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+	for line in string.gmatch(fs.readFile(`{TOP}/{path}`), "[^\n]+") do -- c0120 override: from the top
 		if not string.match(line, "^%s*#") and string.match(line, "%S") then
 			table.insert(out, line)
 		end
@@ -51,7 +54,7 @@ local function commands(path: string): { string }
 end
 
 local function executable(path: string): boolean
-	return process.exec("test", { "-x", path }).ok
+	return process.exec("test", { "-x", path }, { cwd = TOP }).ok -- c0120 override: from the top
 end
 
 return t.spec("c0114 the engine and the build live in z-nile/", function(it)
@@ -83,7 +86,7 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 				"z-nile/projects.toml",
 			}
 		do
-			if not fs.isFile(f) then
+			if not fs.isFile(`{TOP}/{f}`) then -- c0120 override: from the top
 				error(`missing: {f}`)
 			end
 		end
@@ -100,7 +103,7 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 		end
 		t.expect(ids.FILE).toBe("z-nile/next")
 		t.expect(ids.MAP_FILE).toBe("z-nile/compaction.txt")
-		t.expect(ids.parseMap(fs.readFile("z-nile/compaction.txt")) ~= nil).toBe(true)
+		t.expect(ids.parseMap(fs.readFile(`{TOP}/z-nile/compaction.txt`)) ~= nil).toBe(true) -- c0120 override: from the top
 	end)
 
 	it("nothing of the build is left at its old path, and exactly one counter file is live", function()
@@ -117,17 +120,19 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 				"scripts/tracker/board.html",
 			}
 		do
-			if fs.isFile(gone) or fs.isDir(gone) then
+			if fs.isFile(`{TOP}/{gone}`) or fs.isDir(`{TOP}/{gone}`) then -- c0120 override: from the top
 				error(`still there: {gone}`)
 			end
 		end
 		t.expect(ids.OLD_FILE).toBe("tracker/next")
-		t.expect(fs.isFile(ids.OLD_FILE)).toBe(true)
-		local old = ids.parse(fs.readFile(ids.OLD_FILE))
-		if fs.isFile(ids.FILE) then
+		-- c0120 override: the counter files are read from the top
+		t.expect(fs.isFile(`{TOP}/{ids.OLD_FILE}`)).toBe(true)
+		local old = ids.parse(fs.readFile(`{TOP}/{ids.OLD_FILE}`))
+		if fs.isFile(`{TOP}/{ids.FILE}`) then
 			-- moved on origin: z-nile/next counts, and an engine from before the move refuses on the tombstone
-			t.expect(ids.parse(fs.readFile(ids.FILE)) ~= nil).toBe(true)
-			t.expect(fs.readFile(ids.OLD_FILE)).toBe(ids.TOMBSTONE)
+			-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
+			t.expect(ids.parse(fs.readFile(`{TOP}/{ids.FILE}`)) ~= nil).toBe(true)
+			t.expect(fs.readFile(`{TOP}/{ids.OLD_FILE}`)).toBe(ids.TOMBSTONE)
 		else
 			-- not moved yet (this branch, and main until its first publish after landing): tracker/next still counts
 			t.expect(old ~= nil).toBe(true)
@@ -140,10 +145,10 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 		t.expect(table.find(zn, 'export ZN_TOP="$top" ZN_CWD="${rel#/}"') ~= nil).toBe(true)
 		t.expect(table.find(zn, 'cd "$top"') ~= nil).toBe(true)
 		t.expect(table.find(zn, 'exec lune run z-nile/engine/main -- "$@"') ~= nil).toBe(true)
-		local usage = process.exec("bash", { "zn" })
+		local usage = process.exec("bash", { "zn" }, { cwd = TOP }) -- c0120 override: at the root
 		t.expect(has(usage.stdout, "usage: ./zn <command>")).toBe(true)
 		-- run from a folder below the root, it still runs the engine there
-		local below = process.exec("bash", { "../../zn" }, { cwd = "z-nile/engine" })
+		local below = process.exec("bash", { "../../zn" }, { cwd = `{TOP}/z-nile/engine` }) -- c0120 override: from the top
 		t.expect(has(below.stdout, "usage: ./zn <command>")).toBe(true)
 	end)
 
@@ -162,12 +167,12 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 		t.expect(#ac).toBe(1)
 		t.expect(has(ac[1], 'source "$(dirname "${BASH_SOURCE[0]}")/../../z-nile/lib/ac.sh"')).toBe(true)
 		t.expect(has(ac[1], "exit 1")).toBe(true) -- a missing target fails the check.sh
-		t.expect(has(fs.readFile("scripts/affected.luau"), '"z-nile/affected"')).toBe(true)
+		t.expect(has(fs.readFile(`{TOP}/scripts/affected.luau`), '"z-nile/affected"')).toBe(true) -- c0120 override: from the top
 	end)
 
 	it("the forwarders give the same output and exit code as the moved files", function()
 		local function run(argv: { string }): process.ExecResult
-			return process.exec("bash", argv)
+			return process.exec("bash", argv, { cwd = TOP }) -- c0120 override: at the root
 		end
 		local a, b = run({ "scripts/tracker.sh", "find", "c0114" }), run({ "zn", "find", "c0114" })
 		t.expect(a.ok).toBe(true)
@@ -175,7 +180,12 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 		local x, y = run({ "scripts/tracker.sh", "find", "c9999" }), run({ "zn", "find", "c9999" })
 		t.expect(x.ok).toBe(false)
 		t.expect(x.code).toBe(y.code)
-		local sel = process.exec("lune", { "run", "scripts/affected", "--", "z-nile/engine/main.luau" })
+		-- c0120 override: at the root
+		local sel = process.exec(
+			"lune",
+			{ "run", "scripts/affected", "--", "z-nile/engine/main.luau" },
+			{ cwd = TOP }
+		)
 		t.expect(sel.ok).toBe(true)
 		t.expect(sel.stdout).toBe("ALL\n")
 	end)
@@ -193,6 +203,6 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 	)
 
 	it("the znile alias names z-nile/", function()
-		t.expect(has(fs.readFile(".luaurc"), '"znile": "./z-nile"')).toBe(true)
+		t.expect(has(fs.readFile(`{TOP}/.luaurc`), '"znile": "./z-nile"')).toBe(true) -- c0120 override: the root's .luaurc
 	end)
 end)

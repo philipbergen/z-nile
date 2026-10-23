@@ -12,6 +12,20 @@ local publish = require("@znile/engine/publish")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
+-- c0120 override: the registry c0114 shipped (pickman at tracker/), the layout this window is about; the repository's
+-- and the tracker fixtures' (engine.REGISTRY) have moved pickman into pickman/.tracker since
+local C0114_REGISTRY = table.concat({
+	"retired = []",
+	"",
+	"[[project]]",
+	'name = "pickman"',
+	'root = "tracker"',
+	"",
+	"[[project]]",
+	'name = "z-nile"',
+	'root = "z-nile/.tracker"',
+	"",
+}, "\n")
 local f: trackerfix.Fixture
 local wt = ""
 
@@ -51,7 +65,8 @@ return t.spec("c0114 the counter across the landing", function(it)
 		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
 		fixture.git(wt, { "config", "user.name", "c0114-window" })
 		fixture.git(wt, { "config", "user.email", "c0114-window@example.invalid" })
-		fs.writeFile(`{wt}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
+		-- c0120 override: the registry c0114 shipped (C0114_REGISTRY), not the repository's
+		fs.writeFile(`{wt}/z-nile/projects.toml`, C0114_REGISTRY)
 		fixture.git(wt, { "add", "-A" })
 		fixture.git(wt, { "commit", "-q", "-m", "c0114: the registry" })
 	end)
@@ -106,7 +121,7 @@ return t.spec("c0114 the counter across the landing", function(it)
 		-- the landing: origin gains the registry, and tracker/next is still the counter
 		trackerfix.elsewhere(
 			f,
-			{ ["z-nile/projects.toml"] = fs.readFile("z-nile/projects.toml") },
+			{ ["z-nile/projects.toml"] = C0114_REGISTRY }, -- c0120 override: the registry c0114 shipped
 			"c0114 lands"
 		)
 		fixture.git(wt, { "fetch", "-q", "origin" })

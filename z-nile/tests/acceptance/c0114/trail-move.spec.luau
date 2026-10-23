@@ -191,7 +191,8 @@ return t.spec("c0114 an item's past follows it across roots", function(it)
 			fixture.git(base, { "commit", "-q", "-m", message }, { env = at(day) })
 		end
 		local function raft(id: string, day: string)
-			local dir = `{base}/tracker/rafts/done/{id}`
+			-- c0120 override: engine.copy's registry retires tracker/; pickman's rafts live in pickman/.tracker
+			local dir = `{base}/pickman/.tracker/rafts/done/{id}`
 			fs.writeDir(dir)
 			-- metrics dates a raft by its created: day
 			local stubbed =
@@ -206,7 +207,9 @@ return t.spec("c0114 an item's past follows it across roots", function(it)
 		commit("2021-01-01", "a raft reviewed after lessons existed")
 		fixture.git(base, { "rm", "-q", "-r", "scripts" })
 		engine.copy(root, base) -- z-nile/engine/lessons.luau is first added now
-		fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
+		-- c0120 override: the spec runs from z-nile/; rokit.toml is the checkout top's
+		local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+		fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{top}/rokit.toml`))
 		commit("2022-01-01", "the move into z-nile")
 		raft("R0020", "2023-01-01")
 		commit("2023-01-01", "another raft")

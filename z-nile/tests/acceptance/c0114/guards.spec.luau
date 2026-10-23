@@ -13,6 +13,9 @@ local trackerfix = require("@tests/lib/trackerfix")
 
 local root = fixture.physical(".") :: string
 local base = `{root}/.cache/c0114-guards`
+-- c0120 override: the spec runs from z-nile/ (its home, whose .cache holds the fixtures), so the files it copies and the
+-- checkout it asks about are the checkout's top
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -30,7 +33,7 @@ local function repo(name: string, files: { string }): string
 		if parent then
 			fs.writeDir(`{dir}/{parent}`)
 		end
-		t.expect(process.exec("cp", { "-R", `{root}/{rel}`, `{dir}/{rel}` }).ok).toBe(true)
+		t.expect(process.exec("cp", { "-R", `{TOP}/{rel}`, `{dir}/{rel}` }).ok).toBe(true) -- c0120 override: from the top
 	end
 	return dir
 end
@@ -73,7 +76,8 @@ return t.spec("c0114 the guards fail closed", function(it)
 			-- the answer itself: a fixture is not one this run protects, this checkout is
 			local ask = 'source z-nile/lib/fence.sh && pickman_guarded "$PWD"'
 			t.expect(fixture.exec(wt, "bash", { "-c", ask }).stdout).toBe("unguarded\n")
-			t.expect(process.exec("bash", { "-c", ask }).stdout).toBe("guarded\n")
+			-- c0120 override: this checkout is asked about from its top, where z-nile/lib/fence.sh is
+			t.expect(process.exec("bash", { "-c", ask }, { cwd = TOP }).stdout).toBe("guarded\n")
 			-- the explicit "unguarded" publishes
 			local before = tip()
 			t.expect(trackerfix.tr(f, wt, { "new", "issue", "c", "published", "--project", "pickman" }).ok)
@@ -138,21 +142,30 @@ return t.spec("c0114 the guards fail closed", function(it)
 	end)
 
 	it("the spec runner refuses to start without z-nile/lib/fence.sh", function()
-		local dir = repo("runner", { "tests/run.luau", "tests/lib", ".luaurc", "rokit.toml" })
-		fs.writeDir(`{dir}/tests/probe`)
+		-- c0120 override: the runner and its harness are z-nile's (z-nile/tests, with z-nile/.luaurc), run from the copy's
+		-- z-nile home, whose .cache the probe writes to
+		local dir = repo(
+			"runner",
+			{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/.luaurc", ".luaurc", "rokit.toml" }
+		)
+		local home = `{dir}/z-nile`
+		fs.writeDir(`{home}/tests/probe`)
 		local call = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
+		-- c0120 override: the spec runs from z-nile/, its home, after the move
 		fs.writeFile(
-			`{dir}/tests/probe/marker.spec.luau`,
+			`{home}/tests/probe/marker.spec.luau`,
 			`--!strict\nlocal fs = {call}("@lune/fs")\nlocal t = {call}("@tests/lib/t")\nfs.writeFile(".cache/spec-ran", "")\n`
 				.. 'return t.spec("marker", function(it)\n\tit("runs", function() end)\nend)\n'
 		)
+		-- c0120 override: the spec runs from z-nile/, its home, after the move
 		local r = process.exec("lune", { "run", "tests/run", "--", "tests/probe/marker.spec.luau" }, {
-			cwd = dir,
+			cwd = home,
 			env = { PICKMAN_TEST_FENCE = "" }, -- a top-level run of the copy: only the marker is cleared
 		})
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout .. r.stderr, "z-nile/lib/fence.sh")).toBe(true)
-		t.expect(fs.isFile(`{dir}/.cache/spec-ran`)).toBe(false)
+		-- c0120 override: the spec runs from z-nile/, its home, after the move
+		t.expect(fs.isFile(`{home}/.cache/spec-ran`)).toBe(false)
 		fs.removeDir(base)
 	end)
 end)

@@ -9,8 +9,11 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
+local home = (string.gsub(process.cwd, "/+$", ""))
 local hook = `{root}/z-nile/lib/git-hooks/reference-transaction` -- c0114: the guards moved
-local base = `{root}/.cache/c0131-refuse`
+-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
+local base = `{home}/.cache/c0131-refuse`
 local ZERO = string.rep("0", 40)
 local ONE = string.rep("1", 40)
 local TWO = string.rep("2", 40)

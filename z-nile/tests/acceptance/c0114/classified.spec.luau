@@ -7,8 +7,75 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+-- c0120 override: the spec runs from z-nile/, its home, after the move
+local serde = require("@lune/serde")
 local store = require("@znile/engine/store")
 local t = require("@tests/lib/t")
+
+-- c0120 override: the spec runs from z-nile/, but the store reads the tracker from the folder it runs in, so the items
+-- are read by a child run at the checkout's top (a script under this home's .cache), each document's path made absolute
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local HERE = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
+local ITEMS: { [string]: { store.Item } }? = nil
+-- c0120 override: a copy of the checkout's tooling and every project root (the working tree's files), a repository of
+-- its own under this home's .cache, whose check.sh files fence the copy, never the real checkout
+local TREE = `{HERE}/.cache/c0114-classified-tree`
+local function copyTree(): string
+	if fs.isDir(TREE) then
+		fs.removeDir(TREE)
+	end
+	fs.writeDir(TREE)
+	local listed = process.exec(
+		"git",
+		{ "ls-files", "-co", "--exclude-standard", "zn", "scripts", "z-nile", "pickman/.tracker" },
+		{ cwd = TOP }
+	)
+	t.expect(listed.ok).toBe(true)
+	for path in string.gmatch(listed.stdout, "[^\n]+") do
+		if fs.isFile(`{TOP}/{path}`) then
+			local parent = string.match(path, "^(.*)/[^/]+$")
+			if parent then
+				fs.writeDir(`{TREE}/{parent}`)
+			end
+			t.expect(process.exec("cp", { "-p", `{TOP}/{path}`, `{TREE}/{path}` }).ok).toBe(true)
+		end
+	end
+	t.expect(process.exec("git", { "init", "-q", TREE }).ok).toBe(true)
+	return TREE
+end
+local function allItems(kind: string): { store.Item }
+	if not ITEMS then
+		local dir = `{HERE}/.cache/c0114-classified-items`
+		fs.writeDir(dir)
+		fs.writeFile(
+			`{dir}/items.luau`,
+			table.concat({
+				`local serde = {REQ}("@lune/serde")`,
+				`local store = {REQ}("@znile/engine/store")`,
+				"local out = {}",
+				'for _, kind in { "issue", "raft" } do',
+				"\tout[kind] = store.all(kind :: any)",
+				"end",
+				'print(serde.encode("json", out))',
+				"",
+			}, "\n")
+		)
+		local r = process.exec("lune", { "run", `{dir}/items.luau` }, { cwd = TOP })
+		fs.removeDir(dir)
+		if not r.ok then
+			error(`listing the items failed: {r.stderr}`)
+		end
+		local decoded = serde.decode("json", r.stdout) :: { [string]: { store.Item } }
+		for _, items in decoded do
+			for _, item in items do
+				item.doc = `{TOP}/{item.doc}`
+			end
+		end
+		ITEMS = decoded
+	end
+	return (ITEMS :: { [string]: { store.Item } })[kind] or {}
+end
 
 -- the tooling: the tracker, its board and spend, the gate and the selector, the repository guards and the spec runner,
 -- CI and bootstrap, the skills and the process
@@ -181,7 +248,7 @@ local PICKMAN: { [string]: { string } } = {
 -- every item of `kind` by slug, each slug seen once
 local function bySlug(kind: string): { [string]: store.Item }
 	local out: { [string]: store.Item } = {}
-	for _, item in store.all(kind) do
+	for _, item in allItems(kind) do -- c0120 override: read at the top
 		if out[item.slug] then
 			error(`two {kind}s share the slug {item.slug}: {out[item.slug].id}, {item.id}`)
 		end
@@ -216,14 +283,16 @@ return t.spec("c0114 every item is filed in its project", function(it)
 		t.expect(table.concat(filed(ZNILE, "z-nile/.tracker"), "\n")).toBe("")
 	end)
 
-	it("the game items are in tracker/", function()
+	-- c0120 override: pickman's items moved with the game into pickman/.tracker/
+	it("the game items are in pickman/.tracker/", function()
 		t.expect(#PICKMAN.issue).toBe(43)
 		t.expect(#PICKMAN.raft).toBe(20)
-		t.expect(table.concat(filed(PICKMAN, "tracker"), "\n")).toBe("")
+		-- c0120 override: pickman's files live in pickman/ (its home)
+		t.expect(table.concat(filed(PICKMAN, "pickman/.tracker"), "\n")).toBe("")
 	end)
 
 	it("no feature or defect is filed in z-nile's root", function()
-		for _, item in store.all("issue") do
+		for _, item in allItems("issue") do -- c0120 override: read at the top
 			if item.root == "z-nile/.tracker" then
 				t.expect(string.sub(item.id, 1, 1)).toBe("c")
 			end
@@ -234,8 +303,10 @@ return t.spec("c0114 every item is filed in its project", function(it)
 	-- gate in this checkout. The loop below refuses to start without the proof.
 	local listing = false
 	it("list mode holds through the scripts/lib/ac.sh forwarder, and the runner refuses it", function()
-		local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
-		local dir = `{root}/.cache/c0114-classified`
+		-- c0120 override: the fixtures are under this home's .cache. The jail refuses the checkout top's .cache, where the
+		-- real ac.sh writes its fence's sentinel, so the forwarder (and below, every item's check.sh) runs in a copy
+		local root = copyTree()
+		local dir = `{HERE}/.cache/c0114-classified`
 		if fs.isDir(dir) then
 			fs.removeDir(dir)
 		end
@@ -270,8 +341,9 @@ return t.spec("c0114 every item is filed in its project", function(it)
 		local bad: { string } = {}
 		local expected, listed = 0, 0
 		for _, kind in { "issue", "raft" } do
-			for _, item in store.all(kind) do
-				local path = `{item.dir}/check.sh`
+			-- c0120 override: the items are read at the top, and each check.sh runs in the copy (see above)
+			for _, item in allItems(kind) do
+				local path = `{TREE}/{item.dir}/check.sh`
 				if item.state ~= "done" and fs.isFile(path) then
 					local hasCheck = false
 					for line in string.gmatch(fs.readFile(path), "[^\n]+") do
@@ -280,10 +352,11 @@ return t.spec("c0114 every item is filed in its project", function(it)
 						end
 					end
 					-- at most 60 s each, so a check.sh that ignores list mode can't hold the gate
+					-- c0120 override: the spec runs from z-nile/, its home, after the move
 					local r = process.exec(
 						"perl",
 						{ "-e", "alarm shift; exec @ARGV or die", "60", "bash", path },
-						{ env = { AC_LIST = "1" } }
+						{ cwd = TREE, env = { AC_LIST = "1" } }
 					)
 					local ok = r.ok and string.find(r.stdout, "criteria listed (none run)", 1, true) ~= nil
 					local draft = string.find(r.stdout, "no acceptance checks defined", 1, true) ~= nil
@@ -304,5 +377,6 @@ return t.spec("c0114 every item is filed in its project", function(it)
 		-- no floor on how many items are live: the backlog shrinks and grows on its own (code review 001 F1); list mode
 		-- itself is proven on the fixture before this loop runs
 		t.expect(listed).toBe(expected)
+		fs.removeDir(TREE) -- c0120 override: the copy
 	end)
 end)

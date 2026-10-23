@@ -6,12 +6,40 @@
 -- writes only under .cache/c0114-finished and .cache/c0114-finished-tip.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+-- c0120 override: the spec runs from z-nile/, its home, after the move
+local process = require("@lune/process")
 local rewrites = require("./rewrites")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
+-- c0120 override: this spec judges c0114's rewrite on c0114's own result, the tree before c0120's move (c0120 moved
+-- pickman's items into pickman/.tracker and rewrote the finished files again for their homes; c0120's AC18 pins that
+-- second rewrite, so each rewrite has one owner). The tree before c0120's move is the parent of the commit that removed
+-- tracker/rafts/done/R0001/check.sh; before c0120 there is none, and the working tree is that tree. It runs from
+-- z-nile/ since c0120, so the checkout is read from its top.
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local PRE: string? = nil
+if not fs.isFile(`{TOP}/tracker/rafts/done/R0001/check.sh`) then
+	local moved = process.exec(
+		"git",
+		{ "log", "-1", "--format=%H", "--", "tracker/rafts/done/R0001/check.sh" },
+		{ cwd = TOP }
+	)
+	PRE = (string.gsub(moved.stdout, "%s+$", "")) .. "^"
+end
+-- a listed file's text in c0114's result
+local function readAt(f: string): string?
+	if PRE == nil then
+		return if fs.isFile(`{TOP}/{f}`) then fs.readFile(`{TOP}/{f}`) else nil
+	end
+	local r = process.exec("git", { "show", `{PRE}:{f}` }, { cwd = TOP })
+	return if r.ok then r.stdout else nil
+end
+
 -- every item id whose folder is under z-nile/.tracker in the tree at `base`
-local function movedIds(base: string): { [string]: boolean }
+local function movedIds(given: string): { [string]: boolean }
+	-- c0120 override: "." is the checkout's top (this spec runs from z-nile/)
+	local base = if given == "." then TOP else given
 	local moved: { [string]: boolean } = {}
 	for _, kind in { "issues", "rafts" } do
 		for _, state in { "", "active/", "done/" } do
@@ -35,11 +63,14 @@ local function unsettled(base: string): { string }
 	local moved = movedIds(base)
 	local out: { string } = {}
 	for _, f in rewrites.FINISHED do
+		-- c0120 override: the real tree is read as c0114 left it (readAt); a fixture as it is
 		local path = `{base}/{f}`
-		if not fs.isFile(path) then
+		local found = if base == "." then readAt(f) elseif fs.isFile(path) then fs.readFile(path) else nil
+		if not found then
 			table.insert(out, `{f} (missing)`)
 		else
-			local text = fs.readFile(path)
+			-- c0120 override: the spec runs from z-nile/, its home, after the move
+			local text = found :: string
 			local settled = rewrites.paths(text, moved) == text
 			-- an item whose special edits undo a rewrite (a spec case name) is settled when they give the same text
 			if not settled and rewrites.SPECIAL[f] then
@@ -106,7 +137,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
 		for _, f in rewrites.FINISHED do
 			local dir = string.match(f, "^(.*)/[^/]+$") :: string
 			fs.writeDir(`{base}/{dir}`)
-			fs.writeFile(`{base}/{f}`, fs.readFile(f))
+			fs.writeFile(`{base}/{f}`, readAt(f) :: string) -- c0120 override: as c0114 left it
 		end
 		fs.writeDir(`{base}/tracker/rafts/done/R9990`)
 		fs.writeFile(
@@ -128,7 +159,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
 			if not table.find(rewrites.FINISHED, path) then
 				error(`SPECIAL {path}: not a listed finished check.sh`)
 			end
-			local text = fs.readFile(path)
+			local text = readAt(path) :: string -- c0120 override: as c0114 left it
 			for _, e in edits do
 				t.expect(string.find(text, e[2], 1, true) ~= nil).toBe(true)
 			end

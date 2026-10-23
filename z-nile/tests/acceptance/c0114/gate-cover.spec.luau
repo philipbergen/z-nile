@@ -12,14 +12,17 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0114-gate`
+-- c0120 override: the spec runs from z-nile/ (its home, whose .cache holds the fixtures); the checkout it reads, copies
+-- and runs the gate's tools in is the checkout's top
+local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+local base = `{here}/.cache/c0114-gate`
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 local function affected(path: string): string
-	local r = process.exec("lune", { "run", "z-nile/affected", "--", path })
+	local r = process.exec("lune", { "run", "z-nile/affected", "--", path }, { cwd = root }) -- c0120 override: at the top
 	if not r.ok then
 		error(r.stderr)
 	end
@@ -38,7 +41,12 @@ local function write(path: string, text: string)
 end
 -- the gate's format and lint folders, as z-nile/check.sh takes them (`lune run z-nile/roots -- --luau-dirs`), in `cwd`
 local function luauDirs(cwd: string?): { string }
-	local r = process.exec("lune", { "run", `{root}/z-nile/roots`, "--", "--luau-dirs" }, { cwd = cwd })
+	-- c0120 override: the real tree's from its top
+	local r = process.exec(
+		"lune",
+		{ "run", `{root}/z-nile/roots`, "--", "--luau-dirs" },
+		{ cwd = cwd or root }
+	)
 	if not r.ok then
 		error(r.stderr)
 	end
@@ -61,7 +69,10 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 				t.expect(affected(p)).toBe("ALL\n")
 			end
 			t.expect(affected("z-nile/.tracker/issues/c0001/c0001.md")).toBe("")
-			t.expect(affected("tracker/issues/c0001/c0001.md")).toBe("")
+			-- c0120 override: pickman's root is pickman/.tracker; tracker/ is retired, and a file there again runs
+			-- everything, so the old-roots spec reports it
+			t.expect(affected("pickman/.tracker/issues/c0001/c0001.md")).toBe("")
+			t.expect(affected("tracker/issues/c0001/c0001.md")).toBe("ALL\n")
 		end
 	)
 
@@ -69,7 +80,18 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 		"the format stage checks z-nile/ and z-nile/.tracker/, which stylua skips unless it is named",
 		function()
 			local dirs = luauDirs()
-			for _, d in { "src", "tests", "scripts", "tracker", "z-nile", "z-nile/.tracker" } do
+			-- c0120 override: the game's folders are pickman/'s, its root pickman/.tracker; the root has no tests/ (z-nile's
+			-- moved into z-nile/)
+			for _, d in
+				{
+					"pickman/src",
+					"pickman/tests",
+					"pickman/.tracker",
+					"scripts",
+					"z-nile",
+					"z-nile/.tracker",
+				}
+			do
 				t.expect(table.find(dirs, d) ~= nil).toBe(true)
 			end
 			if fs.isDir(base) then
@@ -96,9 +118,21 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 	it(
 		"the types stage reads z-nile/ with Lune definitions, but not the sequestered specs under .tracker/",
 		function()
-			local gate = fs.readFile("z-nile/check.sh")
-			t.expect(has(gate, "--platform=standard --ignore='**/.tracker/**' tests scripts z-nile"))
-				.toBe(true)
+			-- c0120 override: the folders come from the projects' homes (the gate's plan), each .tracker/ ignored; the gate
+			-- is read and planned at the top, and it skips the homes' .cache folders (z-nile/.cache lies inside z-nile/)
+			local gate = fs.readFile(`{root}/z-nile/check.sh`)
+			t.expect(
+				has(
+					gate,
+					[[--platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' "${LUNE_DIRS[@]}"]]
+				)
+			).toBe(true)
+			local plan = process.exec("bash", { "z-nile/check.sh", "--plan" }, { cwd = root })
+			local line = string.match(plan.stdout, "types %(Lune%): ([^\n]*)") or ""
+			-- c0120 override: the root has no tests/ (z-nile's moved into z-nile/)
+			for _, d in { "scripts", "z-nile", "pickman/tests", "pickman/scripts" } do
+				t.expect(table.find(string.split(line, " "), d) ~= nil).toBe(true)
+			end
 		end
 	)
 
@@ -106,10 +140,13 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 		"the repository-fence scan reads ./zn, z-nile/ and every root's check.sh, not their unpromoted specs",
 		function()
 			local scan = `{base}/scan`
+			-- c0120 override: the runner, its harness and the scan spec are z-nile's (z-nile/tests, with z-nile/.luaurc),
+			-- run from the copy's z-nile home
 			copy(scan, {
-				"tests/run.luau",
-				"tests/lib",
-				"tests/tooling/repo-fence.spec.luau",
+				"z-nile/tests/run.luau",
+				"z-nile/tests/lib",
+				"z-nile/tests/tooling/repo-fence.spec.luau",
+				"z-nile/.luaurc",
 				"z-nile/lib",
 				".luaurc",
 				"rokit.toml",
@@ -124,10 +161,11 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 				`{scan}/z-nile/.tracker/issues/c0001/acceptance/x.spec.luau`,
 				`-- {hooks}, not promoted yet\n`
 			)
+			-- c0120 override: the spec runs from z-nile/, its home, after the move
 			local r = process.exec(
 				"lune",
 				{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
-				{ cwd = scan, env = { PICKMAN_TEST_FENCE = "" } }
+				{ cwd = `{scan}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
 			)
 			local out = r.stdout .. r.stderr
 			t.expect(has(out, ":: no spec, check.sh or script switches a guard off or points git elsewhere"))
@@ -141,7 +179,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			local broken = process.exec(
 				"lune",
 				{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
-				{ cwd = scan, env = { PICKMAN_TEST_FENCE = "" } }
+				{ cwd = `{scan}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } } -- c0120 override: from z-nile/
 			)
 			t.expect(broken.ok).toBe(false)
 			t.expect(has(broken.stdout .. broken.stderr, "z-nile/engine/projects.luau does not load"))
@@ -159,7 +197,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 		t.expect(table.find(found, 'z-nile/engine/new.luau: fs.writeFile(".cache/new", text)') ~= nil)
 			.toBe(true)
 		for path in cachepaths.ALLOWED do
-			t.expect(fs.isFile(path)).toBe(true)
+			t.expect(fs.isFile(`{root}/{path}`)).toBe(true) -- c0120 override: from the top
 			t.expect(string.sub(path, 1, 15) == "scripts/tracker" or string.sub(path, 1, 11) == "scripts/lib")
 				.toBe(false)
 		end
@@ -233,9 +271,10 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			t.expect(table.find(luauDirs(fx), "probe/.tracker") ~= nil).toBe(true)
 			-- and in the real tree every current root is at every site, the ones that can't read the registry included
 			local projects = require("@znile/engine/projects")
-			local roots = projects.roots(projects.load("."))
+			-- c0120 override: the real tree is read from its top
+			local roots = projects.roots(projects.load(root))
 			local dirs = luauDirs()
-			local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml")) :: any
+			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
 			local ignored: { string } = wf["on"].push["paths-ignore"]
 			for _, r in roots do
 				t.expect(table.find(dirs, r) ~= nil).toBe(true)
@@ -249,17 +288,21 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 	it(
 		"CI bootstraps with z-nile/setup.sh and skips tracker-only pushes to every root and the counter",
 		function()
-			local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml")) :: any
+			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
+			-- c0120 override: pickman's root moved; tracker/ (retired) is no longer ignored. The workflows are read from
+			-- the top
 			t.expect(wf["on"].push["paths-ignore"])
-				.toEqual({ "tracker/**", "z-nile/.tracker/**", "z-nile/next" })
+				.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
 			local runs = ""
 			for _, step in wf.jobs.gate.steps do
 				runs ..= (step.run or "") .. "\n"
 			end
-			t.expect(has(runs, "z-nile/setup.sh\n")).toBe(true)
+			-- c0120 override: the bootstrap installs the tools only; each job then runs its own project's gate
+			t.expect(has(runs, "z-nile/setup.sh --tools\n")).toBe(true)
 			t.expect(has(runs, "./zn members")).toBe(true)
 			t.expect(has(runs, "scripts/")).toBe(false)
-			local board = fs.readFile(".github/workflows/board.yml")
+			-- c0120 override: the spec runs from z-nile/, its home, after the move
+			local board = fs.readFile(`{root}/.github/workflows/board.yml`)
 			t.expect(has(board, "run: ./zn board --out dist/board.html -O")).toBe(true)
 			fs.removeDir(base)
 		end
