@@ -5,7 +5,11 @@
 -- raft spanning two roots is clean: R0001 does by decision. Plain folders under .cache/audit-raft-roots; no git.
 local audit = require("@znile/engine/audit")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
+
+-- c0120: the spec runs from z-nile/; the registry is read at the checkout's top, and pickman's root is pickman/.tracker
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local base = ".cache/audit-raft-roots"
 
@@ -22,7 +26,7 @@ local function tree(name: string, items: { [string]: string }): string
 	if fs.isDir(dir) then
 		fs.removeDir(dir)
 	end
-	write(`{dir}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
+	write(`{dir}/z-nile/projects.toml`, fs.readFile(`{TOP}/z-nile/projects.toml`))
 	write(`{dir}/z-nile/next`, "issue 100 a-b-c\nraft 100 a-b-c\n")
 	for path, text in items do
 		local id = string.match(path, "([^/]+)$") :: string
@@ -44,20 +48,24 @@ end
 return t.spec("audit: a raft lives in its members' project", function(it)
 	it("an unfinished pickman raft listing a z-nile issue is an error", function()
 		local dir = tree("listed", {
-			["tracker/rafts/R0047"] = doc("R0047", "issues: [c0127]\n"),
+			["pickman/.tracker/rafts/R0047"] = doc("R0047", "issues: [c0127]\n"),
 			["z-nile/.tracker/issues/c0127"] = doc("c0127", "raft: \n"),
 		})
 		local found = spans(dir)
 		t.expect(#found).toBe(1)
 		t.expect(
-			string.find(found[1], "tracker/rafts/R0047: c0127 is in z-nile/.tracker, not tracker", 1, true)
-				~= nil
+			string.find(
+				found[1],
+				"pickman/.tracker/rafts/R0047: c0127 is in z-nile/.tracker, not pickman/.tracker",
+				1,
+				true
+			) ~= nil
 		).toBe(true)
 	end)
 
 	it("the same with the link only in the issue's raft: field is an error", function()
 		local dir = tree("linked", {
-			["tracker/rafts/active/R0047"] = doc("R0047", "issues: []\n"),
+			["pickman/.tracker/rafts/active/R0047"] = doc("R0047", "issues: []\n"),
 			["z-nile/.tracker/issues/active/c0127"] = doc("c0127", "raft: R0047\n"),
 		})
 		t.expect(#spans(dir)).toBe(1)
@@ -73,9 +81,9 @@ return t.spec("audit: a raft lives in its members' project", function(it)
 
 	it("a finished raft spanning two roots is clean (R0001's shape)", function()
 		local dir = tree("done", {
-			["tracker/rafts/done/R0001"] = doc("R0001", "issues: [c0001, c0002]\n"),
+			["pickman/.tracker/rafts/done/R0001"] = doc("R0001", "issues: [c0001, c0002]\n"),
 			["z-nile/.tracker/issues/done/c0001"] = doc("c0001", "raft: R0001\n"),
-			["tracker/issues/done/c0002"] = doc("c0002", "raft: R0001\n"),
+			["pickman/.tracker/issues/done/c0002"] = doc("c0002", "raft: R0001\n"),
 		})
 		t.expect(#spans(dir)).toBe(0)
 		fs.removeDir(base)

@@ -6,9 +6,12 @@
 -- without --project, the project refusal comes first. Fixture under .cache/window-new-raft (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
+-- c0120: the spec runs from z-nile/; the registry is read at the checkout's top, and pickman's root is pickman/.tracker
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local f: trackerfix.Fixture
 local wt = ""
 local WINDOW = "capture from the main checkout until it does, never offline here"
@@ -29,7 +32,7 @@ local function refused(r: fixture.Result, needle: string, before: string)
 		error(`stderr lacks "{needle}": {r.stderr}`)
 	end
 	t.expect(has(r.stderr, "PICKMAN_PUBLISH=0 creates it locally")).toBe(false)
-	t.expect(fs.isDir(`{wt}/tracker/rafts/R0011`)).toBe(false)
+	t.expect(fs.isDir(`{wt}/pickman/.tracker/rafts/R0011`)).toBe(false)
 	t.expect(tip()).toBe(before)
 	t.expect(fixture.git(f.origin, { "show", "main:tracker/next" })).toBe("issue 51 a-b-c\nraft 11 a-b-c")
 end
@@ -38,7 +41,7 @@ return t.spec("new raft in c0114's execution window", function(it)
 	it("sets up a pre-c0114 origin and a branch with the registry", function()
 		f = trackerfix.new("window-new-raft", {
 			["tracker/next"] = "issue 51 a-b-c\nraft 11 a-b-c\n",
-			["tracker/issues/c0050/c0050.md"] = trackerfix.stub("c0050", "c0050", "new-a-b-c"),
+			["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub("c0050", "c0050", "new-a-b-c"),
 		})
 		fixture.git(f.other, { "rm", "-q", "z-nile/projects.toml" })
 		fixture.git(f.other, { "commit", "-q", "-m", "main before c0114" })
@@ -46,7 +49,7 @@ return t.spec("new raft in c0114's execution window", function(it)
 		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
 		fixture.git(wt, { "config", "user.name", "window-new-raft" })
 		fixture.git(wt, { "config", "user.email", "window-new-raft@example.invalid" })
-		fs.writeFile(`{wt}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
+		fs.writeFile(`{wt}/z-nile/projects.toml`, fs.readFile(`{TOP}/z-nile/projects.toml`))
 		fixture.git(wt, { "add", "-A" })
 		fixture.git(wt, { "commit", "-q", "-m", "c0114: the registry" })
 	end)
@@ -68,7 +71,7 @@ return t.spec("new raft in c0114's execution window", function(it)
 		function()
 			trackerfix.elsewhere(
 				f,
-				{ ["z-nile/projects.toml"] = fs.readFile("z-nile/projects.toml") },
+				{ ["z-nile/projects.toml"] = fs.readFile(`{TOP}/z-nile/projects.toml`) },
 				"c0114 lands"
 			)
 			local before = tip()
@@ -81,7 +84,7 @@ return t.spec("new raft in c0114's execution window", function(it)
 			if not r.ok then
 				error(r.stderr .. r.stdout)
 			end
-			t.expect(has(r.stdout, "tracker/rafts/R0011/R0011.md")).toBe(true)
+			t.expect(has(r.stdout, "pickman/.tracker/rafts/R0011/R0011.md")).toBe(true)
 			t.expect(tip() ~= before).toBe(true)
 		end
 	)
