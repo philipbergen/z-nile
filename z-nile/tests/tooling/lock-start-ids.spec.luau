@@ -12,11 +12,12 @@ local t = require("@tests/lib/t")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/lock-start-ids`
+local home = (string.gsub(process.cwd, "/+$", ""))
+local base = `{home}/.cache/lock-start-ids`
 local repo = `{base}/real`
 local bin = `{base}/bin`
 local log = `{base}/asked`
-local lock = `{repo}/.cache/tests-run.lock`
+local lock = `{repo}/z-nile/.cache/tests-run.lock`
 
 local function trim(s: string): string
 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
@@ -93,7 +94,7 @@ local function run(probeName: string?, withBin: boolean?, extra: { [string]: str
 	return process.exec(
 		"lune",
 		{ "run", "tests/run", "--", `tests/probe/{probeName or "ok"}.spec.luau` },
-		{ cwd = repo, env = env }
+		{ cwd = `{repo}/z-nile`, env = env }
 	)
 end
 
@@ -140,10 +141,12 @@ return t.spec("R0047 lock start ids", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(repo)
-		for _, rel in { "tests/run.luau", "tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" } do -- c0114: the guards moved
+		for _, rel in
+			{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
+		do -- c0114: the guards moved
 			copyTree(rel)
 		end
-		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "rokit.toml", ".gitignore" } do
+		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "z-nile/.luaurc", "rokit.toml", ".gitignore" } do
 			copyTree(rel)
 		end
 		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
@@ -167,9 +170,9 @@ return t.spec("R0047 lock start ids", function(it)
 			"runner",
 		}
 		must(process.exec("git", commit, { cwd = repo }), "git commit")
-		fs.writeDir(`{repo}/.cache`)
+		fs.writeDir(`{repo}/z-nile/.cache`)
 		write(
-			"tests/probe/ok.spec.luau",
+			"z-nile/tests/probe/ok.spec.luau",
 			'--!strict\nlocal t = require("@tests/lib/t")\nreturn t.spec("ok", function(it)\n'
 				.. '\tit("probe", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
 		)

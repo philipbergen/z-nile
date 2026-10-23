@@ -105,7 +105,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
 	-- R0047 review 001 F1, F2: clears the marker so a copied runner acts as a top-level run
-	["tests/tooling/lock-start-ids.spec.luau"] = {
+	["z-nile/tests/tooling/lock-start-ids.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
 	-- review 004 F1: its runner case clears the marker so a copied runner acts as a top-level run
@@ -247,9 +247,8 @@ for _, dir in C0640_DIRS do
 end
 for _, dir in
 	{
-		`tracker/issues/{C0127}/acceptance`,
-		`tracker/issues/active/{C0127}/acceptance`,
-		"tests/acceptance/" .. C0127,
+		-- c0120: done promoted them to z-nile's home; every key names a file (code review 004 F2)
+		"z-nile/tests/acceptance/" .. C0127,
 	}
 do
 	ALLOWED[`{dir}/reuse.spec.luau`] = { PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run" }
@@ -259,9 +258,8 @@ end
 local C0131 = renamed.id("c0131")
 for _, dir in
 	{
-		`tracker/issues/{C0131}/acceptance`,
-		`tracker/issues/active/{C0131}/acceptance`,
-		"tests/acceptance/" .. C0131,
+		-- c0120: done promoted them to z-nile's home; every key names a file (code review 004 F2)
+		"z-nile/tests/acceptance/" .. C0131,
 	}
 do
 	for _, name in { "accept.spec.luau", "refuse.spec.luau" } do
