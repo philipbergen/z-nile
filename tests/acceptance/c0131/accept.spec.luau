@@ -1,5 +1,5 @@
 --!strict
--- c0131 AC1: the ref guard (scripts/lib/git-hooks/reference-transaction) accepts an empty ref transaction (a
+-- c0131 AC1: the ref guard (z-nile/lib/git-hooks/reference-transaction since c0114) accepts an empty ref transaction (a
 -- fetch with nothing new) in a protected repository from a check.sh flow, and refuses everything it refused
 -- before: an empty transaction during a spec run, any update outside refs/remotes/, and a deleted ref. The hook
 -- is driven directly, as git calls it, in a fixture repository under .cache that the environment names as
@@ -9,7 +9,7 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local hook = `{root}/scripts/lib/git-hooks/reference-transaction`
+local hook = `{root}/z-nile/lib/git-hooks/reference-transaction` -- c0114: the guards moved
 local base = `{root}/.cache/c0131-accept`
 local ZERO = string.rep("0", 40)
 local ONE = string.rep("1", 40)
