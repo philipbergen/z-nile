@@ -12,8 +12,8 @@ A="$HERE/acceptance"
 check "AC1: the reused-pid rule (start ids compared for equality), and startOf gives the same id per process wherever specs run, nil for a non-pid or an exited one" lune run tests/run -- "$A/rules.spec.luau"
 check "AC2: runs record start ids; a lock held only by pids with a different recorded id is taken over; a matching, missing or unreadable id holds; only live pids are read" lune run tests/run -- "$A/reuse.spec.luau"
 check "AC3: the testing skill's Lock bullet states the start-id rule and that an unreadable id still holds" lune run tests/run -- "$A/skill.spec.luau"
-check "AC4: the full gate passes" z-nile/check.sh --full
-check "AC5: on Linux CI, the acceptance specs (sequestered or promoted) pass for this branch's exact, pushed HEAD" bash -c 'z-nile/ci-verify.sh &&
+check "AC4: the full gate passes" ./check.sh --full
+check "AC5: on Linux CI, the acceptance specs (sequestered or promoted) pass for this branch's exact, pushed HEAD" bash -c './ci-verify.sh &&
   n=$(gh run list --workflow check.yml --commit "$(git rev-parse HEAD)" --event workflow_dispatch \
     --json conclusion -q "[.[] | select(.conclusion == \"success\")] | length") && [[ $n -ge 1 ]]'
 

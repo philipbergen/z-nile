@@ -11,6 +11,6 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: Submits has no play-again hook: exports ready, step, pending, close; no onAgain; no again hook in src/server" lune run tests/run -- "$A/submits.spec.luau"
 check "AC2: Hiscores.onAgain stays and an accepted play again is the next run" lune run tests/run -- "$A/onagain.spec.luau"
-check "AC3: the full gate passes" z-nile/check.sh --full
+check "AC3: the full gate passes" ../z-nile/check.sh --full
 
 finish
