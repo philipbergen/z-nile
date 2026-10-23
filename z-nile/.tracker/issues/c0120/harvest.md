@@ -59,3 +59,9 @@
 - review-007 F4: testing/seed-every-enumerated-case
 - review-007 F5: architecture/parsers-refuse-ambiguity
 - review-007 F6: testing/guards-move-with-the-working-directory
+
+- review-008 F1: review/sequestration-reference-not-a-ref
+- review-008 F2: review/sequestration-reference-not-a-ref
+- review-008 F3: testing/seed-every-enumerated-case
+- review-008 F4: review/sequestration-reference-not-a-ref
+- review-008 F5: tracker/item-history-spans-moves-and-compaction
