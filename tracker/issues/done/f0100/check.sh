@@ -2,13 +2,13 @@
 # Acceptance checks for f0100. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/f0100 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/f0100 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/f0100"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+# `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the Blaster: seeded drops, at most three, spending, the fire intents, the shot's line and target" lune run tests/run -- "$A/blaster.spec.luau"
 check "AC2: a fire shares the intent limit and is taken before anyone moves: one spent, the first active ghost eaten on the chain" lune run tests/run -- "$A/shots.spec.luau"
 check "AC3: contact eats roll seeded drops, shot ghosts do not, at most three, shots outlive deaths and levels, every frame has the count" lune run tests/run -- "$A/drops.spec.luau"
