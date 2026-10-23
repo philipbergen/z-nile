@@ -43,3 +43,6 @@
 - review-005 F3: tracker/exhaustive-lists-name-new-things
 - review-006 F1: tracker/audit-what-new-refuses
 - review-006 F2: one-off: a hint named the merging sync where the fetch-only form was meant
+- review-007 F1: one-off: a refute's consequences on their own sub-bullet, which done does not parse
+- review-007 F2: ticket-prep/restated-rules-move-together
+- review-007 F3: testing/no-live-counts-in-promoted-specs
