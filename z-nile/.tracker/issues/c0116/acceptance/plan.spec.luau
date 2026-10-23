@@ -312,4 +312,43 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
 			t.expect(raftplan.isDesignFile("c0002.md", "c0001")).toBe(false)
 		end
 	)
+
+	it(
+		"builds the commands with each new raft's project, and refuses the plan if a root has no project",
+		function()
+			local ops: { raftplan.Op } = {
+				{
+					kind = "fold",
+					raft = "R0030",
+					type = "defect",
+					root = P,
+					issues = { "d0010", "d0020" },
+					single = false,
+				},
+				{ kind = "new", type = "chore", root = Z, issues = { "c0080", "c0090" }, single = false },
+				{ kind = "new", type = "chore", root = P, issues = { "c0040" }, single = true },
+			}
+			local slugs = { c0080 = "eighty", c0040 = "forty" }
+			local names: { [string]: string } = { [Z] = "z-nile", [P] = "pickman" }
+			local runs, why = raftplan.commands(ops, slugs, function(root: string): string?
+				return names[root]
+			end)
+			t.expect(why).toBe(nil)
+			t.expect(runs).toEqual({
+				{ "fold", "R0030", "d0010", "d0020" },
+				{ "new", "raft", "chore", "eighty", "c0080", "c0090", "--project", "z-nile" },
+				{ "new", "raft", "chore", "forty", "c0040", "--single", "--project", "pickman" },
+			})
+			-- design review 006 F1: a root no project holds refuses the whole plan, never a `--project <root>` that
+			-- `new raft` would refuse after the earlier commands had run
+			names[P] = nil
+			local none, err = raftplan.commands(ops, slugs, function(root: string): string?
+				return names[root]
+			end)
+			t.expect(none).toBe(nil)
+			t.expect(err).toBe(
+				"pickman/.tracker is no project's root in z-nile/projects.toml: raft-plan prints and runs nothing"
+			)
+		end
+	)
 end)

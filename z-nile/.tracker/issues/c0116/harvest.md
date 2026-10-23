@@ -22,3 +22,4 @@
 - design-review-004 F3: ticket-prep/restated-rules-move-together
 - design-review-004 F4: one-off: the refusal printed the exact line that silences it; the message now names the record's ids and the rule "never edit a written review"
 - design-review-005 F1: architecture/one-reader-per-format, ticket-prep/restated-rules-move-together
+- design-review-006 F1: architecture/guard-no-is-explicit

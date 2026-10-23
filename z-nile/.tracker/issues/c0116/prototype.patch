@@ -1578,10 +1578,10 @@ index 00000000..ac65ce07
 +end)
 diff --git a/z-nile/.tracker/issues/c0116/acceptance/plan.spec.luau b/z-nile/.tracker/issues/c0116/acceptance/plan.spec.luau
 new file mode 100644
-index 00000000..7adaa7cf
+index 00000000..1ac9c68b
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/acceptance/plan.spec.luau
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,354 @@
 +--!strict
 +-- c0116 AC3: z-raft's no-argument policy, raftplan.plan (pure). One type and one project per raft; only prepared
 +-- backlog rafts that are not single take more; defects fold into the lowest open prepared defect raft that fits, chores
@@ -1894,6 +1894,45 @@ index 00000000..7adaa7cf
 +			t.expect(raftplan.recordHash("c0001", moved)).toBe(h)
 +			t.expect(raftplan.isDesignFile("c0001.md", "c0001")).toBe(true)
 +			t.expect(raftplan.isDesignFile("c0002.md", "c0001")).toBe(false)
++		end
++	)
++
++	it(
++		"builds the commands with each new raft's project, and refuses the plan if a root has no project",
++		function()
++			local ops: { raftplan.Op } = {
++				{
++					kind = "fold",
++					raft = "R0030",
++					type = "defect",
++					root = P,
++					issues = { "d0010", "d0020" },
++					single = false,
++				},
++				{ kind = "new", type = "chore", root = Z, issues = { "c0080", "c0090" }, single = false },
++				{ kind = "new", type = "chore", root = P, issues = { "c0040" }, single = true },
++			}
++			local slugs = { c0080 = "eighty", c0040 = "forty" }
++			local names: { [string]: string } = { [Z] = "z-nile", [P] = "pickman" }
++			local runs, why = raftplan.commands(ops, slugs, function(root: string): string?
++				return names[root]
++			end)
++			t.expect(why).toBe(nil)
++			t.expect(runs).toEqual({
++				{ "fold", "R0030", "d0010", "d0020" },
++				{ "new", "raft", "chore", "eighty", "c0080", "c0090", "--project", "z-nile" },
++				{ "new", "raft", "chore", "forty", "c0040", "--single", "--project", "pickman" },
++			})
++			-- design review 006 F1: a root no project holds refuses the whole plan, never a `--project <root>` that
++			-- `new raft` would refuse after the earlier commands had run
++			names[P] = nil
++			local none, err = raftplan.commands(ops, slugs, function(root: string): string?
++				return names[root]
++			end)
++			t.expect(none).toBe(nil)
++			t.expect(err).toBe(
++				"pickman/.tracker is no project's root in z-nile/projects.toml: raft-plan prints and runs nothing"
++			)
 +		end
 +	)
 +end)
@@ -2523,7 +2562,7 @@ index 00000000..317042fc
 +	end
 +)
 diff --git a/z-nile/.tracker/issues/c0116/c0116.md b/z-nile/.tracker/issues/c0116/c0116.md
-index c56ecfc3..997962f1 100644
+index c56ecfc3..d69d625e 100644
 --- a/z-nile/.tracker/issues/c0116/c0116.md
 +++ b/z-nile/.tracker/issues/c0116/c0116.md
 @@ -6,7 +6,9 @@ slug: split-raft-step
@@ -2547,7 +2586,7 @@ index c56ecfc3..997962f1 100644
  ## Non-goals
  - Changing the design checklist for a feature, a defect, or a chore beyond taking raft creation out. The three checklists are named in the README by c0115; the signatures and specs of a designed issue stay ticket-prep's job.
  - Choosing models or drawing the board.
-@@ -37,53 +42,498 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -37,53 +42,504 @@ Decided with the user (2026-10-20), from the programme review:
  - Add `z-raft` with the policy above.
  - Add a backlog-only recombine command on `zz-rules` that moves `raft:` and `issues:` and retires the empty raft.
  
@@ -2669,7 +2708,7 @@ index c56ecfc3..997962f1 100644
 +./zn new raft chore c0040 c0040 --single --project pickman
 +skip c0050: no size: (z-design records its estimate of changed lines)
 +```
-+A new raft's slug is its first issue's slug, and it names its project, `--project <name>` (the registry's name for the op's root, `projects.projectOf`): since c0115, `new raft` takes its project from `--project` or the folder it runs in, and z-raft runs in a rafting worktree at the checkout's top, which is no project's folder. `fold` and `recombine` find their raft, so they need none. With no op and no skip it prints `raft-plan: nothing to raft (no prepared issue without a raft)`. Without `--apply` it only reads, so it may run in the main checkout (and it skips nothing: `guardRepoRoot` still runs, as for every command not in `READ_ONLY`). `--apply` refuses the main checkout, then runs each printed command in this process, in order (`cmd.new`, `cmd.fold`), each committing its own edits. `workstreams` keeps its own rule (an issue with no Touched modules overlaps everything there, the safe direction for parallel streams) and now calls `raftplan.overlaps`, one rule for both (lesson zz-arch/one-reader-per-format).
++A new raft's slug is its first issue's slug, and it names its project, `--project <name>` (the registry's name for the op's root, `projects.projectOf`): since c0115, `new raft` takes its project from `--project` or the folder it runs in, and z-raft runs in a rafting worktree at the checkout's top, which is no project's folder. `fold` and `recombine` find their raft, so they need none. The commands are built by `raftplan.commands(ops, slugOf, projectName)`, pure, before anything is printed. A root the registry names no project for refuses the whole plan ("`<root>` is no project's root in z-nile/projects.toml: raft-plan prints and runs nothing"), never a `--project <root>` line that `new raft` would refuse after `--apply` had run the earlier ones (design review 006 F1). The CLI can't reach that branch today, because `store.roots()` is the registry's, so the plan spec pins it on the pure function. With no op and no skip it prints `raft-plan: nothing to raft (no prepared issue without a raft)`. Without `--apply` it only reads, so it may run in the main checkout (and it skips nothing: `guardRepoRoot` still runs, as for every command not in `READ_ONLY`). `--apply` refuses the main checkout, then runs each printed command in this process, in order (`cmd.new`, `cmd.fold`), each committing its own edits. `workstreams` keeps its own rule (an issue with no Touched modules overlaps everything there, the safe direction for parallel streams) and now calls `raftplan.overlaps`, one rule for both (lesson zz-arch/one-reader-per-format).
 +
 +### 4. z-design: one issue, no raft
 +`z-nile/skills/z-design/SKILL.md` changes (quoted where a spec pins it):
@@ -2873,7 +2912,9 @@ index c56ecfc3..997962f1 100644
 +| raft-plan passes each issue's Touched modules | plan-cli :: prints the plan as commands… | `touched = nil` (M42) | run: killed |
 +| raft-plan passes solo: | plan-cli :: prints the plan… | `solo = false` (M43) | run: killed |
 +| raft-plan passes each issue's project root | plan-cli :: prints the plan… | one root for all (M44) | run: killed |
-+| a printed new raft names its project (c0115: `new raft` takes `--project` or its folder) | plan-cli :: prints the plan as commands…; `--apply` stops at the first refusal… | no `--project` (M93) | run: killed |
++| a printed new raft names its project (c0115: `new raft` takes `--project` or its folder) | plan-cli :: prints the plan as commands…; `--apply` stops at the first refusal… | no `--project` (M93; in `raftplan.commands`, also against plan, M93b) | run: killed |
++| a root with no project refuses the plan before anything is printed or run (review 006 F1) | plan :: builds the commands with each new raft's project, and refuses the plan if a root has no project | the root as its own project name (M94) | run: killed |
++| `raft-plan` fails on that refusal | none (the CLI can't reach it: `store.roots()` is the registry's) | return without failing (M95) | reasoned: survives; the refusal itself is pinned by M94 |
 +| raft-plan passes each raft's single: | plan-cli :: prints the plan… (R0025 single is lower than R0030) | `single = false` (M45) | run: killed |
 +| raft-plan --apply refuses the main checkout | plan-cli :: refuses --apply in the main checkout | refusal dropped (M46) | run: killed |
 +| raft-plan passes size: | plan-cli :: prints the plan… (c0050 skipped) | `size = 100` (M47) | run: killed |
@@ -3020,6 +3061,10 @@ index c56ecfc3..997962f1 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
++Design review 006 (**approve**, one low) answered, 2026-10-23, on the same base (prototype on 689e29b9, on 77298f1e).
++- F1: `raft-plan`'s commands are now built by `raftplan.commands`, pure, before anything is printed. A root with no project refuses the whole plan, and `raft-plan` fails with that message, so neither the printed list nor `--apply` starts. A new plan-spec case pins both the good path (fold, a new raft per project, `--single` before `--project`) and the refusal. Mutants M93 (moved into `raftplan`), M93b and M94 are killed. M95 (`raft-plan` returning instead of failing) is reasoned: the CLI can't reach the branch. The plan-cli mutants M42 to M47 and M68 were rerun on the moved code and all killed.
++- `z-nile/check.sh --full`: pickman 1160/1160 (173 files). z-nile 1080 passed, 1 failed (154 files): the same c0120/finished failure on c0115's own done `check.sh` as on the simulation alone (below). `./zn check c0116`: **10/10**. Lessons: "39 lessons, 244 harvest entries, ok" on the prototype and "45 lessons, 296 harvest entries, ok" here. `--uncovered c0116`: every finding is covered.
++
 +Rebased onto c0115's final design, 2026-10-23: `origin/prep-c0115` at 5308d42f is merged into this branch, and the prototype is rebuilt on `proto-c0115` 77298f1e with a fresh simulation of c0115 done (689e29b9). `prototype.patch` is `git diff -M 77298f1e`. Seven cherry-pick conflicts were text where both sides edited one place: c0115's `check.sh` AC3, the README, z-design, z-raft, `main.luau`'s usage, zz-rules, and c0043's and c0111's overrides. In each, c0115's side was kept and c0116's change was put back on top. What c0115 changed under this design:
 +- **Projects** (the project comes from the working directory or `--project`): `new raft` and `new issue` refuse a checkout root that no project holds, and a rafting worktree's top is such a root. So `raft-plan` now prints each new raft with `--project <name>`, the registry's name for the op's root, and `--apply` runs the same line (§3; new mutant M93, killed). z-raft, zz-rules and z-ready show `--project <name>` on every `./zn new raft` command (c0114/docs pins this). `fold`, `unfold`, `recombine` and `release` find their raft, so they take no project. A missing registry already refuses in `projects.load`, and nothing in c0116 reads the roots another way.
 +- **The z-nile home** (`z-nile/`, promoted specs at `z-nile/tests/acceptance/`): `check.sh` runs from `z-nile/`. It falls back to `$ZN_ROOT/z-nile/tests/acceptance/c0116` and runs `"$ZN_ROOT/zn"` for AC8. AC9's paths already resolve from the home. The specs seed pickman's root as `pickman/.tracker`, pass `--project pickman` to `new raft` and `new issue`, read repository files from the top (docs, the metrics sandbox's `.luaurc` and `rokit.toml`), keep their fixtures in the home's `.cache`, and run retired's nested specs from the fixture's `z-nile/` through `process.exec`, as c0120's runner-home does: `fixture.exec` refuses a folder below a fixture. The fixtures' `.gitignore` carries the new `prompt.md` rule, without which `ready` saw its own prompt as dirt. c0114/classified's retired/ override reads the registry at the top. recombine's lesson case now asks only about its own `demo` lesson: the fixture copies z-nile's real lessons, whose sources it lacks.
@@ -3167,6 +3212,14 @@ index 00000000..d140b03f
 @@ -0,0 +1,2 @@
 +# Refute 005: c0116
 +- F1: fixed: differently from the Recommendation, keeping its reasoning. I tried `refuseDirty("renumber")` first, and it turned 26 cases of three promoted specs red (c0001/tracker-lifecycle, c0052/renumber and c0082/cli). Those run `renumber` on trees with untracked files, as the documented duplicate-copy workflow does with a fresh stub, so it would have narrowed a promoted behaviour for a low finding. So I followed the reviewer's own candidate lesson: "git's view" is two views, and each reader takes the one its commit carries. `gitFolderFiles(dir, tracked)` stays one reader. `keepRecords` (compact, remap, renumber) reads the index (`ls-files -c`), because a rewrite commits only tracked files; the carried move's raft reviews keep `-co --exclude-standard`, because a review may not be committed yet. `gitFolderFiles` is not switched to `-c` for the review check. §1 and AC1 now state the same rule. The rv5 Q5 case is in compact-record.spec: renumber with an untracked work file in a member's folder, land, and `ready` succeeds. M92 (`keepRecords` on the `-co` view, round 4's code) run and killed. The lesson is a note on architecture/one-reader-per-format. consequences: a member that is itself untracked (a fresh stub) hashes empty in `keepRecords`, and is then left as it was; a grouped member is always committed, so this never changes a real record.
+diff --git a/z-nile/.tracker/issues/c0116/design-refute-006.md b/z-nile/.tracker/issues/c0116/design-refute-006.md
+new file mode 100644
+index 00000000..528005e0
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0116/design-refute-006.md
+@@ -0,0 +1,2 @@
++# Refute 006: c0116
++- F1: fixed, as the Recommendation's first option. The commands are built by `raftplan.commands(ops, slugOf, projectName)`, pure, before anything is printed. A root `projectName` doesn't name returns nil and the reason ("`<root>` is no project's root in z-nile/projects.toml: raft-plan prints and runs nothing"), and `raft-plan` fails with it. So the printed list and `--apply` start only once every command is known to be accepted. Since `store.roots()` is the registry's, the CLI can't reach this branch, so the case is in plan.spec, on the pure function. It pins fold, a new raft in each project, `--single` before `--project`, and the refusal's message. Mutants: M93 (the `--project` arguments, now in `raftplan`, against plan-cli), M93b (the same, against plan) and M94 (the root as its own name) are killed. M95 (`raft-plan` returning instead of failing) is reasoned. §3 and the mutants table state the rule.
 diff --git a/z-nile/.tracker/issues/c0116/design-review-001.md b/z-nile/.tracker/issues/c0116/design-review-001.md
 new file mode 100644
 index 00000000..a49710d0
@@ -3396,12 +3449,48 @@ index 00000000..a41f305f
 +Verification: `z-nile/check.sh --full` on the clone at 87368fc: **GATE PASSED (full)**, pickman 1068 and z-nile 1053 cases, 0 failed.
 +
 +Verdict: approve
+diff --git a/z-nile/.tracker/issues/c0116/design-review-006.md b/z-nile/.tracker/issues/c0116/design-review-006.md
+new file mode 100644
+index 00000000..9d0caa51
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0116/design-review-006.md
+@@ -0,0 +1,30 @@
++# Review 006: c0116 (design mode)
++Inputs: prep-c0116 at f53513fb (the rebase onto c0115's final design 5308d42f: `c0116.md` §3, the new M93 row and the Verification log, `check.sh`, every acceptance spec's delta); prototype `.worktree/proto-c0116` at c02954ad (on simulation 689e29b9, on `proto-c0115` 77298f1e), with `cmd["raft-plan"]`, `cmd.new` (raft), `projectRoot`, `projects.projectOf`, `store.roots`, `z-nile/lib/ac.sh`, the skills' `new raft` lines and c0114/classified's retired/ override read. The prep's `check.sh` and `acceptance/` are byte-identical to the prototype's. `./zn lessons --when design --full`; `./zn capture c0116`. Every run was in a scratch clone of the prototype with its origin removed (`scratchpad/c0116-review006/clone`), fixtures under its own `z-nile/.cache`. Scope: the rebase delta, as approved in round 5.
++Dropped from review-005: none open (F1 answered in round 5).
++
++Reproductions rerun on the new prototype (rounds 3–5's specs, ported mechanically to `pickman/.tracker` and `--project pickman`: `scratchpad/c0116-review006/rv{3,4,5}.spec.luau`):
++- rv3: T1 (a `check.sh` redesign inside the window) refused; T2 (unfold, fold, old review) refused "predates its record"; T4 (forged and empty `grouped:`) refused; T6 (empty raft) named by audit, refused by `ready`. 5/5.
++- rv4: Q1 refused after an acceptance file is removed, then passes after a refold and a new review; `ready` with an ignored `.DS_Store` in the main checkout succeeds. The spec's next line fails only because `ready` moved the folder to `active/`, as in round 5. Q2, Q3 (cross-member path through stop and ready, now `pickman/.tracker/issues/active/c0060`) and Q4 (compact, remap, carried move, `ready`) all hold.
++- rv5: control and Q5 (renumber with an untracked work file) both leave `ready` succeeding. 3/3.
++
++Project inference (new `scratchpad/c0116-review006/rv6.spec.luau`, a rafting worktree at the checkout's top):
++- `new raft … c0010 --project z-nile` with c0010 in pickman is refused ("the raft is made in z-nile/.tracker: c0010 is in pickman/.tracker"). Members of two projects are refused ("a raft holds issues of one project"). So is `fold R0030 c0020` across projects.
++- No `--project` at the top is refused ("no project holds the checkout's root"). So is a root name passed as `--project`.
++- `raft-plan` prints `./zn fold R0030 c0010 c0011` and `./zn new raft chore c0020 c0020 --project z-nile`. `--apply` runs both from the top, and c0020 gets R0040 in `z-nile/.tracker`.
++- An issue under an unregistered `other/.tracker` is invisible to `raft-plan` (`store.roots` is the registry's). That is c0115's rule ("a directory not listed is not a project"), not a c0116 gap.
++
++Held (no finding):
++- The port is mechanical. The spec deltas are paths, `--project pickman`, fixtures in the home's `.cache`, reads from `TOP`, and retired's nested run through `process.exec` with `cwd = {work}/z-nile`. The only behaviour change is M93, and the plan-cli EXPECTED pins both project names, so a wrong name would be seen.
++- `check.sh` AC8 uses `"$ZN_ROOT/zn"`, exported by `ac.sh` before it changes to the home.
++- c0114/classified's override reads `projects.load(TOP)`, which takes a directory.
++- Every `./zn new raft` in the skills, README and AGENTS.md carries `--project` (grep: none without).
++- Scope: the rebase changed no Problem, Solution or AC outcome text. `./zn capture c0116` prints "capture: no history for c0116 on origin/main": real origin/main holds it at `tracker/issues/c0116`, and this branch's engine looks under the new roots. This is not a confirmed capture. Judged from fb7fd80 instead, as rounds 3–5 did, the scope is unchanged. Following a capture across the root move is c0115's concern.
++- Lessons: no new defect against the design checks. "Every argument pinned" holds for `--project`.
++- Gate on the clone: pickman 1160/0. z-nile 1080 passed, 1 failed: c0120/finished on five literals in `done/c0115/check.sh`. That is c0115's known failure and is not counted against c0116. `./zn check c0116`: 10/10.
++
++### F1 [low] raft-plan's fallback for a root with no project prints `--project <root>`, a command `new raft` always refuses
++Where: `cmd["raft-plan"]`, `table.insert(args, if project then project.name else op.root)`.
++Evidence: `store.roots()` is the registry's, so `projectOf` cannot return nil today and the branch never runs. If it did, the printed line would be `./zn new raft … --project pickman/.tracker`. rv6 D shows that line refused ("--project pickman/.tracker: not a project"), and under `--apply` it would fail after the earlier commands had already run.
++Recommendation: `fail` at plan time ("<root> is no project's root in z-nile/projects.toml"), before printing or running anything. Or keep the line and add a comment saying it can't be reached. No spec case is needed.
++
++Verdict: approve
 diff --git a/z-nile/.tracker/issues/c0116/harvest.md b/z-nile/.tracker/issues/c0116/harvest.md
 new file mode 100644
-index 00000000..0a6176e9
+index 00000000..b27815cd
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0116/harvest.md
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,25 @@
 +# Harvest: c0116
 +- design-review-001 F1: zz-arch/claims-name-who-else-can-claim, zz-arch/lock-reads-live-state
 +- design-review-001 F2: zz-rules/retire-keeps-what-readers-count
@@ -3426,6 +3515,7 @@ index 00000000..0a6176e9
 +- design-review-004 F3: z-design/restated-rules-move-together
 +- design-review-004 F4: one-off: the refusal printed the exact line that silences it; the message now names the record's ids and the rule "never edit a written review"
 +- design-review-005 F1: zz-arch/one-reader-per-format, z-design/restated-rules-move-together
++- design-review-006 F1: zz-arch/guard-no-is-explicit
 diff --git a/z-nile/.tracker/issues/c0115/c0115.md b/z-nile/.tracker/issues/done/c0115/c0115.md
 similarity index 100%
 rename from z-nile/.tracker/issues/c0115/c0115.md
@@ -3646,7 +3736,7 @@ index 77704afa..ffae7c73 100644
  				for _, id in dirs(parent) do
  					if not string.match(id, ITEM) then
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index ddefdd8c..5767c75f 100644
+index ddefdd8c..a069a5f1 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -13,6 +13,7 @@ local pathsLib = require("./paths")
@@ -4741,7 +4831,7 @@ index ddefdd8c..5767c75f 100644
  
  -- The plan text for a raft, its warnings, and an error when it can't be built. Issues are placed in
  -- waves: one more than the latest wave they must follow (in-raft `depends_on`, and any issue already
-@@ -2410,6 +3236,90 @@ function cmd.workstreams(pos: { string })
+@@ -2410,6 +3236,80 @@ function cmd.workstreams(pos: { string })
  	print(text)
  end
  
@@ -4791,27 +4881,17 @@ index ddefdd8c..5767c75f 100644
 +		})
 +	end
 +	local ops, skips = raftplan.plan(issues, rafts)
-+	local runs: { { string } } = {}
-+	for _, op in ops do
-+		local args: { string }
-+		if op.kind == "fold" then
-+			args = { "fold", op.raft :: string }
-+		else
-+			args = { "new", "raft", op.type, slugOf[op.issues[1]] }
-+		end
-+		for _, id in op.issues do
-+			table.insert(args, id)
-+		end
-+		if op.kind == "new" and op.single then
-+			table.insert(args, "--single")
-+		end
-+		-- since c0115 a new raft names its project (or runs in its folder): the op's root, by its registry name
-+		if op.kind == "new" then
-+			local project = projects.projectOf(projects.load(), op.root)
-+			table.insert(args, "--project")
-+			table.insert(args, if project then project.name else op.root)
-+		end
-+		table.insert(runs, args)
++	-- since c0115 a new raft names its project: every command is built, and a root no project holds refused, before
++	-- anything is printed or run (design review 006 F1)
++	local reg = projects.load()
++	local runs, why = raftplan.commands(ops, slugOf, function(root: string): string?
++		local project = projects.projectOf(reg, root)
++		return if project then project.name else nil
++	end)
++	if not runs then
++		fail(why :: string)
++	end
++	for _, args in runs :: { { string } } do
 +		print(`./zn {table.concat(args, " ")}`)
 +	end
 +	for _, sk in skips do
@@ -4821,7 +4901,7 @@ index ddefdd8c..5767c75f 100644
 +		print("raft-plan: nothing to raft (no prepared issue without a raft)")
 +	end
 +	if opts["--apply"] then
-+		for _, args in runs do
++		for _, args in runs :: { { string } } do
 +			local rest = table.move(args, 2, #args, 1, {})
 +			local p, o = flags(rest);
 +			(cmd :: any)[args[1]](p, o)
@@ -4832,7 +4912,7 @@ index ddefdd8c..5767c75f 100644
  function cmd.worktree(pos: { string }, opts: { [string]: { string } })
  	local target = pos[1] or fail("usage: worktree <R-id|name>")
  	local branch: string
-@@ -2650,9 +3560,15 @@ end
+@@ -2650,9 +3550,15 @@ end
  -- Copy each member's acceptance specs into its project's tests/acceptance/<id>, run `check`, then remove the
  -- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run). `check` gets the copied
  -- spec paths, repo-relative.
@@ -4849,7 +4929,7 @@ index ddefdd8c..5767c75f 100644
  		local acc = `{m.dir}/acceptance`
  		local dest = promotedDir(m)
  		if fs.isDir(acc) and not fs.isDir(dest) then
-@@ -2667,7 +3583,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
+@@ -2667,7 +3573,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
  	end
  	local pok, result = pcall(check, copied)
  	local ok = pok and result == true
@@ -4858,7 +4938,7 @@ index ddefdd8c..5767c75f 100644
  		local dest = promotedDir(m)
  		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
  			fs.removeDir(dest)
-@@ -2705,7 +3621,7 @@ end
+@@ -2705,7 +3611,7 @@ end
  local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: boolean): boolean
  	local seen: { [string]: boolean } = {}
  	local ok = true
@@ -4867,7 +4947,7 @@ index ddefdd8c..5767c75f 100644
  		local home = homeOf(m)
  		if not seen[home] then
  			seen[home] = true
-@@ -2719,11 +3635,15 @@ local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs:
+@@ -2719,11 +3625,15 @@ local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs:
  end
  
  cmd["promote-check"] = function(pos: { string })
@@ -4887,7 +4967,7 @@ index ddefdd8c..5767c75f 100644
  		fail("promoted acceptance specs would break tests/ (see above)")
  	end
  	print("promote-check OK")
-@@ -3309,7 +4229,7 @@ function cmd.ready(pos: { string })
+@@ -3309,7 +4219,7 @@ function cmd.ready(pos: { string })
  	if target.kind == "issue" then
  		local raftId = store.readFront(target.doc).raft
  		if not raftId or raftId == "" then
@@ -4896,7 +4976,7 @@ index ddefdd8c..5767c75f 100644
  		end
  		raft = store.get(raftId)
  	end
-@@ -3404,6 +4324,43 @@ function cmd.ready(pos: { string })
+@@ -3404,6 +4314,43 @@ function cmd.ready(pos: { string })
  					return `{id} is {cur} on origin/main, not prepared`
  				end
  				return nil
@@ -4940,7 +5020,7 @@ index ddefdd8c..5767c75f 100644
  			end
  		)
  		if not r.ok then
-@@ -3851,6 +4808,47 @@ local function addedAt(paths: { string }): number?
+@@ -3851,6 +4798,47 @@ local function addedAt(paths: { string }): number?
  end
  
  -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
@@ -4988,7 +5068,7 @@ index ddefdd8c..5767c75f 100644
  local function metricsLessons()
  	local tree = lessonsLib.load(".")
  	local all: { lessonsLib.Lesson } = {}
-@@ -3867,12 +4865,7 @@ local function metricsLessons()
+@@ -3867,12 +4855,7 @@ local function metricsLessons()
  	end
  	local rafts: { lessonsLib.RaftRounds } = {}
  	for _, raft in store.all("raft") do
@@ -5002,7 +5082,7 @@ index ddefdd8c..5767c75f 100644
  		if n > 0 then
  			-- a raft is dated by its `created:` day, which no compaction or renumber rewrites
  			local created = store.readFront(raft.doc).created
-@@ -3882,6 +4875,16 @@ local function metricsLessons()
+@@ -3882,6 +4865,16 @@ local function metricsLessons()
  			)
  		end
  	end
@@ -5019,7 +5099,7 @@ index ddefdd8c..5767c75f 100644
  	-- the cutoff keeps the original add: c0114 moved the file to z-nile/engine/lessons.luau
  	local added = addedAt({ "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" })
  	-- `created:` is written as the local calendar day, so the cutoff is the local day of that commit too
-@@ -4084,12 +5087,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+@@ -4084,12 +5077,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
  		"| raft | design rounds | design-review minutes | minutes/round | tokens/round |\n|---|---|---|---|---|"
  	)
  	for _, raft in store.all("raft") do
@@ -5033,7 +5113,7 @@ index ddefdd8c..5767c75f 100644
  		if rounds == 0 then
  			continue
  		end
-@@ -4117,6 +5115,13 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+@@ -4117,6 +5105,13 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
  			)
  		)
  	end
@@ -5047,7 +5127,7 @@ index ddefdd8c..5767c75f 100644
  	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
  	local d = byType.defect or { added = 0, minutes = 0, count = 0 }
  	local function pct(def: number, feat: number): string
-@@ -4128,23 +5133,84 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+@@ -4128,23 +5123,84 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
  	end
  	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
  	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
@@ -5146,10 +5226,10 @@ index ddefdd8c..5767c75f 100644
  	print("\nRework = defect / (defect + feature). Target: under 20%.")
 diff --git a/z-nile/engine/raftplan.luau b/z-nile/engine/raftplan.luau
 new file mode 100644
-index 00000000..6887665b
+index 00000000..b929a66b
 --- /dev/null
 +++ b/z-nile/engine/raftplan.luau
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,429 @@
 +--!strict
 +-- z-raft's no-argument policy (c0116): which prepared, raftless issues go into which raft. Pure: the caller reads the
 +-- tree and hands over plain records, so the same backlog always gives the same plan, whatever order it is read in.
@@ -5455,6 +5535,42 @@ index 00000000..6887665b
 +-- is noticed by the carried move and by `ready`. The hash leaves out `status:` and `raft:`, the two lines ready, stop
 +-- and the rafting PR itself change.
 +local serde = require("@lune/serde")
++
++-- The commands that carry out a plan, one argument list per op (`fold <R> <ids…>`, `new raft <type> <slug> <ids…>
++-- [--single] --project <name>`), a new raft's slug its first issue's. `projectName` gives a root's project name in
++-- the registry. A root it doesn't name refuses the whole plan, so nothing is printed or run (design review 006 F1).
++function raftplan.commands(
++	ops: { Op },
++	slugOf: { [string]: string },
++	projectName: (root: string) -> string?
++): ({ { string } }?, string?)
++	local runs: { { string } } = {}
++	for _, op in ops do
++		local args: { string }
++		if op.kind == "fold" then
++			args = { "fold", op.raft :: string }
++		else
++			args = { "new", "raft", op.type, slugOf[op.issues[1]] }
++		end
++		for _, id in op.issues do
++			table.insert(args, id)
++		end
++		if op.kind == "new" then
++			if op.single then
++				table.insert(args, "--single")
++			end
++			local name = projectName(op.root)
++			if not name then
++				return nil,
++					`{op.root} is no project's root in z-nile/projects.toml: raft-plan prints and runs nothing`
++			end
++			table.insert(args, "--project")
++			table.insert(args, name)
++		end
++		table.insert(runs, args)
++	end
++	return runs, nil
++end
 +
 +function raftplan.designHash(text: string): string
 +	local kept: { string } = {}
