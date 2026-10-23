@@ -380,17 +380,18 @@ index 7820bcf8..55afc2fc 100644
  	end)
  end)
 diff --git a/z-nile/tests/acceptance/c0114/finished.spec.luau b/z-nile/tests/acceptance/c0114/finished.spec.luau
-index 78b75609..91710cbb 100644
+index 96714461..b865be82 100644
 --- a/z-nile/tests/acceptance/c0114/finished.spec.luau
 +++ b/z-nile/tests/acceptance/c0114/finished.spec.luau
-@@ -5,11 +5,39 @@
- -- lands); finished.luau (run by check.sh) checks each file against its base text. Reads the real tree, read-only;
- -- writes only under .cache/c0114-finished.
+@@ -6,12 +6,40 @@
+ -- writes only under .cache/c0114-finished and .cache/c0114-finished-tip.
+ local fixture = require("@tests/lib/fixture")
  local fs = require("@lune/fs")
 +-- c0120 override: the spec runs from z-nile/, its home, after the move
 +local process = require("@lune/process")
  local rewrites = require("./rewrites")
  local t = require("@tests/lib/t")
+ local trackerfix = require("@tests/lib/trackerfix")
  
 +-- c0120 override: this spec judges c0114's rewrite on c0114's own result, the tree before c0120's move (c0120 moved
 +-- pickman's items into pickman/.tracker and rewrote the finished files again for their homes; c0120's AC18 pins that
@@ -424,7 +425,7 @@ index 78b75609..91710cbb 100644
  	local moved: { [string]: boolean } = {}
  	for _, kind in { "issues", "rafts" } do
  		for _, state in { "", "active/", "done/" } do
-@@ -33,11 +61,14 @@ local function unsettled(base: string): { string }
+@@ -35,11 +63,14 @@ local function unsettled(base: string): { string }
  	local moved = movedIds(base)
  	local out: { string } = {}
  	for _, f in rewrites.FINISHED do
@@ -441,7 +442,7 @@ index 78b75609..91710cbb 100644
  			local settled = rewrites.paths(text, moved) == text
  			-- an item whose special edits undo a rewrite (a spec case name) is settled when they give the same text
  			if not settled and rewrites.SPECIAL[f] then
-@@ -104,7 +135,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
+@@ -106,7 +137,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
  		for _, f in rewrites.FINISHED do
  			local dir = string.match(f, "^(.*)/[^/]+$") :: string
  			fs.writeDir(`{base}/{dir}`)
@@ -450,7 +451,7 @@ index 78b75609..91710cbb 100644
  		end
  		fs.writeDir(`{base}/tracker/rafts/done/R9990`)
  		fs.writeFile(
-@@ -126,7 +157,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
+@@ -128,7 +159,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
  			if not table.find(rewrites.FINISHED, path) then
  				error(`SPECIAL {path}: not a listed finished check.sh`)
  			end
