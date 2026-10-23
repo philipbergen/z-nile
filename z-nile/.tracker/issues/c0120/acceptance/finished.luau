@@ -302,10 +302,28 @@ end
 
 -- the world a finished check.sh's rewrite saw: the tree of the commit that made its text (code review 008 F4), so a
 -- file committed later, at a path it names, can't change what is expected
+-- The finished rewrite (JC1's group 2) ran with the hand-written core (group 4) in the working tree, so a file whose text
+-- comes from group 2 or earlier is rewritten against group 4's tree: the third commit after the move on the branch's
+-- first-parent line (the user decided the groups, "One PR, reviewed by commit group"; they are never rewritten).
 local worlds: { [string]: rewrites.World } = {}
+local okMv, moveCommit = git({ "log", "-1", "--format=%H", "--", rewrites.MARK })
+local okFp, firstParents = git({ "rev-list", "--first-parent", "--reverse", `{trim(moveCommit)}..HEAD` })
+local coreRev: string? = nil
+if okMv and okFp then
+	local n = 0
+	for sha in string.gmatch(firstParents, "%x+") do
+		n += 1
+		if n == 3 then
+			coreRev = sha
+		end
+	end
+end
 local function worldAt(path: string): rewrites.World
 	local okT, sha = git({ "log", "-1", "--format=%H", "HEAD", "--", path })
 	local rev = if okT and trim(sha) ~= "" then trim(sha) else "HEAD"
+	if coreRev and git({ "merge-base", "--is-ancestor", rev, coreRev :: string }) then
+		rev = coreRev :: string
+	end
 	if not worlds[rev] then
 		worlds[rev] = rewrites.world(TOP, pre :: string, rev)
 	end
