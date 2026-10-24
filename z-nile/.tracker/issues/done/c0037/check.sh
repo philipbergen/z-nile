@@ -2,8 +2,8 @@
 # Acceptance checks for c0037. SEQUESTERED: never edit during execution.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
-T=../.claude/skills/tracker/SKILL.md
-X=../.claude/skills/execute-raft/SKILL.md
+T=skills/zz-rules/SKILL.md
+X=skills/zz-execute/SKILL.md
 merging() { sed -n '/^## Merging/,/^## After merge/p' "$T"; }
 phase6() { sed -n '/^## Phase 6/,/^## Stop/p' "$X"; }
 phase4() { sed -n '/^## Phase 4/,/^## Phase 5/p' "$X"; }

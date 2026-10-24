@@ -15,7 +15,7 @@ check "RC1: no make-prompt or ./zn launch remains in the skills, docs, templates
   bad=$(grep -rnF -e "make-prompt" -e "./zn launch" .claude ../AGENTS.md ../SETUP.md ./templates scripts || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "RC2: AGENTS.md lists ready-raft, launch-raft and stop-raft, each with a matching SKILL.md" bash -c '
-  for s in ready-raft launch-raft stop-raft; do
+  for s in z-ready z-run z-stop; do
     grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: $s"; exit 1; }
     grep -q "^name: $s\$" "../.claude/skills/$s/SKILL.md" || { echo "$s: SKILL.md name"; exit 1; }
   done'
@@ -34,31 +34,31 @@ check "RC6: c0053's replacement copies match and ready-raft syncs (c0053 AC6/AC8
   R=.tracker/issues/done/c0053/replacements
   cmp -s "$R/c0005-worktree.spec.luau" tests/acceptance/c0005/worktree.spec.luau || { echo "c0005 replacement differs"; exit 1; }
   cmp -s "$R/c0015-workflow.spec.luau" ../pickman/tests/acceptance/c0015/workflow.spec.luau || { echo "c0015 replacement differs"; exit 1; }
-  grep -Eq "zn sync([^ -]|$)" ../.claude/skills/ready-raft/SKILL.md || { echo "ready-raft: no merging sync"; exit 1; }'
+  grep -Eq "zn sync([^ -]|$)" skills/z-ready/SKILL.md || { echo "ready-raft: no merging sync"; exit 1; }'
 
 # c0053's AC6, AC7 and AC9, copied verbatim (review 002 F5): this raft rewrites that skill text, USAGE and the publisher.
 # c0053's whole check.sh is not run because its AC4 reruns every acceptance spec.
 skills_carry_sync_and_claim() {
   local s merging='zn sync([^ -]|$)'
   # the working skills run the merging form; reviewers, stream agents and metrics fetch only
-  for s in tracker ticket-prep ready-raft execute-raft make-issue; do
+  for s in zz-rules z-design z-ready zz-execute z-ticket; do
     grep -Eq "$merging" "../.claude/skills/$s/SKILL.md" || { echo "$s skill has no './zn sync' (merging) step"; return 1; }
   done
-  for s in review metrics; do
+  for s in zz-review zz-stats; do
     grep -q 'zn sync --fetch' "../.claude/skills/$s/SKILL.md" || { echo "$s skill has no './zn sync --fetch' step"; return 1; }
     ! grep -Eq "$merging" "../.claude/skills/$s/SKILL.md" || { echo "$s skill still runs the merging './zn sync'"; return 1; }
   done
   # the sequestration diff separates this branch's changes from what main brought in
-  for s in review execute-raft; do
+  for s in zz-review zz-execute; do
     grep -q 'origin/main\.\.\.HEAD -- .tracker/\*\*/check\.sh. .tracker/\*\*/acceptance/\*\*.' "../.claude/skills/$s/SKILL.md" || { echo "$s skill's sequestration diff is not against origin/main...HEAD"; return 1; }
   done
-  local t=../.claude/skills/tracker/SKILL.md
+  local t=skills/zz-rules/SKILL.md
   grep -q '^## Sync and claim' "$t" || { echo "tracker skill has no 'Sync and claim' section"; return 1; }
   grep -q 'PICKMAN_PUBLISH' "$t" || { echo "tracker skill does not document PICKMAN_PUBLISH"; return 1; }
   grep -q 'new -> preparing -> prepared -> active -> done' "$t" || { echo "tracker skill does not list the statuses"; return 1; }
   grep -q 'paths-ignore\|tracker-only' "$t" || { echo "tracker skill does not state the direct-push limit"; return 1; }
   grep -q 'status <R-id> preparing' "$t" || { echo "tracker skill does not say how an existing raft is claimed"; return 1; }
-  grep -q 'status <R-id> prepared' ../.claude/skills/ticket-prep/SKILL.md || { echo "ticket-prep does not run status <R-id> prepared before the prep commit"; return 1; }
+  grep -q 'status <R-id> prepared' skills/z-design/SKILL.md || { echo "ticket-prep does not run status <R-id> prepared before the prep commit"; return 1; }
   grep -q 'Whose claim' "$t" || { echo "tracker skill does not say that claims are not owned"; return 1; }
 }
 usage_lists_new_commands() {

@@ -33,24 +33,24 @@ check "AC5: check.yml ignores tracker/** on push, and only on push" workflow_ign
 skills_carry_sync_and_claim() {
   local s merging='zn sync([^ -]|$)'
   # the working skills run the merging form; reviewers, stream agents and metrics fetch only
-  for s in tracker ticket-prep ready-raft execute-raft make-issue; do
+  for s in zz-rules z-design z-ready zz-execute z-ticket; do
     grep -Eq "$merging" "../.claude/skills/$s/SKILL.md" || { echo "$s skill has no './zn sync' (merging) step"; return 1; }
   done
-  for s in review metrics; do
+  for s in zz-review zz-stats; do
     grep -q 'zn sync --fetch' "../.claude/skills/$s/SKILL.md" || { echo "$s skill has no './zn sync --fetch' step"; return 1; }
     ! grep -Eq "$merging" "../.claude/skills/$s/SKILL.md" || { echo "$s skill still runs the merging './zn sync'"; return 1; }
   done
   # the sequestration diff separates this branch's changes from what main brought in
-  for s in review execute-raft; do
+  for s in zz-review zz-execute; do
     grep -q 'origin/main\.\.\.HEAD -- .tracker/\*\*/check\.sh. .tracker/\*\*/acceptance/\*\*.' "../.claude/skills/$s/SKILL.md" || { echo "$s skill's sequestration diff is not against origin/main...HEAD"; return 1; }
   done
-  local t=../.claude/skills/tracker/SKILL.md
+  local t=skills/zz-rules/SKILL.md
   grep -q '^## Sync and claim' "$t" || { echo "tracker skill has no 'Sync and claim' section"; return 1; }
   grep -q 'PICKMAN_PUBLISH' "$t" || { echo "tracker skill does not document PICKMAN_PUBLISH"; return 1; }
   grep -q 'new -> preparing -> prepared -> active -> done' "$t" || { echo "tracker skill does not list the statuses"; return 1; }
   grep -q 'paths-ignore\|tracker-only' "$t" || { echo "tracker skill does not state the direct-push limit"; return 1; }
   grep -q 'status <R-id> preparing' "$t" || { echo "tracker skill does not say how an existing raft is claimed"; return 1; }
-  grep -q 'status <R-id> prepared' ../.claude/skills/ticket-prep/SKILL.md || { echo "ticket-prep does not run status <R-id> prepared before the prep commit"; return 1; }
+  grep -q 'status <R-id> prepared' skills/z-design/SKILL.md || { echo "ticket-prep does not run status <R-id> prepared before the prep commit"; return 1; }
   grep -q 'Whose claim' "$t" || { echo "tracker skill does not say that claims are not owned"; return 1; }
 }
 check "AC6: the skills sync (reviewers fetch only), diff sequestered files against origin/main...HEAD, and the tracker skill states the sync-and-claim rules" skills_carry_sync_and_claim

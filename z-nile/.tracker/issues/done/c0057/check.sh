@@ -16,6 +16,6 @@ check "AC5: the usage text and the tracker skill's board row document -O" lune r
 check "AC6: the board workflow builds with -O" lune run tests/run -- "$A/open.spec.luau"
 check "AC7: the overridden board specs and the tooling board spec pass" lune run tests/run -- "$OLD/c0042/cli.spec.luau" "$OLD/c0048/board-workflow.spec.luau" "$OLD/c0048/board-docs.spec.luau" tests/tooling/board.spec.luau
 check "AC8: tests/run fails a run in which a spec started a browser, and changes nothing else" lune run tests/run -- "$A/guard.spec.luau"
-check "AC9: the testing skill's No browsers bullet names tests/run, -O and PICKMAN_OPEN_GUARD" bash -c 'l=$(grep -F -- "- **No browsers.**" ../.claude/skills/testing/SKILL.md) && grep -qF "tests/run" <<<"$l" && grep -qF -- "-O" <<<"$l" && grep -qF PICKMAN_OPEN_GUARD <<<"$l"'
+check "AC9: the testing skill's No browsers bullet names tests/run, -O and PICKMAN_OPEN_GUARD" bash -c 'l=$(grep -F -- "- **No browsers.**" skills/zz-test/SKILL.md) && grep -qF "tests/run" <<<"$l" && grep -qF -- "-O" <<<"$l" && grep -qF PICKMAN_OPEN_GUARD <<<"$l"'
 
 finish

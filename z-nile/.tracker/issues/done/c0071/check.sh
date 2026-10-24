@@ -7,9 +7,9 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0071"
 
-P=../.claude/skills/ticket-prep/SKILL.md
-X=../.claude/skills/execute-raft/SKILL.md
-T=../.claude/skills/tracker/SKILL.md
+P=skills/z-design/SKILL.md
+X=skills/zz-execute/SKILL.md
+T=skills/zz-rules/SKILL.md
 phase4() { sed -n '/^## Phase 4/,/^## Phase 5/p' "$X"; }
 merging() { sed -n '/^## Merging/,/^## /p' "$T"; }
 review() { sed -n '/^## 5\./,/^## 6\./p' "$P"; }
@@ -27,14 +27,14 @@ check "AC2: execute-raft caps code review at 5, prefers 3, blocks on the final r
   grep -qF 'Cap: 5 rounds, prefer 3' <<<\"\$p\" || { echo 'execute-raft: no Cap: 5 rounds, prefer 3'; exit 1; }
   grep -qE 'review-NNN\\.md. contains any' <<<\"\$p\" || { echo 'execute-raft: final-round blocking rule'; exit 1; }
   grep -qi 'final round' <<<\"\$p\" || { echo 'execute-raft: no final round'; exit 1; }
-  bad=\$(grep -rnF -e 'review-003' -e 'refute-003' -e 'Cap: 3 rounds' ../.claude/skills || true)
+  bad=\$(grep -rnF -e 'review-003' -e 'refute-003' -e 'Cap: 3 rounds' skills ../pickman/skills || true)
   [ -z \"\$bad\" ] || { echo \"\$bad\"; exit 1; }"
 check "AC3: Merging names the final round's review and keeps significant" bash -c "
   $(declare -f merging); T=$T
   m=\$(merging)
   grep -qi 'final round' <<<\"\$m\" && grep -qF 'significant' <<<\"\$m\" || { echo 'tracker Merging condition 1'; exit 1; }"
 check "AC4: both skills define minor concretely" bash -c '
-  for f in ../.claude/skills/ticket-prep/SKILL.md ../.claude/skills/execute-raft/SKILL.md; do
+  for f in skills/z-design/SKILL.md skills/zz-execute/SKILL.md; do
     for k in wording "Rules and mutants"; do
       grep -i minor "$f" | grep -qiF -- "$k" || { echo "$f: minor is not defined with: $k"; exit 1; }
     done

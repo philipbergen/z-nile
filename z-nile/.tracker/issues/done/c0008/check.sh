@@ -26,7 +26,7 @@ check "AC1: done marks the PR ready while origin has the previous head, then pus
 check "AC2: a gh failure rolls done back (HEAD, tree, raft state, nothing pushed)" cases_pass \
   "rolls back and stays active when gh cannot mark the PR ready"
 check "AC3: the skills document the new order and drop the old one" bash -c '
-  t=../.claude/skills/tracker/SKILL.md; x=../.claude/skills/execute-raft/SKILL.md
+  t=skills/zz-rules/SKILL.md; x=skills/zz-execute/SKILL.md
   for s in "marks the PR **ready** before its final push" "the push starts the \`pull_request\` run"; do
     grep -qF -- "$s" "$t" || { echo "tracker skill is missing: $s"; exit 1; }
   done

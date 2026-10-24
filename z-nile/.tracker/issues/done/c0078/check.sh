@@ -40,7 +40,7 @@ check "AC3: the link probe says made, refused (only for Operation not permitted)
   "a probe that fails for another reason is an error, not a refusal" \
   "when jailed, the link probe at the top of .cache says refused"
 check "AC4: the testing skill states every guard as it now is" bash -c '
-  s=../.claude/skills/testing/SKILL.md
+  s=skills/zz-test/SKILL.md
   for fact in "same-sandbox" "replace-file.pl" "cachepaths" "watchdog" "sweep" "99999"; do
     grep -qF "$fact" "$s" || { echo "the testing skill does not mention $fact"; exit 1; }
   done

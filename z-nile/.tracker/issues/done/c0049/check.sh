@@ -81,7 +81,7 @@ full_suite_in_parallel() { # twice: shared-state flakiness shows up as a failure
 check "AC6: the whole suite passes under the parallel runner with 8 jobs, twice in a row" full_suite_in_parallel
 
 skills_carry_the_rule() {
-  local testing=../.claude/skills/testing/SKILL.md raft=../.claude/skills/execute-raft/SKILL.md section
+  local testing=skills/zz-test/SKILL.md raft=skills/zz-execute/SKILL.md section
   grep -qE '^## Speed' "$testing" || { echo "testing skill has no '## Speed' section"; return 1; }
   section=$(awk '/^## Speed/{f=1; next} /^## /{f=0} f' "$testing")
   local w

@@ -30,7 +30,7 @@ check "AC2: a check run publishes nothing, says so and still works locally; outs
   "a check run's status move publishes nothing either, and says so"
 check "AC3: the full gate passes" ./check.sh --full
 check "AC4: the testing skill says a check never publishes tracker state" bash -c '
-  s=../.claude/skills/testing/SKILL.md
+  s=skills/zz-test/SKILL.md
   grep -qiE "never publish|not publishing|publishes nothing" "$s" || { echo "the testing skill does not say checks never publish"; exit 1; }'
 
 finish

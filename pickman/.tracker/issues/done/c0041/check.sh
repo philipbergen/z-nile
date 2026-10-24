@@ -11,7 +11,7 @@ check "AC1: graph maps @game paths through the Rojo project" lune run tests/run 
 check "AC2: graph.resolve and graph.build follow @game requires" lune run tests/run -- "$A/graph-build.spec.luau"
 check "AC3: place.resolveRequire resolves @game from the tree root" lune run tests/run -- "$A/place-game.spec.luau"
 check "AC4: the architecture skill documents @game for cross-root requires" \
-  bash -c 'f=../.claude/skills/architecture/SKILL.md; for s in "@game/ReplicatedStorage/Shared/Logic/" "across Rojo roots" "only into ReplicatedStorage"; do grep -qF "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
+  bash -c 'f=skills/pickman-arch/SKILL.md; for s in "@game/ReplicatedStorage/Shared/Logic/" "across Rojo roots" "only into ReplicatedStorage"; do grep -qF "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
 check "AC5: src may require only relative paths, @self/ or @game/ReplicatedStorage/, enforced by tests/meta" \
   lune run tests/run -- "$A/src-aliases.spec.luau" tests/meta/architecture.spec.luau
 

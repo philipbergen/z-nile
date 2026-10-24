@@ -3,7 +3,7 @@
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 S=../.claude/skills
-X="$S/execute-raft/SKILL.md"
+X="$S/zz-execute/SKILL.md"
 
 # Text of one numbered Phase 4 step (the step's line plus its indented continuation lines).
 step() {
@@ -22,14 +22,14 @@ ac1() { step 1 | has 'Review NNN started at' && step 1 | has './zn commit' && st
 # holds, and any raft id in the example (a compaction rewrote it once).
 ac2() { step 3 | grep -Eq 'zn commit -m "R[0-9]+: review-NNN" (--time 0|--phase code-review)' && step 3 | has 'finding count by severity'; }
 ac3() { step 5 | has './zn commit' && step 5 | has 'Review NNN addressed' && step 5 | has 'refute'; }
-ac4() { grep -q '^## The PR is the visible record' "$S/tracker/SKILL.md" && grep -q 'BLOCKED' "$S/tracker/SKILL.md" && grep -q '^## Visible record' "$S/review/SKILL.md"; }
+ac4() { grep -q '^## The PR is the visible record' "$S/zz-rules/SKILL.md" && grep -q 'BLOCKED' "$S/zz-rules/SKILL.md" && grep -q '^## Visible record' "$S/zz-review/SKILL.md"; }
 ac5() {
   sed -n '/^## Phase 1/,/^## Phase 2/p' "$X" | has 'PR comment' &&
     sed -n '/^## Phase 2/,/^## Phase 3/p' "$X" | has 'PR comment' &&
     sed -n '/^## Phase 3/,/^## Phase 4/p' "$X" | has 'PR comment'
 }
 ac6() { step 4 | has 'approve' && step 4 | has 'Phase 5'; }
-ac7() { grep -q 'Dropped from review-' "$S/review/SKILL.md" && grep -q 'repeat of review-' "$S/review/SKILL.md"; }
+ac7() { grep -q 'Dropped from review-' "$S/zz-review/SKILL.md" && grep -q 'repeat of review-' "$S/zz-review/SKILL.md"; }
 
 check "AC1: review start is committed, pushed and announced (step 1)" ac1
 check "AC2: review file is committed by the author, pushed and summarized (step 3)" ac2

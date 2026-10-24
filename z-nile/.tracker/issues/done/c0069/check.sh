@@ -28,13 +28,13 @@ check "AC3: prompt refuses a missing prompt.md and a non-raft id" cases_pass \
   "prompt refuses a missing prompt.md" "prompt takes only a raft id"
 check "AC4: ./zn launch is gone" cases_pass "./zn launch is gone"
 check "AC5: the launch-raft skill; docs point to /launch-raft; no ./zn launch anywhere" bash -c '
-  s=../.claude/skills/launch-raft/SKILL.md
+  s=skills/z-run/SKILL.md
   [ -f "$s" ] || { echo "no $s"; exit 1; }
   grep -q "^name: launch-raft$" "$s" || { echo "launch-raft: name"; exit 1; }
   for k in "./zn prompt" "--path" "Read" "./zn worktree" "/ready-raft"; do
     grep -qF -- "$k" "$s" || { echo "launch-raft: missing $k"; exit 1; }
   done
-  for f in ../AGENTS.md ../SETUP.md ../.claude/skills/tracker/SKILL.md ../.claude/skills/ready-raft/SKILL.md; do
+  for f in ../AGENTS.md ../SETUP.md skills/zz-rules/SKILL.md skills/z-ready/SKILL.md; do
     grep -qF "/launch-raft" "$f" || { echo "$f: /launch-raft"; exit 1; }
   done
   grep -qF "launch-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
