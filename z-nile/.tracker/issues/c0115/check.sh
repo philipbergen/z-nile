@@ -41,8 +41,28 @@ check "AC7: a prompt inlines z-nile's step skills, then its own project's, with 
 check "AC8: the skills, AGENTS.md, SETUP.md, the usage, the board and the engine's messages use the new names" \
   lune run tests/run -- "$A/docs.spec.luau" tests/acceptance/c0042/model.spec.luau tests/acceptance/c0107/views.spec.luau tests/acceptance/c0069/prompt.spec.luau
 check "AC9: z-nile/README.md opens with the picture of the five parts, then names every skill and the three checklists" lune run tests/run -- "$A/readme.spec.luau"
-check "AC10: the guard, structure, lessons-paragraph and check-path specs pass in both homes" \
-  bash -c 'lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0111/skill-docs.spec.luau tests/acceptance/c0120/check-paths.spec.luau && cd ../pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau'
+# c0120's specs with c0115's overrides: promoted once c0120 is done; until then (c0115's branch is stacked on
+# c0120's) a copy of c0120's sequestered specs under z-nile's .cache with experiments/c0120-overrides.patch applied,
+# exactly what the rebase onto landed c0120 commits (§11 (p))
+c0120_specs() {
+  local p="$PWD/tests/acceptance/c0120" # built from $PWD: check-paths reads literal paths, and this one appears later
+  if [[ -d $p ]]; then
+    lune run tests/run -- "$p/check-paths.spec.luau" "$p/docs.spec.luau" "$p/homes.spec.luau"
+    return
+  fi
+  local d="$PWD/.cache/c0115-c0120" item
+  item=$(cd .. && ./zn find c0120) || { echo "c0120 is neither promoted nor in the tracker"; return 1; }
+  rm -rf "$d" && mkdir -p "$d/tests/acceptance/c0120" || return 1
+  cp "$ZN_ROOT/$item"/acceptance/*.luau "$d/tests/acceptance/c0120/" || return 1
+  (cd "$d" && patch -p2 -s < "$HERE/experiments/c0120-overrides.patch") || { echo "the c0120 overrides no longer apply"; return 1; }
+  lune run tests/run -- "$d/tests/acceptance/c0120/check-paths.spec.luau" "$d/tests/acceptance/c0120/docs.spec.luau" "$d/tests/acceptance/c0120/homes.spec.luau"
+}
+ac10() {
+  lune run tests/run -- tests/tooling/repo-fence.spec.luau tests/meta/architecture.spec.luau tests/acceptance/c0111/skill-docs.spec.luau &&
+    (cd ../pickman && lune run tests/run -- tests/meta/architecture.spec.luau tests/meta/fence.spec.luau) &&
+    c0120_specs
+}
+check "AC10: the guard, structure, lessons-paragraph and check-path specs pass in both homes" ac10
 check "AC11: the real tracker audits clean" "$ZN_ROOT/zn" audit
 check "AC12: as of the last fetch, nothing but this raft holds the skill folders or their links: no other raft active, no branch or worktree changing them" \
   bash -c 'cd .. && ./zn busy .claude/skills z-nile/skills pickman/skills'
@@ -86,6 +106,7 @@ backlog_clean() {
   while IFS= read -r dir; do
     id=${dir##*/}
     [[ $id == c0115 ]] && continue
+    [[ $id == c0120 ]] && continue # the item c0115 is stacked on, in flight on the base branch: emptied at the rebase (§11 (p))
     [[ -f $dir/$id.md ]] || continue
     n=$((n + 1))
     if [[ $id == R* ]]; then
