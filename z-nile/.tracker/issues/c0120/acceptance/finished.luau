@@ -409,9 +409,14 @@ for key in keys do
 			local okO, blob = git({ "rev-parse", `{pre}:{p.path}` })
 			if okO then
 				-- bounded (code review 010 F2): between main's base and the merged main, at this item's own places
-				local where = { p.path }
-				if m then
-					table.insert(where, m.path)
+				-- every place this key's item had on main, whatever its root or state: its folder (any root, active/,
+				-- done/) and its promoted folder (c0114's spec reached main at tracker/issues/c0114/acceptance/ in
+				-- R0043's prep, and lives at tests/acceptance/c0114/ now)
+				local rest = string.match(inner, "^acceptance/(.*)$")
+				local where = { `:(glob)**/{id}/{inner}` }
+				if rest then
+					table.insert(where, `:(glob)**/tests/acceptance/{id}/{rest}`)
+					table.insert(where, `:(glob)tests/acceptance/{id}/{rest}`)
 				end
 				local argv = { "log", "-1", "--format=%H", `--find-object={trim(blob)}`, `{B}..{M}`, "--" }
 				for _, w in where do
