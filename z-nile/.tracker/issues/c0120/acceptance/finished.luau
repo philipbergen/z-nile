@@ -100,8 +100,7 @@ local function recorded(): (string?, string)
 		return nil, `{b.file}'s Prep reference {b.sha} is not in this branch`
 	end
 	if not b.move or not b.core then
-		return nil,
-			`{b.file} records no "Move commit: <sha>" and "Core commit: <sha>" beside its Prep reference`
+		return nil, `{b.file} records no "Move commit: <sha>" and "Core commit: <sha>" beside its Prep reference`
 	end
 	PINNED_MOVE, PINNED_CORE = b.move, b.core
 	return full, b.file
@@ -137,13 +136,9 @@ local function sequestered(
 				local rest = string.sub(path, #root + 2)
 				local inKind = string.match(rest, "^issues/(.*)$") or string.match(rest, "^rafts/(.*)$")
 				if inKind then
-					inKind = string.match(inKind, "^active/(.*)$")
-						or string.match(inKind, "^done/(.*)$")
-						or inKind
+					inKind = string.match(inKind, "^active/(.*)$") or string.match(inKind, "^done/(.*)$") or inKind
 					local id, inner = string.match(inKind :: string, "^([fdcR]%d%d%d%d)/(.+)$")
-					if
-						id and (inner == "check.sh" or string.sub(inner :: string, 1, 11) == "acceptance/")
-					then
+					if id and (inner == "check.sh" or string.sub(inner :: string, 1, 11) == "acceptance/") then
 						put(`{id}|{inner}`, { id = id, path = path, promoted = false })
 					end
 				end
@@ -173,6 +168,22 @@ local function tree(rev: string): string
 	local ok, listing = git({ "ls-tree", "-r", "--name-only", rev })
 	assert(ok, `git ls-tree {rev} failed`)
 	return listing
+end
+-- every path's mode in a tree (code review 011 F4: a merge dropped the executable bit of 24 check.sh files, which a
+-- blob comparison doesn't see)
+local modeCache: { [string]: { [string]: string } } = {}
+local function modeOf(rev: string, path: string): string?
+	local m = modeCache[rev]
+	if not m then
+		m = {}
+		local ok, listing = git({ "ls-tree", "-r", rev })
+		assert(ok, `git ls-tree {rev} failed`)
+		for mode, p in string.gmatch(listing, "(%d+) %a+ %x+\t([^\n]+)") do
+			m[p] = mode
+		end
+		modeCache[rev] = m
+	end
+	return m[path]
 end
 local function show(rev: string, path: string): string
 	local ok, text = git({ "show", `{rev}:{path}` })
@@ -271,11 +282,7 @@ local function withOverrides(promoted: string, old: string): string?
 	fs.writeDir(scratch)
 	fs.writeFile(`{scratch}/file`, old)
 	fs.writeFile(`{scratch}/section.patch`, section)
-	local r = process.exec(
-		"patch",
-		{ "-s", "-f", `{scratch}/file`, `{scratch}/section.patch` },
-		{ cwd = scratch }
-	)
+	local r = process.exec("patch", { "-s", "-f", `{scratch}/file`, `{scratch}/section.patch` }, { cwd = scratch })
 	local out = if r.ok then fs.readFile(`{scratch}/file`) else nil
 	fs.removeDir(scratch)
 	return out
@@ -318,8 +325,7 @@ end
 -- branch must follow main there too; its files are in neither pre nor M, only in main's history between B and M
 local removedOnMain: { [string]: boolean } = {}
 do
-	local okD, removed =
-		git({ "log", "--no-renames", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
+	local okD, removed = git({ "log", "--no-renames", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
 	if okD then
 		local gone = sequestered(removed, rootsOf(mReg), promotedOf(mReg))
 		for key, e in gone do
@@ -387,11 +393,13 @@ for key in keys do
 	-- else the text before the move; both sides changing it differently is ambiguous and refuses
 	local ref: string? = nil
 	local refPath: string? = nil
+	local refMode: string? = nil
 	local refPromoted = false
 	if id == OWN_ID then
 		local o = ownSet[key]
 		if o then
 			ref, refPath = show(ownBase :: string, o.path), o.path
+			refMode = modeOf(ownBase :: string, o.path)
 		end
 	else
 		local p, m, b = preSet[key], mSet[key], bSet[key]
@@ -412,11 +420,39 @@ for key in keys do
 				-- every place this key's item had on main, whatever its root or state: its folder (any root, active/,
 				-- done/) and its promoted folder (c0114's spec reached main at tracker/issues/c0114/acceptance/ in
 				-- R0043's prep, and lives at tests/acceptance/c0114/ now)
+				-- anchored to the roots (code review 011 F3): the item's folder in each root any of the three trees
+				-- names (and the retired tracker/), in issues/ or rafts/, at its top or in active/ or done/; and,
+				-- for a spec, its promoted folder in each of their promoted-spec folders
 				local rest = string.match(inner, "^acceptance/(.*)$")
-				local where = { `:(glob)**/{id}/{inner}` }
+				local where: { string } = {}
+				local seenW: { [string]: boolean } = {}
+				local function add(w: string)
+					if not seenW[w] then
+						seenW[w] = true
+						table.insert(where, `:(literal){w}`)
+					end
+				end
+				for _, r in { preReg, bReg, mReg } do
+					for _, root in rootsOf(r) do
+						for _, kind in { "issues", "rafts" } do
+							for _, state in { "", "active/", "done/" } do
+								add(`{root}/{kind}/{state}{id}/{inner}`)
+							end
+						end
+					end
+					if rest then
+						for _, dir in promotedOf(r) do
+							add(`{dir}/{id}/{rest}`)
+						end
+					end
+				end
+				for _, kind in { "issues", "rafts" } do
+					for _, state in { "", "active/", "done/" } do
+						add(`{projects.LEGACY}/{kind}/{state}{id}/{inner}`)
+					end
+				end
 				if rest then
-					table.insert(where, `:(glob)**/tests/acceptance/{id}/{rest}`)
-					table.insert(where, `:(glob)tests/acceptance/{id}/{rest}`)
+					add(`tests/acceptance/{id}/{rest}`)
 				end
 				local argv = { "log", "-1", "--format=%H", `--find-object={trim(blob)}`, `{B}..{M}`, "--" }
 				for _, w in where do
@@ -441,8 +477,10 @@ for key in keys do
 		if mainChanged then
 			ref, refPath = tM, if m then m.path else nil
 			refPromoted = m ~= nil and m.promoted
+			refMode = if m then modeOf(M, m.path) else nil
 		else
 			ref, refPath = tP, if p then p.path else nil
+			refMode = if p then modeOf(pre :: string, p.path) else nil
 		end
 	end
 	local h = headSet[key]
@@ -503,6 +541,11 @@ for key in keys do
 	if deleted and want and not (inner == "check.sh" and isDone(h.path)) then
 		want = rewrites.deleteCriteria(want, deleted) or `cannot delete {table.concat(deleted, ", ")}`
 	end
+	-- the mode too (code review 011 F4): a file keeps its reference's executable bit
+	local nowMode = modeOf("HEAD", h.path)
+	if refMode and nowMode ~= refMode then
+		table.insert(bad, `{h.path}: mode {nowMode} (its reference {refPath} is {refMode})`)
+	end
 	if now ~= want then
 		table.insert(
 			bad,
@@ -510,9 +553,7 @@ for key in keys do
 				then `{h.path}: not its text with exactly the rewrite{if deleted
 					then " and the deleted criteria"
 					else ""}`
-				else `{h.path}: changed{if h.promoted and not refPromoted
-					then ` (promoted from {refPath})`
-					else ""}`
+				else `{h.path}: changed{if h.promoted and not refPromoted then ` (promoted from {refPath})` else ""}`
 		)
 	end
 end

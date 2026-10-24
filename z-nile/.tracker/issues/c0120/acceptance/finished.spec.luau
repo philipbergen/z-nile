@@ -136,8 +136,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- an untracked file at a rewritten path's home-relative place changes nothing: the rewrite reads HEAD's tree,
 		-- never the working tree (code review 007 F3)
 		put("z-nile/scripts/ci-verify.sh", "#!/usr/bin/env bash\n")
-		local znile =
-			rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
+		local znile = rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
 		t.expect(znile).toBe(table.concat({
 			"#!/usr/bin/env bash",
 			'check "AC1: ci" ../scripts/ci-verify.sh',
@@ -168,33 +167,30 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		fs.removeDir(FX)
 	end)
 
-	it(
-		"deletes exactly the named criteria, continuation lines included, and refuses a missing one",
-		function()
-			local text = table.concat({
-				"helper() { true; }",
-				'check "AC1: kept" true',
-				'check "AC4: gone" \\',
-				"  helper",
-				'check "AC4a: kept, a longer id" true',
-				'check "AC10: gone too" true',
-				'check "AC1x: kept" true',
-				"finish",
-				"",
-			}, "\n")
-			t.expect((rewrites.deleteCriteria(text, { "AC4", "AC10" }))).toBe(table.concat({
-				"helper() { true; }",
-				'check "AC1: kept" true',
-				'check "AC4a: kept, a longer id" true',
-				'check "AC1x: kept" true',
-				"finish",
-				"",
-			}, "\n"))
-			local none, why = rewrites.deleteCriteria(text, { "AC9" })
-			t.expect(none).toBe(nil)
-			t.expect(why).toBe("AC9: 0 check statements")
-		end
-	)
+	it("deletes exactly the named criteria, continuation lines included, and refuses a missing one", function()
+		local text = table.concat({
+			"helper() { true; }",
+			'check "AC1: kept" true',
+			'check "AC4: gone" \\',
+			"  helper",
+			'check "AC4a: kept, a longer id" true',
+			'check "AC10: gone too" true',
+			'check "AC1x: kept" true',
+			"finish",
+			"",
+		}, "\n")
+		t.expect((rewrites.deleteCriteria(text, { "AC4", "AC10" }))).toBe(table.concat({
+			"helper() { true; }",
+			'check "AC1: kept" true',
+			'check "AC4a: kept, a longer id" true',
+			'check "AC1x: kept" true',
+			"finish",
+			"",
+		}, "\n"))
+		local none, why = rewrites.deleteCriteria(text, { "AC9" })
+		t.expect(none).toBe(nil)
+		t.expect(why).toBe("AC9: 0 check statements")
+	end)
 
 	-- code review 004 F1 (decided with the user, 2026-10-21: "Reviewer-pinned commit"): c0120's own files are judged
 	-- against the prep commit an approved review records, never a branch ref the author can move
@@ -424,10 +420,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		expectRed("z-nile/.tracker/issues/c0120/check.sh: changed")
 		-- a recorded commit the branch doesn't hold: refused
 		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
-		w(
-			"z-nile/.tracker/issues/c0120/review-002.md",
-			"Prep reference: 0123456789abcdef\n\nVerdict: approve\n"
-		)
+		w("z-nile/.tracker/issues/c0120/review-002.md", "Prep reference: 0123456789abcdef\n\nVerdict: approve\n")
 		step("a bad reference")
 		expectRed("is no commit here")
 		-- a review whose last verdict is changes records nothing, though it quotes `Verdict: approve` (code review
@@ -566,6 +559,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		step("main, early")
 		w("tracker/issues/active/f0075/check.sh", "check AC1 true\n")
 		w("tracker/issues/active/f0076/check.sh", "check AC1 true\n")
+		w("tracker/issues/active/f0078/check.sh", "check AC1 true\n")
+		w("tracker/issues/active/f0079/check.sh", "check AC1 true\n")
 		step("main base")
 		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
 		g({ "remote", "add", "origin", origin })
@@ -600,6 +595,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- the stack returns f0075 to main's text from before its base, and gives f0076 a text main will put elsewhere
 		w("tracker/issues/active/f0075/check.sh", "check AC1 old\n")
 		w("tracker/issues/active/f0076/check.sh", "check AC1 elsewhere\n")
+		w("tracker/issues/active/f0078/check.sh", "check AC1 stack78\n")
+		w("tracker/issues/active/f0079/check.sh", "check AC1 stack79\n")
 		step("the prep")
 		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
 		fs.writeDir(`{FX2}/pickman/.tracker`)
@@ -631,10 +628,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			return (string.gsub(g({ "rev-parse", `HEAD~{n}` }), "%s+$", ""))
 		end
 		local anchors = `Move commit: {head(3)}\nCore commit: {head(0)}\n`
-		w(
-			"z-nile/.tracker/issues/c0120/review-001.md",
-			`Prep reference: {prep}\n{anchors}\nVerdict: approve\n`
-		)
+		w("z-nile/.tracker/issues/c0120/review-001.md", `Prep reference: {prep}\n{anchors}\nVerdict: approve\n`)
 		step("review")
 		expectGreen()
 		-- a prep on main edits an unfinished item's check.sh and adds a spec: main's, green
@@ -662,10 +656,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		mergeMain(function()
 			fs.writeDir(`{FX2}/pickman/.tracker/issues/active`)
 			g({ "mv", "pickman/.tracker/issues/f0071", "pickman/.tracker/issues/active/f0071" })
-			w(
-				"pickman/.tracker/issues/active/f0071/check.sh",
-				"check AC1 test -d tracker/issues/active/f0071\n"
-			)
+			w("pickman/.tracker/issues/active/f0071/check.sh", "check AC1 test -d tracker/issues/active/f0071\n")
 		end)
 		expectGreen()
 		-- main finishes f0072 and promotes its spec: main's, green; the branch then edits the promoted spec: red
@@ -893,6 +884,29 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			w("pickman/.tracker/issues/active/f0074/check.sh", "check AC1 stacked, then main\n")
 		end)
 		expectGreen()
+		-- the stack's text reached main at another of the item's places (code review 011 F3: as c0114's reached main in
+		-- the old layout): f0078 went back to the backlog with it, then returned to active/ with main's newer text; main
+		-- supersedes, green. Its place before the move and on the merged main are the same path, so a search only there
+		-- misses it
+		onMain(function()
+			g({ "mv", "tracker/issues/active/f0078", "tracker/issues/f0078" })
+			w("tracker/issues/f0078/check.sh", "check AC1 stack78\n")
+		end, "the stack lands f0078 in the backlog")
+		onMain(function()
+			g({ "mv", "tracker/issues/f0078", "tracker/issues/active/f0078" })
+			w("tracker/issues/active/f0078/check.sh", "check AC1 stack78, then main\n")
+		end, "main readies f0078 again, changed")
+		mergeMain(function()
+			w("pickman/.tracker/issues/active/f0078/check.sh", "check AC1 stack78, then main\n")
+		end)
+		expectGreen()
+		-- a sequestered file keeps its reference's mode (code review 011 F4)
+		g({ "update-index", "--chmod=+x", "pickman/.tracker/issues/active/f0070/check.sh" })
+		g({ "commit", "-qm", "f0070 executable" })
+		expectRed("pickman/.tracker/issues/active/f0070/check.sh: mode 100755 (its reference")
+		g({ "update-index", "--chmod=-x", "pickman/.tracker/issues/active/f0070/check.sh" })
+		g({ "commit", "-qm", "f0070 back" })
+		expectGreen()
 		-- main and the stack change one file differently: refused, naming both
 		onMain(function()
 			w("tracker/issues/active/f0073/check.sh", "check AC1 main\n")
@@ -905,12 +919,17 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			w("tracker/issues/active/f0075/check.sh", "check AC1 main\n")
 			w("tracker/issues/active/f0077/check.sh", "check AC1 elsewhere\n")
 			w("tracker/issues/active/f0076/check.sh", "check AC1 main\n")
+			-- f0079's stack text at a folder named like the item, outside every root (code review 011 F3: the places are
+			-- anchored to the roots)
+			w("notes/f0079/check.sh", "check AC1 stack79\n")
+			w("tracker/issues/active/f0079/check.sh", "check AC1 main\n")
 		end, "main changes f0075 and f0076, and puts f0076's stack text at f0077")
 		mergeMain(function()
 			w("pickman/.tracker/issues/active/f0077/check.sh", "check AC1 elsewhere\n")
 		end)
 		expectRed("f0075's check.sh: changed on main")
 		expectRed("f0076's check.sh: changed on main")
+		expectRed("f0079's check.sh: changed on main")
 		-- origin's main moved onto this branch (it then holds the move): refused
 		publish("HEAD")
 		expectRed("origin's main already holds the move")
