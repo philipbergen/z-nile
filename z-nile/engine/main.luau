@@ -1457,6 +1457,15 @@ end
 -- stack"): designed for the move, they are no freeze for it.
 local STACKED_ON_C0120 =
 	{ ["prep-c0115"] = true, ["prep-c0116"] = true, ["prep-c0117"] = true, ["prep-c0118"] = true }
+-- The branches the user approved as harmless to the move, by exact name (decided with the user, 2026-10-23: "Named
+-- exemptions you approve"): no freeze either, nor a worktree on one of them. Any other branch still blocks.
+local APPROVED_FOR_C0120 = {
+	["proto-linux-jail"] = true,
+	["proto-r0260"] = true,
+	["prep-guard-follow-ups"] = true,
+	["proto-c0117"] = true,
+	["proto-c0118"] = true,
+}
 
 -- Whether the branch `ref` (as busyRefs names it: `name` or `origin/name`) is stacked on c0120's own prep, so c0120's
 -- freeze ignores it: c0120's prep itself; one of the listed stacked preps by its exact name; or any branch whose history
@@ -1465,7 +1474,7 @@ local STACKED_ON_C0120 =
 -- the prep.
 local function stackedOnC0120(ref: string): boolean
 	local name = string.match(ref, "^origin/(.+)$") or ref
-	if name == "prep-c0120" or STACKED_ON_C0120[name] then
+	if name == "prep-c0120" or STACKED_ON_C0120[name] or APPROVED_FOR_C0120[name] then
 		return true
 	end
 	if not sh.run("git", { "rev-parse", "--verify", "-q", "origin/prep-c0120" }).ok then
@@ -1509,6 +1518,11 @@ function cmd.busy(pos: { string })
 	end
 	local here = sh.trim(sh.run("pwd", { "-P" }).stdout)
 	for _, wt in compactLib.dirtyWorktrees(here, paths) do
+		-- a worktree on a branch the freeze ignores is ignored with it (the same function)
+		local on = sh.trim(sh.run("git", { "-C", wt, "branch", "--show-current" }).stdout)
+		if on ~= "" and stackedOnC0120(on) then
+			continue
+		end
 		print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
 		found += 1
 	end
