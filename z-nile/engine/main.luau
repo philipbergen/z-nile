@@ -1453,6 +1453,31 @@ function cmd.members(pos: { string })
 	end
 end
 
+-- The preps the user listed as stacked on c0120's (decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the
+-- stack"): designed for the move, they are no freeze for it.
+local STACKED_ON_C0120 =
+	{ ["prep-c0115"] = true, ["prep-c0116"] = true, ["prep-c0117"] = true, ["prep-c0118"] = true }
+
+-- Whether the branch `ref` (as busyRefs names it: `name` or `origin/name`) is stacked on c0120's own prep, so c0120's
+-- freeze ignores it: c0120's prep itself; one of the listed stacked preps by its exact name; or any branch whose history
+-- holds a commit of origin/prep-c0120 that origin/main doesn't (its merge-base with the prep is not on main). A name
+-- that only looks stacked (`prep-c0120-x`, `stacked-on-c0120`) counts for nothing: it blocks unless its history holds
+-- the prep.
+local function stackedOnC0120(ref: string): boolean
+	local name = string.match(ref, "^origin/(.+)$") or ref
+	if name == "prep-c0120" or STACKED_ON_C0120[name] then
+		return true
+	end
+	if not sh.run("git", { "rev-parse", "--verify", "-q", "origin/prep-c0120" }).ok then
+		return false
+	end
+	local base = sh.trim(sh.run("git", { "merge-base", ref, "origin/prep-c0120" }).stdout)
+	if base == "" then
+		return false
+	end
+	return not sh.run("git", { "merge-base", "--is-ancestor", base, "origin/main" }).ok
+end
+
 -- What holds `paths` (c0120): every raft active on origin/main (but the current branch's own), every branch that
 -- changes them since it left origin/main (compaction's check, compact.busyRefs) and every other worktree with
 -- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
@@ -1476,6 +1501,9 @@ function cmd.busy(pos: { string })
 		end
 	end
 	for _, ref in compactLib.busyRefs(current, paths) do
+		if stackedOnC0120(ref) then
+			continue
+		end
 		print(`branch {ref} changes {table.concat(paths, ", ")}`)
 		found += 1
 	end
