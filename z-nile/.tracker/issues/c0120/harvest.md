@@ -71,3 +71,8 @@
 - review-009 F3: tracker/item-history-spans-moves-and-compaction
 - review-009 F4: review/sequestration-reference-not-a-ref
 - review-009 F5: architecture/parsers-refuse-ambiguity
+
+- review-010 F1: review/sequestration-reference-not-a-ref
+- review-010 F2: review/sequestration-reference-not-a-ref
+- review-010 F3: testing/no-vacuous-pass
+- review-010 F4: ticket-prep/restated-rules-move-together

@@ -448,6 +448,18 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		g({ "rm", "-q", "z-nile/.tracker/issues/c0120/review-003.md" })
 		step("drop the ambiguous review")
 		expectGreen()
+		-- a review pinning a core that isn't the third commit after the move: refused (code review 010 F1)
+		local move3 = string.match(anchors, "Move commit: (%x+)") :: string
+		local wrongCore = (string.gsub(g({ "rev-parse", `{move3}~0` }), "%s+$", ""))
+		w(
+			"z-nile/.tracker/issues/c0120/review-004.md",
+			`Prep reference: {prep}\nMove commit: {move3}\nCore commit: {wrongCore}\n\nVerdict: approve\n`
+		)
+		step("a review pinning the wrong core")
+		expectRed("the core is not the one review-004.md pins")
+		g({ "rm", "-q", "z-nile/.tracker/issues/c0120/review-004.md" })
+		step("drop it")
+		expectGreen()
 		-- re-anchoring the move (code review 010 F1): the marker file restored and removed again, then three commits,
 		-- the last with the core's subject: the search would now find the author's commits; the pinned anchors refuse
 		w(rewrites.MARK, "#!/usr/bin/env bash\n")

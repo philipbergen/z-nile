@@ -1,5 +1,5 @@
 diff --git a/z-nile/tests/acceptance/c0127/reuse.spec.luau b/z-nile/tests/acceptance/c0127/reuse.spec.luau
-index 6f299435..bceb1927 100644
+index 6f29943..1eeb874 100644
 --- a/z-nile/tests/acceptance/c0127/reuse.spec.luau
 +++ b/z-nile/tests/acceptance/c0127/reuse.spec.luau
 @@ -17,11 +17,15 @@ local task = require("@lune/task")
@@ -7,9 +7,9 @@ index 6f299435..bceb1927 100644
  
  local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 -local base = `{root}/.cache/c0127-reuse`
-+-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
++-- c0120 override: the spec runs from z-nile/, its home
 +local home = (string.gsub(process.cwd, "/+$", ""))
-+-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
++-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
 +local base = `{home}/.cache/c0127-reuse`
  local repo = `{base}/real`
  local bin = `{base}/bin`
@@ -104,35 +104,35 @@ index 6f299435..bceb1927 100644
  		table.sort(seen)
  		t.expect(r.ok).toBe(true)
 diff --git a/z-nile/tests/acceptance/c0131/accept.spec.luau b/z-nile/tests/acceptance/c0131/accept.spec.luau
-index 7a9b6a89..58d807ef 100644
+index 7a9b6a8..0cce2ed 100644
 --- a/z-nile/tests/acceptance/c0131/accept.spec.luau
 +++ b/z-nile/tests/acceptance/c0131/accept.spec.luau
 @@ -9,8 +9,11 @@ local process = require("@lune/process")
  local t = require("@tests/lib/t")
  
  local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-+-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
++-- c0120 override: the spec runs from z-nile/, its home
 +local home = (string.gsub(process.cwd, "/+$", ""))
  local hook = `{root}/z-nile/lib/git-hooks/reference-transaction` -- c0114: the guards moved
 -local base = `{root}/.cache/c0131-accept`
-+-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
++-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
 +local base = `{home}/.cache/c0131-accept`
  local ZERO = string.rep("0", 40)
  local ONE = string.rep("1", 40)
  local TWO = string.rep("2", 40)
 diff --git a/z-nile/tests/acceptance/c0131/refuse.spec.luau b/z-nile/tests/acceptance/c0131/refuse.spec.luau
-index d451f046..25bade3b 100644
+index d451f04..c588d55 100644
 --- a/z-nile/tests/acceptance/c0131/refuse.spec.luau
 +++ b/z-nile/tests/acceptance/c0131/refuse.spec.luau
 @@ -9,8 +9,11 @@ local process = require("@lune/process")
  local t = require("@tests/lib/t")
  
  local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-+-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
++-- c0120 override: the spec runs from z-nile/, its home
 +local home = (string.gsub(process.cwd, "/+$", ""))
  local hook = `{root}/z-nile/lib/git-hooks/reference-transaction` -- c0114: the guards moved
 -local base = `{root}/.cache/c0131-refuse`
-+-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
++-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
 +local base = `{home}/.cache/c0131-refuse`
  local ZERO = string.rep("0", 40)
  local ONE = string.rep("1", 40)
