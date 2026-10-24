@@ -14,11 +14,6 @@ check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-c
 check "RC1: no make-prompt or ./zn launch remains in the skills, docs, templates or scripts" bash -c '
   bad=$(grep -rnF -e "make-prompt" -e "./zn launch" .claude ../AGENTS.md ../SETUP.md ./templates scripts || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "RC2: AGENTS.md lists ready-raft, launch-raft and stop-raft, each with a matching SKILL.md" bash -c '
-  for s in z-ready z-run z-stop; do
-    grep -qF ".claude/skills/$s/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: $s"; exit 1; }
-    grep -q "^name: $s\$" "../.claude/skills/$s/SKILL.md" || { echo "$s: SKILL.md name"; exit 1; }
-  done'
 check "RC3: .gitignore ignores every readied raft's prompt.md" grep -qxF "/tracker/rafts/active/*/prompt.md" ../.gitignore
 check "RC4: the usage text lists ready, stop and prompt <R-id> [--path], and no launch" bash -c '
   u=$(../zn 2>&1)

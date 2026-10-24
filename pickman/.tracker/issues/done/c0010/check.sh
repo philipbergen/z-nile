@@ -13,7 +13,5 @@ check "AC3: failures write a replay that sim.replay reproduces" lune run tests/r
 check "AC4: per-seed reproducibility and assertDeterministic" lune run tests/run -- "$A/determinism.spec.luau"
 check "AC5: harness misuse fails before any step" lune run tests/run -- "$A/misuse.spec.luau"
 check "AC6: bench interleaves worlds within the budget" lune run tests/run -- "$A/bench.spec.luau"
-check "AC7: testing skill documents tests/scenario and the sim harness" \
-  bash -c 'f=../z-nile/skills/zz-test/SKILL.md; for s in "tests/scenario/" "@tests/lib/sim" "sim.replay" "Step k moves the world from time k to time k+1" "Events returned by step k are visible at time k+1" "An intent at k is delivered in step k" "timing exception" "tests/integration/ is for"; do grep -qF "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
 
 finish

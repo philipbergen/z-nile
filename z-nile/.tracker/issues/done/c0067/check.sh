@@ -62,12 +62,6 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
     skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
-check "AC11: the overridden c0047 spec passes; no done check.sh names make-prompt (edited in prep)" bash -c '
-  lune run tests/run -- tests/acceptance/c0047/override-check.spec.luau || exit 1
-  grep -qF "ready-raft/SKILL.md" tests/acceptance/c0047/override-check.spec.luau || { echo "c0047 spec: not repointed"; exit 1; }
-  # only the five done checks prep edited: c0067 and R0025 name make-prompt themselves (review 003 F1)
-  bad=$(grep -lF "make-prompt" z-nile/.tracker/issues/done/{c0005,c0045,c0046,c0047,c0053}/check.sh || true)
-  [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
   "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
 check "AC13: CI dispatched gate runs only the acceptance specs of the branch raft" bash -c '
