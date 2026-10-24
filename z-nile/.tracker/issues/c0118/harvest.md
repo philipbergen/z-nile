@@ -7,3 +7,6 @@
 - design-review-001 F6: ticket-prep/spec-design-correspondence
 - design-review-001 F7: ticket-prep/prove-specs-pass-on-a-prototype
 - note c0118 prep, before review: arrival dates taken from an item's first add to done/ picked the 2026-10-05 compaction's re-add (the subagent's candidate, "arrival dates and compaction re-adds"): tracker/item-history-spans-moves-and-compaction
+- design-review-002 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
+- design-review-002 F2: ticket-prep/restated-rules-move-together, ticket-prep/spec-design-correspondence
+- design-review-002 F3: ticket-prep/never-narrow-captured-scope

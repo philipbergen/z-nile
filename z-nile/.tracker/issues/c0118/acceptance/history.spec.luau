@@ -2,9 +2,10 @@
 -- c0118 AC2: history gives every issue and raft the UTC instant it first arrived in done/ in its current life (doneAt,
 -- epoch seconds) and its latest arrival in active/ (activeAt): whatever offset the commit carries, unchanged by a move
 -- between roots or by leaving and re-entering done/. A compaction (a commit that adds or changes a map's content, not
--- one that moves the map, even squashed with a landing) ends the dated life of every item it touches: an id it reuses
--- for another item loses the old landing, re-added in done/ it is undated, and a later landing dates it afresh;
--- `closed` stays as it was. A retired raft's folder is no arrival, and rafts stay out of `closed` and `spells`.
+-- one that moves the map, even squashed with a landing) ends the dated life of every id on either side of a pair in the
+-- map lines it adds: an id it reuses for another item loses the old landing, re-added in done/ it is undated, and a
+-- later landing dates it afresh; an id it keeps keeps its dates though its document is rewritten; a map line that does
+-- not parse undates every item the commit touches, with a warning. `closed` stays as it was. A retired raft's folder is no arrival, and rafts stay out of `closed` and `spells`.
 -- Fixture under .cache/c0118-history; git runs through @tests/lib/fixture.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -56,8 +57,11 @@ return t.spec("c0118 done times", function(it)
 		write("tracker/issues/done/c0030/c0030.md", doc("c0030", "active-a-b-c"))
 		write("tracker/rafts/done/R0050/R0050.md", doc("R0050", "active-a-b-c"))
 		commit("2026-10-10T10:00:00Z", "prepared")
-		write("tracker/compaction.txt", "# compaction map\nc0900 c0901\n")
-		commit("2026-10-10T11:00:00Z", "an older compaction's map, touching no item")
+		write("tracker/compaction.txt", "# compaction map\nc0900 c0901\nR0071 R0070\n")
+		commit(
+			"2026-10-10T11:00:00Z",
+			"an older compaction's map, touching no item (it names R0070, which R0043's squash lands)"
+		)
 		-- R0060 is readied, stopped and readied again
 		write("tracker/rafts/R0060/R0060.md", doc("R0060", "prepared-a-b-c"))
 		commit("2026-10-11T10:00:00Z", "R0060 prepared")
@@ -98,9 +102,18 @@ return t.spec("c0118 done times", function(it)
 		fixture.git(repo, { "rm", "-q", "-r", "z-nile/.tracker/issues/done/c0030" })
 		write("z-nile/.tracker/issues/c0030/c0030.md", doc("c0030", "prepared-x-y-z"))
 		write("z-nile/.tracker/rafts/done/R0050/R0050.md", doc("R0050", "active-x-y-z") .. "\nanother raft\n")
+		-- ids the compaction keeps, whose documents it rewrites in place (they name a renumbered id)
+		write(
+			"z-nile/.tracker/issues/done/c0010/c0010.md",
+			doc("c0010", "active-a-b-c") .. "\ndepends on c0030\n"
+		)
+		write(
+			"z-nile/.tracker/rafts/active/R0060/R0060.md",
+			doc("R0060", "prepared-a-b-c") .. "\nafter R0050\n"
+		)
 		write(
 			"z-nile/compaction.txt",
-			"# compaction map\nc0900 c0901\nc0901 c0090\nR0901 R0090\nc0031 c0030\n"
+			"# compaction map\nc0900 c0901\nR0071 R0070\nc0901 c0090\nR0901 R0090\nc0031 c0030\nR0051 R0050\n"
 		)
 		commit("2026-10-21T09:00:00Z", "tracker: compact ids")
 		-- a raft retired into R0010 (c0116): its folder beside the lifecycle folders
@@ -112,6 +125,13 @@ return t.spec("c0118 done times", function(it)
 		-- the item now named c0030 lands
 		move("z-nile/.tracker/issues/c0030", "z-nile/.tracker/issues/done/c0030")
 		commit("2026-10-22T12:00:00Z", "c0030 (the new one) done")
+		-- a map line that does not parse: every item the commit touches is undated
+		write("z-nile/.tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o") .. "\nrewritten\n")
+		write(
+			"z-nile/compaction.txt",
+			"# compaction map\nc0900 c0901\nR0071 R0070\nc0901 c0090\nR0901 R0090\nc0031 c0030\nR0051 R0050\nnot a pair\n"
+		)
+		commit("2026-10-23T12:00:00Z", "a broken compaction")
 		parsed = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
 		t.expect(parsed ~= nil).toBe(true)
 	end)
@@ -120,7 +140,7 @@ return t.spec("c0118 done times", function(it)
 		local landing = stats.seconds("2026-10-19T06:30:00Z")
 		t.expect(parsed.doneAt.c0010).toBe(landing)
 		t.expect(parsed.doneAt.R0010).toBe(landing)
-		t.expect(parsed.doneAt.c0040).toBe(stats.seconds("2026-10-21T11:00:00Z"))
+		t.expect(parsed.closed.c0040).toBe("2026-10-21") -- landed 2026-10-21T11:00Z; the broken map undates it (below)
 	end)
 
 	it("keeps the first landing across a move between roots and a later return to done/", function()
@@ -141,6 +161,18 @@ return t.spec("c0118 done times", function(it)
 			t.expect(parsed.closed.c0030).toBe("2026-10-10") -- Stats' close day is unchanged
 		end
 	)
+
+	it("an id the compaction keeps keeps its dates, though its document is rewritten in place", function()
+		t.expect(parsed.doneAt.c0010).toBe(stats.seconds("2026-10-19T06:30:00Z"))
+		t.expect(parsed.activeAt.R0060).toBe(stats.seconds("2026-10-14T10:00:00Z"))
+	end)
+
+	it("a map line that does not parse undates every item the commit touches, and warns", function()
+		t.expect(parsed.doneAt.c0040).toBe(nil)
+		t.expect(parsed.doneAt.c0030).toBe(stats.seconds("2026-10-22T12:00:00Z")) -- not touched by that commit
+		t.expect(#parsed.warnings).toBe(1)
+		t.expect(string.find(parsed.warnings[1], "does not parse", 1, true) ~= nil).toBe(true)
+	end)
 
 	it("moving the map, squashed with a landing, is no compaction", function()
 		t.expect(parsed.doneAt.R0070).toBe(stats.seconds("2026-10-21T08:00:00Z"))
