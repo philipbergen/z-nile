@@ -17,9 +17,9 @@ local task = require("@lune/task")
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
--- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
+-- c0120 override: the spec runs from z-nile/, its home
 local home = (string.gsub(process.cwd, "/+$", ""))
--- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
+-- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
 local base = `{home}/.cache/c0127-reuse`
 local repo = `{base}/real`
 local bin = `{base}/bin`
