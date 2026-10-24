@@ -103,7 +103,7 @@ return t.spec("c0120 busy lists what holds the paths a move needs", function(it)
 	-- (its history holds a commit of origin/prep-c0120 that main doesn't), or one of the listed stacked preps by name, is
 	-- no freeze; any other branch is, whatever its name claims
 	it(
-		"a branch stacked on c0120's prep is ignored; an unrelated one, or one only named like it, is listed",
+		"a branch stacked on c0120's prep, or one the user approved by name, is ignored; an unrelated or similarly named one is listed",
 		function()
 			local function branchOff(name: string, from: string, file: string)
 				fixture.git(f.main, { "checkout", "-q", "-b", name, from })
@@ -120,6 +120,10 @@ return t.spec("c0120 busy lists what holds the paths a move needs", function(it)
 			branchOff("unrelated-work", "main", "src/unrelated.luau")
 			branchOff("prep-c0120-stacked", "main", "src/claims.luau")
 			branchOff("prep-c0115", "main", "src/listed.luau")
+			-- the branches the user approved by exact name (decided with the user, 2026-10-23: "Named exemptions you
+			-- approve"); a similar name blocks
+			branchOff("proto-c0117", "main", "src/approved.luau")
+			branchOff("proto-c0117-copy", "main", "src/similar.luau")
 			local r = busy(f.main, OLD)
 			t.expect(has(r.stdout, "stacked-work")).toBe(false)
 			t.expect(has(r.stdout, "branch prep-c0120 ")).toBe(false)
@@ -127,6 +131,8 @@ return t.spec("c0120 busy lists what holds the paths a move needs", function(it)
 			t.expect(has(r.stdout, "prep-c0115")).toBe(false)
 			t.expect(has(r.stdout, "branch unrelated-work changes")).toBe(true)
 			t.expect(has(r.stdout, "branch prep-c0120-stacked changes")).toBe(true)
+			t.expect(has(r.stdout, "branch proto-c0117 ")).toBe(false)
+			t.expect(has(r.stdout, "branch proto-c0117-copy changes")).toBe(true)
 			t.expect(r.code).toBe(1)
 			fixture.git(f.main, {
 				"branch",
@@ -137,6 +143,8 @@ return t.spec("c0120 busy lists what holds the paths a move needs", function(it)
 				"unrelated-work",
 				"prep-c0120-stacked",
 				"prep-c0115",
+				"proto-c0117",
+				"proto-c0117-copy",
 			})
 			fixture.git(f.main, { "push", "-q", "origin", "--delete", "prep-c0120" })
 			fixture.git(f.main, { "fetch", "-q", "--prune", "origin" })
