@@ -1,19 +1,19 @@
 ---
-name: execute-raft
-description: The autonomous execution protocol for one raft - one branch, one PR, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when implementing a raft (or when handed a prompt by launch-raft or ready-raft).
+name: zz-execute
+description: The execution protocol for one raft, followed from inside z-run (or from a raft's prompt) - one branch, one PR, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when executing a raft you were handed.
 ---
 
 # Execute a raft
 
-Input: a raft ID (`R0010`) whose issues are `design: ready`.
+Input: a raft ID (`R0010`) whose issues are `design: ready`, readied by z-ready and launched by z-run (or handed to you as its prompt).
 Output: one PR, taken out of draft by `./zn done R0010`, then merged by you (Phase 6).
 
-Work through the phases in order and don't skip any. Wherever you are unsure, the tracker, architecture and testing skills are binding.
+Work through the phases in order and don't skip any. Wherever you are unsure, the zz-rules, zz-arch and zz-test skills, and your project's own skills (`pickman-arch` and `pickman-test` for pickman), are binding.
 
 ## Phase 0: Claim (in the first minutes)
-1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (tracker skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `z-nile/check.sh --full` passes here.
+1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `z-nile/check.sh --full` passes here.
    - **If main is red, stop.** Report it; don't fix main inside this raft.
-2. `./zn start R0010`. The claim was made by ready-raft: the raft and its members are already in `active/` on `origin/main`, so `start` only creates the branch (if the worktree isn't already on it), makes an empty `tracker: start` commit, pushes, and opens a **draft** PR. If it refuses with `run ./zn sync first`, sync and retry. A raft that was never readied (a legacy start) is claimed and moved by `start` itself; if a step after that claim fails, see the tracker skill, Sync and claim, A failed start.
+2. `./zn start R0010`. The claim was made by z-ready: the raft and its members are already in `active/` on `origin/main`, so `start` only creates the branch (if the worktree isn't already on it), makes an empty `tracker: start` commit, pushes, and opens a **draft** PR. If it refuses with `run ./zn sync first`, sync and retry. A raft that was never readied (a legacy start) is claimed and moved by `start` itself; if a step after that claim fails, see the zz-rules skill, Sync and claim, A failed start.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 
@@ -38,7 +38,7 @@ For each issue:
 5. **Deviations**:
    - If the design turns out to be wrong in a small, local way (for example a name or a helper split), adjust it and record the deviation, with the reason, in the issue's Verification log.
    - If it's wrong in a way that changes a public API, a cross-feature dependency or an acceptance criterion, **stop** and escalate.
-6. **Emergent problems**: follow "Emergent issues" in the tracker skill. Only fix them now if they can't be postponed.
+6. **Emergent problems**: follow "Emergent issues" in the zz-rules skill. Only fix them now if they can't be postponed.
 
 ## Phase 2B: Parallel workstreams (instead of Phase 2, when the plan allows it)
 Use this when `./zn workstreams <R-id>` ends with `parallel: yes` (the prompt embeds the plan) and the human hasn't asked for sequential execution. Otherwise run Phase 2 as written (Phase 2A). You are the **lead**: you alone push, merge, comment on the PR, allocate ids, and run `./zn commit`, `focus` and `done`. The rest of this phase uses subagents; they can't spawn others, so you start every one of them.
@@ -48,10 +48,10 @@ Use this when `./zn workstreams <R-id>` ends with `parallel: yes` (the prompt em
 1. **Plan.** Run `./zn workstreams <R-id>`, post it as a PR comment, and execute **wave by wave**. A stream is one issue; the issues in a wave don't depend on each other and don't share files.
 2. **Start a wave.** For every issue in the wave, create its worktree from the raft branch: `./zn worktree ws-<issue> --from <raft branch>`. Then spawn one **Sonnet** subagent per stream (Agent tool, `model: "sonnet"`), **all in one message so the streams run concurrently**. Each brief contains:
    - the raft and issue ids, and the absolute path of the stream worktree ("your shell doesn't keep a working directory: start every command with `cd <path> &&` or use `git -C <path>`");
-   - the issue document, its `check.sh` and its acceptance specs (paths; all sequestered), and the architecture, testing and tracker skills to follow;
+   - the issue document, its `check.sh` and its acceptance specs (paths; all sequestered), and the zz-rules, zz-arch and zz-test skills and the project's own skills to follow;
    - the rules: tests first, implement the Design exactly, edit only the issue's Touched modules and its own Verification log, never edit `check.sh`, acceptance specs or the project's `architecture.md` (`pickman/.tracker/architecture.md`); never push, never comment on the PR, and never run `./zn new`, `focus`, `commit`, `renumber`, `migrate` or `done` (you allocate ids and commit on the raft branch, so a problem the stream finds that no issue covers goes in its final report, and you file it; a candidate lesson goes in the final report too, and you harvest it); never create a `stream-review-*` or `stream-refute-*` file (the reviewer returns the review text and writes no file; the lead writes both files on the raft branch); commit implementation with plain `git add -A && git commit -m "<issue>: <what>"`; run `z-nile/check.sh --affected` and `./zn check <issue>` in the worktree; on a stop condition, stop and report instead of improvising;
    - what to report: `done` or `blocked`, the final commit sha, the minutes worked, deviations, anything another issue needs, and candidate lessons (the rule, why, and the question that catches it).
-3. **Review each stream** as soon as it reports `done`: a clean **Sonnet** subagent (`model: "sonnet"`) using the review skill's **Stream mode**. Its inputs are `git diff <raft branch>...ws-<issue>`, the issue document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (put that text in the brief; it is not in the stream tree). It runs the stream's checks, checks that the diff stays inside the issue's Touched modules and its own document, and returns the review markdown. It writes no file. You write `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md` only in the raft worktree and, while that file is the only dirty path, record the reviewer: `./zn commit -m "<issue>: stream-review-NNN" --phase code-review --time <reviewer minutes> --tokens <reviewer tokens> --issue <issue>` (omit `--tokens` when the report has none). That commit is the file plus its spend row. `commit` runs `git add -A`, so this happens before `git merge --squash`, never while a squash is staged, and never while any other path is dirty. The stream's author (continue the same subagent with SendMessage) returns the fix commits and the refute text, and writes no file. You write `stream-refute-<issue>-NNN.md` only in the raft worktree and commit it the same way, with `--time <answering minutes>` and `--issue <issue>`, again while that file is the only dirty path. **At most 2 rounds per stream**; a high finding still standing after round 2 means you take that issue over or escalate.
+3. **Review each stream** as soon as it reports `done`: a clean **Sonnet** subagent (`model: "sonnet"`) using the zz-review skill's **Stream mode**. Its inputs are `git diff <raft branch>...ws-<issue>`, the issue document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (put that text in the brief; it is not in the stream tree). It runs the stream's checks, checks that the diff stays inside the issue's Touched modules and its own document, and returns the review markdown. It writes no file. You write `tracker/rafts/active/<R-id>/stream-review-<issue>-NNN.md` only in the raft worktree and, while that file is the only dirty path, record the reviewer: `./zn commit -m "<issue>: stream-review-NNN" --phase code-review --time <reviewer minutes> --tokens <reviewer tokens> --issue <issue>` (omit `--tokens` when the report has none). That commit is the file plus its spend row. `commit` runs `git add -A`, so this happens before `git merge --squash`, never while a squash is staged, and never while any other path is dirty. The stream's author (continue the same subagent with SendMessage) returns the fix commits and the refute text, and writes no file. You write `stream-refute-<issue>-NNN.md` only in the raft worktree and commit it the same way, with `--time <answering minutes>` and `--issue <issue>`, again while that file is the only dirty path. **At most 2 rounds per stream**; a high finding still standing after round 2 means you take that issue over or escalate.
 4. **Merge the stream.** In the raft worktree run `git merge --squash ws-<issue>`. Then `./zn commit -m "<issue>: <what the stream did>" --issue <issue> --time <stream minutes>`. Leave this commit on the default build phase: do not pass `--phase`. Squashing stages exactly the stream's net change, so the spend lines go to that issue, and the stream's own commits stay out of the raft history.
    - **If the squash conflicts** (two streams touched one file outside their declared modules), resolve it in the raft worktree, note it in both issues' Verification logs, rerun both issues' checks, and only then run `./zn commit`, which refuses while unmerged paths remain.
    - Run `./zn check <issue>`, then remove the stream's worktree and branch only when `git -C <stream> status --porcelain` is empty (an untracked file makes `worktree remove` refuse): `git -C <root> worktree remove <path> && git -C <root> branch -D ws-<issue>`. Comment on the PR: the review verdict and findings by severity, and the merge sha.
@@ -65,7 +65,7 @@ When the steps below pass, post a PR comment with the RC results.
 
 1. `bash "$(./zn find R0010)/check.sh"`. Every RC line must PASS.
 2. Double-check that `z-nile/check.sh --full` passes as well (every project: the raft's RC0 runs only its own project's gate, c0120), and that `./zn promote-check R0010` passes. It dry-runs the move of the acceptance specs into the project's `tests/acceptance/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
-3. **Gate speed**: record the **gate wall time** and the `slowest:` specs from a `z-nile/check.sh --full` run in each issue's Verification log. If a stage or spec dominates or the time regressed, fix it or file the chore, per the testing skill's Speed section.
+3. **Gate speed**: record the **gate wall time** and the `slowest:` specs from a `z-nile/check.sh --full` run in each issue's Verification log. If a stage or spec dominates or the time regressed, fix it or file the chore, per the zz-test skill's Speed section.
 4. **Sequestration check**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'` must list nothing except `R100` renames (a raft started the legacy way moves its items on the branch). The three-dot form separates what this branch changed from what `main` brought in, so other terminals' new stubs are not false positives.
 
 ## Phase 4: Adversarial code review (a clean reviewer)
@@ -73,7 +73,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 
 1. **Before launching**: commit any pending work with `./zn commit` so the reviewer sees exactly what the PR shows. Run `z-nile/check.sh --full` and read the whole lint summary (the `errors`/`warnings` lines, never just the last line); a red gate is fixed before a reviewer is launched. Then post the comment `Review NNN started at <short sha> (code mode)`.
 2. Start a **clean** reviewer. It has none of your context and gets only these inputs:
-   - the `review` skill (code mode);
+   - the `zz-review` skill (code mode);
    - `git fetch origin main && git diff origin/main...HEAD` (the local `main` isn't kept current);
    - the raft and issue documents and `check.sh` files;
    - read access to the repo.
@@ -84,9 +84,9 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
    - `- F3: fixed <short sha>: <what changed>; consequences: <what the fix could break or open, and how you checked it, or none>`, or
    - `- F3: refuted: <argument with evidence>`, or
    - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left in the final round).
-   Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as ticket-prep's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
+   Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as z-design's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
    4a. **Question a twice-hit mechanism.** When a finding is the second in two rounds against the same mechanism (the same guard, module or rule), stop patching. Before the next round, question the mechanism (a deny-list or an allowlist? a patch or a redesign?) and say which you chose, and why, in the refute file.
-5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as ticket-prep step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md` (any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md` (any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
 6. **Re-review** after round 1 or 2 with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1); from round 3 on, step 7 decides instead:
    - any high-severity finding was fixed;
    - the fixes changed a public API or the design;
@@ -104,10 +104,10 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 
 ## Phase 6: Merge and clean up
-1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the tracker skill holds (`z-nile/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
+1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (`z-nile/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. After the merge and before the final report, `./zn spend R0010 --phase deliver --time <minutes from done to merged>`.
 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
-4. Follow Landing a change, step 4, in the tracker skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
+4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
 
 ## Stop conditions (escalate; don't improvise)
 Stop and report if any of these happen:
@@ -119,7 +119,7 @@ Stop and report if any of these happen:
 - A tool is missing and `SETUP.md` doesn't fix it.
 - The final round of review is still unresolved.
 - An action would require a secret or credential you don't have.
-- A test run prints `REPOSITORY CHANGED` or refuses a fixture identity, or the shared repository's remotes, branches, worktrees or identity look wrong: stop at once, and never repair the shared git configuration yourself (testing skill, "Specs never touch the real repository").
+- A test run prints `REPOSITORY CHANGED` or refuses a fixture identity, or the shared repository's remotes, branches, worktrees or identity look wrong: stop at once, and never repair the shared git configuration yourself (zz-test skill, "Specs never touch the real repository").
 
 To escalate:
 1. Commit whatever is green.
@@ -143,9 +143,9 @@ Workstreams: <issue>: <stream review verdict> | sequential   (one line per issue
 ```
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill execute-raft --full`. Each is a mistake made before, with the question that catches it.
+Before you start, read this skill's lessons: `./zn lessons --skill zz-execute --full`. Each is a mistake made before, with the question that catches it.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
-- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
+- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.

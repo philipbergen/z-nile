@@ -151,7 +151,7 @@ out.pane = els.pane.innerHTML;
 key("ArrowDown");
 out.afterDown = els.pane.innerHTML;
 const beforeCopy = els.list.innerHTML;
-const okBtn = button("/ready-raft R9100");
+const okBtn = button("/z-ready R9100");
 els.list.dispatch("click", { target: okBtn.child });
 setTimeout(() => {
   out.written = written.slice();
@@ -159,7 +159,7 @@ setTimeout(() => {
   out.okLabel = okBtn.b.getAttribute("aria-label");
   out.listSame = els.list.innerHTML === beforeCopy;
   mode = "bad";
-  const failBtn = button("/launch-raft R9103");
+  const failBtn = button("/z-run R9103");
   out.threw = false;
   try { els.list.dispatch("click", { target: failBtn.child }); } catch (e) { out.threw = true; }
   setTimeout(() => {
@@ -323,14 +323,14 @@ return t.spec("c0107 board page", function(it)
 		t.expect(string.find(readyRow, 'class="row ready', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(readyRow, 'class="type t-mix"', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(readyRow, ">mix<", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(readyRow, 'data-command="/ready-raft R9100"', 1, true) ~= nil).toBe(true)
+		t.expect(string.find(readyRow, 'data-command="/z-ready R9100"', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(readyRow, "<svg", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(readyRow, "s-prepared", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(readyRow, ">prepared<", 1, true) ~= nil).toBe(true)
 		local launchRow = row(list, "R9103")
 		t.expect(string.find(launchRow, 'class="row ready', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(launchRow, "s-active", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(launchRow, 'data-command="/launch-raft R9103"', 1, true) ~= nil).toBe(true)
+		t.expect(string.find(launchRow, 'data-command="/z-run R9103"', 1, true) ~= nil).toBe(true)
 		local draftRow = row(list, "R9101")
 		t.expect(string.find(draftRow, 'class="row not', 1, true) ~= nil).toBe(true)
 		t.expect((string.find(draftRow, "copy", 1, true))).toBe(nil)
@@ -341,18 +341,17 @@ return t.spec("c0107 board page", function(it)
 		t.expect((string.find(preparingRow, ">ready<", 1, true))).toBe(nil)
 		t.expect(string.find(shown.pane, "ReadyRaft", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(shown.afterDown, "LaunchRaft", 1, true) ~= nil).toBe(true)
-		t.expect(shown.written).toEqual({ "/ready-raft R9100" })
+		t.expect(shown.written).toEqual({ "/z-ready R9100" })
 		t.expect(shown.okCopied).toBe(true)
 		t.expect(shown.okLabel).toBe("Copied")
 		t.expect(shown.threw).toBe(false)
 		t.expect(shown.failCopied).toBe(false)
-		t.expect(shown.writtenAfterFail).toEqual({ "/ready-raft R9100" })
+		t.expect(shown.writtenAfterFail).toEqual({ "/z-ready R9100" })
 		t.expect(shown.listSame).toBe(true)
 		t.expect(shown.bareThrew).toBe(false)
 		local choreRow = row(shown.afterRight, "c9101")
 		t.expect(string.find(choreRow, 'class="type t-chore"', 1, true) ~= nil).toBe(true)
-		t.expect(string.find(shown.afterRight, 'data-command="/ticket-prep c9102"', 1, true) ~= nil)
-			.toBe(true)
+		t.expect(string.find(shown.afterRight, 'data-command="/z-design c9102"', 1, true) ~= nil).toBe(true)
 		t.expect((string.find(shown.afterRight, 'data-id="R9100"', 1, true))).toBe(nil)
 		t.expect(string.find(shown.afterRightPane, "MixedChore", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(shown.preparingPane, ">R9104<", 1, true) ~= nil).toBe(true)

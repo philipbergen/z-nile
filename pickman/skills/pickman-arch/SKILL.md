@@ -1,9 +1,9 @@
 ---
-name: architecture
-description: Code structure rules for pickman (strict Luau, pure Logic features vs thin Roblox adapters, require rules, dependency direction). Read before designing or writing any src/ code.
+name: pickman-arch
+description: Code structure rules for pickman's game (strict Luau, pure Logic features vs thin Roblox adapters, require rules, dependency direction, server authority). Read before designing or writing anything in pickman/src/. The tooling's own rules are in zz-arch.
 ---
 
-# Architecture
+# Architecture (pickman)
 
 ## Layout (Rojo: `default.project.json` is the game place, `lobby.project.json` the lobby)
 The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository).
@@ -38,7 +38,7 @@ Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is
    - Logic never uses `@game`: the engine-word rule in `tests/meta` already rejects the word `game` in Logic files. `tests/place` and `tests/meta` both resolve `@game` through `default.project.json`.
    - No dynamic requires in `src/`.
 6. **Dependencies between features must be declared** in the ```` ```deps ```` block of `pickman/.tracker/architecture.md` (`.tracker/architecture.md` from pickman's home; `Consumer -> Provider`), and the graph must stay acyclic.
-   - Adding an edge is a design decision, made in ticket-prep and not during execution.
+   - Adding an edge is a design decision, made in z-design and not during execution.
 7. **Server is authoritative** for game state: score, pellets, ghost positions, lives.
    - Clients send intents and render.
    - Anything a client could lie about is validated on the server.
@@ -59,9 +59,9 @@ Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is
 - **Touched modules**: the exact paths, used for spend attribution and for choosing affected tests.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill architecture --full`. Each is a mistake made before, with the question that catches it.
+Before you start, read this skill's lessons: `./zn lessons --skill pickman-arch --full`. Each is a mistake made before, with the question that catches it.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
-- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
+- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.

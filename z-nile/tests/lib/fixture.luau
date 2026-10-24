@@ -1,5 +1,5 @@
 --!strict
--- Fixture repositories for specs (testing skill, "Specs never touch the real repository"). Every git or
+-- Fixture repositories for specs (zz-test skill, "Specs never touch the real repository"). Every git or
 -- tracker.sh command a spec runs in a fixture goes through here, and runs only in a repository that lies under
 -- a .cache folder and is that directory itself: if a fixture's repository were missing, git would otherwise find
 -- the enclosing real one. Creating a fixture (git init, git clone to a new path) needs no check: the new path is

@@ -126,7 +126,7 @@ return t.spec("c0107 board keep", function(it)
 	it("the tracker skill's board row names Rafts, Issues and mix, and still names the artifact", function()
 		-- c0120 override: the skill is read from the checkout's top
 		local row = ""
-		for line in string.gmatch(fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
+		for line in string.gmatch(fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`), "[^\n]+") do
 			if string.sub(line, 1, 10) == "| board | " then
 				row = line
 			end

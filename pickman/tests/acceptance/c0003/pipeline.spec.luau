@@ -10,8 +10,8 @@ local wf: any = serde.decode("yaml" :: "yaml", fs.readFile("../.github/workflows
 local beta: any = wf.jobs.beta
 -- c0120 override: the spec runs from its home: the checkout's files are read from the top
 local setup = fs.readFile("../SETUP.md")
-local testing = fs.readFile("../.claude/skills/testing/SKILL.md")
-local tracker = fs.readFile("../.claude/skills/tracker/SKILL.md")
+local testing = fs.readFile("skills/pickman-test/SKILL.md")
+local tracker = fs.readFile("../z-nile/skills/zz-rules/SKILL.md")
 
 local function has(s: any, needle: string): boolean
 	return type(s) == "string" and string.find(s, needle, 1, true) ~= nil

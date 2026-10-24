@@ -1,5 +1,5 @@
 --!strict
--- No check may change the real repository (testing skill, "Specs never touch the real repository").
+-- No check may change the real repository (zz-test skill, "Specs never touch the real repository").
 -- tests/lib/fence.luau and z-nile/lib/fence.sh enforce it for every run; this spec proves, on every gate
 -- run, that the guards are on here, and that no spec, check.sh or script switches them off. It never tries
 -- a write against this repository: the ref guard is proven by running its hook the way git would.
@@ -84,7 +84,7 @@ local function identitiesIn(text: string): { string }
 	return out
 end
 -- The guards themselves and their own specs, which must name them, wherever they are in their lifecycle.
--- Names a file may use for a stated reason, each reviewed (review skill, Repository safety). Nothing else in
+-- Names a file may use for a stated reason, each reviewed (zz-review skill, Repository safety). Nothing else in
 -- the file may name them.
 local ALLOWED: { [string]: { [string]: string } } = {
 	-- c0660: the fixture helper names these to refuse them, and its spec proves it
@@ -497,7 +497,7 @@ return t.spec("repository fence", function(it)
 
 	it("when jailed, a spec can't signal the run's top process", function()
 		if env.PICKMAN_TEST_JAIL ~= "sandbox-exec" then
-			return -- no jail, so no signal rule (Linux, an outer sandbox): the testing skill's "Caught only by review"
+			return -- no jail, so no signal rule (Linux, an outer sandbox): the zz-test skill's "Caught only by review"
 		end
 		local top = trim(fs.readFile(`{env.PICKMAN_TEST_FENCE or ""}/.cache/tests-run.lock/pid`))
 		t.expect(string.match(top, "^%d+$") ~= nil).toBe(true)

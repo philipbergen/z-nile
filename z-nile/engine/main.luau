@@ -1,5 +1,5 @@
 --!strict
--- Tracker CLI. Run through ./zn at the repository root (c0114). See .claude/skills/tracker/SKILL.md.
+-- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
 local claimsLib = require("./claims")
@@ -14,6 +14,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
 local sh = require("../lib/sh")
+local skillsLib = require("./skills")
 local spend = require("./spend")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
@@ -68,7 +69,9 @@ usage: ./zn <command> ...
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
-                                                list skill lessons; also --tags, --check, and --uncovered <id>...]]
+                                                list skill lessons; also --tags, --check, and --uncovered <id>...
+  skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
+                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 -- the issue, raft and prompt templates: engine files, shared by every project (c0114)
@@ -159,7 +162,7 @@ local function mainRoot(): string
 end
 
 -- Tracker commands that change the tree refuse to run in the main checkout of a repo with an origin:
--- every change is made in a worktree (tracker skill, "Worktrees").
+-- every change is made in a worktree (zz-rules skill, "Worktrees").
 local function inMainCheckout(): boolean
 	return sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot()
 end
@@ -1155,7 +1158,7 @@ local function setStatus(id: string, to: string)
 				-- the move to `prepared` ties the two fields together: designs are ready first
 				local localItem = store.get(t)
 				if store.readFront(localItem.doc).design ~= "ready" then
-					return `{t} is not design: ready: set it (ticket-prep) before status {id} prepared`
+					return `{t} is not design: ready: set it (z-design) before status {id} prepared`
 				end
 			end
 			if
@@ -2146,7 +2149,7 @@ end
 function cmd.start(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: start <R-id>"))
 	if raft.kind ~= "raft" then
-		fail("only rafts are started; make a `--single` raft with `new raft ... --single` (ticket-prep)")
+		fail("only rafts are started; make a `--single` raft with `new raft ... --single` (z-design)")
 	end
 	if raft.state == "active" then
 		-- a readied raft: ready claimed it and moved it to active/ on origin/main, so start only branches
@@ -2199,7 +2202,7 @@ function cmd.start(pos: { string })
 	local members = store.members(raft.id)
 	for _, m in members do
 		if store.readFront(m.doc).design ~= "ready" then
-			fail(`{m.id} is not design: ready (run ticket-prep first)`)
+			fail(`{m.id} is not design: ready (run z-design first)`)
 		end
 	end
 	-- a dependency outside the raft must already be done: nothing else orders rafts
@@ -2946,8 +2949,6 @@ function cmd.done(pos: { string })
 	end
 end
 
-local SKILLS_INLINED = { "execute-raft", "tracker", "architecture", "testing", "review" }
-
 -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
 local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 	local ids = {}
@@ -2968,16 +2969,71 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 end
 
 -- The prompt's Lessons section: the index of the build and both lessons (c0111).
-local function buildLessons(): string
+-- Only the lessons of z-nile's skills and of the raft's own project's (c0115): another project's are left out.
+local function buildLessons(project: string?): string
 	local tree = lessonsLib.load(".")
 	local sources = lessonsLib.sources(tree.items)
-	local text =
-		lessonsLib.index(lessonsLib.select(parsedLessons(tree), sources, { when = "build" }), sources)
+	local mine = {}
+	for _, l in parsedLessons(tree) do
+		local owner = tree.owners and tree.owners[l.skill]
+		if not owner or owner == skillsLib.ZNILE or owner == project then
+			table.insert(mine, l)
+		end
+	end
+	local text = lessonsLib.index(lessonsLib.select(mine, sources, { when = "build" }), sources)
 	return (string.gsub(text, "\n$", ""))
 end
 
 local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
 	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
+
+-- `skills [--check]` (c0115): one relative link in .claude/skills per skill folder. --check only reads (the gate
+-- runs it); without it the links are written, so it refuses in the main checkout like every other writer.
+function cmd.skills(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: ./zn skills [--check] (unknown option {k})`)
+		end
+	end
+	if #pos > 0 then
+		fail("usage: ./zn skills [--check]")
+	end
+	local found, present = skillsLib.load(".")
+	local list, problems = skillsLib.plan(found)
+	if #problems > 0 then
+		fail(table.concat(problems, "\n"))
+	end
+	-- a linked .claude or .claude/skills points both modes outside the repository: report it, write nothing
+	local parents = skillsLib.linkedParents(".")
+	if opts["--check"] then
+		local wrong = table.clone(parents)
+		if #parents == 0 then
+			for _, p in skillsLib.diff(list, present) do
+				table.insert(wrong, p)
+			end
+		end
+		for _, p in skillsLib.trackedNonLinks(".") do
+			table.insert(wrong, p)
+		end
+		if #wrong > 0 then
+			fail(table.concat(wrong, "\n") .. "\nrun ./zn skills in a worktree to fix the links")
+		end
+		print(`skills: {#list} skills, one link each, ok`)
+		return
+	end
+	refuseInMainCheckout("skills")
+	if #parents > 0 then
+		fail(table.concat(parents, "\n"))
+	end
+	local done, refused = skillsLib.apply(".", list, present)
+	if #refused > 0 then
+		fail(table.concat(refused, "\n"))
+	end
+	for _, line in done do
+		print(line)
+	end
+	print(`skills: {#list} skills linked`)
+end
 
 -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
 function cmd.lessons(pos: { string }, opts: { [string]: { string } })
@@ -3108,7 +3164,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		if l.from then
 			table.insert(src, l.from)
 		end
-		print(`== .claude/skills/{l.skill}/lessons/{l.slug}.md`)
+		print(`== {lessonsLib.folderOf(tree, l.skill)}/lessons/{l.slug}.md`)
 		print(`sources: {if #src > 0 then table.concat(src, ", ") else "none"}`)
 		stdio.write(tree.lessons[l.id])
 	end
@@ -3124,6 +3180,40 @@ local function architectureOf(raft: store.Item): string
 	return if fs.isFile(path)
 		then fs.readFile(path)
 		else `({raft.root} has no architecture.md: this project has none)`
+end
+
+-- The project whose current root is `root`, from the working tree's registry; nil when none is.
+local function projectOfRoot(root: string): string?
+	local ok, reg = pcall(projects.load, ".")
+	if not ok then
+		return nil
+	end
+	local p = projects.projectOf(reg :: projects.Registry, root)
+	return p and p.name
+end
+
+-- The SKILL.md files a raft's prompt inlines (c0115): z-nile's skills.INLINED, then every skill of the raft's
+-- project (none more for z-nile's own rafts). Real paths, never through .claude/skills.
+local function inlinedSkills(project: string?): { string }
+	local found = skillsLib.load(".")
+	local list = skillsLib.plan(found)
+	local out: { string } = {}
+	local byName: { [string]: skillsLib.Skill } = {}
+	for _, sk in list do
+		byName[sk.name] = sk
+	end
+	for _, name in skillsLib.INLINED do
+		local sk = byName[name]
+		table.insert(out, if sk then `{sk.dir}/SKILL.md` else `{skillsLib.ZNILE}/skills/{name}/SKILL.md`)
+	end
+	if project and project ~= skillsLib.ZNILE then
+		for _, sk in list do
+			if sk.project == project then
+				table.insert(out, `{sk.dir}/SKILL.md`)
+			end
+		end
+	end
+	return out
 end
 
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
@@ -3147,9 +3237,11 @@ local function renderPrompt(raft: store.Item): string
 			end
 		end
 	end
+	-- z-nile's step skills, then every skill of the raft's own project, each from its real folder (c0115)
+	local project = projectOfRoot(raft.root)
 	local skills = ""
-	for _, s in SKILLS_INLINED do
-		skills ..= section(`.claude/skills/{s}/SKILL.md`)
+	for _, path in inlinedSkills(project) do
+		skills ..= section(path)
 	end
 	local plan, _, planError = workstreamPlan(raft)
 	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
@@ -3164,7 +3256,8 @@ local function renderPrompt(raft: store.Item): string
 		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
 		ROOT = raft.root,
 		WORKSTREAMS = planText,
-		LESSONS = buildLessons(),
+		LESSONS = buildLessons(project),
+		PROJECT = project or raft.root,
 	})
 	for _, m in store.members(raft.id) do
 		if store.readFront(m.doc).design ~= "ready" then
@@ -3179,14 +3272,14 @@ local function promptPath(root: string, raftId: string): string
 	return `{mainRoot()}/{root}/rafts/active/{raftId}/prompt.md`
 end
 
--- The reader of a readied raft's prompt.md (the launch-raft skill's input). The decision is made from origin/main's
+-- The reader of a readied raft's prompt.md (the z-run skill's input). The decision is made from origin/main's
 -- tree, never from the local store; nothing is written.
 function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or #pos > 1 or not string.match(id, "^R%d%d%d%d$") then
 		fail("prompt takes a raft id (an issue's raft: ./zn find <id>)")
 	end
-	local notReadied = `{id} is not readied: run /ready-raft {id} (./zn ready {id}) in the main checkout`
+	local notReadied = `{id} is not readied: run /z-ready {id} (./zn ready {id}) in the main checkout`
 	if not hasOrigin() then
 		fail(notReadied)
 	end
@@ -3264,7 +3357,7 @@ function cmd.ready(pos: { string })
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
 		if not raftId or raftId == "" then
-			fail(`{target.id} has no raft: ticket-prep makes one (--single)`)
+			fail(`{target.id} has no raft: z-design makes one (--single)`)
 		end
 		raft = store.get(raftId)
 	end
@@ -3313,7 +3406,7 @@ function cmd.ready(pos: { string })
 				`{raft.id}'s issues: list and its members' raft: fields disagree (raft: {raft.id} but not listed: {table.concat(
 					unlisted,
 					", "
-				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (ticket-prep) and ready again`
+				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (z-design) and ready again`
 			)
 		end
 		local everyone: { store.Item } = { raft }
@@ -3326,7 +3419,7 @@ function cmd.ready(pos: { string })
 		end
 		for _, it in everyone do
 			if store.readFront(it.doc).design ~= "ready" then
-				fail(`{it.id} is not design: ready (run ticket-prep first)`)
+				fail(`{it.id} is not design: ready (run z-design first)`)
 			end
 			local check = `{it.dir}/check.sh`
 			if not fs.isFile(check) or not hasCheckLine(fs.readFile(check)) then

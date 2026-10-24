@@ -22,7 +22,7 @@ local function has(text: string, phrase: string): boolean
 end
 
 -- c0120 override: the spec runs from its home: the checkout's files are read from the top
-local PREP = `{TOP}/.claude/skills/ticket-prep/SKILL.md`
+local PREP = `{TOP}/z-nile/skills/z-design/SKILL.md`
 
 return t.spec("c0410 ticket-prep sections", function(it)
 	it("ticket-prep: step 3 asks for the Rules and mutants table", function()

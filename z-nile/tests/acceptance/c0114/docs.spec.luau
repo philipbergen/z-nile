@@ -7,7 +7,19 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
-local SKILLS = ".claude/skills"
+-- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links); each
+-- entry is a repository-relative skill folder ("z-nile/skills/zz-rules")
+local function skillDirs(top: string): { string }
+	local out = {}
+	for _, base in { "z-nile/skills", "pickman/skills" } do
+		local names = fs.readDir(`{top}/{base}`)
+		table.sort(names)
+		for _, name in names do
+			table.insert(out, `{base}/{name}`)
+		end
+	end
+	return out
+end
 -- c0120 override: the spec runs from z-nile/, so every document is read from the checkout's top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
@@ -17,9 +29,7 @@ local function docs(): { [string]: string }
 		["AGENTS.md"] = fs.readFile(`{TOP}/AGENTS.md`),
 		["SETUP.md"] = fs.readFile(`{TOP}/SETUP.md`),
 	}
-	-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
-	for _, skill in fs.readDir(`{TOP}/{SKILLS}`) do
-		local dir = `{SKILLS}/{skill}`
+	for _, dir in skillDirs(TOP) do
 		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
 		if fs.isFile(`{TOP}/{dir}/SKILL.md`) then
 			out[`{dir}/SKILL.md`] = fs.readFile(`{TOP}/{dir}/SKILL.md`)
@@ -87,6 +97,7 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		local bad: { string } = {}
 		-- c0120 override: each home has its own scripts/ (pickman/scripts/check.sh, z-nile/scripts/check.sh), so an old
 		-- path counts only where no home's folder (or the words "home's", naming one) is in front of it
+		-- c0120 override: each home has its own scripts/ (pickman/scripts/check.sh, z-nile/scripts/check.sh), so an old
 		local function namesOld(text: string, old: string): boolean
 			local i = 1
 			while true do
@@ -125,15 +136,14 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 			local bad: { string } = {}
 			for path, text in docs() do
 				local n = commandUses(text)
-				local allowed = if path == `{SKILLS}/tracker/SKILL.md` then 1 else 0
+				local allowed = if path == `z-nile/skills/zz-rules/SKILL.md` then 1 else 0
 				if n ~= allowed then
 					table.insert(bad, `{path}: {n}`)
 				end
 			end
 			table.sort(bad)
 			t.expect(table.concat(bad, "\n")).toBe("")
-			-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
-			local tracker = fs.readFile(`{TOP}/{SKILLS}/tracker/SKILL.md`)
+			local tracker = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 			at(tracker, "The command is `./zn` at the repository root (`scripts/tracker.sh` forwards to it")
 		end
 	)
@@ -145,6 +155,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		local raft = fs.readFile(`{TOP}/z-nile/templates/raft/check.sh`)
 		-- c0120 override: a raft's check.sh runs from its project's home, so it names the gate and ./zn by the root, and
 		-- the gate it runs is its project's
+		-- c0120 override: a raft's check.sh runs from its project's home, so it names the gate and ./zn by the root, and
+		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
 		at(
 			raft,
 			'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --full'
@@ -154,8 +166,7 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 	end)
 
 	it("the tracker and make-issue skills state the project-root rules", function()
-		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
-		local tracker = fs.readFile(`{TOP}/{SKILLS}/tracker/SKILL.md`)
+		local tracker = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 		at(
 			tracker,
 			"`z-nile/projects.toml` lists the projects, each with the root that holds its issues and rafts"
@@ -170,8 +181,7 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 			"under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's)"
 		)
 		at(tracker, "never to another root")
-		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
-		local make = fs.readFile(`{TOP}/{SKILLS}/make-issue/SKILL.md`)
+		local make = fs.readFile(`{TOP}/z-nile/skills/z-ticket/SKILL.md`)
 		-- the project: --project's, else the directory's, refused at the root (decided with the user, 2026-10-21)
 		at(make, "`./zn new issue <f|d|c> <kebab-slug> --project <name> --desc")
 		at(make, "The project is `--project`'s when given, else the one whose folder you run `./zn` in")
@@ -193,8 +203,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		)
 		-- every capture line a skill or template gives names its project, or its raft
 		-- c0120 override: the documents are read from the checkout's top (this spec runs from z-nile/)
-		for _, skill in fs.readDir(`{TOP}/{SKILLS}`) do
-			local doc = `{SKILLS}/{skill}/SKILL.md`
+		for _, dir in skillDirs(TOP) do
+			local doc = `{dir}/SKILL.md`
 			if fs.isFile(`{TOP}/{doc}`) then
 				for line in string.gmatch(fs.readFile(`{TOP}/{doc}`), "[^\n]+") do
 					for cmd in string.gmatch(line, "`(%./zn new [^`]*)`") do
@@ -209,7 +219,6 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 				end
 			end
 		end
-		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
 		at(
 			fs.readFile(`{TOP}/z-nile/templates/prompt.md`),
 			"`./zn new issue … --project <name>`, or `--raft <R-id>`"
@@ -245,9 +254,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 	it("the sequestration check covers every project root", function()
 		local cmd =
 			"-- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'"
-		for _, skill in { "review", "testing", "execute-raft" } do
-			-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
-			at(fs.readFile(`{TOP}/{SKILLS}/{skill}/SKILL.md`), cmd)
+		for _, skill in { "zz-review", "zz-test", "zz-execute" } do
+			at(fs.readFile(`{TOP}/z-nile/skills/{skill}/SKILL.md`), cmd)
 		end
 	end)
 end)

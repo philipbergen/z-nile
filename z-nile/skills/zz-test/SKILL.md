@@ -1,9 +1,9 @@
 ---
-name: testing
-description: How pickman is tested - spec tiers and naming, the affected-test selector, gate modes, check.sh acceptance files and their sequestration. Read before writing specs, check.sh files, or running the gate.
+name: zz-test
+description: How z-nile tests and gates every project - the gate and its modes, the shared spec runner, the affected-test selector, check.sh acceptance files and their sequestration, and the guards that keep specs off the real repository. Read before writing specs or check.sh, or running the gate (a project's own spec tiers are in its own skill: pickman-test).
 ---
 
-# Testing
+# Testing (z-nile)
 
 ## Running tests
 | command | use |
@@ -18,73 +18,22 @@ description: How pickman is tested - spec tiers and naming, the affected-test se
 | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
 
 ## Spec layout (`*.spec.luau`)
-Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's.
+Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's. A project's own tiers (pickman's `tests/unit`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place` and `fakeengine` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has.
 | dir | tier | may require |
 |---|---|---|
-| `tests/unit/<Feature>/` | one feature's behavior | only that feature (through its `init`) plus `@tests/lib/t` |
-| `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
-| `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
-| `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
 | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |
-| `tests/runtime/` | scripts that run inside a real Roblox server of the published Beta game place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`, run by CI after a publish; skipped when no key is configured); `tests/runtime/lobby/` holds the lobby's, run in the lobby with `--lobby <version>` once both places are published (c0064). Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
-| `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/`, `default.project.json` or `lobby.project.json` change. `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
 | `tests/acceptance/<id>/` | acceptance specs promoted by `./zn done`, in the item's project's home (`pickman/tests/acceptance/<id>` for pickman's, `z-nile/tests/acceptance/<id>` for z-nile's). Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
-| `tests/meta/` | the structural rules: pickman's from the architecture skill (`pickman/tests/meta/`), the tooling's (`z-nile/tests/meta/`) | the graph library |
+| `tests/meta/` | the structural rules: pickman's from the pickman-arch skill (`pickman/tests/meta/`), the tooling's (`z-nile/tests/meta/`) | the graph library |
 
-A spec file looks like this:
-```lua
---!strict
-local Maze = require("@logic/Maze")
-local t = require("@tests/lib/t")
-
-return t.spec("Maze.parse", function(it)
-	it("rejects rows of unequal width", function()
-		t.expect(function() Maze.parse({ "##", "#" }) end).toThrow("width")
-	end)
-end)
-```
 The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThrow(pattern?)`.
 
-**Running an adapter's real source**: `@tests/lib/fakeengine` loads an adapter from a built place (`luau.load` with a fake environment) and runs it against a fake engine: instances whose remotes and attributes come from that place, signals whose handlers run in coroutines, `task.*` on a fake clock, and the real Logic. It covers what the lobby adapters use (f0061's design lists the surface). A spec that needs more extends the fake, without making it accept less, or more, than it does now.
-
 **Good specs**:
-- **Deterministic**: no wall-clock time and no unseeded randomness. Pass `dt` and a seeded RNG instead. The one timing exception is `sim.bench` budgets (see Simulations).
+- **Deterministic**: no wall-clock time and no unseeded randomness. Pass `dt` and a seeded RNG instead. The one timing exception is `sim.bench` budgets (pickman-test skill, Simulations).
 - **One behavior per case**, with a name that states it.
 - **Assert on public API results**, never on internals.
 - **Survive a compaction** (`./zn compact` renumbers every item): a spec that pins a real tracker item maps its id through `tests/lib/renamed.luau` (`renamed.id("R0010")`), and test data that names a `tests/acceptance/<id>` path spells it in two parts (`"tests/" .. "acceptance/"`), or the compaction rewrites it.
 - **Hard to fake.** An acceptance spec must fail for plausible wrong implementations: an off-by-one, a missing edge case, a hard-coded value. Include at least one case that a hard-coded or partial implementation would fail.
 - **No browsers.** `tests/run` puts recording `open` and `xdg-open` stubs first on `PATH` for the whole run (workers and nested runners included, through `PICKMAN_OPEN_GUARD`) and fails the run if any is called. Run `./zn board` with `-O`; a spec that tests opening puts its own stubs first on `PATH`. A spec that sets `PATH` for a child prepends to it, never replaces it, or the guard's stubs are lost.
-
-## Simulations (`@tests/lib/sim`)
-`tests/lib/sim.luau` runs any **model** (`new(seed)`, `step(state, intents, tick)`, `observe(state)`, plus `name` and `tickRate`) for N ticks from a script of timed intents and expectations, and returns a trace. The game's Logic provides a model; `tests/fixtures/sim/walker.luau` is a small one.
-
-**Tick semantics** (the contract every model must follow):
-- Time `t` is the world after `t` steps. Time 0 is `model.new(seed)`.
-- Step k moves the world from time k to time k+1.
-- An intent at k is delivered in step k. Several intents at one tick arrive in script order; a step with none gets an empty list.
-- Events returned by step k are visible at time k+1, so they are stamped `tick = k+1`.
-- An expectation `at = t` is checked against the observation at time `t` (`at = 0` is the initial state). Per time the order is: record, check expectations, then `stopWhen`.
-
-```lua
-local sim = require("@tests/lib/sim")
-local Walker = require("@tests/fixtures/sim/walker")
-local t = require("@tests/lib/t")
-local trace = sim.run(Walker, {
-    seed = 1,
-    ticks = sim.ticks(Walker, 0.5),
-    script = { sim.intent(0, "R"), sim.expect(5, { x = 10 }, "reaches the wall") },
-})
-t.expect(sim.firstTick(trace, "Bump")).toBe(6)
-```
-- A table expectation is a partial match on top-level keys only; a function expectation gets a copy of the observation and fails by raising.
-- Observations and intents are **deep-copied**: the harness snapshots each observation, and each run gets fresh copies of the scripted intents.
-- **JSON-safe**: intents, observations and events must be JSON-safe (no functions, sparse arrays or NaN), because failures write a replay.
-- Misuse (bad `ticks`, `seed` or `at`, an intent or expectation beyond the run) fails before any step.
-- `sim.assertDeterministic` runs a scenario twice and names the first diverging tick. `sim.seeds(n)` and `sim.firstTick` support measurable proxies for feel: "an idle player is caught within N-M s across 20 seeds" goes here, not in Observed.
-- **Replays**: a failure writes `.cache/sim/<model>-seed<seed>-tick<t>.json` (gitignored) and names it in the message. To debug, re-run it from a scratch spec: `sim.replay(Model, ".cache/sim/…json")`. It re-runs the model, so a `print` in the model works; for a step error the failing step runs again and re-raises.
-- **`sim.bench`** steps N worlds interleaved, like the server, and returns elapsed seconds. Budgets are the one **timing exception** to "no wall-clock time": keep a margin of at least 50x over the measured cost.
-
-**Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time.
 
 ## Affected selection
 `z-nile/affected.luau` builds the static require graph of `src/` and `tests/`. It selects every spec whose transitive requires include a changed file.
@@ -110,16 +59,16 @@ finish
 - **One `check` per Checked criterion.** The label starts with the AC number from the document.
 - **Exit criteria**: a raft's `check.sh` runs its project's gate (`"$ZN_ROOT/z-nile/check.sh" --project <project> --full`), then every member's `check.sh`, then the raft's own RCn checks. A project's gate proves that project alone (c0120): a game raft's `done` does not prove z-nile is green; CI's z-nile job does, on every push.
 - **Commands**: checks may run any deterministic command, such as a spec, a `lune run` script, `rojo build`, or a `grep` that must match nothing.
-- **Where acceptance specs live**: ticket-prep writes them in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/*.spec.luau`, under the issue's project root), **not** in `tests/`.
+- **Where acceptance specs live**: z-design writes them in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/*.spec.luau`, under the issue's project root), **not** in `tests/`.
   - They target code that doesn't exist yet, so putting them in `tests/` would turn main red.
   - They're formatted and linted, but not type-checked or run by the repo gate. Only `check.sh` runs them, by explicit path.
   - They must require only through aliases (`@logic/…`, `@tests/…`, `@scripts/…`), never relative paths, because they get moved.
   - Never write literal `require("…")` text inside strings or comments. The graph scanner would treat it as a real require. Build such text by concatenation.
   - `./zn done` **moves** them to `tests/acceptance/<id>/` in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's, `z-nile/tests/acceptance/<id>/` for z-nile's), where they become permanent regression specs. It then type-checks that project's `tests/`, runs its `tests/meta` and the promoted specs from its home, and **rolls back** if any of that fails.
 - **Sequestered**:
-  - `check.sh` files and the acceptance specs they name are written in ticket-prep, *before* execution.
+  - `check.sh` files and the acceptance specs they name are written in z-design, *before* execution.
   - During execution they must not change. The one exception is a move of the repository's layout that the user decides on, for **finished** items' `check.sh` files only: the move's raft rewrites the paths it breaks in them, so they still resolve from their home (c0114 for its moves, c0120 for the homes), in an edits commit, never a renames-only one, and its sequestration check compares each finished file with its text before the move, rewritten.
-  - The code reviewer checks them with `git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'`, which must list only `R100` renames (review skill, Code mode item 2).
+  - The code reviewer checks them with `git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'`, which must list only `R100` renames (zz-review skill, Code mode item 2).
   - If one is actually wrong, the executor stops and escalates; it doesn't patch it.
 
 ## Criteria tiers (in each issue document)
@@ -161,7 +110,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
     - a ref whose tip a fixture identity wrote appeared.
   - **Gate spec**: `tests/tooling/repo-fence.spec.luau` proves in every gate that the guards are on, the jail included (harmless probe writes outside `.cache` must fail). It scans what runs as a check (`tests/`, `scripts/`, `z-nile/`, `./zn` and every `check.sh`; a prepared acceptance spec once it is promoted into `tests/`), case-insensitively. It fails if any of them names a way to switch the guards off (`GIT_CEILING_DIRECTORIES`, `GIT_DIR`, `GIT_CONFIG_*`, `core.hooksPath`, `--no-verify`, `sandbox-exec`, `env -i`, `osascript`, `launchctl`, and the network and credential settings `protocol.*allow`, `credential.*`, `extraheader`, `GIT_SSH_COMMAND`, …), or commits as anything but `@example.invalid` (in `user.email` or an `*_EMAIL` variable). Extensionless files (hooks, tools) are read too; the guards themselves (`z-nile/lib/git-hooks/`, `fence.sh`, `fence.luau`) are exempt. A file with a real need to name one (a fixture hook that unsets what git exports to it, the fixture helper that refuses them) gets an entry in the spec's `ALLOWED` table: that file, those names only, and the reason. The review checks every entry.
 - **`check.sh` files** get the fence, the override stripping and the ref and push guards through `ac.sh`, but no jail: they legitimately write the checkout (`sourcemap.json`, `promote-check`) and talk to GitHub (`z-nile/ci-verify.sh`). The specs they start are jailed.
-- **Caught only by review** (the review skill's Repository safety item; each is **high**):
+- **Caught only by review** (the zz-review skill's Repository safety item; each is **high**):
   - **Linux (CI)**: specs there are unjailed, so a write to the real checkout's index or files (`git add`, `checkout`, `reset --hard`, `worktree remove`, `remote set-url`, a plain file write) is stopped by nothing; CI's checkout is disposable, but the same spec runs on developers' Macs, where the jail stops it.
   - **`check.sh` files' own commands**: anything they run outside `tests/run`, including config writes and network actions.
   - **Handing work to a process outside the jail**: `open`, `osascript`, `launchctl`, or a daemon. The gate scan flags `osascript` and `launchctl`.
@@ -178,9 +127,9 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
 - On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or `pickman/` (c0120: the game's home).
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill testing --full`. Each is a mistake made before, with the question that catches it.
+Before you start, read this skill's lessons: `./zn lessons --skill zz-test --full`. Each is a mistake made before, with the question that catches it.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
-- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
+- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.

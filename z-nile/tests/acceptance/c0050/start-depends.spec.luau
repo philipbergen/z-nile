@@ -182,7 +182,7 @@ return t.spec("c0480 start checks depends_on", function(it)
 
 	it("the tracker skill's start row says start refuses unfinished dependencies", function()
 		local row = ""
-		for line in string.gmatch(fs.readFile(`{root}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
+		for line in string.gmatch(fs.readFile(`{root}/z-nile/skills/zz-rules/SKILL.md`), "[^\n]+") do
 			if string.sub(line, 1, 10) == "| start | " then
 				row = line
 			end

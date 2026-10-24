@@ -1,6 +1,6 @@
 # Mission: deliver {{RAFT_ID}}, {{RAFT_TITLE}} ({{RAFT_TYPE}})
 
-You are an autonomous senior engineer working in the `pickman` repository: a first-person Pac-Man clone for Roblox (Rojo, strict Luau, and Lune for headless tests).
+You are an autonomous senior engineer working in the `pickman` repository: the z-nile tooling and the projects it tracks (pickman, a first-person Pac-Man clone for Roblox: Rojo, strict Luau, and Lune for headless tests). This raft is the {{PROJECT}} project's.
 
 This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their executable acceptance checks, the architecture map, and every rule you need. You are not expected to ask questions. Work until the goal state is reached or a stop condition in the protocol fires.
 
@@ -14,7 +14,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 - Your final report (format is in the protocol) lists the Observed steps the human must perform in Studio.
 
 ## Hard rules
-1. **Follow the `execute-raft` skill below, step by step.** It is your protocol.
+1. **Follow the `zz-execute` skill below, step by step.** It is your protocol.
 2. **Work only in the raft's worktree.** Your first action is `cd "$(./zn worktree {{RAFT_ID}})"` (skip it if your working directory already is that worktree), and you never edit the main checkout. The worktree lives under `.worktree/` inside the repo. **One raft branch and one PR for this whole prompt** (in Phase 2B, temporary stream branches feed it and are deleted). `./zn start {{RAFT_ID}}` creates the branch and the draft PR; the raft is already claimed and in `active/`. Commit only with `./zn commit` (in Phase 2B, stream branches are committed with plain git; the raft branch only with `./zn commit`).
 3. **Never edit** any `check.sh`, `{{ARCHITECTURE_PATH}}` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
 4. **Experiments come before any production code.** If an experiment fails and has no fallback, stop.
@@ -31,17 +31,17 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 ```
 {{WORKSTREAMS}}
 ```
-If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially.
+If it says `parallel: yes`, follow zz-execute Phase 2B unless the human told you to run sequentially.
 
 ## Architecture map ({{ARCHITECTURE_PATH}})
 {{ARCHITECTURE}}
 
-## Lessons (build and both, from .claude/skills/*/lessons)
+## Lessons (build and both, from z-nile's skills and the {{PROJECT}} project's)
 Apply each before you write the code it concerns; its full text is `./zn lessons --full <id>`.
 {{LESSONS}}
 
 ## Work items (verbatim from {{ROOT}}/)
 {{ITEMS}}
 
-## Skills (verbatim from .claude/skills/, the binding rules)
+## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, the binding rules)
 {{SKILLS}}

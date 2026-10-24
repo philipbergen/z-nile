@@ -90,10 +90,7 @@ return t.spec("c0114 commands across project roots", function(it)
 			[`{Z}/rafts/R0010/R0010.md`] = doc("R0010", "", "ready", PREPARED),
 			[`{Z}/rafts/R0010/check.sh`] = CHECK,
 		}
-		for _, s in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			-- c0120 override: read through the checkout's top
-			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{s}/SKILL.md`)
-		end
+		-- the prompt's skills come with the copied tooling (z-nile/skills, c0115)
 		f = trackerfix.new("c0114-roots", seed)
 		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
 	end)

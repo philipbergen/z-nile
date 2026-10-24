@@ -23,7 +23,7 @@ if [[ ${_ac_outer##*/} == check.sh && $_ac_outer != "$_ac_script" ]]; then
   exit 1
 fi
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
-# Guard git for everything this check.sh runs (testing skill, "Specs never touch the real repository"). The guards
+# Guard git for everything this check.sh runs (zz-test skill, "Specs never touch the real repository"). The guards
 # missing fails closed (c0114): a check.sh never runs unfenced.
 if [[ ! -f z-nile/lib/fence.sh ]]; then
   echo "ac.sh: $(pwd -P)/z-nile/lib/fence.sh is missing: refusing to run checks without the repository guards" >&2

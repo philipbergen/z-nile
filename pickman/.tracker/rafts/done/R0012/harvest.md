@@ -1,27 +1,27 @@
 # Harvest: R0012
 
-- note R0012 Phase 3, promote-check failed on strict sequestered specs that did not type-check against the design's Touch types (prep's dry run saw only the missing module); the user authorized a type-only amendment: ticket-prep/prove-specs-pass-on-a-prototype
-- review-001 F1: architecture/guard-what-the-engine-sees
-- review-001 F2: architecture/guard-what-the-engine-sees
-- review-001 F3: testing/pin-call-site-arguments
+- note R0012 Phase 3, promote-check failed on strict sequestered specs that did not type-check against the design's Touch types (prep's dry run saw only the missing module); the user authorized a type-only amendment: z-design/prove-specs-pass-on-a-prototype
+- review-001 F1: zz-arch/guard-what-the-engine-sees
+- review-001 F2: zz-arch/guard-what-the-engine-sees
+- review-001 F3: zz-test/pin-call-site-arguments
 - review-001 F4: one-off: Studio-only premises the executor cannot run; the user accepted merging on the gates with the questions listed for OC1
 - review-001 F5: one-off: a product decision (the snap frame on touch screens only), made by the user
 - review-001 F6: one-off: a comment wider than stylua's column width, which stylua does not wrap
 - review-001 F7: one-off: an unverified engine guarantee (an end for every touch), answered by a focus-loss reset and an OC1 question
-- note R0012 code review 001's lesson candidate, f0028 AC3's order pin took a declaration as the clear: testing/order-pins-anchor-unique-text
-- review-002 F1: testing/pin-call-site-arguments
-- design-review-001 F1: ticket-prep/prove-specs-pass-on-a-prototype
-- design-review-001 F2: ticket-prep/prove-specs-pass-on-a-prototype
-- design-review-001 F3: architecture/name-each-coordinate-space
-- design-review-001 F4: testing/no-vacuous-pass
-- design-review-001 F5: testing/seed-every-enumerated-case
-- design-review-001 F6: ticket-prep/spec-design-correspondence
-- design-review-002 F1: architecture/name-each-coordinate-space
-- design-review-002 F2: ticket-prep/spec-design-correspondence
-- design-review-003 F1: architecture/name-each-coordinate-space
-- design-review-003 F2: ticket-prep/restated-rules-move-together
-- design-review-003 F3: ticket-prep/restated-rules-move-together, testing/pin-call-site-arguments
-- design-review-004 F1: architecture/name-each-coordinate-space
-- design-review-004 F2: testing/pin-call-site-arguments
-- design-review-005 F1: testing/pin-call-site-arguments
-- design-review-005 F2: testing/no-vacuous-pass
+- note R0012 code review 001's lesson candidate, f0028 AC3's order pin took a declaration as the clear: zz-test/order-pins-anchor-unique-text
+- review-002 F1: zz-test/pin-call-site-arguments
+- design-review-001 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: zz-arch/name-each-coordinate-space
+- design-review-001 F4: zz-test/no-vacuous-pass
+- design-review-001 F5: zz-test/seed-every-enumerated-case
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-002 F1: zz-arch/name-each-coordinate-space
+- design-review-002 F2: z-design/spec-design-correspondence
+- design-review-003 F1: zz-arch/name-each-coordinate-space
+- design-review-003 F2: z-design/restated-rules-move-together
+- design-review-003 F3: z-design/restated-rules-move-together, zz-test/pin-call-site-arguments
+- design-review-004 F1: zz-arch/name-each-coordinate-space
+- design-review-004 F2: zz-test/pin-call-site-arguments
+- design-review-005 F1: zz-test/pin-call-site-arguments
+- design-review-005 F2: zz-test/no-vacuous-pass

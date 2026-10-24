@@ -197,7 +197,7 @@ if (mode === "walk") {
   expect(/Nothing here/.test(list()), "an empty Rafts view shows Nothing here");
   key("ArrowDown"); key("ArrowUp");
   key("ArrowRight");
-  expect(/ticket-prep/.test(list()), "ArrowRight shows a raftless issue");
+  expect(/z-design/.test(list()), "ArrowRight shows a raftless issue");
 } else {
   expect(/<h2><span class="id">c0050<\/span>/.test(pane()), "a #id in the URL opens that issue");
 }

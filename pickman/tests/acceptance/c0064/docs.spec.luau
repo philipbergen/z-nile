@@ -6,7 +6,7 @@ local t = require("@tests/lib/t")
 
 -- c0120 override: the spec runs from its home: the checkout's files are read from the top
 local setup = fs.readFile("../SETUP.md")
-local testing = fs.readFile("../.claude/skills/testing/SKILL.md")
+local testing = fs.readFile("skills/pickman-test/SKILL.md")
 
 local function has(s: string, needle: string): boolean
 	return string.find(s, needle, 1, true) ~= nil

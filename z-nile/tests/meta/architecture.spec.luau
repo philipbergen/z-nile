@@ -1,5 +1,5 @@
 --!strict
--- Structural rules from the `testing` skill for the tooling (z-nile's), run from its home z-nile/ (c0120): its specs,
+-- Structural rules from the `zz-arch` skill for the tooling (z-nile's), run from its home z-nile/ (c0120): its specs,
 -- its engine and libraries, and the root's scripts/ (c0114's shims, which belong to no project). pickman's rules
 -- (src/, Logic, features, its architecture map) are pickman/tests/meta/architecture.spec.luau, run from pickman/.
 local fs = require("@lune/fs")

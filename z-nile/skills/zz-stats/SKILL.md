@@ -1,5 +1,5 @@
 ---
-name: metrics
+name: zz-stats
 description: Report cost per issue (agent active time, lines) and the rework rate against the 20% target. Use for "metrics", "spend", "how much rework".
 ---
 
@@ -22,9 +22,9 @@ description: Report cost per issue (agent active time, lines) and the rework rat
 4. **Caveat**: spend is best effort. Minutes come from `--time` when the agent knew them, and otherwise from commit gaps capped at 45 minutes. Tokens are best effort too: an agent that does not know them leaves `--tokens` out, and that cell stays empty and sums as 0. Say so if precision matters to the question.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill metrics --full`. Each is a mistake made before, with the question that catches it.
+Before you start, read this skill's lessons: `./zn lessons --skill zz-stats --full`. Each is a mistake made before, with the question that catches it.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
-- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md` (format: tracker skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (ticket-prep step 5.3, execute-raft Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (make-issue skill). The prep that takes the issue writes the file.
+- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.

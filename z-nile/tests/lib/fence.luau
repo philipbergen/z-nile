@@ -1,5 +1,5 @@
 --!strict
--- The spec runner's guard for the repository it runs in (testing skill, "Specs never touch the real
+-- The spec runner's guard for the repository it runs in (zz-test skill, "Specs never touch the real
 -- repository"). tests/run calls `fence.enter()` right after its AC_LIST refusal.
 --
 -- A top-level run (no valid PICKMAN_TEST_FENCE for this checkout):
@@ -719,7 +719,7 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 			open,
 			", "
 		)}{if #open > 0 and #leaks > 0 then ", " else ""}{table.concat(leaks, ", ")}). `
-			.. 'Run specs outside the sandbox you are in (testing skill, "Specs never touch the real repository").\n'
+			.. 'Run specs outside the sandbox you are in (zz-test skill, "Specs never touch the real repository").\n'
 	)
 	pcall(fs.removeDir, runTemp)
 	process.exit(1)
@@ -819,7 +819,7 @@ function fence.enter()
 		local origin = git({ "config", "--show-origin", "user.email" }) or ""
 		stdio.ewrite(
 			`this repository's git identity is a fixture identity ({email}, from {origin}): a check wrote it. `
-				.. "Stop and report this; do not repair the repository yourself (testing skill).\n"
+				.. "Stop and report this; do not repair the repository yourself (zz-test skill).\n"
 		)
 		process.exit(1)
 	end
@@ -906,7 +906,7 @@ function fence.enter()
 	local changed = changes(before, after)
 	if #changed > 0 then
 		stdio.ewrite(
-			`\nREPOSITORY CHANGED during the test run: a check must never touch the real repository (testing skill).\n{table.concat(
+			`\nREPOSITORY CHANGED during the test run: a check must never touch the real repository (zz-test skill).\n{table.concat(
 				changed,
 				"\n"
 			)}\nStop and report this; do not repair the repository yourself.\n`

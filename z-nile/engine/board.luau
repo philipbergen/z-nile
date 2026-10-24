@@ -650,7 +650,7 @@ function board.collect(root: string?, checkout: string?): Model
 			else "not"
 		local command: string? = nil
 		if bucket == "ready" then
-			command = if r.state == "active" then `/launch-raft {r.id}` else `/ready-raft {r.id}`
+			command = if r.state == "active" then `/z-run {r.id}` else `/z-ready {r.id}`
 		end
 		raftBuckets[r.id] = bucket
 		local raft: Raft = {
@@ -739,7 +739,7 @@ function board.collect(root: string?, checkout: string?): Model
 			bucket = "ready"
 			issue.command = raftById[issue.raft].command
 		elseif not issue.raft then
-			issue.command = `/ticket-prep {issue.id}`
+			issue.command = `/z-design {issue.id}`
 		end
 		table.insert(views.issues[bucket], issue.id)
 	end

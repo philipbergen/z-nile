@@ -1,6 +1,6 @@
 --!strict
 -- Headless simulation harness. Runs any model (new / step / observe) for N ticks from a script of
--- timed intents and expectations, and returns a trace. See the testing skill, "Simulations".
+-- timed intents and expectations, and returns a trace. See the pickman-test skill, "Simulations".
 --
 -- Tick semantics: step k moves the world from time k to time k+1; an intent at k is delivered in
 -- step k; events returned by step k are visible at time k+1 (stamped tick = k+1).

@@ -8,6 +8,6 @@ The gap between a claim and its record is the window in which another process se
 
 **Why:** R0047 code review 001 F1: the takeover waiter ran perl for its own start id after creating the takeover folder and before writing its `pid`; a 3 s perl let a second waiter remove the takeover as unowned (2 s), and the first then crashed writing into the removed folder. The read also ran on every 0.1 s step of a 240 s wait.
 
-**How to apply:** read your own facts once, before the loop and before the claim, and pass them in; keep the claim and its record a few writes apart; count the reads in a spec (`testing/count-calls-in-poll-loops`).
+**How to apply:** read your own facts once, before the loop and before the claim, and pass them in; keep the claim and its record a few writes apart; count the reads in a spec (`zz-test/count-calls-in-poll-loops`).
 
 Helpers called inside the window count too: R0047 code review 002 F1 found `writeWhole` naming its temp file with `myPid()`, a shell, after the claim; the caller now passes the pid in.

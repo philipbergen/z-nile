@@ -30,9 +30,10 @@ local function identity(dir: string, name: string)
 	fixture.git(dir, { "config", "user.email", `{name}@example.invalid` })
 end
 
--- Builds `.cache/<name>`: a seed commit (the tooling, empty tracker folders, and `seed`'s extra files),
+-- Builds `.cache/<name>`: a seed commit (the tooling, with the skills' lessons unless `opts.noLessons`, empty tracker
+-- folders, and `seed`'s extra files),
 -- a bare origin made from it, and two clones of the origin. Removes what an earlier run left.
-function trackerfix.new(name: string, seed: { [string]: string }?): Fixture
+function trackerfix.new(name: string, seed: { [string]: string }?, opts: { noLessons: boolean? }?): Fixture
 	local root = fixture.physical(".")
 	if not root then
 		error("trackerfix.new: the current directory is not readable", 2)
@@ -48,6 +49,9 @@ function trackerfix.new(name: string, seed: { [string]: string }?): Fixture
 	identity(source, name)
 	-- ./zn, scripts/ and z-nile/'s tooling, with no items, counter or map; empty folders under both project roots
 	engine.copy(root, source)
+	if opts and opts.noLessons then
+		engine.clearLessons(source) -- the copied skills' lessons; the seed adds the spec's own
+	end
 	engine.roots(source)
 	fs.writeFile(`{source}/.gitignore`, ".cache/\n.worktree/\n")
 	local extra: { [string]: string } = seed or {}

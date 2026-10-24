@@ -4,7 +4,7 @@
 -- folders that names a .cache path is listed here with how it stays safe: through z-nile/lib/replace-file.pl (a
 -- rename, never a write through a link), a `mkdir -p` of a plain folder the fence checks, a read, or a message. A new
 -- line needs a reviewer to add it here. The list covers scripts/ and z-nile/ (its .tracker/ documents aside) only: a
--- write through a listed variable, or a write from the runner (tests/lib), is review's to catch (testing skill).
+-- write through a listed variable, or a write from the runner (tests/lib), is review's to catch (zz-test skill).
 local fs = require("@lune/fs")
 local projects = require("@znile/engine/projects")
 

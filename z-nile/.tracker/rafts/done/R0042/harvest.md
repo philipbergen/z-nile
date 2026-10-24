@@ -1,94 +1,94 @@
 # Harvest: R0042
 Rounds 001 to 005 reviewed the reduced-scope design (c0114 to c0118), which the user rejected on 2026-10-20. Their lessons still apply to the full-scope preps of those issues.
 
-- design-review-001 F1: ticket-prep/new-rules-migrate-existing-work
-- design-review-001 F2: tracker/exhaustive-lists-name-new-things, review/no-scope-cut-as-fix
-- design-review-001 F3: architecture/guards-trust-only-origin
-- design-review-001 F4: ticket-prep/spec-design-correspondence
-- design-review-001 F5: ticket-prep/restated-rules-move-together
-- design-review-001 F6: testing/no-vacuous-pass
-- design-review-001 F7: ticket-prep/instructions-runnable-where-they-run
-- design-review-001 F8: ticket-prep/instructions-runnable-where-they-run, ticket-prep/spec-design-correspondence
-- design-review-001 F9: ticket-prep/spec-design-correspondence
-- design-review-001 F10: tracker/exhaustive-lists-name-new-things
-- design-review-001 F11: ticket-prep/never-narrow-captured-scope
-- design-review-001 F12: ticket-prep/spec-design-correspondence
-- design-review-001 F13: testing/seed-every-enumerated-case
-- design-review-001 F14: ticket-prep/specify-every-named-artifact
+- design-review-001 F1: z-design/new-rules-migrate-existing-work
+- design-review-001 F2: zz-rules/exhaustive-lists-name-new-things, zz-review/no-scope-cut-as-fix
+- design-review-001 F3: zz-arch/guards-trust-only-origin
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: zz-test/no-vacuous-pass
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-001 F8: z-design/instructions-runnable-where-they-run, z-design/spec-design-correspondence
+- design-review-001 F9: z-design/spec-design-correspondence
+- design-review-001 F10: zz-rules/exhaustive-lists-name-new-things
+- design-review-001 F11: z-design/never-narrow-captured-scope
+- design-review-001 F12: z-design/spec-design-correspondence
+- design-review-001 F13: zz-test/seed-every-enumerated-case
+- design-review-001 F14: z-design/specify-every-named-artifact
 - design-review-001 F15: one-off: small inconsistencies in the reduced-scope drafts
-- design-review-002 F1: testing/plain-find-for-literals
-- design-review-002 F2: ticket-prep/spec-design-correspondence
-- design-review-002 F3: ticket-prep/rerun-skipped-checks-after-edits
-- design-review-002 F4: architecture/lock-reads-live-state
-- design-review-002 F5: architecture/lock-reads-live-state
-- design-review-002 F6: testing/no-vacuous-pass
-- design-review-002 F7: tracker/exhaustive-lists-name-new-things
-- design-review-002 F8: ticket-prep/restated-rules-move-together
-- design-review-002 F9: ticket-prep/prove-specs-pass-on-a-prototype
-- design-review-002 F10: ticket-prep/spec-design-correspondence
-- design-review-002 F11: ticket-prep/specify-every-named-artifact
+- design-review-002 F1: zz-test/plain-find-for-literals
+- design-review-002 F2: z-design/spec-design-correspondence
+- design-review-002 F3: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F4: zz-arch/lock-reads-live-state
+- design-review-002 F5: zz-arch/lock-reads-live-state
+- design-review-002 F6: zz-test/no-vacuous-pass
+- design-review-002 F7: zz-rules/exhaustive-lists-name-new-things
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F10: z-design/spec-design-correspondence
+- design-review-002 F11: z-design/specify-every-named-artifact
 - design-review-002 F12: one-off: small gaps in the reduced-scope drafts
-- design-review-003 F1: architecture/lock-reads-live-state
-- design-review-003 F2: architecture/lock-reads-live-state
-- design-review-003 F3: ticket-prep/spec-design-correspondence
-- design-review-003 F4: ticket-prep/spec-design-correspondence
-- design-review-003 F5: testing/no-vacuous-pass
-- design-review-003 F6: ticket-prep/instructions-runnable-where-they-run
-- design-review-003 F7: testing/seed-every-enumerated-case
-- design-review-003 F8: ticket-prep/spec-design-correspondence
-- design-review-003 F9: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-003 F1: zz-arch/lock-reads-live-state
+- design-review-003 F2: zz-arch/lock-reads-live-state
+- design-review-003 F3: z-design/spec-design-correspondence
+- design-review-003 F4: z-design/spec-design-correspondence
+- design-review-003 F5: zz-test/no-vacuous-pass
+- design-review-003 F6: z-design/instructions-runnable-where-they-run
+- design-review-003 F7: zz-test/seed-every-enumerated-case
+- design-review-003 F8: z-design/spec-design-correspondence
+- design-review-003 F9: z-design/prove-specs-pass-on-a-prototype
 - design-review-003 F10: one-off: small gaps in the reduced-scope drafts
-- design-review-004 F1: architecture/lock-reads-live-state
-- design-review-004 F2: ticket-prep/prove-specs-pass-on-a-prototype
-- design-review-004 F3: testing/plain-find-for-literals
-- design-review-004 F4: testing/no-vacuous-pass
-- design-review-004 F5: ticket-prep/spec-design-correspondence
+- design-review-004 F1: zz-arch/lock-reads-live-state
+- design-review-004 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F3: zz-test/plain-find-for-literals
+- design-review-004 F4: zz-test/no-vacuous-pass
+- design-review-004 F5: z-design/spec-design-correspondence
 - design-review-004 F6: one-off: small gaps in the reduced-scope drafts
-- design-review-005 F1: architecture/lock-reads-live-state
-- design-review-005 F2: architecture/lock-reads-live-state
-- design-review-005 F3: ticket-prep/prove-specs-pass-on-a-prototype
+- design-review-005 F1: zz-arch/lock-reads-live-state
+- design-review-005 F2: zz-arch/lock-reads-live-state
+- design-review-005 F3: z-design/prove-specs-pass-on-a-prototype
 - design-review-005 F4: one-off: small gaps in the reduced-scope drafts
-- design-review-006 F1: ticket-prep/rerun-skipped-checks-after-edits
-- design-review-006 F2: ticket-prep/never-narrow-captured-scope, ticket-prep/new-rules-migrate-existing-work
-- design-review-006 F3: ticket-prep/required-steps-on-every-path
-- design-review-006 F4: ticket-prep/spec-design-correspondence
-- design-review-006 F5: ticket-prep/restated-rules-move-together
-- design-review-006 F6: ticket-prep/never-narrow-captured-scope
-- design-review-006 F7: ticket-prep/never-narrow-captured-scope
-- design-review-006 F8: ticket-prep/restated-rules-move-together
-- design-review-006 F9: ticket-prep/instructions-runnable-where-they-run
-- design-review-006 F10: ticket-prep/new-rules-migrate-existing-work
+- design-review-006 F1: z-design/rerun-skipped-checks-after-edits
+- design-review-006 F2: z-design/never-narrow-captured-scope, z-design/new-rules-migrate-existing-work
+- design-review-006 F3: z-design/required-steps-on-every-path
+- design-review-006 F4: z-design/spec-design-correspondence
+- design-review-006 F5: z-design/restated-rules-move-together
+- design-review-006 F6: z-design/never-narrow-captured-scope
+- design-review-006 F7: z-design/never-narrow-captured-scope
+- design-review-006 F8: z-design/restated-rules-move-together
+- design-review-006 F9: z-design/instructions-runnable-where-they-run
+- design-review-006 F10: z-design/new-rules-migrate-existing-work
 - design-review-006 F11: one-off: harvest entries marked one-off whose class recurs; remapped in this round
-- design-review-007 F1: tracker/item-history-spans-moves-and-compaction, testing/no-vacuous-pass
-- design-review-007 F2: testing/seed-every-enumerated-case, tracker/item-history-spans-moves-and-compaction
-- design-review-007 F3: ticket-prep/never-narrow-captured-scope
-- design-review-007 F4: ticket-prep/restated-rules-move-together
-- design-review-008 F1: tracker/item-history-spans-moves-and-compaction
-- design-review-008 F2: ticket-prep/spec-design-correspondence, ticket-prep/restated-rules-move-together
-- design-review-008 F3: testing/seed-every-enumerated-case
-- design-review-008 F4: ticket-prep/restated-rules-move-together
-- design-review-009 F1: tracker/item-history-spans-moves-and-compaction, testing/no-vacuous-pass
-- design-review-009 F2: ticket-prep/restated-rules-move-together
-- design-review-010 F1: tracker/item-history-spans-moves-and-compaction, architecture/parsers-refuse-ambiguity
+- design-review-007 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/no-vacuous-pass
+- design-review-007 F2: zz-test/seed-every-enumerated-case, zz-rules/item-history-spans-moves-and-compaction
+- design-review-007 F3: z-design/never-narrow-captured-scope
+- design-review-007 F4: z-design/restated-rules-move-together
+- design-review-008 F1: zz-rules/item-history-spans-moves-and-compaction
+- design-review-008 F2: z-design/spec-design-correspondence, z-design/restated-rules-move-together
+- design-review-008 F3: zz-test/seed-every-enumerated-case
+- design-review-008 F4: z-design/restated-rules-move-together
+- design-review-009 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/no-vacuous-pass
+- design-review-009 F2: z-design/restated-rules-move-together
+- design-review-010 F1: zz-rules/item-history-spans-moves-and-compaction, zz-arch/parsers-refuse-ambiguity
 - design-review-010 F2: one-off: the renumber ledger it concerns was removed in answer to F1
-- design-review-011 F1: tracker/item-history-spans-moves-and-compaction, architecture/parsers-refuse-ambiguity, testing/seed-every-enumerated-case
-- design-review-011 F2: ticket-prep/new-rules-migrate-existing-work
-- design-review-012 F1: tracker/item-history-spans-moves-and-compaction, architecture/parsers-refuse-ambiguity
-- design-review-012 F2: ticket-prep/restated-rules-move-together
-- design-review-013 F1: tracker/item-history-spans-moves-and-compaction, architecture/parsers-refuse-ambiguity, testing/seed-every-enumerated-case
-- design-review-013 F2: ticket-prep/spec-design-correspondence
-- design-review-014 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case, ticket-prep/spec-design-correspondence
-- design-review-014 F2: ticket-prep/restated-rules-move-together, tracker/exhaustive-lists-name-new-things
-- design-review-015 F1: testing/pin-call-site-arguments, testing/seed-every-enumerated-case
-- design-review-015 F2: ticket-prep/spec-design-correspondence, ticket-prep/restated-rules-move-together
-- design-review-015 F3: architecture/one-reader-per-format
-- design-review-016 F1: testing/pin-call-site-arguments
-- design-review-016 F2: testing/seed-every-enumerated-case
-- design-review-016 F3: ticket-prep/restated-rules-move-together
-- review-001 F1: ticket-prep/restated-rules-move-together
+- design-review-011 F1: zz-rules/item-history-spans-moves-and-compaction, zz-arch/parsers-refuse-ambiguity, zz-test/seed-every-enumerated-case
+- design-review-011 F2: z-design/new-rules-migrate-existing-work
+- design-review-012 F1: zz-rules/item-history-spans-moves-and-compaction, zz-arch/parsers-refuse-ambiguity
+- design-review-012 F2: z-design/restated-rules-move-together
+- design-review-013 F1: zz-rules/item-history-spans-moves-and-compaction, zz-arch/parsers-refuse-ambiguity, zz-test/seed-every-enumerated-case
+- design-review-013 F2: z-design/spec-design-correspondence
+- design-review-014 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
+- design-review-014 F2: z-design/restated-rules-move-together, zz-rules/exhaustive-lists-name-new-things
+- design-review-015 F1: zz-test/pin-call-site-arguments, zz-test/seed-every-enumerated-case
+- design-review-015 F2: z-design/spec-design-correspondence, z-design/restated-rules-move-together
+- design-review-015 F3: zz-arch/one-reader-per-format
+- design-review-016 F1: zz-test/pin-call-site-arguments
+- design-review-016 F2: zz-test/seed-every-enumerated-case
+- design-review-016 F3: z-design/restated-rules-move-together
+- review-001 F1: z-design/restated-rules-move-together
 - review-001 F2: one-off: a hidden file in a lessons/ folder (.DS_Store), now skipped
-- review-001 F3: ticket-prep/restated-rules-move-together
-- review-002 F1: ticket-prep/spec-design-correspondence
-- note R0042 prep, two sequestered specs spelled legacy <ID>-<slug>.md names that the promoted c0044 guard refuses, found only by the prototype's full gate: ticket-prep/prove-specs-pass-on-a-prototype
-- note R0042 prep round 010, a new trail.spec case spelled a legacy <ID>-<slug>.md name again, caught only by the prototype's full gate: ticket-prep/prove-specs-pass-on-a-prototype
-- note user correction 2026-10-20, R0042's refutes narrowed the captured scope and rewrote its Problems: ticket-prep/never-narrow-captured-scope, review/no-scope-cut-as-fix
+- review-001 F3: z-design/restated-rules-move-together
+- review-002 F1: z-design/spec-design-correspondence
+- note R0042 prep, two sequestered specs spelled legacy <ID>-<slug>.md names that the promoted c0044 guard refuses, found only by the prototype's full gate: z-design/prove-specs-pass-on-a-prototype
+- note R0042 prep round 010, a new trail.spec case spelled a legacy <ID>-<slug>.md name again, caught only by the prototype's full gate: z-design/prove-specs-pass-on-a-prototype
+- note user correction 2026-10-20, R0042's refutes narrowed the captured scope and rewrote its Problems: z-design/never-narrow-captured-scope, zz-review/no-scope-cut-as-fix

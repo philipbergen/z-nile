@@ -16,7 +16,7 @@ end
 
 -- Fixture repos are throwaway: no background gc/maintenance that could race a re-created fixture. The
 -- runner's guard (z-nile/lib/fence.sh) turns both off for every git a spec runs; a spec must not set
--- git config through the environment, which would replace the guard's (testing skill).
+-- git config through the environment, which would replace the guard's (zz-test skill).
 local NO_GC: { [string]: string } = {}
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)

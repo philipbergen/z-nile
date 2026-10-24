@@ -13,7 +13,7 @@ return t.spec("c0460 board docs", function(it)
 		"the tracker skill's board row names the workflow, the artifact and a download into a fresh directory",
 		function()
 			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-			local text = fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`)
+			local text = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 			local row = ""
 			for line in string.gmatch(text, "[^\n]+") do
 				if string.sub(line, 1, 10) == "| board | " then

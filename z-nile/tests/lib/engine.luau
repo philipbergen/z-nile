@@ -42,6 +42,9 @@ engine.ROOTS = { "pickman/.tracker", "z-nile/.tracker" }
 -- Every root a clone of the repository may hold items in: the fixtures' and the retired one (c0120).
 engine.CLONE_ROOTS = { "tracker", "z-nile/.tracker", "pickman/.tracker" }
 engine.COUNTER = "z-nile/next"
+-- The skills folders engine.copy brings, with their lessons (the user's G7): the one list engine.copy, clearLessons
+-- and c0115's G7 case read. A project's skills folder (pickman/skills) is not in it; a spec that needs one seeds it.
+engine.COPIED_SKILLS = { "z-nile/skills" }
 -- Both places the counter can be: tracker/next stays the counter until origin moves it (the first publish after c0114).
 engine.COUNTERS = { "z-nile/next", "tracker/next" }
 
@@ -67,11 +70,32 @@ function engine.copy(given: string, dest: string)
 	cp(`{root}/scripts`, `{dest}/scripts`)
 	fs.writeDir(`{dest}/z-nile`)
 	for _, name in fs.readDir(`{root}/z-nile`) do
-		if not engine.STATE[name] then
+		if not engine.STATE[name] and name ~= "skills" then
 			cp(`{root}/z-nile/{name}`, `{dest}/z-nile/{name}`)
 		end
 	end
+	-- the skills folders, with their lessons, from the one list (the G7 case and clearLessons read it too)
+	for _, folder in engine.COPIED_SKILLS do
+		if fs.isDir(`{root}/{folder}`) then
+			cp(`{root}/{folder}`, `{dest}/{folder}`)
+		end
+	end
 	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
+end
+
+-- c0115: fixtures copy the skills with their lessons (the user's decision, 2026-10-21). A spec that needs an exact set
+-- of lessons clears the copied ones first (trackerfix.new's `noLessons`), then seeds its own.
+function engine.clearLessons(dest: string)
+	for _, folder in engine.COPIED_SKILLS do
+		local base = `{dest}/{folder}`
+		if fs.isDir(base) then
+			for _, name in fs.readDir(base) do
+				if fs.isDir(`{base}/{name}/lessons`) then
+					fs.removeDir(`{base}/{name}/lessons`)
+				end
+			end
+		end
+	end
 end
 
 -- Empty tracker folders under every root of the copied registry, each kept by a .gitkeep so a commit holds them.
