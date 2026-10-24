@@ -178,16 +178,17 @@ end
 -- blob comparison doesn't see)
 local modeCache: { [string]: { [string]: string } } = {}
 local function modeOf(rev: string, path: string): string?
-	local m = modeCache[rev]
-	if not m then
-		m = {}
-		local ok, listing = git({ "ls-tree", "-r", rev })
-		assert(ok, `git ls-tree {rev} failed`)
-		for mode, p in string.gmatch(listing, "(%d+) %a+ %x+\t([^\n]+)") do
-			m[p] = mode
-		end
-		modeCache[rev] = m
+	local cached = modeCache[rev]
+	if cached then
+		return cached[path]
 	end
+	local m: { [string]: string } = {}
+	local ok, listing = git({ "ls-tree", "-r", rev })
+	assert(ok, `git ls-tree {rev} failed`)
+	for mode, p in string.gmatch(listing, "(%d+) %a+ %x+\t([^\n]+)") do
+		m[p] = mode
+	end
+	modeCache[rev] = m
 	return m[path]
 end
 local function show(rev: string, path: string): string
@@ -263,9 +264,14 @@ end
 -- prep, under the reviewer's pin.
 local PATCHES: string = ""
 for _, name in { "c0114-overrides.patch", "main-overrides.patch" } do
-	local okP, text = git({ "show", `{ownBase}:{OWN}{name}` })
-	if okP then
-		PATCHES ..= text .. "\n"
+	-- at c0120's folder in the pinned prep (active, as reviewed); after c0120's done HEAD has it in done/, the prep
+	-- still where it was reviewed
+	for _, dir in { "z-nile/.tracker/issues/c0120/", "z-nile/.tracker/issues/done/c0120/" } do
+		local okP, text = git({ "show", `{ownBase}:{dir}{name}` })
+		if okP then
+			PATCHES ..= text .. "\n"
+			break
+		end
 	end
 end
 local function withOverrides(promoted: string, old: string): string?
