@@ -158,6 +158,12 @@ return t.spec("c0118 done times", function(it)
 		write("z-nile/compaction.txt", "# compaction map C\nc0950 c0951\n")
 		write("z-nile/.tracker/issues/done/c0080/c0080.md", doc("c0080", "active-x-y-z") .. "\nnames c0951\n")
 		commit("2026-10-22T16:00:00Z", "tracker: compact ids a third time")
+		-- a fourth compaction that also moves the map back: its content changes (a delete plus an add whose content
+		-- differs is a compaction, not a move), and c0960 is re-added in done/ for another item
+		move("z-nile/compaction.txt", "tracker/compaction.txt")
+		write("tracker/compaction.txt", "# compaction map D\nc0961 c0960\n")
+		write("z-nile/.tracker/issues/done/c0960/c0960.md", doc("c0960", "active-a-b-c"))
+		commit("2026-10-22T17:00:00Z", "tracker: compact ids, the map moved and rewritten")
 		-- a map line that does not parse: every item the commit touches is undated
 		write("z-nile/.tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o") .. "\nrewritten\n")
 		write("z-nile/compaction.txt", "# compaction map C\nc0950 c0951\nnot a pair\n")
@@ -227,7 +233,7 @@ return t.spec("c0118 done times", function(it)
 		"reads each compaction's map whole at that commit, at the path the commit has it, and only at compactions",
 		function()
 			-- the first map's add (touching no item), compactions A, B and C, and the broken one; never the map's move
-			t.expect(#mapReads).toBe(5)
+			t.expect(#mapReads).toBe(6)
 			for _, r in mapReads do
 				local isPath = string.find(r, ":z-nile/compaction.txt", 1, true)
 					or string.find(r, ":tracker/compaction.txt", 1, true)
@@ -238,10 +244,37 @@ return t.spec("c0118 done times", function(it)
 		end
 	)
 
+	it("a map moved and changed in one commit is a compaction: the ids its pairs name are undated", function()
+		t.expect(parsed.doneAt.c0960).toBe(nil)
+	end)
+
+	it(
+		"a reader that cannot read one compaction's map undates every item that commit touches, with one warning",
+		function()
+			local n = 0
+			local partial = history.parse(
+				fixture.git(repo, history.logArgs(ROOTS)),
+				ROOTS,
+				function(sha: string, path: string)
+					n += 1
+					if n == 2 then -- compaction A's map
+						return nil
+					end
+					local ok, text = pcall(fixture.git, repo, { "show", `{sha}:{path}` })
+					return if ok then text else nil
+				end
+			)
+			local warnings = partial.warnings :: { string }
+			t.expect(#warnings).toBe(#parsed.warnings + 1)
+			t.expect((partial.doneAt :: { [string]: number }).c0010).toBe(nil) -- kept by A, rewritten in place: undated
+			t.expect(parsed.doneAt.c0010 ~= nil).toBe(true)
+		end
+	)
+
 	it("without a map reader a compaction undates every item it touches, and warns", function()
 		local bare = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
 		t.expect((bare.doneAt :: { [string]: number }).c0010).toBe(nil) -- rewritten in place by compaction A: kept with a reader, undated here
-		t.expect(#(bare.warnings :: { string })).toBe(5)
+		t.expect(#(bare.warnings :: { string })).toBe(6)
 	end)
 
 	it("an id the compaction keeps keeps its dates, though its document is rewritten in place", function()

@@ -13,3 +13,5 @@
 - design-review-003 F1: testing/seed-every-enumerated-case, tracker/item-history-spans-moves-and-compaction
 - design-review-003 F2: tracker/item-history-spans-moves-and-compaction
 - design-review-004 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
+- design-review-005 F1: architecture/guard-no-is-explicit, testing/seed-every-enumerated-case
+- design-review-005 F2: tracker/item-history-spans-moves-and-compaction

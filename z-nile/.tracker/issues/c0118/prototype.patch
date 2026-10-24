@@ -1,4 +1,4 @@
-From 7c6e074ec24d92744c98645e5b94b3e18818dcf2 Mon Sep 17 00:00:00 2001
+From 00e6dede4c4a84cd1603b3815a69f94beed557f1 Mon Sep 17 00:00:00 2001
 From: Philip Bergen <philip.bergen@me.com>
 Date: Fri, 23 Oct 2026 15:56:12 -0700
 Subject: [PATCH] c0118 prototype: the board per project (tabs, columns, raft
@@ -16,12 +16,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  tests/lib/cachepaths.luau                     |   3 +
  tests/tooling/board.spec.luau                 |   9 +-
  .../issues/c0118/acceptance/docs.spec.luau    |  70 +++
- .../issues/c0118/acceptance/history.spec.luau | 285 +++++++++++
+ .../issues/c0118/acceptance/history.spec.luau | 318 ++++++++++++
  .../issues/c0118/acceptance/model.spec.luau   | 434 ++++++++++++++++
  .../issues/c0118/acceptance/page.spec.luau    | 322 ++++++++++++
  .../issues/c0118/acceptance/real.spec.luau    |  41 ++
  .../issues/c0118/acceptance/view.spec.luau    | 285 +++++++++++
- z-nile/.tracker/issues/c0118/c0118.md         | 407 ++++++++++++++-
+ z-nile/.tracker/issues/c0118/c0118.md         | 411 ++++++++++++++-
  z-nile/.tracker/issues/c0118/check.sh         |  32 +-
  z-nile/README.md                              |   4 +-
  z-nile/engine/board.html                      | 234 ++++++++-
@@ -30,7 +30,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  z-nile/engine/history.luau                    | 211 +++++++-
  z-nile/engine/main.luau                       |  24 +-
  z-nile/skills/zz-rules/SKILL.md               |   2 +-
- 23 files changed, 3076 insertions(+), 122 deletions(-)
+ 23 files changed, 3113 insertions(+), 122 deletions(-)
  create mode 100644 z-nile/.tracker/issues/c0118/acceptance/docs.spec.luau
  create mode 100644 z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
  create mode 100644 z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
@@ -278,10 +278,10 @@ index 00000000..56a7e548
 +end)
 diff --git a/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
 new file mode 100644
-index 00000000..4ad93926
+index 00000000..3c9cdfae
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
-@@ -0,0 +1,285 @@
+@@ -0,0 +1,318 @@
 +--!strict
 +-- c0118 AC2: history gives every issue and raft the UTC instant it first arrived in done/ in its current life (doneAt,
 +-- epoch seconds) and its latest arrival in active/ (activeAt): whatever offset the commit carries, unchanged by a move
@@ -442,6 +442,12 @@ index 00000000..4ad93926
 +		write("z-nile/compaction.txt", "# compaction map C\nc0950 c0951\n")
 +		write("z-nile/.tracker/issues/done/c0080/c0080.md", doc("c0080", "active-x-y-z") .. "\nnames c0951\n")
 +		commit("2026-10-22T16:00:00Z", "tracker: compact ids a third time")
++		-- a fourth compaction that also moves the map back: its content changes (a delete plus an add whose content
++		-- differs is a compaction, not a move), and c0960 is re-added in done/ for another item
++		move("z-nile/compaction.txt", "tracker/compaction.txt")
++		write("tracker/compaction.txt", "# compaction map D\nc0961 c0960\n")
++		write("z-nile/.tracker/issues/done/c0960/c0960.md", doc("c0960", "active-a-b-c"))
++		commit("2026-10-22T17:00:00Z", "tracker: compact ids, the map moved and rewritten")
 +		-- a map line that does not parse: every item the commit touches is undated
 +		write("z-nile/.tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o") .. "\nrewritten\n")
 +		write("z-nile/compaction.txt", "# compaction map C\nc0950 c0951\nnot a pair\n")
@@ -511,7 +517,7 @@ index 00000000..4ad93926
 +		"reads each compaction's map whole at that commit, at the path the commit has it, and only at compactions",
 +		function()
 +			-- the first map's add (touching no item), compactions A, B and C, and the broken one; never the map's move
-+			t.expect(#mapReads).toBe(5)
++			t.expect(#mapReads).toBe(6)
 +			for _, r in mapReads do
 +				local isPath = string.find(r, ":z-nile/compaction.txt", 1, true)
 +					or string.find(r, ":tracker/compaction.txt", 1, true)
@@ -522,10 +528,37 @@ index 00000000..4ad93926
 +		end
 +	)
 +
++	it("a map moved and changed in one commit is a compaction: the ids its pairs name are undated", function()
++		t.expect(parsed.doneAt.c0960).toBe(nil)
++	end)
++
++	it(
++		"a reader that cannot read one compaction's map undates every item that commit touches, with one warning",
++		function()
++			local n = 0
++			local partial = history.parse(
++				fixture.git(repo, history.logArgs(ROOTS)),
++				ROOTS,
++				function(sha: string, path: string)
++					n += 1
++					if n == 2 then -- compaction A's map
++						return nil
++					end
++					local ok, text = pcall(fixture.git, repo, { "show", `{sha}:{path}` })
++					return if ok then text else nil
++				end
++			)
++			local warnings = partial.warnings :: { string }
++			t.expect(#warnings).toBe(#parsed.warnings + 1)
++			t.expect((partial.doneAt :: { [string]: number }).c0010).toBe(nil) -- kept by A, rewritten in place: undated
++			t.expect(parsed.doneAt.c0010 ~= nil).toBe(true)
++		end
++	)
++
 +	it("without a map reader a compaction undates every item it touches, and warns", function()
 +		local bare = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
 +		t.expect((bare.doneAt :: { [string]: number }).c0010).toBe(nil) -- rewritten in place by compaction A: kept with a reader, undated here
-+		t.expect(#(bare.warnings :: { string })).toBe(5)
++		t.expect(#(bare.warnings :: { string })).toBe(6)
 +	end)
 +
 +	it("an id the compaction keeps keeps its dates, though its document is rewritten in place", function()
@@ -1674,7 +1707,7 @@ index 00000000..8a12da59
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0118/c0118.md b/z-nile/.tracker/issues/c0118/c0118.md
-index 414d138c..8037723f 100644
+index 414d138c..78985d8c 100644
 --- a/z-nile/.tracker/issues/c0118/c0118.md
 +++ b/z-nile/.tracker/issues/c0118/c0118.md
 @@ -6,7 +6,7 @@ slug: project-board
@@ -1682,11 +1715,11 @@ index 414d138c..8037723f 100644
  depends_on: [c0117]
  emergent: false
 -design: draft
-+design: reviewed
++design: ready
  created: 2026-10-20
  status: new-indigo-crimson-heron
  ---
-@@ -29,59 +29,426 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -29,59 +29,430 @@ Decided with the user (2026-10-20), from the programme review:
  - Replacing `tracker.sh board` until this page covers the same navigation.
  - Editing the workflow from the canvas. The page reads the tracker, worktrees, and GitHub.
  - Starting a model. Stop, retry, and open call the dispatcher from c0117.
@@ -1940,6 +1973,8 @@ index 414d138c..8037723f 100644
 +- `history.spec.luau` :: a pair the next compaction repeats word for word still counts: the whole map is read, not its diff → AC2
 +- `history.spec.luau` :: a pair a later compaction's map drops no longer renames: a kept id named only by an earlier map keeps its date → AC2
 +- `history.spec.luau` :: reads each compaction's map whole at that commit, at the path the commit has it, and only at compactions → AC2
++- `history.spec.luau` :: a map moved and changed in one commit is a compaction: the ids its pairs name are undated → AC2
++- `history.spec.luau` :: a reader that cannot read one compaction's map undates every item that commit touches, with one warning → AC2
 +- `history.spec.luau` :: without a map reader a compaction undates every item it touches, and warns → AC2
 +- `history.spec.luau` :: an id the compaction keeps keeps its dates, though its document is rewritten in place → AC2
 +- `history.spec.luau` :: a map line that does not parse undates every item the commit touches, and warns → AC2
@@ -2019,6 +2054,8 @@ index 414d138c..8037723f 100644
 +| a pair a later map drops no longer renames | history :: a pair a later compaction's map drops… | M69 the union of every map so far | run |
 +| the map is read at the compaction's own commit | history :: an arrival in a commit that writes the compaction map… | M70 parse reads the parent's map | run |
 +| `history.read` gives `parse` the map at that commit (`git show <sha>:<path>`) | model :: dates landings from history… | M71 read reads the parent's map | run |
++| a map the reader can't read fails closed: every touched item undated, one warning | history :: a reader that cannot read one compaction's map… | M72 an unreadable map is skipped | run |
++| a map deleted and added with other content is a compaction, not a move | history :: a map moved and changed in one commit… | M73 any delete plus add is a move | run |
 +| a compaction leaves `closed` as it was | history :: a compaction's reuse of a done id… | M49 resets closed too | run |
 +| moving the map is no compaction | history :: moving the map, squashed with a landing… | M50 a map move is a compaction | run |
 +| a branch is `<R-id>-…` anchored | model :: a raft runs when a branch… | M23 look-alike launches | run |
@@ -2121,13 +2158,13 @@ index 414d138c..8037723f 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
-+Prep, 2026-10-23, on `proto-c0118` (base `proto-c0117` 6ff822f5; commit 1 `SIMULATION (not part of c0118): c0117 done` cbeb2657, commit 2 the c0118 edits). Rerun after design review 004's answers:
++Prep, 2026-10-23, on `proto-c0118` (base `proto-c0117` 6ff822f5; commit 1 `SIMULATION (not part of c0118): c0117 done` cbeb2657, commit 2 the c0118 edits). Rerun after design review 005's answers (it approved; its two lows are answered):
 +- `bash z-nile/.tracker/issues/done/c0117/check.sh` on the simulation: 11/11 passed.
 +- `bash z-nile/.tracker/issues/c0118/check.sh` on the prototype: 8/8 passed.
 +- The same `check.sh` and specs on the base (the simulation commit, in a scratch clone): 2/8. AC1 fails to load `@znile/engine/boardview` (the module c0118 creates); AC2 to AC6 fail on assertions (`doneAt` and `activeAt` nil, `projects` nil, `initialView` "rafts", the docs phrases missing). AC7 and AC8 pass: they guard behaviour that exists on both sides.
-+- `z-nile/check.sh --full` on the prototype: format, lint, types, builds and skills clean; pickman 1068 passed, 0 failed (157 files); z-nile 1236 passed, 0 failed (169 files); gate wall time 432 s (c0117's `control-cli.spec` dominates). Before review 001, the first two gate runs failed on c0117's promoted specs (the `env -i` allowance, the shared `.cache/dispatch` name) and on c0118's own unlisted `.cache` read and a `Range` type; all fixed.
++- `z-nile/check.sh --full` on the prototype: format, lint, types, builds and skills clean; pickman 1068 passed, 0 failed (157 files); z-nile 1236 passed, 0 failed (169 files); gate wall time 344 s (c0117's `control-cli.spec` dominates). Before review 001, the first two gate runs failed on c0117's promoted specs (the `env -i` allowance, the shared `.cache/dispatch` name) and on c0118's own unlisted `.cache` read and a `Range` type; all fixed.
 +- `luau-lsp analyze` of the sequestered specs and of the tooling against the prototype: clean.
-+- Mutation check: 71 mutants (M1 to M71), all killed on an assertion, with the whole set rerun after review 004. M66 and M67 each delete one half of the pair rule. M68 judges by the diff, M69 takes the union of maps, and M70 and M71 read the parent commit's map. The rebuild review 004 attacked is gone, so its removal mutant and the two equivalent mutants it named have no code left to apply to. Review 001 added M48 to M61, and review 002 added M62 to M65. Four older anchors (M18, M19, M23, M24) were re-pointed at rewritten code. After review 002's fixture change every history mutant was rerun (M18 to M22, M48 to M50, M53, M62 to M65).
++- Mutation check: 73 mutants (M1 to M73), all killed on an assertion, with the whole set rerun after review 005 (M72: an unreadable map is skipped; M73: any map delete plus add is a move). The set was also rerun after review 004. M66 and M67 each delete one half of the pair rule. M68 judges by the diff, M69 takes the union of maps, and M70 and M71 read the parent commit's map. The rebuild review 004 attacked is gone, so its removal mutant and the two equivalent mutants it named have no code left to apply to. Review 001 added M48 to M61, and review 002 added M62 to M65. Four older anchors (M18, M19, M23, M24) were re-pointed at rewritten code. After review 002's fixture change every history mutant was rerun (M18 to M22, M48 to M50, M53, M62 to M65).
 +- Real tree after review 002's F1: E1's table is unchanged (the 2026-10-05 compaction rewrote in place only ids it reused).
 +- Real tree after review 001's F1: the 13 ids as in E1's table.
 +- Render: node fake-DOM dump of the real page plus Quick Look PNGs: the pickman Board, the z-nile Board with a 30-day window, and both charts over 90 days and all history.
