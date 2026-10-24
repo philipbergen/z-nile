@@ -1,0 +1,2134 @@
+From 916300f12b1a9ff5f51b53bcd32ef9b00807d747 Mon Sep 17 00:00:00 2001
+From: Philip Bergen <philip.bergen@me.com>
+Date: Sat, 24 Oct 2026 15:57:36 -0700
+Subject: [PATCH] c0121 prototype: the board server (serve.luau: guard, plan,
+ gh cache, live model), the page's live mode and actions, ./zn board --serve,
+ docs, the c0118 docs override, acceptance
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tests/acceptance/c0118/docs.spec.luau         |   2 +-
+ tests/lib/cachepaths.luau                     |   3 +
+ .../issues/c0121/acceptance/cli.spec.luau     | 126 ++++++
+ .../issues/c0121/acceptance/docs.spec.luau    |  68 ++++
+ .../issues/c0121/acceptance/guard.spec.luau   | 183 +++++++++
+ .../issues/c0121/acceptance/page.spec.luau    | 210 ++++++++++
+ .../issues/c0121/acceptance/server.spec.luau  | 294 ++++++++++++++
+ z-nile/.tracker/issues/c0121/c0121.md         | 270 ++++++++++++-
+ z-nile/.tracker/issues/c0121/check.sh         |  23 +-
+ .../c0121/experiments/E1-serve.spec.luau      | 109 ++++++
+ z-nile/README.md                              |   2 +-
+ z-nile/engine/board.html                      |  56 ++-
+ z-nile/engine/board.luau                      |  33 +-
+ z-nile/engine/main.luau                       |  66 +++-
+ z-nile/engine/serve.luau                      | 367 ++++++++++++++++++
+ z-nile/skills/zz-rules/SKILL.md               |   3 +-
+ 16 files changed, 1783 insertions(+), 32 deletions(-)
+ create mode 100644 z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0121/acceptance/page.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0121/acceptance/server.spec.luau
+ create mode 100644 z-nile/.tracker/issues/c0121/experiments/E1-serve.spec.luau
+ create mode 100644 z-nile/engine/serve.luau
+
+diff --git a/tests/acceptance/c0118/docs.spec.luau b/tests/acceptance/c0118/docs.spec.luau
+index 56a7e548..05ca7d4c 100644
+--- a/tests/acceptance/c0118/docs.spec.luau
++++ b/tests/acceptance/c0118/docs.spec.luau
+@@ -65,6 +65,6 @@ return t.spec("c0118 board docs", function(it)
+ 		local text = fs.readFile("z-nile/README.md")
+ 		t.expect(has(text, 'board["board: ./zn board, a tab per project"]')).toBe(true)
+ 		t.expect(has(text, "new board c0118, planned")).toBe(false)
+-		t.expect(has(text, "`./zn board --serve` (c0121, planned) serves the same page live")).toBe(true)
++		t.expect(has(text, "`./zn board --serve` (c0121) serves the same page live")).toBe(true) -- c0121 override: built
+ 	end)
+ end)
+diff --git a/tests/lib/cachepaths.luau b/tests/lib/cachepaths.luau
+index a61d3689..ef01f1f7 100644
+--- a/tests/lib/cachepaths.luau
++++ b/tests/lib/cachepaths.luau
+@@ -94,6 +94,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
+ 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
+ 	},
++	["z-nile/engine/serve.luau"] = {
++		["local home = `{root}/.cache/dispatch`"] = "c0121: the board server reads the dispatcher's state files' change times for its model key; nothing is written",
++	},
+ 	["z-nile/engine/board.luau"] = {
+ 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
+ 	},
+diff --git a/z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau
+new file mode 100644
+index 00000000..706b298a
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau
+@@ -0,0 +1,126 @@
++--!strict
++-- c0121 AC4: `./zn board --serve [--port N]` in a fixture checkout: it refuses a bad port, `-O` and `--out`, a linked
++-- worktree (it runs in the main checkout), and a taken port, each naming why and serving nothing; it is guarded
++-- (refused where git's root is not the checkout) though `board` alone only reads; the usage names it. No case starts a
++-- server that keeps running: the in-process server is AC2's. Fixture under .cache/c0121-cli; git through fixture.
++local engine = require("@tests/lib/engine")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local net = require("@lune/net")
++local process = require("@lune/process")
++local t = require("@tests/lib/t")
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
++local REPO = `{top}/.cache/c0121-cli`
++local WT = `{top}/.cache/c0121-cli-wt`
++
++local function zn(dir: string, args: { string }): any
++	local r = fixture.exec(dir, "./zn", args)
++	return { ok = r.ok, out = r.stdout .. r.stderr }
++end
++-- A port this spec holds: a command that wrongly gets past its refusal fails on the taken port, never serves and hangs.
++local function occupy(): (number, any)
++	for _ = 1, 30 do
++		local port = math.random(30000, 60000)
++		local ok, h = pcall(net.serve :: any, port, {
++			address = "http://127.0.0.1",
++			handleRequest = function()
++				return { status = 200, body = "someone else" }
++			end,
++		})
++		if ok then
++			return port, h
++		end
++	end
++	error("no free port in 30 tries")
++end
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++
++return t.spec("c0121 board --serve command", function(it)
++	it("sets up a fixture checkout with the engine and a linked worktree", function()
++		for _, d in { REPO, WT } do
++			if fs.isDir(d) then
++				fs.removeDir(d)
++			end
++		end
++		fs.writeDir(REPO)
++		process.exec("git", { "init", "-q", "-b", "main", REPO }) -- raw: init to a named path
++		fixture.git(REPO, { "config", "user.name", "c0121-cli" })
++		fixture.git(REPO, { "config", "user.email", "c0121-cli@example.invalid" })
++		engine.copy(top, REPO)
++		engine.roots(REPO)
++		fixture.git(REPO, { "add", "-A" })
++		fixture.git(REPO, { "commit", "-q", "-m", "engine" })
++		fixture.git(REPO, { "worktree", "add", "-q", "-b", "elsewhere", WT })
++		fs.writeDir(`{REPO}/nogit`)
++		engine.copy(top, `{REPO}/nogit`)
++	end)
++
++	it("refuses a port outside 1024 to 65535, or not a number", function()
++		for _, p in { "80", "70000", "abc", "1.5" } do
++			local r = zn(REPO, { "board", "--serve", "--port", p })
++			t.expect(r.ok).toBe(false)
++			t.expect(has(r.out, `--port {p} is not a port from 1024 to 65535`)).toBe(true)
++		end
++	end)
++
++	it("refuses -O, --out and --open with --serve, since it writes no file", function()
++		for _, extra in { { "-O" }, { "--out", "x.html" }, { "--open" } } do
++			local args = { "board", "--serve" }
++			for _, a in extra do
++				table.insert(args, a)
++			end
++			local r = zn(REPO, args)
++			t.expect(r.ok).toBe(false)
++			t.expect(has(r.out, "usage: board --serve [--port N]")).toBe(true)
++		end
++		t.expect(fs.isFile(`{REPO}/x.html`)).toBe(false)
++	end)
++
++	it("runs only in the main checkout", function()
++		local port, h = occupy()
++		local r = zn(WT, { "board", "--serve", "--port", tostring(port) })
++		h:stop()
++		t.expect(r.ok).toBe(false)
++		t.expect(has(r.out, "board --serve runs in the main checkout")).toBe(true)
++	end)
++
++	it("fails clearly when the port is taken, and serves nothing", function()
++		local port, handle = occupy()
++		local r = zn(REPO, { "board", "--serve", "--port", tostring(port) })
++		handle:stop()
++		t.expect(r.ok).toBe(false)
++		t.expect(has(r.out, `port {port} is taken`)).toBe(true)
++		t.expect(has(r.out, "--port")).toBe(true)
++	end)
++
++	it("is guarded where git's root is not the checkout, while board alone only reads", function()
++		-- run from the fixture's top (the helper checks it); ./zn changes into its own folder, nogit/, which git's root is not
++		local function nogit(args: { string }): any
++			local r = fixture.exec(REPO, "nogit/zn", args)
++			return { ok = r.ok, out = r.stdout .. r.stderr }
++		end
++		local port, h = occupy()
++		local served = nogit({ "board", "--serve", "--port", tostring(port) })
++		h:stop()
++		t.expect(served.ok).toBe(false)
++		t.expect(has(served.out, "refusing to run: git's repository root is")).toBe(true)
++		local page = nogit({ "board", "-O", "--out", ".cache/page.html" })
++		t.expect(has(page.out, "refusing to run")).toBe(false)
++	end)
++
++	it("the usage line names board --serve", function()
++		local r = zn(REPO, {})
++		t.expect(has(r.out, "board --serve [--port N]")).toBe(true)
++	end)
++
++	it("cleans up", function()
++		fixture.git(REPO, { "worktree", "remove", "--force", WT })
++		fs.removeDir(REPO)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau
+new file mode 100644
+index 00000000..3402f9cf
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau
+@@ -0,0 +1,68 @@
++--!strict
++-- c0121 AC5: zz-rules names `./zn board --serve` in the main checkout's command list and describes it in the board
++-- row, in the Design's words; the README says it is built; c0118's row words stay.
++local fs = require("@lune/fs")
++local t = require("@tests/lib/t")
++
++local SKILL = fs.readFile("z-nile/skills/zz-rules/SKILL.md")
++local function boardRow(): string
++	local row = ""
++	for line in string.gmatch(SKILL, "[^\n]+") do
++		if string.sub(line, 1, 10) == "| board | " then
++			row = line
++		end
++	end
++	return row
++end
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++
++return t.spec("c0121 docs", function(it)
++	it("the main checkout's command list names board --serve and what it may do there", function()
++		local a = string.find(SKILL, "The complete list of commands that may run there:", 1, true)
++		local b = string.find(SKILL, "The tracker enforces part of this", 1, true)
++		t.expect(a ~= nil and b ~= nil).toBe(true)
++		local list = string.sub(SKILL, a :: number, b :: number)
++		t.expect(
++			has(
++				list,
++				"`./zn board --serve [--port N]` (c0121), which only reads, except for the three actions on its page (stop, retry, open), each delegated"
++			)
++		).toBe(true)
++		t.expect(has(list, "it runs only here, where the dispatcher's run state lives")).toBe(true)
++	end)
++
++	it("the board row describes the served page, its guards and its three actions", function()
++		local row = boardRow()
++		for _, phrase in
++			{
++				"`./zn board --serve [--port N]` (c0121; main checkout only; default port 8417) serves the same page on 127.0.0.1 and prints its URL once, with a session token",
++				"the page polls `/api/state` every 5 s",
++				"`gh pr list` at most every 30 s, in the background",
++				"a launched raft's spend read from its worktree",
++				'"checks unavailable" when `gh` fails',
++				'says "server is out of date: restart" when the engine changed since start',
++				"stop and retry (`./zn dispatch stop|retry <id>`) and open (the PR, else the worktree)",
++				"It refuses a foreign Host or Origin, any OPTIONS, a request without the token, an action that is not a JSON POST, and an id the model lacks.",
++				"PR and checks are live only on the served board (c0121)",
++				"Views Rafts and Issues",
++			}
++		do
++			if not has(row, phrase) then
++				error(`the board row lacks: {phrase}`)
++			end
++		end
++	end)
++
++	it("the README says the served board is built", function()
++		local text = fs.readFile("z-nile/README.md")
++		t.expect(
++			has(
++				text,
++				"`./zn board --serve` (c0121) serves the same page live from the main checkout, with stop, retry and open."
++			)
++		).toBe(true)
++		t.expect(has(text, "c0121, planned")).toBe(false)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau
+new file mode 100644
+index 00000000..71b23626
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau
+@@ -0,0 +1,183 @@
++--!strict
++-- c0121 AC1: the server's pure rules. serve.guard refuses DNS rebinding (a foreign Host), CSRF (OPTIONS, a foreign
++-- Origin, no token, an action that is not a JSON POST) and lets the rest through; serve.plan turns an action on an id
++-- the model has into an argument array or an open target, and refuses anything else; serve.parsePrs reads `gh pr list`.
++local serve = require("@znile/engine/serve")
++local t = require("@tests/lib/t")
++
++local PORT, TOKEN = 41234, "t0k"
++local function req(o: { [string]: any }): serve.Request
++	return {
++		path = o.path or "/api/state",
++		query = o.query or {},
++		method = o.method or "GET",
++		headers = o.headers or { host = `127.0.0.1:{PORT}`, ["x-zn-token"] = TOKEN },
++		body = o.body or "",
++	}
++end
++local function status(r: serve.Request): number?
++	local res = serve.guard(r, PORT, TOKEN)
++	return if res then res.status else nil
++end
++local function headers(extra: { [string]: string }): { [string]: string }
++	local h: { [string]: string } = { host = `127.0.0.1:{PORT}`, ["x-zn-token"] = TOKEN }
++	for k, v in extra do
++		h[k] = v
++	end
++	return h
++end
++
++local MODEL: any = {
++	home = { R0020 = "R0020", R0030 = "R0030", f0021 = "f0021", f0031 = "f0031", c0099 = "c0099" },
++	rafts = {
++		{
++			id = "R0020",
++			pr = { number = 7, url = "https://example.invalid/pr/7", state = "draft" },
++			worktree = "/w/R0020",
++		},
++		{ id = "R0030", worktree = "/w/R0030" },
++	} :: { any },
++	issues = {
++		{ id = "f0021", raft = "R0020" },
++		{
++			id = "f0031",
++			raft = "R0030",
++			pr = { number = 9, url = "https://example.invalid/pr/9", state = "open" },
++		},
++		{ id = "c0099" },
++	} :: { any },
++}
++
++return t.spec("c0121 server rules", function(it)
++	it("lets a same-host request with the token through, by 127.0.0.1 or localhost", function()
++		t.expect(status(req({}))).toBe(nil)
++		t.expect(status(req({ headers = { host = `localhost:{PORT}`, ["x-zn-token"] = TOKEN } }))).toBe(nil)
++		-- some clients send the bare loopback name, without the port
++		t.expect(status(req({ headers = { host = "127.0.0.1", ["x-zn-token"] = TOKEN } }))).toBe(nil)
++	end)
++
++	it("refuses a foreign Host (DNS rebinding), another port, and no Host", function()
++		t.expect(status(req({ headers = headers({ host = "evil.example" }) }))).toBe(403)
++		t.expect(status(req({ headers = headers({ host = `evil.example:{PORT}` }) }))).toBe(403)
++		t.expect(status(req({ headers = headers({ host = "127.0.0.1:1" }) }))).toBe(403)
++		t.expect(status(req({ headers = { ["x-zn-token"] = TOKEN } }))).toBe(403)
++		t.expect(status(req({ headers = headers({ host = "localhost.evil.example" }) }))).toBe(403)
++	end)
++
++	it("refuses every OPTIONS, with no CORS header, so a cross-site preflight fails", function()
++		local res = serve.guard(req({ method = "OPTIONS", path = "/api/action" }), PORT, TOKEN)
++		t.expect(res ~= nil and res.status).toBe(403)
++		for k in (res :: any).headers or {} do
++			t.expect((string.find(string.lower(k), "access-control", 1, true))).toBe(nil)
++		end
++	end)
++
++	it("refuses a foreign Origin, and lets the server's own through", function()
++		t.expect(status(req({ headers = headers({ origin = "http://evil.example" }) }))).toBe(403)
++		t.expect(status(req({ headers = headers({ origin = `http://127.0.0.1:{PORT + 1}` }) }))).toBe(403)
++		t.expect(status(req({ headers = headers({ origin = `http://127.0.0.1:{PORT}` }) }))).toBe(nil)
++		t.expect(status(req({ headers = headers({ origin = `http://localhost:{PORT}` }) }))).toBe(nil)
++	end)
++
++	it("serves the page only as a GET with the token in its query", function()
++		local h = { host = `127.0.0.1:{PORT}` }
++		t.expect(status(req({ path = "/", headers = h }))).toBe(403)
++		t.expect(status(req({ path = "/", headers = h, query = { token = "wrong" } }))).toBe(403)
++		t.expect(status(req({ path = "/", headers = h, query = { token = TOKEN } }))).toBe(nil)
++		t.expect(status(req({ path = "/", method = "POST", headers = h, query = { token = TOKEN } })))
++			.toBe(405)
++	end)
++
++	it("refuses an /api/ call without the token or with a wrong one", function()
++		t.expect(status(req({ headers = { host = `127.0.0.1:{PORT}` } }))).toBe(403)
++		t.expect(status(req({ headers = headers({ ["x-zn-token"] = "t0k2" }) }))).toBe(403)
++		t.expect(status(req({ headers = headers({ ["x-zn-token"] = "" }) }))).toBe(403)
++	end)
++
++	it("takes an action only as a POST with a JSON body; a GET never acts", function()
++		t.expect(status(req({ path = "/api/action", method = "GET" }))).toBe(405)
++		t.expect(status(req({
++			path = "/api/action",
++			method = "POST",
++			headers = headers({ ["content-type"] = "text/plain" }),
++		}))).toBe(415)
++		t.expect(status(req({ path = "/api/action", method = "POST" }))).toBe(415) -- no Content-Type
++		t.expect(status(req({
++			path = "/api/action",
++			method = "POST",
++			headers = headers({ ["content-type"] = "application/json" }),
++		}))).toBe(nil)
++		t.expect(status(req({ path = "/api/state", method = "POST" }))).toBe(405)
++	end)
++
++	it("answers 404 for any other path", function()
++		t.expect(status(req({ path = "/api/other" }))).toBe(404)
++		t.expect(status(req({ path = "/etc/passwd" }))).toBe(404)
++	end)
++
++	it(
++		"plans stop (waited) and retry (started) as argument arrays for ./zn dispatch, on ids the model has",
++		function()
++			t.expect((serve.plan(MODEL, "stop", "R0020")))
++				.toEqual({ kind = "run", args = { "dispatch", "stop", "R0020" }, wait = true })
++			t.expect((serve.plan(MODEL, "retry", "f0021")))
++				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0021" }, wait = false })
++		end
++	)
++
++	it(
++		"refuses an unknown id, an id with shell text, a non-string id and an unknown action, naming why",
++		function()
++			local p1, why1 = serve.plan(MODEL, "stop", "R9999")
++			t.expect(p1).toBe(nil)
++			t.expect(string.find(why1 :: string, "unknown id", 1, true) ~= nil).toBe(true)
++			t.expect((serve.plan(MODEL, "stop", "R0020; rm -rf ~"))).toBe(nil)
++			t.expect((serve.plan(MODEL, "stop", 42 :: any))).toBe(nil)
++			local p2, why2 = serve.plan(MODEL, "delete", "R0020")
++			t.expect(p2).toBe(nil)
++			t.expect(string.find(why2 :: string, "unknown action", 1, true) ~= nil).toBe(true)
++		end
++	)
++
++	it("opens an item's own PR, else its raft's PR, else its raft's worktree, and nothing else", function()
++		t.expect((serve.plan(MODEL, "open", "f0031")))
++			.toEqual({ kind = "open", target = "https://example.invalid/pr/9" })
++		t.expect((serve.plan(MODEL, "open", "f0021")))
++			.toEqual({ kind = "open", target = "https://example.invalid/pr/7" })
++		t.expect((serve.plan(MODEL, "open", "R0020")))
++			.toEqual({ kind = "open", target = "https://example.invalid/pr/7" })
++		t.expect((serve.plan(MODEL, "open", "R0030"))).toEqual({ kind = "open", target = "/w/R0030" })
++		local p, why = serve.plan(MODEL, "open", "c0099")
++		t.expect(p).toBe(nil)
++		t.expect(string.find(why :: string, "no PR and no worktree", 1, true) ~= nil).toBe(true)
++	end)
++
++	it("reads gh pr list: drafts, and checks as passing, failing, pending or none", function()
++		local prs = serve.parsePrs([[
++[{"number":7,"headRefName":"R0020-alpha","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
++  "statusCheckRollup":[{"conclusion":"SUCCESS"},{"state":"SUCCESS"}]},
++ {"number":8,"headRefName":"R0030-beta","state":"OPEN","isDraft":false,"url":"u8",
++  "statusCheckRollup":[{"conclusion":"SUCCESS"},{"conclusion":"FAILURE"}]},
++ {"number":9,"headRefName":"R0040-gamma","state":"MERGED","isDraft":false,"url":"u9",
++  "statusCheckRollup":[{"conclusion":"SUCCESS"},{"status":"IN_PROGRESS","conclusion":""}]},
++ {"number":10,"headRefName":"R0050-delta","state":"CLOSED","isDraft":false,"url":"u10","statusCheckRollup":[]},
++ {"headRefName":"no-number"}]
++]]) :: any
++		t.expect(prs["R0020-alpha"].pr)
++			.toEqual({ number = 7, url = "https://example.invalid/pr/7", state = "draft" })
++		t.expect(prs["R0020-alpha"].checks.state).toBe("passing")
++		t.expect(prs["R0030-beta"].pr.state).toBe("open")
++		t.expect(prs["R0030-beta"].checks.state).toBe("failing")
++		t.expect(prs["R0040-gamma"].pr.state).toBe("merged")
++		t.expect(prs["R0040-gamma"].checks.state).toBe("pending")
++		t.expect(prs["R0050-delta"].checks.state).toBe("none")
++		t.expect(prs["no-number"]).toBe(nil)
++		t.expect(serve.parsePrs("gh: not logged in")).toBe(nil)
++	end)
++
++	it("makes a session token of 32 hex digits, new each time", function()
++		local a, b = serve.newToken(), serve.newToken()
++		t.expect(string.match(a, "^%x+$") ~= nil and #a == 32).toBe(true)
++		t.expect(a ~= b).toBe(true)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0121/acceptance/page.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/page.spec.luau
+new file mode 100644
+index 00000000..1308d242
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0121/acceptance/page.spec.luau
+@@ -0,0 +1,210 @@
++--!strict
++-- c0121 AC3: the served page's script, run by node against a fake DOM with `fetch` and `setInterval` stubbed (no
++-- network): it polls /api/state every live.poll seconds with its token and hands the model to znBoard.load; it shows
++-- "live", "server is out of date: restart", "checks unavailable" and "the server did not answer"; a card has Stop,
++-- Retry and Open, each a JSON POST to /api/action with the token, and shows the answer. The static page has no
++-- buttons, never polls and never fetches.
++local board = require("@znile/engine/board")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++local t = require("@tests/lib/t")
++
++local DIR = ".cache/c0121-page"
++local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
++
++local function write(path: string, text: string)
++	local full = `{DIR}/{path}`
++	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
++	fs.writeFile(full, text)
++end
++local function item(path: string, front: { string })
++	local id = string.match(path, "([^/]+)$") :: string
++	write(
++		`{path}/{id}.md`,
++		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n"
++	)
++end
++
++-- The fake DOM and the stubs. Never literal require text: the repo scanner would read it.
++local HARNESS = [==[
++const load = m => module["req" + "uire"](m);
++const fs = load("fs"), vm = load("vm");
++const html = fs.readFileSync(process.argv[2], "utf8"), mode = process.argv[3];
++const next = process.argv[4] ? JSON.parse(fs.readFileSync(process.argv[4], "utf8")) : null;
++const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
++const els = {};
++function el(id) {
++  const ls = {}, cl = new Set(), attrs = {};
++  return els[id] = { id, innerHTML: "", textContent: "", value: "", scrollTop: 0,
++    classList: { add: c => cl.add(c), remove: c => cl.delete(c), contains: c => cl.has(c),
++      toggle: (c, f) => { const on = f === undefined ? !cl.has(c) : !!f; on ? cl.add(c) : cl.delete(c); return on; } },
++    addEventListener: (t, f) => (ls[t] = ls[t] || []).push(f), dispatch: (t, e) => (ls[t] || []).forEach(f => f(e)),
++    setAttribute: (n, v) => (attrs[n] = String(v)), removeAttribute: n => delete attrs[n], hasAttribute: n => n in attrs,
++    getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
++    querySelectorAll: () => [] };
++}
++["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "window", "range", "as-of",
++ "list", "pane", "board-data", "live"].forEach(el);
++els.live.setAttribute("hidden", "");
++els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
++const doc = el("document");
++const fetches = [], intervals = [];
++let failNext = false;
++function fetchStub(u, opts) {
++  fetches.push({ url: u, method: (opts && opts.method) || "GET", headers: (opts && opts.headers) || {}, body: (opts && opts.body) || null });
++  if (failNext) return Promise.reject(new Error("down"));
++  if (u === "/api/state") return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ model: next, statsHtml: "<p>s</p>" }) });
++  return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('{"ok":true,"output":"stopped"}') });
++}
++const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
++  location: { hash: "" }, history: { replaceState() {} }, navigator: {}, console, JSON, Math, String, Array, Object, Number, Date,
++  Promise, decodeURIComponent, encodeURIComponent };
++if (mode !== "static-nofetch") { sandbox.fetch = fetchStub; sandbox.setInterval = (fn, ms) => intervals.push({ fn, ms }); }
++sandbox.window = sandbox; sandbox.globalThis = sandbox;
++vm.createContext(sandbox);
++for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
++const target = (sel, attrs) => ({ closest: s => (s === sel ? { getAttribute: n => attrs[n] ?? null } : null) });
++const tick = () => new Promise(r => setTimeout(r, 0));
++(async () => {
++  const out = { liveHidden: els.live.hasAttribute("hidden"), live: els.live.innerHTML, intervals: intervals.map(i => i.ms) };
++  els.columns.dispatch("click", { target: target("button.card", { "data-id": "f0021" }), preventDefault() {} });
++  out.pane = els.pane.innerHTML;
++  els.pane.dispatch("click", { target: target("button.act", { "data-act": "stop", "data-id": "f0021" }), preventDefault() {} });
++  await tick(); await tick(); await tick();
++  out.paneAfter = els.pane.innerHTML;
++  if (intervals.length) {
++    intervals[0].fn();
++    await tick(); await tick(); await tick();
++    out.columnsAfterPoll = els.columns.innerHTML;
++    out.liveAfterPoll = els.live.innerHTML;
++    failNext = true;
++    intervals[0].fn();
++    await tick(); await tick(); await tick();
++    out.liveAfterFail = els.live.innerHTML;
++  }
++  out.fetches = fetches;
++  console.log(JSON.stringify(out));
++})();
++]==]
++
++local function node(page: string, mode: string, nextPath: string?): any
++	local args = { `{DIR}/harness.js`, page, mode }
++	if nextPath then
++		table.insert(args, nextPath)
++	end
++	local ok, r = pcall(process.exec, "node", args)
++	if not ok then
++		error(`node is required for this spec (preinstalled on GitHub runners): {r}`)
++	end
++	if not r.ok then
++		error(r.stderr)
++	end
++	return serde.decode("json", r.stdout)
++end
++local function has(s: string?, needle: string): boolean
++	return s ~= nil and string.find(s, needle, 1, true) ~= nil
++end
++
++local shown: any, unavailable: any, static: any = nil, nil, nil
++
++return t.spec("c0121 served page", function(it)
++	it("builds a live page, a live page whose gh failed, and a static page", function()
++		if fs.isDir(DIR) then
++			fs.removeDir(DIR)
++		end
++		write("z-nile/projects.toml", REGISTRY)
++		item(
++			"z-nile/.tracker/rafts/active/R0020",
++			{ "type: feature", "title: Running", "design: ready", "status: active-a-b-c" }
++		)
++		item(
++			"z-nile/.tracker/issues/active/f0021",
++			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" }
++		)
++		local facts: any = {
++			asOf = 1792800000,
++			refs = { { name = "R0020-alpha", at = 1792800000 } },
++			worktrees = {},
++			dispatch = {},
++		}
++		local function liveModel(checks: string, stale: boolean): any
++			local m: any = board.collect(nil, DIR, facts)
++			m.live = { token = "t0k", poll = 5, checks = checks, checksAge = 3, stale = stale }
++			return m
++		end
++		local marked = fs.readFile(board.MARKED_PATH)
++		fs.writeFile(`{DIR}/live.html`, board.render(liveModel("ok", false), marked))
++		fs.writeFile(`{DIR}/unavailable.html`, board.render(liveModel("unavailable", false), marked))
++		fs.writeFile(`{DIR}/static.html`, board.render(board.collect(nil, DIR, facts), marked))
++		-- the next polled model: a new card, and the engine changed since the server started
++		item(
++			"z-nile/.tracker/issues/active/f0022",
++			{ "type: feature", "title: Arrived live", "raft: R0020", "status: active-a-b-c" }
++		)
++		fs.writeFile(`{DIR}/next.json`, board.encode(liveModel("ok", true)))
++		fs.writeFile(`{DIR}/harness.js`, HARNESS)
++		shown = node(`{DIR}/live.html`, "live", `{DIR}/next.json`)
++		unavailable = node(`{DIR}/unavailable.html`, "live", `{DIR}/next.json`)
++		static = node(`{DIR}/static.html`, "static", nil)
++	end)
++
++	it("shows that it is live, and polls every live.poll seconds", function()
++		t.expect(shown.liveHidden).toBe(false)
++		t.expect(has(shown.live, "live")).toBe(true)
++		t.expect(has(shown.live, "checks 3 s old")).toBe(true)
++		t.expect(shown.intervals).toEqual({ 5000 })
++	end)
++
++	it("polls /api/state with its token and loads the model it gets", function()
++		local polls = {}
++		for _, f in shown.fetches do
++			if f.url == "/api/state" then
++				table.insert(polls, f)
++			end
++		end
++		t.expect(#polls >= 1).toBe(true)
++		t.expect(polls[1].method).toBe("GET")
++		t.expect(polls[1].headers["X-Zn-Token"]).toBe("t0k")
++		t.expect(has(shown.columnsAfterPoll, 'data-id="f0022"')).toBe(true)
++		t.expect(has(shown.columnsAfterPoll, "Arrived live")).toBe(true)
++	end)
++
++	it(
++		"says the server is out of date when the polled model says so, and when the server does not answer",
++		function()
++			t.expect(has(shown.liveAfterPoll, "server is out of date: restart")).toBe(true)
++			t.expect(has(shown.liveAfterFail, "the server did not answer")).toBe(true)
++		end
++	)
++
++	it("a card has Stop, Retry and Open, and Stop is a JSON POST to /api/action with the token", function()
++		t.expect(has(shown.pane, 'data-act="stop" data-id="f0021"')).toBe(true)
++		t.expect(has(shown.pane, 'data-act="retry" data-id="f0021"')).toBe(true)
++		t.expect(has(shown.pane, 'data-act="open" data-id="f0021"')).toBe(true)
++		local post = shown.fetches[1]
++		t.expect(post.url).toBe("/api/action")
++		t.expect(post.method).toBe("POST")
++		t.expect(post.headers["Content-Type"]).toBe("application/json")
++		t.expect(post.headers["X-Zn-Token"]).toBe("t0k")
++		t.expect(serde.decode("json", post.body)).toEqual({ action = "stop", id = "f0021" })
++		t.expect(has(shown.paneAfter, "stop: 200")).toBe(true)
++	end)
++
++	it("a card with no PR says checks unavailable when gh failed", function()
++		t.expect(has(unavailable.pane, "checks unavailable")).toBe(true)
++		t.expect(has(unavailable.live, "checks unavailable")).toBe(true)
++	end)
++
++	it("the static page has no buttons, never polls and never fetches", function()
++		t.expect(static.liveHidden).toBe(true)
++		t.expect(static.intervals).toEqual({})
++		t.expect(#static.fetches).toBe(0)
++		t.expect(has(static.pane, 'class="act"')).toBe(false)
++		t.expect(has(static.pane, "zn board --serve")).toBe(true)
++	end)
++
++	it("cleans up", function()
++		fs.removeDir(DIR)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0121/acceptance/server.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/server.spec.luau
+new file mode 100644
+index 00000000..cb652fb8
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0121/acceptance/server.spec.luau
+@@ -0,0 +1,294 @@
++--!strict
++-- c0121 AC2: serve.start in-process on 127.0.0.1 and a random port, with every effect a stub (the runner of ./zn, the
++-- opener, gh, the clock, the model's key and the engine's hash): the page needs its token; a rebinding Host, a foreign
++-- Origin, OPTIONS, a GET action and an unknown id are refused before any stub runs; stop and retry run ./zn dispatch
++-- with an argument array; open opens the PR; /api/state fills PR and checks from gh at most once per 30 s, survives a
++-- failing gh, reads a launched raft's spend from its worktree, rebuilds the model only when its key changes (or after
++-- 60 s), and says when the engine changed; the last case stops the server. Fixture under .cache/c0121-server.
++local fs = require("@lune/fs")
++local net = require("@lune/net")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++local serve = require("@znile/engine/serve")
++local t = require("@tests/lib/t")
++local task = require("@lune/task")
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
++local ROOT = `{top}/.cache/c0121-server`
++local TOKEN = "t0k-c0121"
++local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
++
++local function write(path: string, text: string)
++	local full = `{ROOT}/{path}`
++	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
++	fs.writeFile(full, text)
++end
++local function item(path: string, front: { string })
++	local id = string.match(path, "([^/]+)$") :: string
++	write(
++		`{path}/{id}.md`,
++		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n"
++	)
++end
++
++local GH_JSON = [[
++[{"number":7,"headRefName":"R0020-alpha","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
++  "statusCheckRollup":[{"conclusion":"SUCCESS"}]}]
++]]
++
++-- the stubs and what they saw
++local clock = 1000000
++local runs: { { string } } = {}
++local opened: { string } = {}
++local ghCalls = 0
++local ghFails = false
++local builds = 0
++local key = "k1"
++local hash = "engine-1"
++local server: serve.Server? = nil
++local PORT = 0
++
++local function start()
++	for _ = 1, 30 do
++		local port = math.random(30000, 60000)
++		local ok, s = pcall(serve.start, {
++			root = ROOT,
++			port = port,
++			token = TOKEN,
++			runner = function(args: { string }): serve.RunResult
++				table.insert(runs, table.clone(args))
++				return { ok = true, stdout = "stopped", stderr = "" }
++			end,
++			opener = function(target: string): boolean
++				table.insert(opened, target)
++				return true
++			end,
++			gh = function(): (string?, string?)
++				ghCalls += 1
++				if ghFails then
++					return nil, "gh: not logged in"
++				end
++				return GH_JSON, nil
++			end,
++			now = function(): number
++				return clock
++			end,
++			facts = function(_root: string): any
++				return {
++					asOf = nil,
++					refs = { { name = "origin/R0020-alpha", at = clock } },
++					worktrees = { { path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" } },
++					dispatch = {},
++				}
++			end,
++			collect = function(root: string, facts: any): any
++				builds += 1
++				return require("@znile/engine/board").collect(nil, root, facts)
++			end,
++			keyOf = function(): string
++				return key
++			end,
++			engineHash = function(): string?
++				return hash
++			end,
++		})
++		if ok then
++			server, PORT = s, port
++			return
++		end
++	end
++	error("no free port in 30 tries")
++end
++
++local function url(path: string): string
++	return `http://127.0.0.1:{PORT}{path}`
++end
++local function call(method: string, path: string, headers: { [string]: string }?, body: string?): any
++	return (net.request :: any)({
++		url = url(path),
++		method = method :: any,
++		headers = headers or { ["X-Zn-Token"] = TOKEN },
++		body = body,
++	})
++end
++local function action(body: string, extra: { [string]: string }?): any
++	local h: { [string]: string } = { ["X-Zn-Token"] = TOKEN, ["Content-Type"] = "application/json" }
++	for k, v in (extra or {}) :: { [string]: string } do
++		h[k] = v
++	end
++	return call("POST", "/api/action", h, body)
++end
++-- a request sent raw, as a browser on a rebinding domain or a preflight sends it (net.request rewrites Host)
++local function raw(lines: { string }): string
++	local conn = net.tcp.connect("127.0.0.1", PORT)
++	conn:write(table.concat(lines, "\r\n") .. "\r\nConnection: close\r\n\r\n")
++	local reply = conn:read() or ""
++	conn:close()
++	return reply
++end
++local function state(): any
++	local r = call("GET", "/api/state")
++	t.expect(r.statusCode).toBe(200)
++	return serde.decode("json", r.body)
++end
++local function byId(list: { any }): { [string]: any }
++	local out = {}
++	for _, x in list do
++		out[x.id] = x
++	end
++	return out
++end
++
++return t.spec("c0121 board server", function(it)
++	it("starts on 127.0.0.1 with a fixture tracker and a worktree's spend", function()
++		if fs.isDir(ROOT) then
++			fs.removeDir(ROOT)
++		end
++		write("z-nile/projects.toml", REGISTRY)
++		item(
++			"z-nile/.tracker/rafts/active/R0020",
++			{ "type: feature", "title: Running", "design: ready", "status: active-a-b-c" }
++		)
++		item(
++			"z-nile/.tracker/issues/active/f0021",
++			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" }
++		)
++		item(
++			"z-nile/.tracker/rafts/R0030",
++			{ "type: chore", "title: Prepared", "design: ready", "status: prepared-a-b-c" }
++		)
++		item("z-nile/.tracker/issues/c0099", { "type: chore", "title: Loose", "raft:" })
++		write(
++			"wt/R0020/z-nile/.tracker/issues/active/f0021/spend.md",
++			"# Spend: f0021 x\n\n| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n"
++				.. "|---|---|---|---|---|---|---|---|---|---|\n"
++				.. "| 1 | 2026-10-24 10:00 | s | 3 | 1 | 4.0 | raft | code-review | 777 | grok-y |\n"
++		)
++		start()
++		t.expect(server ~= nil).toBe(true)
++		t.expect((server :: serve.Server).url).toBe(`http://127.0.0.1:{PORT}/?token={TOKEN}`)
++	end)
++
++	it("serves the page with its token and the live settings, and refuses it without the token", function()
++		local ok = call("GET", `/?token={TOKEN}`, {})
++		t.expect(ok.statusCode).toBe(200)
++		t.expect(string.find(ok.body, `"token":"{TOKEN}"`, 1, true) ~= nil).toBe(true)
++		t.expect(string.find(ok.body, '"live":', 1, true) ~= nil).toBe(true)
++		t.expect(call("GET", "/", {}).statusCode).toBe(403)
++		t.expect(call("GET", "/?token=nope", {}).statusCode).toBe(403)
++	end)
++
++	it("refuses a DNS-rebinding Host before any stub runs", function()
++		local reply = raw({
++			"POST /api/action HTTP/1.1",
++			"Host: evil.example",
++			`X-Zn-Token: {TOKEN}`,
++			"Content-Type: application/json",
++			'Content-Length: 31\r\n\r\n{"action":"stop","id":"R0020"}',
++		})
++		t.expect(string.find(reply, "HTTP/1.1 403", 1, true) ~= nil).toBe(true)
++		t.expect(#runs).toBe(0)
++	end)
++
++	it("refuses a foreign Origin, an OPTIONS preflight and a GET action, running nothing", function()
++		t.expect(action('{"action":"stop","id":"R0020"}', { Origin = "http://evil.example" }).statusCode)
++			.toBe(403)
++		local pre =
++			raw({ "OPTIONS /api/action HTTP/1.1", `Host: 127.0.0.1:{PORT}`, "Origin: http://evil.example" })
++		t.expect(string.find(pre, "HTTP/1.1 403", 1, true) ~= nil).toBe(true)
++		t.expect((string.find(string.lower(pre), "access-control-allow", 1, true))).toBe(nil)
++		t.expect(call("GET", "/api/action?action=stop&id=R0020").statusCode).toBe(405)
++		t.expect(action('{"action":"stop","id":"R0020"}', { ["X-Zn-Token"] = "wrong" }).statusCode).toBe(403)
++		t.expect(#runs).toBe(0)
++	end)
++
++	it("refuses an unknown id or shell text before any process runs", function()
++		t.expect(action('{"action":"stop","id":"R9999"}').statusCode).toBe(400)
++		t.expect(action('{"action":"retry","id":"R0020 && touch x"}').statusCode).toBe(400)
++		t.expect(action("not json").statusCode).toBe(400)
++		t.expect(#runs).toBe(0)
++	end)
++
++	it("stop runs ./zn dispatch stop <id> as an argument array and answers with its output", function()
++		local r = action('{"action":"stop","id":"R0020"}')
++		t.expect(r.statusCode).toBe(200)
++		t.expect(string.find(r.body, "stopped", 1, true) ~= nil).toBe(true)
++		t.expect(runs).toEqual({ { "dispatch", "stop", "R0020" } })
++	end)
++
++	it("retry is answered at once and runs ./zn dispatch retry <id>", function()
++		local r = action('{"action":"retry","id":"f0021"}')
++		t.expect(r.statusCode).toBe(202)
++		task.wait(0.2)
++		t.expect(runs[2]).toEqual({ "dispatch", "retry", "f0021" })
++	end)
++
++	it("state fills PR and checks from gh, calling it once in its 30 s window and again after", function()
++		local s1 = state()
++		task.wait(0.1)
++		local s2 = state()
++		t.expect(ghCalls).toBe(1)
++		local r = byId(s2.model.rafts).R0020
++		t.expect(r.pr).toEqual({ number = 7, url = "https://example.invalid/pr/7", state = "draft" })
++		t.expect(r.checks.state).toBe("passing")
++		t.expect(s2.model.live.checks).toBe("ok")
++		t.expect(s1.model.live.token).toBe(TOKEN)
++		t.expect(type(s2.statsHtml)).toBe("string")
++		clock += 31
++		state()
++		t.expect(ghCalls).toBe(2)
++	end)
++
++	it("open opens the card's PR, and refuses an item with nothing to open", function()
++		t.expect(action('{"action":"open","id":"f0021"}').statusCode).toBe(200)
++		t.expect(opened).toEqual({ "https://example.invalid/pr/7" })
++		t.expect(action('{"action":"open","id":"c0099"}').statusCode).toBe(400)
++		t.expect(#opened).toBe(1)
++	end)
++
++	it("reads a launched raft's member spend from its worktree", function()
++		local f = byId(state().model.issues).f0021
++		t.expect(f.spend.tokens).toBe(777)
++		t.expect(f.spend.models).toEqual({ "grok-y" })
++	end)
++
++	it("rebuilds the model only when its key changes, or after 60 s", function()
++		local before = builds
++		state()
++		state()
++		t.expect(builds).toBe(before)
++		key = "k2"
++		state()
++		t.expect(builds).toBe(before + 1)
++		clock += 61
++		state()
++		t.expect(builds).toBe(before + 2)
++	end)
++
++	it("a failing gh still gives 200, with checks unavailable", function()
++		ghFails = true
++		clock += 31
++		state()
++		task.wait(0.1)
++		local s = state()
++		t.expect(s.model.live.checks).toBe("unavailable")
++		t.expect(byId(s.model.rafts).R0020.pr).toBe(nil)
++	end)
++
++	it("says the server is out of date once the engine changed since it started", function()
++		t.expect(state().model.live.stale).toBe(false)
++		hash = "engine-2"
++		t.expect(state().model.live.stale).toBe(true)
++	end)
++
++	it("stops: a request afterwards is refused", function()
++		(server :: serve.Server).stop()
++		task.wait(0.1)
++		local ok = pcall(net.request, url("/api/state"))
++		t.expect(ok).toBe(false)
++		fs.removeDir(ROOT)
++	end)
++end)
+diff --git a/z-nile/.tracker/issues/c0121/c0121.md b/z-nile/.tracker/issues/c0121/c0121.md
+index 46eb4f7b..0fc21974 100644
+--- a/z-nile/.tracker/issues/c0121/c0121.md
++++ b/z-nile/.tracker/issues/c0121/c0121.md
+@@ -19,59 +19,291 @@ Split from c0118 by the user (2026-10-20, "Split: static board, then server"). T
+ - The only actions are stop, retry and open, and they work from the page through the dispatcher (c0117).
+ - `zn board --serve` serves the same page `zn board` writes, with live polling (the user's decision: one page, two modes).
+ 
++Carried from c0118's programme review (2026-10-20), whose server, action and live-data findings moved here with the split (c0118 design review 001 F4). Each is a requirement on this issue's design, not a change of its outcomes:
++- **F3 (high), CSRF and DNS rebinding.** Loopback is not safe by itself: any page in the person's browser can send a simple cross-origin `POST`, and a rebinding domain reaches `127.0.0.1` with a foreign `Host`. Bind `127.0.0.1` explicitly; refuse a `Host` other than `127.0.0.1:<port>` or `localhost:<port>`; accept actions only as `POST` with `Content-Type: application/json` (so a preflight is forced) and answer `OPTIONS` with 403 and no CORS headers; require an `X-Zn-Token` equal to a random token made at start, embedded only in the served page and printed once in the start URL; refuse a foreign `Origin`; never act on a `GET`; validate ids against the model and pass argument arrays, never `sh -c`. One spec case per guard: wrong Host, foreign Origin, missing or wrong token, `GET` that does not act, unknown id refused before any process runs (each 403 or a refusal).
++- **F4 (high), who runs stop and retry, and where.** `stop` runs only in the main checkout, so the server does too: add `zn board --serve` to the main checkout's allowed command list ("read-only except the three actions, each delegated"), keep it out of `READ_ONLY` so the repository guard runs, and update the `tracker-guarded` pin. Stop and retry call c0117's `dispatch stop|retry <id>` and read its run state (`.cache/dispatch/<id>/state.json`); say whether those run in the main checkout.
++- **F8 (medium), live data without blocking.** `gh pr list` took 0.5 s and needs auth: call it once per project per refresh, cache about 30 s, refresh in a background task and never on the request path; `/api/state` returns the cached data and its age; when `gh` is missing or fails the card says "checks unavailable" and the page still renders. Read a running raft's spend from its worktree's `spend.md` (build and code-review rows reach main only at the merge). Rebuild the model only when HEAD, `origin/main` or a worktree's HEAD changed. Cases: a failing stub `gh` gives a 200 with checks unavailable; two `/api/state` calls in the cache window call the stub once.
++- **F9 (medium), test seams.** `net.serve(0, …)` reports port 0, so specs can't use port 0: `serve.start({ root, port, runner, opener, gh, now })` returns `{ url, token, stop }` with every effect injected; specs run it in-process on a random port with retry (c0003's helper) and drive it with `net.request`; the CLI takes `--port` and fails clearly when it is taken. `open` is never the real one in specs (the runner's browser guard fails the run); a retried dispatcher is never the server's child (or it dies with the server) and never detached into a new session. Also, word for word from the review: "The page's JS is tested with the c0042 node harness, with `fetch` stubbed"; specs "stop it in a final case"; and "repository-safety review checks that no stub spawns a real process outside `.cache`" (c0118 design review 002 F3).
++- **F11 (low), a stale server.** Record the engine tree's hash at start; when HEAD's differs, the page says "server is out of date: restart". One case with a fixture HEAD change.
++- c0118's seam for this issue: the page's `window.znBoard.load(model, statsHtml?)` swaps the model (and the Stats section), keeping the view, project, selection, done window and range; `board.collect(nil, root, facts)` with `facts.asOf` set to the request time builds each polled model; the Issue and Raft types carry `pr` and `checks` fields, nil in the static page, for this issue to fill.
++
+ ## Non-goals
+ - The static page, its columns, cards, charts, navigation and Stats: c0118.
++- Starting a model, or any action besides stop, retry and open (c0118's captured "The only actions are stop, retry, and open").
++- Serving anything but 127.0.0.1, or to anyone but the person at this machine: no remote access, no TLS, no accounts.
+ 
+ ## Solution
+ <!-- The approach in one paragraph. -->
++Prep's detail (the capture's Solution was empty; nothing captured is changed):
++- One module, `z-nile/engine/serve.luau`. The guard, the action plan and the `gh` parse are pure. `serve.start` wires them to Lune's `net.serve` on 127.0.0.1, with every effect injected (the runner of `./zn`, the opener, `gh`, the clock, the model's key, the engine's hash), so specs run it in-process on a random port with stubs and never reach the network beyond loopback.
++- The page is c0118's page. The server sets `model.live` (the session token, the poll interval, the checks state, the stale flag) and fills each raft's reserved `pr` and `checks`. The page polls `/api/state` and hands each model to c0118's `znBoard.load`.
++- Stop and retry run c0117's `./zn dispatch stop|retry <id>` as argument arrays; open opens the card's PR, else its raft's worktree.
+ 
+ ## Design
+-<!-- Modules and paths, public types and signatures, data flow, pure Logic vs adapter split,
+-     client/server authority. Must agree with the raft's whole-raft design and tracker/architecture.md. -->
++c0121 adds the second mode of c0118's "one page, two modes": `./zn board` keeps writing the static page, and `./zn board --serve` serves the same `board.render` output from the main checkout, live, with the three actions. Nothing in the static page changes except what a served model turns on (`model.live`).
++
++### 1. Modules and data flow
++```
++browser ──GET /?token=T──► serve.handle ─► serve.guard ─► board.render(model + live)         (the page, once)
++browser ──GET /api/state (X-Zn-Token)──► guard ─► model() ─► { model, statsHtml }          (every 5 s)
++browser ──POST /api/action (JSON, X-Zn-Token)──► guard ─► serve.plan(model, action, id) ─► runner ./zn dispatch … | opener
++model(): key = keyOf() (HEAD, origin/main, worktree HEADs, dispatcher state times); rebuild with board.collect(nil, root,
++         facts{asOf = now, worktreeSpend = true}) when the key changes or every 60 s; fill rafts' pr/checks from the gh cache
++gh cache: refreshed in a task of its own at most every 30 s, started by a request, never awaited by it
++```
++| module | change | pure or I/O |
++|---|---|---|
++| `z-nile/engine/serve.luau` | **new**: `guard`, `plan`, `parsePrs` (pure); `newToken`, `keyOf`, `engineHash`, `start` (I/O) | both, split as listed |
++| `z-nile/engine/board.luau` | `Facts.worktreeSpend`; `Model.live`; `board.statsHtml(model)` exported; a launched raft's members' spend read from its worktree when asked | the existing reader |
++| `z-nile/engine/board.html` | `#live` status line; Stop, Retry and Open on a served card; polling with the token; "checks unavailable", "checks loading", "no PR" on a served card | the page |
++| `z-nile/engine/main.luau` | `board --serve [--port N]`; `--serve` a flag; `board --serve` guarded although `board` is read-only; usage line | CLI |
++| `z-nile/skills/zz-rules/SKILL.md`, `z-nile/README.md` | the main checkout's command list, the board row, the README's board line | docs |
++
++### 2. Public types and signatures
++```lua
++export type Request = { path: string, query: { [string]: string? }, method: string, headers: { [string]: string }, body: string }
++export type Response = { status: number, headers: { [string]: string }?, body: string }
++export type Plan = { kind: "run", args: { string }, wait: boolean } | { kind: "open", target: string }
++export type RunResult = { ok: boolean, stdout: string, stderr: string }
++export type Options = {
++	root: string, port: number,
++	runner: (args: { string }) -> RunResult,        -- `./zn <args>` in root, an argument array, never a shell
++	opener: (target: string) -> boolean,            -- open / xdg-open on a URL or a folder
++	gh: () -> (string?, string?),                   -- gh pr list --json … output, or nil and why
++	now: () -> number,
++	token: string?, collect: ((root, facts) -> board.Model)?, facts: ((root) -> board.Facts)?,
++	keyOf: (() -> string)?, engineHash: (() -> string?)?, statsHtml: ((board.Model) -> string)?,
++}
++export type Server = { url: string, token: string, port: number, stop: () -> () }
++serve.PORT = 8417; serve.TTL = 30; serve.REBUILD = 60; serve.POLL = 5
++function serve.guard(req: Request, port: number, token: string): Response?   -- nil: go on
++function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?)
++function serve.parsePrs(out: string): { [string]: { pr: board.Pr, checks: board.Checks } }?   -- by branch
++function serve.newToken(): string                 -- 16 bytes of /dev/urandom as 32 hex digits
++function serve.keyOf(root: string): string
++function serve.engineHash(root: string): string?  -- git rev-parse HEAD:z-nile/engine
++function serve.start(o: Options): Server          -- errors when the port is taken
++-- board.luau
++export type Live = { token: string, poll: number, checks: string, checksAge: number?, stale: boolean }
++-- Facts gains worktreeSpend: boolean?; Model gains live: Live?; function board.statsHtml(m: Model): string
++```
++
++### 3. The guard (programme review F3; the experiments below)
++Every request goes through `serve.guard` before any route, so a refused request runs no stub, reads no model and starts no process:
++| refusal | status | why |
++|---|---|---|
++| `Host` not `127.0.0.1:<port>`, `localhost:<port>`, `127.0.0.1` or `localhost` | 403 | DNS rebinding: a page on `evil.example` resolved to 127.0.0.1 still sends `Host: evil.example[:port]`. The bare names are allowed because some clients (Lune's `net.request`, E2) send no port; a rebinding page never sends them. |
++| any `OPTIONS` | 403, no `Access-Control-*` header | a cross-site preflight for a JSON POST fails, so the browser never sends the POST |
++| an `Origin` other than `http://127.0.0.1:<port>` or `http://localhost:<port>` | 403 | CSRF from any other site |
++| `/` without `?token=<token>`, or not a GET | 403 / 405 | the page carries the token; only the URL the server printed opens it |
++| `/api/*` without `X-Zn-Token: <token>` | 403 | a custom header also forces a preflight from any other origin |
++| `/api/action` not a POST, or its `Content-Type` not `application/json` | 405 / 415 | a GET never acts; a simple form post can't send JSON |
++| `/api/state` not a GET; any other path | 405 / 404 | |
++The token is 16 random bytes (`od -An -tx1 -N16 /dev/urandom`), made at start, embedded only in the served page's model, and printed once in the start URL (`http://127.0.0.1:<port>/?token=<token>`). The server binds `127.0.0.1` explicitly (E1, E6: the LAN address is refused).
++
++### 4. The actions (programme review F4)
++`serve.plan` decides from the model alone, never from free text: the id must be a key of `model.home` (an id the model shows), else `400 refused: unknown id <id>`; the action must be stop, retry or open.
++- **stop**: runs `./zn dispatch stop <id>` (c0117) and waits; 200 with its output, 500 when it fails.
++- **retry**: starts `./zn dispatch retry <id>` (c0117) in a task of its own and answers 202 at once (the chain can run for hours). It runs as a child process of the server, in the server's process group, never detached into a new session (`setsid`), so stopping the server (Ctrl-C) stops a retry it started; c0117 then marks that run `lost` and `./zn dispatch retry <id>` resumes it. Guess (pending user): G3.
++- **open**: opens the item's own PR, else its raft's PR (from the `gh` cache), else its raft's worktree folder, with `open` (macOS) or `xdg-open`; 400 when there is none.
++- The runner is `process.exec("<root>/zn", args, { cwd = root })`: an argument array, never `sh -c`.
++- **Where**: the server runs only in the main checkout (`git rev-parse --show-toplevel` must equal the first worktree), because c0117's run state (`.cache/dispatch/`) and `stop` live there; elsewhere `./zn board --serve` refuses: "board --serve runs in the main checkout (<path>), where the dispatcher's run state and stop live". zz-rules' list of main-checkout commands names it.
++- **The repository guard**: `board` stays in `READ_ONLY` (it only writes a page), and `board --serve` is excepted (`not READ_ONLY[name] or (name == "board" and --serve given)`), so `guardRepoRoot` runs before any action can. The programme review asked to "keep it out of READ_ONLY ... and update the tracker-guarded pin"; the exception keeps the pin (`tests/tooling/tracker-guarded.spec.luau`) unchanged and is pinned by `cli.spec` instead. Guess (pending user): G4.
++
++### 5. Live data (programme review F8)
++- **`gh`**: one `gh pr list --state all --limit 200 --json number,headRefName,state,isDraft,url,statusCheckRollup` per refresh, for the repository (every project shares it, so "once per project" is once). A refresh is started by a page or state request when the last one is 30 s old, runs in a task of its own (E3: a subprocess in one task does not block the others), and is never awaited by the request: the request answers with the cache as it is. `parsePrs` keys PRs by head branch; a raft gets the PR of its launched branch (`raft.branch`, c0118 §3). Draft open PRs read `draft`; checks read `failing` (any FAILURE, ERROR, CANCELLED, TIMED_OUT or ACTION_REQUIRED), `pending` (anything not finished), `passing`, or `none`.
++- When `gh` is missing, fails or prints something else, `model.live.checks` is `unavailable` and every card without a PR says "checks unavailable"; before the first answer it is `loading`. The page still renders (200).
++- **Spend**: a launched raft's members show the `spend.md` rows in its worktree (`<worktree>/<root>/issues/active/<id>/spend.md`), where build and code-review rows sit until the merge; a member without one there keeps main's.
++- **Rebuilding**: the key's one `.cache` read (`<root>/.cache/dispatch`) is on the reviewed list in `tests/lib/cachepaths.luau` as a read. The model is rebuilt only when its key changes (HEAD and `origin/main`, every worktree's HEAD from `git worktree list --porcelain`, and each `.cache/dispatch/<id>/state.json`'s change time), or when the model is 60 s old (so done ages and the as-of time move). The PR and checks are laid on each time from the cache.
++- **`/api/state`** returns `{ model, statsHtml }`; `model.live` carries `checks`, `checksAge` (seconds since the last `gh` answer) and `stale`.
++
++### 6. The page (c0118's seam)
++- The served page is `board.render(model)` with `model.live` set. Its script: when `model.live` is present and the browser has `fetch` and `setInterval`, it shows `#live` ("live · checks N s old", "checks unavailable", "checks loading", or "server is out of date: restart" in red) and polls `GET /api/state` with `X-Zn-Token` every `live.poll` (5) seconds, handing `{ model, statsHtml }` to `znBoard.load` (c0118 §9: view, project, selection, window and range kept). A failed poll adds "the server did not answer".
++- A served card's Run block gains Stop, Retry and Open buttons; each sends `POST /api/action` with `Content-Type: application/json`, `X-Zn-Token` and `{ action, id }`, and shows "<action>: <status> <answer>" under the buttons.
++- A served card with no PR says "checks unavailable", "checks loading" or "no PR" instead of the static page's "live on the served board".
++- The static page has no `model.live`: no buttons, no polling, no fetch, `#live` hidden.
++
++### 7. A stale server (programme review F11)
++`serve.start` records `git rev-parse HEAD:z-nile/engine` at start; each model compares it with the current one, and `live.stale` is true when they differ, so after a `sync` that changed the engine the page says "server is out of date: restart".
++
++### 8. The command
++`./zn board --serve [--port N]` (default 8417):
++- refuses `--out`, `-O`, `--open` and positional arguments ("usage: board --serve [--port N]  (--serve writes no file: --out, -O and --open don't apply)");
++- refuses a port that is not an integer from 1024 to 65535;
++- refuses outside the main checkout (§4);
++- fails when the port is taken: "board --serve: port N is taken (already serving?): <why>; pick another with --port";
++- prints the URL with its token once, and serves until stopped (Ctrl-C).
+ 
+ ### Scalability
++- Per page poll (every 5 s per open tab): the key (`git rev-parse` once, `git worktree list` once, a `stat` per dispatcher state, about 20 ms) and, only when it changed or every 60 s, a model build (about 0.5 s on the real tree, c0118). `gh` at most once per 30 s whatever the number of tabs, off the request path. The response is the whole model (about 2.7 MB today; the documents dominate); loopback only.
++- Handlers don't block each other (E3), so a stop that waits on `./zn dispatch stop` doesn't stall polling.
++
+ ### Maintainability
++- A new action is a branch in `serve.plan` and a button in `actions()`; the guard needs no change. A new live field goes in `board.Live` and `model()`.
++- Every effect is injected, so the next server feature is specced in-process.
++
+ ### Usability
++- One command prints one URL; the page is the board people already use, plus a status line and three buttons.
++- Refusals name the rule (the Host, the Origin, the token, the method, the id).
++- Exhaustive lists: the main checkout's command list names `./zn board --serve`; the usage text names it; `READ_ONLY` keeps `board` with the `--serve` exception stated beside it.
+ 
+ ### Touched modules
+-<!-- One backticked repo path per bullet (file or directory prefix), INCLUDING this issue's spec
+-     paths (e.g. `tests/unit/Maze`). Used for spend attribution
+-     and for `lune run scripts/affected -- <paths>` to list the affected specs below. -->
++- `z-nile/engine/serve.luau`
++- `z-nile/engine/board.luau`
++- `z-nile/engine/board.html`
++- `z-nile/engine/main.luau`
++- `z-nile/skills/zz-rules/SKILL.md`
++- `z-nile/README.md`
++- `tests/lib/cachepaths.luau`
++- `tests/acceptance/c0118/docs.spec.luau`
++- `tests/acceptance/c0121`
+ 
+ ### Affected specs
+-<!-- Output of `lune run scripts/affected -- <touched paths>` plus the new specs. -->
++`lune run z-nile/affected -- z-nile/engine/serve.luau z-nile/engine/board.luau` prints `ALL` (engine paths force a full run). Specs that read the touched files: c0118's six (promoted in the prototype's simulation), c0042's and c0107's page specs, c0048 `board-docs`, c0057 `open`, c0073 `board-stats`, `tests/tooling/{board,tracker-guarded}.spec.luau`, and every zz-rules reader (c0050, c0052, c0081, c0082, c0107 `keep`, c0111, c0114, c0115, c0116, c0117, c0119, c0120 docs specs). New: `tests/acceptance/c0121/{guard,server,page,cli,docs}.spec.luau`. All green on the prototype's full gate (Verification log).
+ 
+ ## Unknowns & experiments
+-<!-- Per unknown: E1 question (pass/fail), how it is tested (experiments/E1-*.luau or a command),
+-     result if already run during prep, and the fallback design if it fails. -->
++Run as specs under the real runner (the jail on macOS) in a scratch clone of the prototype (`experiments/E1-serve.spec.luau`), except E6, which must run outside the jail.
++- **E1: can a spec bind `net.serve` to 127.0.0.1 on a random port inside the jail and reach it?** Pass: the jail allows loopback; a random port from 30000 to 60000 binds on the first try; `net.request` gets 200.
++- **E2: does the handler see `Host`, `Origin` and `X-Zn-Token` as sent?** Pass with a finding: `Origin` and the token arrive as sent, but `net.request` rewrites `Host` to the URL's host without its port (the handler saw `127.0.0.1`). A rebinding request is therefore sent raw with `net.tcp.connect`, and the handler sees `Host: evil.example`. The guard accepts the bare loopback names (§3).
++- **E3: does a handler running a subprocess block another?** Pass: a request answered in under 1 ms while another handler sat in `process.exec("sleep", { "1" })`.
++- **E4: port 0?** It binds, but the handle reports nothing about the port, so specs use a random port with retry (c0003's helper).
++- **E5: is a stopped server gone?** Pass: a request after `stop` fails, which is how the last case proves it.
++- **E6: does the 127.0.0.1 bind refuse the LAN address?** Outside the jail: loopback 200, `http://192.168.68.57:47199/` "Connection refused".
++- **Fallbacks**, had the jail refused to listen: the fixture's server over a Unix socket (Lune has none), or the runner's loopback allowance (it exists: E1). None was needed.
++- **Mutation check**: every Rules and mutants row was run on the committed prototype in a scratch clone; outcomes in the table.
+ 
+ ## Regression guard
+-<!-- Existing behavior/specs that must stay green, and new regression specs added here. -->
+-Overrides: <promoted specs (tests/acceptance/) this issue deliberately changes, each with its chore, or none>
++- c0118's board stays: its six promoted specs run in AC6 (the static page has no `model.live`, so no button, no poll and no fetch; the static card still says "live on the served board").
++- The old page specs (c0042, c0107, `tests/tooling/board.spec.luau`) and the read-only set (`tests/tooling/tracker-guarded.spec.luau`, unchanged) run in AC6.
++
++Overrides: c0118 `docs.spec.luau` (one assertion: the README's "`./zn board --serve` (c0121, planned) serves the same page live" becomes "`./zn board --serve` (c0121) serves the same page live"). c0121 is a chore, so it changes it in its own raft.
+ 
+ ## Test plan
+-<!-- Spec file :: case -> AC number. Write these first; they must fail before implementation. -->
++- `guard.spec.luau` :: lets a same-host request with the token through, by 127.0.0.1 or localhost → AC1
++- `guard.spec.luau` :: refuses a foreign Host (DNS rebinding), another port, and no Host → AC1
++- `guard.spec.luau` :: refuses every OPTIONS, with no CORS header, so a cross-site preflight fails → AC1
++- `guard.spec.luau` :: refuses a foreign Origin, and lets the server's own through → AC1
++- `guard.spec.luau` :: serves the page only as a GET with the token in its query → AC1
++- `guard.spec.luau` :: refuses an /api/ call without the token or with a wrong one → AC1
++- `guard.spec.luau` :: takes an action only as a POST with a JSON body; a GET never acts → AC1
++- `guard.spec.luau` :: answers 404 for any other path → AC1
++- `guard.spec.luau` :: plans stop (waited) and retry (started) as argument arrays for ./zn dispatch, on ids the model has → AC1
++- `guard.spec.luau` :: refuses an unknown id, an id with shell text, a non-string id and an unknown action, naming why → AC1
++- `guard.spec.luau` :: opens an item's own PR, else its raft's PR, else its raft's worktree, and nothing else → AC1
++- `guard.spec.luau` :: reads gh pr list: drafts, and checks as passing, failing, pending or none → AC1
++- `guard.spec.luau` :: makes a session token of 32 hex digits, new each time → AC1
++- `server.spec.luau` :: starts on 127.0.0.1 with a fixture tracker and a worktree's spend → AC2
++- `server.spec.luau` :: serves the page with its token and the live settings, and refuses it without the token → AC2
++- `server.spec.luau` :: refuses a DNS-rebinding Host before any stub runs → AC2
++- `server.spec.luau` :: refuses a foreign Origin, an OPTIONS preflight and a GET action, running nothing → AC2
++- `server.spec.luau` :: refuses an unknown id or shell text before any process runs → AC2
++- `server.spec.luau` :: stop runs ./zn dispatch stop <id> as an argument array and answers with its output → AC2
++- `server.spec.luau` :: retry is answered at once and runs ./zn dispatch retry <id> → AC2
++- `server.spec.luau` :: state fills PR and checks from gh, calling it once in its 30 s window and again after → AC2
++- `server.spec.luau` :: open opens the card's PR, and refuses an item with nothing to open → AC2
++- `server.spec.luau` :: reads a launched raft's member spend from its worktree → AC2
++- `server.spec.luau` :: rebuilds the model only when its key changes, or after 60 s → AC2
++- `server.spec.luau` :: a failing gh still gives 200, with checks unavailable → AC2
++- `server.spec.luau` :: says the server is out of date once the engine changed since it started → AC2
++- `server.spec.luau` :: stops: a request afterwards is refused → AC2
++- `page.spec.luau` :: shows that it is live, and polls every live.poll seconds → AC3
++- `page.spec.luau` :: polls /api/state with its token and loads the model it gets → AC3
++- `page.spec.luau` :: says the server is out of date when the polled model says so, and when the server does not answer → AC3
++- `page.spec.luau` :: a card has Stop, Retry and Open, and Stop is a JSON POST to /api/action with the token → AC3
++- `page.spec.luau` :: a card with no PR says checks unavailable when gh failed → AC3
++- `page.spec.luau` :: the static page has no buttons, never polls and never fetches → AC3
++- `cli.spec.luau` :: refuses a port outside 1024 to 65535, or not a number → AC4
++- `cli.spec.luau` :: refuses -O, --out and --open with --serve, since it writes no file → AC4
++- `cli.spec.luau` :: runs only in the main checkout → AC4
++- `cli.spec.luau` :: fails clearly when the port is taken, and serves nothing → AC4
++- `cli.spec.luau` :: is guarded where git's root is not the checkout, while board alone only reads → AC4
++- `cli.spec.luau` :: the usage line names board --serve → AC4
++- `docs.spec.luau` :: (three cases) → AC5
++- c0118's six promoted specs, c0042 `smoke`, c0107 `page`, `tests/tooling/{board,tracker-guarded}.spec.luau` → AC6
+ 
+ ### Rules and mutants
+-<!-- One row per behavioural rule in the Design. The mutant is a plausible wrong implementation
+-     that the spec case must fail for (from the prep mutation check, or reasoned). -->
++All `run` rows were applied one at a time to the committed prototype in a scratch clone; "killed" means an assertion failed (no load error).
++
+ | rule | spec :: case | mutant it kills | checked |
+ |---|---|---|---|
++| a Host other than the loopback names is refused | guard :: refuses a foreign Host (DNS rebinding), another port, and no Host | N1 any Host passes | run |
++| a Host that merely contains a loopback name is refused | guard :: refuses a foreign Host (DNS rebinding), another port, and no Host | N2 a Host that contains a loopback name passes | run |
++| every OPTIONS is refused, without CORS headers | guard :: refuses every OPTIONS, with no CORS header, so a cross-site preflight fails | N3 OPTIONS is let through | run |
++| a foreign Origin is refused | guard :: refuses a foreign Origin, and lets the server's own through | N4 any Origin passes | run |
++| the page needs its token | guard :: serves the page only as a GET with the token in its query | N5 the page needs no token | run |
++| an /api/ call needs X-Zn-Token | guard :: refuses an /api/ call without the token or with a wrong one | N6 /api/ needs no token | run |
++| a GET never acts | guard :: takes an action only as a POST with a JSON body; a GET never acts | N7 a GET may act | run |
++| an action needs a JSON body | guard :: takes an action only as a POST with a JSON body; a GET never acts | N8 any Content-Type may act | run |
++| an action needs an id the model has | guard :: refuses an unknown id, an id with shell text, a non-string id and an unknown action, naming | N9 any id may act | run |
++| stop is waited for and answered with its output | guard :: plans stop (waited) and retry (started) as argument arrays for ./zn dispatch, on ids the mo | N10 stop is not waited for | run |
++| retry is started and answered 202 at once | guard :: plans stop (waited) and retry (started) as argument arrays for ./zn dispatch, on ids the mo | N11 retry is waited for | run |
++| actions run ./zn by argument array, never a shell | guard :: plans stop (waited) and retry (started) as argument arrays for ./zn dispatch, on ids the mo | N12 actions go through a shell | run |
++| open falls back to the raft's PR | guard :: opens an item's own PR, else its raft's PR, else its raft's worktree, and nothing else | N13 open ignores the raft's PR | run |
++| open falls back to the raft's worktree | guard :: opens an item's own PR, else its raft's PR, else its raft's worktree, and nothing else | N14 open never falls back to the worktree | run |
++| a draft open PR reads draft | guard :: reads gh pr list: drafts, and checks as passing, failing, pending or none | N15 drafts read as open | run |
++| a failing check reads failing | guard :: reads gh pr list: drafts, and checks as passing, failing, pending or none | N16 a failing check reads as pending | run |
++| gh runs at most once per 30 s | server :: state fills PR and checks from gh, calling it once in its 30 s window and again after | N17 gh runs on every request | run |
++| a failing gh reads unavailable | server :: a failing gh still gives 200, with checks unavailable | N18 a failing gh reads as loading | run |
++| the model is reused while its key holds | server :: rebuilds the model only when its key changes, or after 60 s | N19 the model is rebuilt on every request | run |
++| a key change rebuilds the model | server :: rebuilds the model only when its key changes, or after 60 s | N20 a key change does not rebuild | run |
++| a model older than 60 s is rebuilt | server :: rebuilds the model only when its key changes, or after 60 s | N21 the model never ages out | run |
++| a changed engine is flagged stale | server :: says the server is out of date once the engine changed since it started | N22 a stale engine is never flagged | run |
++| a launched raft's members show their worktree spend | server :: reads a launched raft's member spend from its worktree | N23 a launched raft's spend is read from main | run |
++| the page polls with its token | page :: polls /api/state with its token and loads the model it gets | N24 the page polls without its token | run |
++| an action is posted as JSON | page :: a card has Stop, Retry and Open, and Stop is a JSON POST to /api/action with the token | N25 an action is not JSON | run |
++| each polled model is loaded | page :: polls /api/state with its token and loads the model it gets | N26 a polled model is not loaded | run |
++| the static page never polls | page :: builds a live page, a live page whose gh failed, and a static page | N27 the static page polls | run |
++| a stale server is shown | page :: says the server is out of date when the polled model says so, and when the server does not a | N28 a stale server is not shown | run |
++| a served card without a PR says checks unavailable when gh failed | page :: a card with no PR says checks unavailable when gh failed | N29 checks unavailable is not shown on a card | run |
++| the static page has no action buttons | page :: the static page has no buttons, never polls and never fetches | N30 the static page shows action buttons | run |
++| the port must be 1024 to 65535 | cli :: refuses a port outside 1024 to 65535, or not a number | N31 any port is accepted | run |
++| a taken port is refused by name | cli :: fails clearly when the port is taken, and serves nothing | N32 a taken port raises a bare error | run |
++| board --serve runs only in the main checkout | cli :: runs only in the main checkout | N33 board --serve runs outside the main checkout | run |
++| board --serve is guarded | cli :: is guarded where git's root is not the checkout, while board alone only reads | N34 board --serve is not guarded | run |
++| the CLI wires the real effects: `<root>/zn` with an argument array, `open`/`xdg-open`, the `gh pr list` argv, `os.time` | (review; JC1, OC1) | a wrong path or argv | reasoned: a spec would have to start the real server or real tools; the in-process server pins the same seams with stubs |
++| the docs say what the design says | docs :: (three cases) | a phrase dropped | reasoned: each phrase is asserted literally |
+ 
+ ## Acceptance criteria
+ 
+ ### Checked
+-<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
++- AC1: the guard refuses a foreign Host, any OPTIONS (without CORS headers), a foreign Origin, the page without its token, an /api/ call without its token, and an action that is not a JSON POST; `serve.plan` acts only on ids the model has, with argument arrays (stop waited, retry started) and opens a PR or a worktree; `parsePrs` reads drafts and the checks' four states; the token is 32 random hex digits.
++- AC2: the in-process server on 127.0.0.1 refuses a rebinding Host, a foreign Origin, OPTIONS, a GET action, a wrong token and an unknown id before any stub runs; runs `./zn dispatch stop|retry <id>` by argument array; opens the PR; calls `gh` once per 30 s and survives its failure; reads a launched raft's spend from its worktree; rebuilds only on a key change or after 60 s; flags a stale engine; and the last case stops it.
++- AC3: the served page polls `/api/state` with its token every `live.poll` seconds and loads each model; shows live, stale, checks unavailable and an unanswered poll; posts Stop as a JSON POST with the token and shows the answer; the static page never fetches, never polls and has no buttons.
++- AC4: `./zn board --serve` refuses a bad port, `-O`, `--out` and `--open`, a linked worktree and a taken port, each naming why; it is guarded where git's root is not the checkout; the usage names it.
++- AC5: zz-rules (the main checkout's list and the board row) and the README describe the served board.
++- AC6: c0118's board, the old page specs, the overridden README pin and the read-only set stay green.
+ 
+ ### Judged
+-<!-- Only if genuinely subjective. JCn: statement + rubric (what pass/fail looks like).
+-     Ruled on by the adversarial code reviewer. -->
++- JC1: no stub spawns a real process. Rubric: in `tests/acceptance/c0121/*`, every `runner`, `opener` and `gh` passed to `serve.start` is a Luau function that records and returns, and the only processes a spec starts are `git` (rev-parse, init, through `fixture`), `node` (the page harness, with `fetch` stubbed) and the fixture's own `./zn`, which refuses before it serves (each such case holds the port it passes, so a regression fails on the taken port instead of serving); fail on any real `gh`, `open`, `xdg-open` or `./zn dispatch` reachable from a spec, or a server left running after the last case.
+ 
+ ### Observed
+-<!-- Minimal Studio playtest steps for the human (OCn). -->
++- OC1: in the main checkout, `./zn board --serve`, open the printed URL in a browser, click a running raft's card: the PR link and checks show; Stop answers within a second; the status line updates every 5 s.
+ 
+ ## Implementation steps
+-<!-- Ordered, small, each verifiable. -->
++1. Check the base: `git diff <prep base> origin/main --` the Touched modules and c0118's promoted specs (c0118 must be done first: `depends_on`). If they moved, stop and escalate for a re-prep.
++2. `serve.luau`: `guard`, `plan`, `parsePrs`, `newToken` (AC1).
++3. `board.luau`: `Facts.worktreeSpend`, `Model.live`, `board.statsHtml`, the worktree spend read.
++4. `serve.start`: the gh cache, `model()`, the routes (AC2).
++5. `board.html`: `#live`, the actions, the poll (AC3).
++6. `main.luau`: `board --serve`, the `--serve` flag, the guard exception, the usage line (AC4).
++7. Docs and the c0118 docs override (AC5, AC6).
++8. `z-nile/check.sh --full`; then OC1 by hand.
++
++## Guess list
++- G1. Guess (pending user): the default port is 8417, overridable with `--port`.
++- G2. Guess (pending user): the page polls every 5 s; `gh` is reused for 30 s; the model is rebuilt at least every 60 s.
++- G3. Guess (pending user): a retry the server started is a child of the server, in its process group, so stopping the server stops it (c0117 marks the run lost; `./zn dispatch retry <id>` resumes it). The alternative, handing the run to a process outside the server, needs a launcher c0117 doesn't have.
++- G4. Guess (pending user): `board` stays in `READ_ONLY`, with `board --serve` excepted beside it, rather than moving `board` out; the `tracker-guarded` pin is unchanged.
++- G5. Guess (pending user): "open" opens the item's PR (its own, else its raft's), else its raft's worktree folder; nothing else.
++- G6. Guess (pending user): the guard also accepts the bare `127.0.0.1` and `localhost` as `Host` (some clients send no port; a rebinding page never sends them).
++- G7. Guess (pending user): a served card with no PR says "checks unavailable" (gh failed), "checks loading" (no answer yet) or "no PR".
+ 
+ ## Verification log
+-<!-- Appended at the end of execution: date, commands run, results. -->
++Prep, 2026-10-24, on `proto-c0121` (base `proto-c0118` 00e6dede; commit 1 `SIMULATION (not part of c0121): c0118 done` 68f4c5e1, commit 2 the c0121 edits).
++- c0118's `check.sh` on the simulation: 8/8 passed.
++- `bash z-nile/.tracker/issues/c0121/check.sh` on the prototype: 6/6 passed.
++- The same `check.sh` and specs on the base (the simulation commit, in a scratch clone): 1/6. AC1 and AC2 fail to load `@znile/engine/serve` (the module c0121 creates); AC3 to AC5 fail on assertions (no `#live`, no buttons, no polling; `--serve` unknown to the CLI; the docs' phrases missing). AC6 passes: it guards the static board, which exists on both sides.
++- `z-nile/check.sh --full` on the prototype: format, lint, types, builds and skills clean; pickman 1068 passed, 0 failed; z-nile 1308 passed, 0 failed; gate wall time 429 s. The first run failed on `serve.luau`'s unlisted `.cache` read; it is now on the reviewed list.
++- `luau-lsp analyze` of the sequestered specs against the prototype: clean.
++- Experiments E1 to E5 under the jail: 5/5 passed; E6 outside it: the LAN address refused.
++- Mutation check: 34 mutants (N1 to N34), all killed on an assertion.
+diff --git a/z-nile/.tracker/issues/c0121/check.sh b/z-nile/.tracker/issues/c0121/check.sh
+index 43c7d0a4..95fd6305 100755
+--- a/z-nile/.tracker/issues/c0121/check.sh
++++ b/z-nile/.tracker/issues/c0121/check.sh
+@@ -2,13 +2,26 @@
+ # Acceptance checks for c0121. SEQUESTERED: never edit during execution.
+ # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
+ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
+-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
+-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0121 after it
++source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home: the root
++# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0121 after it
+ A="$HERE/acceptance"
+ [[ -d $A ]] || A="$PWD/tests/acceptance/c0121"
+ 
+ # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
+-# `tracker.sh members` and other cheap reads; everything else goes inside `check`.
+-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+-
++# `./zn members` and other cheap reads; everything else goes inside `check`.
++check "AC1: the guard refuses a foreign Host, OPTIONS, a foreign Origin, a missing token and a non-JSON or GET action; plan and gh parse" \
++  lune run tests/run -- "$A/guard.spec.luau"
++check "AC2: the in-process server on 127.0.0.1 refuses each attack before any stub runs, runs ./zn dispatch by argument array, opens the PR, caches gh, reads worktree spend, rebuilds on change, flags a stale engine, stops" \
++  lune run tests/run -- "$A/server.spec.luau"
++check "AC3: the served page polls with its token, loads each model, shows live, stale, unavailable and unanswered, and posts the three actions; the static page never fetches" \
++  lune run tests/run -- "$A/page.spec.luau"
++check "AC4: ./zn board --serve refuses a bad port, -O and --out, a linked worktree and a taken port, is guarded, and is in the usage" \
++  lune run tests/run -- "$A/cli.spec.luau"
++check "AC5: zz-rules and the README describe the served board" \
++  lune run tests/run -- "$A/docs.spec.luau"
++check "AC6: c0118's board, its page and docs (overridden where it said planned) and the read-only set stay" \
++  lune run tests/run -- tests/acceptance/c0118/view.spec.luau tests/acceptance/c0118/history.spec.luau \
++  tests/acceptance/c0118/model.spec.luau tests/acceptance/c0118/page.spec.luau tests/acceptance/c0118/docs.spec.luau \
++  tests/acceptance/c0118/real.spec.luau tests/acceptance/c0042/smoke.spec.luau tests/acceptance/c0107/page.spec.luau \
++  tests/tooling/board.spec.luau tests/tooling/tracker-guarded.spec.luau
+ finish
+diff --git a/z-nile/.tracker/issues/c0121/experiments/E1-serve.spec.luau b/z-nile/.tracker/issues/c0121/experiments/E1-serve.spec.luau
+new file mode 100644
+index 00000000..dd3ccc59
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0121/experiments/E1-serve.spec.luau
+@@ -0,0 +1,109 @@
++--!strict
++-- c0121 experiments E1-E4, run under the real runner (the jail on macOS): can a spec bind net.serve to 127.0.0.1 on a
++-- random port, reach it with net.request, see Host and Origin as sent, and run a subprocess in one handler while
++-- another answers? And what does the handle report for port 0?
++local net = require("@lune/net")
++local process = require("@lune/process")
++local t = require("@tests/lib/t")
++local task = require("@lune/task")
++
++local function serve(handler: (net.ServeRequest) -> net.ServeResponse): (number, () -> ())
++	for _ = 1, 30 do
++		local port = math.random(30000, 60000)
++		local ok, handle =
++			pcall(net.serve, port, { address = "http://127.0.0.1", handleRequest = handler :: any })
++		if ok then
++			return port, function()
++				(handle :: any).stop()
++			end
++		end
++	end
++	error("no free port in 30 tries")
++end
++
++return t.spec("c0121 experiments", function(it)
++	it("E1 binds 127.0.0.1 on a random port inside the jail and answers net.request", function()
++		local port, stop = serve(function(req)
++			return { status = 200, body = `{req.method} {req.path}` }
++		end)
++		local r = net.request(`http://127.0.0.1:{port}/api/state`)
++		stop()
++		t.expect(r.statusCode).toBe(200)
++		t.expect(r.body).toBe("GET /api/state")
++	end)
++
++	it(
++		"E2 the handler sees Host and Origin exactly as a rebinding page or a foreign site sends them",
++		function()
++			local seen: { [string]: string } = {}
++			local port, stop = serve(function(req)
++				seen.host = req.headers.host or ""
++				seen.origin = req.headers.origin or ""
++				seen.token = req.headers["x-zn-token"] or ""
++				return { status = 200, body = "ok" }
++			end)
++			-- net.request rewrites Host from the URL, so a rebinding request is sent raw over TCP
++			local conn = net.tcp.connect("127.0.0.1", port)
++			conn:write(
++				"POST /api/stop HTTP/1.1\r\nHost: evil.example\r\nOrigin: http://evil.example\r\nX-Zn-Token: abc\r\n"
++					.. "Content-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"
++			)
++			local reply = conn:read() or ""
++			conn:close()
++			stop()
++			print("E2 raw reply:", (string.match(reply, "^[^\r\n]*")))
++			print("E2 seen", seen.host, seen.origin, seen.token)
++			t.expect(seen.host).toBe("evil.example")
++			t.expect(seen.origin).toBe("http://evil.example")
++			t.expect(seen.token).toBe("abc")
++		end
++	)
++
++	it("E3 a handler running a subprocess does not block another request", function()
++		local port, stop = serve(function(req)
++			if req.path == "/slow" then
++				process.exec("sleep", { "1" })
++			end
++			return { status = 200, body = req.path }
++		end)
++		local slowDone = false
++		task.spawn(function()
++			net.request(`http://127.0.0.1:{port}/slow`)
++			slowDone = true
++		end)
++		task.wait(0.1)
++		local t0 = os.clock()
++		local r = net.request(`http://127.0.0.1:{port}/fast`)
++		local fast = os.clock() - t0
++		print("E3 fast answered while slow pending:", not slowDone, string.format("%.3fs", fast))
++		t.expect(r.body).toBe("/fast")
++		t.expect(slowDone).toBe(false)
++		task.wait(1.2)
++		stop()
++	end)
++
++	it("E4 port 0 binds but the handle cannot tell which port", function()
++		local ok, handle = pcall(net.serve, 0, {
++			address = "http://127.0.0.1",
++			handleRequest = function()
++				return { status = 200 }
++			end,
++		})
++		print("E4 port 0:", ok, if ok then tostring((handle :: any).port) else tostring(handle))
++		if ok then
++			(handle :: any).stop()
++		end
++		t.expect(ok).toBe(true)
++	end)
++
++	it("E5 a request to a stopped server is refused, so a final case can prove the server is gone", function()
++		local port, stop = serve(function()
++			return { status = 200 }
++		end)
++		stop()
++		task.wait(0.1)
++		local ok = pcall(net.request, `http://127.0.0.1:{port}/`)
++		print("E5 request after stop ok?", ok)
++		t.expect(ok).toBe(false)
++	end)
++end)
+diff --git a/z-nile/README.md b/z-nile/README.md
+index 496e9468..76f3698b 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -27,7 +27,7 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
+ - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
+ - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the watermark, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. The watermark file is shared by every dispatcher of the repository and only moves forward. The rules are in the zz-rules skill, Dispatch.
+ - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+-- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
++- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121) serves the same page live from the main checkout, with stop, retry and open.
+ 
+ ## Skills
+ | skill | step | what it does |
+diff --git a/z-nile/engine/board.html b/z-nile/engine/board.html
+index 6cce45d5..ff2f148a 100644
+--- a/z-nile/engine/board.html
++++ b/z-nile/engine/board.html
+@@ -103,12 +103,17 @@ ul.links { margin: 0; padding-left: 20px; }
+ dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+ dl.run dt { color: var(--mut); }
+ dl.run dd { margin: 0; }
++/* c0121: the served page's status line and action buttons */
++#live { font-size: 12px; }
++#live.stale { color: #d33; font-weight: 600; }
++.acts button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; margin-right: 6px; cursor: pointer; }
+ </style>
+ <script>{{MARKED}}</script>
+ </head>
+ <body>
+ <header>
+ <h1>pickman tracker</h1>
++<div id="live" class="note" hidden></div>
+ <nav><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
+ <button id="stats-toggle" type="button">Stats</button>
+ <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
+@@ -260,7 +265,10 @@ dl.run dd { margin: 0; }
+   var LIVE = '<span class="note">live on the served board (<code>zn board --serve</code>, c0121)</span>';
+   // PR and checks: c0121's served page fills `pr` and `checks`; the static page has neither and says where they are.
+   function prText(it) {
+-    if (!it || (!it.pr && !it.checks)) return LIVE;
++    if (!it || (!it.pr && !it.checks)) {
++      if (!model.live) return LIVE;
++      return model.live.checks === "unavailable" ? "checks unavailable" : model.live.checks === "loading" ? "checks loading" : "no PR";
++    }
+     var h = it.pr ? '<a href="' + esc(it.pr.url) + '">#' + esc(it.pr.number) + "</a> " + esc(it.pr.state) : "";
+     if (it.checks) h += (h ? ", checks " : "checks ") + esc(it.checks.state);
+     return h;
+@@ -276,7 +284,21 @@ dl.run dd { margin: 0; }
+       ["branch", raft && raft.branch ? esc(raft.branch) : ""],
+       ["worktree", raft && raft.worktree ? esc(raft.worktree) : ""],
+       ["PR and checks", prText({ pr: issue.pr || (raft && raft.pr), checks: issue.checks || (raft && raft.checks) })],
+-    ]);
++    ]) + actions(issue.id);
++  }
++  // c0121: on the served page, a card has the only three actions, sent to the server with the session token.
++  var actResult = {};
++  function actions(id) {
++    if (!model.live) return "";
++    var b = function (act, label) { return '<button type="button" class="act" data-act="' + act + '" data-id="' + esc(id) + '">' + label + "</button>"; };
++    return '<p class="acts">' + b("stop", "Stop") + b("retry", "Retry") + b("open", "Open") +
++      (has(actResult, id) ? ' <span class="note">' + esc(actResult[id]) + "</span>" : "") + "</p>";
++  }
++  function act(action, id) {
++    if (typeof fetch !== "function" || !model.live) return; // the static page has no actions
++    fetch("/api/action", { method: "POST", headers: { "Content-Type": "application/json", "X-Zn-Token": model.live.token }, body: JSON.stringify({ action: action, id: id }) })
++      .then(function (r) { return r.text().then(function (t) { return action + ": " + r.status + " " + t; }); })
++      .then(function (msg) { actResult[id] = msg; renderPane(id); }, function () { actResult[id] = action + ": the server did not answer"; renderPane(id); });
+   }
+   function runOfRaft(r) {
+     var models = {}, total = { minutes: 0, tokens: 0, added: 0, removed: 0 };
+@@ -293,7 +315,7 @@ dl.run dd { margin: 0; }
+       ["branch", r.branch ? esc(r.branch) : ""],
+       ["worktree", r.worktree ? esc(r.worktree) : ""],
+       ["PR and checks", prText(r)],
+-    ]);
++    ]) + actions(r.id);
+   }
+ 
+   function renderIssue(issue) {
+@@ -425,6 +447,8 @@ dl.run dd { margin: 0; }
+     if (row) select(idsOf(view).indexOf(row.getAttribute("data-id")));
+   });
+   pane.addEventListener("click", function (e) {
++    var btn = e.target.closest("button.act");
++    if (btn) { act(btn.getAttribute("data-act"), btn.getAttribute("data-id")); return; }
+     var a = e.target.closest("a.jump");
+     if (!a) return;
+     e.preventDefault();
+@@ -488,6 +512,32 @@ dl.run dd { margin: 0; }
+   var start = "";
+   try { start = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* malformed: no match */ }
+   if (!(start && go(start))) switchView(view);
++
++  // c0121: the served page polls /api/state with its token and hands each model to znBoard.load; the static page has no
++  // model.live and never polls.
++  var liveEl = $("live");
++  function showLive(note) {
++    if (!liveEl || !model.live) return;
++    var l = model.live;
++    var parts = [l.stale ? "server is out of date: restart" : "live"];
++    if (l.checks === "unavailable") parts.push("checks unavailable");
++    else if (l.checks === "loading") parts.push("checks loading");
++    else if (l.checksAge !== undefined) parts.push("checks " + l.checksAge + " s old");
++    if (note) parts.push(note);
++    liveEl.innerHTML = esc(parts.join(" · "));
++    liveEl.classList.toggle("stale", !!l.stale);
++    liveEl.removeAttribute("hidden");
++  }
++  function poll() {
++    var token = model.live.token;
++    fetch("/api/state", { headers: { "X-Zn-Token": token } })
++      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
++      .then(function (d) { window.znBoard.load(d.model, d.statsHtml); showLive(); }, function () { showLive("the server did not answer"); });
++  }
++  if (model.live && typeof fetch === "function" && typeof setInterval === "function") {
++    showLive();
++    setInterval(poll, model.live.poll * 1000);
++  }
+ })();
+ </script>
+ </body>
+diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
+index 840cc24e..de600426 100644
+--- a/z-nile/engine/board.luau
++++ b/z-nile/engine/board.luau
+@@ -90,7 +90,10 @@ export type Facts = {
+ 	refs: { Ref },
+ 	worktrees: { { path: string, branch: string } },
+ 	dispatch: { [string]: Dispatch },
++	worktreeSpend: boolean?, -- c0121: read a launched raft's members' spend.md from its worktree (live rows)
+ }
++-- c0121: the served page's live settings; nil in the static page.
++export type Live = { token: string, poll: number, checks: string, checksAge: number?, stale: boolean }
+ export type ProjectCharts = { rounds: { [string]: string }, tokens: { [string]: string } }
+ export type Model = {
+ 	rafts: { Raft }, -- sorted by id
+@@ -109,6 +112,7 @@ export type Model = {
+ 	ranges: { { key: string, label: string } },
+ 	range: string,
+ 	problems: { string }, -- files the board could not read (a spend.md that does not parse)
++	live: Live?, -- c0121: set by the server only
+ }
+ 
+ board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
+@@ -463,7 +467,14 @@ local function durationsTable(durations: { [string]: stats.ByType }): string
+ end
+ 
+ -- One line: the acceptance spec matches the stats section and the tables div without crossing a newline.
+-local function statsHtml(s: stats.Stats): string
++local statsHtml: (s: stats.Stats) -> string
++
++-- c0121: the Stats section of a model, as board.render draws it (the server sends it with each polled model).
++function board.statsHtml(m: Model): string
++	return statsHtml(m.stats)
++end
++
++function statsHtml(s: stats.Stats): string
+ 	local parts: { string } = {}
+ 	if not s.history then
+ 		table.insert(
+@@ -799,6 +810,10 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 		end
+ 	end
+ 	local doneAt: { [string]: number } = if hist and hist.doneAt then hist.doneAt else {}
++	local registryRoot: { [string]: string } = {}
++	for _, src in sourceList do
++		registryRoot[src.name] = src.root
++	end
+ 	local worktreeOf: { [string]: string } = {}
+ 	for _, w in facts.worktrees do
+ 		worktreeOf[w.branch] = w.path
+@@ -1005,6 +1020,22 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 		home[issue.id] = issue.id
+ 	end
+ 
++	-- c0121: on the served page, a launched raft's members show the spend rows in its worktree, where build and code
++	-- review rows sit until the merge (programme review F8); a member with no spend.md there keeps main's
++	if facts.worktreeSpend then
++		for _, issue in issues do
++			local raft = if issue.raft then raftById[issue.raft] else nil
++			local wt = if raft then raft.worktree else nil
++			local rootRel = registryRoot[issue.project]
++			if wt and rootRel then
++				local path = `{wt}/{rootRel}/issues/active/{issue.id}/spend.md`
++				if fs.isFile(path) then
++					issue.spend = spendOf(spendRows(path, problems))
++				end
++			end
++		end
++	end
++
+ 	-- c0118: a done item that history leaves undated (a compaction ended its dated life, or there is no history: a
+ 	-- shallow clone) is dated by its newest spend row (a raft by its members'), a field no id change rewrites; else it
+ 	-- stays undated
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c58c5a09..bebc54d4 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -18,6 +18,7 @@ local process = require("@lune/process")
+ local projects = require("./projects")
+ local publish = require("./publish")
+ local raftplan = require("./raftplan")
++local serveLib = require("./serve")
+ local sh = require("../lib/sh")
+ local skillsLib = require("./skills")
+ local spend = require("./spend")
+@@ -87,6 +88,7 @@ usage: ./zn <command> ...
+   capture <id>                                  print the item's document as captured (read-only)
+   metrics [--include-active]                    cost per issue and rework %
+   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
++  board --serve [--port N]                      serve that page live on 127.0.0.1 (main checkout; stop, retry, open)
+                                                 and open it in the browser; -O only writes it
+   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
+                                                 list skill lessons; also --tags, --check, and --uncovered <id>...
+@@ -776,6 +778,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 			or a == "--uncovered"
+ 			or a == "--apply"
+ 			or a == "--dry-run"
++			or a == "--serve"
+ 		then
+ 			opts[a] = { "true" }
+ 		elseif string.sub(a, 1, 1) == "-" then
+@@ -5198,7 +5201,67 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+ 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+ end
+ 
++-- `board --serve [--port N]` (c0121): the page, live, on 127.0.0.1, with stop, retry and open through `./zn dispatch`.
++-- It runs in the main checkout only: c0117's run state and `stop` live there.
++local function serveBoard(pos: { string }, opts: { [string]: { string } })
++	if #pos > 0 or opts["--out"] or opts["-O"] or opts["--open"] then
++		fail("usage: board --serve [--port N]  (--serve writes no file: --out, -O and --open don't apply)")
++	end
++	local portText = if opts["--port"] then opts["--port"][1] else tostring(serveLib.PORT)
++	local port = tonumber(portText)
++	if not port or port ~= math.floor(port) or port < 1024 or port > 65535 then
++		fail(`board --serve: --port {tostring(portText)} is not a port from 1024 to 65535`)
++	end
++	local top = sh.trim(sh.git({ "rev-parse", "--show-toplevel" }))
++	if top ~= mainRoot() then
++		fail(
++			`board --serve runs in the main checkout ({mainRoot()}), where the dispatcher's run state and stop live`
++		)
++	end
++	local zn = `{top}/zn`
++	local ok, server = pcall(serveLib.start, {
++		root = top,
++		port = port :: number,
++		runner = function(args: { string }): serveLib.RunResult
++			local r = process.exec(zn, args, { cwd = top })
++			return { ok = r.ok, stdout = r.stdout, stderr = r.stderr }
++		end,
++		opener = function(target: string): boolean
++			local opener = if process.os == "macos" then "open" else "xdg-open"
++			local r = process.exec(opener, { target })
++			return r.ok
++		end,
++		gh = function(): (string?, string?)
++			local okRun, r = pcall(process.exec, "gh", {
++				"pr",
++				"list",
++				"--state",
++				"all",
++				"--limit",
++				"200",
++				"--json",
++				"number,headRefName,state,isDraft,url,statusCheckRollup",
++			}, { cwd = top })
++			if not okRun then
++				return nil, "gh is not installed"
++			end
++			if not r.ok then
++				return nil, sh.trim(r.stderr)
++			end
++			return r.stdout, nil
++		end,
++		now = os.time,
++	})
++	if not ok then
++		fail(`board --serve: port {port} is taken (already serving?): {server}; pick another with --port`)
++	end
++	print(server.url)
++end
++
+ function cmd.board(pos: { string }, opts: { [string]: { string } })
++	if opts["--serve"] then
++		return serveBoard(pos, opts)
++	end
+ 	local given = opts["--out"] and opts["--out"][1]
+ 	if #pos > 0 or (given and (given == "" or string.sub(given, 1, 1) == "-")) then
+ 		fail("usage: board [--out PATH] [-O]  (an --out path can't start with -; write ./-x for such a file)")
+@@ -5315,7 +5378,8 @@ local READ_ONLY: { [string]: boolean } = {
+ 	["promote-check"] = true,
+ 	stamp = true,
+ }
+-if not READ_ONLY[name :: string] then
++-- `board --serve` runs actions (c0121), so it is guarded although `board` alone only reads
++if not READ_ONLY[name :: string] or (name == "board" and table.find(args, "--serve") ~= nil) then
+ 	guardRepoRoot()
+ end
+ local rest = table.move(args, 2, #args, 1, {})
+diff --git a/z-nile/engine/serve.luau b/z-nile/engine/serve.luau
+new file mode 100644
+index 00000000..0effe369
+--- /dev/null
++++ b/z-nile/engine/serve.luau
+@@ -0,0 +1,367 @@
++--!strict
++-- The board's local server (c0121): `./zn board --serve` serves the page `./zn board` writes, with live data and the
++-- three actions (stop, retry, open). The guard, the action plan and the `gh` parse are pure; `serve.start` wires them to
++-- net.serve with every effect injected (the runner of `./zn`, the opener, `gh`, the clock), so specs run it in-process.
++local board = require("./board")
++local fs = require("@lune/fs")
++local net = require("@lune/net")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++local task = require("@lune/task")
++
++local serve = {}
++
++serve.PORT = 8417 -- the default --port
++serve.TTL = 30 -- seconds a `gh` answer is reused
++serve.REBUILD = 60 -- seconds a model is reused while nothing it reads has changed
++serve.POLL = 5 -- seconds between the page's polls
++
++export type Response = { status: number, headers: { [string]: string }?, body: string }
++export type Request = {
++	path: string,
++	query: { [string]: string? },
++	method: string,
++	headers: { [string]: string },
++	body: string,
++}
++export type Plan = { kind: "run", args: { string }, wait: boolean } | { kind: "open", target: string }
++export type RunResult = { ok: boolean, stdout: string, stderr: string }
++export type Pr = { number: number, url: string, state: string }
++export type Checks = { state: string, url: string? }
++export type Options = {
++	root: string, -- the main checkout
++	port: number,
++	runner: (args: { string }) -> RunResult, -- runs `./zn <args>` in root, argument array only
++	opener: (target: string) -> boolean, -- opens a URL or a folder
++	gh: () -> (string?, string?), -- `gh pr list --json …` output, or nil and the reason
++	now: () -> number,
++	token: string?, -- default: 16 random bytes as hex
++	collect: ((root: string, facts: board.Facts) -> board.Model)?,
++	facts: ((root: string) -> board.Facts)?,
++	keyOf: (() -> string)?, -- what the model reads; a change forces a rebuild
++	engineHash: (() -> string?)?, -- the engine tree's hash now
++	statsHtml: ((m: board.Model) -> string)?,
++}
++export type Server = { url: string, token: string, port: number, stop: () -> () }
++
++local function text(status: number, body: string): Response
++	return { status = status, headers = { ["Content-Type"] = "text/plain; charset=utf-8" }, body = body }
++end
++local function json(status: number, value: any): Response
++	return { status = status, headers = { ["Content-Type"] = "application/json" }, body = board.encode(value) }
++end
++
++-- The guard, before any route (F3): a Host other than 127.0.0.1 or localhost (with this port, or none) (DNS rebinding), any
++-- OPTIONS (no CORS: a cross-site preflight fails), a foreign Origin, the page without its token in the query, an /api/
++-- call without its X-Zn-Token, an action that is not a POST with a JSON body. nil when the request may go on.
++function serve.guard(req: Request, port: number, token: string): Response?
++	local host = req.headers.host or ""
++	-- browsers send the port; some clients (Lune's net.request) send the bare loopback name. A rebinding page sends
++	-- its own domain, which neither form is.
++	if
++		host ~= `127.0.0.1:{port}`
++		and host ~= `localhost:{port}`
++		and host ~= "127.0.0.1"
++		and host ~= "localhost"
++	then
++		return text(403, `refused: Host {host} is not this server`)
++	end
++	if req.method == "OPTIONS" then
++		return text(403, "refused: no cross-origin requests")
++	end
++	local origin = req.headers.origin
++	if origin and origin ~= `http://127.0.0.1:{port}` and origin ~= `http://localhost:{port}` then
++		return text(403, `refused: Origin {origin}`)
++	end
++	if req.path == "/" then
++		if req.method ~= "GET" then
++			return text(405, "refused: the page is GET only")
++		end
++		if req.query.token ~= token then
++			return text(403, "refused: open the URL ./zn board --serve printed (it carries the token)")
++		end
++		return nil
++	end
++	if string.sub(req.path, 1, 5) ~= "/api/" then
++		return text(404, "no such page")
++	end
++	if req.headers["x-zn-token"] ~= token then
++		return text(403, "refused: missing or wrong X-Zn-Token")
++	end
++	if req.path == "/api/action" then
++		if req.method ~= "POST" then
++			return text(405, "refused: actions are POST only")
++		end
++		local ct = req.headers["content-type"] or ""
++		if string.sub(ct, 1, 16) ~= "application/json" then
++			return text(415, "refused: actions take application/json")
++		end
++	elseif req.path == "/api/state" then
++		if req.method ~= "GET" then
++			return text(405, "refused: state is GET only")
++		end
++	else
++		return text(404, "no such endpoint")
++	end
++	return nil
++end
++
++-- What an action does, from the model only (never from free text): stop and retry run c0117's dispatcher on an id the
++-- model has (stop waits, retry is started and answered at once); open opens the item's PR (its own, else its raft's)
++-- or else its raft's worktree. nil and the reason for anything else.
++function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?)
++	if type(id) ~= "string" or m.home[id] == nil then
++		return nil, `unknown id {tostring(id)}`
++	end
++	if action == "stop" then
++		return { kind = "run", args = { "dispatch", "stop", id }, wait = true }, nil
++	elseif action == "retry" then
++		return { kind = "run", args = { "dispatch", "retry", id }, wait = false }, nil
++	elseif action ~= "open" then
++		return nil, `unknown action {tostring(action)}`
++	end
++	local raft: board.Raft? = nil
++	local issuePr: board.Pr? = nil
++	for _, r in m.rafts do
++		if r.id == id then
++			raft = r
++		end
++	end
++	if not raft then
++		for _, i in m.issues do
++			if i.id == id then
++				issuePr = i.pr
++				for _, r in m.rafts do
++					if r.id == i.raft then
++						raft = r
++					end
++				end
++			end
++		end
++	end
++	local pr = issuePr or (if raft then raft.pr else nil)
++	if pr then
++		return { kind = "open", target = pr.url }, nil
++	elseif raft and raft.worktree then
++		return { kind = "open", target = raft.worktree }, nil
++	end
++	return nil, `{id} has no PR and no worktree to open`
++end
++
++local function summary(rollup: any): string
++	if type(rollup) ~= "table" or #rollup == 0 then
++		return "none"
++	end
++	local pending = false
++	for _, c in rollup do
++		local v = string.upper(tostring(c.conclusion or c.state or ""))
++		if
++			v == "FAILURE"
++			or v == "ERROR"
++			or v == "CANCELLED"
++			or v == "TIMED_OUT"
++			or v == "ACTION_REQUIRED"
++		then
++			return "failing"
++		elseif v ~= "SUCCESS" and v ~= "NEUTRAL" and v ~= "SKIPPED" then
++			pending = true
++		end
++	end
++	return if pending then "pending" else "passing"
++end
++
++-- `gh pr list --json number,headRefName,state,isDraft,url,statusCheckRollup` output as PR and checks by branch name.
++-- nil when it is not that JSON.
++function serve.parsePrs(out: string): { [string]: { pr: Pr, checks: Checks } }?
++	local ok, decoded = pcall(serde.decode, "json" :: "json", out)
++	if not ok or type(decoded) ~= "table" then
++		return nil
++	end
++	local byBranch: { [string]: { pr: Pr, checks: Checks } } = {}
++	for _, p in decoded :: { any } do
++		if type(p) == "table" and type(p.headRefName) == "string" and type(p.number) == "number" then
++			local state = string.lower(tostring(p.state or ""))
++			if p.isDraft == true and state == "open" then
++				state = "draft"
++			end
++			byBranch[p.headRefName] = {
++				pr = { number = p.number, url = tostring(p.url or ""), state = state },
++				checks = {
++					state = summary(p.statusCheckRollup),
++					url = if p.url then `{p.url}/checks` else nil,
++				},
++			}
++		end
++	end
++	return byBranch
++end
++
++function serve.newToken(): string
++	local r = process.exec("od", { "-An", "-tx1", "-N16", "/dev/urandom" })
++	local hex = string.gsub(r.stdout, "%s", "")
++	if not r.ok or #hex ~= 32 then
++		error("board --serve: could not read 16 random bytes for the session token", 0)
++	end
++	return hex
++end
++
++-- The default key: HEAD, origin/main, every worktree's HEAD, and each dispatcher state file's change time.
++function serve.keyOf(root: string): string
++	local parts: { string } = {}
++	for _, args in { { "rev-parse", "HEAD", "origin/main" }, { "worktree", "list", "--porcelain" } } do
++		local r = process.exec("git", args, { cwd = root })
++		table.insert(parts, r.stdout)
++	end
++	local home = `{root}/.cache/dispatch`
++	if fs.isDir(home) then
++		local names = fs.readDir(home)
++		table.sort(names)
++		for _, name in names do
++			local file = `{home}/{name}/state.json`
++			if fs.isFile(file) then
++				local meta = fs.metadata(file)
++				table.insert(parts, `{name} {meta.modifiedAt and meta.modifiedAt.unixTimestampMillis or 0}`)
++			end
++		end
++	end
++	return table.concat(parts, "\n")
++end
++
++function serve.engineHash(root: string): string?
++	local r = process.exec("git", { "rev-parse", "HEAD:z-nile/engine" }, { cwd = root })
++	return if r.ok then (string.gsub(r.stdout, "%s", "")) else nil
++end
++
++-- Starts the server on 127.0.0.1:<port>; errors when the port is taken.
++function serve.start(o: Options): Server
++	local token = o.token or serve.newToken()
++	local collect = o.collect
++		or function(root: string, facts: board.Facts): board.Model
++			return board.collect(nil, root, facts)
++		end
++	local factsOf = o.facts or board.readFacts
++	local keyOf = o.keyOf or function(): string
++		return serve.keyOf(o.root)
++	end
++	local engineHash: () -> string? = if o.engineHash
++		then o.engineHash
++		else function(): string?
++			return serve.engineHash(o.root)
++		end
++	local startHash = engineHash()
++	local statsOf = o.statsHtml or board.statsHtml
++
++	local cache: { model: board.Model?, key: string?, at: number } =
++		{ model = nil, key = nil, at = -math.huge }
++	local gh: { at: number, data: { [string]: { pr: Pr, checks: Checks } }?, err: string?, busy: boolean } =
++		{ at = -math.huge, data = nil, err = nil, busy = false }
++
++	-- `gh` runs in a task of its own, never on the request path, at most once per TTL (F8)
++	local function refreshGh()
++		if gh.busy or o.now() - gh.at < serve.TTL then
++			return
++		end
++		gh.busy = true
++		gh.at = o.now()
++		task.spawn(function()
++			local ok, out, why = pcall(o.gh)
++			local parsed = if ok and out then serve.parsePrs(out :: string) else nil
++			if parsed then
++				gh.data, gh.err = parsed, nil
++			else
++				gh.data, gh.err = nil, if not ok then tostring(out) else (why or "gh gave no PR list")
++			end
++			gh.busy = false
++		end)
++	end
++
++	local function model(): board.Model
++		local key = keyOf()
++		if not cache.model or key ~= cache.key or o.now() - cache.at >= serve.REBUILD then
++			local facts = factsOf(o.root)
++			facts.asOf = o.now()
++			facts.worktreeSpend = true
++			cache.model, cache.key, cache.at = collect(o.root, facts), key, o.now()
++		end
++		local m = cache.model :: board.Model
++		local data = gh.data
++		for _, r in m.rafts do
++			local hit = if data and r.branch then data[r.branch] else nil
++			r.pr = if hit then hit.pr else nil
++			r.checks = if hit then hit.checks else nil
++		end
++		m.live = {
++			token = token,
++			poll = serve.POLL,
++			checks = if gh.err then "unavailable" elseif gh.data then "ok" else "loading",
++			checksAge = if gh.data or gh.err then math.max(0, o.now() - gh.at) else nil,
++			stale = engineHash() ~= startHash,
++		}
++		return m
++	end
++
++	local function act(req: Request): Response
++		local ok, body = pcall(serde.decode, "json" :: "json", req.body)
++		if not ok or type(body) ~= "table" then
++			return text(400, "refused: the body is not a JSON object")
++		end
++		local plan, why = serve.plan(model(), (body :: any).action, (body :: any).id)
++		if not plan then
++			return text(400, `refused: {why}`)
++		end
++		if plan.kind == "open" then
++			local opened = o.opener(plan.target)
++			return json(if opened then 200 else 500, { opened = plan.target, ok = opened })
++		end
++		if plan.wait then
++			local r = o.runner(plan.args)
++			return json(if r.ok then 200 else 500, { ok = r.ok, output = r.stdout .. r.stderr })
++		end
++		task.spawn(function()
++			o.runner(plan.args)
++		end)
++		return json(202, { started = table.concat(plan.args, " ") })
++	end
++
++	local function handle(req: Request): Response
++		local deny = serve.guard(req, o.port, token)
++		if deny then
++			return deny
++		end
++		if req.path == "/" then
++			refreshGh()
++			local markedJs = fs.readFile(board.MARKED_PATH)
++			return {
++				status = 200,
++				headers = { ["Content-Type"] = "text/html; charset=utf-8" },
++				body = board.render(model(), markedJs),
++			}
++		elseif req.path == "/api/state" then
++			refreshGh()
++			local m = model()
++			return json(200, { model = m, statsHtml = statsOf(m) })
++		end
++		return act(req)
++	end
++
++	local handleRef = net.serve(o.port, {
++		address = "http://127.0.0.1",
++		handleRequest = function(req: any): any
++			local ok, res = pcall(handle, req)
++			if not ok then
++				return text(500, `board --serve: {res}`)
++			end
++			return res
++		end,
++	})
++	return {
++		url = `http://127.0.0.1:{o.port}/?token={token}`,
++		token = token,
++		port = o.port,
++		stop = function()
++			(handleRef :: any):stop()
++		end,
++	}
++end
++
++return serve
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 3baa4451..ab7268fa 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -46,6 +46,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+    - `z-nile/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
+    - `./zn ready` and `stop`, which publish to `origin/main`, fast-forward it there; `ready` writes the ignored `<root>/rafts/active/<R-id>/prompt.md` beside the raft and `stop` removes it;
+    - `./zn dispatch` (Dispatch, below), which runs every step in a worktree of its own and writes only the ignored run state in `.cache/dispatch/`;
++   - `./zn board --serve [--port N]` (c0121), which only reads, except for the three actions on its page (stop, retry, open), each delegated: stop and retry run `./zn dispatch stop|retry <id>`, and open opens a PR or a worktree; it runs only here, where the dispatcher's run state lives;
+    - the read-only tracker commands `list`, `audit`, `find`, `members`, `busy`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>` (it reads a readied raft's prompt and writes nothing), `lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read), and the worktree commands `worktree` and `worktree-prune`. (`./zn check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`, `remap` and `skills` (without `--check`) refuse to run in the main checkout of a repo that has an `origin`; `ready` and `stop` refuse to run anywhere else.
+ 2. **Every change starts with a worktree**: `cd "$(./zn worktree <target>)"`.
+@@ -76,7 +77,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | start | `./zn start R0010` | clean tree required. A readied raft (in `active/` on `origin/main`): creates the branch, makes an empty `tracker: start` commit, pushes, and opens a **draft** PR; it claims and moves nothing. A backlog raft (legacy): checks members are `design: ready` and every `depends_on` of a member that isn't a member of the raft is `done` on `origin/main` (an unknown id is refused too); if `start` refuses, merge `origin/main` and retry, never edit `depends_on` or move items to get past it: stop and report. It then claims, creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. A worktree made before `ready` is told to `sync` first. Do this first, so the in-progress claim is visible right away. |
+ | worktree | `./zn worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `./zn worktree ws-<issue> --from <raft branch>`). |
+ | workstreams | `./zn workstreams <R-id>` | read-only plan for parallel execution (z-run Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
+-| board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). One tab per project in `z-nile/projects.toml`, on the left, the first selected (c0118); every view shows the selected project only. It opens on Board: the project's issues as cards in six columns, ticket (`new`), design (`preparing`), raft (`prepared`), ready (readied, in `active/`, its raft has no branch yet), run (its raft has a branch `<R-id>-…`, local or on origin) and done (in `done/`), each raft a band behind its members. Done cards stay for the chosen window, 24 hours by default, from 1 hour to 30 days, counted back from the page's as-of time (HEAD's commit time). A click on a card shows its column, model, spend, dispatcher state, branch and worktree, and its document; PR and checks are live only on the served board (c0121). Under the columns, two charts with their own range (90 days by default, 30 days, 1 year or all history): review rounds by week (the `design-review-NNN.md` and `review-NNN.md` of each raft that landed that week, its members' and those of rafts retired into it, each file once) and review tokens by week and model (spend rows of `design-review` and `code-review`; a row with no model is the unrecorded series). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as CI and the specs do; `--open`, the old opt-in, is still accepted and is the default). `.github/workflows/board.yml` rebuilds it on every push to `main` and keeps it as the `tracker-board` Actions artifact: `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci` fetches the latest into a fresh directory (gh won't overwrite an existing file, and `.cache/board.html` is the local default). Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
++| board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). One tab per project in `z-nile/projects.toml`, on the left, the first selected (c0118); every view shows the selected project only. It opens on Board: the project's issues as cards in six columns, ticket (`new`), design (`preparing`), raft (`prepared`), ready (readied, in `active/`, its raft has no branch yet), run (its raft has a branch `<R-id>-…`, local or on origin) and done (in `done/`), each raft a band behind its members. Done cards stay for the chosen window, 24 hours by default, from 1 hour to 30 days, counted back from the page's as-of time (HEAD's commit time). A click on a card shows its column, model, spend, dispatcher state, branch and worktree, and its document; PR and checks are live only on the served board (c0121). Under the columns, two charts with their own range (90 days by default, 30 days, 1 year or all history): review rounds by week (the `design-review-NNN.md` and `review-NNN.md` of each raft that landed that week, its members' and those of rafts retired into it, each file once) and review tokens by week and model (spend rows of `design-review` and `code-review`; a row with no model is the unrecorded series). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as CI and the specs do; `--open`, the old opt-in, is still accepted and is the default). `.github/workflows/board.yml` rebuilds it on every push to `main` and keeps it as the `tracker-board` Actions artifact: `rm -rf .cache/board-ci && gh run download -n tracker-board -D .cache/board-ci` fetches the latest into a fresh directory (gh won't overwrite an existing file, and `.cache/board.html` is the local default). Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. `./zn board --serve [--port N]` (c0121; main checkout only; default port 8417) serves the same page on 127.0.0.1 and prints its URL once, with a session token: the page polls `/api/state` every 5 s (the model rebuilt when HEAD, `origin/main`, a worktree's HEAD or the dispatcher's state changes, and at least every 60 s; `gh pr list` at most every 30 s, in the background; a launched raft's spend read from its worktree), shows each card's PR and checks ("checks unavailable" when `gh` fails), says "server is out of date: restart" when the engine changed since start, and has the only three actions: stop and retry (`./zn dispatch stop|retry <id>`) and open (the PR, else the worktree). It refuses a foreign Host or Origin, any OPTIONS, a request without the token, an action that is not a JSON POST, and an id the model lacks. |
+ | busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`) is readied only when it prints nothing |
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
+-- 
+2.54.0 (Apple Git-157)
+
