@@ -42,8 +42,10 @@ local reg = projects.load(TOP, true)
 local OWN = if fs.isDir(`{TOP}/z-nile/.tracker/issues/c0120`)
 	then "z-nile/.tracker/issues/c0120/"
 	else "z-nile/.tracker/issues/done/c0120/"
+local PINNED_MOVE: string? = nil
+local PINNED_CORE: string? = nil
 local function recorded(): (string?, string)
-	local best: { rank: number, file: string, sha: string }? = nil
+	local best: { rank: number, file: string, sha: string, move: string?, core: string? }? = nil
 	for _, name in fs.readDir(`{TOP}/{OWN}`) do
 		local code = string.match(name, "^review%-(%d+)%.md$")
 		local n = code or string.match(name, "^design%-review%-(%d+)%.md$")
@@ -52,6 +54,8 @@ local function recorded(): (string?, string)
 			-- `Prep reference:` line is ambiguous and refuses
 			local verdict: string? = nil
 			local refs: { string } = {}
+			local moves: { string } = {}
+			local cores: { string } = {}
 			for line in string.gmatch(fs.readFile(`{TOP}/{OWN}{name}`), "[^\n]+") do
 				local v = string.match(line, "^Verdict: (.-)%s*$")
 				if v then
@@ -61,15 +65,24 @@ local function recorded(): (string?, string)
 				if r then
 					table.insert(refs, r)
 				end
+				-- the anchors, pinned by the same reviewer (code review 010 F1): never found by searching history
+				local mv = string.match(line, "^Move commit: (%x+)%s*$")
+				if mv then
+					table.insert(moves, mv)
+				end
+				local co = string.match(line, "^Core commit: (%x+)%s*$")
+				if co then
+					table.insert(cores, co)
+				end
 			end
-			if #refs > 1 then
-				return nil, `{name} records {#refs} Prep reference lines`
+			if #refs > 1 or #moves > 1 or #cores > 1 then
+				return nil, `{name} records more than one Prep reference, Move commit or Core commit line`
 			end
 			local sha = refs[1]
 			if sha and verdict == "approve" then
 				local rank = (if code then 100000 else 0) + (tonumber(n) :: number)
 				if not best or rank > (best :: any).rank then
-					best = { rank = rank, file = name, sha = sha }
+					best = { rank = rank, file = name, sha = sha, move = moves[1], core = cores[1] }
 				end
 			end
 		end
@@ -77,7 +90,7 @@ local function recorded(): (string?, string)
 	if not best then
 		return nil, `no approved review in {OWN} records a "Prep reference: <sha>"`
 	end
-	local b = best :: { rank: number, file: string, sha: string }
+	local b = best :: { rank: number, file: string, sha: string, move: string?, core: string? }
 	local okV, full = git({ "rev-parse", "--verify", "-q", b.sha .. "^{commit}" })
 	full = string.gsub(full, "%s+$", "")
 	if not okV or full == "" then
@@ -86,6 +99,11 @@ local function recorded(): (string?, string)
 	if not git({ "merge-base", "--is-ancestor", full, "HEAD" }) then
 		return nil, `{b.file}'s Prep reference {b.sha} is not in this branch`
 	end
+	if not b.move or not b.core then
+		return nil,
+			`{b.file} records no "Move commit: <sha>" and "Core commit: <sha>" beside its Prep reference`
+	end
+	PINNED_MOVE, PINNED_CORE = b.move, b.core
 	return full, b.file
 end
 local ownBase, from = recorded()
@@ -322,29 +340,39 @@ end
 -- 4's tree, pinned by its subject, and HEAD's. A finished check.sh's text is accepted when it equals the rewrite under
 -- either.
 local CORE_SUBJECT = "c0120: run each project from its home"
-local okMv, moveCommit = git({ "log", "-1", "--format=%H", "--", rewrites.MARK })
-local okFp, firstParents = git({ "rev-list", "--first-parent", "--reverse", `{trim(moveCommit)}..HEAD` })
-local coreRev: string? = nil
-if okMv and okFp then
-	local n = 0
-	for sha in string.gmatch(firstParents, "%x+") do
-		n += 1
-		if n == 3 then
-			coreRev = sha
-		end
-	end
+-- the anchors are the reviewer's (code review 010 F1): the move the search finds must be the pinned one, the pinned move
+-- and core must be on HEAD's first-parent line, the core the third commit after the move there, and its subject the
+-- hand-written core's (a second guard)
+local function full(sha: string): string?
+	local ok, out = git({ "rev-parse", "--verify", "-q", sha .. "^{commit}" })
+	return if ok and trim(out) ~= "" then trim(out) else nil
 end
-local coreSubject = if coreRev
-	then trim(select(2, git({ "log", "-1", "--format=%s", coreRev :: string })))
-	else ""
-if string.sub(coreSubject, 1, #CORE_SUBJECT) ~= CORE_SUBJECT then
+local pinnedMove, pinnedCore = full(PINNED_MOVE :: string), full(PINNED_CORE :: string)
+local okMv, moveCommit = git({ "log", "-1", "--format=%H", "--", rewrites.MARK })
+if not pinnedMove or not pinnedCore or not okMv or trim(moveCommit) ~= pinnedMove then
+	print(`finished: the move is not the one {from} pins ({PINNED_MOVE}): refusing`)
+	process.exit(1)
+end
+local okFp, firstParents = git({ "rev-list", "--first-parent", "--reverse", "HEAD" })
+local line: { string } = {}
+for sha in string.gmatch(if okFp then firstParents else "", "%x+") do
+	table.insert(line, sha)
+end
+local at = table.find(line, pinnedMove :: string)
+local coreRev: string? = if at then line[at + 3] else nil
+if coreRev ~= pinnedCore then
 	print(
-		`finished: the third commit after the move is not the hand-written core ("{CORE_SUBJECT} …"): refusing`
+		`finished: the core is not the one {from} pins ({PINNED_CORE}) on HEAD's first-parent line, three after the move: refusing`
 	)
 	process.exit(1)
 end
-local worldCore = rewrites.world(TOP, pre :: string, coreRev :: string)
-local worldHead = rewrites.world(TOP, pre :: string, "HEAD")
+local coreSubject = trim(select(2, git({ "log", "-1", "--format=%s", coreRev :: string })))
+if string.sub(coreSubject, 1, #CORE_SUBJECT) ~= CORE_SUBJECT then
+	print(`finished: the pinned core is not the hand-written core ("{CORE_SUBJECT} …"): refusing`)
+	process.exit(1)
+end
+local worldCore = rewrites.world(TOP, pre :: string, coreRev :: string, M)
+local worldHead = rewrites.world(TOP, pre :: string, "HEAD", M)
 local function finishedAtHead(id: string): boolean
 	local c = headSet[`{id}|check.sh`]
 	return c ~= nil and isDone(c.path)
@@ -376,10 +404,20 @@ for key in keys do
 		-- supersedes the stack's older one
 		local landed = false
 		if mainChanged and stackChanged and tM ~= tP and p then
-			-- the stack's text is in main's history: main carried it, then changed it further
+			-- the stack's text reached main between B and M at this item's place: main carried it, then changed it
+			-- further (Guess 18's supersede rule)
 			local okO, blob = git({ "rev-parse", `{pre}:{p.path}` })
 			if okO then
-				local okF, seen = git({ "log", "-1", "--format=%H", `--find-object={trim(blob)}`, M })
+				-- bounded (code review 010 F2): between main's base and the merged main, at this item's own places
+				local where = { p.path }
+				if m then
+					table.insert(where, m.path)
+				end
+				local argv = { "log", "-1", "--format=%H", `--find-object={trim(blob)}`, `{B}..{M}`, "--" }
+				for _, w in where do
+					table.insert(argv, w)
+				end
+				local okF, seen = git(argv)
 				landed = okF and trim(seen) ~= ""
 			end
 		end
