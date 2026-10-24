@@ -99,6 +99,51 @@ return t.spec("c0120 busy lists what holds the paths a move needs", function(it)
 		end
 	)
 
+	-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack": a branch stacked on c0120's own prep
+	-- (its history holds a commit of origin/prep-c0120 that main doesn't), or one of the listed stacked preps by name, is
+	-- no freeze; any other branch is, whatever its name claims
+	it(
+		"a branch stacked on c0120's prep is ignored; an unrelated one, or one only named like it, is listed",
+		function()
+			local function branchOff(name: string, from: string, file: string)
+				fixture.git(f.main, { "checkout", "-q", "-b", name, from })
+				fs.writeFile(`{f.main}/{file}`, `--!strict\nreturn "{name}"\n`)
+				fixture.git(f.main, { "add", "-A" })
+				fixture.git(f.main, { "commit", "-qm", name })
+				fixture.git(f.main, { "checkout", "-q", "main" })
+			end
+			-- c0120's prep on origin: one commit main doesn't have
+			branchOff("prep-c0120", "main", "NOTES-c0120.md")
+			fixture.git(f.main, { "push", "-q", "origin", "prep-c0120" })
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			branchOff("stacked-work", "origin/prep-c0120", "src/stacked.luau")
+			branchOff("unrelated-work", "main", "src/unrelated.luau")
+			branchOff("prep-c0120-stacked", "main", "src/claims.luau")
+			branchOff("prep-c0115", "main", "src/listed.luau")
+			local r = busy(f.main, OLD)
+			t.expect(has(r.stdout, "stacked-work")).toBe(false)
+			t.expect(has(r.stdout, "branch prep-c0120 ")).toBe(false)
+			t.expect(has(r.stdout, "branch origin/prep-c0120 ")).toBe(false)
+			t.expect(has(r.stdout, "prep-c0115")).toBe(false)
+			t.expect(has(r.stdout, "branch unrelated-work changes")).toBe(true)
+			t.expect(has(r.stdout, "branch prep-c0120-stacked changes")).toBe(true)
+			t.expect(r.code).toBe(1)
+			fixture.git(f.main, {
+				"branch",
+				"-q",
+				"-D",
+				"prep-c0120",
+				"stacked-work",
+				"unrelated-work",
+				"prep-c0120-stacked",
+				"prep-c0115",
+			})
+			fixture.git(f.main, { "push", "-q", "origin", "--delete", "prep-c0120" })
+			fixture.git(f.main, { "fetch", "-q", "--prune", "origin" })
+			t.expect(busy(f.main, OLD).stdout).toBe("")
+		end
+	)
+
 	it("another worktree with uncommitted changes under one of the paths is listed", function()
 		wt = `{f.base}/wt`
 		fixture.git(f.main, { "worktree", "add", "-q", "-b", "wt-work", wt, "main" })

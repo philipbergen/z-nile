@@ -24,6 +24,10 @@ local RESTAMPED: { [string]: string } = {
 	["f9d4fd1f0b1322341c3290961d568d67be9ad21a"] = "c0083",
 	["11a38337b7880b1c72dc980c675f4c5a2fd61db7"] = "R0039",
 	["6b7764378eb11104e765724ed40cfb1af4833749"] = "c0075",
+	-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack": R0044 (prepared on main for the old
+	-- layout) is re-prepped after c0120, restamped `preparing` on main
+	["f989acf181d949b6ca4e8a189f0034d2475ab321"] = "R0044",
+	["3145713efb3b956619a8db297ea3fc8157db6a28"] = "d0124",
 }
 local PREFIXES =
 	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
