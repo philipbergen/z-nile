@@ -93,21 +93,14 @@ local function fix(path: string, ledger: boolean)
 end
 
 -- The item c0115's branch is stacked on (c0120, implemented on the base branch impl2-c0120 and not yet landed): its
--- folder is that item's own work in flight, so no pass touches it. At the rebase onto landed c0120 this list is emptied
--- (c0115.md §11 (p)), and pass 1 then renames c0120's finished ledger like any other.
+-- design and sequestered files are that item's own work in flight, so pass 3 leaves them alone. Its harvest.md is a
+-- ledger like any other (data `lessons --check` reads), so pass 1 renames it. At the rebase onto landed c0120 the list
+-- is emptied (c0115.md §11 (p)).
 local STACKED_ON: { [string]: boolean } = { c0120 = true }
-local function stackedOn(p: string): boolean
-	for id in STACKED_ON do
-		if string.find(p, `/{id}/`, 1, true) then
-			return true
-		end
-	end
-	return false
-end
 
 for _, root in roots() do
 	walk(root, function(p)
-		if string.match(p, "/harvest%.md$") and not stackedOn(p) then
+		if string.match(p, "/harvest%.md$") then
 			fix(p, true)
 		end
 	end)
