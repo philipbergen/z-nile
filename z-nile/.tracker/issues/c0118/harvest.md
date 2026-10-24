@@ -10,3 +10,5 @@
 - design-review-002 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
 - design-review-002 F2: ticket-prep/restated-rules-move-together, ticket-prep/spec-design-correspondence
 - design-review-002 F3: ticket-prep/never-narrow-captured-scope
+- design-review-003 F1: testing/seed-every-enumerated-case, tracker/item-history-spans-moves-and-compaction
+- design-review-003 F2: tracker/item-history-spans-moves-and-compaction

@@ -4,8 +4,10 @@
 -- between roots or by leaving and re-entering done/. A compaction (a commit that adds or changes a map's content, not
 -- one that moves the map, even squashed with a landing) ends the dated life of every id on either side of a pair in the
 -- map lines it adds: an id it reuses for another item loses the old landing, re-added in done/ it is undated, and a
--- later landing dates it afresh; an id it keeps keeps its dates though its document is rewritten; a map line that does
--- not parse undates every item the commit touches, with a warning. `closed` stays as it was. A retired raft's folder is no arrival, and rafts stay out of `closed` and `spells`.
+-- later landing dates it afresh; both sides of a pair reset (an old id the counter hands out again starts undated); a
+-- pair repeated word for word from the last map still counts (the whole map is read, not the diff); an id it keeps
+-- keeps its dates though its document is rewritten; a map line that does not parse undates every item the commit
+-- touches, with a warning. `closed` stays as it was. A retired raft's folder is no arrival, and rafts stay out of `closed` and `spells`.
 -- Fixture under .cache/c0118-history; git runs through @tests/lib/fixture.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -38,6 +40,10 @@ local function move(from: string, to: string)
 	fs.writeDir(string.match(`{repo}/{to}`, "^(.*)/[^/]+$") :: string)
 	fixture.git(repo, { "mv", from, to })
 end
+
+-- the first compaction's pairs; the second compaction repeats them under a new header
+local MAP_A = "c0900 c0901\nR0071 R0070\nc0901 c0090\nR0901 R0090\nc0031 c0030\nR0051 R0050\nc0080 c0081\n"
+	.. "R0082 R0083\nc0091 c0092\n"
 
 local parsed: any = nil
 
@@ -95,6 +101,11 @@ return t.spec("c0118 done times", function(it)
 		move("tracker/compaction.txt", "z-nile/compaction.txt")
 		write("z-nile/.tracker/rafts/done/R0070/R0070.md", doc("R0070", "active-a-b-c"))
 		commit("2026-10-21T08:00:00Z", "R0043: move into z-nile/ (#99)")
+		-- items the compaction renumbers away (old side only): c0080 done, R0082 active; c0091 done (both sides below)
+		write("z-nile/.tracker/issues/done/c0080/c0080.md", doc("c0080", "active-a-b-c"))
+		write("z-nile/.tracker/rafts/active/R0082/R0082.md", doc("R0082", "active-a-b-c"))
+		write("z-nile/.tracker/issues/done/c0091/c0091.md", doc("c0091", "active-a-b-c"))
+		commit("2026-10-21T08:30:00Z", "c0080 and c0091 land, R0082 readied")
 		-- a compaction changes the map: c0090 and R0090 appear in done/ under new ids; c0030 now names another item,
 		-- re-added in the backlog; R0050 now names another item, re-added in done/ at the same path
 		write("z-nile/.tracker/issues/done/c0090/c0090.md", doc("c0090", "active-a-b-c"))
@@ -102,6 +113,13 @@ return t.spec("c0118 done times", function(it)
 		fixture.git(repo, { "rm", "-q", "-r", "z-nile/.tracker/issues/done/c0030" })
 		write("z-nile/.tracker/issues/c0030/c0030.md", doc("c0030", "prepared-x-y-z"))
 		write("z-nile/.tracker/rafts/done/R0050/R0050.md", doc("R0050", "active-x-y-z") .. "\nanother raft\n")
+		-- c0080, R0082 and c0091 become c0081, R0083 and c0092
+		fixture.git(repo, { "rm", "-q", "-r", "z-nile/.tracker/issues/done/c0080" })
+		fixture.git(repo, { "rm", "-q", "-r", "z-nile/.tracker/rafts/active/R0082" })
+		fixture.git(repo, { "rm", "-q", "-r", "z-nile/.tracker/issues/done/c0091" })
+		write("z-nile/.tracker/issues/done/c0081/c0081.md", doc("c0081", "active-a-b-c"))
+		write("z-nile/.tracker/rafts/active/R0083/R0083.md", doc("R0083", "active-a-b-c"))
+		write("z-nile/.tracker/issues/done/c0092/c0092.md", doc("c0092", "active-a-b-c"))
 		-- ids the compaction keeps, whose documents it rewrites in place (they name a renumbered id)
 		write(
 			"z-nile/.tracker/issues/done/c0010/c0010.md",
@@ -111,10 +129,7 @@ return t.spec("c0118 done times", function(it)
 			"z-nile/.tracker/rafts/active/R0060/R0060.md",
 			doc("R0060", "prepared-a-b-c") .. "\nafter R0050\n"
 		)
-		write(
-			"z-nile/compaction.txt",
-			"# compaction map\nc0900 c0901\nR0071 R0070\nc0901 c0090\nR0901 R0090\nc0031 c0030\nR0051 R0050\n"
-		)
+		write("z-nile/compaction.txt", "# compaction map\n" .. MAP_A)
 		commit("2026-10-21T09:00:00Z", "tracker: compact ids")
 		-- a raft retired into R0010 (c0116): its folder beside the lifecycle folders
 		write("z-nile/.tracker/rafts/retired/R0030/R0030.md", doc("R0030", "prepared-a-b-c"))
@@ -125,12 +140,20 @@ return t.spec("c0118 done times", function(it)
 		-- the item now named c0030 lands
 		move("z-nile/.tracker/issues/c0030", "z-nile/.tracker/issues/done/c0030")
 		commit("2026-10-22T12:00:00Z", "c0030 (the new one) done")
+		-- the counter hands c0080 and R0082 out again, to new items: c0080 lands at once, R0082 stays in the backlog
+		write("z-nile/.tracker/issues/done/c0080/c0080.md", doc("c0080", "active-x-y-z"))
+		write("z-nile/.tracker/rafts/R0082/R0082.md", doc("R0082", "new-x-y-z"))
+		commit("2026-10-22T13:00:00Z", "new c0080 lands; new R0082 captured")
+		-- a second compaction whose map repeats the pair c0091 c0092 word for word: c0092 (removed since) is re-added in
+		-- done/ for another item, and must stay undated
+		fixture.git(repo, { "rm", "-q", "-r", "z-nile/.tracker/issues/done/c0092" })
+		commit("2026-10-22T14:00:00Z", "c0092 removed")
+		write("z-nile/.tracker/issues/done/c0092/c0092.md", doc("c0092", "active-x-y-z"))
+		write("z-nile/compaction.txt", "# compaction map B\n" .. MAP_A)
+		commit("2026-10-22T15:00:00Z", "tracker: compact ids again")
 		-- a map line that does not parse: every item the commit touches is undated
 		write("z-nile/.tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o") .. "\nrewritten\n")
-		write(
-			"z-nile/compaction.txt",
-			"# compaction map\nc0900 c0901\nR0071 R0070\nc0901 c0090\nR0901 R0090\nc0031 c0030\nR0051 R0050\nnot a pair\n"
-		)
+		write("z-nile/compaction.txt", "# compaction map B\n" .. MAP_A .. "not a pair\n")
 		commit("2026-10-23T12:00:00Z", "a broken compaction")
 		parsed = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
 		t.expect(parsed ~= nil).toBe(true)
@@ -159,6 +182,20 @@ return t.spec("c0118 done times", function(it)
 			t.expect(parsed.doneAt.c0030).toBe(stats.seconds("2026-10-22T12:00:00Z"))
 			t.expect(parsed.doneAt.R0050).toBe(nil) -- re-added straight into done/: no arrival
 			t.expect(parsed.closed.c0030).toBe("2026-10-10") -- Stats' close day is unchanged
+		end
+	)
+
+	it("both sides of a pair reset: an old id the counter hands out again starts undated", function()
+		t.expect(parsed.doneAt.c0080).toBe(stats.seconds("2026-10-22T13:00:00Z")) -- the new c0080's own landing
+		t.expect(parsed.activeAt.R0082).toBe(nil) -- the new R0082 is in the backlog, never readied
+		t.expect(parsed.doneAt.c0081).toBe(nil) -- re-added straight into done/ by the compaction
+		t.expect(parsed.activeAt.R0083).toBe(nil) -- re-added straight into active/ by the compaction
+	end)
+
+	it(
+		"a pair the next compaction repeats word for word still counts: the whole map is read, not its diff",
+		function()
+			t.expect(parsed.doneAt.c0092).toBe(nil)
 		end
 	)
 
