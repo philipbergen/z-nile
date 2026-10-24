@@ -346,7 +346,7 @@ end
 -- The World of the checkout at `top`, `pre` being the tree before the move: `before` reads that tree, `now` the
 -- tree of `nowRev` (HEAD by default; code review 008 F4: AC18 pins it to the commit that made a file's text), and
 -- `moved` the renames git finds between `pre` and the move itself.
-function rewrites.world(top: string, pre: string, nowRev: string?): World
+function rewrites.world(top: string, pre: string, nowRev: string?, mainRev: string?): World
 	local okL, listing = git(top, { "ls-tree", "-r", "--name-only", pre })
 	assert(okL, `git ls-tree {pre} failed`)
 	local files: { [string]: boolean } = {}
@@ -357,6 +357,21 @@ function rewrites.world(top: string, pre: string, nowRev: string?): World
 		while d do
 			dirs[d] = true
 			d = string.match(d, "^(.*)/[^/]+$")
+		end
+	end
+	-- a root path main created after the move's base counts as one the move must rewrite too (code review 010 F3:
+	-- c0114's AC13 names z-nile/next, which main made at its first publish after R0043): main's tree at `mainRev`
+	local mainFiles: { [string]: boolean } = {}
+	if mainRev then
+		local okMn, mainListing = git(top, { "ls-tree", "-r", "--name-only", mainRev })
+		assert(okMn, `git ls-tree {mainRev} failed`)
+		for f in string.gmatch(mainListing, "[^\n]+") do
+			mainFiles[f] = true
+			local d = string.match(f, "^(.*)/[^/]+$")
+			while d do
+				mainFiles[d] = true
+				d = string.match(d, "^(.*)/[^/]+$")
+			end
 		end
 	end
 	-- the move's own renames, pre to the commit that made them (code review 006 F1): a later merge that finishes an
@@ -418,7 +433,7 @@ function rewrites.world(top: string, pre: string, nowRev: string?): World
 			return anyMatch(beforeList, lua)
 		end
 		local q = trimSlash(p)
-		return files[q] == true or dirs[q] == true
+		return files[q] == true or dirs[q] == true or mainFiles[q] == true
 	end
 	local function existsNow(given: string): boolean
 		local p = normal(given) .. (if string.sub(given, -1) == "/" then "/" else "")

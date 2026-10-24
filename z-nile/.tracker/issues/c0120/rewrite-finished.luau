@@ -14,7 +14,9 @@ local pre, why = rewrites.premove(top)
 if not pre then
 	error(`rewrite-finished: {why}`)
 end
-local world = rewrites.world(top, pre)
+-- main's tree too: a root path main created after the move's base is rewritten as well (code review 010 F3)
+local mainBase = rewrites.mainBase(top)
+local world = rewrites.world(top, pre, nil, mainBase)
 local reg = projects.load(top, true)
 
 local changed, read = 0, 0
