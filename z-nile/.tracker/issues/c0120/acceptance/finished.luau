@@ -186,7 +186,7 @@ local function modeOf(rev: string, path: string): string?
 	local ok, listing = git({ "ls-tree", "-r", rev })
 	assert(ok, `git ls-tree {rev} failed`)
 	for mode, p in string.gmatch(listing, "(%d+) %a+ %x+\t([^\n]+)") do
-		m[p] = mode
+		m[p :: string] = mode :: string
 	end
 	modeCache[rev] = m
 	return m[path]
