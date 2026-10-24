@@ -4,7 +4,7 @@ when: both
 tags: [renames, specs, coverage]
 check: For each renamed identifier, does some spec fail when one old occurrence is left in each kind of live file (skill text, code comment, ledger, a diagram node of any shape), without flagging look-alike paths?
 ---
-A rename leaves its old name in more forms than the scan was written for: a lesson id in a comment, a node in another diagram shape, a path segment. A scan built from a word list misses the forms it didn't list, and widening the word list flags ordinary paths (`tracker/next`, `scripts/tracker/…`).
+A rename leaves its old name in more forms than the scan was written for: a lesson id in a comment, a node in another diagram shape, a path segment. A scan built from a word list misses the forms it didn't list, and widening the word list flags ordinary paths that start with an old skill word (the old root's counter file, a `tracker` folder under `scripts/`).
 
 **Why:** c0115 design review 001 F1: the old testing-skill id of the no-vacuous-pass lesson left in a skill, and the old architecture-skill id of guards-trust-only-origin in a code comment, passed both absence specs and `lessons --check`, because the scan matched the five ordinary skill words only as `.claude/skills/<old>` or "<old> skill". F7: the README scan read only `["…"]` labels, so a node in another shape escaped it.
 
