@@ -136,7 +136,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- an untracked file at a rewritten path's home-relative place changes nothing: the rewrite reads HEAD's tree,
 		-- never the working tree (code review 007 F3)
 		put("z-nile/scripts/ci-verify.sh", "#!/usr/bin/env bash\n")
-		local znile = rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
+		local znile =
+			rewrites.rewrite(fs.readFile(`{FX}/z-nile/.tracker/issues/done/c0001/check.sh`), "z-nile", world)
 		t.expect(znile).toBe(table.concat({
 			"#!/usr/bin/env bash",
 			'check "AC1: ci" ../scripts/ci-verify.sh',
@@ -167,30 +168,33 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		fs.removeDir(FX)
 	end)
 
-	it("deletes exactly the named criteria, continuation lines included, and refuses a missing one", function()
-		local text = table.concat({
-			"helper() { true; }",
-			'check "AC1: kept" true',
-			'check "AC4: gone" \\',
-			"  helper",
-			'check "AC4a: kept, a longer id" true',
-			'check "AC10: gone too" true',
-			'check "AC1x: kept" true',
-			"finish",
-			"",
-		}, "\n")
-		t.expect((rewrites.deleteCriteria(text, { "AC4", "AC10" }))).toBe(table.concat({
-			"helper() { true; }",
-			'check "AC1: kept" true',
-			'check "AC4a: kept, a longer id" true',
-			'check "AC1x: kept" true',
-			"finish",
-			"",
-		}, "\n"))
-		local none, why = rewrites.deleteCriteria(text, { "AC9" })
-		t.expect(none).toBe(nil)
-		t.expect(why).toBe("AC9: 0 check statements")
-	end)
+	it(
+		"deletes exactly the named criteria, continuation lines included, and refuses a missing one",
+		function()
+			local text = table.concat({
+				"helper() { true; }",
+				'check "AC1: kept" true',
+				'check "AC4: gone" \\',
+				"  helper",
+				'check "AC4a: kept, a longer id" true',
+				'check "AC10: gone too" true',
+				'check "AC1x: kept" true',
+				"finish",
+				"",
+			}, "\n")
+			t.expect((rewrites.deleteCriteria(text, { "AC4", "AC10" }))).toBe(table.concat({
+				"helper() { true; }",
+				'check "AC1: kept" true',
+				'check "AC4a: kept, a longer id" true',
+				'check "AC1x: kept" true',
+				"finish",
+				"",
+			}, "\n"))
+			local none, why = rewrites.deleteCriteria(text, { "AC9" })
+			t.expect(none).toBe(nil)
+			t.expect(why).toBe("AC9: 0 check statements")
+		end
+	)
 
 	-- code review 004 F1 (decided with the user, 2026-10-21: "Reviewer-pinned commit"): c0120's own files are judged
 	-- against the prep commit an approved review records, never a branch ref the author can move
@@ -420,7 +424,10 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		expectRed("z-nile/.tracker/issues/c0120/check.sh: changed")
 		-- a recorded commit the branch doesn't hold: refused
 		w("z-nile/.tracker/issues/c0120/check.sh", "check AC18\n")
-		w("z-nile/.tracker/issues/c0120/review-002.md", "Prep reference: 0123456789abcdef\n\nVerdict: approve\n")
+		w(
+			"z-nile/.tracker/issues/c0120/review-002.md",
+			"Prep reference: 0123456789abcdef\n\nVerdict: approve\n"
+		)
 		step("a bad reference")
 		expectRed("is no commit here")
 		-- a review whose last verdict is changes records nothing, though it quotes `Verdict: approve` (code review
@@ -628,7 +635,10 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			return (string.gsub(g({ "rev-parse", `HEAD~{n}` }), "%s+$", ""))
 		end
 		local anchors = `Move commit: {head(3)}\nCore commit: {head(0)}\n`
-		w("z-nile/.tracker/issues/c0120/review-001.md", `Prep reference: {prep}\n{anchors}\nVerdict: approve\n`)
+		w(
+			"z-nile/.tracker/issues/c0120/review-001.md",
+			`Prep reference: {prep}\n{anchors}\nVerdict: approve\n`
+		)
 		step("review")
 		expectGreen()
 		-- a prep on main edits an unfinished item's check.sh and adds a spec: main's, green
@@ -656,7 +666,10 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		mergeMain(function()
 			fs.writeDir(`{FX2}/pickman/.tracker/issues/active`)
 			g({ "mv", "pickman/.tracker/issues/f0071", "pickman/.tracker/issues/active/f0071" })
-			w("pickman/.tracker/issues/active/f0071/check.sh", "check AC1 test -d tracker/issues/active/f0071\n")
+			w(
+				"pickman/.tracker/issues/active/f0071/check.sh",
+				"check AC1 test -d tracker/issues/active/f0071\n"
+			)
 		end)
 		expectGreen()
 		-- main finishes f0072 and promotes its spec: main's, green; the branch then edits the promoted spec: red
