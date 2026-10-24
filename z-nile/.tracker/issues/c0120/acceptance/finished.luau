@@ -372,6 +372,20 @@ for key in keys do
 		local tB = if b then show(B, b.path) else nil
 		local mainChanged = tM ~= tB
 		local stackChanged = tP ~= tB
+		-- the stack's change landed on main (c0114's branch merged as R0043): main's text is its newest form, and
+		-- supersedes the stack's older one
+		local landed = false
+		if mainChanged and stackChanged and tM ~= tP and p then
+			-- the stack's text is in main's history: main carried it, then changed it further
+			local okO, blob = git({ "rev-parse", `{pre}:{p.path}` })
+			if okO then
+				local okF, seen = git({ "log", "-1", "--format=%H", `--find-object={trim(blob)}`, M })
+				landed = okF and trim(seen) ~= ""
+			end
+		end
+		if landed then
+			stackChanged = false
+		end
 		if mainChanged and stackChanged and tM ~= tP then
 			table.insert(
 				bad,
