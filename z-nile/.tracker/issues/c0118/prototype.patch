@@ -1,4 +1,4 @@
-From 66afbca729ba7ff8542186bb7da19faf4acd99b2 Mon Sep 17 00:00:00 2001
+From 7c6e074ec24d92744c98645e5b94b3e18818dcf2 Mon Sep 17 00:00:00 2001
 From: Philip Bergen <philip.bergen@me.com>
 Date: Fri, 23 Oct 2026 15:56:12 -0700
 Subject: [PATCH] c0118 prototype: the board per project (tabs, columns, raft
@@ -16,21 +16,21 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  tests/lib/cachepaths.luau                     |   3 +
  tests/tooling/board.spec.luau                 |   9 +-
  .../issues/c0118/acceptance/docs.spec.luau    |  70 +++
- .../issues/c0118/acceptance/history.spec.luau | 240 +++++++++
- .../issues/c0118/acceptance/model.spec.luau   | 428 ++++++++++++++++
+ .../issues/c0118/acceptance/history.spec.luau | 285 +++++++++++
+ .../issues/c0118/acceptance/model.spec.luau   | 434 ++++++++++++++++
  .../issues/c0118/acceptance/page.spec.luau    | 322 ++++++++++++
  .../issues/c0118/acceptance/real.spec.luau    |  41 ++
  .../issues/c0118/acceptance/view.spec.luau    | 285 +++++++++++
- z-nile/.tracker/issues/c0118/c0118.md         | 401 ++++++++++++++-
+ z-nile/.tracker/issues/c0118/c0118.md         | 407 ++++++++++++++-
  z-nile/.tracker/issues/c0118/check.sh         |  32 +-
  z-nile/README.md                              |   4 +-
  z-nile/engine/board.html                      | 234 ++++++++-
  z-nile/engine/board.luau                      | 484 ++++++++++++++++--
  z-nile/engine/boardview.luau                  | 329 ++++++++++++
- z-nile/engine/history.luau                    | 223 +++++++-
+ z-nile/engine/history.luau                    | 211 +++++++-
  z-nile/engine/main.luau                       |  24 +-
  z-nile/skills/zz-rules/SKILL.md               |   2 +-
- 23 files changed, 3036 insertions(+), 117 deletions(-)
+ 23 files changed, 3076 insertions(+), 122 deletions(-)
  create mode 100644 z-nile/.tracker/issues/c0118/acceptance/docs.spec.luau
  create mode 100644 z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
  create mode 100644 z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
@@ -278,10 +278,10 @@ index 00000000..56a7e548
 +end)
 diff --git a/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
 new file mode 100644
-index 00000000..8153c4f1
+index 00000000..4ad93926
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0118/acceptance/history.spec.luau
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,285 @@
 +--!strict
 +-- c0118 AC2: history gives every issue and raft the UTC instant it first arrived in done/ in its current life (doneAt,
 +-- epoch seconds) and its latest arrival in active/ (activeAt): whatever offset the commit carries, unchanged by a move
@@ -289,7 +289,8 @@ index 00000000..8153c4f1
 +-- one that moves the map, even squashed with a landing) ends the dated life of every id on either side of a pair in the
 +-- map lines it adds: an id it reuses for another item loses the old landing, re-added in done/ it is undated, and a
 +-- later landing dates it afresh; both sides of a pair reset (an old id the counter hands out again starts undated); a
-+-- pair repeated word for word from the last map still counts (the whole map is read, not the diff); an id it keeps
++-- pair repeated word for word from the last map still counts, and a pair a later map drops no longer does (each
++-- compaction's map is read whole at that commit, through the reader parse is given); an id it keeps
 +-- keeps its dates though its document is rewritten; a map line that does not parse undates every item the commit
 +-- touches, with a warning. `closed` stays as it was. A retired raft's folder is no arrival, and rafts stay out of `closed` and `spells`.
 +-- Fixture under .cache/c0118-history; git runs through @tests/lib/fixture.
@@ -330,6 +331,7 @@ index 00000000..8153c4f1
 +	.. "R0082 R0083\nc0091 c0092\n"
 +
 +local parsed: any = nil
++local mapReads: { string } = {}
 +
 +return t.spec("c0118 done times", function(it)
 +	it("sets up a repository with dated landings, a move between roots and a compaction", function()
@@ -435,11 +437,26 @@ index 00000000..8153c4f1
 +		write("z-nile/.tracker/issues/done/c0092/c0092.md", doc("c0092", "active-x-y-z"))
 +		write("z-nile/compaction.txt", "# compaction map B\n" .. MAP_A)
 +		commit("2026-10-22T15:00:00Z", "tracker: compact ids again")
++		-- a third compaction whose map holds only an unrelated pair: it drops c0080's pair, and rewrites the (new, kept)
++		-- c0080's document in place, which keeps its landing
++		write("z-nile/compaction.txt", "# compaction map C\nc0950 c0951\n")
++		write("z-nile/.tracker/issues/done/c0080/c0080.md", doc("c0080", "active-x-y-z") .. "\nnames c0951\n")
++		commit("2026-10-22T16:00:00Z", "tracker: compact ids a third time")
 +		-- a map line that does not parse: every item the commit touches is undated
 +		write("z-nile/.tracker/issues/done/c0040/c0040.md", doc("c0040", "active-m-n-o") .. "\nrewritten\n")
-+		write("z-nile/compaction.txt", "# compaction map B\n" .. MAP_A .. "not a pair\n")
++		write("z-nile/compaction.txt", "# compaction map C\nc0950 c0951\nnot a pair\n")
 +		commit("2026-10-23T12:00:00Z", "a broken compaction")
-+		parsed = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
++		local reads: { string } = {}
++		parsed = history.parse(
++			fixture.git(repo, history.logArgs(ROOTS)),
++			ROOTS,
++			function(sha: string, path: string)
++				table.insert(reads, `{string.sub(sha, 1, 7)}:{path}`)
++				local ok, text = pcall(fixture.git, repo, { "show", `{sha}:{path}` })
++				return if ok then text else nil
++			end
++		)
++		mapReads = reads
 +		t.expect(parsed ~= nil).toBe(true)
 +	end)
 +
@@ -483,6 +500,34 @@ index 00000000..8153c4f1
 +		end
 +	)
 +
++	it(
++		"a pair a later compaction's map drops no longer renames: a kept id named only by an earlier map keeps its date",
++		function()
++			t.expect(parsed.doneAt.c0080).toBe(stats.seconds("2026-10-22T13:00:00Z"))
++		end
++	)
++
++	it(
++		"reads each compaction's map whole at that commit, at the path the commit has it, and only at compactions",
++		function()
++			-- the first map's add (touching no item), compactions A, B and C, and the broken one; never the map's move
++			t.expect(#mapReads).toBe(5)
++			for _, r in mapReads do
++				local isPath = string.find(r, ":z-nile/compaction.txt", 1, true)
++					or string.find(r, ":tracker/compaction.txt", 1, true)
++				t.expect(isPath ~= nil).toBe(true)
++			end
++			t.expect(string.find(mapReads[1], ":tracker/compaction.txt", 1, true) ~= nil).toBe(true)
++			t.expect(string.find(mapReads[2], ":z-nile/compaction.txt", 1, true) ~= nil).toBe(true)
++		end
++	)
++
++	it("without a map reader a compaction undates every item it touches, and warns", function()
++		local bare = history.parse(fixture.git(repo, history.logArgs(ROOTS)), ROOTS)
++		t.expect((bare.doneAt :: { [string]: number }).c0010).toBe(nil) -- rewritten in place by compaction A: kept with a reader, undated here
++		t.expect(#(bare.warnings :: { string })).toBe(5)
++	end)
++
 +	it("an id the compaction keeps keeps its dates, though its document is rewritten in place", function()
 +		t.expect(parsed.doneAt.c0010).toBe(stats.seconds("2026-10-19T06:30:00Z"))
 +		t.expect(parsed.activeAt.R0060).toBe(stats.seconds("2026-10-14T10:00:00Z"))
@@ -524,10 +569,10 @@ index 00000000..8153c4f1
 +end)
 diff --git a/z-nile/.tracker/issues/c0118/acceptance/model.spec.luau b/z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
 new file mode 100644
-index 00000000..46a96490
+index 00000000..145d83e7
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0118/acceptance/model.spec.luau
-@@ -0,0 +1,428 @@
+@@ -0,0 +1,434 @@
 +--!strict
 +-- c0118 AC3: board.collect over a checkout with two projects: the tabs in registry order, each issue in its project's
 +-- column (ready or run by its raft's branch), raft bands, done times from history (or, across a compaction, from the
@@ -736,6 +781,11 @@ index 00000000..46a96490
 +			"| 2 | 2026-10-15 08:00 | s | 0 | 0 | 1.0 | raft | deliver |  |  |",
 +		})
 +		write("z-nile/compaction.txt", "# map\nc0700 c0070\n")
++		-- the compaction keeps c0011 and rewrites its document in place: board.collect's history keeps its landing
++		item(
++			`{G}/issues/done/c0011`,
++			{ "type: chore", "title: Member", "raft: R0010", "status: active-a-b-c", "after: c0070" }
++		)
 +		commit("2026-10-21T09:00:00Z", "tracker: compact ids")
 +		m = board.collect(nil, repo, FACTS)
 +		t.expect(m ~= nil).toBe(true)
@@ -796,6 +846,7 @@ index 00000000..46a96490
 +		t.expect(rafts.R0010.doneAt).toBe(LANDED)
 +		t.expect(rafts.R0010.doneFrom).toBe("history")
 +		t.expect(issues.c0011.doneAt).toBe(LANDED)
++		t.expect(issues.c0011.doneFrom).toBe("history") -- kept by the compaction, whose map history.read reads
 +		t.expect(issues.c0011.age).toBe(AS_OF - LANDED)
 +		t.expect(issues.c0070.doneAt).toBe(stats.seconds("2026-10-15T08:00:00Z"))
 +		t.expect(issues.c0070.doneFrom).toBe("spend")
@@ -1623,7 +1674,7 @@ index 00000000..8a12da59
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0118/c0118.md b/z-nile/.tracker/issues/c0118/c0118.md
-index 414d138c..06650107 100644
+index 414d138c..8037723f 100644
 --- a/z-nile/.tracker/issues/c0118/c0118.md
 +++ b/z-nile/.tracker/issues/c0118/c0118.md
 @@ -6,7 +6,7 @@ slug: project-board
@@ -1635,7 +1686,7 @@ index 414d138c..06650107 100644
  created: 2026-10-20
  status: new-indigo-crimson-heron
  ---
-@@ -29,59 +29,420 @@ Decided with the user (2026-10-20), from the programme review:
+@@ -29,59 +29,426 @@ Decided with the user (2026-10-20), from the programme review:
  - Replacing `tracker.sh board` until this page covers the same navigation.
  - Editing the workflow from the canvas. The page reads the tracker, worktrees, and GitHub.
  - Starting a model. Stop, retry, and open call the dispatcher from c0117.
@@ -1670,7 +1721,7 @@ index 414d138c..06650107 100644
 +|---|---|---|
 +| `z-nile/engine/boardview.luau` | **new**: the board's rules | pure (data in, data out; `os.date("!…")` only as a calendar) |
 +| `z-nile/engine/board.luau` | the model gains projects, columns, card facts, rounds, charts; `board.readFacts`; spend read through `ledger.parse` | the reads (`scan`, `readFacts`, spend files) and the assembly |
-+| `z-nile/engine/history.luau` | `Parsed.doneAt`, `activeAt` and `warnings`; raft documents classified; a compaction's renamed ids (both sides, whole map) lose their dates; cache key `v6` | `parse` pure, `read` I/O |
++| `z-nile/engine/history.luau` | `Parsed.doneAt`, `activeAt` and `warnings`; raft documents classified; a compaction's renamed ids (both sides, the map read whole at that commit) lose their dates; the log carries `%H`; cache key `v7` | `parse` pure, `read` I/O |
 +| `z-nile/engine/board.html` | the project tabs, the Board view, the done window and range controls, the card's run details, the c0121 seam | the page |
 +| `z-nile/engine/main.luau` | `metrics` counts rounds through `boardview.rounds` (one rule with the chart) | CLI |
 +| `z-nile/skills/zz-rules/SKILL.md`, `z-nile/README.md` | the board row and the README say what the board does | docs |
@@ -1724,7 +1775,7 @@ index 414d138c..06650107 100644
 +```
 +`collect(root)` (one tracker folder, as specs pass) keeps working: one project named after the folder (or, for `<name>/.tracker`, the folder above), its `root` field that name, so no path from outside the tree reaches the page, and no facts unless given. `collect(nil, checkout)` reads every project of the checkout's registry in registry order and the checkout's own facts.
 +
-+`history.luau`: `Parsed` gains `doneAt: { [string]: number }?` and `activeAt: { [string]: number }?` (issues and rafts). `history.logArgs(roots)` appends the compaction maps `ids.MAP_FILES` (`z-nile/compaction.txt`, `tracker/compaction.txt`) to the pathspec. `Parsed` also gains `warnings: { string }?` (a compaction map line that does not parse), which the board adds to `problems`. The cache key is `v6 <HEAD> <roots>`.
++`history.luau`: `Parsed` gains `doneAt: { [string]: number }?` and `activeAt: { [string]: number }?` (issues and rafts). `history.logArgs(roots)` appends the compaction maps `ids.MAP_FILES` (`z-nile/compaction.txt`, `tracker/compaction.txt`) to the pathspec. `Parsed` also gains `warnings: { string }?` (a compaction map line that does not parse), which the board adds to `problems`. The log's commit line is `@@C %cI %H`. `history.parse(log, roots?, readMap?)` takes `readMap: (sha: string, path: string) -> string?`, which returns a compaction map's whole text as committed at that commit. `history.read` passes `git show <sha>:<path>`, run once per compaction commit (one so far, ever), so `parse` stays pure. The cache key is `v7 <HEAD> <roots>`.
 +
 +### 3. The columns (programme review F6)
 +A total function of the issue's effective status (`status.effective`, the five words) and whether its raft is launched:
@@ -1748,13 +1799,13 @@ index 414d138c..06650107 100644
 +- `history.parse` records, for every issue **and raft** (raft documents are now classified; a retired raft's folder `rafts/retired/` is no area), `doneAt`: the instant of the first commit in which the item arrives in `done/`, converted to UTC epoch seconds with `stats.seconds` (the offset `%cI` writes is honoured, so a Sunday 23:30 −07:00 landing is Monday 06:30 UTC). A move between roots (c0114, c0120) is a delete and an add in one commit, which history already reads as no change; a later return to `done/` keeps the first instant.
 +- **Compaction** (design review 001 F1 and F2). The 2026-10-05 compaction re-added every item under a new id and reused ids for other items (`R0100 R0010`: the done "Ghosts" became R0010 at the very path where "Foundation", landed 2026-09-28, had been). Following identity across that is what the lesson `tracker/item-history-spans-moves-and-compaction` forbids. So:
 +  - A commit is a **compaction** when it changes a map in place, or adds one whose content is not a map it deletes in the same commit. Moving the map (c0114's `git mv`, which lands on main squashed with R0043's own `done/` move) is no compaction; `trail.cuts` reads it with renames for the same reason. The rule is read from the log's own diff lines (the map paths are in the pathspec), so `parse` stays pure.
-+  - A compaction **ends the dated life of every id named on either side of a pair in the whole map it leaves** (design reviews 002 F1 and 003 F2): for `X Y` with X ≠ Y, both X and Y now name another item. Both halves matter: the new side is an id reused for another item (R0010), and the old side is an id renumbered away that the counter will hand out again (the dense renumbering puts every old id above the new count on the old side only; on the real log, dropping that half leaves 92 stale dates, R0030 and R0040 among them). The map is read with `ids.parseMap`, the map's one reader, over its whole content. `parse` rebuilds that content from the map's hunks, since the log holds every commit that touched it from its first add. It does not use the diff, because `compact` rewrites the whole map with only that compaction's pairs: a pair it repeats word for word from the last map is not in the `--unified=0` diff, but it still renames. For those ids, `doneAt` and `activeAt` are cleared and the item's place after the commit is no arrival. A later arrival in `done/` dates it afresh (the item now named R0030 takes its own landing when it lands); a re-add straight into `done/` stays undated. A reused id at the same path shows in git as a change, which is why the map, not the kind of change, decides.
++  - A compaction **ends the dated life of every id named on either side of a pair in the whole map it leaves** (design reviews 002 F1 and 003 F2): for `X Y` with X ≠ Y, both X and Y now name another item. Both halves matter: the new side is an id reused for another item (R0010), and the old side is an id renumbered away that the counter will hand out again (the dense renumbering puts every old id above the new count on the old side only; on the real log, dropping that half leaves 92 stale dates, R0030 and R0040 among them). The map is **read whole at that commit** (design review 004 F1): `readMap(sha, path)` at the compaction commit's own sha and the path the commit's diff names (the file moved from `tracker/` to `z-nile/` since), through `ids.parseMap`, the map's one reader. `compact` writes the whole map each time with only that compaction's pairs, so the map as committed is exactly that compaction's renames. It is never the diff, which drops a pair repeated word for word from the last map, and never a rebuild from hunks, which needs every add and every removal right; three review rounds found holes in the diff-based forms. A pair an earlier map had and this map drops no longer renames: a kept id named only by an earlier map keeps its dates. Without a reader (a caller that passes none) or when a map can't be read, every item the commit touches is undated, with a warning. For those ids, `doneAt` and `activeAt` are cleared and the item's place after the commit is no arrival. A later arrival in `done/` dates it afresh (the item now named R0030 takes its own landing when it lands); a re-add straight into `done/` stays undated. A reused id at the same path shows in git as a change, which is why the map, not the kind of change, decides.
 +  - **An id the compaction keeps keeps its dates**, even when `compact` rewrites its document in place because the document names a renumbered id (`depends_on`, `raft:`, body text). Otherwise a second compaction would undate every kept item that names a renumbered one, and clear the `activeAt` of active rafts, so a branch left by a `stop` would launch them again.
 +  - **A map line that does not parse** makes the commit end the dated life of every item it touches (fail closed: an unreadable map means "reset"), and `Parsed.warnings` names the commit; the board adds it to `problems`.
 +  - `closed` and `spells` stay issues only and exactly as before (Stats reads them; c0073 pins them).
 +- **Undated done items.** A done item that history leaves undated (a compaction ended its dated life, or there is no history at all: a shallow clone) is dated by the newest row of its own `spend.md` (a raft by its members' newest row), a field no id change rewrites, and marked `doneFrom = "spend"`; a raft's rows end at its `done` commit (phase `deliver`), so the date is the landing to within the delivery. An item with neither is undated: hidden in the done column, absent from the charts. The model's `history` says whether git history was read, and the page says so when it was not (§8).
 +- `activeAt` is the latest commit in which the item arrives in `active/` from elsewhere in its current life (a move between roots inside `active/` is no arrival); §3 uses it.
-+- The cache key is `v6` so no cache from before these rules is reused.
++- The cache key is `v7` so no cache from before these rules is reused.
 +- **As-of time.** The page is a snapshot: `asOf` is HEAD's commit time (`git log -1 --format=%ct HEAD`), so two builds of one tree are byte-identical (c0042, c0073 and c0070 pin that). Each done card carries `age = max(0, asOf − doneAt)`. The page shows a done card while `age ≤ window`; the window select offers 1 h, 3 h, 6 h, 12 h, 24 h (selected), 2 d, 3 d, 7 d, 14 d, 30 d. Decided with the user (2026-10-23): see G1. c0121's server passes its own `asOf` (the request time) through `facts`.
 +
 +### 6. Review rounds by week (programme review F7)
@@ -1784,7 +1835,7 @@ index 414d138c..06650107 100644
 +`board.readFacts(dir)` runs, in `dir`, `git log -1 --format=%ct HEAD`, `git for-each-ref --format=%(committerdate:unix) %(refname:short) refs/heads refs/remotes/origin` (each tip's commit time, for §3) and `git worktree list --porcelain`, and reads `dir/.cache/dispatch/<id>/state.json` (top level only, ids only; `step`, `outcome`, `model` strings; anything else ignored) and the presence of `questions.md` beside it. A git call that fails leaves that fact empty; a state file that does not decode is skipped. It writes nothing, fetches nothing and needs no network: no `gh`. Its one `.cache` line (`local home = \`{dir}/.cache/dispatch\``) is on the reviewed list in `tests/lib/cachepaths.luau` as a read ("nothing is written"), as c0077's scan requires.
  
  ### Scalability
-+- Per build: the existing history log (one `git log`, cached by HEAD under `.cache/tracker-history.json`), three more git calls (`log -1`, `for-each-ref`, `worktree list`: about 20 ms together), one read of each issue's `spend.md` (cached in-process, read once per build though both the card and the charts use it), a `readDir` of each raft and member folder for review files, and the dispatcher's state files. Linear in items; measured 0.47 s for the real tree (two projects, 145 items) against the old board's 0.43 s (programme review's timing).
++- Per build: the existing history log (one `git log`, cached by HEAD under `.cache/tracker-history.json`, plus one `git show` per compaction commit when the cache is cold: one in the repository's life so far), three more git calls (`log -1`, `for-each-ref`, `worktree list`: about 20 ms together), one read of each issue's `spend.md` (cached in-process, read once per build though both the card and the charts use it), a `readDir` of each raft and member folder for review files, and the dispatcher's state files. Linear in items; measured 0.47 s for the real tree (two projects, 145 items) against the old board's 0.43 s (programme review's timing).
 +- The page: 16 small SVGs (2 projects × 2 charts × 4 ranges, about 3 KB each) and a few fields per item add about 80 KB to the 2.93 MB page (3.01 MB). Each project adds 8 SVGs. The done column holds every done item's id; the page filters by age in the browser, so a wider window needs no rebuild.
 +- `boardview` is O(items + weeks); `tokensByWeek` sorts the models once.
 +
@@ -1887,6 +1938,9 @@ index 414d138c..06650107 100644
 +- `history.spec.luau` :: a compaction's reuse of a done id drops the old landing, and the new item's landing dates it → AC2
 +- `history.spec.luau` :: both sides of a pair reset: an old id the counter hands out again starts undated → AC2
 +- `history.spec.luau` :: a pair the next compaction repeats word for word still counts: the whole map is read, not its diff → AC2
++- `history.spec.luau` :: a pair a later compaction's map drops no longer renames: a kept id named only by an earlier map keeps its date → AC2
++- `history.spec.luau` :: reads each compaction's map whole at that commit, at the path the commit has it, and only at compactions → AC2
++- `history.spec.luau` :: without a map reader a compaction undates every item it touches, and warns → AC2
 +- `history.spec.luau` :: an id the compaction keeps keeps its dates, though its document is rewritten in place → AC2
 +- `history.spec.luau` :: a map line that does not parse undates every item the commit touches, and warns → AC2
 +- `history.spec.luau` :: moving the map, squashed with a landing, is no compaction → AC2
@@ -1961,7 +2015,10 @@ index 414d138c..06650107 100644
 +| an unparsable map gives a warning | history :: a map line that does not parse… | M65 no warning | run |
 +| the old side of a pair resets (an id renumbered away, handed out again) | history :: both sides of a pair reset… | M66 only the new side resets | run |
 +| the new side of a pair resets (an id reused for another item) | history :: a compaction's reuse of a done id… | M67 only the old side resets | run |
-+| a compaction is judged by the whole map it leaves | history :: a pair the next compaction repeats… | M68 judged by its diff | run |
++| a compaction is judged by its map read whole at its commit | history :: a pair the next compaction repeats… | M68 judged by its diff | run |
++| a pair a later map drops no longer renames | history :: a pair a later compaction's map drops… | M69 the union of every map so far | run |
++| the map is read at the compaction's own commit | history :: an arrival in a commit that writes the compaction map… | M70 parse reads the parent's map | run |
++| `history.read` gives `parse` the map at that commit (`git show <sha>:<path>`) | model :: dates landings from history… | M71 read reads the parent's map | run |
 +| a compaction leaves `closed` as it was | history :: a compaction's reuse of a done id… | M49 resets closed too | run |
 +| moving the map is no compaction | history :: moving the map, squashed with a landing… | M50 a map move is a compaction | run |
 +| a branch is `<R-id>-…` anchored | model :: a raft runs when a branch… | M23 look-alike launches | run |
@@ -2007,7 +2064,7 @@ index 414d138c..06650107 100644
  ### Checked
 -<!-- ACn: statement. Each maps 1:1 to a `check "ACn: ..."` line in check.sh. Deterministic. -->
 +- AC1: every effective status maps to exactly one column (ready or run by the raft's branch, anything else refused); bands, the done age, UTC ISO weeks, a raft's rounds counted once, and both charts' weekly series follow §3 to §7.
-+- AC2: history dates each issue's and raft's first arrival in `done/` in UTC seconds and its latest arrival in `active/`, unchanged by root moves and returns to `done/`; a compaction undates only the ids its whole map renames, on both sides of each pair (a reused id loses the old landing and takes its own later; an old id the counter hands out again starts undated; a pair repeated from the last map still counts; a kept id rewritten in place keeps its dates); a map move squashed with a landing is no compaction; a map line that does not parse undates every touched item with a warning; `closed` is unchanged; rafts stay out of `closed` and `spells`.
++- AC2: history dates each issue's and raft's first arrival in `done/` in UTC seconds and its latest arrival in `active/`, unchanged by root moves and returns to `done/`; a compaction undates only the ids its whole map renames, on both sides of each pair (a reused id loses the old landing and takes its own later; an old id the counter hands out again starts undated; a pair repeated from the last map still counts, and a pair a later map drops no longer does, since each map is read whole at its own commit; a kept id rewritten in place keeps its dates); a map move squashed with a landing is no compaction; a map that can't be read, or has a line that does not parse, undates every touched item with a warning; `closed` is unchanged; rafts stay out of `closed` and `spells`.
 +- AC3: `board.collect` over two projects gives a tab per project in registry order, each issue in its project's column, bands, done times (history, else spend across a compaction) and ages, rounds with members and retired chains, both charts per project per range from that project's data only, the card facts, named problems, and `readFacts` reads HEAD's time, refs, worktrees and the dispatcher's state without writing.
 +- AC4: the page opens on the first project's Board; the done window hides and shows done cards by age; raft bands; the charts follow the range; a card shows its run details; project tabs, search and `#project` switch the project; Left and Right cycle Board, Rafts and Issues, each filtered to the project; `znBoard.load` keeps the project, window, range and selected card and replaces Stats when given it; a card shows a served model's PR and checks; without git history the done column says its times come from spend rows.
 +- AC5: the zz-rules board row and the README say what the board does, and the old row's pinned words stay.
@@ -2027,7 +2084,7 @@ index 414d138c..06650107 100644
  ## Implementation steps
 -<!-- Ordered, small, each verifiable. -->
 +1. Check the base: `git diff <prep base> origin/main -- z-nile/engine/board.luau z-nile/engine/board.html z-nile/engine/history.luau z-nile/engine/main.luau z-nile/skills/zz-rules/SKILL.md z-nile/README.md` and the six overridden specs. If c0117 or any other raft changed them since prep, stop and escalate for a re-prep (the overrides are whole-case edits).
-+2. `history.luau`: classify raft documents (not `rafts/retired/`), record `doneAt` with `stats.seconds`, the compaction cut from `ids.MAP_FILES` in the pathspec, `activeAt`, a compaction's renamed ids (both sides of each pair in the whole map it leaves, rebuilt from the map's hunks and read with `ids.parseMap`; every touched item when a line does not parse, with a warning), rafts out of `closed`/`spells`, cache key `v6`. Run AC2 and c0073 `history.spec`.
++2. `history.luau`: classify raft documents (not `rafts/retired/`), record `doneAt` with `stats.seconds`, the compaction cut from `ids.MAP_FILES` in the pathspec, `activeAt`, a compaction's renamed ids (both sides of each pair in the map read whole at that commit with `readMap` (`git show <sha>:<path>` from `history.read`) and `ids.parseMap`; every touched item when no map can be read or a line does not parse, with a warning), `%H` in the log format, rafts out of `closed`/`spells`, cache key `v7`. Run AC2 and c0073 `history.spec`.
 +3. `boardview.luau` as §2. Run AC1.
 +4. `board.luau`: the types, `sources` with projects, `readFacts`, spend through `ledger.parse` with `problems`, the card facts, the spend fallback for `doneAt`, columns and bands, rounds with members and retired chains, the charts via `chart.svg` and `boardview.scaled`, `initialView = "board"`. Run AC3, AC6.
 +5. `board.html`: the CSS series classes and layout, the markup (`#projects`, `#board` with `#window`, `#range`, `#as-of`, `#columns`, `#charts`; `tab-board`), the script (views, project filter, done filter, card pane run block, keys, search, `#project`, `znBoard.load`). Run AC4.
@@ -2064,13 +2121,13 @@ index 414d138c..06650107 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
-+Prep, 2026-10-23, on `proto-c0118` (base `proto-c0117` 6ff822f5; commit 1 `SIMULATION (not part of c0118): c0117 done` cbeb2657, commit 2 the c0118 edits). Rerun after design review 003's answers:
++Prep, 2026-10-23, on `proto-c0118` (base `proto-c0117` 6ff822f5; commit 1 `SIMULATION (not part of c0118): c0117 done` cbeb2657, commit 2 the c0118 edits). Rerun after design review 004's answers:
 +- `bash z-nile/.tracker/issues/done/c0117/check.sh` on the simulation: 11/11 passed.
 +- `bash z-nile/.tracker/issues/c0118/check.sh` on the prototype: 8/8 passed.
 +- The same `check.sh` and specs on the base (the simulation commit, in a scratch clone): 2/8. AC1 fails to load `@znile/engine/boardview` (the module c0118 creates); AC2 to AC6 fail on assertions (`doneAt` and `activeAt` nil, `projects` nil, `initialView` "rafts", the docs phrases missing). AC7 and AC8 pass: they guard behaviour that exists on both sides.
-+- `z-nile/check.sh --full` on the prototype: format, lint, types, builds and skills clean; pickman 1068 passed, 0 failed (157 files); z-nile 1236 passed, 0 failed (169 files); gate wall time 353 s (c0117's `control-cli.spec` dominates). Before review 001, the first two gate runs failed on c0117's promoted specs (the `env -i` allowance, the shared `.cache/dispatch` name) and on c0118's own unlisted `.cache` read and a `Range` type; all fixed.
++- `z-nile/check.sh --full` on the prototype: format, lint, types, builds and skills clean; pickman 1068 passed, 0 failed (157 files); z-nile 1236 passed, 0 failed (169 files); gate wall time 432 s (c0117's `control-cli.spec` dominates). Before review 001, the first two gate runs failed on c0117's promoted specs (the `env -i` allowance, the shared `.cache/dispatch` name) and on c0118's own unlisted `.cache` read and a `Range` type; all fixed.
 +- `luau-lsp analyze` of the sequestered specs and of the tooling against the prototype: clean.
-+- Mutation check: 68 mutants (M1 to M68), all killed on an assertion (the whole set rerun after review 003; M66 and M67 each delete one half of the pair rule, M68 judges by the diff). Review 001 added M48 to M61, and review 002 added M62 to M65. Four older anchors (M18, M19, M23, M24) were re-pointed at rewritten code. After review 002's fixture change every history mutant was rerun (M18 to M22, M48 to M50, M53, M62 to M65).
++- Mutation check: 71 mutants (M1 to M71), all killed on an assertion, with the whole set rerun after review 004. M66 and M67 each delete one half of the pair rule. M68 judges by the diff, M69 takes the union of maps, and M70 and M71 read the parent commit's map. The rebuild review 004 attacked is gone, so its removal mutant and the two equivalent mutants it named have no code left to apply to. Review 001 added M48 to M61, and review 002 added M62 to M65. Four older anchors (M18, M19, M23, M24) were re-pointed at rewritten code. After review 002's fixture change every history mutant was rerun (M18 to M22, M48 to M50, M53, M62 to M65).
 +- Real tree after review 002's F1: E1's table is unchanged (the 2026-10-05 compaction rewrote in place only ids it reused).
 +- Real tree after review 001's F1: the 13 ids as in E1's table.
 +- Render: node fake-DOM dump of the real page plus Quick Look PNGs: the pickman Board, the z-nile Board with a 30-day window, and both charts over 90 days and all history.
@@ -3427,7 +3484,7 @@ index 00000000..1e5a4a65
 +
 +return boardview
 diff --git a/z-nile/engine/history.luau b/z-nile/engine/history.luau
-index 76844eba..e90395eb 100644
+index 76844eba..823e9d5c 100644
 --- a/z-nile/engine/history.luau
 +++ b/z-nile/engine/history.luau
 @@ -2,6 +2,7 @@
@@ -3438,7 +3495,7 @@ index 76844eba..e90395eb 100644
  local process = require("@lune/process")
  local projects = require("./projects")
  local serde = require("@lune/serde")
-@@ -11,7 +12,21 @@ local stats = require("./stats")
+@@ -11,16 +12,34 @@ local stats = require("./stats")
  local history = {}
  
  export type Spell = stats.Spell
@@ -3461,7 +3518,10 @@ index 76844eba..e90395eb 100644
  
  -- The log of every item document under `roots` (every root that ever held items, c0114). A move between roots is a
  -- delete plus an add in one commit, which `apply` reads as no change of state.
-@@ -21,6 +36,10 @@ function history.logArgs(roots: { string }): { string }
+ function history.logArgs(roots: { string }): { string }
+-	local args = { "log", "--reverse", "--format=@@C %cI", "-p", "--unified=0", "--no-renames", "--" }
++	local args = { "log", "--reverse", "--format=@@C %cI %H", "-p", "--unified=0", "--no-renames", "--" }
+ 	for _, r in roots do
  		table.insert(args, `:(glob){r}/issues/**/[fdc][0-9][0-9][0-9][0-9]*.md`)
  		table.insert(args, `:(glob){r}/rafts/**/R[0-9][0-9][0-9][0-9]*.md`)
  	end
@@ -3529,10 +3589,12 @@ index 76844eba..e90395eb 100644
  local function apply(item: Item, touches: { Touch }, when: string, day: string)
  	local add: Touch? = nil
  	local modPlus: string? = nil
-@@ -139,6 +177,108 @@ local function apply(item: Item, touches: { Touch }, when: string, day: string)
+@@ -139,8 +177,85 @@ local function apply(item: Item, touches: { Touch }, when: string, day: string)
  	end
  end
  
+--- `roots`: the roots the log covers (default: the legacy `tracker` alone, as history.LOG_ARGS reads).
+-function history.parse(log: string, roots: { string }?): Parsed
 +-- c0118: the dates of one commit's touches of an item. `cut`: the commit is a compaction.
 +local function date(item: Item, touches: { Touch }, when: string, cut: boolean)
 +	local add: Touch? = nil
@@ -3560,46 +3622,19 @@ index 76844eba..e90395eb 100644
 +-- A compaction map's diff in one commit: added, deleted, or changed in place, with its added and removed lines.
 +type MapDiff = { path: string, added: boolean, deleted: boolean, plus: { string }, minus: { string } }
 +
-+-- Each map's whole content, rebuilt from its hunks (the log has every commit that touched it, from its first add):
-+-- `--unified=0` shows only the lines that differ, and `compact` rewrites the whole map, so a pair a compaction repeats
-+-- word for word from the last map is in the content but not in the diff (c0118 design review 003 F2).
-+type MapState = { [string]: { [string]: number } } -- path -> line -> count
-+local function applyMaps(state: MapState, maps: { MapDiff })
-+	for _, m in maps do
-+		if m.deleted then
-+			state[m.path] = nil
-+		else
-+			local lines = if m.added then {} else (state[m.path] or {})
-+			for _, line in m.minus do
-+				local n = (lines[line] or 0) - 1
-+				lines[line] = if n > 0 then n else nil
-+			end
-+			for _, line in m.plus do
-+				lines[line] = (lines[line] or 0) + 1
-+			end
-+			state[m.path] = lines
-+		end
-+	end
-+end
++-- A compaction map's whole text as committed at a commit: `readMap(sha, path)`, nil when it can't be read.
++export type ReadMap = (sha: string, path: string) -> string?
 +
-+local function contentOf(lines: { [string]: number }): string
-+	local out: { string } = {}
-+	for line, n in lines do
-+		for _ = 1, n do
-+			table.insert(out, line)
-+		end
-+	end
-+	table.sort(out)
-+	return table.concat(out, "\n")
-+end
-+
-+-- The ids a compaction's maps give new meaning: both sides of every pair whose sides differ, in the whole content of
-+-- each map the commit adds or changes; nil when any line of it does not parse (then every touched item counts).
-+local function renamedIds(maps: { MapDiff }, state: MapState): { [string]: boolean }?
++-- The ids a compaction's maps give new meaning: both sides of every pair whose sides differ, in the whole map each
++-- added or changed map file holds at that commit, read whole (`readMap`, at the commit's own sha and the path the
++-- diff names there; `compact` writes the whole map each time, so the diff is not the map), through ids.parseMap; nil
++-- when there is no reader, a map can't be read, or a line of it does not parse (then every touched item counts).
++local function renamedIds(maps: { MapDiff }, sha: string?, readMap: ReadMap?): { [string]: boolean }?
 +	local out: { [string]: boolean } = {}
 +	for _, m in maps do
 +		if not m.deleted then
-+			local map = ids.parseMap(contentOf(state[m.path] or {}))
++			local text = if readMap and sha then readMap(sha, m.path) else nil
++			local map = if text then ids.parseMap(text) else nil
 +			if not map then
 +				return nil
 +			end
@@ -3635,15 +3670,19 @@ index 76844eba..e90395eb 100644
 +	return false
 +end
 +
- -- `roots`: the roots the log covers (default: the legacy `tracker` alone, as history.LOG_ARGS reads).
- function history.parse(log: string, roots: { string }?): Parsed
++-- `roots`: the roots the log covers (default: the legacy `tracker` alone, as history.LOG_ARGS reads). `readMap` reads a
++-- compaction map whole at a commit (history.read passes `git show <sha>:<path>`); without it, a compaction undates
++-- every item it touches, with a warning.
++function history.parse(log: string, roots: { string }?, readMap: ReadMap?): Parsed
  	local within = roots or { projects.LEGACY }
-@@ -148,11 +288,26 @@ function history.parse(log: string, roots: { string }?): Parsed
+ 	local items: { [string]: Item } = {}
+ 	local pending: { [string]: { Touch } } = {}
+@@ -148,11 +263,26 @@ function history.parse(log: string, roots: { string }?): Parsed
  	local day: string? = nil
  	local today: string? = nil
  	local cur: File? = nil
 +	local maps: { MapDiff } = {}
-+	local mapState: MapState = {}
++	local sha: string? = nil
 +	local warnings: { string } = {}
 +	local curMap: MapDiff? = nil
 +	local isMap: { [string]: boolean } = {}
@@ -3666,7 +3705,7 @@ index 76844eba..e90395eb 100644
  			return
  		end
  		local id, area = classify(file.path, within)
-@@ -165,23 +320,42 @@ function history.parse(log: string, roots: { string }?): Parsed
+@@ -165,30 +295,49 @@ function history.parse(log: string, roots: { string }?): Parsed
  			bag = {}
  			pending[id] = bag
  		end
@@ -3678,12 +3717,11 @@ index 76844eba..e90395eb 100644
  		flushFile()
  		local at, on = when, day
 +		local cut = isCut(maps)
-+		applyMaps(mapState, maps)
-+		local renamed = if cut then renamedIds(maps, mapState) else nil
++		local renamed = if cut then renamedIds(maps, sha, readMap) else nil
 +		if cut and renamed == nil then
 +			table.insert(
 +				warnings,
-+				`{at or "?"}: a compaction map line does not parse; every item the commit touches is undated`
++				`{at or "?"}: a compaction map could not be read or a line of it does not parse; every item the commit touches is undated`
 +			)
 +		end
  		if at and on then
@@ -3712,7 +3750,16 @@ index 76844eba..e90395eb 100644
  	end
  
  	for line in string.gmatch(log .. "\n", "(.-)\n") do
-@@ -196,11 +370,22 @@ function history.parse(log: string, roots: { string }?): Parsed
+-		local ts = string.match(line, "^@@C%s+(%S+)")
++		local ts, hash = string.match(line, "^@@C%s+(%S+)%s*(%x*)")
+ 		if ts then
+ 			flushCommit()
+ 			when = ts
++			sha = if hash and hash ~= "" then hash else nil
+ 			day = string.sub(ts, 1, 10)
+ 			today = day
+ 		elseif when then
+@@ -196,11 +345,22 @@ function history.parse(log: string, roots: { string }?): Parsed
  			if path then
  				flushFile()
  				cur = { path = path, added = false, deleted = false, plus = nil }
@@ -3735,7 +3782,7 @@ index 76844eba..e90395eb 100644
  				elseif not cur.plus then
  					local plus = string.match(line, "^%+status:%s*(%S+)")
  					if plus then
-@@ -214,13 +399,31 @@ function history.parse(log: string, roots: { string }?): Parsed
+@@ -214,13 +374,31 @@ function history.parse(log: string, roots: { string }?): Parsed
  
  	local closed: { [string]: string } = {}
  	local spells: { [string]: { Spell } } = {}
@@ -3768,15 +3815,27 @@ index 76844eba..e90395eb 100644
  end
  
  local function physical(path: string): string?
-@@ -294,7 +497,7 @@ function history.read(root: string?): Parsed?
+@@ -294,7 +472,7 @@ function history.read(root: string?): Parsed?
  	end
  	local roots = projects.allRoots(reg :: projects.Registry)
  	-- keyed by HEAD and the roots read, so a cache of another root set is never reused
 -	local sha = sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",")
-+	local sha = "v6 " .. sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",") -- v6: doneAt, activeAt, compaction lives from the whole map (c0118)
++	local sha = "v7 " .. sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",") -- v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
  	local path = cacheFile(dir)
  	if path and fs.isFile(path) then
  		local hit = loadCache(path, sha)
+@@ -306,7 +484,10 @@ function history.read(root: string?): Parsed?
+ 	if not log.ok then
+ 		return nil
+ 	end
+-	local parsed = history.parse(sh.trim(log.stdout), roots)
++	local parsed = history.parse(sh.trim(log.stdout), roots, function(at: string, mapPath: string): string?
++		local shown = process.exec("git", { "show", `{at}:{mapPath}` }, { cwd = dir })
++		return if shown.ok then shown.stdout else nil
++	end)
+ 	if path then
+ 		storeCache(path, sha, parsed)
+ 	end
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
 index 74f1e06b..c58c5a09 100644
 --- a/z-nile/engine/main.luau

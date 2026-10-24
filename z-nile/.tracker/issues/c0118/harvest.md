@@ -12,3 +12,4 @@
 - design-review-002 F3: ticket-prep/never-narrow-captured-scope
 - design-review-003 F1: testing/seed-every-enumerated-case, tracker/item-history-spans-moves-and-compaction
 - design-review-003 F2: tracker/item-history-spans-moves-and-compaction
+- design-review-004 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case

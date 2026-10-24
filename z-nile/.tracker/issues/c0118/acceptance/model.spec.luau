@@ -206,6 +206,11 @@ return t.spec("c0118 board model", function(it)
 			"| 2 | 2026-10-15 08:00 | s | 0 | 0 | 1.0 | raft | deliver |  |  |",
 		})
 		write("z-nile/compaction.txt", "# map\nc0700 c0070\n")
+		-- the compaction keeps c0011 and rewrites its document in place: board.collect's history keeps its landing
+		item(
+			`{G}/issues/done/c0011`,
+			{ "type: chore", "title: Member", "raft: R0010", "status: active-a-b-c", "after: c0070" }
+		)
 		commit("2026-10-21T09:00:00Z", "tracker: compact ids")
 		m = board.collect(nil, repo, FACTS)
 		t.expect(m ~= nil).toBe(true)
@@ -266,6 +271,7 @@ return t.spec("c0118 board model", function(it)
 		t.expect(rafts.R0010.doneAt).toBe(LANDED)
 		t.expect(rafts.R0010.doneFrom).toBe("history")
 		t.expect(issues.c0011.doneAt).toBe(LANDED)
+		t.expect(issues.c0011.doneFrom).toBe("history") -- kept by the compaction, whose map history.read reads
 		t.expect(issues.c0011.age).toBe(AS_OF - LANDED)
 		t.expect(issues.c0070.doneAt).toBe(stats.seconds("2026-10-15T08:00:00Z"))
 		t.expect(issues.c0070.doneFrom).toBe("spend")
