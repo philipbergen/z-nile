@@ -100,7 +100,8 @@ local function recorded(): (string?, string)
 		return nil, `{b.file}'s Prep reference {b.sha} is not in this branch`
 	end
 	if not b.move or not b.core then
-		return nil, `{b.file} records no "Move commit: <sha>" and "Core commit: <sha>" beside its Prep reference`
+		return nil,
+			`{b.file} records no "Move commit: <sha>" and "Core commit: <sha>" beside its Prep reference`
 	end
 	PINNED_MOVE, PINNED_CORE = b.move, b.core
 	return full, b.file
@@ -136,9 +137,13 @@ local function sequestered(
 				local rest = string.sub(path, #root + 2)
 				local inKind = string.match(rest, "^issues/(.*)$") or string.match(rest, "^rafts/(.*)$")
 				if inKind then
-					inKind = string.match(inKind, "^active/(.*)$") or string.match(inKind, "^done/(.*)$") or inKind
+					inKind = string.match(inKind, "^active/(.*)$")
+						or string.match(inKind, "^done/(.*)$")
+						or inKind
 					local id, inner = string.match(inKind :: string, "^([fdcR]%d%d%d%d)/(.+)$")
-					if id and (inner == "check.sh" or string.sub(inner :: string, 1, 11) == "acceptance/") then
+					if
+						id and (inner == "check.sh" or string.sub(inner :: string, 1, 11) == "acceptance/")
+					then
 						put(`{id}|{inner}`, { id = id, path = path, promoted = false })
 					end
 				end
@@ -282,7 +287,11 @@ local function withOverrides(promoted: string, old: string): string?
 	fs.writeDir(scratch)
 	fs.writeFile(`{scratch}/file`, old)
 	fs.writeFile(`{scratch}/section.patch`, section)
-	local r = process.exec("patch", { "-s", "-f", `{scratch}/file`, `{scratch}/section.patch` }, { cwd = scratch })
+	local r = process.exec(
+		"patch",
+		{ "-s", "-f", `{scratch}/file`, `{scratch}/section.patch` },
+		{ cwd = scratch }
+	)
 	local out = if r.ok then fs.readFile(`{scratch}/file`) else nil
 	fs.removeDir(scratch)
 	return out
@@ -325,7 +334,8 @@ end
 -- branch must follow main there too; its files are in neither pre nor M, only in main's history between B and M
 local removedOnMain: { [string]: boolean } = {}
 do
-	local okD, removed = git({ "log", "--no-renames", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
+	local okD, removed =
+		git({ "log", "--no-renames", "--format=", "--name-only", "--diff-filter=D", `{B}..{M}` })
 	if okD then
 		local gone = sequestered(removed, rootsOf(mReg), promotedOf(mReg))
 		for key, e in gone do
@@ -553,7 +563,9 @@ for key in keys do
 				then `{h.path}: not its text with exactly the rewrite{if deleted
 					then " and the deleted criteria"
 					else ""}`
-				else `{h.path}: changed{if h.promoted and not refPromoted then ` (promoted from {refPath})` else ""}`
+				else `{h.path}: changed{if h.promoted and not refPromoted
+					then ` (promoted from {refPath})`
+					else ""}`
 		)
 	end
 end

@@ -76,3 +76,9 @@
 - review-010 F2: review/sequestration-reference-not-a-ref
 - review-010 F3: testing/no-vacuous-pass
 - review-010 F4: ticket-prep/restated-rules-move-together
+
+- review-011 F1: architecture/item-rules-scoped-to-their-call
+- review-011 F2: testing/seed-every-enumerated-case
+- review-011 F3: testing/seed-every-enumerated-case
+- review-011 F4: review/sequestration-reference-not-a-ref
+- review-011 F5: architecture/parsers-refuse-ambiguity
