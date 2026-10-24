@@ -6,7 +6,7 @@ check: For each rule this design checks, where else is it implemented (a migrati
 ---
 A rule that a script applies and two specs check is three rules once one of them is fixed. A later finding then fixes one copy and leaves the others, and the next round finds the same hole in the copy nobody touched.
 
-**Why:** c0115 design review 002 F1: the look-alike fix for old lesson ids (count a token only where its renamed lesson exists, and report missing ids only in ledgers) reached the rename script and AC4's scan but not AC5's `oldIds`, which then failed on the prep's own lesson that mentions `` `tracker/next` ``.
+**Why:** c0115 design review 002 F1: the look-alike fix for old lesson ids (count a token only where its renamed lesson exists, and report missing ids only in ledgers) reached the rename script and AC4's scan but not AC5's `oldIds`, which then failed on the prep's own lesson that mentions the old root's counter file by its path.
 
 Round 003 F1 found the third hole in the same rule: it treated a whole `harvest.md` as ids, but a note's text and a one-off's reason are prose, so `review/x` in a note failed AC5. The fix was not a fourth narrowing of the pattern but the format's own reader: `lessons.parseHarvest` says which tokens are ids.
 

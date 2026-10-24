@@ -14,7 +14,8 @@ return t.spec("c0127 the testing skill's lock rule", function(it)
 	it(
 		"the testing skill's Lock rule says a reused pid (its start id differs) does not hold, and an unreadable one does",
 		function()
-			local skill = fs.readFile(`{root}/.claude/skills/testing/SKILL.md`)
+			-- c0115 override: the testing skill is z-nile/skills/zz-test (the skills' move)
+			local skill = fs.readFile(`{root}/z-nile/skills/zz-test/SKILL.md`)
 			local line = string.match(skill, "\n%s*%- %*%*Lock%*%*:[^\n]*") or ""
 			t.expect({
 				reused = has(line, "differs from the one recorded"),
