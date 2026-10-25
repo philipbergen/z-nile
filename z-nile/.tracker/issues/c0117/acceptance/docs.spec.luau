@@ -7,8 +7,13 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+-- c0117 runs from its project's home, z-nile/ (c0120): every path of the real tree this spec reads is the
+-- repository's, from its top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 local function read(path: string): string
-	return fs.readFile(path)
+	return fs.readFile(if string.sub(path, 1, 1) == "/" then path else `{TOP}/{path}`)
 end
 local function at(text: string, needle: string, where: string)
 	if not string.find(text, needle, 1, true) then
@@ -64,10 +69,11 @@ return t.spec("c0117 docs", function(it)
 		end
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
 		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft`", "z-raft")
-		at(skill("z-run"), "`./zn dispatch zz-review <R-id> --mode code`", "z-run")
-		at(skill("z-run"), "--model <reviewer model>", "z-run")
-		for _, name in fs.readDir("z-nile/skills") do
-			if fs.isFile(`z-nile/skills/{name}/SKILL.md`) then
+		-- the run's protocol is zz-execute's since c0115 (z-run hands off to it)
+		at(skill("zz-execute"), "`./zn dispatch zz-review <R-id> --mode code`", "zz-execute")
+		at(skill("zz-execute"), "--model <reviewer model>", "zz-execute")
+		for _, name in fs.readDir(`{TOP}/z-nile/skills`) do
+			if fs.isFile(`{TOP}/z-nile/skills/{name}/SKILL.md`) then
 				absent(skill(name), "on **Opus 5.5**", name)
 				absent(skill(name), "on Opus 5.5", name)
 			end
@@ -83,16 +89,16 @@ return t.spec("c0117 docs", function(it)
 				"z-ticket"
 			)
 			at(
-				skill("z-run"),
+				skill("zz-execute"),
 				"a stream review is `./zn dispatch zz-review <issue> --mode stream` instead",
-				"z-run"
+				"zz-execute"
 			)
 		end
 	)
 
 	it("z-run ends at Ready to merge under the dispatcher", function()
 		at(
-			section(skill("z-run"), "## Phase 6: Merge and clean up"),
+			section(skill("zz-execute"), "## Phase 6: Merge and clean up"),
 			"Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment",
 			"z-run Phase 6"
 		)
@@ -182,7 +188,7 @@ return t.spec("c0117 docs", function(it)
 		local agents = read("AGENTS.md")
 		at(agents, "the dispatcher's run state in `.cache/dispatch/`", "AGENTS.md")
 		at(agents, "`./zn dispatch <id>`", "AGENTS.md")
-		local usage = process.exec("./zn", {}).stdout
+		local usage = process.exec(`{TOP}/zn`, {}, { cwd = TOP }).stdout
 		for _, line in
 			{
 				"  dispatch <id> [--dry-run]",

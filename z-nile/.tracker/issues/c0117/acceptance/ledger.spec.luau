@@ -85,7 +85,11 @@ return t.spec("c0117 the spend row's model cell", function(it)
 
 	it("spend --model records the model on the published row", function()
 		local f = trackerfix.new("c0117-ledger-spend", {
-			["tracker/issues/c0010/c0010.md"] = trackerfix.stub("c0010", "thing", "new-quiet-copper-falcon"),
+			["pickman/.tracker/issues/c0010/c0010.md"] = trackerfix.stub(
+				"c0010",
+				"thing",
+				"new-quiet-copper-falcon"
+			),
 		})
 		local w = trackerfix.trOk(f, f.main, { "worktree", "zn-dispatch" })
 		trackerfix.trOk(f, w, {
@@ -100,7 +104,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5-high",
 		})
-		local text = fixture.git(f.origin, { "show", "main:tracker/issues/c0010/spend.md" }) .. "\n"
+		local text = fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
 		local l = ledger.parse(text) :: ledger.Ledger
 		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5-high")
 		t.expect(l.rows[#l.rows].tokens).toBe(123)
@@ -114,7 +118,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		-- without --model the cell stays empty
 		trackerfix.trOk(f, w, { "spend", "c0010", "--phase", "capture", "--time", "1", "--tokens", "4" })
 		local again = ledger.parse(
-			fixture.git(f.origin, { "show", "main:tracker/issues/c0010/spend.md" }) .. "\n"
+			fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
 		) :: ledger.Ledger
 		t.expect(again.rows[#again.rows].model).toBe(nil)
 	end)
@@ -142,14 +146,18 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			return trim(r.stdout)
 		end
 		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			fs.writeDir(`{dir}/tracker/{d}`)
-			fs.writeFile(`{dir}/tracker/{d}/.gitkeep`, "")
+			fs.writeDir(`{dir}/pickman/.tracker/{d}`)
+			fs.writeFile(`{dir}/pickman/.tracker/{d}/.gitkeep`, "")
 		end
 		fixture.exec(dir, "git", { "add", "-A" }, { env = ID })
 		fixture.exec(dir, "git", { "commit", "-q", "-m", "seed" }, { env = ID })
-		local a = string.match(must({ "new", "issue", "c", "alpha" }), "(c%d%d%d%d)") :: string
-		local raft = string.match(must({ "new", "raft", "chore", "demo", a }), "(R%d%d%d%d)") :: string
-		for _, doc in { `tracker/issues/{a}/{a}.md`, `tracker/rafts/{raft}/{raft}.md` } do
+		local a =
+			string.match(must({ "new", "issue", "c", "alpha", "--project", "pickman" }), "(c%d%d%d%d)") :: string
+		local raft = string.match(
+			must({ "new", "raft", "chore", "demo", a, "--project", "pickman" }),
+			"(R%d%d%d%d)"
+		) :: string
+		for _, doc in { `pickman/.tracker/issues/{a}/{a}.md`, `pickman/.tracker/rafts/{raft}/{raft}.md` } do
 			local p = `{dir}/{doc}`
 			fs.writeFile(p, (string.gsub(fs.readFile(p), "design: draft", "design: ready")))
 		end
@@ -170,7 +178,8 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5",
 		})
-		local l = ledger.parse(fs.readFile(`{dir}/tracker/issues/active/{a}/spend.md`)) :: ledger.Ledger
+		local l =
+			ledger.parse(fs.readFile(`{dir}/pickman/.tracker/issues/active/{a}/spend.md`)) :: ledger.Ledger
 		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5")
 		t.expect(l.rows[#l.rows].tokens).toBe(77)
 		local bad = run({ "commit", "-m", "x", "--model", "a|b" })
