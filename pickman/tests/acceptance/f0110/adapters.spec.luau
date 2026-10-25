@@ -235,17 +235,26 @@ local function instance(class: string): Inst
 end
 
 type Hv = { start: () -> (), show: (Session.PlayFrame) -> (), buttons: () -> Buttons? }
-type Screen = { hud: Hv, render: () -> (), frame: (name: string) -> Inst, resize: (number, number) -> () }
+type Screen = {
+	hud: Hv,
+	render: () -> (),
+	frame: (name: string) -> Inst,
+	resize: (number, number) -> (),
+	notch: (left: number, top: number, right: number, bottom: number) -> (),
+}
 
+-- HudView on a 1000 x 600 screen with no inset. `notch` keeps pixels on each edge for the device: both areas are
+-- then reported relative to the core-UI area's top-left, as GetInsetArea reports them (f0029).
 local function hudView(touch: boolean): Screen
 	local rendered: { () -> () } = {}
 	local made: { Inst } = {}
 	local area = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
+	local core = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
 	local viewport = { X = 1000, Y = 600 }
 	local services: { [string]: any } = {
 		GuiService = {
-			GetInsetArea = function(_: any, _which: any): any
-				return area
+			GetInsetArea = function(_: any, which: any): any
+				return if which.Name == "CoreUISafeInsets" then core else area
 			end,
 		},
 		Players = { LocalPlayer = instance("Player") },
@@ -308,8 +317,16 @@ local function hudView(touch: boolean): Screen
 			end
 		end,
 		resize = function(w: number, h: number)
+			area.Min = { X = 0, Y = 0 }
 			area.Max = { X = w, Y = h }
+			core.Max = { X = w, Y = h }
 			viewport.X, viewport.Y = w, h
+		end,
+		notch = function(left: number, top: number, right: number, bottom: number)
+			local w, h = viewport.X, viewport.Y
+			area.Min = { X = -left, Y = -top }
+			area.Max = { X = w - left, Y = h - top }
+			core.Max = { X = w - left - right, Y = h - top - bottom }
 		end,
 		frame = function(name: string): Inst
 			for _, i in made do
@@ -326,8 +343,8 @@ local function rectOf(f: Inst): Rect
 	return { x = f.Position.x, y = f.Position.y, w = f.Size.x, h = f.Size.y }
 end
 
-local function want(w: number, h: number): any
-	return (Touch :: any).buttons(Hud.layout(w, h, { top = 0, bottom = 0, left = 0, right = 0 }))
+local function want(w: number, h: number, inset: any?): any
+	return (Touch :: any).buttons(Hud.layout(w, h, inset or { top = 0, bottom = 0, left = 0, right = 0 }))
 end
 
 -- the text of every TextLabel under a frame
@@ -425,7 +442,8 @@ return t.spec("f0110 touch adapters", function(it)
 			s.render()
 			local b = want(1000, 600)
 			t.expect(s.hud.buttons()).toEqual(b)
-			for name, r in { Fire = b.fire, Hop = b.hop } do
+			local drawn: { [string]: Rect } = { Fire = b.fire, Hop = b.hop }
+			for name, r in drawn do
 				local f = s.frame(name)
 				t.expect(rectOf(f)).toEqual(r)
 				t.expect(f.Active).toBe(false)
@@ -446,6 +464,21 @@ return t.spec("f0110 touch adapters", function(it)
 		t.expect(rectOf(s.frame("Fire"))).toEqual(b.fire)
 		t.expect(rectOf(s.frame("Hop"))).toEqual(b.hop)
 	end)
+
+	it(
+		"HudView places the buttons in the safe rectangle the device's insets leave, as the snap control",
+		function()
+			local s = hudView(true)
+			s.resize(844, 390)
+			s.notch(47, 0, 47, 21) -- a landscape phone: the notch and its mirror, and the home indicator
+			s.render()
+			local b = want(844, 390, { top = 0, bottom = 21, left = 47, right = 47 })
+			t.expect(b.hop).toEqual({ x = 702, y = 279, w = 70, h = 70 })
+			t.expect(s.hud.buttons()).toEqual(b)
+			t.expect(rectOf(s.frame("Fire"))).toEqual(b.fire)
+			t.expect(rectOf(s.frame("Hop"))).toEqual(b.hop)
+		end
+	)
 
 	it("a screen without touch does not show the buttons", function()
 		local s = hudView(false)

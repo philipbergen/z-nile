@@ -116,7 +116,7 @@ return t.spec("f0110 touch hunt", function(it)
 		feed(fold, { id = 2, phase = "begin", x = fx, y = fy })
 		feed(fold, { id = 2, phase = "end", x = fx, y = fy })
 		t.expect(fold.effects).toEqual({ { kind = "fire" } })
-		local heading =
+		local heading: Maze.Heading =
 			View.aim(Session.snapshot(s, "p").player.heading, { look = look, spring = false }, NO_ARROWS)
 		t.expect(heading).toBe("N")
 		local ok, why = Session.submit(s, "p", Blaster.intent(heading))
