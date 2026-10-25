@@ -1,0 +1,9 @@
+# Refute 005: R0043
+- F1: fixed: new non-sequestered spec `tests/tooling/window-new-raft.spec.luau`, in fixture `.cache/window-new-raft`. It builds the window: origin has no registry, the branch has one. Its cases:
+  - `new raft chore probe c0050 --project pickman` refuses both offline and publishing. Each refusal carries "capture from the main checkout until it does, never offline here" and not the offline hint. No `rafts/R0011` appears, and origin's tip and `tracker/next` are unchanged.
+  - At the root without `--project`, the project refusal comes first.
+  - Right after the landing, with no fetch, an offline run says origin is "as last fetched", and a publishing run fetches and makes R0011.
+  - Rules and mutants row R112 (the refusal dropped from `new raft`) was run and is killed.
+  consequences: none.
+- F2: fixed: `new raft` now calls `refuseInWindow` after `refuseStale`, which fetches when publishing, so a publishing run decides on a fresh ref. `projectRoot` still runs first. Offline, the message reads "origin/main as last fetched has no z-nile/projects.toml: fetch (./zn sync) if c0114 has landed; otherwise capture from the main checkout until it does, never offline here". `new issue` already ran it after `refuseStale` and gets the same offline wording. window.spec's needle is part of both messages. consequences: none.
+- F3: fixed: c0122, c0123 and c0127 are tooling items (the ref guard, the fence and the runner's lock). They move into `z-nile/.tracker/issues/` in 54f0226 `c0114: move c0122 c0123 c0127 into z-nile/.tracker/ (renames only)`, which is 8 `R100` and nothing else, and PR #98's JC1 list now names that commit. The other captures since the prep stay in pickman's root, because they are game items: c0128, c0129, d0124, f0125, f0126 and R0044. consequences: their `check.sh` files keep `scripts/lib/ac.sh`, which forwards.

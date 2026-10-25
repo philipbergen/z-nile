@@ -2,9 +2,11 @@
 -- Static require graph for the repo. Used by z-nile/affected.luau and tests/meta.
 -- Resolves string requires the same way Luau does: "./" and "../" relative to the
 -- requiring file (for init.luau: relative to its directory's parent), "@self/",
--- and aliases from .luaurc. Non-string requires are reported as "dynamic".
+-- and aliases from .luaurc. Non-string requires are reported as "dynamic". Paths are relative to the current
+-- folder; one above it keeps its leading "../" (a project's home reaching the root's files, c0120).
 
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local serde = require("@lune/serde")
 
 export type Graph = {
@@ -23,6 +25,7 @@ local graph = {}
 
 -- Specs that require this library load the Rojo-built place, so they implicitly depend on every
 -- file under src/ and on both project files, default.project.json and lobby.project.json (see affectedSpecs).
+-- A project's home has its own (c0120): `<home>/tests/lib/place.luau` stands for `<home>/src/` and its project files.
 graph.PLACE_LIB = "tests/lib/place.luau"
 
 -- Captures the spec of a string-literal require. Apply to stripComments output only.
@@ -53,7 +56,12 @@ local function normalize(path: string): string
 	local parts: { string } = {}
 	for part in string.gmatch(path, "[^/]+") do
 		if part == ".." then
-			table.remove(parts)
+			-- a ".." that climbs above the current folder is kept (c0120)
+			if #parts == 0 or parts[#parts] == ".." then
+				table.insert(parts, "..")
+			else
+				table.remove(parts)
+			end
 		elseif part ~= "." then
 			table.insert(parts, part)
 		end
@@ -69,17 +77,86 @@ local function isInit(path: string): boolean
 	return string.match(path, "/init%.luau$") ~= nil or path == "init.luau"
 end
 
-local aliases: { [string]: string }? = nil
-function graph.aliases(): { [string]: string }
-	if aliases == nil then
-		local cfg = serde.decode("json", fs.readFile(".luaurc"))
-		local map: { [string]: string } = {}
-		for k, v in cfg.aliases or {} do
-			map[string.lower(k)] = normalize(v)
+-- The current folder, absolute, without a trailing "/".
+local function cwd(): string
+	local c = string.gsub(process.cwd, "/+$", "")
+	return if c == "" then "/" else c
+end
+
+-- An absolute path without "." or ".." segments.
+local function absNormalize(path: string): string
+	local parts: { string } = {}
+	for part in string.gmatch(path, "[^/]+") do
+		if part == ".." then
+			table.remove(parts)
+		elseif part ~= "." then
+			table.insert(parts, part)
 		end
-		aliases = map
 	end
-	return aliases :: { [string]: string }
+	return "/" .. table.concat(parts, "/")
+end
+
+-- An absolute path relative to the current folder ("../" when it is above it).
+local function relative(abs: string): string
+	local a = string.split(string.sub(cwd(), 2), "/")
+	local b = string.split(string.sub(abs, 2), "/")
+	if cwd() == "/" then
+		a = {}
+	end
+	local i = 1
+	while i <= #a and i <= #b and a[i] == b[i] do
+		i += 1
+	end
+	local parts: { string } = {}
+	for _ = i, #a do
+		table.insert(parts, "..")
+	end
+	for j = i, #b do
+		if b[j] ~= "" then
+			table.insert(parts, b[j])
+		end
+	end
+	return if #parts == 0 then "." else table.concat(parts, "/")
+end
+
+local aliasCache: { [string]: { [string]: string } } = {}
+-- The aliases a file in `dir` (relative to the current folder; default ".") sees, as Lune and luau-lsp resolve them
+-- (c0120 U2): every .luaurc from the filesystem root down to `dir`, an alias in a nearer one replacing the same alias
+-- in a farther one. Each target is relative to its own .luaurc's folder; it is returned relative to the current
+-- folder (it may start with "../"). Keys are lowercase.
+function graph.aliases(dir: string?): { [string]: string }
+	local start = absNormalize(`{cwd()}/{dir or "."}`)
+	local hit = aliasCache[start]
+	if hit then
+		return hit
+	end
+	local folders: { string } = {}
+	local at = start
+	while true do
+		table.insert(folders, 1, at)
+		if at == "/" then
+			break
+		end
+		at = string.match(at, "^(.*)/[^/]+$") or "/"
+		if at == "" then
+			at = "/"
+		end
+	end
+	local map: { [string]: string } = {}
+	for _, folder in folders do
+		local file = if folder == "/" then "/.luaurc" else `{folder}/.luaurc`
+		if fs.isFile(file) then
+			local cfg = serde.decode("json", fs.readFile(file))
+			for k, v in cfg.aliases or {} do
+				if type(v) == "string" and string.sub(v, 1, 1) ~= "~" then
+					local target = if string.sub(v, 1, 1) == "/" then v else `{folder}/{v}`
+					map[string.lower(k)] = normalize(relative(absNormalize(target)))
+				end
+			end
+		end
+	end
+	aliasCache[start] = map
+	return map
 end
 
 local gameRootsCache: { GameRoot }? = nil
@@ -100,12 +177,18 @@ end
 
 -- Every node of the Rojo project tree that has a "$path", longest instance path first. `project` is
 -- a decoded project table; nil reads ./default.project.json and caches that result per process (an
--- explicit project is never cached and never answered from the cache).
+-- explicit project is never cached and never answered from the cache). No ./default.project.json (the repository
+-- root once the game moved into pickman/, c0120) has no roots.
 function graph.gameRoots(project: any?): { GameRoot }
 	if project == nil and gameRootsCache ~= nil then
 		return gameRootsCache
 	end
-	local decoded = project or serde.decode("json", fs.readFile("default.project.json"))
+	local decoded = project
+		or (
+			if fs.isFile("default.project.json")
+				then serde.decode("json", fs.readFile("default.project.json"))
+				else {}
+		)
 	local out: { GameRoot } = {}
 	collectRoots(decoded.tree or {}, {}, out)
 	table.sort(out, function(a, b)
@@ -118,6 +201,37 @@ function graph.gameRoots(project: any?): { GameRoot }
 		table.freeze(out)
 		gameRootsCache = out
 	end
+	return out
+end
+
+-- The folder whose default.project.json builds the place `file` belongs to (c0120): the nearest one at or above the
+-- file's folder, up to the current folder, or "." when there is none.
+local function placeDirOf(file: string): string
+	local d = dirname(file)
+	while d ~= "." and d ~= "" and string.sub(d, 1, 2) ~= ".." do
+		if fs.isFile(`{d}/default.project.json`) then
+			return d
+		end
+		d = dirname(d)
+	end
+	return "."
+end
+
+local rootsAt: { [string]: { GameRoot } } = {}
+-- graph.gameRoots() for the place built from `<dir>/default.project.json`, its paths relative to the current folder.
+local function gameRootsAt(dir: string): { GameRoot }
+	if dir == "." then
+		return graph.gameRoots()
+	end
+	local hit = rootsAt[dir]
+	if hit then
+		return hit
+	end
+	local out: { GameRoot } = {}
+	for _, r in graph.gameRoots(serde.decode("json", fs.readFile(`{dir}/default.project.json`))) do
+		table.insert(out, { instance = r.instance, path = normalize(`{dir}/{r.path}`) })
+	end
+	rootsAt[dir] = out
 	return out
 end
 
@@ -182,13 +296,13 @@ function graph.resolve(from: string, spec: string, game: { GameRoot }?): string?
 	if string.sub(spec, 1, 6) == "@lune/" then
 		return nil
 	elseif string.sub(spec, 1, 6) == "@game/" then
-		return graph.resolveGame(spec, game)
+		return graph.resolveGame(spec, game or gameRootsAt(placeDirOf(from)))
 	elseif string.sub(spec, 1, 6) == "@self/" or spec == "@self" then
 		local selfDir = if isInit(from) then dirname(from) else string.gsub(from, "%.luau$", "")
 		base = selfDir .. string.sub(spec, 6)
 	elseif string.sub(spec, 1, 1) == "@" then
 		local alias, rest = string.match(spec, "^@([^/]+)(.*)$")
-		local target = alias and graph.aliases()[string.lower(alias)]
+		local target = alias and graph.aliases(dirname(from))[string.lower(alias)]
 		if not target then
 			return nil
 		end
@@ -332,20 +446,37 @@ end
 -- under src/ and the two project files, because the places are built from them.
 function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> boolean): { string }
 	local changedSet: { [string]: boolean } = {}
-	local placeChanged = false
 	for _, f in changed do
 		changedSet[f] = true
-		if
-			f == "src"
-			or string.sub(f, 1, 4) == "src/"
-			or f == "default.project.json"
-			or f == "lobby.project.json"
-		then
-			placeChanged = true
+	end
+	-- every place library in the graph: the root's and each project home's (`<home>/tests/lib/place.luau`, c0120)
+	for _, file in g.files do
+		if file == graph.PLACE_LIB or string.sub(file, -(#graph.PLACE_LIB + 1)) == "/" .. graph.PLACE_LIB then
+			local home = string.sub(file, 1, #file - #graph.PLACE_LIB)
+			for _, f in changed do
+				if
+					f == home .. "src"
+					or string.sub(f, 1, #home + 4) == home .. "src/"
+					or f == home .. "default.project.json"
+					or f == home .. "lobby.project.json"
+				then
+					changedSet[file] = true
+				end
+			end
 		end
 	end
-	if placeChanged then
-		changedSet[graph.PLACE_LIB] = true
+	-- a graph that lists no place library (a fixture's) still marks the root's, as before
+	if not changedSet[graph.PLACE_LIB] then
+		for _, f in changed do
+			if
+				f == "src"
+				or string.sub(f, 1, 4) == "src/"
+				or f == "default.project.json"
+				or f == "lobby.project.json"
+			then
+				changedSet[graph.PLACE_LIB] = true
+			end
+		end
 	end
 	local specs: { string } = {}
 	for _, file in g.files do

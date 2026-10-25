@@ -2,8 +2,8 @@
 # Acceptance checks for c0060. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0060 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0060 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0060"
 
@@ -28,7 +28,7 @@ check "AC1: the fixture helper runs commands only in a fixture repository, refus
   "git raises with git's own output" "exec passes the environment and standard input" \
   "a repository under another .cache folder than this run's is refused" \
   "git options or variables that point at another repository are refused"
-check "AC2: the twelve older fixture specs run git and tracker.sh only through the helper (self-tested scan)" \
+check "AC2: the twelve older fixture specs run git and ./zn only through the helper (self-tested scan)" \
   lune run tests/run -- "$A/retrofit.spec.luau"
 TWELVE=(tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0005/worktree.spec.luau
   tests/acceptance/c0006/clone.spec.luau tests/acceptance/c0007/changed.spec.luau tests/acceptance/c0008/done-order.spec.luau
@@ -60,7 +60,7 @@ unguarded() { # the twelve, against the runner without its guards, in a clone ou
 }
 check "AC4: unguarded, in a clone under TMPDIR, the twelve specs pass and leave the clone's repository unchanged" unguarded
 check "AC5: the testing skill states the fixture rule and names the specs not yet converted" bash -c '
-  s=.claude/skills/testing/SKILL.md
+  s=skills/zz-test/SKILL.md
   grep -qF "@tests/lib/fixture" "$s" || { echo "the testing skill does not name @tests/lib/fixture"; exit 1; }
   grep -qF "c0053" "$s" || { echo "the rule does not name the specs not yet converted"; exit 1; }
   if grep -qF "in new and edited specs" "$s"; then echo "the rule still says new and edited specs only"; exit 1; fi

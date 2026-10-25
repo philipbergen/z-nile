@@ -94,7 +94,7 @@ return t.spec("c0075 the Linux jail is wired in", function(it)
 
 	it("the documents say specs are jailed on Linux too", function()
 		local agents = fs.readFile("AGENTS.md")
-		local testing = fs.readFile(".claude/skills/testing/SKILL.md")
+		local testing = fs.readFile("z-nile/skills/zz-test/SKILL.md")
 		local setup = fs.readFile("SETUP.md")
 		t.expect(has(agents, "unjailed runs on Linux")).toBe(false)
 		t.expect(has(agents, "bubblewrap")).toBe(true)

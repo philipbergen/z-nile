@@ -136,7 +136,7 @@ return t.spec("c0083 harness and game suites", function(it)
 		for _, changed in
 			{
 				"scripts/tracker/main.luau",
-				".claude/skills/ticket-prep/SKILL.md",
+				"z-nile/skills/z-design/SKILL.md",
 				"tracker/templates/prompt.md",
 				"tests/lib/fixture.luau",
 				"tests/lib/clone.luau",

@@ -42,7 +42,8 @@ local ID: { [string]: string } = {
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local base = `{root}/.cache/c0116-promote`
+-- the fixture lives in this home's .cache (z-nile/.cache since c0120), the only place a spec may write
+local base = `{fixture.physical(".") :: string}/.cache/c0116-promote`
 local work = `{base}/work`
 
 local function must(r: Result, what: string): string
@@ -102,13 +103,13 @@ return t.spec("c0116 promote-check takes an issue's own acceptance specs", funct
 		end
 		t.expect(string.find(r.stdout, "\ncopied 1 acceptance specs\n", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(r.stdout, "promote-check OK", 1, true) ~= nil).toBe(true)
-		t.expect(fs.isDir(`{work}/{ACC}c0010`)).toBe(false)
+		t.expect(fs.isDir(`{work}/z-nile/{ACC}c0010`)).toBe(false) -- z-nile's home is z-nile/ (c0120)
 	end)
 
 	it("fails on an issue spec that breaks the type check, and still removes the copy", function()
 		local r = promote("c0020")
 		t.expect(r.ok).toBe(false)
 		t.expect(string.find(r.stdout, "\ncopied 1 acceptance specs\n", 1, true) ~= nil).toBe(true)
-		t.expect(fs.isDir(`{work}/{ACC}c0020`)).toBe(false)
+		t.expect(fs.isDir(`{work}/z-nile/{ACC}c0020`)).toBe(false)
 	end)
 end)

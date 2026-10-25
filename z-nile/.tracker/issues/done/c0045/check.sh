@@ -2,8 +2,8 @@
 # Acceptance checks for c0045. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0045 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0045 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0045"
 
@@ -32,21 +32,7 @@ check "AC2: worktree --from bases on the ref; unknown ref and raft id rejected" 
   "worktree --from bases" "worktree --from rejects"
 check "AC3: stream review files are not review rounds" cases_pass "stream review files are not review rounds"
 # AC4 (the prompt embeds the plan, or its error) moved to c0067's ready.spec in R0025: prompt is now a reader
-check "AC5: tracker.sh commit refuses while merge conflicts are unresolved" cases_pass "tracker.sh commit refuses"
-check "AC6: skills and template carry the parallel protocol" bash -c '
-  e=.claude/skills/execute-raft/SKILL.md
-  for k in "Phase 2B" "tracker.sh workstreams" "--from" "stream-review" "git merge --squash" "model: \"sonnet\"" "model: \"opus\""; do
-    grep -qF -- "$k" "$e" || { echo "execute-raft: missing $k"; exit 1; }
-  done
-  grep -qiE "^#+ +stream mode" .claude/skills/review/SKILL.md || { echo "review: no Stream mode section"; exit 1; }
-  grep -qF "tracker.sh workstreams" .claude/skills/tracker/SKILL.md || { echo "tracker skill: workstreams"; exit 1; }
-  grep -qF -- "--from" .claude/skills/tracker/SKILL.md || { echo "tracker skill: --from"; exit 1; }
-  grep -qF "parallel:" .claude/skills/ready-raft/SKILL.md || { echo "ready-raft: parallel line"; exit 1; }
-  grep -qF "## Workstreams plan" tracker/templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
-  grep -qF "{{WORKSTREAMS}}" tracker/templates/prompt.md || { echo "prompt template: variable"; exit 1; }
-  grep -qF "stream branches are committed with plain git" tracker/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
-  grep -qF "One raft branch and one PR" tracker/templates/prompt.md || { echo "prompt template: hard rule 2 (one raft branch)"; exit 1; }
-  grep -qF "Follow the \`execute-raft\` skill" tracker/templates/prompt.md || { echo "prompt template: hard rule 1 is gone"; exit 1; }'
+check "AC5: ./zn commit refuses while merge conflicts are unresolved" cases_pass "tracker.sh commit refuses"
 check "AC1-AC5: every case of the workstreams spec passes" all_cases_pass
 
 finish

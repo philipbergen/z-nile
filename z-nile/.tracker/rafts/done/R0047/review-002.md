@@ -1,0 +1,26 @@
+# Review 002: R0047 (code mode)
+Inputs: HEAD 940d0c25 (origin/main 5e1e1b34 after `scripts/tracker.sh sync --fetch`; main brought only tracker captures c0132 to c0134 and R0035's src/ work, nothing in the runner or the guards); `git diff origin/main...HEAD`; the fix delta `git diff 5066d9d5..HEAD` (fence.luau, lock-start-ids.spec, repo-fence.spec, c0127's log, harvest, the new lesson); review-001 and refute-001; R0047.md and check.sh; c0127 and c0131 (documents, check.sh, specs); the testing skill's "Specs never touch the real repository"; review and build lessons.
+Dropped from review-001: F1, F2, F3 (fixed, see below); F4 (deferral to c0134 accepted).
+Runs: `scripts/check.sh --full` GATE PASSED (2041 passed, 0 failed, 299 spec files, 92.3 s). `scripts/tracker.sh check c0131` 2/2 PASS. c0127's specs run directly (AC5 skipped, it dispatches CI): rules 3/3, reuse 13/13, skill 1/1. `tests/tooling/lock-start-ids.spec.luau` 4/4. Sequestration: only c0131's three added files (`A`), as expected for an emergent issue.
+Mutants (each restored, tree clean): (1) the top's id read from `<lock>/pid` instead of `start-<pid>` (review-001's mutant 1): lock-start-ids "a live top process whose recorded start id matches still holds" fails; (2) the waiter's own id read on every step (`takeOverIfStale(lock, unowned, me, fence.startOf(me))`): lock-start-ids "a waiting run reads its own start id once" fails.
+Rulings on refute-001: F1 fixed (the perl read is out of the claim window and out of the loop; mutant 2 is caught; see F1 below for what is left in the window). F2 fixed (mutant 1 is caught by a non-sequestered case). F3 fixed (R0047.md names c0122 as superseded; closing it is the user's call). F4 deferral accepted: the header is in a sequestered spec, the defect is comment-only, and c0134 is on main.
+Repository safety (item 8): the lock rule only adds a way to say "not a holder" when a live pid's id is read and differs; missing or unreadable ids keep holding, so it cannot take over a live run's lock. The new spec writes only under `.cache/lock-start-ids`, runs git only in the repository it just created after proving its toplevel, commits as `@example.invalid`, and gets the narrowest `ALLOWED` entry (the marker, one file). The hook change was judged safe in review-001 and is unchanged since; I re-read it: the empty-transaction allow is gated on `prepared`, a protected repository and `PICKMAN_FENCE_SPECS` unset, exactly as the remote-tracking allow. No weakening found.
+
+### F1 [low] The claim-to-record window still holds a subprocess: `writeWhole` names its temp file with `myPid()`, which runs `sh`
+Where: tests/lib/fence.luau:141-142 (`writeWhole`: `` `{path}.part-{myPid()}` ``), called at :230 (takeover owner, between `mkdir` of the mutex and its `pid`) and :273 (`start-<me>`, between `mkdir` of the lock and its `pid`); `myPid` at :85-86 is `shell("echo $PPID")`. The comment at :221-222 says "with no subprocess between", and refute-001 F1 says the same.
+Evidence: after the mutex `mkdir`, `writeWhole(owner)` spawns `sh` before the owner file and `pid` are written; after the lock `mkdir`, `writeWhole(start-…)` spawns `sh` before `pid`. A stalled `sh` there is the same gap review-001 F1 reproduced with perl (another waiter removes an unowned mutex after `UNOWNED_SECONDS`, or counts an empty lock as unowned for 2 s of steps). Main had one `sh` in the same place (`fs.writeFile(pid, myPid())`), so this is not a regression and `sh` starts much faster than perl; but the fix's stated property is false, and the raft's own new lesson (`architecture/read-own-facts-before-claiming`: "does anything run besides the writes themselves") fails its check on this code.
+Critique: the tempting fix is to edit the comment. That leaves a guard whose comment and lesson claim a window the code doesn't have.
+Consequences: passing `me` into `writeWhole` (or caching `myPid()` once per process at module level; a process's pid never changes) removes every subprocess from both windows, and also from `fence.enter`'s worker record write. No new state, no new rule.
+Recommendation: give `writeWhole` the pid as an argument (`writeWhole(path, text, me)`), with `fence.enter` passing the `me` it already has, or memoize `myPid()`. No new spec is needed beyond the existing ones; optionally, the lock-start-ids stand-in pattern could log `sh` calls, but that is more than this low warrants.
+Lesson: architecture/read-own-facts-before-claiming
+
+### F2 [low] refute-001 F2 names the fixture's commit identity wrongly
+Where: tracker/rafts/active/R0047/refute-001.md (F2: "its fixture commits as `lock-start-ids@example.invalid`"); tests/tooling/lock-start-ids.spec.luau:161 (`user.email=c0127@example.invalid`)
+Evidence: the spec commits as `c0127@example.invalid`, copied from reuse.spec.
+Critique: harmless for safety (it is `@example.invalid`), but a refute is the record the harvest and later reviewers trust.
+Consequences: none.
+Recommendation: either correct the refute's wording or make the spec's identity `lock-start-ids` as stated; either is fine.
+
+Lesson candidates (for the lead): none new; F1 repeats this raft's own `architecture/read-own-facts-before-claiming`. Its "How to apply" could add "helpers called in the window count too (a temp-file name built from a pid read by a subprocess)".
+
+Verdict: approve

@@ -2,8 +2,8 @@
 # Acceptance checks for c0074. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0074 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0074 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0074"
 
@@ -34,7 +34,7 @@ check "AC4: done's promoted fixture specs pass" lune run tests/run -- \
   tests/acceptance/c0045/workstreams.spec.luau tests/acceptance/c0050/start-depends.spec.luau
 
 check "AC5: the tracker skill's done row states the full gate and how to recover from an interrupted gate" bash -c '
-  row=$(grep -E "^\| done \|" .claude/skills/tracker/SKILL.md)
+  row=$(grep -E "^\| done \|" skills/zz-rules/SKILL.md)
   [[ -n $row ]] || { echo "the tracker skill has no done row"; exit 1; }
   grep -qi "full gate" <<<"$row" || { echo "the done row does not say done runs the full gate"; exit 1; }
   grep -qi "interrupt" <<<"$row" || { echo "the done row does not say how to recover from an interrupted gate"; exit 1; }

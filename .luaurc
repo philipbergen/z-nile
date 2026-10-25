@@ -1,9 +1,9 @@
 {
   "languageMode": "strict",
   "aliases": {
-    "logic": "./src/shared/Logic",
-    "shared": "./src/shared",
-    "tests": "./tests",
+    "logic": "./pickman/src/shared/Logic",
+    "shared": "./pickman/src/shared",
+    "tests": "./z-nile/tests",
     "scripts": "./scripts",
     "znile": "./z-nile",
     "lune": "~/.lune/.typedefs/0.10.5/"
