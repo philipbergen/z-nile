@@ -295,6 +295,30 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
+	-- R0050 code review 001 F2: a backlog or active issue whose raft: names a retired or missing raft can be neither
+	-- readied, unfolded nor claimed. A done issue's raft: is history and is not checked.
+	local raftAt: { [string]: string } = {}
+	for _, f in found do
+		if f.kind == "raft" then
+			raftAt[f.id] = if string.find(f.path, "/retired/", 1, true) then "retired" else "live"
+		end
+	end
+	for _, f in found do
+		local doc = `{root}/{f.path}/{f.id}.md`
+		if f.kind == "issue" and not string.find(f.path, "/done/", 1, true) and fs.isFile(doc) then
+			local r = front(fs.readFile(doc)).raft or ""
+			if r ~= "" and raftAt[r] == "retired" then
+				add(
+					"error",
+					"dead-raft",
+					f.path,
+					`{f.id}'s raft {r} is retired: move it with ./zn recombine or unfold`
+				)
+			elseif r ~= "" and raftAt[r] == nil then
+				add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist`)
+			end
+		end
+	end
 	for _, f in found do
 		local doc = `{root}/{f.path}/{f.id}.md`
 		local retired = string.find(f.path, "/retired/", 1, true) ~= nil

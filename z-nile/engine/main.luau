@@ -1863,6 +1863,10 @@ function cmd.recombine(pos: { string })
 			if not inOther[pos[i]] then
 				fail(`{pos[i]} is not a member of {otherId}`)
 			end
+			-- R0050 code review 001 F2: a repeated id would count twice toward emptying the other raft
+			if table.find(moving, pos[i]) then
+				fail(`{pos[i]} is named twice: name each member once`)
+			end
 			table.insert(moving, pos[i])
 		end
 	else
@@ -1879,7 +1883,14 @@ function cmd.recombine(pos: { string })
 			fail(`{m.id} is solo: true (a recorded user decision): it is rafted alone`)
 		end
 	end
-	local retire = #moving == #otherIds
+	-- retire only when no member of the other raft stays behind (decided by the members, never by counts: review 001 F2)
+	local retire = true
+	for _, id in otherIds do
+		if not table.find(moving, id) then
+			retire = false
+			break
+		end
+	end
 	local claim = freshStamp("preparing")
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
