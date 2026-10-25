@@ -57,3 +57,7 @@
 - design-review-007 F2: z-design/restated-rules-move-together
 - design-review-007 F3: z-design/spec-design-correspondence
 - design-review-007 F4: z-design/touched-paths-exist
+- design-review-008 F1: zz-arch/place-outputs-dont-scan-for-them
+- design-review-008 F2: z-design/results-land-on-every-path
+- design-review-008 F3: z-design/spec-design-correspondence
+- design-review-008 F4: z-design/restated-rules-move-together
