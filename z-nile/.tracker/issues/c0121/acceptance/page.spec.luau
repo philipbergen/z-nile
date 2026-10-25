@@ -133,7 +133,9 @@ return t.spec("c0121 served page", function(it)
 			m.live = { token = "t0k", poll = 5, checks = checks, checksAge = 3, stale = stale }
 			return m
 		end
-		local marked = fs.readFile(board.MARKED_PATH)
+		-- the spec runs from its project's home: the vendored file is read from the checkout's top (c0120)
+		local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+		local marked = fs.readFile(`{top}/{board.MARKED_PATH}`)
 		fs.writeFile(`{DIR}/live.html`, board.render(liveModel("ok", false), marked))
 		fs.writeFile(`{DIR}/unavailable.html`, board.render(liveModel("unavailable", false), marked))
 		fs.writeFile(`{DIR}/static.html`, board.render(board.collect(nil, DIR, facts), marked))
