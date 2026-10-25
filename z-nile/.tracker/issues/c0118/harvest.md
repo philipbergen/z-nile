@@ -25,3 +25,4 @@
 - design-review-008 F1: z-design/rerun-skipped-checks-after-edits
 - design-review-008 F2: zz-test/source-text-pins-read-the-code
 - design-review-008 F3: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/restated-rules-move-together
