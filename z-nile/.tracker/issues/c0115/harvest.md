@@ -53,3 +53,8 @@
 - design-review-012 F3: zz-review/lists-paste-their-search
 - note c0115 prep, after round 12: c0115's and c0113's check.sh named cwd-relative paths after a variable cd, red under c0120's finished.spec once done; simulate the item done before approving: z-design/prove-specs-pass-on-a-prototype
 - note c0115 rebase onto landed c0120: the G14 engine patch was tried against the freeze specs only, and its literal mark tripped the item's own absence scan (AC4) once applied; run every one of the item's criteria on each experimental patch: z-design/prove-specs-pass-on-a-prototype
+- design-review-013 F1: zz-arch/history-tests-survive-squash
+- design-review-013 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-013 F3: one-off: the busy row was c0120's text, rewritten for the general rule
+- design-review-013 F4: one-off: stale text after the rebase (dates, the prototype's role)
+- design-review-013 F5: zz-arch/item-rules-scoped-to-their-call
