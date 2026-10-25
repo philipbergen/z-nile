@@ -66,3 +66,4 @@
 - design-review-015 F1: testing/seed-every-enumerated-case
 - design-review-015 F2: ticket-prep/restated-rules-move-together
 - design-review-015 F3: architecture/history-tests-survive-squash
+- note c0115 rebase: rename-lesson-ids ran twice on a still-conflicted harvest.md and reported success (the user asked for a lesson and a chore): execute-raft/resolve-before-rerunning-scripts
