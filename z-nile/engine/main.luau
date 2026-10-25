@@ -1507,19 +1507,30 @@ local function c0120Move(): string?
 	return pinned
 end
 
--- c0115's move commit: the one commit on origin/impl-c0115 whose subject starts "c0115: move the skills" (AC13 pins
--- that there is exactly one). Nil when the branch or the commit isn't there.
+-- c0115's move commit: among the commits of origin/impl-c0115 that origin/main doesn't have (the range AC13 reads),
+-- the one whose subject (never a body line) starts "c0115: move the skills". Exactly one, or nil: none, two, or a
+-- missing branch pins nothing (c0115 design review 014 F2).
 local function c0115Move(): string?
 	local r = sh.run("git", {
 		"log",
-		"-1",
-		"--format=%H",
-		"--grep=^c0115: move the skills",
-		"refs/remotes/origin/impl-c0115",
+		"--format=%H %s",
+		"refs/remotes/origin/main..refs/remotes/origin/impl-c0115",
 		"--",
 	})
-	local sha = sh.trim(r.stdout)
-	return if r.ok and sha ~= "" then sha else nil
+	if not r.ok then
+		return nil
+	end
+	local found: { string } = {}
+	for line in string.gmatch(r.stdout, "[^\n]+") do
+		local sha, subject = string.match(line, "^(%x+) (.*)$")
+		if
+			sha
+			and string.sub(subject :: string, 1, #"c0115: move the skills") == "c0115: move the skills"
+		then
+			table.insert(found, sha :: string)
+		end
+	end
+	return if #found == 1 then found[1] else nil
 end
 
 local FREEZES: { Freeze } = {
@@ -1622,14 +1633,14 @@ local function ignoredBy(fr: Freeze, ref: string): string?
 	return nil
 end
 
--- The freezes that are on: `./zn busy` was given paths, all inside the move's own, and origin/main still holds the
--- move's mark. Without paths
--- (compaction's set), or once a move lands, nothing is exempt for it, so busy agrees with `./zn compact` and a later
--- branch reusing one of these names blocks like any other (c0120 code review 011 F1).
--- whether every path in `pos` is one of `inside` or under one ("./" and a trailing "/" ignored)
+-- whether every path in `pos` is one of `inside` or under one, by whole segments ("./" and a trailing "/" ignored;
+-- a path with a ".." segment is never inside: c0115 design review 014 F4)
 local function allInside(pos: { string }, inside: { string }): boolean
 	for _, p in pos do
 		local n = string.gsub(string.gsub(p, "^%./", ""), "/+$", "")
+		if n == ".." or string.find(`/{n}/`, "/../", 1, true) then
+			return false
+		end
 		local ok = false
 		for _, top in inside do
 			if n == top or string.sub(n, 1, #top + 1) == `{top}/` then
@@ -1644,6 +1655,9 @@ local function allInside(pos: { string }, inside: { string }): boolean
 	return true
 end
 
+-- The freezes that are on: `./zn busy` was given paths, all inside the move's own, and origin/main still holds the
+-- move's mark. Without paths (compaction's set), or once a move lands, nothing is exempt for it, so busy agrees with
+-- `./zn compact` and a later branch reusing one of these names blocks like any other (c0120 code review 011 F1).
 local function freezesOn(pos: { string }): { Freeze }
 	local on: { Freeze } = {}
 	if #pos == 0 then
