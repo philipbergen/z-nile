@@ -451,40 +451,23 @@ local function flush(ctx: Ctx, st: State)
 	st.pending = keep
 end
 
--- A dispatched stream review lands through the dispatcher (design review 008 F1): its reviewer writes `review.md` in
--- its own state folder, and the dispatcher numbers it into the raft's folder. The highest round of `id`'s stream
--- review and stream refute files in `dir` (plain prefix match, so another issue's never counts), and their names.
-local function streamRounds(dir: string, id: string): (number, string?, string?)
-	local best, bestRefute = 0, 0
-	local review, refute = nil :: string?, nil :: string?
+-- Every dispatched review lands through the dispatcher (design review 008 F1, 009 F1: one mechanism, no folder
+-- scan): its reviewer writes `review.md` in its own state folder, and the dispatcher numbers it into the mode's folder.
+-- The highest round in `dir` of the files named `<prefix>NNN.md` (a plain prefix match, so another issue's or another
+-- mode's file never counts), and that file's name.
+local function lastRound(dir: string, prefix: string): (number, string?)
+	local best, name = 0, nil :: string?
 	if fs.isDir(dir) then
-		for _, name in fs.readDir(dir) do
-			for _, kind in { "review", "refute" } do
-				local prefix = `stream-{kind}-{id}-`
-				if string.sub(name, 1, #prefix) == prefix then
-					local n = tonumber(string.match(string.sub(name, #prefix + 1), "^(%d+)%.md$"))
-					if n and kind == "review" and n > best then
-						best, review = n, name
-					elseif n and kind == "refute" and n > bestRefute then
-						bestRefute, refute = n, name
-					end
+		for _, f in fs.readDir(dir) do
+			if string.sub(f, 1, #prefix) == prefix then
+				local n = tonumber(string.match(string.sub(f, #prefix + 1), "^(%d+)%.md$"))
+				if n and n > best then
+					best, name = n, f
 				end
 			end
 		end
 	end
-	return best, review, refute
-end
-
-local function reviewFiles(dir: string): { [string]: boolean }
-	local out: { [string]: boolean } = {}
-	if fs.isDir(dir) then
-		for _, name in fs.readDir(dir) do
-			if string.match(name, "^design%-review%-%d+%.md$") or string.match(name, "^review%-%d+%.md$") then
-				out[name] = true
-			end
-		end
-	end
-	return out
+	return best, name
 end
 
 -- What this dispatcher pinned at its start, held in memory for the whole run (review 003 F2, F3): origin's fetch and
@@ -769,7 +752,8 @@ function dispatcher.modelStep(
 		end
 		local dir = store.get(raftId).dir
 		streamDir = dir
-		local _, lastReview, lastRefute = streamRounds(`{cwd}/{dir}`, id)
+		local _, lastReview = lastRound(`{cwd}/{dir}`, `stream-review-{id}-`)
+		local _, lastRefute = lastRound(`{cwd}/{dir}`, `stream-refute-{id}-`)
 		if lastReview then
 			local list = { `{dir}/{lastReview}` }
 			if lastRefute then
@@ -846,15 +830,21 @@ function dispatcher.modelStep(
 			env[k] = v
 		end
 	end
-	local reviewDir: string? = nil
-	if step == "zz-review" and id ~= "" and not streamDir then
-		reviewDir = `{cwd}/{store.get(id).dir}`
+	-- where a dispatched review lands: the mode's folder (the item's; a stream review's raft's) and file name
+	type Landing = { dir: string, prefix: string, note: string }
+	local land: Landing? = nil
+	if step == "zz-review" and id ~= "" then
+		if streamDir then
+			land = { dir = streamDir, prefix = `stream-review-{id}-`, note = "stream-review-" }
+		else
+			local prefix = if mode == "code" then "review-" else "design-review-"
+			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
+		end
 	end
-	local before = if reviewDir then reviewFiles(reviewDir) else {}
 	local outcome = "failed"
 	fs.writeDir(stateDir)
 	local landing = `{stateDir}/review.md`
-	if streamDir then
+	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
 	end
 	for _, spec in tries do
@@ -974,7 +964,7 @@ function dispatcher.modelStep(
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
 		-- a failed attempt's review is moved aside, so only the attempt that ends the step can land one
-		if streamDir and outcomeNow ~= "ok" and fs.isFile(landing) then
+		if land and outcomeNow ~= "ok" and fs.isFile(landing) then
 			local aside = `{stateDir}/review-attempt-{#attempts}.md`
 			pcall(fs.removeFile, aside)
 			fs.move(landing, aside)
@@ -1042,16 +1032,17 @@ function dispatcher.modelStep(
 			st.dir = `{dispatcher.home(ctx)}/{target}`
 		end
 	end
-	-- the dispatcher lands a stream review: exactly the one review.md, numbered after the issue's last round; a step
-	-- that spent tokens and left none failed (its spend is still recorded below)
-	local streamNote: string? = nil
-	if streamDir and outcome == "ok" then
+	-- the dispatcher lands a dispatched review: exactly the one review.md, numbered after the last round of its kind in
+	-- the mode's folder; a step that spent tokens and left none failed (its spend is still recorded below)
+	local reviewNote: string? = nil
+	if land and outcome == "ok" then
+		local l = land :: Landing
 		if fs.isFile(landing) then
-			local last = streamRounds(`{cwd}/{streamDir}`, id)
-			local name = string.format("stream-review-%s-%03d.md", id, last + 1)
-			fs.move(landing, `{cwd}/{streamDir}/{name}`)
-			streamNote = string.format("stream-review-%03d", last + 1)
-			print(`dispatch: the review is {streamDir}/{name}`)
+			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
+			local name = string.format("%s%03d.md", l.prefix, last + 1)
+			fs.move(landing, `{cwd}/{l.dir}/{name}`)
+			reviewNote = string.format("%s%03d", l.note, last + 1)
+			print(`dispatch: the review is {l.dir}/{name}`)
 		else
 			outcome = "failed"
 			local why: Attempt = {
@@ -1069,14 +1060,7 @@ function dispatcher.modelStep(
 			stdio.ewrite(`dispatch: {why.detail}\n`)
 		end
 	end
-	local note = streamNote or `dispatch {step}`
-	if reviewDir then
-		for name in reviewFiles(reviewDir) do
-			if not before[name] then
-				note = (string.gsub(name, "%.md$", ""))
-			end
-		end
-	end
+	local note = reviewNote or `dispatch {step}`
 	if target ~= "" then
 		record(
 			ctx,

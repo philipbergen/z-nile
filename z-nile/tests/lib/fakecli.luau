@@ -102,7 +102,7 @@ function fakecli.script(cli: string): string
 		'author) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; kill $hb; '
 			.. ok
 			.. " ;;",
-		'reviewer) git status --short > /dev/null; echo "gitstatus=$?" >> "$FAKE_DIR/log"; d=$(./zn find "$id"); printf "# Review 001\\n\\nVerdict: approve\\n" > "$d/design-review-001.md"; '
+		'reviewer) git status --short > /dev/null; echo "gitstatus=$?" >> "$FAKE_DIR/log"; printf "# Review 001\\n\\nVerdict: approve\\n" > "$ZN_DISPATCH_DIR/review.md"; '
 			.. ok
 			.. " ;;",
 		-- whatever <fakes>/script.sh does, inside the step (a spec's own misbehaving step), with a heartbeat
@@ -114,7 +114,7 @@ function fakecli.script(cli: string): string
 			.. ok
 			.. " ;;",
 		-- a reviewer that works for 16 s, printing every second, then writes its review
-		'slowreview) for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo \'{"type":"system"}\'; sleep 1; done; d=$(./zn find "$id"); printf "# Review 001\\n\\nVerdict: approve\\n" > "$d/design-review-001.md"; '
+		'slowreview) for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo \'{"type":"system"}\'; sleep 1; done; printf "# Review 001\\n\\nVerdict: approve\\n" > "$ZN_DISPATCH_DIR/review.md"; '
 			.. ok
 			.. " ;;",
 		-- an author that waits on its review outside any tool call (its own limit is stall_seconds)
@@ -122,7 +122,7 @@ function fakecli.script(cli: string): string
 			.. ok
 			.. " ;;",
 		-- a reviewer silent for 18 s inside one tool call (within its tool_seconds), then its review
-		[[silenttool) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; sleep 18; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; d=$(./zn find "$id"); printf "# Review 001\n\nVerdict: approve\n" > "$d/design-review-001.md"; ]]
+		[[silenttool) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; sleep 18; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; printf "# Review 001\n\nVerdict: approve\n" > "$ZN_DISPATCH_DIR/review.md"; ]]
 			.. ok
 			.. " ;;",
 		-- a reviewer that goes quiet past its own stall limit

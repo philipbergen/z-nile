@@ -21,6 +21,7 @@ A review runs on the review model of the CLI (the user's rule): Opus through `cl
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
 - Code mode: `review-NNN.md`, in the raft directory.
 - `NNN` continues from the highest existing number.
+- Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above are the interactive path's, where you write the file yourself.
 
 ```markdown
 # Review NNN: <R0010 | f0010> (<design | code> mode)

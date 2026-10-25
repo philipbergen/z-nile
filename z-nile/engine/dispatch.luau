@@ -141,7 +141,10 @@ function dispatch.prompt(p: PromptInput): string
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-NNN.md\`.{later}`
 	elseif p.step == "zz-review" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write only the review file that mode names.`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
+					== "code"
+				then "`review-NNN.md`"
+				else "`design-review-NNN.md`"}).`
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end
