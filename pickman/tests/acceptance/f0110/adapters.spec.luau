@@ -251,13 +251,21 @@ local function hudView(touch: boolean): Screen
 	local area = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
 	local core = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
 	local viewport = { X = 1000, Y = 600 }
+	local playerGui = instance("PlayerGui") -- what is drawn hangs under it
 	local services: { [string]: any } = {
 		GuiService = {
 			GetInsetArea = function(_: any, which: any): any
 				return if which.Name == "CoreUISafeInsets" then core else area
 			end,
 		},
-		Players = { LocalPlayer = instance("Player") },
+		Players = {
+			LocalPlayer = {
+				WaitForChild = function(_: any, name: string): Inst
+					assert(name == "PlayerGui", name)
+					return playerGui
+				end,
+			},
+		},
 		RunService = {
 			BindToRenderStep = function(_: any, _name: string, _priority: number, fn: () -> ())
 				table.insert(rendered, fn)
@@ -328,13 +336,21 @@ local function hudView(touch: boolean): Screen
 			area.Max = { X = w - left, Y = h - top }
 			core.Max = { X = w - left - right, Y = h - top - bottom }
 		end,
+		-- the named frame, found from the player's screen down: the one Hud ScreenGui, then its children
 		frame = function(name: string): Inst
-			for _, i in made do
+			local guis = {}
+			for _, g in playerGui:GetChildren() do
+				if g.ClassName == "ScreenGui" and g.Name == "Hud" then
+					table.insert(guis, g)
+				end
+			end
+			assert(#guis == 1, "one Hud ScreenGui under PlayerGui")
+			for _, i in guis[1]:GetChildren() do
 				if i.Name == name and i.ClassName == "Frame" then
 					return i
 				end
 			end
-			error("no " .. name .. " frame")
+			error("no " .. name .. " frame in the Hud ScreenGui")
 		end,
 	}
 end
@@ -347,15 +363,53 @@ local function want(w: number, h: number, inset: any?): any
 	return (Touch :: any).buttons(Hud.layout(w, h, inset or { top = 0, bottom = 0, left = 0, right = 0 }))
 end
 
--- the text of every TextLabel under a frame
-local function captions(f: Inst): { string }
+-- every TextLabel under a frame
+local function captions(f: Inst): { Inst }
 	local out = {}
 	for _, c in f:GetChildren() do
 		if c.ClassName == "TextLabel" then
-			table.insert(out, c.Text)
+			table.insert(out, c)
 		end
 	end
 	return out
+end
+
+-- every UICorner under a frame
+local function corners(f: Inst): { Inst }
+	local out = {}
+	for _, c in f:GetChildren() do
+		if c.ClassName == "UICorner" then
+			table.insert(out, c)
+		end
+	end
+	return out
+end
+
+-- How a button is drawn: a translucent disc of `colour` with one caption `text` at the HUD's text size, in white
+-- with a full black outline, so the caption, not the colour alone, tells FIRE from JUMP.
+local function expectDrawn(
+	f: Inst,
+	colour: { r: number, g: number, b: number },
+	text: string,
+	textSize: number
+)
+	t.expect(f.BackgroundColor3).toEqual(colour)
+	t.expect(f.BackgroundTransparency).toBe(0.6)
+	t.expect(f.BorderSizePixel).toBe(0)
+	local round = corners(f)
+	t.expect(#round).toBe(1)
+	t.expect(round[1].CornerRadius).toEqual({ s = 0.5, o = 0 })
+	local caps = captions(f)
+	t.expect(#caps).toBe(1)
+	local c = caps[1]
+	t.expect(c.Text).toBe(text)
+	t.expect(c.TextSize).toBe(textSize)
+	t.expect(c.TextColor3).toEqual({ r = 255, g = 255, b = 255 })
+	t.expect(c.TextStrokeColor3).toEqual({ r = 0, g = 0, b = 0 })
+	t.expect(c.TextStrokeTransparency).toBe(0)
+	t.expect(c.BackgroundTransparency).toBe(1)
+	t.expect(c.Size).toEqual({ sx = 1, sy = 1 })
+	t.expect(c.Active).toBe(false)
 end
 
 return t.spec("f0110 touch adapters", function(it)
@@ -449,8 +503,9 @@ return t.spec("f0110 touch adapters", function(it)
 				t.expect(f.Active).toBe(false)
 				t.expect(f.Visible).toBe(true)
 			end
-			t.expect(captions(s.frame("Fire"))).toEqual({ "FIRE" })
-			t.expect(captions(s.frame("Hop"))).toEqual({ "JUMP" })
+			local size = Hud.layout(1000, 600).textSize
+			expectDrawn(s.frame("Fire"), { r = 0, g = 255, b = 255 }, "FIRE", size) -- the shot bars' cyan
+			expectDrawn(s.frame("Hop"), { r = 255, g = 255, b = 255 }, "JUMP", size)
 		end
 	)
 
@@ -463,6 +518,9 @@ return t.spec("f0110 touch adapters", function(it)
 		t.expect(s.hud.buttons()).toEqual(b)
 		t.expect(rectOf(s.frame("Fire"))).toEqual(b.fire)
 		t.expect(rectOf(s.frame("Hop"))).toEqual(b.hop)
+		-- the captions follow the new screen's text size
+		t.expect(captions(s.frame("Fire"))[1].TextSize).toBe(Hud.layout(390, 844).textSize)
+		t.expect(captions(s.frame("Hop"))[1].TextSize).toBe(Hud.layout(390, 844).textSize)
 	end)
 
 	it(

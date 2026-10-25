@@ -18,6 +18,7 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 local YELLOW = Color3.fromRGB(255, 255, 0)
 local BLUE = Color3.fromRGB(33, 33, 222)
 local CYAN = Color3.fromRGB(0, 255, 255)
+local BLACK = Color3.fromRGB(0, 0, 0)
 
 local HudView = {}
 
@@ -129,6 +130,9 @@ local function button(name: string, caption: string, colour: Color3, parent: Ins
 	l.Active = false
 	l.Size = UDim2.fromScale(1, 1)
 	l.Text = caption
+	-- a full outline: the caption, not the colour alone, tells FIRE from JUMP
+	l.TextStrokeColor3 = BLACK
+	l.TextStrokeTransparency = 0
 	f.Parent = parent
 	return { frame = f, caption = l }
 end

@@ -4,8 +4,10 @@
 -- rectangle. The fire button is the same size, one margin left of the hop button, level with it unless that
 -- would reach the snap control: then its bottom is one margin above the snap control's top. On every sample
 -- screen of f0029 both buttons are at least 44 px, inside the safe rectangle, and miss each other, the snap
--- control, the four HUD blocks, the shot bars and the radar; on the shortest screens (320 px under a 58 px top
--- bar) the radar's clamp wins and the fire button overlaps its bottom, which is accepted and pinned.
+-- control, the four HUD blocks, the shot bars and the radar, with three accepted exceptions, each pinned: on the
+-- shortest screens (320 px under a 58 px top bar) the radar's clamp wins and the fire button overlaps its bottom;
+-- on a 320 px wide portrait screen Roblox's jump place shares one column with the snap control (which wins the
+-- zone); on a 500 px short side the jump place's bottom row lies on the power bar.
 local Hud = require("@logic/Hud")
 local Touch = require("@logic/Touch")
 local t = require("@tests/lib/t")
@@ -24,7 +26,8 @@ local ZERO = { top = 0, bottom = 0, left = 0, right = 0 }
 
 -- A sample screen: `inset` the core-UI safe inset (HudView's and the touch GUI's), `device` DangerHud's (nil:
 -- the same). `fire` and `hop` are the buttons in screen pixels; `radarOverlap` the accepted overlap of the fire
--- button with the radar, in rows of pixels (0 or nil: none).
+-- button with the radar, in rows of pixels (0 or nil: none); `touches` the accepted intersections of the hop
+-- button with the snap control or the power bar (nil: none).
 type Sample = {
 	name: string,
 	width: number,
@@ -34,6 +37,7 @@ type Sample = {
 	fire: Rect,
 	hop: Rect,
 	radarOverlap: number?,
+	touches: { snap: Rect?, power: Rect? }?,
 }
 local SAMPLES: { Sample } = {
 	{
@@ -121,6 +125,33 @@ local SAMPLES: { Sample } = {
 		hop = { x = 473, y = 230, w = 70, h = 70 },
 		radarOverlap = 14,
 	},
+	{
+		name = "small old phone, portrait",
+		width = 320,
+		height = 568,
+		inset = nil,
+		fire = { x = 148, y = 440, w = 70, h = 70 },
+		hop = { x = 225, y = 478, w = 70, h = 70 },
+		touches = { snap = { x = 225, y = 517, w = 1, h = 31 } },
+	},
+	{
+		name = "500 px short side, portrait",
+		width = 500,
+		height = 900,
+		inset = nil,
+		fire = { x = 323, y = 762, w = 70, h = 70 },
+		hop = { x = 405, y = 810, w = 70, h = 70 },
+		touches = { power = { x = 405, y = 879, w = 70, h = 1 } },
+	},
+	{
+		name = "500 px short side, landscape",
+		width = 900,
+		height = 500,
+		inset = nil,
+		fire = { x = 723, y = 362, w = 70, h = 70 },
+		hop = { x = 805, y = 410, w = 70, h = 70 },
+		touches = { power = { x = 805, y = 479, w = 70, h = 1 } },
+	},
 }
 
 local function boxOf(row: any): any
@@ -144,6 +175,16 @@ local function radarOf(s: Sample): Rect
 	local r =
 		Hud.radarBox(s.width - d.left - d.right, s.height - d.top - d.bottom, SIZE, true, core.top - d.top)
 	return { x = d.left + r.x, y = d.top + r.y, w = r.w, h = r.h }
+end
+
+-- The intersection of two rectangles, or nil when they miss.
+local function intersection(a: Rect, b: Rect): Rect?
+	local x1, y1 = math.max(a.x, b.x), math.max(a.y, b.y)
+	local x2, y2 = math.min(a.x + a.w, b.x + b.w), math.min(a.y + a.h, b.y + b.h)
+	if x2 > x1 and y2 > y1 then
+		return { x = x1, y = y1, w = x2 - x1, h = y2 - y1 }
+	end
+	return nil
 end
 
 local function inside(a: Rect, box: any): boolean
@@ -215,7 +256,7 @@ return t.spec("f0110 touch buttons", function(it)
 	end)
 
 	it(
-		"on every sample both buttons are at least 44 px, inside the safe rectangle, and miss each other and the HUD",
+		"on every sample both buttons are at least 44 px, inside the safe rectangle, and miss each other and the HUD but for the pinned touches",
 		function()
 			for _, s in SAMPLES do
 				local box = boxOf(Hud.layout(s.width, s.height, s.inset))
@@ -232,12 +273,16 @@ return t.spec("f0110 touch buttons", function(it)
 					})
 				end
 				t.expect(overlaps(b.fire, b.hop)).toBe(false)
+				local touches = s.touches or {}
 				for _, name in { "fire", "hop" } do
 					local r: Rect = b[name]
 					t.expect(math.min(r.w, r.h) >= Touch.MIN_TARGET).toBe(true)
 					t.expect(inside(r, box)).toBe(true)
-					t.expect(overlaps(r, b.snap)).toBe(false)
-					for _, block in { "score", "level", "lives", "power" } do
+					-- the hop button's accepted touches are exactly the pinned rectangles; the fire button has none
+					local allowed = if name == "hop" then touches else {}
+					t.expect(intersection(r, b.snap)).toEqual(allowed.snap)
+					t.expect(intersection(r, blocks.power)).toEqual(allowed.power)
+					for _, block in { "score", "level", "lives" } do
 						t.expect(overlaps(r, blocks[block])).toBe(false)
 					end
 					for _, bar in bars do
