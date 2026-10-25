@@ -1,0 +1,3 @@
+- review-001 F1: z-design/finished-overrides-land-before-ready
+- review-001 F2: zz-rules/audit-what-new-refuses
+- review-001 F3: one-off: a skill sentence and a pinned list that lagged the engine's behaviour
