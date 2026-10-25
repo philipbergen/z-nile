@@ -382,8 +382,10 @@ local function corners(f: Inst): { Inst }
 	return out
 end
 
--- How a button is drawn: a translucent disc of `colour` with one caption `text` at the HUD's text size, in white
--- with a full black outline, so the caption, not the colour alone, tells FIRE from JUMP.
+-- How a button is drawn, sentence by sentence from the Design's HudView bullet: a translucent disc of `colour`
+-- with no border and one round corner, holding one caption named Caption: `text` in the HUD's white Arcade font,
+-- centred, at the HUD's text size, with a full black outline (so the caption, not the colour alone, tells FIRE
+-- from JUMP), no background, the frame's full size, taking no input.
 local function expectDrawn(
 	f: Inst,
 	colour: { r: number, g: number, b: number },
@@ -399,6 +401,9 @@ local function expectDrawn(
 	local caps = captions(f)
 	t.expect(#caps).toBe(1)
 	local c = caps[1]
+	t.expect(c.Name).toBe("Caption")
+	t.expect(c.Font and c.Font.Name).toBe("Arcade") -- the HUD's font, through HudView's label()
+	t.expect(c.TextXAlignment and c.TextXAlignment.Name).toBe("Center")
 	t.expect(c.Text).toBe(text)
 	t.expect(c.TextSize).toBe(textSize)
 	t.expect(c.TextColor3).toEqual({ r = 255, g = 255, b = 255 })
