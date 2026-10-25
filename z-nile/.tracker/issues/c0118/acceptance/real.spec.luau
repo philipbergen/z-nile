@@ -6,11 +6,19 @@ local projects = require("@znile/engine/projects")
 local t = require("@tests/lib/t")
 
 return t.spec("c0118 real board", function(it)
-	local m = board.collect(nil, ".")
+	-- the spec runs from its project's home: the tracker is read from the checkout's top (c0120)
+	local top = (
+		string.gsub(
+			require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout,
+			"%s+$",
+			""
+		)
+	)
+	local m = board.collect(nil, top)
 
 	it("has one tab per project in z-nile/projects.toml, in its order", function()
 		local want = {}
-		for _, p in projects.load(".").projects do
+		for _, p in projects.load(top).projects do
 			table.insert(want, { name = p.name, root = p.root })
 		end
 		t.expect(m.projects).toEqual(want)
