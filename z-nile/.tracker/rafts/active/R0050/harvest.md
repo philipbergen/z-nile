@@ -7,3 +7,5 @@
 - review-003 F1: zz-rules/audit-what-new-refuses
 - review-003 F2: zz-test/guard-needs-its-own-case
 - review-003 F3: zz-test/seed-every-enumerated-case
+- review-004 F1: zz-test/one-rule-one-function
+- review-004 F2: zz-review/run-the-evidence-you-cite
