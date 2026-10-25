@@ -243,12 +243,28 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
 			fixture.git(f.main, { "checkout", "-q", "impl-c0115" })
 			fixture.git(f.main, { "merge", "-q", "--no-edit", "main" })
+			-- a subject that only contains the words is not the move commit (015 F1, mutant T)
+			fs.writeFile(`{f.main}/z-nile/skills/zz-x/note.md`, "note\n")
+			fixture.git(f.main, { "add", "-A" })
+			fixture.git(f.main, { "commit", "-qm", "note: not c0115: move the skills" })
 			fixture.git(f.main, { "checkout", "-q", "main" })
 			push("impl-c0115")
 			branchOff("rogue-on-main", "main", "z-nile/skills/zz-r/SKILL.md")
 			local r = busy(PATHS)
 			t.expect(has(r.stdout, "branch rogue-on-main changes")).toBe(true)
 			t.expect(has(r.stderr, "ignored for c0115's freeze: on-the-impl (holds its move)")).toBe(true)
+			-- a local branch named origin/impl-c0115 with its own "move" is not the remote branch (015 F1, mutant U)
+			branchOff(
+				"origin/impl-c0115",
+				"main",
+				"z-nile/skills/zz-f/SKILL.md",
+				"c0115: move the skills (a local look-alike)"
+			)
+			branchOff("on-the-fake", "refs/heads/origin/impl-c0115", "z-nile/skills/zz-g/SKILL.md")
+			local fake = busy(PATHS)
+			t.expect(has(fake.stdout, "branch on-the-fake changes")).toBe(true)
+			t.expect(has(fake.stderr, "ignored for c0115's freeze: on-the-impl (holds its move)")).toBe(true)
+			drop({ "on-the-fake", "origin/impl-c0115" }, {})
 			-- a second commit with the subject: no single move commit, so nothing is pinned
 			fixture.git(f.main, { "checkout", "-q", "impl-c0115" })
 			fs.writeFile(`{f.main}/z-nile/skills/zz-x/again.md`, "again\n")

@@ -79,7 +79,7 @@ moves_only() {
   base=${tb%% *}
   echo "${tb#*$'\n'}" # the URL ls-remote read: a swapped origin is review's to catch (detect, not prevent)
   if [[ ${tb%%$'\n'*} == *" empty" ]]; then echo "no commits since origin's main: nothing to check (G11)"; return 0; fi
-  moves=$(git log --format=%H --grep='^c0115: move the skills' "$base..HEAD")
+  moves=$(git log --format='%H %s' "$base..HEAD" | awk 'index($0, " c0115: move the skills") == 41 {print $1}') # the subject, never a body line (design review 015 F2)
   if [[ $(printf '%s\n' "$moves" | grep -c .) != 1 ]]; then echo "want one moves commit since $base, got: ${moves:-none}"; return 1; fi
   bad=$(git show -M --find-renames=100% --name-status --format= "$moves" | grep -v '^R100' || true)
   if [[ -n $bad ]]; then echo "the moves commit is not renames only: $bad"; return 1; fi

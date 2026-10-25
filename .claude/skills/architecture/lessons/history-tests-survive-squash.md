@@ -2,7 +2,7 @@
 title: A "not on main" history test survives main taking the branch as a squash
 when: both
 tags: [git, squash, history, exemptions]
-check: Does any rule decide by "a commit of branch X that main doesn't have"? What does it answer once main lands X, or anything X is built on, as a squash (whose commits never reach main)? Is there a spec case where main squashes the base?
+check: Does any rule decide by "a commit of branch X that main doesn't have"? What does it answer once main lands X, or anything X is built on, as a squash (whose commits never reach main)? Is there a spec case where main squashes the base? And where a commit is found by a search: does it read the same range as the rule that claims it is unique, match the subject line only, and pin nothing for zero or two matches?
 ---
 A test of the form "this branch holds a commit of X that origin/main doesn't" assumes landing brings X's commits into main. A squash merge lands X's change as one new commit, so X's own commits stay off main for good, and every branch that holds them, including everything built on X, matches the test forever.
 
