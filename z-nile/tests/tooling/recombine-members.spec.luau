@@ -86,7 +86,11 @@ return t.spec(
 					["pickman/.tracker/issues/done/c0051/c0051.md"] = issue("c0051", "R0098", "done"),
 					["pickman/.tracker/issues/done/c0051/check.sh"] = CHECK,
 					-- review 002 F2: live issues whose raft is in active/ or done/ are fine (never "missing")
-					["pickman/.tracker/rafts/active/R0060/R0060.md"] = raftDoc("R0060", "c0061"),
+					["pickman/.tracker/rafts/active/R0060/R0060.md"] = (string.gsub(
+						raftDoc("R0060", "c0061"),
+						(string.gsub(PREPARED, "%-", "%%-")),
+						"active-jolly-silver-walrus"
+					)),
 					["pickman/.tracker/rafts/active/R0060/check.sh"] = CHECK,
 					["pickman/.tracker/issues/active/c0061/c0061.md"] = issue(
 						"c0061",
@@ -195,6 +199,64 @@ return t.spec(
 			local out = trackerfix.trOk(f, f.main, { "list" })
 			t.expect(string.find(out, "R0030%s+retired") ~= nil).toBe(true)
 			t.expect(string.find(out, "R0030%s+backlog") ~= nil).toBe(false)
+		end)
+
+		it(
+			"the one rule: an active issue is its raft's only when that raft is active and holds its claim (or it is emergent)",
+			function()
+				local A = "active-jolly-silver-walrus"
+				trackerfix.elsewhere(f, {
+					-- review 004 F1's probe states: a backlog raft, a done raft, an issue id, an active raft without the stamp
+					["pickman/.tracker/issues/active/c0091/c0091.md"] = issue("c0091", "R0010", A),
+					["pickman/.tracker/issues/active/c0091/check.sh"] = CHECK,
+					["pickman/.tracker/issues/active/c0094/c0094.md"] = issue("c0094", "R0070", A),
+					["pickman/.tracker/issues/active/c0094/check.sh"] = CHECK,
+					["pickman/.tracker/issues/active/c0093/c0093.md"] = issue("c0093", "c0011", A),
+					["pickman/.tracker/issues/active/c0093/check.sh"] = CHECK,
+					["pickman/.tracker/issues/active/c0095/c0095.md"] = issue(
+						"c0095",
+						"R0060",
+						"active-other-stamp-here"
+					),
+					["pickman/.tracker/issues/active/c0095/check.sh"] = CHECK,
+					-- an emergent issue made on R0060's branch: it carries no claim, and is R0060's
+					["pickman/.tracker/issues/active/c0096/c0096.md"] = (string.gsub(
+						issue("c0096", "R0060", "new-amber-otter-lynx"),
+						"emergent: false",
+						"emergent: true"
+					)),
+					["pickman/.tracker/issues/active/c0096/check.sh"] = CHECK,
+				}, "active issues their rafts don't hold")
+				fixture.git(f.main, { "pull", "-q", "origin", "main" })
+				local a = trackerfix.tr(f, f.main, { "audit" })
+				local out = a.stdout .. a.stderr
+				for _, id in { "c0091", "c0094", "c0093", "c0095" } do
+					if not has(out, `give it back with ./zn stop {id}`) then
+						error(`audit names no stop for {id}: {out}`)
+					end
+				end
+				t.expect(has(out, "c0091 is in active/, but its raft R0010 doesn't hold it")).toBe(true)
+				t.expect(has(out, "c0096")).toBe(false)
+				t.expect(has(out, "c0061")).toBe(false)
+				for _, id in { "c0061", "c0096" } do
+					local r = trackerfix.tr(f, f.main, { "stop", id })
+					t.expect(r.ok).toBe(false)
+					t.expect(has(r.stderr, "use ./zn stop R0060")).toBe(true)
+				end
+				for _, id in { "c0091", "c0094", "c0093", "c0095" } do
+					trackerfix.trOk(f, f.main, { "stop", id })
+					t.expect(
+						fixture.exec(f.origin, "git", { "show", `main:pickman/.tracker/issues/{id}/{id}.md` }).ok
+					).toBe(true)
+				end
+				local after = trackerfix.tr(f, f.main, { "audit" })
+				t.expect(has(after.stdout .. after.stderr, "./zn stop c00")).toBe(false)
+			end
+		)
+
+		it("the bare status never lists a retired raft (it walks only publishable paths)", function()
+			local out = trackerfix.trOk(f, f.main, { "status" })
+			t.expect(has(out, "R0030")).toBe(false)
 		end)
 	end
 )

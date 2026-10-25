@@ -1580,10 +1580,7 @@ function cmd.status(pos: { string })
 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
 			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				local shown = if string.find(p, "/rafts/retired/", 1, true)
-					then "retired"
-					else statusLib.effective(front, stateOfPath(p))
-				print(`{fid} {shown} {front.title or ""}`)
+				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
 			end
 		end
 		return
@@ -1986,7 +1983,8 @@ function cmd.recombine(pos: { string })
 	if retire then
 		-- c0116 (review 001 F2): a retired raft keeps its folder (its design reviews, refutes and harvest.md, which
 		-- lessons and metrics read) under <root>/rafts/retired/, with `retired: <keeper>`; store, the board and the plan
-		-- never find it there (audit's scan, list and the bare status show it, as retired: review 003 F3)
+		-- never find it there; audit's scan and list show it, as retired; the bare status, which walks only publishable
+		-- paths, never lists it (review 004 F2)
 		local dest = retiredDir(other.root, otherId)
 		local parent = string.match(dest, "^(.*)/[^/]+$") :: string
 		if not fs.isDir(parent) then
@@ -4722,14 +4720,18 @@ local function stopIssue(id: string)
 	if issue.state ~= "active" then
 		fail(`{id} is in {issue.dir} on origin/main: stop <issue> gives back an active issue only`)
 	end
-	local raftId = store.readFront(issue.doc).raft or ""
-	if raftId ~= "" and store.find(raftId) then
-		fail(`{id}'s raft {raftId} is live: use ./zn stop {raftId}`)
+	local fm = store.readFront(issue.doc)
+	local raftId = fm.raft or ""
+	-- the one rule audit uses too (audit.raftHolds, review 004 F1): refused only when stop <R-id> takes it
+	local raft = if store.isRaftId(raftId) then store.find(raftId) else nil
+	local raftStatus = if raft then store.readFront(raft.doc).status else nil
+	if audit.raftHolds(fm, if raft then raft.dir else nil, raftStatus) then
+		fail(`{id} is held by its raft {raftId}: use ./zn stop {raftId}`)
 	end
 	local function stillActive(item: string, now: string): string?
 		return if now == "active" then nil else `{item} is {now} on origin/main, not active: nothing to stop`
 	end
-	local why = if raftId == "" then "no raft" else `raft {raftId} is gone`
+	local why = if raftId == "" then "no raft" else `raft {raftId} doesn't hold it`
 	local r = moveOnOrigin({ id }, "backlog", stamp("prepared"), `tracker: stop {id} ({why})`, stillActive)
 	if not r.ok then
 		fail(`stop: {r.reason}`)

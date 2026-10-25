@@ -44,6 +44,25 @@ end
 
 -- Every item folder under every project root (relative paths), whatever state it is in. Never throws on a malformed
 -- tree.
+-- The one rule for which command gives back an active issue (R0050 code review 004 F1; one rule, one function): it is
+-- its raft's (`./zn stop <R-id>`) exactly when that raft is in active/ with an `active-…` claim and the issue carries
+-- that claim, or is an emergent issue made on the raft's branch (it carries no claim; `done` takes it with the raft).
+-- Every other active issue is given back by `./zn stop <issue>`, and audit reports it. `raftDir` and `raftStatus`
+-- describe the raft the issue's `raft:` names (nil when there is none, or the value is not a raft id).
+function audit.raftHolds(issueFront: { [string]: string }, raftDir: string?, raftStatus: string?): boolean
+	local r = issueFront.raft or ""
+	if not string.match(r, "^R%d%d%d%d$") or not raftDir or not raftStatus then
+		return false
+	end
+	if
+		not string.find(raftDir .. "/", "/rafts/active/", 1, true)
+		or not string.match(raftStatus, "^active%-")
+	then
+		return false
+	end
+	return issueFront.status == raftStatus or issueFront.emergent == "true"
+end
+
 function audit.scan(root: string): { Found }
 	local out: { Found } = {}
 	local roots, problem = rootsOf(root)
@@ -296,37 +315,55 @@ function audit.run(root: string): { Problem }
 		end
 	end
 	-- R0050 code review 001 F2: a backlog or active issue whose raft: names a retired or missing raft can be neither
-	-- readied, unfolded nor claimed. A done issue's raft: is history and is not checked.
+	-- readied, unfolded nor claimed. A done issue's raft: is history and is not checked. An active issue that its raft
+	-- doesn't hold (audit.raftHolds, the rule `stop <issue>` uses too: review 004 F1) is reported with `stop <issue>`.
 	local raftAt: { [string]: string } = {}
+	local raftPath: { [string]: string } = {}
 	for _, f in found do
 		if f.kind == "raft" then
-			raftAt[f.id] = if string.find(f.path, "/retired/", 1, true) then "retired" else "live"
+			local retiredOne = string.find(f.path, "/retired/", 1, true) ~= nil
+			raftAt[f.id] = if retiredOne then "retired" else "live"
+			if not retiredOne then
+				raftPath[f.id] = f.path
+			end
 		end
 	end
 	for _, f in found do
 		local doc = `{root}/{f.path}/{f.id}.md`
 		if f.kind == "issue" and not string.find(f.path, "/done/", 1, true) and fs.isFile(doc) then
-			local rawRaft = front(fs.readFile(doc)).raft
+			local fm = front(fs.readFile(doc))
+			local rawRaft = fm.raft
 			local r = rawRaft or ""
 			local active = string.find(f.path, "/active/", 1, true) ~= nil
-			-- the command that clears the state, for the item's own state (review 003 F1): an active issue goes back
-			-- through stop (a published move, as stop gives a member back); a backlog one through unfold
-			local fix = if active
-				then `give it back with ./zn stop {f.id}`
-				else `clear it with ./zn unfold {r} {f.id}`
-			if r ~= "" and raftAt[r] == "retired" then
-				add("error", "dead-raft", f.path, `{f.id}'s raft {r} is retired: {fix}`)
-			elseif r ~= "" and raftAt[r] == nil then
-				add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist: {fix}`)
-			elseif rawRaft == "" and active then
-				-- an empty raft: line (every engine-made issue has one); a document with no raft: line at all is
-				-- not one the engine writes, and is left to the other checks
-				add(
-					"error",
-					"raftless-active",
-					f.path,
-					`{f.id} is in active/ with no raft: give it back with ./zn stop {f.id}`
-				)
+			local stop = `give it back with ./zn stop {f.id}`
+			if not active then
+				-- a backlog issue: unfold clears a dead raft (review 003 F1)
+				local fix = `clear it with ./zn unfold {r} {f.id}`
+				if r ~= "" and raftAt[r] == "retired" then
+					add("error", "dead-raft", f.path, `{f.id}'s raft {r} is retired: {fix}`)
+				elseif r ~= "" and raftAt[r] == nil then
+					add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist: {fix}`)
+				end
+			elseif rawRaft ~= nil then
+				-- an active issue (a document with no raft: line at all is not one the engine writes)
+				local rp = raftPath[r]
+				local rs = if rp then front(fs.readFile(`{root}/{rp}/{r}.md`)).status else nil
+				if not audit.raftHolds(fm, rp, rs) then
+					if r == "" then
+						add("error", "raftless-active", f.path, `{f.id} is in active/ with no raft: {stop}`)
+					elseif raftAt[r] == "retired" then
+						add("error", "dead-raft", f.path, `{f.id}'s raft {r} is retired: {stop}`)
+					elseif raftAt[r] == nil then
+						add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist: {stop}`)
+					else
+						add(
+							"error",
+							"stray-active",
+							f.path,
+							`{f.id} is in active/, but its raft {r} doesn't hold it (not an active raft whose claim it carries): {stop}`
+						)
+					end
+				end
 			end
 		end
 	end
