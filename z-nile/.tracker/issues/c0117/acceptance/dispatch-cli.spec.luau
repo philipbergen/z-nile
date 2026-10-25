@@ -276,7 +276,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 			-- quota on claude, the review on grok: still one line, the model that wrote the review
 			fakecli.clear(h)
-			mode("claude.zz-review", "quota")
+			-- claude spends 42 tokens, then reports quota (design review 007 F3): the line sums both attempts
+			mode("claude.zz-review", "spentquota")
 			mode("grok.zz-review", "script")
 			reviewer("review-001.md")
 			local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
@@ -285,7 +286,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			end
 			local two = recordLines(q.stdout)
 			t.expect(#two).toBe(1)
-			t.expect(has(two[1], "--model grok-4.7-xhigh")).toBe(true)
+			t.expect(has(two[1], "--tokens 249 --model grok-4.7-xhigh")).toBe(true) -- 42 + 207, the reviewing model
+			local hist = state("c0010").history
+			local spent = hist[#hist - 1].minutes + hist[#hist].minutes
+			t.expect(hist[#hist - 1].tokens).toBe(42)
+			t.expect(has(two[1], `--time {math.floor(spent * 10 + 0.5) / 10} --tokens`)).toBe(true)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 		end
 	)
@@ -307,6 +312,45 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(row.minutes > 0).toBe(true)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 	end)
+
+	it(
+		"a stream review under the dispatcher writes its file in the raft's folder, and its record: line names it and the issue",
+		function()
+			fakecli.clear(h)
+			mode("claude.zz-review", "script")
+			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+			-- c0010 in raft R0090 (as in a raft worktree), uncommitted in this worktree only
+			local raftDir = `{wt}/pickman/.tracker/rafts/R0090`
+			fs.writeDir(raftDir)
+			fs.writeFile(
+				`{raftDir}/R0090.md`,
+				"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
+			)
+			local doc = `{wt}/pickman/.tracker/issues/c0010/c0010.md`
+			local was = fs.readFile(doc)
+			fs.writeFile(doc, (string.gsub(was, "\nraft:[^\n]*", "\nraft: R0090", 1)))
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				`sleep 3; d=$(./zn find R0090); printf '# Stream review\\n\\nVerdict: approve\\n' > "$d/stream-review-c0010-001.md"\n`
+			)
+			local before = #(fakecli.rows(h, "c0010") or {})
+			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+			fs.writeFile(doc, was)
+			fs.removeDir(raftDir)
+			if not r.ok then
+				error(r.stdout .. r.stderr)
+			end
+			local lines = recordLines(r.stdout)
+			t.expect(#lines).toBe(1)
+			t.expect(
+				string.match(
+					lines[1],
+					'^record: %./zn commit %-m "c0010: stream%-review%-001" %-%-phase code%-review %-%-time [%d%.]+ %-%-tokens 123 %-%-model claude%-opus%-5%-5 %-%-issue c0010$'
+				) ~= nil
+			).toBe(true)
+			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
+		end
+	)
 
 	it("with no agent credential, no CLI starts", function()
 		fakecli.clear(h)

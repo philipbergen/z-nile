@@ -73,6 +73,28 @@ return t.spec("c0117 docs", function(it)
 		-- the run's protocol is zz-execute's since c0115 (z-run hands off to it)
 		at(skill("zz-execute"), "`./zn dispatch zz-review <R-id> --mode code`", "zz-execute")
 		at(skill("zz-execute"), "--model <reviewer model>", "zz-execute")
+		-- stream reviews under the dispatcher (G15, design review 007 F1): the review model of the CLI, and the reviewer
+		-- writes its own file, since a dispatched run has no caller to return text to
+		local zr = skill("zz-review")
+		at(zr, "`./zn dispatch zz-review <id> --mode design|raft|code|stream`", "zz-review Who reviews")
+		absent(zr, "stream reviews stay on Sonnet subagents", "zz-review Who reviews")
+		at(
+			zr,
+			"Under `./zn dispatch`, the reviewer writes the file itself: `stream-review-<issue>-NNN.md` in the raft's folder of the worktree it runs in",
+			"zz-review Stream mode"
+		)
+		at(
+			zr,
+			"An interactive subagent returns the review markdown and writes no file",
+			"zz-review Stream mode"
+		)
+		at(
+			skill("zz-execute"),
+			'commit the review file with the `record:` line it prints (`-m "<issue>: stream-review-NNN"` … `--issue <issue>`)',
+			"zz-execute"
+		)
+		-- a dispatched raft review records its own row (design review 007 F2): the author records only a subagent's
+		at(skill("z-raft"), "As soon as a subagent reviewer returns", "z-raft")
 		for _, name in fs.readDir(`{TOP}/z-nile/skills`) do
 			if fs.isFile(`{TOP}/z-nile/skills/{name}/SKILL.md`) then
 				absent(skill(name), "on **Opus 5.5**", name)
