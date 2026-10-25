@@ -64,7 +64,8 @@ return t.spec("c0117 docs", function(it)
 
 	it("who reviews is the review model of the CLI, wherever a skill says so", function()
 		local rule = "Opus through `claude` or `agent`, `grok-4.7-xhigh` through `grok`"
-		for _, name in { "z-design", "z-raft", "z-run", "zz-review" } do
+		-- z-run's reviews are its protocol's, zz-execute's, since c0115
+		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
 			at(skill(name), rule, name)
 		end
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
