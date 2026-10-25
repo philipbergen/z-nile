@@ -10,7 +10,7 @@ An instruction added to many skills has to fit each skill's context. Writing a f
 
 R0040 design review 2 (F3): the fix routed those skills to `./zn new issue`, which subagents (stream implementers and reviewers, handed the same skills) may not run. Skills are read by agents in different roles, so the split has to be by role, not by skill.
 
-R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads ticket-prep and testing), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
+R0040 design review 3 (F1) found the fix still split by skill: one agent follows several skills at once (a prep author reads the design skill and the testing skill), so two skills gave it contradictory instructions. The rule that held was one paragraph, identical in every skill, keyed on role.
 
 **How to apply:** for each skill a change touches, name every role that reads it (lead, stream subagent, reviewer), its working directory and what it may write or publish. Write one instruction keyed on role, the same wherever it appears, rather than a variant per skill.
 
