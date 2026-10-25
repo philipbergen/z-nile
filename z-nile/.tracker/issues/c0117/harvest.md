@@ -46,3 +46,4 @@
 - design-review-005 F2: one-off: a raised default the guess didn't cost
 - design-review-005 F3: zz-arch/waiting-steps-show-liveness
 - note c0118's simulation of c0117 done: the promoted control-cli spec named env -i (repo-fence), and four specs named .cache/dispatch (c0049 isolation), both caught only at the promoted location: z-design/prove-specs-pass-on-a-prototype
+- note c0117 G8, 2026-10-25: the three remote runtimes' command lines, left unproven for Phase 1 through five rounds, were wrong, as their help and a refused call showed for free at design time; the user split them into c0142: z-design/probe-free-cli-lines-in-prep
