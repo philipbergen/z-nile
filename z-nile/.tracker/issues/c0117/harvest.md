@@ -1,0 +1,48 @@
+# Harvest: c0117
+- design-review-001 F1: architecture/guards-decide-from-the-tools-resolution, architecture/guards-trust-only-origin
+- design-review-001 F2: architecture/guards-decide-from-the-tools-resolution, architecture/guards-trust-only-origin
+- design-review-001 F3: architecture/guards-trust-only-origin
+- design-review-001 F4: architecture/children-need-a-lifeline
+- design-review-001 F5: ticket-prep/instructions-runnable-where-they-run
+- design-review-001 F6: ticket-prep/never-narrow-captured-scope
+- design-review-001 F7: architecture/guard-no-is-explicit
+- design-review-001 F8: ticket-prep/spec-design-correspondence
+- design-review-001 F9: ticket-prep/instructions-runnable-where-they-run
+- design-review-001 F10: ticket-prep/no-check-red-between-steps
+- design-review-001 F11: testing/new-commands-run-in-a-copy
+- design-review-001 F12: ticket-prep/spec-design-correspondence
+- design-review-001 F13: one-off: a sentence named a file the folder did not hold
+- design-review-001 F14: ticket-prep/specify-every-named-artifact
+- design-review-001 F15: testing/specs-set-host-markers-explicitly
+- design-review-002 F1: architecture/one-definition-of-tracker-state, testing/plain-find-for-literals
+- design-review-002 F2: architecture/one-definition-of-tracker-state
+- design-review-002 F3: architecture/one-definition-of-tracker-state, architecture/guards-trust-only-origin
+- design-review-002 F4: architecture/tripwire-covers-every-interval, ticket-prep/required-steps-on-every-path
+- design-review-002 F5: architecture/guards-trust-only-origin
+- design-review-002 F6: architecture/merge-gate-checks-what-it-merges
+- design-review-002 F7: architecture/children-need-a-lifeline
+- design-review-002 F8: architecture/guard-no-is-explicit
+- design-review-002 F9: architecture/merge-gate-checks-what-it-merges
+- design-review-002 F10: architecture/children-need-a-lifeline
+- design-review-002 F11: one-off: a name picked by a check before the folder was made (made atomic)
+- design-review-002 F12: one-off: two numbers said twice and differently
+- design-review-003 F1: architecture/sequestered-files-judged-per-item, testing/seed-every-enumerated-case
+- design-review-003 F2: architecture/guard-state-out-of-reach-or-checked, architecture/tripwire-covers-every-interval
+- design-review-003 F3: architecture/guard-state-out-of-reach-or-checked, testing/derive-after-stripping-overrides
+- design-review-003 F4: architecture/authority-config-is-not-tracker-state
+- design-review-003 F5: architecture/merge-gate-checks-what-it-merges, architecture/one-definition-of-tracker-state
+- design-review-003 F6: architecture/tripwire-covers-every-interval
+- design-review-003 F7: architecture/guard-no-is-explicit
+- design-review-003 F8: architecture/one-definition-of-tracker-state
+- design-review-003 F9: one-off: a flag the usage offered and the command ignored
+- design-review-003 F10: architecture/one-definition-of-tracker-state
+- design-review-003 F11: architecture/merge-gate-checks-what-it-merges
+- design-review-004 F1: architecture/several-writers-check-the-subject, architecture/lock-reads-live-state, architecture/guard-state-out-of-reach-or-checked
+- design-review-004 F2: architecture/waiting-steps-show-liveness, ticket-prep/instructions-runnable-where-they-run
+- design-review-004 F3: ticket-prep/spec-design-correspondence, testing/guard-needs-its-own-case
+- design-review-004 F4: architecture/guard-state-out-of-reach-or-checked, architecture/merge-gate-checks-what-it-merges
+- design-review-004 F5: one-off: one fact said twice and differently (E10 against §8)
+- design-review-005 F1: architecture/several-writers-check-the-subject, architecture/lock-reads-live-state
+- design-review-005 F2: one-off: a raised default the guess didn't cost
+- design-review-005 F3: architecture/waiting-steps-show-liveness
+- note c0118's simulation of c0117 done: the promoted control-cli spec named env -i (repo-fence), and four specs named .cache/dispatch (c0049 isolation), both caught only at the promoted location: ticket-prep/prove-specs-pass-on-a-prototype
