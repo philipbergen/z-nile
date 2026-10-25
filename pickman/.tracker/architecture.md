@@ -55,6 +55,7 @@ Session -> Levels
 Session -> Maze
 Session -> Movement
 Session -> Pellets
+Touch -> Hud
 Touch -> View
 View -> Maze
 View -> Movement

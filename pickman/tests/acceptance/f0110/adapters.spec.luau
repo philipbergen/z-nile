@@ -1,0 +1,465 @@
+--!strict
+-- f0110 AC3: the adapters. Controls' real source runs on a small stub engine (touch signals, one inset area, a
+-- recording Intent remote) with the real Touch and View, as tests/place/touch-adapters does: a tap on the fire
+-- button sends Blaster.intent of the camera's aim, the same as E; a tap on the hop button sends Hop.INTENT, the
+-- same as Space; the rectangles are read from the called buttons hook on every event. HudView's real source runs
+-- on a stub engine as tests/place/hud-shots does: on a touch screen it draws a non-active Fire and Hop frame at
+-- Touch.buttons' rectangles, re-lays them when the screen changes, and HudView.buttons reports them. Main hands
+-- HudView.buttons to Controls.start.
+local Blaster = require("@logic/Blaster")
+local Hop = require("@logic/Hop")
+local Hud = require("@logic/Hud")
+local Maze = require("@logic/Maze")
+local Movement = require("@logic/Movement")
+local Session = require("@logic/Session")
+local Touch = require("@logic/Touch")
+local View = require("@logic/View")
+local luau = require("@lune/luau")
+local place = require("@tests/lib/place")
+local t = require("@tests/lib/t")
+
+local game = place.load()
+
+local function script(name: string): any
+	local node = game:FindFirstChild("StarterPlayer")
+	for _, child in { "StarterPlayerScripts", "Client", name } do
+		node = node and node:FindFirstChild(child)
+	end
+	t.expect(node ~= nil).toBe(true)
+	return node
+end
+
+local function source(name: string): string
+	return (string.gsub(script(name).Source, "%-%-[^\n]*", ""))
+end
+
+type Rect = { x: number, y: number, w: number, h: number }
+type Buttons = { snap: Rect, fire: Rect, hop: Rect }
+
+-- Enum.<Group>.<Item> is a stable table per item, so identity compares work.
+local function enumProxy(): any
+	return setmetatable({}, {
+		__index = function(self: any, group: string): any
+			local g = setmetatable({}, {
+				__index = function(gs: any, item: string): any
+					local v = { Name = item, Value = 0, group = group }
+					rawset(gs, item, v)
+					return v
+				end,
+			})
+			rawset(self, group, g)
+			return g
+		end,
+	})
+end
+
+type Signal = { Connect: (any, (...any) -> ()) -> (), fire: (...any) -> () }
+
+local function signal(): Signal
+	local fns: { (...any) -> () } = {}
+	return {
+		Connect = function(_: any, fn: (...any) -> ())
+			table.insert(fns, fn)
+		end,
+		fire = function(...: any)
+			for _, fn in fns do
+				fn(...)
+			end
+		end,
+	}
+end
+
+-- Controls ------------------------------------------------------------------------------------------------------
+
+type World = {
+	fired: { any },
+	snaps: number,
+	looks: { { number } },
+	began: Signal,
+	changed: Signal,
+	ended: Signal,
+	touch: () -> any,
+	press: (key: string, state: string) -> (),
+}
+
+-- Starts Controls on an 800 x 400 screen. `buttons` is the hook handed in as the fifth argument (nil: none);
+-- with `aim`, Controls.keys is called first with it.
+local function controls(buttons: (() -> Buttons?)?, aim: (() -> Maze.Heading?)?): World
+	local enum = enumProxy()
+	local fired: { any } = {}
+	local remote = {
+		FireServer = function(_: any, intent: any)
+			table.insert(fired, intent)
+		end,
+	}
+	local remotes = {
+		WaitForChild = function(_: any, name: string): any
+			assert(name == "Intent", name)
+			return remote
+		end,
+	}
+	local handler: any = nil
+	local world: World
+	world = {
+		fired = fired,
+		snaps = 0,
+		looks = {},
+		began = signal(),
+		changed = signal(),
+		ended = signal(),
+		touch = function(): any
+			return { UserInputType = enum.UserInputType.Touch, Position = { X = 0, Y = 0 } }
+		end,
+		press = function(key: string, state: string)
+			handler("PickmanControls", enum.UserInputState[state], { KeyCode = { Name = key } })
+		end,
+	}
+	local services: { [string]: any } = {
+		ContextActionService = {
+			BindActionAtPriority = function(_: any, _name: string, h: any)
+				handler = h
+			end,
+		},
+		GuiService = {
+			GetInsetArea = function(_: any, _which: any): any
+				return { Min = { X = 0, Y = 0 }, Max = { X = 800, Y = 400 } }
+			end,
+		},
+		ReplicatedStorage = {
+			WaitForChild = function(_: any, name: string): any
+				assert(name == "Remotes", name)
+				return remotes
+			end,
+		},
+		UserInputService = {
+			InputBegan = world.began,
+			InputChanged = world.changed,
+			InputEnded = world.ended,
+			WindowFocusReleased = signal(),
+		},
+	}
+	local modules: { [string]: any } = {
+		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
+		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
+		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
+		["@game/ReplicatedStorage/Shared/Logic/Movement"] = Movement,
+		["@game/ReplicatedStorage/Shared/Logic/Touch"] = Touch,
+		["@game/ReplicatedStorage/Shared/Logic/View"] = View,
+	}
+	local env = {
+		game = {
+			GetService = function(_: any, name: string): any
+				return assert(services[name], name)
+			end,
+		},
+		workspace = { CurrentCamera = { ViewportSize = { X = 800, Y = 400 } } },
+		Enum = enum,
+		require = function(spec: string): any
+			return assert(modules[spec], spec)
+		end,
+	}
+	local Controls = luau.load(script("Controls").Source, { environment = env, debugName = "Controls" })()
+	if aim then
+		Controls.keys({ arrows = function(_: View.Arrows) end, aim = aim })
+	end
+	(Controls.start :: any)(function()
+		world.snaps += 1
+	end, function(dx: number, dy: number)
+		table.insert(world.looks, { dx, dy })
+	end, nil, function(_: boolean) end, buttons)
+	return world
+end
+
+local function at(input: any, x: number, y: number): any
+	input.Position = { X = x, Y = y }
+	return input
+end
+
+local function tap(w: World, x: number, y: number)
+	local f = w.touch()
+	w.began.fire(at(f, x, y), false)
+	w.ended.fire(at(f, x, y), false)
+end
+
+local BUTTONS: Buttons = {
+	snap = { x = 500, y = 350, w = 44, h = 44 },
+	fire = { x = 600, y = 300, w = 70, h = 70 },
+	hop = { x = 700, y = 320, w = 70, h = 70 },
+}
+
+local function fixed(b: Buttons?): () -> Buttons?
+	return function(): Buttons?
+		return b
+	end
+end
+
+-- HudView -------------------------------------------------------------------------------------------------------
+
+type Inst = { [string]: any }
+
+local function instance(class: string): Inst
+	local children: { Inst } = {}
+	local props: { [string]: any } = { ClassName = class }
+	local self: Inst
+	self = setmetatable({}, {
+		__index = function(_: any, key: string): any
+			if key == "GetChildren" then
+				return function(): { Inst }
+					return table.clone(children)
+				end
+			elseif key == "ClearAllChildren" then
+				return function()
+					table.clear(children)
+				end
+			elseif key == "IsA" then
+				return function(_: any, c: string): boolean
+					return props.ClassName == c
+				end
+			elseif key == "WaitForChild" then
+				return function(_: any, _name: string): Inst
+					return instance("PlayerGui")
+				end
+			elseif key == "children" then
+				return children
+			end
+			return props[key]
+		end,
+		__newindex = function(_: any, key: string, value: any)
+			if key == "Parent" and value ~= nil then
+				table.insert(value.children, self)
+			end
+			props[key] = value
+		end,
+	}) :: any
+	return self
+end
+
+type Hv = { start: () -> (), show: (Session.PlayFrame) -> (), buttons: () -> Buttons? }
+type Screen = { hud: Hv, render: () -> (), frame: (name: string) -> Inst, resize: (number, number) -> () }
+
+local function hudView(touch: boolean): Screen
+	local rendered: { () -> () } = {}
+	local made: { Inst } = {}
+	local area = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
+	local viewport = { X = 1000, Y = 600 }
+	local services: { [string]: any } = {
+		GuiService = {
+			GetInsetArea = function(_: any, _which: any): any
+				return area
+			end,
+		},
+		Players = { LocalPlayer = instance("Player") },
+		RunService = {
+			BindToRenderStep = function(_: any, _name: string, _priority: number, fn: () -> ())
+				table.insert(rendered, fn)
+			end,
+		},
+		UserInputService = { TouchEnabled = touch },
+	}
+	local modules: { [string]: any } = {
+		["@game/ReplicatedStorage/Shared/Logic/Hud"] = Hud,
+		["@game/ReplicatedStorage/Shared/Logic/Session"] = Session,
+		["@game/ReplicatedStorage/Shared/Logic/Touch"] = Touch,
+	}
+	local env = {
+		game = {
+			GetService = function(_: any, name: string): any
+				return assert(services[name], name)
+			end,
+		},
+		workspace = { CurrentCamera = { ViewportSize = viewport } },
+		Enum = enumProxy(),
+		Instance = {
+			new = function(class: string): Inst
+				local i = instance(class)
+				table.insert(made, i)
+				return i
+			end,
+		},
+		UDim2 = {
+			fromOffset = function(x: number, y: number): any
+				return { x = x, y = y }
+			end,
+			fromScale = function(x: number, y: number): any
+				return { sx = x, sy = y }
+			end,
+		},
+		UDim = {
+			new = function(s: number, o: number): any
+				return { s = s, o = o }
+			end,
+		},
+		Color3 = {
+			fromRGB = function(r: number, g: number, b: number): any
+				return { r = r, g = g, b = b }
+			end,
+		},
+		require = function(spec: string): any
+			return assert(modules[spec], spec)
+		end,
+	}
+	local hud = luau.load(script("HudView").Source, { environment = env, debugName = "HudView" })() :: Hv
+	hud.start()
+	return {
+		hud = hud,
+		render = function()
+			for _, fn in rendered do
+				fn()
+			end
+		end,
+		resize = function(w: number, h: number)
+			area.Max = { X = w, Y = h }
+			viewport.X, viewport.Y = w, h
+		end,
+		frame = function(name: string): Inst
+			for _, i in made do
+				if i.Name == name and i.ClassName == "Frame" then
+					return i
+				end
+			end
+			error("no " .. name .. " frame")
+		end,
+	}
+end
+
+local function rectOf(f: Inst): Rect
+	return { x = f.Position.x, y = f.Position.y, w = f.Size.x, h = f.Size.y }
+end
+
+local function want(w: number, h: number): any
+	return (Touch :: any).buttons(Hud.layout(w, h, { top = 0, bottom = 0, left = 0, right = 0 }))
+end
+
+-- the text of every TextLabel under a frame
+local function captions(f: Inst): { string }
+	local out = {}
+	for _, c in f:GetChildren() do
+		if c.ClassName == "TextLabel" then
+			table.insert(out, c.Text)
+		end
+	end
+	return out
+end
+
+return t.spec("f0110 touch adapters", function(it)
+	it("a tap on the fire button sends the aimed shot, the same intent E sends", function()
+		local aim: Maze.Heading? = "N"
+		local w = controls(fixed(BUTTONS), function(): Maze.Heading?
+			return aim
+		end)
+		tap(w, 610, 310)
+		aim = "W"
+		tap(w, 669, 369)
+		w.press("E", "Begin")
+		t.expect(w.fired).toEqual({ Blaster.intent("N"), Blaster.intent("W"), Blaster.intent("W") })
+		t.expect(w.looks).toEqual({})
+		t.expect(w.snaps).toBe(0)
+	end)
+
+	it("a fire tap sends nothing with no aim yet, or before Controls.keys", function()
+		local w = controls(fixed(BUTTONS), function(): Maze.Heading?
+			return nil
+		end)
+		tap(w, 610, 310)
+		t.expect(w.fired).toEqual({})
+		local bare = controls(fixed(BUTTONS), nil)
+		tap(bare, 610, 310)
+		t.expect(bare.fired).toEqual({})
+	end)
+
+	it("a tap on the hop button sends Hop.INTENT, the same intent Space sends", function()
+		local w = controls(fixed(BUTTONS), nil)
+		tap(w, 710, 330)
+		w.press("Space", "Begin")
+		t.expect(w.fired).toEqual({ Hop.INTENT, Hop.INTENT })
+		t.expect(w.snaps).toBe(0)
+	end)
+
+	it("a finger held on a button and dragged away sends nothing more and never looks", function()
+		local w = controls(fixed(BUTTONS), function(): Maze.Heading?
+			return "E"
+		end)
+		local f = w.touch()
+		w.began.fire(at(f, 610, 310), false)
+		w.changed.fire(at(f, 450, 100), false)
+		w.ended.fire(at(f, 100, 100), false)
+		t.expect(w.fired).toEqual({ Blaster.intent("E") })
+		t.expect(w.looks).toEqual({})
+	end)
+
+	it("the rectangles come from the called hook on each touch, and none means the halves", function()
+		local current: Buttons? = nil
+		local w = controls(function(): Buttons?
+			return current
+		end, function(): Maze.Heading?
+			return "S"
+		end)
+		local f = w.touch()
+		w.began.fire(at(f, 610, 310), false) -- before the first layout: a look finger
+		w.changed.fire(at(f, 640, 310), false)
+		w.ended.fire(at(f, 640, 310), false)
+		t.expect(w.looks).toEqual({ { 30, 0 } })
+		current = BUTTONS
+		tap(w, 610, 310)
+		current = {
+			snap = BUTTONS.snap,
+			fire = { x = 100, y = 100, w = 70, h = 70 },
+			hop = { x = 200, y = 100, w = 70, h = 70 },
+		}
+		tap(w, 610, 310) -- the fire button moved away: a look tap, nothing sent
+		tap(w, 120, 120) -- on the left half, where it is now
+		tap(w, 220, 120)
+		t.expect(w.fired).toEqual({ Blaster.intent("S"), Blaster.intent("S"), Hop.INTENT })
+		local none = controls(nil, function(): Maze.Heading?
+			return "S"
+		end)
+		tap(none, 610, 310)
+		t.expect(none.fired).toEqual({})
+	end)
+
+	it(
+		"HudView draws a non-active Fire and Hop frame at Touch.buttons' rectangles on a touch screen",
+		function()
+			local s = hudView(true)
+			t.expect(s.hud.buttons()).toBe(nil) -- before the first layout
+			s.render()
+			local b = want(1000, 600)
+			t.expect(s.hud.buttons()).toEqual(b)
+			for name, r in { Fire = b.fire, Hop = b.hop } do
+				local f = s.frame(name)
+				t.expect(rectOf(f)).toEqual(r)
+				t.expect(f.Active).toBe(false)
+				t.expect(f.Visible).toBe(true)
+			end
+			t.expect(captions(s.frame("Fire"))).toEqual({ "FIRE" })
+			t.expect(captions(s.frame("Hop"))).toEqual({ "JUMP" })
+		end
+	)
+
+	it("HudView re-lays the buttons when the screen changes", function()
+		local s = hudView(true)
+		s.render()
+		s.resize(390, 844)
+		s.render()
+		local b = want(390, 844)
+		t.expect(s.hud.buttons()).toEqual(b)
+		t.expect(rectOf(s.frame("Fire"))).toEqual(b.fire)
+		t.expect(rectOf(s.frame("Hop"))).toEqual(b.hop)
+	end)
+
+	it("a screen without touch does not show the buttons", function()
+		local s = hudView(false)
+		s.render()
+		t.expect(s.frame("Fire").Visible).toBe(false)
+		t.expect(s.frame("Hop").Visible).toBe(false)
+	end)
+
+	it("HudView sends nothing, and Main hands HudView.buttons to Controls.start", function()
+		local hud = source("HudView")
+		t.expect((string.find(hud, "FireServer", 1, true))).toBe(nil)
+		t.expect((string.find(hud, "Remotes", 1, true))).toBe(nil)
+		local main = source("Main")
+		local call = string.match(main, "Controls%.start%b()") or ""
+		t.expect(string.find(call, "HudView%.buttons%s*%)$") ~= nil).toBe(true)
+	end)
+end)
