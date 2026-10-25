@@ -42,6 +42,19 @@ max_tokens = 5000
 max_calls = 30
 max_minutes = 60
 
+[zz-review.claude]
+model = "claude-opus-5-5"
+rank = 4
+runtime = "claude-cli"
+max_tokens = 5000
+
+[zz-review.grok]
+model = "grok-4.7"
+effort = "xhigh"
+rank = 4
+runtime = "grok-cli"
+max_tokens = 5000
+
 [z-ready.claude]
 model = "nobody"
 rank = 1
@@ -69,6 +82,38 @@ local function count(text: string, needle: string): number
 end
 local function zn(args: { string }, extra: { [string]: string }?): fixture.Result
 	return fakecli.zn(h, args, extra)
+end
+-- `./zn` from a worktree of the fixture (a review runs in its author's worktree, never the main checkout)
+local function znIn(dir: string, args: { string }): fixture.Result
+	local argv = { "scripts/tracker.sh" }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	return fixture.exec(dir, "bash", argv, {
+		env = {
+			FAKE_DIR = h.fakes,
+			PATH = `{h.bin}:{process.env.PATH}`,
+			ZN_AGENT_TOKEN_FILE = h.token,
+			ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
+			GH_TOKEN = "the-users-token",
+		},
+	})
+end
+-- a fake reviewer: three seconds of work (so its wall minutes are over 0), then the review file
+local function reviewer(file: string)
+	fs.writeFile(
+		`{h.fakes}/script.sh`,
+		`sleep 3; d=$(./zn find "$id"); printf '# Review 001\n\nVerdict: approve\n' > "$d/{file}"\n`
+	)
+end
+local function recordLines(out: string): { string }
+	local lines = {}
+	for line in string.gmatch(out, "[^\n]+") do
+		if string.sub(line, 1, 8) == "record: " then
+			table.insert(lines, line)
+		end
+	end
+	return lines
 end
 local function log(): string
 	return fakecli.log(h)
@@ -203,6 +248,66 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		end
 	)
 
+	-- the user's G13 reading, 2026-10-25: "Yes, reviewers keep minutes": no skill records a reviewer's minutes, so a
+	-- review's rows carry its wall minutes (an author's rows record 0)
+	it(
+		"a code review prints one record: line for its author's commit, with the review's wall minutes, tokens and model, and writes no row",
+		function()
+			fakecli.clear(h)
+			mode("claude.zz-review", "script")
+			reviewer("review-001.md")
+			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+			local before = #(fakecli.rows(h, "c0010") or {})
+			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+			if not r.ok then
+				error(r.stdout .. r.stderr)
+			end
+			local lines = recordLines(r.stdout)
+			t.expect(#lines).toBe(1)
+			local minutes = tonumber(
+				string.match(
+					lines[1],
+					'^record: %./zn commit %-m "c0010: review%-001" %-%-phase code%-review %-%-time ([%d%.]+) %-%-tokens 123 %-%-model claude%-opus%-5%-5$'
+				)
+			)
+			t.expect(minutes ~= nil).toBe(true)
+			t.expect((minutes :: number) > 0).toBe(true)
+			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the author's commit records it, not the dispatcher
+			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
+			-- quota on claude, the review on grok: still one line, the model that wrote the review
+			fakecli.clear(h)
+			mode("claude.zz-review", "quota")
+			mode("grok.zz-review", "script")
+			reviewer("review-001.md")
+			local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+			if not q.ok then
+				error(q.stdout .. q.stderr)
+			end
+			local two = recordLines(q.stdout)
+			t.expect(#two).toBe(1)
+			t.expect(has(two[1], "--model grok-4.7-xhigh")).toBe(true)
+			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
+		end
+	)
+
+	it("a design review writes its own row with its wall minutes, and prints no record: line", function()
+		fakecli.clear(h)
+		mode("claude.zz-review", "script")
+		reviewer("design-review-001.md")
+		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		t.expect(#recordLines(r.stdout)).toBe(0)
+		local row = lastRow("c0010")
+		t.expect(row.subject).toBe("design-review-001")
+		t.expect(row.phase).toBe("design-review")
+		t.expect(row.model).toBe("claude-opus-5-5")
+		t.expect(row.minutes > 0).toBe(true)
+		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+	end)
+
 	it("with no agent credential, no CLI starts", function()
 		fakecli.clear(h)
 		local r = zn({ "dispatch", "z-design", "c0010" }, { ZN_AGENT_TOKEN_FILE = `{h.f.base}/none` })
@@ -224,6 +329,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 				error(r.stdout .. r.stderr)
 			end
 			t.expect(has(r.stderr, "claude is not installed")).toBe(true)
+			t.expect(has(r.stderr, "no CLI in the order")).toBe(false)
 			t.expect(count(log(), "grok step=z-design mode=ok")).toBe(1)
 			local s = state("c0030")
 			t.expect(s.outcome).toBe("ok")
@@ -237,6 +343,27 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(has(none.stderr, "no CLI in the order is installed")).toBe(true)
 			t.expect(log()).toBe("")
 			t.expect(state("c0030").outcome).toBe("failed")
+		end
+	)
+
+	it(
+		"a CLI on quota and the rest not installed: the outcome is quota and the message names both",
+		function()
+			fakecli.clear(h)
+			mode("claude", "quota")
+			fs.move(`{h.bin}/grok`, `{h.bin}/grok.off`)
+			fs.move(`{h.bin}/agent`, `{h.bin}/agent.off`)
+			local r = zn({ "dispatch", "z-design", "c0030" }, { PATH = `{h.bin}:/usr/bin:/bin` })
+			fs.move(`{h.bin}/grok.off`, `{h.bin}/grok`)
+			fs.move(`{h.bin}/agent.off`, `{h.bin}/agent`)
+			t.expect(r.ok).toBe(false)
+			t.expect(state("c0030").outcome).toBe("quota")
+			t.expect(
+				has(r.stderr, "no CLI in the order could run: claude on quota; grok, agent not installed")
+			)
+				.toBe(true)
+			t.expect(has(r.stderr, "every CLI in the order failed on quota")).toBe(false)
+			t.expect(has(r.stderr, "no CLI in the order is installed")).toBe(false)
 		end
 	)
 
