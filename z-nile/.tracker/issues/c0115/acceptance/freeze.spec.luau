@@ -83,15 +83,33 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 				{ ["z-nile/.tracker/issues/NOTES-c0115.md"] = "prep-c0115\n" },
 				"prep (#1)"
 			)
+			-- the base the implementation is built on, landed on main as a squash too: its commits sit under the move,
+			-- as c0120's do on the real branch (014 F1)
+			branchOff("base-work", "main", "pickman/.tracker/issues/active/base.md")
+			push("base-work")
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/.tracker/issues/active/base.md"] = "base-work\n" },
+				"base (#2)"
+			)
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
 			branchOff(
 				"impl-c0115",
-				"main",
+				"origin/base-work",
 				"z-nile/skills/zz-x/SKILL.md",
 				"c0115: move the skills (renames only)"
 			)
+			fixture.git(f.main, { "checkout", "-q", "impl-c0115" })
+			fs.writeFile(`{f.main}/z-nile/skills/zz-x/after.md`, "after\n")
+			fixture.git(f.main, { "add", "-A" })
+			fixture.git(f.main, { "commit", "-qm", "c0115: the edits" })
+			fixture.git(f.main, { "checkout", "-q", "main" })
 			push("impl-c0115")
 			branchOff("on-the-impl", "origin/impl-c0115", "z-nile/skills/zz-y/SKILL.md")
+			-- cut at the move commit, below the branch's tip: it holds the move (a pin on the tip would miss it)
+			branchOff("at-the-move", "origin/impl-c0115~1", "z-nile/skills/zz-m/SKILL.md")
+			-- cut from the squashed base under the move: it doesn't hold the move, so it blocks
+			branchOff("below-the-move", "origin/base-work", "z-nile/skills/zz-u/SKILL.md")
 			branchOff("on-the-prep", "origin/prep-c0115", "pickman/skills/pickman-x/SKILL.md")
 			branchOff("impl-c0121", "main", "z-nile/skills/zz-z/SKILL.md")
 			branchOff("proto-c0121", "main", ".claude/skills/zz-w")
@@ -108,6 +126,8 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 			t.expect(has(r.stdout, "branch origin/impl-c0115 ")).toBe(false)
 			t.expect(has(r.stdout, "branch prep-c0115 ")).toBe(false)
 			t.expect(has(r.stderr, "ignored for c0115's freeze: on-the-impl (holds its move)")).toBe(true)
+			t.expect(has(r.stderr, "ignored for c0115's freeze: at-the-move (holds its move)")).toBe(true)
+			t.expect(has(r.stdout, "branch below-the-move changes")).toBe(true)
 			-- built on the prep, whose commit main took as a squash: no history rule for c0115, so it blocks
 			t.expect(has(r.stdout, "branch on-the-prep changes")).toBe(true)
 			t.expect(has(r.stderr, "on-the-prep")).toBe(false)
@@ -120,6 +140,7 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 			t.expect(r.code).toBe(1)
 			drop({
 				"on-the-prep",
+				"below-the-move",
 				"impl-c0115-x",
 				"proto-c0121-copy",
 				"origin/proto-c0121",
@@ -187,8 +208,67 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 		t.expect(has(mixed.stdout, "branch prep-c0116 changes")).toBe(true)
 		t.expect(has(mixed.stdout, "branch impl-c0121 changes")).toBe(true)
 		t.expect(has(mixed.stderr, "ignored")).toBe(false)
-		drop({ "prep-c0116" }, {})
+		-- whole segments only: a sibling that shares the prefix is outside; "./" is the same path; ".." is never inside
+		branchOff("prep-c0117", "main", "z-nile/skillsX/a.md")
+		local sibling = busy({ "z-nile/skillsX" })
+		t.expect(has(sibling.stdout, "branch prep-c0117 changes")).toBe(true)
+		t.expect(has(sibling.stderr, "ignored")).toBe(false)
+		local dotted = busy({ "./z-nile/skills" })
+		t.expect(has(dotted.stdout, "prep-c0116")).toBe(false)
+		t.expect(has(dotted.stderr, "ignored for c0115's freeze: prep-c0116 (stacked on its prep)"))
+			.toBe(true)
+		local up = busy({ "z-nile/skills/../skillsX" })
+		t.expect(has(up.stderr, "ignored")).toBe(false)
+		drop({ "prep-c0116", "prep-c0117" }, {})
 	end)
+
+	it(
+		"the move commit is read by subject, from the branch's own commits, and only when it is the one",
+		function()
+			local before = (
+				string.gsub(fixture.git(f.main, { "rev-parse", "origin/impl-c0115" }), "%s+$", "")
+			)
+			-- a main commit whose body carries the subject's words, and one whose subject does, merged into the
+			-- implementation: neither is the branch's own, so the move commit stays the one pinned
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/.tracker/issues/active/body.md"] = "x\n" },
+				"chore\n\nc0115: move the skills, later"
+			)
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/.tracker/issues/active/subject.md"] = "x\n" },
+				"c0115: move the skills (a look-alike on main)"
+			)
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			fixture.git(f.main, { "checkout", "-q", "impl-c0115" })
+			fixture.git(f.main, { "merge", "-q", "--no-edit", "main" })
+			fixture.git(f.main, { "checkout", "-q", "main" })
+			push("impl-c0115")
+			branchOff("rogue-on-main", "main", "z-nile/skills/zz-r/SKILL.md")
+			local r = busy(PATHS)
+			t.expect(has(r.stdout, "branch rogue-on-main changes")).toBe(true)
+			t.expect(has(r.stderr, "ignored for c0115's freeze: on-the-impl (holds its move)")).toBe(true)
+			-- a second commit with the subject: no single move commit, so nothing is pinned
+			fixture.git(f.main, { "checkout", "-q", "impl-c0115" })
+			fs.writeFile(`{f.main}/z-nile/skills/zz-x/again.md`, "again\n")
+			fixture.git(f.main, { "add", "-A" })
+			fixture.git(f.main, { "commit", "-qm", "c0115: move the skills, again" })
+			fixture.git(f.main, { "checkout", "-q", "main" })
+			push("impl-c0115")
+			-- cut above both: it holds either one, yet neither is the move commit
+			branchOff("above-both", "origin/impl-c0115", "z-nile/skills/zz-v/SKILL.md")
+			local two = busy(PATHS)
+			t.expect(has(two.stdout, "branch on-the-impl changes")).toBe(true)
+			t.expect(has(two.stdout, "branch above-both changes")).toBe(true)
+			t.expect(has(two.stderr, "holds its move")).toBe(false)
+			-- back as before
+			fixture.git(f.main, { "branch", "-q", "-f", "impl-c0115", before })
+			fixture.git(f.main, { "push", "-q", "-f", "origin", "impl-c0115" })
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			drop({ "rogue-on-main", "above-both" }, {})
+		end
+	)
 
 	it("nothing is exempt without paths, nor once origin/main loses the mark", function()
 		local all = busy({})
@@ -203,7 +283,16 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 		t.expect(has(landed.stdout, "branch on-the-impl changes")).toBe(true)
 		t.expect(has(landed.stdout, "branch proto-c0121 changes")).toBe(true)
 		t.expect(has(landed.stderr, "ignored")).toBe(false)
-		drop({ "prep-c0115", "impl-c0115", "on-the-impl", "impl-c0121", "proto-c0121" }, {
+		drop({
+			"prep-c0115",
+			"impl-c0115",
+			"on-the-impl",
+			"at-the-move",
+			"base-work",
+			"impl-c0121",
+			"proto-c0121",
+		}, {
+			"base-work",
 			"prep-c0115",
 			"impl-c0115",
 		})

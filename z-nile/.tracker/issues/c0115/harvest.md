@@ -58,3 +58,8 @@
 - design-review-013 F3: one-off: the busy row was c0120's text, rewritten for the general rule
 - design-review-013 F4: one-off: stale text after the rebase (dates, the prototype's role)
 - design-review-013 F5: architecture/item-rules-scoped-to-their-call
+- design-review-014 F1: architecture/history-tests-survive-squash
+- design-review-014 F2: review/sequestration-reference-not-a-ref
+- design-review-014 F3: ticket-prep/new-rules-migrate-existing-work
+- design-review-014 F4: testing/seed-every-enumerated-case
+- design-review-014 F5: one-off: stale text and a split comment after round 013's edits
