@@ -253,4 +253,102 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
 		t.expect(string.find(named.R0020 or "", "d0099 has no size:", 1, true) ~= nil).toBe(true)
 		t.expect(#ops).toBe(2)
 	end)
+
+	it(
+		"hashes a member's design without its status: and raft: lines, and changes with anything else",
+		function()
+			local doc =
+				"---\nid: c0001\nraft: \nsize: 100\nstatus: prepared-a-b-c\n---\n\n# c0001\n\n## Design\nOne.\n"
+			local h = raftplan.designHash(doc)
+			t.expect(string.match(h, "^%x+$") ~= nil and #h == 12).toBe(true)
+			local moved = (string.gsub(doc, "status: prepared%-a%-b%-c", "status: active-d-e-f"))
+			moved = (string.gsub(moved, "raft: \n", "raft: R0010\n"))
+			t.expect(raftplan.designHash(moved)).toBe(h)
+			t.expect(raftplan.designHash(doc .. "Two.\n") ~= h).toBe(true)
+			t.expect(raftplan.designHash((string.gsub(doc, "size: 100", "size: 200"))) ~= h).toBe(true)
+		end
+	)
+
+	it("reads and writes the grouped: record, refusing a malformed entry and an id twice", function()
+		local map, problem = raftplan.parseGrouped("[c0002@bbbbbbbbbbbb, c0001@aaaaaaaaaaaa]")
+		t.expect(problem).toBe(nil)
+		t.expect(map).toEqual({ c0001 = "aaaaaaaaaaaa", c0002 = "bbbbbbbbbbbb" })
+		t.expect(raftplan.renderGrouped(map)).toBe("[c0001@aaaaaaaaaaaa, c0002@bbbbbbbbbbbb]")
+		t.expect(select(2, raftplan.parseGrouped("[c0001@aaaa, c0001@bbbb]")) ~= nil).toBe(true)
+		t.expect(select(2, raftplan.parseGrouped("[c0001]")) ~= nil).toBe(true)
+		t.expect(select(2, raftplan.parseGrouped("c0001@aaaa")) ~= nil).toBe(true)
+		t.expect((raftplan.parseGrouped(nil))).toEqual({})
+	end)
+
+	it(
+		"records a member over its design files: document, check.sh, acceptance specs, reviews and harvest",
+		function()
+			local base: { [string]: string } = {
+				["c0001.md"] = "---\nid: c0001\nraft: \nstatus: prepared-a-b-c\n---\n\n# c0001\n",
+				["check.sh"] = 'check "AC1: x" true\n',
+				["acceptance/a.spec.luau"] = "--!strict\nreturn nil\n",
+				["design-review-001.md"] = "# Review 001\n",
+			}
+			local function with(rel: string, text: string?): { [string]: string }
+				local c = table.clone(base)
+				c[rel] = text :: any
+				return c
+			end
+			local h = raftplan.recordHash("c0001", base)
+			for _, rel in { "check.sh", "acceptance/a.spec.luau", "design-review-001.md" } do
+				t.expect(raftplan.recordHash("c0001", with(rel, base[rel] .. "more\n")) ~= h).toBe(true)
+			end
+			for _, rel in { "acceptance/b.spec.luau", "design-refute-001.md", "harvest.md" } do
+				t.expect(raftplan.recordHash("c0001", with(rel, "new\n")) ~= h).toBe(true)
+			end
+			-- files that change for other reasons leave it alone
+			for _, rel in { "spend.md", "prompt.md", "experiments/e1.luau" } do
+				t.expect(raftplan.recordHash("c0001", with(rel, "anything\n"))).toBe(h)
+			end
+			local moved =
+				with("c0001.md", "---\nid: c0001\nraft: R0010\nstatus: active-d-e-f\n---\n\n# c0001\n")
+			t.expect(raftplan.recordHash("c0001", moved)).toBe(h)
+			t.expect(raftplan.isDesignFile("c0001.md", "c0001")).toBe(true)
+			t.expect(raftplan.isDesignFile("c0002.md", "c0001")).toBe(false)
+		end
+	)
+
+	it(
+		"builds the commands with each new raft's project, and refuses the plan if a root has no project",
+		function()
+			local ops: { raftplan.Op } = {
+				{
+					kind = "fold",
+					raft = "R0030",
+					type = "defect",
+					root = P,
+					issues = { "d0010", "d0020" },
+					single = false,
+				},
+				{ kind = "new", type = "chore", root = Z, issues = { "c0080", "c0090" }, single = false },
+				{ kind = "new", type = "chore", root = P, issues = { "c0040" }, single = true },
+			}
+			local slugs = { c0080 = "eighty", c0040 = "forty" }
+			local names: { [string]: string } = { [Z] = "z-nile", [P] = "pickman" }
+			local runs, why = raftplan.commands(ops, slugs, function(root: string): string?
+				return names[root]
+			end)
+			t.expect(why).toBe(nil)
+			t.expect(runs).toEqual({
+				{ "fold", "R0030", "d0010", "d0020" },
+				{ "new", "raft", "chore", "eighty", "c0080", "c0090", "--project", "z-nile" },
+				{ "new", "raft", "chore", "forty", "c0040", "--single", "--project", "pickman" },
+			})
+			-- design review 006 F1: a root no project holds refuses the whole plan, never a `--project <root>` that
+			-- `new raft` would refuse after the earlier commands had run
+			names[P] = nil
+			local none, err = raftplan.commands(ops, slugs, function(root: string): string?
+				return names[root]
+			end)
+			t.expect(none).toBe(nil)
+			t.expect(err).toBe(
+				"pickman/.tracker is no project's root in z-nile/projects.toml: raft-plan prints and runs nothing"
+			)
+		end
+	)
 end)

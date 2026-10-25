@@ -103,31 +103,31 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 	it("sets up a tracker with .models.toml, issues and the fake CLIs", function()
 		h = fakecli.new("c0117-control", {
 			[".models.toml"] = MODELS,
-			["tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
-			["tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
-			["tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
-			["tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
-			["tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
-			["tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
-			["tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
-			["tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
-			["tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
-			["tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
-			["tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
-			["tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
-			["tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
-			["tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
-			["tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
-			["tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
-			["tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 16\nstall_seconds = 6\n",
-			["tracker/issues/c0096/c0096.md"] = string.gsub(
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
+			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
+			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
+			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
+			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
+			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
+			["pickman/.tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
+			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
+			["pickman/.tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
+			["pickman/.tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
+			["pickman/.tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
+			["pickman/.tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
+			["pickman/.tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
+			["pickman/.tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
+			["pickman/.tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
+			["pickman/.tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
+			["pickman/.tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 24\nstall_seconds = 10\n",
+			["pickman/.tracker/issues/c0096/c0096.md"] = string.gsub(
 				trackerfix.stub("c0096", "rafted-thing", "prepared-quiet-copper-falcon"),
 				"design: draft",
 				"design: ready"
 			),
-			["tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
-			["tracker/issues/c0091/check.sh"] = "lune run tests/run -- tracker/issues/c0091/acceptance/a.spec.luau\n",
-			["tracker/issues/c0102/c0102.md"] = issue("c0102", "conc-two"),
+			["pickman/.tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
+			["pickman/.tracker/issues/c0091/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0091/acceptance/a.spec.luau\n",
+			["pickman/.tracker/issues/c0102/c0102.md"] = issue("c0102", "conc-two"),
 		})
 	end)
 
@@ -186,7 +186,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			t.expect(has(l, "gitstatus=0")).toBe(true)
 			t.expect(has(l, "review=0")).toBe(true)
 			local wt = `{h.f.main}/.worktree/prep-second-thing`
-			t.expect(fs.isFile(`{wt}/tracker/issues/c0020/design-review-001.md`)).toBe(true)
+			t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/c0020/design-review-001.md`)).toBe(true)
 			local rows = fakecli.rows(h, "c0020") :: { any }
 			local review: any = nil
 			for _, row in rows do
@@ -219,7 +219,10 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 				error(r.stdout .. r.stderr .. fakecli.log(h))
 			end
 			t.expect(has(fakecli.log(h), "claim=0")).toBe(true)
-			t.expect(string.match(onOrigin("tracker/issues/c0030/c0030.md"), "\nstatus: preparing%-") ~= nil)
+			t.expect(
+				string.match(onOrigin("pickman/.tracker/issues/c0030/c0030.md"), "\nstatus: preparing%-")
+					~= nil
+			)
 				.toBe(true)
 			t.expect(#fakecli.state(h, "c0030").pushed).toBe(1)
 		end
@@ -256,7 +259,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 		-- tracker state pushed by another terminal is vetted without the user
 		trackerfix.elsewhere(
 			h.f,
-			{ ["tracker/issues/c0010/notes.md"] = "notes\n" },
+			{ ["pickman/.tracker/issues/c0010/notes.md"] = "notes\n" },
 			"tracker state elsewhere"
 		)
 		t.expect(zn({ "dispatch", "z-design", "c0010" }).code ~= 5).toBe(true)
@@ -362,14 +365,16 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 	it(
 		"two dispatchers at once never trip each other: another run's honest advance of the watermark is no trip",
 		function()
-			-- review 004 case C: while B's step runs, the user's other terminal publishes tracker state and runs A
+			-- review 004 case C: while B's step runs, the user's other terminal publishes tracker state and runs A (its
+			-- environment is the step's without the step's own variables: the spec's guards stay, so no `env` that clears
+			-- them all, which repo-fence refuses)
 			fakecli.clear(h)
 			mode("claude", "script")
 			local script = [==[if [ "$id" = c0102 ]; then echo "A step ran"; exit 0; fi
 userpath=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/z-nile/bin$' | paste -sd: -)
 G=$ZN_REAL_GIT
-( cd @OTHER@ && $G pull -q origin main && echo note > tracker/issues/c0101/note.md && $G add -A && $G -c user.name=u -c user.email=u@example.invalid commit -qm "other terminal: tracker state" && $G push -q origin HEAD:main; echo otherpush=$? )
-( cd @MAIN@ && env -i HOME="$HOME" PATH="$userpath" FAKE_DIR="$FAKE_DIR" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" ZN_WATERMARK_DIR="@BASE@/watermark" GH_TOKEN=the-users-token TMPDIR="$TMPDIR" bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
+( cd @OTHER@ && $G pull -q origin main && echo note > pickman/.tracker/issues/c0101/note.md && $G add -A && $G -c user.name=u -c user.email=u@example.invalid commit -qm "other terminal: tracker state" && $G push -q origin HEAD:main; echo otherpush=$? )
+( cd @MAIN@ && env -u ZN_DISPATCH -u ZN_HEADLESS -u ZN_DISPATCH_DIR -u ZN_DISPATCH_HOME -u ZN_PUBLISH_BROKER -u ZN_PUBLISH_TOKEN -u ZN_DISPATCHER_PID -u ZN_REAL_GIT -u ZN_REAL_GH -u GITHUB_TOKEN PATH="$userpath" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" ZN_WATERMARK_DIR="@BASE@/watermark" GH_TOKEN=the-users-token bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
 ]==]
 			script = string.gsub(
 				string.gsub(string.gsub(script, "@OTHER@", h.f.other), "@MAIN@", h.f.main),
@@ -396,7 +401,7 @@ G=$ZN_REAL_GIT
 			mode("claude", "script")
 			fs.writeFile(
 				`{h.fakes}/script.sh`,
-				'for i in 1 2 3 4 5; do ./zn new issue c "$id-note-$i" --desc "from $id" > /dev/null 2>&1; echo "published=$?"; done\n'
+				'for i in 1 2 3 4 5; do ./zn new issue c "$id-note-$i" --project pickman --desc "from $id" > /dev/null 2>&1; echo "published=$?"; done\n'
 			)
 			local results: { [string]: fixture.Result } = {}
 			local done = 0
@@ -493,8 +498,8 @@ G=$ZN_REAL_GIT
 	it(
 		"a reviewer silent but within its own limits keeps its author alive past the author's own limit",
 		function()
-			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 6 and
-			-- the reviewer is silent 12 s inside one tool call, within its tool_seconds = 16
+			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 10 and
+			-- the reviewer is silent 18 s inside one tool call, within its tool_seconds = 24
 			fakecli.clear(h)
 			mode("claude.z-design", "waitplain")
 			mode("claude.zz-review", "silenttool")
@@ -517,11 +522,13 @@ G=$ZN_REAL_GIT
 			local function prJson(n: number, head: string): string
 				return `\{"number":{n},"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{head}"\}`
 			end
-			local doc = fixture.git(h.f.origin, { "show", "main:tracker/issues/c0096/c0096.md" })
+			local doc = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/issues/c0096/c0096.md" })
 			local raft = "---\nid: R0050\ntitle: a raft\nissues: [c0096]\n---\n"
 			local own = {
-				["tracker/rafts/R0050/R0050.md"] = raft,
-				["tracker/issues/c0096/c0096.md"] = (string.gsub(doc, "\nraft: \n", "\nraft: R0050\n")),
+				["pickman/.tracker/rafts/R0050/R0050.md"] = raft,
+				["pickman/.tracker/issues/c0096/c0096.md"] = (
+					string.gsub(doc, "\nraft: \n", "\nraft: R0050\n")
+				),
 			}
 			local function with(extra: { [string]: string }): { [string]: string }
 				local out = table.clone(own)
@@ -540,13 +547,15 @@ G=$ZN_REAL_GIT
 			t.expect(code.code).toBe(4)
 			t.expect(has(code.stdout, "src/x.lua")).toBe(true)
 			-- waits: another item's check.sh (c0091 is no member)
-			local check = gate(22, with({ ["tracker/issues/c0091/check.sh"] = "exit 0\n" }))
+			local check = gate(22, with({ ["pickman/.tracker/issues/c0091/check.sh"] = "exit 0\n" }))
 			t.expect(check.code).toBe(4)
 			t.expect(has(check.stdout, "c0091")).toBe(true)
 			-- waits: settings
 			local settings = gate(
 				23,
-				with({ ["tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft", "prep"]\n' })
+				with({
+					["pickman/.tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft", "prep"]\n',
+				})
 			)
 			t.expect(settings.code).toBe(4)
 			t.expect(has(settings.stdout, "configuration")).toBe(true)
@@ -730,7 +739,7 @@ G=$ZN_REAL_GIT
 			local function prJson(n: number, head: string): string
 				return `\{"number":{n},"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{head}"\}`
 			end
-			local head7 = fakecli.pullRequest(h, 7, { ["tracker/issues/c0070/x.md"] = "notes\n" })
+			local head7 = fakecli.pullRequest(h, 7, { ["pickman/.tracker/issues/c0070/x.md"] = "notes\n" })
 			fs.writeFile(`{h.fakes}/pr-prep-seventh-thing.json`, prJson(7, head7))
 			mode("claude", "claim")
 			-- auto_merge = ["prep"] at the root: the dispatcher merges, then sees origin unchanged and stops
@@ -739,7 +748,7 @@ G=$ZN_REAL_GIT
 			t.expect(merged.code).toBe(1)
 			t.expect(has(merged.stdout, "merged but origin/main does not show it")).toBe(true)
 			-- an item-level auto_merge = [] wins: the chain waits at the gate, and nothing is merged
-			local head8 = fakecli.pullRequest(h, 8, { ["tracker/issues/c0080/x.md"] = "notes\n" })
+			local head8 = fakecli.pullRequest(h, 8, { ["pickman/.tracker/issues/c0080/x.md"] = "notes\n" })
 			fs.writeFile(`{h.fakes}/pr-prep-eighth-thing.json`, prJson(8, head8))
 			local waiting = zn({ "dispatch", "c0080" })
 			t.expect(waiting.code).toBe(4)
@@ -749,7 +758,7 @@ G=$ZN_REAL_GIT
 			local head9 = fakecli.pullRequest(
 				h,
 				9,
-				{ ["tracker/issues/c0091/x.md"] = "x\n", ["src/x.lua"] = "return 1\n" }
+				{ ["pickman/.tracker/issues/c0091/x.md"] = "x\n", ["src/x.lua"] = "return 1\n" }
 			)
 			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(9, head9))
 			local carries = zn({ "dispatch", "c0091" })
@@ -757,7 +766,7 @@ G=$ZN_REAL_GIT
 			t.expect(has(carries.stdout, "src/x.lua")).toBe(true)
 			t.expect(has(fakecli.log(h), "realgh pr merge 9")).toBe(false)
 			-- a prep PR that touches another item's documents waits too
-			local other = fakecli.pullRequest(h, 14, { ["tracker/issues/c0070/y.md"] = "y\n" })
+			local other = fakecli.pullRequest(h, 14, { ["pickman/.tracker/issues/c0070/y.md"] = "y\n" })
 			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(14, other))
 			local elsewhere = zn({ "dispatch", "c0091" })
 			t.expect(elsewhere.code).toBe(4)
@@ -769,7 +778,7 @@ G=$ZN_REAL_GIT
 				h,
 				10,
 				{},
-				{ ["src/guard.lua"] = "tracker/issues/c0091/guard.lua" }
+				{ ["src/guard.lua"] = "pickman/.tracker/issues/c0091/guard.lua" }
 			)
 			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(10, head10))
 			local renamed = zn({ "dispatch", "c0091" })
@@ -780,7 +789,7 @@ G=$ZN_REAL_GIT
 			local head11 = fakecli.pullRequest(
 				h,
 				11,
-				{ ["tracker/issues/c0091/.models.toml"] = '[dispatch]\nauto_merge = ["prep"]\n' }
+				{ ["pickman/.tracker/issues/c0091/.models.toml"] = '[dispatch]\nauto_merge = ["prep"]\n' }
 			)
 			fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, prJson(11, head11))
 			t.expect(has(zn({ "dispatch", "c0091" }).stdout, "configuration")).toBe(true)

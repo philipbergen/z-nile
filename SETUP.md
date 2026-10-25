@@ -14,7 +14,7 @@ z-nile/setup.sh
 | GitHub CLI | `brew install gh` | see cli.github.com |
 | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
 | curl, unzip | preinstalled | distro packages |
-| Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`tests/acceptance/c0042/smoke.spec.luau`) |
+| Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
 
 ## What `z-nile/setup.sh` does
 1. **Rokit** (the toolchain manager, v1.2.0): downloads the prebuilt release asset with `gh release download -R rojo-rbx/rokit`, then runs `rokit self-install`.
@@ -30,16 +30,16 @@ z-nile/setup.sh
 ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
 1. Install Roblox Studio.
 2. Install the Rojo plugin with `rojo plugin install`, or from the Studio plugin marketplace.
-3. `rojo serve`, then Connect in Studio. You should see `ReplicatedStorage.Shared`, `ServerScriptService.Server` and `StarterPlayer.StarterPlayerScripts.Client`. Play prints `[pickman] server started` and `[pickman] client started`.
-4. The lobby place: `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
+3. In `pickman/` (the game's home: its Rojo projects are there), `rojo serve`, then Connect in Studio. You should see `ReplicatedStorage.Shared`, `ServerScriptService.Server` and `StarterPlayer.StarterPlayerScripts.Client`. Play prints `[pickman] server started` and `[pickman] client started`.
+4. The lobby place: in `pickman/`, `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
 
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
-- **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/ready-raft` writes it), which is self-contained.
-- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/launch-raft R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+- **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
+- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
-`.github/workflows/check.yml` bootstraps the runner with `z-nile/setup.sh`, the same script as a new host, so every CI run also proves this document on a clean Linux machine. setup.sh ends with `z-nile/check.sh --full`.
+`.github/workflows/check.yml` bootstraps the runner with `z-nile/setup.sh --tools`, the same script as a new host, then runs one project's gate per job (`gate (pickman)`, `gate (z-nile)`, c0120), so every CI run also proves this document on a clean Linux machine. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root. setup.sh ends with `z-nile/check.sh --full`.
 
 - **When it runs**: pushes to main, PRs that are **not drafts** (draft pushes cost no CI), and manual dispatch.
 - **Dispatch from a draft branch**: `z-nile/ci-verify.sh` dispatches CI for the current branch, waits, and exits with the run's result. Push first; it refuses when the local HEAD differs from `origin/<branch>`. Dispatched runs also execute the active raft's sequestered acceptance specs.
@@ -68,5 +68,5 @@ Every PR that is ready for review is published to the private **Pickman (Beta)**
 - Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
 - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
 - The job installs only the tools (`z-nile/setup.sh --tools`); the gate has already run.
-- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta`. That publishes to Beta.
-- After the publish, the job runs the runtime tests (`tests/runtime/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.
+- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta` in `pickman/` (the job runs its steps there too). That publishes to Beta.
+- After the publish, the job runs the runtime tests (`tests/runtime/`, in `pickman/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.

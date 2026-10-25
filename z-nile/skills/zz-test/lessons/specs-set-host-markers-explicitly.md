@@ -1,0 +1,15 @@
+---
+title: A spec sets the host markers it depends on
+when: both
+tags: [specs, ci, jail, portability]
+check: Does any case depend on what the runner sets for this host (`PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS`, `PICKMAN_TEST_FENCE`, the OS)? Does it set each of those itself? Run with every value `PICKMAN_TEST_JAIL` takes (`sandbox-exec`, Linux's `none (…)`, `outer sandbox (…)`), does each case, and every promoted spec on the same code path, still test what its name says?
+---
+A case that inherits the runner's jail markers tests whatever the host it runs on happens to be. It passes where its author ran it, and elsewhere it fails or, worse, passes without reaching the path it names. Prep, mutation runs and the gate all running on one macOS machine never show this; CI's Linux gate does, after the spec is promoted.
+
+**Why:** c0120 design review 003 F1: `homes.spec`'s jail case relied on the runner's `PICKMAN_TEST_JAIL=sandbox-exec`. On Linux (`none (not macOS: …)`) and in an outer sandbox (`outer sandbox (…)`) the home fence took its refusal branch, so the case failed. Its leftover folders then failed two later cases. The symlink case's "in the jail" run never reached the marker path there at all, so the mutant it was meant to kill would survive on CI.
+
+**How to apply:** give every run that depends on a host marker an explicit environment with all of them, plus an explicit no-marker run beside it. Stand in for the host's protection with something the fixture controls (`chmod 555` for the jail), and fail loudly when the stand-in doesn't hold (root ignores `chmod`). Don't skip the case off the host, which leaves it untested on CI. Then run the spec, and its mutants, with each value the runner can set. A temporary relabel of the run is enough when the real host isn't at hand. Record each run in the Verification log.
+
+**"Every value" covers every spec on the changed path.** Run under each label not only the issue's own specs but every promoted spec that exercises the code path whose host dependence changed. c0120 design review 004 F1: the home fence's specs passed under all three labels, but c0034's list mode, the waiver's named regression case, refused under the outer-sandbox label. That exposed an unwritten requirement on outer sandboxes. Check: which promoted specs reach this code path, and did each one run under every label?
+
+**A spec run's own markers count as host markers.** c0120 code review 003 F2: a fence case looped over `specs` and `checks` modes, but it ran inside a spec run, which exports `PICKMAN_FENCE_SPECS=1`, and the fence turns checks mode into specs mode. Both iterations tested specs mode. Set or unset every marker the code under test reads, and assert the mode the run actually took. Likewise a guard line that real git can't reach (an empty successful answer) is reached with a stub `git` on `PATH` in a fixture shell, so it gets a case, not "reasoned".

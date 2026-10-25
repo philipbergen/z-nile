@@ -40,44 +40,47 @@ local function onOrigin(path: string): string?
 end
 
 local EXPECTED = {
-	"./zn new raft feature f0060 f0060 f0070",
+	"./zn new raft feature f0060 f0060 f0070 --project pickman",
 	"./zn fold R0030 d0010 d0020",
-	"./zn new raft chore c0040 c0040 --single",
-	"./zn new raft chore c0100 c0100",
-	"./zn new raft chore c0080 c0080 c0090",
+	"./zn new raft chore c0040 c0040 --single --project pickman",
+	"./zn new raft chore c0100 c0100 --project pickman",
+	"./zn new raft chore c0080 c0080 c0090 --project z-nile",
 	"skip c0050: no size: (z-design records its estimate of changed lines)",
 }
 
 return t.spec("c0116 raft-plan prints z-raft's plan as commands, and --apply runs them", function(it)
 	it("sets up a backlog that exercises every rule the plan reads from the documents", function()
 		local seed: { [string]: string } = {
-			[".gitignore"] = fs.readFile(".gitignore"),
-			["tracker/architecture.md"] = "# Architecture\n",
+			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
+			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 		}
 		local function add(path: string, text: string)
 			seed[path] = text
 			seed[string.gsub(path, "/[^/]+$", "/check.sh")] = CHECK
 		end
-		add("tracker/issues/d0010/d0010.md", issue("d0010", "", "size: 200\n"))
-		add("tracker/issues/d0020/d0020.md", issue("d0020", "", "size: 200\n"))
-		add("tracker/issues/d0031/d0031.md", issue("d0031", "R0030", "size: 1000\n"))
-		add("tracker/rafts/R0030/R0030.md", raftDoc("R0030", "defect", "d0031"))
+		add("pickman/.tracker/issues/d0010/d0010.md", issue("d0010", "", "size: 200\n"))
+		add("pickman/.tracker/issues/d0020/d0020.md", issue("d0020", "", "size: 200\n"))
+		add("pickman/.tracker/issues/d0031/d0031.md", issue("d0031", "R0030", "size: 1000\n"))
+		add("pickman/.tracker/rafts/R0030/R0030.md", raftDoc("R0030", "defect", "d0031"))
 		-- a single raft and a raft being prepared take nothing
-		add("tracker/issues/d0032/d0032.md", issue("d0032", "R0025", "size: 10\n"))
-		add("tracker/rafts/R0025/R0025.md", raftDoc("R0025", "defect", "d0032", true))
-		add("tracker/issues/c0040/c0040.md", issue("c0040", "", "size: 100\nsolo: true\n"))
-		add("tracker/issues/c0050/c0050.md", issue("c0050", "", ""))
-		add("tracker/issues/f0060/f0060.md", issue("f0060", "", "size: 100\n", { "pickman/src/Maze" }))
+		add("pickman/.tracker/issues/d0032/d0032.md", issue("d0032", "R0025", "size: 10\n"))
+		add("pickman/.tracker/rafts/R0025/R0025.md", raftDoc("R0025", "defect", "d0032", true))
+		add("pickman/.tracker/issues/c0040/c0040.md", issue("c0040", "", "size: 100\nsolo: true\n"))
+		add("pickman/.tracker/issues/c0050/c0050.md", issue("c0050", "", ""))
 		add(
-			"tracker/issues/f0070/f0070.md",
+			"pickman/.tracker/issues/f0060/f0060.md",
+			issue("f0060", "", "size: 100\n", { "pickman/src/Maze" })
+		)
+		add(
+			"pickman/.tracker/issues/f0070/f0070.md",
 			issue("f0070", "", "size: 100\n", { "pickman/src/Maze/grid.luau" })
 		)
 		add("z-nile/.tracker/issues/c0080/c0080.md", issue("c0080", "", "size: 100\n"))
 		add("z-nile/.tracker/issues/c0090/c0090.md", issue("c0090", "", "size: 100\n"))
-		add("tracker/issues/c0100/c0100.md", issue("c0100", "", "size: 100\n"))
+		add("pickman/.tracker/issues/c0100/c0100.md", issue("c0100", "", "size: 100\n"))
 		-- not candidates: a draft, and a prepared issue that is already in a raft
 		add(
-			"tracker/issues/c0110/c0110.md",
+			"pickman/.tracker/issues/c0110/c0110.md",
 			(string.gsub(issue("c0110", "", "size: 100\n"), "design: ready", "design: draft"))
 		)
 		f = trackerfix.new("c0116-plan-cli", seed)
@@ -111,8 +114,8 @@ return t.spec("c0116 raft-plan prints z-raft's plan as commands, and --apply run
 		local function raftOf(path: string): string?
 			return string.match(fs.readFile(`{W}/{path}`), "\nraft: (%S*)\n")
 		end
-		t.expect(raftOf("tracker/issues/f0060/f0060.md") ~= "").toBe(true) -- the first command ran
-		t.expect(raftOf("tracker/issues/c0040/c0040.md")).toBe("") -- the commands after the refusal did not
+		t.expect(raftOf("pickman/.tracker/issues/f0060/f0060.md") ~= "").toBe(true) -- the first command ran
+		t.expect(raftOf("pickman/.tracker/issues/c0040/c0040.md")).toBe("") -- the commands after the refusal did not
 		trOk(V, { "release", "R0030", "--force" })
 		trOk(W, { "sync" }) -- raft-plan reads this tree: sync it after the give-back
 	end)
@@ -122,20 +125,25 @@ return t.spec("c0116 raft-plan prints z-raft's plan as commands, and --apply run
 		function()
 			trOk(W, { "raft-plan", "--apply" })
 			t.expect(
-				string.match(onOrigin("tracker/rafts/R0030/R0030.md") or "", "\nstatus: preparing%-") ~= nil
-			)
-				.toBe(true)
+				string.match(onOrigin("pickman/.tracker/rafts/R0030/R0030.md") or "", "\nstatus: preparing%-")
+					~= nil
+			).toBe(true)
 			local function raftOf(path: string): string?
 				return string.match(fs.readFile(`{W}/{path}`), "\nraft: (%S*)\n")
 			end
-			t.expect(raftOf("tracker/issues/d0010/d0010.md")).toBe("R0030")
-			t.expect(raftOf("tracker/issues/f0060/f0060.md")).toBe(raftOf("tracker/issues/f0070/f0070.md"))
+			t.expect(raftOf("pickman/.tracker/issues/d0010/d0010.md")).toBe("R0030")
+			t.expect(raftOf("pickman/.tracker/issues/f0060/f0060.md"))
+				.toBe(raftOf("pickman/.tracker/issues/f0070/f0070.md"))
 			t.expect(raftOf("z-nile/.tracker/issues/c0080/c0080.md"))
 				.toBe(raftOf("z-nile/.tracker/issues/c0090/c0090.md"))
-			local solo = raftOf("tracker/issues/c0040/c0040.md") :: string
+			local solo = raftOf("pickman/.tracker/issues/c0040/c0040.md") :: string
 			t.expect(
-				string.find(fs.readFile(`{W}/tracker/rafts/{solo}/{solo}.md`), "\nsingle: true\n", 1, true)
-					~= nil
+				string.find(
+					fs.readFile(`{W}/pickman/.tracker/rafts/{solo}/{solo}.md`),
+					"\nsingle: true\n",
+					1,
+					true
+				) ~= nil
 			).toBe(true)
 			t.expect(fixture.git(W, { "status", "--porcelain" })).toBe("")
 			t.expect(trOk(W, { "raft-plan" })).toBe(EXPECTED[6])
@@ -145,7 +153,7 @@ return t.spec("c0116 raft-plan prints z-raft's plan as commands, and --apply run
 	it("says so when there is nothing to raft", function()
 		f = trackerfix.new(
 			"c0116-plan-none",
-			{ ["tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010", "size: 5\n") }
+			{ ["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "R0010", "size: 5\n") }
 		)
 		t.expect(trOk(f.main, { "raft-plan" }))
 			.toBe("raft-plan: nothing to raft (no prepared issue without a raft)")

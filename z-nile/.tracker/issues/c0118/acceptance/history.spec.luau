@@ -20,8 +20,9 @@ local t = require("@tests/lib/t")
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local repo = `{root}/.cache/c0118-history`
+-- fixtures live under the home's .cache, where the spec runs (the jail refuses the checkout top's when they differ)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local repo = `{here}/.cache/c0118-history`
 local ROOTS = { "tracker", "z-nile/.tracker" }
 
 local function doc(id: string, status: string): string

@@ -2,8 +2,8 @@
 # Acceptance checks for c0007. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0007 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0007 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0007"
 
@@ -26,7 +26,7 @@ check "AC1: changed.files lists every kind of change, both paths of a move, noth
   "does not list what changed on the base after" "with no usable base"
 check "AC2: the default base is origin/main when it exists, else main" cases_pass \
   "defaults to main when there is no origin" "defaults to origin/main when it exists"
-check "AC3: scripts/affected uses the module, and the affected specs still pass" bash -c '
+check "AC3: z-nile/affected uses the module, and the affected specs still pass" bash -c '
   lune run tests/run -- tests/tooling/affected.spec.luau &&
   grep -qF "scripts/affected takes its changed files from the module" "'"$spec"'" &&
   lune run tests/run -- "'"$spec"'" 2>&1 | grep -E "^[0-9]+ passed, 0 failed" >/dev/null'

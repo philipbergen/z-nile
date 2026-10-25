@@ -1,23 +1,29 @@
 # pickman
 
-A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`.
+A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects).
 
-**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`) (tracker skill, Worktrees and Landing a change). Start execution with `/launch-raft <R-id>` in a session in the main checkout. Before doing anything, read the skill that applies. The skills hold all the rules.
+**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout. Before doing anything, read the skill that applies. The skills hold all the rules.
 
-**No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (testing skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself.
+**No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout and project home at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (zz-test skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself.
+
+The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills/`); `.claude/skills/<name>` links to each one (`./zn skills`). `z-nile/README.md` is the map: the flow, the five parts and every skill.
 
 | Skill | Read when |
 |---|---|
-| `.claude/skills/tracker/SKILL.md` | creating, moving, committing or finishing tracked work |
-| `.claude/skills/architecture/SKILL.md` | designing or writing anything in `src/` |
-| `.claude/skills/testing/SKILL.md` | writing specs or `check.sh`, running the gate |
-| `.claude/skills/make-issue/SKILL.md` | capturing a new feature, defect or chore |
-| `.claude/skills/ticket-prep/SKILL.md` | grouping issues into a raft and designing it (includes the design review) |
-| `.claude/skills/ready-raft/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
-| `.claude/skills/stop-raft/SKILL.md` | undoing ready-raft or aborting a raft |
-| `.claude/skills/launch-raft/SKILL.md` | starting execution of a readied raft |
-| `.claude/skills/execute-raft/SKILL.md` | implementing a raft: one branch, one PR |
-| `.claude/skills/review/SKILL.md` | acting as, or launching, the adversarial reviewer |
-| `.claude/skills/metrics/SKILL.md` | cost and rework reporting |
+| `z-nile/skills/z-ticket/SKILL.md` | capturing a new feature, defect or chore |
+| `z-nile/skills/z-design/SKILL.md` | designing issues and grouping them into a raft (includes the design review) |
+| `z-nile/skills/z-ready/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
+| `z-nile/skills/z-run/SKILL.md` | launching a readied raft from the main checkout (`/z-run R0010`) |
+| `z-nile/skills/z-stop/SKILL.md` | undoing z-ready or aborting a raft |
+| `z-nile/skills/zz-rules/SKILL.md` | creating, moving, committing or finishing tracked work |
+| `z-nile/skills/zz-execute/SKILL.md` | executing a raft, the protocol z-run hands off to: one branch, one PR |
+| `z-nile/skills/zz-review/SKILL.md` | acting as, or launching, the adversarial reviewer |
+| `z-nile/skills/zz-arch/SKILL.md` | designing or writing the tooling: `z-nile/` (its `tests/` included), `zn`, `scripts/` |
+| `z-nile/skills/zz-test/SKILL.md` | writing specs or `check.sh`, running the gate |
+| `z-nile/skills/zz-stats/SKILL.md` | cost and rework reporting |
+| `pickman/skills/pickman-arch/SKILL.md` | designing or writing anything in `pickman/src/` |
+| `pickman/skills/pickman-test/SKILL.md` | writing pickman's game specs (with zz-test) |
 
-Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Every skill reads its own when it starts. ticket-prep and execute-raft harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.
+The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step. The `zz-` and `z-` prefixes are z-nile's: a project's skills are named `<project>-…`.
+
+Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Every skill reads its own when it starts. z-design and zz-execute harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.

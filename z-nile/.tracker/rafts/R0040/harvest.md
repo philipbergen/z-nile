@@ -1,28 +1,28 @@
 # Harvest: R0040
-- design-review-001 F1: testing/seed-every-enumerated-case, testing/no-vacuous-pass
-- design-review-001 F2: testing/pin-call-site-arguments
-- design-review-001 F3: ticket-prep/spec-design-correspondence
-- design-review-001 F4: ticket-prep/no-check-red-between-steps
-- design-review-001 F5: ticket-prep/instructions-runnable-where-they-run
-- design-review-001 F6: ticket-prep/spec-design-correspondence
-- design-review-001 F7: architecture/one-reader-per-format
-- design-review-001 F8: tracker/exhaustive-lists-name-new-things
-- design-review-001 F9: ticket-prep/spec-design-correspondence
-- design-review-002 F1: ticket-prep/rerun-skipped-checks-after-edits
-- design-review-002 F2: testing/seed-every-enumerated-case
-- design-review-002 F3: ticket-prep/instructions-runnable-where-they-run
-- design-review-002 F4: ticket-prep/spec-design-correspondence
-- design-review-002 F5: ticket-prep/restated-rules-move-together
+- design-review-001 F1: zz-test/seed-every-enumerated-case, zz-test/no-vacuous-pass
+- design-review-001 F2: zz-test/pin-call-site-arguments
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: z-design/no-check-red-between-steps
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: zz-arch/one-reader-per-format
+- design-review-001 F8: zz-rules/exhaustive-lists-name-new-things
+- design-review-001 F9: z-design/spec-design-correspondence
+- design-review-002 F1: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F2: zz-test/seed-every-enumerated-case
+- design-review-002 F3: z-design/instructions-runnable-where-they-run
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: z-design/restated-rules-move-together
 - design-review-002 F6: one-off: a needless restriction in one sentence (code-review harvest limited to build lessons); no class of defect beyond careful wording
-- design-review-003 F1: ticket-prep/instructions-runnable-where-they-run
-- design-review-003 F2: ticket-prep/restated-rules-move-together, ticket-prep/spec-design-correspondence
-- design-review-003 F3: ticket-prep/rerun-skipped-checks-after-edits
-- design-review-004 F1: architecture/parsers-refuse-ambiguity
-- design-review-004 F2: ticket-prep/required-steps-on-every-path
-- design-review-004 F3: ticket-prep/spec-design-correspondence
-- design-review-004 F4: ticket-prep/restated-rules-move-together
-- design-review-005 F1: ticket-prep/new-rules-migrate-existing-work
-- design-review-005 F2: ticket-prep/required-steps-on-every-path
-- design-review-005 F3: ticket-prep/restated-rules-move-together
-- design-review-005 F4: ticket-prep/restated-rules-move-together, ticket-prep/spec-design-correspondence
-- design-review-005 F5: architecture/parsers-refuse-ambiguity
+- design-review-003 F1: z-design/instructions-runnable-where-they-run
+- design-review-003 F2: z-design/restated-rules-move-together, z-design/spec-design-correspondence
+- design-review-003 F3: z-design/rerun-skipped-checks-after-edits
+- design-review-004 F1: zz-arch/parsers-refuse-ambiguity
+- design-review-004 F2: z-design/required-steps-on-every-path
+- design-review-004 F3: z-design/spec-design-correspondence
+- design-review-004 F4: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/new-rules-migrate-existing-work
+- design-review-005 F2: z-design/required-steps-on-every-path
+- design-review-005 F3: z-design/restated-rules-move-together
+- design-review-005 F4: z-design/restated-rules-move-together, z-design/spec-design-correspondence
+- design-review-005 F5: zz-arch/parsers-refuse-ambiguity

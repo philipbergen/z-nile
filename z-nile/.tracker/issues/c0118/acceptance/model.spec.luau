@@ -14,19 +14,18 @@ local t = require("@tests/lib/t")
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local repo = `{top}/.cache/c0118-model`
+-- fixtures live under the home's .cache, where the spec runs (the jail refuses the checkout top's when they differ)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local repo = `{here}/.cache/c0118-model`
 
 local REGISTRY = [==[
 [[project]]
 name = "game"
 root = "game/.tracker"
-home = "game"
 
 [[project]]
 name = "tool"
 root = "tool/.tracker"
-home = "."
 ]==]
 
 local function write(path: string, text: string)

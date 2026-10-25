@@ -2,8 +2,8 @@
 # Acceptance checks for c0034. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0034 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0034 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0034"
 
@@ -27,16 +27,16 @@ check "AC2: the issue template's check.sh works before and after promotion" case
   "the issue template's check.sh works before and after"
 check "AC3: every finished item's check.sh finds the repo, and no live one uses the old locator" cases_pass \
   "every finished item's check.sh finds the repo" "no live check.sh or the template uses the locator"
-check "AC4: list mode can't be mistaken for a pass or re-run specs (runner, top-level specs, tracker.sh check)" cases_pass \
+check "AC4: list mode can't be mistaken for a pass or re-run specs (runner, top-level specs, ./zn check)" cases_pass \
   "the spec runner refuses to run specs when AC_LIST is set" \
   "a check.sh that runs a spec at top level only lists in list mode" \
   "tracker.sh check and done refuse to run with AC_LIST set"
 check "AC5: the testing skill shows the new locator and AC_LIST" bash -c '
-  f=.claude/skills/testing/SKILL.md
+  f=skills/zz-test/SKILL.md
   for s in "AC_LIST=1" "[[ -d \$A ]] || A=\"\$PWD/tests/acceptance/" "Work outside \`check\`"; do
     grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }
   done
-  grep -qF "Work outside" tracker/templates/issue/check.sh || { echo "the template lacks the rule about work outside check"; exit 1; }
+  grep -qF "Work outside" templates/issue/check.sh || { echo "the template lacks the rule about work outside check"; exit 1; }
   if grep -qF "git -C \"\$A/..\"" "$f"; then echo "the old locator is still in the example"; exit 1; fi'
 
 finish

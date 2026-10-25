@@ -52,15 +52,17 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 		local f = trackerfix.new("c0116-issue-design", nil)
 		local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-solo" })
 		trackerfix.trOk(f, wt, { "sync" })
-		local id =
-			string.match(trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing" }), "(c%d+)") :: string
+		local id = string.match(
+			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
 		local before = fixture.git(f.origin, { "rev-parse", "main" })
 		trackerfix.trOk(f, wt, { "status", id, "preparing" })
 		local changed = fixture.git(f.origin, { "diff", "--name-only", before, "main" })
-		t.expect(changed).toBe(`tracker/issues/{id}/{id}.md`)
+		t.expect(changed).toBe(`pickman/.tracker/issues/{id}/{id}.md`)
 		t.expect(trackerfix.trOk(f, wt, { "status", id })).toBe("preparing")
 		-- the reviewer's file and the spend are the issue's
-		local dir = `{wt}/tracker/issues/{id}`
+		local dir = `{wt}/pickman/.tracker/issues/{id}`
 		write(`{dir}/design-review-001.md`, REVIEW)
 		local uncovered = trackerfix.tr(f, wt, { "lessons", "--uncovered", id })
 		t.expect(uncovered.ok).toBe(false)
@@ -77,7 +79,7 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			"--note",
 			"design-review-001",
 		})
-		local spent = fixture.git(f.origin, { "show", `main:tracker/issues/{id}/spend.md` })
+		local spent = fixture.git(f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
 		t.expect(has(spent, "| design-review-001 | 0 | 0 | 4.0 |")).toBe(true)
 		-- design ready, then the carried move: nothing published, the local document prepared, raft: still empty
 		local path = `{dir}/{id}.md`
@@ -110,9 +112,9 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			end
 			fs.writeDir(SB)
 			engine.copy(".", SB)
-			fs.copy(".luaurc", `{SB}/.luaurc`)
-			fs.copy("rokit.toml", `{SB}/rokit.toml`)
-			local tr = `{SB}/tracker`
+			fs.copy(`{engine.TOP}/.luaurc`, `{SB}/.luaurc`) -- the checkout's top: specs run from z-nile/ (c0120)
+			fs.copy(`{engine.TOP}/rokit.toml`, `{SB}/rokit.toml`)
+			local tr = `{SB}/pickman/.tracker`
 			-- R0910 (done): its own coherence review, and its members' design reviews in their folders
 			write(`{tr}/rafts/done/R0910/R0910.md`, raftDoc("R0910"))
 			write(`{tr}/rafts/done/R0910/design-review-001.md`, REVIEW)

@@ -44,21 +44,21 @@ check "AC5: scripts/affected --suite and --deps, and check.sh --suite" suites \
 check "AC6: the Stop hook gates whenever the selector picks a spec, harness changes included" suites \
   "the Stop hook gates whenever the selector picks a spec, harness changes included"
 ac7() {
-  local s=.claude/skills/testing/SKILL.md p=.claude/skills/ticket-prep/SKILL.md fact affected override item tok
+  local s=z-nile/skills/zz-test/SKILL.md p=z-nile/skills/z-design/SKILL.md fact affected override item tok
   for fact in "harness suite" "game suite" "--suite" "scripts/lib/suites.luau" "TRACKER_TREE_READERS"; do
-    grep -qF -- "$fact" "$s" || { echo "the testing skill does not mention $fact"; return 1; }
+    grep -qF -- "$fact" "$s" || { echo "the zz-test skill does not mention $fact"; return 1; }
   done
-  if grep -qF "force one" "$s"; then echo "the testing skill still has the old full-run rule"; return 1; fi
+  if grep -qF "force one" "$s"; then echo "the zz-test skill still has the old full-run rule"; return 1; fi
   affected=$(awk '/\*\*Touched modules\*\*/,/\*\*Unknowns/' "$p")
-  grep -qF -- "scripts/affected -- --deps" <<<"$affected" || { echo "ticket-prep's Affected specs step does not use --deps"; return 1; }
-  if grep -qF "scripts/affected -- <paths>" <<<"$affected"; then echo "ticket-prep still pastes the plain selector"; return 1; fi
+  grep -qF -- "scripts/affected -- --deps" <<<"$affected" || { echo "z-design's Affected specs step does not use --deps"; return 1; }
+  if grep -qF "scripts/affected -- <paths>" <<<"$affected"; then echo "z-design still pastes the plain selector"; return 1; fi
   override=$(awk '/\*\*Override check\*\*/,/- \*\*Test plan\*\*/' "$p")
-  grep -qF -- "scripts/affected -- --deps" <<<"$override" || { echo "ticket-prep's Override check does not use --deps"; return 1; }
-  grep -qF -- "carries no list" <<<"$override" || { echo "ticket-prep's Override check dropped carries no list"; return 1; }
-  grep -qF -- "ALL" <<<"$override" || { echo "ticket-prep's Override check dropped ALL"; return 1; }
-  if grep -qF '(any `scripts/` or config path)' "$p"; then echo "ticket-prep still says every scripts/ path prints ALL"; return 1; fi
-  item=$(awk '/4\. \*\*Regressions\*\*/,/^5\. /' .claude/skills/review/SKILL.md)
-  grep -qF -- "scripts/affected -- --deps" <<<"$item" || { echo "the review skill's item 4 does not use --deps"; return 1; }
+  grep -qF -- "scripts/affected -- --deps" <<<"$override" || { echo "z-design's Override check does not use --deps"; return 1; }
+  grep -qF -- "carries no list" <<<"$override" || { echo "z-design's Override check dropped carries no list"; return 1; }
+  grep -qF -- "ALL" <<<"$override" || { echo "z-design's Override check dropped ALL"; return 1; }
+  if grep -qF '(any `scripts/` or config path)' "$p"; then echo "z-design still says every scripts/ path prints ALL"; return 1; fi
+  item=$(awk '/4\. \*\*Regressions\*\*/,/^5\. /' z-nile/skills/zz-review/SKILL.md)
+  grep -qF -- "scripts/affected -- --deps" <<<"$item" || { echo "the zz-review skill's item 4 does not use --deps"; return 1; }
   if grep -qF "scripts/affected -- <path>" <<<"$item"; then echo "review item 4 still pastes the plain selector"; return 1; fi
   for tok in "Overrides:" "scripts/affected" "grep -rlF" "carries no list" "tests/acceptance" "depends_on" "placeholder" "high" "ALL"; do
     grep -qF -- "$tok" <<<"$item" || { echo "review item 4 dropped $tok"; return 1; }
@@ -67,68 +67,68 @@ ac7() {
   grep -qF -- "scripts/affected -- --deps" "$tpl" || { echo "the issue template does not use --deps"; return 1; }
   if grep -qF "scripts/affected -- <" "$tpl"; then echo "the issue template still pastes the plain selector"; return 1; fi
   row=$(grep -F '| `lune run scripts/affected' "$s" || true)
-  [[ -n $row ]] || { echo "the testing skill has no scripts/affected commands row"; return 1; }
+  [[ -n $row ]] || { echo "the zz-test skill has no scripts/affected commands row"; return 1; }
   for mode in --suite --deps --which; do
     grep -qF -- "$mode" <<<"$row" || { echo "the scripts/affected commands row does not list $mode"; return 1; }
   done
-  grep -qF "scripts/lib/suites.luau" .claude/skills/architecture/SKILL.md || {
-    echo "the architecture skill does not say a further place joins the GAME list in scripts/lib/suites.luau"; return 1
+  grep -qF "scripts/lib/suites.luau" pickman/skills/pickman-arch/SKILL.md || {
+    echo "the pickman-arch skill does not say a further place joins the GAME list in scripts/lib/suites.luau"; return 1
   }
   lune run tests/run -- tests/acceptance/c0047/override-check.spec.luau
 }
-check "AC7: the testing skill describes the suites without the old full-run rule; ticket-prep and the review skill use --deps" ac7
+check "AC7: the zz-test skill describes the suites without the old full-run rule; z-design and the zz-review skill use --deps" ac7
 
 ac8() {
   local line full_lines phase0 miss merging sec4 item2 code phase3 phrase
   if grep -nF "check.sh --full" \
-    .claude/skills/execute-raft/SKILL.md .claude/skills/review/SKILL.md \
-    .claude/skills/tracker/SKILL.md .claude/skills/ticket-prep/SKILL.md \
+    z-nile/skills/zz-execute/SKILL.md z-nile/skills/zz-review/SKILL.md \
+    z-nile/skills/zz-rules/SKILL.md z-nile/skills/z-design/SKILL.md \
     tracker/templates/raft/check.sh tracker/templates/prompt.md; then
     echo "a step still runs check.sh --full"
     return 1
   fi
-  if grep -qF "after a local full gate" .claude/skills/tracker/SKILL.md AGENTS.md; then
+  if grep -qF "after a local full gate" z-nile/skills/zz-rules/SKILL.md AGENTS.md; then
     echo "tracker or AGENTS.md still says after a local full gate"; return 1
   fi
-  if grep -qF "for a raft, the full gate" .claude/skills/tracker/SKILL.md; then
+  if grep -qF "for a raft, the full gate" z-nile/skills/zz-rules/SKILL.md; then
     echo "tracker still says for a raft, the full gate"; return 1
   fi
-  full_lines=$(grep -F "check.sh --full" .claude/skills/testing/SKILL.md || true)
-  [[ -n $full_lines ]] || { echo "the testing skill never says where --full remains"; return 1; }
+  full_lines=$(grep -F "check.sh --full" z-nile/skills/zz-test/SKILL.md || true)
+  [[ -n $full_lines ]] || { echo "the zz-test skill never says where --full remains"; return 1; }
   while IFS= read -r line; do
-    grep -qF "on demand" <<<"$line" || { echo "the testing skill names --full outside on-demand use: $line"; return 1; }
+    grep -qF "on demand" <<<"$line" || { echo "the zz-test skill names --full outside on-demand use: $line"; return 1; }
     if grep -Eq "raft|RC0|exit criteria" <<<"$line"; then
-      echo "the testing skill ties --full to the raft gate: $line"; return 1
+      echo "the zz-test skill ties --full to the raft gate: $line"; return 1
     fi
   done <<<"$full_lines"
-  phase0=$(sed -n '/^## Phase 0/,/^## Phase 1/p' .claude/skills/execute-raft/SKILL.md)
+  phase0=$(sed -n '/^## Phase 0/,/^## Phase 1/p' z-nile/skills/zz-execute/SKILL.md)
   grep -qF -- "check.sh --suite" <<<"$phase0" || { echo "Phase 0 does not run the touched suites as its baseline"; return 1; }
   grep -qF -- "--which" <<<"$phase0" || { echo "Phase 0 does not key the baseline on --which"; return 1; }
   miss=$(awk '
     /^- \*\*Graph miss\*\*/ { on=1 }
     on && !/^- \*\*Graph miss\*\*/ && /^- \*\*/ { exit }
     on { print }
-  ' .claude/skills/testing/SKILL.md)
-  [[ -n $miss ]] || { echo "the testing skill has no Graph-miss bullet"; return 1; }
+  ' z-nile/skills/zz-test/SKILL.md)
+  [[ -n $miss ]] || { echo "the zz-test skill has no Graph-miss bullet"; return 1; }
   grep -qF "selector miss" <<<"$miss" || { echo "the Graph-miss rule does not describe a selector miss"; return 1; }
   grep -qF "PR's branch" <<<"$miss" || { echo "the Graph-miss rule does not say to fix it on the PR's branch"; return 1; }
   grep -qF "tracker.sh new issue c" <<<"$miss" || { echo "the Graph-miss rule does not file a chore"; return 1; }
   if grep -qF 'fails under `--full` but wasn'"'"'t selected' <<<"$miss"; then
     echo "the Graph-miss rule still names a local --full run"; return 1
   fi
-  merging=$(sed -n '/^## Merging/,/^## /p' .claude/skills/tracker/SKILL.md)
+  merging=$(sed -n '/^## Merging/,/^## /p' z-nile/skills/zz-rules/SKILL.md)
   for phrase in "selector miss" "lune run scripts/affected" "lune run tests/run --" "review-fix" "git commit" "absent from" "tests/acceptance"; do
     grep -qF -- "$phrase" <<<"$merging" || { echo "Merging is missing: $phrase"; return 1; }
   done
-  sec4=$(sed -n '/^## 4\. /,/^## 5\. /p' .claude/skills/ticket-prep/SKILL.md)
-  grep -qF "scripts/check.sh --affected" <<<"$sec4" || { echo "ticket-prep section 4 does not say RC0 runs --affected"; return 1; }
-  item2=$(awk '/^2\. \*\*Acceptance criteria\*\*/,/^3\. /' .claude/skills/review/SKILL.md)
+  sec4=$(sed -n '/^## 4\. /,/^## 5\. /p' z-nile/skills/z-design/SKILL.md)
+  grep -qF "scripts/check.sh --affected" <<<"$sec4" || { echo "z-design section 4 does not say RC0 runs --affected"; return 1; }
+  item2=$(awk '/^2\. \*\*Acceptance criteria\*\*/,/^3\. /' z-nile/skills/zz-review/SKILL.md)
   grep -qF "RC0" <<<"$item2" || { echo "design item 2 does not mention RC0"; return 1; }
   grep -qF "scripts/check.sh --affected" <<<"$item2" || { echo "design item 2 does not require RC0 to run --affected"; return 1; }
-  code=$(awk '/^2\. \*\*Sequestration\*\*/,/^3\. /' .claude/skills/review/SKILL.md)
+  code=$(awk '/^2\. \*\*Sequestration\*\*/,/^3\. /' z-nile/skills/zz-review/SKILL.md)
   grep -qF "c0080" <<<"$code" || { echo "code item 2 does not name the c0080 exception"; return 1; }
   grep -qF -- "--affected" <<<"$code" || { echo "code item 2 does not name the --affected exception"; return 1; }
-  phase3=$(sed -n '/^## Phase 3/,/^## Phase 4/p' .claude/skills/execute-raft/SKILL.md)
+  phase3=$(sed -n '/^## Phase 3/,/^## Phase 4/p' z-nile/skills/zz-execute/SKILL.md)
   grep -qF "c0080" <<<"$phase3" || { echo "Phase 3 sequestration does not name the c0080 exception"; return 1; }
   grep -qF -- "--affected" <<<"$phase3" || { echo "Phase 3 sequestration does not name the --affected exception"; return 1; }
   if grep -qF "template-drift" <<<"$merging"; then

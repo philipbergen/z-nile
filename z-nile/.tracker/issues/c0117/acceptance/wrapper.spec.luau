@@ -11,6 +11,11 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerstate = require("@znile/engine/trackerstate")
 local wrapper = require("@znile/engine/wrapper")
+-- c0117 runs from its project's home, z-nile/ (c0120): every path of the real tree this spec reads is the
+-- repository's, from its top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -115,8 +120,8 @@ return t.spec("c0117 git and gh wrapper", function(it)
 		function()
 			local seen = 0
 			for _, root in { "z-nile/skills", "pickman/skills" } do
-				for _, name in fs.readDir(root) do
-					local path = `{root}/{name}/SKILL.md`
+				for _, name in fs.readDir(`{TOP}/{root}`) do
+					local path = `{TOP}/{root}/{name}/SKILL.md`
 					if fs.isFile(path) then
 						for cmd, sub in string.gmatch(fs.readFile(path), "`gh ([a-z]+) ([a-z%-]+)") do
 							seen += 1
@@ -173,7 +178,7 @@ return t.spec("c0117 git and gh wrapper", function(it)
 	)
 
 	it("z-nile/bin/git refuses every way of putting the branch's code on main", function()
-		local shim = `{fixture.physical(".")}/z-nile/bin/git`
+		local shim = `{TOP}/z-nile/bin/git`
 		local env = { ZN_REAL_GIT = realGit, ZN_P = "push" }
 		local function moved(): boolean
 			return fixture.git(origin, { "rev-parse", "main" }) ~= start
@@ -212,7 +217,7 @@ return t.spec("c0117 git and gh wrapper", function(it)
 	end)
 
 	it("z-nile/bin/git lets tracker state reach main and a branch reach its own name", function()
-		local shim = `{fixture.physical(".")}/z-nile/bin/git`
+		local shim = `{TOP}/z-nile/bin/git`
 		local env = { ZN_REAL_GIT = realGit }
 		fixture.git(repo, { "checkout", "-q", "-B", "tracker", start })
 		fs.writeFile(`{repo}/z-nile/.tracker/issues/c0010/c0010.md`, "two\n")
@@ -243,7 +248,7 @@ return t.spec("c0117 git and gh wrapper", function(it)
 	it(
 		"z-nile/bin/gh refuses a merge and API writes before the real gh runs, and passes the skills' commands",
 		function()
-			local shim = `{fixture.physical(".")}/z-nile/bin/gh`
+			local shim = `{TOP}/z-nile/bin/gh`
 			local env = { ZN_REAL_GH = `{bin}/gh` }
 			for _, form in
 				{
@@ -261,7 +266,7 @@ return t.spec("c0117 git and gh wrapper", function(it)
 			t.expect(fs.readFile(log)).toBe("gh pr create --draft\n")
 			-- without the dispatcher's environment the shims refuse to guess the real tool
 			t.expect(fixture.exec(repo, shim, { "pr", "list" }, { env = { ZN_REAL_GH = "" } }).code).toBe(2)
-			local gitShim = `{fixture.physical(".")}/z-nile/bin/git`
+			local gitShim = `{TOP}/z-nile/bin/git`
 			t.expect(fixture.exec(repo, gitShim, { "status" }, { env = { ZN_REAL_GIT = "" } }).code).toBe(2)
 		end
 	)
