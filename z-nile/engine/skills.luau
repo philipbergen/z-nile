@@ -324,6 +324,8 @@ skills.RENAMED_PATH = {
 -- The six old names that are only ever skill names, and the five ordinary words that name one only as "<word> skill".
 skills.HYPHENATED = { "make-issue", "ticket-prep", "ready-raft", "launch-raft", "execute-raft", "stop-raft" }
 skills.WORDS = { "review", "tracker", "metrics", "testing", "architecture" }
+-- c0115's freeze mark (G14): a file the move takes away, so the freeze is on while origin/main still holds it.
+skills.MOVE_MARK = ".claude/skills/testing/SKILL.md"
 -- c0115 rename map: end
 
 -- One old lesson id found in prose: its span, its old and new skill, and its slug (its renamed lesson exists).
