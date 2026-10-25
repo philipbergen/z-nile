@@ -1,5 +1,5 @@
 --!strict
--- c0115 AC12's freeze (Guess (pending user) G14, after the user's "exempt the stack" for c0120): while origin/main still
+-- c0115 AC12's freeze (decided with the user, 2026-10-24, G14: "Yes, same rule"): while origin/main still
 -- holds the old testing skill's file (c0115's mark), `./zn busy` with paths ignores c0115's own prep and
 -- implementation, the items listed as stacked on them (prep-c0116 … impl-c0121), any branch whose history holds a
 -- commit of origin/prep-c0115 or origin/impl-c0115 that main doesn't, and the prototypes approved by exact name

@@ -51,7 +51,7 @@ index 869e802..be6fbe1 100644
 +		},
 +	},
 +	{
-+		-- c0115 (Guess (pending user) G14, after the user's "exempt the stack" for c0120): the items stacked on c0115's
++		-- c0115 (decided with the user, 2026-10-24, G14: "Yes, same rule"): the items stacked on c0115's
 +		-- prep or implementation (c0116, c0117, c0118, c0121) touch the skill paths by design; their prototypes are
 +		-- approved by name. Its mark is the old testing skill's file, which the move takes away.
 +		item = "c0115",
