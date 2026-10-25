@@ -62,7 +62,8 @@ return t.spec("c0121 board --serve command", function(it)
 	end)
 
 	it("refuses a port outside 1024 to 65535, or not a number", function()
-		for _, p in { "80", "70000", "abc", "1.5" } do
+		-- values that cannot bind come first: a regression fails on them before it could reach one that binds
+		for _, p in { "70000", "abc", "1.5", "1023" } do
 			local r = zn(REPO, { "board", "--serve", "--port", p })
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.out, `--port {p} is not a port from 1024 to 65535`)).toBe(true)
@@ -71,11 +72,13 @@ return t.spec("c0121 board --serve command", function(it)
 
 	it("refuses -O, --out and --open with --serve, since it writes no file", function()
 		for _, extra in { { "-O" }, { "--out", "x.html" }, { "--open" } } do
-			local args = { "board", "--serve" }
+			local port, h = occupy()
+			local args = { "board", "--serve", "--port", tostring(port) }
 			for _, a in extra do
 				table.insert(args, a)
 			end
 			local r = zn(REPO, args)
+			h:stop()
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.out, "usage: board --serve [--port N]")).toBe(true)
 		end
@@ -117,6 +120,9 @@ return t.spec("c0121 board --serve command", function(it)
 	it("the usage line names board --serve", function()
 		local r = zn(REPO, {})
 		t.expect(has(r.out, "board --serve [--port N]")).toBe(true)
+		-- board's own continuation line still follows board's line
+		local after = string.match(r.out, "board %[%-%-out PATH%] %[%-O%][^\n]*\n([^\n]*)") or ""
+		t.expect(has(after, "open it in the browser")).toBe(true)
 	end)
 
 	it("cleans up", function()

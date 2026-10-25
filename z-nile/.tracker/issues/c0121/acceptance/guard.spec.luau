@@ -175,6 +175,88 @@ return t.spec("c0121 server rules", function(it)
 		t.expect(serve.parsePrs("gh: not logged in")).toBe(nil)
 	end)
 
+	it(
+		"keeps one PR per branch: open or draft over merged or closed, then the highest number, in any order",
+		function()
+			local a =
+				[[{"number":5,"headRefName":"R0020-a","state":"CLOSED","isDraft":false,"url":"u5","statusCheckRollup":[]}]]
+			local b =
+				[[{"number":12,"headRefName":"R0020-a","state":"OPEN","isDraft":false,"url":"u12","statusCheckRollup":[{"conclusion":"FAILURE"}]}]]
+			local c =
+				[[{"number":3,"headRefName":"R0030-b","state":"MERGED","isDraft":false,"url":"u3","statusCheckRollup":[]}]]
+			local d =
+				[[{"number":9,"headRefName":"R0030-b","state":"CLOSED","isDraft":false,"url":"u9","statusCheckRollup":[]}]]
+			local fork =
+				[[{"number":20,"headRefName":"R0020-a","state":"OPEN","isDraft":false,"url":"u20","isCrossRepository":true,"statusCheckRollup":[]}]]
+			for _, list in { `[{b},{a},{c},{d},{fork}]`, `[{fork},{a},{b},{d},{c}]` } do
+				local prs = serve.parsePrs(list) :: any
+				t.expect(prs["R0020-a"].pr.number).toBe(12) -- the open one, over the closed one and the fork's
+				t.expect(prs["R0020-a"].checks.state).toBe("failing")
+				t.expect(prs["R0030-b"].pr.number).toBe(9) -- neither open: the higher number
+			end
+		end
+	)
+
+	it("names a taken port, and says what else failed when the server could not start", function()
+		t.expect(serve.startError("Address already in use (os error 48)", 8417))
+			.toBe("board --serve: port 8417 is taken (already serving?); pick another with --port")
+		t.expect(
+			serve.startError("board --serve: could not read 16 random bytes for the session token", 8417)
+		)
+			.toBe(
+				"board --serve could not start: board --serve: could not read 16 random bytes for the session token"
+			)
+	end)
+
+	it(
+		"the CLI's effects run <top>/zn by argument array, open or xdg-open, and gh pr list with its exact arguments",
+		function()
+			local calls: { any } = {}
+			local answer: any = { ok = true, stdout = "[]", stderr = "" }
+			local function exec(cmd: string, args: { string }, opts: any): any
+				table.insert(calls, { cmd = cmd, args = args, cwd = opts and opts.cwd })
+				return answer
+			end
+			local mac = serve.effects("/top", exec :: any, "macos")
+			mac.runner({ "dispatch", "stop", "R0020" })
+			mac.opener("https://example.invalid/pr/7")
+			t.expect((mac.gh())).toBe("[]")
+			serve.effects("/top", exec :: any, "linux").opener("/w/R0020")
+			t.expect(calls[1])
+				.toEqual({ cmd = "/top/zn", args = { "dispatch", "stop", "R0020" }, cwd = "/top" })
+			t.expect(calls[2]).toEqual({ cmd = "open", args = { "https://example.invalid/pr/7" } })
+			t.expect(calls[3]).toEqual({
+				cmd = "gh",
+				args = {
+					"pr",
+					"list",
+					"--state",
+					"all",
+					"--limit",
+					"200",
+					"--json",
+					"number,headRefName,state,isDraft,url,statusCheckRollup,isCrossRepository",
+				},
+				cwd = "/top",
+			})
+			t.expect(calls[4]).toEqual({ cmd = "xdg-open", args = { "/w/R0020" } })
+			answer = { ok = false, stdout = "", stderr = "gh: not logged in\n" }
+			local out, why = mac.gh()
+			t.expect(out).toBe(nil)
+			t.expect(why).toBe("gh: not logged in")
+			local missing = serve.effects(
+				"/top",
+				function(): any
+					error("no such file")
+				end :: any,
+				"macos"
+			)
+			local out2, why2 = missing.gh()
+			t.expect(out2).toBe(nil)
+			t.expect(why2).toBe("gh is not installed")
+		end
+	)
+
 	it("makes a session token of 32 hex digits, new each time", function()
 		local a, b = serve.newToken(), serve.newToken()
 		t.expect(string.match(a, "^%x+$") ~= nil and #a == 32).toBe(true)

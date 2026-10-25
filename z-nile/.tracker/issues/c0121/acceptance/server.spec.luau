@@ -4,7 +4,11 @@
 -- Origin, OPTIONS, a GET action and an unknown id are refused before any stub runs; stop and retry run ./zn dispatch
 -- with an argument array; open opens the PR; /api/state fills PR and checks from gh at most once per 30 s, survives a
 -- failing gh, reads a launched raft's spend from its worktree, rebuilds the model only when its key changes (or after
--- 60 s), and says when the engine changed; the last case stops the server. Fixture under .cache/c0121-server.
+-- 60 s), and says when the engine changed; a retry refused at once answers with the refusal. gh yields as the real one
+-- does, so a request never waits for it. The real keyOf and engineHash run on a fixture repository (a commit, origin/main,
+-- a worktree's commit, the dispatcher's state; an engine commit against any other). The last case stops the server.
+-- Fixtures under .cache/c0121-server and .cache/c0121-server-repo.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local net = require("@lune/net")
 local process = require("@lune/process")
@@ -19,6 +23,10 @@ end
 local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 local ROOT = `{top}/.cache/c0121-server`
 local TOKEN = "t0k-c0121"
+local REPO = `{top}/.cache/c0121-server-repo`
+local REPO_WT = `{top}/.cache/c0121-server-repo-wt`
+-- the dispatcher's state folder, spelled in two parts: c0049 counts a literal .cache/<dir> as a fixture name
+local DISPATCH = "." .. "cache/dispatch"
 local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
 
 local function write(path: string, text: string)
@@ -45,6 +53,7 @@ local runs: { { string } } = {}
 local opened: { string } = {}
 local ghCalls = 0
 local ghFails = false
+local ghDelay = 0.3 -- gh yields, as process.exec does
 local builds = 0
 local key = "k1"
 local hash = "engine-1"
@@ -60,6 +69,13 @@ local function start()
 			token = TOKEN,
 			runner = function(args: { string }): serve.RunResult
 				table.insert(runs, table.clone(args))
+				if args[2] == "retry" and args[3] == "R0030" then
+					task.wait(0.1) -- a refusal still takes a process start, as process.exec yields
+					return { ok = false, stdout = "", stderr = "stop: R0030's run lock is held" }
+				elseif args[2] == "retry" then
+					task.wait(1.5) -- a chain that keeps running
+					return { ok = true, stdout = "", stderr = "" }
+				end
 				return { ok = true, stdout = "stopped", stderr = "" }
 			end,
 			opener = function(target: string): boolean
@@ -68,6 +84,9 @@ local function start()
 			end,
 			gh = function(): (string?, string?)
 				ghCalls += 1
+				if ghDelay > 0 then
+					task.wait(ghDelay)
+				end
 				if ghFails then
 					return nil, "gh: not logged in"
 				end
@@ -172,6 +191,22 @@ return t.spec("c0121 board server", function(it)
 		t.expect((server :: serve.Server).url).toBe(`http://127.0.0.1:{PORT}/?token={TOKEN}`)
 	end)
 
+	it(
+		"never waits for gh: the first answer says loading, a request while gh runs starts no second one",
+		function()
+			local first = state()
+			t.expect(first.model.live.checks).toBe("loading")
+			t.expect(byId(first.model.rafts).R0020.pr).toBe(nil)
+			local second = state()
+			t.expect(second.model.live.checks).toBe("loading")
+			t.expect(ghCalls).toBe(1)
+			task.wait(0.5)
+			t.expect(state().model.live.checks).toBe("ok")
+			t.expect(ghCalls).toBe(1)
+			ghDelay = 0
+		end
+	)
+
 	it("serves the page with its token and the live settings, and refuses it without the token", function()
 		local ok = call("GET", `/?token={TOKEN}`, {})
 		t.expect(ok.statusCode).toBe(200)
@@ -222,8 +257,14 @@ return t.spec("c0121 board server", function(it)
 	it("retry is answered at once and runs ./zn dispatch retry <id>", function()
 		local r = action('{"action":"retry","id":"f0021"}')
 		t.expect(r.statusCode).toBe(202)
-		task.wait(0.2)
 		t.expect(runs[2]).toEqual({ "dispatch", "retry", "f0021" })
+	end)
+
+	it("a retry the dispatcher refuses at once answers with the refusal, not 202", function()
+		local r = action('{"action":"retry","id":"R0030"}')
+		t.expect(r.statusCode).toBe(500)
+		t.expect(string.find(r.body, "run lock is held", 1, true) ~= nil).toBe(true)
+		t.expect(runs[3]).toEqual({ "dispatch", "retry", "R0030" })
 	end)
 
 	it("state fills PR and checks from gh, calling it once in its 30 s window and again after", function()
@@ -284,11 +325,117 @@ return t.spec("c0121 board server", function(it)
 		t.expect(state().model.live.stale).toBe(true)
 	end)
 
+	it(
+		"the real keyOf changes with a commit, origin/main, a worktree's commit and the dispatcher's state, and only then",
+		function()
+			if fs.isDir(REPO) then
+				fs.removeDir(REPO)
+			end
+			if fs.isDir(REPO_WT) then
+				fs.removeDir(REPO_WT)
+			end
+			fs.writeDir(REPO)
+			process.exec("git", { "init", "-q", "-b", "main", REPO }) -- raw: init to a named path
+			fixture.git(REPO, { "config", "user.name", "c0121-server" })
+			fixture.git(REPO, { "config", "user.email", "c0121-server@example.invalid" })
+			fs.writeDir(`{REPO}/z-nile/engine`)
+			fs.writeFile(`{REPO}/z-nile/engine/x.luau`, "return 1\n")
+			fs.writeFile(`{REPO}/README.md`, "r\n")
+			fixture.git(REPO, { "add", "-A" })
+			fixture.git(REPO, { "commit", "-q", "-m", "one" })
+			fixture.git(REPO, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+			fixture.git(REPO, { "worktree", "add", "-q", "-b", "R0020-alpha", REPO_WT })
+			local k0 = serve.keyOf(REPO)
+			t.expect(serve.keyOf(REPO)).toBe(k0)
+			fs.writeFile(`{REPO}/README.md`, "r2\n")
+			fixture.git(REPO, { "commit", "-q", "-am", "two" })
+			local k1 = serve.keyOf(REPO)
+			t.expect(k1 ~= k0).toBe(true)
+			fixture.git(REPO, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+			local k2 = serve.keyOf(REPO)
+			t.expect(k2 ~= k1).toBe(true)
+			fs.writeFile(`{REPO_WT}/wt.txt`, "w\n")
+			fixture.git(REPO_WT, { "add", "-A" })
+			fixture.git(REPO_WT, { "commit", "-q", "-m", "in the worktree" })
+			local k3 = serve.keyOf(REPO)
+			t.expect(k3 ~= k2).toBe(true)
+			fs.writeDir(`{REPO}/{DISPATCH}/R0020`)
+			fs.writeFile(`{REPO}/{DISPATCH}/R0020/state.json`, "{}")
+			local k4 = serve.keyOf(REPO)
+			t.expect(k4 ~= k3).toBe(true)
+			t.expect(serve.keyOf(REPO)).toBe(k4)
+		end
+	)
+
+	it("the real engineHash changes with an engine commit and not with any other", function()
+		local h0 = serve.engineHash(REPO)
+		t.expect(h0 ~= nil).toBe(true)
+		fs.writeFile(`{REPO}/README.md`, "r3\n")
+		fixture.git(REPO, { "commit", "-q", "-am", "not the engine" })
+		t.expect(serve.engineHash(REPO)).toBe(h0)
+		fs.writeFile(`{REPO}/z-nile/engine/x.luau`, "return 2\n")
+		fixture.git(REPO, { "commit", "-q", "-am", "the engine" })
+		t.expect(serve.engineHash(REPO) ~= h0).toBe(true)
+	end)
+
+	it(
+		"a server with the default engine hash says it is out of date after an engine commit in its checkout",
+		function()
+			local live: serve.Server? = nil
+			local port = 0
+			for _ = 1, 30 do
+				port = math.random(30000, 60000)
+				local ok, s = pcall(serve.start, {
+					root = REPO,
+					port = port,
+					token = TOKEN,
+					runner = function(): serve.RunResult
+						return { ok = true, stdout = "", stderr = "" }
+					end,
+					opener = function(): boolean
+						return true
+					end,
+					gh = function(): (string?, string?)
+						return nil, "no gh in this case"
+					end,
+					now = function(): number
+						return clock
+					end,
+					facts = function(_root: string): any
+						return { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+					end,
+					collect = function(_root: string, facts: any): any
+						return require("@znile/engine/board").collect(nil, ROOT, facts)
+					end,
+				})
+				if ok then
+					live = s
+					break
+				end
+			end
+			t.expect(live ~= nil).toBe(true)
+			local function stale(): boolean
+				local r = (net.request :: any)({
+					url = `http://127.0.0.1:{port}/api/state`,
+					headers = { ["X-Zn-Token"] = TOKEN },
+				})
+				return serde.decode("json", r.body).model.live.stale
+			end
+			t.expect(stale()).toBe(false)
+			fs.writeFile(`{REPO}/z-nile/engine/x.luau`, "return 3\n")
+			fixture.git(REPO, { "commit", "-q", "-am", "the engine again" })
+			t.expect(stale()).toBe(true);
+			(live :: serve.Server).stop()
+		end
+	)
+
 	it("stops: a request afterwards is refused", function()
 		(server :: serve.Server).stop()
 		task.wait(0.1)
 		local ok = pcall(net.request, url("/api/state"))
 		t.expect(ok).toBe(false)
 		fs.removeDir(ROOT)
+		fixture.git(REPO, { "worktree", "remove", "--force", REPO_WT })
+		fs.removeDir(REPO)
 	end)
 end)
