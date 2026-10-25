@@ -306,7 +306,8 @@ function audit.run(root: string): { Problem }
 	for _, f in found do
 		local doc = `{root}/{f.path}/{f.id}.md`
 		if f.kind == "issue" and not string.find(f.path, "/done/", 1, true) and fs.isFile(doc) then
-			local r = front(fs.readFile(doc)).raft or ""
+			local rawRaft = front(fs.readFile(doc)).raft
+			local r = rawRaft or ""
 			local active = string.find(f.path, "/active/", 1, true) ~= nil
 			-- the command that clears the state, for the item's own state (review 003 F1): an active issue goes back
 			-- through stop (a published move, as stop gives a member back); a backlog one through unfold
@@ -317,7 +318,9 @@ function audit.run(root: string): { Problem }
 				add("error", "dead-raft", f.path, `{f.id}'s raft {r} is retired: {fix}`)
 			elseif r ~= "" and raftAt[r] == nil then
 				add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist: {fix}`)
-			elseif r == "" and active then
+			elseif rawRaft == "" and active then
+				-- an empty raft: line (every engine-made issue has one); a document with no raft: line at all is
+				-- not one the engine writes, and is left to the other checks
 				add(
 					"error",
 					"raftless-active",
