@@ -50,6 +50,21 @@ local ZNILE_DONE = table.concat({
 	"",
 }, "\n")
 
+-- one of c0120's own scripts, wherever its folder is: the backlog (prep), active/ (readied), or promoted (done)
+local function ownScript(name: string): string
+	for _, dir in
+		{
+			"z-nile/.tracker/issues/c0120/acceptance",
+			"z-nile/.tracker/issues/active/c0120/acceptance",
+			"z-nile/tests/acceptance/c0120",
+		}
+	do
+		if fs.isFile(`{TOP}/{dir}/{name}`) then
+			return `{TOP}/{dir}/{name}`
+		end
+	end
+	return `{TOP}/z-nile/tests/acceptance/c0120/{name}`
+end
 local function git(args: { string }): string
 	return fixture.git(FX, args)
 end
@@ -212,10 +227,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			fs.writeFile(`{OWNFX}/{rel}`, text)
 		end
 		local function judge(): (boolean, string)
-			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/finished.luau`
-			if not fs.isFile(script) then
-				script = `{TOP}/z-nile/tests/acceptance/c0120/finished.luau`
-			end
+			local script = ownScript("finished.luau")
 			local r = process.exec("lune", { "run", script, "--", OWNFX })
 			return r.ok, r.stdout .. r.stderr
 		end
@@ -505,10 +517,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			g({ "commit", "-qm", message })
 		end
 		local function judge(): (boolean, string)
-			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/finished.luau`
-			if not fs.isFile(script) then
-				script = `{TOP}/z-nile/tests/acceptance/c0120/finished.luau`
-			end
+			local script = ownScript("finished.luau")
 			local r = process.exec("lune", { "run", script, "--", FX2 })
 			return r.ok, r.stdout .. r.stderr
 		end
@@ -704,10 +713,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- override-markers finds nothing of the branch's to mark (code review 007 F2); one unmarked line the branch adds
 		-- to it is the branch's own: red, and one unmarked hunk
 		local function markers(): (boolean, string)
-			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/override-markers.luau`
-			if not fs.isFile(script) then
-				script = `{TOP}/z-nile/tests/acceptance/c0120/override-markers.luau`
-			end
+			local script = ownScript("override-markers.luau")
 			local move = (string.gsub(g({ "log", "-1", "--format=%H", "--", rewrites.MARK }), "%s+$", ""))
 			local r = process.exec("lune", { "run", script, "--", move }, { cwd = FX2 })
 			return r.ok, r.stdout .. r.stderr
