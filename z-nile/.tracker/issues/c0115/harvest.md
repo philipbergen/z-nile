@@ -63,6 +63,6 @@
 - design-review-014 F3: z-design/new-rules-migrate-existing-work
 - design-review-014 F4: zz-test/seed-every-enumerated-case
 - design-review-014 F5: one-off: stale text and a split comment after round 013's edits
-- design-review-015 F1: testing/seed-every-enumerated-case
-- design-review-015 F2: ticket-prep/restated-rules-move-together
-- design-review-015 F3: architecture/history-tests-survive-squash
+- design-review-015 F1: zz-test/seed-every-enumerated-case
+- design-review-015 F2: z-design/restated-rules-move-together
+- design-review-015 F3: zz-arch/history-tests-survive-squash
