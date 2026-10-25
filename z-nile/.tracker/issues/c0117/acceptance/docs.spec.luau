@@ -125,6 +125,27 @@ return t.spec("c0117 docs", function(it)
 		)
 		absent(ze, "the reviewer writes `stream-review-<issue>-NNN.md` itself", "zz-execute")
 		absent(ze, "next., and", "zz-execute")
+		-- design review 010: the Visible record's file is scoped too, and the failed-review rule sits in Phase 4 step 3
+		at(zr, "The names above and in Visible record are the interactive path's", "zz-review Output file")
+		at(
+			zr,
+			"Write `review-NNN.md` in full (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says)",
+			"zz-review Visible record"
+		)
+		local step3 = string.match(
+			ze,
+			"\n3%. The reviewer writes `review%-NNN%.md` in the raft directory[^\n]*"
+		) or ""
+		at(
+			step3,
+			'A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line',
+			"zz-execute Phase 4 step 3"
+		)
+		at(
+			ze,
+			"A dispatched stream review that fails with no review is handled as Phase 4 step 3 says.",
+			"zz-execute step 7"
+		)
 		at(
 			ze,
 			"One dispatched stream review at a time: commit its file before you start the next.",

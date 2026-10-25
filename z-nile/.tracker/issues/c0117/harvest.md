@@ -64,3 +64,5 @@
 - design-review-009 F1: zz-arch/place-outputs-dont-scan-for-them
 - design-review-009 F2: z-design/restated-rules-move-together
 - design-review-009 F3: zz-test/no-vacuous-pass
+- design-review-010 F1: z-design/restated-rules-move-together
+- design-review-010 F2: z-design/results-land-on-every-path
