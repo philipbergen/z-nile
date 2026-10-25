@@ -63,7 +63,7 @@ return t.spec("c0117 docs", function(it)
 	end)
 
 	it("who reviews is the review model of the CLI, wherever a skill says so", function()
-		local rule = "Opus through `claude` or `agent`, `grok-4.7-xhigh` through `grok`"
+		local rule = "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`"
 		-- z-run's reviews are its protocol's, zz-execute's, since c0115
 		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
 			at(skill(name), rule, name)
@@ -114,7 +114,7 @@ return t.spec("c0117 docs", function(it)
 				"`z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend`",
 				"- **`.models.toml`.**",
 				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
-				"`claude-cli` and `claude-cloud` (`claude --cloud`), `grok-cli` and `grok-bot` (`grok agent headless`), `cursor-cli` and `cursor-app` (`agent worker`)",
+				"`claude-cli`, `grok-cli` and `cursor-cli`",
 				"Nothing defaults",
 				"an `agent` table also `max_calls` and `max_minutes`",
 				'- **What the guards are** (the user\'s "Keep same user, accept detection", 2026-10-21).',
@@ -203,16 +203,17 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it("the prompt template names the files it used to paste", function()
+	-- the user's G9, 2026-10-25: "Keep pasting skills": the raft's prompt keeps the skills, the architecture map and the
+	-- lessons index inlined (a cheap guarantee that every rule is in the context), as before c0117
+	it("the raft's prompt template keeps pasting the skills and the architecture map", function()
 		local p = read("z-nile/templates/prompt.md")
-		at(
-			p,
-			"it names every file that holds a rule you need: the skills, the architecture map and the lessons command",
-			"prompt.md"
-		)
-		at(p, "Run `{{LESSONS_COMMAND}}`", "prompt.md")
-		at(p, "{{LESSONS}}", "prompt.md") -- the index stays (c0111); the text is named
-		absent(p, "verbatim from z-nile/skills/", "prompt.md")
+		at(p, "## Skills (verbatim from z-nile/skills/", "prompt.md")
+		at(p, "{{SKILLS}}", "prompt.md")
+		at(p, "{{ARCHITECTURE}}", "prompt.md")
+		at(p, "{{LESSONS}}", "prompt.md")
+		at(p, "1. **Follow the `zz-execute` skill below, step by step.**", "prompt.md")
+		absent(p, "{{LESSONS_COMMAND}}", "prompt.md")
+		absent(p, "nothing is pasted here", "prompt.md")
 		at(p, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
 	end)
 end)
