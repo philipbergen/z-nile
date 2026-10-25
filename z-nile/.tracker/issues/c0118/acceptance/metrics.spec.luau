@@ -33,9 +33,9 @@ local function body(text: string, name: string): string?
 end
 
 -- `src` read as Luau, without its comments: the code with every comment removed (line `--` and long `--[[ ]]`,
--- `--[=[ ]=]`), and every string literal's contents (quoted '…', "…", `…` and long [[ ]] / [=[ ]=] brackets). Strings are
--- kept in the code too, so a call inside one still reads as text, never as a comment (design review 007 F2: a comment
--- naming `boardview.rounds(` must not count as the call, and a comment's `review` is not a pattern).
+-- `--[=[ ]=]`) and every string literal's text replaced by `""`, and every string literal's contents (quoted '…', "…",
+-- `…` and long [[ ]] / [=[ ]=] brackets). Neither a comment nor a string naming `boardview.rounds(` counts as the call
+-- (design review 007 F2, 008 F2), and a comment's `review` is not a pattern.
 local function scan(src: string): (string, { string })
 	local code: { string } = {}
 	local strings: { string } = {}
@@ -64,7 +64,7 @@ local function scan(src: string): (string, { string })
 			local e = last :: number
 			local closeLen = #(string.match(src, "^%[(=*)%[", i) :: string) + 2
 			table.insert(strings, string.sub(src, first :: number, e - closeLen))
-			table.insert(code, string.sub(src, i, e))
+			table.insert(code, '""') -- a string's text is never code (design review 008 F2)
 			i = e + 1
 		elseif c == '"' or c == "'" or c == "`" then
 			local j = i + 1
@@ -79,7 +79,7 @@ local function scan(src: string): (string, { string })
 				end
 			end
 			table.insert(strings, string.sub(src, i + 1, j - 1))
-			table.insert(code, string.sub(src, i, j))
+			table.insert(code, '""') -- a string's text is never code (design review 008 F2)
 			i = j + 1
 		else
 			table.insert(code, c)
@@ -111,7 +111,7 @@ return t.spec("c0118 metrics rounds", function(it)
 			"local function a(x)\n\tlocal function codeRounds(dir)\n\t\tlocal _, c = boardview.rounds(paths)\n\tend\n\treturn 1\nend\n"
 		local b = body(sample, "codeRounds")
 		t.expect(b ~= nil).toBe(true)
-		t.expect(string.find(b :: string, "return 1", 1, true)).toBe(nil)
+		t.expect((string.find(b :: string, "return 1", 1, true))).toBe(nil)
 		t.expect(body(sample, "missing")).toBe(nil)
 	end)
 
@@ -140,6 +140,11 @@ return t.spec("c0118 metrics rounds", function(it)
 			calls, own =
 				reads('local p = [[^review%-(%d+)%.md$]]\nlocal f = string.format("%s-review-%03d.md", k, i)')
 			t.expect(#own).toBe(2)
+			-- a call written only inside a string is no call (design review 008 F2)
+			calls, own = reads('local s = "boardview.rounds(paths)"\nreturn s')
+			t.expect(calls).toBe(false)
+			calls, own = reads("local s = [[boardview.rounds(paths)]]\nreturn s")
+			t.expect(calls).toBe(false)
 			-- a comment that says "review" is no literal
 			calls, own = reads("-- count the review rounds\nlocal d = boardview.rounds(paths)")
 			t.expect(calls).toBe(true)

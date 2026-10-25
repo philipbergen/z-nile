@@ -22,3 +22,6 @@
 - design-review-006 F5: one-off: inputs from c0117's pending guesses named in Unknowns
 - design-review-007 F1: z-design/watch-steps-name-their-base
 - design-review-007 F2: zz-test/source-text-pins-read-the-code
+- design-review-008 F1: z-design/rerun-skipped-checks-after-edits
+- design-review-008 F2: zz-test/source-text-pins-read-the-code
+- design-review-008 F3: z-design/restated-rules-move-together
