@@ -52,7 +52,8 @@ return t.spec("c0119 scope rules in the skills", function(it)
 	it("ticket-prep opens with the scope rule, before step 1", function()
 		local doc = read(`{TOP}/z-nile/skills/z-design/SKILL.md`)
 		local p = paragraph(doc, "**Scope is what was captured.**")
-		t.expect(at(doc, "**Scope is what was captured.**") < at(doc, "\n## 1. Form the raft")).toBe(true)
+		-- c0116 override: z-design makes no raft, so its step 1 claims the issue
+		t.expect(at(doc, "**Scope is what was captured.**") < at(doc, "\n## 1. Claim the issue")).toBe(true)
 		at(p, "its title, its Problem and the ideas under its Solution as they stood at capture")
 		at(p, "`./zn capture <id>` prints that version")
 		at(
@@ -96,7 +97,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 			local check = at(s5, "Then **check the scope**")
 			t.expect(check > five and check < at(s5, "set `design: ready`")).toBe(true)
 			local line = string.sub(s5, check, (string.find(s5, "\n", check, true) :: number) - 1)
-			at(line, "compare each member's document with `./zn capture <id>`")
+			at(line, "compare the issue's document with `./zn capture <id>`") -- c0116 override: one issue
 			at(line, "every captured outcome has a Design and an acceptance criterion")
 			at(line, "goes to the user before `design: ready`")
 		end

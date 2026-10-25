@@ -13,3 +13,5 @@ Round 003 F1 found the third hole in the same rule: it treated a whole `harvest.
 Round 004 F1 found the gap that reader left: `parseHarvest` skips every line that isn't a `- ` bullet, so a prose paragraph or an indented sub-bullet naming an old id was in neither rule. A rule built on a reader covers the lines the reader skips: the parsed parts take their rule, and every other byte of the file takes the general one.
 
 **How to apply:** put the rule in one pure function in the module that owns the format (here `skills.oldLessonIds` in `z-nile/engine/skills.luau`), and have the script and every spec call it. Where a copy can't be avoided, give every copy the same planted cases, look-alikes included, and add a mutant row per copy.
+
+R0050 code review 004 F1: "which command gives back this active issue" was decided twice, by audit (no raft folder means missing) and by `stop <issue>` (anything `store.find` finds is live). In the states between them, each refusal named a command whose own rule then refused the item. That made three rounds on one mechanism; one function (`audit.raftHolds`), called by both, ended it.

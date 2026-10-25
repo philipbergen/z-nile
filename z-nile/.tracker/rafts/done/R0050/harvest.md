@@ -1,0 +1,11 @@
+- review-001 F1: z-design/finished-overrides-land-before-ready
+- review-001 F2: zz-rules/audit-what-new-refuses
+- review-001 F3: one-off: a skill sentence and a pinned list that lagged the engine's behaviour
+- review-002 F1: zz-rules/audit-what-new-refuses
+- review-002 F2: zz-test/seed-every-enumerated-case
+- review-002 F3: one-off: a header comment left from before the retired/ folder
+- review-003 F1: zz-rules/audit-what-new-refuses
+- review-003 F2: zz-test/guard-needs-its-own-case
+- review-003 F3: zz-test/seed-every-enumerated-case
+- review-004 F1: zz-test/one-rule-one-function
+- review-004 F2: zz-review/run-the-evidence-you-cite
