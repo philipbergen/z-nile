@@ -340,54 +340,76 @@ local function minutesSince(t0: number): number
 end
 
 -- Records the rows the step's attempts spent: on the item now when its spend may be written (backlog), else kept in
--- pending for the next legal point (a run's rows after its merge). A code review's row is printed for the author's
--- `./zn commit` (it rides with the review file).
-local function record(ctx: Ctx, st: State, id: string, phase: string, attempts: { Attempt }, note: string)
+-- pending for the next legal point (a run's rows after its merge). Minutes (the user's G13, 2026-10-25, "Dispatcher row
+-- 0 min", read with "Yes, reviewers keep minutes"): an author step's rows record 0, since its skill records its own;
+-- a review's rows record the attempt's wall minutes, since no skill records a reviewer's. A code or stream review's
+-- spend is one printed `record:` line for the author's `./zn commit` (it rides with the review file): the attempts'
+-- tokens and minutes summed, under the model of the attempt that did the review (the last that spent tokens).
+local function roundTenth(x: number): number
+	return math.floor(x * 10 + 0.5) / 10
+end
+local function record(
+	ctx: Ctx,
+	st: State,
+	id: string,
+	phase: string,
+	attempts: { Attempt },
+	note: string,
+	reviewer: boolean
+)
+	if phase == "code-review" then
+		local tokens, minutes, model = 0, 0, nil :: string?
+		for _, a in attempts do
+			if a.tokens > 0 then
+				tokens += a.tokens
+				minutes += a.minutes
+				model = a.model
+			end
+		end
+		if model then
+			print(
+				`record: ./zn commit -m "{id}: {note}" --phase code-review --time {roundTenth(minutes)} --tokens {tokens} --model {model}`
+			)
+		end
+		return
+	end
 	for _, a in attempts do
 		if a.tokens > 0 then
-			-- the dispatcher's own rows record 0 minutes: the step's skill records its minutes (the user's G13,
-			-- 2026-10-25: "Dispatcher row 0 min"); a code review's printed line carries the reviewer's for the author
 			local row: Row = {
 				id = id,
 				phase = phase,
 				tokens = a.tokens,
 				model = a.model,
-				minutes = 0,
+				minutes = if reviewer then a.minutes else 0,
 				note = note,
 			}
-			if phase == "code-review" then
-				print(
-					`record: ./zn commit -m "{id}: {note}" --phase code-review --time {a.minutes} --tokens {a.tokens} --model {a.model}`
-				)
+			local origin = ctx.origin(id)
+			if phase == "deliver" or (origin and origin.state ~= "backlog") then
+				table.insert(st.pending, row)
 			else
-				local origin = ctx.origin(id)
-				if phase == "deliver" or (origin and origin.state ~= "backlog") then
-					table.insert(st.pending, row)
+				local wt = worktree(ctx, "zn-dispatch")
+				zn(wt, { "sync" }, true)
+				local ok, out, err = zn(wt, {
+					"spend",
+					id,
+					"--phase",
+					phase,
+					"--time",
+					tostring(row.minutes),
+					"--tokens",
+					tostring(a.tokens),
+					"--model",
+					a.model,
+					"--note",
+					note,
+				}, true)
+				if ok then
+					print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
 				else
-					local wt = worktree(ctx, "zn-dispatch")
-					zn(wt, { "sync" }, true)
-					local ok, out, err = zn(wt, {
-						"spend",
-						id,
-						"--phase",
-						phase,
-						"--time",
-						"0",
-						"--tokens",
-						tostring(a.tokens),
-						"--model",
-						a.model,
-						"--note",
-						note,
-					}, true)
-					if ok then
-						print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
-					else
-						stdio.ewrite(
-							`dispatch: could not record {id}'s {phase} row ({err}{out}): kept as pending\n`
-						)
-						table.insert(st.pending, row)
-					end
+					stdio.ewrite(
+						`dispatch: could not record {id}'s {phase} row ({err}{out}): kept as pending\n`
+					)
+					table.insert(st.pending, row)
 				end
 			end
 		end
@@ -735,9 +757,7 @@ function dispatcher.modelStep(
 		})
 		stdio.ewrite(`dispatch: {why}\n`)
 	end
-	local missing = 0
 	local function skipped(spec: models.Spec, why: string)
-		missing += 1
 		table.insert(attempts, {
 			step = step,
 			cli = spec.cli,
@@ -905,10 +925,28 @@ function dispatcher.modelStep(
 			break
 		end
 	end
-	if outcome == "quota" then
-		stdio.ewrite(`dispatch: every CLI in the order failed on quota\n`)
-	elseif missing > 0 and missing == #tries then
-		stdio.ewrite(`dispatch: no CLI in the order is installed\n`)
+	-- when every CLI of the order was tried and none could run, say why for each kind (review 006 F5)
+	local onQuota, notInstalled = {}, {}
+	for _, a in attempts do
+		if a.outcome == "quota" then
+			table.insert(onQuota, a.cli)
+		elseif a.outcome == "missing" then
+			table.insert(notInstalled, a.cli)
+		end
+	end
+	if #attempts > 0 and #onQuota + #notInstalled == #attempts then
+		if #notInstalled == 0 then
+			stdio.ewrite(`dispatch: every CLI in the order failed on quota\n`)
+		elseif #onQuota == 0 then
+			stdio.ewrite(`dispatch: no CLI in the order is installed\n`)
+		else
+			stdio.ewrite(
+				`dispatch: no CLI in the order could run: {table.concat(onQuota, ", ")} on quota; {table.concat(
+					notInstalled,
+					", "
+				)} not installed\n`
+			)
+		end
 	end
 	for _, a in attempts do
 		table.insert(st.history, a)
@@ -955,7 +993,7 @@ function dispatcher.modelStep(
 		end
 	end
 	if target ~= "" then
-		record(ctx, st, target, dispatch.phaseOf(step, mode), attempts, note)
+		record(ctx, st, target, dispatch.phaseOf(step, mode), attempts, note, step == "zz-review")
 	end
 	st.outcome = outcome
 	st.detail = attempts[#attempts] and attempts[#attempts].detail or ""
