@@ -19,11 +19,11 @@ check "AC4: the git and gh wrapper refuses a code push to main and an unauthoris
   lune run tests/run -- "$A/wrapper.spec.luau"
 check "AC5: a spend row stores the model id beside its tokens, through spend --model and commit --model" \
   lune run tests/run -- "$A/ledger.spec.luau"
-check "AC6: ./zn dispatch runs fake CLIs in order, falls through on quota only, kills at the cap, a stall and stop, records spend, stops at questions.md" \
+check "AC6: ./zn dispatch runs fake CLIs in order, falls through on quota or a missing CLI only, kills at the cap, a stall and stop, records spend, stops at questions.md" \
   lune run tests/run -- "$A/dispatch-cli.spec.luau"
 check "AC7: the skills, README, AGENTS.md, usage and prompt template say what the design says" \
   lune run tests/run -- "$A/docs.spec.luau"
-check "AC8: the prompt names skill files and the architecture map (c0115 and c0120 specs, overridden), and the README spec stays green" \
+check "AC8: the raft's prompt keeps pasting the skills and the architecture map (c0115's and c0120's specs, not overridden: the user's G9), and the README spec stays green" \
   lune run tests/run -- tests/acceptance/c0115/prompt.spec.luau tests/acceptance/c0120/homes.spec.luau tests/acceptance/c0115/readme.spec.luau
 check "AC9: the real tree's skill links, lessons and audit stay clean" \
   bash -c '"$ZN_ROOT/zn" skills --check && "$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" audit'

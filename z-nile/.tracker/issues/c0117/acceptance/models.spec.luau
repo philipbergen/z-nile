@@ -200,17 +200,24 @@ return t.spec("c0117 .models.toml", function(it)
 		)).toBe(true)
 	end)
 
-	it("a runtime belongs to its CLI: each CLI's two runtimes, and no other", function()
+	it("a runtime belongs to its CLI: each CLI's one local runtime, and no other", function()
 		for cli, runtimes in models.RUNTIMES do
 			for _, rt in runtimes do
 				layer(`[z-design.{cli}]\nruntime = "{rt}"\n`)
 			end
 		end
+		-- the remote runtimes are not c0117's (the user's G8, 2026-10-25: "Split into a follow-up")
 		t.expect(models.RUNTIMES).toEqual({
-			claude = { "claude-cli", "claude-cloud" },
-			grok = { "grok-cli", "grok-bot" },
-			agent = { "cursor-cli", "cursor-app" },
+			claude = { "claude-cli" },
+			grok = { "grok-cli" },
+			agent = { "cursor-cli" },
 		})
+		t.expect(has(
+			errorOf(function()
+				layer('[z-design.claude]\nruntime = "claude-cloud"\n')
+			end),
+			"not a runtime of claude"
+		)).toBe(true)
 		t.expect(has(
 			errorOf(function()
 				layer('[z-design.grok]\nruntime = "cursor-cli"\n')
@@ -303,7 +310,7 @@ return t.spec("c0117 .models.toml", function(it)
 	end)
 
 	it(
-		"the review model belongs to the CLI: Opus through claude and agent, grok-4.7 at xhigh through grok",
+		"the review model belongs to the CLI: Opus through claude and agent, any grok model at xhigh through grok",
 		function()
 			local function review(cli: string, model: string, effort: string?): string?
 				local text =
@@ -319,8 +326,12 @@ return t.spec("c0117 .models.toml", function(it)
 			t.expect(review("grok", "grok-4.7", "xhigh")).toBe(nil)
 			t.expect(has(review("claude", "claude-sonnet-5") or "", "runs on Opus")).toBe(true)
 			t.expect(has(review("agent", "grok-4.7-xhigh") or "", "runs on Opus")).toBe(true)
-			t.expect(has(review("grok", "grok-4.7", "high") or "", "grok-4.7-xhigh")).toBe(true)
-			t.expect(has(review("grok", "grok-4.6", "xhigh") or "", "grok-4.7-xhigh")).toBe(true)
+			-- any grok model at xhigh (the user's G7, 2026-10-25: "Any grok at xhigh"); never below xhigh, never a non-grok
+			t.expect(review("grok", "grok-4.6", "xhigh")).toBe(nil)
+			t.expect(review("grok", "grok-5", "xhigh")).toBe(nil)
+			t.expect(has(review("grok", "grok-4.7", "high") or "", "at effort xhigh")).toBe(true)
+			t.expect(has(review("grok", "grok-4.7") or "", "at effort xhigh")).toBe(true)
+			t.expect(has(review("grok", "claude-opus-5-5", "xhigh") or "", "a grok model")).toBe(true)
 			-- the rule is the review's alone: an author may run on any model
 			t.expect(models.reviewRule("z-design", spec("claude", 1, 1, "claude-sonnet-5"))).toBe(nil)
 		end

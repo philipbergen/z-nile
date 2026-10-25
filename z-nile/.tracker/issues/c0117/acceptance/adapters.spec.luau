@@ -66,13 +66,6 @@ return t.spec("c0117 adapters", function(it)
 		})
 		local e = argv("claude-cli", "high")
 		t.expect({ e[#e - 1], e[#e] }).toEqual({ "--effort", "high" })
-		-- the remote runtimes are unproven (E7 to E9): only their program, the model and the prompt's delivery are
-		-- pinned, so a fallback the executor takes keeps this case green
-		local cloud = argv("claude-cloud")
-		t.expect(cloud[1]).toBe("claude")
-		t.expect(table.find(cloud, "--cloud") ~= nil).toBe(true)
-		t.expect(table.find(cloud, "M") ~= nil).toBe(true)
-		t.expect(table.find(cloud, "PROMPT") ~= nil).toBe(true)
 	end)
 
 	it("grok runs -p with streaming-json in the step's folder, auto-approved, with its session id", function()
@@ -92,11 +85,6 @@ return t.spec("c0117 adapters", function(it)
 		})
 		local e = argv("grok-cli", "xhigh")
 		t.expect({ e[#e - 1], e[#e] }).toEqual({ "--reasoning-effort", "xhigh" })
-		local bot = argv("grok-bot", "xhigh")
-		t.expect(bot[1]).toBe("grok")
-		t.expect(table.find(bot, "M") ~= nil).toBe(true)
-		t.expect(table.find(bot, "xhigh") ~= nil).toBe(true)
-		t.expect(adapters.STDIN["grok-bot"]).toBe(true)
 	end)
 
 	it(
@@ -118,11 +106,6 @@ return t.spec("c0117 adapters", function(it)
 				"PROMPT",
 			})
 			t.expect(argv("cursor-cli", "high")[6]).toBe("M[effort=high]")
-			local app = argv("cursor-app")
-			t.expect(app[1]).toBe("agent")
-			t.expect(table.find(app, "M") ~= nil).toBe(true)
-			t.expect(adapters.STDIN["cursor-app"]).toBe(true)
-			t.expect(adapters.STDIN["cursor-cli"]).toBe(nil)
 		end
 	)
 
@@ -130,11 +113,8 @@ return t.spec("c0117 adapters", function(it)
 		for runtime, cli in
 			{
 				["claude-cli"] = "claude",
-				["claude-cloud"] = "claude",
 				["grok-cli"] = "grok",
-				["grok-bot"] = "grok",
 				["cursor-cli"] = "agent",
-				["cursor-app"] = "agent",
 			}
 		do
 			local a = adapters.get(runtime :: string)
@@ -142,6 +122,10 @@ return t.spec("c0117 adapters", function(it)
 			t.expect(a.argv(req())[1]).toBe(cli)
 		end
 		t.expect((pcall(adapters.get, "cursor"))).toBe(false)
+		-- the remote runtimes are not c0117's (the user's G8, 2026-10-25: "Split into a follow-up"): no adapter
+		for _, remote in { "claude-cloud", "grok-bot", "cursor-app" } do
+			t.expect((pcall(adapters.get, remote))).toBe(false)
+		end
 	end)
 
 	it("claude: one message counted once at its usage, and the final count from modelUsage", function()
@@ -182,7 +166,6 @@ return t.spec("c0117 adapters", function(it)
 			t.expect(running.live).toBe(0)
 			t.expect(running.calls).toBe(2)
 			t.expect(adapters.get("cursor-cli").callCapped).toBe(true)
-			t.expect(adapters.get("cursor-app").callCapped).toBe(true)
 			t.expect(adapters.get("claude-cli").callCapped).toBe(false)
 			t.expect(adapters.get("grok-cli").callCapped).toBe(false)
 			t.expect(running.unknown).toBe(nil)
@@ -199,7 +182,6 @@ return t.spec("c0117 adapters", function(it)
 			t.expect(adapters.NO_ID_TURNS).toBe(3)
 			t.expect(feed("cursor-cli", { '{"type":"surprise"}' }).unknown ~= nil).toBe(true)
 			t.expect(feed("cursor-cli", { "not json" }).unknown ~= nil).toBe(true)
-			t.expect(feed("cursor-app", noIds).unknown ~= nil).toBe(true)
 			-- bare tool calls, no thinking, no assistant line, no id (review 003 F7): each is a turn, and the cap is unknown
 			local bare: { string } = {}
 			for i = 1, 50 do
