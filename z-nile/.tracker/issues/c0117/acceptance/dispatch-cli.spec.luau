@@ -99,14 +99,14 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	it("sets up a tracker with .models.toml, issues, a closer .models.toml and the fake CLIs", function()
 		h = fakecli.new("c0117-dispatch", {
 			[".models.toml"] = MODELS,
-			["tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
-			["tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
-			["tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
-			["tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
-			["tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
-			["tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
-			["tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
-			["tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
+			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
+			["pickman/.tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
+			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
+			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
+			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
+			["pickman/.tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
+			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
 		})
 		-- agent resolves outside .cache (a link to /bin/echo): the dispatcher must refuse to start it
 		fs.removeFile(`{h.bin}/agent`)
@@ -142,12 +142,12 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 
 	it("model files come from main, never the working tree: an uncommitted one is refused", function()
 		fakecli.clear(h)
-		local stray = `{h.f.main}/tracker/issues/c0010/.models.toml`
+		local stray = `{h.f.main}/pickman/.tracker/issues/c0010/.models.toml`
 		fs.writeFile(stray, "[z-design.claude]\nmax_tokens = 99999999\n")
 		local r = zn({ "dispatch", "z-design", "c0010", "--dry-run" })
 		fs.removeFile(stray)
 		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "tracker/issues/c0010/.models.toml is not committed")).toBe(true)
+		t.expect(has(r.stderr, "pickman/.tracker/issues/c0010/.models.toml is not committed")).toBe(true)
 		t.expect(log()).toBe("")
 	end)
 
