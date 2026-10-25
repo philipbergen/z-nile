@@ -19,12 +19,12 @@ The goal is a raft that **any strong agent can deliver on the first attempt with
 - If an issue is missing, create it first with the `make-issue` skill.
 
 ## 2. Design the raft as a whole
-`tracker/game-design.md` holds the user's product decisions, and it's binding. A design that needs to change a decision stops and asks the user. The raft document **quotes the decisions it relies on** under Theme, so the execution prompt carries them.
+`pickman/.tracker/game-design.md` holds the user's product decisions for the game, and it's binding. A design that needs to change a decision stops and asks the user. The raft document **quotes the decisions it relies on** under Theme, so the execution prompt carries them.
 
 In the raft document (`R<NNNN>.md`), before any issue gets detail:
 - **Theme**: why these belong together.
 - **Whole-raft design**: the module map, which features are new or changed, the interfaces between issues (typed signatures), and the data flow. Add a small diagram if it helps.
-- **Architecture changes**: any new dependency edge goes in `tracker/architecture.md` now, including the ```` ```deps ```` block.
+- **Architecture changes**: any new dependency edge goes in the project's architecture map (`pickman/.tracker/architecture.md`) now, including the ```` ```deps ```` block.
 - **Order & dependencies**, **Risks & rollback**.
 
 ## 3. Design each issue in detail
@@ -52,7 +52,7 @@ Fill every section of the issue template. Requirements:
 
 ## 4. Write the executable acceptance
 - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
-- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines. A raft check finds its members with `./zn find <id>` (or `members`), never a hard-coded backlog path: the directories move when the raft is readied. `./zn ready` rewrites only the moved items' own literal paths in their `check.sh` files.
+- **Raft checks**: the raft's `check.sh` gets RCn end-to-end checks after the generated RC0 lines (RC0 runs the raft's project's gate, `--project <project>`: it proves that project alone, and CI's job per project covers the others, c0120). A raft check finds its members with `./zn find <id>` (or `members`), never a hard-coded backlog path: the directories move when the raft is readied. `./zn ready` rewrites only the moved items' own literal paths in their `check.sh` files.
 - **Write the acceptance specs now** in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/`, `./zn find <id>`), as real spec files with the cases that pin the behavior. Require only through aliases, and see the testing skill for where these live.
   - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
   - This is what makes the checks unfakeable and sequestered.

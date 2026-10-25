@@ -28,27 +28,27 @@ check "AC3: prompt refuses a missing prompt.md and a non-raft id" cases_pass \
   "prompt refuses a missing prompt.md" "prompt takes only a raft id"
 check "AC4: ./zn launch is gone" cases_pass "./zn launch is gone"
 check "AC5: the launch-raft skill; docs point to /launch-raft; no ./zn launch anywhere" bash -c '
-  s=.claude/skills/launch-raft/SKILL.md
+  s=../.claude/skills/launch-raft/SKILL.md
   [ -f "$s" ] || { echo "no $s"; exit 1; }
   grep -q "^name: launch-raft$" "$s" || { echo "launch-raft: name"; exit 1; }
   for k in "./zn prompt" "--path" "Read" "./zn worktree" "/ready-raft"; do
     grep -qF -- "$k" "$s" || { echo "launch-raft: missing $k"; exit 1; }
   done
-  for f in AGENTS.md SETUP.md .claude/skills/tracker/SKILL.md .claude/skills/ready-raft/SKILL.md; do
+  for f in ../AGENTS.md ../SETUP.md ../.claude/skills/tracker/SKILL.md ../.claude/skills/ready-raft/SKILL.md; do
     grep -qF "/launch-raft" "$f" || { echo "$f: /launch-raft"; exit 1; }
   done
-  grep -qF "launch-raft/SKILL.md" AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
-  bad=$(grep -rnF "./zn launch" .claude AGENTS.md SETUP.md z-nile/templates scripts || true)
+  grep -qF "launch-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: launch-raft row"; exit 1; }
+  bad=$(grep -rnF "./zn launch" .claude ../AGENTS.md ../SETUP.md ./templates scripts || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC6: the overridden c0046, c0045 and c0005 specs pass; c0053's replacement copy is still there" bash -c '
   lune run tests/run -- tests/acceptance/c0046/launch.spec.luau || exit 1
   ! grep -qF "it(\"launch" tests/acceptance/c0046/launch.spec.luau || { echo "c0046: launch cases remain"; exit 1; }
   grep -qF "it(\"worktree-prune warns about a worktree outside" tests/acceptance/c0046/launch.spec.luau || { echo "c0046: prune case lost"; exit 1; }
-  ! grep -qF "./zn launch" z-nile/.tracker/issues/done/c0046/check.sh || { echo "c0046 check.sh: launch"; exit 1; }
+  ! grep -qF "./zn launch" .tracker/issues/done/c0046/check.sh || { echo "c0046 check.sh: launch"; exit 1; }
   lune run tests/run -- tests/acceptance/c0045/workstreams.spec.luau || exit 1
   ! grep -qF "it(\"prompt embeds" tests/acceptance/c0045/workstreams.spec.luau || { echo "c0045: prompt cases remain"; exit 1; }
   grep -qF "it(\"prompt does not create" tests/acceptance/c0005/worktree.spec.luau || { echo "c0005: prompt case renamed"; exit 1; }
-  test -f z-nile/.tracker/issues/done/c0053/replacements/c0005-worktree.spec.luau || { echo "c0053 replacement copy is missing"; exit 1; }
+  test -f .tracker/issues/done/c0053/replacements/c0005-worktree.spec.luau || { echo "c0053 replacement copy is missing"; exit 1; }
   lune run tests/run -- tests/acceptance/c0005/worktree.spec.luau'
 
 finish

@@ -60,7 +60,7 @@ unguarded() { # the twelve, against the runner without its guards, in a clone ou
 }
 check "AC4: unguarded, in a clone under TMPDIR, the twelve specs pass and leave the clone's repository unchanged" unguarded
 check "AC5: the testing skill states the fixture rule and names the specs not yet converted" bash -c '
-  s=.claude/skills/testing/SKILL.md
+  s=../.claude/skills/testing/SKILL.md
   grep -qF "@tests/lib/fixture" "$s" || { echo "the testing skill does not name @tests/lib/fixture"; exit 1; }
   grep -qF "c0053" "$s" || { echo "the rule does not name the specs not yet converted"; exit 1; }
   if grep -qF "in new and edited specs" "$s"; then echo "the rule still says new and edited specs only"; exit 1; fi

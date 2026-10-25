@@ -1,0 +1,8 @@
+std = "roblox"
+# a home's .cache holds fixtures' copies of the tooling (c0120: every home has one), never sources
+exclude = ["**/.cache/**"]
+
+[rules]
+global_usage = "deny"
+unused_variable = "deny"
+shadowing = "warn"

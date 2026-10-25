@@ -1,0 +1,259 @@
+--!strict
+-- c0360 AC1: `tracker.sh done` accepts `- F<n>: deferred <id>: <why>` for a medium or low finding
+-- when <id> is an existing backlog issue, and refuses it in every other case. Driven for real in a
+-- throwaway clone (no remote, so done skips push and gh).
+local cleanup = require("@tests/lib/cleanup")
+local engine = require("@tests/lib/engine")
+local fixture = require("@tests/lib/fixture")
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local t = require("@tests/lib/t")
+
+type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+
+local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+-- c0120 override: a spec writes only under its home's .cache (the jail refuses the checkout top's); root stays the
+-- repository it clones
+local work = `{fixture.physical(".")}/.cache/c0360-deferred`
+
+local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
+	.. 'check "RC1: fixture" true\nfinish\n'
+
+local REVIEW = "# Review 001\n\n"
+	.. "### F1 [high] a high finding\nEvidence: x\n\n"
+	.. "### F2 [medium] a medium finding\nEvidence: y\n\n"
+	.. "### F3 [low] a low finding\nEvidence: z\n\n"
+	.. "Verdict: changes requested\n"
+
+local function must(r: Result, what: string): string
+	if not r.ok then
+		error(`{what} failed ({r.code}): {r.stderr}{r.stdout}`, 2)
+	end
+	return (string.gsub(r.stdout, "%s+$", ""))
+end
+
+local function git(args: { string }): string
+	return must(fixture.exec(work, "git", args), "git " .. table.concat(args, " "))
+end
+
+local function tr(args: { string }): Result
+	return fixture.exec(work, "bash", { "scripts/tracker.sh", table.unpack(args) })
+end
+
+local function read(path: string): string
+	return fs.readFile(`{work}/{path}`)
+end
+
+local function write(path: string, text: string)
+	fs.writeFile(`{work}/{path}`, text)
+end
+
+local function edit(path: string, from: string, to: string)
+	local text, n = string.gsub(read(path), from, to)
+	assert(n > 0, `pattern {from} not found in {path}`)
+	write(path, text)
+end
+
+-- answers: the lines of refute-001.md. Commits them (done needs a clean tree), then runs done.
+local function attempt(answers: { string }, review: string?): Result
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+	write("pickman/.tracker/rafts/active/R0010/review-001.md", review or REVIEW)
+	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
+	must(tr({ "commit", "-m", "round", "--time", "1" }), "commit")
+	return tr({ "done", "R0010" })
+end
+
+local function refused(r: Result, ...: string)
+	t.expect(r.ok).toBe(false)
+	for _, needle in { ... } do
+		t.expect(string.find(r.stderr, needle, 1, true) ~= nil).toBe(true)
+	end
+	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+	t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/active/R0010`)).toBe(true) -- nothing was moved
+end
+
+return t.spec("c0360 done accepts deferred answers", function(it)
+	it("sets up a clone with a started raft and a backlog follow-up issue", function()
+		if fs.isDir(work) then
+			fs.removeDir(work)
+		end
+		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+		git({ "remote", "remove", "origin" })
+		local listed = process.exec("git", {
+			"ls-files",
+			"-co",
+			"--exclude-standard",
+			"zn",
+			"scripts",
+			"z-nile",
+			":(exclude)z-nile/.tracker",
+			":(exclude)z-nile/next",
+			":(exclude)z-nile/compaction.txt",
+		}, { cwd = root })
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if fs.isFile(`{root}/{path}`) then
+				local parent = string.match(path, "^(.*)/[^/]+$")
+				if parent then
+					fs.writeDir(`{work}/{parent}`)
+				end
+				fs.writeFile(`{work}/{path}`, fs.readFile(`{root}/{path}`))
+			end
+		end
+		git({ "config", "user.name", "e2e" })
+		git({ "config", "user.email", "e2e@example.invalid" })
+		git({ "config", "gc.auto", "0" })
+		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+		engine.empty(work)
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
+		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+		must(tr({ "new", "issue", "c", "followup", "--project", "pickman" }), "new follow-up")
+		must(
+			tr({ "new", "raft", "feature", "demo", "f0010", "--single", "--project", "pickman" }),
+			"new raft"
+		)
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		for _, doc in { "pickman/.tracker/issues/f0010/f0010.md", "pickman/.tracker/rafts/R0010/R0010.md" } do
+			edit(doc, "design: draft", "design: ready")
+		end
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		edit(
+			"pickman/.tracker/issues/f0010/f0010.md",
+			"### Touched modules\n",
+			"### Touched modules\n- `notes/alpha`\n"
+		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
+		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "prep ready" })
+		must(tr({ "start", "R0010" }), "start")
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up stays in the backlog
+	end)
+
+	it("refuses to defer a high finding", function()
+		refused(
+			attempt({
+				"- F1: deferred c0020: later",
+				"- F2: fixed abc: ok; consequences: none",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F1",
+			"high"
+		)
+	end)
+
+	it("refuses to defer to an issue that does not exist", function()
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred c0999: later",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F2",
+			"c0999"
+		)
+	end)
+
+	it("refuses to defer to an issue that is not in the backlog", function()
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred f0010: later",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F2",
+			"f0010"
+		)
+	end)
+
+	it("refuses a deferral that names no issue or gives no reason", function()
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F2",
+			"deferred needs"
+		)
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred c0020",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F2",
+			"deferred needs"
+		)
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred c0020:   ",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F2",
+			"deferred needs"
+		)
+	end)
+
+	it("refuses to defer a finding whose severity is not stated", function()
+		-- the unrated finding is followed by a rated one: its severity must not be borrowed
+		local review = "# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
+			.. "### F2 [low] a rated finding\nEvidence: y\n\nVerdict: changes requested\n"
+		refused(
+			attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok; consequences: none" }, review),
+			"F1",
+			"unrated"
+		)
+	end)
+
+	it("still accepts fixed and refuted for any severity, and rejects other words", function()
+		refused(
+			attempt({
+				"- F1: ignored",
+				"- F2: fixed abc: ok; consequences: none",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F1"
+		)
+		refused(
+			attempt({
+				"- F1: fixed abc: ok; consequences: none",
+				"- F2: deferred-ish c0020: later",
+				"- F3: fixed abc: ok; consequences: none",
+			}),
+			"F2"
+		)
+		-- an unanswered finding is reported on its own, before any invalid deferral
+		local mixed = attempt({
+			"- F1: ignored",
+			"- F2: deferred c0999: later",
+			"- F3: fixed abc: ok; consequences: none",
+		})
+		refused(mixed, "F1", "not answered")
+		t.expect((string.find(mixed.stderr, "c0999", 1, true))).toBe(nil)
+	end)
+
+	it("finishes when medium and low findings are deferred", function()
+		local r = attempt({
+			"- F1: refuted: the reviewer misread the spec (test: x)",
+			"- F2: deferred c0020: needs its own design",
+			"- F3: deferred c0020: same follow-up",
+		})
+		if not r.ok then
+			error(r.stderr .. r.stdout)
+		end
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/done/f0010`)).toBe(true)
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
+	end)
+
+	it("cleans up", function()
+		cleanup.removeTree(work)
+	end)
+end)

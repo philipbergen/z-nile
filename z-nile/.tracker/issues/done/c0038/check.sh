@@ -28,7 +28,7 @@ check "AC1: a deferred answer is refused when the finding is high or unrated, th
 check "AC2: fixed and refuted still work, other words stay unanswered, and a valid deferral finishes done" cases_pass \
   "still accepts fixed and refuted" "finishes when medium and low findings are deferred"
 check "AC3: the skills document deferred and drop the interim form" bash -c '
-  x=.claude/skills/execute-raft/SKILL.md; t=.claude/skills/tracker/SKILL.md
+  x=../.claude/skills/execute-raft/SKILL.md; t=../.claude/skills/tracker/SKILL.md
   grep -qF -- "- F<n>: deferred <id>: <why>" "$x" || { echo "execute-raft lacks the deferred form"; exit 1; }
   grep -qF -- "deferred <id>" "$t" || { echo "tracker skill lacks deferred"; exit 1; }
   for s in "interim form" "refuted: below the merge threshold"; do

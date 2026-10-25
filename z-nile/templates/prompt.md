@@ -16,7 +16,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 ## Hard rules
 1. **Follow the `execute-raft` skill below, step by step.** It is your protocol.
 2. **Work only in the raft's worktree.** Your first action is `cd "$(./zn worktree {{RAFT_ID}})"` (skip it if your working directory already is that worktree), and you never edit the main checkout. The worktree lives under `.worktree/` inside the repo. **One raft branch and one PR for this whole prompt** (in Phase 2B, temporary stream branches feed it and are deleted). `./zn start {{RAFT_ID}}` creates the branch and the draft PR; the raft is already claimed and in `active/`. Commit only with `./zn commit` (in Phase 2B, stream branches are committed with plain git; the raft branch only with `./zn commit`).
-3. **Never edit** any `check.sh`, `tracker/architecture.md` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
+3. **Never edit** any `check.sh`, `{{ARCHITECTURE_PATH}}` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
 4. **Experiments come before any production code.** If an experiment fails and has no fallback, stop.
 5. **Tests come first** for each issue. Watch them fail for the right reason, then implement.
 6. **Stay inside the designs.** Anything not covered by an issue must become a new issue first (`./zn new issue … --project <name>`, or `--raft <R-id>` for an emergent issue).
@@ -33,14 +33,14 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 ```
 If it says `parallel: yes`, follow execute-raft Phase 2B unless the human told you to run sequentially.
 
-## Architecture map (tracker/architecture.md)
+## Architecture map ({{ARCHITECTURE_PATH}})
 {{ARCHITECTURE}}
 
 ## Lessons (build and both, from .claude/skills/*/lessons)
 Apply each before you write the code it concerns; its full text is `./zn lessons --full <id>`.
 {{LESSONS}}
 
-## Work items (verbatim from tracker/)
+## Work items (verbatim from {{ROOT}}/)
 {{ITEMS}}
 
 ## Skills (verbatim from .claude/skills/, the binding rules)

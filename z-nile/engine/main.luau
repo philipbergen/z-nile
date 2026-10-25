@@ -35,10 +35,13 @@ usage: ./zn <command> ...
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
   stamp <state>                                 print a fresh status stamp (diagnostics)
-  find <id>                                     print the item's current directory
+  find <id>                                     print the item's current directory (from where ./zn was run)
   list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
-  members <R-id>                                print directories of every issue in the raft
+  members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
+  busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
+                                                folder): rafts active on origin/main, branches and worktrees that
+                                                change them; exits 1 when anything does (read-only)
   check <id>                                    run an item's check.sh (a raft runs its own)
   renumber <old|item directory> [<new>]         step an id (conflict resolution), or one copy of a duplicated id;
                                                 <new> defaults to the next free number (z-nile/next, by one)
@@ -79,6 +82,13 @@ end
 local function title(slug: string): string
 	local s = string.gsub(slug, "%-", " ")
 	return (string.upper(string.sub(s, 1, 1)) .. string.sub(s, 2))
+end
+
+-- The name of the project whose root is `root` (the raft template's {{PROJECT}}, c0120: its RC0 runs that project's
+-- gate); the working tree's registry decides, and a root no project holds is named as it is.
+local function projectNameOf(root: string): string
+	local p = projects.projectOf(projects.load(), root)
+	return if p then p.name else root
 end
 
 local function render(path: string, vars: { [string]: string }): string
@@ -773,7 +783,7 @@ local function projectRoot(opts: { [string]: { string } }, what: string): string
 	end
 	local where = if here == "" then "the checkout's root" else here
 	return fail(
-		`{what}: no project holds {where}: run it in a project's folder or pass --project <name> ({list}); pickman has no folder until c0120, so its work passes --project pickman`
+		`{what}: no project holds {where}: run it in a project's folder or pass --project <name> ({list})`
 	)
 end
 
@@ -1000,6 +1010,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					SINGLE = if opts["--single"] then "true" else "false",
 					ISSUES = table.concat(ids, ", "),
 					DATE = today(),
+					PROJECT = projectNameOf(root),
 				}
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/{chosen}.md`,
@@ -1076,6 +1087,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			SINGLE = if opts["--single"] then "true" else "false",
 			ISSUES = table.concat(ids, ", "),
 			DATE = today(),
+			PROJECT = projectNameOf(root),
 		}
 		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
@@ -1408,13 +1420,189 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	fail("lost the race to main 3 times: run land again")
 end
 
+-- A repo-relative path as the caller can use it (c0120): relative to the directory ./zn was run from (hereDir, c0114's
+-- ZN_CWD in ZN_TOP), so `$(./zn find <id>)/...` works from a project's home as from the root.
+local function callerPath(rel: string): string
+	local from = hereDir()
+	if from == "" then
+		return rel
+	end
+	local a = string.split(from, "/")
+	local b = string.split(rel, "/")
+	local i = 1
+	while i <= #a and i <= #b and a[i] == b[i] do
+		i += 1
+	end
+	local parts: { string } = {}
+	for _ = i, #a do
+		table.insert(parts, "..")
+	end
+	for j = i, #b do
+		table.insert(parts, b[j])
+	end
+	return if #parts == 0 then "." else table.concat(parts, "/")
+end
+
 function cmd.find(pos: { string })
-	print(store.get(pos[1] or fail("usage: find <id>")).dir)
+	print(callerPath(store.get(pos[1] or fail("usage: find <id>")).dir))
 end
 
 function cmd.members(pos: { string })
 	for _, m in store.members(pos[1] or fail("usage: members <R-id>")) do
-		print(m.dir)
+		print(callerPath(m.dir))
+	end
+end
+
+-- The preps the user listed as stacked on c0120's (decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the
+-- stack"): designed for the move, they are no freeze for it.
+local STACKED_ON_C0120 =
+	{ ["prep-c0115"] = true, ["prep-c0116"] = true, ["prep-c0117"] = true, ["prep-c0118"] = true }
+-- The branches the user approved as harmless to the move, by exact name (decided with the user, 2026-10-23: "Named
+-- exemptions you approve"): no freeze either, nor a worktree on one of them. Any other branch still blocks.
+local APPROVED_FOR_C0120 = {
+	["proto-linux-jail"] = true,
+	["proto-r0260"] = true,
+	["prep-guard-follow-ups"] = true,
+	["proto-c0117"] = true,
+	["proto-c0118"] = true,
+	-- decided with the user, 2026-10-24: "Approve all three"
+	["prep-c0121"] = true,
+	["proto-c0121"] = true,
+	["impl-c0120"] = true,
+}
+
+-- c0120's move, as the approving review pins it (`Move commit: <sha>` in the newest approved review-NNN.md in c0120's
+-- folder at this checkout; AC18 reads the same line): a branch whose history holds it is built on c0120's
+-- implementation, so stacked on c0120 (decided with the coordinator, 2026-10-24, after #99 merged c0120's prep into
+-- main and the prep test could no longer tell a stacked branch apart). Nil when no approved review pins one.
+local function c0120Move(): string?
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local best, pinned = -1, nil
+	for _, dir in
+		{
+			"z-nile/.tracker/issues/c0120",
+			"z-nile/.tracker/issues/active/c0120",
+			"z-nile/.tracker/issues/done/c0120",
+		}
+	do
+		local path = `{top}/{dir}`
+		if fs.isDir(path) then
+			for _, name in fs.readDir(path) do
+				local n = tonumber(string.match(name, "^review%-(%d+)%.md$"))
+				if n and n > best then
+					local text = fs.readFile(`{path}/{name}`)
+					local sha = string.match(text, "\nMove commit: (%x+)")
+					if string.find(text, "\nVerdict: approve", 1, true) and sha then
+						best, pinned = n, sha
+					end
+				end
+			end
+		end
+	end
+	return pinned
+end
+
+-- Why c0120's freeze ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil when it
+-- doesn't: c0120's prep itself, or one of the listed stacked preps, by exact name ("stacked on its prep"); a branch the
+-- user approved, by exact name ("approved by name"); or any branch whose history holds a commit of origin/prep-c0120
+-- that origin/main doesn't (its merge-base with the prep is not on main: "stacked on its prep"). A name that only
+-- looks stacked (`prep-c0120-x`, `stacked-on-c0120`) counts for nothing, and only `refs/remotes/origin/` loses its
+-- `origin/`: a local branch named `origin/proto-c0117` is not proto-c0117 (code review 011 F5).
+local function stackedOnC0120(ref: string): string?
+	local name = string.match(ref, "^refs/remotes/origin/(.+)$")
+		or string.match(ref, "^refs/heads/(.+)$")
+		or ref
+	if APPROVED_FOR_C0120[name] then
+		return "approved by name"
+	end
+	if name == "prep-c0120" or STACKED_ON_C0120[name] then
+		return "stacked on its prep"
+	end
+	local pinned = c0120Move()
+	if pinned and sh.run("git", { "merge-base", "--is-ancestor", pinned, ref }).ok then
+		return "holds its move"
+	end
+	if not sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/prep-c0120" }).ok then
+		return nil
+	end
+	local base = sh.trim(sh.run("git", { "merge-base", ref, "refs/remotes/origin/prep-c0120" }).stdout)
+	if base == "" then
+		return nil
+	end
+	if sh.run("git", { "merge-base", "--is-ancestor", base, "refs/remotes/origin/main" }).ok then
+		return nil
+	end
+	return "stacked on its prep"
+end
+
+-- Whether c0120's freeze is on: `./zn busy` was given paths (the freeze, AC16: `./zn busy tracker src tests`) and
+-- origin/main doesn't hold the move yet (it still has the old layout's tracker/rafts/done/R0001/check.sh, AC18's
+-- mark). Without paths (compaction's set), or once the move lands, nothing is exempt, so busy agrees with
+-- `./zn compact` and a later branch reusing one of these names blocks like any other (code review 011 F1).
+local function c0120FreezeOn(pos: { string }): boolean
+	return #pos > 0
+		and sh.run("git", { "cat-file", "-e", "refs/remotes/origin/main:tracker/rafts/done/R0001/check.sh" }).ok
+end
+
+-- What holds `paths` (c0120): every raft active on origin/main (but the current branch's own), every branch that
+-- changes them since it left origin/main (compaction's check, compact.busyRefNames) and every other worktree with
+-- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
+-- While c0120's freeze is on (c0120FreezeOn), a branch it ignores, and a worktree on one, is named on stderr and not
+-- counted.
+function cmd.busy(pos: { string })
+	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
+	local own = string.match(current, "^(R%d%d%d%d)%-")
+	local paths = if #pos > 0 then pos else compactLib.guarded()
+	local found = 0
+	local ok, tree = originTree()
+	if not ok then
+		fail("busy: cannot read origin/main (git fetch origin main)")
+	end
+	local freeze = c0120FreezeOn(pos)
+	local seen: { [string]: boolean } = {}
+	for _, p in tree do
+		local r = string.match(p, "/rafts/active/(R%d%d%d%d)/")
+			or string.match(p, "^rafts/active/(R%d%d%d%d)/")
+		if r and r ~= own and not seen[r] then
+			seen[r] = true
+			-- c0120's own raft, readied for the move, is no freeze on it: its document on origin/main lists c0120
+			-- (c0120's branch is impl2-c0120, not named by the raft)
+			local doc = string.match(p, "^(.*/rafts/active/R%d%d%d%d)/")
+				or string.match(p, "^(rafts/active/R%d%d%d%d)/")
+			local text = sh.run("git", { "show", `refs/remotes/origin/main:{doc}/{r}.md` }).stdout
+			local members = string.match(text, "\nissues:%s*%[([^%]]*)%]") or ""
+			if freeze and string.find(`,{(string.gsub(members, "%s", ""))},`, ",c0120,", 1, true) then
+				stdio.ewrite(`ignored for c0120's freeze: raft {r} (c0120's own)\n`)
+			else
+				print(`raft {r} is active`)
+				found += 1
+			end
+		end
+	end
+	for _, ref in compactLib.busyRefNames(current, paths) do
+		local short = compactLib.shortRef(ref)
+		local why = if freeze then stackedOnC0120(ref) else nil
+		if why then
+			stdio.ewrite(`ignored for c0120's freeze: {short} ({why})\n`)
+		else
+			print(`branch {short} changes {table.concat(paths, ", ")}`)
+			found += 1
+		end
+	end
+	local here = sh.trim(sh.run("pwd", { "-P" }).stdout)
+	for _, wt in compactLib.dirtyWorktrees(here, paths) do
+		-- a worktree on a branch the freeze ignores is ignored with it (the same function); a detached one is not
+		local on = sh.trim(sh.run("git", { "-C", wt, "branch", "--show-current" }).stdout)
+		local why = if freeze and on ~= "" then stackedOnC0120(`refs/heads/{on}`) else nil
+		if why then
+			stdio.ewrite(`ignored for c0120's freeze: worktree {wt} on {on} ({why})\n`)
+		else
+			print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
+			found += 1
+		end
+	end
+	if found > 0 then
+		process.exit(1)
 	end
 end
 
@@ -2563,13 +2751,30 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens)
 end
 
--- Copy each member's acceptance specs into tests/acceptance/<id>, run `check`, then remove the
--- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run).
+-- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
+-- tree's registry; "." for the root's project.
+local function homeOf(item: store.Item): string
+	return projects.homeOf(projects.load(), item.dir)
+end
+
+-- `<home>/<rel>`, or `<rel>` for the root's home.
+local function inHome(home: string, rel: string): string
+	return if home == "." then rel else `{home}/{rel}`
+end
+
+-- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
+local function promotedDir(m: store.Item): string
+	return projects.promotedDir(projects.load(), m.root, m.id)
+end
+
+-- Copy each member's acceptance specs into its project's tests/acceptance/<id>, run `check`, then remove the
+-- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run). `check` gets the copied
+-- spec paths, repo-relative.
 local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boolean): boolean
 	local copied: { string } = {}
 	for _, m in store.members(raft.id) do
 		local acc = `{m.dir}/acceptance`
-		local dest = `tests/acceptance/{m.id}`
+		local dest = promotedDir(m)
 		if fs.isDir(acc) and not fs.isDir(dest) then
 			fs.writeDir(dest)
 			for _, name in fs.readDir(acc) do
@@ -2583,7 +2788,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	local pok, result = pcall(check, copied)
 	local ok = pok and result == true
 	for _, m in store.members(raft.id) do
-		local dest = `tests/acceptance/{m.id}`
+		local dest = promotedDir(m)
 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
 			fs.removeDir(dest)
 		end
@@ -2594,24 +2799,50 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	return ok
 end
 
--- Structural checks promoted acceptance specs must pass in tests/: type check + meta spec
--- (+ the specs themselves when `runSpecs`).
-local function promotedChecks(specs: { string }, runSpecs: boolean): boolean
-	local ok = sh.stream("luau-lsp", { "analyze", "--base-luaurc=.luaurc", "--platform=standard", "tests" })
+-- Structural checks promoted acceptance specs must pass in their project's tests/ (c0120: `home`): type check +
+-- meta spec (+ the specs themselves when `runSpecs`), run from that home. `specs` are repo-relative.
+local function promotedChecks(home: string, specs: { string }, runSpecs: boolean): boolean
+	local ok = sh.stream("luau-lsp", {
+		"analyze",
+		"--base-luaurc=.luaurc",
+		"--platform=standard",
+		"--ignore=**/.tracker/**",
+		inHome(home, "tests"),
+	})
 	local args = { "run", "tests/run", "--", "tests/meta/architecture.spec.luau" }
 	if runSpecs then
+		local prefix = if home == "." then "" else home .. "/"
 		for _, p in specs do
-			table.insert(args, p)
+			if string.sub(p, 1, #prefix) == prefix then
+				table.insert(args, string.sub(p, #prefix + 1))
+			end
 		end
 	end
-	return sh.stream("lune", args) and ok
+	return sh.streamIn(home, "lune", args) and ok
+end
+
+-- promotedChecks for every home the specs land in (a raft's members share one project, c0114).
+local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: boolean): boolean
+	local seen: { [string]: boolean } = {}
+	local ok = true
+	for _, m in store.members(raft.id) do
+		local home = homeOf(m)
+		if not seen[home] then
+			seen[home] = true
+			ok = promotedChecks(home, specs, runSpecs) and ok
+		end
+	end
+	if next(seen) == nil then
+		ok = promotedChecks(homeOf(raft), specs, runSpecs)
+	end
+	return ok
 end
 
 cmd["promote-check"] = function(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: promote-check <R-id>"))
 	print(`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`)
 	if not withPromotedCopies(raft, function(specs)
-		return promotedChecks(specs, false)
+		return promotedChecksAll(raft, specs, false)
 	end) then
 		fail("promoted acceptance specs would break tests/ (see above)")
 	end
@@ -2704,11 +2935,12 @@ function cmd.done(pos: { string })
 	for _, m in store.members(raft.id) do
 		local acc = `{m.dir}/acceptance`
 		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
-			fs.writeDir("tests/acceptance")
-			sh.git({ "mv", acc, `tests/acceptance/{m.id}` })
-			for _, name in fs.readDir(`tests/acceptance/{m.id}`) do
+			local dest = promotedDir(m)
+			fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
+			sh.git({ "mv", acc, dest })
+			for _, name in fs.readDir(dest) do
 				if string.match(name, "%.spec%.luau$") then
-					table.insert(promoted, `tests/acceptance/{m.id}/{name}`)
+					table.insert(promoted, `{dest}/{name}`)
 				end
 			end
 		end
@@ -2756,7 +2988,7 @@ function cmd.done(pos: { string })
 		print("done: inside a spec run, so the full gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
 			print("\n=== promoted acceptance specs: type check + meta + run")
-			if not promotedChecks(promoted, true) then
+			if not promotedChecksAll(raft, promoted, true) then
 				rollback()
 				fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
 			end
@@ -2960,6 +3192,15 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- The raft's project's architecture map (c0120): `<root>/architecture.md`, pickman's in pickman/.tracker/; a project
+-- without one (z-nile) gets a line saying so.
+local function architectureOf(raft: store.Item): string
+	local path = `{raft.root}/architecture.md`
+	return if fs.isFile(path)
+		then fs.readFile(path)
+		else `({raft.root} has no architecture.md: this project has none)`
+end
+
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
 -- architecture map and workstream plan filled in.
 local function renderPrompt(raft: store.Item): string
@@ -2994,7 +3235,9 @@ local function renderPrompt(raft: store.Item): string
 		ISSUE_IDS = table.concat(ids, ", "),
 		ITEMS = items,
 		SKILLS = skills,
-		ARCHITECTURE = fs.readFile("tracker/architecture.md"),
+		ARCHITECTURE = architectureOf(raft),
+		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
+		ROOT = raft.root,
 		WORKSTREAMS = planText,
 		LESSONS = buildLessons(),
 	})

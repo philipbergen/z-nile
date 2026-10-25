@@ -11,10 +11,10 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: board.yml triggers only on push to main and dispatch, read-only, per-ref concurrency, main-only job, no hidden conditions" lune run tests/run -- "$A/board-workflow.spec.luau"
 check "AC2: board.yml sets up, builds dist/board.html, and uploads that file as tracker-board, in that order" lune run tests/run -- "$A/board-workflow.spec.luau"
-check "AC3: setup.sh's tools-only mode skips the gate only for --tools (c0015's text spec; the behavioural run of the whole script is c0055's)" lune run tests/run -- tests/acceptance/c0015/tools.spec.luau
+check "AC3: setup.sh's tools-only mode skips the gate only for --tools (c0015's text spec; the behavioural run of the whole script is c0055's)" lune run tests/run -- ../pickman/tests/acceptance/c0015/tools.spec.luau
 check "AC4: the tracker skill's board row says how to fetch the artifact" lune run tests/run -- "$A/board-docs.spec.luau"
-check "AC5: the board builds with the workflow's own command" bash -c 'out=$(mktemp -d)/dist/board.html && ./zn board --out "$out" >/dev/null && grep -q "board-data" "$out"'
+check "AC5: the board builds with the workflow's own command" bash -c 'out=$(mktemp -d)/dist/board.html && ../zn board --out "$out" >/dev/null && grep -q "board-data" "$out"'
 check "AC6: the acceptance specs are formatted and linted" bash -c 'stylua --check "$0" && selene --quiet "$0"' "$A"
-check "AC7: the full gate passes" z-nile/check.sh --full
+check "AC7: the full gate passes" ./check.sh --full
 
 finish

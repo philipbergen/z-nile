@@ -1,6 +1,7 @@
 --!strict
--- The project registry (c0114): z-nile/projects.toml names every project and the tracker root that holds its issues
--- and rafts. A directory that is not listed is not a project. `parse` and the path helpers are pure; `load` reads the
+-- The project registry (c0114): z-nile/projects.toml names every project, the tracker root that holds its issues
+-- and rafts, and (c0120) its home: the folder its check.sh files and specs run in. A directory that is not listed is
+-- not a project. `parse` and the path helpers are pure; `load` reads the
 -- working tree and `at` reads a commit. The publish guard reads the registry only from origin/main (publish.luau).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -8,7 +9,7 @@ local serde = require("@lune/serde")
 
 local projects = {}
 
-export type Project = { name: string, root: string }
+export type Project = { name: string, root: string, home: string }
 export type Registry = { projects: { Project }, retired: { string } }
 
 projects.FILE = "z-nile/projects.toml"
@@ -72,6 +73,9 @@ function projects.parse(text: string): (Registry?, string?)
 		if type(root) ~= "string" or not (root == projects.LEGACY or root == `{name}/.tracker`) then
 			return nil, `{projects.FILE}: {name}'s root must be "{name}/.tracker" or "{projects.LEGACY}"`
 		end
+		-- the home (c0120): the folder that holds the root, where the project's check.sh files and specs run. The legacy
+		-- root `tracker` has none: its project ran from the repository root (".")
+		local home = if root == projects.LEGACY then "." else name
 		if names[name] then
 			return nil, `{projects.FILE}: project {name} is listed twice`
 		end
@@ -79,7 +83,7 @@ function projects.parse(text: string): (Registry?, string?)
 			return nil, `{projects.FILE}: root {root} is listed twice`
 		end
 		names[name], roots[root] = true, true
-		table.insert(out, { name = name, root = root })
+		table.insert(out, { name = name, root = root, home = home })
 	end
 	local retired: { string } = {}
 	local raw = doc.retired
@@ -138,6 +142,41 @@ function projects.projectOf(reg: Registry, root: string): Project?
 		end
 	end
 	return nil
+end
+
+-- The home of the project whose current root holds the repo-relative `path` (c0120): where that project's check.sh
+-- files and specs run, the folder that holds its root. A path under no current root (a retired root, a fixture's loose
+-- file) has the repository root, which belongs to no project.
+function projects.homeOf(reg: Registry, path: string): string
+	for _, p in reg.projects do
+		if string.sub(path, 1, #p.root + 1) == p.root .. "/" then
+			return p.home
+		end
+	end
+	return "."
+end
+
+-- Where `done` promotes the acceptance specs of the item `id` in the root `root` (c0120): its project's
+-- `<home>/tests/acceptance/<id>`, `tests/acceptance/<id>` for the root's. The one reader of that place: `done`,
+-- `promote-check` and c0120's sequestration check (AC18) all take it from here (code review 006 F1).
+function projects.promotedDir(reg: Registry, root: string, id: string): string
+	local home = projects.homeOf(reg, `{root}/{id}`)
+	return if home == "." then `tests/acceptance/{id}` else `{home}/tests/acceptance/{id}`
+end
+
+-- Every project's promoted-spec folder (c0120): `<home>/tests/acceptance`, `tests/acceptance` for the root's, once
+-- each, in registry order.
+function projects.acceptanceRoots(reg: Registry): { string }
+	local out: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, p in reg.projects do
+		local dir = if p.home == "." then "tests/acceptance" else `{p.home}/tests/acceptance`
+		if not seen[dir] then
+			seen[dir] = true
+			table.insert(out, dir)
+		end
+	end
+	return out
 end
 
 -- The project named `name`, or nil.
