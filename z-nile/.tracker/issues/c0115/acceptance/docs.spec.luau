@@ -160,6 +160,13 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 			at(zr, "`skills --check` and `capture <id>` (they only read)", "zz-rules main-checkout list")
 			at(zr, "`compact`, `remap` and `skills` (without `--check`) refuse", "zz-rules refusal list")
 			at(zr, "- `./zn skills [--check]`\n", "zz-rules Other commands")
+			-- design review 013 F3: the busy row states every move's freeze, c0115's included
+			at(
+				zr,
+				"Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own",
+				"zz-rules busy row"
+			)
+			at(zr, "the move's own active raft", "zz-rules busy row")
 			at(
 				zr,
 				"A branch from before c0115 that added a file inside an old skill folder (`.claude/skills/<old>/`) gets the same conflict",
