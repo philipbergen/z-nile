@@ -4,3 +4,6 @@
 - review-002 F1: zz-rules/audit-what-new-refuses
 - review-002 F2: zz-test/seed-every-enumerated-case
 - review-002 F3: one-off: a header comment left from before the retired/ folder
+- review-003 F1: zz-rules/audit-what-new-refuses
+- review-003 F2: zz-test/guard-needs-its-own-case
+- review-003 F3: zz-test/seed-every-enumerated-case
