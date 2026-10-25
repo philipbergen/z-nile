@@ -15,7 +15,7 @@ You have no shared context with the author. Judge only what's in front of you:
 - in code mode, the diff.
 
 ## Who reviews
-A review runs on the review model of the CLI (the user's rule): Opus through `claude` or `agent`, `grok-4.7-xhigh` through `grok`, never the author's own cheaper model. `./zn dispatch zz-review <id> --mode design|raft|code` starts it from the author's worktree on the CLI and model `.models.toml` names for `zz-review` (stream reviews stay on Sonnet subagents: Stream mode).
+A review runs on the review model of the CLI (the user's rule): Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`, never the author's own cheaper model. `./zn dispatch zz-review <id> --mode design|raft|code` starts it from the author's worktree on the CLI and model `.models.toml` names for `zz-review` (stream reviews stay on Sonnet subagents: Stream mode).
 
 ## Output file
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.

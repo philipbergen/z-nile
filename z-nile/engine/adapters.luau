@@ -350,25 +350,6 @@ local ADAPTERS: { [string]: Adapter } = {
 		end,
 		feed = claudeFeed,
 	},
-	["claude-cloud"] = {
-		cli = "claude",
-		runtime = "claude-cloud",
-		callCapped = false,
-		argv = function(r: Request): { string }
-			return withEffort({
-				"claude",
-				"--cloud",
-				r.prompt,
-				"-p",
-				"--output-format",
-				"stream-json",
-				"--verbose",
-				"--model",
-				r.model,
-			}, "--effort", r.effort)
-		end,
-		feed = claudeFeed,
-	},
 	["grok-cli"] = {
 		cli = "grok",
 		runtime = "grok-cli",
@@ -388,18 +369,6 @@ local ADAPTERS: { [string]: Adapter } = {
 				"-s",
 				r.session,
 			}, "--reasoning-effort", r.effort)
-		end,
-		feed = grokFeed,
-	},
-	["grok-bot"] = {
-		cli = "grok",
-		runtime = "grok-bot",
-		callCapped = false,
-		argv = function(r: Request): { string }
-			local args = withEffort({ "grok", "agent", "-m", r.model }, "--reasoning-effort", r.effort)
-			table.insert(args, "--always-approve")
-			table.insert(args, "headless")
-			return args
 		end,
 		feed = grokFeed,
 	},
@@ -426,26 +395,7 @@ local ADAPTERS: { [string]: Adapter } = {
 		end,
 		feed = agentFeed,
 	},
-	["cursor-app"] = {
-		cli = "agent",
-		runtime = "cursor-app",
-		callCapped = true,
-		argv = function(r: Request): { string }
-			return {
-				"agent",
-				"worker",
-				"--model",
-				if r.effort then `{r.model}[effort={r.effort}]` else r.model,
-				"--workspace",
-				r.cwd,
-			}
-		end,
-		feed = agentFeed,
-	},
 }
-
--- The runtimes whose prompt goes on stdin (they take none on the command line).
-adapters.STDIN = { ["grok-bot"] = true, ["cursor-app"] = true }
 
 function adapters.get(runtime: string): Adapter
 	local a = ADAPTERS[runtime]

@@ -345,12 +345,14 @@ end
 local function record(ctx: Ctx, st: State, id: string, phase: string, attempts: { Attempt }, note: string)
 	for _, a in attempts do
 		if a.tokens > 0 then
+			-- the dispatcher's own rows record 0 minutes: the step's skill records its minutes (the user's G13,
+			-- 2026-10-25: "Dispatcher row 0 min"); a code review's printed line carries the reviewer's for the author
 			local row: Row = {
 				id = id,
 				phase = phase,
 				tokens = a.tokens,
 				model = a.model,
-				minutes = a.minutes,
+				minutes = 0,
 				note = note,
 			}
 			if phase == "code-review" then
@@ -370,7 +372,7 @@ local function record(ctx: Ctx, st: State, id: string, phase: string, attempts: 
 						"--phase",
 						phase,
 						"--time",
-						tostring(a.minutes),
+						"0",
 						"--tokens",
 						tostring(a.tokens),
 						"--model",
@@ -733,6 +735,21 @@ function dispatcher.modelStep(
 		})
 		stdio.ewrite(`dispatch: {why}\n`)
 	end
+	local missing = 0
+	local function skipped(spec: models.Spec, why: string)
+		missing += 1
+		table.insert(attempts, {
+			step = step,
+			cli = spec.cli,
+			runtime = spec.runtime,
+			model = models.id(spec),
+			outcome = "missing",
+			detail = why,
+			tokens = 0,
+			minutes = 0,
+		})
+		stdio.ewrite(`dispatch: {why}\n`)
+	end
 	local basePath = dispatcher.realPath()
 	local repo = trim(process.exec("pwd", { "-P" }).stdout)
 	local token, where = cred.token()
@@ -784,9 +801,9 @@ function dispatcher.modelStep(
 			break
 		end
 		if not bin then
-			outcome = "failed"
-			refused(spec, `{argv[1]} is not installed (the {spec.cli} CLI)`)
-			break
+			-- skipped like quota, named on stderr (the user's G11, 2026-10-25: "Skip missing CLIs")
+			skipped(spec, `{argv[1]} is not installed (the {spec.cli} CLI): skipped`)
+			continue
 		end
 		if ctx.checking() and string.sub(bin :: string, 1, #physicalCache()) ~= physicalCache() then
 			outcome = "failed"
@@ -841,7 +858,7 @@ function dispatcher.modelStep(
 			argv = argv,
 			cwd = cwd,
 			env = env,
-			stdin = if adapters.STDIN[spec.runtime] then prompt else nil,
+			stdin = nil, -- every runtime takes its prompt on the command line
 			adapter = adapter,
 			cap = spec.maxTokens,
 			maxCalls = if adapter.callCapped then spec.maxCalls else nil,
@@ -890,6 +907,8 @@ function dispatcher.modelStep(
 	end
 	if outcome == "quota" then
 		stdio.ewrite(`dispatch: every CLI in the order failed on quota\n`)
+	elseif missing > 0 and missing == #tries then
+		stdio.ewrite(`dispatch: no CLI in the order is installed\n`)
 	end
 	for _, a in attempts do
 		table.insert(st.history, a)

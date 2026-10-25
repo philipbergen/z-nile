@@ -112,7 +112,8 @@ max_calls = 200
 max_minutes = 240
 max_tokens = 12000000
 
-# The review model belongs to the CLI (the user's decision): Opus through claude or agent, grok-4.7-xhigh through grok.
+# The review model belongs to the CLI (the user's decision): Opus through claude or agent, any grok model at xhigh
+# through grok.
 [zz-review.claude]
 model = "claude-opus-5-5"
 rank = 4

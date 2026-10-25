@@ -22,9 +22,10 @@ models.FILE = ".models.toml"
 -- The supported CLIs (the user's decision: `agent` is Cursor's), each with its two runtimes.
 models.CLIS = { "claude", "grok", "agent" }
 models.RUNTIMES = {
-	claude = { "claude-cli", "claude-cloud" },
-	grok = { "grok-cli", "grok-bot" },
-	agent = { "cursor-cli", "cursor-app" },
+	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
+	claude = { "claude-cli" },
+	grok = { "grok-cli" },
+	agent = { "cursor-cli" },
 } :: { [string]: { string } }
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
 models.GATES = { "prep", "raft" }
@@ -329,15 +330,15 @@ function models.resolve(layers: { Layer }, skill: string): Resolved
 	return { skill = skill, order = table.clone(order :: { string }), specs = specs, settings = settings }
 end
 
--- The review model belongs to the CLI (the user's decision): Opus through `claude` or `agent`, grok-4.7 at xhigh
--- through `grok`. Returns why a zz-review spec breaks it, or nil.
+-- The review model belongs to the CLI (the user's decision): Opus through `claude` or `agent`, any grok model at xhigh
+-- through `grok` (the user's G7, 2026-10-25: "Any grok at xhigh"). Returns why a zz-review spec breaks it, or nil.
 function models.reviewRule(skill: string, spec: Spec): string?
 	if skill ~= "zz-review" then
 		return nil
 	end
 	if spec.cli == "grok" then
-		if spec.model ~= "grok-4.7" or spec.effort ~= "xhigh" then
-			return `zz-review.grok: a review through grok runs grok-4.7 at effort xhigh (grok-4.7-xhigh), not {models.id(
+		if not string.match(spec.model, "^grok%-") or spec.effort ~= "xhigh" then
+			return `zz-review.grok: a review through grok runs a grok model at effort xhigh (grok-…-xhigh), not {models.id(
 				spec
 			)}`
 		end

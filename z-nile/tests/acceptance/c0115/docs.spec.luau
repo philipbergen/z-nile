@@ -76,10 +76,9 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		local exec = read(`{Z}/zz-execute/SKILL.md`)
 		at(exec, "\n## Phase 0: Claim", "zz-execute")
 		at(exec, "\n## Stop conditions", "zz-execute")
-		-- c0117 override: the prompt names the skill's file instead of pasting it ("Name the files in the prompt")
 		at(
 			read("z-nile/templates/prompt.md"),
-			"1. **Follow the `zz-execute` skill (its file is named below), step by step.**",
+			"1. **Follow the `zz-execute` skill below, step by step.**",
 			"the prompt template"
 		)
 	end)

@@ -4171,20 +4171,6 @@ local function buildLessons(project: string?): string
 	return (string.gsub(text, "\n$", ""))
 end
 
--- The command that prints a raft's build and both lessons in full (c0117: the lessons' text is named, never pasted; the index stays, c0111):
--- z-nile's skills' and the raft's own project's (c0115), never another project's.
-local function lessonsCommand(project: string?): string
-	local loaded = skillsLib.load(".")
-	local found = skillsLib.plan(loaded)
-	local args = { "./zn lessons --when build --full" }
-	for _, sk in found do
-		if sk.project == skillsLib.ZNILE or sk.project == project then
-			table.insert(args, `--skill {sk.name}`)
-		end
-	end
-	return table.concat(args, " ")
-end
-
 local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
 	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
 
@@ -4374,12 +4360,12 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
--- The raft's project's architecture map (c0120): `<root>/architecture.md`, pickman's in pickman/.tracker/, named for
--- the executor to read (c0117: no map is pasted); a project without one (z-nile) gets a line saying so.
+-- The raft's project's architecture map (c0120): `<root>/architecture.md`, pickman's in pickman/.tracker/; a project
+-- without one (z-nile) gets a line saying so.
 local function architectureOf(raft: store.Item): string
 	local path = `{raft.root}/architecture.md`
 	return if fs.isFile(path)
-		then `Read \`{path}\` before you write code: it is binding.`
+		then fs.readFile(path)
 		else `({raft.root} has no architecture.md: this project has none)`
 end
 
@@ -4438,12 +4424,11 @@ local function renderPrompt(raft: store.Item): string
 			end
 		end
 	end
-	-- z-nile's step skills, then every skill of the raft's own project, each named by its real path (c0115); the
-	-- prompt names the files and every CLI reads them itself (c0117: "Name the files in the prompt")
+	-- z-nile's step skills, then every skill of the raft's own project, each from its real folder (c0115)
 	local project = projectOfRoot(raft.root)
 	local skills = ""
 	for _, path in inlinedSkills(project) do
-		skills ..= `- \`{path}\`\n`
+		skills ..= section(path)
 	end
 	local plan, _, planError = workstreamPlan(raft)
 	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
@@ -4455,11 +4440,10 @@ local function renderPrompt(raft: store.Item): string
 		ITEMS = items,
 		SKILLS = skills,
 		ARCHITECTURE = architectureOf(raft),
-		LESSONS_COMMAND = lessonsCommand(project),
-		LESSONS = buildLessons(project),
 		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
 		ROOT = raft.root,
 		WORKSTREAMS = planText,
+		LESSONS = buildLessons(project),
 		PROJECT = project or raft.root,
 	})
 	for _, m in store.members(raft.id) do
