@@ -39,7 +39,7 @@ check "AC8: the current raft is found by branch; emergent issues only on the raf
   "commit works on a raft branch" "new issue --raft needs the raft's branch" "done rewrites check.sh paths"
 check "AC9: done rewrites check.sh paths to done/" cases_pass "done rewrites check.sh paths"
 check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.md; no clipboard; no banned phrases" bash -c '
-  s=.claude/skills/ready-raft/SKILL.md
+  s=../.claude/skills/ready-raft/SKILL.md
   [ -f "$s" ] || { echo "no $s"; exit 1; }
   [ ! -e .claude/skills/make-prompt ] || { echo "make-prompt still exists"; exit 1; }
   grep -q "^name: ready-raft$" "$s" || { echo "ready-raft: name"; exit 1; }
@@ -47,20 +47,20 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
     grep -qF -- "$k" "$s" || { echo "ready-raft: missing $k"; exit 1; }
   done
   grep -Eq "zn sync([^ -]|$)" "$s" || { echo "ready-raft: no merging sync"; exit 1; }
-  grep -qF "ready-raft/SKILL.md" AGENTS.md || { echo "AGENTS.md: ready-raft row"; exit 1; }
-  t=.claude/skills/tracker/SKILL.md
+  grep -qF "ready-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: ready-raft row"; exit 1; }
+  t=../.claude/skills/tracker/SKILL.md
   grep -qF "./zn ready" "$t" || grep -qE "^\| ready \|" "$t" || { echo "tracker skill: ready"; exit 1; }
   grep -qF "prompt.md" "$t" || { echo "tracker skill: prompt.md"; exit 1; }
-  grep -qF "/ready-raft" .claude/skills/ticket-prep/SKILL.md || { echo "ticket-prep: next step"; exit 1; }
-  ! grep -qF "moves the items to \`active/\`" .claude/skills/execute-raft/SKILL.md || { echo "execute-raft: start still moves"; exit 1; }
-  bad=$(grep -rnIi -e "pbcopy" -e "clipboard" .claude z-nile/templates scripts AGENTS.md || true)
+  grep -qF "/ready-raft" ../.claude/skills/ticket-prep/SKILL.md || { echo "ticket-prep: next step"; exit 1; }
+  ! grep -qF "moves the items to \`active/\`" ../.claude/skills/execute-raft/SKILL.md || { echo "execute-raft: start still moves"; exit 1; }
+  bad=$(grep -rnIi -e "pbcopy" -e "clipboard" .claude ./templates scripts ../AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }
   # the 13 phrases c0005 AC5 bans
   bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
     -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
     -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
-    .claude/skills z-nile/templates AGENTS.md SETUP.md z-nile/engine/main.luau || true)
+    ../.claude/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC11: the overridden c0047 spec passes; no done check.sh names make-prompt (edited in prep)" bash -c '
   lune run tests/run -- tests/acceptance/c0047/override-check.spec.luau || exit 1
@@ -71,7 +71,7 @@ check "AC11: the overridden c0047 spec passes; no done check.sh names make-promp
 check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
   "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
 check "AC13: CI dispatched gate runs only the acceptance specs of the branch raft" bash -c '
-  w=.github/workflows/check.yml
+  w=../.github/workflows/check.yml
   grep -qF "*/active/*/acceptance/*.spec.luau" "$w" || { echo "check.yml: the active acceptance glob is gone (c0001 pins it)"; exit 1; }
   grep -qF "./zn members" "$w" || { echo "check.yml: the dispatched step does not select the raft members"; exit 1; }
   grep -qF "GITHUB_REF_NAME" "$w" || { echo "check.yml: the raft is not taken from the dispatched ref"; exit 1; }'

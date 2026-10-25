@@ -2,7 +2,7 @@
 # Acceptance checks for c0035. SEQUESTERED: never edit during execution.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
-S=.claude/skills
+S=../.claude/skills
 X="$S/execute-raft/SKILL.md"
 
 # Text of one numbered Phase 4 step (the step's line plus its indented continuation lines).

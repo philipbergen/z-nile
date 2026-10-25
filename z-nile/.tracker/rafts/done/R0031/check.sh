@@ -3,23 +3,23 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ./check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0031); do
+for dir in $(../zn members R0031); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0031
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0031
 
 # Done checks that read the skills or main.luau this raft edits (c0035 was edited in prep to accept --phase code-review).
 # c0067-c0072 are R0025's, done before this raft starts; each is found wherever it is.
 done_checks_hold() {
   local id d bad=0
   for id in c0005 c0008 c0035 c0067 c0068 c0069 c0070 c0071 c0072; do
-    d=$(./zn find "$id") || { echo "$id not found"; bad=1; continue; }
+    d=$(../zn find "$id") || { echo "$id not found"; bad=1; continue; }
     bash "$d/check.sh" >/dev/null 2>&1 || { echo "$id's check.sh fails"; bad=1; }
   done
-  local m=.claude/skills/metrics/SKILL.md
+  local m=../.claude/skills/metrics/SKILL.md
   grep -q 'zn sync --fetch' "$m" || { echo "metrics skill lost its './zn sync --fetch' step"; bad=1; }
   if grep -Eq 'zn sync([^ -]|$)' "$m"; then echo "metrics skill runs the merging sync"; bad=1; fi
   return $bad
@@ -33,7 +33,7 @@ check "RC2: no member acceptance spec names what the gate scan bans, or runs a s
   names=$(sed -n "/^local NAMES = {/,/^}/p" "$f" | grep -o "\"[^\"]*\"" | tr -d "\"")
   [ -n "$names" ] || { echo "read no banned names from $f"; exit 1; }
   bad=""
-  for d in $(./zn members R0031); do
+  for d in $(../zn members R0031); do
     [ -d "$d/acceptance" ] || continue
     while IFS= read -r n; do
       hit=$(grep -rliF -- "$n" "$d/acceptance" || true)

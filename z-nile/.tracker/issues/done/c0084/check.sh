@@ -42,7 +42,7 @@ check "AC5: metrics prints spend by phase, per raft, design-review cost per roun
   "gives each raft with counted issues" "prices a design round" "keeps the review-rounds table" "counts every phase in rework"
 
 skills_record_every_phase() {
-  local S=.claude/skills
+  local S=../.claude/skills
   # sec <file> <line that starts the section> <line that starts the next one, empty: to the end>
   sec() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 {p=1} p && e != "" && index($0, e) == 1 && index($0, s) != 1 {p=0} p' "$1"; }
   grep -E "^6\. " "$S/make-issue/SKILL.md" | grep -qF -- "./zn spend <id> --phase capture" ||
@@ -72,9 +72,9 @@ check "AC6: the skills record every phase, and none keeps --time 0" skills_recor
 
 one_ledger_format() {
   local f code bad=0
-  [[ -f z-nile/engine/ledger.luau ]] || { echo "z-nile/engine/ledger.luau is missing"; return 1; }
-  for f in z-nile/engine/*.luau; do
-    [[ $f == z-nile/engine/ledger.luau ]] && continue
+  [[ -f engine/ledger.luau ]] || { echo "engine/ledger.luau is missing"; return 1; }
+  for f in engine/*.luau; do
+    [[ $f == engine/ledger.luau ]] && continue
     code=$(grep -vE '^[[:space:]]*--' "$f") # comment lines don't count (store.luau's layout comment names spend.md)
     # the row format is spelled in the ledger alone
     if grep -nF "| when | commit |" <<<"$code"; then echo "$f spells the spend row format itself"; bad=1; fi
@@ -84,7 +84,7 @@ one_ledger_format() {
     fi
   done
   for f in spend publish; do
-    grep -qE 'ledger\.(parse|append|render|appendOnly)\(' "z-nile/engine/$f.luau" || { echo "$f.luau does not use the ledger"; bad=1; }
+    grep -qE 'ledger\.(parse|append|render|appendOnly)\(' "engine/$f.luau" || { echo "$f.luau does not use the ledger"; bad=1; }
   done
   return $bad
 }

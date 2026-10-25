@@ -118,7 +118,9 @@ function ids.rewrite(text: string, map: { [string]: string }): string
 end
 
 -- `tests/acceptance/<id>` paths that start a token (not inside `{dir}/…`, `$PWD/…` or a longer name), in one pass.
-function ids.rewritePaths(text: string, map: { [string]: string }): string
+-- `homes` (c0120) are project homes other than the root (`pickman`): `<home>/tests/acceptance/<id>` starting a token
+-- is rewritten too, so a root-relative path to a project's promoted spec follows a compaction.
+function ids.rewritePaths(text: string, map: { [string]: string }, homes: { string }?): string
 	local out: { string } = {}
 	local i = 1
 	while true do
@@ -130,7 +132,16 @@ function ids.rewritePaths(text: string, map: { [string]: string }): string
 		local before = if at > 1 then string.sub(text, at - 1, at - 1) else ""
 		local new = map[id :: string]
 		table.insert(out, string.sub(text, i, at - 1))
-		if new and not (before ~= "" and string.match(before, "[%w_/%.}%$%-]")) then
+		local starts = not (before ~= "" and string.match(before, "[%w_/%.}%$%-]"))
+		local list: { string } = homes or {}
+		for _, h in list do
+			local from = at - #h - 1
+			if not starts and from >= 1 and string.sub(text, from, at - 1) == h .. "/" then
+				local ahead = if from > 1 then string.sub(text, from - 1, from - 1) else ""
+				starts = not (ahead ~= "" and string.match(ahead, "[%w_/%.}%$%-]"))
+			end
+		end
+		if new and starts then
 			table.insert(out, `tests/acceptance/{new}`)
 		else
 			table.insert(out, string.sub(text, at, stop))

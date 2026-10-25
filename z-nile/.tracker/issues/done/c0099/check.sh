@@ -9,7 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-spec() { local d; d=$(./zn find c0077) || return 1
+spec() { local d; d=$(../zn find c0077) || return 1
   if [[ -f $d/acceptance/replace-file.spec.luau ]]; then echo "$d/acceptance/replace-file.spec.luau"; else echo tests/acceptance/c0077/replace-file.spec.luau; fi; }
 check "AC1: the stub rojo links .cache/check.rbxl only for the game place's build" bash -c '
   grep -qF "if [ \"\$1\" = build ] && [ \"\$2\" = default.project.json ]; then rm -f .cache/check.rbxl" "$1" || { echo "the stub links on every build"; exit 1; }' _ "$(spec)"

@@ -15,7 +15,7 @@ marker_folders() {
   local id spec want have dir
   for pair in c0076:sweeper c0078:jail-signals; do
     id=${pair%%:*} spec=${pair#*:}
-    dir=$(./zn find "$id") || return 1
+    dir=$(../zn find "$id") || return 1
     want=$(grep -oE '\.cache/[a-z0-9-]+/jailed-cases-ran' "$dir/check.sh" | head -1)
     want=${want%/jailed-cases-ran}
     [[ -f $dir/acceptance/$spec.spec.luau ]] && have=$dir/acceptance/$spec.spec.luau || have=tests/acceptance/$id/$spec.spec.luau

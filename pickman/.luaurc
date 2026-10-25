@@ -1,0 +1,10 @@
+{
+  "languageMode": "strict",
+  "aliases": {
+    "logic": "./src/shared/Logic",
+    "shared": "./src/shared",
+    "tests": "./tests",
+    "scripts": "./scripts",
+    "znile": "../z-nile"
+  }
+}

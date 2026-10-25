@@ -33,13 +33,13 @@ check "AC4: a started raft's branch is left and named; the raft can be readied a
 check "AC5: status refuses any move of a readied item and names stop" cases_pass "status refuses to move a readied item"
 check "AC6: stop gives back a legacy-started raft without moving it" cases_pass "stop gives back a raft claimed by the legacy start"
 check "AC7: the stop-raft skill, the tracker skill and AGENTS.md" bash -c '
-  s=.claude/skills/stop-raft/SKILL.md
+  s=../.claude/skills/stop-raft/SKILL.md
   [ -f "$s" ] || { echo "no $s"; exit 1; }
   grep -q "^name: stop-raft$" "$s" || { echo "stop-raft: name"; exit 1; }
   grep -qF "./zn stop" "$s" || { echo "stop-raft: ./zn stop"; exit 1; }
   grep -qi "main checkout" "$s" || { echo "stop-raft: main checkout"; exit 1; }
   grep -qiE "(branch|pull request|PR).*(left|leave)|(left|leave).*(branch|pull request|PR)" "$s" || { echo "stop-raft: branch and PR are left"; exit 1; }
-  grep -qF "stop-raft/SKILL.md" AGENTS.md || { echo "AGENTS.md: stop-raft row"; exit 1; }
-  grep -qF "./zn stop" .claude/skills/tracker/SKILL.md || grep -qE "^\| stop \|" .claude/skills/tracker/SKILL.md || { echo "tracker skill: stop"; exit 1; }'
+  grep -qF "stop-raft/SKILL.md" ../AGENTS.md || { echo "AGENTS.md: stop-raft row"; exit 1; }
+  grep -qF "./zn stop" ../.claude/skills/tracker/SKILL.md || grep -qE "^\| stop \|" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: stop"; exit 1; }'
 
 finish

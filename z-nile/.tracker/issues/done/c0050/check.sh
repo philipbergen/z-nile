@@ -14,6 +14,6 @@ check "AC2: a refused start changes nothing" lune run tests/run -- "$A/start-dep
 check "AC3: start proceeds once the dependency is done, and for a dependency on a raft-mate" lune run tests/run -- "$A/start-depends.spec.luau"
 check "AC4: the tracker skill's start row documents the rule" lune run tests/run -- "$A/start-depends.spec.luau"
 check "AC5: the acceptance spec is formatted and linted" bash -c 'stylua --check "$0" && selene --quiet "$0"' "$A"
-check "AC6: the full gate passes" z-nile/check.sh --full
+check "AC6: the full gate passes" ./check.sh --full
 
 finish
