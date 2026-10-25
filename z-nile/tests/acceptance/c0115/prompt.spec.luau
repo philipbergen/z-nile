@@ -1,4 +1,6 @@
 --!strict
+-- c0117 override: the prompt names each skill's file (a `- \`<path>\`` line) and the lessons command instead of pasting
+-- them ("Name the files in the prompt"); the order and the project rules below are c0115's.
 -- c0115 AC7: a raft's prompt inlines z-nile's step skills (zz-execute, zz-rules, zz-arch, zz-test, zz-review, in that
 -- order) and then every skill of the raft's own project, each from its real folder, never through .claude/skills;
 -- a z-nile raft gets no project skill, and another project's skills and lessons never reach it. Its Lessons section
@@ -44,7 +46,7 @@ end
 -- the paths of the inlined files, in order, from the Skills section
 local function inlined(prompt: string): { string }
 	local out = {}
-	for path in string.gmatch(section(prompt, "\n## Skills"), '<file path="([^"]+)">') do
+	for path in string.gmatch(section(prompt, "\n## Skills"), "\n%- `([^`]+)`") do
 		table.insert(out, path)
 	end
 	return out
@@ -113,12 +115,15 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 			end
 			table.insert(want, "pickman/skills/pickman-play/SKILL.md")
 			t.expect(paths).toEqual(want)
-			t.expect(has(prompt, "PLAY-RULES")).toBe(true)
-			t.expect(has(prompt, '<file path=".claude/')).toBe(false)
+			t.expect(has(prompt, "PLAY-RULES")).toBe(false) -- c0117 override: named, never pasted
+			t.expect(has(prompt, "`.claude/")).toBe(false)
 			t.expect(has(prompt, "This raft is the pickman project's.")).toBe(true)
 			local lessons = section(prompt, "\n## Lessons", "\n## Work items")
-			t.expect(has(lessons, "zz-test/pin")).toBe(true)
-			t.expect(has(lessons, "pickman-play/feel")).toBe(true)
+			t.expect(has(lessons, "./zn lessons --when build --full")).toBe(true) -- c0117 override: the command
+			t.expect(has(lessons, "--skill zz-test")).toBe(true)
+			t.expect(has(lessons, "--skill pickman-play")).toBe(true)
+			t.expect(has(lessons, "zz-test/pin")).toBe(true) -- the index stays (c0111)
+			t.expect(has(lessons, "Body.")).toBe(false)
 			t.expect(has(prompt, "{{")).toBe(false)
 		end
 	)
@@ -133,7 +138,7 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 		t.expect(has(prompt, "PLAY-RULES")).toBe(false)
 		t.expect(has(prompt, "This raft is the z-nile project's.")).toBe(true)
 		local lessons = section(prompt, "\n## Lessons", "\n## Work items")
-		t.expect(has(lessons, "zz-test/pin")).toBe(true)
+		t.expect(has(lessons, "--skill zz-test")).toBe(true) -- c0117 override: the command
 		t.expect(has(lessons, "pickman-play")).toBe(false)
 		t.expect(has(prompt, "{{")).toBe(false)
 	end)

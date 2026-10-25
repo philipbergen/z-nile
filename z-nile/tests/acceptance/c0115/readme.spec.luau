@@ -136,8 +136,8 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 		end
 		t.expect(seen >= 10).toBe(true)
 		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
-		at(pic, "dispatcher (c0117, planned)", "the picture")
-		at(pic, ".models.toml (c0117, planned)", "the picture")
+		at(pic, 'dispatcher["dispatcher: ./zn dispatch"]', "the picture") -- c0117 override: the dispatcher is built
+		at(pic, 'models[".models.toml: the model and CLI per step"]', "the picture") -- c0117 override
 		at(pic, "c0118, planned", "the picture")
 	end)
 
@@ -151,8 +151,8 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			{
 				"\n- **The tracker.**",
 				"\n- **The skills.**",
-				"\n- **The dispatcher** (c0117, planned).",
-				"\n- **`.models.toml`** (c0117, planned).",
+				"\n- **The dispatcher.**", -- c0117 override: built
+				"\n- **`.models.toml`.**", -- c0117 override: built
 				"\n- **The board.**",
 			}
 		do

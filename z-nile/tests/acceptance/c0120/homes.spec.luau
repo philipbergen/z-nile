@@ -413,7 +413,9 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			end
 			local prompt = fs.readFile(at("pickman/.tracker/rafts/active/R0010/prompt.md"))
 			t.expect(has(prompt, "## Architecture map (pickman/.tracker/architecture.md)")).toBe(true)
-			t.expect(has(prompt, "ARCH-MARKER pickman's map")).toBe(true)
+			-- c0117 override: the map is named for the executor to read, never pasted
+			t.expect(has(prompt, "Read `pickman/.tracker/architecture.md` before you write code")).toBe(true)
+			t.expect(has(prompt, "ARCH-MARKER")).toBe(false)
 			t.expect(has(prompt, "## Work items (verbatim from pickman/.tracker/)")).toBe(true)
 			local z = trackerfix.tr(f, f.main, { "ready", "R0020" })
 			if not z.ok then
