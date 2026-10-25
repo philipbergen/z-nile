@@ -1,12 +1,14 @@
 --!strict
--- c0115 AC12's freeze (decided with the user, 2026-10-24, G14: "Yes, same rule"): while origin/main still
--- holds the old testing skill's file (c0115's mark), `./zn busy` with paths ignores c0115's own prep and
--- implementation, the items listed as stacked on them (prep-c0116 … impl-c0121), any branch whose history holds a
--- commit of origin/prep-c0115 or origin/impl-c0115 that main doesn't, and the prototypes approved by exact name
--- (proto-c0116, proto-c0117, proto-c0118, proto-c0121). Each is named on stderr, uncounted. A look-alike name, a local
--- branch named origin/…, an unrelated branch and a detached worktree still block, and nothing is exempt without paths
--- or once the move lands. The same rule as c0120's freeze (z-nile/engine/main.luau's FREEZES). Fixture under
--- .cache/c0115-busy (tests/lib/trackerfix).
+-- c0115 AC12's freeze (decided with the user, 2026-10-24, G14: "Yes, same rule"; scoped and its own raft added
+-- 2026-10-25, design review 013 F2, F5): while origin/main still holds the old testing skill's file (c0115's mark) and
+-- every path `./zn busy` is given lies in the skill folders, busy ignores c0115's own prep and implementation, the
+-- items listed as stacked on them (prep-c0116 … impl-c0121), any branch whose history holds c0115's move commit (the
+-- one on origin/impl-c0115 whose subject starts "c0115: move the skills"), the prototypes approved by exact name
+-- (proto-c0116, proto-c0117, proto-c0118, proto-c0121) and an active raft that lists c0115. Each is named on stderr,
+-- uncounted. A branch sharing only commits main took as a squash (013 F1), a look-alike name, a local branch named
+-- origin/…, an unrelated branch, another raft and a detached worktree still block; nothing is exempt without paths,
+-- for a path outside the skill folders, or once the move lands. The same rule as c0120's freeze
+-- (z-nile/engine/main.luau's FREEZES). Fixture under .cache/c0115-busy (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
@@ -28,7 +30,7 @@ end
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
-local function branchOff(name: string, from: string, file: string)
+local function branchOff(name: string, from: string, file: string, subject: string?)
 	fixture.git(f.main, { "checkout", "-q", "-b", name, from })
 	local parent = string.match(file, "^(.*)/[^/]+$")
 	if parent then
@@ -36,8 +38,12 @@ local function branchOff(name: string, from: string, file: string)
 	end
 	fs.writeFile(`{f.main}/{file}`, `{name}\n`)
 	fixture.git(f.main, { "add", "-A" })
-	fixture.git(f.main, { "commit", "-qm", name })
+	fixture.git(f.main, { "commit", "-qm", subject or name })
 	fixture.git(f.main, { "checkout", "-q", "main" })
+end
+-- a raft document on origin/main listing `issues`, as `./zn ready` would have pushed it
+local function raftDoc(id: string, issues: string): string
+	return `---\nid: {id}\ntype: chore\ntitle: demo\nslug: demo\nissues: [{issues}]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# {id}\n`
 end
 local function push(name: string)
 	fixture.git(f.main, { "push", "-q", "origin", name })
@@ -67,11 +73,23 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 	end)
 
 	it(
-		"c0115's prep and implementation, the stacked items, branches built on them and the approved prototypes are ignored",
+		"c0115's prep and implementation, the stacked items, branches holding its move and the approved prototypes are ignored",
 		function()
 			branchOff("prep-c0115", "main", "z-nile/.tracker/issues/NOTES-c0115.md")
 			push("prep-c0115")
-			branchOff("impl-c0115", "main", "z-nile/skills/zz-x/SKILL.md")
+			-- main takes the prep's change as a squash: the prep's own commit never reaches main (013 F1)
+			trackerfix.elsewhere(
+				f,
+				{ ["z-nile/.tracker/issues/NOTES-c0115.md"] = "prep-c0115\n" },
+				"prep (#1)"
+			)
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			branchOff(
+				"impl-c0115",
+				"main",
+				"z-nile/skills/zz-x/SKILL.md",
+				"c0115: move the skills (renames only)"
+			)
 			push("impl-c0115")
 			branchOff("on-the-impl", "origin/impl-c0115", "z-nile/skills/zz-y/SKILL.md")
 			branchOff("on-the-prep", "origin/prep-c0115", "pickman/skills/pickman-x/SKILL.md")
@@ -83,16 +101,16 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 			branchOff("origin/proto-c0121", "main", "z-nile/skills/zz-c/SKILL.md")
 			branchOff("unrelated-work", "main", "pickman/skills/pickman-y/SKILL.md")
 			local r = busy(PATHS)
-			for _, n in { "on-the-impl", "on-the-prep", "branch impl-c0121 ", "branch proto-c0121 " } do
+			for _, n in { "on-the-impl", "branch impl-c0121 ", "branch proto-c0121 " } do
 				t.expect(has(r.stdout, n)).toBe(false)
 			end
 			t.expect(has(r.stdout, "branch impl-c0115 ")).toBe(false)
 			t.expect(has(r.stdout, "branch origin/impl-c0115 ")).toBe(false)
 			t.expect(has(r.stdout, "branch prep-c0115 ")).toBe(false)
-			t.expect(has(r.stderr, "ignored for c0115's freeze: on-the-impl (stacked on its implementation)"))
-				.toBe(true)
-			t.expect(has(r.stderr, "ignored for c0115's freeze: on-the-prep (stacked on its prep)"))
-				.toBe(true)
+			t.expect(has(r.stderr, "ignored for c0115's freeze: on-the-impl (holds its move)")).toBe(true)
+			-- built on the prep, whose commit main took as a squash: no history rule for c0115, so it blocks
+			t.expect(has(r.stdout, "branch on-the-prep changes")).toBe(true)
+			t.expect(has(r.stderr, "on-the-prep")).toBe(false)
 			t.expect(has(r.stderr, "ignored for c0115's freeze: impl-c0121 (stacked on its prep)")).toBe(true)
 			t.expect(has(r.stderr, "ignored for c0115's freeze: proto-c0121 (approved by name)")).toBe(true)
 			t.expect(has(r.stdout, "branch impl-c0115-x changes")).toBe(true)
@@ -101,6 +119,7 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 			t.expect(has(r.stdout, "branch unrelated-work changes")).toBe(true)
 			t.expect(r.code).toBe(1)
 			drop({
+				"on-the-prep",
 				"impl-c0115-x",
 				"proto-c0121-copy",
 				"origin/proto-c0121",
@@ -133,6 +152,44 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 		fixture.git(f.main, { "worktree", "remove", "--force", detached })
 	end)
 
+	it("an active raft that lists c0115 is ignored; any other raft is listed", function()
+		trackerfix.elsewhere(f, {
+			["z-nile/.tracker/rafts/active/R0099/R0099.md"] = raftDoc("R0099", "c0115, c0113"),
+			["z-nile/.tracker/rafts/active/R0098/R0098.md"] = raftDoc("R0098", "c0116"),
+		}, "tracker: ready R0098 and R0099")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		local r = busy(PATHS)
+		t.expect(has(r.stderr, "ignored for c0115's freeze: raft R0099 (c0115's own)")).toBe(true)
+		t.expect(has(r.stdout, "raft R0099")).toBe(false)
+		t.expect(has(r.stdout, "raft R0098 is active")).toBe(true)
+		t.expect(r.code).toBe(1)
+		local all = busy({})
+		t.expect(has(all.stdout, "raft R0099 is active")).toBe(true)
+		fixture.git(f.other, { "pull", "-q", "origin", "main" })
+		fixture.git(
+			f.other,
+			{ "rm", "-q", "-r", "z-nile/.tracker/rafts/active/R0098", "z-nile/.tracker/rafts/active/R0099" }
+		)
+		fixture.git(f.other, { "commit", "-qm", "tracker: stop R0098 and R0099" })
+		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		t.expect(busy(PATHS).stdout).toBe("")
+	end)
+
+	it("the freeze covers only the skill folders: any other path given turns it off", function()
+		branchOff("prep-c0116", "main", "z-nile/skills/zz-q/SKILL.md")
+		local inside = busy({ "z-nile/skills/" })
+		t.expect(inside.stdout).toBe("")
+		t.expect(has(inside.stderr, "ignored for c0115's freeze: prep-c0116 (stacked on its prep)"))
+			.toBe(true)
+		local mixed = busy({ "z-nile/skills", "z-nile/.tracker" })
+		t.expect(mixed.code).toBe(1)
+		t.expect(has(mixed.stdout, "branch prep-c0116 changes")).toBe(true)
+		t.expect(has(mixed.stdout, "branch impl-c0121 changes")).toBe(true)
+		t.expect(has(mixed.stderr, "ignored")).toBe(false)
+		drop({ "prep-c0116" }, {})
+	end)
+
 	it("nothing is exempt without paths, nor once origin/main loses the mark", function()
 		local all = busy({})
 		t.expect(has(all.stderr, "ignored")).toBe(false)
@@ -146,7 +203,7 @@ return t.spec("c0115 the freeze ignores the items stacked on c0115", function(it
 		t.expect(has(landed.stdout, "branch on-the-impl changes")).toBe(true)
 		t.expect(has(landed.stdout, "branch proto-c0121 changes")).toBe(true)
 		t.expect(has(landed.stderr, "ignored")).toBe(false)
-		drop({ "prep-c0115", "impl-c0115", "on-the-impl", "on-the-prep", "impl-c0121", "proto-c0121" }, {
+		drop({ "prep-c0115", "impl-c0115", "on-the-impl", "impl-c0121", "proto-c0121" }, {
 			"prep-c0115",
 			"impl-c0115",
 		})
