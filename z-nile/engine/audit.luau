@@ -51,16 +51,19 @@ end
 -- describe the raft the issue's `raft:` names (nil when there is none, or the value is not a raft id).
 function audit.raftHolds(issueFront: { [string]: string }, raftDir: string?, raftStatus: string?): boolean
 	local r = issueFront.raft or ""
-	if not string.match(r, "^R%d%d%d%d$") or not raftDir or not raftStatus then
+	if not string.match(r, "^R%d%d%d%d$") or not raftDir then
 		return false
 	end
-	if
-		not string.find(raftDir .. "/", "/rafts/active/", 1, true)
-		or not string.match(raftStatus, "^active%-")
-	then
+	if not string.find(raftDir .. "/", "/rafts/active/", 1, true) then
 		return false
 	end
-	return issueFront.status == raftStatus or issueFront.emergent == "true"
+	-- an emergent issue is made on its active raft's branch and carries no claim: whatever the raft's status says
+	if issueFront.emergent == "true" then
+		return true
+	end
+	return raftStatus ~= nil
+		and string.match(raftStatus, "^active%-") ~= nil
+		and issueFront.status == raftStatus
 end
 
 function audit.scan(root: string): { Found }
