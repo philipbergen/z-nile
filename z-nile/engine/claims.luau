@@ -30,4 +30,33 @@ function claims.taken(cwd: string, value: string, ref: string?, roots: { string 
 	return nil, (string.gsub(r.stderr .. r.stdout, "%s+$", ""))
 end
 
+-- c0116: the tracker documents on `ref` (default origin/main) under `roots` whose status line is `status: <value>`:
+-- every item one claim stamped (`release` gives them back together). nil and git's message when it can't tell.
+function claims.carriers(cwd: string, value: string, ref: string?, roots: { string }): ({ string }?, string?)
+	if not string.match(value, "^[%a%-]+$") then
+		return nil, `not a stamp: {value}`
+	end
+	if #roots == 0 then
+		return nil, "no project roots to search"
+	end
+	local at = ref or "origin/main"
+	local args = { "grep", "-l", "-E", `^status: {value}$`, at, "--" }
+	for _, r in roots do
+		table.insert(args, r .. "/")
+	end
+	local r = process.exec("git", args, { cwd = cwd })
+	if r.code == 1 then
+		return {}, nil
+	elseif r.code ~= 0 then
+		return nil, (string.gsub(r.stderr .. r.stdout, "%s+$", ""))
+	end
+	local out: { string } = {}
+	for line in string.gmatch(r.stdout, "[^\n]+") do
+		-- git grep prints `<ref>:<path>`
+		table.insert(out, string.sub(line, #at + 2))
+	end
+	table.sort(out)
+	return out, nil
+end
+
 return claims

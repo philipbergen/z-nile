@@ -15,7 +15,7 @@ You have no shared context with the author. Judge only what's in front of you:
 - in code mode, the diff.
 
 ## Output file
-- Design mode: `design-review-NNN.md`, in the raft's directory (`./zn metrics` counts rounds from there).
+- Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
 - Code mode: `review-NNN.md`, in the raft directory.
 - `NNN` continues from the highest existing number.
 
@@ -60,6 +60,9 @@ In code mode the PR shows the review as it happens: the author pushes and posts 
 - Write `review-NNN.md` in full; findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
 - On a re-review, list withdrawn findings in a non-heading line under `Inputs:`, for example `Dropped from review-001: F2, F4`. Give a repeated finding a new id and say `(repeat of review-001 F3)` in its claim. Every `### F<n>` heading is a finding that `./zn done` requires an answer to, and ids restart at F1 each round.
 - Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
+
+## Raft mode (from z-raft)
+One short round on a raft z-raft grouped from prepared issues, whose own designs were reviewed apart. Copy the raft's `grouped:` value onto a line of its own under `Inputs:`, as `Grouped: [<the value>]`: z-raft's carried move and `ready` need a review that quotes the record it read. Never edit a review once it is written: a new round is a new file. Attack only the raft: item 7 (**Raft coherence**) below, and the raft's Theme, Order & dependencies and Whole-raft design: do two members change one module, public signature or `architecture.md` edge in ways that disagree, does the order follow `depends_on` and what the interfaces force, and does the Theme quote the decisions the members rely on? Don't re-review a member's design. A finding whose fix needs a member's design to change says so: z-raft takes that member out of the raft.
 
 ## Design mode (from z-design)
 Attack all of the following:

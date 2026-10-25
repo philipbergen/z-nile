@@ -1,7 +1,7 @@
 --!strict
 -- c0115 AC9: z-nile/README.md opens (right after its title) with a mermaid picture of the five parts: the tracker,
 -- the skills, the dispatcher, .models.toml and the board. Every z- or zz- skill it draws exists in z-nile/skills, or
--- its node says `planned`, and the unbuilt parts carry their issue: z-raft (c0116), the dispatcher and .models.toml
+-- its node says `planned`, and the unbuilt parts carry their issue: the dispatcher and .models.toml
 -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
 -- the three design checklists by path, each of which exists. Reads the real tree.
 local process = require("@lune/process")
@@ -135,7 +135,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			end
 		end
 		t.expect(seen >= 10).toBe(true)
-		at(pic, "z-raft (c0116, planned)", "the picture")
+		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
 		at(pic, "dispatcher (c0117, planned)", "the picture")
 		at(pic, ".models.toml (c0117, planned)", "the picture")
 		at(pic, "c0118, planned", "the picture")

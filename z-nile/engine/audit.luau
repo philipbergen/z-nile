@@ -15,7 +15,7 @@ local audit = {}
 audit.ITEM_CODES = { duplicate = true, ["no-document"] = true, ["legacy-name"] = true, ["no-slug"] = true }
 
 local KINDS = { { dir = "issues", space = "issue" }, { dir = "rafts", space = "raft" } }
-local STATES = { "", "active/", "done/" }
+local STATES = { "", "active/", "done/", "retired/" } -- retired/: rafts recombine retired (c0116), rafts only
 
 local function front(text: string): { [string]: string }
 	local out: { [string]: string } = {}
@@ -281,6 +281,52 @@ function audit.run(root: string): { Problem }
 				table.insert(names, f.id)
 			end
 			add("warning", "shared-number", list[1].path, `one number for {table.concat(names, ", ")}`)
+		end
+	end
+	-- c0116: a raft given back by `release` after `new raft` stays at `new` with no member (publish never deletes): an
+	-- orphan. Membership is each issue's `raft:` line, so an orphan is a backlog raft at `new` that no issue names.
+	local named: { [string]: boolean } = {}
+	for _, f in found do
+		local doc = `{root}/{f.path}/{f.id}.md`
+		if f.kind == "issue" and fs.isFile(doc) then
+			local r = front(fs.readFile(doc)).raft
+			if r and r ~= "" then
+				named[r] = true
+			end
+		end
+	end
+	for _, f in found do
+		local doc = `{root}/{f.path}/{f.id}.md`
+		local retired = string.find(f.path, "/retired/", 1, true) ~= nil
+		local backlog = not retired
+			and not string.find(f.path, "/active/", 1, true)
+			and not string.find(f.path, "/done/", 1, true)
+		if retired and f.kind ~= "raft" then
+			add("error", "retired-raft", f.path, `{f.id} is in retired/: only a raft is retired`)
+		elseif retired and fs.isFile(doc) and (front(fs.readFile(doc)).retired or "") == "" then
+			add(
+				"error",
+				"retired-raft",
+				f.path,
+				`{f.id} is in retired/ without retired: <keeper> (only recombine retires a raft)`
+			)
+		end
+		if f.kind == "raft" and backlog and not named[f.id] and fs.isFile(doc) then
+			local st = front(fs.readFile(doc)).status or ""
+			-- review 003 F6: an empty prepared raft too (an unfold of its last member): nothing can ready it
+			if
+				st == "new"
+				or string.match(st, "^new%-")
+				or st == "prepared"
+				or string.match(st, "^prepared%-")
+			then
+				add(
+					"warning",
+					"orphan-raft",
+					f.path,
+					`{f.id} is a raft with no member (given back, or emptied by unfold): retire it with ./zn recombine <a raft of its project and type> {f.id}`
+				)
+			end
 		end
 	end
 	local okReg, reg = pcall(projects.load, root)
