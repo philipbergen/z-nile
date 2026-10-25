@@ -10,7 +10,19 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
-local SKILLS = ".claude/skills"
+-- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links), as
+-- repository-relative folders ("z-nile/skills/zz-rules")
+local function skillDirs(): { string }
+	local out = {}
+	for _, base in { "z-nile/skills", "pickman/skills" } do
+		local names = fs.readDir(`{TOP}/{base}`)
+		table.sort(names)
+		for _, name in names do
+			table.insert(out, `{base}/{name}`)
+		end
+	end
+	return out
+end
 local function read(path: string): string
 	return fs.readFile(`{TOP}/{path}`)
 end
@@ -21,8 +33,7 @@ local function at(text: string, needle: string, where: string)
 end
 local function docs(): { [string]: string }
 	local out: { [string]: string } = { ["AGENTS.md"] = read("AGENTS.md"), ["SETUP.md"] = read("SETUP.md") }
-	for _, name in fs.readDir(`{TOP}/{SKILLS}`) do
-		local dir = `{SKILLS}/{name}`
+	for _, dir in skillDirs() do
 		if fs.isFile(`{TOP}/{dir}/SKILL.md`) then
 			out[`{dir}/SKILL.md`] = read(`{dir}/SKILL.md`)
 		end
@@ -40,7 +51,7 @@ end
 
 return t.spec("c0120 the documents say where pickman lives", function(it)
 	it("the tracker skill states the roots, the homes, the retired root and the new commands", function()
-		local s = read(`{SKILLS}/tracker/SKILL.md`)
+		local s = read(`z-nile/skills/zz-rules/SKILL.md`)
 		local w = "tracker skill"
 		at(s, "pickman's is `pickman/.tracker/` and z-nile's, the tooling's, is `z-nile/.tracker/`", w)
 		at(
@@ -75,7 +86,7 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 	it(
 		"the testing skill states where specs live and run, each project's gate, and promotion into the home",
 		function()
-			local s = read(`{SKILLS}/testing/SKILL.md`)
+			local s = read(`z-nile/skills/zz-test/SKILL.md`)
 			local w = "testing skill"
 			at(
 				s,
@@ -122,12 +133,16 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 
 	it("the architecture and ticket-prep skills, AGENTS.md and SETUP.md name pickman's home", function()
 		at(
-			read(`{SKILLS}/architecture/SKILL.md`),
+			read(`pickman/skills/pickman-arch/SKILL.md`),
 			"every path in this skill is relative to `pickman/`",
 			"architecture skill"
 		)
-		at(read(`{SKILLS}/architecture/SKILL.md`), "`pickman/.tracker/architecture.md`", "architecture skill")
-		at(read(`{SKILLS}/ticket-prep/SKILL.md`), "`pickman/.tracker/game-design.md`", "ticket-prep skill")
+		at(
+			read(`pickman/skills/pickman-arch/SKILL.md`),
+			"`pickman/.tracker/architecture.md`",
+			"architecture skill"
+		)
+		at(read(`z-nile/skills/z-design/SKILL.md`), "`pickman/.tracker/game-design.md`", "ticket-prep skill")
 		at(read("AGENTS.md"), "The game is the `pickman` project, in `pickman/`", "AGENTS.md")
 		at(read("AGENTS.md"), "designing or writing anything in `pickman/src/`", "AGENTS.md")
 		at(read("AGENTS.md"), "runs one suite per checkout and project home at a time", "AGENTS.md")

@@ -98,9 +98,7 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			),
 			["z-nile/.tracker/rafts/R0020/check.sh"] = ZNILE_CHECK,
 		}
-		for _, sk in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			seed[`.claude/skills/{sk}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{sk}/SKILL.md`)
-		end
+		-- the prompt's skills come with the copied tooling (z-nile/skills, c0115)
 		for _, state in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			seed[`pickman/.tracker/{state}/.gitkeep`] = ""
 		end

@@ -21,7 +21,7 @@ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" })
 -- git blob ids of the check.sh files restamped for a re-prep after c0120 (the user's decision), as they are now
 local RESTAMPED: { [string]: string } = {
 	["3bdafdae668ab8d19cfb26c4e7c0b15290a61bfe"] = "R0030",
-	["f9d4fd1f0b1322341c3290961d568d67be9ad21a"] = "c0083",
+	["2ed112435a2d5bf9e9670158939bc83cbc7c45aa"] = "c0083", -- c0115 override: its old skill paths renamed (the user's G4)
 	["11a38337b7880b1c72dc980c675f4c5a2fd61db7"] = "R0039",
 	["6b7764378eb11104e765724ed40cfb1af4833749"] = "c0075",
 	-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack": R0044 (prepared on main for the old
