@@ -1,8 +1,8 @@
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 869e802..be6fbe1 100644
+index 1c634a7b..6de6751a 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -1453,63 +1453,131 @@ function cmd.members(pos: { string })
+@@ -1456,22 +1456,20 @@ function cmd.members(pos: { string })
  	end
  end
  
@@ -18,21 +18,42 @@ index 869e802..be6fbe1 100644
 -	["prep-guard-follow-ups"] = true,
 -	["proto-c0117"] = true,
 -	["proto-c0118"] = true,
+-	-- decided with the user, 2026-10-24: "Approve all three"
+-	["prep-c0121"] = true,
+-	["proto-c0121"] = true,
+-	["impl-c0120"] = true,
 +-- The moves that freeze paths while they are in flight, and the branches each one's freeze ignores (one rule for every
-+-- move, in `ignoredBy`). A move's freeze is on while `./zn busy` is given paths and origin/main still holds its mark
-+-- (a path the move takes away); then it ignores, by exact name, its own roots, the branches listed as stacked on them
-+-- and the branches the user approved, and any branch whose history holds a commit of one of its roots on origin that
-+-- origin/main doesn't. A name that only looks stacked counts for nothing.
++-- move, in `ignoredBy`; c0115 G14, decided with the user 2026-10-24: "Yes, same rule"). A move's freeze is on while
++-- `./zn busy` is given paths and origin/main still holds its mark (a path the move takes away); then it ignores, by
++-- exact name, its own roots, the branches listed as stacked on them and the branches the user approved; any branch
++-- whose history holds the move its approving review pins (`pinned`); any branch whose history holds a commit of one of
++-- its roots on origin that origin/main doesn't; and an active raft that lists the item. A name that only looks stacked
++-- counts for nothing.
 +type Freeze = {
 +	item: string,
 +	mark: string,
 +	roots: { [string]: string }, -- root branch -> why ("stacked on its prep")
 +	stacked: { [string]: boolean },
 +	approved: { [string]: boolean },
-+}
++	pinned: (() -> string?)?,
+ }
+ 
+ -- c0120's move, as the approving review pins it (`Move commit: <sha>` in the newest approved review-NNN.md in c0120's
+@@ -1505,53 +1503,129 @@ local function c0120Move(): string?
+ 	return pinned
+ end
+ 
+--- Why c0120's freeze ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil when it
+--- doesn't: c0120's prep itself, or one of the listed stacked preps, by exact name ("stacked on its prep"); a branch the
+--- user approved, by exact name ("approved by name"); or any branch whose history holds a commit of origin/prep-c0120
+--- that origin/main doesn't (its merge-base with the prep is not on main: "stacked on its prep"). A name that only
+--- looks stacked (`prep-c0120-x`, `stacked-on-c0120`) counts for nothing, and only `refs/remotes/origin/` loses its
+--- `origin/`: a local branch named `origin/proto-c0117` is not proto-c0117 (code review 011 F5).
+-local function stackedOnC0120(ref: string): string?
 +local FREEZES: { Freeze } = {
 +	{
-+		-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack" and "Named exemptions you approve"
++		-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack" and "Named exemptions you approve";
++		-- 2026-10-24: "Approve all three" (prep-c0121, proto-c0121, impl-c0120)
 +		item = "c0120",
 +		mark = "tracker/rafts/done/R0001/check.sh",
 +		roots = { ["prep-c0120"] = "stacked on its prep" },
@@ -48,14 +69,18 @@ index 869e802..be6fbe1 100644
 +			["prep-guard-follow-ups"] = true,
 +			["proto-c0117"] = true,
 +			["proto-c0118"] = true,
++			["prep-c0121"] = true,
++			["proto-c0121"] = true,
++			["impl-c0120"] = true,
 +		},
++		pinned = c0120Move,
 +	},
 +	{
 +		-- c0115 (decided with the user, 2026-10-24, G14: "Yes, same rule"): the items stacked on c0115's
 +		-- prep or implementation (c0116, c0117, c0118, c0121) touch the skill paths by design; their prototypes are
-+		-- approved by name. Its mark is the old testing skill's file, which the move takes away.
++		-- approved by name. Its mark is a file the move takes away, kept with the rename map (skillsLib.MOVE_MARK).
 +		item = "c0115",
-+		mark = ".claude/skills/testing/SKILL.md",
++		mark = skillsLib.MOVE_MARK,
 +		roots = { ["prep-c0115"] = "stacked on its prep", ["impl-c0115"] = "stacked on its implementation" },
 +		stacked = {
 +			["prep-c0116"] = true,
@@ -74,15 +99,8 @@ index 869e802..be6fbe1 100644
 +			["proto-c0121"] = true,
 +		},
 +	},
- }
- 
---- Why c0120's freeze ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil when it
---- doesn't: c0120's prep itself, or one of the listed stacked preps, by exact name ("stacked on its prep"); a branch the
---- user approved, by exact name ("approved by name"); or any branch whose history holds a commit of origin/prep-c0120
---- that origin/main doesn't (its merge-base with the prep is not on main: "stacked on its prep"). A name that only
---- looks stacked (`prep-c0120-x`, `stacked-on-c0120`) counts for nothing, and only `refs/remotes/origin/` loses its
---- `origin/`: a local branch named `origin/proto-c0117` is not proto-c0117 (code review 011 F5).
--local function stackedOnC0120(ref: string): string?
++}
++
 +-- Why the freeze `fr` ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil. Only
 +-- `refs/remotes/origin/` loses its `origin/`: a local branch named `origin/proto-c0117` is not proto-c0117 (c0120 code
 +-- review 011 F5).
@@ -95,23 +113,25 @@ index 869e802..be6fbe1 100644
  		return "approved by name"
  	end
 -	if name == "prep-c0120" or STACKED_ON_C0120[name] then
--		return "stacked on its prep"
 +	if fr.roots[name] then
 +		return fr.roots[name]
++	end
++	if fr.stacked[name] then
+ 		return "stacked on its prep"
+ 	end
+-	local pinned = c0120Move()
++	local pinned = if fr.pinned then fr.pinned() else nil
+ 	if pinned and sh.run("git", { "merge-base", "--is-ancestor", pinned, ref }).ok then
+ 		return "holds its move"
  	end
 -	if not sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/prep-c0120" }).ok then
--		return nil
-+	if fr.stacked[name] then
-+		return "stacked on its prep"
- 	end
--	local base = sh.trim(sh.run("git", { "merge-base", ref, "refs/remotes/origin/prep-c0120" }).stdout)
--	if base == "" then
 -		return nil
 +	local roots: { string } = {}
 +	for root in fr.roots do
 +		table.insert(roots, root)
  	end
--	if sh.run("git", { "merge-base", "--is-ancestor", base, "refs/remotes/origin/main" }).ok then
+-	local base = sh.trim(sh.run("git", { "merge-base", ref, "refs/remotes/origin/prep-c0120" }).stdout)
+-	if base == "" then
 -		return nil
 +	table.sort(roots)
 +	for _, root in roots do
@@ -126,8 +146,26 @@ index 869e802..be6fbe1 100644
 +			end
 +		end
  	end
--	return "stacked on its prep"
+-	if sh.run("git", { "merge-base", "--is-ancestor", base, "refs/remotes/origin/main" }).ok then
+-		return nil
 +	return nil
++end
++
++-- The freezes that are on: `./zn busy` was given paths and origin/main still holds the move's mark. Without paths
++-- (compaction's set), or once a move lands, nothing is exempt for it, so busy agrees with `./zn compact` and a later
++-- branch reusing one of these names blocks like any other (c0120 code review 011 F1).
++local function freezesOn(pos: { string }): { Freeze }
++	local on: { Freeze } = {}
++	if #pos == 0 then
++		return on
+ 	end
+-	return "stacked on its prep"
++	for _, fr in FREEZES do
++		if sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok then
++			table.insert(on, fr)
++		end
++	end
++	return on
  end
  
 --- Whether c0120's freeze is on: `./zn busy` was given paths (the freeze, AC16: `./zn busy tracker src tests`) and
@@ -137,22 +175,7 @@ index 869e802..be6fbe1 100644
 -local function c0120FreezeOn(pos: { string }): boolean
 -	return #pos > 0
 -		and sh.run("git", { "cat-file", "-e", "refs/remotes/origin/main:tracker/rafts/done/R0001/check.sh" }).ok
-+-- The freezes that are on: `./zn busy` was given paths and origin/main still holds the move's mark. Without paths
-+-- (compaction's set), or once a move lands, nothing is exempt for it, so busy agrees with `./zn compact` and a later
-+-- branch reusing one of these names blocks like any other (c0120 code review 011 F1).
-+local function freezesOn(pos: { string }): { Freeze }
-+	local on: { Freeze } = {}
-+	if #pos == 0 then
-+		return on
-+	end
-+	for _, fr in FREEZES do
-+		if sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok then
-+			table.insert(on, fr)
-+		end
-+	end
-+	return on
-+end
-+-- the first freeze that ignores `ref`, as `<item>'s freeze: … (<why>)`, or nil
++-- the first freeze that ignores `ref`: its item and why, or nil
 +local function frozenOut(freezes: { Freeze }, ref: string): (string?, string?)
 +	for _, fr in freezes do
 +		local why = ignoredBy(fr, ref)
@@ -168,12 +191,12 @@ index 869e802..be6fbe1 100644
  -- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
 --- While c0120's freeze is on (c0120FreezeOn), a branch it ignores, and a worktree on one, is named on stderr and not
 --- counted.
-+-- While a move's freeze is on (freezesOn: c0120's, c0115's), a branch it ignores, and a worktree on one, is named on
-+-- stderr and not counted.
++-- While a move's freeze is on (freezesOn: c0120's, c0115's), a branch it ignores, a worktree on one, and an active raft
++-- that lists the item, are named on stderr and not counted.
  function cmd.busy(pos: { string })
  	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
  	local own = string.match(current, "^(R%d%d%d%d)%-")
-@@ -1519,7 +1587,7 @@ function cmd.busy(pos: { string })
+@@ -1561,21 +1635,29 @@ function cmd.busy(pos: { string })
  	if not ok then
  		fail("busy: cannot read origin/main (git fetch origin main)")
  	end
@@ -182,7 +205,33 @@ index 869e802..be6fbe1 100644
  	local seen: { [string]: boolean } = {}
  	for _, p in tree do
  		local r = string.match(p, "/rafts/active/(R%d%d%d%d)/")
-@@ -1532,9 +1600,9 @@ function cmd.busy(pos: { string })
+ 			or string.match(p, "^rafts/active/(R%d%d%d%d)/")
+ 		if r and r ~= own and not seen[r] then
+ 			seen[r] = true
+-			-- c0120's own raft, readied for the move, is no freeze on it: its document on origin/main lists c0120
++			-- a move's own raft, readied for it, is no freeze on it: its document on origin/main lists the item
+ 			-- (c0120's branch is impl2-c0120, not named by the raft)
+ 			local doc = string.match(p, "^(.*/rafts/active/R%d%d%d%d)/")
+ 				or string.match(p, "^(rafts/active/R%d%d%d%d)/")
+ 			local text = sh.run("git", { "show", `refs/remotes/origin/main:{doc}/{r}.md` }).stdout
+-			local members = string.match(text, "\nissues:%s*%[([^%]]*)%]") or ""
+-			if freeze and string.find(`,{(string.gsub(members, "%s", ""))},`, ",c0120,", 1, true) then
+-				stdio.ewrite(`ignored for c0120's freeze: raft {r} (c0120's own)\n`)
++			local members =
++				`,{(string.gsub(string.match(text, "\nissues:%s*%[([^%]]*)%]") or "", "%s", ""))},`
++			local ownOf: string? = nil
++			for _, fr in freezes do
++				if string.find(members, `,{fr.item},`, 1, true) then
++					ownOf = fr.item
++					break
++				end
++			end
++			if ownOf then
++				stdio.ewrite(`ignored for {ownOf}'s freeze: raft {r} ({ownOf}'s own)\n`)
+ 			else
+ 				print(`raft {r} is active`)
+ 				found += 1
+@@ -1584,9 +1666,9 @@ function cmd.busy(pos: { string })
  	end
  	for _, ref in compactLib.busyRefNames(current, paths) do
  		local short = compactLib.shortRef(ref)
@@ -195,7 +244,7 @@ index 869e802..be6fbe1 100644
  		else
  			print(`branch {short} changes {table.concat(paths, ", ")}`)
  			found += 1
-@@ -1544,9 +1612,12 @@ function cmd.busy(pos: { string })
+@@ -1596,9 +1678,12 @@ function cmd.busy(pos: { string })
  	for _, wt in compactLib.dirtyWorktrees(here, paths) do
  		-- a worktree on a branch the freeze ignores is ignored with it (the same function); a detached one is not
  		local on = sh.trim(sh.run("git", { "-C", wt, "branch", "--show-current" }).stdout)
@@ -211,3 +260,16 @@ index 869e802..be6fbe1 100644
  		else
  			print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
  			found += 1
+diff --git a/z-nile/engine/skills.luau b/z-nile/engine/skills.luau
+index 19543090..14db687b 100644
+--- a/z-nile/engine/skills.luau
++++ b/z-nile/engine/skills.luau
+@@ -324,6 +324,8 @@ skills.RENAMED_PATH = {
+ -- The six old names that are only ever skill names, and the five ordinary words that name one only as "<word> skill".
+ skills.HYPHENATED = { "make-issue", "ticket-prep", "ready-raft", "launch-raft", "execute-raft", "stop-raft" }
+ skills.WORDS = { "review", "tracker", "metrics", "testing", "architecture" }
++-- c0115's freeze mark (G14): a file the move takes away, so the freeze is on while origin/main still holds it.
++skills.MOVE_MARK = ".claude/skills/testing/SKILL.md"
+ -- c0115 rename map: end
+ 
+ -- One old lesson id found in prose: its span, its old and new skill, and its slug (its renamed lesson exists).

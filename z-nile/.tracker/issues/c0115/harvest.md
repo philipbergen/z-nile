@@ -52,3 +52,4 @@
 - design-review-012 F2: zz-test/no-vacuous-pass
 - design-review-012 F3: zz-review/lists-paste-their-search
 - note c0115 prep, after round 12: c0115's and c0113's check.sh named cwd-relative paths after a variable cd, red under c0120's finished.spec once done; simulate the item done before approving: z-design/prove-specs-pass-on-a-prototype
+- note c0115 rebase onto landed c0120: the G14 engine patch was tried against the freeze specs only, and its literal mark tripped the item's own absence scan (AC4) once applied; run every one of the item's criteria on each experimental patch: z-design/prove-specs-pass-on-a-prototype
