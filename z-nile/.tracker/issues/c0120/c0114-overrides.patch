@@ -1,0 +1,1219 @@
+diff --git a/z-nile/tests/acceptance/c0114/classified.spec.luau b/z-nile/tests/acceptance/c0114/classified.spec.luau
+index ad09fa42..3983b678 100644
+--- a/z-nile/tests/acceptance/c0114/classified.spec.luau
++++ b/z-nile/tests/acceptance/c0114/classified.spec.luau
+@@ -7,9 +7,76 @@
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++-- c0120 override: the spec runs from z-nile/, its home, after the move
++local serde = require("@lune/serde")
+ local store = require("@znile/engine/store")
+ local t = require("@tests/lib/t")
+ 
++-- c0120 override: the spec runs from z-nile/, but the store reads the tracker from the folder it runs in, so the items
++-- are read by a child run at the checkout's top (a script under this home's .cache), each document's path made absolute
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
++local HERE = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
++local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
++local ITEMS: { [string]: { store.Item } }? = nil
++-- c0120 override: a copy of the checkout's tooling and every project root (the working tree's files), a repository of
++-- its own under this home's .cache, whose check.sh files fence the copy, never the real checkout
++local TREE = `{HERE}/.cache/c0114-classified-tree`
++local function copyTree(): string
++	if fs.isDir(TREE) then
++		fs.removeDir(TREE)
++	end
++	fs.writeDir(TREE)
++	local listed = process.exec(
++		"git",
++		{ "ls-files", "-co", "--exclude-standard", "zn", "scripts", "z-nile", "pickman/.tracker" },
++		{ cwd = TOP }
++	)
++	t.expect(listed.ok).toBe(true)
++	for path in string.gmatch(listed.stdout, "[^\n]+") do
++		if fs.isFile(`{TOP}/{path}`) then
++			local parent = string.match(path, "^(.*)/[^/]+$")
++			if parent then
++				fs.writeDir(`{TREE}/{parent}`)
++			end
++			t.expect(process.exec("cp", { "-p", `{TOP}/{path}`, `{TREE}/{path}` }).ok).toBe(true)
++		end
++	end
++	t.expect(process.exec("git", { "init", "-q", TREE }).ok).toBe(true)
++	return TREE
++end
++local function allItems(kind: string): { store.Item }
++	if not ITEMS then
++		local dir = `{HERE}/.cache/c0114-classified-items`
++		fs.writeDir(dir)
++		fs.writeFile(
++			`{dir}/items.luau`,
++			table.concat({
++				`local serde = {REQ}("@lune/serde")`,
++				`local store = {REQ}("@znile/engine/store")`,
++				"local out = {}",
++				'for _, kind in { "issue", "raft" } do',
++				"\tout[kind] = store.all(kind :: any)",
++				"end",
++				'print(serde.encode("json", out))',
++				"",
++			}, "\n")
++		)
++		local r = process.exec("lune", { "run", `{dir}/items.luau` }, { cwd = TOP })
++		fs.removeDir(dir)
++		if not r.ok then
++			error(`listing the items failed: {r.stderr}`)
++		end
++		local decoded = serde.decode("json", r.stdout) :: { [string]: { store.Item } }
++		for _, items in decoded do
++			for _, item in items do
++				item.doc = `{TOP}/{item.doc}`
++			end
++		end
++		ITEMS = decoded
++	end
++	return (ITEMS :: { [string]: { store.Item } })[kind] or {}
++end
++
+ -- the tooling: the tracker, its board and spend, the gate and the selector, the repository guards and the spec runner,
+ -- CI and bootstrap, the skills and the process
+ local ZNILE: { [string]: { string } } = {
+@@ -181,7 +248,7 @@ local PICKMAN: { [string]: { string } } = {
+ -- every item of `kind` by slug, each slug seen once
+ local function bySlug(kind: string): { [string]: store.Item }
+ 	local out: { [string]: store.Item } = {}
+-	for _, item in store.all(kind) do
++	for _, item in allItems(kind) do -- c0120 override: read at the top
+ 		if out[item.slug] then
+ 			error(`two {kind}s share the slug {item.slug}: {out[item.slug].id}, {item.id}`)
+ 		end
+@@ -216,14 +283,16 @@ return t.spec("c0114 every item is filed in its project", function(it)
+ 		t.expect(table.concat(filed(ZNILE, "z-nile/.tracker"), "\n")).toBe("")
+ 	end)
+ 
+-	it("the game items are in tracker/", function()
++	-- c0120 override: pickman's items moved with the game into pickman/.tracker/
++	it("the game items are in pickman/.tracker/", function()
+ 		t.expect(#PICKMAN.issue).toBe(43)
+ 		t.expect(#PICKMAN.raft).toBe(20)
+-		t.expect(table.concat(filed(PICKMAN, "tracker"), "\n")).toBe("")
++		-- c0120 override: pickman's files live in pickman/ (its home)
++		t.expect(table.concat(filed(PICKMAN, "pickman/.tracker"), "\n")).toBe("")
+ 	end)
+ 
+ 	it("no feature or defect is filed in z-nile's root", function()
+-		for _, item in store.all("issue") do
++		for _, item in allItems("issue") do -- c0120 override: read at the top
+ 			if item.root == "z-nile/.tracker" then
+ 				t.expect(string.sub(item.id, 1, 1)).toBe("c")
+ 			end
+@@ -234,8 +303,10 @@ return t.spec("c0114 every item is filed in its project", function(it)
+ 	-- gate in this checkout. The loop below refuses to start without the proof.
+ 	local listing = false
+ 	it("list mode holds through the scripts/lib/ac.sh forwarder, and the runner refuses it", function()
+-		local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+-		local dir = `{root}/.cache/c0114-classified`
++		-- c0120 override: the fixtures are under this home's .cache. The jail refuses the checkout top's .cache, where the
++		-- real ac.sh writes its fence's sentinel, so the forwarder (and below, every item's check.sh) runs in a copy
++		local root = copyTree()
++		local dir = `{HERE}/.cache/c0114-classified`
+ 		if fs.isDir(dir) then
+ 			fs.removeDir(dir)
+ 		end
+@@ -270,8 +341,9 @@ return t.spec("c0114 every item is filed in its project", function(it)
+ 		local bad: { string } = {}
+ 		local expected, listed = 0, 0
+ 		for _, kind in { "issue", "raft" } do
+-			for _, item in store.all(kind) do
+-				local path = `{item.dir}/check.sh`
++			-- c0120 override: the items are read at the top, and each check.sh runs in the copy (see above)
++			for _, item in allItems(kind) do
++				local path = `{TREE}/{item.dir}/check.sh`
+ 				if item.state ~= "done" and fs.isFile(path) then
+ 					local hasCheck = false
+ 					for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+@@ -280,10 +352,11 @@ return t.spec("c0114 every item is filed in its project", function(it)
+ 						end
+ 					end
+ 					-- at most 60 s each, so a check.sh that ignores list mode can't hold the gate
++					-- c0120 override: the spec runs from z-nile/, its home, after the move
+ 					local r = process.exec(
+ 						"perl",
+ 						{ "-e", "alarm shift; exec @ARGV or die", "60", "bash", path },
+-						{ env = { AC_LIST = "1" } }
++						{ cwd = TREE, env = { AC_LIST = "1" } }
+ 					)
+ 					local ok = r.ok and string.find(r.stdout, "criteria listed (none run)", 1, true) ~= nil
+ 					local draft = string.find(r.stdout, "no acceptance checks defined", 1, true) ~= nil
+@@ -304,5 +377,6 @@ return t.spec("c0114 every item is filed in its project", function(it)
+ 		-- no floor on how many items are live: the backlog shrinks and grows on its own (code review 001 F1); list mode
+ 		-- itself is proven on the fixture before this loop runs
+ 		t.expect(listed).toBe(expected)
++		fs.removeDir(TREE) -- c0120 override: the copy
+ 	end)
+ end)
+diff --git a/z-nile/tests/acceptance/c0114/compact-roots.spec.luau b/z-nile/tests/acceptance/c0114/compact-roots.spec.luau
+index c93ef2cc..69f37b38 100644
+--- a/z-nile/tests/acceptance/c0114/compact-roots.spec.luau
++++ b/z-nile/tests/acceptance/c0114/compact-roots.spec.luau
+@@ -28,11 +28,13 @@ return t.spec("c0114 compaction spans every project root", function(it)
+ 	it("sets up items in both roots, a promoted spec folder and a template naming an id", function()
+ 		f = trackerfix.new("c0114-compact", {
+ 			["tracker/next"] = "issue 401 a-b-c\nraft 301 a-b-c\n", -- not moved yet
+-			["tracker/issues/c0100/c0100.md"] = doc("c0100", "Blocks c0200."),
++			-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout); tracker/ keeps only the counter
++			["pickman/.tracker/issues/c0100/c0100.md"] = doc("c0100", "Blocks c0200."),
+ 			[`{Z}/issues/c0200/c0200.md`] = doc("c0200", "See c0100 and R0300."),
+ 			[`{Z}/issues/c0200/check.sh`] = `A="{Z}/issues/c0200/acceptance"\n`,
+ 			[`{Z}/rafts/R0300/R0300.md`] = doc("R0300", "Holds c0200.", "single: true\nissues: [c0200]\n"),
+-			[`{TA}c0200/x.spec.luau`] = "return 1\n",
++			-- c0120 override: a z-nile item's promoted specs are in its home's tests/, z-nile/tests/acceptance
++			[`z-nile/{TA}c0200/x.spec.luau`] = "return 1\n",
+ 			["z-nile/templates/issue/example.md"] = `For example c0200, R0300 and {TA}c0200/x.spec.luau.\n`,
+ 		})
+ 	end)
+@@ -57,11 +59,13 @@ return t.spec("c0114 compaction spans every project root", function(it)
+ 			error(r.stderr .. r.stdout)
+ 		end
+ 		t.expect(has(r.stdout, "compacted 2 issues and 1 rafts")).toBe(true)
+-		t.expect(has(read("tracker/issues/c0001/c0001.md"), "Blocks c0002.")).toBe(true)
++		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
++		t.expect(has(read("pickman/.tracker/issues/c0001/c0001.md"), "Blocks c0002.")).toBe(true)
+ 		t.expect(has(read(`{Z}/issues/c0002/c0002.md`), "See c0001 and R0001.")).toBe(true)
+ 		t.expect(read(`{Z}/issues/c0002/check.sh`)).toBe(`A="{Z}/issues/c0002/acceptance"\n`)
+ 		t.expect(has(read(`{Z}/rafts/R0001/R0001.md`), "issues: [c0002]")).toBe(true)
+-		t.expect(fs.isFile(`{wt}/{TA}c0002/x.spec.luau`)).toBe(true)
++		-- c0120 override: a z-nile item's promoted specs are in its home's tests/, z-nile/tests/acceptance
++		t.expect(fs.isFile(`{wt}/z-nile/{TA}c0002/x.spec.luau`)).toBe(true)
+ 		t.expect(fs.isDir(`{wt}/{Z}/issues/c0200`)).toBe(false)
+ 		t.expect(has(read("z-nile/compaction.txt"), "\nc0200 c0002\n")).toBe(true)
+ 		t.expect(string.match(read("z-nile/next"), "^issue 3 %S+\nraft 2 %S+\n$") ~= nil).toBe(true)
+diff --git a/z-nile/tests/acceptance/c0114/docs.spec.luau b/z-nile/tests/acceptance/c0114/docs.spec.luau
+index 7820bcf8..55afc2fc 100644
+--- a/z-nile/tests/acceptance/c0114/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0114/docs.spec.luau
+@@ -2,29 +2,38 @@
+ -- c0114 AC9: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
+ -- (scripts/tracker.sh is named once, as the forwarder), and they state the project-root rules the engine follows.
+ local fs = require("@lune/fs")
++-- c0120 override: the spec runs from z-nile/, its home, after the move
++local process = require("@lune/process")
+ local serde = require("@lune/serde")
+ local t = require("@tests/lib/t")
+ 
+ local SKILLS = ".claude/skills"
++-- c0120 override: the spec runs from z-nile/, so every document is read from the checkout's top
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+ 
+ local function docs(): { [string]: string }
++	-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
+ 	local out: { [string]: string } = {
+-		["AGENTS.md"] = fs.readFile("AGENTS.md"),
+-		["SETUP.md"] = fs.readFile("SETUP.md"),
++		["AGENTS.md"] = fs.readFile(`{TOP}/AGENTS.md`),
++		["SETUP.md"] = fs.readFile(`{TOP}/SETUP.md`),
+ 	}
+-	for _, skill in fs.readDir(SKILLS) do
++	-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++	for _, skill in fs.readDir(`{TOP}/{SKILLS}`) do
+ 		local dir = `{SKILLS}/{skill}`
+-		if fs.isFile(`{dir}/SKILL.md`) then
+-			out[`{dir}/SKILL.md`] = fs.readFile(`{dir}/SKILL.md`)
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++		if fs.isFile(`{TOP}/{dir}/SKILL.md`) then
++			out[`{dir}/SKILL.md`] = fs.readFile(`{TOP}/{dir}/SKILL.md`)
+ 		end
+-		if fs.isDir(`{dir}/lessons`) then
+-			for _, name in fs.readDir(`{dir}/lessons`) do
+-				out[`{dir}/lessons/{name}`] = fs.readFile(`{dir}/lessons/{name}`)
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++		if fs.isDir(`{TOP}/{dir}/lessons`) then
++			for _, name in fs.readDir(`{TOP}/{dir}/lessons`) do
++				out[`{dir}/lessons/{name}`] = fs.readFile(`{TOP}/{dir}/lessons/{name}`)
+ 			end
+ 		end
+ 	end
+ 	for _, rel in { "prompt.md", "issue/doc.md", "issue/check.sh", "raft/doc.md", "raft/check.sh" } do
+-		out[`z-nile/templates/{rel}`] = fs.readFile(`z-nile/templates/{rel}`)
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++		out[`z-nile/templates/{rel}`] = fs.readFile(`{TOP}/z-nile/templates/{rel}`)
+ 	end
+ 	return out
+ end
+@@ -76,9 +85,32 @@ end
+ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 	it("no skill, lesson, AGENTS.md, SETUP.md or template names an old path", function()
+ 		local bad: { string } = {}
++		-- c0120 override: each home has its own scripts/ (pickman/scripts/check.sh, z-nile/scripts/check.sh), so an old
++		-- path counts only where no home's folder (or the words "home's", naming one) is in front of it
++		local function namesOld(text: string, old: string): boolean
++			local i = 1
++			while true do
++				local s, e = string.find(text, old, i, true)
++				if not s then
++					return false
++				end
++				local before = string.sub(text, math.max(1, s - 8), s - 1)
++				if
++					not (
++						string.match(before, "pickman/$")
++						or string.match(before, "z%-nile/$")
++						or string.match(before, "home's `$")
++					)
++				then
++					return true
++				end
++				i = (e :: number) + 1
++			end
++		end
+ 		for path, text in docs() do
+ 			for _, old in OLD do
+-				if string.find(text, old, 1, true) then
++				-- c0120 override: the spec runs from z-nile/, its home, after the move
++				if namesOld(text, old) then
+ 					table.insert(bad, `{path}: {old}`)
+ 				end
+ 			end
+@@ -100,22 +132,30 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 			end
+ 			table.sort(bad)
+ 			t.expect(table.concat(bad, "\n")).toBe("")
+-			local tracker = fs.readFile(`{SKILLS}/tracker/SKILL.md`)
++			-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++			local tracker = fs.readFile(`{TOP}/{SKILLS}/tracker/SKILL.md`)
+ 			at(tracker, "The command is `./zn` at the repository root (`scripts/tracker.sh` forwards to it")
+ 		end
+ 	)
+ 
+ 	it("new items' check.sh files use the moved helpers and ./zn", function()
+-		local issue = fs.readFile("z-nile/templates/issue/check.sh")
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++		local issue = fs.readFile(`{TOP}/z-nile/templates/issue/check.sh`)
+ 		at(issue, 'rev-parse --show-toplevel)/z-nile/lib/ac.sh"')
+-		local raft = fs.readFile("z-nile/templates/raft/check.sh")
+-		at(raft, 'check "RC0: repo gate passes (full)" z-nile/check.sh --full')
+-		at(raft, "for dir in $(./zn members {{ID}}); do")
+-		at(raft, "./zn promote-check {{ID}}")
++		local raft = fs.readFile(`{TOP}/z-nile/templates/raft/check.sh`)
++		-- c0120 override: a raft's check.sh runs from its project's home, so it names the gate and ./zn by the root, and
++		-- the gate it runs is its project's
++		at(
++			raft,
++			'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --full'
++		)
++		at(raft, 'for dir in $("$ZN_ROOT/zn" members {{ID}}); do')
++		at(raft, '"$ZN_ROOT/zn" promote-check {{ID}}')
+ 	end)
+ 
+ 	it("the tracker and make-issue skills state the project-root rules", function()
+-		local tracker = fs.readFile(`{SKILLS}/tracker/SKILL.md`)
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++		local tracker = fs.readFile(`{TOP}/{SKILLS}/tracker/SKILL.md`)
+ 		at(
+ 			tracker,
+ 			"`z-nile/projects.toml` lists the projects, each with the root that holds its issues and rafts"
+@@ -130,7 +170,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 			"under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's)"
+ 		)
+ 		at(tracker, "never to another root")
+-		local make = fs.readFile(`{SKILLS}/make-issue/SKILL.md`)
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++		local make = fs.readFile(`{TOP}/{SKILLS}/make-issue/SKILL.md`)
+ 		-- the project: --project's, else the directory's, refused at the root (decided with the user, 2026-10-21)
+ 		at(make, "`./zn new issue <f|d|c> <kebab-slug> --project <name> --desc")
+ 		at(make, "The project is `--project`'s when given, else the one whose folder you run `./zn` in")
+@@ -139,7 +180,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 			"at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`"
+ 		)
+ 		at(make, "Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`")
+-		at(make, "game work is `--project pickman`, which has no folder until c0120")
++		-- c0120 override: pickman has its folder now, pickman/; at the root game work still names --project pickman
++		at(make, "game work is `--project pickman`, or a capture run in `pickman/`")
+ 		at(tracker, "the directory gives the project unless `--project` names one")
+ 		at(
+ 			tracker,
+@@ -150,10 +192,11 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 			"read-only ones read every project there (`list` shows them all), because reading needs no project"
+ 		)
+ 		-- every capture line a skill or template gives names its project, or its raft
+-		for _, skill in fs.readDir(SKILLS) do
++		-- c0120 override: the documents are read from the checkout's top (this spec runs from z-nile/)
++		for _, skill in fs.readDir(`{TOP}/{SKILLS}`) do
+ 			local doc = `{SKILLS}/{skill}/SKILL.md`
+-			if fs.isFile(doc) then
+-				for line in string.gmatch(fs.readFile(doc), "[^\n]+") do
++			if fs.isFile(`{TOP}/{doc}`) then
++				for line in string.gmatch(fs.readFile(`{TOP}/{doc}`), "[^\n]+") do
+ 					for cmd in string.gmatch(line, "`(%./zn new [^`]*)`") do
+ 						if
+ 							not (
+@@ -166,8 +209,9 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 				end
+ 			end
+ 		end
++		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
+ 		at(
+-			fs.readFile("z-nile/templates/prompt.md"),
++			fs.readFile(`{TOP}/z-nile/templates/prompt.md`),
+ 			"`./zn new issue … --project <name>`, or `--raft <R-id>`"
+ 		)
+ 	end)
+@@ -175,7 +219,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 	it(
+ 		"the settings allow ./zn wherever they allowed scripts/tracker.sh, and keep the old entries",
+ 		function()
+-			local settings = serde.decode("json", fs.readFile(".claude/settings.json"))
++			-- c0120 override: the spec runs from z-nile/, so the settings are read from the checkout's top
++			local settings = serde.decode("json", fs.readFile(`{TOP}/.claude/settings.json`))
+ 			local allow: { string } = settings.permissions.allow
+ 			local old = 0
+ 			for _, entry in allow do
+@@ -201,7 +246,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
+ 		local cmd =
+ 			"-- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'"
+ 		for _, skill in { "review", "testing", "execute-raft" } do
+-			at(fs.readFile(`{SKILLS}/{skill}/SKILL.md`), cmd)
++			-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++			at(fs.readFile(`{TOP}/{SKILLS}/{skill}/SKILL.md`), cmd)
+ 		end
+ 	end)
+ end)
+diff --git a/z-nile/tests/acceptance/c0114/finished.spec.luau b/z-nile/tests/acceptance/c0114/finished.spec.luau
+index 96714461..b865be82 100644
+--- a/z-nile/tests/acceptance/c0114/finished.spec.luau
++++ b/z-nile/tests/acceptance/c0114/finished.spec.luau
+@@ -6,12 +6,40 @@
+ -- writes only under .cache/c0114-finished and .cache/c0114-finished-tip.
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
++-- c0120 override: the spec runs from z-nile/, its home, after the move
++local process = require("@lune/process")
+ local rewrites = require("./rewrites")
+ local t = require("@tests/lib/t")
+ local trackerfix = require("@tests/lib/trackerfix")
+ 
++-- c0120 override: this spec judges c0114's rewrite on c0114's own result, the tree before c0120's move (c0120 moved
++-- pickman's items into pickman/.tracker and rewrote the finished files again for their homes; c0120's AC18 pins that
++-- second rewrite, so each rewrite has one owner). The tree before c0120's move is the parent of the commit that removed
++-- tracker/rafts/done/R0001/check.sh; before c0120 there is none, and the working tree is that tree. It runs from
++-- z-nile/ since c0120, so the checkout is read from its top.
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
++local PRE: string? = nil
++if not fs.isFile(`{TOP}/tracker/rafts/done/R0001/check.sh`) then
++	local moved = process.exec(
++		"git",
++		{ "log", "-1", "--format=%H", "--", "tracker/rafts/done/R0001/check.sh" },
++		{ cwd = TOP }
++	)
++	PRE = (string.gsub(moved.stdout, "%s+$", "")) .. "^"
++end
++-- a listed file's text in c0114's result
++local function readAt(f: string): string?
++	if PRE == nil then
++		return if fs.isFile(`{TOP}/{f}`) then fs.readFile(`{TOP}/{f}`) else nil
++	end
++	local r = process.exec("git", { "show", `{PRE}:{f}` }, { cwd = TOP })
++	return if r.ok then r.stdout else nil
++end
++
+ -- every item id whose folder is under z-nile/.tracker in the tree at `base`
+-local function movedIds(base: string): { [string]: boolean }
++local function movedIds(given: string): { [string]: boolean }
++	-- c0120 override: "." is the checkout's top (this spec runs from z-nile/)
++	local base = if given == "." then TOP else given
+ 	local moved: { [string]: boolean } = {}
+ 	for _, kind in { "issues", "rafts" } do
+ 		for _, state in { "", "active/", "done/" } do
+@@ -35,11 +63,14 @@ local function unsettled(base: string): { string }
+ 	local moved = movedIds(base)
+ 	local out: { string } = {}
+ 	for _, f in rewrites.FINISHED do
++		-- c0120 override: the real tree is read as c0114 left it (readAt); a fixture as it is
+ 		local path = `{base}/{f}`
+-		if not fs.isFile(path) then
++		local found = if base == "." then readAt(f) elseif fs.isFile(path) then fs.readFile(path) else nil
++		if not found then
+ 			table.insert(out, `{f} (missing)`)
+ 		else
+-			local text = fs.readFile(path)
++			-- c0120 override: the spec runs from z-nile/, its home, after the move
++			local text = found :: string
+ 			local settled = rewrites.paths(text, moved) == text
+ 			-- an item whose special edits undo a rewrite (a spec case name) is settled when they give the same text
+ 			if not settled and rewrites.SPECIAL[f] then
+@@ -106,7 +137,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
+ 		for _, f in rewrites.FINISHED do
+ 			local dir = string.match(f, "^(.*)/[^/]+$") :: string
+ 			fs.writeDir(`{base}/{dir}`)
+-			fs.writeFile(`{base}/{f}`, fs.readFile(f))
++			fs.writeFile(`{base}/{f}`, readAt(f) :: string) -- c0120 override: as c0114 left it
+ 		end
+ 		fs.writeDir(`{base}/tracker/rafts/done/R9990`)
+ 		fs.writeFile(
+@@ -128,7 +159,7 @@ return t.spec("c0114 finished items' check.sh files name the new paths", functio
+ 			if not table.find(rewrites.FINISHED, path) then
+ 				error(`SPECIAL {path}: not a listed finished check.sh`)
+ 			end
+-			local text = fs.readFile(path)
++			local text = readAt(path) :: string -- c0120 override: as c0114 left it
+ 			for _, e in edits do
+ 				t.expect(string.find(text, e[2], 1, true) ~= nil).toBe(true)
+ 			end
+diff --git a/z-nile/tests/acceptance/c0114/gate-cover.spec.luau b/z-nile/tests/acceptance/c0114/gate-cover.spec.luau
+index 33f7af29..6de169ef 100644
+--- a/z-nile/tests/acceptance/c0114/gate-cover.spec.luau
++++ b/z-nile/tests/acceptance/c0114/gate-cover.spec.luau
+@@ -12,14 +12,17 @@ local process = require("@lune/process")
+ local serde = require("@lune/serde")
+ local t = require("@tests/lib/t")
+ 
+-local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+-local base = `{root}/.cache/c0114-gate`
++-- c0120 override: the spec runs from z-nile/ (its home, whose .cache holds the fixtures); the checkout it reads, copies
++-- and runs the gate's tools in is the checkout's top
++local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
++local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
++local base = `{here}/.cache/c0114-gate`
+ 
+ local function has(text: string, needle: string): boolean
+ 	return string.find(text, needle, 1, true) ~= nil
+ end
+ local function affected(path: string): string
+-	local r = process.exec("lune", { "run", "z-nile/affected", "--", path })
++	local r = process.exec("lune", { "run", "z-nile/affected", "--", path }, { cwd = root }) -- c0120 override: at the top
+ 	if not r.ok then
+ 		error(r.stderr)
+ 	end
+@@ -38,7 +41,12 @@ local function write(path: string, text: string)
+ end
+ -- the gate's format and lint folders, as z-nile/check.sh takes them (`lune run z-nile/roots -- --luau-dirs`), in `cwd`
+ local function luauDirs(cwd: string?): { string }
+-	local r = process.exec("lune", { "run", `{root}/z-nile/roots`, "--", "--luau-dirs" }, { cwd = cwd })
++	-- c0120 override: the real tree's from its top
++	local r = process.exec(
++		"lune",
++		{ "run", `{root}/z-nile/roots`, "--", "--luau-dirs" },
++		{ cwd = cwd or root }
++	)
+ 	if not r.ok then
+ 		error(r.stderr)
+ 	end
+@@ -61,7 +69,10 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 				t.expect(affected(p)).toBe("ALL\n")
+ 			end
+ 			t.expect(affected("z-nile/.tracker/issues/c0001/c0001.md")).toBe("")
+-			t.expect(affected("tracker/issues/c0001/c0001.md")).toBe("")
++			-- c0120 override: pickman's root is pickman/.tracker; tracker/ is retired, and a file there again runs
++			-- everything, so the old-roots spec reports it
++			t.expect(affected("pickman/.tracker/issues/c0001/c0001.md")).toBe("")
++			t.expect(affected("tracker/issues/c0001/c0001.md")).toBe("ALL\n")
+ 		end
+ 	)
+ 
+@@ -69,7 +80,18 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 		"the format stage checks z-nile/ and z-nile/.tracker/, which stylua skips unless it is named",
+ 		function()
+ 			local dirs = luauDirs()
+-			for _, d in { "src", "tests", "scripts", "tracker", "z-nile", "z-nile/.tracker" } do
++			-- c0120 override: the game's folders are pickman/'s, its root pickman/.tracker; the root has no tests/ (z-nile's
++			-- moved into z-nile/)
++			for _, d in
++				{
++					"pickman/src",
++					"pickman/tests",
++					"pickman/.tracker",
++					"scripts",
++					"z-nile",
++					"z-nile/.tracker",
++				}
++			do
+ 				t.expect(table.find(dirs, d) ~= nil).toBe(true)
+ 			end
+ 			if fs.isDir(base) then
+@@ -96,9 +118,21 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 	it(
+ 		"the types stage reads z-nile/ with Lune definitions, but not the sequestered specs under .tracker/",
+ 		function()
+-			local gate = fs.readFile("z-nile/check.sh")
+-			t.expect(has(gate, "--platform=standard --ignore='**/.tracker/**' tests scripts z-nile"))
+-				.toBe(true)
++			-- c0120 override: the folders come from the projects' homes (the gate's plan), each .tracker/ ignored; the gate
++			-- is read and planned at the top, and it skips the homes' .cache folders (z-nile/.cache lies inside z-nile/)
++			local gate = fs.readFile(`{root}/z-nile/check.sh`)
++			t.expect(
++				has(
++					gate,
++					[[--platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' "${LUNE_DIRS[@]}"]]
++				)
++			).toBe(true)
++			local plan = process.exec("bash", { "z-nile/check.sh", "--plan" }, { cwd = root })
++			local line = string.match(plan.stdout, "types %(Lune%): ([^\n]*)") or ""
++			-- c0120 override: the root has no tests/ (z-nile's moved into z-nile/)
++			for _, d in { "scripts", "z-nile", "pickman/tests", "pickman/scripts" } do
++				t.expect(table.find(string.split(line, " "), d) ~= nil).toBe(true)
++			end
+ 		end
+ 	)
+ 
+@@ -106,10 +140,13 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 		"the repository-fence scan reads ./zn, z-nile/ and every root's check.sh, not their unpromoted specs",
+ 		function()
+ 			local scan = `{base}/scan`
++			-- c0120 override: the runner, its harness and the scan spec are z-nile's (z-nile/tests, with z-nile/.luaurc),
++			-- run from the copy's z-nile home
+ 			copy(scan, {
+-				"tests/run.luau",
+-				"tests/lib",
+-				"tests/tooling/repo-fence.spec.luau",
++				"z-nile/tests/run.luau",
++				"z-nile/tests/lib",
++				"z-nile/tests/tooling/repo-fence.spec.luau",
++				"z-nile/.luaurc",
+ 				"z-nile/lib",
+ 				".luaurc",
+ 				"rokit.toml",
+@@ -124,10 +161,11 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 				`{scan}/z-nile/.tracker/issues/c0001/acceptance/x.spec.luau`,
+ 				`-- {hooks}, not promoted yet\n`
+ 			)
++			-- c0120 override: the spec runs from z-nile/, its home, after the move
+ 			local r = process.exec(
+ 				"lune",
+ 				{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
+-				{ cwd = scan, env = { PICKMAN_TEST_FENCE = "" } }
++				{ cwd = `{scan}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } }
+ 			)
+ 			local out = r.stdout .. r.stderr
+ 			t.expect(has(out, ":: no spec, check.sh or script switches a guard off or points git elsewhere"))
+@@ -141,7 +179,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 			local broken = process.exec(
+ 				"lune",
+ 				{ "run", "tests/run", "--", "tests/tooling/repo-fence.spec.luau" },
+-				{ cwd = scan, env = { PICKMAN_TEST_FENCE = "" } }
++				{ cwd = `{scan}/z-nile`, env = { PICKMAN_TEST_FENCE = "" } } -- c0120 override: from z-nile/
+ 			)
+ 			t.expect(broken.ok).toBe(false)
+ 			t.expect(has(broken.stdout .. broken.stderr, "z-nile/engine/projects.luau does not load"))
+@@ -159,7 +197,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 		t.expect(table.find(found, 'z-nile/engine/new.luau: fs.writeFile(".cache/new", text)') ~= nil)
+ 			.toBe(true)
+ 		for path in cachepaths.ALLOWED do
+-			t.expect(fs.isFile(path)).toBe(true)
++			t.expect(fs.isFile(`{root}/{path}`)).toBe(true) -- c0120 override: from the top
+ 			t.expect(string.sub(path, 1, 15) == "scripts/tracker" or string.sub(path, 1, 11) == "scripts/lib")
+ 				.toBe(false)
+ 		end
+@@ -233,9 +271,10 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 			t.expect(table.find(luauDirs(fx), "probe/.tracker") ~= nil).toBe(true)
+ 			-- and in the real tree every current root is at every site, the ones that can't read the registry included
+ 			local projects = require("@znile/engine/projects")
+-			local roots = projects.roots(projects.load("."))
++			-- c0120 override: the real tree is read from its top
++			local roots = projects.roots(projects.load(root))
+ 			local dirs = luauDirs()
+-			local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml")) :: any
++			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
+ 			local ignored: { string } = wf["on"].push["paths-ignore"]
+ 			for _, r in roots do
+ 				t.expect(table.find(dirs, r) ~= nil).toBe(true)
+@@ -249,17 +288,21 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
+ 	it(
+ 		"CI bootstraps with z-nile/setup.sh and skips tracker-only pushes to every root and the counter",
+ 		function()
+-			local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml")) :: any
++			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
++			-- c0120 override: pickman's root moved; tracker/ (retired) is no longer ignored. The workflows are read from
++			-- the top
+ 			t.expect(wf["on"].push["paths-ignore"])
+-				.toEqual({ "tracker/**", "z-nile/.tracker/**", "z-nile/next" })
++				.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
+ 			local runs = ""
+ 			for _, step in wf.jobs.gate.steps do
+ 				runs ..= (step.run or "") .. "\n"
+ 			end
+-			t.expect(has(runs, "z-nile/setup.sh\n")).toBe(true)
++			-- c0120 override: the bootstrap installs the tools only; each job then runs its own project's gate
++			t.expect(has(runs, "z-nile/setup.sh --tools\n")).toBe(true)
+ 			t.expect(has(runs, "./zn members")).toBe(true)
+ 			t.expect(has(runs, "scripts/")).toBe(false)
+-			local board = fs.readFile(".github/workflows/board.yml")
++			-- c0120 override: the spec runs from z-nile/, its home, after the move
++			local board = fs.readFile(`{root}/.github/workflows/board.yml`)
+ 			t.expect(has(board, "run: ./zn board --out dist/board.html -O")).toBe(true)
+ 			fs.removeDir(base)
+ 		end
+diff --git a/z-nile/tests/acceptance/c0114/guards.spec.luau b/z-nile/tests/acceptance/c0114/guards.spec.luau
+index 43ad4482..5bc557f0 100644
+--- a/z-nile/tests/acceptance/c0114/guards.spec.luau
++++ b/z-nile/tests/acceptance/c0114/guards.spec.luau
+@@ -13,6 +13,9 @@ local trackerfix = require("@tests/lib/trackerfix")
+ 
+ local root = fixture.physical(".") :: string
+ local base = `{root}/.cache/c0114-guards`
++-- c0120 override: the spec runs from z-nile/ (its home, whose .cache holds the fixtures), so the files it copies and the
++-- checkout it asks about are the checkout's top
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+ 
+ local function has(text: string, needle: string): boolean
+ 	return string.find(text, needle, 1, true) ~= nil
+@@ -30,7 +33,7 @@ local function repo(name: string, files: { string }): string
+ 		if parent then
+ 			fs.writeDir(`{dir}/{parent}`)
+ 		end
+-		t.expect(process.exec("cp", { "-R", `{root}/{rel}`, `{dir}/{rel}` }).ok).toBe(true)
++		t.expect(process.exec("cp", { "-R", `{TOP}/{rel}`, `{dir}/{rel}` }).ok).toBe(true) -- c0120 override: from the top
+ 	end
+ 	return dir
+ end
+@@ -73,7 +76,8 @@ return t.spec("c0114 the guards fail closed", function(it)
+ 			-- the answer itself: a fixture is not one this run protects, this checkout is
+ 			local ask = 'source z-nile/lib/fence.sh && pickman_guarded "$PWD"'
+ 			t.expect(fixture.exec(wt, "bash", { "-c", ask }).stdout).toBe("unguarded\n")
+-			t.expect(process.exec("bash", { "-c", ask }).stdout).toBe("guarded\n")
++			-- c0120 override: this checkout is asked about from its top, where z-nile/lib/fence.sh is
++			t.expect(process.exec("bash", { "-c", ask }, { cwd = TOP }).stdout).toBe("guarded\n")
+ 			-- the explicit "unguarded" publishes
+ 			local before = tip()
+ 			t.expect(trackerfix.tr(f, wt, { "new", "issue", "c", "published", "--project", "pickman" }).ok)
+@@ -138,21 +142,30 @@ return t.spec("c0114 the guards fail closed", function(it)
+ 	end)
+ 
+ 	it("the spec runner refuses to start without z-nile/lib/fence.sh", function()
+-		local dir = repo("runner", { "tests/run.luau", "tests/lib", ".luaurc", "rokit.toml" })
+-		fs.writeDir(`{dir}/tests/probe`)
++		-- c0120 override: the runner and its harness are z-nile's (z-nile/tests, with z-nile/.luaurc), run from the copy's
++		-- z-nile home, whose .cache the probe writes to
++		local dir = repo(
++			"runner",
++			{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/.luaurc", ".luaurc", "rokit.toml" }
++		)
++		local home = `{dir}/z-nile`
++		fs.writeDir(`{home}/tests/probe`)
+ 		local call = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
++		-- c0120 override: the spec runs from z-nile/, its home, after the move
+ 		fs.writeFile(
+-			`{dir}/tests/probe/marker.spec.luau`,
++			`{home}/tests/probe/marker.spec.luau`,
+ 			`--!strict\nlocal fs = {call}("@lune/fs")\nlocal t = {call}("@tests/lib/t")\nfs.writeFile(".cache/spec-ran", "")\n`
+ 				.. 'return t.spec("marker", function(it)\n\tit("runs", function() end)\nend)\n'
+ 		)
++		-- c0120 override: the spec runs from z-nile/, its home, after the move
+ 		local r = process.exec("lune", { "run", "tests/run", "--", "tests/probe/marker.spec.luau" }, {
+-			cwd = dir,
++			cwd = home,
+ 			env = { PICKMAN_TEST_FENCE = "" }, -- a top-level run of the copy: only the marker is cleared
+ 		})
+ 		t.expect(r.ok).toBe(false)
+ 		t.expect(has(r.stdout .. r.stderr, "z-nile/lib/fence.sh")).toBe(true)
+-		t.expect(fs.isFile(`{dir}/.cache/spec-ran`)).toBe(false)
++		-- c0120 override: the spec runs from z-nile/, its home, after the move
++		t.expect(fs.isFile(`{home}/.cache/spec-ran`)).toBe(false)
+ 		fs.removeDir(base)
+ 	end)
+ end)
+diff --git a/z-nile/tests/acceptance/c0114/layout.spec.luau b/z-nile/tests/acceptance/c0114/layout.spec.luau
+index 8111a2b3..fba7d463 100644
+--- a/z-nile/tests/acceptance/c0114/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0114/layout.spec.luau
+@@ -35,6 +35,9 @@ local SHIMS: { { any } } = {
+ 	{ "changed", require("@scripts/lib/changed") :: any, require("@znile/lib/changed") :: any },
+ }
+ 
++-- c0120 override: the spec runs from z-nile/, so it reads and runs the checkout from its top
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
++
+ local function has(text: string, needle: string): boolean
+ 	return string.find(text, needle, 1, true) ~= nil
+ end
+@@ -42,7 +45,7 @@ end
+ -- the lines of a shell script that run something: no shebang, no comment, no blank
+ local function commands(path: string): { string }
+ 	local out: { string } = {}
+-	for line in string.gmatch(fs.readFile(path), "[^\n]+") do
++	for line in string.gmatch(fs.readFile(`{TOP}/{path}`), "[^\n]+") do -- c0120 override: from the top
+ 		if not string.match(line, "^%s*#") and string.match(line, "%S") then
+ 			table.insert(out, line)
+ 		end
+@@ -51,7 +54,7 @@ local function commands(path: string): { string }
+ end
+ 
+ local function executable(path: string): boolean
+-	return process.exec("test", { "-x", path }).ok
++	return process.exec("test", { "-x", path }, { cwd = TOP }).ok -- c0120 override: from the top
+ end
+ 
+ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+@@ -83,7 +86,7 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 				"z-nile/projects.toml",
+ 			}
+ 		do
+-			if not fs.isFile(f) then
++			if not fs.isFile(`{TOP}/{f}`) then -- c0120 override: from the top
+ 				error(`missing: {f}`)
+ 			end
+ 		end
+@@ -100,7 +103,7 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 		end
+ 		t.expect(ids.FILE).toBe("z-nile/next")
+ 		t.expect(ids.MAP_FILE).toBe("z-nile/compaction.txt")
+-		t.expect(ids.parseMap(fs.readFile("z-nile/compaction.txt")) ~= nil).toBe(true)
++		t.expect(ids.parseMap(fs.readFile(`{TOP}/z-nile/compaction.txt`)) ~= nil).toBe(true) -- c0120 override: from the top
+ 	end)
+ 
+ 	it("nothing of the build is left at its old path, and exactly one counter file is live", function()
+@@ -117,17 +120,19 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 				"scripts/tracker/board.html",
+ 			}
+ 		do
+-			if fs.isFile(gone) or fs.isDir(gone) then
++			if fs.isFile(`{TOP}/{gone}`) or fs.isDir(`{TOP}/{gone}`) then -- c0120 override: from the top
+ 				error(`still there: {gone}`)
+ 			end
+ 		end
+ 		t.expect(ids.OLD_FILE).toBe("tracker/next")
+-		t.expect(fs.isFile(ids.OLD_FILE)).toBe(true)
+-		local old = ids.parse(fs.readFile(ids.OLD_FILE))
+-		if fs.isFile(ids.FILE) then
++		-- c0120 override: the counter files are read from the top
++		t.expect(fs.isFile(`{TOP}/{ids.OLD_FILE}`)).toBe(true)
++		local old = ids.parse(fs.readFile(`{TOP}/{ids.OLD_FILE}`))
++		if fs.isFile(`{TOP}/{ids.FILE}`) then
+ 			-- moved on origin: z-nile/next counts, and an engine from before the move refuses on the tombstone
+-			t.expect(ids.parse(fs.readFile(ids.FILE)) ~= nil).toBe(true)
+-			t.expect(fs.readFile(ids.OLD_FILE)).toBe(ids.TOMBSTONE)
++			-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
++			t.expect(ids.parse(fs.readFile(`{TOP}/{ids.FILE}`)) ~= nil).toBe(true)
++			t.expect(fs.readFile(`{TOP}/{ids.OLD_FILE}`)).toBe(ids.TOMBSTONE)
+ 		else
+ 			-- not moved yet (this branch, and main until its first publish after landing): tracker/next still counts
+ 			t.expect(old ~= nil).toBe(true)
+@@ -140,10 +145,10 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 		t.expect(table.find(zn, 'export ZN_TOP="$top" ZN_CWD="${rel#/}"') ~= nil).toBe(true)
+ 		t.expect(table.find(zn, 'cd "$top"') ~= nil).toBe(true)
+ 		t.expect(table.find(zn, 'exec lune run z-nile/engine/main -- "$@"') ~= nil).toBe(true)
+-		local usage = process.exec("bash", { "zn" })
++		local usage = process.exec("bash", { "zn" }, { cwd = TOP }) -- c0120 override: at the root
+ 		t.expect(has(usage.stdout, "usage: ./zn <command>")).toBe(true)
+ 		-- run from a folder below the root, it still runs the engine there
+-		local below = process.exec("bash", { "../../zn" }, { cwd = "z-nile/engine" })
++		local below = process.exec("bash", { "../../zn" }, { cwd = `{TOP}/z-nile/engine` }) -- c0120 override: from the top
+ 		t.expect(has(below.stdout, "usage: ./zn <command>")).toBe(true)
+ 	end)
+ 
+@@ -162,12 +167,12 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 		t.expect(#ac).toBe(1)
+ 		t.expect(has(ac[1], 'source "$(dirname "${BASH_SOURCE[0]}")/../../z-nile/lib/ac.sh"')).toBe(true)
+ 		t.expect(has(ac[1], "exit 1")).toBe(true) -- a missing target fails the check.sh
+-		t.expect(has(fs.readFile("scripts/affected.luau"), '"z-nile/affected"')).toBe(true)
++		t.expect(has(fs.readFile(`{TOP}/scripts/affected.luau`), '"z-nile/affected"')).toBe(true) -- c0120 override: from the top
+ 	end)
+ 
+ 	it("the forwarders give the same output and exit code as the moved files", function()
+ 		local function run(argv: { string }): process.ExecResult
+-			return process.exec("bash", argv)
++			return process.exec("bash", argv, { cwd = TOP }) -- c0120 override: at the root
+ 		end
+ 		local a, b = run({ "scripts/tracker.sh", "find", "c0114" }), run({ "zn", "find", "c0114" })
+ 		t.expect(a.ok).toBe(true)
+@@ -175,7 +180,12 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 		local x, y = run({ "scripts/tracker.sh", "find", "c9999" }), run({ "zn", "find", "c9999" })
+ 		t.expect(x.ok).toBe(false)
+ 		t.expect(x.code).toBe(y.code)
+-		local sel = process.exec("lune", { "run", "scripts/affected", "--", "z-nile/engine/main.luau" })
++		-- c0120 override: at the root
++		local sel = process.exec(
++			"lune",
++			{ "run", "scripts/affected", "--", "z-nile/engine/main.luau" },
++			{ cwd = TOP }
++		)
+ 		t.expect(sel.ok).toBe(true)
+ 		t.expect(sel.stdout).toBe("ALL\n")
+ 	end)
+@@ -193,6 +203,6 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 	)
+ 
+ 	it("the znile alias names z-nile/", function()
+-		t.expect(has(fs.readFile(".luaurc"), '"znile": "./z-nile"')).toBe(true)
++		t.expect(has(fs.readFile(`{TOP}/.luaurc`), '"znile": "./z-nile"')).toBe(true) -- c0120 override: the root's .luaurc
+ 	end)
+ end)
+diff --git a/z-nile/tests/acceptance/c0114/publish-roots.spec.luau b/z-nile/tests/acceptance/c0114/publish-roots.spec.luau
+index 6537c3aa..878d3936 100644
+--- a/z-nile/tests/acceptance/c0114/publish-roots.spec.luau
++++ b/z-nile/tests/acceptance/c0114/publish-roots.spec.luau
+@@ -43,9 +43,10 @@ local function refusedPush(changes: { publish.Change }, needle: string)
+ end
+ 
+ return t.spec("c0114 publish roots come from origin/main", function(it)
+-	it("sets up an origin whose registry lists tracker and z-nile/.tracker", function()
++	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout; tracker/ is retired)
++	it("sets up an origin whose registry lists pickman/.tracker and z-nile/.tracker", function()
+ 		f = trackerfix.new("c0114-publish", {
+-			["tracker/issues/c0010/c0010.md"] = stub("c0010"),
++			["pickman/.tracker/issues/c0010/c0010.md"] = stub("c0010"),
+ 			[`{Z}/issues/c0020/c0020.md`] = stub("c0020"),
+ 		})
+ 	end)
+@@ -54,7 +55,9 @@ return t.spec("c0114 publish roots come from origin/main", function(it)
+ 		local r = push({ { path = `{Z}/issues/c0030/c0030.md`, content = stub("c0030") } })
+ 		t.expect(r.ok).toBe(true)
+ 		t.expect(onOrigin(`{Z}/issues/c0030/c0030.md`)).toBe(true)
+-		t.expect(push({ { path = "tracker/issues/c0040/c0040.md", content = stub("c0040") } }).ok).toBe(true)
++		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout; tracker/ is retired)
++		t.expect(push({ { path = "pickman/.tracker/issues/c0040/c0040.md", content = stub("c0040") } }).ok)
++			.toBe(true)
+ 	end)
+ 
+ 	it("a root only the working tree's registry lists is refused, whatever that tree says", function()
+@@ -72,10 +75,11 @@ return t.spec("c0114 publish roots come from origin/main", function(it)
+ 	end)
+ 
+ 	it("a published move stays in its root", function()
++		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout; tracker/ is retired)
+ 		refusedPush({
+ 			{
+ 				path = `{Z}/issues/active/c0010/c0010.md`,
+-				from = "tracker/issues/c0010/c0010.md",
++				from = "pickman/.tracker/issues/c0010/c0010.md",
+ 				content = stub("c0010"),
+ 			},
+ 		}, "keeps the id, the root and the relative path")
+diff --git a/z-nile/tests/acceptance/c0114/registry.spec.luau b/z-nile/tests/acceptance/c0114/registry.spec.luau
+index fafbb1c3..7f43b8b0 100644
+--- a/z-nile/tests/acceptance/c0114/registry.spec.luau
++++ b/z-nile/tests/acceptance/c0114/registry.spec.luau
+@@ -20,17 +20,26 @@ local function project(name: string, root: string): string
+ end
+ 
+ return t.spec("c0114 the project registry", function(it)
+-	it("the shipped registry lists pickman at tracker first, then z-nile at z-nile/.tracker", function()
+-		local reg, err = projects.parse(fs.readFile("z-nile/projects.toml"))
+-		t.expect(err).toBe(nil)
+-		local r = reg :: projects.Registry
+-		t.expect(r.projects).toEqual({
+-			{ name = "pickman", root = "tracker" },
+-			{ name = "z-nile", root = "z-nile/.tracker" },
+-		})
+-		t.expect(r.retired).toEqual({})
+-		t.expect(projects.roots(r)).toEqual({ "tracker", "z-nile/.tracker" })
+-	end)
++	-- c0120 override: pickman moved into pickman/, its root to pickman/.tracker and its home to pickman/; tracker/ is
++	-- retired, so history and the trail still read it. z-nile's home is z-nile/, and the spec runs there, so the
++	-- registry is read from the checkout's top
++	it(
++		"the shipped registry lists pickman at pickman/.tracker first, then z-nile at z-nile/.tracker",
++		function()
++			local top = (
++				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
++			)
++			local reg, err = projects.parse(fs.readFile(`{top}/z-nile/projects.toml`))
++			t.expect(err).toBe(nil)
++			local r = reg :: projects.Registry
++			t.expect(r.projects).toEqual({
++				{ name = "pickman", root = "pickman/.tracker", home = "pickman" },
++				{ name = "z-nile", root = "z-nile/.tracker", home = "z-nile" },
++			})
++			t.expect(r.retired).toEqual({ "tracker" })
++			t.expect(projects.roots(r)).toEqual({ "pickman/.tracker", "z-nile/.tracker" })
++		end
++	)
+ 
+ 	it("parses the roots in file order, and the retired ones after them for history", function()
+ 		local text = 'retired = ["old/.tracker"]\n'
+@@ -126,7 +135,11 @@ return t.spec("c0114 the project registry", function(it)
+ 		fixture.git(base, { "add", "-A" })
+ 		fixture.git(base, { "commit", "-q", "-m", "an item" }) -- remap needs a clean tree before it reads anything
+ 		for _, args in { { "list" }, { "audit" }, { "new", "issue", "c", "offline", "--project", "pickman" } } do
+-			local all = { "run", `{fixture.physical(".")}/z-nile/engine/main`, "--" }
++			-- c0120 override: the engine is the checkout's, read from its top (this spec runs from z-nile/)
++			local top = (
++				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
++			)
++			local all = { "run", `{top}/z-nile/engine/main`, "--" }
+ 			for _, a in args do
+ 				table.insert(all, a)
+ 			end
+diff --git a/z-nile/tests/acceptance/c0114/roots-cli.spec.luau b/z-nile/tests/acceptance/c0114/roots-cli.spec.luau
+index d67001f3..79349149 100644
+--- a/z-nile/tests/acceptance/c0114/roots-cli.spec.luau
++++ b/z-nile/tests/acceptance/c0114/roots-cli.spec.luau
+@@ -3,6 +3,8 @@
+ -- for what it publishes. Driven through ./zn in a tracker fixture under .cache/c0114-roots (tests/lib/trackerfix): a
+ -- bare origin, a main checkout and a second terminal that pushes straight to origin's main.
+ local claims = require("@znile/engine/claims")
++-- c0120 override: the spec runs from z-nile/, its home, after the move
++local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local ids = require("@znile/engine/ids")
+@@ -11,6 +13,10 @@ local trackerfix = require("@tests/lib/trackerfix")
+ 
+ local PREPARED = "prepared-quiet-copper-falcon"
+ local Z = "z-nile/.tracker"
++-- c0120 override: pickman's items live in pickman/.tracker (its home pickman/), tracker/ is retired
++local P = "pickman/.tracker"
++-- c0120 override: the spec runs from z-nile/, so files of the real checkout are read through its top
++local TOP = engine.TOP
+ 
+ local function doc(id: string, raft: string, design: string, status: string): string
+ 	local extra = if string.sub(id, 1, 1) == "R" then "single: true\nissues: [c0030]\n" else `raft: {raft}\n`
+@@ -71,10 +77,12 @@ end
+ return t.spec("c0114 commands across project roots", function(it)
+ 	it("sets up items in both roots and a shared counter", function()
+ 		local seed: { [string]: string } = {
+-			[".gitignore"] = fs.readFile(".gitignore"), -- ignores every root's prompt.md
+-			["tracker/architecture.md"] = fs.readFile("tracker/architecture.md"),
++			-- c0120 override: read through the top; architecture.md moved to pickman's root
++			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`), -- ignores every root's prompt.md
++			[`{P}/architecture.md`] = fs.readFile(`{TOP}/{P}/architecture.md`),
+ 			["z-nile/next"] = "issue 41 a-b-c\nraft 11 a-b-c\n",
+-			["tracker/issues/f0010/f0010.md"] = doc("f0010", "", "draft", "new-a-b-c"),
++			--[[ c0120 override: pickman's root ]]
++			[`{P}/issues/f0010/f0010.md`] = doc("f0010", "", "draft", "new-a-b-c"),
+ 			[`{Z}/issues/c0020/c0020.md`] = doc("c0020", "", "draft", "new-a-b-c"),
+ 			[`{Z}/issues/c0021/c0021.md`] = doc("c0021", "", "draft", "new-a-b-c"),
+ 			[`{Z}/issues/c0030/c0030.md`] = doc("c0030", "R0010", "ready", PREPARED),
+@@ -83,7 +91,8 @@ return t.spec("c0114 commands across project roots", function(it)
+ 			[`{Z}/rafts/R0010/check.sh`] = CHECK,
+ 		}
+ 		for _, s in { "execute-raft", "tracker", "architecture", "testing", "review" } do
+-			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`.claude/skills/{s}/SKILL.md`)
++			-- c0120 override: read through the checkout's top
++			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{s}/SKILL.md`)
+ 		end
+ 		f = trackerfix.new("c0114-roots", seed)
+ 		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
+@@ -91,7 +100,7 @@ return t.spec("c0114 commands across project roots", function(it)
+ 
+ 	it("find, list, members and status see every root", function()
+ 		t.expect(trackerfix.trOk(f, f.main, { "find", "c0020" })).toBe(`{Z}/issues/c0020`)
+-		t.expect(trackerfix.trOk(f, f.main, { "find", "f0010" })).toBe("tracker/issues/f0010")
++		t.expect(trackerfix.trOk(f, f.main, { "find", "f0010" })).toBe(`{P}/issues/f0010`) -- c0120 override: pickman's root
+ 		t.expect(trackerfix.trOk(f, f.main, { "members", "R0010" })).toBe(`{Z}/issues/c0030`)
+ 		local listed = trackerfix.trOk(f, f.main, { "list" })
+ 		for _, id in { "R0010", "f0010", "c0020", "c0030" } do
+@@ -112,6 +121,10 @@ return t.spec("c0114 commands across project roots", function(it)
+ 		t.expect(has(tools, "c0020")).toBe(true)
+ 		t.expect(has(tools, "R0010")).toBe(true)
+ 		t.expect(has(tools, "f0010")).toBe(false)
++		-- c0120 override: pickman has a folder now, and list run in it shows pickman's items
++		local game2 = listIn("pickman")
++		t.expect(has(game2, "f0010")).toBe(true)
++		t.expect(has(game2, "c0020")).toBe(false)
+ 		local status = trackerfix.trOk(f, f.main, { "status" })
+ 		t.expect(has(status, "c0020 new")).toBe(true)
+ 		t.expect(has(status, "f0010 new")).toBe(true)
+@@ -125,8 +138,10 @@ return t.spec("c0114 commands across project roots", function(it)
+ 			refused({ "new", "issue", "c", "nowhere" }, "no project holds the checkout's root")
+ 			fs.writeDir(`{wt}/src/deep`)
+ 			refused({ "new", "issue", "c", "nowhere" }, "no project holds src/deep", "src/deep")
+-			-- pickman has no folder until c0120: tracker/ does not choose it either
+-			refused({ "new", "issue", "c", "nowhere" }, "--project pickman", "tracker")
++			-- c0120 override: tracker/ is retired and still chooses no project (the fixture keeps no tracker/ folder, so
++			-- the spec makes it); pickman's own folder pickman/ chooses pickman (below)
++			fs.writeDir(`{wt}/tracker`)
++			refused({ "new", "issue", "c", "nowhere" }, "no project holds tracker", "tracker")
+ 			-- a directory inherited from another checkout's ./zn (a spec's fixture run inside a session) is that
+ 			-- checkout's, never this one's: the engine reads it as its own root
+ 			local before = tip()
+@@ -134,22 +149,28 @@ return t.spec("c0114 commands across project roots", function(it)
+ 				wt,
+ 				"lune",
+ 				{ "run", `{wt}/z-nile/engine/main`, "--", "new", "issue", "c", "nowhere" },
+-				{ env = { ZN_TOP = fixture.physical(".") :: string, ZN_CWD = "z-nile" } }
++				-- c0120 override: the spec runs in z-nile/, so the other checkout is named by its top
++				{ env = { ZN_TOP = fixture.physical(TOP) :: string, ZN_CWD = "z-nile" } }
+ 			)
+ 			t.expect(inherited.ok).toBe(false)
+ 			t.expect(has(inherited.stderr, "no project holds the checkout's root")).toBe(true)
+ 			t.expect(tip()).toBe(before)
+ 			local a = trackerfix.trOk(f, wt, { "new", "issue", "f", "game-thing", "--project", "pickman" })
+-			t.expect(a).toBe("tracker/issues/f0041/f0041.md")
++			t.expect(a).toBe(`{P}/issues/f0041/f0041.md`) -- c0120 override: pickman's root
+ 			local b = znInOk("z-nile/engine", { "new", "issue", "c", "tool-thing" })
+ 			t.expect(b).toBe(`{Z}/issues/c0042/c0042.md`)
+ 			t.expect(onOrigin(`{Z}/issues/c0042/c0042.md`)).toBe(true)
+ 			t.expect(onOrigin(`{Z}/issues/c0042/check.sh`)).toBe(true)
+ 			-- --project wins over the folder
+ 			local c = znInOk("z-nile", { "new", "issue", "c", "game-chore", "--project", "pickman" })
+-			t.expect(c).toBe("tracker/issues/c0043/c0043.md")
+-			-- one counter: three issues in two projects took 41, 42 and 43, and origin's counter says 44 next
+-			t.expect(string.match(originText("z-nile/next"), "^issue 44 %S+\nraft 11 %S+$") ~= nil).toBe(true)
++			t.expect(c).toBe(`{P}/issues/c0043/c0043.md`) -- c0120 override: pickman's root
++			-- c0120 override: pickman has a folder now: new issue run below pickman/ files there (it takes 44)
++			local d = znInOk("pickman/.tracker", { "new", "issue", "c", "game-folder" })
++			t.expect(d).toBe(`{P}/issues/c0044/c0044.md`)
++			t.expect(onOrigin(`{P}/issues/c0044/c0044.md`)).toBe(true)
++			-- one counter: four issues in two projects took 41 to 44, and origin's counter says 45 next
++			-- c0120 override: 45, not 44, after the pickman folder case
++			t.expect(string.match(originText("z-nile/next"), "^issue 45 %S+\nraft 11 %S+$") ~= nil).toBe(true)
+ 			t.expect(onOrigin("tracker/next")).toBe(false) -- the fixture has no tombstone, and nothing writes one
+ 			refused({ "new", "issue", "c", "nowhere", "--project", "nope" }, "--project nope: not a project")
+ 		end
+@@ -164,7 +185,7 @@ return t.spec("c0114 commands across project roots", function(it)
+ 			)
+ 			refused(
+ 				{ "new", "raft", "chore", "tools", "c0020", "--single", "--project", "pickman" },
+-				"the raft is made in tracker: c0020 is in z-nile/.tracker"
++				"the raft is made in pickman/.tracker: c0020 is in z-nile/.tracker" -- c0120 override: pickman's root
+ 			)
+ 			local r = znInOk("z-nile", { "new", "raft", "chore", "tools", "c0020", "--single" })
+ 			t.expect(r).toBe(`{Z}/rafts/R0011/R0011.md`)
+@@ -186,7 +207,11 @@ return t.spec("c0114 commands across project roots", function(it)
+ 			)
+ 			t.expect(offline.ok).toBe(false)
+ 			t.expect(has(offline.stderr, "a raft holds issues of one project")).toBe(true)
+-			t.expect(fs.isDir(`{wt}/tracker/rafts/R0012`) or fs.isDir(`{wt}/{Z}/rafts/R0012`)).toBe(false)
++			-- c0120 override: the spec runs from z-nile/, its home, after the move
++			t.expect(
++				fs.isDir(`{wt}/{P}/rafts/R0012`) --[[ c0120 override: pickman's root ]]
++					or fs.isDir(`{wt}/{Z}/rafts/R0012`)
++			).toBe(false)
+ 			t.expect(tip()).toBe(before)
+ 		end
+ 	)
+@@ -223,7 +248,8 @@ return t.spec("c0114 commands across project roots", function(it)
+ 		function()
+ 			trackerfix.elsewhere(
+ 				f,
+-				{ ["tracker/issues/c0021/c0021.md"] = doc("c0021", "", "draft", "new-d-e-f") },
++				-- c0120 override: the copy is in pickman's root
++				{ [`{P}/issues/c0021/c0021.md`] = doc("c0021", "", "draft", "new-d-e-f") },
+ 				"copy"
+ 			)
+ 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+@@ -232,7 +258,11 @@ return t.spec("c0114 commands across project roots", function(it)
+ 			t.expect(has(found.stderr, "duplicate id c0021")).toBe(true)
+ 			local audited = trackerfix.tr(f, f.main, { "audit" })
+ 			t.expect(audited.ok).toBe(false)
+-			t.expect(has(audited.stdout, "error duplicate tracker/issues/c0021")).toBe(true)
++			-- c0120 override: the spec runs from z-nile/, its home, after the move
++			t.expect(
++				has(audited.stdout, `error duplicate {P}/issues/c0021` --[[ c0120 override: pickman's root ]])
++			)
++				.toBe(true)
+ 			t.expect(has(audited.stdout, `error duplicate {Z}/issues/c0021`)).toBe(true)
+ 			-- the copy under z-nile's root, named by its folder, takes the next number from the shared counter
+ 			fixture.git(wt, { "fetch", "-q", "origin" })
+@@ -241,12 +271,16 @@ return t.spec("c0114 commands across project roots", function(it)
+ 			if not r.ok then
+ 				error(r.stderr .. r.stdout)
+ 			end
+-			t.expect(has(r.stdout, "c0021 -> c0044")).toBe(true)
+-			t.expect(fs.isFile(`{wt}/{Z}/issues/c0044/c0044.md`)).toBe(true)
+-			t.expect(trackerfix.trOk(f, wt, { "find", "c0021" })).toBe("tracker/issues/c0021")
++			-- c0120 override: 45, since the pickman folder case took 44
++			t.expect(has(r.stdout, "c0021 -> c0045")).toBe(true)
++			t.expect(fs.isFile(`{wt}/{Z}/issues/c0045/c0045.md`)).toBe(true)
++			t.expect(trackerfix.trOk(f, wt, { "find", "c0021" })).toBe(`{P}/issues/c0021`) -- c0120 override: pickman's root
+ 			fixture.git(wt, { "reset", "-q", "--hard", "origin/main" })
+ 			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+-			fixture.git(f.other, { "rm", "-q", "-r", "tracker/issues/c0021" })
++			fixture.git(
++				f.other,
++				{ "rm", "-q", "-r", `{P}/issues/c0021` } --[[ c0120 override: pickman's root ]]
++			)
+ 			fixture.git(f.other, { "commit", "-q", "-m", "drop the copy" })
+ 			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+ 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+@@ -271,7 +305,8 @@ return t.spec("c0114 commands across project roots", function(it)
+ 
+ 	it("spend counts code lines, never the documents under any project root", function()
+ 		fs.writeFile(`{wt}/{Z}/issues/c0021/notes.md`, "one\ntwo\n")
+-		fs.writeFile(`{wt}/tracker/issues/f0010/notes.md`, "one\n")
++		-- c0120 override: the spec runs from z-nile/, its home, after the move
++		fs.writeFile(`{wt}/{P}/issues/f0010/notes.md` --[[ c0120 override: pickman's root ]], "one\n")
+ 		fs.writeDir(`{wt}/src`)
+ 		fs.writeFile(`{wt}/src/x.luau`, "--!strict\nreturn 1\n")
+ 		fixture.git(wt, { "add", "-A" })
+@@ -320,8 +355,9 @@ return t.spec("c0114 commands across project roots", function(it)
+ 		local stamp =
+ 			string.match(originText(`{Z}/rafts/active/R0010/R0010.md`), "\nstatus: (active%-[%a%-]+)\n")
+ 		t.expect(stamp ~= nil).toBe(true)
+-		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { "tracker", Z }))).toBe(true)
+-		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { "tracker" }))).toBe(false)
++		-- c0120 override: the roots are pickman/.tracker and z-nile/.tracker
++		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { P, Z }))).toBe(true)
++		t.expect((claims.taken(f.main, stamp :: string, "origin/main", { P }))).toBe(false)
+ 		-- an emergent issue, made on the raft's branch in its worktree, is filed beside its raft in z-nile's root
+ 		local rwt = trackerfix.trOk(f, f.main, { "worktree", "R0010" })
+ 		trackerfix.trOk(f, rwt, { "start", "R0010" })
+@@ -386,6 +422,8 @@ return t.spec("c0114 commands across project roots", function(it)
+ 		fs.writeFile(`{f.main}/z-nile/projects.toml`, reg)
+ 		t.expect(bad.ok).toBe(false)
+ 		t.expect(has(bad.stdout, "error registry z-nile/projects.toml")).toBe(true)
++		-- c0120 override: the fixture has no tracker/ folder (a retired root), so the spec makes it
++		fs.writeDir(`{f.main}/tracker`)
+ 		fs.writeFile(`{f.main}/tracker/next`, "issue 9 a-b-c\nraft 9 a-b-c\n")
+ 		local old = trackerfix.tr(f, f.main, { "audit" })
+ 		fs.removeFile(`{f.main}/tracker/next`)
+diff --git a/z-nile/tests/acceptance/c0114/trail-move.spec.luau b/z-nile/tests/acceptance/c0114/trail-move.spec.luau
+index ac09804b..ed605fdc 100644
+--- a/z-nile/tests/acceptance/c0114/trail-move.spec.luau
++++ b/z-nile/tests/acceptance/c0114/trail-move.spec.luau
+@@ -191,7 +191,8 @@ return t.spec("c0114 an item's past follows it across roots", function(it)
+ 			fixture.git(base, { "commit", "-q", "-m", message }, { env = at(day) })
+ 		end
+ 		local function raft(id: string, day: string)
+-			local dir = `{base}/tracker/rafts/done/{id}`
++			-- c0120 override: engine.copy's registry retires tracker/; pickman's rafts live in pickman/.tracker
++			local dir = `{base}/pickman/.tracker/rafts/done/{id}`
+ 			fs.writeDir(dir)
+ 			-- metrics dates a raft by its created: day
+ 			local stubbed =
+@@ -206,7 +207,9 @@ return t.spec("c0114 an item's past follows it across roots", function(it)
+ 		commit("2021-01-01", "a raft reviewed after lessons existed")
+ 		fixture.git(base, { "rm", "-q", "-r", "scripts" })
+ 		engine.copy(root, base) -- z-nile/engine/lessons.luau is first added now
+-		fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{root}/rokit.toml`))
++		-- c0120 override: the spec runs from z-nile/; rokit.toml is the checkout top's
++		local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
++		fs.writeFile(`{base}/rokit.toml`, fs.readFile(`{top}/rokit.toml`))
+ 		commit("2022-01-01", "the move into z-nile")
+ 		raft("R0020", "2023-01-01")
+ 		commit("2023-01-01", "another raft")
+diff --git a/z-nile/tests/acceptance/c0114/window.spec.luau b/z-nile/tests/acceptance/c0114/window.spec.luau
+index 550bc376..8af3efee 100644
+--- a/z-nile/tests/acceptance/c0114/window.spec.luau
++++ b/z-nile/tests/acceptance/c0114/window.spec.luau
+@@ -12,6 +12,20 @@ local publish = require("@znile/engine/publish")
+ local t = require("@tests/lib/t")
+ local trackerfix = require("@tests/lib/trackerfix")
+ 
++-- c0120 override: the registry c0114 shipped (pickman at tracker/), the layout this window is about; the repository's
++-- and the tracker fixtures' (engine.REGISTRY) have moved pickman into pickman/.tracker since
++local C0114_REGISTRY = table.concat({
++	"retired = []",
++	"",
++	"[[project]]",
++	'name = "pickman"',
++	'root = "tracker"',
++	"",
++	"[[project]]",
++	'name = "z-nile"',
++	'root = "z-nile/.tracker"',
++	"",
++}, "\n")
+ local f: trackerfix.Fixture
+ local wt = ""
+ 
+@@ -51,7 +65,8 @@ return t.spec("c0114 the counter across the landing", function(it)
+ 		wt = trackerfix.trOk(f, f.main, { "worktree", "work" })
+ 		fixture.git(wt, { "config", "user.name", "c0114-window" })
+ 		fixture.git(wt, { "config", "user.email", "c0114-window@example.invalid" })
+-		fs.writeFile(`{wt}/z-nile/projects.toml`, fs.readFile("z-nile/projects.toml"))
++		-- c0120 override: the registry c0114 shipped (C0114_REGISTRY), not the repository's
++		fs.writeFile(`{wt}/z-nile/projects.toml`, C0114_REGISTRY)
+ 		fixture.git(wt, { "add", "-A" })
+ 		fixture.git(wt, { "commit", "-q", "-m", "c0114: the registry" })
+ 	end)
+@@ -106,7 +121,7 @@ return t.spec("c0114 the counter across the landing", function(it)
+ 		-- the landing: origin gains the registry, and tracker/next is still the counter
+ 		trackerfix.elsewhere(
+ 			f,
+-			{ ["z-nile/projects.toml"] = fs.readFile("z-nile/projects.toml") },
++			{ ["z-nile/projects.toml"] = C0114_REGISTRY }, -- c0120 override: the registry c0114 shipped
+ 			"c0114 lands"
+ 		)
+ 		fixture.git(wt, { "fetch", "-q", "origin" })

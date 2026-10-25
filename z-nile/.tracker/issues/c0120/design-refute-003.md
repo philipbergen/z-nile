@@ -1,0 +1,24 @@
+# Refute 003: c0120 (design review 003)
+
+- F1: fixed. Every `homes.spec` run that depends on the jail now sets the runner's three markers itself (`markers()`: `PICKMAN_TEST_JAIL=sandbox-exec`, `PICKMAN_FENCE_SPECS=1`, `PICKMAN_TEST_FENCE=<the fixture's root>`), never inheriting them:
+  - the symlink case's in-jail run;
+  - the jail case's waived run;
+  - its z-nile root run, for the comparison.
+  - The no-marker runs stay, and are explicit too (`NO_JAIL`).
+  - `chmod 555` stands in for the jail. When `pickman/.cache` is still writable after it (root), the case errors with a clear message instead of passing.
+  - repo-fence's `ALLOWED` entry for the promoted `homes.spec` now also covers `PICKMAN_TEST_FENCE` and `sandbox-exec`. E7 was rerun and passes.
+  - W1 to W6 were rerun and killed, three ways:
+    - in the macOS jail as it is;
+    - with the run labelled `none (not macOS: environment guards only)`, as on Linux, with the ref-guard hooks set as there;
+    - with it labelled `outer sandbox (protects the repository)`.
+  - A temporary change to `fence.luau`, reverted afterwards, set the label; a probe spec confirmed it. All 13 c0120 specs pass under each label (87/87). Not run on a real Linux host or in a real outer sandbox (Verification log).
+  - New lesson testing/specs-set-host-markers-explicitly.
+  - consequences: none outside the spec. The markers only reach fixture check.sh files under the run's `.cache`.
+- F2: fixed. `pickman_home_fence`'s waiver gains the fourth condition: `<home>/.cache` is neither `$PICKMAN_TEST_FENCE/.cache` nor under it, the comparison c0114's `jailed` test makes. Inside the run's own `.cache` the jail allows the write, so a failure there refuses.
+  - The jail case gains a run whose `PICKMAN_TEST_FENCE` is the home: it refuses.
+  - W6 (the condition dropped) was run and killed under all three labels.
+  - §3, the comment in `fence.sh` and the testing skill's Fence bullet state the condition; `cachepaths` lists the new line.
+  - consequences: c0034's list mode is unaffected: the real `pickman/.cache` lies outside the root run's `.cache`. The full gate passes.
+- F3: fixed. §15 gains an R0039 bullet: a new jail adds its name to `pickman_home_fence`'s test, with c0034's list mode as its regression case, and `homes.spec`'s jail case gets a run with the new marker. The comment in `fence.sh` says the same.
+- Lessons: testing/specs-set-host-markers-explicitly (new). harvest.md has an entry for each finding.
+- The edits commit is now `d6e36fa`. The full gate passes, and `check.sh` is 15/17 (AC16 and AC17 red for the stated reasons). Size is +3,867/−400, about 1,840 lines outside the specs.
