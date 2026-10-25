@@ -253,7 +253,7 @@ function trail.namedIds(subject: string): { string }
 end
 
 -- The capture: the newest commit, not a deletion, whose subject is `tracker: new` with the commit's `id` (the item's
--- current id) in its leading id list (make-issue's landing commit and the stub's publish), or, when none is, the
+-- current id) in its leading id list (z-ticket's landing commit and the stub's publish), or, when none is, the
 -- earliest add (or, with none, the earliest commit). The second result says whether the commit is a capture commit
 -- (false: the fallback).
 function trail.capture(commits: { Commit }): (Commit?, boolean)

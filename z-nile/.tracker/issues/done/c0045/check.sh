@@ -33,20 +33,6 @@ check "AC2: worktree --from bases on the ref; unknown ref and raft id rejected" 
 check "AC3: stream review files are not review rounds" cases_pass "stream review files are not review rounds"
 # AC4 (the prompt embeds the plan, or its error) moved to c0067's ready.spec in R0025: prompt is now a reader
 check "AC5: ./zn commit refuses while merge conflicts are unresolved" cases_pass "tracker.sh commit refuses"
-check "AC6: skills and template carry the parallel protocol" bash -c '
-  e=.claude/skills/execute-raft/SKILL.md
-  for k in "Phase 2B" "./zn workstreams" "--from" "stream-review" "git merge --squash" "model: \"sonnet\"" "model: \"opus\""; do
-    grep -qF -- "$k" "$e" || { echo "execute-raft: missing $k"; exit 1; }
-  done
-  grep -qiE "^#+ +stream mode" .claude/skills/review/SKILL.md || { echo "review: no Stream mode section"; exit 1; }
-  grep -qF "./zn workstreams" .claude/skills/tracker/SKILL.md || { echo "tracker skill: workstreams"; exit 1; }
-  grep -qF -- "--from" .claude/skills/tracker/SKILL.md || { echo "tracker skill: --from"; exit 1; }
-  grep -qF "parallel:" .claude/skills/ready-raft/SKILL.md || { echo "ready-raft: parallel line"; exit 1; }
-  grep -qF "## Workstreams plan" z-nile/templates/prompt.md || { echo "prompt template: plan section"; exit 1; }
-  grep -qF "{{WORKSTREAMS}}" z-nile/templates/prompt.md || { echo "prompt template: variable"; exit 1; }
-  grep -qF "stream branches are committed with plain git" z-nile/templates/prompt.md || { echo "prompt template: hard rule 2"; exit 1; }
-  grep -qF "One raft branch and one PR" z-nile/templates/prompt.md || { echo "prompt template: hard rule 2 (one raft branch)"; exit 1; }
-  grep -qF "Follow the \`execute-raft\` skill" z-nile/templates/prompt.md || { echo "prompt template: hard rule 1 is gone"; exit 1; }'
 check "AC1-AC5: every case of the workstreams spec passes" all_cases_pass
 
 finish

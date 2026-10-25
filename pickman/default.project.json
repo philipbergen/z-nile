@@ -1,0 +1,29 @@
+{
+  "name": "pickman",
+  "tree": {
+    "$className": "DataModel",
+    "Players": {
+      "$properties": { "CharacterAutoLoads": false }
+    },
+    "ReplicatedStorage": {
+      "Shared": { "$path": "src/shared" },
+      "Remotes": {
+        "$className": "Folder",
+        "Ready": { "$className": "RemoteEvent" },
+        "Intent": { "$className": "RemoteEvent" },
+        "Snapshot": { "$className": "RemoteEvent" },
+        "ToLobby": { "$className": "RemoteEvent" },
+        "LobbyStatus": { "$className": "RemoteEvent" }
+      }
+    },
+    "ServerScriptService": {
+      "$attributes": { "LobbyPlaceId": 0 },
+      "Server": { "$path": "src/server" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      }
+    }
+  }
+}

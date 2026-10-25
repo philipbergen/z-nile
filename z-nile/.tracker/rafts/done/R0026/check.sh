@@ -3,13 +3,13 @@
 # Runs the full repo gate, every member issue's check.sh, then raft-level end-to-end checks.
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
-check "RC0: repo gate passes (full)" z-nile/check.sh --full
+check "RC0: repo gate passes (full)" ./check.sh --full
 # every issue naming this raft, including emergent ones
-for dir in $(./zn members R0026); do
+for dir in $(../zn members R0026); do
   check "RC0: $(basename "$dir") acceptance checks pass" bash "$dir/check.sh"
 done
 
-check "RC0: acceptance specs will survive promotion into tests/" ./zn promote-check R0026
+check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0026
 
 # RC1: the guards together, in a real jailed suite. A fixture checkout holds a copy of the runner and its guards;
 # this check.sh runs outside the jail, so the fixture's run jails itself. Its one probe spec leaves a process in a
@@ -19,7 +19,7 @@ guards_together() {
   [[ $(uname -s) == Darwin ]] || { echo "not macOS: no jail, nothing to check"; return 0; }
   local fx="$PWD/.cache/r0260-rc1" rel out rc pid
   rm -rf "$fx" && mkdir -p "$fx/repo" || return 1
-  for rel in tests/run.luau tests/lib scripts/lib .luaurc rokit.toml .gitignore; do
+  for rel in tests/run.luau tests/lib ../scripts/lib .luaurc ../rokit.toml ../.gitignore; do
     mkdir -p "$fx/repo/$(dirname "$rel")" && cp -R "$rel" "$fx/repo/$rel" || return 1
   done
   mkdir -p "$fx/repo/tests/probe" "$fx/repo/.cache/deep"

@@ -34,7 +34,7 @@ check "AC4: done's promoted fixture specs pass" lune run tests/run -- \
   tests/acceptance/c0045/workstreams.spec.luau tests/acceptance/c0050/start-depends.spec.luau
 
 check "AC5: the tracker skill's done row states the full gate and how to recover from an interrupted gate" bash -c '
-  row=$(grep -E "^\| done \|" .claude/skills/tracker/SKILL.md)
+  row=$(grep -E "^\| done \|" skills/zz-rules/SKILL.md)
   [[ -n $row ]] || { echo "the tracker skill has no done row"; exit 1; }
   grep -qi "full gate" <<<"$row" || { echo "the done row does not say done runs the full gate"; exit 1; }
   grep -qi "interrupt" <<<"$row" || { echo "the done row does not say how to recover from an interrupted gate"; exit 1; }

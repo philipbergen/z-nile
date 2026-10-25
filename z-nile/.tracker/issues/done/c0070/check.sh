@@ -28,18 +28,18 @@ check "AC2: sync in the main checkout rebuilds the board" cases_pass "sync in th
 check "AC3: a failed refresh only warns; no refresh without publishing" cases_pass \
   "a main checkout off main only warns" "no refresh without publishing"
 check "AC4: every publish.commit in main.luau goes through published()" bash -c '
-  m=z-nile/engine/main.luau
+  m=engine/main.luau
   grep -qF "local function published(" "$m" || { echo "no published()"; exit 1; }
   n=$(grep -c "publish\.commit(" "$m")
   [ "$n" -ge 5 ] || { echo "only $n publish.commit calls: expected new (2), status, start, ready, stop"; exit 1; }
   bad=$(grep -n "publish\.commit(" "$m" | grep -vF "published(publish.commit(" || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC5: Landing a change, step 4, syncs the root with ./zn; no skill pulls the root by hand after a merge" bash -c '
-  t=.claude/skills/tracker/SKILL.md
+  t=skills/zz-rules/SKILL.md
   step=$(grep -E "^4\. \*\*After the merge" "$t")
   [ -n "$step" ] || { echo "no Landing step 4"; exit 1; }
-  grep -qE "zn\"? sync" <<<"$step" || { echo "step 4 does not run ./zn sync"; exit 1; }
-  bad=$(grep -rnF "git -C <root> pull --ff-only" .claude/skills || true)
+  grep -qE "zn\"? sync" <<<"$step" || { echo "step 4 does not run ../zn sync"; exit 1; }
+  bad=$(grep -rnF "git -C <root> pull --ff-only" skills ../pickman/skills || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 
 finish

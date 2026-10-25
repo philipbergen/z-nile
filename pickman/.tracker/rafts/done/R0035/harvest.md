@@ -1,0 +1,35 @@
+# Harvest: R0035
+
+- design-review-001 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: zz-arch/show-what-the-server-decided
+- design-review-001 F4: one-off: a product question (seed each session freshly or not), put to the user
+- design-review-001 F5: z-design/specify-every-named-artifact
+- design-review-001 F6: zz-test/pin-call-site-arguments
+- design-review-001 F7: one-off: a platform gap (touch fire and hop), captured as f0110
+- design-review-001 F8: one-off: small inconsistencies in the documents and one spec name
+- design-review-001 F9: one-off: an adjacent issue's open user decision (Inky's colour), asked of the user
+- design-review-002 F1: zz-arch/show-what-the-server-decided
+- design-review-002 F2: z-design/instructions-runnable-where-they-run
+- design-review-002 F3: z-design/restated-rules-move-together
+- design-review-003 F1: zz-arch/show-what-the-server-decided
+- design-review-003 F2: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-005 F1: zz-arch/shown-time-follows-the-rule
+- design-review-005 F2: zz-arch/shown-time-follows-the-rule
+- design-review-005 F3: zz-test/skips-leave-the-rest-unchanged
+- design-review-005 F4: zz-test/seed-every-enumerated-case
+- design-review-005 F5: one-off: an Observed criterion written before its measurement existed; the testing skill already asks for a proxy
+- design-review-005 F6: one-off: a mutant id reused across two issues in one mutants file
+- design-review-005 F7: z-design/spec-design-correspondence
+- design-review-005 F8: z-design/restated-rules-move-together
+- design-review-005 F9: z-design/never-narrow-captured-scope
+- note R0035 re-prep, the prototype's full gate found a type error in f0100's sequestered hud.spec (R0012's new Hud.Layout fields) that the affected gate never type-checks: z-design/prove-specs-pass-on-a-prototype
+- design-review-006 F1: zz-test/seed-every-enumerated-case
+- design-review-006 F2: z-design/spec-design-correspondence
+- design-review-006 F3: z-design/restated-rules-move-together
+- design-review-006 F4: z-design/never-narrow-captured-scope
+- design-review-007 F1: zz-test/age-uses-the-last-played-tick, z-design/spec-design-correspondence
+- review-001 F1: zz-test/pin-call-site-arguments
+- review-001 F2: zz-test/pin-call-site-arguments
+- review-002 F1: zz-test/pin-call-site-arguments

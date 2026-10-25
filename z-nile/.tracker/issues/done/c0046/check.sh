@@ -29,16 +29,16 @@ all_cases_pass() {
 check "AC5: worktree-prune warns about worktrees outside .worktree/" cases_pass \
   "worktree-prune warns about a worktree outside"
 check "AC6: the skills state the inside-the-repo rule; no sibling or .worktrees/ path" bash -c '
-  t=.claude/skills/tracker/SKILL.md
+  t=skills/zz-rules/SKILL.md
   grep -qF ".worktree/" "$t" || { echo "tracker skill: .worktree/"; exit 1; }
   grep -qiE "never outside" "$t" || { echo "tracker skill: no \"never outside\" rule"; exit 1; }
-  grep -qF ".worktree/" z-nile/templates/prompt.md || { echo "prompt template: .worktree/"; exit 1; }
+  grep -qF ".worktree/" templates/prompt.md || { echo "prompt template: .worktree/"; exit 1; }
   # the c0005 AC5 markers must survive: done reruns every member check.sh
-  for f in execute-raft tracker make-issue ticket-prep ready-raft; do
-    grep -qF "./zn worktree" ".claude/skills/$f/SKILL.md" || { echo "$f: c0005 marker lost"; exit 1; }
+  for f in zz-execute zz-rules z-ticket z-design z-ready; do
+    grep -qF "./zn worktree" "../.claude/skills/$f/SKILL.md" || { echo "$f: c0005 marker lost"; exit 1; }
   done
-  grep -qF "./zn worktree {{RAFT_ID}}" z-nile/templates/prompt.md || { echo "prompt template: c0005 marker lost"; exit 1; }
-  bad=$(grep -rnE -e "\.worktrees/" -e "\.\./pickman" .claude/skills z-nile/templates SETUP.md AGENTS.md || true)
+  grep -qF "./zn worktree {{RAFT_ID}}" templates/prompt.md || { echo "prompt template: c0005 marker lost"; exit 1; }
+  bad=$(grep -rnE -e "\.worktrees/" -e "\.\./pickman" skills ../pickman/skills ./templates ../SETUP.md ../AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC5: every case of the launch spec passes" all_cases_pass
 

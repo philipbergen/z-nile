@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# z-nile's command (c0114): ./zn <command> ... from anywhere in the checkout. See .claude/skills/tracker/SKILL.md.
+# z-nile's command (c0114): ./zn <command> ... from anywhere in the checkout. See z-nile/skills/zz-rules/SKILL.md.
 # The directory it is run from gives the project (a command's --project overrides it): ZN_CWD is that directory
 # relative to the checkout, and ZN_TOP the checkout, so the engine trusts ZN_CWD only when it runs in ZN_TOP.
 set -euo pipefail

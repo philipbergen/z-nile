@@ -6,6 +6,7 @@
 -- minutes in proportion to lines added.
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
+local projects = require("./projects")
 local sh = require("../lib/sh")
 local store = require("./store")
 
@@ -34,7 +35,10 @@ function spend.stagedStats(excludeAcceptance: boolean?): { FileStat }
 		table.insert(args, `:(exclude){r}`)
 	end
 	if excludeAcceptance then
-		table.insert(args, ":(exclude)tests/acceptance")
+		-- every project's promoted specs (c0120: pickman's are pickman/tests/acceptance)
+		for _, a in projects.acceptanceRoots(projects.load()) do
+			table.insert(args, `:(exclude){a}`)
+		end
 	end
 	local text = sh.git(args)
 	for line in string.gmatch(text, "[^\n]+") do

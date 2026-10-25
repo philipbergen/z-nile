@@ -42,39 +42,39 @@ check "AC5: metrics prints spend by phase, per raft, design-review cost per roun
   "gives each raft with counted issues" "prices a design round" "keeps the review-rounds table" "counts every phase in rework"
 
 skills_record_every_phase() {
-  local S=.claude/skills
+  local S=../.claude/skills
   # sec <file> <line that starts the section> <line that starts the next one, empty: to the end>
   sec() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 {p=1} p && e != "" && index($0, e) == 1 && index($0, s) != 1 {p=0} p' "$1"; }
-  grep -E "^6\. " "$S/make-issue/SKILL.md" | grep -qF -- "./zn spend <id> --phase capture" ||
+  grep -E "^6\. " "$S/z-ticket/SKILL.md" | grep -qF -- "./zn spend <id> --phase capture" ||
     { echo "make-issue step 6 does not record the capture"; return 1; }
-  sec "$S/ticket-prep/SKILL.md" "## 5." "## 6." |
+  sec "$S/z-design/SKILL.md" "## 5." "## 6." |
     grep -qF -- "--phase design-review --time <reviewer minutes> --tokens <reviewer tokens> --note design-review-NNN" ||
     { echo "ticket-prep 5 does not record each round's reviewer run"; return 1; }
-  sec "$S/ticket-prep/SKILL.md" "## 5." "## 6." | grep -qF -- "--note design-refute-NNN" ||
+  sec "$S/z-design/SKILL.md" "## 5." "## 6." | grep -qF -- "--note design-refute-NNN" ||
     { echo "ticket-prep 5 does not record the answering time"; return 1; }
-  sec "$S/ticket-prep/SKILL.md" "## 6." "" | grep -qF -- "--phase prep" || { echo "ticket-prep 6 does not record prep"; return 1; }
-  sec "$S/execute-raft/SKILL.md" "## Phase 4" "## Phase 5" | grep -qF -- "--phase code-review --time <reviewer minutes> --tokens <reviewer tokens>" ||
+  sec "$S/z-design/SKILL.md" "## 6." "" | grep -qF -- "--phase prep" || { echo "ticket-prep 6 does not record prep"; return 1; }
+  sec "$S/zz-execute/SKILL.md" "## Phase 4" "## Phase 5" | grep -qF -- "--phase code-review --time <reviewer minutes> --tokens <reviewer tokens>" ||
     { echo "execute-raft Phase 4 does not record code review with the reviewer's minutes and tokens"; return 1; }
-  sec "$S/execute-raft/SKILL.md" "## Phase 6" "## Stop" | grep -Eq -- 'zn spend R[0-9]+ --phase deliver' ||
+  sec "$S/zz-execute/SKILL.md" "## Phase 6" "## Stop" | grep -Eq -- 'zn spend R[0-9]+ --phase deliver' ||
     { echo "execute-raft Phase 6 does not record delivery after the merge"; return 1; }
-  if grep -rnF -- "--time 0" "$S"; then echo "a skill still records with --time 0"; return 1; fi
-  local t="$S/tracker/SKILL.md" p
+  if grep -rnF -- "--time 0" skills ../pickman/skills; then echo "a skill still records with --time 0"; return 1; fi
+  local t="$S/zz-rules/SKILL.md" p
   grep -qE '^\| spend \|' "$t" || { echo "tracker skill: no spend row in the command table"; return 1; }
   for p in capture prep design-review build code-review deliver; do
     sec "$t" "## Spend" "## " | grep -qF "\`$p\`" || { echo "tracker skill: ## Spend does not name $p"; return 1; }
   done
   grep -F "**The direct-push exception.**" "$t" | grep -qF "spend.md" || { echo "tracker skill: the direct-push exception does not name spend.md"; return 1; }
   sec "$t" "## Other commands" "## Sync" | grep -qF "./zn spend" || { echo "tracker skill: Other commands lacks spend"; return 1; }
-  grep -qiF "by phase" "$S/metrics/SKILL.md" && grep -qiF "per round" "$S/metrics/SKILL.md" ||
+  grep -qiF "by phase" "$S/zz-stats/SKILL.md" && grep -qiF "per round" "$S/zz-stats/SKILL.md" ||
     { echo "metrics skill does not explain the phase tables"; return 1; }
 }
 check "AC6: the skills record every phase, and none keeps --time 0" skills_record_every_phase
 
 one_ledger_format() {
   local f code bad=0
-  [[ -f z-nile/engine/ledger.luau ]] || { echo "z-nile/engine/ledger.luau is missing"; return 1; }
-  for f in z-nile/engine/*.luau; do
-    [[ $f == z-nile/engine/ledger.luau ]] && continue
+  [[ -f engine/ledger.luau ]] || { echo "engine/ledger.luau is missing"; return 1; }
+  for f in engine/*.luau; do
+    [[ $f == engine/ledger.luau ]] && continue
     code=$(grep -vE '^[[:space:]]*--' "$f") # comment lines don't count (store.luau's layout comment names spend.md)
     # the row format is spelled in the ledger alone
     if grep -nF "| when | commit |" <<<"$code"; then echo "$f spells the spend row format itself"; bad=1; fi
@@ -84,7 +84,7 @@ one_ledger_format() {
     fi
   done
   for f in spend publish; do
-    grep -qE 'ledger\.(parse|append|render|appendOnly)\(' "z-nile/engine/$f.luau" || { echo "$f.luau does not use the ledger"; bad=1; }
+    grep -qE 'ledger\.(parse|append|render|appendOnly)\(' "engine/$f.luau" || { echo "$f.luau does not use the ledger"; bad=1; }
   done
   return $bad
 }
