@@ -61,3 +61,6 @@
 - design-review-008 F2: z-design/results-land-on-every-path
 - design-review-008 F3: z-design/spec-design-correspondence
 - design-review-008 F4: z-design/restated-rules-move-together
+- design-review-009 F1: zz-arch/place-outputs-dont-scan-for-them
+- design-review-009 F2: z-design/restated-rules-move-together
+- design-review-009 F3: zz-test/no-vacuous-pass
