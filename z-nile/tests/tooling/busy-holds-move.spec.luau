@@ -64,4 +64,23 @@ return t.spec("c0120's freeze ignores a branch that holds c0120's pinned move", 
 		fs.removeFile(`{f.main}/{REVIEW}`)
 		fixture.git(f.main, { "checkout", "-q", "main" })
 	end)
+
+	it("c0120's own raft, active on origin/main, is ignored; another active raft is listed", function()
+		trackerfix.elsewhere(f, {
+			["z-nile/.tracker/rafts/active/R0048/R0048.md"] = "---\nid: R0048\nissues: [c0120]\n---\n",
+		}, "tracker: ready R0048")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		local r = trackerfix.tr(f, f.main, { "busy", table.unpack(OLD) })
+		t.expect(has(r.stdout, "raft R0048")).toBe(false)
+		t.expect(has(r.stderr, "ignored for c0120's freeze: raft R0048 (c0120's own)")).toBe(true)
+		t.expect(r.code).toBe(1) -- impl-c0199 still holds src
+		trackerfix.elsewhere(f, {
+			["z-nile/.tracker/rafts/active/R0049/R0049.md"] = "---\nid: R0049\nissues: [c0120x, c0121]\n---\n",
+		}, "tracker: ready R0049")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		local o = trackerfix.tr(f, f.main, { "busy", table.unpack(OLD) })
+		t.expect(has(o.stdout, "raft R0049 is active")).toBe(true)
+		-- without paths (compaction's set) the freeze is off: c0120's raft is listed too
+		t.expect(has(trackerfix.tr(f, f.main, { "busy" }).stdout, "raft R0048 is active")).toBe(true)
+	end)
 end)

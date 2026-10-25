@@ -1565,8 +1565,18 @@ function cmd.busy(pos: { string })
 			or string.match(p, "^rafts/active/(R%d%d%d%d)/")
 		if r and r ~= own and not seen[r] then
 			seen[r] = true
-			print(`raft {r} is active`)
-			found += 1
+			-- c0120's own raft, readied for the move, is no freeze on it: its document on origin/main lists c0120
+			-- (c0120's branch is impl2-c0120, not named by the raft)
+			local doc = string.match(p, "^(.*/rafts/active/R%d%d%d%d)/")
+				or string.match(p, "^(rafts/active/R%d%d%d%d)/")
+			local text = sh.run("git", { "show", `refs/remotes/origin/main:{doc}/{r}.md` }).stdout
+			local members = string.match(text, "\nissues:%s*%[([^%]]*)%]") or ""
+			if freeze and string.find(`,{(string.gsub(members, "%s", ""))},`, ",c0120,", 1, true) then
+				stdio.ewrite(`ignored for c0120's freeze: raft {r} (c0120's own)\n`)
+			else
+				print(`raft {r} is active`)
+				found += 1
+			end
 		end
 	end
 	for _, ref in compactLib.busyRefNames(current, paths) do
