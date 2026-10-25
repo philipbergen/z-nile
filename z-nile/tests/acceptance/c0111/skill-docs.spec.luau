@@ -86,19 +86,19 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 
 	it(
 		"ticket-prep: the lessons pass before review, a harvest as each round is answered, a confirmation before prepared",
-		function()
+		function() -- c0116 override: z-design works on one issue, so its commands take <id>, not <R-id>
 			local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
 			t.expect(at(s5, "lessons --when design --full") < at(s5, "`design: reviewed`")).toBe(true)
 			local three, four = at(s5, "\n3. "), at(s5, "\n4. ")
 			local harvest = at(s5, "harvest.md")
 			t.expect(harvest > three and harvest < four).toBe(true) -- in the answering step
-			local rerun = at(s5, "rerun `./zn promote-check <R-id>`")
+			local rerun = at(s5, "rerun `./zn promote-check <id>`")
 			t.expect(rerun > three and rerun < four).toBe(true)
 			t.expect(
-				at(s5, "first harvest anything `./zn lessons --uncovered <R-id>` still lists")
-					< at(s5, "status <R-id> prepared`")
+				at(s5, "first harvest anything `./zn lessons --uncovered <id>` still lists")
+					< at(s5, "status <id> prepared`")
 			).toBe(true)
-			t.expect(at(s5, "lessons --uncovered <R-id>") < at(s5, "status <R-id> prepared`")).toBe(true)
+			t.expect(at(s5, "lessons --uncovered <id>") < at(s5, "status <id> prepared`")).toBe(true)
 			at(s5, "lessons --check")
 		end
 	)

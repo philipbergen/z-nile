@@ -61,8 +61,8 @@ local function sandbox(): string
 	write(`{SB}/pickman/.tracker/rafts/R0030/design-review-002.md`, second)
 	write(`{SB}/pickman/.tracker/rafts/R0030/design-refute-001.md`, "- F1: fixed: x; consequences: none\n")
 	write(`{SB}/pickman/.tracker/rafts/R0030/review-001.md`, second)
-	-- reviews inside an issue directory are not counted for any raft
 	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+	-- c0116 override: a member issue's design reviews roll up to its raft; its code reviews are not counted
 	write(
 		`{SB}/pickman/.tracker/issues/c0010/c0010.md`,
 		"---\nid: c0010\ntype: chore\ntitle: X\nslug: x\nraft: R0030\n---\n\n# c0010\n"
@@ -74,13 +74,13 @@ local function sandbox(): string
 end
 
 return t.spec("c0410 review rounds in metrics", function(it)
-	it("in a sandbox tracker: none for a raft without reviews, issue directories not counted", function()
+	it("in a sandbox tracker: none for a raft without reviews, a member's design reviews roll up", function()
 		local ok, err = pcall(function()
 			local got = rows(metrics(sandbox()))
 			t.expect(got).toEqual({
 				{ "R0010", "1", "0", "classic" },
 				{ "R0020", "0", "0", "none" },
-				{ "R0030", "2", "1", "second-order" },
+				{ "R0030", "3", "1", "second-order" },
 			})
 		end)
 		if fs.isDir(SB) then
@@ -134,9 +134,13 @@ return t.spec("c0410 review rounds in metrics", function(it)
 				"z-nile/.tracker/rafts",
 				"z-nile/.tracker/rafts/active",
 				"z-nile/.tracker/rafts/done",
+				-- c0116 override: a raft recombine retired keeps its folder, and its rounds, in rafts/retired/
+				"pickman/.tracker/rafts/retired",
+				"z-nile/.tracker/rafts/retired",
 			}
 		do
-			for _, name in fs.readDir(`{TOP}/{base}`) do -- c0120 override: the roots are at the checkout's top
+			local names: { string } = if fs.isDir(`{TOP}/{base}`) then fs.readDir(`{TOP}/{base}`) else {} -- c0120 override: the roots are at the checkout's top
+			for _, name in names do
 				if string.match(name, "^R%d%d%d%d$") then
 					table.insert(want, name)
 				end

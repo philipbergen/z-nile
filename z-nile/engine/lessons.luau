@@ -607,7 +607,8 @@ function lessons.load(root: string): Tree
 	local roots: { string } = projects.roots(registry)
 	for _, top in roots do
 		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "/active", "/done" } do
+			-- c0116: a retired raft (rafts/retired/<R-id>) keeps its reviews and harvest.md, which stay sources
+			for _, state in { "", "/active", "/done", "/retired" } do
 				local parent = `{root}/{top}/{kind}{state}`
 				for _, id in dirs(parent) do
 					if not string.match(id, ITEM) then
