@@ -133,11 +133,11 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["credential."] = "resets git's credential helpers to the agent's token only",
 	},
 	-- c0117: the fake CLIs log the step's gh configuration folder, to prove the agent's credential replaced the user's
-	["tests/lib/fakecli.luau"] = {
+	["z-nile/tests/lib/fakecli.luau"] = {
 		GH_CONFIG_DIR = "logged by a fake CLI to prove the step's own, empty gh configuration",
 	},
 	-- c0117: its refusal case sets the spec-run marker explicitly (review 001 F15), never to switch a guard
-	["tests/acceptance/c0117/dispatch-cli.spec.luau"] = {
+	["z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau"] = {
 		PICKMAN_FENCE_ = "sets the spec-run marker the dispatcher's check reads",
 	},
 	-- c0077: the reviewed list of .cache lines quotes fence.sh lines that name these
