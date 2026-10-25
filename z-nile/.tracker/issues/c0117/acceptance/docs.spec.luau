@@ -78,9 +78,15 @@ return t.spec("c0117 docs", function(it)
 		local zr = skill("zz-review")
 		at(zr, "`./zn dispatch zz-review <id> --mode design|raft|code|stream`", "zz-review Who reviews")
 		absent(zr, "stream reviews stay on Sonnet subagents", "zz-review Who reviews")
+		-- design review 008 F1, F2: the dispatcher lands a dispatched review; round 2's inputs are the files in the raft
 		at(
 			zr,
-			"Under `./zn dispatch`, the reviewer writes the file itself: `stream-review-<issue>-NNN.md` in the raft's folder of the worktree it runs in",
+			"Under `./zn dispatch`, the reviewer writes its review to `$ZN_DISPATCH_DIR/review.md` (its own state folder), and the dispatcher numbers it into the raft's folder as `stream-review-<issue>-NNN.md`",
+			"zz-review Stream mode"
+		)
+		at(
+			zr,
+			"Under `./zn dispatch`, from round 2 read the previous `stream-review-<issue>-NNN.md` and `stream-refute-<issue>-NNN.md` in the raft's folder of your worktree",
 			"zz-review Stream mode"
 		)
 		at(
@@ -95,6 +101,27 @@ return t.spec("c0117 docs", function(it)
 		)
 		-- a dispatched raft review records its own row (design review 007 F2): the author records only a subagent's
 		at(skill("z-raft"), "As soon as a subagent reviewer returns", "z-raft")
+		at(
+			skill("z-raft"),
+			"Either way, record your answering time: `./zn spend <R-id> --phase design-review --time <minutes>`",
+			"z-raft"
+		) -- design review 008 F4
+		local ze = skill("zz-execute")
+		at(
+			ze,
+			"One dispatched stream review at a time: commit its file before you start the next.",
+			"zz-execute"
+		)
+		at(
+			ze,
+			"3. **Review each stream** as soon as it reports `done`. In an interactive session:",
+			"zz-execute"
+		)
+		at(
+			ze,
+			"(an interactive reviewer returns its text and the lead writes the file; a dispatched one's review is placed in the raft worktree by the dispatcher; the lead commits both there)",
+			"zz-execute"
+		)
 		for _, name in fs.readDir(`{TOP}/z-nile/skills`) do
 			if fs.isFile(`{TOP}/z-nile/skills/{name}/SKILL.md`) then
 				absent(skill(name), "on **Opus 5.5**", name)

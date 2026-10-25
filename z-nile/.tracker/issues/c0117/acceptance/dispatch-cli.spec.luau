@@ -313,33 +313,66 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 	end)
 
+	-- design review 008 F1: under the dispatcher a stream reviewer writes `$ZN_DISPATCH_DIR/review.md`, its own state
+	-- folder; the dispatcher numbers it (the next free NNN of that issue in the raft's folder) and moves it into place
+	local function inRaft(): (string, string, () -> ())
+		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+		-- c0010 in raft R0090 (as in a raft worktree), uncommitted in this worktree only
+		local raftDir = `{wt}/pickman/.tracker/rafts/R0090`
+		fs.writeDir(raftDir)
+		fs.writeFile(
+			`{raftDir}/R0090.md`,
+			"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010, c0011]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
+		)
+		local doc = `{wt}/pickman/.tracker/issues/c0010/c0010.md`
+		local was = fs.readFile(doc)
+		fs.writeFile(doc, (string.gsub(was, "\nraft:[^\n]*", "\nraft: R0090", 1)))
+		return wt, raftDir, function()
+			fs.writeFile(doc, was)
+			fs.removeDir(raftDir)
+		end
+	end
+	local function writesReview(extra: string?)
+		fs.writeFile(
+			`{h.fakes}/script.sh`,
+			`sleep 3; printf '# Stream review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"; {extra or ""}\n`
+		)
+	end
+	local function streamFiles(dir: string): { string }
+		local out = {}
+		for _, name in fs.readDir(dir) do
+			if string.match(name, "^stream%-review") then
+				table.insert(out, name)
+			end
+		end
+		table.sort(out)
+		return out
+	end
+
 	it(
-		"a stream review under the dispatcher writes its file in the raft's folder, and its record: line names it and the issue",
+		"a stream review: the dispatcher numbers its review.md into the raft's folder, the line names it and the issue, and round 2 is given round 1's files",
 		function()
 			fakecli.clear(h)
 			mode("claude.zz-review", "script")
-			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
-			-- c0010 in raft R0090 (as in a raft worktree), uncommitted in this worktree only
-			local raftDir = `{wt}/pickman/.tracker/rafts/R0090`
-			fs.writeDir(raftDir)
-			fs.writeFile(
-				`{raftDir}/R0090.md`,
-				"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
-			)
-			local doc = `{wt}/pickman/.tracker/issues/c0010/c0010.md`
-			local was = fs.readFile(doc)
-			fs.writeFile(doc, (string.gsub(was, "\nraft:[^\n]*", "\nraft: R0090", 1)))
-			fs.writeFile(
-				`{h.fakes}/script.sh`,
-				`sleep 3; d=$(./zn find R0090); printf '# Stream review\\n\\nVerdict: approve\\n' > "$d/stream-review-c0010-001.md"\n`
-			)
+			writesReview()
+			local wt, raftDir, restore = inRaft()
 			local before = #(fakecli.rows(h, "c0010") or {})
 			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
-			fs.writeFile(doc, was)
-			fs.removeDir(raftDir)
+			local one = streamFiles(raftDir)
+			local l1 = log()
+			-- round 2: the lead committed round 1's review and its refute
+			fs.writeFile(`{raftDir}/stream-refute-c0010-001.md`, "- F1: fixed\n")
+			fakecli.clear(h) -- clears the modes and the script too
+			mode("claude.zz-review", "script")
+			writesReview()
+			local r2 = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+			local two = streamFiles(raftDir)
+			local l2 = log()
+			restore()
 			if not r.ok then
 				error(r.stdout .. r.stderr)
 			end
+			t.expect(one).toEqual({ "stream-review-c0010-001.md" })
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(
@@ -349,6 +382,64 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 				) ~= nil
 			).toBe(true)
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
+			-- the prompt names the stream's own worktree (the call site's argument, design review 008 F3)
+			local main = fixture.physical(h.f.main) :: string
+			t.expect(has(l1, `{main}/.worktree/ws-c0010`)).toBe(true)
+			t.expect(has(l1, "previous round")).toBe(false)
+			if not r2.ok then
+				error(r2.stdout .. r2.stderr)
+			end
+			t.expect(two).toEqual({ "stream-review-c0010-001.md", "stream-review-c0010-002.md" })
+			t.expect(has(recordLines(r2.stdout)[1], '-m "c0010: stream-review-002"')).toBe(true)
+			t.expect(has(l2, "stream-review-c0010-001.md")).toBe(true)
+			t.expect(has(l2, "stream-refute-c0010-001.md")).toBe(true)
+		end
+	)
+
+	it(
+		"a stream reviewer that writes no review fails the step, and its spend line is still printed",
+		function()
+			fakecli.clear(h)
+			mode("claude.zz-review", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, "sleep 3\n")
+			local wt, raftDir, restore = inRaft()
+			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+			local files = streamFiles(raftDir)
+			restore()
+			t.expect(r.ok).toBe(false)
+			t.expect(files).toEqual({})
+			local s = state("c0010")
+			t.expect(s.outcome).toBe("failed")
+			t.expect(has(s.detail, "the reviewer wrote no review")).toBe(true)
+			local lines = recordLines(r.stdout)
+			t.expect(#lines).toBe(1)
+			t.expect(has(lines[1], '-m "c0010: dispatch zz-review"')).toBe(true)
+			t.expect(has(lines[1], "--tokens 123")).toBe(true)
+		end
+	)
+
+	it(
+		"a quota fallthrough lands one review, numbered once; the failed attempt's file is moved aside; another issue's file is never this one's",
+		function()
+			fakecli.clear(h)
+			-- claude writes a review, spends 42 tokens, then reports quota; grok writes the review that counts, and
+			-- also a stray file of another issue in the raft's folder
+			mode("claude.zz-review", "scriptquota")
+			mode("grok.zz-review", "script")
+			writesReview('d=$(./zn find R0090); echo x > "$d/stream-review-c0011-001.md"')
+			local wt, raftDir, restore = inRaft()
+			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+			local files = streamFiles(raftDir)
+			restore()
+			if not r.ok then
+				error(r.stdout .. r.stderr)
+			end
+			t.expect(files).toEqual({ "stream-review-c0010-001.md", "stream-review-c0011-001.md" })
+			local lines = recordLines(r.stdout)
+			t.expect(#lines).toBe(1)
+			t.expect(has(lines[1], '-m "c0010: stream-review-001"')).toBe(true)
+			t.expect(has(lines[1], "--tokens 249 --model grok-4.7-xhigh")).toBe(true)
+			t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
 		end
 	)
 

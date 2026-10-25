@@ -9,3 +9,5 @@ A mode written for one caller ("return the review markdown; the lead writes the 
 **Why:** c0117 design review 007 F1: under the dispatcher a stream review ran headless, zz-review's Stream mode told the reviewer to return its text and write no file, the runner kept only the token count, and the dispatcher looked for review files in the issue's folder rather than the raft's. The review vanished, and its `record:` line named no file and no issue.
 
 **How to apply:** for each mode, write down where its output lands on every path that runs it, and give each path its own carrier (here: the dispatched reviewer writes `stream-review-<issue>-NNN.md` itself in the raft's folder, an interactive subagent still returns text for the lead). Pin each path with a case that finds the output where it should be.
+
+Inputs too (c0117 design review 008 F2): a step's inputs need a carrier on every path as much as its result. "The lead puts the previous round in the brief" has no brief under a dispatcher: the dispatched round-2 reviewer got no previous review or refute until its prompt named the files. For each input a mode names, ask who hands it over on the dispatched path.
