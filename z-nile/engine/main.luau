@@ -1761,6 +1761,40 @@ function cmd.unfold(pos: { string })
 		fail("usage: unfold <R-id> <issue>...")
 	end
 	raftingStart("unfold")
+	-- R0050 code review 002 F1: a raft that is retired or missing can't be claimed, so its members' raft: lines are
+	-- cleared here with no claim (audit's dead-raft error names this command); the rafting PR carries them
+	if not store.find(raftId) then
+		local dead = "missing"
+		for _, root in store.roots() do
+			if fs.isDir(retiredDir(root, raftId)) then
+				dead = "retired"
+			end
+		end
+		local gone: { string } = {}
+		for i = 2, #pos do
+			local issue = store.get(pos[i])
+			if (store.readFront(issue.doc).raft or "") ~= raftId then
+				fail(`{issue.id} is not a member of {raftId}`)
+			end
+			if issue.state == "done" then
+				fail(`{issue.id} is done: its raft: is history`)
+			end
+			table.insert(gone, issue.id)
+		end
+		for _, id in gone do
+			local doc = store.get(id).doc
+			store.setFront(doc, "raft", "")
+			sh.git({ "add", doc })
+		end
+		sh.git({
+			"commit",
+			"--quiet",
+			"-m",
+			`tracker: unfold {table.concat(gone, " ")} from {raftId} ({dead}: no claim)`,
+		})
+		print(`unfolded {table.concat(gone, ", ")} from {raftId} ({dead}: nothing to claim)`)
+		return
+	end
 	local raft = store.get(raftId)
 	if raft.kind ~= "raft" or raft.state ~= "backlog" then
 		fail(`{raftId} is in {raft.dir}: unfold takes a backlog raft`)
@@ -1823,7 +1857,8 @@ end
 -- `recombine <keeper> <other> [<issue>...]`: moves the named members of the other backlog raft (all of them when none
 -- is named) into the keeper. Both rafts are claimed with one fresh stamp (status lines only, published), so the
 -- carried `status <keeper> prepared` sees the other raft as the same claim. The moves are written here and committed;
--- the other raft is retired (its folder deleted in this branch, so in the rafting PR) only when it ends up empty.
+-- the other raft is retired only when it ends up empty: its folder moves to <root>/rafts/retired/ with `retired: <keeper>`
+-- in this branch, so in the rafting PR.
 function cmd.recombine(pos: { string })
 	local keeperId, otherId = pos[1], pos[2]
 	if not (keeperId and otherId and store.isRaftId(keeperId) and store.isRaftId(otherId)) then

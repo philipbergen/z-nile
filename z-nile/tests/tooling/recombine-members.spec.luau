@@ -4,6 +4,7 @@
 -- can be neither readied, unfolded nor claimed). Driven through ./zn in a fixture under .cache/c0116-recombine-members
 -- (tests/lib/trackerfix).
 local fixture = require("@tests/lib/fixture")
+local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -84,6 +85,19 @@ return t.spec(
 					-- a done issue's raft: is history, never checked
 					["pickman/.tracker/issues/done/c0051/c0051.md"] = issue("c0051", "R0098", "done"),
 					["pickman/.tracker/issues/done/c0051/check.sh"] = CHECK,
+					-- review 002 F2: live issues whose raft is in active/ or done/ are fine (never "missing")
+					["pickman/.tracker/rafts/active/R0060/R0060.md"] = raftDoc("R0060", "c0061"),
+					["pickman/.tracker/rafts/active/R0060/check.sh"] = CHECK,
+					["pickman/.tracker/issues/active/c0061/c0061.md"] = issue(
+						"c0061",
+						"R0060",
+						"active-jolly-silver-walrus"
+					),
+					["pickman/.tracker/issues/active/c0061/check.sh"] = CHECK,
+					["pickman/.tracker/rafts/done/R0070/R0070.md"] = raftDoc("R0070", "c0071"),
+					["pickman/.tracker/rafts/done/R0070/check.sh"] = CHECK,
+					["pickman/.tracker/issues/c0071/c0071.md"] = issue("c0071", "R0070"),
+					["pickman/.tracker/issues/c0071/check.sh"] = CHECK,
 				}, "issues naming dead rafts")
 				fixture.git(f.main, { "pull", "-q", "origin", "main" })
 				local r = trackerfix.tr(f, f.main, { "audit" })
@@ -92,6 +106,33 @@ return t.spec(
 				t.expect(has(out, "c0031's raft R0030 is retired")).toBe(true)
 				t.expect(has(out, "c0041's raft R0099 does not exist")).toBe(true)
 				t.expect(has(out, "c0051")).toBe(false)
+				t.expect(has(out, "c0061")).toBe(false)
+				t.expect(has(out, "c0071")).toBe(false)
+				-- each error names the one command that clears it (review 002 F1)
+				t.expect(has(out, "./zn unfold R0030 c0031")).toBe(true)
+				t.expect(has(out, "./zn unfold R0099 c0041")).toBe(true)
+				t.expect(select(2, string.gsub(out, "error dead%-raft", ""))).toBe(2)
+			end
+		)
+
+		it(
+			"the named unfold clears a dead raft's member without claiming any raft, and audit is clean of it",
+			function()
+				fixture.git(W, { "fetch", "-q", "origin" })
+				fixture.git(W, { "merge", "-q", "--no-edit", "origin/main" })
+				local before = tip()
+				-- an issue the dead raft doesn't hold is refused
+				local wrong = trackerfix.tr(f, W, { "unfold", "R0030", "c0071" })
+				t.expect(wrong.ok).toBe(false)
+				t.expect(has(wrong.stderr, "c0071 is not a member of R0030")).toBe(true)
+				trackerfix.trOk(f, W, { "unfold", "R0030", "c0031" })
+				trackerfix.trOk(f, W, { "unfold", "R0099", "c0041" })
+				-- nothing published: neither raft is claimed (one is retired, the other missing)
+				t.expect(tip()).toBe(before)
+				local a = trackerfix.tr(f, W, { "audit" })
+				t.expect(has(a.stdout .. a.stderr, "dead-raft")).toBe(false)
+				t.expect(has(fs.readFile(`{W}/pickman/.tracker/issues/c0031/c0031.md`), "\nraft: \n"))
+					.toBe(true)
 			end
 		)
 	end

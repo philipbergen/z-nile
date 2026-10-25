@@ -312,10 +312,15 @@ function audit.run(root: string): { Problem }
 					"error",
 					"dead-raft",
 					f.path,
-					`{f.id}'s raft {r} is retired: move it with ./zn recombine or unfold`
+					`{f.id}'s raft {r} is retired: clear it with ./zn unfold {r} {f.id}`
 				)
 			elseif r ~= "" and raftAt[r] == nil then
-				add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist`)
+				add(
+					"error",
+					"dead-raft",
+					f.path,
+					`{f.id}'s raft {r} does not exist: clear it with ./zn unfold {r} {f.id}`
+				)
 			end
 		end
 	end
