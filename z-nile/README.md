@@ -27,7 +27,7 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
 - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
 - **The dispatcher** (c0117, planned). It will run a step's skill on an item with the model `.models.toml` names, through that model's CLI, and record the spend.
 - **`.models.toml`** (c0117, planned). It will say which model runs each skill, stacking from the repository root down to the work, as `.gitignore` does.
-- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121) serves the same page live from the main checkout, with stop, retry and open.
 
 ## Skills
 | skill | step | what it does |

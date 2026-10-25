@@ -14,6 +14,7 @@ local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
+local serveLib = require("./serve")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
 local spend = require("./spend")
@@ -69,6 +70,7 @@ usage: ./zn <command> ...
   metrics [--include-active]                    cost per issue and rework %
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
+  board --serve [--port N]                      serve that page live on 127.0.0.1 (main checkout; stop, retry, open)
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
                                                 list skill lessons; also --tags, --check, and --uncovered <id>...
   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
@@ -720,6 +722,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--check"
 			or a == "--tags"
 			or a == "--uncovered"
+			or a == "--serve"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -4201,7 +4204,42 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
 end
 
+-- `board --serve [--port N]` (c0121): the page, live, on 127.0.0.1, with stop, retry and open through `./zn dispatch`.
+-- It runs in the main checkout only: c0117's run state and `stop` live there.
+local function serveBoard(pos: { string }, opts: { [string]: { string } })
+	if #pos > 0 or opts["--out"] or opts["-O"] or opts["--open"] then
+		fail("usage: board --serve [--port N]  (--serve writes no file: --out, -O and --open don't apply)")
+	end
+	local portText = if opts["--port"] then opts["--port"][1] else tostring(serveLib.PORT)
+	local port = tonumber(portText)
+	if not port or port ~= math.floor(port) or port < 1024 or port > 65535 then
+		fail(`board --serve: --port {tostring(portText)} is not a port from 1024 to 65535`)
+	end
+	local top = sh.trim(sh.git({ "rev-parse", "--show-toplevel" }))
+	if top ~= mainRoot() then
+		fail(
+			`board --serve runs in the main checkout ({mainRoot()}), where the dispatcher's run state and stop live`
+		)
+	end
+	local effects = serveLib.effects(top, process.exec :: any, process.os)
+	local ok, server = pcall(serveLib.start, {
+		root = top,
+		port = port :: number,
+		runner = effects.runner,
+		opener = effects.opener,
+		gh = effects.gh,
+		now = os.time,
+	})
+	if not ok then
+		fail(serveLib.startError(tostring(server), port :: number))
+	end
+	print(server.url)
+end
+
 function cmd.board(pos: { string }, opts: { [string]: { string } })
+	if opts["--serve"] then
+		return serveBoard(pos, opts)
+	end
 	local given = opts["--out"] and opts["--out"][1]
 	if #pos > 0 or (given and (given == "" or string.sub(given, 1, 1) == "-")) then
 		fail("usage: board [--out PATH] [-O]  (an --out path can't start with -; write ./-x for such a file)")
@@ -4253,7 +4291,8 @@ local READ_ONLY: { [string]: boolean } = {
 	["promote-check"] = true,
 	stamp = true,
 }
-if not READ_ONLY[name :: string] then
+-- `board --serve` runs actions (c0121), so it is guarded although `board` alone only reads
+if not READ_ONLY[name :: string] or (name == "board" and table.find(args, "--serve") ~= nil) then
 	guardRepoRoot()
 end
 local rest = table.move(args, 2, #args, 1, {})
