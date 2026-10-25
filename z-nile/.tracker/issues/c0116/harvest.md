@@ -23,3 +23,4 @@
 - design-review-004 F4: one-off: the refusal printed the exact line that silences it; the message now names the record's ids and the rule "never edit a written review"
 - design-review-005 F1: architecture/one-reader-per-format, ticket-prep/restated-rules-move-together
 - design-review-006 F1: architecture/guard-no-is-explicit
+- note a simulated done of c0116 itself found retired.spec's fixture holding the moved item twice (clone of HEAD plus the working tree): ticket-prep/prove-specs-pass-on-a-prototype
