@@ -49,6 +49,11 @@ function fakecli.script(cli: string): string
 		"ok) " .. ok .. " ;;",
 		"quota) " .. quota .. " ;;",
 		"spentquota) " .. spent .. quota .. " ;;",
+		-- the step's script (a reviewer writing its review), then tokens spent and quota: a fallthrough's first attempt
+		'scriptquota) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; id="$id" step="$step" sh "$FAKE_DIR/script.sh" >> "$FAKE_DIR/log" 2>&1; kill $hb; '
+			.. spent
+			.. quota
+			.. " ;;",
 		'fail) echo "boom" >&2; exit 1 ;;',
 		"nocount) echo 'not json'; exit 0 ;;",
 		'questions) printf "## Q1\\nWhich scope?\\n" > "$ZN_DISPATCH_DIR/questions.md"; ' .. ok .. " ;;",

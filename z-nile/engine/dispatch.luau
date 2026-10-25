@@ -108,6 +108,7 @@ export type PromptInput = {
 	stateDir: string, -- where questions.md goes
 	promptPath: string?, -- z-run: the raft's readied prompt.md
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
+	previous: { string }?, -- zz-review in stream mode, from round 2: the previous round's review and refute files
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
 }
@@ -125,9 +126,19 @@ function dispatch.prompt(p: PromptInput): string
 		what =
 			`Read \`{p.skillPath}\` and follow it for {p.id}: its input is the raft's prompt, \`{p.promptPath or `./zn prompt {p.id} --path`}\`; read the whole file first.`
 	elseif p.step == "zz-review" and p.mode == "stream" then
-		-- a dispatched run has no caller to return text to: the reviewer writes its own file (design review 007 F1)
+		-- a dispatched run has no caller to return text to: the reviewer writes review.md in its own state folder and
+		-- the dispatcher numbers it into the raft's folder (design review 008 F1); from round 2 it reads round 1's files
+		local later = ""
+		if p.previous and #p.previous > 0 then
+			local named = {}
+			for _, f in p.previous :: { string } do
+				table.insert(named, `\`{f}\``)
+			end
+			later =
+				` This is a later round: first read the previous round's files, {table.concat(named, ", ")}.`
+		end
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there); write only \`stream-review-{p.id}-NNN.md\` in the raft's folder of your worktree, as Stream mode says under \`./zn dispatch\`.`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-NNN.md\`.{later}`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write only the review file that mode names.`
