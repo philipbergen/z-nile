@@ -47,6 +47,11 @@ return t.spec("c0120's freeze ignores a branch that holds c0120's pinned move", 
 		local move = branchOff("impl-move", "main", "src/moved.luau")
 		branchOff("stacked-on-move", "impl-move", "src/stacked.luau")
 		branchOff("impl-c0199", "main", "src/lookalike.luau")
+		-- the three names the user approved ("Approve all three") count; names only like them don't (review 013 F3)
+		branchOff("prep-c0121", "main", "src/approved-1.luau")
+		branchOff("prep-c0121-x", "main", "src/like-1.luau")
+		branchOff("proto-c0121-copy", "main", "src/like-2.luau")
+		branchOff("impl-c0120b", "main", "src/like-3.luau")
 		-- the current branch is impl-move, as c0120's own branch runs AC16
 		fixture.git(f.main, { "checkout", "-q", "impl-move" })
 		review(
@@ -56,6 +61,10 @@ return t.spec("c0120's freeze ignores a branch that holds c0120's pinned move", 
 		t.expect(has(r.stdout, "stacked-on-move")).toBe(false)
 		t.expect(has(r.stderr, "ignored for c0120's freeze: stacked-on-move (holds its move)")).toBe(true)
 		t.expect(has(r.stdout, "branch impl-c0199 changes")).toBe(true)
+		t.expect(has(r.stderr, "ignored for c0120's freeze: prep-c0121 (approved by name)")).toBe(true)
+		for _, like in { "prep-c0121-x", "proto-c0121-copy", "impl-c0120b" } do
+			t.expect(has(r.stdout, `branch {like} changes`)).toBe(true)
+		end
 		t.expect(r.code).toBe(1)
 		-- no approved review: nothing is exempt for holding a move
 		review(`# Review\nMove commit: {move}\n\nVerdict: changes\n`)
