@@ -35,11 +35,11 @@ check "AC4: every publish.commit in main.luau goes through published()" bash -c 
   bad=$(grep -n "publish\.commit(" "$m" | grep -vF "published(publish.commit(" || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC5: Landing a change, step 4, syncs the root with ./zn; no skill pulls the root by hand after a merge" bash -c '
-  t=../.claude/skills/tracker/SKILL.md
+  t=skills/zz-rules/SKILL.md
   step=$(grep -E "^4\. \*\*After the merge" "$t")
   [ -n "$step" ] || { echo "no Landing step 4"; exit 1; }
   grep -qE "zn\"? sync" <<<"$step" || { echo "step 4 does not run ../zn sync"; exit 1; }
-  bad=$(grep -rnF "git -C <root> pull --ff-only" ../.claude/skills || true)
+  bad=$(grep -rnF "git -C <root> pull --ff-only" skills ../pickman/skills || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 
 finish

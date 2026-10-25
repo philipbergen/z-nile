@@ -357,7 +357,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			return if r.ok then r.stdout else nil
 		end
 		-- the roots this publish may write under come from origin/main alone: a branch that edits its own registry
-		-- can't widen them (lesson architecture/guards-trust-only-origin). An origin/main without the registry (before
+		-- can't widen them (lesson zz-arch/guards-trust-only-origin). An origin/main without the registry (before
 		-- c0114 lands) or with one that does not parse publishes nothing: the main checkout's engine, which predates the
 		-- registry, publishes until then.
 		local regText = read(projects.FILE)

@@ -26,7 +26,7 @@ check "AC2: land carries only edits to draft backlog issue documents, status and
 check "AC3: land refuses when the gate fails" cases_pass "land refuses when the gate fails"
 check "AC4: land refuses outside a capture worktree, dirty, or with nothing to land" cases_pass "land refuses outside a capture worktree"
 check "AC5: make-issue lands with ./zn land (no PR); the tracker skill names land" bash -c '
-  m=../.claude/skills/make-issue/SKILL.md; t=../.claude/skills/tracker/SKILL.md
+  m=skills/z-ticket/SKILL.md; t=skills/zz-rules/SKILL.md
   step=$(grep -E "^6\. " "$m")
   grep -qF "./zn land" <<<"$step" || { echo "make-issue step 6 does not run ./zn land"; exit 1; }
   ! grep -qiE "\bPR\b|pull request" <<<"$(sed "s/[Nn]o PR//; s/no pull request//" <<<"$step")" || { echo "make-issue step 6 still opens a PR"; exit 1; }

@@ -10,7 +10,19 @@ local TOP = (
 	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 )
 
-local SKILLS = `{TOP}/.claude/skills` -- c0120 override: read from the checkout's top
+-- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links), as
+-- repository-relative folders ("z-nile/skills/zz-rules")
+local function skillDirs(): { string }
+	local out = {}
+	for _, base in { "z-nile/skills", "pickman/skills" } do
+		local names = fs.readDir(`{TOP}/{base}`)
+		table.sort(names)
+		for _, name in names do
+			table.insert(out, `{base}/{name}`)
+		end
+	end
+	return out
+end
 
 local function read(path: string): string
 	return fs.readFile(path)
@@ -40,8 +52,9 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 		function()
 			local first: string? = nil
 			local n = 0
-			for _, name in fs.readDir(SKILLS) do
-				local doc = `{SKILLS}/{name}/SKILL.md`
+			for _, dir in skillDirs() do
+				local name = string.match(dir, "[^/]+$") :: string
+				local doc = `{TOP}/{dir}/SKILL.md`
 				if fs.isFile(doc) then
 					n += 1
 					local s = section(read(doc), "Lessons")
@@ -50,7 +63,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 					at(s, "never writes a lesson file or runs `./zn new`")
 					at(
 						s,
-						"- **The lead of a prep or raft** writes it in `.claude/skills/<the skill the lesson improves>/lessons/<slug>.md`"
+						"- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md`"
 					)
 					at(s, "as `- note <what happened>: <lesson ids>`")
 					at(s, "- **Any other lead** (")
@@ -74,7 +87,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 	it(
 		"ticket-prep: the lessons pass before review, a harvest as each round is answered, a confirmation before prepared",
 		function()
-			local s5 = section(read(`{SKILLS}/ticket-prep/SKILL.md`), "5.")
+			local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
 			t.expect(at(s5, "lessons --when design --full") < at(s5, "`design: reviewed`")).toBe(true)
 			local three, four = at(s5, "\n3. "), at(s5, "\n4. ")
 			local harvest = at(s5, "harvest.md")
@@ -93,7 +106,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 	it(
 		"execute-raft: streams report lessons, the lead writes and harvests each round, and confirms before done",
 		function()
-			local text = read(`{SKILLS}/execute-raft/SKILL.md`)
+			local text = read(`{TOP}/z-nile/skills/zz-execute/SKILL.md`)
 			local p2b = section(text, "Phase 2B")
 			t.expect(at(p2b, "a candidate lesson goes in the final report too") < at(p2b, "\n3. ")).toBe(true) -- in the brief
 			-- written as each report or stream review arrives, before step 1, so no later path can skip them
@@ -115,7 +128,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 	)
 
 	it("review checks lessons in both modes, and a finding may name the lesson it repeats", function()
-		local text = read(`{SKILLS}/review/SKILL.md`)
+		local text = read(`{TOP}/z-nile/skills/zz-review/SKILL.md`)
 		local design = section(text, "Design mode")
 		at(design, "\n10. **Lessons**")
 		at(design, "lessons --when design --full")
@@ -128,13 +141,13 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 	it(
 		"the tracker, ready-raft and metrics skills, AGENTS.md and the prompt template know lessons",
 		function()
-			local tracker = read(`{SKILLS}/tracker/SKILL.md`)
+			local tracker = read(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 			t.expect(string.find(tracker, "\n| lessons | `./zn lessons", 1, true) ~= nil).toBe(true)
 			at(tracker, "harvest.md")
 			at(tracker, "`- note <text>: <lesson ids>`")
 			at(section(tracker, "Worktrees"), "`lessons`") -- it may run in the main checkout
-			at(read(`{SKILLS}/ready-raft/SKILL.md`), "build lessons")
-			at(read(`{SKILLS}/metrics/SKILL.md`), "./zn lessons")
+			at(read(`{TOP}/z-nile/skills/z-ready/SKILL.md`), "build lessons")
+			at(read(`{TOP}/z-nile/skills/zz-stats/SKILL.md`), "./zn lessons")
 			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 			local agents = read(`{TOP}/AGENTS.md`)
 			at(agents, "lessons/")

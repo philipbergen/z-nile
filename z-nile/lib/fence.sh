@@ -1,4 +1,4 @@
-# Guards for everything a check runs (testing skill, "Specs never touch the real repository").
+# Guards for everything a check runs (zz-test skill, "Specs never touch the real repository").
 #   pickman_fence <checkout>          # check.sh files (z-nile/lib/ac.sh)
 #   pickman_fence <checkout> specs [<jail>]   # spec runs (tests/lib/fence.luau): also no network, no credentials,
 #                                             # no fetch; under the jail (<jail> = sandbox-exec) no hooks either

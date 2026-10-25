@@ -22,32 +22,32 @@ local function review(...: string): string
 	return out .. "Verdict: changes\n"
 end
 
-local PIN = ".claude/skills/testing/lessons/pin-inputs.md"
+local PIN = "z-nile/skills/zz-test/lessons/pin-inputs.md"
 local SEED: { [string]: string } = {
-	[".claude/skills/testing/SKILL.md"] = skill("testing"),
-	[".claude/skills/review/SKILL.md"] = skill("review"),
-	[".claude/skills/ticket-prep/SKILL.md"] = skill("ticket-prep"),
+	["z-nile/skills/zz-test/SKILL.md"] = skill("zz-test"),
+	["z-nile/skills/zz-review/SKILL.md"] = skill("zz-review"),
+	["z-nile/skills/z-design/SKILL.md"] = skill("z-design"),
 	[PIN] = lesson("build", "wiring, seams", "Are the call site's inputs pinned?", "Pin them."),
-	[".claude/skills/ticket-prep/lessons/lifetimes.md"] = lesson(
+	["z-nile/skills/z-design/lessons/lifetimes.md"] = lesson(
 		"design",
 		"lifetimes",
 		"Which process outlives which?",
 		"Name the owner."
 	),
-	[".claude/skills/review/lessons/both-kinds.md"] = lesson(
+	["z-nile/skills/zz-review/lessons/both-kinds.md"] = lesson(
 		"both",
 		"wiring",
 		"Is the text consistent?",
-		"Read it twice; see testing/pin-inputs.",
+		"Read it twice; see zz-test/pin-inputs.",
 		"user 2026-10-20: read it twice"
 	),
 	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout), every item path in this seed
 	["pickman/.tracker/rafts/R0010/design-review-001.md"] = review("F1", "F2", "F3"),
 	["pickman/.tracker/rafts/R0010/review-001.md"] = review("F1", "F2"),
-	["pickman/.tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n\n- design-review-001 F1: testing/pin-inputs\n"
-		.. "- design-review-001 F2: ticket-prep/lifetimes\n- design-review-001 F3: one-off: a typo\n"
+	["pickman/.tracker/rafts/R0010/harvest.md"] = "# Harvest: R0010\n\n- design-review-001 F1: zz-test/pin-inputs\n"
+		.. "- design-review-001 F2: z-design/lifetimes\n- design-review-001 F3: one-off: a typo\n"
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		.. "- review-001 F2: testing/pin-inputs\n",
+		.. "- review-001 F2: zz-test/pin-inputs\n",
 	["pickman/.tracker/issues/done/c0020/review-001.md"] = review("F1"),
 	["pickman/.tracker/rafts/R0030/design-review-001.md"] = "# Review 001\n\nVerdict: approve\n",
 	-- a readied raft with an unharvested finding, and an item with no reviews at all
@@ -89,34 +89,34 @@ end
 
 return t.spec("c0111 tracker.sh lessons", function(it)
 	it("sets up a tracker fixture with lessons, ledgers and reviews", function()
-		f = trackerfix.new("lessons-cli", SEED)
+		f = trackerfix.new("lessons-cli", SEED, { noLessons = true }) -- c0115: fixtures copy lessons; this one counts its own
 	end)
 
 	it("lists every lesson by sources then id, one index line each", function()
 		local code, out = run({})
 		t.expect(code).toBe(0)
 		t.expect(lines(out)).toEqual({
-			"- testing/pin-inputs (build, 2 sources): Are the call site's inputs pinned?",
-			"- review/both-kinds (both, 1 source): Is the text consistent?",
-			"- ticket-prep/lifetimes (design, 1 source): Which process outlives which?",
+			"- zz-test/pin-inputs (build, 2 sources): Are the call site's inputs pinned?",
+			"- z-design/lifetimes (design, 1 source): Which process outlives which?",
+			"- zz-review/both-kinds (both, 1 source): Is the text consistent?",
 		})
 	end)
 
 	it("filters by when, skill, tag and words", function()
 		local _, design = run({ "--when", "design" })
 		t.expect(#lines(design)).toBe(2)
-		t.expect(has(design, "review/both-kinds") and has(design, "ticket-prep/lifetimes")).toBe(true)
+		t.expect(has(design, "zz-review/both-kinds") and has(design, "z-design/lifetimes")).toBe(true)
 		local _, build = run({ "--when", "build" })
-		t.expect(has(build, "testing/pin-inputs") and has(build, "review/both-kinds")).toBe(true)
+		t.expect(has(build, "zz-test/pin-inputs") and has(build, "zz-review/both-kinds")).toBe(true)
 		t.expect(has(build, "lifetimes")).toBe(false)
-		local _, two = run({ "--skill", "testing", "--skill", "ticket-prep" })
+		local _, two = run({ "--skill", "zz-test", "--skill", "z-design" })
 		t.expect(#lines(two)).toBe(2)
 		local _, tagged = run({ "--tag", "wiring", "--tag", "seams" })
 		t.expect(lines(tagged))
-			.toEqual({ "- testing/pin-inputs (build, 2 sources): Are the call site's inputs pinned?" })
+			.toEqual({ "- zz-test/pin-inputs (build, 2 sources): Are the call site's inputs pinned?" })
 		local _, word = run({ "OWNER" })
 		t.expect(#lines(word)).toBe(1)
-		t.expect(has(word, "ticket-prep/lifetimes")).toBe(true)
+		t.expect(has(word, "z-design/lifetimes")).toBe(true)
 		local code, none = run({ "nothing-matches-this" })
 		t.expect(code).toBe(0)
 		t.expect(none).toBe("(none)\n")
@@ -140,9 +140,9 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 		t.expect(out).toBe(
 			block(PIN, "R0010 design-review-001 F1, R0010 review-001 F2")
 				.. "\n"
-				.. block(".claude/skills/review/lessons/both-kinds.md", "user 2026-10-20: read it twice")
+				.. block("z-nile/skills/z-design/lessons/lifetimes.md", "R0010 design-review-001 F2")
 				.. "\n"
-				.. block(".claude/skills/ticket-prep/lessons/lifetimes.md", "R0010 design-review-001 F2")
+				.. block("z-nile/skills/zz-review/lessons/both-kinds.md", "user 2026-10-20: read it twice")
 		)
 	end)
 
@@ -153,7 +153,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 		end
 		local _, word = run({ "--full", "pin-inputs" }) -- a plain word: both-kinds mentions it too
 		t.expect(blocks(word)).toBe(2)
-		local _, id = run({ "--full", "testing/pin-inputs" })
+		local _, id = run({ "--full", "zz-test/pin-inputs" })
 		t.expect(blocks(id)).toBe(1)
 		t.expect(has(id, PIN)).toBe(true)
 	end)
@@ -221,27 +221,27 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 
 	it("a bad lesson is skipped with a warning by the listing, and fails --check", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
-		fs.writeFile(`{f.main}/.claude/skills/testing/lessons/bad.md`, lesson("never", "x", "Q?", "B"))
-		fs.writeFile(`{f.main}/.claude/skills/testing/lessons/notes.txt`, "scratch\n")
+		fs.writeFile(`{f.main}/z-nile/skills/zz-test/lessons/bad.md`, lesson("never", "x", "Q?", "B"))
+		fs.writeFile(`{f.main}/z-nile/skills/zz-test/lessons/notes.txt`, "scratch\n")
 		local code, out, err = run({})
 		t.expect(code).toBe(0)
 		t.expect(#lines(out)).toBe(3)
-		t.expect(has(err, "testing/bad")).toBe(true)
+		t.expect(has(err, "zz-test/bad")).toBe(true)
 		-- a sound lesson with no source is listed (only parse failures are skipped), and --check names it
 		fs.writeFile(
-			`{f.main}/.claude/skills/testing/lessons/lonely.md`,
+			`{f.main}/z-nile/skills/zz-test/lessons/lonely.md`,
 			lesson("build", "x", "Alone?", "No source.")
 		)
-		local _, lonely = run({ "--full", "testing/lonely" })
+		local _, lonely = run({ "--full", "zz-test/lonely" })
 		t.expect(has(lonely, "sources: none")).toBe(true)
 		local bad, badOut = run({ "--check" })
 		t.expect(bad).toBe(1)
-		t.expect(has(badOut, "testing/bad")).toBe(true)
+		t.expect(has(badOut, "zz-test/bad")).toBe(true)
 		t.expect(has(badOut, "notes.txt")).toBe(true)
-		t.expect(has(badOut, "testing/lonely")).toBe(true)
-		fs.removeFile(`{f.main}/.claude/skills/testing/lessons/lonely.md`)
-		fs.removeFile(`{f.main}/.claude/skills/testing/lessons/bad.md`)
-		fs.removeFile(`{f.main}/.claude/skills/testing/lessons/notes.txt`)
+		t.expect(has(badOut, "zz-test/lonely")).toBe(true)
+		fs.removeFile(`{f.main}/z-nile/skills/zz-test/lessons/lonely.md`)
+		fs.removeFile(`{f.main}/z-nile/skills/zz-test/lessons/bad.md`)
+		fs.removeFile(`{f.main}/z-nile/skills/zz-test/lessons/notes.txt`)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local h = `{f.main}/pickman/.tracker/rafts/R0010/harvest.md`
 		fs.writeFile(h, fs.readFile(h) .. "- review-001 F1: testing/gone\n")
@@ -251,7 +251,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 	end)
 
 	it("an empty tree lists (none), checks ok and is covered", function()
-		f = trackerfix.new("lessons-cli-empty")
+		f = trackerfix.new("lessons-cli-empty", nil, { noLessons = true })
 		local code, out = run({})
 		t.expect(code).toBe(0)
 		t.expect(out).toBe("(none)\n")

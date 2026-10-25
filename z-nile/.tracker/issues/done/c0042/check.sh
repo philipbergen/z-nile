@@ -12,7 +12,7 @@ check "AC2: the page is one byte-stable, self-contained HTML file with escaped J
 check "AC3: ./zn board writes the page (--out, default .cache/board.html)" lune run tests/run -- "$A/cli.spec.luau"
 check "AC4: marked 18.0.14 is vendored, pinned by sha256, with its licence" lune run tests/run -- "$A/vendor.spec.luau"
 check "AC5: the tracker skill documents ./zn board" \
-  bash -c 'f=../.claude/skills/tracker/SKILL.md; for s in "./zn board" ".cache/board.html" "--open"; do grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
+  bash -c 'f=skills/zz-rules/SKILL.md; for s in "./zn board" ".cache/board.html" "--open"; do grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }; done'
 check "AC6: the page's scripts run: node drives tabs, keys, search, highlight and #id links" lune run tests/run -- "$A/smoke.spec.luau"
 
 finish

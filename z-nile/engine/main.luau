@@ -1,5 +1,5 @@
 --!strict
--- Tracker CLI. Run through ./zn at the repository root (c0114). See .claude/skills/tracker/SKILL.md.
+-- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
 local claimsLib = require("./claims")
@@ -14,6 +14,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
 local sh = require("../lib/sh")
+local skillsLib = require("./skills")
 local spend = require("./spend")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
@@ -68,7 +69,9 @@ usage: ./zn <command> ...
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
-                                                list skill lessons; also --tags, --check, and --uncovered <id>...]]
+                                                list skill lessons; also --tags, --check, and --uncovered <id>...
+  skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
+                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 -- the issue, raft and prompt templates: engine files, shared by every project (c0114)
@@ -159,7 +162,7 @@ local function mainRoot(): string
 end
 
 -- Tracker commands that change the tree refuse to run in the main checkout of a repo with an origin:
--- every change is made in a worktree (tracker skill, "Worktrees").
+-- every change is made in a worktree (zz-rules skill, "Worktrees").
 local function inMainCheckout(): boolean
 	return sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot()
 end
@@ -1155,7 +1158,7 @@ local function setStatus(id: string, to: string)
 				-- the move to `prepared` ties the two fields together: designs are ready first
 				local localItem = store.get(t)
 				if store.readFront(localItem.doc).design ~= "ready" then
-					return `{t} is not design: ready: set it (ticket-prep) before status {id} prepared`
+					return `{t} is not design: ready: set it (z-design) before status {id} prepared`
 				end
 			end
 			if
@@ -1453,22 +1456,24 @@ function cmd.members(pos: { string })
 	end
 end
 
--- The preps the user listed as stacked on c0120's (decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the
--- stack"): designed for the move, they are no freeze for it.
-local STACKED_ON_C0120 =
-	{ ["prep-c0115"] = true, ["prep-c0116"] = true, ["prep-c0117"] = true, ["prep-c0118"] = true }
--- The branches the user approved as harmless to the move, by exact name (decided with the user, 2026-10-23: "Named
--- exemptions you approve"): no freeze either, nor a worktree on one of them. Any other branch still blocks.
-local APPROVED_FOR_C0120 = {
-	["proto-linux-jail"] = true,
-	["proto-r0260"] = true,
-	["prep-guard-follow-ups"] = true,
-	["proto-c0117"] = true,
-	["proto-c0118"] = true,
-	-- decided with the user, 2026-10-24: "Approve all three"
-	["prep-c0121"] = true,
-	["proto-c0121"] = true,
-	["impl-c0120"] = true,
+-- The moves that freeze paths while they are in flight, and the branches each one's freeze ignores (one rule for every
+-- move, in `ignoredBy`; c0115 G14, decided with the user 2026-10-24: "Yes, same rule"). A move's freeze is on while
+-- `./zn busy` is given paths, all of them inside the move's own `paths` (c0115 design review 013 F5, decided with the
+-- user 2026-10-25: "Scope to its paths"), and origin/main still holds its mark (a path the move takes away); then it
+-- ignores, by exact name, its own roots, the branches listed as stacked on them and the branches the user approved;
+-- any branch whose history holds the move commit (`pinned`); with `history`, any branch whose history holds a commit
+-- of one of its roots on origin that origin/main doesn't (c0120's; useless once main takes a base as a squash, whose
+-- commits never reach main: 013 F1); and an active raft that lists the item (013 F2, decided with the user 2026-10-25:
+-- "Yes, ignore its own raft"). A name that only looks stacked counts for nothing.
+type Freeze = {
+	item: string,
+	mark: string,
+	roots: { [string]: string }, -- root branch -> why ("stacked on its prep")
+	stacked: { [string]: boolean },
+	approved: { [string]: boolean },
+	paths: { string }, -- busy's paths must all lie inside these
+	pinned: (() -> string?)?,
+	history: boolean,
 }
 
 -- c0120's move, as the approving review pins it (`Move commit: <sha>` in the newest approved review-NNN.md in c0120's
@@ -1502,53 +1507,189 @@ local function c0120Move(): string?
 	return pinned
 end
 
--- Why c0120's freeze ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil when it
--- doesn't: c0120's prep itself, or one of the listed stacked preps, by exact name ("stacked on its prep"); a branch the
--- user approved, by exact name ("approved by name"); or any branch whose history holds a commit of origin/prep-c0120
--- that origin/main doesn't (its merge-base with the prep is not on main: "stacked on its prep"). A name that only
--- looks stacked (`prep-c0120-x`, `stacked-on-c0120`) counts for nothing, and only `refs/remotes/origin/` loses its
--- `origin/`: a local branch named `origin/proto-c0117` is not proto-c0117 (code review 011 F5).
-local function stackedOnC0120(ref: string): string?
+-- c0115's move commit: among the commits of origin/impl-c0115 that origin/main doesn't have (the range AC13 reads),
+-- the one whose subject (never a body line) starts "c0115: move the skills". Exactly one, or nil: none, two, or a
+-- missing branch pins nothing (c0115 design review 014 F2).
+local function c0115Move(): string?
+	local r = sh.run("git", {
+		"log",
+		"--format=%H %s",
+		"refs/remotes/origin/main..refs/remotes/origin/impl-c0115",
+		"--",
+	})
+	if not r.ok then
+		return nil
+	end
+	local found: { string } = {}
+	for line in string.gmatch(r.stdout, "[^\n]+") do
+		local sha, subject = string.match(line, "^(%x+) (.*)$")
+		if
+			sha
+			and string.sub(subject :: string, 1, #"c0115: move the skills") == "c0115: move the skills"
+		then
+			table.insert(found, sha :: string)
+		end
+	end
+	return if #found == 1 then found[1] else nil
+end
+
+local FREEZES: { Freeze } = {
+	{
+		-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack" and "Named exemptions you approve";
+		-- 2026-10-24: "Approve all three" (prep-c0121, proto-c0121, impl-c0120)
+		item = "c0120",
+		mark = "tracker/rafts/done/R0001/check.sh",
+		roots = { ["prep-c0120"] = "stacked on its prep" },
+		stacked = {
+			["prep-c0115"] = true,
+			["prep-c0116"] = true,
+			["prep-c0117"] = true,
+			["prep-c0118"] = true,
+		},
+		approved = {
+			["proto-linux-jail"] = true,
+			["proto-r0260"] = true,
+			["prep-guard-follow-ups"] = true,
+			["proto-c0117"] = true,
+			["proto-c0118"] = true,
+			["prep-c0121"] = true,
+			["proto-c0121"] = true,
+			["impl-c0120"] = true,
+		},
+		-- the old layout it moved and the new home (AC16: `./zn busy tracker src tests`; its spec asks about pickman/.tracker)
+		paths = { "tracker", "src", "tests", "pickman" },
+		pinned = c0120Move,
+		history = true,
+	},
+	{
+		-- c0115 (decided with the user, 2026-10-24, G14: "Yes, same rule"): the items stacked on c0115's
+		-- prep or implementation (c0116, c0117, c0118, c0121) touch the skill paths by design; their prototypes are
+		-- approved by name. Its mark is a file the move takes away, kept with the rename map (skillsLib.MOVE_MARK).
+		item = "c0115",
+		mark = skillsLib.MOVE_MARK,
+		roots = { ["prep-c0115"] = "stacked on its prep", ["impl-c0115"] = "stacked on its implementation" },
+		stacked = {
+			["prep-c0116"] = true,
+			["prep-c0117"] = true,
+			["prep-c0118"] = true,
+			["prep-c0121"] = true,
+			["impl-c0116"] = true,
+			["impl-c0117"] = true,
+			["impl-c0118"] = true,
+			["impl-c0121"] = true,
+		},
+		approved = {
+			["proto-c0116"] = true,
+			["proto-c0117"] = true,
+			["proto-c0118"] = true,
+			["proto-c0121"] = true,
+		},
+		paths = { ".claude/skills", "z-nile/skills", "pickman/skills" },
+		pinned = c0115Move,
+		history = false,
+	},
+}
+
+-- Why the freeze `fr` ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil. Only
+-- `refs/remotes/origin/` loses its `origin/`: a local branch named `origin/proto-c0117` is not proto-c0117 (c0120 code
+-- review 011 F5).
+local function ignoredBy(fr: Freeze, ref: string): string?
 	local name = string.match(ref, "^refs/remotes/origin/(.+)$")
 		or string.match(ref, "^refs/heads/(.+)$")
 		or ref
-	if APPROVED_FOR_C0120[name] then
+	if fr.approved[name] then
 		return "approved by name"
 	end
-	if name == "prep-c0120" or STACKED_ON_C0120[name] then
+	if fr.roots[name] then
+		return fr.roots[name]
+	end
+	if fr.stacked[name] then
 		return "stacked on its prep"
 	end
-	local pinned = c0120Move()
+	local pinned = if fr.pinned then fr.pinned() else nil
 	if pinned and sh.run("git", { "merge-base", "--is-ancestor", pinned, ref }).ok then
 		return "holds its move"
 	end
-	if not sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/prep-c0120" }).ok then
+	if not fr.history then
 		return nil
 	end
-	local base = sh.trim(sh.run("git", { "merge-base", ref, "refs/remotes/origin/prep-c0120" }).stdout)
-	if base == "" then
-		return nil
+	local roots: { string } = {}
+	for root in fr.roots do
+		table.insert(roots, root)
 	end
-	if sh.run("git", { "merge-base", "--is-ancestor", base, "refs/remotes/origin/main" }).ok then
-		return nil
+	table.sort(roots)
+	for _, root in roots do
+		local remote = `refs/remotes/origin/{root}`
+		if sh.run("git", { "rev-parse", "--verify", "-q", remote }).ok then
+			local base = sh.trim(sh.run("git", { "merge-base", ref, remote }).stdout)
+			if
+				base ~= ""
+				and not sh.run("git", { "merge-base", "--is-ancestor", base, "refs/remotes/origin/main" }).ok
+			then
+				return fr.roots[root]
+			end
+		end
 	end
-	return "stacked on its prep"
+	return nil
 end
 
--- Whether c0120's freeze is on: `./zn busy` was given paths (the freeze, AC16: `./zn busy tracker src tests`) and
--- origin/main doesn't hold the move yet (it still has the old layout's tracker/rafts/done/R0001/check.sh, AC18's
--- mark). Without paths (compaction's set), or once the move lands, nothing is exempt, so busy agrees with
--- `./zn compact` and a later branch reusing one of these names blocks like any other (code review 011 F1).
-local function c0120FreezeOn(pos: { string }): boolean
-	return #pos > 0
-		and sh.run("git", { "cat-file", "-e", "refs/remotes/origin/main:tracker/rafts/done/R0001/check.sh" }).ok
+-- whether every path in `pos` is one of `inside` or under one, by whole segments ("./" and a trailing "/" ignored;
+-- a path with a ".." segment is never inside: c0115 design review 014 F4)
+local function allInside(pos: { string }, inside: { string }): boolean
+	for _, p in pos do
+		local n = string.gsub(string.gsub(p, "^%./", ""), "/+$", "")
+		if n == ".." or string.find(`/{n}/`, "/../", 1, true) then
+			return false
+		end
+		local ok = false
+		for _, top in inside do
+			if n == top or string.sub(n, 1, #top + 1) == `{top}/` then
+				ok = true
+				break
+			end
+		end
+		if not ok then
+			return false
+		end
+	end
+	return true
+end
+
+-- The freezes that are on: `./zn busy` was given paths, all inside the move's own, and origin/main still holds the
+-- move's mark. Without paths (compaction's set), or once a move lands, nothing is exempt for it, so busy agrees with
+-- `./zn compact` and a later branch reusing one of these names blocks like any other (c0120 code review 011 F1).
+local function freezesOn(pos: { string }): { Freeze }
+	local on: { Freeze } = {}
+	if #pos == 0 then
+		return on
+	end
+	for _, fr in FREEZES do
+		if
+			allInside(pos, fr.paths)
+			and sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok
+		then
+			table.insert(on, fr)
+		end
+	end
+	return on
+end
+
+-- the first freeze that ignores `ref`: its item and why, or nil
+local function frozenOut(freezes: { Freeze }, ref: string): (string?, string?)
+	for _, fr in freezes do
+		local why = ignoredBy(fr, ref)
+		if why then
+			return fr.item, why
+		end
+	end
+	return nil, nil
 end
 
 -- What holds `paths` (c0120): every raft active on origin/main (but the current branch's own), every branch that
 -- changes them since it left origin/main (compaction's check, compact.busyRefNames) and every other worktree with
 -- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
--- While c0120's freeze is on (c0120FreezeOn), a branch it ignores, and a worktree on one, is named on stderr and not
--- counted.
+-- While a move's freeze is on (freezesOn: c0120's, c0115's), a branch it ignores, a worktree on one, and an active raft
+-- that lists the item, are named on stderr and not counted.
 function cmd.busy(pos: { string })
 	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
 	local own = string.match(current, "^(R%d%d%d%d)%-")
@@ -1558,21 +1699,29 @@ function cmd.busy(pos: { string })
 	if not ok then
 		fail("busy: cannot read origin/main (git fetch origin main)")
 	end
-	local freeze = c0120FreezeOn(pos)
+	local freezes = freezesOn(pos)
 	local seen: { [string]: boolean } = {}
 	for _, p in tree do
 		local r = string.match(p, "/rafts/active/(R%d%d%d%d)/")
 			or string.match(p, "^rafts/active/(R%d%d%d%d)/")
 		if r and r ~= own and not seen[r] then
 			seen[r] = true
-			-- c0120's own raft, readied for the move, is no freeze on it: its document on origin/main lists c0120
+			-- a move's own raft, readied for it, is no freeze on it: its document on origin/main lists the item
 			-- (c0120's branch is impl2-c0120, not named by the raft)
 			local doc = string.match(p, "^(.*/rafts/active/R%d%d%d%d)/")
 				or string.match(p, "^(rafts/active/R%d%d%d%d)/")
 			local text = sh.run("git", { "show", `refs/remotes/origin/main:{doc}/{r}.md` }).stdout
-			local members = string.match(text, "\nissues:%s*%[([^%]]*)%]") or ""
-			if freeze and string.find(`,{(string.gsub(members, "%s", ""))},`, ",c0120,", 1, true) then
-				stdio.ewrite(`ignored for c0120's freeze: raft {r} (c0120's own)\n`)
+			local members =
+				`,{(string.gsub(string.match(text, "\nissues:%s*%[([^%]]*)%]") or "", "%s", ""))},`
+			local ownOf: string? = nil
+			for _, fr in freezes do
+				if string.find(members, `,{fr.item},`, 1, true) then
+					ownOf = fr.item
+					break
+				end
+			end
+			if ownOf then
+				stdio.ewrite(`ignored for {ownOf}'s freeze: raft {r} ({ownOf}'s own)\n`)
 			else
 				print(`raft {r} is active`)
 				found += 1
@@ -1581,9 +1730,9 @@ function cmd.busy(pos: { string })
 	end
 	for _, ref in compactLib.busyRefNames(current, paths) do
 		local short = compactLib.shortRef(ref)
-		local why = if freeze then stackedOnC0120(ref) else nil
-		if why then
-			stdio.ewrite(`ignored for c0120's freeze: {short} ({why})\n`)
+		local item, why = frozenOut(freezes, ref)
+		if item then
+			stdio.ewrite(`ignored for {item}'s freeze: {short} ({why})\n`)
 		else
 			print(`branch {short} changes {table.concat(paths, ", ")}`)
 			found += 1
@@ -1593,9 +1742,12 @@ function cmd.busy(pos: { string })
 	for _, wt in compactLib.dirtyWorktrees(here, paths) do
 		-- a worktree on a branch the freeze ignores is ignored with it (the same function); a detached one is not
 		local on = sh.trim(sh.run("git", { "-C", wt, "branch", "--show-current" }).stdout)
-		local why = if freeze and on ~= "" then stackedOnC0120(`refs/heads/{on}`) else nil
-		if why then
-			stdio.ewrite(`ignored for c0120's freeze: worktree {wt} on {on} ({why})\n`)
+		local item, why = nil :: string?, nil :: string?
+		if on ~= "" then
+			item, why = frozenOut(freezes, `refs/heads/{on}`)
+		end
+		if item then
+			stdio.ewrite(`ignored for {item}'s freeze: worktree {wt} on {on} ({why})\n`)
 		else
 			print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
 			found += 1
@@ -2221,7 +2373,7 @@ end
 function cmd.start(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: start <R-id>"))
 	if raft.kind ~= "raft" then
-		fail("only rafts are started; make a `--single` raft with `new raft ... --single` (ticket-prep)")
+		fail("only rafts are started; make a `--single` raft with `new raft ... --single` (z-design)")
 	end
 	if raft.state == "active" then
 		-- a readied raft: ready claimed it and moved it to active/ on origin/main, so start only branches
@@ -2274,7 +2426,7 @@ function cmd.start(pos: { string })
 	local members = store.members(raft.id)
 	for _, m in members do
 		if store.readFront(m.doc).design ~= "ready" then
-			fail(`{m.id} is not design: ready (run ticket-prep first)`)
+			fail(`{m.id} is not design: ready (run z-design first)`)
 		end
 	end
 	-- a dependency outside the raft must already be done: nothing else orders rafts
@@ -3021,8 +3173,6 @@ function cmd.done(pos: { string })
 	end
 end
 
-local SKILLS_INLINED = { "execute-raft", "tracker", "architecture", "testing", "review" }
-
 -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
 local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 	local ids = {}
@@ -3043,16 +3193,71 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 end
 
 -- The prompt's Lessons section: the index of the build and both lessons (c0111).
-local function buildLessons(): string
+-- Only the lessons of z-nile's skills and of the raft's own project's (c0115): another project's are left out.
+local function buildLessons(project: string?): string
 	local tree = lessonsLib.load(".")
 	local sources = lessonsLib.sources(tree.items)
-	local text =
-		lessonsLib.index(lessonsLib.select(parsedLessons(tree), sources, { when = "build" }), sources)
+	local mine = {}
+	for _, l in parsedLessons(tree) do
+		local owner = tree.owners and tree.owners[l.skill]
+		if not owner or owner == skillsLib.ZNILE or owner == project then
+			table.insert(mine, l)
+		end
+	end
+	local text = lessonsLib.index(lessonsLib.select(mine, sources, { when = "build" }), sources)
 	return (string.gsub(text, "\n$", ""))
 end
 
 local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
 	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
+
+-- `skills [--check]` (c0115): one relative link in .claude/skills per skill folder. --check only reads (the gate
+-- runs it); without it the links are written, so it refuses in the main checkout like every other writer.
+function cmd.skills(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: ./zn skills [--check] (unknown option {k})`)
+		end
+	end
+	if #pos > 0 then
+		fail("usage: ./zn skills [--check]")
+	end
+	local found, present = skillsLib.load(".")
+	local list, problems = skillsLib.plan(found)
+	if #problems > 0 then
+		fail(table.concat(problems, "\n"))
+	end
+	-- a linked .claude or .claude/skills points both modes outside the repository: report it, write nothing
+	local parents = skillsLib.linkedParents(".")
+	if opts["--check"] then
+		local wrong = table.clone(parents)
+		if #parents == 0 then
+			for _, p in skillsLib.diff(list, present) do
+				table.insert(wrong, p)
+			end
+		end
+		for _, p in skillsLib.trackedNonLinks(".") do
+			table.insert(wrong, p)
+		end
+		if #wrong > 0 then
+			fail(table.concat(wrong, "\n") .. "\nrun ./zn skills in a worktree to fix the links")
+		end
+		print(`skills: {#list} skills, one link each, ok`)
+		return
+	end
+	refuseInMainCheckout("skills")
+	if #parents > 0 then
+		fail(table.concat(parents, "\n"))
+	end
+	local done, refused = skillsLib.apply(".", list, present)
+	if #refused > 0 then
+		fail(table.concat(refused, "\n"))
+	end
+	for _, line in done do
+		print(line)
+	end
+	print(`skills: {#list} skills linked`)
+end
 
 -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
 function cmd.lessons(pos: { string }, opts: { [string]: { string } })
@@ -3183,7 +3388,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		if l.from then
 			table.insert(src, l.from)
 		end
-		print(`== .claude/skills/{l.skill}/lessons/{l.slug}.md`)
+		print(`== {lessonsLib.folderOf(tree, l.skill)}/lessons/{l.slug}.md`)
 		print(`sources: {if #src > 0 then table.concat(src, ", ") else "none"}`)
 		stdio.write(tree.lessons[l.id])
 	end
@@ -3199,6 +3404,40 @@ local function architectureOf(raft: store.Item): string
 	return if fs.isFile(path)
 		then fs.readFile(path)
 		else `({raft.root} has no architecture.md: this project has none)`
+end
+
+-- The project whose current root is `root`, from the working tree's registry; nil when none is.
+local function projectOfRoot(root: string): string?
+	local ok, reg = pcall(projects.load, ".")
+	if not ok then
+		return nil
+	end
+	local p = projects.projectOf(reg :: projects.Registry, root)
+	return p and p.name
+end
+
+-- The SKILL.md files a raft's prompt inlines (c0115): z-nile's skills.INLINED, then every skill of the raft's
+-- project (none more for z-nile's own rafts). Real paths, never through .claude/skills.
+local function inlinedSkills(project: string?): { string }
+	local found = skillsLib.load(".")
+	local list = skillsLib.plan(found)
+	local out: { string } = {}
+	local byName: { [string]: skillsLib.Skill } = {}
+	for _, sk in list do
+		byName[sk.name] = sk
+	end
+	for _, name in skillsLib.INLINED do
+		local sk = byName[name]
+		table.insert(out, if sk then `{sk.dir}/SKILL.md` else `{skillsLib.ZNILE}/skills/{name}/SKILL.md`)
+	end
+	if project and project ~= skillsLib.ZNILE then
+		for _, sk in list do
+			if sk.project == project then
+				table.insert(out, `{sk.dir}/SKILL.md`)
+			end
+		end
+	end
+	return out
 end
 
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
@@ -3222,9 +3461,11 @@ local function renderPrompt(raft: store.Item): string
 			end
 		end
 	end
+	-- z-nile's step skills, then every skill of the raft's own project, each from its real folder (c0115)
+	local project = projectOfRoot(raft.root)
 	local skills = ""
-	for _, s in SKILLS_INLINED do
-		skills ..= section(`.claude/skills/{s}/SKILL.md`)
+	for _, path in inlinedSkills(project) do
+		skills ..= section(path)
 	end
 	local plan, _, planError = workstreamPlan(raft)
 	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
@@ -3239,7 +3480,8 @@ local function renderPrompt(raft: store.Item): string
 		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
 		ROOT = raft.root,
 		WORKSTREAMS = planText,
-		LESSONS = buildLessons(),
+		LESSONS = buildLessons(project),
+		PROJECT = project or raft.root,
 	})
 	for _, m in store.members(raft.id) do
 		if store.readFront(m.doc).design ~= "ready" then
@@ -3254,14 +3496,14 @@ local function promptPath(root: string, raftId: string): string
 	return `{mainRoot()}/{root}/rafts/active/{raftId}/prompt.md`
 end
 
--- The reader of a readied raft's prompt.md (the launch-raft skill's input). The decision is made from origin/main's
+-- The reader of a readied raft's prompt.md (the z-run skill's input). The decision is made from origin/main's
 -- tree, never from the local store; nothing is written.
 function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or #pos > 1 or not string.match(id, "^R%d%d%d%d$") then
 		fail("prompt takes a raft id (an issue's raft: ./zn find <id>)")
 	end
-	local notReadied = `{id} is not readied: run /ready-raft {id} (./zn ready {id}) in the main checkout`
+	local notReadied = `{id} is not readied: run /z-ready {id} (./zn ready {id}) in the main checkout`
 	if not hasOrigin() then
 		fail(notReadied)
 	end
@@ -3339,7 +3581,7 @@ function cmd.ready(pos: { string })
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
 		if not raftId or raftId == "" then
-			fail(`{target.id} has no raft: ticket-prep makes one (--single)`)
+			fail(`{target.id} has no raft: z-design makes one (--single)`)
 		end
 		raft = store.get(raftId)
 	end
@@ -3388,7 +3630,7 @@ function cmd.ready(pos: { string })
 				`{raft.id}'s issues: list and its members' raft: fields disagree (raft: {raft.id} but not listed: {table.concat(
 					unlisted,
 					", "
-				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (ticket-prep) and ready again`
+				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (z-design) and ready again`
 			)
 		end
 		local everyone: { store.Item } = { raft }
@@ -3401,7 +3643,7 @@ function cmd.ready(pos: { string })
 		end
 		for _, it in everyone do
 			if store.readFront(it.doc).design ~= "ready" then
-				fail(`{it.id} is not design: ready (run ticket-prep first)`)
+				fail(`{it.id} is not design: ready (run z-design first)`)
 			end
 			local check = `{it.dir}/check.sh`
 			if not fs.isFile(check) or not hasCheckLine(fs.readFile(check)) then

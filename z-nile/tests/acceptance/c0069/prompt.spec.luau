@@ -198,7 +198,7 @@ return t.spec("tracker prompt", function(it)
 		for _, cwd in { main, cap } do
 			local r = tr(cwd, { "prompt", "R0020" })
 			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "/ready-raft")).toBe(true)
+			t.expect(has(r.stderr, "/z-ready")).toBe(true)
 			t.expect(r.stdout).toBe("")
 		end
 		fs.removeDir(stale)

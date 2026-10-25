@@ -50,9 +50,9 @@ check "AC7: the specs that named the old paths pass on the new layout" \
 check "AC8: two branches creating the same id conflict on the document" cases_pass \
   "two branches creating the same id"
 check "AC9: the skill describes the layout; no text still says <ID>-<slug>.md" bash -c '
-  grep -qF "<ID>/<ID>.md" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: layout line"; exit 1; }
-  grep -qi "migrate" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: no migrate procedure"; exit 1; }
-  grep -qF "add/add" ../.claude/skills/tracker/SKILL.md || { echo "tracker skill: only add/add means renumber"; exit 1; }
+  grep -qF "<ID>/<ID>.md" skills/zz-rules/SKILL.md || { echo "tracker skill: layout line"; exit 1; }
+  grep -qi "migrate" skills/zz-rules/SKILL.md || { echo "tracker skill: no migrate procedure"; exit 1; }
+  grep -qF "add/add" skills/zz-rules/SKILL.md || { echo "tracker skill: only add/add means renumber"; exit 1; }
   bad=$(grep -rnF -e "<ID>-<slug>" -e "<id>-<slug>" -e "-slug.md" -e "-<slug>.md" .claude scripts ./templates ../SETUP.md ../AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC10: no spec names a legacy document path (the permanent guard)" \

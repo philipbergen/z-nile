@@ -13,7 +13,7 @@ return t.spec("c0119 scope lessons", function(it)
 		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 		local tree = lessons.load(TOP)
 		local sources = lessons.sources(tree.items)
-		for _, id in { "ticket-prep/never-narrow-captured-scope", "review/no-scope-cut-as-fix" } do
+		for _, id in { "z-design/never-narrow-captured-scope", "zz-review/no-scope-cut-as-fix" } do
 			local text = tree.lessons[id]
 			t.expect(text ~= nil).toBe(true)
 			local lesson, problem = lessons.parse(id, text :: string)

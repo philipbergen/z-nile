@@ -5,7 +5,7 @@ A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acceptance" # sequestered specs
 source "$(git -C "$(dirname "$A")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
 R="$(git -C "$(dirname "$A")" rev-parse --show-toplevel)/.claude/skills"
-check "AC1: execute-raft code reviewer runs on the strongest model" grep -qi "reviewer.*opus" "$R/execute-raft/SKILL.md"
-check "AC2: ticket-prep design reviewer runs on the strongest model" grep -qi "reviewer.*opus" "$R/ticket-prep/SKILL.md"
+check "AC1: execute-raft code reviewer runs on the strongest model" grep -qi "reviewer.*opus" "$R/zz-execute/SKILL.md"
+check "AC2: ticket-prep design reviewer runs on the strongest model" grep -qi "reviewer.*opus" "$R/z-design/SKILL.md"
 
 finish

@@ -10,7 +10,7 @@ local TOP = (
 
 local function conflicts(): string
 	-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-	for line in string.gmatch(fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`), "[^\n]+") do
+	for line in string.gmatch(fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`), "[^\n]+") do
 		if string.sub(line, 1, 15) == "- **Conflicts**" then
 			return line
 		end
@@ -50,7 +50,7 @@ return t.spec("tracker skill: Conflicts bullet", function(it)
 
 	it("the Numbering bullet says new takes its number from tracker/next (c0870)", function()
 		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-		local text = fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`)
+		local text = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 		t.expect(says(text, "`z-nile/next` holds the next number")).toBe(true)
 	end)
 end)

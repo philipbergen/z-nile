@@ -32,7 +32,7 @@ check "AC4: list mode can't be mistaken for a pass or re-run specs (runner, top-
   "a check.sh that runs a spec at top level only lists in list mode" \
   "tracker.sh check and done refuse to run with AC_LIST set"
 check "AC5: the testing skill shows the new locator and AC_LIST" bash -c '
-  f=../.claude/skills/testing/SKILL.md
+  f=skills/zz-test/SKILL.md
   for s in "AC_LIST=1" "[[ -d \$A ]] || A=\"\$PWD/tests/acceptance/" "Work outside \`check\`"; do
     grep -qF -- "$s" "$f" || { echo "missing: $s"; exit 1; }
   done

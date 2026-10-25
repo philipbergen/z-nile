@@ -69,9 +69,7 @@ return t.spec("ready and stop agree on a raft's members", function(it)
 		do
 			seed[`{dir}/check.sh`] = CHECK
 		end
-		for _, s in { "execute-raft", "tracker", "architecture", "testing", "review" } do
-			seed[`.claude/skills/{s}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{s}/SKILL.md`)
-		end
+		-- the prompt's skills come with the copied tooling (z-nile/skills, c0115)
 		f = trackerfix.new("ready-members", seed)
 	end)
 

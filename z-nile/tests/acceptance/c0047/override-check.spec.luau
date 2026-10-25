@@ -34,7 +34,7 @@ return t.spec("c0450 override check", function(it)
 		"ticket-prep step 3 has an Override check naming the selector, the promoted specs and the chore route",
 		function()
 			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-			local prep = fs.readFile(`{TOP}/.claude/skills/ticket-prep/SKILL.md`)
+			local prep = fs.readFile(`{TOP}/z-nile/skills/z-design/SKILL.md`)
 			local step = section(prep, "**Override check**", "- **")
 			t.expect(step ~= "").toBe(true)
 			for _, token in
@@ -59,7 +59,7 @@ return t.spec("c0450 override check", function(it)
 
 	it("the Override check sits in step 3, before the Test plan bullet", function()
 		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-		local prep = fs.readFile(`{TOP}/.claude/skills/ticket-prep/SKILL.md`)
+		local prep = fs.readFile(`{TOP}/z-nile/skills/z-design/SKILL.md`)
 		local at = string.find(prep, "**Override check**", 1, true)
 		t.expect(at ~= nil).toBe(true)
 		t.expect((at :: number) > (string.find(prep, "## 3. Design each issue", 1, true) :: number))
@@ -69,7 +69,7 @@ return t.spec("c0450 override check", function(it)
 
 	it("the design-mode review attacks an unnamed override as high", function()
 		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-		local review = fs.readFile(`{TOP}/.claude/skills/review/SKILL.md`)
+		local review = fs.readFile(`{TOP}/z-nile/skills/zz-review/SKILL.md`)
 		local design = section(review, "## Design mode", "## Stream mode")
 		local item = section(design, "4. **Regressions**", "5. ")
 		for _, token in
@@ -90,7 +90,7 @@ return t.spec("c0450 override check", function(it)
 
 	it("ready-raft's readiness check refuses a raft whose issue depends on an unfinished item", function()
 		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-		local skill = fs.readFile(`{TOP}/.claude/skills/ready-raft/SKILL.md`)
+		local skill = fs.readFile(`{TOP}/z-nile/skills/z-ready/SKILL.md`)
 		local ready = section(skill, "2. **Check readiness", "3. ")
 		for _, token in { "depends_on", "isn't a member", "done/", "stop" } do
 			t.expect(has(ready, token)).toBe(true)

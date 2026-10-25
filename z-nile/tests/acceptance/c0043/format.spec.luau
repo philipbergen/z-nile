@@ -8,7 +8,7 @@ local t = require("@tests/lib/t")
 -- c0120 override: specs run from their project's home; the repository files live at the checkout's top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
-local SKILL = `{TOP}/.claude/skills/review/SKILL.md`
+local SKILL = `{TOP}/z-nile/skills/zz-review/SKILL.md`
 
 -- The fenced markdown block that shows the output file format.
 local function template(): string

@@ -11,7 +11,7 @@ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" })
 
 local function skill(): string
 	-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-	return fs.readFile(`{TOP}/.claude/skills/tracker/SKILL.md`)
+	return fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 end
 local function bullet(prefix: string): string
 	for line in string.gmatch(skill(), "[^\n]+") do
@@ -53,7 +53,7 @@ return t.spec("c0870 tracker skill", function(it)
 	end)
 
 	it("the testing skill tells spec writers how to survive a compaction", function()
-		local testing = fs.readFile(`{TOP}/.claude/skills/testing/SKILL.md`) -- c0120 override: see TOP
+		local testing = fs.readFile(`{TOP}/z-nile/skills/zz-test/SKILL.md`) -- c0120 override: see TOP
 		t.expect(says(testing, "tests/lib/renamed")).toBe(true)
 		t.expect(says(testing, "in two parts")).toBe(true)
 	end)

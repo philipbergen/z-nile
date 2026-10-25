@@ -3,7 +3,7 @@
 -- set (fence.sh's pickman_fence_all), whichever project it belongs to and wherever it is started. The reviewer's probe:
 -- with no sentinel in z-nile/.cache yet (a fresh checkout), a pickman check.sh's `git add -f -N` in z-nile/.cache
 -- reached the real index. Run with the jail's marker set explicitly both ways (lesson
--- testing/specs-set-host-markers-explicitly). Fixture under this home's .cache/c0120-every-home.
+-- zz-test/specs-set-host-markers-explicitly). Fixture under this home's .cache/c0120-every-home.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")

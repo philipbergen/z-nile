@@ -30,23 +30,19 @@ local function seed(withLessons: boolean): { [string]: string }
 		["pickman/.tracker/issues/c0010/c0010.md"] = `---\nid: c0010\ntype: chore\ntitle: c0010\nslug: c0010\nraft: R0010\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nstatus: {PREPARED}\n---\n\n# c0010\n`,
 		["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
 	}
-	for _, name in { "execute-raft", "tracker", "architecture", "testing", "review", "ticket-prep" } do
-		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-		s[`.claude/skills/{name}/SKILL.md`] = fs.readFile(`{TOP}/.claude/skills/{name}/SKILL.md`)
-	end
+	-- the prompt's skills come with the copied tooling (z-nile/skills, c0115)
 	if withLessons then
 		-- two harvested sources and no from: its count and its place come from the harvest alone
-		s[".claude/skills/testing/lessons/pin-inputs.md"] =
+		s["z-nile/skills/zz-test/lessons/pin-inputs.md"] =
 			lesson("build", "Are the call site's inputs pinned?", false)
 		-- c0120 override: pickman's items and architecture.md live in pickman/.tracker (engine.REGISTRY's layout)
 		s["pickman/.tracker/rafts/R0005/design-review-001.md"] =
 			"# Review 001\n\n### F1 [low] a\n\n### F2 [low] b\n\nVerdict: changes\n"
 		s["pickman/.tracker/rafts/R0005/harvest.md"] =
-			"- design-review-001 F1: testing/pin-inputs\n- design-review-001 F2: testing/pin-inputs\n"
-		s[".claude/skills/review/lessons/both-kinds.md"] = lesson("both", "Is the text consistent?")
-		s[".claude/skills/ticket-prep/lessons/lifetimes.md"] =
-			lesson("design", "Which process outlives which?")
-		s[".claude/skills/testing/lessons/bad.md"] = lesson("never", "Is this ever shown?")
+			"- design-review-001 F1: zz-test/pin-inputs\n- design-review-001 F2: zz-test/pin-inputs\n"
+		s["z-nile/skills/zz-review/lessons/both-kinds.md"] = lesson("both", "Is the text consistent?")
+		s["z-nile/skills/z-design/lessons/lifetimes.md"] = lesson("design", "Which process outlives which?")
+		s["z-nile/skills/zz-test/lessons/bad.md"] = lesson("never", "Is this ever shown?")
 	end
 	return s
 end
@@ -67,20 +63,20 @@ end
 return t.spec("c0111 the prompt carries the build lessons", function(it)
 	it("ready lists build and both lessons, not design ones, and warns about a bad one", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
-		local f = trackerfix.new("prompt-lessons", seed(true))
+		local f = trackerfix.new("prompt-lessons", seed(true), { noLessons = true }) -- c0115: fixtures copy lessons
 		local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
-		t.expect(has(r.stderr, "warning") and has(r.stderr, "testing/bad")).toBe(true)
+		t.expect(has(r.stderr, "warning") and has(r.stderr, "zz-test/bad")).toBe(true)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local s = lessonsSection(fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`))
 		-- exactly these lines, most sources first
 		t.expect(
 			has(
 				s,
-				"\n- testing/pin-inputs (build, 2 sources): Are the call site's inputs pinned?\n"
-					.. "- review/both-kinds (both, 1 source): Is the text consistent?\n"
+				"\n- zz-test/pin-inputs (build, 2 sources): Are the call site's inputs pinned?\n"
+					.. "- zz-review/both-kinds (both, 1 source): Is the text consistent?\n"
 			)
 		).toBe(true)
 		t.expect(has(s, "lifetimes")).toBe(false)
@@ -90,7 +86,7 @@ return t.spec("c0111 the prompt carries the build lessons", function(it)
 
 	it("a tree with no lessons gives (none)", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
-		local f = trackerfix.new("prompt-lessons-none", seed(false))
+		local f = trackerfix.new("prompt-lessons-none", seed(false), { noLessons = true })
 		local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)

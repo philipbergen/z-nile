@@ -37,13 +37,13 @@ check "AC3: worktree-prune removes finished rafts only, never forces" cases_pass
 check "AC4: hooks act on the edited file's / session cwd's tree" cases_pass \
   "post-edit hook lints" "post-edit hook ignores" "stop hook gates the session" "stop hook gates the worktree root"
 check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
-  for f in execute-raft tracker make-issue ticket-prep ready-raft; do
+  for f in zz-execute zz-rules z-ticket z-design z-ready; do
     grep -qF "./zn worktree" "../.claude/skills/$f/SKILL.md" || { echo "$f: no worktree command"; exit 1; }
   done
   grep -qF "./zn worktree {{RAFT_ID}}" templates/prompt.md || { echo "prompt template"; exit 1; }
   grep -qi "worktree" ../AGENTS.md || { echo "AGENTS.md"; exit 1; }
-  grep -qiE "^#+ +worktrees" ../.claude/skills/tracker/SKILL.md || { echo "tracker: no Worktrees section"; exit 1; }
-  grep -qiE "^#+ +landing a change" ../.claude/skills/tracker/SKILL.md || { echo "tracker: no Landing a change section"; exit 1; }
+  grep -qiE "^#+ +worktrees" skills/zz-rules/SKILL.md || { echo "tracker: no Worktrees section"; exit 1; }
+  grep -qiE "^#+ +landing a change" skills/zz-rules/SKILL.md || { echo "tracker: no Landing a change section"; exit 1; }
   for c in "worktree:\*" "worktree-prune:\*"; do
     grep -q "Bash(./zn $c)" ../.claude/settings.json || { echo "settings: missing $c"; exit 1; }
   done
@@ -51,7 +51,7 @@ check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
     -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
     -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
-    ../.claude/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
+    skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC6: named worktrees; bad names, item ids, done rafts rejected; new/start refused in the main checkout" cases_pass \
   "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft" \

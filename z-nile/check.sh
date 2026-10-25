@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The repo gate (c0114: z-nile's), one per project (c0120). See .claude/skills/testing/SKILL.md.
+# The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
 #   z-nile/check.sh [--project <name>]... [--affected [--base REF] | --full]
 #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
 # With no --project it runs every project of z-nile/projects.toml (CI, `./zn done`, `./zn land`); each --project adds
@@ -102,6 +102,7 @@ if [[ -n $plan ]]; then
   for h in ${srcs[@]+"${srcs[@]}"}; do printf 'types (Roblox): %ssrc, from %s\n' "$(prefix "$h")" "$h"; done
   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
+  [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -179,6 +180,8 @@ for e in ${places[@]+"${places[@]}"}; do
   [[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"
   par_start "build (rojo $f)" build_place "$out" rojo build "$f"
 done
+# the skill links (c0115): one committed relative link in .claude/skills per skill folder, every project's
+[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check
 par_wait || exit 1
 
 # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.

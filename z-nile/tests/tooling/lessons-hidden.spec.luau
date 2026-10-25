@@ -13,9 +13,9 @@ return t.spec("lessons.load and hidden files", function(it)
 		if fs.isDir(root) then
 			fs.removeDir(root)
 		end
-		local folder = `{root}/.claude/skills/testing/lessons`
+		local folder = `{root}/z-nile/skills/zz-test/lessons`
 		fs.writeDir(folder)
-		fs.writeFile(`{root}/.claude/skills/testing/SKILL.md`, "---\nname: testing\ndescription: x\n---\n")
+		fs.writeFile(`{root}/z-nile/skills/zz-test/SKILL.md`, "---\nname: zz-test\ndescription: x\n---\n")
 		fs.writeFile(`{folder}/.DS_Store`, "binary")
 		fs.writeDir(`{root}/z-nile`) -- c0114: a tree without the registry refuses
 		fs.writeFile(`{root}/z-nile/projects.toml`, fs.readFile(`{engine.TOP}/z-nile/projects.toml`)) -- c0120: specs run in z-nile/
@@ -25,7 +25,7 @@ return t.spec("lessons.load and hidden files", function(it)
 			"---\ntitle: Pin\nwhen: build\ntags: [wiring]\ncheck: Pinned?\nfrom: test\n---\nPin them.\n"
 		)
 		local tree = lessons.load(root)
-		t.expect(tree.lessons["testing/pin"] ~= nil).toBe(true)
+		t.expect(tree.lessons["zz-test/pin"] ~= nil).toBe(true)
 		local joined = table.concat(tree.problems, "\n")
 		t.expect(string.find(joined, "notes.txt: not a lesson file", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(joined, ".DS_Store", 1, true))).toBe(nil)

@@ -1,5 +1,5 @@
 --!strict
--- Structural rules from the `architecture` and `testing` skills, enforced mechanically: pickman's (c0120), run from
+-- Structural rules from the `pickman-arch` and `pickman-test` skills, enforced mechanically: pickman's (c0120), run from
 -- pickman/ like every pickman spec. The tooling's own rules are in the root's tests/meta/architecture.spec.luau.
 local fs = require("@lune/fs")
 local graph = require("@znile/lib/graph")

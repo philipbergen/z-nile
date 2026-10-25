@@ -175,7 +175,7 @@ return t.spec("c0880 audit, list and renumber by directory", function(it)
 	end)
 
 	it("the tracker skill documents audit and renumbering a duplicate's copy", function()
-		local skill = fs.readFile(`{root}/.claude/skills/tracker/SKILL.md`)
+		local skill = fs.readFile(`{root}/z-nile/skills/zz-rules/SKILL.md`)
 		local other = string.match(skill, "## Other commands\n(.-)\n## ") :: string
 		t.expect(has(other, "./zn audit")).toBe(true)
 		local readOnly = string.match(skill, "the read%-only tracker commands ([^\n]+)") :: string

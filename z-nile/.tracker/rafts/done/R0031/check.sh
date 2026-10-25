@@ -19,7 +19,7 @@ done_checks_hold() {
     d=$(../zn find "$id") || { echo "$id not found"; bad=1; continue; }
     bash "$d/check.sh" >/dev/null 2>&1 || { echo "$id's check.sh fails"; bad=1; }
   done
-  local m=../.claude/skills/metrics/SKILL.md
+  local m=skills/zz-stats/SKILL.md
   grep -q 'zn sync --fetch' "$m" || { echo "metrics skill lost its './zn sync --fetch' step"; bad=1; }
   if grep -Eq 'zn sync([^ -]|$)' "$m"; then echo "metrics skill runs the merging sync"; bad=1; fi
   return $bad

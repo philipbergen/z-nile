@@ -66,17 +66,17 @@ overrides() {
 }
 check "AC7: the overridden specs (c0034 in a fixture, five without their own git config) still pass" overrides
 docs() {
-  local s=../.claude/skills t=../.claude/skills/testing/SKILL.md
+  local s=../.claude/skills t=skills/zz-test/SKILL.md
   grep -qF "No check may ever change the real repository" ../AGENTS.md || { echo "AGENTS.md lacks the rule"; return 1; }
   grep -qF "## Specs never touch the real repository" "$t" || { echo "testing skill lacks its section"; return 1; }
   for p in "Enforced at run time" "Caught only by review" "Allowed writers" "If the tripwire fires" "Jail" '$TMPDIR'; do
     grep -qF "$p" "$t" || { echo "testing skill section lacks: $p"; return 1; }
   done
   if grep -qF "Run one suite per worktree at a time" "$t"; then echo "the Speed section still has the manual one-suite rule"; return 1; fi
-  [[ $(grep "Repository safety" $s/review/SKILL.md | grep -c "high") -eq 2 ]] || { echo "review: Repository safety, high, in design and code mode"; return 1; }
-  grep -qF "REPOSITORY CHANGED" $s/execute-raft/SKILL.md || { echo "execute-raft lacks the stop condition"; return 1; }
-  grep -qF "never change the real repository" $s/ticket-prep/SKILL.md || { echo "ticket-prep lacks the rule"; return 1; }
-  grep -qF '$TMPDIR' $s/ticket-prep/SKILL.md || { echo "ticket-prep: run acceptance specs against unguarded code only in a clone under $TMPDIR"; return 1; }
+  [[ $(grep "Repository safety" $s/zz-review/SKILL.md | grep -c "high") -eq 2 ]] || { echo "review: Repository safety, high, in design and code mode"; return 1; }
+  grep -qF "REPOSITORY CHANGED" $s/zz-execute/SKILL.md || { echo "execute-raft lacks the stop condition"; return 1; }
+  grep -qF "never change the real repository" $s/z-design/SKILL.md || { echo "ticket-prep lacks the rule"; return 1; }
+  grep -qF '$TMPDIR' $s/z-design/SKILL.md || { echo "ticket-prep: run acceptance specs against unguarded code only in a clone under $TMPDIR"; return 1; }
 }
 check "AC8: AGENTS.md and the testing, review, execute-raft and ticket-prep skills state the rule, what is enforced (the jail included) and what only review catches" docs
 

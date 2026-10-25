@@ -2,8 +2,8 @@
 # Acceptance checks for c0036. SEQUESTERED: never edit during execution.
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(git -C "$A" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
-T=../.claude/skills/tracker/SKILL.md
-X=../.claude/skills/execute-raft/SKILL.md
+T=skills/zz-rules/SKILL.md
+X=skills/zz-execute/SKILL.md
 after() { sed -n '/^## After merge/,/^## /p' "$T"; }
 
 ac1() { after | grep -q 'worktree remove' && after | grep -q 'branch -D' && after | grep -qi 'remote branch'; }

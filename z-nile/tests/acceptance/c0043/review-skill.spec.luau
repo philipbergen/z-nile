@@ -27,7 +27,7 @@ local function has(text: string, phrase: string): boolean
 end
 
 -- c0120 override: the spec runs from its home: the checkout's files are read from the top
-local REVIEW = `{TOP}/.claude/skills/review/SKILL.md`
+local REVIEW = `{TOP}/z-nile/skills/zz-review/SKILL.md`
 
 return t.spec("c0410 review skill sections", function(it)
 	it("review: the one-step-further rule is prose, outside the template", function()
