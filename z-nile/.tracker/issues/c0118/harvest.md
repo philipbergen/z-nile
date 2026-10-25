@@ -20,3 +20,5 @@
 - design-review-006 F3: zz-test/one-rule-one-function
 - design-review-006 F4: z-design/watch-steps-name-their-base
 - design-review-006 F5: one-off: inputs from c0117's pending guesses named in Unknowns
+- design-review-007 F1: z-design/watch-steps-name-their-base
+- design-review-007 F2: zz-test/source-text-pins-read-the-code
