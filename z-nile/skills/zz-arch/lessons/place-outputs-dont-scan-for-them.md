@@ -9,3 +9,5 @@ Scanning a folder for "the new file" works for one writer and one attempt. With 
 **Why:** c0117 design reviews 006 to 008 found three holes in a row in how a dispatched review's output was landed: the line, the lost file, then the count and the key. The dispatcher took any new `stream-review-*` file in the raft's folder, so a reviewer that wrote nothing still got `ok`, another issue's file counted, and a fallthrough left two rounds.
 
 **How to apply:** have the agent write to a fixed name in its own state folder; the runner moves it into place, numbering it from the target folder by the item's own prefix. No file after a step that spent is a failure (its cost still recorded); a failed attempt's file is moved aside before the next attempt.
+
+Replace it everywhere (c0117 design review 009 F1): when a mechanism is retired for one caller because it was found broken, list every other caller of it and replace it there too, or write why that caller can't hit the holes. c0117 moved stream reviews off the folder scan and kept it for design, raft and code reviews, which a quota fallthrough and a silent reviewer broke the same way.

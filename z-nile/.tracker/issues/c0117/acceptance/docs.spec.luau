@@ -96,7 +96,7 @@ return t.spec("c0117 docs", function(it)
 		)
 		at(
 			skill("zz-execute"),
-			'commit the review file with the `record:` line it prints (`-m "<issue>: stream-review-NNN"` … `--issue <issue>`)',
+			'you commit it with the `record:` line it prints (`-m "<issue>: stream-review-NNN"` … `--issue <issue>`)',
 			"zz-execute"
 		)
 		-- a dispatched raft review records its own row (design review 007 F2): the author records only a subagent's
@@ -107,6 +107,24 @@ return t.spec("c0117 docs", function(it)
 			"z-raft"
 		) -- design review 008 F4
 		local ze = skill("zz-execute")
+		-- design review 009 F1, F2: the dispatcher places every dispatched review; a failed one's line is committed alone
+		at(
+			zr,
+			"Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else",
+			"zz-review Output file"
+		)
+		at(
+			ze,
+			"the dispatcher places the review as `stream-review-<issue>-NNN.md` in the raft's folder",
+			"zz-execute"
+		)
+		at(
+			ze,
+			'A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line: commit that line alone (the commit is its spend row), then rerun the review, which is still the same round.',
+			"zz-execute"
+		)
+		absent(ze, "the reviewer writes `stream-review-<issue>-NNN.md` itself", "zz-execute")
+		absent(ze, "next., and", "zz-execute")
 		at(
 			ze,
 			"One dispatched stream review at a time: commit its file before you start the next.",

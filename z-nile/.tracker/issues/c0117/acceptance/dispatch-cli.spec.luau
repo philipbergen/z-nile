@@ -100,11 +100,23 @@ local function znIn(dir: string, args: { string }): fixture.Result
 	})
 end
 -- a fake reviewer: three seconds of work (so its wall minutes are over 0), then the review file
-local function reviewer(file: string)
+-- a fake reviewer under the dispatcher: three seconds of work (so its wall minutes are over 0), then its review in
+-- its own state folder, which the dispatcher numbers into place (design review 009 F1: one landing for every mode)
+local function reviewer()
 	fs.writeFile(
 		`{h.fakes}/script.sh`,
-		`sleep 3; d=$(./zn find "$id"); printf '# Review 001\n\nVerdict: approve\n' > "$d/{file}"\n`
+		`sleep 3; printf '# Review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"\n`
 	)
+end
+local function reviewNames(dir: string, prefix: string): { string }
+	local out = {}
+	for _, name in fs.readDir(dir) do
+		if string.sub(name, 1, #prefix) == prefix then
+			table.insert(out, name)
+		end
+	end
+	table.sort(out)
+	return out
 end
 local function recordLines(out: string): { string }
 	local lines = {}
@@ -255,7 +267,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		function()
 			fakecli.clear(h)
 			mode("claude.zz-review", "script")
-			reviewer("review-001.md")
+			reviewer()
 			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
 			local before = #(fakecli.rows(h, "c0010") or {})
 			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
@@ -276,10 +288,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 			-- quota on claude, the review on grok: still one line, the model that wrote the review
 			fakecli.clear(h)
-			-- claude spends 42 tokens, then reports quota (design review 007 F3): the line sums both attempts
-			mode("claude.zz-review", "spentquota")
+			-- claude writes a review, spends 42 tokens, then reports quota (design review 007 F3, 009 F1): the line sums
+			-- both attempts, and one review lands, numbered once
+			mode("claude.zz-review", "scriptquota")
 			mode("grok.zz-review", "script")
-			reviewer("review-001.md")
+			reviewer()
 			local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
 			if not q.ok then
 				error(q.stdout .. q.stderr)
@@ -291,6 +304,9 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local spent = hist[#hist - 1].minutes + hist[#hist].minutes
 			t.expect(hist[#hist - 1].tokens).toBe(42)
 			t.expect(has(two[1], `--time {math.floor(spent * 10 + 0.5) / 10} --tokens`)).toBe(true)
+			t.expect(has(two[1], '-m "c0010: review-001"')).toBe(true)
+			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-"))
+				.toEqual({ "review-001.md" })
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 		end
 	)
@@ -298,7 +314,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	it("a design review writes its own row with its wall minutes, and prints no record: line", function()
 		fakecli.clear(h)
 		mode("claude.zz-review", "script")
-		reviewer("design-review-001.md")
+		reviewer()
 		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
 		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
 		if not r.ok then
@@ -311,7 +327,45 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(row.model).toBe("claude-opus-5-5")
 		t.expect(row.minutes > 0).toBe(true)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+		-- a fallthrough whose first attempt wrote a review: one file, numbered once, from the reviewing model
+		fakecli.clear(h)
+		mode("claude.zz-review", "scriptquota")
+		mode("grok.zz-review", "script")
+		reviewer()
+		local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
+		local names = reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "design-review-")
+		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+		if not q.ok then
+			error(q.stdout .. q.stderr)
+		end
+		t.expect(names).toEqual({ "design-review-001.md" })
+		local last = lastRow("c0010")
+		t.expect(last.subject).toBe("design-review-001")
+		t.expect(last.model).toBe("grok-4.7-xhigh")
 	end)
+
+	it(
+		"a design or code reviewer that writes nothing fails the step; the row is written, or the line printed",
+		function()
+			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+			local dir = `{wt}/pickman/.tracker/issues/c0010`
+			fakecli.clear(h)
+			mode("claude.zz-review", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, "sleep 3\n")
+			local d = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
+			t.expect(d.ok).toBe(false)
+			t.expect(state("c0010").outcome).toBe("failed")
+			t.expect(has(state("c0010").detail, "the reviewer wrote no review")).toBe(true)
+			t.expect(reviewNames(dir, "design-review-")).toEqual({})
+			t.expect(lastRow("c0010").subject).toBe("dispatch zz-review")
+			local c = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+			t.expect(c.ok).toBe(false)
+			t.expect(reviewNames(dir, "review-")).toEqual({})
+			local lines = recordLines(c.stdout)
+			t.expect(#lines).toBe(1)
+			t.expect(has(lines[1], '-m "c0010: dispatch zz-review"')).toBe(true)
+		end
+	)
 
 	-- design review 008 F1: under the dispatcher a stream reviewer writes `$ZN_DISPATCH_DIR/review.md`, its own state
 	-- folder; the dispatcher numbers it (the next free NNN of that issue in the raft's folder) and moves it into place
@@ -442,6 +496,52 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
 		end
 	)
+
+	it("a raft review lands as design-review-NNN.md in the raft's own folder", function()
+		fakecli.clear(h)
+		mode("claude.zz-review", "script")
+		reviewer()
+		local wt, raftDir, restore = inRaft()
+		local r = znIn(wt, { "dispatch", "zz-review", "R0090", "--mode", "raft" })
+		local names = reviewNames(raftDir, "design-review-")
+		restore()
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		t.expect(names).toEqual({ "design-review-001.md" })
+	end)
+
+	-- design review 009 F3: the cleanup rules, each with a next writer that writes nothing
+	it("a stale review.md from an earlier run never lands: a reviewer that writes nothing fails", function()
+		fakecli.clear(h)
+		mode("claude.zz-review", "script")
+		fs.writeFile(`{h.fakes}/script.sh`, "sleep 3\n")
+		local wt, raftDir, restore = inRaft()
+		fs.writeDir(`{h.f.main}/.cache/dispatch/c0010`)
+		fs.writeFile(`{h.f.main}/.cache/dispatch/c0010/review.md`, "# stale\n")
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+		local files = streamFiles(raftDir)
+		restore()
+		t.expect(r.ok).toBe(false)
+		t.expect(state("c0010").outcome).toBe("failed")
+		t.expect(files).toEqual({})
+	end)
+
+	it("a failed attempt's review never lands: the next CLI writes nothing, and the step fails", function()
+		fakecli.clear(h)
+		mode("claude.zz-review", "scriptquota")
+		-- grok in its default mode: it spends tokens and writes no review
+		writesReview()
+		local wt, raftDir, restore = inRaft()
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+		local files = streamFiles(raftDir)
+		restore()
+		t.expect(r.ok).toBe(false)
+		t.expect(state("c0010").outcome).toBe("failed")
+		t.expect(files).toEqual({})
+		t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
+		t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review.md`)).toBe(false)
+	end)
 
 	it("with no agent credential, no CLI starts", function()
 		fakecli.clear(h)
