@@ -14,8 +14,10 @@ local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
 local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local REPO = `{top}/.cache/c0121-cli`
-local WT = `{top}/.cache/c0121-cli-wt`
+-- fixtures live under the home's .cache, where the spec runs (the jail refuses the checkout top's when they differ)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local REPO = `{here}/.cache/c0121-cli`
+local WT = `{here}/.cache/c0121-cli-wt`
 
 local function zn(dir: string, args: { string }): any
 	local r = fixture.exec(dir, "./zn", args)

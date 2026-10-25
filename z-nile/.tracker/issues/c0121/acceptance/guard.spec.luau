@@ -194,6 +194,14 @@ return t.spec("c0121 server rules", function(it)
 				t.expect(prs["R0020-a"].checks.state).toBe("failing")
 				t.expect(prs["R0030-b"].pr.number).toBe(9) -- neither open: the higher number
 			end
+			local draft =
+				[[{"number":5,"headRefName":"R0040-c","state":"OPEN","isDraft":true,"url":"u5d","statusCheckRollup":[]}]]
+			local closed =
+				[[{"number":9,"headRefName":"R0040-c","state":"CLOSED","isDraft":false,"url":"u9c","statusCheckRollup":[]}]]
+			for _, list in { `[{draft},{closed}]`, `[{closed},{draft}]` } do
+				local prs = serve.parsePrs(list) :: any
+				t.expect(prs["R0040-c"].pr).toEqual({ number = 5, url = "u5d", state = "draft" }) -- a draft beats a higher closed one
+			end
 		end
 	)
 

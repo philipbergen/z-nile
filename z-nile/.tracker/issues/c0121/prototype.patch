@@ -1,4 +1,4 @@
-From 458b291de1a592b6f8bddc48dfcde4ae2e3f5cf3 Mon Sep 17 00:00:00 2001
+From 7ae10bca574cb80684f917e2cc0d110c56220d66 Mon Sep 17 00:00:00 2001
 From: Philip Bergen <philip.bergen@me.com>
 Date: Sat, 24 Oct 2026 15:57:36 -0700
 Subject: [PATCH] c0121 prototype: the board server (serve.luau: guard, plan,
@@ -9,21 +9,21 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  tests/acceptance/c0118/docs.spec.luau         |   2 +-
  tests/lib/cachepaths.luau                     |   3 +
- .../issues/c0121/acceptance/cli.spec.luau     | 132 ++++++
- .../issues/c0121/acceptance/docs.spec.luau    |  68 +++
- .../issues/c0121/acceptance/guard.spec.luau   | 265 +++++++++++
- .../issues/c0121/acceptance/page.spec.luau    | 210 +++++++++
- .../issues/c0121/acceptance/server.spec.luau  | 441 +++++++++++++++++
- z-nile/.tracker/issues/c0121/c0121.md         | 294 +++++++++++-
+ .../issues/c0121/acceptance/cli.spec.luau     | 134 +++++
+ .../issues/c0121/acceptance/docs.spec.luau    |  72 +++
+ .../issues/c0121/acceptance/guard.spec.luau   | 273 ++++++++++
+ .../issues/c0121/acceptance/page.spec.luau    | 210 ++++++++
+ .../issues/c0121/acceptance/server.spec.luau  | 496 ++++++++++++++++++
+ z-nile/.tracker/issues/c0121/c0121.md         | 302 ++++++++++-
  z-nile/.tracker/issues/c0121/check.sh         |  23 +-
- .../c0121/experiments/E1-serve.spec.luau      | 109 +++++
+ .../c0121/experiments/E1-serve.spec.luau      | 109 ++++
  z-nile/README.md                              |   2 +-
- z-nile/engine/board.html                      |  56 ++-
+ z-nile/engine/board.html                      |  56 +-
  z-nile/engine/board.luau                      |  33 +-
  z-nile/engine/main.luau                       |  41 +-
- z-nile/engine/serve.luau                      | 445 ++++++++++++++++++
+ z-nile/engine/serve.luau                      | 447 ++++++++++++++++
  z-nile/skills/zz-rules/SKILL.md               |   3 +-
- 16 files changed, 2095 insertions(+), 32 deletions(-)
+ 16 files changed, 2173 insertions(+), 33 deletions(-)
  create mode 100644 z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau
  create mode 100644 z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau
  create mode 100644 z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau
@@ -60,10 +60,10 @@ index a61d3689..ef01f1f7 100644
  	},
 diff --git a/z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau
 new file mode 100644
-index 00000000..21a5fec0
+index 00000000..2a6a0f1d
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0121/acceptance/cli.spec.luau
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,134 @@
 +--!strict
 +-- c0121 AC4: `./zn board --serve [--port N]` in a fixture checkout: it refuses a bad port, `-O` and `--out`, a linked
 +-- worktree (it runs in the main checkout), and a taken port, each naming why and serving nothing; it is guarded
@@ -80,8 +80,10 @@ index 00000000..21a5fec0
 +	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 +end
 +local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-+local REPO = `{top}/.cache/c0121-cli`
-+local WT = `{top}/.cache/c0121-cli-wt`
++-- fixtures live under the home's .cache, where the spec runs (the jail refuses the checkout top's when they differ)
++local here = trim(process.exec("pwd", { "-P" }).stdout)
++local REPO = `{here}/.cache/c0121-cli`
++local WT = `{here}/.cache/c0121-cli-wt`
 +
 +local function zn(dir: string, args: { string }): any
 +	local r = fixture.exec(dir, "./zn", args)
@@ -198,17 +200,21 @@ index 00000000..21a5fec0
 +end)
 diff --git a/z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau
 new file mode 100644
-index 00000000..3402f9cf
+index 00000000..dc0e6cc5
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0121/acceptance/docs.spec.luau
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,72 @@
 +--!strict
 +-- c0121 AC5: zz-rules names `./zn board --serve` in the main checkout's command list and describes it in the board
 +-- row, in the Design's words; the README says it is built; c0118's row words stay.
 +local fs = require("@lune/fs")
 +local t = require("@tests/lib/t")
 +
-+local SKILL = fs.readFile("z-nile/skills/zz-rules/SKILL.md")
++-- the spec runs from its project's home: the checkout's own files are read from the top (c0120)
++local TOP = (
++	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
++)
++local SKILL = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 +local function boardRow(): string
 +	local row = ""
 +	for line in string.gmatch(SKILL, "[^\n]+") do
@@ -260,7 +266,7 @@ index 00000000..3402f9cf
 +	end)
 +
 +	it("the README says the served board is built", function()
-+		local text = fs.readFile("z-nile/README.md")
++		local text = fs.readFile(`{TOP}/z-nile/README.md`)
 +		t.expect(
 +			has(
 +				text,
@@ -272,10 +278,10 @@ index 00000000..3402f9cf
 +end)
 diff --git a/z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau
 new file mode 100644
-index 00000000..0cc8836b
+index 00000000..fe210a2d
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0121/acceptance/guard.spec.luau
-@@ -0,0 +1,265 @@
+@@ -0,0 +1,273 @@
 +--!strict
 +-- c0121 AC1: the server's pure rules. serve.guard refuses DNS rebinding (a foreign Host), CSRF (OPTIONS, a foreign
 +-- Origin, no token, an action that is not a JSON POST) and lets the rest through; serve.plan turns an action on an id
@@ -472,6 +478,14 @@ index 00000000..0cc8836b
 +				t.expect(prs["R0020-a"].checks.state).toBe("failing")
 +				t.expect(prs["R0030-b"].pr.number).toBe(9) -- neither open: the higher number
 +			end
++			local draft =
++				[[{"number":5,"headRefName":"R0040-c","state":"OPEN","isDraft":true,"url":"u5d","statusCheckRollup":[]}]]
++			local closed =
++				[[{"number":9,"headRefName":"R0040-c","state":"CLOSED","isDraft":false,"url":"u9c","statusCheckRollup":[]}]]
++			for _, list in { `[{draft},{closed}]`, `[{closed},{draft}]` } do
++				local prs = serve.parsePrs(list) :: any
++				t.expect(prs["R0040-c"].pr).toEqual({ number = 5, url = "u5d", state = "draft" }) -- a draft beats a higher closed one
++			end
 +		end
 +	)
 +
@@ -543,7 +557,7 @@ index 00000000..0cc8836b
 +end)
 diff --git a/z-nile/.tracker/issues/c0121/acceptance/page.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/page.spec.luau
 new file mode 100644
-index 00000000..1308d242
+index 00000000..f0b18f3f
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0121/acceptance/page.spec.luau
 @@ -0,0 +1,210 @@
@@ -560,7 +574,7 @@ index 00000000..1308d242
 +local t = require("@tests/lib/t")
 +
 +local DIR = ".cache/c0121-page"
-+local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
++local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 +
 +local function write(path: string, text: string)
 +	local full = `{DIR}/{path}`
@@ -759,10 +773,10 @@ index 00000000..1308d242
 +end)
 diff --git a/z-nile/.tracker/issues/c0121/acceptance/server.spec.luau b/z-nile/.tracker/issues/c0121/acceptance/server.spec.luau
 new file mode 100644
-index 00000000..f707f15b
+index 00000000..4abc4841
 --- /dev/null
 +++ b/z-nile/.tracker/issues/c0121/acceptance/server.spec.luau
-@@ -0,0 +1,441 @@
+@@ -0,0 +1,496 @@
 +--!strict
 +-- c0121 AC2: serve.start in-process on 127.0.0.1 and a random port, with every effect a stub (the runner of ./zn, the
 +-- opener, gh, the clock, the model's key and the engine's hash): the page needs its token; a rebinding Host, a foreign
@@ -785,14 +799,15 @@ index 00000000..f707f15b
 +local function trim(s: string): string
 +	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 +end
-+local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-+local ROOT = `{top}/.cache/c0121-server`
++-- fixtures live under the home's .cache, where the spec runs (the jail refuses the checkout top's when they differ)
++local here = trim(process.exec("pwd", { "-P" }).stdout)
++local ROOT = `{here}/.cache/c0121-server`
 +local TOKEN = "t0k-c0121"
-+local REPO = `{top}/.cache/c0121-server-repo`
-+local REPO_WT = `{top}/.cache/c0121-server-repo-wt`
++local REPO = `{here}/.cache/c0121-server-repo`
++local REPO_WT = `{here}/.cache/c0121-server-repo-wt`
 +-- the dispatcher's state folder, spelled in two parts: c0049 counts a literal .cache/<dir> as a fixture name
 +local DISPATCH = "." .. "cache/dispatch"
-+local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
++local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 +
 +local function write(path: string, text: string)
 +	local full = `{ROOT}/{path}`
@@ -818,7 +833,7 @@ index 00000000..f707f15b
 +local opened: { string } = {}
 +local ghCalls = 0
 +local ghFails = false
-+local ghDelay = 0.3 -- gh yields, as process.exec does
++local ghDelay = 2 -- gh yields, as process.exec does (long enough that a loaded machine still sees it in flight)
 +local builds = 0
 +local key = "k1"
 +local hash = "engine-1"
@@ -960,15 +975,17 @@ index 00000000..f707f15b
 +		"never waits for gh: the first answer says loading, a request while gh runs starts no second one",
 +		function()
 +			local first = state()
++			local second = state()
++			local callsInFlight = ghCalls
++			task.wait(ghDelay + 0.5)
++			local after = state()
++			ghDelay = 0 -- before any assertion, so a failure here leaves the later cases a quick gh
 +			t.expect(first.model.live.checks).toBe("loading")
 +			t.expect(byId(first.model.rafts).R0020.pr).toBe(nil)
-+			local second = state()
 +			t.expect(second.model.live.checks).toBe("loading")
++			t.expect(callsInFlight).toBe(1)
++			t.expect(after.model.live.checks).toBe("ok")
 +			t.expect(ghCalls).toBe(1)
-+			task.wait(0.5)
-+			t.expect(state().model.live.checks).toBe("ok")
-+			t.expect(ghCalls).toBe(1)
-+			ghDelay = 0
 +		end
 +	)
 +
@@ -1194,6 +1211,58 @@ index 00000000..f707f15b
 +		end
 +	)
 +
++	it("binds through its listener on 127.0.0.1 only, at the port it was given", function()
++		local binds: { any } = {}
++		local s: serve.Server? = nil
++		local port = 0
++		for _ = 1, 30 do
++			port = math.random(30000, 60000)
++			local ok, made = pcall(serve.start, {
++				root = ROOT,
++				port = port,
++				token = TOKEN,
++				runner = function(): serve.RunResult
++					return { ok = true, stdout = "", stderr = "" }
++				end,
++				opener = function(): boolean
++					return true
++				end,
++				gh = function(): (string?, string?)
++					return nil, "no gh in this case"
++				end,
++				now = function(): number
++					return clock
++				end,
++				facts = function(_root: string): any
++					return { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
++				end,
++				keyOf = function(): string
++					return "k"
++				end,
++				engineHash = function(): string?
++					return "e"
++				end,
++				listen = function(p: number, cfg: any): any
++					table.insert(binds, { port = p, address = cfg.address })
++					return (net.serve :: any)(p, cfg)
++				end,
++			})
++			if ok then
++				s = made
++				break
++			end
++			table.clear(binds)
++		end
++		t.expect(s ~= nil).toBe(true)
++		t.expect(binds).toEqual({ { port = port, address = "http://127.0.0.1" } })
++		local r = (net.request :: any)({
++			url = `http://127.0.0.1:{port}/api/state`,
++			headers = { ["X-Zn-Token"] = TOKEN },
++		})
++		t.expect(r.statusCode).toBe(200);
++		(s :: serve.Server).stop()
++	end)
++
 +	it("stops: a request afterwards is refused", function()
 +		(server :: serve.Server).stop()
 +		task.wait(0.1)
@@ -1205,10 +1274,19 @@ index 00000000..f707f15b
 +	end)
 +end)
 diff --git a/z-nile/.tracker/issues/c0121/c0121.md b/z-nile/.tracker/issues/c0121/c0121.md
-index 46eb4f7b..14cc998c 100644
+index 46eb4f7b..b2ab9355 100644
 --- a/z-nile/.tracker/issues/c0121/c0121.md
 +++ b/z-nile/.tracker/issues/c0121/c0121.md
-@@ -19,59 +19,315 @@ Split from c0118 by the user (2026-10-20, "Split: static board, then server"). T
+@@ -6,7 +6,7 @@ slug: board-live-server
+ raft: 
+ depends_on: [c0118]
+ emergent: false
+-design: draft
++design: ready
+ created: 2026-10-20
+ status: new-copper-quiet-mellow
+ ---
+@@ -19,59 +19,321 @@ Split from c0118 by the user (2026-10-20, "Split: static board, then server"). T
  - The only actions are stop, retry and open, and they work from the page through the dispatcher (c0117).
  - `zn board --serve` serves the same page `zn board` writes, with live polling (the user's decision: one page, two modes).
  
@@ -1268,6 +1346,7 @@ index 46eb4f7b..14cc998c 100644
 +	now: () -> number,
 +	token: string?, collect: ((root, facts) -> board.Model)?, facts: ((root) -> board.Facts)?,
 +	keyOf: (() -> string)?, engineHash: (() -> string?)?, statsHtml: ((board.Model) -> string)?,
++	listen: ((port: number, cfg: any) -> any)?,     -- default net.serve; the address is always http://127.0.0.1
 +}
 +export type Server = { url: string, token: string, port: number, stop: () -> () }
 +export type Exec = (cmd: string, args: { string }, opts: { cwd: string }?) -> RunResult
@@ -1299,12 +1378,12 @@ index 46eb4f7b..14cc998c 100644
 +| `/api/*` without `X-Zn-Token: <token>` | 403 | a custom header also forces a preflight from any other origin |
 +| `/api/action` not a POST, or its `Content-Type` not `application/json` | 405 / 415 | a GET never acts; a simple form post can't send JSON |
 +| `/api/state` not a GET; any other path | 405 / 404 | |
-+The token is 16 random bytes (`od -An -tx1 -N16 /dev/urandom`), made at start, embedded only in the served page's model, and printed once in the start URL (`http://127.0.0.1:<port>/?token=<token>`). The server binds `127.0.0.1` explicitly (E1, E6: the LAN address is refused).
++The token is 16 random bytes (`od -An -tx1 -N16 /dev/urandom`), made at start, embedded only in the served page's model, and printed once in the start URL (`http://127.0.0.1:<port>/?token=<token>`). The server binds `127.0.0.1` explicitly (E1, E6: the LAN address is refused), through `Options.listen` (default `net.serve`), so `server.spec` records the bind and pins its address and port (design review 002 F1).
 +
 +### 4. The actions (programme review F4)
 +`serve.plan` decides from the model alone, never from free text: the id must be a key of `model.home` (an id the model shows), else `400 refused: unknown id <id>`; the action must be stop, retry or open.
 +- **stop**: runs `./zn dispatch stop <id>` (c0117) and waits; 200 with its output, 500 when it fails.
-+- **retry**: starts `./zn dispatch retry <id>` (c0117) in a task of its own and answers 202 at once (the chain can run for hours). It runs as a child process of the server, in the server's process group, never detached into a new session (`setsid`), so stopping the server (Ctrl-C) stops a retry it started; c0117 then marks that run `lost` and `./zn dispatch retry <id>` resumes it. Ctrl-C and a closed terminal reach the whole foreground group, so the retry dies with the server; a `kill` of the server's pid alone leaves the child writing to a closed pipe, so it dies at its next write and c0117 marks it lost the same way. The server waits up to 1 s (`serve.RETRY_WAIT`) for the child: a dispatcher that refuses at once (a held run lock) is answered 200 or 500 with its output, and a chain that keeps running is answered 202 (design review 001 F6). Decided with the user (2026-10-24): G3.
++- **retry**: starts `./zn dispatch retry <id>` (c0117) in a task of its own and answers 202 once it has run for `serve.RETRY_WAIT` (1 s), or with the dispatcher's output if it exits sooner (the chain can run for hours). It runs as a child process of the server, in the server's process group, never detached into a new session (`setsid`), so stopping the server (Ctrl-C) stops a retry it started; c0117 then marks that run `lost` and `./zn dispatch retry <id>` resumes it. Ctrl-C and a closed terminal reach the whole foreground group, so the retry dies with the server; a `kill` of the server's pid alone leaves the child writing to a closed pipe, so it dies at its next write and c0117 marks it lost the same way. The server waits up to 1 s (`serve.RETRY_WAIT`) for the child: a dispatcher that refuses at once (a held run lock) is answered 200 or 500 with its output, and a chain that keeps running is answered 202 (design review 001 F6). Decided with the user (2026-10-24): G3.
 +- **open**: opens the item's own PR, else its raft's PR (from the `gh` cache), else its raft's worktree folder, with `open` (macOS) or `xdg-open`; 400 when there is none.
 +- The real effects are built by `serve.effects(top, exec, os)` (`exec` is `process.exec` in the CLI, a recording stub in `guard.spec`): the runner is `exec("<top>/zn", args, { cwd = top })`, an argument array, never `sh -c`; the opener is `exec("open" | "xdg-open", { target })` by `process.os`; and `gh` is `exec("gh", serve.GH_ARGS, { cwd = top })`, where a `gh` that can't be started reads "gh is not installed" and a failing one its stderr (design review 001 F8).
 +- **Where**: the server runs only in the main checkout (`git rev-parse --show-toplevel` must equal the first worktree), because c0117's run state (`.cache/dispatch/`) and `stop` live there; elsewhere `./zn board --serve` refuses: "board --serve runs in the main checkout (<path>), where the dispatcher's run state and stop live". zz-rules' list of main-checkout commands names it.
@@ -1422,6 +1501,7 @@ index 46eb4f7b..14cc998c 100644
 +- `server.spec.luau` :: the real keyOf changes with a commit, origin/main, a worktree's commit and the dispatcher's state, and only then → AC2
 +- `server.spec.luau` :: the real engineHash changes with an engine commit and not with any other → AC2
 +- `server.spec.luau` :: a server with the default engine hash says it is out of date after an engine commit in its checkout → AC2
++- `server.spec.luau` :: binds through its listener on 127.0.0.1 only, at the port it was given → AC2
 +- `server.spec.luau` :: stops: a request afterwards is refused → AC2
 +- `page.spec.luau` :: shows that it is live, and polls every live.poll seconds → AC3
 +- `page.spec.luau` :: polls /api/state with its token and loads the model it gets → AC3
@@ -1489,6 +1569,9 @@ index 46eb4f7b..14cc998c 100644
 +| the runner runs <top>/zn in top | guard :: the CLI's effects run <top>/zn by argument array, open or xdg-open, and gh pr list with its | N42 the runner runs zn from the wrong place | run |
 +| the opener is open on macOS, xdg-open elsewhere | guard :: the CLI's effects run <top>/zn by argument array, open or xdg-open, and gh pr list with its | N43 the opener is open on every system | run |
 +| the engine hash is the engine tree's | server :: the real engineHash changes with an engine commit and not with any other | N44 the engine hash is HEAD's, not the engine tree's | run |
++| the server binds 127.0.0.1 only | server :: binds through its listener on 127.0.0.1 only… | N45 binds 0.0.0.0 | run |
++| the bind goes through the listener option | server :: binds through its listener… | N47 the option ignored | run |
++| a draft PR beats a higher-numbered closed one | guard :: keeps one PR per branch… | N46 a draft ranks as closed | run |
 +| main.luau passes `process.exec` and `process.os` to serve.effects | (review; JC1, OC1) | a wrong argument | reasoned: one line in the CLI; serve.effects itself is pinned (N42, N43, the gh argv case) |
 +| the docs say what the design says | docs :: (three cases) | a phrase dropped | reasoned: each phrase is asserted literally |
  
@@ -1534,7 +1617,7 @@ index 46eb4f7b..14cc998c 100644
  
  ## Verification log
 -<!-- Appended at the end of execution: date, commands run, results. -->
-+Prep, 2026-10-24, on `proto-c0121` (base `proto-c0118` 00e6dede; commit 1 `SIMULATION (not part of c0121): c0118 done` 68f4c5e1, commit 2 the c0121 edits). Rerun after design review 001's answers:
++Prep, 2026-10-24, on `proto-c0121` (base `proto-c0118` 00e6dede; commit 1 `SIMULATION (not part of c0121): c0118 done` 68f4c5e1, commit 2 the c0121 edits). Rerun after design review 002's answers:
 +- c0118's `check.sh` on the simulation: 8/8 passed.
 +- `bash z-nile/.tracker/issues/c0121/check.sh` on the prototype: 6/6 passed.
 +- The same `check.sh` and specs on the base (before review 001, in a scratch clone): 1/6. AC1 and AC2 fail to load `@znile/engine/serve` (the module c0121 creates), and AC3 to AC5 fail on assertions. AC6 passes: it guards the static board, which exists on both sides.
@@ -1542,7 +1625,8 @@ index 46eb4f7b..14cc998c 100644
 +- A simulated promotion (the acceptance specs moved to `tests/acceptance/c0121` and the item to `done/`, in a scratch clone, as `./zn done` does): the full gate passed (z-nile 1362 passed, 0 failed, the promoted specs type-checked and in the repo-wide scans), and the promoted `check.sh` passed 6/6.
 +- `luau-lsp analyze` of the sequestered specs against the prototype: clean.
 +- Experiments E1 to E5 under the jail: 5/5 passed; E6 outside it: the LAN address refused.
-+- Mutation check: 44 mutants (N1 to N44), all killed on an assertion. Review 001 added N35 to N44 and re-anchored N32.
++- Mutation check: 47 mutants (N1 to N47), all killed on an assertion. Review 001 added N35 to N44 and re-anchored N32; review 002 added N45 to N47.
++- The specs were made to run from any project home (fixtures under the home's `.cache`, the checkout's files read from the top, fixture registries without a `home` key): c0118's implementation found that its specs assumed z-nile's home at the root, which c0120's implementation does not. No assertion changed.
 diff --git a/z-nile/.tracker/issues/c0121/check.sh b/z-nile/.tracker/issues/c0121/check.sh
 index 43c7d0a4..95fd6305 100755
 --- a/z-nile/.tracker/issues/c0121/check.sh
@@ -1971,10 +2055,10 @@ index c58c5a09..01de7cf7 100644
  local rest = table.move(args, 2, #args, 1, {})
 diff --git a/z-nile/engine/serve.luau b/z-nile/engine/serve.luau
 new file mode 100644
-index 00000000..f6bae62b
+index 00000000..ec5c00a1
 --- /dev/null
 +++ b/z-nile/engine/serve.luau
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,447 @@
 +--!strict
 +-- The board's local server (c0121): `./zn board --serve` serves the page `./zn board` writes, with live data and the
 +-- three actions (stop, retry, open). The guard, the action plan and the `gh` parse are pure; `serve.start` wires them to
@@ -2019,6 +2103,7 @@ index 00000000..f6bae62b
 +	keyOf: (() -> string)?, -- what the model reads; a change forces a rebuild
 +	engineHash: (() -> string?)?, -- the engine tree's hash now
 +	statsHtml: ((m: board.Model) -> string)?,
++	listen: ((port: number, cfg: any) -> any)?, -- default: net.serve (a spec records the bind through it)
 +}
 +export type Server = { url: string, token: string, port: number, stop: () -> () }
 +
@@ -2399,7 +2484,8 @@ index 00000000..f6bae62b
 +		return act(req)
 +	end
 +
-+	local handleRef = net.serve(o.port, {
++	local listen: (number, any) -> any = o.listen or (net.serve :: any)
++	local handleRef = listen(o.port, {
 +		address = "http://127.0.0.1",
 +		handleRequest = function(req: any): any
 +			local ok, res = pcall(handle, req)

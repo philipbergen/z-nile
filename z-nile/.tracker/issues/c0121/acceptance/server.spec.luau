@@ -20,14 +20,15 @@ local task = require("@lune/task")
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local ROOT = `{top}/.cache/c0121-server`
+-- fixtures live under the home's .cache, where the spec runs (the jail refuses the checkout top's when they differ)
+local here = trim(process.exec("pwd", { "-P" }).stdout)
+local ROOT = `{here}/.cache/c0121-server`
 local TOKEN = "t0k-c0121"
-local REPO = `{top}/.cache/c0121-server-repo`
-local REPO_WT = `{top}/.cache/c0121-server-repo-wt`
+local REPO = `{here}/.cache/c0121-server-repo`
+local REPO_WT = `{here}/.cache/c0121-server-repo-wt`
 -- the dispatcher's state folder, spelled in two parts: c0049 counts a literal .cache/<dir> as a fixture name
 local DISPATCH = "." .. "cache/dispatch"
-local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 
 local function write(path: string, text: string)
 	local full = `{ROOT}/{path}`
@@ -53,7 +54,7 @@ local runs: { { string } } = {}
 local opened: { string } = {}
 local ghCalls = 0
 local ghFails = false
-local ghDelay = 0.3 -- gh yields, as process.exec does
+local ghDelay = 2 -- gh yields, as process.exec does (long enough that a loaded machine still sees it in flight)
 local builds = 0
 local key = "k1"
 local hash = "engine-1"
@@ -195,15 +196,17 @@ return t.spec("c0121 board server", function(it)
 		"never waits for gh: the first answer says loading, a request while gh runs starts no second one",
 		function()
 			local first = state()
+			local second = state()
+			local callsInFlight = ghCalls
+			task.wait(ghDelay + 0.5)
+			local after = state()
+			ghDelay = 0 -- before any assertion, so a failure here leaves the later cases a quick gh
 			t.expect(first.model.live.checks).toBe("loading")
 			t.expect(byId(first.model.rafts).R0020.pr).toBe(nil)
-			local second = state()
 			t.expect(second.model.live.checks).toBe("loading")
+			t.expect(callsInFlight).toBe(1)
+			t.expect(after.model.live.checks).toBe("ok")
 			t.expect(ghCalls).toBe(1)
-			task.wait(0.5)
-			t.expect(state().model.live.checks).toBe("ok")
-			t.expect(ghCalls).toBe(1)
-			ghDelay = 0
 		end
 	)
 
@@ -428,6 +431,58 @@ return t.spec("c0121 board server", function(it)
 			(live :: serve.Server).stop()
 		end
 	)
+
+	it("binds through its listener on 127.0.0.1 only, at the port it was given", function()
+		local binds: { any } = {}
+		local s: serve.Server? = nil
+		local port = 0
+		for _ = 1, 30 do
+			port = math.random(30000, 60000)
+			local ok, made = pcall(serve.start, {
+				root = ROOT,
+				port = port,
+				token = TOKEN,
+				runner = function(): serve.RunResult
+					return { ok = true, stdout = "", stderr = "" }
+				end,
+				opener = function(): boolean
+					return true
+				end,
+				gh = function(): (string?, string?)
+					return nil, "no gh in this case"
+				end,
+				now = function(): number
+					return clock
+				end,
+				facts = function(_root: string): any
+					return { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+				end,
+				keyOf = function(): string
+					return "k"
+				end,
+				engineHash = function(): string?
+					return "e"
+				end,
+				listen = function(p: number, cfg: any): any
+					table.insert(binds, { port = p, address = cfg.address })
+					return (net.serve :: any)(p, cfg)
+				end,
+			})
+			if ok then
+				s = made
+				break
+			end
+			table.clear(binds)
+		end
+		t.expect(s ~= nil).toBe(true)
+		t.expect(binds).toEqual({ { port = port, address = "http://127.0.0.1" } })
+		local r = (net.request :: any)({
+			url = `http://127.0.0.1:{port}/api/state`,
+			headers = { ["X-Zn-Token"] = TOKEN },
+		})
+		t.expect(r.statusCode).toBe(200);
+		(s :: serve.Server).stop()
+	end)
 
 	it("stops: a request afterwards is refused", function()
 		(server :: serve.Server).stop()

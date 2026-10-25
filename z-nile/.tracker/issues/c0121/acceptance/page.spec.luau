@@ -11,7 +11,7 @@ local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
 local DIR = ".cache/c0121-page"
-local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\nhome = "."\n'
+local REGISTRY = '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 
 local function write(path: string, text: string)
 	local full = `{DIR}/{path}`

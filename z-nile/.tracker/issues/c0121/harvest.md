@@ -7,3 +7,6 @@
 - design-review-001 F6: one-off: a started child's immediate refusal was discarded; the server now waits briefly for it
 - design-review-001 F7: one-off: refusal cases that pass no port would serve and hang under a regression instead of failing
 - design-review-001 F8: testing/pin-call-site-arguments
+- design-review-002 F1: testing/pin-call-site-arguments
+- design-review-002 F2: testing/seed-every-enumerated-case
+- design-review-002 F3: ticket-prep/restated-rules-move-together

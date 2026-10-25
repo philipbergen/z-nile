@@ -4,7 +4,11 @@
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
-local SKILL = fs.readFile("z-nile/skills/zz-rules/SKILL.md")
+-- the spec runs from its project's home: the checkout's own files are read from the top (c0120)
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
+local SKILL = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 local function boardRow(): string
 	local row = ""
 	for line in string.gmatch(SKILL, "[^\n]+") do
@@ -56,7 +60,7 @@ return t.spec("c0121 docs", function(it)
 	end)
 
 	it("the README says the served board is built", function()
-		local text = fs.readFile("z-nile/README.md")
+		local text = fs.readFile(`{TOP}/z-nile/README.md`)
 		t.expect(
 			has(
 				text,
