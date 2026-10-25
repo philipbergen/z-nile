@@ -1,9 +1,9 @@
 --!strict
 -- c0116 AC2 (review 002 F2): a raft `recombine` retired keeps its folder in `<root>/rafts/retired/<R-id>` with
--- `retired: <keeper>`. On a clone of this checkout holding one (its lowest backlog z-nile raft, retired the way
+-- `retired: <keeper>`. On a copy of this checkout's working tree holding one (its lowest backlog z-nile raft, retired the way
 -- recombine does it), the readers that walk rafts stay green: the promoted c0114 classification and c0043 rounds specs
 -- (overridden for retired/), `lessons --check` and `audit`. `engine.empty`, which fixtures use to start from no items,
--- clears retired/ too. Fixtures under .cache/c0116-retired; the clone is never committed to.
+-- clears retired/ too. Fixtures under .cache/c0116-retired: the copy is a fresh repository holding this checkout's working tree.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -23,6 +23,37 @@ local function must(r: Result, what: string): string
 		error(`{what} failed ({r.code}): {r.stderr}{r.stdout}`, 2)
 	end
 	return r.stdout
+end
+
+local ID = { "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid" }
+
+-- A repository of its own at `dest` holding `src`'s working tree as it is, committed or not, in one commit. A fresh
+-- `git init`, never a clone of HEAD with the working tree copied over it: a file moved or deleted and not yet
+-- committed (as `./zn done` leaves the tree while its gate runs) would otherwise be there twice (found by a simulated
+-- `done` of c0116 itself).
+local function copyTree(src: string, dest: string)
+	fs.writeDir(dest)
+	must(process.exec("git", { "init", "-q" }, { cwd = dest }), "git init")
+	local listed = must(
+		process.exec("git", { "ls-files", "-co", "--exclude-standard", "-z" }, { cwd = src }),
+		"ls-files"
+	)
+	for _, path in string.split(listed, "\0") do
+		local inCache = string.find("/" .. path, "/.cache/", 1, true) ~= nil
+		if path ~= "" and not inCache and fs.isFile(`{src}/{path}`) then
+			local parent = string.match(path, "^(.*)/[^/]+$")
+			if parent then
+				fs.writeDir(`{dest}/{parent}`)
+			end
+			must(process.exec("cp", { "-p", `{src}/{path}`, `{dest}/{path}` }), `copy {path}`)
+		end
+	end
+	must(fixture.exec(dest, "git", { "add", "-A" }), "git add")
+	local commit = table.clone(ID)
+	for _, a in { "commit", "-qm", "the source's working tree" } do
+		table.insert(commit, a)
+	end
+	must(fixture.exec(dest, "git", commit), "git commit")
 end
 
 return t.spec(
@@ -45,34 +76,45 @@ return t.spec(
 			t.expect(fs.isDir(`{dir}/z-nile/.tracker/rafts/retired/R0999`)).toBe(false)
 		end)
 
+		it("copies a moved, uncommitted item once: at its new place, never also at its old", function()
+			local src = `{base}/moved-src`
+			fs.writeDir(`{src}/z-nile/.tracker/issues/c0001`)
+			must(process.exec("git", { "init", "-q" }, { cwd = src }), "git init")
+			fs.writeFile(`{src}/z-nile/.tracker/issues/c0001/c0001.md`, "---\nid: c0001\n---\n")
+			fs.writeFile(`{src}/kept.txt`, "kept\n")
+			fs.writeFile(`{src}/gone.txt`, "gone\n")
+			must(fixture.exec(src, "git", { "add", "-A" }), "git add")
+			local commit = table.clone(ID)
+			for _, a in { "commit", "-qm", "seed" } do
+				table.insert(commit, a)
+			end
+			must(fixture.exec(src, "git", commit), "git commit")
+			-- as `done` leaves it while its gate runs: moved and deleted, nothing committed
+			fs.writeDir(`{src}/z-nile/.tracker/issues/done`)
+			must(
+				fixture.exec(
+					src,
+					"git",
+					{ "mv", "z-nile/.tracker/issues/c0001", "z-nile/.tracker/issues/done/c0001" }
+				),
+				"git mv"
+			)
+			must(fixture.exec(src, "git", { "rm", "-q", "gone.txt" }), "git rm")
+			fs.writeFile(`{src}/new.txt`, "new\n")
+			local dest = `{base}/moved-dest`
+			copyTree(src, dest)
+			t.expect(fs.isFile(`{dest}/z-nile/.tracker/issues/done/c0001/c0001.md`)).toBe(true)
+			t.expect(fs.isDir(`{dest}/z-nile/.tracker/issues/c0001`)).toBe(false)
+			t.expect(fs.isFile(`{dest}/gone.txt`)).toBe(false)
+			t.expect(fs.isFile(`{dest}/kept.txt`)).toBe(true)
+			t.expect(fs.isFile(`{dest}/new.txt`)).toBe(true)
+			t.expect(fixture.git(dest, { "status", "--porcelain" })).toBe("")
+		end)
+
 		it(
 			"on a clone holding a retired raft, the classification, rounds, lessons and audit checks pass",
 			function()
-				must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
-				must(fixture.exec(work, "git", { "remote", "remove", "origin" }), "remote remove")
-				-- this checkout's tooling, specs and tracker as they are, committed or not
-				local listed = must(
-					process.exec("git", {
-						"ls-files",
-						"-co",
-						"--exclude-standard",
-						"zn",
-						"scripts",
-						"z-nile",
-						"tests",
-						".luaurc",
-					}, { cwd = root }),
-					"ls-files"
-				)
-				for path in string.gmatch(listed, "[^\n]+") do
-					if fs.isFile(`{root}/{path}`) and not string.find(path, ".cache/", 1, true) then
-						local parent = string.match(path, "^(.*)/[^/]+$")
-						if parent then
-							fs.writeDir(`{work}/{parent}`)
-						end
-						fs.writeFile(`{work}/{path}`, fs.readFile(`{root}/{path}`))
-					end
-				end
+				copyTree(root, work)
 				-- retire the lowest backlog raft of z-nile's root the way recombine does: the whole folder, retired: <keeper>
 				local rafts = `{work}/z-nile/.tracker/rafts`
 				-- prefer a raft no issue names (what recombine retires); else the lowest
