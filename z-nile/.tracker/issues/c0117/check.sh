@@ -26,7 +26,7 @@ check "AC7: the skills, README, AGENTS.md, usage and prompt template say what th
 check "AC8: the prompt names skill files and the architecture map (c0115 and c0120 specs, overridden), and the README spec stays green" \
   lune run tests/run -- tests/acceptance/c0115/prompt.spec.luau tests/acceptance/c0120/homes.spec.luau tests/acceptance/c0115/readme.spec.luau
 check "AC9: the real tree's skill links, lessons and audit stay clean" \
-  bash -c './zn skills --check && ./zn lessons --check && ./zn audit'
+  bash -c '"$ZN_ROOT/zn" skills --check && "$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" audit'
 check "AC10: the dispatcher controls a run: questions, capture, a nested review, the broker, the tripwire and the watermark, the lifeline, the lock, stop, the call cap and the gates" \
   lune run tests/run -- "$A/control-cli.spec.luau"
 check "AC11: one definition of tracker state (sequestered files judged per item, configuration never), and a broker that pushes only a fast-forward of it, commit by commit, bound to its run" \
