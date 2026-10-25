@@ -1477,7 +1477,7 @@ local APPROVED_FOR_C0120 = {
 -- main and the prep test could no longer tell a stacked branch apart). Nil when no approved review pins one.
 local function c0120Move(): string?
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
-	local best, move = -1, nil
+	local best, pinned = -1, nil
 	for _, dir in
 		{
 			"z-nile/.tracker/issues/c0120",
@@ -1493,13 +1493,13 @@ local function c0120Move(): string?
 					local text = fs.readFile(`{path}/{name}`)
 					local sha = string.match(text, "\nMove commit: (%x+)")
 					if string.find(text, "\nVerdict: approve", 1, true) and sha then
-						best, move = n, sha
+						best, pinned = n, sha
 					end
 				end
 			end
 		end
 	end
-	return move
+	return pinned
 end
 
 -- Why c0120's freeze ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil when it
@@ -1518,8 +1518,8 @@ local function stackedOnC0120(ref: string): string?
 	if name == "prep-c0120" or STACKED_ON_C0120[name] then
 		return "stacked on its prep"
 	end
-	local move = c0120Move()
-	if move and sh.run("git", { "merge-base", "--is-ancestor", move, ref }).ok then
+	local pinned = c0120Move()
+	if pinned and sh.run("git", { "merge-base", "--is-ancestor", pinned, ref }).ok then
 		return "holds its move"
 	end
 	if not sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/prep-c0120" }).ok then
