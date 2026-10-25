@@ -65,7 +65,7 @@ ac10() {
 check "AC10: the guard, structure, lessons-paragraph and check-path specs pass in both homes" ac10
 check "AC11: the real tracker audits clean" "$ZN_ROOT/zn" audit
 check "AC12: as of the last fetch, nothing but this raft holds the skill folders or their links: no other raft active, no branch or worktree changing them" \
-  bash -c 'cd .. && ./zn busy .claude/skills z-nile/skills pickman/skills'
+  bash -c 'lune run tests/run -- "$1" && cd .. && ./zn busy .claude/skills z-nile/skills pickman/skills' _ "$A/freeze.spec.luau"
 
 # AC13 reads the branch's own commits since it left origin's main, as the trusted base gives it (git reads only): exactly one commit whose subject
 # starts "c0115: move the skills", holding only R100 renames, and no other commit of the range renaming a skill file.
