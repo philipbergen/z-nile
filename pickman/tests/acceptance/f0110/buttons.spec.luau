@@ -273,13 +273,13 @@ return t.spec("f0110 touch buttons", function(it)
 					})
 				end
 				t.expect(overlaps(b.fire, b.hop)).toBe(false)
-				local touches = s.touches or {}
+				local touches: { snap: Rect?, power: Rect? } = s.touches or {}
 				for _, name in { "fire", "hop" } do
 					local r: Rect = b[name]
 					t.expect(math.min(r.w, r.h) >= Touch.MIN_TARGET).toBe(true)
 					t.expect(inside(r, box)).toBe(true)
 					-- the hop button's accepted touches are exactly the pinned rectangles; the fire button has none
-					local allowed = if name == "hop" then touches else {}
+					local allowed: { snap: Rect?, power: Rect? } = if name == "hop" then touches else {}
 					t.expect(intersection(r, b.snap)).toEqual(allowed.snap)
 					t.expect(intersection(r, blocks.power)).toEqual(allowed.power)
 					for _, block in { "score", "level", "lives" } do

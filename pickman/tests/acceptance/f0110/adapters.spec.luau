@@ -247,7 +247,6 @@ type Screen = {
 -- then reported relative to the core-UI area's top-left, as GetInsetArea reports them (f0029).
 local function hudView(touch: boolean): Screen
 	local rendered: { () -> () } = {}
-	local made: { Inst } = {}
 	local area = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
 	local core = { Min = { X = 0, Y = 0 }, Max = { X = 1000, Y = 600 } }
 	local viewport = { X = 1000, Y = 600 }
@@ -288,9 +287,7 @@ local function hudView(touch: boolean): Screen
 		Enum = enumProxy(),
 		Instance = {
 			new = function(class: string): Inst
-				local i = instance(class)
-				table.insert(made, i)
-				return i
+				return instance(class)
 			end,
 		},
 		UDim2 = {
