@@ -1,0 +1,59 @@
+# Refute 003: c0117 (answers to design-review-003.md)
+Prototype: `proto-c0117` on `proto-c0116` 5fa0a8d, simulation b57df84, the edits on top. The user decided on 2026-10-21, "Keep same user, accept detection", recorded as a `Decided with the user` line. Unattended agents run as the user's own OS user. Every guard (the wrapper, the broker, the tripwire, the watermark, the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent. The design, zz-rules and the README now say so plainly. The watermark decision's "outside any agent's reach" now reads "kept where a well-behaved step never writes, and detected if it changes". Within that frame, everything detectable or cheap is fixed below, and the rest is listed as known limits. No experiment made a branch, worktree or commit in the real repository: the mutants ran in clones under the session scratchpad.
+
+- F1: fixed, by replacing the mechanism.
+  - Sequestered files are judged per item (`trackerstate.judge`). For each item the change touches (`<root>/<issues|rafts>/[active/|done/|retired/]<id>/<rel>`), the set of its sequestered files (an exact-case `check.sh` and anything under `acceptance/`) must be the same in both trees (`ls-tree -r`). Each file must be unchanged or, for a `check.sh` whose item folder moved, exactly what `paths.rewrite` writes for that move. The item must lie in one folder afterwards, and only an item with no file on the base may add them.
+  - A sequestered name in another case (`CHECK.SH`, `Acceptance/`) is refused, and so is any added path that differs only in case from another path of the resulting tree.
+  - trackerstate.spec covers:
+    - the decoy of case S, both pure and through the broker;
+    - a spec moved to another item;
+    - `CHECK.SH`;
+    - an existing item that gains a sequestered file;
+    - a gate's own item changing its own `check.sh`;
+    - `ready`'s rewrite of a `check.sh` that names its own path, which passes the broker, while the same move with any other change is refused.
+  - Consequences: `check` reads both trees per commit, two `ls-tree` calls. M107 to M110.
+- F2: a known limit under the decision, with the cheap detection made.
+  - The dispatcher holds the watermark in memory for the whole run. A file that differs from what this run last read or wrote trips the wire, which covers W1 (deleted) and W2 (rewritten).
+  - A missing watermark is never trusted. Only `./zn dispatch vet` writes the first one, and the fixtures now run it once.
+  - The watermark is mirrored in each item's `state.json`, so a watermark that is gone, or one behind the mirror, stops that item's next run.
+  - The limit, stated in the decision line, §5, zz-rules and the README: a process left behind can still rewrite the file, its mirror and the URL file between runs.
+  - control-cli covers a step that deletes or rewrites the watermark (exit 5 after that same step), a missing watermark at the next run, and a watermark set back between runs. M118 to M120.
+- F3: a known limit under the decision, with the cheap detection made.
+  - Origin's fetch and push URLs are pinned at the dispatcher's start (`git ls-remote --get-url origin`, `git remote get-url --push origin`). Every fetch and push of the run uses them: `freshMain`, the broker's push, and the gates' fetch of `refs/pull/<n>/head`.
+  - After each step, the tripwire compares `git config --get-regexp '^(remote\.origin\.|url\.)'` with its value at the run's start, so a changed `url`, `pushurl` or `insteadOf` trips it.
+  - The URLs are kept in `origin-url` beside the watermark, and a change between runs stops the next run.
+  - control-cli covers case R (exit 5, "origin's configuration changed during the step"), then the next run ("origin's URL changed since the last run"), and a step that only adds a `pushurl`. M116 and M117.
+  - The limit: a step can rewrite `origin-url` too, between runs. Stated.
+- F4: fixed.
+  - `.models.toml` in any case is configuration, never tracker state, alongside `.gitattributes` and `.gitmodules`. The broker refuses it (case MT, trackerstate.spec), and so do the gates (a prep PR carrying its issue's `.models.toml` waits at the gate, control-cli).
+  - zz-rules says such a file changes only by a reviewed PR that a human merges. A step that wants an item-level spec asks in `questions.md`.
+  - Consequences: §1's closer files are a human's to land. M111 and M112.
+- F5: fixed, by replacing the mechanism.
+  - The gate fetches `refs/pull/<n>/head` from the pinned URL into `refs/zn-dispatch/pr-<n>`, and refuses unless it equals `headRefOid`.
+  - It then judges `merge-base(main, head)..head` with `trackerstate.check`, sequestered, plus the gate's narrower rule. A prep PR may carry only its issue's folder (whose own sequestered files it may change) and skill lessons. A rafting PR may carry only its own items' files: the issue, any raft the PR adds and that raft's `issues:`. It may never touch another item's sequestered files.
+  - gh's `files` is no longer read (`prView` asks for `headRefOid` only), and the merge stays pinned with `--match-head-commit`.
+  - control-cli covers, each with a real head on the fixture origin: a prep PR carrying code, P1 (a rename of `src/guard.lua` into the issue's folder), a prep PR touching another item's document, a prep PR carrying `.models.toml`, a stale head, and the pinned merge.
+  - The rafting gate's own-items rule has no CLI case (a reasoned row; the executor adds one). M123 to M125.
+- F6: fixed in part, with the rest a known limit.
+  - `dispatch.prMergedFrom` (pure, in dispatch.spec) accepts a commit only when GitHub reports a PR merged into `main` whose merge commit it is. A PR merged into another branch is unvetted (control-cli, a `side` base).
+  - The limit: a merge made with the user's credential, stolen or not, can't be told apart from the user's own. It passes, as the decision accepts (G20).
+  - M122.
+- F7: fixed.
+  - A `tool_call` `started` line with no `model_call_id`, outside a counted turn, starts a turn and counts as a call, so P3's bare tool calls count and stop as `cap-unknown` (adapters.spec).
+  - Every `agent` spec also needs `max_minutes`, a wall-time ceiling. A missing one is an error (models.spec), and the runner kills a step past it as `cap` (control-cli, a runner case with a 1 s ceiling).
+  - The root file sets 240. That value is a guess (G16).
+  - M127 to M129.
+- F8: fixed.
+  - The configuration names (`.gitattributes`, `.gitmodules`, `.models.toml`) are compared case-folded.
+  - Any path component that is empty, `.`, `..` or `.git` (any case) is refused, as is any character outside ASCII letters, digits, `.`, `_`, `-` and `/`. That rule also covers git's quoted paths and Unicode normalisation.
+  - trackerstate.spec covers `.GITATTRIBUTES`, `.GitModules`, `.MODELS.TOML`, `tracker/../x`, `tracker/./x`, `tracker/.git/config` and non-ASCII names. M112 and M113.
+- F9: fixed.
+  - `vet --dry-run` lists each commit since the watermark with its verdict and writes nothing. Plain `vet` lists them too, then writes.
+  - control-cli covers this: after `vet --dry-run` over a code commit, the next run still exits 5. M121.
+- F10: fixed.
+  - The broker judges each first-parent commit of `fresh..sha` against its parent by its parent's registry, through `trackerstate.checkEach`, the function `vetMain` uses. A history the watermark would refuse is refused ("squash it and ask again").
+  - trackerstate.spec covers case B (code, then its revert): refused, with origin's `main` unchanged. M114.
+- F11: fixed. The lesson `merge-gate-checks-what-it-merges` now says to fetch the head pinned to `headRefOid` and judge it with the shared function. Its check names a rename's source and gh's 100-file cap.
+- Guesses:
+  - G20: rewritten for F6, as (a) of the reviewer's options. A merge made with the user's credential passes; (b) and (c) are offered.
+  - G21: kept. E10 must still show that the admin's tracker pushes get through `update`.
