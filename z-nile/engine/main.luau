@@ -1458,18 +1458,22 @@ end
 
 -- The moves that freeze paths while they are in flight, and the branches each one's freeze ignores (one rule for every
 -- move, in `ignoredBy`; c0115 G14, decided with the user 2026-10-24: "Yes, same rule"). A move's freeze is on while
--- `./zn busy` is given paths and origin/main still holds its mark (a path the move takes away); then it ignores, by
--- exact name, its own roots, the branches listed as stacked on them and the branches the user approved; any branch
--- whose history holds the move its approving review pins (`pinned`); any branch whose history holds a commit of one of
--- its roots on origin that origin/main doesn't; and an active raft that lists the item. A name that only looks stacked
--- counts for nothing.
+-- `./zn busy` is given paths, all of them inside the move's own `paths` (c0115 design review 013 F5, decided with the
+-- user 2026-10-25: "Scope to its paths"), and origin/main still holds its mark (a path the move takes away); then it
+-- ignores, by exact name, its own roots, the branches listed as stacked on them and the branches the user approved;
+-- any branch whose history holds the move commit (`pinned`); with `history`, any branch whose history holds a commit
+-- of one of its roots on origin that origin/main doesn't (c0120's; useless once main takes a base as a squash, whose
+-- commits never reach main: 013 F1); and an active raft that lists the item (013 F2, decided with the user 2026-10-25:
+-- "Yes, ignore its own raft"). A name that only looks stacked counts for nothing.
 type Freeze = {
 	item: string,
 	mark: string,
 	roots: { [string]: string }, -- root branch -> why ("stacked on its prep")
 	stacked: { [string]: boolean },
 	approved: { [string]: boolean },
+	paths: { string }, -- busy's paths must all lie inside these
 	pinned: (() -> string?)?,
+	history: boolean,
 }
 
 -- c0120's move, as the approving review pins it (`Move commit: <sha>` in the newest approved review-NNN.md in c0120's
@@ -1503,6 +1507,21 @@ local function c0120Move(): string?
 	return pinned
 end
 
+-- c0115's move commit: the one commit on origin/impl-c0115 whose subject starts "c0115: move the skills" (AC13 pins
+-- that there is exactly one). Nil when the branch or the commit isn't there.
+local function c0115Move(): string?
+	local r = sh.run("git", {
+		"log",
+		"-1",
+		"--format=%H",
+		"--grep=^c0115: move the skills",
+		"refs/remotes/origin/impl-c0115",
+		"--",
+	})
+	local sha = sh.trim(r.stdout)
+	return if r.ok and sha ~= "" then sha else nil
+end
+
 local FREEZES: { Freeze } = {
 	{
 		-- decided with the user, 2026-10-23: "Re-prep R0044 after; exempt the stack" and "Named exemptions you approve";
@@ -1526,7 +1545,10 @@ local FREEZES: { Freeze } = {
 			["proto-c0121"] = true,
 			["impl-c0120"] = true,
 		},
+		-- the old layout it moved and the new home (AC16: `./zn busy tracker src tests`; its spec asks about pickman/.tracker)
+		paths = { "tracker", "src", "tests", "pickman" },
 		pinned = c0120Move,
+		history = true,
 	},
 	{
 		-- c0115 (decided with the user, 2026-10-24, G14: "Yes, same rule"): the items stacked on c0115's
@@ -1551,6 +1573,9 @@ local FREEZES: { Freeze } = {
 			["proto-c0118"] = true,
 			["proto-c0121"] = true,
 		},
+		paths = { ".claude/skills", "z-nile/skills", "pickman/skills" },
+		pinned = c0115Move,
+		history = false,
 	},
 }
 
@@ -1574,6 +1599,9 @@ local function ignoredBy(fr: Freeze, ref: string): string?
 	if pinned and sh.run("git", { "merge-base", "--is-ancestor", pinned, ref }).ok then
 		return "holds its move"
 	end
+	if not fr.history then
+		return nil
+	end
 	local roots: { string } = {}
 	for root in fr.roots do
 		table.insert(roots, root)
@@ -1594,16 +1622,38 @@ local function ignoredBy(fr: Freeze, ref: string): string?
 	return nil
 end
 
--- The freezes that are on: `./zn busy` was given paths and origin/main still holds the move's mark. Without paths
+-- The freezes that are on: `./zn busy` was given paths, all inside the move's own, and origin/main still holds the
+-- move's mark. Without paths
 -- (compaction's set), or once a move lands, nothing is exempt for it, so busy agrees with `./zn compact` and a later
 -- branch reusing one of these names blocks like any other (c0120 code review 011 F1).
+-- whether every path in `pos` is one of `inside` or under one ("./" and a trailing "/" ignored)
+local function allInside(pos: { string }, inside: { string }): boolean
+	for _, p in pos do
+		local n = string.gsub(string.gsub(p, "^%./", ""), "/+$", "")
+		local ok = false
+		for _, top in inside do
+			if n == top or string.sub(n, 1, #top + 1) == `{top}/` then
+				ok = true
+				break
+			end
+		end
+		if not ok then
+			return false
+		end
+	end
+	return true
+end
+
 local function freezesOn(pos: { string }): { Freeze }
 	local on: { Freeze } = {}
 	if #pos == 0 then
 		return on
 	end
 	for _, fr in FREEZES do
-		if sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok then
+		if
+			allInside(pos, fr.paths)
+			and sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok
+		then
 			table.insert(on, fr)
 		end
 	end
