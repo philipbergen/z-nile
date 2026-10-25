@@ -138,7 +138,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 		at(pic, "z-raft (c0116, planned)", "the picture")
 		at(pic, "dispatcher (c0117, planned)", "the picture")
 		at(pic, ".models.toml (c0117, planned)", "the picture")
-		at(pic, "c0118, planned", "the picture")
+		at(pic, 'board["board: ./zn board, a tab per project"]', "the picture") -- c0118 override: the board is built
 	end)
 
 	it("a short account of the five parts follows the picture", function()
