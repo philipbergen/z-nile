@@ -270,7 +270,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		if fs.isDir(origin) then
 			fs.removeDir(origin)
 		end
-		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
+		t.expect(process.exec("git", { "init", "-q", "--bare", "-b", "main", origin }).ok).toBe(true)
 		g({ "remote", "add", "origin", origin })
 		g({ "push", "-q", "origin", `{prep}:refs/heads/main` })
 		g({ "fetch", "-q", "origin" })
@@ -586,7 +586,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		w("tracker/issues/active/f0078/check.sh", "check AC1 true\n")
 		w("tracker/issues/active/f0079/check.sh", "check AC1 true\n")
 		step("main base")
-		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
+		t.expect(process.exec("git", { "init", "-q", "--bare", "-b", "main", origin }).ok).toBe(true)
 		g({ "remote", "add", "origin", origin })
 		publish("HEAD")
 		-- a look-alike branch whose name ends in /refs/heads/main and sorts first: the real tip is still read (009 F5)
