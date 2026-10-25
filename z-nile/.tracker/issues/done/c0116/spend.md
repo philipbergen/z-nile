@@ -12,6 +12,8 @@
 | 8 | 2026-10-20 23:18 | design-review-004 | 0 | 0 | 1.4 | spend+proportional | design-review |  |
 | 9 | 2026-10-20 23:18 | design-refute-004 | 0 | 0 | 2.2 | spend+proportional | design-review |  |
 | 10 | 2026-10-20 23:24 | design-review-005 | 0 | 0 | 1.2 | spend+proportional | design-review |  |
+| 11 | 2026-10-25 15:20 | prep | 2556 | 5 | 25.0 | spend | prep |  |
+| 12 | 2026-10-25 21:13 | tracker: done R0050 | 0 | 0 | 11.6 | raft | deliver |  |
 
-**Total:** +0 / -0 lines, 24.4 agent-minutes, 0 tokens over 10 records
-<!-- totals: added=0 removed=0 minutes=24.4 records=10 tokens=0 -->
+**Total:** +2556 / -5 lines, 61.0 agent-minutes, 0 tokens over 12 records
+<!-- totals: added=2556 removed=5 minutes=61.0 records=12 tokens=0 -->

@@ -64,6 +64,7 @@ usage: ./zn <command> ...
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
+  stop <issue>                                  give back one active issue whose raft is retired, missing or empty
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
@@ -1785,6 +1786,46 @@ function cmd.unfold(pos: { string })
 		fail("usage: unfold <R-id> <issue>...")
 	end
 	raftingStart("unfold")
+	-- R0050 code review 002 F1: a raft that is retired or missing can't be claimed, so its members' raft: lines are
+	-- cleared here with no claim (audit's dead-raft error names this command); the rafting PR carries them
+	if not store.find(raftId) then
+		local dead = "missing"
+		for _, root in store.roots() do
+			if fs.isDir(retiredDir(root, raftId)) then
+				dead = "retired"
+			end
+		end
+		local gone: { string } = {}
+		for i = 2, #pos do
+			local issue = store.get(pos[i])
+			if (store.readFront(issue.doc).raft or "") ~= raftId then
+				fail(`{issue.id} is not a member of {raftId}`)
+			end
+			if issue.state == "done" then
+				fail(`{issue.id} is done: its raft: is history`)
+			end
+			-- review 003 F1: an active issue leaves active/ only by a published move, never in a branch
+			if issue.state == "active" then
+				fail(
+					`{issue.id} is in active/: use ./zn stop {issue.id} (it gives the issue back to the backlog)`
+				)
+			end
+			table.insert(gone, issue.id)
+		end
+		for _, id in gone do
+			local doc = store.get(id).doc
+			store.setFront(doc, "raft", "")
+			sh.git({ "add", doc })
+		end
+		sh.git({
+			"commit",
+			"--quiet",
+			"-m",
+			`tracker: unfold {table.concat(gone, " ")} from {raftId} ({dead}: no claim)`,
+		})
+		print(`unfolded {table.concat(gone, ", ")} from {raftId} ({dead}: nothing to claim)`)
+		return
+	end
 	local raft = store.get(raftId)
 	if raft.kind ~= "raft" or raft.state ~= "backlog" then
 		fail(`{raftId} is in {raft.dir}: unfold takes a backlog raft`)
@@ -1847,7 +1888,8 @@ end
 -- `recombine <keeper> <other> [<issue>...]`: moves the named members of the other backlog raft (all of them when none
 -- is named) into the keeper. Both rafts are claimed with one fresh stamp (status lines only, published), so the
 -- carried `status <keeper> prepared` sees the other raft as the same claim. The moves are written here and committed;
--- the other raft is retired (its folder deleted in this branch, so in the rafting PR) only when it ends up empty.
+-- the other raft is retired only when it ends up empty: its folder moves to <root>/rafts/retired/ with `retired: <keeper>`
+-- in this branch, so in the rafting PR.
 function cmd.recombine(pos: { string })
 	local keeperId, otherId = pos[1], pos[2]
 	if not (keeperId and otherId and store.isRaftId(keeperId) and store.isRaftId(otherId)) then
@@ -1887,6 +1929,10 @@ function cmd.recombine(pos: { string })
 			if not inOther[pos[i]] then
 				fail(`{pos[i]} is not a member of {otherId}`)
 			end
+			-- R0050 code review 001 F2: a repeated id would count twice toward emptying the other raft
+			if table.find(moving, pos[i]) then
+				fail(`{pos[i]} is named twice: name each member once`)
+			end
 			table.insert(moving, pos[i])
 		end
 	else
@@ -1903,7 +1949,14 @@ function cmd.recombine(pos: { string })
 			fail(`{m.id} is solo: true (a recorded user decision): it is rafted alone`)
 		end
 	end
-	local retire = #moving == #otherIds
+	-- retire only when no member of the other raft stays behind (decided by the members, never by counts: review 001 F2)
+	local retire = true
+	for _, id in otherIds do
+		if not table.find(moving, id) then
+			retire = false
+			break
+		end
+	end
 	local claim = freshStamp("preparing")
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
@@ -1953,8 +2006,9 @@ function cmd.recombine(pos: { string })
 	sh.git({ "add", keeper.doc })
 	if retire then
 		-- c0116 (review 001 F2): a retired raft keeps its folder (its design reviews, refutes and harvest.md, which
-		-- lessons and metrics read) under <root>/rafts/retired/, with `retired: <keeper>`; nothing that finds items
-		-- (store, the board, the plan) looks there
+		-- lessons and metrics read) under <root>/rafts/retired/, with `retired: <keeper>`; store, the board and the plan
+		-- never find it there; audit's scan and list show it, as retired; the bare status, which walks only publishable
+		-- paths, never lists it (review 004 F2)
 		local dest = retiredDir(other.root, otherId)
 		local parent = string.match(dest, "^(.*)/[^/]+$") :: string
 		if not fs.isDir(parent) then
@@ -2644,7 +2698,10 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
 			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
-				local state = stateOfPath(f.path .. "/")
+				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
+				local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
+					then "retired"
+					else stateOfPath(f.path .. "/")
 				if not pos[1] or pos[1] == state then
 					local fm = store.readFront(doc)
 					local ftype = if kind == "issue"
@@ -4699,13 +4756,54 @@ function cmd.ready(pos: { string })
 	print(parallel)
 end
 
+-- `stop <issue>` (R0050 code review 003 F1): gives back one active issue whose raft is retired, missing or empty (a
+-- dead raft can't be stopped as a raft): the same published move to the backlog, stamped prepared, check.sh paths
+-- rewritten back, that stop gives a member. Its raft: line is left: audit then names `unfold` for it (a backlog
+-- issue), which clears it in a rafting PR. An issue whose raft is live is refused: stop the raft.
+local function stopIssue(id: string)
+	if not store.isIssueId(id) then
+		fail(`{id} is neither a raft nor an issue`)
+	end
+	mainCheckoutGuards("stop")
+	local pulled = pullMain()
+	if pulled then
+		fail(`stop: cannot fast-forward the main checkout: {pulled}`)
+	end
+	local issue = store.get(id)
+	if issue.state ~= "active" then
+		fail(`{id} is in {issue.dir} on origin/main: stop <issue> gives back an active issue only`)
+	end
+	local fm = store.readFront(issue.doc)
+	local raftId = fm.raft or ""
+	-- the one rule audit uses too (audit.raftHolds, review 004 F1): refused only when stop <R-id> takes it
+	local raft = if store.isRaftId(raftId) then store.find(raftId) else nil
+	local raftStatus = if raft then store.readFront(raft.doc).status else nil
+	if audit.raftHolds(fm, if raft then raft.dir else nil, raftStatus) then
+		fail(`{id} is held by its raft {raftId}: use ./zn stop {raftId}`)
+	end
+	local function stillActive(item: string, now: string): string?
+		return if now == "active" then nil else `{item} is {now} on origin/main, not active: nothing to stop`
+	end
+	local why = if raftId == "" then "no raft" else `raft {raftId} doesn't hold it`
+	local r = moveOnOrigin({ id }, "backlog", stamp("prepared"), `tracker: stop {id} ({why})`, stillActive)
+	if not r.ok then
+		fail(`stop: {r.reason}`)
+	end
+	local failed = pullMain()
+	if failed then
+		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
+	end
+	print(`gave back {id} ({why}): it is in the backlog, prepared`)
+end
+
 -- `stop <R-id>`: gives back a readied raft (moves it and its members to the backlog on origin/main, stamped prepared,
 -- check.sh paths rewritten back) or a raft claimed by the legacy `start` (a status-only publish). Removes prompt.md,
 -- pulls the main checkout and names the raft's branch and PR, which are left as they are.
 function cmd.stop(pos: { string })
-	local raftId = pos[1] or fail("usage: stop <R-id>")
+	local raftId = pos[1] or fail("usage: stop <R-id> | stop <issue>")
 	if not store.isRaftId(raftId) then
-		fail(`{raftId} is not a raft`)
+		stopIssue(raftId)
+		return
 	end
 	mainCheckoutGuards("stop")
 	local pulled = pullMain()
