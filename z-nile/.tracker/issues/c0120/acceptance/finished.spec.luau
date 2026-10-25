@@ -317,6 +317,14 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		)
 		step("review")
 		expectGreen()
+		-- readied: c0120's folder in active/ still finds its review and its reference
+		fs.writeDir(`{OWNFX}/z-nile/.tracker/issues/active`)
+		g({ "mv", "z-nile/.tracker/issues/c0120", "z-nile/.tracker/issues/active/c0120" })
+		step("ready")
+		expectGreen()
+		g({ "mv", "z-nile/.tracker/issues/active/c0120", "z-nile/.tracker/issues/c0120" })
+		step("unready")
+		expectGreen()
 		-- a commit the author makes can't choose the rewrite's world (code review 009 F2): a stray z-nile/AGENTS.md
 		-- planted with c0001's check.sh un-rewritten, then removed: red; a tracked file left at that place: still green
 		w("z-nile/AGENTS.md", "stray\n")
