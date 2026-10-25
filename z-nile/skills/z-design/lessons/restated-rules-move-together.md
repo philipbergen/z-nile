@@ -17,3 +17,5 @@ c0120 design review 005 F1: c0114's promoted `finished.spec` restated c0114's re
 **How to apply:** when a refute line changes a rule, grep the repo for its old wording and its key terms, update every restatement in the same change, and pin the new wording where a spec already reads that file.
 
 R0044 design review 2 (F4): rounds 1 and 2 changed the design behind a separate chore (c0128), whose Problem still described the first prototype. When a design changes, update every document that explains it, including dependent chores, or say in the raft which of their words are stale.
+
+c0115 design review 015 F2: round 014 fixed the engine's move-commit lookup (subject only, not `--grep`), and AC13's `check.sh` kept the old `--grep` for the same commit. When a lookup is fixed, search the item's own sequestered files (check.sh, experiments, specs) for the same mechanism in the same change.

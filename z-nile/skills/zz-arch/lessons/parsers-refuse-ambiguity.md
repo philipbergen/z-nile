@@ -9,3 +9,5 @@ A record shaped for one value loses the second one, and a parser that keeps the 
 **Why:** R0040 design review 4 (F1): a lesson's non-review source was a single `from:` key. A second source (another stream, a second correction by the user) had nowhere to go, and the frontmatter parser silently kept the last of two `from:` lines, so recurring lessons could never show their count, and `--check` stayed green.
 
 **How to apply:** for each field of a new format, ask "can there be two?". If yes, give it a repeatable form. If no, add a spec case where it appears twice and must be refused.
+
+c0120 code review 011 F5: `busyRefs` shortened `refs/heads/origin/x` and `refs/remotes/origin/x` both to `origin/x`, and the exemption then stripped `origin/` from either, so a local branch named `origin/proto-c0117` matched an approved name it doesn't have. Keep the full refname until the last step that needs it, and strip a prefix only from the namespace it belongs to.
