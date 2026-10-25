@@ -53,3 +53,7 @@
 - design-review-006 F4: z-design/decided-guesses-rewrite-their-body
 - design-review-006 F5: zz-test/seed-every-enumerated-case
 - design-review-006 F6: z-design/touched-paths-exist
+- design-review-007 F1: z-design/results-land-on-every-path
+- design-review-007 F2: z-design/restated-rules-move-together
+- design-review-007 F3: z-design/spec-design-correspondence
+- design-review-007 F4: z-design/touched-paths-exist
