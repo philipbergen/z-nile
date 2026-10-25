@@ -355,7 +355,8 @@ local function record(
 	phase: string,
 	attempts: { Attempt },
 	note: string,
-	reviewer: boolean
+	reviewer: boolean,
+	stream: boolean
 )
 	if phase == "code-review" then
 		local tokens, minutes, model = 0, 0, nil :: string?
@@ -368,7 +369,9 @@ local function record(
 		end
 		if model then
 			print(
-				`record: ./zn commit -m "{id}: {note}" --phase code-review --time {roundTenth(minutes)} --tokens {tokens} --model {model}`
+				`record: ./zn commit -m "{id}: {note}" --phase code-review --time {roundTenth(minutes)} --tokens {tokens} --model {model}{if stream
+					then ` --issue {id}`
+					else ""}`
 			)
 		end
 		return
@@ -452,7 +455,11 @@ local function reviewFiles(dir: string): { [string]: boolean }
 	local out: { [string]: boolean } = {}
 	if fs.isDir(dir) then
 		for _, name in fs.readDir(dir) do
-			if string.match(name, "^design%-review%-%d+%.md$") or string.match(name, "^review%-%d+%.md$") then
+			if
+				string.match(name, "^design%-review%-%d+%.md$")
+				or string.match(name, "^review%-%d+%.md$")
+				or string.match(name, "^stream%-review%-.+%-%d+%.md$")
+			then
 				out[name] = true
 			end
 		end
@@ -740,6 +747,9 @@ function dispatcher.modelStep(
 		worktree = cwd,
 		stateDir = stateDir,
 		promptPath = promptPath,
+		streamWorktree = if step == "zz-review" and mode == "stream"
+			then `{ctx.mainRoot()}/.worktree/ws-{id}`
+			else nil,
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
 	})
@@ -800,7 +810,10 @@ function dispatcher.modelStep(
 	end
 	local reviewDir: string? = nil
 	if step == "zz-review" and id ~= "" then
-		reviewDir = `{cwd}/{store.get(id).dir}`
+		-- a stream review's file lives in the raft's folder (its issue's `raft:`), every other review's in the item's
+		local item = store.get(id)
+		local raftId = if mode == "stream" then store.readFront(item.doc).raft else nil
+		reviewDir = if raftId and raftId ~= "" then `{cwd}/{store.get(raftId).dir}` else `{cwd}/{item.dir}`
 	end
 	local before = if reviewDir then reviewFiles(reviewDir) else {}
 	local outcome = "failed"
@@ -988,12 +1001,23 @@ function dispatcher.modelStep(
 	if reviewDir then
 		for name in reviewFiles(reviewDir) do
 			if not before[name] then
-				note = (string.gsub(name, "%.md$", ""))
+				-- a stream review's note drops its issue, as zz-execute's commit names it: "stream-review-NNN"
+				local n = string.match(name, "^stream%-review%-.+%-(%d+)%.md$")
+				note = if n then `stream-review-{n}` else (string.gsub(name, "%.md$", ""))
 			end
 		end
 	end
 	if target ~= "" then
-		record(ctx, st, target, dispatch.phaseOf(step, mode), attempts, note, step == "zz-review")
+		record(
+			ctx,
+			st,
+			target,
+			dispatch.phaseOf(step, mode),
+			attempts,
+			note,
+			step == "zz-review",
+			mode == "stream"
+		)
 	end
 	st.outcome = outcome
 	st.detail = attempts[#attempts] and attempts[#attempts].detail or ""

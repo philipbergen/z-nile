@@ -24,6 +24,10 @@ echo '{"type":"end","usage":{"input_tokens":200,"cache_creation_input_tokens":0,
 -- The script of the fake `cli`.
 function fakecli.script(cli: string): string
 	local ok = OK[cli]
+	-- claude spends 42 tokens before the rejection (a quota hit mid-session); the others spend nothing first
+	local spent = if cli == "claude"
+		then [[echo '{"type":"assistant","message":{"id":"m0","usage":{"input_tokens":40,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":2},"content":[{"type":"text","text":"working"}]}}'; ]]
+		else ""
 	local quota = if cli == "claude"
 		then [[echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour","resetsAt":1}}'; sleep 20]]
 		else [[echo "Error: rate limit exceeded (too many requests)" >&2; exit 1]]
@@ -44,6 +48,7 @@ function fakecli.script(cli: string): string
 		'case "$mode" in',
 		"ok) " .. ok .. " ;;",
 		"quota) " .. quota .. " ;;",
+		"spentquota) " .. spent .. quota .. " ;;",
 		'fail) echo "boom" >&2; exit 1 ;;',
 		"nocount) echo 'not json'; exit 0 ;;",
 		'questions) printf "## Q1\\nWhich scope?\\n" > "$ZN_DISPATCH_DIR/questions.md"; ' .. ok .. " ;;",

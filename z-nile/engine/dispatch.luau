@@ -107,6 +107,7 @@ export type PromptInput = {
 	worktree: string,
 	stateDir: string, -- where questions.md goes
 	promptPath: string?, -- z-run: the raft's readied prompt.md
+	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
 }
@@ -123,6 +124,10 @@ function dispatch.prompt(p: PromptInput): string
 	elseif p.step == "z-run" then
 		what =
 			`Read \`{p.skillPath}\` and follow it for {p.id}: its input is the raft's prompt, \`{p.promptPath or `./zn prompt {p.id} --path`}\`; read the whole file first.`
+	elseif p.step == "zz-review" and p.mode == "stream" then
+		-- a dispatched run has no caller to return text to: the reviewer writes its own file (design review 007 F1)
+		what =
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there); write only \`stream-review-{p.id}-NNN.md\` in the raft's folder of your worktree, as Stream mode says under \`./zn dispatch\`.`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write only the review file that mode names.`
