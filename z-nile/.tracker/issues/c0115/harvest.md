@@ -66,3 +66,4 @@
 - design-review-015 F1: zz-test/seed-every-enumerated-case
 - design-review-015 F2: z-design/restated-rules-move-together
 - design-review-015 F3: zz-arch/history-tests-survive-squash
+- note c0115 rebase: rename-lesson-ids ran twice on a still-conflicted harvest.md and reported success (the user asked for a lesson and a chore): zz-execute/resolve-before-rerunning-scripts
