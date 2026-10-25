@@ -1465,7 +1465,42 @@ local APPROVED_FOR_C0120 = {
 	["prep-guard-follow-ups"] = true,
 	["proto-c0117"] = true,
 	["proto-c0118"] = true,
+	-- decided with the user, 2026-10-24: "Approve all three"
+	["prep-c0121"] = true,
+	["proto-c0121"] = true,
+	["impl-c0120"] = true,
 }
+
+-- c0120's move, as the approving review pins it (`Move commit: <sha>` in the newest approved review-NNN.md in c0120's
+-- folder at this checkout; AC18 reads the same line): a branch whose history holds it is built on c0120's
+-- implementation, so stacked on c0120 (decided with the coordinator, 2026-10-24, after #99 merged c0120's prep into
+-- main and the prep test could no longer tell a stacked branch apart). Nil when no approved review pins one.
+local function c0120Move(): string?
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local best, move = -1, nil
+	for _, dir in
+		{
+			"z-nile/.tracker/issues/c0120",
+			"z-nile/.tracker/issues/active/c0120",
+			"z-nile/.tracker/issues/done/c0120",
+		}
+	do
+		local path = `{top}/{dir}`
+		if fs.isDir(path) then
+			for _, name in fs.readDir(path) do
+				local n = tonumber(string.match(name, "^review%-(%d+)%.md$"))
+				if n and n > best then
+					local text = fs.readFile(`{path}/{name}`)
+					local sha = string.match(text, "\nMove commit: (%x+)")
+					if string.find(text, "\nVerdict: approve", 1, true) and sha then
+						best, move = n, sha
+					end
+				end
+			end
+		end
+	end
+	return move
+end
 
 -- Why c0120's freeze ignores the branch `ref` (a full refname, as compact.busyRefNames gives it), or nil when it
 -- doesn't: c0120's prep itself, or one of the listed stacked preps, by exact name ("stacked on its prep"); a branch the
@@ -1482,6 +1517,10 @@ local function stackedOnC0120(ref: string): string?
 	end
 	if name == "prep-c0120" or STACKED_ON_C0120[name] then
 		return "stacked on its prep"
+	end
+	local move = c0120Move()
+	if move and sh.run("git", { "merge-base", "--is-ancestor", move, ref }).ok then
+		return "holds its move"
 	end
 	if not sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/prep-c0120" }).ok then
 		return nil
