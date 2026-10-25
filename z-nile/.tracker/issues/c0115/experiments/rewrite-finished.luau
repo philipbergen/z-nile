@@ -37,31 +37,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
--- c0120's rewrites.relative (its acceptance/rewrites.luau), copied: c0115's branch is stacked on c0120's, where that
--- module is still in c0120's own folder; at the rebase onto landed c0120 this becomes its require again (§11 (p))
-local rewrites = {}
-function rewrites.relative(from: string, to: string): string
-	local a: { string } = {}
-	for seg in string.gmatch(from, "[^/]+") do
-		table.insert(a, seg)
-	end
-	local b: { string } = {}
-	for seg in string.gmatch(to, "[^/]+") do
-		table.insert(b, seg)
-	end
-	local i = 1
-	while i <= #a and i <= #b and a[i] == b[i] do
-		i += 1
-	end
-	local out: { string } = {}
-	for _ = i, #a do
-		table.insert(out, "..")
-	end
-	for k = i, #b do
-		table.insert(out, b[k])
-	end
-	return table.concat(out, "/")
-end
+local rewrites = require("@tests/acceptance/c0120/rewrites") -- c0120's `relative`, the one path arithmetic (promoted with c0120; §11 (p))
 local skills = require("@znile/engine/skills")
 local trustedBase = require("./trusted-base")
 

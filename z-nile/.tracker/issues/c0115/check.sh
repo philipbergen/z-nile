@@ -106,7 +106,6 @@ backlog_clean() {
   while IFS= read -r dir; do
     id=${dir##*/}
     [[ $id == c0115 ]] && continue
-    [[ $id == c0120 ]] && continue # the item c0115 is stacked on, in flight on the base branch: emptied at the rebase (§11 (p))
     [[ -f $dir/$id.md ]] || continue
     n=$((n + 1))
     if [[ $id == R* ]]; then
