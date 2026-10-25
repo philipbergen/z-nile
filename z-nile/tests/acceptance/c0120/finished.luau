@@ -39,9 +39,19 @@ local reg = projects.load(TOP, true)
 -- a `Prep reference: <sha>` line in the newest approved review file (a code review's review-NNN.md before a design
 -- review's design-review-NNN.md, the higher number first), which only a reviewer writes. Never a branch ref: its author
 -- can move one (code review 004 F1). No recorded sha, or one the branch doesn't contain, refuses.
-local OWN = if fs.isDir(`{TOP}/z-nile/.tracker/issues/c0120`)
-	then "z-nile/.tracker/issues/c0120/"
-	else "z-nile/.tracker/issues/done/c0120/"
+-- c0120's folder in whichever state it is: the backlog (prep), active/ (readied), done/ (finished)
+local OWN_DIRS = {
+	"z-nile/.tracker/issues/c0120/",
+	"z-nile/.tracker/issues/active/c0120/",
+	"z-nile/.tracker/issues/done/c0120/",
+}
+local OWN = OWN_DIRS[3]
+for _, dir in OWN_DIRS do
+	if fs.isDir(`{TOP}/{dir}`) then
+		OWN = dir
+		break
+	end
+end
 local PINNED_MOVE: string? = nil
 local PINNED_CORE: string? = nil
 local function recorded(): (string?, string)
@@ -174,6 +184,23 @@ local function tree(rev: string): string
 	assert(ok, `git ls-tree {rev} failed`)
 	return listing
 end
+-- every path's mode in a tree (code review 011 F4: a merge dropped the executable bit of 24 check.sh files, which a
+-- blob comparison doesn't see)
+local modeCache: { [string]: { [string]: string } } = {}
+local function modeOf(rev: string, path: string): string?
+	local cached = modeCache[rev]
+	if cached then
+		return cached[path]
+	end
+	local m: { [string]: string } = {}
+	local ok, listing = git({ "ls-tree", "-r", rev })
+	assert(ok, `git ls-tree {rev} failed`)
+	for mode, p in string.gmatch(listing, "(%d+) %a+ %x+\t([^\n]+)") do
+		m[p :: string] = mode :: string
+	end
+	modeCache[rev] = m
+	return m[path]
+end
 local function show(rev: string, path: string): string
 	local ok, text = git({ "show", `{rev}:{path}` })
 	assert(ok, `git show {rev}:{path} failed`)
@@ -247,9 +274,14 @@ end
 -- prep, under the reviewer's pin.
 local PATCHES: string = ""
 for _, name in { "c0114-overrides.patch", "main-overrides.patch" } do
-	local okP, text = git({ "show", `{ownBase}:{OWN}{name}` })
-	if okP then
-		PATCHES ..= text .. "\n"
+	-- at c0120's folder in the pinned prep (in the backlog, as reviewed); once readied or done HEAD has it in active/ or
+	-- done/, the prep still where it was reviewed
+	for _, dir in OWN_DIRS do
+		local okP, text = git({ "show", `{ownBase}:{dir}{name}` })
+		if okP then
+			PATCHES ..= text .. "\n"
+			break
+		end
 	end
 end
 local function withOverrides(promoted: string, old: string): string?
@@ -387,11 +419,13 @@ for key in keys do
 	-- else the text before the move; both sides changing it differently is ambiguous and refuses
 	local ref: string? = nil
 	local refPath: string? = nil
+	local refMode: string? = nil
 	local refPromoted = false
 	if id == OWN_ID then
 		local o = ownSet[key]
 		if o then
 			ref, refPath = show(ownBase :: string, o.path), o.path
+			refMode = modeOf(ownBase :: string, o.path)
 		end
 	else
 		local p, m, b = preSet[key], mSet[key], bSet[key]
@@ -412,11 +446,39 @@ for key in keys do
 				-- every place this key's item had on main, whatever its root or state: its folder (any root, active/,
 				-- done/) and its promoted folder (c0114's spec reached main at tracker/issues/c0114/acceptance/ in
 				-- R0043's prep, and lives at tests/acceptance/c0114/ now)
+				-- anchored to the roots (code review 011 F3): the item's folder in each root any of the three trees
+				-- names (and the retired tracker/), in issues/ or rafts/, at its top or in active/ or done/; and,
+				-- for a spec, its promoted folder in each of their promoted-spec folders
 				local rest = string.match(inner, "^acceptance/(.*)$")
-				local where = { `:(glob)**/{id}/{inner}` }
+				local where: { string } = {}
+				local seenW: { [string]: boolean } = {}
+				local function add(w: string)
+					if not seenW[w] then
+						seenW[w] = true
+						table.insert(where, `:(literal){w}`)
+					end
+				end
+				for _, r in { preReg, bReg, mReg } do
+					for _, root in rootsOf(r) do
+						for _, kind in { "issues", "rafts" } do
+							for _, state in { "", "active/", "done/" } do
+								add(`{root}/{kind}/{state}{id}/{inner}`)
+							end
+						end
+					end
+					if rest then
+						for _, dir in promotedOf(r) do
+							add(`{dir}/{id}/{rest}`)
+						end
+					end
+				end
+				for _, kind in { "issues", "rafts" } do
+					for _, state in { "", "active/", "done/" } do
+						add(`{projects.LEGACY}/{kind}/{state}{id}/{inner}`)
+					end
+				end
 				if rest then
-					table.insert(where, `:(glob)**/tests/acceptance/{id}/{rest}`)
-					table.insert(where, `:(glob)tests/acceptance/{id}/{rest}`)
+					add(`tests/acceptance/{id}/{rest}`)
 				end
 				local argv = { "log", "-1", "--format=%H", `--find-object={trim(blob)}`, `{B}..{M}`, "--" }
 				for _, w in where do
@@ -441,8 +503,10 @@ for key in keys do
 		if mainChanged then
 			ref, refPath = tM, if m then m.path else nil
 			refPromoted = m ~= nil and m.promoted
+			refMode = if m then modeOf(M, m.path) else nil
 		else
 			ref, refPath = tP, if p then p.path else nil
+			refMode = if p then modeOf(pre :: string, p.path) else nil
 		end
 	end
 	local h = headSet[key]
@@ -502,6 +566,11 @@ for key in keys do
 	local deleted = rewrites.DELETED[h.path]
 	if deleted and want and not (inner == "check.sh" and isDone(h.path)) then
 		want = rewrites.deleteCriteria(want, deleted) or `cannot delete {table.concat(deleted, ", ")}`
+	end
+	-- the mode too (code review 011 F4): a file keeps its reference's executable bit
+	local nowMode = modeOf("HEAD", h.path)
+	if refMode and nowMode ~= refMode then
+		table.insert(bad, `{h.path}: mode {nowMode} (its reference {refPath} is {refMode})`)
 	end
 	if now ~= want then
 		table.insert(

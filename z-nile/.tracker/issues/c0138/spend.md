@@ -1,8 +1,8 @@
-# Spend: c0120 Move pickman into pickman/
+# Spend: c0138 Trail compaction reset
 
 | # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 2026-10-21 01:19 | capture | 0 | 0 | 5.0 | spend | capture |  |
+| 1 | 2026-10-24 06:36 | capture | 0 | 0 | 5.0 | spend | capture |  |
 
 **Total:** +0 / -0 lines, 5.0 agent-minutes, 0 tokens over 1 records
 <!-- totals: added=0 removed=0 minutes=5.0 records=1 tokens=0 -->

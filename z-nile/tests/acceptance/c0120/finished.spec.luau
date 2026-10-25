@@ -50,6 +50,21 @@ local ZNILE_DONE = table.concat({
 	"",
 }, "\n")
 
+-- one of c0120's own scripts, wherever its folder is: the backlog (prep), active/ (readied), or promoted (done)
+local function ownScript(name: string): string
+	for _, dir in
+		{
+			"z-nile/.tracker/issues/c0120/acceptance",
+			"z-nile/.tracker/issues/active/c0120/acceptance",
+			"z-nile/tests/acceptance/c0120",
+		}
+	do
+		if fs.isFile(`{TOP}/{dir}/{name}`) then
+			return `{TOP}/{dir}/{name}`
+		end
+	end
+	return `{TOP}/z-nile/tests/acceptance/c0120/{name}`
+end
 local function git(args: { string }): string
 	return fixture.git(FX, args)
 end
@@ -212,10 +227,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			fs.writeFile(`{OWNFX}/{rel}`, text)
 		end
 		local function judge(): (boolean, string)
-			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/finished.luau`
-			if not fs.isFile(script) then
-				script = `{TOP}/z-nile/tests/acceptance/c0120/finished.luau`
-			end
+			local script = ownScript("finished.luau")
 			local r = process.exec("lune", { "run", script, "--", OWNFX })
 			return r.ok, r.stdout .. r.stderr
 		end
@@ -258,7 +270,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		if fs.isDir(origin) then
 			fs.removeDir(origin)
 		end
-		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
+		t.expect(process.exec("git", { "init", "-q", "--bare", "-b", "main", origin }).ok).toBe(true)
 		g({ "remote", "add", "origin", origin })
 		g({ "push", "-q", "origin", `{prep}:refs/heads/main` })
 		g({ "fetch", "-q", "origin" })
@@ -316,6 +328,14 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			`# Review\nPrep reference: {prep}\n{anchors}\nVerdict: approve\n`
 		)
 		step("review")
+		expectGreen()
+		-- readied: c0120's folder in active/ still finds its review and its reference
+		fs.writeDir(`{OWNFX}/z-nile/.tracker/issues/active`)
+		g({ "mv", "z-nile/.tracker/issues/c0120", "z-nile/.tracker/issues/active/c0120" })
+		step("ready")
+		expectGreen()
+		g({ "mv", "z-nile/.tracker/issues/active/c0120", "z-nile/.tracker/issues/c0120" })
+		step("unready")
 		expectGreen()
 		-- a commit the author makes can't choose the rewrite's world (code review 009 F2): a stray z-nile/AGENTS.md
 		-- planted with c0001's check.sh un-rewritten, then removed: red; a tracked file left at that place: still green
@@ -497,10 +517,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			g({ "commit", "-qm", message })
 		end
 		local function judge(): (boolean, string)
-			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/finished.luau`
-			if not fs.isFile(script) then
-				script = `{TOP}/z-nile/tests/acceptance/c0120/finished.luau`
-			end
+			local script = ownScript("finished.luau")
 			local r = process.exec("lune", { "run", script, "--", FX2 })
 			return r.ok, r.stdout .. r.stderr
 		end
@@ -566,8 +583,10 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		step("main, early")
 		w("tracker/issues/active/f0075/check.sh", "check AC1 true\n")
 		w("tracker/issues/active/f0076/check.sh", "check AC1 true\n")
+		w("tracker/issues/active/f0078/check.sh", "check AC1 true\n")
+		w("tracker/issues/active/f0079/check.sh", "check AC1 true\n")
 		step("main base")
-		t.expect(process.exec("git", { "init", "-q", "--bare", origin }).ok).toBe(true)
+		t.expect(process.exec("git", { "init", "-q", "--bare", "-b", "main", origin }).ok).toBe(true)
 		g({ "remote", "add", "origin", origin })
 		publish("HEAD")
 		-- a look-alike branch whose name ends in /refs/heads/main and sorts first: the real tip is still read (009 F5)
@@ -600,6 +619,8 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- the stack returns f0075 to main's text from before its base, and gives f0076 a text main will put elsewhere
 		w("tracker/issues/active/f0075/check.sh", "check AC1 old\n")
 		w("tracker/issues/active/f0076/check.sh", "check AC1 elsewhere\n")
+		w("tracker/issues/active/f0078/check.sh", "check AC1 stack78\n")
+		w("tracker/issues/active/f0079/check.sh", "check AC1 stack79\n")
 		step("the prep")
 		local prep = (string.gsub(g({ "rev-parse", "HEAD" }), "%s+$", ""))
 		fs.writeDir(`{FX2}/pickman/.tracker`)
@@ -692,10 +713,7 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 		-- override-markers finds nothing of the branch's to mark (code review 007 F2); one unmarked line the branch adds
 		-- to it is the branch's own: red, and one unmarked hunk
 		local function markers(): (boolean, string)
-			local script = `{TOP}/z-nile/.tracker/issues/c0120/acceptance/override-markers.luau`
-			if not fs.isFile(script) then
-				script = `{TOP}/z-nile/tests/acceptance/c0120/override-markers.luau`
-			end
+			local script = ownScript("override-markers.luau")
 			local move = (string.gsub(g({ "log", "-1", "--format=%H", "--", rewrites.MARK }), "%s+$", ""))
 			local r = process.exec("lune", { "run", script, "--", move }, { cwd = FX2 })
 			return r.ok, r.stdout .. r.stderr
@@ -893,6 +911,29 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			w("pickman/.tracker/issues/active/f0074/check.sh", "check AC1 stacked, then main\n")
 		end)
 		expectGreen()
+		-- the stack's text reached main at another of the item's places (code review 011 F3: as c0114's reached main in
+		-- the old layout): f0078 went back to the backlog with it, then returned to active/ with main's newer text; main
+		-- supersedes, green. Its place before the move and on the merged main are the same path, so a search only there
+		-- misses it
+		onMain(function()
+			g({ "mv", "tracker/issues/active/f0078", "tracker/issues/f0078" })
+			w("tracker/issues/f0078/check.sh", "check AC1 stack78\n")
+		end, "the stack lands f0078 in the backlog")
+		onMain(function()
+			g({ "mv", "tracker/issues/f0078", "tracker/issues/active/f0078" })
+			w("tracker/issues/active/f0078/check.sh", "check AC1 stack78, then main\n")
+		end, "main readies f0078 again, changed")
+		mergeMain(function()
+			w("pickman/.tracker/issues/active/f0078/check.sh", "check AC1 stack78, then main\n")
+		end)
+		expectGreen()
+		-- a sequestered file keeps its reference's mode (code review 011 F4)
+		g({ "update-index", "--chmod=+x", "pickman/.tracker/issues/active/f0070/check.sh" })
+		g({ "commit", "-qm", "f0070 executable" })
+		expectRed("pickman/.tracker/issues/active/f0070/check.sh: mode 100755 (its reference")
+		g({ "update-index", "--chmod=-x", "pickman/.tracker/issues/active/f0070/check.sh" })
+		g({ "commit", "-qm", "f0070 back" })
+		expectGreen()
 		-- main and the stack change one file differently: refused, naming both
 		onMain(function()
 			w("tracker/issues/active/f0073/check.sh", "check AC1 main\n")
@@ -905,12 +946,17 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 			w("tracker/issues/active/f0075/check.sh", "check AC1 main\n")
 			w("tracker/issues/active/f0077/check.sh", "check AC1 elsewhere\n")
 			w("tracker/issues/active/f0076/check.sh", "check AC1 main\n")
+			-- f0079's stack text at a folder named like the item, outside every root (code review 011 F3: the places are
+			-- anchored to the roots)
+			w("notes/f0079/check.sh", "check AC1 stack79\n")
+			w("tracker/issues/active/f0079/check.sh", "check AC1 main\n")
 		end, "main changes f0075 and f0076, and puts f0076's stack text at f0077")
 		mergeMain(function()
 			w("pickman/.tracker/issues/active/f0077/check.sh", "check AC1 elsewhere\n")
 		end)
 		expectRed("f0075's check.sh: changed on main")
 		expectRed("f0076's check.sh: changed on main")
+		expectRed("f0079's check.sh: changed on main")
 		-- origin's main moved onto this branch (it then holds the move): refused
 		publish("HEAD")
 		expectRed("origin's main already holds the move")

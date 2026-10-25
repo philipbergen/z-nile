@@ -109,8 +109,10 @@ end
 
 -- Branches that change any of `paths` (default compact.guarded()) since they left origin/main: every origin branch
 -- and every local one except main and `current`. Compaction renumbers under them, so they block it unless forced;
--- `./zn busy` reports them for any paths (c0120's readiness: tracker/, src/, tests/).
-function compact.busyRefs(current: string, paths: { string }?): { string }
+-- `./zn busy` reports them for any paths (c0120's readiness: tracker/, src/, tests/). Full refnames
+-- (`refs/heads/x`, `refs/remotes/origin/x`), so a local branch named `origin/x` stays told apart (code review 011 F5);
+-- compact.busyRefs gives the short names.
+function compact.busyRefNames(current: string, paths: { string }?): { string }
 	local out: { string } = {}
 	local within = paths or compact.guarded()
 	local refs = sh.git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin", "refs/heads" })
@@ -127,12 +129,23 @@ function compact.busyRefs(current: string, paths: { string }?): { string }
 			end
 			local d = sh.run("git", args)
 			if not d.ok or sh.trim(d.stdout) ~= "" then
-				table.insert(
-					out,
-					string.match(ref, "^refs/remotes/(.+)$") or string.match(ref, "^refs/heads/(.+)$") or ref
-				)
+				table.insert(out, ref)
 			end
 		end
+	end
+	return out
+end
+
+-- A refname as people write it: `origin/x` for a remote-tracking branch, `x` for a local one.
+function compact.shortRef(ref: string): string
+	return string.match(ref, "^refs/remotes/(.+)$") or string.match(ref, "^refs/heads/(.+)$") or ref
+end
+
+-- compact.busyRefNames by short name (compaction's refusal lists these).
+function compact.busyRefs(current: string, paths: { string }?): { string }
+	local out: { string } = {}
+	for _, ref in compact.busyRefNames(current, paths) do
+		table.insert(out, compact.shortRef(ref))
 	end
 	return out
 end
