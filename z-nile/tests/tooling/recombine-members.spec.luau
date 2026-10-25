@@ -98,6 +98,13 @@ return t.spec(
 					["pickman/.tracker/rafts/done/R0070/check.sh"] = CHECK,
 					["pickman/.tracker/issues/c0071/c0071.md"] = issue("c0071", "R0070"),
 					["pickman/.tracker/issues/c0071/check.sh"] = CHECK,
+					-- review 003 F1: an active issue with no raft at all
+					["pickman/.tracker/issues/active/c0081/c0081.md"] = issue(
+						"c0081",
+						"",
+						"active-jolly-silver-walrus"
+					),
+					["pickman/.tracker/issues/active/c0081/check.sh"] = CHECK,
 				}, "issues naming dead rafts")
 				fixture.git(f.main, { "pull", "-q", "origin", "main" })
 				local r = trackerfix.tr(f, f.main, { "audit" })
@@ -108,32 +115,86 @@ return t.spec(
 				t.expect(has(out, "c0051")).toBe(false)
 				t.expect(has(out, "c0061")).toBe(false)
 				t.expect(has(out, "c0071")).toBe(false)
-				-- each error names the one command that clears it (review 002 F1)
+				-- each error names the one command that clears it for the item's state (review 002 F1, 003 F1)
 				t.expect(has(out, "./zn unfold R0030 c0031")).toBe(true)
-				t.expect(has(out, "./zn unfold R0099 c0041")).toBe(true)
-				t.expect(select(2, string.gsub(out, "error dead%-raft", ""))).toBe(2)
+				t.expect(has(out, "c0041's raft R0099 does not exist: give it back with ./zn stop c0041"))
+					.toBe(true)
+				t.expect(has(out, "c0081 is in active/ with no raft: give it back with ./zn stop c0081"))
+					.toBe(true)
+				t.expect(has(out, "audit: 3 errors")).toBe(true)
 			end
 		)
 
+		it("unfold refuses a non-member, an active issue and a done one, publishing nothing", function()
+			fixture.git(W, { "fetch", "-q", "origin" })
+			fixture.git(W, { "merge", "-q", "--no-edit", "origin/main" })
+			local before = tip()
+			local function refused(args: { string }, needle: string)
+				local r = trackerfix.tr(f, W, args)
+				t.expect(r.ok).toBe(false)
+				if not has(r.stderr, needle) then
+					error(`{table.concat(args, " ")}: stderr lacks {needle}: {r.stderr}`, 2)
+				end
+			end
+			refused({ "unfold", "R0030", "c0071" }, "c0071 is not a member of R0030")
+			refused({ "unfold", "R0099", "c0041" }, "use ./zn stop c0041")
+			refused({ "unfold", "R0098", "c0051" }, "c0051 is done")
+			t.expect(tip()).toBe(before)
+			t.expect(has(fs.readFile(`{W}/pickman/.tracker/issues/done/c0051/c0051.md`), "\nraft: R0098\n"))
+				.toBe(true)
+			t.expect(has(fs.readFile(`{W}/pickman/.tracker/issues/active/c0041/c0041.md`), "\nraft: R0099\n"))
+				.toBe(true)
+		end)
+
 		it(
-			"the named unfold clears a dead raft's member without claiming any raft, and audit is clean of it",
+			"stop gives back an active issue whose raft is dead or empty, and refuses one whose raft is live",
 			function()
-				fixture.git(W, { "fetch", "-q", "origin" })
-				fixture.git(W, { "merge", "-q", "--no-edit", "origin/main" })
-				local before = tip()
-				-- an issue the dead raft doesn't hold is refused
-				local wrong = trackerfix.tr(f, W, { "unfold", "R0030", "c0071" })
-				t.expect(wrong.ok).toBe(false)
-				t.expect(has(wrong.stderr, "c0071 is not a member of R0030")).toBe(true)
-				trackerfix.trOk(f, W, { "unfold", "R0030", "c0031" })
-				trackerfix.trOk(f, W, { "unfold", "R0099", "c0041" })
-				-- nothing published: neither raft is claimed (one is retired, the other missing)
-				t.expect(tip()).toBe(before)
-				local a = trackerfix.tr(f, W, { "audit" })
-				t.expect(has(a.stdout .. a.stderr, "dead-raft")).toBe(false)
-				t.expect(has(fs.readFile(`{W}/pickman/.tracker/issues/c0031/c0031.md`), "\nraft: \n"))
-					.toBe(true)
+				local r = trackerfix.tr(f, f.main, { "stop", "c0061" })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "use ./zn stop R0060")).toBe(true)
+				trackerfix.trOk(f, f.main, { "stop", "c0041" })
+				trackerfix.trOk(f, f.main, { "stop", "c0081" })
+				for _, id in { "c0041", "c0081" } do
+					local moved =
+						fixture.exec(f.origin, "git", { "show", `main:pickman/.tracker/issues/{id}/{id}.md` })
+					t.expect(moved.ok).toBe(true)
+					t.expect(string.match(moved.stdout, "\nstatus: (prepared%-[%w%-]+)\n") ~= nil).toBe(true)
+					t.expect(
+						fixture.exec(
+							f.origin,
+							"git",
+							{ "cat-file", "-e", `main:pickman/.tracker/issues/active/{id}/{id}.md` }
+						).ok
+					).toBe(false)
+				end
+				-- the backlog issue whose raft is dead is named for unfold now; the raftless one is clean
+				local a = trackerfix.tr(f, f.main, { "audit" })
+				local out = a.stdout .. a.stderr
+				t.expect(has(out, "./zn unfold R0099 c0041")).toBe(true)
+				t.expect(has(out, "c0081")).toBe(false)
 			end
 		)
+
+		it("after the named commands, the next lifecycle step works: z-design claims each issue", function()
+			fixture.git(W, { "fetch", "-q", "origin" })
+			fixture.git(W, { "merge", "-q", "--no-edit", "origin/main" })
+			trackerfix.trOk(f, W, { "unfold", "R0030", "c0031" })
+			trackerfix.trOk(f, W, { "unfold", "R0099", "c0041" })
+			-- the rafting PR lands
+			fixture.git(W, { "push", "-q", "origin", "HEAD:main" })
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			local a = trackerfix.tr(f, f.main, { "audit" })
+			t.expect(has(a.stdout .. a.stderr, "dead-raft")).toBe(false)
+			t.expect(has(a.stdout .. a.stderr, "with no raft")).toBe(false)
+			for _, id in { "c0031", "c0041", "c0081" } do
+				trackerfix.trOk(f, W, { "status", id, "preparing" })
+			end
+		end)
+
+		it("list shows a retired raft as retired, never as a backlog raft", function()
+			local out = trackerfix.trOk(f, f.main, { "list" })
+			t.expect(string.find(out, "R0030%s+retired") ~= nil).toBe(true)
+			t.expect(string.find(out, "R0030%s+backlog") ~= nil).toBe(false)
+		end)
 	end
 )

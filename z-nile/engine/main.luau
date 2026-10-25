@@ -61,6 +61,7 @@ usage: ./zn <command> ...
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
+  stop <issue>                                  give back one active issue whose raft is retired, missing or empty
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
@@ -1579,7 +1580,10 @@ function cmd.status(pos: { string })
 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
 			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
+				local shown = if string.find(p, "/rafts/retired/", 1, true)
+					then "retired"
+					else statusLib.effective(front, stateOfPath(p))
+				print(`{fid} {shown} {front.title or ""}`)
 			end
 		end
 		return
@@ -1779,6 +1783,12 @@ function cmd.unfold(pos: { string })
 			if issue.state == "done" then
 				fail(`{issue.id} is done: its raft: is history`)
 			end
+			-- review 003 F1: an active issue leaves active/ only by a published move, never in a branch
+			if issue.state == "active" then
+				fail(
+					`{issue.id} is in active/: use ./zn stop {issue.id} (it gives the issue back to the backlog)`
+				)
+			end
 			table.insert(gone, issue.id)
 		end
 		for _, id in gone do
@@ -1975,8 +1985,8 @@ function cmd.recombine(pos: { string })
 	sh.git({ "add", keeper.doc })
 	if retire then
 		-- c0116 (review 001 F2): a retired raft keeps its folder (its design reviews, refutes and harvest.md, which
-		-- lessons and metrics read) under <root>/rafts/retired/, with `retired: <keeper>`; nothing that finds items
-		-- (store, the board, the plan) looks there
+		-- lessons and metrics read) under <root>/rafts/retired/, with `retired: <keeper>`; store, the board and the plan
+		-- never find it there (audit's scan, list and the bare status show it, as retired: review 003 F3)
 		local dest = retiredDir(other.root, otherId)
 		local parent = string.match(dest, "^(.*)/[^/]+$") :: string
 		if not fs.isDir(parent) then
@@ -2654,7 +2664,10 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
 			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
-				local state = stateOfPath(f.path .. "/")
+				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
+				local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
+					then "retired"
+					else stateOfPath(f.path .. "/")
 				if not pos[1] or pos[1] == state then
 					local fm = store.readFront(doc)
 					local ftype = if kind == "issue"
@@ -4692,13 +4705,50 @@ function cmd.ready(pos: { string })
 	print(parallel)
 end
 
+-- `stop <issue>` (R0050 code review 003 F1): gives back one active issue whose raft is retired, missing or empty (a
+-- dead raft can't be stopped as a raft): the same published move to the backlog, stamped prepared, check.sh paths
+-- rewritten back, that stop gives a member. Its raft: line is left: audit then names `unfold` for it (a backlog
+-- issue), which clears it in a rafting PR. An issue whose raft is live is refused: stop the raft.
+local function stopIssue(id: string)
+	if not store.isIssueId(id) then
+		fail(`{id} is neither a raft nor an issue`)
+	end
+	mainCheckoutGuards("stop")
+	local pulled = pullMain()
+	if pulled then
+		fail(`stop: cannot fast-forward the main checkout: {pulled}`)
+	end
+	local issue = store.get(id)
+	if issue.state ~= "active" then
+		fail(`{id} is in {issue.dir} on origin/main: stop <issue> gives back an active issue only`)
+	end
+	local raftId = store.readFront(issue.doc).raft or ""
+	if raftId ~= "" and store.find(raftId) then
+		fail(`{id}'s raft {raftId} is live: use ./zn stop {raftId}`)
+	end
+	local function stillActive(item: string, now: string): string?
+		return if now == "active" then nil else `{item} is {now} on origin/main, not active: nothing to stop`
+	end
+	local why = if raftId == "" then "no raft" else `raft {raftId} is gone`
+	local r = moveOnOrigin({ id }, "backlog", stamp("prepared"), `tracker: stop {id} ({why})`, stillActive)
+	if not r.ok then
+		fail(`stop: {r.reason}`)
+	end
+	local failed = pullMain()
+	if failed then
+		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
+	end
+	print(`gave back {id} ({why}): it is in the backlog, prepared`)
+end
+
 -- `stop <R-id>`: gives back a readied raft (moves it and its members to the backlog on origin/main, stamped prepared,
 -- check.sh paths rewritten back) or a raft claimed by the legacy `start` (a status-only publish). Removes prompt.md,
 -- pulls the main checkout and names the raft's branch and PR, which are left as they are.
 function cmd.stop(pos: { string })
-	local raftId = pos[1] or fail("usage: stop <R-id>")
+	local raftId = pos[1] or fail("usage: stop <R-id> | stop <issue>")
 	if not store.isRaftId(raftId) then
-		fail(`{raftId} is not a raft`)
+		stopIssue(raftId)
+		return
 	end
 	mainCheckoutGuards("stop")
 	local pulled = pullMain()

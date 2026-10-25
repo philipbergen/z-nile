@@ -307,19 +307,22 @@ function audit.run(root: string): { Problem }
 		local doc = `{root}/{f.path}/{f.id}.md`
 		if f.kind == "issue" and not string.find(f.path, "/done/", 1, true) and fs.isFile(doc) then
 			local r = front(fs.readFile(doc)).raft or ""
+			local active = string.find(f.path, "/active/", 1, true) ~= nil
+			-- the command that clears the state, for the item's own state (review 003 F1): an active issue goes back
+			-- through stop (a published move, as stop gives a member back); a backlog one through unfold
+			local fix = if active
+				then `give it back with ./zn stop {f.id}`
+				else `clear it with ./zn unfold {r} {f.id}`
 			if r ~= "" and raftAt[r] == "retired" then
-				add(
-					"error",
-					"dead-raft",
-					f.path,
-					`{f.id}'s raft {r} is retired: clear it with ./zn unfold {r} {f.id}`
-				)
+				add("error", "dead-raft", f.path, `{f.id}'s raft {r} is retired: {fix}`)
 			elseif r ~= "" and raftAt[r] == nil then
+				add("error", "dead-raft", f.path, `{f.id}'s raft {r} does not exist: {fix}`)
+			elseif r == "" and active then
 				add(
 					"error",
-					"dead-raft",
+					"raftless-active",
 					f.path,
-					`{f.id}'s raft {r} does not exist: clear it with ./zn unfold {r} {f.id}`
+					`{f.id} is in active/ with no raft: give it back with ./zn stop {f.id}`
 				)
 			end
 		end
