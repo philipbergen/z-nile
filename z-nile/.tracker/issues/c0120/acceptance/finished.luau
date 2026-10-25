@@ -39,9 +39,19 @@ local reg = projects.load(TOP, true)
 -- a `Prep reference: <sha>` line in the newest approved review file (a code review's review-NNN.md before a design
 -- review's design-review-NNN.md, the higher number first), which only a reviewer writes. Never a branch ref: its author
 -- can move one (code review 004 F1). No recorded sha, or one the branch doesn't contain, refuses.
-local OWN = if fs.isDir(`{TOP}/z-nile/.tracker/issues/c0120`)
-	then "z-nile/.tracker/issues/c0120/"
-	else "z-nile/.tracker/issues/done/c0120/"
+-- c0120's folder in whichever state it is: the backlog (prep), active/ (readied), done/ (finished)
+local OWN_DIRS = {
+	"z-nile/.tracker/issues/c0120/",
+	"z-nile/.tracker/issues/active/c0120/",
+	"z-nile/.tracker/issues/done/c0120/",
+}
+local OWN = OWN_DIRS[3]
+for _, dir in OWN_DIRS do
+	if fs.isDir(`{TOP}/{dir}`) then
+		OWN = dir
+		break
+	end
+end
 local PINNED_MOVE: string? = nil
 local PINNED_CORE: string? = nil
 local function recorded(): (string?, string)
@@ -264,9 +274,9 @@ end
 -- prep, under the reviewer's pin.
 local PATCHES: string = ""
 for _, name in { "c0114-overrides.patch", "main-overrides.patch" } do
-	-- at c0120's folder in the pinned prep (active, as reviewed); after c0120's done HEAD has it in done/, the prep
-	-- still where it was reviewed
-	for _, dir in { "z-nile/.tracker/issues/c0120/", "z-nile/.tracker/issues/done/c0120/" } do
+	-- at c0120's folder in the pinned prep (in the backlog, as reviewed); once readied or done HEAD has it in active/ or
+	-- done/, the prep still where it was reviewed
+	for _, dir in OWN_DIRS do
 		local okP, text = git({ "show", `{ownBase}:{dir}{name}` })
 		if okP then
 			PATCHES ..= text .. "\n"
