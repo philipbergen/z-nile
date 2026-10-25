@@ -1531,9 +1531,9 @@ local FREEZES: { Freeze } = {
 	{
 		-- c0115 (decided with the user, 2026-10-24, G14: "Yes, same rule"): the items stacked on c0115's
 		-- prep or implementation (c0116, c0117, c0118, c0121) touch the skill paths by design; their prototypes are
-		-- approved by name. Its mark is the old testing skill's file, which the move takes away.
+		-- approved by name. Its mark is a file the move takes away, kept with the rename map (skillsLib.MOVE_MARK).
 		item = "c0115",
-		mark = ".claude/skills/testing/SKILL.md",
+		mark = skillsLib.MOVE_MARK,
 		roots = { ["prep-c0115"] = "stacked on its prep", ["impl-c0115"] = "stacked on its implementation" },
 		stacked = {
 			["prep-c0116"] = true,
@@ -1647,7 +1647,8 @@ function cmd.busy(pos: { string })
 			local doc = string.match(p, "^(.*/rafts/active/R%d%d%d%d)/")
 				or string.match(p, "^(rafts/active/R%d%d%d%d)/")
 			local text = sh.run("git", { "show", `refs/remotes/origin/main:{doc}/{r}.md` }).stdout
-			local members = `,{(string.gsub(string.match(text, "\nissues:%s*%[([^%]]*)%]") or "", "%s", ""))},`
+			local members =
+				`,{(string.gsub(string.match(text, "\nissues:%s*%[([^%]]*)%]") or "", "%s", ""))},`
 			local ownOf: string? = nil
 			for _, fr in freezes do
 				if string.find(members, `,{fr.item},`, 1, true) then
