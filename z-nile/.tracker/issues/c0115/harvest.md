@@ -67,3 +67,4 @@
 - design-review-015 F2: z-design/restated-rules-move-together
 - design-review-015 F3: zz-arch/history-tests-survive-squash
 - note c0115 rebase: rename-lesson-ids ran twice on a still-conflicted harvest.md and reported success (the user asked for a lesson and a chore): zz-execute/resolve-before-rerunning-scripts
+- note c0115 prep on landed c0120: AC12's literal `cd ..` made c0120's check-paths read the skill folders as ../… from z-nile/, which its Touched-modules exemption doesn't match (repository-relative); anchored at $ZN_ROOT (found by the full gate on the prep tree before merging): z-design/run-the-other-rafts-specs
