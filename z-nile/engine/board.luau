@@ -1,8 +1,11 @@
 --!strict
 -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
+local boardview = require("./boardview")
 local chart = require("./chart")
 local fs = require("@lune/fs")
 local history = require("./history")
+local ledger = require("./ledger")
+local process = require("@lune/process")
 local projects = require("./projects")
 local serde = require("@lune/serde")
 local stats = require("./stats")
@@ -12,7 +15,7 @@ local store = require("./store")
 local board = {}
 
 export type Bucket = "ready" | "not" | "done"
-export type ViewName = "rafts" | "issues"
+export type ViewName = "board" | "rafts" | "issues"
 export type Groups = { ready: { string }, ["not"]: { string }, done: { string } }
 export type Raft = {
 	id: string,
@@ -33,7 +36,24 @@ export type Raft = {
 	topLevel: boolean, -- #blockedBy == 0
 	command: string?, -- nil when this row has no next command
 	body: string,
+	project: string, -- the project whose root holds it (c0118)
+	launched: boolean, -- a branch <R-id>-… exists, local or on origin
+	branch: string?, -- that branch's name
+	worktree: string?, -- the worktree that has it checked out
+	doneAt: number?, -- first arrival in done/, UTC epoch seconds (history, else the members' newest spend row)
+	doneFrom: string?, -- "history" or "spend": where doneAt came from
+	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
+	dispatch: Dispatch?,
+	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
+	checks: Checks?,
 }
+-- Reserved for c0121's served page (live `gh` data); nil in every model c0118 builds.
+export type Pr = { number: number, url: string, state: string }
+export type Checks = { state: string, url: string? }
+-- The dispatcher's run state for an id (c0117's .cache/dispatch/<id>/state.json): its step, outcome and model, and
+-- whether it waits for answers in questions.md.
+export type Dispatch = { step: string, outcome: string, model: string, questions: boolean }
+export type Spend = { minutes: number, tokens: number, added: number, removed: number, models: { string } }
 export type Issue = {
 	id: string,
 	kind: string, -- always "issue"
@@ -50,14 +70,45 @@ export type Issue = {
 	emergent: boolean,
 	command: string?,
 	body: string,
+	project: string,
+	column: boardview.Column, -- c0118: ticket, design, raft, ready, run or done
+	doneAt: number?,
+	doneFrom: string?,
+	age: number?, -- seconds between doneAt and the model's asOf
+	spend: Spend, -- from its spend.md (ledger.parse)
+	dispatch: Dispatch?,
+	pr: Pr?, -- c0121's, as on Raft
+	checks: Checks?,
 }
+export type Project = { name: string, root: string }
+-- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
+-- commit time), the branches (refs/heads and refs/remotes/origin, short names, with each tip's commit time), the
+-- worktrees, the dispatcher's state.
+export type Ref = { name: string, at: number }
+export type Facts = {
+	asOf: number?,
+	refs: { Ref },
+	worktrees: { { path: string, branch: string } },
+	dispatch: { [string]: Dispatch },
+}
+export type ProjectCharts = { rounds: { [string]: string }, tokens: { [string]: string } }
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
 	views: { rafts: Groups, issues: Groups },
 	home: { [string]: string }, -- every id maps to itself
-	initialView: ViewName, -- always "rafts"
+	initialView: ViewName, -- always "board" (c0118)
 	stats: stats.Stats,
+	projects: { Project }, -- the registry's order; the first is selected when the page opens
+	columns: { [string]: { [string]: { boardview.Band } } }, -- project -> column -> bands
+	charts: { [string]: ProjectCharts }, -- project -> chart -> range key -> svg
+	asOf: number?,
+	history: boolean, -- false without git history (a shallow clone): done times then come from spend rows alone
+	windows: { number },
+	window: number,
+	ranges: { { key: string, label: string } },
+	range: string,
+	problems: { string }, -- files the board could not read (a spend.md that does not parse)
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -120,7 +171,7 @@ local function bodyOf(text: string): string
 	return (string.gsub(string.sub(text, closeEnd + 1), "^\n+", ""))
 end
 
-type Raw = { id: string, state: string, front: { [string]: string }, body: string, root: string }
+type Raw = { id: string, state: string, front: { [string]: string }, body: string, root: string, dir: string }
 
 -- { id, state, front, body, root } for every item directory of one kind under root.
 local function scan(root: string, kind: string): { Raw }
@@ -143,6 +194,7 @@ local function scan(root: string, kind: string): { Raw }
 					front = store.readFront(doc),
 					body = bodyOf(fs.readFile(doc)),
 					root = root,
+					dir = `{dir}/{name}`,
 				})
 			end
 		end
@@ -200,35 +252,42 @@ local function spendPath(root: string, state: string, id: string): string
 	return `{root}/issues/{state}/{id}/spend.md`
 end
 
-local function cellsOf(line: string): { string }
-	local out: { string } = {}
-	for cell in string.gmatch(line, "|([^|]*)") do
-		table.insert(out, (string.gsub(cell, "^%s*(.-)%s*$", "%1")))
+-- An issue's spend rows through the one reader of spend.md (ledger.parse, c0084 and c0117). A file that does not
+-- parse gives no rows and is named in `problems`.
+local spendCache: { [string]: { ledger.Row } } = {}
+local function spendRows(path: string, problems: { string }): { ledger.Row }
+	local hit = spendCache[path]
+	if hit then
+		return hit
 	end
-	return out
+	local rows: { ledger.Row } = {}
+	if fs.isFile(path) then
+		local parsed, err = ledger.parse(fs.readFile(path))
+		if parsed then
+			rows = parsed.rows
+		else
+			table.insert(problems, `{path} does not parse: {err}`)
+		end
+	end
+	spendCache[path] = rows
+	return rows
 end
 
--- Spend rows share the seven-column shape. Extra columns, if a later ledger adds them, are ignored.
-local function readSpend(path: string): { { day: string, added: number, removed: number, minutes: number } }
+local function readSpend(
+	path: string,
+	problems: { string }
+): { { day: string, added: number, removed: number, minutes: number } }
 	local out = {}
-	if not fs.isFile(path) then
-		return out
-	end
-	for line in string.gmatch(fs.readFile(path), "[^\n]+") do
-		if string.sub(line, 1, 1) == "|" then
-			local cells = cellsOf(line)
-			local day = dayOf(cells[2])
-			local added, removed, minutes = tonumber(cells[4]), tonumber(cells[5]), tonumber(cells[6])
-			if tonumber(cells[1]) and day and added and removed and minutes then
-				table.insert(out, { day = day, added = added, removed = removed, minutes = minutes })
-			end
+	for _, row in spendRows(path, problems) do
+		local day = dayOf(row.when)
+		if day then
+			table.insert(out, { day = day, added = row.added, removed = row.removed, minutes = row.minutes })
 		end
 	end
 	return out
 end
 
-local function statistics(checkout: string, rawIssues: { Raw }): stats.Stats
-	local hist = history.read(checkout)
+local function statistics(hist: history.Parsed?, rawIssues: { Raw }, problems: { string }): stats.Stats
 	local items: { stats.Item } = {}
 	local spends: { stats.Spend } = {}
 	local latest = ""
@@ -253,7 +312,7 @@ local function statistics(checkout: string, rawIssues: { Raw }): stats.Stats
 				items,
 				{ id = raw.id, type = kind, opened = opened, closed = closed, spells = spells }
 			)
-			for _, row in readSpend(spendPath(raw.root, raw.state, raw.id)) do
+			for _, row in readSpend(spendPath(raw.root, raw.state, raw.id), problems) do
 				consider(row.day)
 				table.insert(spends, {
 					id = raw.id,
@@ -546,18 +605,175 @@ local function statsHtml(s: stats.Stats): string
 	return (string.gsub(table.concat(parts), "[\r\n]", ""))
 end
 
--- The tracker roots to read and the checkout whose history the stats come from: `root` alone (one tracker folder, as
--- specs pass) with its parent, or else every project root of `checkout` (default ".") from its registry (c0114).
-local function sources(root: string?, checkout: string?): ({ string }, string)
+-- The projects to read and the checkout whose history the stats come from: `root` alone (one tracker folder, as
+-- specs pass; its project is named after the folder above it) with its parent, or else every project of `checkout`
+-- (default ".") from its registry, in registry order (c0114, c0118). `base` is the root as read from here.
+local function sources(
+	root: string?,
+	checkout: string?
+): ({ { name: string, root: string, base: string } }, string)
 	if root then
-		return { root }, parentOf(root)
+		local parent = parentOf(root)
+		-- named by the folder (or, for `<name>/.tracker`, the folder above it), so the page is the same wherever it is
+		local name = string.match(root, "([^/]+)$") or root
+		if name == ".tracker" then
+			name = string.match(parent, "([^/]+)$") or name
+		end
+		return { { name = name, root = name, base = root } }, parent -- no path from outside the tree reaches the page
 	end
 	local dir = checkout or "."
-	local out: { string } = {}
-	for _, r in projects.roots(projects.load(dir)) do
-		table.insert(out, if dir == "." then r else `{dir}/{r}`)
+	local out = {}
+	for _, p in projects.load(dir).projects do
+		table.insert(
+			out,
+			{ name = p.name, root = p.root, base = if dir == "." then p.root else `{dir}/{p.root}` }
+		)
 	end
 	return out, dir
+end
+
+local function run(dir: string, args: { string }): string?
+	local ok, r = pcall(process.exec, "git", args, { cwd = dir })
+	if not ok or not r.ok then
+		return nil
+	end
+	return r.stdout
+end
+
+-- The facts of the checkout `dir` (c0118): HEAD's commit time, the branch names, the worktrees, and the dispatcher's
+-- run state under `<dir>/.cache/dispatch/<id>/` (c0117). A git call that fails leaves its fact empty; nothing here
+-- writes, fetches or reaches the network.
+function board.readFacts(dir: string): Facts
+	local facts: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+	local head = run(dir, { "log", "-1", "--format=%ct", "HEAD" })
+	facts.asOf = if head then tonumber((string.gsub(head, "%s+", ""))) else nil
+	local refs = run(dir, {
+		"for-each-ref",
+		"--format=%(committerdate:unix) %(refname:short)",
+		"refs/heads",
+		"refs/remotes/origin",
+	})
+	for line in string.gmatch(refs or "", "[^\n]+") do
+		local at, name = string.match(line, "^(%d+) (%S+)$")
+		if at and name then
+			table.insert(facts.refs, { name = name, at = tonumber(at) :: number })
+		end
+	end
+	local wt = run(dir, { "worktree", "list", "--porcelain" })
+	local path: string? = nil
+	for line in string.gmatch(wt or "", "[^\n]+") do
+		local p = string.match(line, "^worktree (.+)$")
+		local b = string.match(line, "^branch refs/heads/(.+)$")
+		if p then
+			path = p
+		elseif b and path then
+			table.insert(facts.worktrees, { path = path, branch = b })
+		end
+	end
+	local home = `{dir}/.cache/dispatch`
+	if fs.isDir(home) then
+		for _, name in fs.readDir(home) do
+			local file = `{home}/{name}/state.json`
+			if (store.isRaftId(name) or store.isIssueId(name)) and fs.isFile(file) then
+				local ok, decoded = pcall(serde.decode, "json" :: "json", fs.readFile(file))
+				if ok and type(decoded) == "table" then
+					local st = decoded :: { [string]: any }
+					facts.dispatch[name] = {
+						step = if type(st.step) == "string" then st.step else "",
+						outcome = if type(st.outcome) == "string" then st.outcome else "",
+						model = if type(st.model) == "string" then st.model else "",
+						questions = fs.isFile(`{home}/{name}/questions.md`),
+					}
+				end
+			end
+		end
+	end
+	return facts
+end
+
+local NO_FACTS: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+
+-- The branch that launched raft `id`: the first ref, in name order, named `<id>-…` (local) or `origin/<id>-…`, as
+-- plain text, whose tip is newer than the raft's latest arrival in active/ (`since`; `start` commits on the branch
+-- after `ready`). A branch left from before a stop and a new ready (`stop` keeps it) launched nothing. With no
+-- arrival known (no history, a legacy start), any such branch counts.
+local function branchOf(id: string, refs: { Ref }, since: number?): string?
+	local sorted = table.clone(refs)
+	table.sort(sorted, function(a, b)
+		return a.name < b.name
+	end)
+	for _, ref in sorted do
+		local name = if string.sub(ref.name, 1, 7) == "origin/" then string.sub(ref.name, 8) else ref.name
+		if string.sub(name, 1, #id + 1) == id .. "-" and (since == nil or ref.at > since) then
+			return name
+		end
+	end
+	return nil
+end
+
+-- The model id a spend row records (c0117's tenth column, `ledger.Row.model`); nil for a row without one, and for every
+-- row while the ledger has no model column yet.
+local function modelOf(row: ledger.Row): string?
+	local m = (row :: any).model
+	return if type(m) == "string" and m ~= "" then m else nil
+end
+
+local function spendOf(rows: { ledger.Row }): Spend
+	local out: Spend = { minutes = 0, tokens = 0, added = 0, removed = 0, models = {} }
+	local seen: { [string]: boolean } = {}
+	for _, row in rows do
+		out.minutes += row.minutes
+		out.tokens += row.tokens or 0
+		out.added += row.added
+		out.removed += row.removed
+		local model = modelOf(row)
+		if model and not seen[model] then
+			seen[model] = true
+			table.insert(out.models, model)
+		end
+	end
+	table.sort(out.models)
+	out.minutes = math.floor(out.minutes * 10 + 0.5) / 10
+	return out
+end
+
+local function reviewFiles(dir: string, into: { string })
+	if not fs.isDir(dir) then
+		return
+	end
+	for _, name in fs.readDir(dir) do
+		if string.match(name, "^design%-review%-%d+%.md$") or string.match(name, "^review%-%d+%.md$") then
+			table.insert(into, `{dir}/{name}`)
+		end
+	end
+end
+
+-- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
+local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
+	local out = {}
+	local dir = `{base}/rafts/retired`
+	if not fs.isDir(dir) then
+		return out
+	end
+	for _, name in fs.readDir(dir) do
+		local doc = `{dir}/{name}/{name}.md`
+		if store.isRaftId(name) and fs.isFile(doc) then
+			table.insert(
+				out,
+				{ id = name, dir = `{dir}/{name}`, keeper = store.readFront(doc).retired or "" }
+			)
+		end
+	end
+	return out
+end
+
+local function chartSvg(id: string, title: string, rawUnit: string, raw: boardview.Weekly): string
+	local w, unit = boardview.scaled(raw, rawUnit)
+	local series: { chart.Series } = {}
+	for _, s in w.series do
+		table.insert(series, { key = s.key, label = s.label, values = s.values })
+	end
+	return chart.svg(series, { id = id, title = title, unit = unit, labels = w.labels, kind = "stacked" })
 end
 
 local function sortById(list: { Raw })
@@ -566,16 +782,41 @@ local function sortById(list: { Raw })
 	end)
 end
 
-function board.collect(root: string?, checkout: string?): Model
-	local roots, checkoutDir = sources(root, checkout)
+-- The model of every project (c0118). `facts` default to the checkout's own (board.readFacts), or to none when
+-- `root` names one tracker folder (specs pass theirs).
+function board.collect(root: string?, checkout: string?, given: Facts?): Model
+	local sourceList, checkoutDir = sources(root, checkout)
+	local facts: Facts = given or (if root then NO_FACTS else board.readFacts(checkoutDir))
+	local problems: { string } = {}
+	table.clear(spendCache)
 	local rawRafts: { Raw }, rawIssues: { Raw } = {}, {}
-	for _, base in roots do
-		for _, r in scan(base, "rafts") do
+	local projectOf: { [string]: string } = {}
+	local retired = {}
+	local projectList: { Project } = {}
+	for _, src in sourceList do
+		table.insert(projectList, { name = src.name, root = src.root })
+		for _, r in scan(src.base, "rafts") do
+			projectOf[r.id] = src.name
 			table.insert(rawRafts, r)
 		end
-		for _, i in scan(base, "issues") do
+		for _, i in scan(src.base, "issues") do
+			projectOf[i.id] = src.name
 			table.insert(rawIssues, i)
 		end
+		for _, r in retiredOf(src.base) do
+			table.insert(retired, r)
+		end
+	end
+	local hist = history.read(checkoutDir)
+	if hist and hist.warnings then
+		for _, w in hist.warnings do
+			table.insert(problems, `history: {w}`)
+		end
+	end
+	local doneAt: { [string]: number } = if hist and hist.doneAt then hist.doneAt else {}
+	local worktreeOf: { [string]: string } = {}
+	for _, w in facts.worktrees do
+		worktreeOf[w.branch] = w.path
 	end
 	sortById(rawRafts)
 	sortById(rawIssues)
@@ -605,6 +846,13 @@ function board.collect(root: string?, checkout: string?): Model
 			dependents = {},
 			emergent = i.front.emergent == "true",
 			body = i.body,
+			project = projectOf[i.id],
+			column = "ticket",
+			doneAt = doneAt[i.id],
+			doneFrom = if doneAt[i.id] then "history" else nil,
+			age = nil,
+			spend = spendOf(spendRows(spendPath(i.root, i.state, i.id), problems)),
+			dispatch = facts.dispatch[i.id],
 		}
 		table.insert(issues, issue)
 		issueById[i.id] = issue
@@ -672,7 +920,21 @@ function board.collect(root: string?, checkout: string?): Model
 			topLevel = true,
 			command = command,
 			body = r.body,
+			project = projectOf[r.id],
+			launched = false,
+			branch = nil,
+			worktree = nil,
+			doneAt = doneAt[r.id],
+			doneFrom = if doneAt[r.id] then "history" else nil,
+			rounds = { design = 0, code = 0 },
+			dispatch = facts.dispatch[r.id],
 		}
+		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)
+		if branch then
+			raft.launched = true
+			raft.branch = branch
+			raft.worktree = worktreeOf[branch]
+		end
 		table.insert(rafts, raft)
 		raftById[r.id] = raft
 	end
@@ -758,13 +1020,163 @@ function board.collect(root: string?, checkout: string?): Model
 		home[issue.id] = issue.id
 	end
 
+	-- c0118: a done item that history leaves undated (a compaction ended its dated life, or there is no history: a
+	-- shallow clone) is dated by its newest spend row (a raft by its members'), a field no id change rewrites; else it
+	-- stays undated
+	local function newestRow(i: Raw): number?
+		local best: number? = nil
+		for _, row in spendRows(spendPath(i.root, i.state, i.id), problems) do
+			local at = boardview.rowInstant(row.when)
+			if at and (best == nil or at > best) then
+				best = at
+			end
+		end
+		return best
+	end
+	local newestOf: { [string]: number } = {}
+	for _, i in rawIssues do
+		local issue = issueById[i.id]
+		local at = newestRow(i)
+		if at then
+			newestOf[i.id] = at
+		end
+		if issue.state == "done" and not issue.doneAt and at then
+			issue.doneAt, issue.doneFrom = at, "spend"
+		end
+	end
+	for _, raft in rafts do
+		if raft.state == "done" and not raft.doneAt then
+			for _, id in raft.issues do
+				local at = newestOf[id]
+				if at and (raft.doneAt == nil or at > raft.doneAt :: number) then
+					raft.doneAt, raft.doneFrom = at, "spend"
+				end
+			end
+		end
+	end
+
+	-- c0118: columns and bands per project, from each issue's effective status and its raft's branch
+	local columns: { [string]: { [string]: { boardview.Band } } } = {}
+	for _, p in projectList do
+		local cards: { [string]: { { id: string, raft: string? } } } = {}
+		for _, c in boardview.COLUMNS do
+			cards[c] = {}
+		end
+		for _, issue in issues do
+			if issue.project == p.name then
+				local raft = if issue.raft then raftById[issue.raft] else nil
+				issue.column = boardview.column(issue.stage, raft ~= nil and raft.launched)
+				issue.age = boardview.age(issue.doneAt, facts.asOf)
+				table.insert(cards[issue.column], { id = issue.id, raft = issue.raft })
+			end
+		end
+		columns[p.name] = {}
+		for _, c in boardview.COLUMNS do
+			columns[p.name][c] = boardview.bands(cards[c])
+		end
+	end
+
+	-- c0118: review rounds of each raft (its folder, its members', and the rafts retired into it, followed to the
+	-- raft that kept them), and the two charts per project and range
+	local rawRaftById: { [string]: Raw } = {}
+	for _, r in rawRafts do
+		rawRaftById[r.id] = r
+	end
+	local files: { [string]: { string } } = {}
+	for _, raft in rafts do
+		files[raft.id] = {}
+		reviewFiles(rawRaftById[raft.id].dir, files[raft.id])
+	end
+	for _, i in rawIssues do
+		local issue = issueById[i.id]
+		if issue.raft then
+			reviewFiles(i.dir, files[issue.raft])
+		end
+	end
+	local keeperOf: { [string]: string } = {}
+	for _, r in retired do
+		keeperOf[r.id] = r.keeper
+	end
+	for _, r in retired do
+		local keeper, hops = r.keeper, 0
+		while keeperOf[keeper] and hops < 100 do
+			keeper, hops = keeperOf[keeper], hops + 1
+		end
+		if files[keeper] then
+			reviewFiles(r.dir, files[keeper])
+		end
+	end
+	for _, raft in rafts do
+		local design, code = boardview.rounds(files[raft.id])
+		raft.rounds = { design = design, code = code }
+	end
+	local charts: { [string]: ProjectCharts } = {}
+	for _, p in projectList do
+		local landed: { boardview.Landed } = {}
+		for _, raft in rafts do
+			if raft.project == p.name and raft.state == "done" and raft.doneAt then
+				table.insert(
+					landed,
+					{ id = raft.id, at = raft.doneAt, design = raft.rounds.design, code = raft.rounds.code }
+				)
+			end
+		end
+		local rows: { boardview.TokenRow } = {}
+		for _, i in rawIssues do
+			if projectOf[i.id] == p.name then
+				for _, row in spendRows(spendPath(i.root, i.state, i.id), problems) do
+					local at = boardview.rowInstant(row.when)
+					if at and row.tokens then
+						table.insert(
+							rows,
+							{ at = at, phase = row.phase, tokens = row.tokens, model = modelOf(row) }
+						)
+					end
+				end
+			end
+		end
+		local pc: ProjectCharts = { rounds = {}, tokens = {} }
+		for _, range in boardview.RANGES do
+			if facts.asOf then
+				pc.rounds[range.key] = chartSvg(
+					`{p.name}/rounds/{range.key}`,
+					"Review rounds by week (rafts landed that week)",
+					"rounds",
+					boardview.roundsByWeek(landed, facts.asOf, range.days)
+				)
+				pc.tokens[range.key] = chartSvg(
+					`{p.name}/tokens/{range.key}`,
+					"Review tokens by model (design-review and code-review)",
+					"tokens",
+					boardview.tokensByWeek(rows, facts.asOf, range.days)
+				)
+			end
+		end
+		charts[p.name] = pc
+	end
+	local ranges = {}
+	for _, range in boardview.RANGES do
+		table.insert(ranges, { key = range.key, label = range.label })
+	end
+	table.sort(problems)
+
 	return {
 		rafts = rafts,
 		issues = issues,
 		views = views,
 		home = home,
-		initialView = "rafts",
-		stats = statistics(checkoutDir, rawIssues),
+		initialView = "board",
+		stats = statistics(hist, rawIssues, problems),
+		projects = projectList,
+		columns = columns,
+		charts = charts,
+		asOf = facts.asOf,
+		history = hist ~= nil,
+		windows = boardview.WINDOWS,
+		window = boardview.WINDOW,
+		ranges = ranges,
+		range = boardview.RANGE,
+		problems = problems,
 	}
 end
 
@@ -854,10 +1266,10 @@ end
 
 -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
 -- marked.
-function board.build(root: string?, checkout: string?): string
+function board.build(root: string?, checkout: string?, facts: Facts?): string
 	local markedJs = fs.readFile(fromTop(board.MARKED_PATH))
 	board.checkMarked(markedJs)
-	return board.render(board.collect(root, checkout), markedJs)
+	return board.render(board.collect(root, checkout, facts), markedJs)
 end
 
 return board

@@ -2,6 +2,7 @@
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
+local boardview = require("./boardview")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
 local fs = require("@lune/fs")
@@ -4177,14 +4178,12 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
 	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
 	for _, raft in store.all("raft") do
-		local design, code = 0, 0
+		-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
+		local paths: { string } = {}
 		for _, name in fs.readDir(raft.dir) do
-			if string.match(name, "^design%-review%-%d+%.md$") then
-				design += 1
-			elseif string.match(name, "^review%-%d+%.md$") then
-				code += 1
-			end
+			table.insert(paths, `{raft.dir}/{name}`)
 		end
+		local design, code = boardview.rounds(paths)
 		local first = `{raft.dir}/design-review-001.md`
 		local format = "none"
 		if fs.isFile(first) then

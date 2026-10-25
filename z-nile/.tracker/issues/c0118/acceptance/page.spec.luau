@@ -16,12 +16,10 @@ local REGISTRY = [==[
 [[project]]
 name = "game"
 root = "game/.tracker"
-home = "game"
 
 [[project]]
 name = "tool"
 root = "tool/.tracker"
-home = "."
 ]==]
 
 local function write(path: string, text: string)

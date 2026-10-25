@@ -4,9 +4,14 @@
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
+-- the spec runs from its project's home: the checkout's own files are read from the top (c0120)
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
+
 local function boardRow(): string
 	local row = ""
-	for line in string.gmatch(fs.readFile("z-nile/skills/zz-rules/SKILL.md"), "[^\n]+") do
+	for line in string.gmatch(fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`), "[^\n]+") do
 		if string.sub(line, 1, 10) == "| board | " then
 			row = line
 		end
@@ -62,7 +67,7 @@ return t.spec("c0118 board docs", function(it)
 	end)
 
 	it("the README draws the built board and names the served one as planned", function()
-		local text = fs.readFile("z-nile/README.md")
+		local text = fs.readFile(`{TOP}/z-nile/README.md`)
 		t.expect(has(text, 'board["board: ./zn board, a tab per project"]')).toBe(true)
 		t.expect(has(text, "new board c0118, planned")).toBe(false)
 		t.expect(has(text, "`./zn board --serve` (c0121, planned) serves the same page live")).toBe(true)

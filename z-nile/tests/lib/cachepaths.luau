@@ -125,6 +125,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 	},
+	["z-nile/engine/board.luau"] = {
+		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
+	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
 	},
