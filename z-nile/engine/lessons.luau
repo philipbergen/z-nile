@@ -1,9 +1,11 @@
 --!strict
--- Skill lessons (c0111): one Markdown file per lesson under .claude/skills/<skill>/lessons/<slug>.md, and a
+-- Skill lessons (c0111): one Markdown file per lesson under <skills folder>/<skill>/lessons/<slug>.md (z-nile/skills or
+-- <project>/skills, c0115; .claude/skills in a tree from before c0115), and a
 -- harvest.md ledger in each reviewed item's folder mapping every review finding to the lessons it taught, or
 -- marking it one-off. Everything here is pure over texts except `load`, which only reads.
 local fs = require("@lune/fs")
 local projects = require("./projects")
+local skillsLib = require("./skills")
 
 local stats = require("./stats")
 
@@ -37,6 +39,9 @@ export type Tree = {
 	lessons: { [string]: string },
 	found: { [string]: boolean }, -- every item folder seen, reviewed or not
 	skills: { [string]: boolean },
+	-- c0115: each skill's real folder ("z-nile/skills/zz-test") and the project it belongs to; nil in hand-built trees
+	folders: { [string]: string }?,
+	owners: { [string]: string }?,
 	items: { Item },
 	problems: { string },
 }
@@ -414,7 +419,7 @@ function lessons.check(tree: Tree): { string }
 			continue
 		end
 		if not tree.skills[l.skill] then
-			add(`{id}: no skill {l.skill} (no .claude/skills/{l.skill}/SKILL.md)`)
+			add(`{id}: no skill {l.skill} (no {l.skill}/SKILL.md in any skills folder)`)
 		end
 		if not sources[id] and not l.from then
 			add(`{id}: no source: no harvest entry names it and it has no from`)
@@ -531,32 +536,75 @@ local function dirs(path: string): { string }
 	return out
 end
 
+-- Where a tree from before c0115 keeps its skills (and a hand-built tree with no folders is read as).
+lessons.LEGACY_SKILLS = ".claude/skills"
+
+-- A skill's real folder in a loaded tree ("z-nile/skills/zz-test"), or its legacy place.
+function lessons.folderOf(tree: Tree, skill: string): string
+	return (tree.folders and tree.folders[skill]) or `{lessons.LEGACY_SKILLS}/{skill}`
+end
+
 function lessons.load(root: string): Tree
-	local tree: Tree = { lessons = {}, found = {}, skills = {}, items = {}, problems = {} }
-	local base = `{root}/.claude/skills`
-	for _, skill in dirs(base) do
-		if fs.isFile(`{base}/{skill}/SKILL.md`) then
-			tree.skills[skill] = true
+	local folders: { [string]: string } = {}
+	local owners: { [string]: string } = {}
+	local tree: Tree = {
+		lessons = {},
+		found = {},
+		skills = {},
+		folders = folders,
+		owners = owners,
+		items = {},
+		problems = {},
+	}
+	-- c0115: the real skill folders, z-nile's and every project's (skills.folders); a tree that has none of them
+	-- predates c0115 and keeps its skills in .claude/skills
+	local ok, reg = pcall(projects.load, root)
+	if not ok then
+		error(`lessons: {reg}`, 0) -- a missing or bad registry refuses: never guess the roots or the skills folders (c0114)
+	end
+	local registry: projects.Registry = reg :: projects.Registry
+	local bases: { { path: string, project: string } } = {}
+	for _, f in skillsLib.folders(registry) do
+		if fs.isDir(`{root}/{f.path}`) then
+			table.insert(bases, { path = f.path, project = f.project })
 		end
-		local folder = `{base}/{skill}/lessons`
-		if fs.isDir(folder) then
-			local names = fs.readDir(folder)
-			table.sort(names)
-			for _, name in names do
-				local slug = string.match(name, "^(.+)%.md$")
-				if string.sub(name, 1, 1) == "." then
-					continue -- hidden files (.DS_Store, editor swap files) are never lessons
-				elseif slug and fs.isFile(`{folder}/{name}`) then
-					tree.lessons[`{skill}/{slug}`] = fs.readFile(`{folder}/{name}`)
-				else
-					table.insert(tree.problems, `.claude/skills/{skill}/lessons/{name}: not a lesson file`)
+	end
+	if #bases == 0 then
+		bases = { { path = lessons.LEGACY_SKILLS, project = "" } }
+	end
+	for _, b in bases do
+		for _, skill in dirs(`{root}/{b.path}`) do
+			local rel = `{b.path}/{skill}`
+			if folders[skill] then
+				table.insert(tree.problems, `skill {skill} is in two folders: {folders[skill]} and {rel}`)
+				continue
+			end
+			if fs.isFile(`{root}/{rel}/SKILL.md`) then
+				tree.skills[skill] = true
+			end
+			folders[skill] = rel
+			if b.project ~= "" then
+				owners[skill] = b.project
+			end
+			local folder = `{root}/{rel}/lessons`
+			if fs.isDir(folder) then
+				local names = fs.readDir(folder)
+				table.sort(names)
+				for _, name in names do
+					local slug = string.match(name, "^(.+)%.md$")
+					if string.sub(name, 1, 1) == "." then
+						continue -- hidden files (.DS_Store, editor swap files) are never lessons
+					elseif slug and fs.isFile(`{folder}/{name}`) then
+						tree.lessons[`{skill}/{slug}`] = fs.readFile(`{folder}/{name}`)
+					else
+						table.insert(tree.problems, `{rel}/lessons/{name}: not a lesson file`)
+					end
 				end
 			end
 		end
 	end
 	-- items under every project root of the checkout (c0114): z-nile's rafts hold the harvests
-	local ok, reg = pcall(projects.load, root)
-	local roots: { string } = if ok then projects.roots(reg :: projects.Registry) else { projects.LEGACY }
+	local roots: { string } = projects.roots(registry)
 	for _, top in roots do
 		for _, kind in { "issues", "rafts" } do
 			for _, state in { "", "/active", "/done" } do
@@ -590,6 +638,94 @@ function lessons.load(root: string): Tree
 		return a.id < b.id
 	end)
 	return tree
+end
+
+-- c0115: the old lesson ids in one harvest.md line. Every byte of a ledger takes one of two rules. The id list of
+-- an entry parseHarvest (the format's one reader) returns takes the id rule: every id of an old skill counts, known or
+-- not. Everything else is prose and takes skills.oldLessonIds' prose rule (only a token whose renamed lesson exists):
+-- the rest of an entry's line (its review and finding, a note's text, a one-off's reason), and every line parseHarvest
+-- skips (headings, paragraphs, indented sub-bullets, blank or odd lines) or refuses (`lessons --check` still fails on
+-- those). Returns the line with every known old id renamed, the count, every old id found ("old/slug"), and the
+-- parsed ids with no renamed lesson.
+local function ledgerLine(
+	line: string,
+	existing: { [string]: boolean }
+): (string, number, { string }, { string })
+	local found: { string } = {}
+	local unknown: { string } = {}
+	local function prose(text: string): (string, number)
+		for _, hit in skillsLib.oldLessonIds(text, existing) do
+			table.insert(found, `{hit.old}/{hit.slug}`)
+		end
+		return skillsLib.renameLessonIds(text, existing)
+	end
+	local entry = lessons.parseHarvest("x", line)[1]
+	local head, ids
+	if entry and entry.note then
+		head, ids = string.match(line, "^(%- note .*: )([^:]*)$")
+	elseif entry and not entry.oneOff then
+		head, ids = string.match(line, "^(%- %S+ F%d+:%s*)(.*)$")
+	end
+	if not entry or entry.oneOff or not head or not ids then
+		-- no id list on this line: all of it is prose
+		local out, n = prose(line)
+		return out, n, found, unknown
+	end
+	local out, n = prose(head :: string)
+	local renamed: { [string]: string } = {}
+	for _, id in entry.lessons do
+		local old, slug = string.match(id, "^([^/]+)/(.+)$")
+		local new = old and skillsLib.RENAMED[old]
+		if new then
+			table.insert(found, id)
+			if existing[`{new}/{slug}`] then
+				renamed[id] = `{new}/{slug}`
+			else
+				table.insert(unknown, id)
+			end
+		end
+	end
+	-- each id renamed in place: the list's separators and spaces stay byte for byte
+	local list = string.gsub(ids :: string, "[^,]+", function(chunk: string): string
+		local left, core, right = string.match(chunk, "^(%s*)(.-)(%s*)$")
+		local new = core and renamed[core]
+		if new then
+			n += 1
+			return `{left}{new}{right}`
+		end
+		return chunk
+	end)
+	return out .. list, n, found, unknown
+end
+
+-- Every old lesson id in a harvest.md's text ("old/slug"), and the parsed ones with no renamed lesson.
+function lessons.ledgerOldIds(text: string, existing: { [string]: boolean }): ({ string }, { string })
+	local found: { string } = {}
+	local unknown: { string } = {}
+	for line in string.gmatch(text, "[^\n]+") do
+		local _, _, f, u = ledgerLine(line, existing)
+		table.move(f, 1, #f, #found + 1, found)
+		table.move(u, 1, #u, #unknown + 1, unknown)
+	end
+	return found, unknown
+end
+
+-- A harvest.md's text with every known old id renamed (ids and prose alike), the count, and the unknown parsed ids.
+function lessons.renameLedger(text: string, existing: { [string]: boolean }): (string, number, { string })
+	local out: { string } = {}
+	local unknown: { string } = {}
+	local n = 0
+	for line in string.gmatch(text .. (if string.sub(text, -1) == "\n" then "" else "\n"), "([^\n]*)\n") do
+		local l, m, _, u = ledgerLine(line, existing)
+		table.insert(out, l)
+		n += m
+		table.move(u, 1, #u, #unknown + 1, unknown)
+	end
+	local joined = table.concat(out, "\n")
+	if string.sub(text, -1) == "\n" then
+		joined ..= "\n"
+	end
+	return joined, n, unknown
 end
 
 return lessons

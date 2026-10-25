@@ -2,8 +2,8 @@
 # Acceptance checks for c0077. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0077 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0077 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0077"
 
@@ -39,9 +39,9 @@ check "AC4: the launcher unlinks links at the top of its cache after the command
   "the launcher unlinks them even when the command was killed by a signal"
 check "AC5: every .cache line in scripts/ is on the reviewed list; the scan flags new mentions and stale entries" paths \
   "a new .cache mention in a Luau or a shell file is flagged" "a commented mention is not flagged" \
-  "a listed line that is gone is reported" "every .cache line in scripts/ is on the reviewed list"
+  "a listed line that is gone is reported" "every .cache line in scripts/ and z-nile/ is on the reviewed list"
 check "AC6: no mv -f is left in check.sh, fence.sh or sh.luau" bash -c '
-  if grep -nE "\bmv\b.*-f|\"mv\"" scripts/check.sh scripts/lib/fence.sh scripts/lib/sh.luau; then
-    echo "a move is still used to put a file in place (use scripts/lib/replace-file.pl)"; exit 1; fi'
+  if grep -nE "\bmv\b.*-f|\"mv\"" ./check.sh lib/fence.sh lib/sh.luau; then
+    echo "a move is still used to put a file in place (use lib/replace-file.pl)"; exit 1; fi'
 
 finish

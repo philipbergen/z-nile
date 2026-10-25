@@ -6,6 +6,11 @@
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
+-- c0117 runs from its project's home, z-nile/ (c0120): every path of the real tree this spec reads is the
+-- repository's, from its top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
 local ROOT = [[
 order = ["claude", "grok", "agent"]
@@ -340,7 +345,7 @@ return t.spec("c0117 .models.toml", function(it)
 	end)
 
 	it("the root .models.toml resolves every model step on all three CLIs", function()
-		local layers = { models.parse(fs.readFile(".models.toml"), ".models.toml") }
+		local layers = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 		for _, skill in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
 			local r = models.resolve(layers, skill)
 			for _, cli in models.CLIS do

@@ -1,0 +1,11 @@
+---
+title: Facts judged together are read at one moment
+when: both
+tags: [races, files, locks]
+check: Where a decision reads two facts that must belong together (a pid and its start id, an owner and its token), are they in one file written whole (written to a temp file, then renamed), or is the first one re-read to confirm nothing changed in between?
+---
+Two files read milliseconds apart can come from two different writers: the folder changes hands between the reads, and the decision pairs one writer's pid with another's id.
+
+**Why:** R0047 design review 004 F2: the takeover's owner was judged from `takeover/pid` and `takeover/start`, read separately; if the takeover changed hands between the reads, a live owner looked reused and its takeover was removed, a race the old rule (pid only) didn't have.
+
+**How to apply:** write the pair as one line in one file, through a temp file and a rename, and parse both from that one read; or re-read the first file after the second and judge only if it is unchanged. The same goes for any single value a reader can catch half written: write it whole.

@@ -1,17 +1,17 @@
 # Harvest: c0118
-- design-review-001 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
-- design-review-001 F2: tracker/item-history-spans-moves-and-compaction, architecture/one-reader-per-format
+- design-review-001 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/seed-every-enumerated-case
+- design-review-001 F2: zz-rules/item-history-spans-moves-and-compaction, zz-arch/one-reader-per-format
 - design-review-001 F3: one-off: `stop` keeps a raft's branch, so "a branch exists" outlived the run it marked; the launch rule now compares the branch tip with the raft's latest arrival in active/
-- design-review-001 F4: ticket-prep/never-narrow-captured-scope
-- design-review-001 F5: ticket-prep/spec-design-correspondence, ticket-prep/specify-every-named-artifact
-- design-review-001 F6: ticket-prep/spec-design-correspondence
-- design-review-001 F7: ticket-prep/prove-specs-pass-on-a-prototype
-- note c0118 prep, before review: arrival dates taken from an item's first add to done/ picked the 2026-10-05 compaction's re-add (the subagent's candidate, "arrival dates and compaction re-adds"): tracker/item-history-spans-moves-and-compaction
-- design-review-002 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
-- design-review-002 F2: ticket-prep/restated-rules-move-together, ticket-prep/spec-design-correspondence
-- design-review-002 F3: ticket-prep/never-narrow-captured-scope
-- design-review-003 F1: testing/seed-every-enumerated-case, tracker/item-history-spans-moves-and-compaction
-- design-review-003 F2: tracker/item-history-spans-moves-and-compaction
-- design-review-004 F1: tracker/item-history-spans-moves-and-compaction, testing/seed-every-enumerated-case
-- design-review-005 F1: architecture/guard-no-is-explicit, testing/seed-every-enumerated-case
-- design-review-005 F2: tracker/item-history-spans-moves-and-compaction
+- design-review-001 F4: z-design/never-narrow-captured-scope
+- design-review-001 F5: z-design/spec-design-correspondence, z-design/specify-every-named-artifact
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: z-design/prove-specs-pass-on-a-prototype
+- note c0118 prep, before review: arrival dates taken from an item's first add to done/ picked the 2026-10-05 compaction's re-add (the subagent's candidate, "arrival dates and compaction re-adds"): zz-rules/item-history-spans-moves-and-compaction
+- design-review-002 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/seed-every-enumerated-case
+- design-review-002 F2: z-design/restated-rules-move-together, z-design/spec-design-correspondence
+- design-review-002 F3: z-design/never-narrow-captured-scope
+- design-review-003 F1: zz-test/seed-every-enumerated-case, zz-rules/item-history-spans-moves-and-compaction
+- design-review-003 F2: zz-rules/item-history-spans-moves-and-compaction
+- design-review-004 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/seed-every-enumerated-case
+- design-review-005 F1: zz-arch/guard-no-is-explicit, zz-test/seed-every-enumerated-case
+- design-review-005 F2: zz-rules/item-history-spans-moves-and-compaction

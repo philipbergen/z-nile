@@ -2,8 +2,8 @@
 # Acceptance checks for c0008. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0008 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0008 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0008"
 
@@ -26,7 +26,7 @@ check "AC1: done marks the PR ready while origin has the previous head, then pus
 check "AC2: a gh failure rolls done back (HEAD, tree, raft state, nothing pushed)" cases_pass \
   "rolls back and stays active when gh cannot mark the PR ready"
 check "AC3: the skills document the new order and drop the old one" bash -c '
-  t=.claude/skills/tracker/SKILL.md; x=.claude/skills/execute-raft/SKILL.md
+  t=skills/zz-rules/SKILL.md; x=skills/zz-execute/SKILL.md
   for s in "marks the PR **ready** before its final push" "the push starts the \`pull_request\` run"; do
     grep -qF -- "$s" "$t" || { echo "tracker skill is missing: $s"; exit 1; }
   done

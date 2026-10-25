@@ -2,8 +2,8 @@
 # Acceptance checks for c0038. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0038 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0038 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0038"
 
@@ -28,7 +28,7 @@ check "AC1: a deferred answer is refused when the finding is high or unrated, th
 check "AC2: fixed and refuted still work, other words stay unanswered, and a valid deferral finishes done" cases_pass \
   "still accepts fixed and refuted" "finishes when medium and low findings are deferred"
 check "AC3: the skills document deferred and drop the interim form" bash -c '
-  x=.claude/skills/execute-raft/SKILL.md; t=.claude/skills/tracker/SKILL.md
+  x=skills/zz-execute/SKILL.md; t=skills/zz-rules/SKILL.md
   grep -qF -- "- F<n>: deferred <id>: <why>" "$x" || { echo "execute-raft lacks the deferred form"; exit 1; }
   grep -qF -- "deferred <id>" "$t" || { echo "tracker skill lacks deferred"; exit 1; }
   for s in "interim form" "refuted: below the merge threshold"; do

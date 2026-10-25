@@ -2,8 +2,8 @@
 # Acceptance checks for c0078. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
-source "$(git -C "$HERE" rev-parse --show-toplevel)/scripts/lib/ac.sh" # cds to the repo root
-# sequestered specs: here before `tracker.sh done`, promoted to tests/acceptance/c0078 after it
+source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the repo root
+# sequestered specs: here before `./zn done`, promoted to tests/acceptance/c0078 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0078"
 
@@ -40,7 +40,7 @@ check "AC3: the link probe says made, refused (only for Operation not permitted)
   "a probe that fails for another reason is an error, not a refusal" \
   "when jailed, the link probe at the top of .cache says refused"
 check "AC4: the testing skill states every guard as it now is" bash -c '
-  s=.claude/skills/testing/SKILL.md
+  s=skills/zz-test/SKILL.md
   for fact in "same-sandbox" "replace-file.pl" "cachepaths" "watchdog" "sweep" "99999"; do
     grep -qF "$fact" "$s" || { echo "the testing skill does not mention $fact"; exit 1; }
   done

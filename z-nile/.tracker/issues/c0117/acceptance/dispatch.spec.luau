@@ -5,6 +5,11 @@
 local dispatch = require("@znile/engine/dispatch")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
+-- c0117 runs from its project's home, z-nile/ (c0120): every path of the real tree this spec reads is the
+-- repository's, from its top
+local TOP = (
+	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+)
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -21,7 +26,7 @@ end
 local function facts(over: { [string]: any }): dispatch.Facts
 	local f: { [string]: any } = {
 		id = "c0010",
-		folder = "tracker/issues/c0010",
+		folder = "pickman/.tracker/issues/c0010",
 		root = "tracker",
 		kind = "issue",
 		where = "backlog",
@@ -79,8 +84,8 @@ return t.spec("c0117 dispatch rules", function(it)
 			for _, name in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
 				t.expect(dispatch.step(name).kind).toBe("model")
 			end
-			for _, name in fs.readDir("z-nile/skills") do
-				if fs.isFile(`z-nile/skills/{name}/SKILL.md`) then
+			for _, name in fs.readDir(`{TOP}/z-nile/skills`) do
+				if fs.isFile(`{TOP}/z-nile/skills/{name}/SKILL.md`) then
 					local ok, e = pcall(dispatch.step, name)
 					t.expect(ok or (dispatch.READ_INSIDE[name] == true and has(tostring(e), "read inside")))
 						.toBe(true)
@@ -165,7 +170,7 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(has(p, "Never merge a pull request and never push to main")).toBe(true)
 		t.expect(has(p, "without --tokens")).toBe(true)
 		-- no line of the skill itself
-		local skill = fs.readFile("z-nile/skills/z-design/SKILL.md")
+		local skill = fs.readFile(`{TOP}/z-nile/skills/z-design/SKILL.md`)
 		t.expect(has(p, string.match(skill, "\n(The goal is[^\n]+)") :: string)).toBe(false)
 		local review = dispatch.prompt({
 			step = "zz-review",

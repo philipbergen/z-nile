@@ -1,9 +1,26 @@
 # Harvest: c0116
-- design-review-001 F1: architecture/claims-name-who-else-can-claim, architecture/lock-reads-live-state
-- design-review-001 F2: tracker/retire-keeps-what-readers-count
-- design-review-001 F3: ticket-prep/new-rules-migrate-existing-work
-- design-review-001 F4: testing/new-commands-run-in-a-copy
+- design-review-001 F1: zz-arch/claims-name-who-else-can-claim, zz-arch/lock-reads-live-state
+- design-review-001 F2: zz-rules/retire-keeps-what-readers-count
+- design-review-001 F3: z-design/new-rules-migrate-existing-work
+- design-review-001 F4: zz-test/new-commands-run-in-a-copy
 - design-review-001 F5: one-off: a guard keyed on "a member was prepared on origin" where the rule meant "this rafting changed the membership"; specific to the coherence-review guard
-- design-review-001 F6: ticket-prep/specify-every-named-artifact
-- design-review-001 F7: ticket-prep/spec-design-correspondence
-- note c0116 prep mutation run: M24 and M27 survived because a second check refused the same input: testing/guard-needs-its-own-case
+- design-review-001 F6: z-design/specify-every-named-artifact
+- design-review-001 F7: z-design/spec-design-correspondence
+- note c0116 prep mutation run: M24 and M27 survived because a second check refused the same input: zz-test/guard-needs-its-own-case
+- design-review-002 F1: zz-arch/locks-detect-change, zz-arch/claims-name-who-else-can-claim
+- design-review-002 F2: zz-rules/retire-keeps-what-readers-count, zz-test/prove-state-folders-on-the-real-tree, zz-test/seed-every-enumerated-case
+- design-review-002 F3: z-design/instructions-runnable-where-they-run
+- design-review-002 F4: one-off: the remembered issue claim's own failure modes (a cleared .cache, and release covering only the raft's stamp), specific to G14
+- design-review-003 F1: zz-arch/records-cover-what-was-reviewed, zz-arch/locks-detect-change
+- design-review-003 F2: z-design/required-steps-on-every-path
+- design-review-003 F3: zz-test/guard-needs-its-own-case
+- design-review-003 F4: zz-arch/records-cover-what-was-reviewed, zz-rules/item-history-spans-moves-and-compaction
+- design-review-003 F5: zz-arch/guard-no-is-explicit
+- design-review-003 F6: one-off: unfold of a raft's last member left an empty prepared raft; the orphan warning now covers it
+- design-review-004 F1: zz-arch/one-reader-per-format, zz-arch/records-cover-what-was-reviewed
+- design-review-004 F2: zz-test/guard-needs-its-own-case, zz-arch/records-cover-what-was-reviewed
+- design-review-004 F3: z-design/restated-rules-move-together
+- design-review-004 F4: one-off: the refusal printed the exact line that silences it; the message now names the record's ids and the rule "never edit a written review"
+- design-review-005 F1: zz-arch/one-reader-per-format, z-design/restated-rules-move-together
+- design-review-006 F1: zz-arch/guard-no-is-explicit
+- note a simulated done of c0116 itself found retired.spec's fixture holding the moved item twice (clone of HEAD plus the working tree): z-design/prove-specs-pass-on-a-prototype
