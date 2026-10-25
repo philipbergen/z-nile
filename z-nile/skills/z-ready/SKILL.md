@@ -1,11 +1,11 @@
 ---
 name: z-ready
-description: Ready a raft for execution, which claims it, moves it and its issues to `active/` on origin/main with their `check.sh` paths rewritten, and writes the self-contained prompt to `<root>/rafts/active/<R-id>/prompt.md` (beside the raft, in its project root) for any agent (Opus, Grok, ...) to deliver as one PR. An issue with no raft goes back to z-design first. Also used to regenerate the prompt. Use for "ready a raft", "ready R0010", "/z-ready".
+description: Ready a raft for execution, which claims it, moves it and its issues to `active/` on origin/main with their `check.sh` paths rewritten, and writes the self-contained prompt to `<root>/rafts/active/<R-id>/prompt.md` (beside the raft, in its project root) for any agent (Opus, Grok, ...) to deliver as one PR. An issue with no raft goes to z-raft first. Also used to regenerate the prompt. Use for "ready a raft", "ready R0010", "/z-ready".
 ---
 
 # Ready a raft
 
-1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-design makes one (`--single` for a lone issue) in its prep worktree and merges it. A prompt for an undesigned issue defeats the purpose.
+1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-raft makes one (`./zn raft-plan`, or `./zn new raft … <id> --project <name>`) in its rafting worktree and merges it. A prompt for an undesigned issue defeats the purpose.
 2. **Check readiness.** First, **scope**: each member's title, Problem and Solution ideas match its capture (`./zn capture <id>`; z-design, **Scope is what was captured**) apart from added detail and decision lines, and a capture whose header carries any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) counts as not matching until the Problem has a `Scope decision (user, …)` line that confirms the item's scope. If one doesn't, stop and ask the user. Their answer lands as a `Scope decision` line through a pull request merged with the subject `tracker: scope <id> <what>` (a `tracker: new` subject would make the whole prepared document the new capture) before you ready the raft. If they restore the captured scope instead, the raft goes back to prep. `./zn ready` enforces every rule below except the acceptance specs one, and refuses with the reason, naming the item; read them so you can explain a refusal.
    - The raft and every member are `design: ready`.
    - Every issue has a `check.sh` with at least one `check`.

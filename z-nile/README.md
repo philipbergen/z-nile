@@ -4,7 +4,7 @@
 flowchart LR
   subgraph skills["skills: z-nile/skills, project/skills"]
     direction LR
-    zticket["z-ticket"] --> zdesign["z-design"] --> zraft["z-raft (c0116, planned)"] --> zready["z-ready"] --> zrun["z-run"]
+    zticket["z-ticket"] --> zdesign["z-design"] --> zraft["z-raft"] --> zready["z-ready"] --> zrun["z-run"]
     zready -.-> zstop["z-stop"]
     zrun -.-> zstop
   end
@@ -33,13 +33,13 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
 | skill | step | what it does |
 |---|---|---|
 | `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
-| `z-design` | 2 | designs issues to `design: ready`: Design, `check.sh`, acceptance specs, experiments, the adversarial design review. Until c0116 it also forms the raft |
-| `z-raft` | 3 | (c0116, planned) groups prepared issues into rafts |
+| `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
+| `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
 | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
 | `z-run` | 5 | launches a readied raft from the main checkout (`/z-run R0010`): reads its prompt, enters its worktree, hands off to zz-execute |
 | `z-stop` | any | gives a readied or started raft back; its branch and PR stay |
 | `zz-execute` | from z-run | the execution protocol: one branch, one PR, experiments, tests first, review, done, merge |
-| `zz-review` | from z-design and zz-execute | the clean adversarial reviewer: design, stream and code modes |
+| `zz-review` | from z-design, z-raft and zz-execute | the clean adversarial reviewer: design, raft, stream and code modes |
 | `zz-rules` | every step | the tracker's rules: ids, roots, lifecycle, worktrees, landing, spend |
 | `zz-arch` | design and build of the tooling | the tooling's code structure |
 | `zz-test` | every step | the gate, the spec runner, `check.sh`, sequestration and the guards |
@@ -53,14 +53,15 @@ z-design reads the checklist for the issue's type before it writes the Design:
 - `z-nile/skills/z-design/checklists/chore.md`
 
 ## The flow
-One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes are chores. A lone issue still gets a raft (`--single`).
+One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes are chores. A lone issue still gets a raft.
 1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
-2. **z-design**, in `prep-<slug>`: `new raft` claims the issues (`preparing`); the designs, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and the prep PR merges.
-3. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
-4. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt, enters `.worktree/R0010` and hands off to zz-execute: `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
-5. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
+2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
+3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
+4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
+5. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt, enters `.worktree/R0010` and hands off to zz-execute: `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
+6. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
 
-`design:` is separate from status, and only z-design changes it: `draft` → `reviewed` → `ready`.
+`design:` is separate from status: z-design changes an issue's and z-raft a raft's, `draft` → `reviewed` → `ready`.
 
 ```mermaid
 stateDiagram-v2
@@ -83,5 +84,6 @@ The main checkout stays on `main`; every edit is made under `.worktree/` (zz-rul
 |---|---|
 | capture | `capture-<slug>` |
 | prep | `prep-<slug>` |
+| rafting | `raft-<slug>` |
 | execution | `R0010`, branch `R0010-<slug>`, one PR |
 | a skill, doc or config edit | `<area>-<slug>` |
