@@ -3,8 +3,11 @@
 local audit = require("./audit")
 local board = require("./board")
 local boardview = require("./boardview")
+local brokerLib = require("./broker")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
+local dispatchLib = require("./dispatch")
+local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
@@ -14,6 +17,7 @@ local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
+local raftplan = require("./raftplan")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
 local spend = require("./spend")
@@ -33,6 +37,14 @@ usage: ./zn <command> ...
                                                 create an issue (emergent if the raft is active) in the project
                                                 whose folder you are in, or --project (refused elsewhere)
   new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
+                                                make a raft of new issues (claimed with it) or prepared ones (z-raft)
+  fold <R-id> <issue>...                        put prepared, raftless issues into a prepared backlog raft (z-raft)
+  unfold <R-id> <issue>...                      take members out of a backlog raft, back to no raft (z-raft)
+  recombine <keeper> <other> [<issue>...]       move the other backlog raft's members (all, or those named) into the
+                                                keeper; retire the other when it ends up empty (z-raft)
+  release <R-id> [--force]                      give back a rafting claim: what carries its stamp goes back to
+                                                prepared (design ready) or new (z-raft)
+  raft-plan [--apply]                           print z-raft's plan for every prepared, raftless issue (--apply runs it)
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
@@ -53,17 +65,26 @@ usage: ./zn <command> ...
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
+  stop <issue>                                  give back one active issue whose raft is retired, missing or empty
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
-                                                stage all, record spend, commit, push
-  spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--note <text>]
-                                                append one phase's rows to origin/main; changes nothing here
+         [--model <id>]                         stage all, record spend, commit, push
+  spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>]
+         [--note <text>]                        append one phase's rows to origin/main; changes nothing here
+  dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
+                                                ready, run), stopping at a merge gate, questions.md or a failure
+  dispatch new "<description>" [--project <name>] [--dry-run]
+                                                capture a new issue (z-ticket) and run its chain
+  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
+                                                run one step: a model step on .models.toml's CLIs, a script step itself
+  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+  dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
-  promote-check <R-id>                          dry-run: would promoted acceptance specs pass type check + meta?
+  promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   capture <id>                                  print the item's document as captured (read-only)
   metrics [--include-active]                    cost per issue and rework %
@@ -75,6 +96,7 @@ usage: ./zn <command> ...
                                                 <project>/skills); --check writes nothing and exits 1 on a problem]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
+local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
 -- the issue, raft and prompt templates: engine files, shared by every project (c0114)
 local TEMPLATES = "z-nile/templates"
 
@@ -134,7 +156,8 @@ end
 
 -- Only a GitHub origin gets draft PRs: anything else (a local bare remote in a spec) has no `gh`.
 local function onGitHub(): boolean
-	local r = sh.run("git", { "remote", "get-url", "origin" })
+	-- the URL as configured, before any insteadOf rewrite (c0117: a spec's GitHub-named origin is a local path)
+	local r = sh.run("git", { "config", "--get", "remote.origin.url" })
 	return r.ok and string.find(r.stdout, "github.com", 1, true) ~= nil
 end
 
@@ -245,6 +268,17 @@ local function guarded(): boolean
 	return guardedRun == true
 end
 
+-- Whether this process runs inside a guarded run (a spec, or a check.sh fenced through ac.sh), asked of the guards'
+-- own script like `guarded` (c0117): only the exact answer `free` means no; inside one, ./zn dispatch starts no model
+-- CLI but a fake one under the checkout's .cache.
+local function checking(): boolean
+	local ok, r = pcall(process.exec, "bash", {
+		"-c",
+		"[ -f z-nile/lib/fence.sh ] || exit 3; source z-nile/lib/fence.sh && pickman_checking",
+	})
+	return not (ok and r.ok and sh.trim(r.stdout) == "free")
+end
+
 local function publishing(): boolean
 	local v = process.env.PICKMAN_PUBLISH
 	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
@@ -341,6 +375,26 @@ end
 
 local function claimFile(raftId: string): string
 	return `.cache/tracker-claim-{raftId}`
+end
+
+-- c0116: remembers a rafting claim (`new raft`, `fold`, `recombine`) in this checkout, so a re-run resumes it and
+-- `release` gives back only a claim it finds here.
+local function rememberClaim(raftId: string, value: string)
+	local dir = string.match(claimFile(raftId), "^(.*)/") :: string
+	if not fs.isDir(dir) then
+		fs.writeDir(dir)
+	end
+	sh.writeReplacing(claimFile(raftId), value)
+end
+
+-- c0116 (review 001 F2): where `recombine` keeps a retired raft's folder: beside the backlog, never a lifecycle folder.
+local function retiredDir(root: string, raftId: string): string
+	return `{root}/rafts/{RETIRED}/{raftId}`
+end
+
+-- The claim this checkout remembers for an item (a raft, or an issue z-design claimed here), or "".
+local function rememberedClaim(raftId: string): string
+	return if fs.isFile(claimFile(raftId)) then sh.trim(fs.readFile(claimFile(raftId))) else ""
 end
 
 local function idsOf(paths: { string }, kind: string): { string }
@@ -523,11 +577,11 @@ end
 -- The three words of a fresh stamp: the phrase that makes every write of tracker/next differ (c0870).
 -- A claim stamp (`active-…`) that no item on origin/main carries, done/ included: `stop` gives back exactly the
 -- issues that carry the raft's stamp, so two claims must never share one. One `git grep` over the fetched tree.
-local function claimStamp(): string
+local function freshStamp(state: string): string
 	local roots = originRoots()
 		or fail(`cannot check a claim stamp: origin/main has no readable {projects.FILE}`)
 	local value = statusLib.fresh(function()
-		return stamp("active")
+		return stamp(state)
 	end, function(v: string): boolean
 		local taken, err = claimsLib.taken(".", v, nil, roots)
 		if taken == nil then
@@ -536,6 +590,10 @@ local function claimStamp(): string
 		return taken == true
 	end)
 	return value or fail("could not draw a claim stamp that origin/main does not already carry")
+end
+
+local function claimStamp(): string
+	return freshStamp("active")
 end
 
 local function phrase(): string
@@ -550,10 +608,18 @@ local function moveOnOrigin(
 	to: store.State,
 	status: string,
 	message: string,
-	verify: ((id: string, st: string) -> string?)?
+	verify: ((id: string, st: string) -> string?)?,
+	whole: ((paths: { string }, read: (string) -> string?) -> string?)?
 ): publish.Result
 	refuseStale()
 	return published(publish.commit(".", function(paths, read)
+		-- c0116 (review 004 F1): a check of the tree being published, in the same build
+		if whole then
+			local refusal = whole(paths, read)
+			if refusal then
+				return refusal
+			end
+		end
 		local dirs: { [string]: string } = {}
 		local sources: { [string]: string } = {}
 		for _, id in ids do
@@ -720,6 +786,8 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--check"
 			or a == "--tags"
 			or a == "--uncovered"
+			or a == "--apply"
+			or a == "--dry-run"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -810,6 +878,179 @@ local function refuseInWindow(what: string)
 			`{what}: origin/main has no {projects.FILE} (c0114 has not landed): capture from the main checkout until it does, never offline here`
 		)
 	end
+end
+
+-- c0116 (review 002 F1, 003 F1): an item folder's files as path (relative to the folder) -> text, read from the
+-- working tree, from origin/main, or from a publish build's tree; raftplan.recordHash picks the design files.
+-- The working tree as git sees it (review 004 F1): tracked files and untracked ones that aren't ignored, so a Finder
+-- .DS_Store or an editor's swap file never changes a record. Bytes from disk (the index's paths after a rewrite's git mv).
+-- `tracked`: the index only (review 005 F1). A reader takes the view its own commit will carry: the carried move's raft
+-- reviews may not be committed yet (tracked and untracked, ignored left out); a rewrite (compact, remap, renumber)
+-- commits only tracked files, so `keepRecords` hashes the index, and a work-in-progress file never changes its hashes.
+local function gitFolderFiles(dir: string, tracked: boolean?): { [string]: string }
+	local out: { [string]: string } = {}
+	if not fs.isDir(dir) then
+		return out
+	end
+	local args = if tracked
+		then { "ls-files", "-c", "-z", "--", "." }
+		else { "ls-files", "-co", "--exclude-standard", "-z", "--", "." }
+	local listed = process.exec("git", args, { cwd = dir })
+	if not listed.ok then
+		fail(`cannot list {dir} through git: {listed.stderr}`)
+	end
+	for _, rel in string.split(listed.stdout, "\0") do
+		if rel ~= "" and fs.isFile(`{dir}/{rel}`) then
+			out[rel] = fs.readFile(`{dir}/{rel}`)
+		end
+	end
+	return out
+end
+
+local function treeFolderFiles(
+	paths: { string },
+	read: (string) -> string?,
+	dir: string
+): { [string]: string }
+	local out: { [string]: string } = {}
+	local prefix = dir .. "/"
+	for _, p in paths do
+		if string.sub(p, 1, #prefix) == prefix then
+			local text = read(p)
+			if text then
+				out[string.sub(p, #prefix + 1)] = text
+			end
+		end
+	end
+	return out
+end
+
+local function originFolderFiles(dir: string): { [string]: string }
+	local out: { [string]: string } = {}
+	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main", "--", dir .. "/" })
+	if not listed.ok then
+		fail(`cannot list {dir} on origin/main to record what was grouped`)
+	end
+	for p in string.gmatch(listed.stdout, "[^\n]+") do
+		local shown = sh.run("git", { "show", `origin/main:{p}` })
+		if shown.ok then
+			out[string.sub(p, #dir + 2)] = shown.stdout
+		end
+	end
+	return out
+end
+
+-- Adds to the raft document's `grouped:` record each issue's record hash as it is on origin/main now, or (`forget`)
+-- drops their entries. The record rides in the rafting PR with the members' raft: lines.
+local function recordGrouped(raftDoc: string, ids: { string }, forget: boolean?)
+	local map, problem = raftplan.parseGrouped(store.readFront(raftDoc).grouped)
+	if problem then
+		fail(`{raftDoc}: {problem}`)
+	end
+	for _, id in ids do
+		if forget then
+			map[id] = nil
+		else
+			map[id] = raftplan.recordHash(id, originFolderFiles(store.get(id).dir))
+		end
+	end
+	store.setFront(raftDoc, "grouped", raftplan.renderGrouped(map))
+end
+
+-- The record's entries whose member now hashes differently (`now`: id -> hash, nil when the member is absent), as
+-- "<id> (<recorded> → <now>)" lines.
+local function regrouped(map: { [string]: string }, now: { [string]: string? }): { string }
+	local out: { string } = {}
+	for id, recorded in map do
+		local h = now[id]
+		if h and h ~= recorded then
+			table.insert(out, `{id} ({recorded} → {h})`)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+-- c0116 (review 003 F4): runs a mechanical rewrite of ids (compact, remap, renumber) under `root`, then re-records
+-- every `grouped:` entry whose member matched its record before the rewrite, in the raft's document and in the
+-- `Grouped:` lines its coherence reviews quote. An entry that did not match before still does not.
+local function keepRecords(root: string, idMap: { [string]: string }, rewrite: () -> ())
+	local function byId(): { [string]: string }
+		local out: { [string]: string } = {}
+		for _, f in audit.scan(root) do
+			out[f.id] = `{root}/{f.path}`
+		end
+		return out
+	end
+	local before = byId()
+	local kept: { { raft: string, id: string, hash: string } } = {}
+	for rid, dir in before do
+		local doc = `{dir}/{rid}.md`
+		if store.isRaftId(rid) and fs.isFile(doc) then
+			local map = raftplan.parseGrouped(store.readFront(doc).grouped)
+			for mid, h in map do
+				local mdir = before[mid]
+				if mdir and raftplan.recordHash(mid, gitFolderFiles(mdir, true)) == h then
+					table.insert(kept, { raft = rid, id = mid, hash = h })
+				end
+			end
+		end
+	end
+	rewrite()
+	local after = byId()
+	for _, k in kept do
+		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
+		local rdir, mdir = after[rid], after[mid]
+		if rdir and mdir then
+			local fresh = raftplan.recordHash(mid, gitFolderFiles(mdir, true))
+			local old, new = `{mid}@{k.hash}`, `{mid}@{fresh}`
+			for _, name in fs.readDir(rdir) do
+				if name == `{rid}.md` or string.match(name, "^design%-review%-%d+%.md$") then
+					local p = `{rdir}/{name}`
+					local text = fs.readFile(p)
+					local parts: { string } = {}
+					local at = 1
+					while true do
+						local a, b = string.find(text, old, at, true)
+						if not a then
+							break
+						end
+						table.insert(parts, string.sub(text, at, a - 1) .. new)
+						at = (b :: number) + 1
+					end
+					if #parts > 0 then
+						table.insert(parts, string.sub(text, at))
+						fs.writeFile(p, table.concat(parts))
+					end
+				end
+			end
+		end
+	end
+end
+
+-- c0116 (review 003 F2): whether a coherence review in the raft's folder quotes a `Grouped:` record that covers the
+-- current one: every current entry with the same hash (an unfold only drops entries, so it needs no new review).
+local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
+	if next(map) == nil then
+		return true
+	end
+	for name, text in files do
+		if string.match(name, "^design%-review%-%d+%.md$") then
+			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
+				local q = raftplan.parseGrouped(quoted)
+				local all = true
+				for id, h in map do
+					if q[id] ~= h then
+						all = false
+					end
+				end
+				if all then
+					return true
+				end
+			end
+		end
+	end
+	return false
 end
 
 local cmd = {}
@@ -952,6 +1193,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end
 			local chosen = ""
 			local root = ""
+			-- c0116: one fresh value, so `release` and the same-claim test never mistake another raft's claim for it
+			local claim = freshStamp("preparing")
 			refuseStale()
 			local r = published(publish.commit(".", function(paths, read, roots, counter)
 				-- a raft lives in its members' project, and never spans two (c0114)
@@ -984,27 +1227,51 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					return err
 				end
 				chosen = store.formatId("R", n or statusLib.nextNumber(known))
-				local claim = stamp("preparing")
 				local changes: { publish.Change } = {}
+				-- c0116: the members are all `new` (the old prep: each is claimed with the raft's stamp) or all
+				-- `prepared` with a ready design (z-raft: the stamp claims the raft only, and a prepared member is never
+				-- restamped). Membership itself is each issue's `raft:` line, written in this worktree and carried by the
+				-- rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly.
+				local kinds: { [string]: boolean } = {}
+				local solo: string? = nil
 				for _, id in ids do
 					local path = docPath(paths, id)
 					local text = path and read(path)
 					if not path or not text then
 						return `{id} is not on origin/main`
 					end
-					local owner = frontOf(text).raft
+					local front = frontOf(text)
+					local owner = front.raft
 					if owner and owner ~= "" then
 						return `{id} already belongs to {owner}`
 					end
-					local st = statusLib.effective(frontOf(text), stateOfPath(path))
-					if st ~= "new" then
-						return `{id} is {st} on origin/main, not new`
+					local st = statusLib.effective(front, stateOfPath(path))
+					if stateOfPath(path) ~= "backlog" then
+						return `{id} is {st} on origin/main: a raft takes backlog issues only`
+					end
+					if st == "prepared" and front.design ~= "ready" then
+						return `{id} is prepared on origin/main without design: ready`
+					end
+					if st ~= "new" and st ~= "prepared" then
+						return `{id} is {st} on origin/main, not new or prepared`
+					end
+					kinds[st] = true
+					if front.solo == "true" then
+						solo = id
 					end
 					if store.TYPES[string.sub(id, 1, 1)] ~= rtype then
 						return `{id} is a {store.TYPES[string.sub(id, 1, 1)]}; a {rtype} raft cannot contain it`
 					end
 					-- only `status:` is written: `raft:` sits beside `depends_on:`, which a capture PR may be editing
-					table.insert(changes, { path = path, content = withFront(text, "status", claim) })
+					if st == "new" then
+						table.insert(changes, { path = path, content = withFront(text, "status", claim) })
+					end
+				end
+				if kinds.new and kinds.prepared then
+					return "a raft is made of new issues (claimed with it) or of prepared ones (z-raft), not both"
+				end
+				if solo and #ids > 1 then
+					return `{solo} is solo: true (a recorded user decision): it is rafted alone`
 				end
 				local vars = {
 					ID = chosen,
@@ -1035,12 +1302,23 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			if not r.ok then
 				fail(`new raft: {r.reason}`)
 			end
+			-- this checkout's claim: a re-run here resumes it, and `release` gives back only a claim it finds here
+			rememberClaim(chosen, claim)
 			mergeOrigin()
 			-- membership is written locally and committed, so later merges of origin/main stay clean
+			local grouped: { string } = {}
 			for _, id in ids do
-				local doc = store.get(id).doc
-				store.setFront(doc, "raft", chosen)
-				sh.git({ "add", doc })
+				local item = store.get(id)
+				store.setFront(item.doc, "raft", chosen)
+				sh.git({ "add", item.doc })
+				if statusLib.effective(frontOf(fs.readFile(item.doc)), item.state) == "prepared" then
+					table.insert(grouped, id)
+				end
+			end
+			if #grouped > 0 then
+				local raftDoc = store.get(chosen).doc
+				recordGrouped(raftDoc, grouped)
+				sh.git({ "add", raftDoc })
 			end
 			sh.git({ "commit", "--quiet", "-m", `tracker: {chosen} members` })
 			print(`{root}/rafts/{chosen}/{chosen}.md`)
@@ -1102,6 +1380,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- c0116: whether a document's `## <heading>` section holds any text beyond the template's comment.
+local function sectionWritten(text: string, heading: string): boolean
+	local body = string.match(text .. "\n## ", `\n## {heading}\n(.-)\n## `)
+	if not body then
+		return false
+	end
+	return string.match((string.gsub(body, "<!%-%-.-%-%->", "")), "%S") ~= nil
+end
+
 local function originPaths(): { string }
 	sh.git({ "fetch", "--quiet", "origin", "main" })
 	local ok, paths = originTree()
@@ -1140,6 +1427,9 @@ local function setStatus(id: string, to: string)
 		end
 		local value = stamp(to)
 		local changes: { publish.Change } = {}
+		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
+		local originHashes: { [string]: string? } = {} -- c0116 (review 002 F1, 003 F1): each member's record on origin
+		local groupedHere: { string } = {} -- c0116 (review 003 F5): prepared members this rafting grouped
 		for _, t in targets do
 			local tp = docPath(paths, t)
 			local tt = tp and read(tp)
@@ -1152,6 +1442,53 @@ local function setStatus(id: string, to: string)
 				return `{t} is readied (in active/): use ./zn stop {if raftId ~= "" then raftId else "<R-id>"}`
 			end
 			local cur = statusLib.effective(tf, stateOfPath(tp))
+			if t ~= id and carried and store.isRaftId(id) then
+				originHashes[t] =
+					raftplan.recordHash(t, treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4)))
+			end
+			-- c0116 (review 001 F1): an issue in a raft is redesigned through its raft, never claimed past it
+			if t == id and not store.isRaftId(id) and to == "preparing" and (tf.raft or "") ~= "" then
+				return `{id} is in {tf.raft} on origin/main: z-raft takes it out first (./zn unfold {tf.raft} {id}), then z-design claims it`
+			end
+			if t ~= id then
+				-- c0116: an issue belongs to the raft its own `raft:` line names on origin/main. A member another raft
+				-- holds there is refused, unless that raft carries this raft's own claim stamp (recombine's other raft).
+				local owner = tf.raft or ""
+				if owner ~= "" and owner ~= id then
+					local op = docPath(paths, owner)
+					local ot = op and read(op)
+					local same = carried
+						and front.status ~= nil
+						and ot ~= nil
+						and frontOf(ot).status == front.status
+					if not same then
+						return `{t} belongs to {owner} on origin/main, not {id}`
+					end
+				end
+				-- a prepared member is never restamped: a published move leaves it as it is, the carried move takes it
+				if cur == "prepared" then
+					if carried then
+						if store.readFront(store.get(t).doc).design ~= "ready" then
+							return `{t} is not design: ready: set it (z-design) before status {id} prepared`
+						end
+						rafted = true
+						if owner ~= id then
+							table.insert(groupedHere, t)
+						end
+					end
+					continue
+				end
+				-- c0116 (review 001 F1): a preparing member is this raft's own claim (its stamp) or one this
+				-- checkout made (`status <id> preparing` here); any other is another terminal's live claim
+				if
+					carried
+					and cur == "preparing"
+					and tf.status ~= front.status
+					and not (tf.status ~= nil and tf.status == rememberedClaim(t))
+				then
+					return `{t} is claimed by another terminal ({tf.status}): drop it from {id} or release (if it is this checkout's own claim and its claim file was cleared: ./zn status {t} new, then claim it again)`
+				end
+			end
 			if carried and t ~= id and cur ~= "preparing" then
 				return `{t} is {cur} on origin/main: claim it first with ./zn status {t} preparing`
 			end
@@ -1173,6 +1510,48 @@ local function setStatus(id: string, to: string)
 			table.insert(moved, { id = t, from = cur :: string })
 			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
 		end
+		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
+		-- the rafting window) leaves the rafting: its coherence review read the old design
+		if carried and store.isRaftId(id) then
+			local raftItem = store.get(id)
+			local map, problem = raftplan.parseGrouped(store.readFront(raftItem.doc).grouped)
+			if problem then
+				return `{raftItem.doc}: {problem}`
+			end
+			local redesigned = regrouped(map, originHashes)
+			if #redesigned > 0 then
+				return `{table.concat(redesigned, ", ")}: changed on origin/main since {id} grouped it: drop it (./zn unfold {id} <id>), then fold it again and rerun the coherence review`
+			end
+			-- review 003 F5: only an old-flow member (stamped with the raft's value) goes without a record
+			for _, t in groupedHere do
+				if not map[t] then
+					return `{t} has no grouped: record in {id}: fold it again (only a member stamped with {id}'s value is exempt)`
+				end
+			end
+		end
+		if carried and rafted then
+			-- z-raft wrote the raft's own design, and a raft of several issues had its coherence review in this rafting
+			local raftItem = store.get(id)
+			local doc = fs.readFile(raftItem.doc)
+			for _, heading in { "Theme", "Order & dependencies" } do
+				if not sectionWritten(doc, heading) then
+					return `{id} has no {heading}: z-raft writes it before status {id} prepared`
+				end
+			end
+		end
+		-- review 003 F2: a raft of several issues needs a coherence review of the record it now holds (after its Theme)
+		if carried and store.isRaftId(id) and #targets > 2 then
+			local raftItem = store.get(id)
+			local map = raftplan.parseGrouped(store.readFront(raftItem.doc).grouped)
+			if not reviewCovers(gitFolderFiles(raftItem.dir), map) then
+				local ids: { string } = {}
+				for mid in map do
+					table.insert(ids, mid)
+				end
+				table.sort(ids)
+				return `{id}'s coherence review predates its record ({table.concat(ids, ", ")}): run a new raft-mode round (zz-review); never edit a review that is already written`
+			end
+		end
 		if carried then
 			return {}
 		end
@@ -1190,6 +1569,14 @@ local function setStatus(id: string, to: string)
 		end
 	else
 		mergeOrigin()
+		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
+		if not store.isRaftId(id) then
+			if to == "preparing" then
+				rememberClaim(id, frontOf(fs.readFile(store.get(id).doc)).status or "")
+			elseif fs.isFile(claimFile(id)) then
+				fs.removeFile(claimFile(id))
+			end
+		end
 	end
 	-- giving a claim back ends this worktree's ownership of it
 	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
@@ -1245,6 +1632,515 @@ function cmd.status(pos: { string })
 		)
 	end
 	setStatus(id, to)
+end
+
+-- c0116 (z-raft): an issue's raft is its own `raft:` line, written in a worktree and carried by the rafting PR, so two
+-- PRs that raft one issue edit one line and the second cannot merge cleanly. The published claim stamps rafts only
+-- (`preparing-…`); a prepared issue is never restamped. These commands share the start: a worktree with an origin, a
+-- clean tree, and origin/main merged in first, so the local tree holds everything origin/main does.
+local function raftingStart(what: string)
+	refuseInMainCheckout(what)
+	if not publishing() then
+		fail(`{what} needs an origin remote (PICKMAN_PUBLISH=0 disables it)`)
+	end
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
+	end
+	refuseStale()
+	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
+	if not r.ok then
+		sh.run("git", { "merge", "--abort" })
+		fail(`{what}: merging origin/main failed (merge aborted): {r.stderr}{r.stdout}`)
+	end
+end
+
+-- A raft's member list as a frontmatter value.
+local function listValue(ids: { string }): string
+	return `[{table.concat(ids, ", ")}]`
+end
+
+-- Refuses an issue that can't be rafted by z-raft: not a prepared backlog issue with a ready design, or one that
+-- already names a raft (`raft:` is the lock) or is of another type or project than `raft`.
+local function refuseUnraftable(issue: store.Item, raft: store.Item)
+	local front = store.readFront(issue.doc)
+	local st = statusLib.effective(frontOf(fs.readFile(issue.doc)), issue.state)
+	if issue.state ~= "backlog" then
+		fail(`{issue.id} is {st} in {issue.dir}: a raft takes backlog issues only`)
+	end
+	if st ~= "prepared" or front.design ~= "ready" then
+		fail(
+			`{issue.id} is {st} (design: {front.design or "none"}): z-raft groups prepared issues only (z-design first)`
+		)
+	end
+	if store.typeOf(issue) ~= store.typeOf(raft) then
+		fail(`{issue.id} is a {store.typeOf(issue)}; a {store.typeOf(raft)} raft cannot contain it`)
+	end
+	if issue.root ~= raft.root then
+		fail(`a raft holds issues of one project: {issue.id} is in {issue.root}, not {raft.root}`)
+	end
+end
+
+-- `fold <R-id> <issue>...`: puts prepared, raftless issues into a prepared backlog raft. It publishes the raft's claim
+-- (its status only), then writes each issue's `raft:` and the raft's `issues:` here and commits; z-raft then writes the
+-- raft's design and runs the carried `status <R-id> prepared`. A raft this checkout already claimed is not claimed
+-- again.
+function cmd.fold(pos: { string })
+	local raftId = pos[1]
+	if not raftId or not store.isRaftId(raftId) or #pos < 2 then
+		fail("usage: fold <R-id> <issue>...")
+	end
+	raftingStart("fold")
+	local raft = store.get(raftId)
+	if raft.kind ~= "raft" or raft.state ~= "backlog" then
+		fail(`{raftId} is in {raft.dir}: fold takes a backlog raft`)
+	end
+	local ids: { string } = {}
+	for i = 2, #pos do
+		table.insert(ids, pos[i])
+	end
+	local members = store.members(raftId)
+	local solo: string? = nil
+	for _, m in members do
+		if store.readFront(m.doc).solo == "true" then
+			solo = m.id
+		end
+	end
+	for _, id in ids do
+		local issue = store.get(id)
+		local owner = store.readFront(issue.doc).raft or ""
+		if owner ~= "" then
+			fail(`{id} already belongs to {owner}`)
+		end
+		refuseUnraftable(issue, raft)
+		if store.readFront(issue.doc).solo == "true" and #members + #ids > 1 then
+			solo = id
+		end
+	end
+	if solo then
+		fail(`{solo} is solo: true (a recorded user decision): it is rafted alone`)
+	end
+	local mine = rememberedClaim(raftId)
+	local claim = freshStamp("preparing")
+	local resumed = false
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
+		resumed = false
+		local rp = docPath(paths, raftId)
+		local rt = rp and read(rp)
+		if not rp or not rt then
+			return `{raftId} is not on origin/main`
+		end
+		local rf = frontOf(rt)
+		local st = statusLib.effective(rf, stateOfPath(rp))
+		if st == "preparing" and mine ~= "" and rf.status == mine then
+			resumed = true
+		elseif st ~= "prepared" then
+			return `{raftId} is {st} on origin/main: fold takes a prepared raft (or one this checkout claimed)`
+		end
+		for _, id in ids do
+			local p = docPath(paths, id)
+			local text = p and read(p)
+			if not p or not text then
+				return `{id} is not on origin/main`
+			end
+			local owner = frontOf(text).raft or ""
+			if owner ~= "" then
+				return `{id} already belongs to {owner} on origin/main`
+			end
+		end
+		if resumed then
+			return {}
+		end
+		return { { path = rp, content = withFront(rt, "status", claim) } }
+	end, `tracker: fold into {raftId} (claim)`))
+	if not r.ok then
+		fail(`fold: {r.reason}`)
+	end
+	if not resumed then
+		rememberClaim(raftId, claim)
+		mergeOrigin()
+	end
+	raft = store.get(raftId)
+	local list = store.idList(store.readFront(raft.doc).issues)
+	for _, id in ids do
+		local doc = store.get(id).doc
+		store.setFront(doc, "raft", raftId)
+		sh.git({ "add", doc })
+		if not table.find(list, id) then
+			table.insert(list, id)
+		end
+	end
+	store.setFront(raft.doc, "issues", listValue(list))
+	recordGrouped(raft.doc, ids)
+	sh.git({ "add", raft.doc })
+	sh.git({ "commit", "--quiet", "-m", `tracker: fold {table.concat(ids, " ")} into {raftId}` })
+	print(`folded {table.concat(ids, ", ")} into {raftId}`)
+end
+
+-- `unfold <R-id> <issue>...` (c0116, review 002 F3): takes members out of a backlog raft. It claims the raft as `fold`
+-- does (its status only, published; this checkout's own claim is resumed), then clears each issue's `raft:`, drops it
+-- from the raft's `issues:` and `grouped:` here and commits; z-raft then prepares the raft again (carried) and lands the
+-- PR. A member of a landed raft goes back to z-design this way: once the PR lands, its claim is open again.
+function cmd.unfold(pos: { string })
+	local raftId = pos[1]
+	if not raftId or not store.isRaftId(raftId) or #pos < 2 then
+		fail("usage: unfold <R-id> <issue>...")
+	end
+	raftingStart("unfold")
+	-- R0050 code review 002 F1: a raft that is retired or missing can't be claimed, so its members' raft: lines are
+	-- cleared here with no claim (audit's dead-raft error names this command); the rafting PR carries them
+	if not store.find(raftId) then
+		local dead = "missing"
+		for _, root in store.roots() do
+			if fs.isDir(retiredDir(root, raftId)) then
+				dead = "retired"
+			end
+		end
+		local gone: { string } = {}
+		for i = 2, #pos do
+			local issue = store.get(pos[i])
+			if (store.readFront(issue.doc).raft or "") ~= raftId then
+				fail(`{issue.id} is not a member of {raftId}`)
+			end
+			if issue.state == "done" then
+				fail(`{issue.id} is done: its raft: is history`)
+			end
+			-- review 003 F1: an active issue leaves active/ only by a published move, never in a branch
+			if issue.state == "active" then
+				fail(
+					`{issue.id} is in active/: use ./zn stop {issue.id} (it gives the issue back to the backlog)`
+				)
+			end
+			table.insert(gone, issue.id)
+		end
+		for _, id in gone do
+			local doc = store.get(id).doc
+			store.setFront(doc, "raft", "")
+			sh.git({ "add", doc })
+		end
+		sh.git({
+			"commit",
+			"--quiet",
+			"-m",
+			`tracker: unfold {table.concat(gone, " ")} from {raftId} ({dead}: no claim)`,
+		})
+		print(`unfolded {table.concat(gone, ", ")} from {raftId} ({dead}: nothing to claim)`)
+		return
+	end
+	local raft = store.get(raftId)
+	if raft.kind ~= "raft" or raft.state ~= "backlog" then
+		fail(`{raftId} is in {raft.dir}: unfold takes a backlog raft`)
+	end
+	local ids: { string } = {}
+	for i = 2, #pos do
+		local issue = store.get(pos[i])
+		if (store.readFront(issue.doc).raft or "") ~= raftId then
+			fail(`{issue.id} is not a member of {raftId}`)
+		end
+		table.insert(ids, issue.id)
+	end
+	local mine = rememberedClaim(raftId)
+	local claim = freshStamp("preparing")
+	local resumed = false
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
+		resumed = false
+		local rp = docPath(paths, raftId)
+		local rt = rp and read(rp)
+		if not rp or not rt then
+			return `{raftId} is not on origin/main`
+		end
+		local rf = frontOf(rt)
+		local st = statusLib.effective(rf, stateOfPath(rp))
+		if st == "preparing" and mine ~= "" and rf.status == mine then
+			resumed = true
+			return {}
+		elseif st ~= "prepared" then
+			return `{raftId} is {st} on origin/main: unfold takes a prepared raft (or one this checkout claimed)`
+		end
+		return { { path = rp, content = withFront(rt, "status", claim) } }
+	end, `tracker: unfold from {raftId} (claim)`))
+	if not r.ok then
+		fail(`unfold: {r.reason}`)
+	end
+	if not resumed then
+		rememberClaim(raftId, claim)
+		mergeOrigin()
+	end
+	raft = store.get(raftId)
+	local left: { string } = {}
+	for _, id in store.idList(store.readFront(raft.doc).issues) do
+		if not table.find(ids, id) then
+			table.insert(left, id)
+		end
+	end
+	for _, id in ids do
+		local doc = store.get(id).doc
+		store.setFront(doc, "raft", "")
+		sh.git({ "add", doc })
+	end
+	store.setFront(raft.doc, "issues", listValue(left))
+	recordGrouped(raft.doc, ids, true)
+	sh.git({ "add", raft.doc })
+	sh.git({ "commit", "--quiet", "-m", `tracker: unfold {table.concat(ids, " ")} from {raftId}` })
+	print(`unfolded {table.concat(ids, ", ")} from {raftId}`)
+end
+
+-- `recombine <keeper> <other> [<issue>...]`: moves the named members of the other backlog raft (all of them when none
+-- is named) into the keeper. Both rafts are claimed with one fresh stamp (status lines only, published), so the
+-- carried `status <keeper> prepared` sees the other raft as the same claim. The moves are written here and committed;
+-- the other raft is retired only when it ends up empty: its folder moves to <root>/rafts/retired/ with `retired: <keeper>`
+-- in this branch, so in the rafting PR.
+function cmd.recombine(pos: { string })
+	local keeperId, otherId = pos[1], pos[2]
+	if not (keeperId and otherId and store.isRaftId(keeperId) and store.isRaftId(otherId)) then
+		fail("usage: recombine <keeper R-id> <other R-id> [<issue>...]")
+	end
+	if keeperId == otherId then
+		fail("recombine needs two different rafts")
+	end
+	raftingStart("recombine")
+	local keeper, other = store.get(keeperId), store.get(otherId)
+	for _, r in { keeper, other } do
+		if r.kind ~= "raft" or r.state ~= "backlog" then
+			fail(`{r.id} is in {r.dir}: recombine takes backlog rafts only`)
+		end
+		local st = statusLib.effective(frontOf(fs.readFile(r.doc)), r.state)
+		if st ~= "prepared" and st ~= "new" then
+			fail(
+				`{r.id} is {st}: recombine takes a prepared or new raft, never one being prepared, active or done`
+			)
+		end
+	end
+	if keeper.root ~= other.root then
+		fail(`rafts never cross projects: {keeperId} is in {keeper.root}, {otherId} in {other.root}`)
+	end
+	if store.typeOf(keeper) ~= store.typeOf(other) then
+		fail(`{keeperId} is a {store.typeOf(keeper)} raft, {otherId} a {store.typeOf(other)} one`)
+	end
+	local inOther: { [string]: boolean } = {}
+	local otherIds: { string } = {}
+	for _, m in store.members(otherId) do
+		inOther[m.id] = true
+		table.insert(otherIds, m.id)
+	end
+	local moving: { string } = {}
+	if #pos > 2 then
+		for i = 3, #pos do
+			if not inOther[pos[i]] then
+				fail(`{pos[i]} is not a member of {otherId}`)
+			end
+			-- R0050 code review 001 F2: a repeated id would count twice toward emptying the other raft
+			if table.find(moving, pos[i]) then
+				fail(`{pos[i]} is named twice: name each member once`)
+			end
+			table.insert(moving, pos[i])
+		end
+	else
+		moving = otherIds
+	end
+	local keeperMembers = store.members(keeperId)
+	local all: { store.Item } = table.clone(keeperMembers)
+	for _, id in moving do
+		table.insert(all, store.get(id))
+	end
+	for _, m in all do
+		refuseUnraftable(m, keeper)
+		if store.readFront(m.doc).solo == "true" and #all > 1 then
+			fail(`{m.id} is solo: true (a recorded user decision): it is rafted alone`)
+		end
+	end
+	-- retire only when no member of the other raft stays behind (decided by the members, never by counts: review 001 F2)
+	local retire = true
+	for _, id in otherIds do
+		if not table.find(moving, id) then
+			retire = false
+			break
+		end
+	end
+	local claim = freshStamp("preparing")
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
+		local changes: { publish.Change } = {}
+		for _, rid in { keeperId, otherId } do
+			local rp = docPath(paths, rid)
+			local rt = rp and read(rp)
+			if not rp or not rt then
+				return `{rid} is not on origin/main`
+			end
+			local st = statusLib.effective(frontOf(rt), stateOfPath(rp))
+			if stateOfPath(rp) ~= "backlog" or (st ~= "prepared" and st ~= "new") then
+				return `{rid} is {st} on origin/main: recombine takes a prepared or new backlog raft`
+			end
+			table.insert(changes, { path = rp, content = withFront(rt, "status", claim) })
+		end
+		for _, id in moving do
+			local p = docPath(paths, id)
+			local text = p and read(p)
+			if not p or not text then
+				return `{id} is not on origin/main`
+			end
+			if (frontOf(text).raft or "") ~= otherId then
+				return `{id} belongs to {frontOf(text).raft or "no raft"} on origin/main, not {otherId}`
+			end
+		end
+		return changes
+	end, `tracker: recombine {otherId} into {keeperId} (claim)`))
+	if not r.ok then
+		fail(`recombine: {r.reason}`)
+	end
+	rememberClaim(keeperId, claim)
+	rememberClaim(otherId, claim)
+	mergeOrigin()
+	keeper, other = store.get(keeperId), store.get(otherId)
+	local list = store.idList(store.readFront(keeper.doc).issues)
+	for _, id in moving do
+		local doc = store.get(id).doc
+		store.setFront(doc, "raft", keeperId)
+		sh.git({ "add", doc })
+		if not table.find(list, id) then
+			table.insert(list, id)
+		end
+	end
+	store.setFront(keeper.doc, "issues", listValue(list))
+	recordGrouped(keeper.doc, moving)
+	sh.git({ "add", keeper.doc })
+	if retire then
+		-- c0116 (review 001 F2): a retired raft keeps its folder (its design reviews, refutes and harvest.md, which
+		-- lessons and metrics read) under <root>/rafts/retired/, with `retired: <keeper>`; store, the board and the plan
+		-- never find it there; audit's scan and list show it, as retired; the bare status, which walks only publishable
+		-- paths, never lists it (review 004 F2)
+		local dest = retiredDir(other.root, otherId)
+		local parent = string.match(dest, "^(.*)/[^/]+$") :: string
+		if not fs.isDir(parent) then
+			fs.writeDir(parent)
+		end
+		store.setFront(other.doc, "retired", keeperId)
+		sh.git({ "add", other.doc })
+		sh.git({ "mv", other.dir, dest })
+	else
+		local left: { string } = {}
+		for _, id in store.idList(store.readFront(other.doc).issues) do
+			if not table.find(moving, id) then
+				table.insert(left, id)
+			end
+		end
+		store.setFront(other.doc, "issues", listValue(left))
+		recordGrouped(other.doc, moving, true)
+		sh.git({ "add", other.doc })
+	end
+	sh.git({
+		"commit",
+		"--quiet",
+		"-m",
+		`tracker: recombine {otherId} into {keeperId} ({if #moving > 0
+			then table.concat(moving, " ")
+			else "no members"})`,
+	})
+	print(
+		`recombined {otherId} into {keeperId}: {if #moving > 0
+			then table.concat(moving, ", ")
+			else "no members"}`
+	)
+	if retire then
+		print(`retired {otherId}: its folder moves to {retiredDir(other.root, otherId)} in this branch`)
+	else
+		print(`{otherId} keeps {table.concat(store.idList(store.readFront(other.doc).issues), ", ")}`)
+	end
+end
+
+-- `release <R-id> [--force]`: gives back a rafting claim (`new raft`, `fold`, `status <R> preparing`, `recombine`) in
+-- one published commit. Every backlog item that carries the raft's `preparing-…` stamp on origin/main goes back:
+-- `prepared` when its design there is ready, else `new`. The plain `status <R> prepared` stays carried by the PR. Only
+-- the claim this checkout remembers is released, unless `--force` (for a claim the user says is abandoned).
+function cmd.release(pos: { string }, opts: { [string]: { string } })
+	local raftId = pos[1]
+	if not raftId or not store.isRaftId(raftId) then
+		fail("usage: release <R-id> [--force]")
+	end
+	refuseInMainCheckout("release")
+	if not publishing() then
+		fail("release needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	refuseStale()
+	local paths = originPaths()
+	local rp = docPath(paths, raftId) or fail(`{raftId} is not on origin/main`)
+	local value = frontOf(sh.git({ "show", `origin/main:{rp}` })).status or ""
+	if not string.match(value, "^preparing%-") then
+		fail(`{raftId} has no rafting claim on origin/main (status: {if value ~= "" then value else "none"})`)
+	end
+	local mine = rememberedClaim(raftId)
+	if mine ~= value and not opts["--force"] then
+		fail(
+			`{raftId}'s claim {value} is not this checkout's: give back only your own claim (--force when the user says it is abandoned)`
+		)
+	end
+	local carriers, err = claimsLib.carriers(".", value, nil, originRoots() or {})
+	if not carriers then
+		fail(`release: cannot list what carries {value}: {err}`)
+	end
+	-- what goes back: every carrier of the raft's stamp, and (review 002 F4) the issue claims this checkout remembers for
+	-- the raft's members here (an issue added to it with `status <id> preparing`), each with the value it must still carry
+	local wanted: { { path: string, value: string } } = {}
+	for _, p in carriers :: { string } do
+		table.insert(wanted, { path = p, value = value })
+	end
+	local raftItem = store.find(raftId)
+	if raftItem then
+		local names: { [string]: boolean } = {}
+		for _, id in store.idList(store.readFront(raftItem.doc).issues) do
+			names[id] = true
+		end
+		for _, m in store.members(raftId) do
+			names[m.id] = true
+		end
+		for id in names do
+			local mineIssue = rememberedClaim(id)
+			local item = store.find(id)
+			if mineIssue ~= "" and mineIssue ~= value and item then
+				table.insert(wanted, { path = item.doc, value = mineIssue })
+			end
+		end
+	end
+	local done: { string } = {}
+	refuseStale()
+	local r = published(publish.commit(".", function(_, read)
+		done = {}
+		local changes: { publish.Change } = {}
+		for _, w in wanted do
+			local p = w.path
+			local text = read(p)
+			local id, rel = publish.itemPath(p)
+			if not text or not id or rel ~= `{id}.md` or stateOfPath(p) ~= "backlog" then
+				continue
+			end
+			local front = frontOf(text)
+			if front.status ~= w.value then
+				continue
+			end
+			local to = if front.design == "ready" then "prepared" else "new"
+			table.insert(done, `{id} ({to})`)
+			table.insert(changes, { path = p, content = withFront(text, "status", stamp(to)) })
+		end
+		if #changes == 0 then
+			return `{raftId}: nothing on origin/main carries {value}`
+		end
+		return changes
+	end, `tracker: release {raftId}`))
+	if not r.ok then
+		fail(`release: {r.reason}`)
+	end
+	for _, d in done do
+		local id = string.match(d, "^(%S+)") :: string
+		if fs.isFile(claimFile(id)) then
+			fs.removeFile(claimFile(id))
+		end
+	end
+	-- no merge: the branch is given up, and it may well conflict with origin/main (another rafting of its issues)
+	print(`released {table.concat(done, ", ")}`)
+	print(
+		"this branch's own rafting commits are left as they are: reset it to origin/main or remove the worktree"
+	)
 end
 
 -- Prints a fresh stamp for a state (diagnostics, and how specs prove that stamps differ between processes).
@@ -1404,7 +2300,19 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
 		end
 		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
-		local pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
+		local pushed: sh.Result
+		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
+			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
+			local ok, said = brokerLib.request(
+				process.env.ZN_PUBLISH_BROKER :: string,
+				process.env.ZN_PUBLISH_TOKEN or "",
+				sha,
+				nil
+			)
+			pushed = { ok = ok, code = if ok then 0 else 1, stdout = "", stderr = said }
+		else
+			pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
+		end
 		if pushed.ok then
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
@@ -1791,7 +2699,10 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
 			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
-				local state = stateOfPath(f.path .. "/")
+				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
+				local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
+					then "retired"
+					else stateOfPath(f.path .. "/")
 				if not pos[1] or pos[1] == state then
 					local fm = store.readFront(doc)
 					local ftype = if kind == "issue"
@@ -1996,24 +2907,27 @@ function cmd.renumber(pos: { string })
 	if fs.isDir(dest) then
 		fail(`{new} already exists`)
 	end
-	local tracked = sh.run("git", { "ls-files", "--error-unmatch", item.doc }).ok
-	if tracked then
-		sh.git({ "mv", item.dir, dest })
-		sh.git({ "mv", `{dest}/{old}.md`, `{dest}/{new}.md` })
-	else
-		fs.move(item.dir, dest)
-		fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
-	end
-	if byDir then
-		rewriteUnder(dest, old, new :: string)
-	else
-		-- every reference, in every project's documents: ids are unique across the roots
-		for _, r in store.roots() do
-			if fs.isDir(r) then
-				rewriteUnder(r, old, new :: string)
+	-- c0116 (review 003 F4): a grouped raft keeps its record of every member the rename touches
+	keepRecords(".", { [old] = new :: string }, function()
+		local tracked = sh.run("git", { "ls-files", "--error-unmatch", item.doc }).ok
+		if tracked then
+			sh.git({ "mv", item.dir, dest })
+			sh.git({ "mv", `{dest}/{old}.md`, `{dest}/{new}.md` })
+		else
+			fs.move(item.dir, dest)
+			fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
+		end
+		if byDir then
+			rewriteUnder(dest, old, new :: string)
+		else
+			-- every reference, in every project's documents: ids are unique across the roots
+			for _, r in store.roots() do
+				if fs.isDir(r) then
+					rewriteUnder(r, old, new :: string)
+				end
 			end
 		end
-	end
+	end)
 	print(`{old} -> {new}`)
 end
 
@@ -2070,7 +2984,9 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 		counts[space] += 1
 	end
 	local map = idsLib.plan(all)
-	compactLib.apply(map, found)
+	keepRecords(".", map, function()
+		compactLib.apply(map, found)
+	end)
 	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
 	-- a compaction before origin moved the counter moves it too: the old file becomes the tombstone (c0114)
 	if fs.isFile(idsLib.OLD_FILE) and idsLib.parse(fs.readFile(idsLib.OLD_FILE)) then
@@ -2184,7 +3100,9 @@ function cmd.remap()
 			number(c :: idsLib.Counters, used)
 		end
 	end
-	compactLib.apply(m, found)
+	keepRecords(".", m, function()
+		compactLib.apply(m, found)
+	end)
 	local problems = audit.run(".")
 	if audit.errors(problems) > 0 then
 		for _, p in problems do
@@ -2208,7 +3126,9 @@ function cmd.remap()
 	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
 	local built, baseTree = pcall(function(): string
 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
-		compactLib.apply(m, audit.scan(scratch), scratch)
+		keepRecords(scratch, m, function()
+			compactLib.apply(m, audit.scan(scratch), scratch)
+		end)
 		-- the scratch worktree's tracked state as a commit object, with no ref moved: empty when nothing changed
 		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
 		local saved = process.exec("git", { "stash", "create" }, { cwd = scratch })
@@ -2553,10 +3473,9 @@ local function touchedModules(item: store.Item): { string }?
 	return out
 end
 
--- Two paths overlap when they are equal or one is a parent directory of the other, by whole components.
-local function overlaps(a: string, b: string): boolean
-	return a == b or string.sub(a, 1, #b + 1) == b .. "/" or string.sub(b, 1, #a + 1) == a .. "/"
-end
+-- Two paths overlap when they are equal or one is a parent directory of the other, by whole components (one rule,
+-- shared with z-raft's plan, c0116).
+local overlaps = raftplan.overlaps
 
 -- The plan text for a raft, its warnings, and an error when it can't be built. Issues are placed in
 -- waves: one more than the latest wave they must follow (in-raft `depends_on`, and any issue already
@@ -2681,6 +3600,80 @@ function cmd.workstreams(pos: { string })
 		stdio.ewrite(w .. "\n")
 	end
 	print(text)
+end
+
+-- `raft-plan [--apply]` (c0116, z-raft with no argument): prints the plan for every prepared, raftless issue as the
+-- commands that carry it out, one per line (`./zn fold …`, `./zn new raft …`), and `skip <id>: <why>` for an issue it
+-- cannot place. Read-only; `--apply` runs the commands in this worktree, in order. The policy is raftplan.plan's.
+cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+	if #pos > 0 then
+		fail("usage: raft-plan [--apply]")
+	end
+	if opts["--apply"] then
+		refuseInMainCheckout("raft-plan --apply")
+	end
+	local issues: { raftplan.Issue } = {}
+	local slugOf: { [string]: string } = {}
+	for _, it in store.all("issue") do
+		local front = frontOf(fs.readFile(it.doc))
+		slugOf[it.id] = it.slug
+		table.insert(issues, {
+			id = it.id,
+			type = store.typeOf(it),
+			root = it.root,
+			state = it.state,
+			status = statusLib.effective(front, it.state),
+			design = front.design,
+			raft = front.raft or "",
+			size = raftplan.parseSize(front.size),
+			solo = front.solo == "true",
+			touched = touchedModules(it),
+		})
+	end
+	local rafts: { raftplan.Raft } = {}
+	for _, r in store.all("raft") do
+		local front = frontOf(fs.readFile(r.doc))
+		local members: { string } = {}
+		for _, m in store.members(r.id) do
+			table.insert(members, m.id)
+		end
+		table.insert(rafts, {
+			id = r.id,
+			type = store.typeOf(r),
+			root = r.root,
+			state = r.state,
+			status = statusLib.effective(front, r.state),
+			single = front.single == "true",
+			members = members,
+		})
+	end
+	local ops, skips = raftplan.plan(issues, rafts)
+	-- since c0115 a new raft names its project: every command is built, and a root no project holds refused, before
+	-- anything is printed or run (design review 006 F1)
+	local reg = projects.load()
+	local runs, why = raftplan.commands(ops, slugOf, function(root: string): string?
+		local project = projects.projectOf(reg, root)
+		return if project then project.name else nil
+	end)
+	if not runs then
+		fail(why :: string)
+	end
+	for _, args in runs :: { { string } } do
+		print(`./zn {table.concat(args, " ")}`)
+	end
+	for _, sk in skips do
+		print(`skip {sk.id}: {sk.reason}`)
+	end
+	if #ops == 0 and #skips == 0 then
+		print("raft-plan: nothing to raft (no prepared issue without a raft)")
+	end
+	if opts["--apply"] then
+		for _, args in runs :: { { string } } do
+			local rest = table.move(args, 2, #args, 1, {})
+			local p, o = flags(rest);
+			(cmd :: any)[args[1]](p, o)
+		end
+	end
 end
 
 function cmd.worktree(pos: { string }, opts: { [string]: { string } })
@@ -2816,6 +3809,18 @@ function cmd.focus(pos: { string })
 	print(`focus: {issue.id}`)
 end
 
+-- `--model <id>` of commit and spend (c0117): the model that spent the row's tokens; nil when not given.
+local function modelOption(what: string, opts: { [string]: { string } }): string?
+	if not opts["--model"] then
+		return nil
+	end
+	local raw = opts["--model"][1]
+	if #opts["--model"] > 1 or not ledger.isModel(raw) then
+		fail(`{what} --model takes one model id (letters, digits, '.', '_' and '-')`)
+	end
+	return raw
+end
+
 local function recordAndCommit(
 	raft: store.Item,
 	message: string,
@@ -2823,7 +3828,8 @@ local function recordAndCommit(
 	explicitMinutes: number?,
 	isDone: boolean?,
 	phase: string?,
-	tokens: number?
+	tokens: number?,
+	model: string?
 )
 	phase = if phase and phase ~= "" then phase else "build"
 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
@@ -2853,7 +3859,7 @@ local function recordAndCommit(
 		if share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0 then
 			continue
 		end
-		spend.appendRow(store.get(share.id), share, message, phase)
+		spend.appendRow(store.get(share.id), share, message, phase, model)
 		local trailer =
 			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
 		if phase ~= "build" then
@@ -2861,6 +3867,9 @@ local function recordAndCommit(
 		end
 		if share.tokens ~= nil then
 			trailer ..= ` {share.tokens} tokens`
+		end
+		if model then
+			trailer ..= ` {model}`
 		end
 		table.insert(trailers, trailer)
 	end
@@ -2879,7 +3888,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	local message = opts["-m"] and opts["-m"][1]
 	if not message or message == "" then
 		fail(
-			"usage: commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]"
+			"usage: commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>] [--model <id>]"
 		)
 	end
 	-- phase and tokens are checked before anything is staged
@@ -2900,8 +3909,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		end
 		tokens = tonumber(raw)
 	end
+	local model = modelOption("commit", opts)
 	local t = opts["--time"] and tonumber((string.gsub(opts["--time"][1], "m$", "")))
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens)
+	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -2923,9 +3933,15 @@ end
 -- Copy each member's acceptance specs into its project's tests/acceptance/<id>, run `check`, then remove the
 -- copies. Returns check's result. Used by `done` (for real) and `promote-check` (dry run). `check` gets the copied
 -- spec paths, repo-relative.
+-- The issues whose specs a promotion covers: a raft's members, or an issue by itself (c0116: z-design checks an
+-- issue's promotion before it has a raft).
+local function promotedItems(item: store.Item): { store.Item }
+	return if item.kind == "issue" then { item } else store.members(item.id)
+end
+
 local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boolean): boolean
 	local copied: { string } = {}
-	for _, m in store.members(raft.id) do
+	for _, m in promotedItems(raft) do
 		local acc = `{m.dir}/acceptance`
 		local dest = promotedDir(m)
 		if fs.isDir(acc) and not fs.isDir(dest) then
@@ -2940,7 +3956,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	end
 	local pok, result = pcall(check, copied)
 	local ok = pok and result == true
-	for _, m in store.members(raft.id) do
+	for _, m in promotedItems(raft) do
 		local dest = promotedDir(m)
 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
 			fs.removeDir(dest)
@@ -2978,7 +3994,7 @@ end
 local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: boolean): boolean
 	local seen: { [string]: boolean } = {}
 	local ok = true
-	for _, m in store.members(raft.id) do
+	for _, m in promotedItems(raft) do
 		local home = homeOf(m)
 		if not seen[home] then
 			seen[home] = true
@@ -2992,11 +4008,15 @@ local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: 
 end
 
 cmd["promote-check"] = function(pos: { string })
-	local raft = store.get(pos[1] or fail("usage: promote-check <R-id>"))
+	local raft = store.get(pos[1] or fail("usage: promote-check <R-id|issue-id>"))
 	print(`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`)
-	if not withPromotedCopies(raft, function(specs)
-		return promotedChecksAll(raft, specs, false)
-	end) then
+	if
+		not withPromotedCopies(raft, function(specs)
+			-- c0116: say how many were copied, so a promotion that found nothing to copy is not mistaken for a clean one
+			print(`copied {#specs} acceptance specs`)
+			return promotedChecksAll(raft, specs, false)
+		end)
+	then
 		fail("promoted acceptance specs would break tests/ (see above)")
 	end
 	print("promote-check OK")
@@ -3582,7 +4602,7 @@ function cmd.ready(pos: { string })
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
 		if not raftId or raftId == "" then
-			fail(`{target.id} has no raft: z-design makes one (--single)`)
+			fail(`{target.id} has no raft: z-raft makes one (./zn raft-plan)`)
 		end
 		raft = store.get(raftId)
 	end
@@ -3677,6 +4697,43 @@ function cmd.ready(pos: { string })
 					return `{id} is {cur} on origin/main, not prepared`
 				end
 				return nil
+			end,
+			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
+			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
+			function(paths, read): string?
+				local rp = docPath(paths, raft.id)
+				local rt = rp and read(rp)
+				if not rp or not rt then
+					return `{raft.id} is not on origin/main`
+				end
+				local map, problem = raftplan.parseGrouped(frontOf(rt).grouped)
+				if problem then
+					return `{rp}: {problem}`
+				end
+				local now: { [string]: string? } = {}
+				for _, m in members do
+					local mp = docPath(paths, m.id)
+					if mp then
+						now[m.id] = raftplan.recordHash(
+							m.id,
+							treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
+						)
+					end
+				end
+				local redesigned = regrouped(map, now)
+				if #redesigned > 0 then
+					return `{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
+				end
+				if
+					#members > 1
+					and not reviewCovers(
+						treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4)),
+						map
+					)
+				then
+					return `{raft.id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
+				end
+				return nil
 			end
 		)
 		if not r.ok then
@@ -3700,13 +4757,54 @@ function cmd.ready(pos: { string })
 	print(parallel)
 end
 
+-- `stop <issue>` (R0050 code review 003 F1): gives back one active issue whose raft is retired, missing or empty (a
+-- dead raft can't be stopped as a raft): the same published move to the backlog, stamped prepared, check.sh paths
+-- rewritten back, that stop gives a member. Its raft: line is left: audit then names `unfold` for it (a backlog
+-- issue), which clears it in a rafting PR. An issue whose raft is live is refused: stop the raft.
+local function stopIssue(id: string)
+	if not store.isIssueId(id) then
+		fail(`{id} is neither a raft nor an issue`)
+	end
+	mainCheckoutGuards("stop")
+	local pulled = pullMain()
+	if pulled then
+		fail(`stop: cannot fast-forward the main checkout: {pulled}`)
+	end
+	local issue = store.get(id)
+	if issue.state ~= "active" then
+		fail(`{id} is in {issue.dir} on origin/main: stop <issue> gives back an active issue only`)
+	end
+	local fm = store.readFront(issue.doc)
+	local raftId = fm.raft or ""
+	-- the one rule audit uses too (audit.raftHolds, review 004 F1): refused only when stop <R-id> takes it
+	local raft = if store.isRaftId(raftId) then store.find(raftId) else nil
+	local raftStatus = if raft then store.readFront(raft.doc).status else nil
+	if audit.raftHolds(fm, if raft then raft.dir else nil, raftStatus) then
+		fail(`{id} is held by its raft {raftId}: use ./zn stop {raftId}`)
+	end
+	local function stillActive(item: string, now: string): string?
+		return if now == "active" then nil else `{item} is {now} on origin/main, not active: nothing to stop`
+	end
+	local why = if raftId == "" then "no raft" else `raft {raftId} doesn't hold it`
+	local r = moveOnOrigin({ id }, "backlog", stamp("prepared"), `tracker: stop {id} ({why})`, stillActive)
+	if not r.ok then
+		fail(`stop: {r.reason}`)
+	end
+	local failed = pullMain()
+	if failed then
+		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
+	end
+	print(`gave back {id} ({why}): it is in the backlog, prepared`)
+end
+
 -- `stop <R-id>`: gives back a readied raft (moves it and its members to the backlog on origin/main, stamped prepared,
 -- check.sh paths rewritten back) or a raft claimed by the legacy `start` (a status-only publish). Removes prompt.md,
 -- pulls the main checkout and names the raft's branch and PR, which are left as they are.
 function cmd.stop(pos: { string })
-	local raftId = pos[1] or fail("usage: stop <R-id>")
+	local raftId = pos[1] or fail("usage: stop <R-id> | stop <issue>")
 	if not store.isRaftId(raftId) then
-		fail(`{raftId} is not a raft`)
+		stopIssue(raftId)
+		return
 	end
 	mainCheckoutGuards("stop")
 	local pulled = pullMain()
@@ -3937,7 +5035,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
 		fail(
-			"usage: spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--note <text>]"
+			"usage: spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>] [--note <text>]"
 		)
 	end
 	local phase = opts["--phase"] and opts["--phase"][1] or ""
@@ -3960,6 +5058,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		end
 		tokens = tonumber(raw)
 	end
+	local model = modelOption("spend", opts)
 	local note = phase
 	if opts["--note"] and opts["--note"][1] ~= "" then
 		note = opts["--note"][1]
@@ -4070,6 +5169,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 				how = share.how,
 				phase = phase,
 				tokens = share.tokens,
+				model = model,
 			}
 			local itemTitle = frontOf(text).title or share.id
 			local okAppend, content = pcall(ledger.append, read(spendPath), share.id, itemTitle, row)
@@ -4124,6 +5224,47 @@ local function addedAt(paths: { string }): number?
 end
 
 -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
+-- c0116: the design-review-NNN.md files in one item's folder.
+local function designRoundsIn(dir: string): number
+	-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
+	local paths: { string } = {}
+	for _, name in fs.readDir(dir) do
+		table.insert(paths, `{dir}/{name}`)
+	end
+	local design = boardview.rounds(paths)
+	return design
+end
+
+-- A raft's design rounds: z-design's reviews live on each issue and z-raft's coherence review on the raft, so they
+-- roll up to the raft through its members' `raft:` lines (c0116).
+local function raftDesignRounds(raft: store.Item): number
+	local n = designRoundsIn(raft.dir)
+	for _, m in store.members(raft.id) do
+		n += designRoundsIn(m.dir)
+	end
+	return n
+end
+
+-- c0116 (review 001 F2): every retired raft's folder and document (`<root>/rafts/retired/<R-id>`), by id.
+local function retiredRafts(): { { id: string, dir: string, doc: string } }
+	local out: { { id: string, dir: string, doc: string } } = {}
+	for _, root in store.roots() do
+		local base = `{root}/rafts/{RETIRED}`
+		if fs.isDir(base) then
+			for _, name in fs.readDir(base) do
+				local doc = `{base}/{name}/{name}.md`
+				if store.isRaftId(name) and fs.isFile(doc) then
+					table.insert(out, { id = name, dir = `{base}/{name}`, doc = doc })
+				end
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		return a.id < b.id
+	end)
+	return out
+end
+
 local function metricsLessons()
 	local tree = lessonsLib.load(".")
 	local all: { lessonsLib.Lesson } = {}
@@ -4140,18 +5281,23 @@ local function metricsLessons()
 	end
 	local rafts: { lessonsLib.RaftRounds } = {}
 	for _, raft in store.all("raft") do
-		local n = 0
-		for _, name in fs.readDir(raft.dir) do
-			if string.match(name, "^design%-review%-%d+%.md$") then
-				n += 1
-			end
-		end
+		local n = raftDesignRounds(raft)
 		if n > 0 then
 			-- a raft is dated by its `created:` day, which no compaction or renumber rewrites
 			local created = store.readFront(raft.doc).created
 			table.insert(
 				rafts,
 				{ id = raft.id, rounds = n, start = if created then lessonsLib.day(created) else nil }
+			)
+		end
+	end
+	for _, r in retiredRafts() do
+		local n = designRoundsIn(r.dir)
+		if n > 0 then
+			local created = store.readFront(r.doc).created
+			table.insert(
+				rafts,
+				{ id = r.id, rounds = n, start = if created then lessonsLib.day(created) else nil }
 			)
 		end
 	end
@@ -4357,12 +5503,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		"| raft | design rounds | design-review minutes | minutes/round | tokens/round |\n|---|---|---|---|---|"
 	)
 	for _, raft in store.all("raft") do
-		local rounds = 0
-		for _, name in fs.readDir(raft.dir) do
-			if string.match(name, "^design%-review%-%d+%.md$") then
-				rounds += 1
-			end
-		end
+		local rounds = raftDesignRounds(raft)
 		if rounds == 0 then
 			continue
 		end
@@ -4390,6 +5531,13 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 			)
 		)
 	end
+	-- a retired raft keeps its rounds; its spend went with its members (c0116, review 001 F2)
+	for _, r in retiredRafts() do
+		local rounds = designRoundsIn(r.dir)
+		if rounds > 0 then
+			print(string.format("| %s | %d | %.1f | %.1f | %d |", r.id, rounds, 0, 0, 0))
+		end
+	end
 	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
 	local d = byType.defect or { added = 0, minutes = 0, count = 0 }
 	local function pct(def: number, feat: number): string
@@ -4401,21 +5549,84 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	end
 	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
 	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
-	for _, raft in store.all("raft") do
+	-- one id-sorted list: the rafts store finds, and (c0116, review 001 F2) the retired ones, whose review files stay in
+	-- rafts/retired/<R-id>
+	local roundRows: { { id: string, line: string } } = {}
+	local function formatOf(first: string): string
+		if not fs.isFile(first) then
+			return "none"
+		end
+		return if string.find("\n" .. fs.readFile(first), "\nConsequences:", 1, true)
+			then "second-order"
+			else "classic"
+	end
+	local function codeRounds(dir: string): number
 		-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
 		local paths: { string } = {}
-		for _, name in fs.readDir(raft.dir) do
-			table.insert(paths, `{raft.dir}/{name}`)
+		for _, name in fs.readDir(dir) do
+			table.insert(paths, `{dir}/{name}`)
 		end
-		local design, code = boardview.rounds(paths)
+		local _, code = boardview.rounds(paths)
+		return code
+	end
+	for _, raft in store.all("raft") do
 		local first = `{raft.dir}/design-review-001.md`
-		local format = "none"
-		if fs.isFile(first) then
-			format = if string.find("\n" .. fs.readFile(first), "\nConsequences:", 1, true)
-				then "second-order"
-				else "classic"
+		if not fs.isFile(first) then
+			for _, m in store.members(raft.id) do
+				if fs.isFile(`{m.dir}/design-review-001.md`) then
+					first = `{m.dir}/design-review-001.md`
+					break
+				end
+			end
 		end
-		print(string.format("| %s | %d | %d | %s |", raft.id, design, code, format))
+		table.insert(roundRows, {
+			id = raft.id,
+			line = string.format(
+				"| %s | %d | %d | %s |",
+				raft.id,
+				raftDesignRounds(raft),
+				codeRounds(raft.dir),
+				formatOf(first)
+			),
+		})
+	end
+	for _, r in retiredRafts() do
+		table.insert(roundRows, {
+			id = r.id,
+			line = string.format(
+				"| %s | %d | %d | %s |",
+				r.id,
+				designRoundsIn(r.dir),
+				codeRounds(r.dir),
+				formatOf(`{r.dir}/design-review-001.md`)
+			),
+		})
+	end
+	table.sort(roundRows, function(a, b)
+		return a.id < b.id
+	end)
+	for _, row in roundRows do
+		print(row.line)
+	end
+	print("\nDesign rounds per issue (design-review-NNN.md in the issue's own folder, from z-design; c0116).")
+	print("| issue | raft | design rounds |\n|---|---|---|")
+	for _, issue in store.all("issue") do
+		local n = designRoundsIn(issue.dir)
+		if n > 0 then
+			print(string.format("| %s | %s | %d |", issue.id, store.readFront(issue.doc).raft or "", n))
+		end
+	end
+	print(
+		"\nSize estimates (z-design's size: against the changed lines counted, for counted issues with one)."
+	)
+	print("| issue | size | changed lines | ratio |\n|---|---|---|---|")
+	for _, r in rows do
+		local issue = store.find(r.id)
+		local size = issue and raftplan.parseSize(store.readFront(issue.doc).size)
+		if size then
+			local changed = r.added + r.removed
+			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
+		end
 	end
 	metricsLessons()
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
@@ -4451,6 +5662,71 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 			stdio.ewrite(`warning: could not open {out} with {opener}; the page is written\n`)
 		end
 	end
+end
+
+-- `dispatch …` (c0117): the dispatcher, dispatcher.luau, with the tracker's readers of origin/main.
+function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
+	local function origin(id: string): dispatcherLib.OriginItem?
+		if not hasOrigin() then
+			return nil
+		end
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local readTree, files = originTree()
+		local path = if readTree then docPath(files, id) else nil
+		if not path then
+			return nil
+		end
+		local shown = sh.run("git", { "show", `origin/main:{path}` })
+		if not shown.ok then
+			return nil
+		end
+		local front = frontOf(shown.stdout)
+		local state = stateOfPath(path)
+		return { path = path, front = front, state = state, status = statusLib.effective(front, state) }
+	end
+	local function originIssueIds(): { string }
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local _, files = originTree()
+		local out: { string } = {}
+		for _, p in files do
+			local pid, rel = publish.itemPath(p)
+			if pid and store.isIssueId(pid) and rel == `{pid}.md` then
+				table.insert(out, pid)
+			end
+		end
+		return out
+	end
+	local code = dispatcherLib.main({
+		fail = fail,
+		mainRoot = mainRoot,
+		onGitHub = onGitHub,
+		checking = checking,
+		origin = origin,
+		originIssueIds = originIssueIds,
+		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
+		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
+		prMerged = function(sha: string): boolean
+			if not onGitHub() then
+				return false
+			end
+			local r = sh.run("gh", { "api", `repos/\{owner\}/\{repo\}/commits/{sha}/pulls` })
+			return r.ok and dispatchLib.prMergedFrom(r.stdout, sha)
+		end,
+		prView = function(branch: string): string?
+			if not onGitHub() then
+				return nil
+			end
+			local r = sh.run("gh", {
+				"pr",
+				"view",
+				branch,
+				"--json",
+				"number,state,isDraft,mergeable,statusCheckRollup,headRefOid",
+			})
+			return if r.ok then r.stdout else nil
+		end,
+	}, pos, opts)
+	process.exit(code)
 end
 
 local args = table.clone(process.args)

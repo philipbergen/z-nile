@@ -1,7 +1,7 @@
 --!strict
 -- c0115 AC9: z-nile/README.md opens (right after its title) with a mermaid picture of the five parts: the tracker,
 -- the skills, the dispatcher, .models.toml and the board. Every z- or zz- skill it draws exists in z-nile/skills, or
--- its node says `planned`, and the unbuilt parts carry their issue: z-raft (c0116), the dispatcher and .models.toml
+-- its node says `planned`, and the unbuilt parts carry their issue: the dispatcher and .models.toml
 -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
 -- the three design checklists by path, each of which exists. Reads the real tree.
 local process = require("@lune/process")
@@ -135,9 +135,9 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			end
 		end
 		t.expect(seen >= 10).toBe(true)
-		at(pic, "z-raft (c0116, planned)", "the picture")
-		at(pic, "dispatcher (c0117, planned)", "the picture")
-		at(pic, ".models.toml (c0117, planned)", "the picture")
+		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
+		at(pic, 'dispatcher["dispatcher: ./zn dispatch"]', "the picture") -- c0117 override: the dispatcher is built
+		at(pic, 'models[".models.toml: the model and CLI per step"]', "the picture") -- c0117 override
 		at(pic, 'board["board: ./zn board, a tab per project"]', "the picture") -- c0118 override: the board is built
 	end)
 
@@ -151,8 +151,8 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			{
 				"\n- **The tracker.**",
 				"\n- **The skills.**",
-				"\n- **The dispatcher** (c0117, planned).",
-				"\n- **`.models.toml`** (c0117, planned).",
+				"\n- **The dispatcher.**", -- c0117 override: built
+				"\n- **`.models.toml`.**", -- c0117 override: built
 				"\n- **The board.**",
 			}
 		do
