@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: z-design/accepted-risks-checked-and-decided
+- design-review-001 F4: z-design/restated-rules-move-together
+- design-review-001 F5: zz-test/one-rule-one-function
+- design-review-001 F6: zz-test/one-rule-one-function
