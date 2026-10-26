@@ -1,2 +1,3 @@
 - design-review-001 F1: zz-test/no-vacuous-pass
 - design-review-001 F2: one-off: the user's scope decision (don't widen), recorded as G2
+- design-review-002 F1: zz-test/fixed-lines-run-their-whole-criterion

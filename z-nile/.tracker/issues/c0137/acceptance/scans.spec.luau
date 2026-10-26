@@ -108,6 +108,27 @@ local function bareClaude(l: string): boolean
 	return string.find(" " .. l, '[ "(]%.claude[ /"]') ~= nil or string.find(l, '[ "(]%.claude$') ~= nil
 end
 
+-- the shell script of a whole `check "<label>…" bash -c '…'` criterion in a finished check.sh (design review 002 F1:
+-- a fixed line is only reachable when every statement before it in its criterion passes)
+local function criterion(file: string, label: string): string
+	local text = fs.readFile(`{TOP}/{file}`)
+	local start = string.find(text, `\ncheck "{label}`, 1, true)
+	if not start then
+		error(`{file}: no criterion {label}`)
+	end
+	local open = string.find(text, "bash -c '", start, true)
+	local close = string.find(text, "'\n", (open :: number) + 9, true)
+	if not open or not close then
+		error(`{file}: {label} is not a bash -c criterion`)
+	end
+	return string.sub(text, (open :: number) + 9, (close :: number) - 1)
+end
+local CRITERIA = {
+	{ file = "z-nile/.tracker/issues/done/c0044/check.sh", label = "AC9:" },
+	{ file = "z-nile/.tracker/issues/done/c0067/check.sh", label = "AC10:" },
+	{ file = "z-nile/.tracker/rafts/done/R0025/check.sh", label = "RC1:" },
+}
+
 return t.spec("c0137 finished checks read the skills where they are", function(it)
 	it("the bare-operand test sees each form and leaves ../.claude alone", function()
 		t.expect(bareClaude("bad=$(grep -rn x .claude scripts || true)")).toBe(true)
@@ -186,6 +207,14 @@ return t.spec("c0137 finished checks read the skills where they are", function(i
 			end
 		end
 	)
+
+	it("each whole criterion the four lines sit in passes in the real home, as ./zn check runs it", function()
+		for _, c in CRITERIA do
+			local r = process.exec("bash", { "-c", criterion(c.file, c.label) }, { cwd = HOME })
+			t.expect({ criterion = c.file .. " " .. c.label, ok = r.ok, out = r.stdout .. r.stderr })
+				.toEqual({ criterion = c.file .. " " .. c.label, ok = true, out = "" })
+		end
+	end)
 
 	it("cleans up", function()
 		if fs.isDir(FX) then
