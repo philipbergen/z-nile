@@ -31,28 +31,22 @@ function checkpaths.repoPath(home: string, path: string): string?
 	return table.concat(parts, "/")
 end
 
--- the repository-relative path each Touched entry of an item in `home` names (c0141 design review 001 F1: one reading
--- per entry, chosen from its own text, never both): an entry whose first segment is a registered project's home
--- (`homes`, from the registry) is repository-relative; otherwise, when its first segment exists in the item's home
--- (in the checkout at `base`) or doesn't exist at the checkout's top either, it is read from the home; otherwise (a
--- root-level file or folder: `zn`, `AGENTS.md`, `.github`) it is repository-relative. An entry that climbs above the
--- checkout is dropped. A home holding a folder named after another home (`z-nile/pickman/…`) would read wrong; none
--- does today.
-function checkpaths.owned(base: string, home: string, entries: { string }, homes: { string }): { string }
+-- the repository-relative paths one document's Touched entries name, the document being in `home` (c0141 design
+-- review 002 F1: the convention is the document's, never the disk's): when any entry starts with a registered
+-- project's home (`homes`, from the registry), every entry of that document is read from the checkout's top
+-- (`z-nile/skills`, `.models.toml`, `AGENTS.md`); otherwise every entry is read from the home, and a root path is
+-- written `../AGENTS.md`. An entry that climbs above the checkout names nothing.
+function checkpaths.owned(home: string, entries: { string }, homes: { string }): { string }
+	local fromTop = false
+	for _, e in entries do
+		local first = string.match((string.gsub(e, "^%./", "")), "^([^/]+)")
+		if first and table.find(homes, first) then
+			fromTop = true
+		end
+	end
 	local out: { string } = {}
 	for _, e in entries do
-		local first = string.match((string.gsub(e, "^%./", "")), "^([^/]+)") or e
-		local reading: string?
-		if table.find(homes, first) then
-			reading = checkpaths.repoPath(".", e)
-		else
-			local homed = home ~= "." and home ~= ""
-			local inHome = homed and (fs.isDir(`{base}{home}/{first}`) or fs.isFile(`{base}{home}/{first}`))
-			local atTop = fs.isDir(base .. first) or fs.isFile(base .. first)
-			reading = if inHome or not atTop
-				then checkpaths.repoPath(home, e)
-				else checkpaths.repoPath(".", e)
-		end
+		local reading = if fromTop then checkpaths.repoPath(".", e) else checkpaths.repoPath(home, e)
 		if reading then
 			table.insert(out, reading)
 		end
@@ -306,13 +300,11 @@ local function scan(base: string, skip: (text: string) -> boolean): Scan
 			table.insert(homes, folder)
 		end
 	end
-	local byRaft: { [string]: { string } } = {}
+	local byRaft: { [string]: { { string } } } = {}
 	for _, i in all do
 		if i.raft ~= "" then
 			byRaft[i.raft] = byRaft[i.raft] or {}
-			for _, o in touched(`{base}{i.dir}/{i.id}.md`) do
-				table.insert(byRaft[i.raft], o)
-			end
+			table.insert(byRaft[i.raft], touched(`{base}{i.dir}/{i.id}.md`))
 		end
 	end
 	local out: Scan = { bad = {}, checked = 0, found = 0, byHome = {} }
@@ -323,12 +315,14 @@ local function scan(base: string, skip: (text: string) -> boolean): Scan
 			if not skip(text) then
 				out.found += 1
 				local home = projects.homeOf(reg, file)
-				local entries = touched(`{base}{i.dir}/{i.id}.md`)
-				local members: { string } = byRaft[i.id] or {}
-				for _, o in members do
-					table.insert(entries, o)
+				-- each document read by its own convention: the item's, and for a raft each member's
+				local own = checkpaths.owned(home, touched(`{base}{i.dir}/{i.id}.md`), homes)
+				local memberDocs: { { string } } = byRaft[i.id] or {}
+				for _, memberEntries in memberDocs do
+					for _, o in checkpaths.owned(home, memberEntries, homes) do
+						table.insert(own, o)
+					end
 				end
-				local own = checkpaths.owned(base, home, entries, homes)
 				for _, p in literals(text) do
 					local at = checkpaths.repoPath(home, p)
 					if not present(base, home, p) and not (at and under(at, own)) then

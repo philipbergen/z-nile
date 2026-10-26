@@ -24,7 +24,7 @@ Any new dependency edge goes in the project's architecture map (`pickman/.tracke
 ## 3. Design each issue in detail
 First read the checklist for the issue's type, `checklists/<feature|defect|chore>.md` beside this skill (`z-nile/skills/z-design/checklists/`), and answer every item of it in the Design. Then fill every section of the issue template. Requirements:
 - **Design**: concrete paths, public types and function signatures, the pure/adapter split, and server authority. Scalability, Maintainability and Usability are answered specifically (see the design checklist of the project's architecture rules: `pickman-arch` for pickman, `zz-arch` for the tooling), not with platitudes.
-- **Touched modules**: one backticked path per bullet. Then run `lune run z-nile/affected -- <paths>` and paste its output, plus the new specs, into **Affected specs**.
+- **Touched modules**: one backticked path per bullet, in one convention for the whole list (c0141): either every entry from the checkout's top, which a list naming any `<home>/…` path is (`z-nile/engine/x.luau`, `AGENTS.md`), or every entry from the issue's project home (`src/shared/Logic/X`), a root path then written `../AGENTS.md`. Then run `lune run z-nile/affected -- <paths>` and paste its output, plus the new specs, into **Affected specs**.
 - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
   - Each gets a pass/fail question, a method and a fallback.
   - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
