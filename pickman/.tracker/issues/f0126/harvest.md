@@ -56,3 +56,4 @@
 - design-review-010 F1: z-design/quote-other-preps-before-promising
 - design-review-010 F2: z-design/prove-specs-pass-on-a-prototype
 - note design-review-010 lesson candidate (hash the specs that will be promoted, not the prototype's copy): z-design/in-flight-bases-pin-their-source
+- note f0110's prep asked (2026-10-25) that f0126 check its boxes against every f0110 button, the snap control included: z-design/run-the-other-rafts-specs

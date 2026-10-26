@@ -145,8 +145,8 @@ return t.spec("f0126 the touch PICK button", function(it)
 						for _, o in others do
 							t.expect(overlap(p, o)).toBe(false)
 						end
-						-- f0110's FIRE and JUMP stay clear of the pick's bar and banner too
-						for _, button in { b.fire, b.hop } do
+						-- f0110's snap control, FIRE and JUMP stay clear of the pick's bar and banner too
+						for _, button in { b.snap, b.fire, b.hop } do
 							t.expect(overlap(button, Hud.pickBox(l))).toBe(false)
 							t.expect(overlap(button, Hud.boonBox(l))).toBe(false)
 						end
