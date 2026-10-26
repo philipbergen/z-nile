@@ -17,6 +17,7 @@
 | 13 | 2026-10-26 04:19 | R0045: refute-001 (F1 deferred to c0156, the user's decision), harvest, lesson | 3 | 1 | 10.0 | raft | code-review |  |
 | 14 | 2026-10-26 04:19 | R0045: Addressed during execution | 0 | 0 | 2.0 | raft | deliver |  |
 | 15 | 2026-10-26 04:19 | R0045: Addressed during execution | 0 | 0 | 1.0 | raft | deliver |  |
+| 16 | 2026-10-26 14:38 | c0128: golden.spec keeps line breaks; AC4 digests recomputed; comment-join cases (code review 001 F1, the user's "Fix the pin now") | 0 | 0 | 25.0 | explicit | code-review |  |
 
-**Total:** +285 / -20 lines, 130.0 agent-minutes, 207132 tokens over 15 records
-<!-- totals: added=285 removed=20 minutes=130.0 records=15 tokens=207132 -->
+**Total:** +285 / -20 lines, 155.0 agent-minutes, 207132 tokens over 16 records
+<!-- totals: added=285 removed=20 minutes=155.0 records=16 tokens=207132 -->
