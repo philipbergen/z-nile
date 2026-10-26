@@ -115,16 +115,18 @@ index bb7c53f2..749a213c 100644
  		for k in Session.snapshot(s, "p") :: any do
 diff --git a/pickman/tests/lib/plain.luau b/pickman/tests/lib/plain.luau
 new file mode 100644
-index 00000000..a8c90e03
+index 00000000..cb62a1fa
 --- /dev/null
 +++ b/pickman/tests/lib/plain.luau
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,115 @@
 +--!strict
 +-- c0153: plain data, as replicated frames and snapshots are: nil, booleans, finite numbers, strings, and tables
 +-- without a metatable or a cycle that are either a sequence (number keys exactly 1..n, no holes) or a map (string
 +-- keys only); the empty table is both. Anything else (functions, userdata, threads, holes, sparse, fractional, zero
 +-- or negative number keys, mixed tables) is lost or changed by replication or JSON. A JSON round trip keeps about
-+-- 16 significant digits, so it is compared within a number tolerance, and NaN is never within it.
++-- 16 significant digits, so it is compared within a number tolerance, and NaN is never within it. An absolute
++-- tolerance of 1e-9 holds for non-integers under about 1e6 (positions in tiles, speeds); a larger non-integer (a
++-- wall-clock time) comes back further off and needs a larger tolerance. Integers of any size round-trip exactly.
 +local serde = require("@lune/serde")
 +
 +local plain = {}

@@ -44,6 +44,10 @@ M = [
     ("P9 mixed tables accepted", H, "if strings > 0 and numbers > 0 then", "if false then", PLAIN),
     ("P10 the encoder's refusal raises", H, "\tlocal done, back = pcall(function()\n\t\treturn serde.decode(\"json\", serde.encode(\"json\", v))\n\tend)\n", "\tlocal done, back = true, serde.decode(\"json\", serde.encode(\"json\", v))\n", PLAIN),
     ("P11 a refusal says nowhere", H, "return false, `{path}: a cycle`", 'return false, ""', PLAIN),
+    # review 002 F1, F2: the round trip compares what came back; a table reached twice is not a cycle
+    ("Q1 compares v with itself", H, "return plain.equalWithin(back, v, eps)", "return plain.equalWithin(v, v, eps)", PLAIN),
+    ("Q2 never compares", H, "return plain.equalWithin(back, v, eps)", "return true, nil", PLAIN),
+    ("Q3 seen never cleared", H, "\t\tseen[v] = nil\n", "", PLAIN),
 ]
 
 def run(specs):

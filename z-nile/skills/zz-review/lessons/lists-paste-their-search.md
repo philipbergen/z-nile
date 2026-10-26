@@ -11,3 +11,5 @@ A finding that names "the N places that do X" from memory, or from the files the
 **How to apply:** for every finding that enumerates places, run one search over every file the mechanism could be in (`git grep -nE '<the form>' -- '<the paths>'`), paste the command and its hits, and say what each hit is or why it's excluded. Put the same search in a capture made from the finding.
 
 c0153 design review 001 F2: the author's own Regression guard said "no other spec uses the exact JSON compare" from a search for `serde.decode("json"` that only matched the two-line form; four more specs put `serde.encode` inline. An author's guard that claims "no other place" is a list too: paste its search, and make the pattern cover every spelling of the mechanism.
+
+c0153 design review 002 F4: the round-1 answer listed the excluded JSON uses by spec folder and missed `tests/lib/sim.luau`, because the list was typed from the hits of the narrower search. Paste the search's own output (file and count), not a summary of it.

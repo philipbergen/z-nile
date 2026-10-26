@@ -14,11 +14,18 @@ local function starts(text: string?, prefix: string): boolean
 end
 
 return t.spec("c0153 plain data and a JSON round trip within a tolerance", function(it)
-	it("the value that came back one ulp off round-trips within the tolerance", function()
-		local frame =
-			{ ghosts = { { name = "blinky", x = 13.783333333333333, y = 11, flash = false } }, tick = 61 }
-		t.expect({ plain.roundTrip(frame, EPS) }).toEqual({ true })
-	end)
+	it(
+		"the value that came back one ulp off round-trips within the tolerance, and differs with none",
+		function()
+			local frame =
+				{ ghosts = { { name = "blinky", x = 13.783333333333333, y = 11, flash = false } }, tick = 61 }
+			t.expect({ plain.roundTrip(frame, EPS) }).toEqual({ true })
+			-- and the round trip really compares what came back: with no tolerance, the lost ulp is a difference
+			local exact, why = plain.roundTrip(frame, 0)
+			t.expect(exact).toBe(false)
+			t.expect(starts(why, "value.ghosts.1.x: ")).toBe(true)
+		end
+	)
 
 	it("equalWithin accepts numbers within the tolerance and refuses them beyond it", function()
 		t.expect((plain.equalWithin({ x = 1 }, { x = 1 + 1e-12 }, EPS))).toBe(true)
@@ -102,13 +109,19 @@ return t.spec("c0153 plain data and a JSON round trip within a tolerance", funct
 		end
 	)
 
-	it("plain data is accepted: empty tables, sequences, maps and their nesting", function()
-		t.expect({ plain.check({}) }).toEqual({ true })
-		t.expect({ plain.check({ a = {}, b = { {}, {} } }) }).toEqual({ true })
-		t.expect({ plain.check({ a = 1, b = "x", c = { true, false }, d = nil }) }).toEqual({ true })
-		t.expect({ plain.roundTrip({ ghosts = { { x = 1.5 }, { x = 2 } }, play = { lives = 3 } }, EPS) })
-			.toEqual({ true })
-	end)
+	it(
+		"plain data is accepted: empty tables, sequences, maps, their nesting, and a table reached twice (not a cycle)",
+		function()
+			t.expect({ plain.check({}) }).toEqual({ true })
+			t.expect({ plain.check({ a = {}, b = { {}, {} } }) }).toEqual({ true })
+			local shared = { x = 1 }
+			t.expect({ plain.check({ a = shared, b = { shared, shared } }) }).toEqual({ true })
+			t.expect({ plain.roundTrip({ a = shared, b = { shared, shared } }, EPS) }).toEqual({ true })
+			t.expect({ plain.check({ a = 1, b = "x", c = { true, false }, d = nil }) }).toEqual({ true })
+			t.expect({ plain.roundTrip({ ghosts = { { x = 1.5 }, { x = 2 } }, play = { lives = 3 } }, EPS) })
+				.toEqual({ true })
+		end
+	)
 
 	it("roundTrip refuses what is not plain data, and what the encoder refuses, without raising", function()
 		t.expect((plain.roundTrip({ big = math.huge }, EPS))).toBe(false)
