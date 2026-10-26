@@ -57,3 +57,14 @@
 - design-review-010 F2: z-design/prove-specs-pass-on-a-prototype
 - note design-review-010 lesson candidate (hash the specs that will be promoted, not the prototype's copy): z-design/in-flight-bases-pin-their-source
 - note f0110's prep asked (2026-10-25) that f0126 check its boxes against every f0110 button, the snap control included: z-design/run-the-other-rafts-specs
+- note R0053's status claim was not remembered, so unfold refused it (2026-10-26): z-raft/rafted-member-changes-stay-in-the-raft
+- design-review-011 F1: z-design/shared-bars-cover-every-pair
+- design-review-011 F2: z-design/restated-rules-move-together
+- design-review-011 F3: z-design/spec-design-correspondence
+- design-review-012 F1: z-design/in-flight-bases-pin-their-source
+- design-review-012 F2: z-design/quote-other-preps-before-promising
+- design-review-012 F3: z-design/shared-bars-cover-every-pair
+- design-review-012 F4: z-raft/rafted-member-changes-stay-in-the-raft
+- design-review-013 F1: z-design/in-flight-bases-pin-their-source
+- design-review-013 F2: z-design/restated-rules-move-together
+- design-review-013 F3: z-design/quote-other-preps-before-promising
