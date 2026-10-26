@@ -9,9 +9,11 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-check "AC1: check-paths' Touched exemption compares a path's repository-relative form with Touched entries read both ways, and never exempts a path that climbs above the checkout" \
+check "AC1: check-paths' Touched exemption compares a path's repository-relative form with what each Touched entry names, read one way chosen from the entry's own text, and never exempts a path that climbs above the checkout" \
   lune run tests/run -- "$A/touched-from-home.spec.luau"
-check "AC2: c0120's check-paths spec still passes, live scan included, with its helpers in z-nile/tests/lib/checkpaths.luau" \
-  bash -c 'test -f tests/lib/checkpaths.luau && lune run tests/run -- tests/acceptance/c0120/check-paths.spec.luau'
+check "AC2: c0120's promoted check-paths spec takes its scan from z-nile/tests/acceptance/c0120/checkpaths.luau and defines no scanner of its own" \
+  lune run tests/run -- "$A/uses-module.spec.luau"
+check "AC3: c0120's check-paths spec still passes, live scan included" \
+  bash -c 'test -f tests/acceptance/c0120/checkpaths.luau && lune run tests/run -- tests/acceptance/c0120/check-paths.spec.luau'
 
 finish
