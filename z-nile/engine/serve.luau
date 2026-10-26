@@ -132,15 +132,18 @@ function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?
 		return nil, `unknown id {tostring(id)}`, 400
 	end
 	if action == "stop" then
-		-- the run the card belongs to: the one its chain follows (issue to raft), else its own; never an id with no
+		-- the run the card belongs to: its own while a step of its own runs, else the one its chain follows (issue to
+		-- raft), else its own; never an id with no
 		-- run state, which `./zn dispatch stop` would create
 		local own = dispatchOf(m, id)
 		if own == nil then
 			return nil, `nothing is running for {id}`, 409
 		end
+		-- c0117 writes `follows` once and never clears it, so the card's own outcome decides: running is a step of its
+		-- own (stop it), anything else means its chain moved on (stop the run it follows, if that one has state)
 		local target = id
 		local follows = own.follows
-		if follows and dispatchOf(m, follows) ~= nil then
+		if own.outcome ~= "running" and follows and dispatchOf(m, follows) ~= nil then
 			target = follows
 		end
 		return { kind = "run", args = { "dispatch", "stop", target }, wait = true }, nil

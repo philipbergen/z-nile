@@ -105,9 +105,16 @@ local function start()
 					dispatch = {
 						R0020 = { step = "z-run", outcome = "running", model = "m", questions = false },
 						f0021 = {
-							step = "follow",
-							outcome = "followed",
-							model = "",
+							step = "z-design",
+							outcome = "ok",
+							model = "m",
+							questions = false,
+							follows = "R0020",
+						},
+						f0022 = {
+							step = "zz-review",
+							outcome = "running",
+							model = "m",
 							questions = false,
 							follows = "R0020",
 						},
@@ -189,6 +196,10 @@ return t.spec("c0121 board server", function(it)
 		item(
 			"z-nile/.tracker/rafts/R0030",
 			{ "type: chore", "title: Prepared", "design: ready", "status: prepared-a-b-c" }
+		)
+		item(
+			"z-nile/.tracker/issues/active/f0022",
+			{ "type: feature", "title: Reviewed", "raft: R0020", "status: active-a-b-c" }
 		)
 		item("z-nile/.tracker/issues/c0099", { "type: chore", "title: Loose", "raft:" })
 		write(
@@ -287,10 +298,13 @@ return t.spec("c0121 board server", function(it)
 			local r = action('{"action":"stop","id":"f0021"}')
 			t.expect(r.statusCode).toBe(200)
 			t.expect(runs[#runs]).toEqual({ "dispatch", "stop", "R0020" })
+			local own = action('{"action":"stop","id":"f0022"}') -- its own step runs: its own id, not the raft's
+			t.expect(own.statusCode).toBe(200)
+			t.expect(runs[#runs]).toEqual({ "dispatch", "stop", "f0022" })
 			local idle = action('{"action":"stop","id":"c0099"}')
 			t.expect(idle.statusCode).toBe(409)
 			t.expect(string.find(idle.body, "nothing is running for c0099", 1, true) ~= nil).toBe(true)
-			t.expect(#runs).toBe(before + 1)
+			t.expect(#runs).toBe(before + 2)
 		end
 	)
 
