@@ -6,3 +6,4 @@
   - tooling migrate-odd stays green (the must-still-run case).
   - Mutants all killed: W1 (round 002's waiver by message), W2 (inherited variables ignored: through `./zn`, `guardRepoRoot` refuses first, so (d) also calls the guard directly as a script would), W3 (a `.git` file ignored), W4 (never outside).
   - Consequence: a broken checkout stops every writing command until repaired, which is right.
+  - Consequence the full gate found: repo-fence bans naming the git location variables outside its reviewed allow list. conflicts.luau now has an entry for all four ("read to refuse when inherited"; it never sets them; 583abd6b). The promoted conflicts.spec's entry (`GIT_DIR`, `GIT_WORK_TREE`, set inside fixture commands) is added at execution, because the allow list requires its key to name an existing file. repo-fence.spec is now a Touched module.
