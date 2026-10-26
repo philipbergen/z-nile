@@ -1,7 +1,7 @@
 ---
 title: A filtered command keeps its own failure: never `cmd | grep -v … || true`
 when: both
-tags: [check.sh, shell, failures]
+tags: [check-files, shell, failures]
 check: In every `cmd | filter || true` (or a filter after a pipe), does a failure of `cmd` itself still turn the check red?
 ---
 A pipe's status is the last command's, and `|| true` then hides even that: when the command before the filter fails (no ref, a bad pathspec), it prints nothing to stdout, the filter gets an empty input, and the check reads "nothing changed" — green on exactly the case it can't judge.
