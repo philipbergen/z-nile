@@ -93,6 +93,7 @@ type World = {
 }
 
 local function world(): World
+	local ticks = 0
 	local enum = enumProxy()
 	local fired: { any } = {}
 	local remote = {
@@ -221,8 +222,11 @@ local function world(): World
 		Enum = enum,
 		require = requirer,
 		os = {
+			-- a clock a second further on at every read, so no two presses fall in a later feature's double-tap window
+			-- (f0143's boost folds Forward presses 0.3 s apart)
 			clock = function(): number
-				return 0
+				ticks += 1
+				return ticks
 			end,
 		},
 	}
