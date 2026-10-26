@@ -9,3 +9,5 @@ A finding whose evidence was read from the code rather than run can describe beh
 **Why:** R0050 code review 003 F3 reported that the bare `status` listed a retired raft as `prepared` without running it. `publish.allowed` never accepts a `rafts/retired/` path, so the bare `status` never listed it at all. The fix added a `retired` branch there that can't be reached, and review 004 F2 found it dead.
 
 **How to apply:** for every behaviour a finding states, run it in the scratch clone and quote the output. On a re-review, re-run the previous round's evidence for each claim its fix rests on before ruling the fix good.
+
+c0121 design review 004 F3: round 003 inferred from the code that a dispatcher killed mid-step recorded its outcome before dying; a scratch run showed the write to the closed pipe comes first, so the state stays `running`. Run a claim about what a failure path writes (which line fails first, what is saved) before ruling on it, and before a refute adopts it.

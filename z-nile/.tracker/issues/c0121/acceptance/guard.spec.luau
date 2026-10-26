@@ -28,7 +28,14 @@ local function headers(extra: { [string]: string }): { [string]: string }
 end
 
 local MODEL: any = {
-	home = { R0020 = "R0020", R0030 = "R0030", f0021 = "f0021", f0031 = "f0031", c0099 = "c0099" },
+	home = {
+		R0020 = "R0020",
+		R0030 = "R0030",
+		f0021 = "f0021",
+		f0022 = "f0022",
+		f0031 = "f0031",
+		c0099 = "c0099",
+	},
 	rafts = {
 		{
 			id = "R0020",
@@ -42,11 +49,11 @@ local MODEL: any = {
 		{
 			id = "f0021",
 			raft = "R0020",
-			-- its chain moved on to its raft (c0117's follow)
+			-- its chain moved on to its raft: c0117 writes `follows` once and leaves the last step's outcome (ok)
 			dispatch = {
-				step = "follow",
-				outcome = "followed",
-				model = "",
+				step = "z-design",
+				outcome = "ok",
+				model = "m",
 				questions = false,
 				follows = "R0020",
 			},
@@ -56,13 +63,25 @@ local MODEL: any = {
 			raft = "R0030",
 			-- a stale follow: R0030 has no run state
 			dispatch = {
-				step = "z-run",
-				outcome = "running",
+				step = "z-design",
+				outcome = "ok",
 				model = "m",
 				questions = false,
 				follows = "R0030",
 			},
 			pr = { number = 9, url = "https://example.invalid/pr/9", state = "open" },
+		},
+		{
+			id = "f0022",
+			raft = "R0020",
+			-- a step of its own runs on the same state after its chain followed R0020 (follows is never cleared)
+			dispatch = {
+				step = "zz-review",
+				outcome = "running",
+				model = "m",
+				questions = false,
+				follows = "R0020",
+			},
 		},
 		{ id = "c0099" },
 	} :: { any },
@@ -146,12 +165,15 @@ return t.spec("c0121 server rules", function(it)
 	)
 
 	it(
-		"stop on a member whose run follows its raft stops the raft's run; a stale follow stops the card's own",
+		"stop on a member whose run follows its raft stops the raft's run; a stale follow, or a step of its own running, stops the card's own",
 		function()
 			t.expect((serve.plan(MODEL, "stop", "f0021")))
 				.toEqual({ kind = "run", args = { "dispatch", "stop", "R0020" }, wait = true })
 			t.expect((serve.plan(MODEL, "stop", "f0031")))
 				.toEqual({ kind = "run", args = { "dispatch", "stop", "f0031" }, wait = true })
+			-- an own step running: stop the card's own run, never the raft's (design review 004 F1)
+			t.expect((serve.plan(MODEL, "stop", "f0022")))
+				.toEqual({ kind = "run", args = { "dispatch", "stop", "f0022" }, wait = true })
 			-- retry keeps the card's own id: its chain follows by itself
 			t.expect((serve.plan(MODEL, "retry", "f0021")))
 				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0021" }, wait = false })

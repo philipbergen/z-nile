@@ -16,3 +16,7 @@
 - design-review-003 F4: z-design/touched-paths-exist
 - design-review-003 F5: one-off: a wrong claim about how Lune reports a closed pipe, checked by a scratch run
 - design-review-003 F6: one-off: a stale PR description
+- design-review-004 F1: zz-arch/act-on-the-id-the-state-follows
+- design-review-004 F2: z-design/watch-steps-name-their-base
+- design-review-004 F3: zz-review/run-the-evidence-you-cite
+- design-review-004 F4: z-design/restated-rules-move-together
