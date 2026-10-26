@@ -53,7 +53,8 @@ return t.spec("c0139 c0115's two rewriting scripts refuse over a merge conflict"
 		for _, name in { "rename-lesson-ids", "rewrite-finished" } do
 			local r = run(name)
 			t.expect(r.code).toBe(2)
-			t.expect(has(r.stderr, `{name}: refusing to run while the checkout has unmerged paths`)).toBe(true)
+			t.expect(has(r.stderr, `{name}: refusing to run while the checkout has unmerged paths`))
+				.toBe(true)
 			t.expect(has(r.stderr, DOC)).toBe(true)
 		end
 		fixture.git(f.main, { "checkout", "--theirs", DOC })
@@ -66,7 +67,8 @@ return t.spec("c0139 c0115's two rewriting scripts refuse over a merge conflict"
 		for _, name in { "rename-lesson-ids", "rewrite-finished" } do
 			local r = run(name)
 			t.expect(r.code).toBe(2)
-			t.expect(has(r.stderr, `{name}: refusing to run: these files hold merge-conflict markers`)).toBe(true)
+			t.expect(has(r.stderr, `{name}: refusing to run: these files hold merge-conflict markers`))
+				.toBe(true)
 			t.expect(has(r.stderr, `{rel}:1`)).toBe(true)
 		end
 		fs.removeDir(f.base)

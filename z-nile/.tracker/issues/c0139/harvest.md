@@ -9,3 +9,5 @@
 - design-review-002 F3: zz-test/seed-every-enumerated-case
 - design-review-002 F4: z-design/restated-rules-move-together
 - design-review-003 F1: zz-arch/guard-no-is-explicit
+- design-review-004 F1: zz-test/seed-every-enumerated-case
+- design-review-004 F2: z-design/required-steps-on-every-path
