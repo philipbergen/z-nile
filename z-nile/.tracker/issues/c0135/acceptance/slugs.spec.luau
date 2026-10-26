@@ -23,6 +23,16 @@ local SEED = {
 	["pickman/.tracker/issues/c0005/c0005.md"] = doc("c0005", "a-member"),
 	["pickman/.tracker/rafts/R0004/R0004.md"] = raftDoc("R0004", "keeper"),
 	["pickman/.tracker/rafts/retired/R0003/R0003.md"] = raftDoc("R0003", "old-raft", "retired: R0004\n"),
+	["pickman/.tracker/issues/c0008/c0008.md"] = doc("c0008", "another-member"),
+	-- a prepared chore whose slug a retired raft holds (design review 001 F2)
+	["pickman/.tracker/issues/c0030/c0030.md"] = (string.gsub(
+		doc("c0030", "lone-chore", "size: 100\n"),
+		"design: draft\ncreated: 2026%-01%-01\nstatus: new%-a%-b%-c",
+		"design: ready\ncreated: 2026-01-01\nstatus: prepared-a-b-c"
+	)),
+	["pickman/.tracker/rafts/retired/R0031/R0031.md"] = raftDoc("R0031", "lone-chore", "retired: R0004\n"),
+	-- an active raft, for an emergent issue made on its branch (design review 001 F3)
+	["pickman/.tracker/rafts/active/R0040/R0040.md"] = raftDoc("R0040", "the-active"),
 }
 
 local function has(text: string, needle: string): boolean
@@ -63,6 +73,22 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 	end)
 
 	it(
+		"raft-plan's commands give a new raft a free slug: its first issue's, or with -2, -3, … distinct in the plan",
+		function()
+			local raftplan = require("@znile/engine/raftplan")
+			local ops: { any } = {
+				{ kind = "new", type = "chore", issues = { "c0001" }, root = "pickman/.tracker" },
+				{ kind = "new", type = "chore", issues = { "c0002" }, root = "pickman/.tracker" },
+			}
+			local runs = raftplan.commands(ops, { c0001 = "same", c0002 = "same" }, function(): string?
+				return "pickman"
+			end, { same = true }) :: { { string } }
+			t.expect(runs[1][4]).toBe("same-2")
+			t.expect(runs[2][4]).toBe("same-3")
+		end
+	)
+
+	it(
 		"sluggedFromTree reads every root and every state folder, retired rafts included, and nothing else",
 		function()
 			local texts: { [string]: string } = table.clone(SEED)
@@ -85,9 +111,13 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 				"issue c0002 in-the-other-root",
 				"issue c0005 a-member",
 				"issue c0006 active-one",
+				"issue c0008 another-member",
+				"issue c0030 lone-chore",
 				"issue f0001 taken-done",
 				"raft R0003 old-raft",
 				"raft R0004 keeper",
+				"raft R0031 lone-chore",
+				"raft R0040 the-active",
 			})
 		end
 	)
@@ -129,6 +159,21 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			t.expect({ slug = case.slug, named = has(r.stderr .. r.stdout, `taken by {case.owner}`) })
 				.toEqual({ slug = case.slug, named = true })
 		end
+		-- a raft retired on origin/main only, after this worktree was cut: the publish path reads origin's tree
+		trackerfix.elsewhere(f, {
+			["pickman/.tracker/rafts/retired/R0035/R0035.md"] = raftDoc(
+				"R0035",
+				"retired-elsewhere",
+				"retired: R0004\n"
+			),
+		}, "a raft retired elsewhere")
+		local far = trackerfix.tr(
+			f,
+			wt,
+			{ "new", "raft", "chore", "retired-elsewhere", "c0005", "--project", "pickman" }
+		)
+		t.expect(far.ok).toBe(false)
+		t.expect(has(far.stderr .. far.stdout, "taken by R0035")).toBe(true)
 		local ok =
 			trackerfix.tr(f, wt, { "new", "raft", "chore", "fresh-raft", "c0005", "--project", "pickman" })
 		t.expect({ ok = ok.ok, err = ok.stderr }).toEqual({ ok = true, err = ok.stderr })
@@ -147,6 +192,50 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 		t.expect(#fs.readDir(`{wt}/pickman/.tracker/issues`)).toBe(before)
 	end)
 
+	it("new raft's local path refuses a live or retired raft's slug and writes no raft", function()
+		local before = #fs.readDir(`{wt}/pickman/.tracker/rafts`)
+		for _, case in { { slug = "keeper", owner = "R0004" }, { slug = "old-raft", owner = "R0003" } } do
+			local r = trackerfix.tr(
+				f,
+				wt,
+				{ "new", "raft", "chore", case.slug, "c0008", "--project", "pickman" },
+				{ PICKMAN_PUBLISH = "0" }
+			)
+			t.expect({ slug = case.slug, ok = r.ok }).toEqual({ slug = case.slug, ok = false })
+			t.expect({ slug = case.slug, named = has(r.stderr .. r.stdout, `taken by {case.owner}`) })
+				.toEqual({ slug = case.slug, named = true })
+		end
+		t.expect(#fs.readDir(`{wt}/pickman/.tracker/rafts`)).toBe(before)
+	end)
+
+	it("raft-plan gives a planned raft a slug no raft has (a retired raft keeps its slug)", function()
+		local out = trackerfix.trOk(f, wt, { "raft-plan" })
+		t.expect(has(out, "./zn new raft chore lone-chore-2 c0030 --project pickman")).toBe(true)
+	end)
+
+	it(
+		"a publishing new checks origin/main and this checkout: an emergent issue sees origin, a capture sees its tree",
+		function()
+			-- origin/main gains an issue after the raft's branch was cut
+			local rw = trackerfix.trOk(f, f.main, { "worktree", "R0040" })
+			trackerfix.elsewhere(
+				f,
+				{ ["z-nile/.tracker/issues/c0090/c0090.md"] = doc("c0090", "origin-only") },
+				"x"
+			)
+			local r = trackerfix.tr(f, rw, { "new", "issue", "c", "origin-only", "--raft", "R0040" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "taken by c0090")).toBe(true)
+			-- a capture worktree's own tree holds an item origin/main doesn't
+			fs.writeDir(`{wt}/pickman/.tracker/issues/c0091`)
+			fs.writeFile(`{wt}/pickman/.tracker/issues/c0091/c0091.md`, doc("c0091", "local-only"))
+			local r2 = trackerfix.tr(f, wt, { "new", "issue", "c", "local-only", "--project", "pickman" })
+			t.expect(r2.ok).toBe(false)
+			t.expect(has(r2.stderr .. r2.stdout, "taken by c0091")).toBe(true)
+			fs.removeDir(`{wt}/pickman/.tracker/issues/c0091`)
+		end
+	)
+
 	it(
 		"audit reports a slug two issues share, once, naming both; an issue and a raft sharing one is fine",
 		function()
@@ -160,8 +249,9 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 					table.insert(lines, l)
 				end
 			end
-			t.expect(#lines).toBe(1)
-			t.expect(has(lines[1], "issue taken-done: c0099, f0001")).toBe(true)
+			t.expect(lines).toEqual({
+				"error slug-duplicate z-nile/.tracker/issues/c0099: issue taken-done: c0099, f0001 (choose a new slug for all but one)",
+			})
 			fs.removeDir(`{wt}/z-nile/.tracker/issues/c0099`)
 			-- the issue `old-raft` made above shares its slug with the retired raft R0003: not a clash
 			local clean = trackerfix.tr(f, wt, { "audit" })
@@ -177,6 +267,12 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			has(
 				rules,
 				"A slug names one item of its kind, in every project root and every state (retired rafts included): `new issue` and `new raft` refuse a slug another item of the same kind uses, and `./zn audit` reports a shared one (`slug-duplicate`)."
+			)
+		).toBe(true)
+		t.expect(
+			has(
+				rules,
+				"Two copies of one id with one slug are one item twice: remove the stray copy rather than renumbering it."
 			)
 		).toBe(true)
 		local ticket = fs.readFile(`{top}/z-nile/skills/z-ticket/SKILL.md`)
