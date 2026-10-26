@@ -198,6 +198,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			)
 			t.expect(active.code).toBe(4)
 			t.expect(has(active.stdout, "rafts/active/R0040/check.sh")).toBe(true)
+			t.expect(has(active.stdout, "raft R0040 is active")).toBe(true)
 			local backlog = gate(
 				42,
 				with({
