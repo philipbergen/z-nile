@@ -16,6 +16,8 @@
 | 12 | 2026-10-25 17:19 | design-review-007 | 0 | 0 | 30.0 | spend | design-review |  |
 | 13 | 2026-10-25 17:27 | design-review-008 | 0 | 0 | 30.0 | spend | design-review |  |
 | 14 | 2026-10-25 17:38 | design-review-009 | 0 | 0 | 12.0 | spend | design-review |  |
+| 15 | 2026-10-26 14:48 | design-review-010 | 0 | 0 | 20.0 | spend | design-review |  |
+| 16 | 2026-10-26 15:56 | design-review-011 | 0 | 0 | 40.0 | spend | design-review |  |
 
-**Total:** +0 / -0 lines, 141.4 agent-minutes, 196270 tokens over 14 records
-<!-- totals: added=0 removed=0 minutes=141.4 records=14 tokens=196270 -->
+**Total:** +0 / -0 lines, 201.4 agent-minutes, 196270 tokens over 16 records
+<!-- totals: added=0 removed=0 minutes=201.4 records=16 tokens=196270 -->
