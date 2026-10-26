@@ -7,6 +7,7 @@
 | 3 | 2026-10-26 15:55 | design-review-002 | 0 | 0 | 40.0 | spend | design-review |  |
 | 4 | 2026-10-26 16:46 | design-review-003 | 0 | 0 | 10.0 | spend | design-review |  |
 | 5 | 2026-10-26 22:23 | prep (design, prototype, mutation check; estimate) | 811 | 5 | 120.0 | spend | prep |  |
+| 6 | 2026-10-26 23:15 | f0146: specs first (unit Pad spec, harness tables learn Pad; red until Pad exists) | 45 | 18 | 5.0 | focus | build |  |
 
-**Total:** +811 / -5 lines, 185.0 agent-minutes, 0 tokens over 5 records
-<!-- totals: added=811 removed=5 minutes=185.0 records=5 tokens=0 -->
+**Total:** +856 / -23 lines, 190.0 agent-minutes, 0 tokens over 6 records
+<!-- totals: added=856 removed=23 minutes=190.0 records=6 tokens=0 -->
