@@ -4,3 +4,4 @@
 - design-review-001 F4: z-design/design-the-execution-window
 - design-review-001 F5: z-design/prove-specs-pass-on-a-prototype
 - design-review-001 F6: one-off: Roblox's ButtonB clears GuiService.SelectedObject; a platform behaviour of the lobby's selection, not a pattern the lessons can generalise
+- note f0143's rebuilt prototype turned controls.spec red: it read the second-to-last intent, which f0143's boost moves; it now reads each press's own first intent: z-design/run-the-other-rafts-specs

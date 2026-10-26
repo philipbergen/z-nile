@@ -224,13 +224,17 @@ return t.spec("f0146 Controls and Sticks on a stub engine", function(it)
 		t.expect(#a).toBe(1)
 		t.expect(a[1]).toBe(w.enum.ContextActionResult.Pass)
 		t.expect(w.fired).toEqual({ Hop.INTENT })
+		local first: { [string]: any } = {}
 		for _, key in { "ButtonR2", "DPadUp", "ButtonR3", "W", "Space" } do
+			local before = #w.fired
 			local r = w.press(key, "Begin")
 			t.expect(#r).toBe(1)
 			t.expect(r[1]).toBe(w.enum.ContextActionResult.Sink)
+			first[key] = w.fired[before + 1]
 		end
-		t.expect(w.fired[#w.fired - 1]).toBe("Forward") -- W
-		t.expect(table.find(w.fired, "Forward") ~= nil).toBe(true) -- the D-pad's Up goes the way of W
+		-- each press's own first intent, so a later feature's extra intent (f0143's boost) leaves this case alone
+		t.expect(first.W).toBe("Forward")
+		t.expect(first.DPadUp).toBe("Forward") -- the D-pad's Up goes the way of W
 	end)
 
 	it(
