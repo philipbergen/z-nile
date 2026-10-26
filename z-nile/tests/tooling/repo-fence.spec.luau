@@ -96,6 +96,11 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_COMMON_DIR = "refused",
 		GIT_OBJECT_DIRECTORY = "refused",
 	},
+	-- c0152 design review 003 F2: merge-check adds the merger's git directory to its trial's nested runs' protected list
+	-- (PICKMAN_FENCE_REAL_GIT), keeping whatever it inherited; it never removes an entry or sets another fence variable
+	["z-nile/engine/mergecheck.luau"] = {
+		PICKMAN_FENCE_ = "adds the merger's git directory to PICKMAN_FENCE_REAL_GIT for the trial's stages, keeping what it inherited",
+	},
 	["z-nile/tests/acceptance/c0060/fixture.spec.luau"] = {
 		GIT_DIR = "proves the helper refuses it",
 		GIT_WORK_TREE = "proves the helper refuses it",

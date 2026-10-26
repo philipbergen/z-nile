@@ -3958,7 +3958,9 @@ end
 
 -- c0152: may a PR merge although origin/main moved after its green CI? Exit 0 yes, 1 no (each reason printed).
 cmd["merge-check"] = function(pos: { string })
-	local v = mergecheck.judge(".", pos[1] or "HEAD")
+	local v = mergecheck.judge(".", pos[1] or "HEAD", function(line: string)
+		print(`merge-check: {line}`)
+	end)
 	for _, l in v.lines do
 		print(`merge-check: {l}`)
 	end

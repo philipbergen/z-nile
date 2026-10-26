@@ -2,7 +2,11 @@
 # merged tree and runs every `run` line there (`run <home> <spec, from the home>`); a listed spec missing from that tree,
 # or no `run` line at all, is a no. A `skip` line names a spec the search below finds that reads no item file a
 # tracker-only commit can change, and why. c0152's promoted list spec runs the search and requires every hit here.
+# A `notrial <glob>` line names files that main may change during a check without a new trial (`**` any folders, `*`
+# within a name): after the trial merge-check reads origin's tip again, and a move that changes only such files (and
+# passes the tracker-state rule) is accepted without trying again; any other move runs the trial again.
 # Search (the spec holds it): git grep -lE '<pattern>' -- 'z-nile/tests/**/*.spec.luau' 'pickman/tests/**/*.spec.luau'
+notrial */.tracker/**/spend.md -- spend rows, written only by ./zn spend; decided with the user, 2026-10-26: "Skip re-trial for spend-only moves" (c0042's and c0043's board and metrics stages do read them)
 run z-nile tests/acceptance/c0082/real-tree.spec.luau -- ./zn audit over the tree: ids, documents, counter, moves
 run z-nile tests/acceptance/c0120/check-paths.spec.luau -- every unfinished check.sh's literal paths exist
 run z-nile tests/acceptance/c0114/classified.spec.luau -- slugs unique, kinds per root, every unfinished check.sh lists
