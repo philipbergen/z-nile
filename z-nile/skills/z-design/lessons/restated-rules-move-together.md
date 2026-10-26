@@ -2,7 +2,7 @@
 title: Restated rules move together
 when: design
 tags: [stale-text, docs]
-check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree, and is the new wording pinned?
+check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree, and is the new wording pinned? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone, by a search for the old non-goal's words and for "either order"?
 ---
 A rule is usually stated in one place and summarized in several others. A fix that changes the rule but not the summaries leaves an executor or a future agent reading the old rule.
 
@@ -21,3 +21,7 @@ R0044 design review 2 (F4): rounds 1 and 2 changed the design behind a separate 
 c0115 design review 015 F2: round 014 fixed the engine's move-commit lookup (subject only, not `--grep`), and AC13's `check.sh` kept the old `--grep` for the same commit. When a lookup is fixed, search the item's own sequestered files (check.sh, experiments, specs) for the same mechanism in the same change.
 
 c0118 design review 009 F1: a note added to a lesson's body restated a new rule, but the lesson's `check:` (the only line `./zn lessons` lists) still asked the old question. A note that changes what a lesson teaches updates its `check:` in the same change.
+
+A scoping sentence covers only what it points at (c0117 design review 010 F1): "the names above are the interactive path's" left a section further down still stating the old rule unscoped. When a rule gains a second path, search the whole skill for the old rule's wording, not just the section you edited, and scope each hit.
+
+f0126 design review 006 F7: after the user widened f0126 to every input, the old non-goal "a gamepad button (f0146)", "touch has no pick", "either order" and the first prototype's base and counts survived beside the new sections.

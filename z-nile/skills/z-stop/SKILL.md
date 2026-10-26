@@ -5,7 +5,7 @@ description: Undo z-ready, or abort a started raft. Gives the claim back, moves 
 
 # Stop a raft
 
-1. **Resolve the target.** It must be a raft id (`R0010`). For an issue, look up its raft first (`./zn status <id>`, then the document's `raft:`).
+1. **Resolve the target.** It is normally a raft id (`R0010`). For an issue, look up its raft first (`./zn status <id>`, then the document's `raft:`). Only an active issue whose raft is retired, missing or empty (audit's `dead-raft` or `raftless-active` error) is stopped by its own id: `./zn stop <issue>` gives that one issue back to the backlog, stamped `prepared-…`, with its `check.sh` paths rewritten back; an issue whose raft is live is refused (stop the raft).
 2. **Sync, then stop, in the main checkout.** Run `./zn sync`, then `./zn stop <R-id>`. It refuses anywhere but a clean `main` checkout with an origin. It is the only way to give back a readied raft: `status` refuses items in `active/`. It gives back exactly what the claim took: the raft and the issues carrying its own `active-…` stamp. An issue filed naming the raft after the claim keeps its status and is named in a warning; report it, and the human decides whether it belongs to the raft. A raft that carries no `active-…` claim stamp (an `active/` folder or status made by hand) is refused ("give it back by hand"): report it, and the human fixes the documents by pull request.
    - A readied raft (in `active/` on `origin/main`): one tracker-only commit moves it and its issues back to the backlog, stamped `prepared-…`, with their `check.sh` paths rewritten back. A member already in `done/` refuses, naming it.
    - A raft claimed by the legacy `start` (in the backlog, status `active`): a status-only publish gives the claim back, with no move.
