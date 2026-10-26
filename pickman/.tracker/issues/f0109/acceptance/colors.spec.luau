@@ -40,12 +40,13 @@ end
 local FLOOR: Rgb = { r = 0, g = 0, b = 0 } -- MazeView's floor
 local PELLET: Rgb = { r = 255, g = 184, b = 174 } -- PelletView's pellets
 local SHOT: Rgb = { r = 0, g = 255, b = 255 } -- the blaster's beam and shot bars (BlastView, HudView)
+local GOLD: Rgb = { r = 255, g = 191, b = 0 } -- f0126's marked walls (MazeView)
 
 return t.spec("f0109 Inky's colour and green walls", function(it)
-	it("Inky is yellow, 255,230,0, for its body and its glow (G1)", function()
-		t.expect(rgb(View.GHOST_COLORS.inky)).toBe("255,230,0")
-		t.expect(rgb(View.ghostColor("inky", "normal", false))).toBe("255,230,0")
-		t.expect(rgb(View.ghostColor("inky", "normal", true))).toBe("255,230,0")
+	it("Inky is lemon, 230,255,0, for its body and its glow (G1)", function()
+		t.expect(rgb(View.GHOST_COLORS.inky)).toBe("230,255,0")
+		t.expect(rgb(View.ghostColor("inky", "normal", false))).toBe("230,255,0")
+		t.expect(rgb(View.ghostColor("inky", "normal", true))).toBe("230,255,0")
 	end)
 
 	it("Inky stands out against the walls, edible or not, and the floor", function()
@@ -63,7 +64,7 @@ return t.spec("f0109 Inky's colour and green walls", function(it)
 			for _, name in { "blinky", "pinky", "clyde" } do
 				t.expect(distance(inky, View.GHOST_COLORS[name]) >= 30).toBe(true)
 			end
-			for _, other in { View.FRIGHTENED_COLOR, View.WHITE, PELLET, SHOT } do
+			for _, other in { View.FRIGHTENED_COLOR, View.WHITE, PELLET, SHOT, GOLD } do
 				t.expect(distance(inky, other) >= 30).toBe(true)
 			end
 		end

@@ -32,6 +32,18 @@ return t.spec("f0109 the client paints the walls by View.wallColor", function(it
 	end)
 
 	it(
+		"walls built or rebuilt while the ghosts are edible come out green: every wall part takes the model's colour",
+		function()
+			local src = source(client("MazeView"))
+			-- no wall part is made in a fixed colour: build (and f0126's rewall) paint through the model's lit/edible state
+			t.expect((string.find(src, "View.wallColor(false, false)", 1, true))).toBe(nil)
+			t.expect((string.find(src, "View.wallColor(false, true)", 1, true))).toBe(nil)
+			t.expect(string.find(src, "local function wallColorOf(", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(src, '"Wall", wallColorOf(', 1, true) ~= nil).toBe(true)
+		end
+	)
+
+	it(
 		"Main tells MazeView each frame whether the ghosts are edible, from View.edible of the frame's play",
 		function()
 			local src = source(client("Main"))
