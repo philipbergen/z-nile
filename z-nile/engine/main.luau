@@ -9,6 +9,7 @@ local gateLib = require("./gate")
 local idsLib = require("./ids")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local mergecheck = require("./mergecheck")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -49,6 +50,8 @@ usage: ./zn <command> ...
   list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
+  merge-check [<head>]                          may this PR merge although origin/main moved since <head> (default HEAD)
+                                                went green? yes only for tracker-state commits it doesn't touch (read-only)
   busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
                                                 folder): rafts active on origin/main, branches and worktrees that
                                                 change them; exits 1 when anything does (read-only)
@@ -3951,6 +3954,18 @@ local function promotedChecksAll(raft: store.Item, specs: { string }, runSpecs: 
 		ok = promotedChecks(homeOf(raft), specs, runSpecs)
 	end
 	return ok
+end
+
+-- c0152: may a PR merge although origin/main moved after its green CI? Exit 0 yes, 1 no (each reason printed).
+cmd["merge-check"] = function(pos: { string })
+	local v = mergecheck.judge(".", pos[1] or "HEAD")
+	for _, l in v.lines do
+		print(`merge-check: {l}`)
+	end
+	print(`merge-check: origin is {v.url}`)
+	if not v.ok then
+		process.exit(1)
+	end
 end
 
 cmd["promote-check"] = function(pos: { string })
