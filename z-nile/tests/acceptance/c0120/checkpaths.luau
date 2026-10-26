@@ -2,9 +2,9 @@
 -- The literal paths a check.sh names, and the scan of every unfinished item's check.sh (c0120 AC11's rule, moved here
 -- from its spec by c0141 so it can be tested on its own). A path is read from the item's project home; one under the
 -- item's own Touched modules (or a raft member's), which its work will create, is exempt. c0141: the exemption
--- compares the path's repository-relative form (home plus the path, `.` and `..` folded) with each Touched entry read
--- both ways the trackers write them: repository-relative (`pickman/skills`) and relative to the item's home
--- (`src/shared/Logic/New` in pickman/). A path that climbs above the checkout is never exempt.
+-- compares the path's repository-relative form (home plus the path, `.` and `..` folded) with what each Touched entry
+-- names, read one way chosen from the entry's own text (`owned`). A path that climbs above the checkout is never exempt.
+-- It lives in c0120's promoted folder (c0141 design review 001 F3), so it stays under "never edit promoted specs".
 local fs = require("@lune/fs")
 local projects = require("@znile/engine/projects")
 
@@ -31,17 +31,30 @@ function checkpaths.repoPath(home: string, path: string): string?
 	return table.concat(parts, "/")
 end
 
--- the Touched entries of an item in `home`, each read both ways (repository-relative, and from the home), folded
-function checkpaths.owned(home: string, entries: { string }): { string }
+-- the repository-relative path each Touched entry of an item in `home` names (c0141 design review 001 F1: one reading
+-- per entry, chosen from its own text, never both): an entry whose first segment is a registered project's home
+-- (`homes`, from the registry) is repository-relative; otherwise, when its first segment exists in the item's home
+-- (in the checkout at `base`) or doesn't exist at the checkout's top either, it is read from the home; otherwise (a
+-- root-level file or folder: `zn`, `AGENTS.md`, `.github`) it is repository-relative. An entry that climbs above the
+-- checkout is dropped. A home holding a folder named after another home (`z-nile/pickman/…`) would read wrong; none
+-- does today.
+function checkpaths.owned(base: string, home: string, entries: { string }, homes: { string }): { string }
 	local out: { string } = {}
 	for _, e in entries do
-		local asRepo = checkpaths.repoPath(".", e)
-		if asRepo then
-			table.insert(out, asRepo)
+		local first = string.match((string.gsub(e, "^%./", "")), "^([^/]+)") or e
+		local reading: string?
+		if table.find(homes, first) then
+			reading = checkpaths.repoPath(".", e)
+		else
+			local homed = home ~= "." and home ~= ""
+			local inHome = homed and (fs.isDir(`{base}{home}/{first}`) or fs.isFile(`{base}{home}/{first}`))
+			local atTop = fs.isDir(base .. first) or fs.isFile(base .. first)
+			reading = if inHome or not atTop
+				then checkpaths.repoPath(home, e)
+				else checkpaths.repoPath(".", e)
 		end
-		local fromHome = checkpaths.repoPath(home, e)
-		if fromHome and fromHome ~= asRepo then
-			table.insert(out, fromHome)
+		if reading then
+			table.insert(out, reading)
 		end
 	end
 	return out
@@ -286,6 +299,13 @@ end
 local function scan(base: string, skip: (text: string) -> boolean): Scan
 	local reg = projects.load(if base == "" then "." else string.sub(base, 1, -2), true)
 	local all = items(base)
+	local homes: { string } = {}
+	for _, r in projects.roots(reg) do
+		local folder = projects.folderOf(r)
+		if folder then
+			table.insert(homes, folder)
+		end
+	end
 	local byRaft: { [string]: { string } } = {}
 	for _, i in all do
 		if i.raft ~= "" then
@@ -308,7 +328,7 @@ local function scan(base: string, skip: (text: string) -> boolean): Scan
 				for _, o in members do
 					table.insert(entries, o)
 				end
-				local own = checkpaths.owned(home, entries)
+				local own = checkpaths.owned(base, home, entries, homes)
 				for _, p in literals(text) do
 					local at = checkpaths.repoPath(home, p)
 					if not present(base, home, p) and not (at and under(at, own)) then

@@ -32,10 +32,10 @@ local function blob(text: string): string
 	return serde.hash("sha1", `blob {#text}\0{text}`)
 end
 
-local checkpaths = require("@tests/lib/checkpaths")
+local checkpaths = require("./checkpaths")
 local literals, present, under, items =
 	checkpaths.literals, checkpaths.present, checkpaths.under, checkpaths.items
-local function scan(base: string): checkpaths.Scan
+local function scanFrom(base: string): checkpaths.Scan
 	return checkpaths.scan(base, function(text: string): boolean
 		return RESTAMPED[blob(text)] ~= nil
 	end)
@@ -105,7 +105,7 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 			"z-nile/.tracker/issues/c0002/check.sh",
 			"lune run tests/run -- tests/tooling/x.spec.luau\ntest -f src/server\n"
 		)
-		local s = scan(FX)
+		local s = scanFrom(FX)
 		t.expect(s.bad).toEqual({
 			"pickman/.tracker/issues/f0001/check.sh: src/gone.luau (from pickman)",
 			"z-nile/.tracker/issues/c0002/check.sh: src/server (from z-nile)",
@@ -122,7 +122,7 @@ return t.spec("c0120 every path a live check.sh names exists from its home", fun
 	it(
 		"every unfinished item's check.sh, in every project root, names only paths that exist from its home",
 		function()
-			local s = scan(TOP)
+			local s = scanFrom(TOP)
 			t.expect(table.concat(s.bad, "\n")).toBe("")
 			-- every check.sh found was read (no floor on how many there are: the backlog shrinks)
 			t.expect(s.checked).toBe(s.found)
