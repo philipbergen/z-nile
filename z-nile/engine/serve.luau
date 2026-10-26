@@ -111,12 +111,39 @@ end
 -- What an action does, from the model only (never from free text): stop and retry run c0117's dispatcher on an id the
 -- model has (stop waits, retry is started and answered at once); open opens the item's PR (its own, else its raft's)
 -- or else its raft's worktree. nil and the reason for anything else.
-function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?)
+-- The dispatcher's state the model has for `id` (c0117's run state, read by c0118's board), or nil.
+local function dispatchOf(m: board.Model, id: string): board.Dispatch?
+	for _, r in m.rafts do
+		if r.id == id then
+			return r.dispatch
+		end
+	end
+	for _, i in m.issues do
+		if i.id == id then
+			return i.dispatch
+		end
+	end
+	return nil
+end
+
+-- An action on a card as a plan, or why not and its status (409 for a Stop with nothing running, else 400).
+function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?, number?)
 	if type(id) ~= "string" or m.home[id] == nil then
-		return nil, `unknown id {tostring(id)}`
+		return nil, `unknown id {tostring(id)}`, 400
 	end
 	if action == "stop" then
-		return { kind = "run", args = { "dispatch", "stop", id }, wait = true }, nil
+		-- the run the card belongs to: the one its chain follows (issue to raft), else its own; never an id with no
+		-- run state, which `./zn dispatch stop` would create
+		local own = dispatchOf(m, id)
+		if own == nil then
+			return nil, `nothing is running for {id}`, 409
+		end
+		local target = id
+		local follows = own.follows
+		if follows and dispatchOf(m, follows) ~= nil then
+			target = follows
+		end
+		return { kind = "run", args = { "dispatch", "stop", target }, wait = true }, nil
 	elseif action == "retry" then
 		return { kind = "run", args = { "dispatch", "retry", id }, wait = false }, nil
 	elseif action ~= "open" then
@@ -372,9 +399,9 @@ function serve.start(o: Options): Server
 		if not ok or type(body) ~= "table" then
 			return text(400, "refused: the body is not a JSON object")
 		end
-		local plan, why = serve.plan(model(), (body :: any).action, (body :: any).id)
+		local plan, why, code = serve.plan(model(), (body :: any).action, (body :: any).id)
 		if not plan then
-			return text(400, `refused: {why}`)
+			return text(code or 400, `refused: {why}`)
 		end
 		if plan.kind == "open" then
 			local opened = o.opener(plan.target)

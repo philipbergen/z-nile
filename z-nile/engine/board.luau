@@ -52,7 +52,7 @@ export type Pr = { number: number, url: string, state: string }
 export type Checks = { state: string, url: string? }
 -- The dispatcher's run state for an id (c0117's .cache/dispatch/<id>/state.json): its step, outcome and model, and
 -- whether it waits for answers in questions.md.
-export type Dispatch = { step: string, outcome: string, model: string, questions: boolean }
+export type Dispatch = { step: string, outcome: string, model: string, questions: boolean, follows: string? }
 export type Spend = { minutes: number, tokens: number, added: number, removed: number, models: { string } }
 export type Issue = {
 	id: string,
@@ -694,6 +694,10 @@ function board.readFacts(dir: string): Facts
 						outcome = if type(st.outcome) == "string" then st.outcome else "",
 						model = if type(st.model) == "string" then st.model else "",
 						questions = fs.isFile(`{home}/{name}/questions.md`),
+						-- the raft an issue's chain moved on to (c0117's follow; c0121's Stop acts on it)
+						follows = if type(st.follows) == "string" and store.isRaftId(st.follows)
+							then st.follows
+							else nil,
 					}
 				end
 			end

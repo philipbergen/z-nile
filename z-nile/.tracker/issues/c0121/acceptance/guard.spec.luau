@@ -34,14 +34,34 @@ local MODEL: any = {
 			id = "R0020",
 			pr = { number = 7, url = "https://example.invalid/pr/7", state = "draft" },
 			worktree = "/w/R0020",
+			dispatch = { step = "z-run", outcome = "running", model = "m", questions = false },
 		},
 		{ id = "R0030", worktree = "/w/R0030" },
 	} :: { any },
 	issues = {
-		{ id = "f0021", raft = "R0020" },
+		{
+			id = "f0021",
+			raft = "R0020",
+			-- its chain moved on to its raft (c0117's follow)
+			dispatch = {
+				step = "follow",
+				outcome = "followed",
+				model = "",
+				questions = false,
+				follows = "R0020",
+			},
+		},
 		{
 			id = "f0031",
 			raft = "R0030",
+			-- a stale follow: R0030 has no run state
+			dispatch = {
+				step = "z-run",
+				outcome = "running",
+				model = "m",
+				questions = false,
+				follows = "R0030",
+			},
 			pr = { number = 9, url = "https://example.invalid/pr/9", state = "open" },
 		},
 		{ id = "c0099" },
@@ -124,6 +144,28 @@ return t.spec("c0121 server rules", function(it)
 				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0021" }, wait = false })
 		end
 	)
+
+	it(
+		"stop on a member whose run follows its raft stops the raft's run; a stale follow stops the card's own",
+		function()
+			t.expect((serve.plan(MODEL, "stop", "f0021")))
+				.toEqual({ kind = "run", args = { "dispatch", "stop", "R0020" }, wait = true })
+			t.expect((serve.plan(MODEL, "stop", "f0031")))
+				.toEqual({ kind = "run", args = { "dispatch", "stop", "f0031" }, wait = true })
+			-- retry keeps the card's own id: its chain follows by itself
+			t.expect((serve.plan(MODEL, "retry", "f0021")))
+				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0021" }, wait = false })
+		end
+	)
+
+	it("stop on a card with no run state plans nothing and answers 409", function()
+		local plan, why, code = serve.plan(MODEL, "stop", "c0099")
+		t.expect(plan).toBe(nil)
+		t.expect(string.find(why :: string, "nothing is running for c0099", 1, true) ~= nil).toBe(true)
+		t.expect(code).toBe(409)
+		local _, _, unknown = serve.plan(MODEL, "stop", "R9999")
+		t.expect(unknown == nil or unknown == 400).toBe(true)
+	end)
 
 	it(
 		"refuses an unknown id, an id with shell text, a non-string id and an unknown action, naming why",
