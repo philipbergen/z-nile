@@ -1,0 +1,14 @@
+- design-review-001 F1: zz-test/pin-call-site-arguments
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: pickman-arch/hysteresis-on-every-boundary
+- design-review-001 F4: z-design/design-the-execution-window
+- design-review-001 F5: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F6: one-off: Roblox's ButtonB clears GuiService.SelectedObject; a platform behaviour of the lobby's selection, not a pattern the lessons can generalise
+- note f0143's rebuilt prototype turned controls.spec red: it read the second-to-last intent, which f0143's boost moves; it now reads each press's own first intent: z-design/run-the-other-rafts-specs
+- design-review-002 F1: z-design/spec-design-correspondence, zz-test/pin-call-site-arguments
+- design-review-002 F2: zz-test/one-rule-one-function, zz-test/pin-fail-safes-where-they-act
+- design-review-002 F3: zz-arch/guard-what-the-engine-sees
+- design-review-002 F4: z-design/restated-rules-move-together, z-design/decided-guesses-rewrite-their-body
+- note f0143's rebuilt prototype paired DPadUp and W into a boost on controls.spec's constant stub clock; the clock now moves a second each read: z-design/run-the-other-rafts-specs
+- design-review-003 F1: pickman-arch/count-processed-input-when-tracking, z-design/spec-design-correspondence
+- design-review-003 F2: z-design/restated-rules-move-together
