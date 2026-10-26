@@ -16,6 +16,7 @@
 | 12 | 2026-10-26 18:15 | f0109: verification log | 0 | 0 | 10.0 | focus | build |  |
 | 13 | 2026-10-26 22:40 | f0109: phase 3 verification | 0 | 0 | 5.0 | focus | build |  |
 | 14 | 2026-10-26 23:05 | R0056: review-001 | 0 | 0 | 22.0 | focus | code-review | 95000 |
+| 15 | 2026-10-26 23:08 | f0109: pin where Main hands the walls' state over, test the fake's attribute refusals, fix the fake's header (review 001 F1-F3) | 151 | 3 | 35.0 | focus | code-review |  |
 
-**Total:** +184 / -12 lines, 288.0 agent-minutes, 95000 tokens over 14 records
-<!-- totals: added=184 removed=12 minutes=288.0 records=14 tokens=95000 -->
+**Total:** +335 / -15 lines, 323.0 agent-minutes, 95000 tokens over 15 records
+<!-- totals: added=335 removed=15 minutes=323.0 records=15 tokens=95000 -->
