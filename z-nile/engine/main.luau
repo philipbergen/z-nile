@@ -3966,6 +3966,8 @@ cmd["merge-check"] = function(pos: { string })
 	if not v.ok then
 		process.exit(1)
 	end
+	-- the head this verdict is for: merge only that head (gh pr merge --match-head-commit, design review 001 F2)
+	print(`merge-check: merge with --match-head-commit {v.head}`)
 end
 
 cmd["promote-check"] = function(pos: { string })
