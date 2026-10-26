@@ -19,7 +19,8 @@ end
 return t.spec("f0146 Pad", function(it)
 	it("the constants and the button map", function()
 		t.expect(Pad.GAMEPAD).toBe("Gamepad1")
-		t.expect(Pad.BUTTONS).toEqual({
+		-- each entry of this issue's map, not its size: later features add rows (f0126's ButtonY = "Pick")
+		local want: { [string]: string } = {
 			ButtonA = "Jump",
 			ButtonR2 = "Fire",
 			ButtonR3 = "Snap",
@@ -27,7 +28,10 @@ return t.spec("f0146 Pad", function(it)
 			DPadDown = "Back",
 			DPadLeft = "Left",
 			DPadRight = "Right",
-		})
+		}
+		for key, action in want do
+			t.expect(Pad.BUTTONS[key]).toBe(action)
+		end
 		t.expect(Pad.CONTINUE).toBe("ButtonA")
 		t.expect(Pad.STEER_ON).toBe(0.6)
 		t.expect(Pad.STEER_OFF).toBe(0.4)

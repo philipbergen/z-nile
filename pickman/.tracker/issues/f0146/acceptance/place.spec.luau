@@ -146,7 +146,7 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 			local design = fs.readFile(".tracker/game-design.md")
 			for _, phrase in
 				{
-					"| Platforms | Desktop (keyboard and mouse), mobile (touch) and gamepad: every input produces the same intents (f0146)",
+					"| Platforms | Desktop (keyboard and mouse), mobile (touch) and gamepad: every input produces the same intents, and every feature supports keyboard, console and touch",
 					"**Gamepad** (f0146",
 					"left stick and the D-pad turn",
 					"right stick looks",
