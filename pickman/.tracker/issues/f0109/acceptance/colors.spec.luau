@@ -78,27 +78,27 @@ return t.spec("f0109 Inky's colour and green walls", function(it)
 
 	it("the walls are blue, green while edible, and white in the level-clear flash, which wins", function()
 		t.expect(rgb(View.WALL_COLOR)).toBe("33,33,222")
-		t.expect(rgb(View.WALL_EDIBLE_COLOR)).toBe("12,74,12")
+		t.expect(rgb(View.WALL_EDIBLE_COLOR)).toBe("14,64,14")
 		t.expect(rgb(View.wallColor(false, false))).toBe("33,33,222")
-		t.expect(rgb(View.wallColor(false, true))).toBe("12,74,12")
+		t.expect(rgb(View.wallColor(false, true))).toBe("14,64,14")
 		t.expect(rgb(View.wallColor(true, false))).toBe("255,255,255")
 		t.expect(rgb(View.wallColor(true, true))).toBe("255,255,255")
 	end)
 
 	-- The user (2026-10-25, "Darker green"): every dangerous ghost must stand out on the green walls (an eaten ghost
 	-- revives dangerous, in its own colour, while they are still green); frightened (blue) ghosts may be harder to
-	-- see. The green maximises the weakest dangerous ghost's contrast while the walls keep 2 against the floor (E2).
+	-- see. The user chose the middle of three greens on the walls' trade-off with the floor (E2c): (14, 64, 14).
 	it(
 		"every dangerous ghost stands out on the green walls, and the walls still stand out from the floor",
 		function()
 			local g = View.WALL_EDIBLE_COLOR
 			t.expect(g.g > g.r and g.g > g.b).toBe(true)
 			for _, name in DANGEROUS do
-				t.expect(contrast(View.GHOST_COLORS[name], g) >= 2.5).toBe(true)
+				t.expect(contrast(View.GHOST_COLORS[name], g) >= 2.9).toBe(true) -- Blinky, the weakest, is 2.99
 			end
-			t.expect(contrast(g, FLOOR) >= 2).toBe(true)
-			-- what the user accepted for the frightened blue on green (1.36), recorded so it can't quietly get worse
-			t.expect(contrast(View.FRIGHTENED_COLOR, g) >= 1.3).toBe(true)
+			t.expect(contrast(g, FLOOR) >= 1.7).toBe(true) -- 1.76
+			-- the frightened blue on this green (1.55), recorded so it can't quietly get worse
+			t.expect(contrast(View.FRIGHTENED_COLOR, g) >= 1.5).toBe(true)
 		end
 	)
 

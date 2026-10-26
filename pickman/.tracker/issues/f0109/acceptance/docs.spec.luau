@@ -12,7 +12,7 @@ return t.spec("f0109 the game design records the colours", function(it)
 			local row = string.match(text, "\n[^\n]*Inky's colour and the edible walls[^\n]*") or ""
 			t.expect(row ~= "").toBe(true)
 			for _, want in
-				{ "f0109", "(230, 255, 0)", "(12, 74, 12)", "power timer", "flash", "gold", "(0, 255, 255)" }
+				{ "f0109", "(230, 255, 0)", "(14, 64, 14)", "power timer", "flash", "gold", "(0, 255, 255)" }
 			do
 				t.expect(string.find(row, want, 1, true) ~= nil).toBe(true)
 			end

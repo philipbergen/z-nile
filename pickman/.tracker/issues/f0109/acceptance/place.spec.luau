@@ -1,9 +1,9 @@
 --!strict
 -- f0109: the walls are painted by one rule, View.wallColor (the flash wins, then green while the ghosts are edible,
 -- else blue). MazeView's real source runs here on the fake engine (pickman/tests/lib/fakeengine, extended by f0109
--- for Vector3, :SetAttribute, :IsA, a workspace and fake.module): every wall part follows blue, green, white, green,
--- blue. Main hands the lit and edible state to MazeView and to the danger radar, whose walls follow the same rule
--- (the user, 2026-10-25). The pellets' and shots' colours are read from their views' sources.
+-- for Vector3, :SetAttribute, :IsA, the client services and fake.module): every wall part follows blue, green, white,
+-- green, blue, and so does every wall dot of the danger radar (DangerHud's real source), whose walls follow the same
+-- rule (the user, 2026-10-25). Main hands the lit and edible state to both. The pellets' and shots' colours are read from their views' sources.
 local Maze = require("@logic/Maze")
 local View = require("@logic/View")
 local fake = require("@tests/lib/fakeengine")
@@ -88,11 +88,11 @@ return t.spec("f0109 the walls follow View.wallColor", function(it)
 			end
 			t.expect(walls()).toBe("33,33,222")
 			MazeView.edible(model, true)
-			t.expect(walls()).toBe("12,74,12")
+			t.expect(walls()).toBe("14,64,14")
 			MazeView.flash(model, true)
 			t.expect(walls()).toBe("255,255,255")
 			MazeView.flash(model, false)
-			t.expect(walls()).toBe("12,74,12") -- the flash ends while the ghosts are still edible
+			t.expect(walls()).toBe("14,64,14") -- the flash ends while the ghosts are still edible
 			MazeView.edible(model, false)
 			t.expect(walls()).toBe("33,33,222")
 			-- the door and the floor keep their own colours throughout
@@ -127,12 +127,54 @@ return t.spec("f0109 the walls follow View.wallColor", function(it)
 		).toBe(true)
 	end)
 
-	it("the danger radar's walls follow View.wallColor and keep no wall colour of their own", function()
-		local src = source(client("DangerHud"))
-		t.expect(string.find(src, "function DangerHud.wallState(", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(src, "View.wallColor(", 1, true) ~= nil).toBe(true)
-		t.expect((string.find(src, "Color3.fromRGB(33, 33, 222)", 1, true))).toBe(nil)
-	end)
+	-- design review 002 F1: DangerHud's real source on the fake engine, a real snapshot, one render step per state
+	it(
+		"the danger radar's real source paints its wall dots by View.wallColor for each state Main hands it",
+		function()
+			local DangerHud, view = fake.module(client("DangerHud").Source, "DangerHud")
+			local Session = require("@logic/Session")
+			local classic = Maze.layout("classic")
+			local s = Session.new(classic, 1, Session.GAME_CONFIG)
+			Session.join(s, "p")
+			for _ = 1, 61 do
+				Session.step(s)
+			end
+			local snap = Session.snapshot(s, "p")
+			local pose = { x = snap.player.x, y = snap.player.y, yaw = 0 }
+			DangerHud.start(function(): any
+				return pose
+			end)
+			DangerHud.push(snap, classic)
+			local radar = view.playerGui:FindFirstChild("Danger"):FindFirstChild("Radar")
+			local YOU, BLIP = "255,255,0", "255,60,60" -- the player's dot and a hunting ghost's blip
+			local function wallDots(): (number, { [string]: boolean })
+				local n, seen = 0, {}
+				for _, f in radar:GetChildren() do
+					if f.Visible ~= false then
+						local key = rgb255(f.BackgroundColor3)
+						if key ~= YOU and key ~= BLIP then
+							n += 1
+							seen[key] = true
+						end
+					end
+				end
+				return n, seen
+			end
+			for _, state in
+				{ { false, false }, { false, true }, { true, true }, { false, true }, { false, false } }
+			do
+				DangerHud.wallState(state[1], state[2])
+				view.renderStepped:fire(1 / 60)
+				local c = View.wallColor(state[1], state[2])
+				local want = `{c.r},{c.g},{c.b}`
+				local n, seen = wallDots()
+				t.expect(n > 0).toBe(true)
+				for key in seen do
+					t.expect(key).toBe(want)
+				end
+			end
+		end
+	)
 
 	it("Inky's colour is far from the pellets' and the shots' as their views draw them", function()
 		local inky = View.GHOST_COLORS.inky

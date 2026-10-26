@@ -4,3 +4,9 @@
 - design-review-001 F4: z-design/restated-rules-move-together
 - design-review-001 F5: zz-test/one-rule-one-function
 - design-review-001 F6: zz-test/one-rule-one-function
+- design-review-002 F1: z-design/scope-added-in-a-refute-gets-the-same-check
+- design-review-002 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F4: one-off: per-frame allocation in an adapter
+- design-review-002 F5: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F6: one-off: a fake's new methods match the engine's refusals
