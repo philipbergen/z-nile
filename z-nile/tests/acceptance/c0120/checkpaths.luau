@@ -3,7 +3,8 @@
 -- from its spec by c0141 so it can be tested on its own). A path is read from the item's project home; one under the
 -- item's own Touched modules (or a raft member's), which its work will create, is exempt. c0141: the exemption
 -- compares the path's repository-relative form (home plus the path, `.` and `..` folded) with what each Touched entry
--- names, read one way chosen from the entry's own text (`owned`). A path that climbs above the checkout is never exempt.
+-- names, read in one convention per document, from its text (`owned`). A path that climbs above the checkout is never
+-- exempt.
 -- It lives in c0120's promoted folder (c0141 design review 001 F3), so it stays under "never edit promoted specs".
 local fs = require("@lune/fs")
 local projects = require("@znile/engine/projects")
