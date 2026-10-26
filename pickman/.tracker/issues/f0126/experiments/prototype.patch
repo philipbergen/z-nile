@@ -86,14 +86,14 @@ index 76014974..958f047a 100644
  		end
  		hold()
 diff --git a/pickman/src/client/HudView.luau b/pickman/src/client/HudView.luau
-index de529271..16c7f677 100644
+index de529271..e8542121 100644
 --- a/pickman/src/client/HudView.luau
 +++ b/pickman/src/client/HudView.luau
 @@ -18,6 +18,7 @@ local WHITE = Color3.fromRGB(255, 255, 255)
  local YELLOW = Color3.fromRGB(255, 255, 0)
  local BLUE = Color3.fromRGB(33, 33, 222)
  local CYAN = Color3.fromRGB(0, 255, 255)
-+local GOLD = Color3.fromRGB(255, 191, 0) -- the marked walls' gold (f0126)
++local GOLD = Color3.fromRGB(255, 215, 0) -- the marked walls' gold (f0126)
  local BLACK = Color3.fromRGB(0, 0, 0)
  
  local HudView = {}
@@ -171,7 +171,7 @@ index de529271..16c7f677 100644
 +		l.BackgroundTransparency = 1
 +		l.TextScaled = true
 +		l.Font = Enum.Font.Arcade
-+		l.TextColor3 = Color3.fromRGB(255, 191, 0)
++		l.TextColor3 = Color3.fromRGB(255, 215, 0)
 +		l.Parent = gui
 +		banner = l
 +		local last = laidFor
@@ -192,7 +192,7 @@ index de529271..16c7f677 100644
  function HudView.shots(n: number?)
  	local count = n or 0
 diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
-index 71e06e74..7ddc43c5 100644
+index 2c684409..097c3af3 100644
 --- a/pickman/src/client/Main.client.luau
 +++ b/pickman/src/client/Main.client.luau
 @@ -28,6 +28,7 @@ local built: string? = nil
@@ -228,7 +228,7 @@ index 71e06e74..7ddc43c5 100644
  	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
  	FlowView.show(overlay)
 diff --git a/pickman/src/client/MazeView.luau b/pickman/src/client/MazeView.luau
-index 958a997d..55b3032c 100644
+index 958a997d..d4a1bae2 100644
 --- a/pickman/src/client/MazeView.luau
 +++ b/pickman/src/client/MazeView.luau
 @@ -1,5 +1,6 @@
@@ -256,7 +256,7 @@ index 958a997d..55b3032c 100644
  	local p = Instance.new("Part")
  	p.Name = name
  	p.Anchored = true
-@@ -28,16 +26,47 @@ local function part(parent: Model, name: string, color: Color3, size: Vector3, c
+@@ -28,16 +26,45 @@ local function part(parent: Model, name: string, color: Color3, size: Vector3, c
  	p.Parent = parent
  end
  
@@ -267,27 +267,25 @@ index 958a997d..55b3032c 100644
 +	)
 +end
 +
-+-- The wall parts of `m`, the marked ones gold, in a Walls model of their own inside the maze model (so the pellets
-+-- and the doors stay when a pick changes them), coloured for the model's lit and edible state.
++-- The wall parts of `m`, the marked ones gold, as children of the maze model (where f0109's checks read them), coloured
++-- for the model's lit and edible state. A rebuild replaces only the `Wall` and `MarkedWall` parts: pellets and doors stay.
 +local function walls(model: Model, m: Maze.Maze, marked: { Maze.Tile }?)
 +	local s = View.SCALE
-+	local old = model:FindFirstChild("Walls")
-+	if old then
-+		old:Destroy()
++	for _, child in model:GetChildren() do
++		if child.Name == "Wall" or child.Name == "MarkedWall" then
++			child:Destroy()
++		end
 +	end
-+	local folder = Instance.new("Model")
-+	folder.Name = "Walls"
 +	for _, r in View.walls(m, nil, marked) do
 +		local cx, cz = View.world((r.x0 + r.x1) / 2, r.y0)
 +		local size = Vector3.new((r.x1 - r.x0 + 1) * s.tileStuds, s.wallHeight, s.tileStuds)
 +		local center = Vector3.new(cx, s.wallHeight / 2, cz)
 +		if r.marked == true then
-+			part(folder, "MarkedWall", wallColorOf(model, true), size, center)
++			part(model, "MarkedWall", wallColorOf(model, true), size, center)
 +		else
-+			part(folder, "Wall", wallColorOf(model), size, center)
++			part(model, "Wall", wallColorOf(model), size, center)
 +		end
 +	end
-+	folder.Parent = model
 +end
 +
 +-- The walls again after a pick changed them (f0126): the holes `m` has open, the walls `marked` now.
@@ -309,7 +307,7 @@ index 958a997d..55b3032c 100644
  	for _, d in Maze.tiles(m, "door") do
  		local cx, cz = View.world(d.x, d.y)
  		part(
-@@ -64,12 +93,11 @@ function MazeView.build(m: Maze.Maze): Model
+@@ -64,12 +91,11 @@ function MazeView.build(m: Maze.Maze): Model
  	return model
  end
  
@@ -1234,7 +1232,7 @@ index c01cde90..326c5f6f 100644
  
  -- The screen's size from the full-screen area, or the fallback while that area is empty or bad.
 diff --git a/pickman/src/shared/Logic/View/init.luau b/pickman/src/shared/Logic/View/init.luau
-index 84cb1e5a..c0383b08 100644
+index a8e3ea57..fdc95f5a 100644
 --- a/pickman/src/shared/Logic/View/init.luau
 +++ b/pickman/src/shared/Logic/View/init.luau
 @@ -7,14 +7,16 @@
@@ -1275,13 +1273,13 @@ index 84cb1e5a..c0383b08 100644
  View.GHOST_COLORS = table.freeze(GHOST_COLORS)
 @@ -74,9 +80,17 @@ View.WHITE = table.freeze({ r = 255, g = 255, b = 255 } :: Rgb)
  View.WALL_COLOR = table.freeze({ r = 33, g = 33, b = 222 } :: Rgb)
- View.WALL_EDIBLE_COLOR = table.freeze({ r = 0, g = 152, b = 0 } :: Rgb)
+ View.WALL_EDIBLE_COLOR = table.freeze({ r = 14, g = 64, b = 14 } :: Rgb)
  
 --- The walls' colour: the level-clear flash wins, then green while the ghosts are edible, else blue.
 -function View.wallColor(lit: boolean, edible: boolean): Rgb
 -	local c = if lit then View.WHITE elseif edible then View.WALL_EDIBLE_COLOR else View.WALL_COLOR
 +-- f0126: a wall that can be picked is gold (user, 2026-10-25), and stays gold while the walls are green
-+View.WALL_MARKED_COLOR = table.freeze({ r = 255, g = 191, b = 0 } :: Rgb)
++View.WALL_MARKED_COLOR = table.freeze({ r = 255, g = 215, b = 0 } :: Rgb)
 +
 +-- The walls' colour: the level-clear flash wins, then a marked wall's gold (f0126), then green while the ghosts are
 +-- edible, else blue.
