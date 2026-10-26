@@ -11,6 +11,7 @@
 | 7 | 2026-10-22 04:13 | design-refute-002 | 0 | 0 | 8.0 | spend | design-review |  |
 | 8 | 2026-10-22 04:17 | prep | 228 | 1 | 35.0 | spend | prep |  |
 | 9 | 2026-10-26 01:30 | c0128: narrow the f0024 and f0026 adapter pins to allow d0124's HiscoreTop (experiments/narrowing.patch) | 54 | 18 | 10.0 | explicit | build |  |
+| 10 | 2026-10-26 01:30 | c0128: Verification log | 0 | 0 | 3.0 | explicit | build |  |
 
-**Total:** +282 / -19 lines, 87.0 agent-minutes, 207132 tokens over 9 records
-<!-- totals: added=282 removed=19 minutes=87.0 records=9 tokens=207132 -->
+**Total:** +282 / -19 lines, 90.0 agent-minutes, 207132 tokens over 10 records
+<!-- totals: added=282 removed=19 minutes=90.0 records=10 tokens=207132 -->
