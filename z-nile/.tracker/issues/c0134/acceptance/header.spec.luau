@@ -4,25 +4,15 @@
 -- remote-tracking ref), and leaves the refusals to refuse.spec.luau (AC2), which tests them. Reads the file only.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local split = require("./split")
 local t = require("@tests/lib/t")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local FILE = `{TOP}/z-nile/tests/acceptance/c0131/accept.spec.luau`
 
--- the header: the comment lines after `--!strict`, up to the first line that is not a comment
+-- the header, cut by the one boundary reader check.sh AC2 uses too (design review 001 F1)
 local function header(text: string): string
-	local out: { string } = {}
-	local first = true
-	for line in string.gmatch(text, "([^\n]*)\n") do
-		if first then
-			first = false
-		elseif string.sub(line, 1, 2) == "--" then
-			table.insert(out, line)
-		else
-			break
-		end
-	end
-	return table.concat(out, "\n")
+	return (split.cut(text))
 end
 
 local function has(text: string, needle: string): boolean
@@ -30,10 +20,15 @@ local function has(text: string, needle: string): boolean
 end
 
 return t.spec("c0134 accept.spec's header describes what it tests", function(it)
-	it("the header reader takes the comment block after --!strict and stops at the code", function()
-		local h = header("--!strict\n-- one\n-- two\nlocal x = 1\n-- not header\n")
-		t.expect(h).toBe("-- one\n-- two")
-	end)
+	it(
+		"the one reader cuts after the comment block that follows --!strict, and every other line is body",
+		function()
+			local h, b = split.cut("--!strict\n-- one\n-- two\n_G.x = true\nlocal x = 1\n-- not header\n")
+			t.expect(h).toBe("-- one\n-- two")
+			-- a code line at the boundary is body, so AC2 compares it (review 001 F1)
+			t.expect(b).toBe("_G.x = true\nlocal x = 1\n-- not header")
+		end
+	)
 
 	it("AC1: the header names AC1's two acceptances", function()
 		local h = header(fs.readFile(FILE))
