@@ -11,3 +11,4 @@
 - design-review-002 F4: zz-test/unchanged-checks-start-non-canonical
 - design-review-002 F5: zz-arch/parsers-refuse-ambiguity
 - design-review-002 F6: z-design/spec-design-correspondence
+- design-review-003 F1: zz-test/pipe-filter-keeps-the-failure

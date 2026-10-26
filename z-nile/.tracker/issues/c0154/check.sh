@@ -16,8 +16,11 @@ check "AC3: on a real run's 177 file times, slowest first ends at least a fifth 
 check "AC4: the runner starts the slowest recorded file first, records only the home's tests/ files, and reports in path order with unchanged counts and exit code, a file listed twice included" lune run tests/run -- "$S"
 # promoted specs (every project's tests/acceptance) are unchanged, c0154's own promoted folder aside
 promoted_unchanged() {
-  local changed
-  changed=$(git -C "$ZN_ROOT" diff --name-only origin/main...HEAD -- "$ZN_ROOT/pickman/tests/acceptance" "$ZN_ROOT/z-nile/tests/acceptance" | grep -v '^z-nile/tests/acceptance/c0154/' || true)
+  local out changed
+  # git's own failure (no origin/main, a bad pathspec) is red, never filtered away (design review 003 F1)
+  out=$(git -C "$ZN_ROOT" diff --name-only origin/main...HEAD -- "$ZN_ROOT/pickman/tests/acceptance" "$ZN_ROOT/z-nile/tests/acceptance" 2>&1) ||
+    { echo "cannot compare with origin/main: $out"; return 1; }
+  changed=$(printf '%s\n' "$out" | grep -v '^z-nile/tests/acceptance/c0154/' | grep -v '^$' || true)
   [[ -z $changed ]] || { echo "promoted specs changed: $changed"; return 1; }
 }
 check "AC5: no promoted spec changes" promoted_unchanged
