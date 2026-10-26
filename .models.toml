@@ -3,7 +3,7 @@
 # step about a raft takes, for each CLI, the strongest of its members' specs (higher rank, then larger max_tokens).
 # Only the CLIs below are supported, and nothing defaults: a skill no file names is an error. See zz-rules, Dispatch.
 #
-# Guess (pending user): the order, the models, the ranks and the caps below are the prep's first guess.
+# The order, the models, the ranks and the caps below: decided with the user (c0117 G1, 2026-10-25: "Accept as written").
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
 
 # The CLI priority order: the dispatcher moves down it only when a CLI fails on quota.

@@ -288,8 +288,20 @@ local pinned: string? = nil
 
 local function walk(dir: string): { models.Layer }
 	if not pinned then
-		local here = process.cwd
-		pinned = fetchInto(here, "origin", "refs/heads/main", runRef(here, "models")) or "origin/main"
+		-- the run's own fresh main when it has one, else fetched from the pinned URL (code review 001 F7): never
+		-- `origin` by name and never the tracking ref a step can rewrite; no main, no walk
+		if guard.fresh then
+			pinned = guard.fresh
+		else
+			local here = process.cwd
+			local url = if guard.origin
+				then (guard.origin :: broker.Origin).fetch
+				else trim(process.exec("git", { "ls-remote", "--get-url", "origin" }).stdout)
+			pinned = fetchInto(here, url, "refs/heads/main", runRef(here, "models"))
+			if not pinned then
+				error(`could not fetch main from {url} to read .models.toml: no walk without it`, 0)
+			end
+		end
 	end
 	return models.walkAt(dir, function(path: string): string?
 		local shown = process.exec("git", { "show", `{pinned}:{path}` })
@@ -421,17 +433,25 @@ end
 
 -- Writes the pending rows whose item may now take them (a done raft takes its run's row as deliver).
 local function flush(ctx: Ctx, st: State)
+	-- every pending row its item may take now (code review 001 F6): a run's `deliver` row once the raft is done, any
+	-- other row while its item is in the backlog (a row `record` couldn't publish); a row that fails again is kept and
+	-- reported, never dropped silently
 	local keep: { Row } = {}
 	for _, row in st.pending do
 		local origin = ctx.origin(row.id)
-		if origin and origin.state == "done" and row.phase == "deliver" then
+		local ready = origin
+			and (
+				(row.phase == "deliver" and origin.state == "done")
+				or (row.phase ~= "deliver" and origin.state == "backlog")
+			)
+		if ready then
 			local wt = worktree(ctx, "zn-dispatch")
 			zn(wt, { "sync" }, true)
-			local ok = zn(wt, {
+			local ok, out, err = zn(wt, {
 				"spend",
 				row.id,
 				"--phase",
-				"deliver",
+				row.phase,
 				"--time",
 				tostring(row.minutes),
 				"--tokens",
@@ -441,7 +461,12 @@ local function flush(ctx: Ctx, st: State)
 				"--note",
 				row.note,
 			}, true)
-			if not ok then
+			if ok then
+				print(`spend: {row.id} {row.phase} {row.tokens} tokens {row.model} (pending, now written)`)
+			else
+				stdio.ewrite(
+					`dispatch: {row.id}'s pending {row.phase} row still can't be written ({err}{out})\n`
+				)
 				table.insert(keep, row)
 			end
 		else
@@ -1170,7 +1195,11 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 	local function gitFn(a: { string }): (boolean, string)
 		return git(root, a)
 	end
-	local own: { [string]: boolean } = { [id] = true }
+	-- two sets (code review 001 F1): `items` are the items whose files this PR may carry (the `only` rule); `own` are
+	-- the items whose sequestered files it may change: the issue being prepared at the prep gate, and at the rafting
+	-- gate at most the rafts the PR carries, never an issue (a member's reviewed check.sh is never the PR's to change)
+	local items: { [string]: boolean } = { [id] = true }
+	local own: { [string]: boolean } = if gateName == "prep" then { [id] = true } else {}
 	local only: (path: string) -> string?
 	if gateName == "prep" then
 		only = function(path: string): string?
@@ -1192,10 +1221,11 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			local rid, _, rel = trackerstate.itemOf(path, roots :: { string })
 			if rid and store.isRaftId(rid :: string) and rel == `{rid}.md` then
 				own[rid :: string] = true
+				items[rid :: string] = true
 				local _, text = git(root, { "show", `{ref}:{path}` })
 				local members = string.match(text, "\nissues:%s*%[([^%]]*)%]")
 				for m in string.gmatch(members or "", "[%w]+") do
-					own[m] = true
+					items[m] = true
 				end
 			end
 		end
@@ -1204,7 +1234,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 				return nil
 			end
 			local pid = trackerstate.itemOf(path, roots :: { string })
-			if pid and own[pid :: string] then
+			if pid and items[pid :: string] then
 				return nil
 			end
 			return `it carries {path}, which is not one of the raft's own items`
@@ -1548,6 +1578,18 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 			return dispatch.EXIT.failure
 		end
 		local st = load(ctx, id)
+		-- every run that starts a step starts through the same guards (code review 001 F2): origin's URL, the
+		-- watermark and its mirror, then main vetted since it; `top` (`<id>`, `new`, `<step> <id>`) and `retry` are
+		-- the only two entry points that run steps (`vet`, `status` and `stop` start none)
+		local unvetted = dispatcher.guardStart(ctx, st)
+		if unvetted then
+			st.outcome, st.detail = "tripwire", unvetted
+			save(st)
+			unlock(dir)
+			print(`stop: {unvetted}`)
+			return dispatch.EXIT.tripwire
+		end
+		flush(ctx, st)
 		local q = `{dir}/questions.md`
 		if fs.isFile(q) then
 			local n = 1
@@ -1622,6 +1664,8 @@ function dispatcher.top(ctx: Ctx, id: string, opts: { [string]: { string } }, bo
 		print(`stop: {unvetted}`)
 		return dispatch.EXIT.tripwire
 	end
+	flush(ctx, st)
+	save(st)
 	local ok, code = pcall(body, st)
 	unlock(dir)
 	if not ok then

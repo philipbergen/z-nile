@@ -14,12 +14,13 @@
 --   runtime = "claude-cli"
 --   max_tokens = 3000000
 local fs = require("@lune/fs")
+local ledger = require("./ledger")
 local serde = require("@lune/serde")
 
 local models = {}
 
 models.FILE = ".models.toml"
--- The supported CLIs (the user's decision: `agent` is Cursor's), each with its two runtimes.
+-- The supported CLIs (the user's decision: `agent` is Cursor's), each with its one local runtime (the remote ones are c0142's).
 models.CLIS = { "claude", "grok", "agent" }
 models.RUNTIMES = {
 	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
@@ -175,6 +176,13 @@ function models.parse(text: string, path: string): Layer
 						error(`{path}: {key}.{cli}.{field} is a whole number, at least 1`, 0)
 					elseif want == "string" and (type(v) ~= "string" or v == "") then
 						error(`{path}: {key}.{cli}.{field} is a non-empty string`, 0)
+					end
+					-- the id a spend row records is checked as the ledger checks it, one predicate (code review 001 F6)
+					if (field == "model" or field == "effort") and not ledger.isModel(v) then
+						error(
+							`{path}: {key}.{cli}.{field} is {v}, not a model id the ledger takes (letters, digits, '.', '_', '-')`,
+							0
+						)
 					end
 					if field == "runtime" and not table.find(models.RUNTIMES[cli], v) then
 						error(

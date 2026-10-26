@@ -11,3 +11,5 @@ A pure rule can say "unknown means hold", while the function that feeds it turns
 **How to apply:** make the input unknown at the real call site (a stand-in that refuses only that one call, answering everything else as the real tool does) and assert the end-to-end outcome. Add the act-site mutant to the Rules and mutants table.
 
 R0047 design review 005 F2: the same two fail-safes were applied again in the takeover's owner check (`ownerHolds`), and there neither had a case: a live waiter's takeover could be removed.
+
+Every entry point, not just the first (R0052 code review 001 F2): the start-of-run guards ran in `dispatch <id>` but not in `dispatch retry`, the command every stop message tells the user to run. List every entry point that starts the guarded work and pin the guard in each with a case.

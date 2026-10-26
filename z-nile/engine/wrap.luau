@@ -106,6 +106,11 @@ if tool == "git" then
 				if not okSha then
 					return `could not resolve {src}`
 				end
+				-- a fast-forward of the fresh main only (code review 001 F3: `--force`, `+<src>:main` and
+				-- `--force-with-lease` that rewind main are refused, whatever tracker state rides on top)
+				if not (run(with({ "merge-base", "--is-ancestor", private, sha }))) then
+					return "not a fast-forward of main: main only moves forward"
+				end
 				local okBase, base = run(with({ "merge-base", private, sha }))
 				-- tracker state by the fresh main's registry: a branch can't widen what may go to main (lesson
 				-- zz-arch/guards-trust-only-origin)

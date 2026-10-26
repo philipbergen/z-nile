@@ -69,12 +69,17 @@ function wrapper.parsePorcelain(text: string): { Update }
 	return out
 end
 
--- A push passes when nothing it updates is main, or what it puts on main is tracker state.
+-- A push passes when nothing it updates is main, or it fast-forwards main with tracker state only.
 function wrapper.decidePush(f: PushFacts): Decision
 	for _, u in f.updates do
 		if u.dst == "refs/heads/main" then
 			if u.flag == "-" or u.src == "(delete)" or u.src == "" then
 				return refuse("git push would delete main")
+			end
+			-- never a rewind of main, however spelled (code review 001 F3): a forced update is refused here, and the
+			-- check below refuses a source that does not descend from the freshly fetched main
+			if u.flag == "+" then
+				return refuse("git push would rewrite main (a forced update): main only moves forward")
 			end
 			local why = f.check(u.src)
 			if why then
@@ -143,6 +148,36 @@ function wrapper.splitGh(args: { string }, aliases: { [string]: { string } }): {
 	return words
 end
 
+-- `gh api`'s options (code review 001 F4: an option's value is never taken for the endpoint). Each value-taking option
+-- by what its value is; the flags take none; any other option is refused (fail closed), never guessed.
+local API_VALUE: { [string]: string } = {
+	["-X"] = "method",
+	["--method"] = "method",
+	["-F"] = "field",
+	["--field"] = "field",
+	["-f"] = "field",
+	["--raw-field"] = "field",
+	["--input"] = "field",
+	["-H"] = "other",
+	["--header"] = "other",
+	["-q"] = "other",
+	["--jq"] = "other",
+	["-t"] = "other",
+	["--template"] = "other",
+	["-p"] = "other",
+	["--preview"] = "other",
+	["--hostname"] = "other",
+	["--cache"] = "other",
+}
+local API_FLAGS: { [string]: boolean } = {
+	["-i"] = true,
+	["--include"] = true,
+	["--paginate"] = true,
+	["--silent"] = true,
+	["--slurp"] = true,
+	["--verbose"] = true,
+}
+
 local function apiDecision(rest: { string }): Decision
 	local endpoint = ""
 	local method: string? = nil
@@ -151,30 +186,36 @@ local function apiDecision(rest: { string }): Decision
 	local i = 1
 	while i <= #rest do
 		local a = rest[i]
-		local attached = string.match(a, "^%-X(.+)$") or string.match(a, "^%-%-method=(.+)$")
-		if attached then
-			method = string.upper(attached)
-		elseif a == "-X" or a == "--method" then
-			method = string.upper(rest[i + 1] or "")
-			i += 1
-		elseif a == "-f" or a == "-F" or a == "--field" or a == "--raw-field" or a == "--input" then
-			fields = true
-			local v = rest[i + 1] or ""
-			if string.match(v, "^query=") then
-				query = v
+		if string.sub(a, 1, 1) == "-" and a ~= "-" then
+			-- the option's name and its value: `--name=value`, `-Xvalue`, or the next word
+			local name, value = a, nil :: string?
+			local long, attached = string.match(a, "^(%-%-[^=]+)=(.*)$")
+			if long then
+				name, value = long, attached
+			elseif string.sub(a, 2, 2) ~= "-" and #a > 2 then
+				name, value = string.sub(a, 1, 2), string.sub(a, 3)
 			end
-			i += 1
-		elseif
-			string.match(a, "^%-[fF].")
-			or string.match(a, "^%-%-field=")
-			or string.match(a, "^%-%-raw%-field=")
-		then
-			fields = true
-			if string.find(a, "query=", 1, true) then
-				query = a
+			local kind = API_VALUE[name]
+			if kind then
+				if value == nil then
+					value = rest[i + 1] or ""
+					i += 1
+				end
+				if kind == "method" then
+					method = string.upper(value :: string)
+				elseif kind == "field" then
+					fields = true
+					if string.match(value :: string, "^query=") then
+						query = value :: string
+					end
+				end
+			elseif not (API_FLAGS[name] and value == nil) then
+				return refuse(`gh api option {a} is not one the wrapper knows: refused (fail closed)`)
 			end
-		elseif string.sub(a, 1, 1) ~= "-" and endpoint == "" then
+		elseif endpoint == "" then
 			endpoint = a
+		else
+			return refuse(`gh api with two endpoints ({endpoint}, {a}) refused`)
 		end
 		i += 1
 	end

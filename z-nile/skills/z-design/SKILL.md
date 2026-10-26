@@ -62,7 +62,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
 3. Answer every finding. Before editing, run the **consequence step** on your own fix: what new rules, state, edge cases or user decisions does it bring? Add their Rules and mutants rows and spec cases in the same change, and put any decisions to the user now, all at once.
    - Fix it in the documents, specs or `check.sh`.
    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`). Once the round is answered, `./zn spend <id> --phase design-review --time <your answering minutes> --note design-refute-NNN`.
-   - **Never answer a finding by cutting scope.** If the only fix you see removes, defers or shrinks an outcome the Problem asks for, ask the user before you answer it, and write their answer into the Problem as a `Scope decision` line (**Scope is what was captured**, above). Without that line, the answer is a redesign that keeps the outcome.
+   - **Never answer a finding by cutting scope.** If the only fix you see removes, defers or shrinks an outcome the Problem asks for, ask the user before you answer it (under the dispatcher: write the question to `$ZN_DISPATCH_DIR/questions.md` and stop), and write their answer into the Problem as a `Scope decision` line (**Scope is what was captured**, above). Without that line, the answer is a redesign that keeps the outcome.
    - **Harvest the round** as you answer it: add one entry per finding of `design-review-NNN.md` to `harvest.md` in the issue's folder, naming a new lesson, a new source for an existing one (prefer this), or `one-off: <reason>` (format: zz-rules skill, Items). A finding that repeats a lesson the pass should have caught sharpens that lesson's `check`. Then run `./zn lessons --check`, and rerun `./zn promote-check <id>` after the round's spec edits (the test runner does not type-check). The next round's reviewer judges the new lessons; the lessons and the ledger ride in the prep commit.
 4. **Rounds: up to 5 rounds, prefer 3.** One rule decides, from the round's `design-review-NNN.md` severities and the diff of your answers:
    - After round 1 or 2, run another round with a new clean reviewer if any high finding was fixed or refuted (a new reviewer rules on a refutation), or answering the round was more than minor (defined below).
@@ -75,7 +75,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
 
 ## 6. Commit and hand off
 - **Commit** the prepared issue, its acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep c0010 <title>`, then follow Landing a change (zz-rules skill): push, PR, merge, pull the main checkout, remove the worktree. Right after the prep PR is opened, before it merges (so before any raft holding it can be readied), `./zn spend <id> --phase prep --time <your prep minutes, the design-review answering time excluded: that is in the design-review rows>` (once: it counts the prep branch's lines). An issue readied first can no longer take it, and `spend` says so.
-  - Ask the user before merging prep they didn't request.
+  - Ask the user before merging prep they didn't request. Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher passes the gate (the user started it).
 - **Report**:
   - the issue, its `size:` and whether it is `solo`;
   - the key design decisions;

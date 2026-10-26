@@ -1,0 +1,8 @@
+- review-001 F1: zz-arch/item-rules-scoped-to-their-call
+- review-001 F2: zz-test/pin-fail-safes-where-they-act
+- review-001 F3: zz-arch/guards-decide-from-the-tools-resolution
+- review-001 F4: zz-arch/guards-decide-from-the-tools-resolution
+- review-001 F5: z-design/instructions-runnable-where-they-run
+- review-001 F6: one-off: the model id accepted by one reader and refused by another; one predicate now
+- review-001 F7: zz-arch/guards-trust-only-origin
+- review-001 F8: one-off: comments left behind by decisions
