@@ -1,0 +1,4 @@
+# Refute 003: c0153 (design mode)
+
+- F1: fixed: measured apart (encode, then decode, with Lune 0.10.5 and 0.11.1): the encoder writes `{"x":13.783333333333333}`, whose `tonumber` is the original, and the decoder returns 13.783333333333331. The five narrowed files' comment now reads "(Lune's JSON decoder can return a number one ulp off)", and the helper's header, plain.spec's header and E1 say the decoder loses it; the five digests are re-taken, golden.spec's join case and G6's anchor follow the new comment, and every mutant reruns killed (intended 52/52). Consequences: the five base blobs are unchanged; the patch is regenerated.
+- F2: fixed: a two-line comment above the eps-0 subcase says it depends on Lune 0.10.5's decoder (rokit.toml) losing that ulp, and that after an upgrade that decodes it exactly the subcase is updated, not counted a regression; E1 says the same. Consequences: none.
