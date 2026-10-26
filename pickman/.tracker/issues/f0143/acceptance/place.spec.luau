@@ -1,7 +1,7 @@
 --!strict
--- f0143 AC3 and AC4: the boost's adapters and documents. Controls keeps one Boost.Taps per input kind: W's Forward
--- and a swipe up (a touch "turn" effect whose intent is Forward) are folded through Boost.tap, and a pair sends
--- Boost.INTENT on the one Intent remote, never the string. Main hands Boost.status of the frame's boosted to
+-- f0143 AC3 and AC4: the boost's adapters and documents. Controls' double taps run in controls.spec (a stub with a
+-- scripted clock); here only what the stub can't see: Controls requires Logic/Boost, sends the constant, never the
+-- string, and reads the client's real clock. Main hands Boost.status of the frame's boosted to
 -- HudView.boost and the frame's boosted to Camera.boosted, and Camera widens its view by Boost.fov. These are
 -- source pins, read with comments removed; what they leave to the code review: the order of Forward and the boost
 -- on one press, and the colours of the HUD chevron (OC1). game-design.md states the boost; architecture.md declares
@@ -55,27 +55,15 @@ local boostModule = node({ "ReplicatedStorage", "Shared", "Logic", "Boost" })
 
 return t.spec("f0143 the boost's adapters and documents", function(it)
 	it(
-		"Controls folds W's Forward and a swipe up through Boost.tap, one Taps each, and sends Boost.INTENT, never the string",
+		"Controls requires Logic/Boost, sends Boost.INTENT, never the string, and reads the client's clock",
 		function()
 			t.expect(boostModule ~= nil).toBe(true)
 			local controls = client("Controls")
 			t.expect(resolves(controls, boostModule)).toBe(true)
 			local src = source("Controls")
-			local taps = 0
-			for _ in string.gmatch(src, "Boost%.taps%(%)") do
-				taps += 1
-			end
-			t.expect(taps).toBe(2) -- the keys' and the touches'
-			local folds = 0
-			for _ in string.gmatch(src, "Boost%.tap%(") do
-				folds += 1
-			end
-			t.expect(folds >= 2).toBe(true)
 			t.expect(string.find(src, ":FireServer%(%s*Boost%.INTENT%s*%)") ~= nil).toBe(true)
 			t.expect(has(src, 'FireServer("Boost")')).toBe(false)
 			t.expect(string.find(src, "os%.clock%(%)") ~= nil).toBe(true) -- real seconds, the client's clock
-			-- the touch path: a turn effect's Forward is folded too
-			t.expect(string.find(src, 'effect%.intent%s*==%s*"Forward"') ~= nil).toBe(true)
 		end
 	)
 
@@ -94,7 +82,10 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 			t.expect(has(camera, "function Camera.boosted(")).toBe(true)
 			t.expect(has(camera, "Boost.fov(")).toBe(true)
 			t.expect(has(camera, "FieldOfView")).toBe(true)
-			t.expect(has(source("HudView"), "function HudView.boost(")).toBe(true)
+			local hud = source("HudView")
+			t.expect(has(hud, "function HudView.boost(")).toBe(true)
+			-- the chevron's place is Hud's (design review 001 F6), in the lives block's space
+			t.expect(string.find(hud, "Hud%.boostIcon%(%s*l%s*,") ~= nil).toBe(true)
 			t.expect(has(camera, "FireServer")).toBe(false)
 		end
 	)
@@ -108,6 +99,9 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 					"**Speed boost** (f0143",
 					"double tap on **W**",
 					"two quick swipes up",
+					"the D-pad's Up",
+					"left stick's click (L3)",
+					"cancels a buffered turn",
 					"1.5 times",
 					"22 steps",
 					"90 steps",

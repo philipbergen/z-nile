@@ -9,6 +9,7 @@
 local Boost = require("@logic/Boost")
 local Game = require("@logic/Game")
 local Hop = require("@logic/Hop")
+local Levels = require("@logic/Levels")
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
 local Pellets = require("@logic/Pellets")
@@ -21,6 +22,13 @@ local LONG = Maze.parse({ string.rep("#", 80), ROW, string.rep("#", 80) }, "long
 -- the same corridor with a pellet on every tile, for the eating pause
 local DOTTED =
 	Maze.parse({ string.rep("#", 80), "#" .. string.rep(".", 77) .. "P#", string.rep("#", 80) }, "dotted")
+-- a corridor west from the spawn with one side exit north three tiles along (x = 15), for the buffered turn
+local JUNCTION = Maze.parse({
+	string.rep("#", 20),
+	string.rep("#", 15) .. " " .. string.rep("#", 4),
+	"#" .. string.rep(" ", 17) .. "P#",
+	string.rep("#", 20),
+}, "junction")
 local FREE: Session.Config = { movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
 local CLASSIC: Session.Config =
 	{ movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4, play = Game.CLASSIC_CONFIG }
@@ -93,6 +101,14 @@ return t.spec("f0143 the boost in a session", function(it)
 		local over, why2 = Session.submit(q, "p", "Forward")
 		t.expect(over).toBe(false)
 		t.expect(why2).toBe("rate limited")
+		-- the limit holds a boost back too: four intents already this tick
+		local full = new(FREE)
+		for _ = 1, 4 do
+			t.expect((Session.submit(full, "p", "Forward"))).toBe(true)
+		end
+		local held, why3 = Session.submit(full, "p", Boost.INTENT)
+		t.expect(held).toBe(false)
+		t.expect(why3).toBe("rate limited")
 	end)
 
 	it("in play a boost starts this step: a Boosted event, and the frame says the tick", function()
@@ -210,4 +226,76 @@ return t.spec("f0143 the boost in a session", function(it)
 				.toBe(true)
 		end
 	)
+
+	it(
+		"a boost sent alone cancels a buffered turn, as W does, so every input pays what a double tap pays",
+		function()
+			local function goes(withBoost: boolean): number
+				local s = Session.new(JUNCTION, 1, FREE)
+				Session.join(s, "p")
+				Session.step(s)
+				t.expect((Session.submit(s, "p", "Right"))).toBe(true) -- heading west: north at the next exit
+				Session.step(s)
+				if withBoost then
+					t.expect((Session.submit(s, "p", Boost.INTENT))).toBe(true)
+				end
+				for _ = 1, 20 do
+					Session.step(s)
+				end
+				return Session.frame(s, "p").player.y
+			end
+			t.expect(goes(false)).toBe(1) -- the buffered turn is taken at x = 15
+			t.expect(goes(true)).toBe(2) -- the boost cancelled it: straight on
+		end
+	)
+
+	it("a boost stacks on the frightened speed: round(frightened speed * FACTOR)", function()
+		local s = playing(new(CLASSIC))
+		Game.power(s.members.p.play)
+		Session.step(s)
+		local frightened = Levels.playerSpeed(30, 1, true)
+		t.expect(travelled(s)).toBe(frightened)
+		t.expect((Session.submit(s, "p", Boost.INTENT))).toBe(true)
+		t.expect(travelled(s)).toBe(Boost.speed(frightened, true, Movement.UNITS))
+		t.expect(Boost.speed(frightened, true, Movement.UNITS) ~= Boost.speed(30, true, Movement.UNITS))
+			.toBe(true)
+	end)
+
+	it("a new level ends the boost and starts with one ready", function()
+		local s = playing(new(CLASSIC))
+		boost(s)
+		Session.step(s)
+		t.expect(Session.frame(s, "p").boosted ~= nil).toBe(true)
+		Game.cleared(s.members.p.play)
+		repeat
+			Session.step(s)
+		until Session.frame(s, "p").play.phase == "playing"
+		t.expect(Session.frame(s, "p").play.level).toBe(2)
+		t.expect(Session.frame(s, "p").boosted).toBe(nil)
+		t.expect(count(boost(s), "Boosted")).toBe(1)
+	end)
+
+	it("a new run ends the boost and starts with one ready", function()
+		local s = playing(new(CLASSIC))
+		for _ = 1, Game.CLASSIC_CONFIG.lives - 1 do
+			Session.kill(s, "p")
+			Session.step(s)
+			playing(s)
+		end
+		boost(s) -- in the last life
+		Session.kill(s, "p")
+		for _ = 1, 400 do
+			if Session.isOver(s, "p") then
+				break
+			end
+			Session.step(s)
+		end
+		t.expect(Session.isOver(s, "p")).toBe(true)
+		t.expect(Session.frame(s, "p").boosted ~= nil).toBe(true) -- no respawn after the last death
+		local _, again = Session.playAgain(s, "p")
+		t.expect(again).toBe(true)
+		Session.step(s)
+		t.expect(Session.frame(s, "p").boosted).toBe(nil)
+		t.expect(count(boost(playing(s)), "Boosted")).toBe(1)
+	end)
 end)

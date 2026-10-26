@@ -64,14 +64,19 @@ return t.spec("f0143 Boost", function(it)
 		t.expect(Boost.speed(80, true, 120)).toBe(120)
 	end)
 
-	it("status: boosting, then cooling, then ready", function()
-		t.expect(Boost.status(nil, 0)).toBe("ready")
-		t.expect(Boost.status(10, 10)).toBe("boosting")
-		t.expect(Boost.status(10, 10 + Boost.TICKS - 1)).toBe("boosting")
-		t.expect(Boost.status(10, 10 + Boost.TICKS)).toBe("cooling")
-		t.expect(Boost.status(10, 10 + Boost.TICKS + Boost.COOLDOWN - 1)).toBe("cooling")
-		t.expect(Boost.status(10, 10 + Boost.TICKS + Boost.COOLDOWN)).toBe("ready")
-	end)
+	it(
+		"status at a frame: boosting while its step is boosted, ready when a boost asked now starts next step",
+		function()
+			t.expect(Boost.status(nil, 0)).toBe("ready")
+			t.expect(Boost.status(10, 10)).toBe("boosting")
+			t.expect(Boost.status(10, 10 + Boost.TICKS - 1)).toBe("boosting")
+			t.expect(Boost.status(10, 10 + Boost.TICKS)).toBe("cooling")
+			t.expect(Boost.status(10, 10 + Boost.TICKS + Boost.COOLDOWN - 2)).toBe("cooling")
+			-- the frame before the step a boost may start in: a boost asked now starts (design review 001 F5)
+			t.expect(Boost.canStart(10, 10 + Boost.TICKS + Boost.COOLDOWN)).toBe(true)
+			t.expect(Boost.status(10, 10 + Boost.TICKS + Boost.COOLDOWN - 1)).toBe("ready")
+		end
+	)
 
 	it(
 		"tap: two presses within WINDOW pair once; a slow second press restarts; a triple tap pairs once; a non-finite or earlier press never pairs",
@@ -115,17 +120,24 @@ return t.spec("f0143 Boost", function(it)
 		end
 	)
 
-	it("fov: ramps up over RAMP steps, holds FOV, ramps down to 0 at TICKS, 0 outside", function()
-		t.expect(Boost.fov(nil, 5)).toBe(0)
-		t.expect(Boost.fov(10, 9.5)).toBe(0)
-		t.expect(Boost.fov(10, 10)).toBe(0)
-		t.expect(Boost.fov(10, 11)).toBe(Boost.FOV / 2)
-		t.expect(Boost.fov(10, 12)).toBe(Boost.FOV)
-		t.expect(Boost.fov(10, 10 + Boost.TICKS / 2)).toBe(Boost.FOV)
-		t.expect(Boost.fov(10, 10 + Boost.TICKS - 1)).toBe(Boost.FOV / 2)
-		t.expect(Boost.fov(10, 10 + Boost.TICKS)).toBe(0)
-		t.expect(Boost.fov(10, NAN)).toBe(0)
-	end)
+	it(
+		"fov: over the boosted steps as shown (step N from shown tick N - 1), ramped at both ends, 0 outside",
+		function()
+			-- a boost started in step 10 makes steps 10 .. 10 + TICKS - 1 fast, shown from tick 9 to 10 + TICKS - 1
+			t.expect(Boost.fov(nil, 5)).toBe(0)
+			t.expect(Boost.fov(10, 8.5)).toBe(0)
+			t.expect(Boost.fov(10, 9)).toBe(0)
+			t.expect(Boost.fov(10, 9.5)).toBe(Boost.FOV / 4) -- the middle of the first boosted step
+			t.expect(Boost.fov(10, 10)).toBe(Boost.FOV / 2)
+			t.expect(Boost.fov(10, 11)).toBe(Boost.FOV)
+			t.expect(Boost.fov(10, 10 + Boost.TICKS / 2)).toBe(Boost.FOV)
+			t.expect(Boost.fov(10, 10 + Boost.TICKS - 2)).toBe(Boost.FOV / 2)
+			t.expect(Boost.fov(10, 10 + Boost.TICKS - 1.5)).toBe(Boost.FOV / 4) -- the middle of the last boosted step
+			t.expect(Boost.fov(10, 10 + Boost.TICKS - 1)).toBe(0)
+			t.expect(Boost.fov(10, 10 + Boost.TICKS - 0.5)).toBe(0) -- the middle of the first step after
+			t.expect(Boost.fov(10, NAN)).toBe(0)
+		end
+	)
 
 	it(
 		"on every level, a boost gains at least two tiles on a hunting ghost and stays within a tile a step, frightened too",
@@ -138,6 +150,31 @@ return t.spec("f0143 Boost", function(it)
 					t.expect(boosted > speed).toBe(true)
 					local ghost = Levels.ghostSpeed(30, level, "normal")
 					t.expect((boosted - ghost) * Boost.TICKS >= 2 * Movement.UNITS).toBe(true)
+				end
+			end
+		end
+	)
+
+	it(
+		"the HUD chevron sits one gap after the last shot bar, a square of the icons' size, inside the lives block",
+		function()
+			local Hud = require("@logic/Hud")
+			local Touch = require("@logic/Touch")
+			for _, screen in { { 1280, 720 }, { 375, 667 }, { 667, 375 } } do
+				local l = Hud.layout(screen[1], screen[2])
+				for _, counts in { { 3, 0 }, { 3, 3 }, { 1, 2 }, { 0, 0 } } do
+					local lives, shots = counts[1], counts[2]
+					local box = Hud.boostIcon(l, lives, shots)
+					local bars = Hud.shotIcons(l, lives, shots)
+					local last = bars[#bars]
+					local after = if last
+						then last.x + last.w + math.floor(l.margin / 2 + 0.5)
+						else lives * (l.iconSize + l.margin)
+					t.expect(box.x).toBe(after)
+					t.expect(box.y).toBe(0)
+					t.expect(box.w).toBe(l.iconSize)
+					t.expect(box.h).toBe(l.iconSize)
+					t.expect(box.x + box.w <= Touch.blocks(l).lives.w).toBe(true)
 				end
 			end
 		end

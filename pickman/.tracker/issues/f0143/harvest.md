@@ -1,0 +1,11 @@
+- design-review-001 F1: zz-test/pin-call-site-arguments
+- design-review-001 F2: z-design/never-narrow-captured-scope, z-design/design-the-execution-window
+- design-review-001 F3: z-design/run-the-other-rafts-specs
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: zz-arch/shown-time-follows-the-rule
+- design-review-001 F6: zz-arch/name-each-coordinate-space
+- design-review-001 F7: one-off: a parity claim ("a client cannot gain") missed the buffered turn a double tap costs; the user decided the server rule, recorded in §5
+- design-review-001 F8: z-design/design-the-execution-window
+- design-review-001 F9: one-off: the gain proxy measured an empty corridor; the dotted numbers are stated beside it
+- design-review-001 F10: z-design/never-narrow-captured-scope
+- note the rebuilt prototype turned f0146's controls.spec red (an index read after a press that now sends a boost too): z-design/run-the-other-rafts-specs
