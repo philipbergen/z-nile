@@ -20,3 +20,7 @@
 - design-review-004 F2: z-design/watch-steps-name-their-base
 - design-review-004 F3: zz-review/run-the-evidence-you-cite
 - design-review-004 F4: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/watch-steps-name-their-base, zz-arch/history-tests-survive-squash, zz-review/run-the-evidence-you-cite
+- design-review-005 F2: zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
+- design-review-005 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
+- design-review-005 F4: z-design/design-the-execution-window
