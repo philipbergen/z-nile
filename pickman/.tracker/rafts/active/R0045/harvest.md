@@ -7,3 +7,5 @@
 - design-review-002 F1: zz-test/narrowing-pins-the-whole-file
 - design-review-002 F2: z-design/restated-rules-move-together
 - review-001 F1: zz-test/narrowing-pins-the-whole-file
+- review-002 F1: zz-test/narrowing-pins-the-whole-file
+- review-002 F2: one-off: records left stale after the user replaced a deferral with a fix
