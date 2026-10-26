@@ -13,3 +13,6 @@
 - design-review-002 F2: pickman-test/assert-between-press-and-release
 - design-review-002 F3: pickman-test/new-controls-get-inset-and-turn-cases, zz-test/pin-call-site-arguments
 - design-review-002 F4: z-design/stubs-inherit-pending-redesigns, z-design/design-the-execution-window
+- design-review-003 F1: z-design/late-pins-run-on-the-merged-deps-tree, z-design/run-the-other-rafts-specs, z-design/stubs-inherit-pending-redesigns
+- design-review-003 F2: z-design/spec-design-correspondence
+- design-review-003 F3: z-design/quote-other-preps-before-promising

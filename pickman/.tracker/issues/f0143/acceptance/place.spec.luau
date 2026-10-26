@@ -88,7 +88,8 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 					"FieldOfView%s*=%s*View%.SCALE%.fieldOfView%s*%+%s*Boost%.fov%(%s*boosted%s*,%s*shown%s*%)"
 				) ~= nil
 			).toBe(true)
-			t.expect(string.find(camera, "Hop%.rise%(%s*hopped%s*,%s*shown%s*%)") ~= nil).toBe(true)
+			-- the hop reads the same shown tick; f0126 adds a third argument (hopTicks), so the pin stops at `shown`
+			t.expect(string.find(camera, "Hop%.rise%(%s*hopped%s*,%s*shown%s*[,)]") ~= nil).toBe(true)
 			t.expect(has(camera, "FieldOfView")).toBe(true)
 			local hud = source("HudView")
 			t.expect(has(hud, "function HudView.boost(")).toBe(true)
