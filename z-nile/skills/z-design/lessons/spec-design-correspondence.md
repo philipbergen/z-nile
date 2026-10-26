@@ -2,7 +2,7 @@
 title: Specs and Design correspond one to one
 when: design
 tags: [acceptance, rules-and-mutants]
-check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies?
+check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older, stricter case (delete the case: does its row's mutant still die)?
 ---
 Sequestered specs and the Design must match in both directions. A stated behaviour with no failing case (a refusal, an output format, an order) can be implemented wrong. An assertion the Design never states (message wording, which stream) can fail a correct implementation that the executor may not fix.
 
@@ -13,3 +13,5 @@ Sequestered specs and the Design must match in both directions. A stated behavio
 R0044 design review 4 (F1): the Design said the `UpdateAsync` transform keeps the place of its last call, but both stubs ran the transform once, so no case could fail it. A stub of an engine call that may retry its own callback must be able to call it again on a changed value.
 
 **Note** (f0146 design review 001 F2): a decision recorded with the user is a stated behaviour like any other. "The first controller only" had no case, and the design built something else (every controller's buttons acted). Give every decided guess a case that fails on its plausible mutant, and check the design really builds what the decision says.
+
+f0126 design review 011 F3: V9 (the gold moved near Inky) was killed first by the exact-gold case, so the record never showed the new CIE76 case could fail; the row now mutates Inky instead, which only the new case catches.
