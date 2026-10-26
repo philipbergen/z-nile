@@ -7,6 +7,7 @@
 | 3 | 2026-10-26 14:47 | design-refute-001 | 0 | 0 | 50.0 | spend | design-review |  |
 | 4 | 2026-10-26 16:21 | design-refute-002 | 0 | 0 | 75.0 | spend | design-review |  |
 | 5 | 2026-10-26 16:46 | design-refute-003 | 0 | 0 | 20.0 | spend | design-review |  |
+| 6 | 2026-10-26 17:15 | c0154: the spec runner schedules files slowest first from recorded durations (schedule.luau, run.luau), zz-test's sentence | 146 | 5 | 25.0 | explicit | build |  |
 
-**Total:** +562 / -1 lines, 269.0 agent-minutes, 0 tokens over 5 records
-<!-- totals: added=562 removed=1 minutes=269.0 records=5 tokens=0 -->
+**Total:** +708 / -6 lines, 294.0 agent-minutes, 0 tokens over 6 records
+<!-- totals: added=708 removed=6 minutes=294.0 records=6 tokens=0 -->
