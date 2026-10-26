@@ -1,0 +1,6 @@
+- design-review-001 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F2: zz-review/lists-paste-their-search
+- design-review-001 F3: one-off: a tolerance compare written as `> eps` lets NaN take the equal branch
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/spec-design-correspondence
+- note renamed.id sends today's f0100 to f0011 (the map's f0100 is a pre-compaction id): zz-test/split-paths-still-need-renamed-id

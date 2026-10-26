@@ -1,0 +1,234 @@
+diff --git a/pickman/tests/acceptance/f0013/snapshot.spec.luau b/pickman/tests/acceptance/f0013/snapshot.spec.luau
+index a212a15d..fbfa341a 100644
+--- a/pickman/tests/acceptance/f0013/snapshot.spec.luau
++++ b/pickman/tests/acceptance/f0013/snapshot.spec.luau
+@@ -3,7 +3,7 @@
+ -- jumpTick that tells the client when not to interpolate.
+ local Maze = require("@logic/Maze")
+ local Session = require("@logic/Session")
+-local serde = require("@lune/serde")
++local plain = require("@tests/lib/plain")
+ local t = require("@tests/lib/t")
+ 
+ local function keys(v: { [string]: any }): { string }
+@@ -38,7 +38,8 @@ return t.spec("f0120 snapshot schema", function(it)
+ 			Session.step(s)
+ 		end
+ 		local snap = Session.snapshot(s, "p")
+-		t.expect(serde.decode("json", serde.encode("json", snap))).toEqual(snap)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		t.expect({ plain.roundTrip(snap, 1e-9) }).toEqual({ true })
+ 	end)
+ 
+ 	it("is a fresh table: changing it does not change the session", function()
+diff --git a/pickman/tests/acceptance/f0018/frame.spec.luau b/pickman/tests/acceptance/f0018/frame.spec.luau
+index 3b84108d..fae00f4a 100644
+--- a/pickman/tests/acceptance/f0018/frame.spec.luau
++++ b/pickman/tests/acceptance/f0018/frame.spec.luau
+@@ -4,7 +4,7 @@
+ local Game = require("@logic/Game")
+ local Maze = require("@logic/Maze")
+ local Session = require("@logic/Session")
+-local serde = require("@lune/serde")
++local plain = require("@tests/lib/plain")
+ local t = require("@tests/lib/t")
+ 
+ local CORRIDOR = Maze.parse({ "###############", "#            P#", "###############" }, "corridor")
+@@ -83,7 +83,8 @@ return t.spec("f0170 Session.frame", function(it)
+ 		end
+ 		Session.kill(s, "p")
+ 		local frame = Session.frame(s, "p")
+-		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
+ 	end)
+ 
+ 	it("is a fresh table: changing it does not change the session", function()
+diff --git a/pickman/tests/acceptance/f0030/frame.spec.luau b/pickman/tests/acceptance/f0030/frame.spec.luau
+index 9ba0fc50..14bd9265 100644
+--- a/pickman/tests/acceptance/f0030/frame.spec.luau
++++ b/pickman/tests/acceptance/f0030/frame.spec.luau
+@@ -5,7 +5,7 @@ local Game = require("@logic/Game")
+ local Maze = require("@logic/Maze")
+ local Pellets = require("@logic/Pellets")
+ local Session = require("@logic/Session")
+-local serde = require("@lune/serde")
++local plain = require("@tests/lib/plain")
+ local t = require("@tests/lib/t")
+ 
+ -- the spawn is at x = 4; walking west eats (3,1), (2,1) and then the power pellet at (1,1), which clears the level
+@@ -120,7 +120,8 @@ return t.spec("f0290 Session.frame pellets", function(it)
+ 		Session.join(s, "p")
+ 		stepUntil(s, eaten(3))
+ 		local frame = Session.frame(s, "p")
+-		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
+ 		t.expect((Session.snapshot(s, "p") :: any).pellets).toBe(nil)
+ 	end)
+ 
+diff --git a/pickman/tests/acceptance/f0032/frame.spec.luau b/pickman/tests/acceptance/f0032/frame.spec.luau
+index f614f375..9435dab8 100644
+--- a/pickman/tests/acceptance/f0032/frame.spec.luau
++++ b/pickman/tests/acceptance/f0032/frame.spec.luau
+@@ -5,6 +5,7 @@
+ local Ghosts = require("@logic/Ghosts")
+ local Maze = require("@logic/Maze")
+ local Session = require("@logic/Session")
++local plain = require("@tests/lib/plain")
+ local serde = require("@lune/serde")
+ local t = require("@tests/lib/t")
+ 
+@@ -142,8 +143,8 @@ return t.spec("f0310 ghosts in the snapshot and the frame", function(it)
+ 		local frame = Session.frame(s, "p")
+ 		t.expect(frame.ghosts).toEqual(snap.ghosts)
+ 		t.expect(type(frame.play)).toBe("table")
+-		local text = serde.encode("json", frame :: any)
+-		t.expect(serde.decode("json", text)).toEqual(frame)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
+ 		-- four ghosts are a few hundred bytes a step
+ 		t.expect(#serde.encode("json", (frame :: any).ghosts) < 700).toBe(true)
+ 	end)
+diff --git a/pickman/tests/acceptance/f0100/drops.spec.luau b/pickman/tests/acceptance/f0100/drops.spec.luau
+index bb7c53f2..749a213c 100644
+--- a/pickman/tests/acceptance/f0100/drops.spec.luau
++++ b/pickman/tests/acceptance/f0100/drops.spec.luau
+@@ -9,7 +9,7 @@ local Maze = require("@logic/Maze")
+ local Movement = require("@logic/Movement")
+ local Pellets = require("@logic/Pellets")
+ local Session = require("@logic/Session")
+-local serde = require("@lune/serde")
++local plain = require("@tests/lib/plain")
+ local t = require("@tests/lib/t")
+ 
+ local classic = Maze.layout("classic")
+@@ -190,7 +190,8 @@ return t.spec("f0100 drops", function(it)
+ 		s.members.p.blaster.shots = 2
+ 		frame = Session.frame(s, "p")
+ 		t.expect(frame.shots).toBe(2)
+-		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
+ 		-- the v1 snapshot is unchanged
+ 		local keys = {}
+ 		for k in Session.snapshot(s, "p") :: any do
+diff --git a/pickman/tests/lib/plain.luau b/pickman/tests/lib/plain.luau
+new file mode 100644
+index 00000000..a8c90e03
+--- /dev/null
++++ b/pickman/tests/lib/plain.luau
+@@ -0,0 +1,113 @@
++--!strict
++-- c0153: plain data, as replicated frames and snapshots are: nil, booleans, finite numbers, strings, and tables
++-- without a metatable or a cycle that are either a sequence (number keys exactly 1..n, no holes) or a map (string
++-- keys only); the empty table is both. Anything else (functions, userdata, threads, holes, sparse, fractional, zero
++-- or negative number keys, mixed tables) is lost or changed by replication or JSON. A JSON round trip keeps about
++-- 16 significant digits, so it is compared within a number tolerance, and NaN is never within it.
++local serde = require("@lune/serde")
++
++local plain = {}
++
++local function walk(v: any, path: string, seen: { [any]: boolean }): (boolean, string?)
++	local kind = type(v)
++	if kind == "nil" or kind == "boolean" or kind == "string" then
++		return true, nil
++	elseif kind == "number" then
++		if v ~= v or v == math.huge or v == -math.huge then
++			return false, `{path}: {v} is not a finite number`
++		end
++		return true, nil
++	elseif kind == "table" then
++		if getmetatable(v) ~= nil then
++			return false, `{path}: a table with a metatable`
++		end
++		if seen[v] then
++			return false, `{path}: a cycle`
++		end
++		seen[v] = true
++		local count, strings, numbers = 0, 0, 0
++		for k in v do
++			count += 1
++			if type(k) == "string" then
++				strings += 1
++			elseif type(k) == "number" then
++				numbers += 1
++			else
++				return false, `{path}: a {type(k)} key`
++			end
++		end
++		if strings > 0 and numbers > 0 then
++			return false, `{path}: a table with both string and number keys`
++		end
++		if numbers > 0 then
++			for i = 1, count do
++				if v[i] == nil then
++					return false, `{path}: a hole at {i} (number keys must be 1..{count})`
++				end
++			end
++		end
++		for k, child in v do
++			local ok, why = walk(child, `{path}.{tostring(k)}`, seen)
++			if not ok then
++				return false, why
++			end
++		end
++		seen[v] = nil
++		return true, nil
++	end
++	return false, `{path}: a {kind}`
++end
++
++-- Is `v` plain data? Returns false and where it isn't.
++function plain.check(v: any): (boolean, string?)
++	return walk(v, "value", {})
++end
++
++-- Are `a` and `b` the same plain data, numbers within `eps` (NaN, or a NaN eps, never is)? Returns false and the
++-- first difference.
++function plain.equalWithin(a: any, b: any, eps: number, path: string?): (boolean, string?)
++	local at = path or "value"
++	if type(a) ~= type(b) then
++		return false, `{at}: {type(a)} against {type(b)}`
++	end
++	if type(a) == "number" then
++		if not (math.abs(a - b) <= eps) then
++			return false, `{at}: {a} against {b}`
++		end
++		return true, nil
++	elseif type(a) == "table" then
++		for k, v in a do
++			local ok, why = plain.equalWithin(v, b[k], eps, `{at}.{tostring(k)}`)
++			if not ok then
++				return false, why
++			end
++		end
++		for k in b do
++			if a[k] == nil then
++				return false, `{at}.{tostring(k)}: missing on the left`
++			end
++		end
++		return true, nil
++	end
++	if a ~= b then
++		return false, `{at}: {tostring(a)} against {tostring(b)}`
++	end
++	return true, nil
++end
++
++-- Is `v` plain data that survives a JSON round trip, numbers within `eps`? Never raises.
++function plain.roundTrip(v: any, eps: number): (boolean, string?)
++	local ok, why = plain.check(v)
++	if not ok then
++		return false, why
++	end
++	local done, back = pcall(function()
++		return serde.decode("json", serde.encode("json", v))
++	end)
++	if not done then
++		return false, `value: the JSON round trip failed: {back}`
++	end
++	return plain.equalWithin(back, v, eps)
++end
++
++return plain
