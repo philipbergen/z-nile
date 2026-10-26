@@ -7,3 +7,6 @@
 - design-review-002 F1: zz-test/seed-every-enumerated-case
 - design-review-002 F2: one-off: a window inherent to branch-only items, now written down
 - design-review-002 F3: zz-rules/audit-what-new-refuses
+- design-review-003 F1: zz-rules/audit-what-new-refuses
+- design-review-003 F2: zz-test/seed-every-enumerated-case
+- design-review-003 F3: zz-test/no-vacuous-pass

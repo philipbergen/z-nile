@@ -90,6 +90,14 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 				return "pickman"
 			end, { same = true, ["same-2"] = true }) :: { { string } }
 			t.expect(one[1][4]).toBe("same-3")
+			-- two different bases, both taken: each gets its own -2 (review 003 F2: no counter shared across the plan)
+			local two = raftplan.commands({
+				{ kind = "new", type = "chore", issues = { "c0001" }, root = "pickman/.tracker" },
+				{ kind = "new", type = "chore", issues = { "c0002" }, root = "pickman/.tracker" },
+			}, { c0001 = "a", c0002 = "b" }, function(): string?
+				return "pickman"
+			end, { a = true, b = true }) :: { { string } }
+			t.expect({ two[1][4], two[2][4] }).toEqual({ "a-2", "b-2" })
 		end
 	)
 
@@ -257,10 +265,23 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			t.expect(lines).toEqual({
 				"error slug-duplicate z-nile/.tracker/issues/c0099: issue taken-done: c0099, f0001 (edit slug: in all but one; branch and worktree names need not follow)",
 			})
+			-- a raft clash says which raft may take the new slug (review 003 F1)
+			fs.writeDir(`{wt}/pickman/.tracker/rafts/R0098`)
+			fs.writeFile(`{wt}/pickman/.tracker/rafts/R0098/R0098.md`, raftDoc("R0098", "keeper"))
+			local rafts = trackerfix.tr(f, wt, { "audit" })
+			t.expect(
+				has(
+					rafts.stdout .. rafts.stderr,
+					"error slug-duplicate pickman/.tracker/rafts/R0004: raft keeper: R0004, R0098 (edit slug: in all but one, never in a raft that has its <id>-<slug> branch: the branch name is derived from it)"
+				)
+			).toBe(true)
+			fs.removeDir(`{wt}/pickman/.tracker/rafts/R0098`)
 			-- the stated fix: edit slug: in one of them (review 002 F3)
 			fs.writeFile(`{wt}/z-nile/.tracker/issues/c0099/c0099.md`, doc("c0099", "renamed-by-hand"))
 			local fixed = trackerfix.tr(f, wt, { "audit" })
 			t.expect(has(fixed.stdout .. fixed.stderr, "slug-duplicate")).toBe(false)
+			-- audit ran to its summary: "not reported" is not "not run" (review 003 F3)
+			t.expect(has(fixed.stdout .. fixed.stderr, "audit: ")).toBe(true)
 			fs.removeDir(`{wt}/z-nile/.tracker/issues/c0099`)
 			-- the issue `old-raft` made above shares its slug with the retired raft R0003: not a clash
 			local clean = trackerfix.tr(f, wt, { "audit" })

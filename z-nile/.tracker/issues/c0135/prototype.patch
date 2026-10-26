@@ -1,5 +1,5 @@
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 33a3844b..e1c13f39 100644
+index 33a3844b..d12f6aa5 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
 @@ -93,6 +93,112 @@ function audit.scan(root: string): { Found }
@@ -122,12 +122,12 @@ index 33a3844b..e1c13f39 100644
 +	-- c0135: a slug is used by one item of its kind (what `new` refuses, caught here when a merge or another engine
 +	-- brings a second one in)
 +	for _, c in audit.slugClashes(audit.sluggedLocal(root)) do
-+		add(
-+			"error",
-+			"slug-duplicate",
-+			c.paths[1],
-+			`{c.kind} {c.slug}: {table.concat(c.ids, ", ")} (edit slug: in all but one; branch and worktree names need not follow)`
-+		)
++		-- c0135 review 003 F1: a raft's branch is `<id>-<slug>` (the engine finds a started raft by it), so only a raft with
++		-- no branch yet may take a new slug; an issue's derived names (prep-<slug>) are only names
++		local hint = if c.kind == "raft"
++			then "edit slug: in all but one, never in a raft that has its <id>-<slug> branch: the branch name is derived from it"
++			else "edit slug: in all but one; branch and worktree names need not follow"
++		add("error", "slug-duplicate", c.paths[1], `{c.kind} {c.slug}: {table.concat(c.ids, ", ")} ({hint})`)
 +	end
  	for _, paths in byId do
  		if #paths > 1 then
