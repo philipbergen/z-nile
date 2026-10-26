@@ -2,3 +2,6 @@
 - design-review-001 F2: one-off: the user's scope decision (don't widen), recorded as G2
 - design-review-002 F1: zz-test/fixed-lines-run-their-whole-criterion
 - design-review-003 F1: zz-test/promoted-specs-pin-rules-not-sets
+- note design review 003's candidate lesson (Recommendation offered spec or check.sh AC): zz-review/recommendations-pick-spec-or-check
+- design-review-004 F1: z-design/restated-rules-move-together
+- design-review-004 F2: z-design/results-land-on-every-path
