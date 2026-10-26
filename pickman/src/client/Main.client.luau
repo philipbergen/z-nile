@@ -14,6 +14,7 @@ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
 local PelletView = require("./PelletView")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
@@ -52,6 +53,10 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 		lit = overlay.flash
 		MazeView.flash(model, overlay.flash)
 	end
+	if model then
+		MazeView.edible(model, View.edible(frame.play))
+	end
+	DangerHud.wallState(overlay.flash, View.edible(frame.play))
 	Camera.setCursor(overlay.cursor)
 	-- last: a code that fails to decode can't stop the rest of the frame
 	if pellets then
