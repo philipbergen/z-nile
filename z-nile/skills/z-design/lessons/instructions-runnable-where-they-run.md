@@ -2,7 +2,7 @@
 title: Instructions must be runnable where they are read
 when: design
 tags: [skills, worktrees]
-check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a reviewer or stream subagent that may not publish), and without breaking a project rule?
+check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a reviewer or stream subagent that may not publish), and without breaking a project rule? And does every step that runs specs before the issue's code exists name the cases expected to pass then, and what a failure means?
 ---
 An instruction added to many skills has to fit each skill's context. Writing a file is impossible in the main checkout, cannot land through a capture, and is forbidden to a reviewer. Where the action cannot happen, route it to something that can land (an issue, the author's harvest).
 
@@ -17,3 +17,5 @@ R0040 design review 3 (F1) found the fix still split by skill: one agent follows
 c0120 code review 001 F2: the build's redo list said "rebase onto c0114, re-run the classification for new captures", which leaves out the `done`s the freeze and Guess 4 (a) put on main first (R0034, R0012, with their promoted pickman folders). Rebasing over them conflicts inside the renames-only commit. Redo steps for a stacked build start from the stop conditions and regenerate mechanical commits on the new base instead of rebasing them.
 
 Every "ask the user" in a step a dispatcher can run needs its headless reading (R0052 code review 001 F5): z-design and z-raft still said "ask before merging the prep", which a headless agent turns into a stop at `questions.md` before the very gate the user decided it should pass. Grep the step's skill for each ask and say what the dispatched step does instead.
+
+f0126 design review 008 F3: step 1 ran f0126's touch specs "first", on dependency code without any f0126 code, where 10 of 13 cases must fail, and also said to stop on any failure.
