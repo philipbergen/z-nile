@@ -69,6 +69,23 @@ local function signal(): Signal
 	}
 end
 
+-- The stub require, open for later features (lesson pickman-test/stub-loaders-fall-back): the given modules
+-- first, then any other Logic feature as itself, so an issue that adds a Logic require to an adapter keeps these
+-- cases green; anything else is an error.
+local function requirer(modules: { [string]: any }): (string) -> any
+	return function(spec: string): any
+		local given = modules[spec]
+		if given ~= nil then
+			return given
+		end
+		local name = string.match(spec, "^@game/ReplicatedStorage/Shared/Logic/([%w_]+)$")
+		if name then
+			return (require :: any)("@logic/" .. name)
+		end
+		error(`unexpected require {spec}`)
+	end
+end
+
 -- Controls ------------------------------------------------------------------------------------------------------
 
 type World = {
@@ -154,9 +171,7 @@ local function controls(buttons: (() -> Buttons?)?, aim: (() -> Maze.Heading?)?)
 		},
 		workspace = { CurrentCamera = { ViewportSize = { X = 800, Y = 400 } } },
 		Enum = enum,
-		require = function(spec: string): any
-			return assert(modules[spec], spec)
-		end,
+		require = requirer(modules),
 	}
 	local Controls = luau.load(script("Controls").Source, { environment = env, debugName = "Controls" })()
 	if aim then
@@ -308,9 +323,7 @@ local function hudView(touch: boolean): Screen
 				return { r = r, g = g, b = b }
 			end,
 		},
-		require = function(spec: string): any
-			return assert(modules[spec], spec)
-		end,
+		require = requirer(modules),
 	}
 	local hud = luau.load(script("HudView").Source, { environment = env, debugName = "HudView" })() :: Hv
 	hud.start()

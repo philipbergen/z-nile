@@ -244,14 +244,13 @@ return t.spec("f0110 touch buttons", function(it)
 		t.expect(fire.y + fire.h).toBe(Touch.snapRect(phone).y - phone.margin)
 	end)
 
-	it("Touch.buttons is the snap, fire and hop rectangles together", function()
+	it("Touch.buttons holds the snap, fire and hop rectangles (a later control may add a field)", function()
 		for _, s in SAMPLES do
 			local box = boxOf(Hud.layout(s.width, s.height, s.inset))
-			t.expect(T.buttons(box)).toEqual({
-				snap = Touch.snapRect(box),
-				fire = T.fireRect(box),
-				hop = T.hopRect(box),
-			})
+			local b = T.buttons(box)
+			t.expect(b.snap).toEqual(Touch.snapRect(box))
+			t.expect(b.fire).toEqual(T.fireRect(box))
+			t.expect(b.hop).toEqual(T.hopRect(box))
 		end
 	end)
 
