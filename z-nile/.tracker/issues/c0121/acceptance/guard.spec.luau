@@ -165,7 +165,7 @@ return t.spec("c0121 server rules", function(it)
 	)
 
 	it(
-		"stop on a member whose run follows its raft stops the raft's run; a stale follow stops the card's own",
+		"stop on a member whose run follows its raft stops the raft's run; a stale follow, or a step of its own running, stops the card's own",
 		function()
 			t.expect((serve.plan(MODEL, "stop", "f0021")))
 				.toEqual({ kind = "run", args = { "dispatch", "stop", "R0020" }, wait = true })
