@@ -12,4 +12,6 @@ Sequestered specs and the Design must match in both directions. A stated behavio
 
 R0044 design review 4 (F1): the Design said the `UpdateAsync` transform keeps the place of its last call, but both stubs ran the transform once, so no case could fail it. A stub of an engine call that may retry its own callback must be able to call it again on a changed value.
 
+**Note** (f0146 design review 001 F2): a decision recorded with the user is a stated behaviour like any other. "The first controller only" had no case, and the design built something else (every controller's buttons acted). Give every decided guess a case that fails on its plausible mutant, and check the design really builds what the decision says.
+
 f0126 design review 011 F3: V9 (the gold moved near Inky) was killed first by the exact-gold case, so the record never showed the new CIE76 case could fail; the row now mutates Inky instead, which only the new case catches.
