@@ -4,3 +4,7 @@
 - design-review-001 F4: zz-arch/refusals-are-gate-checks
 - design-review-001 F5: zz-review/lists-paste-their-search
 - design-review-001 F6: z-design/spec-design-correspondence
+- design-review-002 F1: zz-test/sequestered-edits-parse-and-list
+- design-review-002 F2: zz-arch/guard-no-is-explicit
+- design-review-002 F3: zz-test/seed-every-enumerated-case
+- design-review-002 F4: z-design/restated-rules-move-together

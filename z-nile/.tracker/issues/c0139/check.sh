@@ -11,14 +11,11 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: a whole merge conflict (an opener and a later closer at line starts) is recognised, and nothing else is" \
   lune run tests/run -- "$A/markers.spec.luau"
-check "AC2: a writing ./zn command refuses over unmerged paths, a whole conflict in a working file, or an unreadable registry, naming each path and the recovery, and writes nothing; the conflict-OK commands still run" \
+check "AC2: a writing ./zn command refuses over unmerged paths, a whole conflict in a working file under a root or a skills folder, an unreadable registry or a failed git read, naming each path (and line) and the recovery, and writes nothing; the conflict-OK commands still run" \
   lune run tests/run -- "$A/conflicts.spec.luau"
 check "AC3: c0115's rename-lesson-ids and rewrite-finished refuse, before writing, over unmerged paths and over a whole conflict in a working file" \
   lune run tests/run -- "$A/scripts.spec.luau"
 check "AC4: ./zn audit reports a whole conflict in a file under a root or a skills folder as an error naming the path, line and recovery" \
   lune run tests/run -- "$A/audit.spec.luau"
-
-finished refuse over unmerged paths, before writing" \
-  lune run tests/run -- "$A/conflicts.spec.luau"
 
 finish

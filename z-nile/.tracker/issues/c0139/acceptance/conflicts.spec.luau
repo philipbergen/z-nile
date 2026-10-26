@@ -65,6 +65,8 @@ return t.spec("c0139 a writing command refuses over a merge conflict; reading on
 				{ "members", "R0001" },
 				{ "status" },
 				{ "status", "c0001" },
+				{ "status", "--project", "z-nile" },
+				{ "status", "c0001", "--project", "z-nile" },
 				{ "capture", "c0001" },
 				{ "lessons" },
 				{ "busy" },
@@ -112,12 +114,22 @@ return t.spec("c0139 a writing command refuses over a merge conflict; reading on
 		t.expect(trackerfix.tr(f, f.main, { "sync" }).ok).toBe(true)
 	end)
 
-	it("a registry that can't be read refuses a writing command (fail closed)", function()
+	it("a registry that can't be read, or a failed git read, refuses a writing command (fail closed)", function()
 		write("z-nile/projects.toml", "this is not toml [[[\n")
 		local r = trackerfix.tr(f, f.main, { "sync" })
 		t.expect(r.code ~= 0).toBe(true)
 		t.expect(has(r.stderr .. r.stdout, "can't tell whether files hold merge conflicts")).toBe(true)
 		write("z-nile/projects.toml", REGISTRY)
+		-- design review 002 F2: a git read that fails refuses too (an unreadable index), naming the command
+		local index = `{f.main}/.git/index`
+		local saved = fs.readFile(index)
+		fs.writeFile(index, "DIRC")
+		local r2 = trackerfix.tr(f, f.main, { "sync" })
+		t.expect(r2.code ~= 0).toBe(true)
+		t.expect(has(r2.stderr .. r2.stdout, "can't tell whether files hold merge conflicts")).toBe(true)
+		t.expect(has(r2.stderr .. r2.stdout, "git diff --name-only --diff-filter=U failed")).toBe(true)
+		fs.writeFile(index, saved)
+		t.expect(trackerfix.tr(f, f.main, { "sync" }).ok).toBe(true)
 		fs.removeDir(f.base)
 	end)
 end)
