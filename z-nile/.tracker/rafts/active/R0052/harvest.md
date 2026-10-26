@@ -6,3 +6,7 @@
 - review-001 F6: one-off: the model id accepted by one reader and refused by another; one predicate now
 - review-001 F7: zz-arch/guards-trust-only-origin
 - review-001 F8: one-off: comments left behind by decisions
+- review-002 F1: zz-arch/item-rules-scoped-to-their-call
+- review-002 F2: zz-arch/guards-decide-from-the-tools-resolution
+- review-002 F3: zz-arch/guards-trust-only-origin
+- review-002 F4: zz-test/pin-fail-safes-where-they-act

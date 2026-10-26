@@ -286,6 +286,10 @@ end
 -- The commit settings, caps and models are read at: main, fetched once per run (review 002 F5).
 local pinned: string? = nil
 
+-- origin's fetch URL for a process that has pinned none (a nested step, a dry run), set below once the watermark's
+-- helpers exist
+local unpinnedOrigin: () -> string
+
 local function walk(dir: string): { models.Layer }
 	if not pinned then
 		-- the run's own fresh main when it has one, else fetched from the pinned URL (code review 001 F7): never
@@ -294,9 +298,7 @@ local function walk(dir: string): { models.Layer }
 			pinned = guard.fresh
 		else
 			local here = process.cwd
-			local url = if guard.origin
-				then (guard.origin :: broker.Origin).fetch
-				else trim(process.exec("git", { "ls-remote", "--get-url", "origin" }).stdout)
+			local url = if guard.origin then (guard.origin :: broker.Origin).fetch else unpinnedOrigin()
 			pinned = fetchInto(here, url, "refs/heads/main", runRef(here, "models"))
 			if not pinned then
 				error(`could not fetch main from {url} to read .models.toml: no walk without it`, 0)
@@ -613,6 +615,31 @@ dispatcher.writeWatermark = writeWatermark
 
 local function originText(o: broker.Origin): string
 	return `{o.fetch}\n{o.push}\n`
+end
+
+-- With no pinned origin (code review 002 F3: a nested step never runs guardStart), origin is the URL the last vetted
+-- run saved beside the watermark, and only while the configuration still resolves to it: never `origin` by name.
+unpinnedOrigin = function(): string
+	local ctx = ({
+		mainRoot = function(): string
+			return process.cwd
+		end,
+	} :: any) :: Ctx
+	local origin = pinOrigin(ctx)
+	local saved = originPath(ctx)
+	if not fs.isFile(saved) then
+		error(
+			"no pinned origin to read .models.toml from (no vetted run saved one): ./zn dispatch vet first",
+			0
+		)
+	end
+	if fs.readFile(saved) ~= originText(origin) then
+		error(
+			`origin's URL changed since the last run (it was {trim(fs.readFile(saved))}, now {origin.fetch} / {origin.push}): .models.toml is not read from it`,
+			0
+		)
+	end
+	return origin.fetch
 end
 
 -- Vets main since the watermark (every run, every step, after every step): each commit, first parent by first parent,
@@ -1167,8 +1194,9 @@ end
 -- Whether a gate may merge PR `pr` (review 003 F5): its head, fetched from the pinned URL into a private ref, must be
 -- the head gh reports, and `merge-base(main, head)..head` must be tracker state by the one function, sequestered, with
 -- the gate's own narrower rule: a prep PR only its issue's folder (whose sequestered files it may change) and skill
--- lessons; a rafting PR only the files of its own items (the issue, any raft it adds and that raft's members), never
--- another item's sequestered files. Returns why not, or nil.
+-- lessons; a rafting PR only the files of rafts that are new or in the backlog on the base and of their members (each
+-- derived from the base, never from the PR's own text: code review 002 F1), never any item's sequestered files and
+-- never anything under an active or done raft. Returns why not, or nil.
 function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch.Pr, folder: string): string?
 	local root = ctx.mainRoot()
 	local origin = pinOrigin(ctx)
@@ -1195,9 +1223,10 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 	local function gitFn(a: { string }): (boolean, string)
 		return git(root, a)
 	end
-	-- two sets (code review 001 F1): `items` are the items whose files this PR may carry (the `only` rule); `own` are
-	-- the items whose sequestered files it may change: the issue being prepared at the prep gate, and at the rafting
-	-- gate at most the rafts the PR carries, never an issue (a member's reviewed check.sh is never the PR's to change)
+	-- two sets (code review 001 F1, 002 F1): `items` are the items whose files this PR may carry (the `only` rule);
+	-- `own` are the items whose sequestered files it may change: the issue being prepared at the prep gate, and none at
+	-- the rafting gate (a new raft's own files pass as a new item; an existing item's reviewed check.sh and acceptance
+	-- specs are never a rafting PR's to change). Both are derived from the base, never from what the PR itself says.
 	local items: { [string]: boolean } = { [id] = true }
 	local own: { [string]: boolean } = if gateName == "prep" then { [id] = true } else {}
 	local only: (path: string) -> string?
@@ -1212,20 +1241,59 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			return `it carries {path}, outside the issue's own folder and the skill lessons`
 		end
 	else
-		-- the rafts this PR touches, and their members
-		local _, names = git(
-			root,
-			{ "diff", "--name-only", "--no-renames", if okBase then base else trackerstate.EMPTY_TREE, ref }
-		)
+		local from = if okBase then base else trackerstate.EMPTY_TREE
+		local function atBase(path: string): boolean
+			return okBase and (git(root, { "cat-file", "-e", `{base}:{path}` })) or false
+		end
+		-- a raft's lifecycle on the base: "new" (no document in any folder), "backlog", "active" or "done"
+		local function raftOnBase(rid: string): string
+			for _, r in roots :: { string } do
+				for _, life in { "", "active/", "done/" } do
+					if atBase(`{r}/rafts/{life}{rid}/{rid}.md`) then
+						return if life == "" then "backlog" else string.sub(life, 1, -2)
+					end
+				end
+			end
+			return "new"
+		end
+		local _, names = git(root, { "diff", "--name-only", "--no-renames", from, ref })
+		local rafts: { [string]: boolean } = {}
+		local live: { string } = {}
 		for path in string.gmatch(names, "[^\n]+") do
-			local rid, _, rel = trackerstate.itemOf(path, roots :: { string })
-			if rid and store.isRaftId(rid :: string) and rel == `{rid}.md` then
-				own[rid :: string] = true
-				items[rid :: string] = true
+			local rid = trackerstate.itemOf(path, roots :: { string })
+			if rid and store.isRaftId(rid :: string) then
+				local life = raftOnBase(rid :: string)
+				if life == "active" or life == "done" then
+					table.insert(live, `{path} (raft {rid} is {life})`)
+				elseif not rafts[rid :: string] then
+					rafts[rid :: string] = true
+					items[rid :: string] = true
+					-- an existing backlog raft's members as the base lists them
+					for _, r in roots :: { string } do
+						local okDoc, text = git(root, { "show", `{base}:{r}/rafts/{rid}/{rid}.md` })
+						if okBase and okDoc then
+							for m in
+								string.gmatch(string.match(text, "\nissues:%s*%[([^%]]*)%]") or "", "[%w]+")
+							do
+								items[m] = true
+							end
+						end
+					end
+				end
+			end
+		end
+		if #live > 0 then
+			return `it changes an active or done raft: {table.concat(live, ", ")}`
+		end
+		-- an issue joins a raft by its own raft: line naming one of those rafts (its document in the PR); nothing else
+		-- the PR says (a raft's issues: line) makes an issue carry-able
+		for path in string.gmatch(names, "[^\n]+") do
+			local pid, _, rel = trackerstate.itemOf(path, roots :: { string })
+			if pid and not store.isRaftId(pid :: string) and rel == `{pid}.md` then
 				local _, text = git(root, { "show", `{ref}:{path}` })
-				local members = string.match(text, "\nissues:%s*%[([^%]]*)%]")
-				for m in string.gmatch(members or "", "[%w]+") do
-					items[m] = true
+				local named = string.match(text, "\nraft:[ \t]*(R%d%d%d%d)")
+				if named and rafts[named] then
+					items[pid :: string] = true
 				end
 			end
 		end

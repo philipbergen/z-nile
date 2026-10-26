@@ -38,6 +38,12 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 				"Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4).",
 				"zz-rules Landing step 3"
 			)
+			-- code review 002 F1: the rafting gate's rule, as the code applies it
+			at(
+				read("z-nile/skills/zz-rules/SKILL.md"),
+				"a rafting PR: only the files of rafts new or in the backlog on the base and of the issues their base documents list or whose own `raft:` line names one of them, never any item's sequestered files and never anything under an active or done raft; both sets come from the base, never from what the PR says)",
+				"zz-rules The chain"
+			)
 		end
 	)
 

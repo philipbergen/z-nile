@@ -183,6 +183,7 @@ local function apiDecision(rest: { string }): Decision
 	local method: string? = nil
 	local fields = false
 	local query = ""
+	local unseen: string? = nil
 	local i = 1
 	while i <= #rest do
 		local a = rest[i]
@@ -205,6 +206,10 @@ local function apiDecision(rest: { string }): Decision
 					method = string.upper(value :: string)
 				elseif kind == "field" then
 					fields = true
+					-- a body gh reads itself (code review 002 F2): `--input <file|->`, a field `key=@file` or `key=@-`
+					if name == "--input" or string.match(value :: string, "^[^=]*=@") then
+						unseen = `{name} {value}`
+					end
 					if string.match(value :: string, "^query=") then
 						query = value :: string
 					end
@@ -220,6 +225,12 @@ local function apiDecision(rest: { string }): Decision
 		i += 1
 	end
 	if endpoint == "graphql" then
+		-- the wrapper judges only the query it can read: a body gh reads from a file or stdin is refused (fail closed)
+		if unseen then
+			return refuse(
+				`gh api graphql with a body gh reads itself ({unseen}) is refused under the dispatcher: pass the query inline`
+			)
+		end
 		if string.find(string.lower(query), "mutation", 1, true) then
 			return refuse("gh api graphql mutations are refused under the dispatcher")
 		end

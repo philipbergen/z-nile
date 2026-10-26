@@ -63,6 +63,12 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			["pickman/.tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
 			["pickman/.tracker/issues/c0091/c0091.md"] = prepared("c0091", "member-thing"),
 			["pickman/.tracker/issues/c0091/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0091/acceptance/a.spec.luau\n",
+			-- code review 002 F1: an active raft and a backlog raft on main, each with its exit criteria
+			["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\ntitle: an active raft\nissues: []\n---\n",
+			["pickman/.tracker/rafts/active/R0040/check.sh"] = "bash members-check.sh\n",
+			["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
+			["pickman/.tracker/rafts/R0041/check.sh"] = "bash members-check.sh\n",
+			["pickman/.tracker/issues/c0092/c0092.md"] = prepared("c0092", "bystander-thing"),
 		})
 		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 	end)
@@ -84,6 +90,24 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 		t.expect(has(r.stdout, "origin's URL changed")).toBe(true)
 		t.expect(has(fakecli.log(h), "claude step=z-design")).toBe(false)
 	end)
+
+	it(
+		"with no pinned origin, the model walk reads only the saved origin, never origin by name (002 F3)",
+		function()
+			fakecli.clear(h)
+			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+			local ok = zn({ "dispatch", "zz-review", "c0010", "--mode", "code", "--dry-run" })
+			t.expect(has(ok.stdout, "claude-opus-5-5")).toBe(true)
+			local url = fixture.git(h.f.main, { "remote", "get-url", "origin" })
+			local evil = `{h.f.base}/evil.git`
+			process.exec("git", { "clone", "-q", "--bare", h.f.origin, evil }) -- raw: clone to a named path
+			fixture.git(h.f.main, { "remote", "set-url", "origin", evil })
+			local r = zn({ "dispatch", "zz-review", "c0010", "--mode", "code", "--dry-run" })
+			fixture.git(h.f.main, { "remote", "set-url", "origin", url })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stdout .. r.stderr, ".models.toml is not read from it")).toBe(true)
+		end
+	)
 
 	it("a pending row its item may take is written at the next run's start (F6)", function()
 		fakecli.clear(h)
@@ -163,6 +187,37 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local spec =
 				gate(33, with({ ["pickman/.tracker/issues/c0091/acceptance/a.spec.luau"] = "return nil\n" }))
 			t.expect(spec.code).toBe(4)
+			-- code review 002 F1: touching a raft's document chooses no exemption. PR #41: an active raft's title and
+			-- its check.sh; PR #42: a backlog raft's
+			local active = gate(
+				41,
+				with({
+					["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\ntitle: an active raft \nissues: []\n---\n",
+					["pickman/.tracker/rafts/active/R0040/check.sh"] = "exit 0\n",
+				})
+			)
+			t.expect(active.code).toBe(4)
+			t.expect(has(active.stdout, "rafts/active/R0040/check.sh")).toBe(true)
+			local backlog = gate(
+				42,
+				with({
+					["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft \nissues: []\n---\n",
+					["pickman/.tracker/rafts/R0041/check.sh"] = "exit 0\n",
+				})
+			)
+			t.expect(backlog.code).toBe(4)
+			t.expect(has(backlog.stdout, "rafts/R0041/check.sh")).toBe(true)
+			-- a raft's issues: line makes no issue carry-able: c0092 listed, its raft: line untouched, its design rewritten
+			local listed = gate(
+				43,
+				with({
+					["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0092]\n---\n",
+					["pickman/.tracker/issues/c0092/c0092.md"] = prepared("c0092", "bystander-thing")
+						.. "\nrewritten\n",
+				})
+			)
+			t.expect(listed.code).toBe(4)
+			t.expect(has(listed.stdout, "c0092/c0092.md")).toBe(true)
 			t.expect(has(fakecli.log(h), "realgh pr merge")).toBe(false)
 			-- merges: the raft's own document and its members' raft: lines, pinned to the head
 			local sha = fakecli.pullRequest(h, 34, own)

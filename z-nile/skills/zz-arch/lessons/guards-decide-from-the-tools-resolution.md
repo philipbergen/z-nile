@@ -11,3 +11,5 @@ A guard in front of a command-line tool that parses the arguments itself misses 
 **How to apply:** route every invocation that could reach the action (the command word, any `-c`/`--config-env`, any alias, plumbing) to the decision; decide from the dry run; an allow-list of commands beats a deny-list of endpoints; spec one case per form, run for real in a fixture.
 
 A guard that parses a tool's arguments itself must know every option that takes a value, or refuse the ones it doesn't (R0052 code review 001 F4): the `gh api` wrapper took `--jq`'s and `-H`'s values for the endpoint, so a merge passed as a comment. And judge what the tool will do, not only what it adds (F3): a push whose new commits were tracker state still rewound `main`; check that the result descends from the fresh main.
+
+A guard that reads a command's words can't judge content the tool reads itself (R0052 code review 002 F2): `gh api graphql -F query=@file` and `--input <file>` carried a merge mutation past a wrapper that searched the inline query. Refuse those forms (`@file`, `@-`, `--input`, stdin) rather than reading them on the tool's behalf.

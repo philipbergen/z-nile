@@ -7,6 +7,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local wrapper = require("@znile/engine/wrapper")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local function has(text: string, needle: string): boolean
@@ -88,6 +89,20 @@ return t.spec("c0117 the agent's git never rewinds main, and its gh api reads it
 		t.expect(ok.ok).toBe(true)
 	end)
 
+	it(
+		"decidePush refuses a forced update of main on its own, whatever the check says (code review 002 F4)",
+		function()
+			local d = wrapper.decidePush({
+				updates = { { flag = "+", src = "refs/heads/feat", dst = "refs/heads/main" } },
+				check = function(_src: string): string?
+					return nil
+				end,
+			})
+			t.expect(d.ok).toBe(false)
+			t.expect(has(d.why or "", "a forced update")).toBe(true)
+		end
+	)
+
 	it("z-nile/bin/gh never takes an option's value for gh api's endpoint (F4)", function()
 		local shim = `{TOP}/z-nile/bin/gh`
 		local env = { ZN_REAL_GH = `{bin}/gh` }
@@ -112,6 +127,10 @@ return t.spec("c0117 the agent's git never rewinds main, and its gh api reads it
 				{ "api", "-H", "repos/o/r/issues/1/comments", "--method", "POST", "repos/o/r/merges" },
 				{ "api", "--jq=.x", "-XPOST", "repos/o/r/merges", "-f", "base=main" },
 				{ "api", "--frobnicate", "repos/o/r/issues/1/comments", "-f", "body=x" },
+				-- code review 002 F2: a GraphQL body gh reads itself, which the wrapper can't judge
+				{ "api", "graphql", "-F", "query=@q.graphql" },
+				{ "api", "graphql", "--input", "body.json" },
+				{ "api", "graphql", "-f", "query={viewer{login}}", "-F", "owner=@-" },
 			}
 		do
 			local r = fixture.exec(repo, shim, form, { env = env })
@@ -125,6 +144,11 @@ return t.spec("c0117 the agent's git never rewinds main, and its gh api reads it
 			fixture.exec(repo, shim, { "api", "-X", "POST", "repos/o/r/issues/1/comments", "-f", "body=x" }, {
 				env = env,
 			}).ok
+		)
+			.toBe(true)
+		-- an inline GraphQL read still passes
+		t.expect(
+			fixture.exec(repo, shim, { "api", "graphql", "-f", "query={viewer{login}}" }, { env = env }).ok
 		)
 			.toBe(true)
 		t.expect(has(fs.readFile(log), "gh api --jq .title repos/o/r/pulls/1")).toBe(true)
