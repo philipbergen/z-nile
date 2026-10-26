@@ -1,7 +1,10 @@
 --!strict
--- c0154: the spec runner schedules files slowest first from the durations it recorded, and reports exactly as before. The pure rules (z-nile/tests/lib/schedule.luau) are checked on fixed inputs, the gain
--- on the 177 durations of a real z-nile run (2026-10-25: path order 213.5 s, slowest first 162.6 s, on 8 lanes), and
--- the runner itself on a copy under .cache/c0154-runner, with spec files that log the order they start in.
+-- c0154: the spec runner schedules files slowest first from the durations it recorded, and reports exactly as before.
+-- The pure rules (z-nile/tests/lib/schedule.luau) are checked on fixed inputs, the gain on the 177 durations of a real
+-- z-nile run (2026-10-25: path order 213.5 s, slowest first 162.6 s, on 8 lanes), and the runner itself on a copy under
+-- .cache/c0154-runner. The runner cases never compare measured times: the record they schedule by is written by hand,
+-- and a file that must hold its lane holds it for 3 s, far above a loaded machine's start-up jitter (design review 001
+-- F2). Which files start first is read from each fixture spec's own start time.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local schedule = require("@tests/lib/schedule")
@@ -10,7 +13,11 @@ local t = require("@tests/lib/t")
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{here}/.cache/c0154-runner`
+local home = `{base}/z-nile`
+local RECORD = `{home}/.cache/spec-durations.tsv`
+local SPANS = `{home}/.cache/spans`
 local R = "req" .. "uire" -- keeps literal require text out of this file (the graph scanner)
+local DT = "datetime"
 
 local function write(rel: string, text: string)
 	local path = `{base}/{rel}`
@@ -21,9 +28,9 @@ local function copy(rel: string)
 	fs.writeDir(string.match(`{base}/{rel}`, "^(.*)/[^/]+$") :: string)
 	t.expect(process.exec("cp", { "-R", `{root}/{rel}`, `{base}/{rel}` }).ok).toBe(true)
 end
--- a spec that records when it starts and ends in .cache/spans/<name> ("<start ms> <end ms>"), waiting `secs` between
-local DT = "datetime"
-local function sleeper(name: string, secs: number): string
+-- a spec that records when its case starts and ends in .cache/spans/<name>, holding its lane `secs` seconds, or
+-- none when .cache/fast exists (the in-process runs, whose order doesn't depend on time)
+local function sleeper(name: string, secs: number, fails: boolean?): string
 	return table.concat({
 		"--!strict",
 		`local fs = {R}("@lune/fs")`,
@@ -33,76 +40,118 @@ local function sleeper(name: string, secs: number): string
 		`return t.spec("{name}", function(it)`,
 		'\tit("records its span", function()',
 		"\t\tlocal s = dt.now().unixTimestampMillis",
-		`\t\ttask.wait({secs})`,
+		`\t\ttask.wait(if fs.isFile(".cache/fast") then 0 else {secs})`,
 		'\t\tfs.writeDir(".cache/spans")',
-		`\t\tfs.writeFile(".cache/spans/{name}", s .. " " .. dt.now().unixTimestampMillis)`,
-		"\t\tt.expect(true).toBe(true)",
+		`\t\tfs.writeFile(".cache/spans/{name}-" .. s .. "-" .. math.random(1, 1e9), s .. " " .. dt.now().unixTimestampMillis)`,
+		`\t\tt.expect({if fails then "1" else "2"}).toBe(2)`,
 		"\tend)",
 		"end)",
 		"",
 	}, "\n")
 end
-local function run(env: { [string]: string }?, args: { string }?): (boolean, string)
-	local argv = { "run", "tests/run" }
-	if args then
-		table.insert(argv, "--")
-		for _, a in args do
-			table.insert(argv, a)
-		end
-	end
-	local r = process.exec("lune", argv, { cwd = `{base}/z-nile`, env = env })
-	return r.ok, r.stdout .. r.stderr
-end
-local SPANS = `{base}/z-nile/.cache/spans`
-local function clearStarted()
+local function run(args: { string }, fast: boolean?): (boolean, string)
 	if fs.isDir(SPANS) then
 		fs.removeDir(SPANS)
 	end
+	if fast then
+		fs.writeFile(`{home}/.cache/fast`, "")
+	elseif fs.isFile(`{home}/.cache/fast`) then
+		fs.removeFile(`{home}/.cache/fast`)
+	end
+	local argv = { "run", "tests/run", "--" }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	local r = process.exec("lune", argv, { cwd = home, env = { PICKMAN_JOBS = "" } })
+	return r.ok, r.stdout .. r.stderr
 end
-local function spans(): { { name: string, from: number, to: number } }
+-- the names of the fixture specs in the order their cases started (one entry per run of a file)
+local function starts(): { string }
 	local out = {}
 	for _, n in fs.readDir(SPANS) do
-		local a, b = string.match(fs.readFile(`{SPANS}/{n}`), "^(%d+) (%d+)$")
-		table.insert(out, { name = n, from = tonumber(a) :: number, to = tonumber(b) :: number })
+		local name, at = string.match(n, "^(.-)%-(%d+)%-%d+$")
+		table.insert(out, { name = name :: string, at = tonumber(at) :: number })
 	end
 	table.sort(out, function(x, y)
-		return if x.from ~= y.from then x.from < y.from else x.name < y.name
+		return if x.at ~= y.at then x.at < y.at else x.name < y.name
 	end)
-	return out
-end
--- the names of the first `k` files to start, sorted by name (two lanes start two files at once)
-local function firstStarted(k: number): { string }
-	local out = {}
-	for i, sp in spans() do
-		if i <= k then
-			table.insert(out, sp.name)
-		end
+	local names = {}
+	for _, e in out do
+		table.insert(names, e.name)
 	end
+	return names
+end
+-- the first `k` of starts(), sorted by name (two lanes start two files at once)
+local function first(k: number): { string }
+	local out = table.move(starts(), 1, k, 1, {})
 	table.sort(out)
 	return out
 end
--- the 177 durations of a z-nile run on main (2026-10-25, the measurement in c0154's Verification log), in path order
+local function names(files: { string }, order: { number }): { string }
+	local out = {}
+	for _, i in order do
+		table.insert(out, files[i])
+	end
+	return out
+end
+
+-- the 177 durations of a z-nile run on main (2026-10-25, the measurement in c0154's Verification log)
 local REAL = require("./durations")
 
 return t.spec("c0154 the runner schedules slowest first", function(it)
-	it("orders unrecorded files first, then recorded ones slowest first, ties by path", function()
-		local d = { ["b.spec"] = 5, ["c.spec"] = 50, ["d.spec"] = 5, ["e.spec"] = 0.5 }
-		local order = schedule.order({ "a.spec", "b.spec", "c.spec", "d.spec", "e.spec", "f.spec" }, d)
-		t.expect(order).toEqual({ "a.spec", "f.spec", "c.spec", "b.spec", "d.spec", "e.spec" })
-		-- no record: path order, as before c0154
-		t.expect(schedule.order({ "b", "a", "c" }, {})).toEqual({ "a", "b", "c" })
-	end)
+	it(
+		"orders unrecorded files first, then recorded ones slowest first, ties by path, by position",
+		function()
+			local d = { ["b.spec"] = 5, ["c.spec"] = 50, ["d.spec"] = 5, ["e.spec"] = 0.5 }
+			local files = { "f.spec", "e.spec", "d.spec", "c.spec", "b.spec", "a.spec" }
+			t.expect(names(files, schedule.order(files, d))).toEqual({
+				"a.spec",
+				"f.spec",
+				"c.spec",
+				"b.spec",
+				"d.spec",
+				"e.spec",
+			})
+			-- no record: path order, as before c0154
+			t.expect(names({ "b", "a", "c" }, schedule.order({ "b", "a", "c" }, {})))
+				.toEqual({ "a", "b", "c" })
+			-- twelve recorded files at one duration, given in reverse path order: path order (design review 001 F6)
+			local tied: { string } = {}
+			local same: schedule.Durations = {}
+			for i = 12, 1, -1 do
+				local f = string.format("t%02d", i)
+				table.insert(tied, f)
+				same[f] = 7
+			end
+			local want = table.clone(tied)
+			table.sort(want)
+			t.expect(names(tied, schedule.order(tied, same))).toEqual(want)
+			-- a file listed twice keeps both positions (design review 001 F1)
+			t.expect(schedule.order({ "x", "x" }, { x = 1 })).toEqual({ 1, 2 })
+		end
+	)
 
-	it("reads and writes the record, and refuses a malformed one whole", function()
-		local text = schedule.render(
-			{ ["a.spec"] = 1, ["b.spec"] = 2 },
-			{ ["b.spec"] = 3.456, ["c.spec"] = 0.1 }
-		)
-		t.expect(text).toBe("1.00\ta.spec\n3.46\tb.spec\n0.10\tc.spec\n")
-		t.expect(schedule.parse(text)).toEqual({ ["a.spec"] = 1, ["b.spec"] = 3.46, ["c.spec"] = 0.1 })
-		t.expect(schedule.parse("1.00\ta.spec\ngarbage\n")).toBe(nil)
-		t.expect(schedule.parse("x\ta.spec\n")).toBe(nil)
-	end)
+	it(
+		"reads and writes the record, drops gone files on a full run, and refuses a malformed or empty one",
+		function()
+			local text = schedule.render(
+				{ ["a.spec"] = 1, ["b.spec"] = 2 },
+				{ ["b.spec"] = 3.456, ["c.spec"] = 0.1 }
+			)
+			t.expect(text).toBe("1.00\ta.spec\n3.46\tb.spec\n0.10\tc.spec\n")
+			t.expect(schedule.parse(text)).toEqual({ ["a.spec"] = 1, ["b.spec"] = 3.46, ["c.spec"] = 0.1 })
+			t.expect(
+				schedule.render(
+					{ ["a.spec"] = 1, ["gone.spec"] = 9 },
+					{ ["b.spec"] = 2 },
+					{ ["a.spec"] = true }
+				)
+			).toBe("1.00\ta.spec\n2.00\tb.spec\n")
+			t.expect(schedule.parse("1.00\ta.spec\ngarbage\n")).toBe(nil)
+			t.expect(schedule.parse("x\ta.spec\n")).toBe(nil)
+			t.expect(schedule.parse("")).toBe(nil)
+		end
+	)
 
 	it("cuts a real run's wall time on 8 lanes by at least a fifth", function()
 		local files = {}
@@ -110,14 +159,18 @@ return t.spec("c0154 the runner schedules slowest first", function(it)
 			table.insert(files, path)
 		end
 		table.sort(files)
-		local before = schedule.makespan(files, REAL, 8)
-		local after = schedule.makespan(schedule.order(files, REAL), REAL, 8)
+		local pathOrder = {}
+		for i in files do
+			table.insert(pathOrder, i)
+		end
+		local before = schedule.makespan(files, pathOrder, REAL, 8)
+		local after = schedule.makespan(files, schedule.order(files, REAL), REAL, 8)
 		t.expect(before > 200).toBe(true)
 		t.expect(after <= before * 0.8).toBe(true)
 	end)
 
 	it(
-		"the runner starts the slowest recorded file first, records every run, and reports in path order",
+		"the runner starts the slowest recorded file first and the unrecorded before it, and records every run",
 		function()
 			if fs.isDir(base) then
 				fs.removeDir(base)
@@ -128,84 +181,82 @@ return t.spec("c0154 the runner schedules slowest first", function(it)
 				copy(rel)
 			end
 			write("z-nile/.tracker/.gitkeep", "")
-			write("z-nile/tests/a.spec.luau", sleeper("a", 0.1))
-			write("z-nile/tests/b.spec.luau", sleeper("b", 0.1))
-			write("z-nile/tests/c.spec.luau", sleeper("c", 0.6))
-			-- first run: no record, path order; two lanes (an idle machine of 2 CPUs)
-			local ok1, out1 = run({ PICKMAN_JOBS = "" }, { "--jobs", "2" })
-			if not ok1 then
-				print(out1)
+			fs.writeDir(`{home}/.cache`)
+			for _, n in { "a", "b", "c", "n" } do
+				write(`z-nile/tests/{n}.spec.luau`, sleeper(n, 3))
 			end
+			-- no record: path order on two lanes; a and b hold their lanes, so c and n wait
+			local ok1, out1 = run({ "--jobs", "2" })
 			t.expect(ok1).toBe(true)
-			t.expect(firstStarted(2)).toEqual({ "a", "b" })
-			local rec =
-				schedule.parse(fs.readFile(`{base}/z-nile/.cache/spec-durations.tsv`)) :: schedule.Durations
-			t.expect(rec["tests/c.spec.luau"] > rec["tests/a.spec.luau"]).toBe(true)
-			t.expect(rec["tests/b.spec.luau"] ~= nil).toBe(true)
-			-- second run: the recorded slowest (c) starts first, and a new file with no record before it
-			write("z-nile/tests/n.spec.luau", sleeper("n", 0.1))
-			clearStarted()
-			local ok2, out2 = run(nil, { "--jobs", "1" })
-			t.expect(ok2).toBe(true)
-			-- --jobs 1 runs in-process in path order (unchanged); with lanes the schedule applies
-			t.expect(#spans()).toBe(4)
-			t.expect(firstStarted(1)).toEqual({ "a" })
-			clearStarted()
-			local ok3, out3 = run(nil, { "--jobs", "2" })
-			t.expect(ok3).toBe(true)
-			t.expect(firstStarted(2)).toEqual({ "c", "n" })
-			-- the report is in path order whatever the schedule
-			local ia, ib = string.find(out3, "4 passed, 0 failed, 4 spec files", 1, true)
-			t.expect(ia ~= nil and ib ~= nil).toBe(true)
-			t.expect((string.find(out1 .. out2, "FAIL", 1, true))).toBe(nil)
-			-- a run that names a fixture's spec file (a spec testing the runner) records only the home's own tests/ files
-			write("z-nile/.cache/c0154-nested/x.spec.luau", sleeper("x", 0.1))
-			local ok4, _ = run(
-				{ PICKMAN_JOBS = "" },
-				{ "--jobs", "2", "tests/a.spec.luau", ".cache/c0154-nested/x.spec.luau" }
+			t.expect(first(2)).toEqual({ "a", "b" })
+			local rec = schedule.parse(fs.readFile(RECORD)) :: schedule.Durations
+			for _, n in { "a", "b", "c", "n" } do
+				t.expect(rec[`tests/{n}.spec.luau`] ~= nil).toBe(true)
+			end
+			-- a record written by hand (never a measured one): c slowest, a and b fast, n not recorded
+			fs.writeFile(
+				RECORD,
+				"1.00\ttests/a.spec.luau\n1.00\ttests/b.spec.luau\n100.00\ttests/c.spec.luau\n"
 			)
-			t.expect(ok4).toBe(true)
-			local rec4 =
-				schedule.parse(fs.readFile(`{base}/z-nile/.cache/spec-durations.tsv`)) :: schedule.Durations
-			t.expect(rec4[".cache/c0154-nested/x.spec.luau"]).toBe(nil)
-			t.expect(rec4["tests/a.spec.luau"] ~= nil).toBe(true)
+			local ok2, out2 = run({ "--jobs", "2" })
+			t.expect(ok2).toBe(true)
+			t.expect(first(2)).toEqual({ "c", "n" })
+			-- the run recorded every file over the hand-written record
+			local rec2 = schedule.parse(fs.readFile(RECORD)) :: schedule.Durations
+			t.expect(rec2["tests/n.spec.luau"] ~= nil).toBe(true)
+			t.expect(rec2["tests/c.spec.luau"] < 100).toBe(true)
+			-- --jobs 1 runs in-process in path order and neither reads nor writes the record
+			local before = fs.readFile(RECORD)
+			local ok3, _ = run({ "--jobs", "1" }, true)
+			t.expect(ok3).toBe(true)
+			t.expect(starts()).toEqual({ "a", "b", "c", "n" })
+			t.expect(fs.readFile(RECORD)).toBe(before)
+			t.expect((string.find(out1 .. out2, "FAIL", 1, true))).toBe(nil)
 		end
 	)
 
-	it("a malformed record runs in path order and is replaced by a good one", function()
-		write("z-nile/.cache/spec-durations.tsv", "garbage\n")
-		clearStarted()
-		local ok, _ = run({ PICKMAN_JOBS = "" }, { "--jobs", "2" })
+	it("a file listed twice runs twice and both outcomes are reported", function()
+		local ok, out = run({ "--jobs", "2", "tests/a.spec.luau", "tests/a.spec.luau" }, true)
 		t.expect(ok).toBe(true)
-		t.expect(firstStarted(2)).toEqual({ "a", "b" })
-		t.expect(schedule.parse(fs.readFile(`{base}/z-nile/.cache/spec-durations.tsv`)) ~= nil).toBe(true)
+		t.expect((string.find(out, "2 passed, 0 failed, 2 spec files", 1, true)) ~= nil).toBe(true)
+		t.expect(#starts()).toBe(2)
 	end)
 
+	it("a run naming only a fixture's files leaves the record byte for byte", function()
+		local before = fs.readFile(RECORD)
+		write("z-nile/.cache/c0154-nested/x.spec.luau", sleeper("x", 0))
+		local ok, _ =
+			run({ "--jobs", "2", ".cache/c0154-nested/x.spec.luau", ".cache/c0154-nested/x.spec.luau" })
+		t.expect(ok).toBe(true)
+		t.expect(fs.readFile(RECORD)).toBe(before)
+	end)
+
+	it(
+		"a full run drops the record's lines for files that are gone; a malformed record runs in path order",
+		function()
+			fs.writeFile(RECORD, fs.readFile(RECORD) .. "5.00\ttests/gone.spec.luau\n")
+			local ok1, _ = run({}, true)
+			t.expect(ok1).toBe(true)
+			t.expect(string.find(fs.readFile(RECORD), "gone.spec", 1, true)).toBe(nil)
+			fs.writeFile(RECORD, "garbage\n")
+			local ok2, _ = run({ "--jobs", "2" })
+			t.expect(ok2).toBe(true)
+			t.expect(first(2)).toEqual({ "a", "b" })
+			t.expect(schedule.parse(fs.readFile(RECORD)) ~= nil).toBe(true)
+		end
+	)
+
 	it("reports in path order whatever order the files ran and finished in", function()
-		for _, n in fs.readDir(`{base}/z-nile/tests`) do
+		for _, n in fs.readDir(`{home}/tests`) do
 			if string.match(n, "%.spec%.luau$") then
-				fs.removeFile(`{base}/z-nile/tests/{n}`)
+				fs.removeFile(`{home}/tests/{n}`)
 			end
 		end
-		local function failing(name: string, secs: number): string
-			return table.concat({
-				"--!strict",
-				`local task = {R}("@lune/task")`,
-				`local t = {R}("@tests/lib/t")`,
-				`return t.spec("{name}", function(it)`,
-				'\tit("fails", function()',
-				`\t\ttask.wait({secs})`,
-				"\t\tt.expect(1).toBe(2)",
-				"\tend)",
-				"end)",
-				"",
-			}, "\n")
-		end
-		-- f1 comes first by path but is recorded fast and runs slow; f2 is recorded slow (starts first) and ends first
-		write("z-nile/tests/f1.spec.luau", failing("f1", 1.0))
-		write("z-nile/tests/f2.spec.luau", failing("f2", 0))
-		write("z-nile/.cache/spec-durations.tsv", "1.00\ttests/f1.spec.luau\n100.00\ttests/f2.spec.luau\n")
-		local ok, out = run({ PICKMAN_JOBS = "" }, { "--jobs", "2" })
+		-- f1 comes first by path but is recorded fast and holds its lane; f2 is recorded slow (starts first), ends at once
+		write("z-nile/tests/f1.spec.luau", sleeper("f1", 3, true))
+		write("z-nile/tests/f2.spec.luau", sleeper("f2", 0, true))
+		fs.writeFile(RECORD, "1.00\ttests/f1.spec.luau\n100.00\ttests/f2.spec.luau\n")
+		local ok, out = run({ "--jobs", "2" })
 		t.expect(ok).toBe(false)
 		local i1 = string.find(out, "FAIL tests/f1.spec.luau", 1, true)
 		local i2 = string.find(out, "FAIL tests/f2.spec.luau", 1, true)

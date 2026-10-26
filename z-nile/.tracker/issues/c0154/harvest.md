@@ -1,0 +1,7 @@
+- design-review-001 F1: zz-arch/reorder-by-position
+- design-review-001 F2: zz-test/timing-margins-above-jitter
+- design-review-001 F3: z-design/instructions-runnable-where-they-run
+- design-review-001 F4: z-design/instructions-runnable-where-they-run
+- design-review-001 F5: one-off: a cache file shared by nested runs needs an atomic write and no rewrite from an empty read
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: z-design/decided-guesses-rewrite-their-body
