@@ -413,7 +413,7 @@ function audit.run(root: string): { Problem }
 	end
 	-- c0139: a file under a root or a skills folder holding a whole merge conflict stops every writing command, so the
 	-- gate (which runs audit) reports it before it can land. Only in a git checkout (audit also runs without one).
-	if fs.isDir(`{root}/.git`) or fs.isFile(`{root}/.git`) then
+	if not conflicts.outsideRepo(root) then -- the guard's own test (c0139 design review 003 F1)
 		-- an unreadable registry is reported above; the scan is skipped then, never widened to the repository
 		local folders = conflicts.folders(root)
 		if folders then

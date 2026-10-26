@@ -5,6 +5,7 @@
 -- `>>>>>>> ` line, each at the start of a line), stops the command before it writes anything, naming each path to
 -- resolve and how. Reads only. The folders come from the registry (`conflicts.folders`), one list for every caller.
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local projects = require("./projects")
 local sh = require("../lib/sh")
 local skills = require("./skills")
@@ -92,14 +93,30 @@ function conflicts.marked(top: string, folders: { string }): ({ string }?, strin
 	return out, nil
 end
 
+-- the git location variables a caller can hand down, any of which points git at a repository elsewhere
+conflicts.GIT_VARIABLES = { "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE" }
+
+-- is `top` outside any git checkout? Only when it has no `.git` entry (a folder, or a worktree's `gitdir:` file) and
+-- no git location variable is inherited (c0139 design review 003 F1). The condition is tested on disk and in the
+-- environment, never read from git's wording: git says "not a git repository" for a corrupt HEAD, a pruned worktree,
+-- an unreadable `.git` or a stray GIT_DIR too, and every one of those refuses. audit's scan uses the same test.
+function conflicts.outsideRepo(top: string): boolean
+	if fs.isDir(`{top}/.git`) or fs.isFile(`{top}/.git`) then
+		return false
+	end
+	for _, name in conflicts.GIT_VARIABLES do
+		if process.env[name] ~= nil then
+			return false
+		end
+	end
+	return true
+end
+
 -- why `tool` must not run in the checkout at `top`, or nil: unmerged paths first, then whole conflicts in the working
 -- tree under the registry's folders; a registry that can't be read refuses too (fail closed)
 function conflicts.refusal(top: string, tool: string): string?
-	-- outside any git repository nothing can be mid-merge: git saying "not a git repository" is that explicit answer
-	-- (migrate runs in such a tree); any other failure of this read refuses below
-	local inside = sh.run("git", { "-C", top, "rev-parse", "--is-inside-work-tree" })
-	if not inside.ok and string.find(inside.stderr, "not a git repository", 1, true) then
-		return nil
+	if conflicts.outsideRepo(top) then
+		return nil -- nothing can be mid-merge, and there is no checkout to guard (migrate runs in such a tree)
 	end
 	local u, uWhy = conflicts.unmerged(top)
 	if not u then
