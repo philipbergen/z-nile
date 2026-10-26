@@ -389,11 +389,13 @@ return t.spec("f0126 parts", function(it)
 	it(
 		"View.wallColor: the flash wins, then a marked wall's gold, then the edible green, else blue",
 		function()
-			local GOLD, GREEN, BLUE, WHITE =
-				{ r = 255, g = 191, b = 0 },
-				{ r = 0, g = 152, b = 0 },
-				{ r = 33, g = 33, b = 222 },
-				{ r = 255, g = 255, b = 255 }
+			-- f0109's colours are read from View (f0109 owns them); only the marks' gold is f0126's
+			local function copy(c: any): any
+				return { r = c.r, g = c.g, b = c.b }
+			end
+			local GOLD = { r = 255, g = 215, b = 0 }
+			local GREEN, BLUE, WHITE =
+				copy((View :: any).WALL_EDIBLE_COLOR), copy((View :: any).WALL_COLOR), copy(View.WHITE)
 			local wc = (View :: any).wallColor
 			t.expect(wc(false, false, true)).toEqual(GOLD)
 			t.expect(wc(false, true, true)).toEqual(GOLD) -- the user: gold while the walls are green
@@ -403,6 +405,45 @@ return t.spec("f0126 parts", function(it)
 			t.expect(wc(false, false, false)).toEqual(BLUE)
 			t.expect(wc(false, true)).toEqual(GREEN) -- no third argument: f0109's two-argument call, as before
 			t.expect(wc(false, false)).toEqual(BLUE)
+		end
+	)
+
+	it(
+		"the marks' gold stands at least 30 (CIE76) from every ghost and ghost look, and from the walls' blue and green",
+		function()
+			-- f0109's measure (its prep's request, 2026-10-26): sRGB to CIE Lab (D65), Euclidean distance
+			local function lin(v: number): number
+				local c = v / 255
+				return if c <= 0.03928 then c / 12.92 else ((c + 0.055) / 1.055) ^ 2.4
+			end
+			local function lab(c: any): (number, number, number)
+				local r, g, b = lin(c.r), lin(c.g), lin(c.b)
+				local x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+				local y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+				local z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+				local function f(v: number): number
+					return if v > 0.008856 then v ^ (1 / 3) else 7.787 * v + 16 / 116
+				end
+				return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+			end
+			local function distance(a: any, b: any): number
+				local l1, a1, b1 = lab(a)
+				local l2, a2, b2 = lab(b)
+				return math.sqrt((l1 - l2) ^ 2 + (a1 - a2) ^ 2 + (b1 - b2) ^ 2)
+			end
+			local gold = (View :: any).wallColor(false, false, true)
+			-- the user (2026-10-26): a brighter gold, so that every ghost clears f0109's bar, Clyde's orange included
+			local n = 0
+			for _, c in View.GHOST_COLORS do
+				n += 1
+				t.expect(distance(gold, c) >= 30).toBe(true)
+			end
+			t.expect(n >= 4).toBe(true)
+			-- and the looks a ghost takes on: frightened blue and the blink's white
+			t.expect(distance(gold, View.FRIGHTENED_COLOR) >= 30).toBe(true)
+			t.expect(distance(gold, View.WHITE) >= 30).toBe(true)
+			t.expect(distance(gold, (View :: any).WALL_COLOR) >= 30).toBe(true)
+			t.expect(distance(gold, (View :: any).WALL_EDIBLE_COLOR) >= 30).toBe(true)
 		end
 	)
 end)
