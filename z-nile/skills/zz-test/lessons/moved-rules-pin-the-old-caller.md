@@ -9,3 +9,5 @@ Moving a rule into a shared module so a new spec can test it has two traps: the 
 **Why:** c0141 design review 001 F2, F3: the scanner moved from c0120's check-paths spec to `z-nile/tests/lib/`; AC2 passed with c0120's spec untouched, and the library sat outside the promoted folder.
 
 **How to apply:** put the module in the promoted folder beside its spec (as c0120's `rewrites.luau` and `finished.luau` are), name it on the Overrides line, and pin the old caller: it requires the module, calls its entry point, and defines none of the moved functions.
+
+c0141 design review 002 F2: a text pin on the old caller is read after stripping comments, and refuses the moved function in every spelling (`local function x(`, `local x = function`, `x = function`), or a comment naming the module's call passes it.
