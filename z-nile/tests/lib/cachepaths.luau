@@ -125,9 +125,6 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 	},
-	["z-nile/engine/mergecheck.luau"] = {
-		["local wt = `{top}/.cache/merge-check-{string.sub(commit, 1, 12)}`"] = "c0152's trial merge: a throwaway detached worktree git creates (`git worktree add` refuses an existing path, and one left over is removed first with `git worktree remove`), removed with its metadata before the verdict; nothing is written through it",
-	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
 	},

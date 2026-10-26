@@ -1,0 +1,41 @@
+# c0152: the gate stages that read tracker files, in one place. `./zn merge-check` reads this file from the would-be
+# merged tree and runs every `run` line there (`run <home> <spec, from the home>`); a listed spec missing from that tree,
+# or no `run` line at all, is a no. A `skip` line names a spec the search below finds that reads no item file a
+# tracker-only commit can change, and why. c0152's promoted list spec runs the search and requires every hit here.
+# Search (the spec holds it): git grep -lE '<pattern>' -- 'z-nile/tests/**/*.spec.luau' 'pickman/tests/**/*.spec.luau'
+run z-nile tests/acceptance/c0082/real-tree.spec.luau -- ./zn audit over the tree: ids, documents, counter, moves
+run z-nile tests/acceptance/c0120/check-paths.spec.luau -- every unfinished check.sh's literal paths exist
+run z-nile tests/acceptance/c0114/classified.spec.luau -- slugs unique, kinds per root, every unfinished check.sh lists
+run z-nile tests/acceptance/c0114/finished.spec.luau -- the live item ids drive the finished rewrites
+run z-nile tests/acceptance/c0042/cli.spec.luau -- the board over the real items and spend
+run z-nile tests/acceptance/c0043/rounds.spec.luau -- metrics over the real items and every raft folder
+run z-nile tests/acceptance/c0116/retired.spec.luau -- a copy of the tree: classified, rounds, lessons and audit after a retire
+run z-nile tests/acceptance/c0115/lessons.spec.luau -- every harvest.md under the roots
+run z-nile tests/acceptance/c0119/scope-lessons.spec.luau -- lessons.load over every item folder
+run z-nile tests/acceptance/c0120/finished.spec.luau -- every done check.sh's literal paths exist
+run z-nile tests/acceptance/c0120/layout.spec.luau -- audit.scan of the tree: promoted spec folders match their items
+run z-nile tests/acceptance/c0120/old-roots.spec.luau -- audit.leftovers over the tree
+run z-nile tests/acceptance/c0073/board-stats.spec.luau -- board.collect over the real items
+run z-nile tests/tooling/board.spec.luau -- the board over the real tracker
+run z-nile tests/tooling/repo-fence.spec.luau -- every check.sh under every root: no guard switched off
+skip pickman/tests/acceptance/c0063/narrowed.spec.luau -- one fixed done item's check.sh (f0031), which nothing moves
+skip pickman/tests/acceptance/c0103/narrowed.spec.luau -- one fixed done item's check.sh (f0014), which nothing moves
+skip pickman/tests/acceptance/f0054/docs.spec.luau -- the root's game-design.md, not item state (a change to it is not tracker-only)
+skip pickman/tests/meta/architecture.spec.luau -- the root's architecture.md, not item state
+skip z-nile/tests/acceptance/c0060/fixture.spec.luau -- only that the fixture helper refuses the real checkout
+skip z-nile/tests/acceptance/c0081/renamed.spec.luau -- the compaction map, not item state
+skip z-nile/tests/acceptance/c0114/gate-cover.spec.luau -- the registry, check.sh scripts and workflows; its scan is a copy with its own items
+skip z-nile/tests/acceptance/c0114/guards.spec.luau -- asks git about guarded paths; reads no item
+skip z-nile/tests/acceptance/c0114/layout.spec.luau -- `zn find` of fixed ids (c0114, c9999) from the folder listing
+skip z-nile/tests/acceptance/c0114/roots-cli.spec.luau -- a fixture seeded with the root's architecture.md only
+skip z-nile/tests/acceptance/c0115/absence.spec.luau -- git ls-files with every tracker path dropped
+skip z-nile/tests/acceptance/c0115/docs.spec.luau -- skills and docs only
+skip z-nile/tests/acceptance/c0115/layout.spec.luau -- skill folders and links only
+skip z-nile/tests/acceptance/c0115/prompt.spec.luau -- skill lessons; its items are a fixture's
+skip z-nile/tests/acceptance/c0115/readme.spec.luau -- the README and skills only
+skip z-nile/tests/acceptance/c0115/trusted-base.spec.luau -- `zn find c0115`, a done item nothing moves
+skip z-nile/tests/acceptance/c0116/docs.spec.luau -- skills, README, AGENTS.md and the engine only
+skip z-nile/tests/acceptance/c0116/promote.spec.luau -- a clone emptied of every item, then its own
+skip z-nile/tests/acceptance/c0120/gate-homes.spec.luau -- engine.copy, which skips every tracker folder
+skip z-nile/tests/acceptance/c0120/graph-homes.spec.luau -- the require graph at the top; reads no item
+skip z-nile/tests/acceptance/c0120/registry-home.spec.luau -- the registry's roots; reads no item
