@@ -34,6 +34,8 @@ local MODEL: any = {
 		f0021 = "f0021",
 		f0022 = "f0022",
 		f0031 = "f0031",
+		f0023 = "f0023",
+		f0024 = "f0024",
 		c0099 = "c0099",
 	},
 	rafts = {
@@ -78,6 +80,30 @@ local MODEL: any = {
 			dispatch = {
 				step = "zz-review",
 				outcome = "running",
+				model = "m",
+				questions = false,
+				follows = "R0020",
+			},
+		},
+		-- an own step lost, then failed, after the chain followed R0020: every own outcome but running follows
+		-- (design review 005 F2)
+		{
+			id = "f0023",
+			raft = "R0020",
+			dispatch = {
+				step = "zz-review",
+				outcome = "lost",
+				model = "m",
+				questions = false,
+				follows = "R0020",
+			},
+		},
+		{
+			id = "f0024",
+			raft = "R0020",
+			dispatch = {
+				step = "zz-review",
+				outcome = "failed",
 				model = "m",
 				questions = false,
 				follows = "R0020",
@@ -174,6 +200,11 @@ return t.spec("c0121 server rules", function(it)
 			-- an own step running: stop the card's own run, never the raft's (design review 004 F1)
 			t.expect((serve.plan(MODEL, "stop", "f0022")))
 				.toEqual({ kind = "run", args = { "dispatch", "stop", "f0022" }, wait = true })
+			-- an own run lost or failed: the click follows to the raft's run (design review 005 F2)
+			t.expect((serve.plan(MODEL, "stop", "f0023")))
+				.toEqual({ kind = "run", args = { "dispatch", "stop", "R0020" }, wait = true })
+			t.expect((serve.plan(MODEL, "stop", "f0024")))
+				.toEqual({ kind = "run", args = { "dispatch", "stop", "R0020" }, wait = true })
 			-- retry keeps the card's own id: its chain follows by itself
 			t.expect((serve.plan(MODEL, "retry", "f0021")))
 				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0021" }, wait = false })
