@@ -67,7 +67,7 @@ local function world(): World
 			end,
 			UpdateAsync = function(_: any, key: string, transform: (any) -> any): any
 				s.updates += 1
-				table.insert(w.log, `update:{kind}`)
+				table.insert(w.log, `update:{kind}:{name}`)
 				local nextValue = transform(s.data[key])
 				if nextValue ~= nil then
 					s.data[key] = nextValue
@@ -277,14 +277,23 @@ return t.spec("f0024 module shape", function(it)
 			table.insert(names, `{s.name}|{s.scope}`)
 		end
 		table.sort(names)
-		t.expect(names).toEqual({
+		-- c0128: the six per-player stores, and besides them only d0124's top-N list of runs
+		local perPlayer = {
 			"HiscoreEntries|all",
 			"HiscoreEntries|day:2026-10-16",
 			"HiscoreEntries|week:2026-10-12",
 			"Hiscores|all",
 			"Hiscores|day:2026-10-16",
 			"Hiscores|week:2026-10-12",
-		})
+		}
+		for _, want in perPlayer do
+			t.expect(table.find(names, want) ~= nil).toBe(true)
+		end
+		for _, name in names do
+			t.expect(table.find(perPlayer, name) ~= nil or name == "HiscoreTop|all").toBe(true)
+		end
+		-- each store opened once, under one kind
+		t.expect(#names).toBe(if table.find(names, "HiscoreTop|all") then 7 else 6)
 		t.expect(#w.budgets > 0).toBe(true)
 		for _, kind in w.budgets do
 			local known = kind == "DataStoreRequestType.StandardRead"
@@ -305,8 +314,11 @@ return t.spec("f0024 module shape", function(it)
 			if kind then
 				since[kind] = true
 			else
-				updates += 1
-				if entry == "update:ordered" then
+				-- c0128: d0124's top-N list (HiscoreTop) is budgeted too, but only the per-player updates are counted
+				if string.sub(entry, -#":HiscoreTop") ~= ":HiscoreTop" then
+					updates += 1
+				end
+				if string.sub(entry, 1, #"update:ordered") == "update:ordered" then
 					t.expect(since["DataStoreRequestType.OrderedRead"]).toBe(true)
 					t.expect(since["DataStoreRequestType.OrderedWrite"]).toBe(true)
 				else
