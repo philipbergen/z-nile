@@ -136,29 +136,37 @@ function mergecheck.judge(dir: string, head: string): Verdict
 	for _, c in lines(revs) do
 		count += 1
 		local _, subject = git(dir, { "log", "-1", "--format=%h %s", c })
-		local okF, files = git(
+		local okF, raw = git(
 			dir,
-			{
-				"diff-tree",
-				"-r",
-				"--no-commit-id",
-				"--name-status",
-				"--no-renames",
-				"-m",
-				"--first-parent",
-				c,
-			}
+			{ "diff-tree", "-r", "--no-commit-id", "--raw", "--no-renames", "-m", "--first-parent", c }
 		)
 		if not okF then
 			return no({ `git diff-tree {c} failed` }, h)
 		end
-		for _, l in lines(files) do
-			local status, p = string.match(l, "^(%a)%s+(.+)$")
-			if not status or not p then
+		-- a check.sh is added (a new item), or moved (deleted with the same blob added in this commit, as ready and
+		-- done move items); a changed or dropped one is no
+		local added: { [string]: boolean } = {}
+		local entries: { { status: string, path: string, old: string } } = {}
+		for _, l in lines(raw) do
+			local old, new, status, p = string.match(l, "^:%d+ %d+ (%x+) (%x+) (%a)%d*\t(.+)$")
+			if not old or not new or not status or not p then
 				table.insert(bad, `{subject}: can't read its change "{l}"`)
-			elseif not publish.allowed(p, roots) then
+			else
+				if status == "A" then
+					added[new] = true
+				end
+				table.insert(entries, { status = status, path = p, old = old })
+			end
+		end
+		for _, e in entries do
+			local p = e.path
+			if not publish.allowed(p, roots) then
 				table.insert(bad, `{subject}: {p} is not tracker state`)
-			elseif status ~= "A" and string.match(p, "/check%.sh$") then
+			elseif
+				string.match(p, "/check%.sh$")
+				and e.status ~= "A"
+				and not (e.status == "D" and added[e.old])
+			then
 				table.insert(bad, `{subject}: {p} edits an existing item's check.sh`)
 			elseif mine[p] then
 				table.insert(bad, `{subject}: {p} is a file this PR changes`)
