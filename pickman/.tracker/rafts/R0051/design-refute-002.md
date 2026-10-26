@@ -1,0 +1,4 @@
+# Refute 002: R0051 (answers to design-review-002)
+
+- F1: fixed: `expectDrawn` was rebuilt sentence by sentence from the Design's HudView bullet, and gained the three properties it named but did not pin: the caption's `Name` ("Caption"), its `Font` (Arcade, which only `label()` sets) and its `TextXAlignment` (Center), the last two read nil-safely so a missing value fails on an assertion; its comment now lists every property in the bullet's order. Rules and mutants row added (M26 left-aligned, M27 built without `label()`, M28 misnamed), each run on the prototype and failing on an assertion (E4, now 28); the lesson pickman-test/drawn-from-the-visible-root's check now asks for every property the Design's sentence names; consequences: none (no new rule in the Design, only pins of rules it already stated).
+- F2: fixed: the blank line inside the Design's placement table removed, so the 320×568, 500×900 and 900×500 rows render in the table; consequences: none.

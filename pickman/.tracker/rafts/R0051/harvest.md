@@ -1,0 +1,20 @@
+# Harvest: R0051
+
+- design-review-001 F1: z-design/spec-design-correspondence, pickman-test/drawn-from-the-visible-root
+- design-review-001 F2: z-design/prep-choices-marked-and-checked
+- design-review-001 F3: z-design/prep-choices-marked-and-checked
+- design-review-001 F4: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/restated-rules-move-together
+- note the lessons pass's inset case first used a top-only notch, which a HudView ignoring the inset still passed (a bottom-right button doesn't move with a top inset); it now uses side and bottom insets: zz-test/pin-call-site-arguments
+- design-review-002 F1: z-design/spec-design-correspondence, pickman-test/drawn-from-the-visible-root
+- design-review-002 F2: one-off: a blank line split a Markdown table in the Design
+- design-review-003 F1: z-design/design-the-execution-window
+- design-review-003 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F1: z-design/design-the-execution-window
+- design-review-004 F2: z-design/check-open-defects-on-the-path
+- note the f0126 and f0146 preps (2026-10-25) found f0110's sequestered specs closed to their later work (a whole-table toEqual on Touch.buttons, a stub require that asserted on any unknown module); both were opened before R0051 landed: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-005 F1: z-design/design-the-execution-window
+- design-review-005 F2: one-off: a capture edit still landing (its local gate queued behind another session's) when the refute said it had landed
+- design-review-005 F3: z-design/restated-rules-move-together
+- design-review-005 F4: z-design/prove-specs-pass-on-a-prototype
