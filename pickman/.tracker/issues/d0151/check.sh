@@ -11,4 +11,5 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 # check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 
+check "AC1: f0027's, f0028's and f0029's promoted touch specs pass" lune run tests/run -- tests/acceptance/f0027/*.spec.luau tests/acceptance/f0028/*.spec.luau tests/acceptance/f0029/*.spec.luau
 finish
