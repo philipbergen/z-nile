@@ -8,3 +8,7 @@
 - design-review-002 F2: z-design/class-decisions-take-a-searched-list
 - design-review-002 F3: zz-arch/sequestered-files-judged-per-item
 - design-review-002 F4: z-design/restated-rules-move-together
+- design-review-003 F1: zz-arch/skips-pin-what-they-verified
+- design-review-003 F2: zz-arch/throwaway-checkouts-outside-the-repo
+- design-review-003 F3: zz-arch/throwaway-checkouts-outside-the-repo
+- design-review-003 F4: z-design/new-rules-migrate-existing-work

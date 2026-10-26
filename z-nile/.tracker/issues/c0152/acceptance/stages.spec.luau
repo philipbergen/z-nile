@@ -14,9 +14,11 @@ local PATTERN = "real tree|every unfinished|this checkout.s working tree|reads t
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
+local NOTRIAL: { string } = {}
 local function listed(): ({ [string]: string }, { string })
 	local kind: { [string]: string } = {}
 	local runs: { string } = {}
+	table.clear(NOTRIAL)
 	for l in string.gmatch(fs.readFile(`{TOP}/z-nile/tests/merge-stages.txt`), "[^\n]+") do
 		local home, spec, why = string.match(l, "^run%s+(%S+)%s+(%S+)%s+%-%-%s+(%S.*)$")
 		if home and spec and why then
@@ -25,11 +27,14 @@ local function listed(): ({ [string]: string }, { string })
 			table.insert(runs, `{home}/{spec}`)
 		else
 			local path, reason = string.match(l, "^skip%s+(%S+)%s+%-%-%s+(%S.*)$")
+			local glob, because = string.match(l, "^notrial%s+(%S+)%s+%-%-%s+(%S.*)$")
 			if path and reason then
 				t.expect(kind[path]).toBe(nil)
 				kind[path] = "skip"
+			elseif glob and because then
+				table.insert(NOTRIAL, glob)
 			else
-				t.expect(string.match(l, "^#") ~= nil).toBe(true) -- nothing else: a run or skip without its reason fails
+				t.expect(string.match(l, "^#") ~= nil).toBe(true) -- nothing else: a run, skip or notrial without its reason fails
 			end
 		end
 	end
@@ -69,4 +74,13 @@ return t.spec("c0152 the gate stages that read tracker files are one complete li
 			t.expect(table.find(runs, p) ~= nil).toBe(true)
 		end
 	end)
+
+	it(
+		"only spend rows skip a new trial when main moves during the check (decided with the user, 2026-10-26)",
+		function()
+			listed()
+			-- "Skip re-trial for spend-only moves": a wider notrial set needs the user, and this spec changed with it
+			t.expect(NOTRIAL).toEqual({ "*/.tracker/**/spend.md" })
+		end
+	)
 end)

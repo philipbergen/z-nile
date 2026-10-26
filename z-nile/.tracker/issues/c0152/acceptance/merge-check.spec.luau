@@ -22,9 +22,44 @@ local OLD_SPEC = "z-nile/tests/tooling/c0152-old.spec.luau"
 local CLASSIFIED = "z-nile/tests/acceptance/c0114/classified.spec.luau"
 local DRAFT =
 	'#!/usr/bin/env bash\nsource "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\nfinish\n'
-local STAGES = "run z-nile tests/acceptance/c0082/real-tree.spec.luau -- audit\n"
+local PROBE = "z-nile/tests/tooling/c0152-trial-probe.spec.luau"
+local STAGES = "notrial */.tracker/**/spend.md -- spend rows (the user's decision, 2026-10-26)\n"
+	.. "run z-nile tests/tooling/c0152-trial-probe.spec.luau -- the trial's own guards, and a move of main during it\n"
+	.. "run z-nile tests/acceptance/c0082/real-tree.spec.luau -- audit\n"
 	.. "run z-nile tests/acceptance/c0120/check-paths.spec.luau -- check-paths\n"
 	.. "run z-nile tests/acceptance/c0114/classified.spec.luau -- classified\n"
+-- the fixture's folders, known before trackerfix.new makes them (it uses the same physical path)
+local BASE = `{fixture.physical(".")}/.cache/c0152-merge-check`
+local TRIGGER = `{BASE}/move-during-trial`
+-- a stage the trial runs first (design review 003): the trial borrows no objects from the checkout and its nested runs
+-- protect the checkout's git directory; and, when a case leaves a trigger, origin's main moves while the trial runs
+local function probe(): string
+	return table.concat({
+		"--!strict",
+		'local fs = require("@lune/fs")',
+		'local process = require("@lune/process")',
+		'local t = require("@tests/lib/t")',
+		"local function trim(s: string): string",
+		'\treturn (string.gsub(s, "%s+$", ""))',
+		"end",
+		'return t.spec("c0152 trial probe", function(it)',
+		'\tit("borrows nothing, guards the checkout, and moves main when asked", function()',
+		'\t\tlocal common = trim(process.exec("git", { "rev-parse", "--path-format=absolute", "--git-common-dir" }).stdout)',
+		'\t\tt.expect(fs.isFile(common .. "/objects/info/alternates")).toBe(false)',
+		'\t\tlocal real = ":" .. (process.env.PICKMAN_FENCE_REAL_GIT or "") .. ":"',
+		`\t\tt.expect(string.find(real, ":{BASE}/main/.git:", 1, true) ~= nil).toBe(true)`,
+		`\t\tlocal trigger = "{TRIGGER}"`,
+		"\t\tif fs.isFile(trigger) then",
+		"\t\t\tlocal sha = trim(fs.readFile(trigger))",
+		"\t\t\tfs.removeFile(trigger)",
+		`\t\t\tlocal r = process.exec("git", \{ "-C", "{BASE}/other", "push", "-q", "origin", sha .. ":refs/heads/main" \})`,
+		"\t\t\tt.expect(r.ok).toBe(true)",
+		"\t\tend",
+		"\tend)",
+		"end)",
+		"",
+	}, "\n")
+end
 local f: trackerfix.Fixture
 local head = ""
 local baseline = ""
@@ -96,6 +131,7 @@ return t.spec("c0152 a PR may merge past main's tracker-only commits only when t
 		seed[DOC2] = stub("c0902", "c0152-fixture-two", "new-a-b-c")
 		seed[R .. "c0902/check.sh"] = DRAFT
 		seed[OLD_SPEC] = "return nil\n"
+		seed[PROBE] = probe()
 		f = trackerfix.new("c0152-merge-check", seed)
 		-- the PR: code, c0901's document, a new item, and the deletion of a spec
 		fixture.git(f.main, { "checkout", "-q", "-b", "pr" })
@@ -111,6 +147,7 @@ return t.spec("c0152 a PR may merge past main's tracker-only commits only when t
 		local r = check()
 		t.expect(r.code).toBe(0)
 		t.expect(has(r.stdout, "has not moved")).toBe(true)
+		t.expect(has(r.stdout, `judged main {baseline}`)).toBe(true)
 		t.expect(has(r.stdout, `--match-head-commit {head}`)).toBe(true)
 	end)
 
@@ -148,6 +185,11 @@ return t.spec("c0152 a PR may merge past main's tracker-only commits only when t
 			end
 			t.expect(has(r.stdout, "moved by 4 commit(s), all tracker state")).toBe(true)
 			t.expect(has(r.stdout, "passes every tracker-reading stage")).toBe(true)
+			-- design review 003 F1/F3: the trial's folder named first, gone after; the tip judged named
+			local folder = string.match(r.stdout, "merge%-check: trial of main %x+ in (%S+)\n")
+			t.expect(folder ~= nil).toBe(true)
+			t.expect(fs.isDir(folder :: string)).toBe(false)
+			t.expect(has(r.stdout, `judged main {originMain()}`)).toBe(true)
 			t.expect(has(r.stdout, `--match-head-commit {head}`)).toBe(true)
 			reset()
 		end
@@ -225,6 +267,70 @@ return t.spec("c0152 a PR may merge past main's tracker-only commits only when t
 		trackerfix.elsewhere(f, { [R .. "c0902/spend.md"] = "| a spend row |\n" }, "tracker: spend c0902")
 		expectNo({ `the merged tree has no {CLASSIFIED}` }, h2)
 		fixture.git(f.main, { "reset", "-q", "--hard", head })
+	end)
+
+	-- design review 003 F1: main's tip is read again after the trial; `moved` is the commit origin's main gets mid-trial
+	local function moveDuringTrial(files: { [string]: string }, msg: string): string
+		trackerfix.elsewhere(f, { [R .. "c0902/spend.md"] = "| a spend row |\n" }, "tracker: spend c0902")
+		fetch()
+		-- the next commit, made in `other` but pushed only by the trial's probe stage
+		fixture.git(f.other, { "pull", "-q", "origin", "main" })
+		for path, text in files do
+			local parent = string.match(path, "^(.*)/[^/]+$")
+			if parent then
+				fs.writeDir(`{f.other}/{parent}`)
+			end
+			fs.writeFile(`{f.other}/{path}`, text)
+		end
+		fixture.git(f.other, { "add", "-A" })
+		fixture.git(f.other, { "commit", "-qm", msg })
+		local moved = trim(fixture.git(f.other, { "rev-parse", "HEAD" }))
+		fs.writeFile(TRIGGER, moved .. "\n")
+		return moved
+	end
+	local function trials(out: string): number
+		local n = 0
+		for _ in string.gmatch(out, "merge%-check: trial of main ") do
+			n += 1
+		end
+		return n
+	end
+
+	it(
+		"main moving during the check by spend rows only is accepted without a new trial (the user's decision)",
+		function()
+			local moved =
+				moveDuringTrial({ [R .. "c0902/spend.md"] = "| a spend row |\n| another |\n" }, "tracker: spend")
+			local r = check()
+			if r.code ~= 0 then
+				error(`expected ok:\n{r.stdout}{r.stderr}`)
+			end
+			t.expect(fs.isFile(TRIGGER)).toBe(false)
+			t.expect(trials(r.stdout)).toBe(1)
+			t.expect(has(r.stdout, "changing only files the stage list marks notrial")).toBe(true)
+			t.expect(has(r.stdout, `judged main {moved}`)).toBe(true)
+			reset()
+		end
+	)
+
+	it("any other tracker move during the check runs the trial again; code is a no", function()
+		local moved = moveDuringTrial({
+			[R .. "c0905/c0905.md"] = stub("c0905", "c0152-fixture-five", "new-a-b-c"),
+		}, "tracker: new c0905")
+		local r = check()
+		if r.code ~= 0 then
+			error(`expected ok:\n{r.stdout}{r.stderr}`)
+		end
+		t.expect(trials(r.stdout)).toBe(2)
+		t.expect(has(r.stdout, "the trial ran again")).toBe(true)
+		t.expect(has(r.stdout, `judged main {moved}`)).toBe(true)
+		reset()
+		moveDuringTrial({ ["z-nile/engine/late.luau"] = "return nil\n" }, "code, mid-check")
+		local r2 = check()
+		t.expect(r2.code).toBe(1)
+		t.expect(has(r2.stdout, "z-nile/engine/late.luau is not tracker state")).toBe(true)
+		t.expect(has(r2.stdout, "judged main")).toBe(false)
+		reset()
 	end)
 
 	it("the local tracking ref is never the judge, and the trial leaves nothing behind", function()

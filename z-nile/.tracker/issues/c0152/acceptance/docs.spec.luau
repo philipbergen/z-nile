@@ -24,10 +24,18 @@ return t.spec("c0152 the merging rule names merge-check", function(it)
 		)
 			.toBe(true)
 		t.expect(has(merging, "`z-nile/tests/merge-stages.txt`")).toBe(true)
+		-- design review 003 F1/F3: the base pinned right before the merge, the time and how to run it
+		t.expect(has(merging, "`git ls-remote origin refs/heads/main` right before that merge")).toBe(true)
+		t.expect(has(merging, "`judged main <sha>`")).toBe(true)
+		t.expect(has(merging, "run it with a 10-minute timeout or in the background")).toBe(true)
+		t.expect(has(merging, "`merge-check: trial of main <sha> in <folder>`")).toBe(true)
+		t.expect(has(merging, "Skip re-trial") or has(merging, "decided with the user, 2026-10-26")).toBe(true)
 		t.expect(has(merging, "merge `origin/main` in with plain `git`")).toBe(true) -- the old path still holds
 		local row = string.match(zr, "\n(| merge%-check | [^\n]*)") or ""
-		t.expect(has(row, "| merge-check | `./zn merge-check [<head>]` | writes only under `$TMPDIR`.")).toBe(true)
+		t.expect(has(row, "| merge-check | `./zn merge-check [<head>]` | writes only under `$TMPDIR`")).toBe(true)
 		t.expect(has(row, "edits no existing item's `check.sh`")).toBe(true)
+		t.expect(has(row, "run it with a 10-minute timeout or in the background")).toBe(true)
+		t.expect(has(row, "`judged main <sha>`")).toBe(true)
 		t.expect(
 			has(row, "the run lines of `z-nile/tests/merge-stages.txt`")
 				or has(row, "the `run` lines of `z-nile/tests/merge-stages.txt`")

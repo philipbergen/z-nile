@@ -1,0 +1,22 @@
+# Refute 003: c0152 (design mode)
+
+- F1: fixed (prototype b428a7c5), with the user's decision (2026-10-26, "Skip re-trial for spend-only moves", recorded as a Decided line):
+  - New rule 3: after the trial, merge-check reads origin's tip again. On a move it fetches the new tip's objects only (no ref moves), requires the old tip to be an ancestor, and judges the new commits by rule 1.
+  - A move that changes only `notrial` files (the stage list's `notrial */.tracker/**/spend.md`, kept beside the stages, never in code) is ok without a new trial; any other move runs the trial again, at most three trials.
+  - The ok output prints `judged main <sha>`. zz-rules step 4 runs `git ls-remote origin refs/heads/main` right before `gh pr merge` and merges only when it prints that sha, otherwise runs merge-check again.
+  - Scalability measures the re-run rate from main's log: 23% of 180-second checks see a move, 13% spend-only, about 10% need a second trial. Under the reviewer's half threshold, so no escalation.
+  - Cases are deterministic: a probe stage pushes a prepared commit during the trial. A spend-only move gives one trial and the new judged tip; a new item gives two trials; code is a no.
+  - Mutants X3, X4, X5 and X7 killed.
+  - Consequence: c0042's and c0043's board and metrics stages do read spend rows; the user's decision accepts that (only `./zn spend` writes them), and stages.spec pins the `notrial` set to exactly the spend glob.
+- F2: fixed:
+  - The trial is `git clone --no-hardlinks --no-checkout`, a full copy with no alternates, so the merge commit and history come with it.
+  - Every stage runs with `PICKMAN_FENCE_REAL_GIT` = the merger's git directory plus what it inherited.
+  - The Design's "nothing run there can reach the checkout" is replaced. The lesson zz-arch/throwaway-checkouts-outside-the-repo now prescribes `--no-hardlinks` and the fence list, never `--shared`.
+  - The probe stage asserts no alternates and the git directory in the list. X1 (`--shared` kept) and X2 (env not passed) killed.
+  - E5 experiment: `fence.snapshot` covers only the run's own checkout, but the list feeds the jail's protected paths and the hooks; the residual Linux risk is stated in Unknowns.
+  - Consequence: repo-fence bans the fence variable's name outside reviewed files, so mergecheck.luau gets an allow-list entry (the promoted spec's at execution).
+- F3: fixed:
+  - zz-rules' step 4 and the command row give the time ("about 2–3 minutes … run it with a 10-minute timeout or in the background").
+  - merge-check prints `merge-check: trial of main <sha> in <folder>` before the stages run, through a progress callback.
+  - The ok-trial case finds that line and checks the folder is gone afterwards. Mutant X6 killed; docs.spec pins the time and the line.
+- F4: fixed: E3 now says a ready commit is not tracker state: d24aabc8 and 238625e9 move acceptance specs and reviews, and E5a ran merge-check on today's ready commit, a no naming them. Rule 1's move clause covers the publisher's own moves of a document and its check.sh. Making ready commits skippable would need its own design; consequences: none.
