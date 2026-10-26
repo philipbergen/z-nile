@@ -10,3 +10,5 @@
 - design-review-002 F3: zz-arch/guard-what-the-engine-sees
 - design-review-002 F4: z-design/restated-rules-move-together, z-design/decided-guesses-rewrite-their-body
 - note f0143's rebuilt prototype paired DPadUp and W into a boost on controls.spec's constant stub clock; the clock now moves a second each read: z-design/run-the-other-rafts-specs
+- design-review-003 F1: pickman-arch/count-processed-input-when-tracking, z-design/spec-design-correspondence
+- design-review-003 F2: z-design/restated-rules-move-together

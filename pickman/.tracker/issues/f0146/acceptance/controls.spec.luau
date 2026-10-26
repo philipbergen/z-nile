@@ -87,7 +87,7 @@ type World = {
 	connected: { [string]: boolean },
 	sticks: { [string]: { x: number, y: number } },
 	looks: { [string]: { x: number, y: number } },
-	input: (pad: string, key: string, x: number, y: number, began: boolean) -> (),
+	input: (pad: string, key: string, x: number, y: number, began: boolean, processed: boolean?) -> (),
 	press: (key: string, state: string) -> { any },
 	env: { [string]: any },
 }
@@ -135,16 +135,16 @@ local function world(): World
 		env = {},
 	}
 	-- an input from a controller: a button press (began) or a stick's move (InputChanged), as Roblox reports them
-	w.input = function(pad: string, key: string, x: number, y: number, isBegin: boolean)
+	w.input = function(pad: string, key: string, x: number, y: number, isBegin: boolean, processed: boolean?)
 		local obj = {
 			UserInputType = enum.UserInputType[pad],
 			KeyCode = enum.KeyCode[key],
 			Position = { X = x, Y = y, Z = 0 },
 		}
 		if isBegin then
-			began.fire(obj, false)
+			began.fire(obj, processed == true)
 		else
-			changed.fire(obj, false)
+			changed.fire(obj, processed == true)
 		end
 	end
 	local function bind(_: any, _name: string, fn: any, _touch: boolean, ...: any)
@@ -331,7 +331,7 @@ return t.spec("f0146 Controls, Pads and Sticks on a stub engine", function(it)
 			w.connected.Gamepad1, w.connected.Gamepad2 = true, true
 			sticks.start(pads.stick)
 			t.expect(pads.stick("Thumbstick1")).toBe(nil) -- none drives yet
-			w.input("Gamepad1", "Thumbstick1", -0.9, 0, false)
+			w.input("Gamepad1", "Thumbstick1", -0.9, 0, false, true) -- processed: Pads counts it all the same
 			beat(w, "Gamepad1", -0.9, 0)
 			t.expect(w.fired).toEqual({ "Left" })
 			-- Gamepad2's stick drifts below STEER_OFF: Gamepad1 still drives
@@ -340,7 +340,7 @@ return t.spec("f0146 Controls, Pads and Sticks on a stub engine", function(it)
 			beat(w, "Gamepad1", -0.9, 0)
 			t.expect(w.fired).toEqual({ "Left" })
 			-- a button on Gamepad2: it drives now, sticks and look alike
-			w.input("Gamepad2", "ButtonX", 0, 0, true)
+			w.input("Gamepad2", "ButtonX", 0, 0, true, true) -- processed, as every button Controls binds is (review 003 F1)
 			w.looks.Gamepad1 = { x = 0.5, y = 0 }
 			w.looks.Gamepad2 = { x = 0, y = 0.7 }
 			w.heartbeat.fire(1 / 60)
