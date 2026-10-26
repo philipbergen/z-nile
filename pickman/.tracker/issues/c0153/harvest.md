@@ -9,3 +9,6 @@
 - design-review-002 F3: one-off: an absolute tolerance's range is stated where its users read it
 - design-review-002 F4: zz-review/lists-paste-their-search
 - design-review-002 F5: z-design/never-narrow-captured-scope
+- design-review-003 F1: zz-review/run-the-evidence-you-cite
+- design-review-003 F2: z-design/spec-design-correspondence
+- note this shell's PATH put Homebrew's Lune 0.11.1 before rokit's pinned 0.10.5, so local runs used another Lune than CI: zz-test/run-the-pinned-tools

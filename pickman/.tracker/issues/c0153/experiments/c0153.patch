@@ -1,5 +1,5 @@
 diff --git a/pickman/tests/acceptance/f0013/snapshot.spec.luau b/pickman/tests/acceptance/f0013/snapshot.spec.luau
-index a212a15d..fbfa341a 100644
+index a212a15d..031b8d08 100644
 --- a/pickman/tests/acceptance/f0013/snapshot.spec.luau
 +++ b/pickman/tests/acceptance/f0013/snapshot.spec.luau
 @@ -3,7 +3,7 @@
@@ -16,13 +16,13 @@ index a212a15d..fbfa341a 100644
  		end
  		local snap = Session.snapshot(s, "p")
 -		t.expect(serde.decode("json", serde.encode("json", snap))).toEqual(snap)
-+		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
 +		t.expect({ plain.roundTrip(snap, 1e-9) }).toEqual({ true })
  	end)
  
  	it("is a fresh table: changing it does not change the session", function()
 diff --git a/pickman/tests/acceptance/f0018/frame.spec.luau b/pickman/tests/acceptance/f0018/frame.spec.luau
-index 3b84108d..fae00f4a 100644
+index 3b84108d..a97e2107 100644
 --- a/pickman/tests/acceptance/f0018/frame.spec.luau
 +++ b/pickman/tests/acceptance/f0018/frame.spec.luau
 @@ -4,7 +4,7 @@
@@ -39,13 +39,13 @@ index 3b84108d..fae00f4a 100644
  		Session.kill(s, "p")
  		local frame = Session.frame(s, "p")
 -		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
-+		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
 +		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
  	end)
  
  	it("is a fresh table: changing it does not change the session", function()
 diff --git a/pickman/tests/acceptance/f0030/frame.spec.luau b/pickman/tests/acceptance/f0030/frame.spec.luau
-index 9ba0fc50..14bd9265 100644
+index 9ba0fc50..f0bb81fc 100644
 --- a/pickman/tests/acceptance/f0030/frame.spec.luau
 +++ b/pickman/tests/acceptance/f0030/frame.spec.luau
 @@ -5,7 +5,7 @@ local Game = require("@logic/Game")
@@ -62,13 +62,13 @@ index 9ba0fc50..14bd9265 100644
  		stepUntil(s, eaten(3))
  		local frame = Session.frame(s, "p")
 -		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
-+		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
 +		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
  		t.expect((Session.snapshot(s, "p") :: any).pellets).toBe(nil)
  	end)
  
 diff --git a/pickman/tests/acceptance/f0032/frame.spec.luau b/pickman/tests/acceptance/f0032/frame.spec.luau
-index f614f375..9435dab8 100644
+index f614f375..0eef4f7f 100644
 --- a/pickman/tests/acceptance/f0032/frame.spec.luau
 +++ b/pickman/tests/acceptance/f0032/frame.spec.luau
 @@ -5,6 +5,7 @@
@@ -85,13 +85,13 @@ index f614f375..9435dab8 100644
  		t.expect(type(frame.play)).toBe("table")
 -		local text = serde.encode("json", frame :: any)
 -		t.expect(serde.decode("json", text)).toEqual(frame)
-+		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
 +		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
  		-- four ghosts are a few hundred bytes a step
  		t.expect(#serde.encode("json", (frame :: any).ghosts) < 700).toBe(true)
  	end)
 diff --git a/pickman/tests/acceptance/f0100/drops.spec.luau b/pickman/tests/acceptance/f0100/drops.spec.luau
-index bb7c53f2..749a213c 100644
+index bb7c53f2..2d289d5e 100644
 --- a/pickman/tests/acceptance/f0100/drops.spec.luau
 +++ b/pickman/tests/acceptance/f0100/drops.spec.luau
 @@ -9,7 +9,7 @@ local Maze = require("@logic/Maze")
@@ -108,23 +108,24 @@ index bb7c53f2..749a213c 100644
  		frame = Session.frame(s, "p")
  		t.expect(frame.shots).toBe(2)
 -		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
-+		-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)
++		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
 +		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
  		-- the v1 snapshot is unchanged
  		local keys = {}
  		for k in Session.snapshot(s, "p") :: any do
 diff --git a/pickman/tests/lib/plain.luau b/pickman/tests/lib/plain.luau
 new file mode 100644
-index 00000000..cb62a1fa
+index 00000000..9f3ade21
 --- /dev/null
 +++ b/pickman/tests/lib/plain.luau
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,116 @@
 +--!strict
 +-- c0153: plain data, as replicated frames and snapshots are: nil, booleans, finite numbers, strings, and tables
 +-- without a metatable or a cycle that are either a sequence (number keys exactly 1..n, no holes) or a map (string
 +-- keys only); the empty table is both. Anything else (functions, userdata, threads, holes, sparse, fractional, zero
-+-- or negative number keys, mixed tables) is lost or changed by replication or JSON. A JSON round trip keeps about
-+-- 16 significant digits, so it is compared within a number tolerance, and NaN is never within it. An absolute
++-- or negative number keys, mixed tables) is lost or changed by replication or JSON. Lune's JSON encoder writes the
++-- shortest exact text, but its decoder can return a number one ulp off (13.783333333333333 comes back
++-- 13.783333333333331), so a round trip is compared within a number tolerance, and NaN is never within it. An absolute
 +-- tolerance of 1e-9 holds for non-integers under about 1e6 (positions in tiles, speeds); a larger non-integer (a
 +-- wall-clock time) comes back further off and needs a larger tolerance. Integers of any size round-trip exactly.
 +local serde = require("@lune/serde")

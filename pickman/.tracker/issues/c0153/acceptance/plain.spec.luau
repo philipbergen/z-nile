@@ -1,9 +1,9 @@
 --!strict
 -- c0153 AC1: `plain` (pickman/tests/lib/plain.luau) is the one helper for "plain data that survives a JSON round
 -- trip". Plain data is nil, booleans, finite numbers, strings, and tables without a metatable or a cycle that are a
--- sequence (number keys exactly 1..n) or a map (string keys only). Lune's encoder keeps about 16 significant digits,
--- so a position such as 13.783333333333333 comes back one ulp off: numbers are compared within a tolerance, and NaN
--- (or a NaN tolerance) is never within it. Every refusal says where, and roundTrip returns false, never raises.
+-- sequence (number keys exactly 1..n) or a map (string keys only). Lune's JSON decoder can return a number one ulp
+-- off (it reads 13.783333333333333, as the encoder writes it, as 13.783333333333331): numbers are compared within a
+-- tolerance, and NaN (or a NaN tolerance) is never within it. Every refusal says where, and roundTrip returns false, never raises.
 local plain = require("@tests/lib/plain")
 local t = require("@tests/lib/t")
 
@@ -21,6 +21,8 @@ return t.spec("c0153 plain data and a JSON round trip within a tolerance", funct
 				{ ghosts = { { name = "blinky", x = 13.783333333333333, y = 11, flash = false } }, tick = 61 }
 			t.expect({ plain.roundTrip(frame, EPS) }).toEqual({ true })
 			-- and the round trip really compares what came back: with no tolerance, the lost ulp is a difference
+			-- this depends on Lune 0.10.5's decoder (rokit.toml) losing that ulp: if an upgrade decodes it exactly, update this
+			-- subcase to another lossy value; it is not a regression
 			local exact, why = plain.roundTrip(frame, 0)
 			t.expect(exact).toBe(false)
 			t.expect(starts(why, "value.ghosts.1.x: ")).toBe(true)

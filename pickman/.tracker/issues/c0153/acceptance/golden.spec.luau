@@ -18,23 +18,23 @@ local t = require("@tests/lib/t")
 local PINS: { { path: string, sha: string } } = {
 	{
 		path = "tests/acceptance/f0013/snapshot.spec.luau",
-		sha = "7ec2325e8fe6ed4103fcb141a7de3428a77720c63fdb0cecd97a2774689fdbc9",
+		sha = "17f986eb0cc0e738a1e14960287158362e74769bebd5dfcf6d6633a9ec389d27",
 	},
 	{
 		path = "tests/acceptance/f0018/frame.spec.luau",
-		sha = "17a59c7a7222fd4a96d7cf6212cc70834643c9003c67124b412e04d70d322ffa",
+		sha = "f60662748b837844fcf956a7cebddc5ddd91443b8678d6329e2e989607e69e7b",
 	},
 	{
 		path = "tests/acceptance/f0030/frame.spec.luau",
-		sha = "95470b48f0e4f9ae4d2bbbcf0d242a4ac64d330156caa981a001061de8592d4b",
+		sha = "d3a2dbea246445efff4e201878b8070d326d8cfe261824dc8b2495381fc3f583",
 	},
 	{
 		path = "tests/acceptance/f0032/frame.spec.luau",
-		sha = "257cded3f840c62c822e2e9198e0007adb4cee64afbc223cb2db4fb1c1c88b04",
+		sha = "7301e6bc1fe0ca9fa7abfb970059283f3c028205648eda7445124a80625b3b01",
 	},
 	{
 		path = "tests/acceptance/f0100/drops.spec.luau",
-		sha = "c57510229cbd36e94ddf728d9cfa67edf09f356c8eedddc70c69fe5c391c45f2",
+		sha = "bd7fe073fa4193702568cf6e415b925b6e5d305fa2608d98b880af2bab1bc249",
 	},
 }
 
@@ -71,7 +71,7 @@ return t.spec("c0153 the five JSON round trips, narrowed and pinned whole", func
 	it("a check joined onto the comment line above it changes the pinned text", function()
 		local src = exact(fs.readFile(PINS[1].path))
 		local comment = exact(
-			"-- c0153: plain data, and a JSON round trip within 1e-9 (the encoder keeps about 16 significant digits)"
+			"-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)"
 		)
 		local at = string.find(src, comment .. "\n", 1, true)
 		t.expect(at ~= nil).toBe(true)

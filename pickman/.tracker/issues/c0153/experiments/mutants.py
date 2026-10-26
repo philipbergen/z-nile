@@ -27,7 +27,7 @@ M = [
     ("G3 f0032 result never asserted", F32, RT, "plain.roundTrip(frame, 1e-9)", GOLDEN),
     ("G4 f0032 jumpTick assertion deleted", F32, "\t\t\tt.expect(g.jumpTick > resetTick).toBe(true)\n", "", GOLDEN),
     ("G5 f0032 size bound widened", F32, "< 700).toBe(true)", "< 70000).toBe(true)", GOLDEN),
-    ("G6 f0013 check joined onto its comment", F13, "significant digits)\n\t\tt.expect({ plain.roundTrip(snap", "significant digits) t.expect({ plain.roundTrip(snap", GOLDEN),
+    ("G6 f0013 check joined onto its comment", F13, "one ulp off)\n\t\tt.expect({ plain.roundTrip(snap", "one ulp off) t.expect({ plain.roundTrip(snap", GOLDEN),
     ("G7 f0018 tolerance widened", F18, "plain.roundTrip(frame, 1e-9)", "plain.roundTrip(frame, 1)", GOLDEN),
     ("G8 f0030 pellets assertion deleted", F30, '\t\tt.expect((Session.snapshot(s, "p") :: any).pellets).toBe(nil)\n', "", GOLDEN),
     ("G9 f0100 round trip deleted", F100, "\t\t" + RT + "\n", "", GOLDEN),
