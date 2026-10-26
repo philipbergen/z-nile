@@ -13,3 +13,5 @@ A finding whose evidence was read from the code rather than run can describe beh
 f0109 design review 003 F1: review 002 F1 prescribed the radar's state list (F,F), (F,T), (T,T), and it left out (T,F), the game's real flash; the author followed it, and two wrong adapters passed. A Recommendation that lists cases is evidence too: check each listed case against what the real producer emits before prescribing it.
 
 f0109 design review 004: main had moved under files the specs load (c0128 narrowed two fake-engine specs) since the prototype's base, so the reviewer applied the prototype to today's origin/main and re-ran there. On a re-review, run the evidence against today's origin/main, not only the prototype's base, whenever main changed a file the specs load.
+
+c0153 design review 003 F1: the design said Lune's encoder keeps 16 digits; measured apart, the encoder writes the exact shortest text and the decoder loses the ulp. When a spec or a design explains the cause of a numeric difference, measure each step (the encode, then the decode) on its own before naming which one loses precision, with the tool version the project pins.

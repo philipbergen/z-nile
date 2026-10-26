@@ -7,6 +7,7 @@
 | 3 | 2026-10-26 16:15 | design-review-002 | 0 | 0 | 35.0 | spend | design-review |  |
 | 4 | 2026-10-26 17:00 | design-review-003 | 0 | 0 | 10.0 | spend | design-review |  |
 | 5 | 2026-10-26 17:53 | design-review-004 | 0 | 0 | 6.0 | spend | design-review |  |
+| 6 | 2026-10-26 23:40 | prep (design, prototypes, mutation checks, merged-deps runs; estimate) | 1341 | 5 | 150.0 | spend | prep |  |
 
-**Total:** +0 / -0 lines, 67.0 agent-minutes, 0 tokens over 5 records
-<!-- totals: added=0 removed=0 minutes=67.0 records=5 tokens=0 -->
+**Total:** +1341 / -5 lines, 217.0 agent-minutes, 0 tokens over 6 records
+<!-- totals: added=1341 removed=5 minutes=217.0 records=6 tokens=0 -->
