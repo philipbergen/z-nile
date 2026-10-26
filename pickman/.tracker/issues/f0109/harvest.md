@@ -14,3 +14,6 @@
 - design-review-003 F2: z-design/decided-guesses-rewrite-their-body
 - design-review-003 F3: z-design/restated-rules-move-together
 - note design-review-003 F1, the reviewer's second candidate: review 002 F1 prescribed the incomplete state list: zz-review/run-the-evidence-you-cite
+- design-review-004 F1: z-design/restated-rules-move-together
+- design-review-004 F2: z-design/run-the-other-rafts-specs
+- note design-review-004, the reviewer's note: a re-review's evidence ran against today's origin/main because main had moved under files the specs load (c0128's narrowed fake-engine specs): zz-review/run-the-evidence-you-cite
