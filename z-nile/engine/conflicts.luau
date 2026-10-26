@@ -46,9 +46,13 @@ function conflicts.folders(top: string): ({ string }?, string?)
 	return out, nil
 end
 
--- the paths git reports as unmerged in the checkout at `top`, sorted and unique
-function conflicts.unmerged(top: string): { string }
+-- the paths git reports as unmerged in the checkout at `top`, sorted and unique; nil and why when git fails (design
+-- review 002 F2: only an ok read with no output means none)
+function conflicts.unmerged(top: string): ({ string }?, string?)
 	local r = sh.run("git", { "-C", top, "diff", "--name-only", "--diff-filter=U" })
+	if not r.ok then
+		return nil, `git diff --name-only --diff-filter=U failed: {sh.trim(r.stderr)}`
+	end
 	local out: { string } = {}
 	local seen: { [string]: boolean } = {}
 	for p in string.gmatch(r.stdout, "[^\n]+") do
@@ -58,17 +62,24 @@ function conflicts.unmerged(top: string): { string }
 		end
 	end
 	table.sort(out)
-	return out
+	return out, nil
 end
 
 -- files under `folders` whose working copy (tracked or untracked, not ignored) holds a whole conflict: "<path>:<line>"
-function conflicts.marked(top: string, folders: { string }): { string }
+-- nil and why when git grep fails (exit 0 is a hit, exit 1 none, anything else an error)
+function conflicts.marked(top: string, folders: { string }): ({ string }?, string?)
+	if #folders == 0 then
+		return nil, "no folders to check"
+	end
 	local args =
 		{ "-C", top, "grep", "--untracked", "--exclude-standard", "-l", "-I", "-e", "^<<<<<<< ", "--" }
 	for _, f in folders do
 		table.insert(args, f)
 	end
 	local r = sh.run("git", args)
+	if not r.ok and r.code ~= 1 then
+		return nil, `git grep failed: {sh.trim(r.stderr)}`
+	end
 	local out: { string } = {}
 	for p in string.gmatch(r.stdout, "[^\n]+") do
 		local path = `{top}/{p}`
@@ -78,13 +89,16 @@ function conflicts.marked(top: string, folders: { string }): { string }
 		end
 	end
 	table.sort(out)
-	return out
+	return out, nil
 end
 
 -- why `tool` must not run in the checkout at `top`, or nil: unmerged paths first, then whole conflicts in the working
 -- tree under the registry's folders; a registry that can't be read refuses too (fail closed)
 function conflicts.refusal(top: string, tool: string): string?
-	local u = conflicts.unmerged(top)
+	local u, uWhy = conflicts.unmerged(top)
+	if not u then
+		return `{tool}: refusing to run: can't tell whether files hold merge conflicts: {uWhy}\n{conflicts.RECOVERY}`
+	end
 	if #u > 0 then
 		return `{tool}: refusing to run while the checkout has unmerged paths; resolve them first:\n  {table.concat(
 			u,
@@ -95,7 +109,10 @@ function conflicts.refusal(top: string, tool: string): string?
 	if not folders then
 		return `{tool}: refusing to run: can't tell whether files hold merge conflicts: {why}`
 	end
-	local m = conflicts.marked(top, folders)
+	local m, mWhy = conflicts.marked(top, folders)
+	if not m then
+		return `{tool}: refusing to run: can't tell whether files hold merge conflicts: {mWhy}\n{conflicts.RECOVERY}`
+	end
 	if #m > 0 then
 		return `{tool}: refusing to run: these files hold merge-conflict markers; resolve them first:\n  {table.concat(
 			m,

@@ -5651,7 +5651,8 @@ local function conflictOk(cmdName: string, cmdArgs: { string }): boolean
 		return true -- read-only reports (lessons --check and --uncovered read too)
 	end
 	if cmdName == "status" then
-		return #cmdArgs <= 1 -- the list, or one item; `status <id> <to>` writes
+		local positional = flags(cmdArgs) -- options (`--project <p>`) aside, as the handler reads them
+		return #positional <= 1 -- the list, or one item; `status <id> <to>` writes
 	end
 	if cmdName == "raft-plan" then
 		return not has("--apply")

@@ -414,10 +414,18 @@ function audit.run(root: string): { Problem }
 	-- c0139: a file under a root or a skills folder holding a whole merge conflict stops every writing command, so the
 	-- gate (which runs audit) reports it before it can land. Only in a git checkout (audit also runs without one).
 	if fs.isDir(`{root}/.git`) or fs.isFile(`{root}/.git`) then
+		-- an unreadable registry is reported above; the scan is skipped then, never widened to the repository
 		local folders = conflicts.folders(root)
-		for _, m in conflicts.marked(root, folders or {}) do
-			local path = string.match(m, "^(.*):%d+$") or m
-			add("error", "conflict-markers", path, `{m} holds a merge conflict; {conflicts.RECOVERY}`)
+		if folders then
+			local marked, why = conflicts.marked(root, folders)
+			if not marked then
+				add("error", "conflict-markers", ".", `can't check for merge conflicts: {why}`)
+			end
+			local hits: { string } = marked or {}
+			for _, m in hits do
+				local path = string.match(m, "^(.*):%d+$") or m
+				add("error", "conflict-markers", path, `{m} holds a merge conflict; {conflicts.RECOVERY}`)
+			end
 		end
 	end
 	-- The live counter (c0114): z-nile/next once origin has moved it there, and tracker/next before. Both parsing at once
