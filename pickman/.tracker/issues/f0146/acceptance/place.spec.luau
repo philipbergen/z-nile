@@ -3,7 +3,7 @@
 -- binds Pad.BUTTONS' key codes beside View.KEYS', reads View.action or Pad.action, passes Pad.CONTINUE on (so
 -- FlowView hears it), and never says "Gamepad" (f0027 pins that). Pads is the one tracker of the most recently used
 -- controller (Pad.track over InputBegan and InputChanged); only it reads a gamepad's state. Main boots it and hands
--- Pads.stick to Camera and to Sticks, and Controls.turn to Sticks. Camera reads Thumbstick2 through it into Pad.look
+-- Pads.stick to Camera and to Sticks; Sticks sends its turns on the Intent remote. Camera reads Thumbstick2 through it into Pad.look
 -- and View.look before View.steer. In the lobby, Main boots LobbyPad after LobbyView, and
 -- LobbyPad selects the Start button when the last input is a gamepad (Pad.isPad), at start and on
 -- LastInputTypeChanged, only when nothing is selected. What the pins leave to the code review: that the polls run every
@@ -74,42 +74,37 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 		end
 	)
 
-	it(
-		"Pads, the one tracker, reads the gamepads; Main hands Pads.stick to Camera and Sticks, and Controls.turn to Sticks",
-		function()
-			for _, name in { "Pads", "Sticks" } do
-				t.expect(resolvesPad(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", name }))
-					.toBe(true)
-			end
-			local pads = client("Pads")
-			for _, needle in
-				{ "GetGamepadState(", "GetGamepadConnected(", "Pad.track(", "InputBegan", "InputChanged" }
-			do
-				if not has(pads, needle) then
-					error(`Pads lacks {needle}`)
-				end
-			end
-			-- one copy of the tracking: no other client script reads a gamepad's state or the last input type
-			for _, name in { "Sticks", "Camera", "Controls" } do
-				local src = client(name)
-				t.expect(has(src, "GetGamepadState")).toBe(false)
-				t.expect(has(src, "Pad.track(")).toBe(false)
-				t.expect(has(src, "LastInputType")).toBe(false)
-			end
-			local sticks = client("Sticks")
-			for _, needle in { '"Thumbstick1"', "Pad.steer(", "Heartbeat" } do
-				if not has(sticks, needle) then
-					error(`Sticks lacks {needle}`)
-				end
-			end
-			t.expect(has(sticks, "FireServer")).toBe(false) -- it sends through Controls.turn only
-			local main = client("Main")
-			t.expect(string.find(main, "Pads%.start%(%)") ~= nil).toBe(true)
-			t.expect(string.find(main, "Camera%.pad%(%s*Pads%.stick%s*%)") ~= nil).toBe(true)
-			t.expect(string.find(main, "Sticks%.start%(%s*Pads%.stick%s*,%s*Controls%.turn%s*%)") ~= nil)
+	it("Pads, the one tracker, reads the gamepads; Main hands Pads.stick to Camera and Sticks", function()
+		for _, name in { "Pads", "Sticks" } do
+			t.expect(resolvesPad(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", name }))
 				.toBe(true)
 		end
-	)
+		local pads = client("Pads")
+		for _, needle in
+			{ "GetGamepadState(", "GetGamepadConnected(", "Pad.track(", "InputBegan", "InputChanged" }
+		do
+			if not has(pads, needle) then
+				error(`Pads lacks {needle}`)
+			end
+		end
+		-- one copy of the tracking: no other client script reads a gamepad's state or the last input type
+		for _, name in { "Sticks", "Camera", "Controls" } do
+			local src = client(name)
+			t.expect(has(src, "GetGamepadState")).toBe(false)
+			t.expect(has(src, "Pad.track(")).toBe(false)
+			t.expect(has(src, "LastInputType")).toBe(false)
+		end
+		local sticks = client("Sticks")
+		for _, needle in { '"Thumbstick1"', "Pad.steer(", "Heartbeat", ':WaitForChild("Intent")' } do
+			if not has(sticks, needle) then
+				error(`Sticks lacks {needle}`)
+			end
+		end
+		local main = client("Main")
+		t.expect(string.find(main, "Pads%.start%(%)") ~= nil).toBe(true)
+		t.expect(string.find(main, "Camera%.pad%(%s*Pads%.stick%s*%)") ~= nil).toBe(true)
+		t.expect(string.find(main, "Sticks%.start%(%s*Pads%.stick%s*%)") ~= nil).toBe(true)
+	end)
 
 	it(
 		"Camera reads Thumbstick2 through Pads.stick and applies Pad.look through View.look before View.steer",

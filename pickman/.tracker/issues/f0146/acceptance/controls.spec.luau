@@ -5,8 +5,8 @@
 -- on, so FlowView's binding hears it at game over. Pads, the one tracker Sticks and Camera read: the most recently
 -- used controller drives, judged from its inputs (a button, or a stick past STEER_OFF), so a stick alone takes over,
 -- an idle pad's drift never does, a key keeps it, and a disconnected one reads nothing. Sticks: every Heartbeat it
--- folds the driving controller's Thumbstick1 through Pad.steer (stick up is Forward, never inverted) and hands what
--- it emits to Controls.turn, the keys' own path to the server. The stub require falls back to the real Logic
+-- folds the driving controller's Thumbstick1 through Pad.steer (stick up is Forward, never inverted) and sends what
+-- it emits on the Intent remote. The stub require falls back to the real Logic
 -- modules (pickman-test lesson stub-loaders-fall-back).
 local Blaster = require("@logic/Blaster")
 local Hop = require("@logic/Hop")
@@ -300,13 +300,13 @@ return t.spec("f0146 Controls, Pads and Sticks on a stub engine", function(it)
 	)
 
 	it(
-		"Sticks folds the driving controller's left stick into Controls.turn: up Forward, down Back, right Right",
+		"Sticks folds the driving controller's left stick: up Forward, down Back, right Right, never inverted",
 		function()
 			local w = world()
-			local controls, pads = boot3(w)
+			local _, pads = boot3(w)
 			local sticks = boot(w, "Sticks")
 			w.connected.Gamepad1 = true
-			sticks.start(pads.stick, controls.turn)
+			sticks.start(pads.stick)
 			w.input("Gamepad1", "Thumbstick1", 0, 0.9, false) -- the stick alone takes over
 			beat(w, "Gamepad1", 0, 0.9)
 			beat(w, "Gamepad1", 0, 0.9) -- held: nothing more
@@ -322,10 +322,10 @@ return t.spec("f0146 Controls, Pads and Sticks on a stub engine", function(it)
 		"Pads: a used controller takes over, an idle pad's drift never does, a key keeps it, a disconnected one reads nothing",
 		function()
 			local w = world()
-			local controls, pads = boot3(w)
+			local _, pads = boot3(w)
 			local sticks = boot(w, "Sticks")
 			w.connected.Gamepad1, w.connected.Gamepad2 = true, true
-			sticks.start(pads.stick, controls.turn)
+			sticks.start(pads.stick)
 			t.expect(pads.stick("Thumbstick1")).toBe(nil) -- none drives yet
 			w.input("Gamepad1", "Thumbstick1", -0.9, 0, false)
 			beat(w, "Gamepad1", -0.9, 0)
