@@ -13,6 +13,7 @@
 | 9 | 2026-10-26 01:30 | c0128: narrow the f0024 and f0026 adapter pins to allow d0124's HiscoreTop (experiments/narrowing.patch) | 54 | 18 | 10.0 | explicit | build |  |
 | 10 | 2026-10-26 01:30 | c0128: Verification log | 0 | 0 | 3.0 | explicit | build |  |
 | 11 | 2026-10-26 01:40 | c0128: Phase 3 in the Verification log | 0 | 0 | 2.0 | explicit | build |  |
+| 12 | 2026-10-26 03:59 | R0045: review-001 | 0 | 0 | 25.0 | raft | code-review |  |
 
-**Total:** +282 / -19 lines, 92.0 agent-minutes, 207132 tokens over 11 records
-<!-- totals: added=282 removed=19 minutes=92.0 records=11 tokens=207132 -->
+**Total:** +282 / -19 lines, 117.0 agent-minutes, 207132 tokens over 12 records
+<!-- totals: added=282 removed=19 minutes=117.0 records=12 tokens=207132 -->
