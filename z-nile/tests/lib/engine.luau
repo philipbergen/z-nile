@@ -116,7 +116,8 @@ function engine.empty(dir: string)
 	end
 	for _, root in engine.CLONE_ROOTS do
 		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
+			-- retired/: rafts recombine retired (c0116), which keep their folders
+			for _, state in { "", "active/", "done/", "retired/" } do
 				local base = `{dir}/{root}/{kind}/{state}`
 				if fs.isDir(base) then
 					for _, name in fs.readDir(base) do
