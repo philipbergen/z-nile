@@ -8,4 +8,4 @@ A criterion is a script: an earlier statement that fails stops it before a later
 
 **Why:** c0137 design review 002 F1: c0067 AC10's banned-word grep was fixed and tested line by line, but on main AC10 stopped earlier on statements naming skills c0115 had renamed, so the fixed grep never ran.
 
-**How to apply:** after fixing a line, run its whole criterion from the check's home and expect it green; add a spec case that extracts and runs the whole criterion, with a mutant that breaks an earlier statement.
+**How to apply:** after fixing a line, run its whole criterion from the check's home and expect it green; add a check.sh AC (not a promoted spec: lesson promoted-specs-pin-rules-not-sets; a whole finished criterion is today's text, not a rule) that extracts and runs the whole criterion, with a mutant that breaks an earlier statement. Keep any extraction helper in check.sh or beside it, never as a `*.spec.luau`.
