@@ -26,15 +26,10 @@ local function topLevel(): string
 	return (string.gsub(r.stdout, "%s+$", ""))
 end
 local TOP = topLevel()
--- c0139: never rewrite over a merge conflict (unmerged paths, or a tracked file holding a whole conflict)
+-- c0139: never rewrite over a merge conflict (unmerged paths, or a whole conflict in a working file under the
+-- registry's roots and skills folders: conflicts.folders, the list every caller shares)
 do
-	local conflicts = require("@znile/engine/conflicts")
-	local cprojects = require("@znile/engine/projects")
-	local folders: { string } = { "z-nile/skills", "pickman/skills" }
-	for _, r in cprojects.roots(cprojects.load(TOP)) do
-		table.insert(folders, r)
-	end
-	local stop = conflicts.refusal(TOP, "rename-lesson-ids", folders)
+	local stop = require("@znile/engine/conflicts").refusal(TOP, "rename-lesson-ids")
 	if stop then
 		require("@lune/stdio").ewrite(stop .. "\n")
 		process.exit(2)

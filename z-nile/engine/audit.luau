@@ -1,6 +1,7 @@
 --!strict
 -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
 -- malformed tree (which store.find refuses) can still be described. See c0880.
+local conflicts = require("./conflicts")
 local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
@@ -408,6 +409,15 @@ function audit.run(root: string): { Problem }
 	if okReg then
 		for _, p in audit.leftovers(root, found, reg :: projects.Registry) do
 			table.insert(problems, p)
+		end
+	end
+	-- c0139: a file under a root or a skills folder holding a whole merge conflict stops every writing command, so the
+	-- gate (which runs audit) reports it before it can land. Only in a git checkout (audit also runs without one).
+	if fs.isDir(`{root}/.git`) or fs.isFile(`{root}/.git`) then
+		local folders = conflicts.folders(root)
+		for _, m in conflicts.marked(root, folders or {}) do
+			local path = string.match(m, "^(.*):%d+$") or m
+			add("error", "conflict-markers", path, `{m} holds a merge conflict; {conflicts.RECOVERY}`)
 		end
 	end
 	-- The live counter (c0114): z-nile/next once origin has moved it there, and tracker/next before. Both parsing at once

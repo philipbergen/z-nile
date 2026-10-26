@@ -188,21 +188,6 @@ end
 -- ./zn changes into the repository root before it starts Lune, so the working directory is the
 -- checkout the tracker belongs to. A fixture whose own `.git` is missing would otherwise fall through to an
 -- enclosing repository, the real one, and change it.
--- the folders c0139's conflict check reads: every project root and every skills folder of the registry
-local function conflictFolders(): { string }
-	local out: { string } = {}
-	local ok, reg = pcall(projects.load, ".")
-	if ok then
-		for _, r in projects.roots(reg) do
-			table.insert(out, r)
-		end
-		for _, f in skillsLib.folders(reg) do
-			table.insert(out, f.path)
-		end
-	end
-	return out
-end
-
 local function guardRepoRoot()
 	local here = sh.run("pwd", { "-P" })
 	local top = sh.run("git", { "rev-parse", "--show-toplevel" })
@@ -5650,8 +5635,34 @@ local READ_ONLY: { [string]: boolean } = {
 }
 if not READ_ONLY[name :: string] then
 	guardRepoRoot()
-	-- c0139: a command that can write tracked files never runs over a merge conflict
-	local stop = conflictsLib.refusal(".", `tracker {name}`, conflictFolders())
+end
+-- c0139: the commands that may run over a merge conflict, because they only read (or only print): READ_ONLY, plus these
+-- forms. Every other command (and every writing form of these) refuses while the checkout has unmerged paths or a file
+-- under a root or a skills folder holds a whole conflict. `check` is refused on purpose: it runs specs that clone and
+-- judge the tree, and a conflicted tree gives meaningless results.
+local function conflictOk(cmdName: string, cmdArgs: { string }): boolean
+	if READ_ONLY[cmdName] then
+		return true
+	end
+	local function has(flag: string): boolean
+		return table.find(cmdArgs, flag) ~= nil
+	end
+	if cmdName == "busy" or cmdName == "capture" or cmdName == "prompt" or cmdName == "lessons" then
+		return true -- read-only reports (lessons --check and --uncovered read too)
+	end
+	if cmdName == "status" then
+		return #cmdArgs <= 1 -- the list, or one item; `status <id> <to>` writes
+	end
+	if cmdName == "raft-plan" then
+		return not has("--apply")
+	end
+	if cmdName == "skills" then
+		return has("--check")
+	end
+	return false
+end
+if not conflictOk(name :: string, table.move(args, 2, #args, 1, {})) then
+	local stop = conflictsLib.refusal(".", `tracker {name}`)
 	if stop then
 		fail(stop)
 	end
