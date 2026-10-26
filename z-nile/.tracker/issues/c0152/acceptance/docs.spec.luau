@@ -17,6 +17,8 @@ return t.spec("c0152 the merging rule names merge-check", function(it)
 		t.expect(has(merging, "If `main` moved since, first run `./zn merge-check <the green head>`"))
 			.toBe(true)
 		t.expect(has(merging, "merge without another cycle")).toBe(true)
+		t.expect(has(merging, "--match-head-commit <the sha it prints>")).toBe(true)
+		t.expect(has(merging, "runs `./zn audit` and c0120's check-paths spec there")).toBe(true)
 		t.expect(has(merging, "merge `origin/main` in with plain `git`")).toBe(true) -- the old path still holds
 		t.expect(has(zr, "| merge-check | `./zn merge-check [<head>]` |")).toBe(true)
 		t.expect(has(zr, "`merge-check`, `lessons`, `raft-plan` (without `--apply`)")).toBe(true)

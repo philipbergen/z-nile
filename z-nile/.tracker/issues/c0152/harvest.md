@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/tracker-only-is-still-read
+- design-review-001 F2: zz-arch/skips-pin-what-they-verified
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: z-design/design-the-execution-window
+- design-review-001 F5: zz-arch/guard-no-is-explicit
+- design-review-001 F6: z-design/rerun-skipped-checks-after-edits
