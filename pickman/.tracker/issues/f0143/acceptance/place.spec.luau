@@ -80,7 +80,15 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 			t.expect(string.find(main, "Camera%.boosted%(%s*frame%.boosted%s*%)") ~= nil).toBe(true)
 			local camera = source("Camera")
 			t.expect(has(camera, "function Camera.boosted(")).toBe(true)
-			t.expect(has(camera, "Boost.fov(")).toBe(true)
+			-- the shown tick the hop uses, never the frame's (design review 002 F3; Boost.fov counts from it)
+			t.expect(string.find(camera, "local%s+shown%s*=%s*View%.shownTick%(") ~= nil).toBe(true)
+			t.expect(
+				string.find(
+					camera,
+					"FieldOfView%s*=%s*View%.SCALE%.fieldOfView%s*%+%s*Boost%.fov%(%s*boosted%s*,%s*shown%s*%)"
+				) ~= nil
+			).toBe(true)
+			t.expect(string.find(camera, "Hop%.rise%(%s*hopped%s*,%s*shown%s*%)") ~= nil).toBe(true)
 			t.expect(has(camera, "FieldOfView")).toBe(true)
 			local hud = source("HudView")
 			t.expect(has(hud, "function HudView.boost(")).toBe(true)
@@ -101,6 +109,7 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 					"two quick swipes up",
 					"the D-pad's Up",
 					"left stick's click (L3)",
+					"double push of the left stick up",
 					"cancels a buffered turn",
 					"1.5 times",
 					"22 steps",

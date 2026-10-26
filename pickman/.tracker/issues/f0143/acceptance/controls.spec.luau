@@ -86,6 +86,7 @@ type World = {
 	sticks: { [string]: { x: number, y: number } },
 	press: (key: string, state: string) -> { any },
 	swipe: (dx: number, dy: number) -> (),
+	padInput: (pad: string, key: string, x: number, y: number) -> (),
 	now: { t: number },
 	env: { [string]: any },
 }
@@ -127,10 +128,19 @@ local function world(): World
 			return out
 		end,
 		swipe = function(_dx: number, _dy: number) end,
+		padInput = function() end,
 		now = { t = 0 },
 		env = {},
 	}
 	local began, changed, ended = signal(), signal(), signal()
+	-- a controller's stick moved, as Roblox reports it (Pads tracks the driving controller from these)
+	w.padInput = function(pad: string, key: string, x: number, y: number)
+		changed.fire({
+			UserInputType = enum.UserInputType[pad],
+			KeyCode = enum.KeyCode[key],
+			Position = { X = x, Y = y, Z = 0 },
+		}, false)
+	end
 	w.swipe = function(dx: number, dy: number)
 		-- one finger in the turn half (the left), a straight line from down to up
 		local input = { UserInputType = enum.UserInputType.Touch, Position = { X = 200, Y = 200 } }
@@ -232,13 +242,34 @@ local function controls(): World
 	return w
 end
 
--- presses `key` (Begin, then End) at each scripted time
+-- presses `key` (Begin, then End) at each scripted time; every intent goes out on the press, none on the release
+-- (design review 002 F2)
 local function taps(w: World, key: string, times: { number })
 	for _, at in times do
 		w.now.t = at
+		local before = #w.fired
 		w.press(key, "Begin")
+		local pressed = #w.fired
+		t.expect(pressed > before).toBe(true)
 		w.press(key, "End")
+		t.expect(#w.fired).toBe(pressed)
 	end
+end
+
+-- Pads and Sticks booted on the same stub, Gamepad1 connected and driving
+local function sticks(w: World)
+	local pads = boot(w, "Pads")
+	pads.start()
+	boot(w, "Sticks").start(pads.stick)
+	w.connected.Gamepad1 = true
+	w.padInput("Gamepad1", "Thumbstick1", 0, 0.9)
+end
+
+-- the left stick at (x, y) on the heartbeat at scripted time `at`
+local function push(w: World, at: number, x: number, y: number)
+	w.now.t = at
+	w.sticks.Gamepad1 = { x = x, y = y }
+	w.heartbeat.fire(1 / 60)
 end
 
 local function boosts(w: World): number
@@ -302,8 +333,66 @@ return t.spec("f0143 Controls' boost triggers on a stub engine", function(it)
 		local w = controls()
 		w.now.t = 0
 		local r = w.press("ButtonL3", "Begin")
+		t.expect(w.fired).toEqual({ Boost.INTENT }) -- on the press (design review 002 F2)
 		w.press("ButtonL3", "End")
-		t.expect(w.fired).toEqual({ Boost.INTENT })
+		t.expect(w.fired).toEqual({ Boost.INTENT }) -- nothing on the release
 		t.expect(r[1]).toBe(w.enum.ContextActionResult.Sink)
 	end)
+
+	it("a quick double push of the left stick up boosts (its own Taps); a slow one does not", function()
+		local w = world()
+		sticks(w)
+		push(w, 0, 0, 0.9)
+		push(w, 0.1, 0, 0)
+		push(w, 0.2, 0, 0.9)
+		t.expect(w.fired).toEqual({ "Forward", "Forward", Boost.INTENT })
+		local slow = world()
+		sticks(slow)
+		push(slow, 0, 0, 0.9)
+		push(slow, 0.1, 0, 0)
+		push(slow, 0.31, 0, 0.9)
+		t.expect(slow.fired).toEqual({ "Forward", "Forward" })
+	end)
+
+	it("a stick held up is one push; a tilt between STEER_OFF and STEER_ON from rest is none", function()
+		local w = world()
+		sticks(w)
+		for i = 0, 20 do
+			push(w, i * 0.02, 0, 0.9)
+		end
+		t.expect(w.fired).toEqual({ "Forward" })
+		local wobble = world()
+		sticks(wobble)
+		push(wobble, 0, 0, 0)
+		for i = 1, 10 do
+			push(wobble, i * 0.02, 0, if i % 2 == 0 then 0.45 else 0.55)
+		end
+		t.expect(wobble.fired).toEqual({})
+	end)
+
+	it(
+		"every Forward the stick emits is a push, a turn into up included; the stick and W never pair",
+		function()
+			local w = world()
+			sticks(w)
+			push(w, 0, -0.9, 0) -- Left
+			push(w, 0.05, math.cos(math.rad(100)) * 0.9, math.sin(math.rad(100)) * 0.9) -- rotated into up: Forward
+			push(w, 0.1, 0, 0)
+			push(w, 0.2, 0, 0.9)
+			t.expect(w.fired).toEqual({ "Left", "Forward", "Forward", Boost.INTENT })
+			local mixed = world()
+			local c = boot(mixed, "Controls")
+			c.keys({
+				arrows = function() end,
+				aim = function(): any
+					return "N"
+				end,
+			})
+			c.start(function() end)
+			sticks(mixed)
+			push(mixed, 0, 0, 0.9)
+			taps(mixed, "W", { 0.1 })
+			t.expect(mixed.fired).toEqual({ "Forward", "Forward" })
+		end
+	)
 end)
