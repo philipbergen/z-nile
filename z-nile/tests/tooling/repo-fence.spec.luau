@@ -96,6 +96,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_COMMON_DIR = "refused",
 		GIT_OBJECT_DIRECTORY = "refused",
 	},
+	-- c0139 design review 003 F1: the conflict guard reads these to refuse when one is inherited (a checkout git is
+	-- pointed elsewhere is still a checkout), never sets them
+	["z-nile/engine/conflicts.luau"] = {
+		GIT_DIR = "read to refuse when inherited",
+		GIT_WORK_TREE = "read to refuse when inherited",
+		GIT_INDEX_FILE = "read to refuse when inherited",
+		GIT_COMMON_DIR = "read to refuse when inherited",
+	},
 	["z-nile/tests/acceptance/c0060/fixture.spec.luau"] = {
 		GIT_DIR = "proves the helper refuses it",
 		GIT_WORK_TREE = "proves the helper refuses it",
