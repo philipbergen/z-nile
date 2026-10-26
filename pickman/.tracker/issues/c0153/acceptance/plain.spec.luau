@@ -97,6 +97,7 @@ return t.spec("c0153 plain data and a JSON round trip within a tolerance", funct
 				{ value = { [0] = "x" }, says = "value: a hole at 1" },
 				{ value = { [-1] = "x" }, says = "value: a hole at 1" },
 				{ value = { [1.5] = "x" }, says = "value: a hole at 1" },
+				-- selene: allow(mixed_table) -- a mixed table is the value this case refuses
 				{ value = { 1, 2, a = 3 }, says = "value: a table with both string and number keys" },
 				{ value = { [true :: any] = 1 }, says = "value: a boolean key" },
 			}
