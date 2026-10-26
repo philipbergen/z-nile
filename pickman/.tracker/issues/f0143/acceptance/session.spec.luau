@@ -16,8 +16,11 @@ local Session = require("@logic/Session")
 local t = require("@tests/lib/t")
 
 -- a long straight corridor: the player spawns at its east end heading west, with room for a boost and more
-local ROW = "#" .. string.rep(" ", 78) .. "P#"
+local ROW = "#" .. string.rep(" ", 77) .. "P#"
 local LONG = Maze.parse({ string.rep("#", 80), ROW, string.rep("#", 80) }, "long")
+-- the same corridor with a pellet on every tile, for the eating pause
+local DOTTED =
+	Maze.parse({ string.rep("#", 80), "#" .. string.rep(".", 77) .. "P#", string.rep("#", 80) }, "dotted")
 local FREE: Session.Config = { movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4 }
 local CLASSIC: Session.Config =
 	{ movement = { speed = 30, turnBufferTicks = 24 }, maxIntentsPerTick = 4, play = Game.CLASSIC_CONFIG }
@@ -101,17 +104,20 @@ return t.spec("f0143 the boost in a session", function(it)
 		t.expect(Session.frame(s, "p").boosted).toBe(s.tick)
 	end)
 
-	it("a boosted step covers round(speed * FACTOR) units, for TICKS steps, then the level's speed again", function()
-		local s = new(FREE)
-		Session.step(s)
-		t.expect(travelled(s)).toBe(30)
-		t.expect((Session.submit(s, "p", Boost.INTENT))).toBe(true)
-		for i = 1, Boost.TICKS do
-			t.expect(travelled(s)).toBe(45)
+	it(
+		"a boosted step covers round(speed * FACTOR) units, for TICKS steps, then the level's speed again",
+		function()
+			local s = new(FREE)
+			Session.step(s)
+			t.expect(travelled(s)).toBe(30)
+			t.expect((Session.submit(s, "p", Boost.INTENT))).toBe(true)
+			for _ = 1, Boost.TICKS do
+				t.expect(travelled(s)).toBe(45)
+			end
+			t.expect(travelled(s)).toBe(30)
+			t.expect(travelled(s)).toBe(30)
 		end
-		t.expect(travelled(s)).toBe(30)
-		t.expect(travelled(s)).toBe(30)
-	end)
+	)
 
 	it("outside play a boost does nothing and is not kept", function()
 		local s = new(CLASSIC)
@@ -170,32 +176,38 @@ return t.spec("f0143 the boost in a session", function(it)
 		t.expect(Session.frame(s, "q").boosted).toBe(s.tick)
 	end)
 
-	it("a boost and a hop in one tick both start, and a pellet eaten while boosting owes the boosted distance", function()
-		local s = new(FREE)
-		Session.step(s)
-		t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
-		local events = boost(s)
-		t.expect(count(events, "Hopped")).toBe(1)
-		t.expect(count(events, "Boosted")).toBe(1)
+	it(
+		"a boost and a hop in one tick both start, and a pellet eaten while boosting owes the boosted distance",
+		function()
+			local s = new(FREE)
+			Session.step(s)
+			t.expect((Session.submit(s, "p", Hop.INTENT))).toBe(true)
+			local events = boost(s)
+			t.expect(count(events, "Hopped")).toBe(1)
+			t.expect(count(events, "Boosted")).toBe(1)
 
-		local e = new(EATING)
-		Session.step(e)
-		t.expect((Session.submit(e, "p", Boost.INTENT))).toBe(true)
-		local item: Pellets.Kind? = nil
-		for _ = 1, Boost.TICKS do
-			local before = e.members.p.stall
-			for _, ev in Session.step(e) do
-				if ev.kind == "PelletEaten" and item == nil and before == 0 then
-					item = ev.item :: Pellets.Kind
+			local e = Session.new(DOTTED, 1, EATING)
+			Session.join(e, "p")
+			Session.step(e)
+			t.expect((Session.submit(e, "p", Boost.INTENT))).toBe(true)
+			local item: Pellets.Kind? = nil
+			for _ = 1, Boost.TICKS do
+				local before = e.members.p.stall
+				for _, ev in Session.step(e) do
+					if ev.kind == "PelletEaten" and item == nil and before == 0 then
+						item = ev.item :: Pellets.Kind
+					end
+				end
+				if item then
+					break
 				end
 			end
-			if item then
-				break
-			end
+			assert(item, "a pellet is eaten while boosting")
+			local boosted = Boost.speed(30, true, Movement.UNITS)
+			t.expect(e.members.p.stall)
+				.toBe(Pellets.stallUnits(item :: Pellets.Kind, boosted, Session.TICK_RATE))
+			t.expect(e.members.p.stall ~= Pellets.stallUnits(item :: Pellets.Kind, 30, Session.TICK_RATE))
+				.toBe(true)
 		end
-		assert(item, "a pellet is eaten while boosting")
-		local boosted = Boost.speed(30, true, Movement.UNITS)
-		t.expect(e.members.p.stall).toBe(Pellets.stallUnits(item :: Pellets.Kind, boosted, Session.TICK_RATE))
-		t.expect(e.members.p.stall ~= Pellets.stallUnits(item :: Pellets.Kind, 30, Session.TICK_RATE)).toBe(true)
-	end)
+	)
 end)
