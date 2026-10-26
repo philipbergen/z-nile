@@ -9,6 +9,9 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: ./zn merge-check exits 0 only when every commit origin's main gained since the head is tracker state the publisher allows and touches none of the PR's files, reading main's tip from origin; otherwise exits 1 naming each" \
+  lune run tests/run -- "$A/merge-check.spec.luau"
+check "AC2: zz-rules' Merging step 4 states the exception through ./zn merge-check, and the command table, the read-only list and the usage name it" \
+  lune run tests/run -- "$A/docs.spec.luau"
 
 finish
