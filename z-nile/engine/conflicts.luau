@@ -95,6 +95,12 @@ end
 -- why `tool` must not run in the checkout at `top`, or nil: unmerged paths first, then whole conflicts in the working
 -- tree under the registry's folders; a registry that can't be read refuses too (fail closed)
 function conflicts.refusal(top: string, tool: string): string?
+	-- outside any git repository nothing can be mid-merge: git saying "not a git repository" is that explicit answer
+	-- (migrate runs in such a tree); any other failure of this read refuses below
+	local inside = sh.run("git", { "-C", top, "rev-parse", "--is-inside-work-tree" })
+	if not inside.ok and string.find(inside.stderr, "not a git repository", 1, true) then
+		return nil
+	end
 	local u, uWhy = conflicts.unmerged(top)
 	if not u then
 		return `{tool}: refusing to run: can't tell whether files hold merge conflicts: {uWhy}\n{conflicts.RECOVERY}`
