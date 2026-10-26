@@ -83,6 +83,20 @@ local function bad(scan: string, home: string): string
 	local r = process.exec("bash", { "-c", scan .. '\nprintf "%s" "$bad"' }, { cwd = home })
 	return r.stdout
 end
+-- how a grep line ends when run from `home` (no planted phrase): whether its script went on, and what it wrote to
+-- stderr. A folder the grep names that is missing must stop it (design review 001 F1): grep's exit 2 is not "clean".
+local function runs(scan: string, home: string): { ok: boolean, stderr: string }
+	local r = process.exec("bash", { "-c", scan .. '\nprintf "%s" "$bad"' }, { cwd = home })
+	return { ok = r.ok, stderr = r.stderr }
+end
+-- the folders an existence line tests (`-e <dir>/make-prompt`)
+local function testedDirs(test: string): { string }
+	local out: { string } = {}
+	for dir in string.gmatch(test, "%-e (%S+)/make%-prompt") do
+		table.insert(out, dir)
+	end
+	return out
+end
 -- whether an existence line passes, run from `home`
 local function absent(test: string, home: string): boolean
 	local r = process.exec("bash", { "-c", (string.gsub(test, "%s*||.*$", "")) }, { cwd = home })
@@ -144,13 +158,34 @@ return t.spec("c0137 finished checks read the skills where they are", function(i
 		end
 	)
 
-	it("in the real home every line finds nothing: the finished checks stay green", function()
+	it("a grep line stops, not passes, when a folder it reads is missing", function()
 		for _, s in SCANS do
-			t.expect({ name = s.name, found = bad(line(s.file, s.needle), HOME) })
-				.toEqual({ name = s.name, found = "" })
+			setUp()
+			fs.removeDir(`{FX}/z-nile/skills`)
+			local r = runs(line(s.file, s.needle), `{FX}/z-nile`)
+			t.expect({ name = s.name, ok = r.ok }).toEqual({ name = s.name, ok = false })
 		end
-		t.expect(absent(line(EXISTS.file, EXISTS.needle), HOME)).toBe(true)
 	end)
+
+	it(
+		"in the real home every line finds nothing, reads every folder it names, and the finished checks stay green",
+		function()
+			for _, s in SCANS do
+				local l = line(s.file, s.needle)
+				t.expect({ name = s.name, found = bad(l, HOME) }).toEqual({ name = s.name, found = "" })
+				local r = runs(l, HOME)
+				t.expect({ name = s.name, ok = r.ok, stderr = r.stderr })
+					.toEqual({ name = s.name, ok = true, stderr = "" })
+			end
+			local test = line(EXISTS.file, EXISTS.needle)
+			t.expect(absent(test, HOME)).toBe(true)
+			local dirs = testedDirs(test)
+			t.expect(#dirs).toBe(3)
+			for _, dir in dirs do
+				t.expect({ dir = dir, there = fs.isDir(`{HOME}/{dir}`) }).toEqual({ dir = dir, there = true })
+			end
+		end
+	)
 
 	it("cleans up", function()
 		if fs.isDir(FX) then

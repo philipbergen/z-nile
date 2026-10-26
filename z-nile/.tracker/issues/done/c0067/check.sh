@@ -53,7 +53,7 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
   grep -qF "prompt.md" "$t" || { echo "tracker skill: prompt.md"; exit 1; }
   grep -qF "/ready-raft" skills/z-design/SKILL.md || { echo "ticket-prep: next step"; exit 1; }
   ! grep -qF "moves the items to \`active/\`" skills/zz-execute/SKILL.md || { echo "execute-raft: start still moves"; exit 1; }
-  bad=$(grep -rnIi -e "pbcopy" -e "clipboard" skills ../pickman/skills ./templates scripts ../AGENTS.md || true)
+  bad=$(grep -rnIi -e "pbcopy" -e "clipboard" skills ../pickman/skills ./templates scripts ../AGENTS.md) || [ $? -eq 1 ] || { echo "a folder this scan reads is missing"; exit 1; }
   [ -z "$bad" ] || { echo "$bad"; exit 1; }
   # the 13 phrases c0005 AC5 bans
   bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \

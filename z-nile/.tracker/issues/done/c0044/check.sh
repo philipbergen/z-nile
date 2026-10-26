@@ -53,7 +53,7 @@ check "AC9: the skill describes the layout; no text still says <ID>-<slug>.md" b
   grep -qF "<ID>/<ID>.md" skills/zz-rules/SKILL.md || { echo "tracker skill: layout line"; exit 1; }
   grep -qi "migrate" skills/zz-rules/SKILL.md || { echo "tracker skill: no migrate procedure"; exit 1; }
   grep -qF "add/add" skills/zz-rules/SKILL.md || { echo "tracker skill: only add/add means renumber"; exit 1; }
-  bad=$(grep -rnF -e "<ID>-<slug>" -e "<id>-<slug>" -e "-slug.md" -e "-<slug>.md" skills ../pickman/skills scripts ./templates ../SETUP.md ../AGENTS.md || true)
+  bad=$(grep -rnF -e "<ID>-<slug>" -e "<id>-<slug>" -e "-slug.md" -e "-<slug>.md" skills ../pickman/skills scripts ./templates ../SETUP.md ../AGENTS.md) || [ $? -eq 1 ] || { echo "a folder this scan reads is missing"; exit 1; }
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC10: no spec names a legacy document path (the permanent guard)" \
   lune run tests/run -- "$A/guard.spec.luau"

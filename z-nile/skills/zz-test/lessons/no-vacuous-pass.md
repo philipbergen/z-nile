@@ -17,3 +17,5 @@ The same holds through a variable: c0084's `grep -rnF -- "--time 0" "$S"`, with 
 And through a trailing slash or a glob: BSD grep follows no link, not even one named on the command line, so `grep -r x ../.claude/skills/` and `…/skills/*` find nothing too (design review 012 F2). Match the operand by what follows the folder (an optional `/`, then a non-name character), not by a list of spellings.
 
 A cleanup rule needs a case whose outcome differs without it (c0117 design review 009 F3): pin "remove the stale file" and "move the failed attempt's file aside" with a next writer that writes nothing. A case where a later write overwrites the leftover can't fail, so the stale removal and a copy-instead-of-move both survived it.
+
+c0137 design review 001 F1: fixing a vacuous check also guards the mechanism that hid it. Four finished greps ended `|| true`, which swallowed grep's exit 2 when c0120's move took their `.claude` operand away; giving them the right folders but keeping `|| true` would let the next move do the same unseen. Check: after the fix, does removing one operand folder turn some check red?
