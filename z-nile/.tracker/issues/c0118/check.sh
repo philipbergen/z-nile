@@ -30,7 +30,7 @@ check "AC7: the old navigation, Stats, the CLI, the artifact workflow and the ma
   tests/acceptance/c0048/board-docs.spec.luau tests/acceptance/c0048/board-workflow.spec.luau \
   tests/acceptance/c0070/board-refresh.spec.luau tests/tooling/board.spec.luau
 check "AC8: metrics counts review rounds by the board's rule, and the README picture spec (overridden) stays green" \
-  lune run tests/run -- tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
+  lune run tests/run -- "$A/metrics.spec.luau" tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
   tests/acceptance/c0111/metrics-lessons.spec.luau tests/acceptance/c0116/issue-design.spec.luau \
   tests/acceptance/c0116/retired.spec.luau tests/acceptance/c0115/readme.spec.luau
 finish
