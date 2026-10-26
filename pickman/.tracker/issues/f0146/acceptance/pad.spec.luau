@@ -170,14 +170,20 @@ return t.spec("f0146 Pad", function(it)
 		end
 	)
 
-	it("track follows the most recently used controller, and ignores other inputs", function()
-		t.expect(Pad.track(nil, "Gamepad1")).toBe("Gamepad1")
-		t.expect(Pad.track("Gamepad1", "Gamepad2")).toBe("Gamepad2") -- another controller used: it drives now
-		t.expect(Pad.track("Gamepad2", "Keyboard")).toBe("Gamepad2") -- a key keeps the controller
-		t.expect(Pad.track("Gamepad2", "Touch")).toBe("Gamepad2")
-		t.expect(Pad.track(nil, "MouseMovement")).toBe(nil)
-		t.expect(Pad.track("Gamepad3", "GamepadX")).toBe("Gamepad3")
-	end)
+	it(
+		"track: a controller's button or a stick past STEER_OFF takes over; drift, keys and touches keep the one before",
+		function()
+			t.expect(Pad.track(nil, "Gamepad1", 1)).toBe("Gamepad1")
+			t.expect(Pad.track("Gamepad1", "Gamepad2", 1)).toBe("Gamepad2") -- another controller's button
+			t.expect(Pad.track("Gamepad1", "Gamepad2", Pad.STEER_OFF)).toBe("Gamepad2") -- its stick, just enough
+			t.expect(Pad.track("Gamepad1", "Gamepad2", Pad.STEER_OFF - 0.01)).toBe("Gamepad1") -- drift
+			t.expect(Pad.track("Gamepad1", "Gamepad2", 0 / 0)).toBe("Gamepad1")
+			t.expect(Pad.track("Gamepad2", "Keyboard", 1)).toBe("Gamepad2") -- a key keeps the controller
+			t.expect(Pad.track("Gamepad2", "Touch", 1)).toBe("Gamepad2")
+			t.expect(Pad.track(nil, "MouseMovement", 1)).toBe(nil)
+			t.expect(Pad.track("Gamepad3", "GamepadX", 1)).toBe("Gamepad3")
+		end
+	)
 
 	it("isPad names the gamepads only", function()
 		for i = 1, 8 do

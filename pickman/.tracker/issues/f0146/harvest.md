@@ -5,3 +5,7 @@
 - design-review-001 F5: z-design/prove-specs-pass-on-a-prototype
 - design-review-001 F6: one-off: Roblox's ButtonB clears GuiService.SelectedObject; a platform behaviour of the lobby's selection, not a pattern the lessons can generalise
 - note f0143's rebuilt prototype turned controls.spec red: it read the second-to-last intent, which f0143's boost moves; it now reads each press's own first intent: z-design/run-the-other-rafts-specs
+- design-review-002 F1: z-design/spec-design-correspondence, zz-test/pin-call-site-arguments
+- design-review-002 F2: zz-test/one-rule-one-function, zz-test/pin-fail-safes-where-they-act
+- design-review-002 F3: zz-arch/guard-what-the-engine-sees
+- design-review-002 F4: z-design/restated-rules-move-together, z-design/decided-guesses-rewrite-their-body

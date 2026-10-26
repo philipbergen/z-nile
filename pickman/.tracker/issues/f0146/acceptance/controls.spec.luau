@@ -1,10 +1,14 @@
 --!strict
--- f0146 AC3 (design review 001 F1, F2): Controls and Sticks run from their real sources on a stub engine. Controls:
--- a pad button goes down its key's path and is sunk, except Pad.CONTINUE (ButtonA), which jumps (Hop.INTENT) and is
--- passed on, so FlowView's binding hears it at game over; keys are sunk as before. Sticks: every Heartbeat it folds
--- the most recently used controller's Thumbstick1 through Pad.steer (stick up is Forward, never inverted) and sends
--- what it emits; another controller used takes over; a disconnected one sends nothing. The stub require falls back
--- to the real Logic modules (pickman-test lesson stub-loaders-fall-back).
+-- f0146 AC3 (design reviews 001 F1, F2 and 002 F1 to F3): Controls, Pads and Sticks run from their real sources on
+-- a stub engine. Controls: each pad button does what its key does (R2 fires where the player aims, each D-pad
+-- direction turns, R3 recentres) and is sunk, except Pad.CONTINUE (ButtonA), which jumps (Hop.INTENT) and is passed
+-- on, so FlowView's binding hears it at game over. Pads, the one tracker Sticks and Camera read: the most recently
+-- used controller drives, judged from its inputs (a button, or a stick past STEER_OFF), so a stick alone takes over,
+-- an idle pad's drift never does, a key keeps it, and a disconnected one reads nothing. Sticks: every Heartbeat it
+-- folds the driving controller's Thumbstick1 through Pad.steer (stick up is Forward, never inverted) and hands what
+-- it emits to Controls.turn, the keys' own path to the server. The stub require falls back to the real Logic
+-- modules (pickman-test lesson stub-loaders-fall-back).
+local Blaster = require("@logic/Blaster")
 local Hop = require("@logic/Hop")
 local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
@@ -82,6 +86,8 @@ type World = {
 	last: { name: string },
 	connected: { [string]: boolean },
 	sticks: { [string]: { x: number, y: number } },
+	looks: { [string]: { x: number, y: number } },
+	input: (pad: string, key: string, x: number, y: number, began: boolean) -> (),
 	press: (key: string, state: string) -> { any },
 	env: { [string]: any },
 }
@@ -99,6 +105,7 @@ local function world(): World
 			return remote
 		end,
 	}
+	local began, changed = signal(), signal()
 	local w: World
 	w = {
 		enum = enum,
@@ -109,6 +116,8 @@ local function world(): World
 		last = { name = "Keyboard" },
 		connected = {},
 		sticks = {},
+		looks = {},
+		input = function() end,
 		-- a key or button event to every handler bound to it; returns their results (a ContextActionResult each)
 		press = function(key: string, state: string): { any }
 			local out: { any } = {}
@@ -124,6 +133,19 @@ local function world(): World
 		end,
 		env = {},
 	}
+	-- an input from a controller: a button press (began) or a stick's move (InputChanged), as Roblox reports them
+	w.input = function(pad: string, key: string, x: number, y: number, isBegin: boolean)
+		local obj = {
+			UserInputType = enum.UserInputType[pad],
+			KeyCode = enum.KeyCode[key],
+			Position = { X = x, Y = y, Z = 0 },
+		}
+		if isBegin then
+			began.fire(obj, false)
+		else
+			changed.fire(obj, false)
+		end
+	end
 	local function bind(_: any, _name: string, fn: any, _touch: boolean, ...: any)
 		local codes: { string } = {}
 		for _, code in { ... } do
@@ -159,8 +181,8 @@ local function world(): World
 		},
 		RunService = { Heartbeat = w.heartbeat },
 		UserInputService = {
-			InputBegan = signal(),
-			InputChanged = signal(),
+			InputBegan = began,
+			InputChanged = changed,
 			InputEnded = signal(),
 			WindowFocusReleased = signal(),
 			LastInputTypeChanged = w.lastChanged,
@@ -171,13 +193,21 @@ local function world(): World
 				return w.connected[pad.Name] == true
 			end,
 			GetGamepadState = function(_: any, pad: any): { any }
-				local stick = w.sticks[pad.Name]
-				if stick == nil then
-					return {}
+				local out = {}
+				local stick, look = w.sticks[pad.Name], w.looks[pad.Name]
+				if stick then
+					table.insert(
+						out,
+						{ KeyCode = enum.KeyCode.Thumbstick1, Position = { X = stick.x, Y = stick.y, Z = 0 } }
+					)
 				end
-				return {
-					{ KeyCode = enum.KeyCode.Thumbstick1, Position = { X = stick.x, Y = stick.y, Z = 0 } },
-				}
+				if look then
+					table.insert(
+						out,
+						{ KeyCode = enum.KeyCode.Thumbstick2, Position = { X = look.x, Y = look.y, Z = 0 } }
+					)
+				end
+				return out
 			end,
 		},
 	}
@@ -204,82 +234,125 @@ local function boot(w: World, name: string): any
 	return module
 end
 
-local function use(w: World, pad: string)
-	w.last.name = pad
-	w.lastChanged.fire(w.enum.UserInputType[pad])
+-- Controls booted and started, with a snap counter; Pads booted and started
+local function boot3(w: World): (any, any, { snaps: number })
+	local snaps = { snaps = 0 }
+	local controls = boot(w, "Controls")
+	controls.keys({
+		arrows = function() end,
+		aim = function(): any
+			return "N"
+		end,
+	})
+	controls.start(function()
+		snaps.snaps += 1
+	end)
+	local pads = boot(w, "Pads")
+	pads.start()
+	return controls, pads, snaps
 end
 
-return t.spec("f0146 Controls and Sticks on a stub engine", function(it)
-	it("ButtonA jumps and is passed on to FlowView; other pad buttons and the keys are sunk", function()
-		local w = world()
-		local controls = boot(w, "Controls")
-		controls.keys({
-			arrows = function() end,
-			aim = function(): any
-				return "N"
-			end,
-		})
-		controls.start(function() end)
-		local a = w.press("ButtonA", "Begin")
-		t.expect(#a).toBe(1)
-		t.expect(a[1]).toBe(w.enum.ContextActionResult.Pass)
-		t.expect(w.fired).toEqual({ Hop.INTENT })
-		local first: { [string]: any } = {}
-		for _, key in { "ButtonR2", "DPadUp", "ButtonR3", "W", "Space" } do
-			local before = #w.fired
-			local r = w.press(key, "Begin")
-			t.expect(#r).toBe(1)
-			t.expect(r[1]).toBe(w.enum.ContextActionResult.Sink)
-			first[key] = w.fired[before + 1]
-		end
-		-- each press's own first intent, so a later feature's extra intent (f0143's boost) leaves this case alone
-		t.expect(first.W).toBe("Forward")
-		t.expect(first.DPadUp).toBe("Forward") -- the D-pad's Up goes the way of W
-	end)
+local function beat(w: World, pad: string, x: number, y: number)
+	w.sticks[pad] = { x = x, y = y }
+	w.heartbeat.fire(1 / 60)
+end
 
+return t.spec("f0146 Controls, Pads and Sticks on a stub engine", function(it)
 	it(
-		"Sticks folds the most recent controller's left stick: up is Forward, down Back, right Right, never inverted",
+		"each pad button does what its key does and is sunk; ButtonA jumps and is passed on to FlowView",
 		function()
 			local w = world()
+			local _, _, snaps = boot3(w)
+			local function adds(key: string): ({ any }, any)
+				local before = #w.fired
+				local r = w.press(key, "Begin")
+				w.press(key, "End")
+				t.expect(#r).toBe(1)
+				local added = {}
+				for i = before + 1, #w.fired do
+					table.insert(added, w.fired[i])
+				end
+				return added, r[1]
+			end
+			local a, pass = adds("ButtonA")
+			t.expect(a).toEqual({ Hop.INTENT })
+			t.expect(pass).toBe(w.enum.ContextActionResult.Pass)
+			local sink = w.enum.ContextActionResult.Sink
+			local expected: { { any } } = {
+				{ "ButtonR2", { Blaster.intent("N") } },
+				{ "DPadUp", { "Forward" } },
+				{ "DPadDown", { "Back" } },
+				{ "DPadLeft", { "Left" } },
+				{ "DPadRight", { "Right" } },
+				{ "W", { "Forward" } },
+				{ "Space", { Hop.INTENT } },
+			}
+			for _, row in expected do
+				local added, result = adds(row[1])
+				t.expect(added).toEqual(row[2])
+				t.expect(result).toBe(sink)
+			end
+			local r3, result = adds("ButtonR3")
+			t.expect(r3).toEqual({})
+			t.expect(result).toBe(sink)
+			t.expect(snaps.snaps).toBe(1)
+		end
+	)
+
+	it(
+		"Sticks folds the driving controller's left stick into Controls.turn: up Forward, down Back, right Right",
+		function()
+			local w = world()
+			local controls, pads = boot3(w)
 			local sticks = boot(w, "Sticks")
 			w.connected.Gamepad1 = true
-			use(w, "Gamepad1")
-			sticks.start()
-			w.sticks.Gamepad1 = { x = 0, y = 0.9 }
-			w.heartbeat.fire(1 / 60)
-			w.heartbeat.fire(1 / 60) -- held: nothing more
-			w.sticks.Gamepad1 = { x = 0, y = 0 }
-			w.heartbeat.fire(1 / 60)
-			w.sticks.Gamepad1 = { x = 0, y = -0.9 }
-			w.heartbeat.fire(1 / 60)
-			w.sticks.Gamepad1 = { x = 0, y = 0 }
-			w.heartbeat.fire(1 / 60)
-			w.sticks.Gamepad1 = { x = 0.9, y = 0 }
-			w.heartbeat.fire(1 / 60)
+			sticks.start(pads.stick, controls.turn)
+			w.input("Gamepad1", "Thumbstick1", 0, 0.9, false) -- the stick alone takes over
+			beat(w, "Gamepad1", 0, 0.9)
+			beat(w, "Gamepad1", 0, 0.9) -- held: nothing more
+			beat(w, "Gamepad1", 0, 0)
+			beat(w, "Gamepad1", 0, -0.9)
+			beat(w, "Gamepad1", 0, 0)
+			beat(w, "Gamepad1", 0.9, 0)
 			t.expect(w.fired).toEqual({ "Forward", "Back", "Right" })
 		end
 	)
 
-	it("another controller used takes the stick over; a disconnected one sends nothing", function()
-		local w = world()
-		local sticks = boot(w, "Sticks")
-		w.connected.Gamepad1, w.connected.Gamepad2 = true, true
-		use(w, "Gamepad1")
-		sticks.start()
-		w.sticks.Gamepad1 = { x = -0.9, y = 0 }
-		w.sticks.Gamepad2 = { x = 0.9, y = 0 }
-		w.heartbeat.fire(1 / 60)
-		t.expect(w.fired).toEqual({ "Left" })
-		use(w, "Gamepad2")
-		w.heartbeat.fire(1 / 60)
-		t.expect(w.fired).toEqual({ "Left", "Right" })
-		use(w, "Keyboard") -- a key keeps the controller that drives
-		w.sticks.Gamepad2 = { x = 0, y = 0.9 }
-		w.heartbeat.fire(1 / 60)
-		t.expect(w.fired).toEqual({ "Left", "Right", "Forward" })
-		w.connected.Gamepad2 = false
-		w.sticks.Gamepad2 = { x = 0, y = -0.9 }
-		w.heartbeat.fire(1 / 60)
-		t.expect(#w.fired).toBe(3)
-	end)
+	it(
+		"Pads: a used controller takes over, an idle pad's drift never does, a key keeps it, a disconnected one reads nothing",
+		function()
+			local w = world()
+			local controls, pads = boot3(w)
+			local sticks = boot(w, "Sticks")
+			w.connected.Gamepad1, w.connected.Gamepad2 = true, true
+			sticks.start(pads.stick, controls.turn)
+			t.expect(pads.stick("Thumbstick1")).toBe(nil) -- none drives yet
+			w.input("Gamepad1", "Thumbstick1", -0.9, 0, false)
+			beat(w, "Gamepad1", -0.9, 0)
+			t.expect(w.fired).toEqual({ "Left" })
+			-- Gamepad2's stick drifts below STEER_OFF: Gamepad1 still drives
+			w.input("Gamepad2", "Thumbstick1", 0.1, 0.1, false)
+			w.sticks.Gamepad2 = { x = 0.9, y = 0 }
+			beat(w, "Gamepad1", -0.9, 0)
+			t.expect(w.fired).toEqual({ "Left" })
+			-- a button on Gamepad2: it drives now, sticks and look alike
+			w.input("Gamepad2", "ButtonX", 0, 0, true)
+			w.looks.Gamepad1 = { x = 0.5, y = 0 }
+			w.looks.Gamepad2 = { x = 0, y = 0.7 }
+			w.heartbeat.fire(1 / 60)
+			t.expect(w.fired).toEqual({ "Left", "Right" })
+			local lx, ly = pads.stick("Thumbstick2")
+			t.expect(lx).toBe(0)
+			t.expect(ly).toBe(0.7)
+			-- a key keeps the controller that drives
+			w.input("Keyboard", "W", 0, 0, true)
+			local kx = pads.stick("Thumbstick2")
+			t.expect(kx).toBe(0)
+			-- disconnected: nothing read, nothing sent
+			w.connected.Gamepad2 = false
+			t.expect(pads.stick("Thumbstick2")).toBe(nil)
+			beat(w, "Gamepad2", 0, -0.9)
+			t.expect(#w.fired).toBe(2)
+		end
+	)
 end)

@@ -1,9 +1,10 @@
 --!strict
 -- f0146 AC3, AC4 and AC5: the gamepad's adapters and documents, as source pins read with comments removed. Controls
 -- binds Pad.BUTTONS' key codes beside View.KEYS', reads View.action or Pad.action, passes Pad.CONTINUE on (so
--- FlowView hears it), and never says "Gamepad" (f0027 pins that). Sticks, booted by Main, polls the first gamepad's
--- most recently used controller's (Pad.track) Thumbstick1 into Pad.steer every frame and sends what it emits on the Intent remote. Camera polls
--- Thumbstick2 into Pad.look and View.look before View.steer. In the lobby, Main boots LobbyPad after LobbyView, and
+-- FlowView hears it), and never says "Gamepad" (f0027 pins that). Pads is the one tracker of the most recently used
+-- controller (Pad.track over InputBegan and InputChanged); only it reads a gamepad's state. Main boots it and hands
+-- Pads.stick to Camera and to Sticks, and Controls.turn to Sticks. Camera reads Thumbstick2 through it into Pad.look
+-- and View.look before View.steer. In the lobby, Main boots LobbyPad after LobbyView, and
 -- LobbyPad selects the Start button when the last input is a gamepad (Pad.isPad), at start and on
 -- LastInputTypeChanged, only when nothing is selected. What the pins leave to the code review: that the polls run every
 -- frame, and the Roblox selection behaviour itself (OC1). game-design.md's Platforms row includes gamepad and states
@@ -74,48 +75,60 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 	)
 
 	it(
-		"Sticks, booted by Main, folds the first gamepad's Thumbstick1 into Pad.steer every frame and sends what it emits",
+		"Pads, the one tracker, reads the gamepads; Main hands Pads.stick to Camera and Sticks, and Controls.turn to Sticks",
 		function()
-			t.expect(resolvesPad(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", "Sticks" }))
-				.toBe(true)
-			local src = client("Sticks")
+			for _, name in { "Pads", "Sticks" } do
+				t.expect(resolvesPad(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", name }))
+					.toBe(true)
+			end
+			local pads = client("Pads")
 			for _, needle in
-				{
-					"GetGamepadState(",
-					"Pad.track(",
-					"LastInputTypeChanged",
-					"Thumbstick1",
-					"Pad.steer(",
-					"Heartbeat",
-					':WaitForChild("Intent")',
-				}
+				{ "GetGamepadState(", "GetGamepadConnected(", "Pad.track(", "InputBegan", "InputChanged" }
 			do
-				if not has(src, needle) then
+				if not has(pads, needle) then
+					error(`Pads lacks {needle}`)
+				end
+			end
+			-- one copy of the tracking: no other client script reads a gamepad's state or the last input type
+			for _, name in { "Sticks", "Camera", "Controls" } do
+				local src = client(name)
+				t.expect(has(src, "GetGamepadState")).toBe(false)
+				t.expect(has(src, "Pad.track(")).toBe(false)
+				t.expect(has(src, "LastInputType")).toBe(false)
+			end
+			local sticks = client("Sticks")
+			for _, needle in { '"Thumbstick1"', "Pad.steer(", "Heartbeat" } do
+				if not has(sticks, needle) then
 					error(`Sticks lacks {needle}`)
 				end
 			end
-			t.expect(string.find(src, ":FireServer%(%s*turn%s*%)") ~= nil).toBe(true)
-			t.expect(string.find(client("Main"), "Sticks%.start%(%)") ~= nil).toBe(true)
+			t.expect(has(sticks, "FireServer")).toBe(false) -- it sends through Controls.turn only
+			local main = client("Main")
+			t.expect(string.find(main, "Pads%.start%(%)") ~= nil).toBe(true)
+			t.expect(string.find(main, "Camera%.pad%(%s*Pads%.stick%s*%)") ~= nil).toBe(true)
+			t.expect(string.find(main, "Sticks%.start%(%s*Pads%.stick%s*,%s*Controls%.turn%s*%)") ~= nil)
+				.toBe(true)
 		end
 	)
 
-	it("Camera polls Thumbstick2 and applies Pad.look through View.look before View.steer", function()
-		t.expect(resolvesPad(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", "Camera" }))
-			.toBe(true)
-		local src = client("Camera")
-		t.expect(has(src, "Thumbstick2")).toBe(true)
-		t.expect(has(src, "Pad.track(")).toBe(true) -- the most recent controller looks too
-		-- the stick's own numbers, in order, never negated (design review 001 F1)
-		t.expect(
-			string.find(src, "Pad%.look%(%s*[%w_]+%.Position%.X%s*,%s*[%w_]+%.Position%.Y%s*,%s*dt%s*%)")
-				~= nil
-		)
-			.toBe(true)
-		local looked = string.find(src, "View%.look%(%s*look%s*,%s*Pad%.look%(")
-		local steered = string.find(src, "View.steer(", 1, true)
-		t.expect(looked ~= nil and steered ~= nil and (looked :: number) < (steered :: number)).toBe(true)
-		t.expect(has(src, "FireServer")).toBe(false)
-	end)
+	it(
+		"Camera reads Thumbstick2 through Pads.stick and applies Pad.look through View.look before View.steer",
+		function()
+			t.expect(resolvesPad(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", "Camera" }))
+				.toBe(true)
+			local src = client("Camera")
+			-- the right stick of the driving controller, through Pads.stick (the one tracker), its own numbers in order
+			local x, y =
+				string.match(src, 'local%s+([%w_]+)%s*,%s*([%w_]+)%s*=%s*[%w_]+%(%s*"Thumbstick2"%s*%)')
+			t.expect(x ~= nil and y ~= nil).toBe(true)
+			t.expect(has(src, `Pad.look({x}, {y}, dt)`)).toBe(true)
+			t.expect(has(src, "function Camera.pad(")).toBe(true)
+			local looked = string.find(src, "View%.look%(%s*look%s*,%s*Pad%.look%(")
+			local steered = string.find(src, "View.steer(", 1, true)
+			t.expect(looked ~= nil and steered ~= nil and (looked :: number) < (steered :: number)).toBe(true)
+			t.expect(has(src, "FireServer")).toBe(false)
+		end
+	)
 
 	it(
 		"the lobby's Main boots LobbyPad after LobbyView; LobbyPad selects Start for a gamepad only, when nothing is selected",
