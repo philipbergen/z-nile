@@ -9,6 +9,17 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+S="$A/schedule.spec.luau"
+check "AC1: the runner takes unrecorded spec files first, then recorded ones slowest first, ties by path" lune run tests/run -- "$S"
+check "AC2: the duration record is read and written by one rule, merged across runs, and a malformed record is refused whole and replaced" lune run tests/run -- "$S"
+check "AC3: on a real run's 177 file times, slowest first ends at least a fifth sooner than path order on 8 lanes" lune run tests/run -- "$S"
+check "AC4: the runner starts the slowest recorded file first, records only the home's tests/ files, and reports in path order" lune run tests/run -- "$S"
+# promoted specs (every project's tests/acceptance) are unchanged, c0154's own promoted folder aside
+promoted_unchanged() {
+  local changed
+  changed=$(git -C "$ZN_ROOT" diff --name-only origin/main...HEAD -- 'pickman/tests/acceptance' 'z-nile/tests/acceptance' | grep -v '^z-nile/tests/acceptance/c0154/' || true)
+  [[ -z $changed ]] || { echo "promoted specs changed: $changed"; return 1; }
+}
+check "AC5: no promoted spec changes" promoted_unchanged
 
 finish

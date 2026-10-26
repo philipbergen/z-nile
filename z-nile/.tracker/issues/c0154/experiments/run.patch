@@ -1,0 +1,74 @@
+diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
+index a5f91f72..ab80e88d 100644
+--- a/z-nile/tests/run.luau
++++ b/z-nile/tests/run.luau
+@@ -5,10 +5,13 @@
+ --   lune run tests/run -- a b     -- only the listed spec files (paths relative to the current folder)
+ --   --jobs N / PICKMAN_JOBS=N     -- run spec files in N concurrent workers (default min(max(cpus, 2), 8);
+ --                                    1 or a single file runs in-process). --jobs wins over the environment.
++-- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154), from
++-- .cache/spec-durations.tsv in the home, which every concurrent run updates; the report stays in path order.
+ -- Exits non-zero if any case fails or any spec fails to load.
+ 
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local schedule = require("./lib/schedule")
+ local stdio = require("@lune/stdio")
+ local task = require("@lune/task")
+ 
+@@ -178,16 +181,29 @@ table.sort(files)
+ 
+ type Outcome = { file: string, seconds: number, code: number, stdout: string, stderr: string }
+ 
+--- Coordinator: `jobs` lanes pull the next file and run it as a one-file, one-job runner process.
++-- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
++local DURATIONS = ".cache/spec-durations.tsv"
++local function recorded(): schedule.Durations
++	local ok, text = pcall(fs.readFile, DURATIONS)
++	return (if ok then schedule.parse(text :: string) else nil) or {}
++end
++
++-- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
+ local function runConcurrently()
+ 	local outcomes: { Outcome } = {}
++	local before = recorded()
++	local queue = schedule.order(files, before)
++	local indexOf: { [string]: number } = {}
++	for i, f in files do
++		indexOf[f] = i
++	end
+ 	local nextIndex, running = 1, math.min(jobs, #files)
+ 	for _ = 1, math.min(jobs, #files) do
+ 		task.spawn(function()
+-			while nextIndex <= #files do
+-				local index = nextIndex
++			while nextIndex <= #queue do
++				local file = queue[nextIndex]
+ 				nextIndex += 1
+-				local file = files[index]
++				local index = indexOf[file]
+ 				local started = os.clock()
+ 				local ok, r = pcall(process.exec, "lune", { "run", "tests/run", "--", "--jobs", "1", file })
+ 				outcomes[index] = {
+@@ -205,6 +221,21 @@ local function runConcurrently()
+ 		task.wait(0.005)
+ 	end
+ 
++	-- record this run's durations, merged over what an earlier run recorded (a failure to write costs only the order)
++	do
++		local runs: schedule.Durations = {}
++		for _, o in outcomes do
++			-- the home's own spec files only: a spec's nested run of a fixture's files (under .cache) is not this home's
++			if string.sub(o.file, 1, 6) == "tests/" then
++				runs[o.file] = o.seconds
++			end
++		end
++		pcall(function()
++			fs.writeDir(".cache")
++			fs.writeFile(DURATIONS, schedule.render(recorded(), runs))
++		end)
++	end
++
+ 	-- merge in sorted file order, never in finish order
+ 	local passed, failed = 0, 0
+ 	for _, o in outcomes do
