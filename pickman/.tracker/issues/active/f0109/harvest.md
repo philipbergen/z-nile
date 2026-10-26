@@ -1,0 +1,19 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: z-design/accepted-risks-checked-and-decided
+- design-review-001 F4: z-design/restated-rules-move-together
+- design-review-001 F5: zz-test/one-rule-one-function
+- design-review-001 F6: zz-test/one-rule-one-function
+- design-review-002 F1: z-design/scope-added-in-a-refute-gets-the-same-check
+- design-review-002 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F4: one-off: per-frame allocation in an adapter
+- design-review-002 F5: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F6: one-off: a fake's new methods match the engine's refusals
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-003 F3: z-design/restated-rules-move-together
+- note design-review-003 F1, the reviewer's second candidate: review 002 F1 prescribed the incomplete state list: zz-review/run-the-evidence-you-cite
+- design-review-004 F1: z-design/restated-rules-move-together
+- design-review-004 F2: z-design/run-the-other-rafts-specs
+- note design-review-004, the reviewer's note: a re-review's evidence ran against today's origin/main because main had moved under files the specs load (c0128's narrowed fake-engine specs): zz-review/run-the-evidence-you-cite

@@ -104,11 +104,6 @@ return t.spec("f0126 adapters", function(it)
 		end
 	)
 
-	it("the pellets survive a rebuild of the walls: the walls are a model of their own", function()
-		local src = source("MazeView")
-		t.expect(has(src, '"Walls"')).toBe(true)
-	end)
-
 	it(
 		"the HUD shows the pick and the boon with Hud.pickProgress and Hud.boonBanner, from Main's frame",
 		function()

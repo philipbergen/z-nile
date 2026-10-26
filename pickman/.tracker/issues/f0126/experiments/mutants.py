@@ -4,9 +4,9 @@
 # Usage, from anywhere: python3 <this file> [ids...], each a Rules and mutants row id (R4, F5b) or a group ending in * (T4*)
 import os, shutil, subprocess, sys, tempfile
 
-BASE = "dc6c8bf1"  # f0110's prototype (proto-f0110) at f0126's re-prep; base.patch then adds f0146's prototype (proto-f0146 95f005af: Pad and the controller map) and f0109's (proto-f0109's working tree on ee121ddc, with its acceptance specs: the wall colours in View, the edible repaint, wallColorOf, lemon Inky). F0109_SRC and F0109_SPECS are the SHA-256 of that working tree's `git diff -- pickman/src` and of its acceptance specs concatenated, when base.patch was cut: while the proto-f0109 worktree exists the run refuses if either has moved (design review 009 F1), so the base is cut again first
-F0109_SRC = "2149d6a5d5071f89394b32f9f9afc878dfb6da17e11e06d92c401676068fce4a"
-F0109_SPECS = "556a8b12eed7806bc9679c754db36d71b2120760bfe8ffe41ca79efe428b1785"
+BASE = "dc6c8bf1"  # f0110's prototype (proto-f0110) at f0126's re-prep; base.patch then adds f0146's prototype (proto-f0146 95f005af: Pad and the controller map) and f0109's (proto-f0109's working tree on ee121ddc as of f0109's prep 4cc59ded, with its acceptance specs and game-design.md edit: the wall colours in View, the edible repaint, wallColorOf, lemon Inky). F0109_SRC and F0109_SPECS are the SHA-256 of that working tree's `git diff -- pickman/src pickman/tests/lib pickman/.tracker/game-design.md` and of f0109's prep acceptance specs concatenated (the files that will be promoted; design review 010), when base.patch was cut: while the proto-f0109 worktree exists the run refuses if either has moved (design review 009 F1), so the base is cut again first
+F0109_SRC = "37bf5875258facda0265311a383f33fccebc5b8951da5517cc687afe90d56c04"
+F0109_SPECS = "112f33718baacab348c93f136cbd7bf3e61b0beeafd2ba3906d4dbe35662b464"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = subprocess.run(["git", "-C", HERE, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
 TMP = os.path.realpath(tempfile.mkdtemp(prefix="f0126-mutants-"))
@@ -104,7 +104,6 @@ end''', 'pick'),
 ("A3 Main length", C+'Main.client.luau', '	Camera.hopTicks(frame.hopTicks)\n', '', 'adapters'),
 ("A4 radar maze", C+'Main.client.luau', 'DangerHud.push(snap, View.frameMaze(frame))', 'DangerHud.push(snap, Maze.layout(snap.maze))', 'adapters'),
 ("A5 beam maze", C+'BlastView.luau', 'draw(View.frameMaze(frame), shot.from, shot.heading)', 'draw(Maze.layout(frame.maze), shot.from, shot.heading)', 'adapters'),
-("A6 flash marked", C+'MazeView.luau', 'for _, child in model:GetDescendants() do', 'for _, child in model:GetChildren() do', 'views'),
 ("A7 HUD pick", C+'Main.client.luau', '	HudView.pick(frame.pick, frame.boon, frame.tick)\n', '', 'adapters'),
 ("A8 rewall", C+'Main.client.luau', 'MazeView.rewall(model, View.frameMaze(frame),', 'MazeView.rewall(model, Maze.layout(frame.maze),', 'adapters'),
 ]
@@ -191,6 +190,10 @@ NEW6 = [
 ("V2 marked walls green while edible", L+'View/init.luau', '\t\telseif marked then View.WALL_MARKED_COLOR\n\t\telseif edible then View.WALL_EDIBLE_COLOR\n', '\t\telseif edible then View.WALL_EDIBLE_COLOR\n\t\telseif marked then View.WALL_MARKED_COLOR\n', 'parts'),
 ("V3 the repaint skips the marked walls", C+'MazeView.luau', 'if (child.Name == "Wall" or child.Name == "MarkedWall") and child:IsA("BasePart") then\n\t\t\tchild.Color = wallColorOf(model, child.Name == "MarkedWall")', 'if child.Name == "Wall" and child:IsA("BasePart") then\n\t\t\tchild.Color = wallColorOf(model, false)', 'views'),
 ("V6 the pick timed by the untuned ghosts", L+'Session/init.luau', 'local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)', 'local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal")', 'classic'),
+("V7 the walls in a sub-model", C+'MazeView.luau', '\t\tif r.marked == true then\n\t\t\tpart(model, "MarkedWall"', '\t\tlocal sub = model:FindFirstChild("Walls") or Instance.new("Model")\n\t\tsub.Name = "Walls"\n\t\tsub.Parent = model\n\t\tif r.marked == true then\n\t\t\tpart(sub, "MarkedWall"', 'views'),
+("V8 the rebuild leaves the old walls", C+'MazeView.luau', '\t\tif child.Name == "Wall" or child.Name == "MarkedWall" then\n\t\t\tchild:Destroy()', '\t\tif child.Name == "Wall" then\n\t\t\tchild:Destroy()', 'views'),
+("V9 a ghost near the gold", L+'View/init.luau', 'inky = table.freeze({ r = 230, g = 255, b = 0 })', 'inky = table.freeze({ r = 255, g = 230, b = 0 })', 'parts'),
+("V10 the frightened look near the gold", L+'View/init.luau', 'View.FRIGHTENED_COLOR = table.freeze({ r = 33, g = 33, b = 255 } :: Rgb)', 'View.FRIGHTENED_COLOR = table.freeze({ r = 255, g = 200, b = 0 } :: Rgb)', 'parts'),
 ("V4 a rebuild ignores the edible time", C+'MazeView.luau', 'View.wallColor(model:GetAttribute("Lit") == true, model:GetAttribute("Edible") == true, marked)', 'View.wallColor(model:GetAttribute("Lit") == true, false, marked)', 'views'),
 ("V5 the stop capped only at a walking speed", L+'Session/init.luau', 'if beside and distance <= config.speed then', 'if beside and distance <= config.speed and config.speed <= 34 then', 'pick'),
 ("U10 Touch.buttons without the pick", L+'Touch/init.luau', '\t\tpick = Touch.pickRect(box),\n', '', 'touch'),
@@ -204,7 +207,9 @@ CORRECT = [
 ("C2 Main requires a new adapter", C+'Main.client.luau', 'local View = require("@game/ReplicatedStorage/Shared/Logic/View")\n', 'local View = require("@game/ReplicatedStorage/Shared/Logic/View")\nlocal _New = require("./NewView")\n', 'views'),
 ("C3 Main asks for another service", C+'Main.client.luau', 'local View = require("@game/ReplicatedStorage/Shared/Logic/View")\n', 'local View = require("@game/ReplicatedStorage/Shared/Logic/View")\nlocal _Players = game:GetService("Players")\n', 'views'),
 ("C4 HudView sizes the banner by scale first", C+'HudView.luau', '\t\tl.Name = "Boon"\n', '\t\tl.Name = "Boon"\n\t\tl.Size = UDim2.fromScale(0.5, 0.08)\n', 'views'),
-("C5 MazeView reuses its Walls model", C+'MazeView.luau', '\tlocal old = model:FindFirstChild("Walls")\n\tif old then\n\t\told:Destroy()\n\tend\n\tlocal folder = Instance.new("Model")\n', '\tlocal folder = model:FindFirstChild("Walls") or Instance.new("Model")\n\tfolder:ClearAllChildren()\n', 'views'),
+("C5 MazeView collects the old walls before destroying them", C+'MazeView.luau', '\tfor _, child in model:GetChildren() do\n\t\tif child.Name == "Wall" or child.Name == "MarkedWall" then\n\t\t\tchild:Destroy()\n\t\tend\n\tend\n', '\tlocal old = {}\n\tfor _, child in model:GetChildren() do\n\t\tif child.Name == "Wall" or child.Name == "MarkedWall" then\n\t\t\ttable.insert(old, child)\n\t\tend\n\tend\n\tfor _, child in old do\n\t\tchild:Destroy()\n\tend\n', 'views'),
+("C6 f0109 tunes its green again (whatever it is, one step redder)", L+'View/init.luau', 'View.WALL_EDIBLE_COLOR = table.freeze({ r = ', 'View.WALL_EDIBLE_COLOR = table.freeze({ r = 1 + ', 'views'),
+("C7 f0109 tunes its green again (parts)", L+'View/init.luau', 'View.WALL_EDIBLE_COLOR = table.freeze({ r = ', 'View.WALL_EDIBLE_COLOR = table.freeze({ r = 1 + ', 'parts'),
 ]
 
 def f0109_moved():
@@ -213,8 +218,9 @@ def f0109_moved():
         print("note: no proto-f0109 worktree; the base's f0109 is as recorded", flush=True)
         return None
     import glob, hashlib
-    diff = subprocess.run(["git", "-C", tree, "diff", "--", "pickman/src"], capture_output=True, check=True).stdout
-    specs = b"".join(open(f, "rb").read() for f in sorted(glob.glob(os.path.join(tree, "pickman/tests/acceptance/f0109/*.luau"))))
+    diff = subprocess.run(["git", "-C", tree, "diff", "--", "pickman/src", "pickman/tests/lib", "pickman/.tracker/game-design.md"], capture_output=True, check=True).stdout
+    prep = os.path.join(os.path.dirname(tree), "prep-white-ghost-green-walls", "pickman/.tracker/issues/f0109/acceptance")
+    specs = b"".join(open(f, "rb").read() for f in sorted(glob.glob(os.path.join(prep if os.path.isdir(prep) else os.path.join(tree, "pickman/tests/acceptance/f0109"), "*.luau"))))
     moved = []
     if hashlib.sha256(diff).hexdigest() != F0109_SRC:
         moved.append("its source")
