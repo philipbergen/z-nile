@@ -1,0 +1,4 @@
+- review-001 F1: zz-test/pin-call-site-arguments
+- review-001 F2: zz-test/refusals-tested-on-both-sides
+- review-001 F3: z-design/restated-rules-move-together
+- review-001 F4: one-off: a decided colour's side effect on another view is relayed to that view's issue
