@@ -9,10 +9,8 @@
 -- frame's top-left. Every f0029 sample screen (tests/acceptance/f0029/jump.spec.luau's SAMPLES, copied below) is
 -- checked, plus the short screens under a 58 px top bar (480 x 320 and 320 x 568) and their turns, on desktop (no
 -- touch controls) and on touch. No dot may overlap a box unless ACCEPTED names that screen and box.
--- f0110's FIRE and HOP buttons (Touch.buttons) are not on main: whichever of f0110 and f0158 lands second adds
--- them to the touch boxes here, on every screen (review 001 F5).
--- Casts keep the spec type-legal on main before f0158 (Awareness.ring, RING, View.DANGER_COLOR) and f0109 (fake.module)
--- exist; a missing member fails at the call.
+-- f0110's FIRE and HOP buttons (Touch.buttons(l).fire and .hop, f0110 lands first) are touch boxes too: f0158 owns
+-- this clearance (review 001 F5, the coordinator 2026-10-26, after z-design/design-the-execution-window).
 local Awareness: any = require("@logic/Awareness")
 local Hud = require("@logic/Hud")
 local Touch = require("@logic/Touch")
@@ -117,6 +115,10 @@ local function hudBoxes(s: Screen, touch: boolean): { [string]: Rect }
 	out.radar = { x = fx + r.x, y = fy + r.y, w = r.w, h = r.h }
 	if touch then
 		out.snap = Touch.snapRect(l)
+		-- f0110's: reached through a cast, so the spec is type-legal on main before f0110 lands
+		local buttons = (Touch :: any).buttons(l)
+		out.fire = buttons.fire
+		out.hop = buttons.hop
 		for i, j in Hud.jumpButtons(l.safeX, l.safeY, l.safeW, l.safeH) do
 			out["jump" .. i] = j
 		end
