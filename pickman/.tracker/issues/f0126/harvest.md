@@ -1,0 +1,31 @@
+- note c0150's capture: a piped `./zn land` hid a lost-race failure and the worktree was removed early: z-ticket/confirm-landed-before-removing
+- design-review-001 F1: zz-test/skips-leave-the-rest-unchanged
+- design-review-001 F2: zz-test/per-member-copy-pinned-at-every-reader, z-design/reasoned-rows-claim-testable-reasons, zz-test/pin-call-site-arguments
+- design-review-001 F3: zz-test/seed-every-enumerated-case
+- design-review-001 F4: zz-test/pin-call-site-arguments
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
+- design-review-001 F7: zz-test/new-commands-run-in-a-copy
+- design-review-001 F8: z-design/restated-rules-move-together
+- design-review-001 F9: one-off: a presentation choice (the long pill's power bar) the author had not written down; now a (prep) choice the user may veto
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-002 F1: pickman-test/stub-loaders-fall-back, z-design/run-the-other-rafts-specs
+- design-review-002 F2: zz-test/per-member-copy-pinned-at-every-reader, zz-test/seed-every-enumerated-case
+- design-review-002 F3: zz-test/seed-every-enumerated-case
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: zz-test/source-pins-name-what-the-design-names
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: z-design/restated-rules-move-together
+- design-review-002 F8: one-off: f0147, sequenced next, changes level 1's numbers; deriving them from the tables keeps its overrides to the level-end cases
+- design-review-002 F9: z-design/spec-design-correspondence, zz-test/no-vacuous-pass
+- design-review-003 F1: zz-test/per-member-copy-pinned-at-every-reader, zz-test/seed-every-enumerated-case
+- design-review-003 F2: z-design/spec-design-correspondence
+- design-review-003 F3: zz-arch/name-each-coordinate-space
+- design-review-003 F4: z-design/mutant-ids-match-the-runner, z-design/restated-rules-move-together
+- design-review-004 F1: zz-test/source-pins-name-what-the-design-names, pickman-test/stub-loaders-fall-back
+- design-review-004 F2: zz-test/seed-every-enumerated-case
+- design-review-004 F3: z-design/mutant-ids-match-the-runner, z-design/spec-design-correspondence
+- design-review-005 F1: z-design/spec-design-correspondence
+- design-review-005 F2: pickman-test/stub-loaders-fall-back, zz-test/source-pins-name-what-the-design-names, z-design/mutation-runner-runs-correct-variants
+- design-review-005 F3: zz-test/seed-every-enumerated-case
+- design-review-005 F4: z-design/restated-rules-move-together
