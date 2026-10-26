@@ -41,7 +41,7 @@ check "AC9: done rewrites check.sh paths to done/" cases_pass "done rewrites che
 check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.md; no clipboard; no banned phrases" bash -c '
   s=skills/z-ready/SKILL.md
   [ -f "$s" ] || { echo "no $s"; exit 1; }
-  [ ! -e .claude/skills/make-prompt ] || { echo "make-prompt still exists"; exit 1; }
+  [ ! -e skills/make-prompt ] && [ ! -e ../pickman/skills/make-prompt ] && [ ! -e ../.claude/skills/make-prompt ] || { echo "make-prompt still exists"; exit 1; }
   grep -q "^name: ready-raft$" "$s" || { echo "ready-raft: name"; exit 1; }
   for k in "./zn ready" "prompt.md" "2. **Check readiness" "parallel:" "./zn worktree" "/launch-raft"; do
     grep -qF -- "$k" "$s" || { echo "ready-raft: missing $k"; exit 1; }
@@ -53,7 +53,7 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
   grep -qF "prompt.md" "$t" || { echo "tracker skill: prompt.md"; exit 1; }
   grep -qF "/ready-raft" skills/z-design/SKILL.md || { echo "ticket-prep: next step"; exit 1; }
   ! grep -qF "moves the items to \`active/\`" skills/zz-execute/SKILL.md || { echo "execute-raft: start still moves"; exit 1; }
-  bad=$(grep -rnIi -e "pbcopy" -e "clipboard" .claude ./templates scripts ../AGENTS.md || true)
+  bad=$(grep -rnIi -e "pbcopy" -e "clipboard" skills ../pickman/skills ./templates scripts ../AGENTS.md || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }
   # the 13 phrases c0005 AC5 bans
   bad=$(grep -rniF -e "git switch main" -e "Commit to main" -e "straight to main" -e "direct commits to main" \
