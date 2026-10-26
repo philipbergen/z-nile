@@ -1,0 +1,6 @@
+- design-review-001 F1: zz-test/pin-call-site-arguments
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: pickman-arch/hysteresis-on-every-boundary
+- design-review-001 F4: z-design/design-the-execution-window
+- design-review-001 F5: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F6: one-off: Roblox's ButtonB clears GuiService.SelectedObject; a platform behaviour of the lobby's selection, not a pattern the lessons can generalise

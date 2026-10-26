@@ -18,7 +18,6 @@ end
 
 return t.spec("f0146 Pad", function(it)
 	it("the constants and the button map", function()
-		t.expect(Pad.GAMEPAD).toBe("Gamepad1")
 		-- each entry of this issue's map, not its size: later features add rows (f0126's ButtonY = "Pick")
 		local want: { [string]: string } = {
 			ButtonA = "Jump",
@@ -35,6 +34,7 @@ return t.spec("f0146 Pad", function(it)
 		t.expect(Pad.CONTINUE).toBe("ButtonA")
 		t.expect(Pad.STEER_ON).toBe(0.6)
 		t.expect(Pad.STEER_OFF).toBe(0.4)
+		t.expect(Pad.STEER_MARGIN).toBe(15) -- degrees past the diagonal (decided with the user, 2026-10-25)
 		t.expect(Pad.LOOK_DEAD).toBe(0.15)
 		t.expect(Pad.LOOK_YAW).toBe(3)
 		t.expect(Pad.LOOK_PITCH).toBe(2)
@@ -132,6 +132,51 @@ return t.spec("f0146 Pad", function(it)
 			t.expect(bx).toBe(0)
 			t.expect(by).toBe(0)
 		end
+	end)
+
+	it(
+		"an engaged stick leaves its sector only 15 degrees past the diagonal: a wobble on it emits once",
+		function()
+			local function at(deg: number): (number, number)
+				return 0.9 * math.cos(math.rad(deg)), 0.9 * math.sin(math.rad(deg))
+			end
+			-- from rest, just past the up-left diagonal (136 degrees): Left, then a +-1 degree wobble emits nothing more
+			local s, intent = Pad.steer(Pad.steerStart(), at(136))
+			t.expect(intent).toBe("Left")
+			local more = 0
+			for i = 1, 12 do
+				local x, y = at(if i % 2 == 0 then 136 else 134)
+				s, intent = Pad.steer(s, x, y)
+				if intent then
+					more += 1
+				end
+			end
+			t.expect(more).toBe(0)
+			t.expect(s.held).toBe("Left")
+			-- a sweep from up toward left: Left only past 90 + 45 + 15 = 150 degrees, and once
+			s, intent = Pad.steer(Pad.steerStart(), at(90))
+			t.expect(intent).toBe("Forward")
+			local emitted: { string } = {}
+			for deg = 91, 179 do
+				s, intent = Pad.steer(s, at(deg))
+				if intent then
+					table.insert(emitted, `{intent}@{deg}`)
+				end
+			end
+			t.expect(emitted).toEqual({ "Left@151" })
+			-- from rest, an exact diagonal still goes vertical
+			local _, tie = Pad.steer(Pad.steerStart(), at(135))
+			t.expect(tie).toBe("Forward")
+		end
+	)
+
+	it("track follows the most recently used controller, and ignores other inputs", function()
+		t.expect(Pad.track(nil, "Gamepad1")).toBe("Gamepad1")
+		t.expect(Pad.track("Gamepad1", "Gamepad2")).toBe("Gamepad2") -- another controller used: it drives now
+		t.expect(Pad.track("Gamepad2", "Keyboard")).toBe("Gamepad2") -- a key keeps the controller
+		t.expect(Pad.track("Gamepad2", "Touch")).toBe("Gamepad2")
+		t.expect(Pad.track(nil, "MouseMovement")).toBe(nil)
+		t.expect(Pad.track("Gamepad3", "GamepadX")).toBe("Gamepad3")
 	end)
 
 	it("isPad names the gamepads only", function()

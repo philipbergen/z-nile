@@ -2,7 +2,7 @@
 -- f0146 AC3, AC4 and AC5: the gamepad's adapters and documents, as source pins read with comments removed. Controls
 -- binds Pad.BUTTONS' key codes beside View.KEYS', reads View.action or Pad.action, passes Pad.CONTINUE on (so
 -- FlowView hears it), and never says "Gamepad" (f0027 pins that). Sticks, booted by Main, polls the first gamepad's
--- Thumbstick1 into Pad.steer every frame and sends what it emits on the Intent remote. Camera polls
+-- most recently used controller's (Pad.track) Thumbstick1 into Pad.steer every frame and sends what it emits on the Intent remote. Camera polls
 -- Thumbstick2 into Pad.look and View.look before View.steer. In the lobby, Main boots LobbyPad after LobbyView, and
 -- LobbyPad selects the Start button when the last input is a gamepad (Pad.isPad), at start and on
 -- LastInputTypeChanged, only when nothing is selected. What the pins leave to the code review: that the polls run every
@@ -82,7 +82,8 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 			for _, needle in
 				{
 					"GetGamepadState(",
-					"Pad.GAMEPAD",
+					"Pad.track(",
+					"LastInputTypeChanged",
 					"Thumbstick1",
 					"Pad.steer(",
 					"Heartbeat",
@@ -103,6 +104,13 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 			.toBe(true)
 		local src = client("Camera")
 		t.expect(has(src, "Thumbstick2")).toBe(true)
+		t.expect(has(src, "Pad.track(")).toBe(true) -- the most recent controller looks too
+		-- the stick's own numbers, in order, never negated (design review 001 F1)
+		t.expect(
+			string.find(src, "Pad%.look%(%s*[%w_]+%.Position%.X%s*,%s*[%w_]+%.Position%.Y%s*,%s*dt%s*%)")
+				~= nil
+		)
+			.toBe(true)
 		local looked = string.find(src, "View%.look%(%s*look%s*,%s*Pad%.look%(")
 		local steered = string.find(src, "View.steer(", 1, true)
 		t.expect(looked ~= nil and steered ~= nil and (looked :: number) < (steered :: number)).toBe(true)
@@ -136,6 +144,8 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 				end
 			end
 			t.expect(string.find(src, "SelectedObject%s*==%s*nil") ~= nil).toBe(true)
+			-- a cleared selection (ButtonB) is selected again while a controller is in use (design review 001 F6)
+			t.expect(string.find(src, 'GetPropertyChangedSignal%(%s*"SelectedObject"%s*%)') ~= nil).toBe(true)
 			t.expect(has(src, "FireServer")).toBe(false) -- the button's own handler starts the game
 		end
 	)
