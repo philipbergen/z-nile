@@ -1,0 +1,8 @@
+# Refute 002: c0154 (design mode)
+
+- F1: fixed: AC5's pathspecs are `"$ZN_ROOT/pickman/tests/acceptance" "$ZN_ROOT/z-nile/tests/acceptance"` (no literal path for the scanner; git takes an absolute pathspec in the work tree); on the prep tree c0120's check-paths spec passes (4/4), `bash -n` and `AC_LIST=1` list AC1–AC5; consequences: AC5 still compares the branch with origin/main only (three-dot), so main's later promotions don't count.
+- F2: fixed: line 240 wraps `string.find` in parentheses; every other `string.find` in the file is wrapped or assigned; the full gate on the round-002 prototype (spec promoted) passes its types stage (0 errors) and c0116's promote spec; `./zn promote-check c0154` on the bare prep reports only the expected unknown-module errors; consequences: none.
+- F3: fixed: the full gate per project on the round-002 prototype passed (pickman 1404, z-nile 1230; 418 s at load 12 rising to 43); Linux CI through `z-nile/ci-verify.sh` from the throwaway branch `ci-c0154-proto`: see the Verification log; consequences: none.
+- F4: fixed: the fixture-only case starts from a hand-written record the runner would never write (`1\ttests/a.spec.luau`), so the "write whenever the run ends" mutant (M19) now fails it; `schedule.parse` returns nil for a text with no line (`"\n"`, `"\n\n"`), asserted (M15b killed); consequences: a record of only newlines now schedules exactly as no record, as before.
+- F5: fixed: a second line for one path makes `parse` return nil, asserted (M18 killed); consequences: a merged or hand-edited record with a duplicate is refused whole and rewritten by the next concurrent run.
+- F6: fixed: check.sh's AC2 and AC4 labels are the doc's current text (AC_LIST output above); consequences: none.

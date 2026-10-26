@@ -1,0 +1,70 @@
+- note c0150's capture: a piped `./zn land` hid a lost-race failure and the worktree was removed early: z-ticket/confirm-landed-before-removing
+- design-review-001 F1: zz-test/skips-leave-the-rest-unchanged
+- design-review-001 F2: zz-test/per-member-copy-pinned-at-every-reader, z-design/reasoned-rows-claim-testable-reasons, zz-test/pin-call-site-arguments
+- design-review-001 F3: zz-test/seed-every-enumerated-case
+- design-review-001 F4: zz-test/pin-call-site-arguments
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
+- design-review-001 F7: zz-test/new-commands-run-in-a-copy
+- design-review-001 F8: z-design/restated-rules-move-together
+- design-review-001 F9: one-off: a presentation choice (the long pill's power bar) the author had not written down; now a (prep) choice the user may veto
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-002 F1: pickman-test/stub-loaders-fall-back, z-design/run-the-other-rafts-specs
+- design-review-002 F2: zz-test/per-member-copy-pinned-at-every-reader, zz-test/seed-every-enumerated-case
+- design-review-002 F3: zz-test/seed-every-enumerated-case
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: zz-test/source-pins-name-what-the-design-names
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: z-design/restated-rules-move-together
+- design-review-002 F8: one-off: f0147, sequenced next, changes level 1's numbers; deriving them from the tables keeps its overrides to the level-end cases
+- design-review-002 F9: z-design/spec-design-correspondence, zz-test/no-vacuous-pass
+- design-review-003 F1: zz-test/per-member-copy-pinned-at-every-reader, zz-test/seed-every-enumerated-case
+- design-review-003 F2: z-design/spec-design-correspondence
+- design-review-003 F3: zz-arch/name-each-coordinate-space
+- design-review-003 F4: z-design/mutant-ids-match-the-runner, z-design/restated-rules-move-together
+- design-review-004 F1: zz-test/source-pins-name-what-the-design-names, pickman-test/stub-loaders-fall-back
+- design-review-004 F2: zz-test/seed-every-enumerated-case
+- design-review-004 F3: z-design/mutant-ids-match-the-runner, z-design/spec-design-correspondence
+- design-review-005 F1: z-design/spec-design-correspondence
+- design-review-005 F2: pickman-test/stub-loaders-fall-back, zz-test/source-pins-name-what-the-design-names, z-design/mutation-runner-runs-correct-variants
+- design-review-005 F3: zz-test/seed-every-enumerated-case
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-006 F1: z-design/required-steps-on-every-path, z-design/quote-other-preps-before-promising
+- design-review-006 F2: z-design/quote-other-preps-before-promising, z-design/run-the-other-rafts-specs
+- design-review-006 F3: z-design/quote-other-preps-before-promising
+- design-review-006 F4: pickman-test/new-controls-get-inset-and-turn-cases
+- design-review-006 F5: z-design/accepted-risks-checked-and-decided
+- design-review-006 F6: one-off: a real phone and a real controller are not in any headless spec; OC3 and OC4 cover them
+- design-review-006 F7: z-design/restated-rules-move-together
+- design-review-006 F8: z-design/restated-rules-move-together
+- design-review-006 F9: one-off: the f0126 specs are pure Lune with no OS-dependent step; CI's Linux runs them on the executor's first push
+- note a scripted cut ended at the next case's `end)` and deleted design-review-005's camera case; the mutation rerun (A2, A3 survived) caught it: z-design/rerun-skipped-checks-after-edits
+- design-review-007 F1: pickman-test/assert-between-press-and-release
+- design-review-007 F2: z-design/quote-other-preps-before-promising
+- design-review-007 F3: z-design/quote-other-preps-before-promising, z-design/run-the-other-rafts-specs
+- design-review-007 F4: z-design/restated-rules-move-together
+- design-review-007 F5: pickman-test/new-controls-get-inset-and-turn-cases
+- design-review-007 F6: z-design/accepted-risks-checked-and-decided
+- design-review-008 F1: z-design/mutation-runner-runs-correct-variants, pickman-test/stub-loaders-fall-back
+- design-review-008 F2: z-design/quote-other-preps-before-promising
+- design-review-008 F3: z-design/instructions-runnable-where-they-run
+- design-review-008 F4: z-design/quote-other-preps-before-promising
+- design-review-008 F5: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/in-flight-bases-pin-their-source
+- design-review-009 F2: z-design/derive-from-the-live-value
+- design-review-009 F3: z-design/restated-rules-move-together
+- design-review-010 F1: z-design/quote-other-preps-before-promising
+- design-review-010 F2: z-design/prove-specs-pass-on-a-prototype
+- note design-review-010 lesson candidate (hash the specs that will be promoted, not the prototype's copy): z-design/in-flight-bases-pin-their-source
+- note f0110's prep asked (2026-10-25) that f0126 check its boxes against every f0110 button, the snap control included: z-design/run-the-other-rafts-specs
+- note R0053's status claim was not remembered, so unfold refused it (2026-10-26): z-raft/rafted-member-changes-stay-in-the-raft
+- design-review-011 F1: z-design/shared-bars-cover-every-pair
+- design-review-011 F2: z-design/restated-rules-move-together
+- design-review-011 F3: z-design/spec-design-correspondence
+- design-review-012 F1: z-design/in-flight-bases-pin-their-source
+- design-review-012 F2: z-design/quote-other-preps-before-promising
+- design-review-012 F3: z-design/shared-bars-cover-every-pair
+- design-review-012 F4: z-raft/rafted-member-changes-stay-in-the-raft
+- design-review-013 F1: z-design/in-flight-bases-pin-their-source
+- design-review-013 F2: z-design/restated-rules-move-together
+- design-review-013 F3: z-design/quote-other-preps-before-promising

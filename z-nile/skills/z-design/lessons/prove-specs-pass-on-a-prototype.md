@@ -24,3 +24,5 @@ Run the whole item on every experimental patch, not only the spec it was written
 Run the `done` command itself too, not only a hand-made move: it leaves its moves and promotions uncommitted while the gate runs, so a spec that clones HEAD and overlays the working tree sees a moved item twice. c0116's retired.spec did, and only a simulated `done` of c0116 (a stub active raft in a scratch clone with no origin) found it.
 
 **Note** (c0117, found by c0118's simulation of c0117 done): run the promotion dry run at the promoted location too. Repo-wide scans (repo-fence's banned names, c0049's fixture isolation) read only `tests/`, so a sequestered spec passes them in place and fails the `done` gate once promoted. In a scratch clone, move the specs to `tests/acceptance/<id>` and the folder to `done/`, commit it as a simulation, and run the full gate there.
+
+**Note** (f0146 design review 001 F5): a user rule changed a document row the specs pin after the prototype ran, and the record still said 6/6. Rerun the prototype after every spec change, including wording changes from a decision, and update the record's numbers.
