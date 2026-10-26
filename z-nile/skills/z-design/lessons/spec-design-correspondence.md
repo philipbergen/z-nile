@@ -12,6 +12,8 @@ Sequestered specs and the Design must match in both directions. A stated behavio
 
 R0044 design review 4 (F1): the Design said the `UpdateAsync` transform keeps the place of its last call, but both stubs ran the transform once, so no case could fail it. A stub of an engine call that may retry its own callback must be able to call it again on a changed value.
 
+**Note** (f0146 design review 001 F2): a decision recorded with the user is a stated behaviour like any other. "The first controller only" had no case, and the design built something else (every controller's buttons acted). Give every decided guess a case that fails on its plausible mutant, and check the design really builds what the decision says.
+
 f0126 design review 011 F3: V9 (the gold moved near Inky) was killed first by the exact-gold case, so the record never showed the new CIE76 case could fail; the row now mutates Inky instead, which only the new case catches.
 
 c0153 design review 002 F1, F2: `plain.roundTrip` "checks plain data, then compares the decoded value", and every case that reached the comparison expected `true`, so a `roundTrip` that compared `v` with itself, or returned `true` after the check, passed; and "a table reached twice is not a cycle" had no case, so a `seen` set never cleared passed. For each function whose cases all expect success at a step the Design names, add an input where the intended code fails at exactly that step (here `eps` 0 on the one-ulp value), and a case for each "is not" the Design states.
