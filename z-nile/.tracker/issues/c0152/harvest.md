@@ -4,3 +4,7 @@
 - design-review-001 F4: z-design/design-the-execution-window
 - design-review-001 F5: zz-arch/guard-no-is-explicit
 - design-review-001 F6: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F1: zz-arch/throwaway-checkouts-outside-the-repo
+- design-review-002 F2: z-design/class-decisions-take-a-searched-list
+- design-review-002 F3: zz-arch/sequestered-files-judged-per-item
+- design-review-002 F4: z-design/restated-rules-move-together
