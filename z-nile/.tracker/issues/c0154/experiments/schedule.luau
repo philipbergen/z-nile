@@ -31,22 +31,23 @@ function schedule.order(files: { string }, durations: Durations): { number }
 	return out
 end
 
--- the recorded durations: one "<seconds>\t<path>" line each; nil for a file that isn't that, or is empty (the runner
--- then runs in path order, as before c0154)
+-- the recorded durations: one "<seconds>\t<path>" line each; nil for a text that isn't that, repeats a path, or has
+-- no line (the runner then runs in path order, as before c0154)
 function schedule.parse(text: string): Durations?
-	if text == "" then
-		return nil
-	end
 	local out: Durations = {}
+	local any = false
 	for line in string.gmatch(text, "[^\n]+") do
 		local secs, path = string.match(line, "^([%d%.]+)\t(%S+)$")
 		local n = tonumber(secs)
-		if n == nil or path == nil then
+		-- a malformed line, or a second line for one path, makes the whole record doubtful (design review 002 F5)
+		if n == nil or path == nil or out[path :: string] ~= nil then
 			return nil
 		end
 		out[path :: string] = n
+		any = true
 	end
-	return out
+	-- a text with no line (empty, or only newlines) is no record, not an empty one (design review 002 F4)
+	return if any then out else nil
 end
 
 -- `old` with every file of `runs` replaced by its new duration, as text (sorted by path, so it diffs well); when

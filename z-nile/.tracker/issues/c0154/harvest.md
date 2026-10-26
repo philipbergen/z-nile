@@ -5,3 +5,9 @@
 - design-review-001 F5: one-off: a cache file shared by nested runs needs an atomic write and no rewrite from an empty read
 - design-review-001 F6: z-design/spec-design-correspondence
 - design-review-001 F7: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F1: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F2: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F4: zz-test/unchanged-checks-start-non-canonical
+- design-review-002 F5: zz-arch/parsers-refuse-ambiguity
+- design-review-002 F6: z-design/spec-design-correspondence
