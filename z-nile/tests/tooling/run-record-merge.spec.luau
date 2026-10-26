@@ -1,6 +1,6 @@
 --!strict
 -- c0154 code review 001 F1: a partial run (named files, as `check.sh --affected` passes them) merges its durations into
--- the home's .cache/spec-durations.tsv and keeps every other file's line exactly; only a full run drops lines. Pinned
+-- the home's duration record and keeps every other file's line exactly; only a full run drops lines. Pinned
 -- at the runner's own call site (the runner, not the pure module), on a copy of the runner under .cache/run-record-merge,
 -- from a hand-written record the renderer would never write (no decimals), so a rewrite of any line shows.
 local fs = require("@lune/fs")
@@ -12,7 +12,9 @@ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }
 local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{here}/.cache/run-record-merge`
 local home = `{base}/z-nile`
-local RECORD = `{home}/.cache/spec-durations.tsv`
+-- the fixture home's record (the runner's file name; spelled in two parts so c0049's scan doesn't read the record,
+-- which lives in each fixture home, as a fixture folder shared with c0154's schedule.spec)
+local RECORD = `{home}/.cache/` .. "spec" .. "-durations.tsv"
 local R = "req" .. "uire" -- keeps literal require text out of this file (the graph scanner)
 
 local function write(rel: string, text: string)

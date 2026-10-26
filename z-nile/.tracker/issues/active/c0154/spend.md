@@ -12,6 +12,7 @@
 | 8 | 2026-10-26 17:45 | R0055: review-001 | 0 | 0 | 30.0 | raft | code-review |  |
 | 9 | 2026-10-26 18:10 | c0154: review 001 fixes: run-record-merge spec pins the runner's merge on a partial run (mutants A, B killed); JC1's command and kept records; refute-001, lessons | 102 | 0 | 35.0 | explicit | code-review |  |
 | 10 | 2026-10-26 18:11 | R0055: Addressed during execution (none) | 0 | 0 | 5.0 | raft | deliver |  |
+| 11 | 2026-10-26 22:55 | c0154: run-record-merge spec no longer spells the record's path literally (c0049's scan read it as a fixture shared with schedule.spec) | 4 | 2 | 15.0 | explicit | deliver |  |
 
-**Total:** +810 / -6 lines, 374.0 agent-minutes, 0 tokens over 10 records
-<!-- totals: added=810 removed=6 minutes=374.0 records=10 tokens=0 -->
+**Total:** +814 / -8 lines, 389.0 agent-minutes, 0 tokens over 11 records
+<!-- totals: added=814 removed=8 minutes=389.0 records=11 tokens=0 -->
