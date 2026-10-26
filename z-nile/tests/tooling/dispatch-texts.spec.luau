@@ -60,8 +60,8 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 	end)
 
 	it("no comment calls a decided guess pending, or gives a CLI two runtimes (F8)", function()
-		t.expect(string.find(read(".models.toml"), "Guess (pending user)", 1, true)).toBe(nil)
-		t.expect(string.find(read("z-nile/engine/models.luau"), "each with its two runtimes", 1, true))
-			.toBe(nil)
+		t.expect(string.find(read(".models.toml"), "Guess (pending user)", 1, true) == nil).toBe(true)
+		t.expect(string.find(read("z-nile/engine/models.luau"), "each with its two runtimes", 1, true) == nil)
+			.toBe(true)
 	end)
 end)
