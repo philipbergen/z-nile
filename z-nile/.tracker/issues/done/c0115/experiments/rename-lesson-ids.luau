@@ -26,6 +26,20 @@ local function topLevel(): string
 	return (string.gsub(r.stdout, "%s+$", ""))
 end
 local TOP = topLevel()
+-- c0139: never rewrite over a merge conflict (unmerged paths, or a tracked file holding a whole conflict)
+do
+	local conflicts = require("@znile/engine/conflicts")
+	local cprojects = require("@znile/engine/projects")
+	local folders: { string } = { "z-nile/skills", "pickman/skills" }
+	for _, r in cprojects.roots(cprojects.load(TOP)) do
+		table.insert(folders, r)
+	end
+	local stop = conflicts.refusal(TOP, "rename-lesson-ids", folders)
+	if stop then
+		require("@lune/stdio").ewrite(stop .. "\n")
+		process.exit(2)
+	end
+end
 local function rel(p: string): string
 	return if string.sub(p, 1, #TOP + 1) == TOP .. "/" then string.sub(p, #TOP + 2) else p
 end

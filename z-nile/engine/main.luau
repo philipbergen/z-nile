@@ -4,6 +4,7 @@ local audit = require("./audit")
 local board = require("./board")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
+local conflictsLib = require("./conflicts")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
@@ -187,6 +188,21 @@ end
 -- ./zn changes into the repository root before it starts Lune, so the working directory is the
 -- checkout the tracker belongs to. A fixture whose own `.git` is missing would otherwise fall through to an
 -- enclosing repository, the real one, and change it.
+-- the folders c0139's conflict check reads: every project root and every skills folder of the registry
+local function conflictFolders(): { string }
+	local out: { string } = {}
+	local ok, reg = pcall(projects.load, ".")
+	if ok then
+		for _, r in projects.roots(reg) do
+			table.insert(out, r)
+		end
+		for _, f in skillsLib.folders(reg) do
+			table.insert(out, f.path)
+		end
+	end
+	return out
+end
+
 local function guardRepoRoot()
 	local here = sh.run("pwd", { "-P" })
 	local top = sh.run("git", { "rev-parse", "--show-toplevel" })
@@ -5634,6 +5650,11 @@ local READ_ONLY: { [string]: boolean } = {
 }
 if not READ_ONLY[name :: string] then
 	guardRepoRoot()
+	-- c0139: a command that can write tracked files never runs over a merge conflict
+	local stop = conflictsLib.refusal(".", `tracker {name}`, conflictFolders())
+	if stop then
+		fail(stop)
+	end
 end
 local rest = table.move(args, 2, #args, 1, {})
 local pos, opts = flags(rest)

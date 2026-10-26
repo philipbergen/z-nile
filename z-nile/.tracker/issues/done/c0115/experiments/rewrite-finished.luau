@@ -55,6 +55,20 @@ local DELETED: { [string]: { string } } = {
 	["z-nile/.tracker/issues/done/c0069/check.sh"] = { "AC5" }, -- `name: launch-raft`
 }
 local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+-- c0139: never rewrite over a merge conflict (unmerged paths, or a tracked file holding a whole conflict)
+do
+	local conflicts = require("@znile/engine/conflicts")
+	local cprojects = require("@znile/engine/projects")
+	local folders: { string } = { "z-nile/skills", "pickman/skills" }
+	for _, r in cprojects.roots(cprojects.load(top)) do
+		table.insert(folders, r)
+	end
+	local stop = conflicts.refusal(top, "rewrite-finished", folders)
+	if stop then
+		require("@lune/stdio").ewrite(stop .. "\n")
+		process.exit(2)
+	end
+end
 assert(top ~= "", "rewrite-finished: not in a git checkout")
 local reg = projects.load(top, true)
 
