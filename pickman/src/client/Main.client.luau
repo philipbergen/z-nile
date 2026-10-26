@@ -12,8 +12,10 @@ local GhostView = require("./GhostView")
 local HudView = require("./HudView")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
+local Pads = require("./Pads")
 local PelletView = require("./PelletView")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+local Sticks = require("./Sticks")
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
@@ -59,12 +61,15 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	end
 end)
 
+Pads.start()
+Camera.pad(Pads.stick)
 Camera.start()
 GhostView.start()
 DangerHud.start(Camera.pose)
 Controls.keys({ arrows = Camera.arrows, aim = Camera.aim })
 Controls.start(Camera.snap, Camera.lookBy, HudView.snapRect, Camera.holdMouse)
 PelletView.start()
+Sticks.start(Pads.stick)
 HudView.start()
 FlowView.start()
 
