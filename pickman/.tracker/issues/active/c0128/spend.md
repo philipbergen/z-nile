@@ -21,6 +21,7 @@
 | 17 | 2026-10-26 14:38 | R0045: refute-001 F1 fixed (the user's "Fix the pin now") | 0 | 0 | 5.0 | raft | code-review |  |
 | 18 | 2026-10-26 14:43 | R0045: review-002 (approve; two lows) | 0 | 0 | 25.0 | raft | code-review |  |
 | 19 | 2026-10-26 14:44 | R0045: review-002 lows: raft record, lesson sentence and note, refute-002, harvest | 4 | 2 | 10.0 | raft | code-review |  |
+| 20 | 2026-10-26 14:44 | R0045: refute-002 sha | 0 | 0 | 1.0 | raft | code-review |  |
 
-**Total:** +289 / -22 lines, 195.0 agent-minutes, 207132 tokens over 19 records
-<!-- totals: added=289 removed=22 minutes=195.0 records=19 tokens=207132 -->
+**Total:** +289 / -22 lines, 196.0 agent-minutes, 207132 tokens over 20 records
+<!-- totals: added=289 removed=22 minutes=196.0 records=20 tokens=207132 -->
