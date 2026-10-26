@@ -45,6 +45,11 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 		t.expect(checkpaths.owned("z-nile", { ".models.toml", "z-nile/x" }, homes))
 			.toEqual({ ".models.toml", "z-nile/x" })
 		t.expect(checkpaths.owned("z-nile", { "AGENTS.md", "game2/x" }, homes)).toEqual({ "AGENTS.md", "game2/x" })
+		-- the home entry first, and in the middle: any entry decides, never the last or the first (design review 003 F1)
+		t.expect(checkpaths.owned("z-nile", { "z-nile/x", ".models.toml" }, homes))
+			.toEqual({ "z-nile/x", ".models.toml" })
+		t.expect(checkpaths.owned("z-nile", { "AGENTS.md", "z-nile/x", "scripts/y" }, homes))
+			.toEqual({ "AGENTS.md", "z-nile/x", "scripts/y" })
 		-- none does: the whole document is read from the home, `..` reaching the top
 		t.expect(checkpaths.owned("pickman", { "src/New", "../AGENTS.md" }, homes))
 			.toEqual({ "pickman/src/New", "AGENTS.md" })
@@ -94,6 +99,7 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 		put("pickman/.tracker/issues/.gitkeep", "")
 		put("pickman/src/.gitkeep", "")
 		put("z-nile/skills/.gitkeep", "")
+		put("game2/.tracker/issues/.gitkeep", "")
 		-- c0001: z-nile's, a repository-relative entry named after `cd ..`: exempt
 		item("z-nile/.tracker", "c0001", { "pickman/new-thing" }, "cd .. && test -d pickman/new-thing\n")
 		-- c0002: the same path with no Touched entry: reported as written, from its home
@@ -108,6 +114,11 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 		item("z-nile/.tracker", "c0006", { "z-nile/skills" }, "test -d z-nile/skills/new\n")
 		-- design review 001 F1 (b): a home-relative entry, the check climbs to the top (tests the root's src/New)
 		item("pickman/.tracker", "f0007", { "src/New" }, "cd .. && test -d src/New\n")
+		-- design review 003 F2: a document naming a third registered project is read from the top only when `scan` takes
+		-- its homes from the registry, so its root `scripts/new` is exempt (a hand list of two reads it from the home and
+		-- reports it). `game2/…` itself isn't a word check-paths reads as a path (c0120's prefixes), so the root entry
+		-- carries the case.
+		item("z-nile/.tracker", "c0008", { "game2/x", "scripts/new" }, "cd .. && test -f scripts/new\n")
 		local s = checkpaths.scan(FX, function(_text: string): boolean
 			return false
 		end)
@@ -117,7 +128,7 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 			"z-nile/.tracker/issues/c0004/check.sh: ../../tests/x (from z-nile)",
 			"z-nile/.tracker/issues/c0006/check.sh: z-nile/skills/new (from z-nile)",
 		})
-		t.expect(s.checked).toBe(7)
+		t.expect(s.checked).toBe(8)
 		fs.removeDir(FX)
 	end)
 end)
