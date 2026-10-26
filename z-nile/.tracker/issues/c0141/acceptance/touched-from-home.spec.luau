@@ -44,7 +44,8 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 		t.expect(checkpaths.owned("z-nile", { "z-nile/skills" }, homes)).toEqual({ "z-nile/skills" })
 		t.expect(checkpaths.owned("z-nile", { ".models.toml", "z-nile/x" }, homes))
 			.toEqual({ ".models.toml", "z-nile/x" })
-		t.expect(checkpaths.owned("z-nile", { "AGENTS.md", "game2/x" }, homes)).toEqual({ "AGENTS.md", "game2/x" })
+		t.expect(checkpaths.owned("z-nile", { "AGENTS.md", "game2/x" }, homes))
+			.toEqual({ "AGENTS.md", "game2/x" })
 		-- the home entry first, and in the middle: any entry decides, never the last or the first (design review 003 F1)
 		t.expect(checkpaths.owned("z-nile", { "z-nile/x", ".models.toml" }, homes))
 			.toEqual({ "z-nile/x", ".models.toml" })
@@ -61,74 +62,86 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 		t.expect(checkpaths.owned("pickman", { "../../x" }, homes)).toEqual({})
 	end)
 
-	it("the verdict doesn't change when the item's own work creates the path (design review 002's probe)", function()
-		local fx = ".cache/c0141-probe/"
-		if fs.isDir(fx) then
+	it(
+		"the verdict doesn't change when the item's own work creates the path (design review 002's probe)",
+		function()
+			local fx = ".cache/c0141-probe/"
+			if fs.isDir(fx) then
+				fs.removeDir(fx)
+			end
+			local function at(rel: string, text: string)
+				fs.writeDir(string.match(fx .. rel, "^(.*)/[^/]+$") :: string)
+				fs.writeFile(fx .. rel, text)
+			end
+			at("z-nile/projects.toml", REGISTRY)
+			at(".github/workflows/ci.yml", "x\n")
+			at("AGENTS.md", "x\n")
+			at("z-nile/.tracker/issues/.gitkeep", "")
+			local doc = "---\nid: %s\n---\n### Touched modules\n- `.github/workflows/new.yml`\n\n## Next\n"
+			at("pickman/.tracker/issues/f0001/f0001.md", string.format(doc, "f0001"))
+			at("pickman/.tracker/issues/f0001/check.sh", "test -f .github/workflows/new.yml\n")
+			at("pickman/.tracker/issues/f0002/f0002.md", string.format(doc, "f0002"))
+			at("pickman/.tracker/issues/f0002/check.sh", "cd .. && test -f .github/workflows/new.yml\n")
+			local function verdict(): { string }
+				return checkpaths.scan(fx, function(_text: string): boolean
+					return false
+				end).bad
+			end
+			local want =
+				{ "pickman/.tracker/issues/f0002/check.sh: ../.github/workflows/new.yml (from pickman)" }
+			t.expect(verdict()).toEqual(want) -- before pickman/.github exists
+			at("pickman/.github/workflows/new.yml", "x\n")
+			t.expect(verdict()).toEqual(want) -- after: the same
 			fs.removeDir(fx)
 		end
-		local function at(rel: string, text: string)
-			fs.writeDir(string.match(fx .. rel, "^(.*)/[^/]+$") :: string)
-			fs.writeFile(fx .. rel, text)
-		end
-		at("z-nile/projects.toml", REGISTRY)
-		at(".github/workflows/ci.yml", "x\n")
-		at("AGENTS.md", "x\n")
-		at("z-nile/.tracker/issues/.gitkeep", "")
-		local doc = "---\nid: %s\n---\n### Touched modules\n- `.github/workflows/new.yml`\n\n## Next\n"
-		at("pickman/.tracker/issues/f0001/f0001.md", string.format(doc, "f0001"))
-		at("pickman/.tracker/issues/f0001/check.sh", "test -f .github/workflows/new.yml\n")
-		at("pickman/.tracker/issues/f0002/f0002.md", string.format(doc, "f0002"))
-		at("pickman/.tracker/issues/f0002/check.sh", "cd .. && test -f .github/workflows/new.yml\n")
-		local function verdict(): { string }
-			return checkpaths.scan(fx, function(_text: string): boolean
-				return false
-			end).bad
-		end
-		local want = { "pickman/.tracker/issues/f0002/check.sh: ../.github/workflows/new.yml (from pickman)" }
-		t.expect(verdict()).toEqual(want) -- before pickman/.github exists
-		at("pickman/.github/workflows/new.yml", "x\n")
-		t.expect(verdict()).toEqual(want) -- after: the same
-		fs.removeDir(fx)
-	end)
+	)
 
-	it("in a fixture, a path the item creates is exempt from any home and through a cd; others are reported", function()
-		if fs.isDir(FX) then
+	it(
+		"in a fixture, a path the item creates is exempt from any home and through a cd; others are reported",
+		function()
+			if fs.isDir(FX) then
+				fs.removeDir(FX)
+			end
+			put("z-nile/projects.toml", REGISTRY)
+			put("pickman/.tracker/issues/.gitkeep", "")
+			put("pickman/src/.gitkeep", "")
+			put("z-nile/skills/.gitkeep", "")
+			put("game2/.tracker/issues/.gitkeep", "")
+			-- c0001: z-nile's, a repository-relative entry named after `cd ..`: exempt
+			item("z-nile/.tracker", "c0001", { "pickman/new-thing" }, "cd .. && test -d pickman/new-thing\n")
+			-- c0002: the same path with no Touched entry: reported as written, from its home
+			item("z-nile/.tracker", "c0002", {}, "cd .. && test -d pickman/other\n")
+			-- f0003: pickman's, a home-relative entry named from its home: exempt
+			item("pickman/.tracker", "f0003", { "src/New" }, "test -d src/New\n")
+			-- c0004: a path that climbs above the checkout is never exempt, whatever its Touched entry says
+			item("z-nile/.tracker", "c0004", { "tests/x" }, "cd ../.. && test -f tests/x\n")
+			-- c0005: a repository-relative entry, the path named from the home without a cd: exempt
+			item(
+				"z-nile/.tracker",
+				"c0005",
+				{ "z-nile/tests/new.spec.luau" },
+				"test -f tests/new.spec.luau\n"
+			)
+			-- design review 001 F1 (a): a repository-relative entry, the check names it from the home (tests z-nile/z-nile/…)
+			item("z-nile/.tracker", "c0006", { "z-nile/skills" }, "test -d z-nile/skills/new\n")
+			-- design review 001 F1 (b): a home-relative entry, the check climbs to the top (tests the root's src/New)
+			item("pickman/.tracker", "f0007", { "src/New" }, "cd .. && test -d src/New\n")
+			-- design review 003 F2: a document naming a third registered project is read from the top only when `scan` takes
+			-- its homes from the registry, so its root `scripts/new` is exempt (a hand list of two reads it from the home and
+			-- reports it). `game2/…` itself isn't a word check-paths reads as a path (c0120's prefixes), so the root entry
+			-- carries the case.
+			item("z-nile/.tracker", "c0008", { "game2/x", "scripts/new" }, "cd .. && test -f scripts/new\n")
+			local s = checkpaths.scan(FX, function(_text: string): boolean
+				return false
+			end)
+			t.expect(s.bad).toEqual({
+				"pickman/.tracker/issues/f0007/check.sh: ../src/New (from pickman)",
+				"z-nile/.tracker/issues/c0002/check.sh: ../pickman/other (from z-nile)",
+				"z-nile/.tracker/issues/c0004/check.sh: ../../tests/x (from z-nile)",
+				"z-nile/.tracker/issues/c0006/check.sh: z-nile/skills/new (from z-nile)",
+			})
+			t.expect(s.checked).toBe(8)
 			fs.removeDir(FX)
 		end
-		put("z-nile/projects.toml", REGISTRY)
-		put("pickman/.tracker/issues/.gitkeep", "")
-		put("pickman/src/.gitkeep", "")
-		put("z-nile/skills/.gitkeep", "")
-		put("game2/.tracker/issues/.gitkeep", "")
-		-- c0001: z-nile's, a repository-relative entry named after `cd ..`: exempt
-		item("z-nile/.tracker", "c0001", { "pickman/new-thing" }, "cd .. && test -d pickman/new-thing\n")
-		-- c0002: the same path with no Touched entry: reported as written, from its home
-		item("z-nile/.tracker", "c0002", {}, "cd .. && test -d pickman/other\n")
-		-- f0003: pickman's, a home-relative entry named from its home: exempt
-		item("pickman/.tracker", "f0003", { "src/New" }, "test -d src/New\n")
-		-- c0004: a path that climbs above the checkout is never exempt, whatever its Touched entry says
-		item("z-nile/.tracker", "c0004", { "tests/x" }, "cd ../.. && test -f tests/x\n")
-		-- c0005: a repository-relative entry, the path named from the home without a cd: exempt
-		item("z-nile/.tracker", "c0005", { "z-nile/tests/new.spec.luau" }, "test -f tests/new.spec.luau\n")
-		-- design review 001 F1 (a): a repository-relative entry, the check names it from the home (tests z-nile/z-nile/…)
-		item("z-nile/.tracker", "c0006", { "z-nile/skills" }, "test -d z-nile/skills/new\n")
-		-- design review 001 F1 (b): a home-relative entry, the check climbs to the top (tests the root's src/New)
-		item("pickman/.tracker", "f0007", { "src/New" }, "cd .. && test -d src/New\n")
-		-- design review 003 F2: a document naming a third registered project is read from the top only when `scan` takes
-		-- its homes from the registry, so its root `scripts/new` is exempt (a hand list of two reads it from the home and
-		-- reports it). `game2/…` itself isn't a word check-paths reads as a path (c0120's prefixes), so the root entry
-		-- carries the case.
-		item("z-nile/.tracker", "c0008", { "game2/x", "scripts/new" }, "cd .. && test -f scripts/new\n")
-		local s = checkpaths.scan(FX, function(_text: string): boolean
-			return false
-		end)
-		t.expect(s.bad).toEqual({
-			"pickman/.tracker/issues/f0007/check.sh: ../src/New (from pickman)",
-			"z-nile/.tracker/issues/c0002/check.sh: ../pickman/other (from z-nile)",
-			"z-nile/.tracker/issues/c0004/check.sh: ../../tests/x (from z-nile)",
-			"z-nile/.tracker/issues/c0006/check.sh: z-nile/skills/new (from z-nile)",
-		})
-		t.expect(s.checked).toBe(8)
-		fs.removeDir(FX)
-	end)
+	)
 end)

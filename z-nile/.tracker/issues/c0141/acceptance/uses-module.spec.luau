@@ -16,10 +16,22 @@ return t.spec("c0141 c0120's check-paths spec runs the module's scan", function(
 		end
 		t.expect(has('require("./checkpaths")')).toBe(true)
 		-- the wrapper's body is the module's scan
-		t.expect(string.match(code, "local function scanFrom%([^)]*%)[^\n]*\n%s*return checkpaths%.scan%(base,") ~= nil)
-			.toBe(true)
+		t.expect(
+			string.match(code, "local function scanFrom%([^)]*%)[^\n]*\n%s*return checkpaths%.scan%(base,")
+				~= nil
+		).toBe(true)
 		for _, name in
-			{ "literals", "present", "touched", "under", "items", "scan", "repoPath", "owned", "patternWords" }
+			{
+				"literals",
+				"present",
+				"touched",
+				"under",
+				"items",
+				"scan",
+				"repoPath",
+				"owned",
+				"patternWords",
+			}
 		do
 			t.expect(has(`local function {name}(`)).toBe(false)
 			t.expect(has(`function {name}(`)).toBe(false)
