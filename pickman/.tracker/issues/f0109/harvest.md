@@ -10,3 +10,7 @@
 - design-review-002 F4: one-off: per-frame allocation in an adapter
 - design-review-002 F5: z-design/decided-guesses-rewrite-their-body
 - design-review-002 F6: one-off: a fake's new methods match the engine's refusals
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-003 F3: z-design/restated-rules-move-together
+- note design-review-003 F1, the reviewer's second candidate: review 002 F1 prescribed the incomplete state list: zz-review/run-the-evidence-you-cite

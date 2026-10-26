@@ -87,6 +87,11 @@ return t.spec("f0109 the walls follow View.wallColor", function(it)
 				return colourOf(model, "Wall")
 			end
 			t.expect(walls()).toBe("33,33,222")
+			-- the real level-clear flash first: lit while not edible (the level clear zeroes the power timer)
+			MazeView.flash(model, true)
+			t.expect(walls()).toBe("255,255,255")
+			MazeView.flash(model, false)
+			t.expect(walls()).toBe("33,33,222")
 			MazeView.edible(model, true)
 			t.expect(walls()).toBe("14,64,14")
 			MazeView.flash(model, true)
@@ -161,7 +166,15 @@ return t.spec("f0109 the walls follow View.wallColor", function(it)
 				return n, seen
 			end
 			for _, state in
-				{ { false, false }, { false, true }, { true, true }, { false, true }, { false, false } }
+				{
+					{ false, false },
+					{ true, false },
+					{ false, false },
+					{ false, true },
+					{ true, true },
+					{ false, true },
+					{ false, false },
+				}
 			do
 				DangerHud.wallState(state[1], state[2])
 				view.renderStepped:fire(1 / 60)
