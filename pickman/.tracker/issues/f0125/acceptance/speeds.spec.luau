@@ -179,9 +179,9 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
 			fast.movement = { speed = 96, turnBufferTicks = 24 }
 			fast.ghostTuning = 1.1 -- level 5's hunting ghost: round(96 * 0.95 / 0.8 * 1.1) = 125 > 120
 			t.expect((pcall(Session.new, classic, 1, fast))).toBe(false)
-			local edge = table.clone(fast) :: any
-			edge.ghostTuning = nil -- base 96 untuned: level 5's ghost is 114
-			t.expect((pcall(Session.new, classic, 1, edge))).toBe(true)
+			local untuned = table.clone(fast) :: any
+			untuned.ghostTuning = nil -- base 96 untuned: level 5's ghost is 114
+			t.expect((pcall(Session.new, classic, 1, untuned))).toBe(true)
 			t.expect((pcall(Session.new, classic, 1, Session.GAME_CONFIG))).toBe(true)
 		end
 	)
