@@ -36,6 +36,8 @@
 | 32 | 2026-10-26 15:49 | design-refute-011 | 0 | 0 | 25.0 | spend | design-review |  |
 | 33 | 2026-10-26 15:59 | design-review-012 | 0 | 0 | 9.0 | spend | design-review | 159776 |
 | 34 | 2026-10-26 16:07 | design-refute-012 | 0 | 0 | 30.0 | spend | design-review |  |
+| 35 | 2026-10-26 16:26 | design-review-013 | 0 | 0 | 17.0 | spend | design-review |  |
+| 36 | 2026-10-26 16:26 | design-review-013-tokens | 0 | 0 | 0.0 | spend | design-review | 113101 |
 
-**Total:** +4514 / -4 lines, 949.0 agent-minutes, 2187964 tokens over 34 records
-<!-- totals: added=4514 removed=4 minutes=949.0 records=34 tokens=2187964 -->
+**Total:** +4514 / -4 lines, 966.0 agent-minutes, 2301065 tokens over 36 records
+<!-- totals: added=4514 removed=4 minutes=966.0 records=36 tokens=2301065 -->
