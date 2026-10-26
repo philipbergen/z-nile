@@ -18,6 +18,23 @@
 | 14 | 2026-10-26 00:32 | design-review-005-tokens | 0 | 0 | 0.0 | spend | design-review | 152794 |
 | 15 | 2026-10-26 00:36 | design-refute-005 | 0 | 0 | 45.0 | spend | design-review |  |
 | 16 | 2026-10-26 00:40 | prep | 4514 | 4 | 150.0 | spend | prep |  |
+| 17 | 2026-10-26 02:28 | design-review-006 | 0 | 0 | 10.0 | spend | design-review |  |
+| 18 | 2026-10-26 02:29 | design-review-006-tokens | 0 | 0 | 0.0 | spend | design-review | 194365 |
+| 19 | 2026-10-26 02:56 | design-refute-006 | 0 | 0 | 80.0 | spend | design-review |  |
+| 20 | 2026-10-26 03:08 | design-review-007 | 0 | 0 | 10.0 | spend | design-review |  |
+| 21 | 2026-10-26 03:08 | design-review-007-tokens | 0 | 0 | 0.0 | spend | design-review | 192923 |
+| 22 | 2026-10-26 03:12 | design-refute-007 | 0 | 0 | 45.0 | spend | design-review |  |
+| 23 | 2026-10-26 03:57 | design-review-008 | 0 | 0 | 9.0 | spend | design-review | 195387 |
+| 24 | 2026-10-26 04:02 | design-refute-008 | 0 | 0 | 60.0 | spend | design-review |  |
+| 25 | 2026-10-26 04:20 | design-review-009 | 0 | 0 | 6.0 | spend | design-review |  |
+| 26 | 2026-10-26 04:26 | design-refute-009 | 0 | 0 | 50.0 | spend | design-review |  |
+| 27 | 2026-10-26 04:46 | design-review-010 | 0 | 0 | 8.0 | spend | design-review |  |
+| 28 | 2026-10-26 04:46 | design-review-009-tokens | 0 | 0 | 0.0 | spend | design-review | 161023 |
+| 29 | 2026-10-26 04:46 | design-review-010-tokens | 0 | 0 | 0.0 | spend | design-review | 183460 |
+| 30 | 2026-10-26 14:58 | re-prep-f0109-f88685c5 | 0 | 0 | 55.0 | spend | design-review |  |
+| 31 | 2026-10-26 15:43 | design-review-011 | 0 | 0 | 7.0 | spend | design-review | 152459 |
+| 32 | 2026-10-26 15:49 | design-refute-011 | 0 | 0 | 25.0 | spend | design-review |  |
+| 33 | 2026-10-26 15:59 | design-review-012 | 0 | 0 | 9.0 | spend | design-review | 159776 |
 
-**Total:** +4514 / -4 lines, 545.0 agent-minutes, 948571 tokens over 16 records
-<!-- totals: added=4514 removed=4 minutes=545.0 records=16 tokens=948571 -->
+**Total:** +4514 / -4 lines, 919.0 agent-minutes, 2187964 tokens over 33 records
+<!-- totals: added=4514 removed=4 minutes=919.0 records=33 tokens=2187964 -->
