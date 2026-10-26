@@ -10,3 +10,9 @@
 - design-review-002 F1: zz-test/pin-call-site-arguments
 - design-review-002 F2: zz-test/seed-every-enumerated-case
 - design-review-002 F3: z-design/restated-rules-move-together
+- design-review-003 F1: z-design/dependent-specs-sequence-the-preps
+- design-review-003 F2: z-design/watch-steps-name-their-base
+- design-review-003 F3: zz-arch/act-on-the-id-the-state-follows
+- design-review-003 F4: z-design/touched-paths-exist
+- design-review-003 F5: one-off: a wrong claim about how Lune reports a closed pipe, checked by a scratch run
+- design-review-003 F6: one-off: a stale PR description

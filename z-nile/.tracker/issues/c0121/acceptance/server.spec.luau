@@ -101,7 +101,17 @@ local function start()
 					asOf = nil,
 					refs = { { name = "origin/R0020-alpha", at = clock } },
 					worktrees = { { path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" } },
-					dispatch = {},
+					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; c0099 has none
+					dispatch = {
+						R0020 = { step = "z-run", outcome = "running", model = "m", questions = false },
+						f0021 = {
+							step = "follow",
+							outcome = "followed",
+							model = "",
+							questions = false,
+							follows = "R0020",
+						},
+					},
 				}
 			end,
 			collect = function(root: string, facts: any): any
@@ -269,6 +279,20 @@ return t.spec("c0121 board server", function(it)
 		t.expect(string.find(r.body, "run lock is held", 1, true) ~= nil).toBe(true)
 		t.expect(runs[3]).toEqual({ "dispatch", "retry", "R0030" })
 	end)
+
+	it(
+		"stop on a member stops its raft's run, and stop on a card with nothing running answers 409 and runs nothing",
+		function()
+			local before = #runs
+			local r = action('{"action":"stop","id":"f0021"}')
+			t.expect(r.statusCode).toBe(200)
+			t.expect(runs[#runs]).toEqual({ "dispatch", "stop", "R0020" })
+			local idle = action('{"action":"stop","id":"c0099"}')
+			t.expect(idle.statusCode).toBe(409)
+			t.expect(string.find(idle.body, "nothing is running for c0099", 1, true) ~= nil).toBe(true)
+			t.expect(#runs).toBe(before + 1)
+		end
+	)
 
 	it("state fills PR and checks from gh, calling it once in its 30 s window and again after", function()
 		local s1 = state()
