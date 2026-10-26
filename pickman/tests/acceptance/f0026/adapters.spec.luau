@@ -221,6 +221,7 @@ type BoardsWorld = {
 	failsAt: number?, -- a page size the sorted read rejects
 	opens: { string }, -- "<ordered|companion>|<name>|<scope>" per store open, in order
 	gets: number, -- companion GetAsync calls
+	keys: { string }, -- the key of each companion GetAsync, in order
 	companionFails: { [string]: boolean }, -- keys whose GetAsync throws
 	removing: Signal,
 	errors: { string }, -- errors that escaped the request handler (the engine would only log them)
@@ -278,6 +279,7 @@ local function boards(): BoardsWorld
 			return {
 				GetAsync = function(_: any, key: string): any
 					w.gets += 1
+					table.insert(w.keys, key)
 					if w.companionFails[key] then
 						error("stub: companion read throttled", 0)
 					end
@@ -309,6 +311,7 @@ local function boards(): BoardsWorld
 		failsAt = nil,
 		opens = {},
 		gets = 0,
+		keys = {},
 		companionFails = {},
 		removing = removing,
 		errors = {},
@@ -340,6 +343,15 @@ local function boards(): BoardsWorld
 	load("src/lobby/server/Boards.luau", env).start()
 	w.remote = storage.Remotes:FindFirstChild("Board")
 	return w
+end
+
+-- c0128: a Board answer's first four values (id, rows, highlight, failed); d0124 adds the asker's best after them
+local function four(answers: { { any } }): { { any } }
+	local out: { { any } } = {}
+	for _, a in answers do
+		table.insert(out, { a[1], a[2], a[3], a[4] })
+	end
+	return out
 end
 
 local function seed(w: BoardsWorld)
@@ -515,7 +527,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 		local p1, p3 = player(1), player(3)
 		w.mode = "error"
 		w.ask(p1, "all")
-		t.expect(w.answers(p1)).toEqual({ { "all", {}, nil, true } :: { any } })
+		t.expect(four(w.answers(p1))).toEqual({ { "all", {}, nil, true } :: { any } })
 		t.expect(#w.reads).toBe(2)
 		t.expect(w.reads[1].ascending).toBe(false)
 		t.expect(w.reads[1].size).toBe(10)
@@ -525,7 +537,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 		-- inside the key's failure window another player is answered from what there is, without a read
 		w.now += Hiscores.READ_GAP
 		w.ask(p3, "all")
-		t.expect(w.answers(p3)).toEqual({ { "all", {}, nil, true } :: { any } })
+		t.expect(four(w.answers(p3))).toEqual({ { "all", {}, nil, true } :: { any } })
 		t.expect(#w.reads).toBe(2)
 		seed(w)
 		w.mode = "ok"
@@ -544,11 +556,11 @@ return t.spec("f0026 adapter boundaries", function(it)
 		w.now += 2
 		w.ask(p3, "all")
 		t.expect(#w.reads).toBe(reads)
-		t.expect(w.answers(p3)[2]).toEqual({ "all", healthy[2], nil, false } :: { any })
+		t.expect(four(w.answers(p3))[2]).toEqual({ "all", healthy[2], nil, false } :: { any })
 		w.now += Hiscores.CACHE_TTL
 		w.ask(p1, "all")
 		t.expect(#w.answers(p1)).toBe(3)
-		t.expect(w.answers(p1)[3]).toEqual({ "all", healthy[2], 2, true } :: { any })
+		t.expect(four(w.answers(p1))[3]).toEqual({ "all", healthy[2], 2, true } :: { any })
 		-- inside that failure window the board the server holds is the answer, never an empty one, and nothing is read
 		reads = #w.reads
 		w.now += 1
@@ -557,9 +569,9 @@ return t.spec("f0026 adapter boundaries", function(it)
 		w.ask(p3, "all")
 		w.ask(p1, "all")
 		t.expect(#w.reads).toBe(reads)
-		t.expect(w.answers(p2)).toEqual({ { "all", healthy[2], 1, true } :: { any } })
-		t.expect(w.answers(p3)[3]).toEqual({ "all", healthy[2], nil, true } :: { any })
-		t.expect(w.answers(p1)[4]).toEqual({ "all", healthy[2], 2, true } :: { any })
+		t.expect(four(w.answers(p2))).toEqual({ { "all", healthy[2], 1, true } :: { any } })
+		t.expect(four(w.answers(p3))[3]).toEqual({ "all", healthy[2], nil, true } :: { any })
+		t.expect(four(w.answers(p1))[4]).toEqual({ "all", healthy[2], 2, true } :: { any })
 	end)
 
 	it(
@@ -622,10 +634,10 @@ return t.spec("f0026 adapter boundaries", function(it)
 			w.openFails = 1
 			local p1, p2, p9 = player(1), player(2), player(9)
 			w.ask(p1, "all")
-			t.expect(w.answers(p1)).toEqual({ { "all", {}, nil, true } :: { any } })
+			t.expect(four(w.answers(p1))).toEqual({ { "all", {}, nil, true } :: { any } })
 			w.now += 1
 			w.ask(p2, "all")
-			t.expect(w.answers(p2)).toEqual({ { "all", {}, nil, true } :: { any } })
+			t.expect(four(w.answers(p2))).toEqual({ { "all", {}, nil, true } :: { any } })
 			w.now += Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 1) - 1
 			w.ask(p9, "all")
 			t.expect(#w.answers(p9)).toBe(1)
@@ -645,7 +657,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 			w.companionFails["2"] = true
 			local p1 = player(1)
 			w.ask(p1, "all")
-			t.expect(w.answers(p1)).toEqual({ { "all", {}, nil, true } :: { any } })
+			t.expect(four(w.answers(p1))).toEqual({ { "all", {}, nil, true } :: { any } })
 			w.companionFails["2"] = nil
 			w.now += Hiscores.failureWait(Hiscores.READ_GAP, Hiscores.CACHE_TTL, 1)
 			w.ask(p1, "all")
@@ -658,7 +670,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 			seed(v)
 			v.companion.all["2"] = nil
 			v.ask(p1, "all")
-			t.expect(v.answers(p1)).toEqual({
+			t.expect(four(v.answers(p1))).toEqual({
 				{ "all", { { rank = 1, name = "Ada", score = 50, level = 2 } }, 1, false } :: { any },
 			})
 		end
@@ -715,7 +727,9 @@ return t.spec("f0026 adapter boundaries", function(it)
 			for _, open in w.opens do
 				if string.sub(open, 1, 9) == "companion" then
 					companions += 1
-					t.expect(open).toBe("companion|HiscoreEntries|all")
+					-- c0128: d0124's top-N list of runs is the one other companion-kind store
+					t.expect(open == "companion|HiscoreEntries|all" or open == "companion|HiscoreTop|all")
+						.toBe(true)
 				else
 					ordereds += 1
 					t.expect(open).toBe("ordered|Hiscores|all")
@@ -723,6 +737,8 @@ return t.spec("f0026 adapter boundaries", function(it)
 			end
 			t.expect(companions >= 1).toBe(true)
 			t.expect(ordereds >= 1).toBe(true)
+			-- c0128: the per-player companion store is still read
+			t.expect(table.find(w.opens, "companion|HiscoreEntries|all") ~= nil).toBe(true)
 			local name, scope = Hiscores.storeTarget("companion", Hiscores.board("all", FRI), true)
 			t.expect(`companion|{name}|{scope}`).toBe("companion|HiscoreEntries|all")
 		end
@@ -742,7 +758,15 @@ return t.spec("f0026 adapter boundaries", function(it)
 		w.ask(p1, "all")
 		t.expect(#w.reads).toBe(2)
 		t.expect(w.reads[2].size).toBe(50)
-		t.expect(w.gets <= Hiscores.N).toBe(true)
+		-- c0128: only the reads of the board's thirty row keys are counted
+		local rowReads = 0
+		for _, key in w.keys do
+			local n = tonumber(key)
+			if n ~= nil and n >= 101 and n <= 130 then
+				rowReads += 1
+			end
+		end
+		t.expect(rowReads > 0 and rowReads <= Hiscores.N).toBe(true)
 		local answer = w.answers(p1)[1]
 		t.expect(answer[4]).toBe(false)
 		t.expect(#answer[2]).toBe(Hiscores.N)
