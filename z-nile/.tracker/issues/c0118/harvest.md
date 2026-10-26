@@ -29,3 +29,4 @@
 - design-review-010 F1: z-design/watch-steps-name-their-base, zz-arch/history-tests-survive-squash
 - design-review-010 F2: z-design/design-the-execution-window, z-design/watch-steps-name-their-base
 - design-review-010 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
+- design-review-011 F1: z-design/watch-steps-name-their-base
