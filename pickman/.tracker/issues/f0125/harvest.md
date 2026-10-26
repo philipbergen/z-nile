@@ -1,5 +1,8 @@
 - design-review-001 F1: zz-test/one-rule-one-function
 - design-review-001 F2: zz-test/one-rule-one-function
-- design-review-001 F3: zz-arch/parsers-refuse-ambiguity
+- design-review-001 F3: zz-test/refusals-tested-on-both-sides
 - design-review-001 F4: one-off: a measured margin recorded for a neighbouring spec
 - design-review-001 F5: z-design/restated-rules-move-together
+- design-review-002 F1: zz-test/refusals-tested-on-both-sides
+- design-review-002 F2: zz-test/one-rule-one-function
+- design-review-002 F3: one-off: a harvest entry re-filed

@@ -183,6 +183,17 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
 			untuned.ghostTuning = nil -- base 96 untuned: level 5's ghost is 114
 			t.expect((pcall(Session.new, classic, 1, untuned))).toBe(true)
 			t.expect((pcall(Session.new, classic, 1, Session.GAME_CONFIG))).toBe(true)
+			-- both sides of the bound at one base (design review 002 F1): level 5's hunting ghost is round(114 * k)
+			local at = table.clone(fast) :: any
+			at.ghostTuning = 120 / 114 -- exactly 120: allowed
+			t.expect((pcall(Session.new, classic, 1, at))).toBe(true)
+			local over = table.clone(fast) :: any
+			over.ghostTuning = 121 / 114 -- 121: refused
+			t.expect((pcall(Session.new, classic, 1, over))).toBe(false)
+			-- faster ghosts are allowed when they stay within a tile: GAME_CONFIG's base with twice the speed
+			local double = table.clone(Session.GAME_CONFIG) :: any
+			double.ghostTuning = 2 -- level 5's ghost: round(30 * 0.95 / 0.8 * 2) = 71
+			t.expect((pcall(Session.new, classic, 1, double))).toBe(true)
 		end
 	)
 
