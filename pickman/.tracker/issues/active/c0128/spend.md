@@ -16,6 +16,7 @@
 | 12 | 2026-10-26 03:59 | R0045: review-001 | 0 | 0 | 25.0 | raft | code-review |  |
 | 13 | 2026-10-26 04:19 | R0045: refute-001 (F1 deferred to c0156, the user's decision), harvest, lesson | 3 | 1 | 10.0 | raft | code-review |  |
 | 14 | 2026-10-26 04:19 | R0045: Addressed during execution | 0 | 0 | 2.0 | raft | deliver |  |
+| 15 | 2026-10-26 04:19 | R0045: Addressed during execution | 0 | 0 | 1.0 | raft | deliver |  |
 
-**Total:** +285 / -20 lines, 129.0 agent-minutes, 207132 tokens over 14 records
-<!-- totals: added=285 removed=20 minutes=129.0 records=14 tokens=207132 -->
+**Total:** +285 / -20 lines, 130.0 agent-minutes, 207132 tokens over 15 records
+<!-- totals: added=285 removed=20 minutes=130.0 records=15 tokens=207132 -->
