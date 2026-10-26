@@ -85,6 +85,11 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			end, { same = true }) :: { { string } }
 			t.expect(runs[1][4]).toBe("same-2")
 			t.expect(runs[2][4]).toBe("same-3")
+			-- a suffix a raft already has is skipped, per slug (review 002 F1: `-2` itself taken)
+			local one = raftplan.commands({ ops[1] }, { c0001 = "same" }, function(): string?
+				return "pickman"
+			end, { same = true, ["same-2"] = true }) :: { { string } }
+			t.expect(one[1][4]).toBe("same-3")
 		end
 	)
 
@@ -250,8 +255,12 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 				end
 			end
 			t.expect(lines).toEqual({
-				"error slug-duplicate z-nile/.tracker/issues/c0099: issue taken-done: c0099, f0001 (choose a new slug for all but one)",
+				"error slug-duplicate z-nile/.tracker/issues/c0099: issue taken-done: c0099, f0001 (edit slug: in all but one; branch and worktree names need not follow)",
 			})
+			-- the stated fix: edit slug: in one of them (review 002 F3)
+			fs.writeFile(`{wt}/z-nile/.tracker/issues/c0099/c0099.md`, doc("c0099", "renamed-by-hand"))
+			local fixed = trackerfix.tr(f, wt, { "audit" })
+			t.expect(has(fixed.stdout .. fixed.stderr, "slug-duplicate")).toBe(false)
 			fs.removeDir(`{wt}/z-nile/.tracker/issues/c0099`)
 			-- the issue `old-raft` made above shares its slug with the retired raft R0003: not a clash
 			local clean = trackerfix.tr(f, wt, { "audit" })

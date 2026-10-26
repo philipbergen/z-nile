@@ -1,5 +1,5 @@
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 33a3844b..ee505579 100644
+index 33a3844b..e1c13f39 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
 @@ -93,6 +93,112 @@ function audit.scan(root: string): { Found }
@@ -126,7 +126,7 @@ index 33a3844b..ee505579 100644
 +			"error",
 +			"slug-duplicate",
 +			c.paths[1],
-+			`{c.kind} {c.slug}: {table.concat(c.ids, ", ")} (choose a new slug for all but one)`
++			`{c.kind} {c.slug}: {table.concat(c.ids, ", ")} (edit slug: in all but one; branch and worktree names need not follow)`
 +		)
 +	end
  	for _, paths in byId do
