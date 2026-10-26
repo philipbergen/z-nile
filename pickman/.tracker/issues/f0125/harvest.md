@@ -1,0 +1,5 @@
+- design-review-001 F1: zz-test/one-rule-one-function
+- design-review-001 F2: zz-test/one-rule-one-function
+- design-review-001 F3: zz-arch/parsers-refuse-ambiguity
+- design-review-001 F4: one-off: a measured margin recorded for a neighbouring spec
+- design-review-001 F5: z-design/restated-rules-move-together

@@ -14,4 +14,13 @@ return t.spec("f0125 the game design records the factor", function(it)
 		t.expect((string.find(row, "ships at the classic 1 until the user gives the factor", 1, true)))
 			.toBe(nil)
 	end)
+
+	it("the Open questions no longer ask for the slower-ghosts factor", function()
+		local text = fs.readFile(".tracker/game-design.md")
+		for line in string.gmatch(text, "[^\n]+") do
+			if string.find(line, "**The slower-ghosts factor**", 1, true) then
+				t.expect(string.find(line, "f0125", 1, true) ~= nil).toBe(true)
+			end
+		end
+	end)
 end)
