@@ -2,8 +2,10 @@
 -- f0158 AC1: the danger ring's geometry (Awareness.ring). Every sector has Awareness.RING.dots dots on one circle
 -- centred on the screen, as wide as Awareness.RING.share of the screen's smaller side (the dots' outer edge), each
 -- Awareness.RING.dot of that side across. Sector 0 (ahead) is at the top and the sectors go round to the left as
--- Awareness.sector counts them, with a gap between neighbouring sectors wider than the step inside one. Only the
--- sectors Awareness.glows lit are lit, with that glow's brightness (clamped to 0..1), look, name and flash.
+-- Awareness.sector counts them, with a gap between neighbouring sectors wider than the step inside one. Only a
+-- ghost that can kill (look "normal") lights a sector, at the nearest such ghost's brightness (clamped to 0..1);
+-- frightened and blinking ghosts never light it, nor hide a dangerous one farther away in the same sector
+-- (decided with the user, 2026-10-26: one warning colour, not a colour match; edible ghosts not shown, prep's choice).
 local Awareness = require("@logic/Awareness")
 local t = require("@tests/lib/t")
 
@@ -13,17 +15,22 @@ local function centre(d: Awareness.RingDot): (number, number)
 	return d.x + d.w / 2, d.y + d.h / 2
 end
 
-local function glow(sector: number, brightness: number, name: string?): Awareness.Glow
+-- an indicator in `sector` (its bearing: an eighth of a turn per sector, positive left), as Awareness.indicators makes
+local function ind(
+	index: number,
+	sector: number,
+	distance: number,
+	brightness: number,
+	look: Awareness.Look
+): Awareness.Indicator
 	return {
-		sector = sector,
-		bearing = 0,
-		index = 1,
-		distance = 3,
+		index = index,
+		bearing = sector * math.pi / 4,
+		distance = distance,
 		size = 1,
 		brightness = brightness,
-		look = "normal",
-		name = name,
-		flash = false,
+		look = look,
+		inView = false,
 	}
 end
 
@@ -109,23 +116,28 @@ return t.spec("f0158 the danger ring", function(it)
 		end
 	end)
 
-	it("only the lit sectors are lit, with the glow's brightness (clamped), look, name and flash", function()
-		local lit = Awareness.ring({ glow(2, 0.5, "pinky"), glow(5, 1.7, "blinky") }, 1280, 720)
-		for _, d in lit do
-			if d.sector == 2 then
+	it("only dangerous ghosts light a sector, the nearest one's brightness, clamped", function()
+		local dots = Awareness.ring({
+			ind(1, 2, 3, 0.5, "normal"),
+			ind(2, 5, 1, 1.7, "normal"),
+			ind(3, 0, 1, 0.9, "frightened"),
+			ind(4, 6, 1, 0.9, "blinking"),
+			-- in sector 3 a nearer frightened ghost does not hide a farther dangerous one
+			ind(5, 3, 1, 0.9, "frightened"),
+			ind(6, 3, 6, 0.4, "normal"),
+			-- in sector 7 the nearer of two dangerous ghosts gives the brightness
+			ind(7, 7, 8, 0.2, "normal"),
+			ind(8, 7, 2, 0.8, "normal"),
+		}, 1280, 720)
+		local want: { [number]: number } = { [2] = 0.5, [5] = 1, [3] = 0.4, [7] = 0.8 }
+		for _, d in dots do
+			local b = want[d.sector]
+			if b then
 				t.expect(d.lit).toBe(true)
-				t.expect(d.brightness).toBe(0.5)
-				t.expect(d.name).toBe("pinky")
-				t.expect(d.look).toBe("normal")
-				t.expect(d.flash).toBe(false)
-			elseif d.sector == 5 then
-				t.expect(d.lit).toBe(true)
-				t.expect(d.brightness).toBe(1)
-				t.expect(d.name).toBe("blinky")
+				t.expect(d.brightness).toBe(b)
 			else
 				t.expect(d.lit).toBe(false)
 				t.expect(d.brightness).toBe(0)
-				t.expect(d.name).toBe(nil)
 			end
 		end
 	end)

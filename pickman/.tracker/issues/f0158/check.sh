@@ -11,6 +11,7 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the danger ring is eight sectors of translucent dots on one circle centred on the screen, 60% of its smaller side across, lit per sector from the glows" lune run tests/run -- "$A/ring.spec.luau"
 check "AC2: on desktop and touch, landscape and portrait, no ring dot overlaps the HUD blocks, the radar, the snap control or the jump buttons" lune run tests/run -- "$A/clear.spec.luau"
-check "AC3: DangerHud draws the ring Awareness computes, in each ghost's colour, under the HUD, and the edge glows are gone" lune run tests/run -- "$A/place.spec.luau"
+check "AC3: DangerHud draws the ring Awareness computes, in the one warning colour, under the HUD, and the edge glows are gone" lune run tests/run -- "$A/place.spec.luau"
+check "AC4: the warning colour is a red with contrast at least 2.5 against the maze blue, the edible green, the white flash and the marked walls' gold" lune run tests/run -- "$A/colors.spec.luau"
 
 finish
