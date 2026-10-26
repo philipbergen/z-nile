@@ -12,3 +12,6 @@
 - design-review-003 F2: zz-arch/throwaway-checkouts-outside-the-repo
 - design-review-003 F3: zz-arch/throwaway-checkouts-outside-the-repo
 - design-review-003 F4: z-design/new-rules-migrate-existing-work
+- design-review-004 F1: zz-test/loop-bounds-reach-the-bound
+- design-review-004 F2: zz-arch/skips-pin-what-they-verified
+- design-review-004 F3: z-design/instructions-runnable-where-they-run

@@ -11,3 +11,5 @@ A check that says "this head may merge without another CI run" is only as good a
 **How to apply:** have the check print the exact sha, and merge with `--match-head-commit <sha>` (or the API's `sha`), so any later push voids the merge; say in the skill that the check is rerun after the next green CI.
 
 **Both sides (c0152 design review 003 F1):** `--match-head-commit` pins only the head; `gh pr merge --squash` lands on whatever main is when it runs, and a 2–3 minute trial widened that window from seconds to minutes while main moved every few minutes. Pin the base too: the check re-reads the tip after any slow step (and judges what arrived), prints the tip it judged, and the merger re-reads it with `git ls-remote` right before the merge and merges only when it is unchanged.
+
+**Path-class skips (c0152 design review 004 F2):** a skip granted by path class ("only spend rows") also checks that the path still belongs to a live item in the merged tree, because a row written for a folder the PR moved away creates an orphan no path-overlap test sees. Check: can the skipped change land in a folder the other side removed?
