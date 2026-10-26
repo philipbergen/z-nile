@@ -14,6 +14,6 @@ check "AC1: check-paths' Touched exemption compares a path's repository-relative
 check "AC2: c0120's promoted check-paths spec takes its scan from z-nile/tests/acceptance/c0120/checkpaths.luau and defines no scanner of its own" \
   lune run tests/run -- "$A/uses-module.spec.luau"
 check "AC3: c0120's check-paths spec still passes, live scan included" \
-  bash -c 'test -f tests/acceptance/c0120/checkpaths.luau && lune run tests/run -- tests/acceptance/c0120/check-paths.spec.luau'
+  lune run tests/run -- tests/acceptance/c0120/check-paths.spec.luau
 
 finish
