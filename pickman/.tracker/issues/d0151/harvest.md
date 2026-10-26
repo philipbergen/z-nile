@@ -1,0 +1,4 @@
+- design-review-001 F1: z-design/decided-guesses-rewrite-their-body
+- design-review-001 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: z-design/quote-other-preps-before-promising
+- design-review-001 F4: one-off: a non-reproducing report's conditions are recorded for a recurrence
