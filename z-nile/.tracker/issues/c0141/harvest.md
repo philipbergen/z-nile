@@ -1,3 +1,5 @@
 - design-review-001 F1: z-design/one-reading-per-value
 - design-review-001 F2: zz-test/moved-rules-pin-the-old-caller
 - design-review-001 F3: zz-test/moved-rules-pin-the-old-caller
+- design-review-002 F1: z-design/readings-from-text-not-disk
+- design-review-002 F2: zz-test/source-text-pins-read-the-code

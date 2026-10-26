@@ -1,10 +1,9 @@
 --!strict
 -- c0141: check-paths' Touched exemption compares the repository-relative form of the path a check.sh names (its
 -- project home plus the path, `.` and `..` folded) with what each Touched entry names, read ONE way chosen from the
--- entry's own text (design review 001 F1): an entry starting with a registered project's home is repository-relative;
--- otherwise the item's home wins when the entry's first segment exists there, a root-level file or folder that exists
--- at the top is repository-relative, and anything else is read from the home. A path that climbs above the checkout
--- is never exempt. The scanner lives in c0120's promoted folder (F3) and c0120's spec takes its scan from it (F2).
+-- document's own text (design review 002 F1, never the disk): when any of a document's Touched entries starts with a
+-- registered project's home, every entry of that document is read from the checkout's top; otherwise every entry is
+-- read from the item's home, a root path being written `../X`. A path that climbs above the checkout is never exempt. The scanner lives in c0120's promoted folder (F3) and c0120's spec takes its scan from it (F2).
 -- Fixture under .cache/c0141-touched-home.
 local checkpaths = require("@tests/acceptance/c0120/checkpaths")
 local fs = require("@lune/fs")
@@ -39,32 +38,52 @@ return t.spec("c0141 a check.sh path is compared with Touched modules from the c
 		t.expect(checkpaths.repoPath(".", "../x")).toBe(nil)
 	end)
 
-	it("reads each Touched entry one way, chosen from its own text", function()
-		local base = ".cache/c0141-owned/"
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(base .. "pickman/src")
-		fs.writeDir(base .. ".github")
-		fs.writeFile(base .. "AGENTS.md", "x\n")
-		fs.writeDir(base .. "scripts")
-		fs.writeDir(base .. "pickman/scripts")
+	it("reads a document's Touched entries by the document's convention, never the disk's", function()
 		local homes = { "pickman", "z-nile", "game2" }
-		-- a registered home's prefix: repository-relative only
-		t.expect(checkpaths.owned(base, "z-nile", { "z-nile/skills" }, homes)).toEqual({ "z-nile/skills" })
-		t.expect(checkpaths.owned(base, "z-nile", { "game2/x" }, homes)).toEqual({ "game2/x" })
-		-- the first segment exists in the home: read from the home only
-		t.expect(checkpaths.owned(base, "pickman", { "src/New" }, homes)).toEqual({ "pickman/src/New" })
-		-- the first segment exists both in the home and at the top (`scripts/`): the home wins
-		t.expect(checkpaths.owned(base, "pickman", { "scripts/x" }, homes)).toEqual({ "pickman/scripts/x" })
-		-- a root-level file or folder that exists at the top (and not in the home): repository-relative
-		t.expect(checkpaths.owned(base, "z-nile", { "AGENTS.md", ".github/workflows" }, homes))
-			.toEqual({ "AGENTS.md", ".github/workflows" })
-		-- neither: read from the home (a new folder the item creates)
-		t.expect(checkpaths.owned(base, "pickman", { "assets/New" }, homes)).toEqual({ "pickman/assets/New" })
+		-- any entry starting with a registered home: the whole document is read from the top
+		t.expect(checkpaths.owned("z-nile", { "z-nile/skills" }, homes)).toEqual({ "z-nile/skills" })
+		t.expect(checkpaths.owned("z-nile", { ".models.toml", "z-nile/x" }, homes))
+			.toEqual({ ".models.toml", "z-nile/x" })
+		t.expect(checkpaths.owned("z-nile", { "AGENTS.md", "game2/x" }, homes)).toEqual({ "AGENTS.md", "game2/x" })
+		-- none does: the whole document is read from the home, `..` reaching the top
+		t.expect(checkpaths.owned("pickman", { "src/New", "../AGENTS.md" }, homes))
+			.toEqual({ "pickman/src/New", "AGENTS.md" })
+		t.expect(checkpaths.owned("pickman", { ".github/workflows/new.yml" }, homes))
+			.toEqual({ "pickman/.github/workflows/new.yml" })
 		-- a name not in `homes` is not taken as a home
-		t.expect(checkpaths.owned(base, "z-nile", { "game3/x" }, homes)).toEqual({ "z-nile/game3/x" })
-		fs.removeDir(base)
+		t.expect(checkpaths.owned("z-nile", { "game3/x" }, homes)).toEqual({ "z-nile/game3/x" })
+		-- climbing above the checkout names nothing
+		t.expect(checkpaths.owned("pickman", { "../../x" }, homes)).toEqual({})
+	end)
+
+	it("the verdict doesn't change when the item's own work creates the path (design review 002's probe)", function()
+		local fx = ".cache/c0141-probe/"
+		if fs.isDir(fx) then
+			fs.removeDir(fx)
+		end
+		local function at(rel: string, text: string)
+			fs.writeDir(string.match(fx .. rel, "^(.*)/[^/]+$") :: string)
+			fs.writeFile(fx .. rel, text)
+		end
+		at("z-nile/projects.toml", REGISTRY)
+		at(".github/workflows/ci.yml", "x\n")
+		at("AGENTS.md", "x\n")
+		at("z-nile/.tracker/issues/.gitkeep", "")
+		local doc = "---\nid: %s\n---\n### Touched modules\n- `.github/workflows/new.yml`\n\n## Next\n"
+		at("pickman/.tracker/issues/f0001/f0001.md", string.format(doc, "f0001"))
+		at("pickman/.tracker/issues/f0001/check.sh", "test -f .github/workflows/new.yml\n")
+		at("pickman/.tracker/issues/f0002/f0002.md", string.format(doc, "f0002"))
+		at("pickman/.tracker/issues/f0002/check.sh", "cd .. && test -f .github/workflows/new.yml\n")
+		local function verdict(): { string }
+			return checkpaths.scan(fx, function(_text: string): boolean
+				return false
+			end).bad
+		end
+		local want = { "pickman/.tracker/issues/f0002/check.sh: ../.github/workflows/new.yml (from pickman)" }
+		t.expect(verdict()).toEqual(want) -- before pickman/.github exists
+		at("pickman/.github/workflows/new.yml", "x\n")
+		t.expect(verdict()).toEqual(want) -- after: the same
+		fs.removeDir(fx)
 	end)
 
 	it("in a fixture, a path the item creates is exempt from any home and through a cd; others are reported", function()
