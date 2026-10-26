@@ -430,7 +430,7 @@ return t.spec("f0126 the pick on every input", function(it)
 				t.expect(f ~= nil).toBe(true)
 				local want: Rect = (Touch :: any).buttons(l).pick
 				t.expect({ x = f.Position.x, y = f.Position.y, w = f.Size.x, h = f.Size.y }).toEqual(want)
-				t.expect(f.BackgroundColor3).toEqual({ r = 255, g = 191, b = 0 })
+				t.expect(f.BackgroundColor3).toEqual({ r = 255, g = 215, b = 0 })
 				t.expect(f.Visible).toBe(touch)
 				local found = false
 				for _, c in f:GetChildren() do

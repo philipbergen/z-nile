@@ -32,9 +32,13 @@ local t = require("@tests/lib/t")
 
 local game = place.load()
 local classic = Maze.layout("classic")
-local GOLD = { r = 255, g = 191, b = 0 }
-local LIT = { r = 255, g = 255, b = 255 }
-local BLUE = { r = 33, g = 33, b = 222 }
+local GOLD = { r = 255, g = 215, b = 0 }
+-- f0109's colours are read from View (f0109 owns them, and may tune them); only the marks' gold is f0126's
+local function copy(c: any): any
+	return { r = c.r, g = c.g, b = c.b }
+end
+local LIT = copy(View.WHITE)
+local BLUE = copy((View :: any).WALL_COLOR)
 
 local LOGIC: { [string]: any } = {
 	Awareness = Awareness,
@@ -548,18 +552,19 @@ return t.spec("f0126 what the adapters build", function(it)
 		pellet.Name = "Pellet"
 		pellet.Parent = model
 		local holed = Maze.opened(classic, { at(2, 2), at(14, 10) })
-		mv.rewall(model, holed, {})
+		mv.rewall(model, holed, { at(7, 2) }) -- a mark that the next rebuild moves
 		mv.rewall(model, holed, { at(3, 2) })
 		t.expect(model:FindFirstChild("Pellet")).toBe(pellet)
-		local folders = 0
-		for _, c in model:GetChildren() do
-			if c.Name == "Walls" then
-				folders += 1
+		-- the wall parts are the maze model's own children, as f0109's checks read them
+		for _, name in { "Wall", "MarkedWall" } do
+			for _, p in partsNamed(model, name) do
+				t.expect(p.Parent).toBe(model)
 			end
 		end
-		t.expect(folders).toBe(1)
 		local rects = View.walls(holed, nil, { at(3, 2) })
 		t.expect(runsOfParts(partsNamed(model, "Wall"))).toEqual(runsOf(rects, false))
+		-- and the marked walls are exactly the new marks: the old gold walls are gone
+		t.expect(runsOfParts(partsNamed(model, "MarkedWall"))).toEqual(runsOf(rects, true))
 		for _, p in partsNamed(model, "Wall") do
 			local x0, y, x1 = string.match(runOf(p), "^(-?%d+),(-?%d+),(-?%d+)$")
 			local row, a, b = tonumber(y), tonumber(x0), tonumber(x1)
@@ -667,7 +672,7 @@ return t.spec("f0126 what the adapters build", function(it)
 	it(
 		"while the ghosts are edible the walls are green and the marked walls stay gold, rebuilt or not",
 		function()
-			local GREEN = { r = 0, g = 152, b = 0 }
+			local GREEN = copy((View :: any).WALL_EDIBLE_COLOR)
 			local mv = mazeView()
 			local model = mv.build(classic)
 			mv.rewall(model, classic, { at(2, 2) })
