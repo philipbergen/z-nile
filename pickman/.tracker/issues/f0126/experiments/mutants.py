@@ -4,7 +4,9 @@
 # Usage, from anywhere: python3 <this file> [ids...], each a Rules and mutants row id (R4, F5b) or a group ending in * (T4*)
 import os, shutil, subprocess, sys, tempfile
 
-BASE = "d66229c4"  # the origin/main commit prototype.patch was made against
+BASE = "dc6c8bf1"  # f0110's prototype (proto-f0110) at f0126's re-prep; base.patch then adds f0146's prototype (proto-f0146 95f005af: Pad and the controller map) and f0109's (proto-f0109's working tree on ee121ddc, with its acceptance specs: the wall colours in View, the edible repaint, wallColorOf, lemon Inky). F0109_SRC and F0109_SPECS are the SHA-256 of that working tree's `git diff -- pickman/src` and of its acceptance specs concatenated, when base.patch was cut: while the proto-f0109 worktree exists the run refuses if either has moved (design review 009 F1), so the base is cut again first
+F0109_SRC = "2149d6a5d5071f89394b32f9f9afc878dfb6da17e11e06d92c401676068fce4a"
+F0109_SPECS = "556a8b12eed7806bc9679c754db36d71b2120760bfe8ffe41ca79efe428b1785"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = subprocess.run(["git", "-C", HERE, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
 TMP = os.path.realpath(tempfile.mkdtemp(prefix="f0126-mutants-"))
@@ -97,12 +99,12 @@ end''', 'pick'),
 ("P11 progress clamp", L+'Hud/init.luau', 'return math.clamp((shownTick - pick.started) / math.max(1, pick.ticks), 0, 1)', 'return (shownTick - pick.started) / math.max(1, pick.ticks)', 'parts'),
 ("P12 banner window", L+'Hud/init.luau', 'tick >= boon.tick + Hud.BOON_TICKS', 'tick > boon.tick + Hud.BOON_TICKS', 'parts'),
 ("P13 F key", L+'View/init.luau', '	F = "Pick",', '	G = "Pick",', 'parts'),
-("A1 Controls wire", C+'Controls.luau', 'intent:FireServer(View.PICK_INTENT)', 'intent:FireServer("Pick")', 'adapters'),
+("A1 Controls wire", C+'Controls.luau', 'elseif action == "Pick" then\n\t\t\t\tintent:FireServer(View.PICK_INTENT)', 'elseif action == "Pick" then\n\t\t\t\tintent:FireServer("Pick")', 'adapters'),
 ("A2 Camera length", C+'Camera.luau', 'Hop.rise(hopped, shown, hopTicks)', 'Hop.rise(hopped, shown)', 'adapters'),
 ("A3 Main length", C+'Main.client.luau', '	Camera.hopTicks(frame.hopTicks)\n', '', 'adapters'),
 ("A4 radar maze", C+'Main.client.luau', 'DangerHud.push(snap, View.frameMaze(frame))', 'DangerHud.push(snap, Maze.layout(snap.maze))', 'adapters'),
 ("A5 beam maze", C+'BlastView.luau', 'draw(View.frameMaze(frame), shot.from, shot.heading)', 'draw(Maze.layout(frame.maze), shot.from, shot.heading)', 'adapters'),
-("A6 flash marked", C+'MazeView.luau', 'for _, child in model:GetDescendants() do', 'for _, child in model:GetChildren() do', 'adapters'),
+("A6 flash marked", C+'MazeView.luau', 'for _, child in model:GetDescendants() do', 'for _, child in model:GetChildren() do', 'views'),
 ("A7 HUD pick", C+'Main.client.luau', '	HudView.pick(frame.pick, frame.boon, frame.tick)\n', '', 'adapters'),
 ("A8 rewall", C+'Main.client.luau', 'MazeView.rewall(model, View.frameMaze(frame),', 'MazeView.rewall(model, Maze.layout(frame.maze),', 'adapters'),
 ]
@@ -141,7 +143,7 @@ NEW2 = [
 ]
 NEW3 = [
 ("R3a a Pick counts toward the limit", L+'Session/init.luau', '\tif pick then\n\t\t-- a pick request', '\tif pick and #member.queue >= s.config.maxIntentsPerTick then\n\t\treturn false, "rate limited"\n\tend\n\tif pick then\n\t\t-- a pick request', 'pick'),
-("R3b a pick at blue ghosts' speed", L+'Session/init.luau', 'Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal")', 'Levels.ghostSpeed(s.config.movement.speed, member.play.level, if member.play.frightened > 0 then "frightened" else "normal")', 'boons'),
+("R3b a pick at blue ghosts' speed", L+'Session/init.luau', 'Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)', 'Levels.ghostSpeed(s.config.movement.speed, member.play.level, if member.play.frightened > 0 then "frightened" else "normal", tuning)', 'boons'),
 ("R3c a new run keeps the marks", L+'Session/init.luau', '\tif ok then\n\t\tfreshMaze(s, member)', '\tif ok then\n\t\tmember.opened = {}\n\t\tmember.longHops = false', 'pick'),
 ("R3d the ghosts lose the holes after a death", L+'Session/init.luau', '\t\tmaze = mazeOf(s, member), -- the ghosts walk', '\t\tmaze = if member.play.lives < (s.config.play or Game.IMMEDIATE_CONFIG).lives then s.maze else mazeOf(s, member), -- the ghosts walk', 'closed'),
 ("R3e the pick bar low on the screen", L+'Hud/init.luau', 'Hud.PICK_BAR_AT = 0.4', 'Hud.PICK_BAR_AT = 0.62', 'parts'),
@@ -153,7 +155,7 @@ NEW3 = [
 ]
 NEW4 = [
 ("T4a a new level drops the boon", L+'Session/init.luau', '\tmember.opened = {}\n\tmember.longHops = false\n', '\tmember.opened = {}\n\tmember.longHops = false\n\tmember.boon = nil\n', 'boons'),
-("T4b a pick at level 1's speed always", L+'Session/init.luau', 'Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal")', 'Levels.ghostSpeed(s.config.movement.speed, 1, "normal")', 'boons'),
+("T4b a pick at level 1's speed always", L+'Session/init.luau', 'Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)', 'Levels.ghostSpeed(s.config.movement.speed, 1, "normal", tuning)', 'boons'),
 ("T4c MazeView marks nothing", C+'MazeView.luau', 'for _, r in View.walls(m, nil, marked) do', 'for _, r in View.walls(m, nil, nil) do', 'views'),
 ("T4d HudView never lays the bar out", C+'HudView.luau', '\t\tpickBar.Position = UDim2.fromOffset(barBox.x, barBox.y)\n\t\tpickBar.Size = UDim2.fromOffset(barBox.w, barBox.h)\n\t\tbanner.Position = UDim2.fromOffset(boonBox.x, boonBox.y)\n\t\tbanner.Size = UDim2.fromOffset(boonBox.w, boonBox.h)\n', '', 'views'),
 ("T4e HudView moves the bar off its box", C+'HudView.luau', 'pickBar.Position = UDim2.fromOffset(barBox.x, barBox.y)', 'pickBar.Position = UDim2.fromOffset(barBox.x, barBox.y + 30)', 'views'),
@@ -164,7 +166,36 @@ NEW5 = [
 ("T5a HudView places the bar only once", C+'HudView.luau', '\tif pickBar and banner then\n', '\tif pickBar and banner and pickBar.Position == nil then\n', 'views'),
 ("T5b Main rebuilds only for the holes", C+'Main.client.luau', '\tlocal key = View.wallsKey(frame)', '\tlocal key = frame.maze .. #(if frame.walls then frame.walls.opened else {})', 'views'),
 ]
-M = M + NEW + NEW2 + NEW3 + NEW4 + NEW5
+NEW6 = [
+("U1 PICK right of JUMP", L+'Touch/init.luau', '\treturn { x = fire.x - box.margin - fire.w, y = fire.y, w = fire.w, h = fire.h }', '\tlocal hop = Touch.hopRect(box)\n\treturn { x = hop.x + hop.w + box.margin, y = fire.y, w = fire.w, h = fire.h }', 'touch'),
+("U2 no pick zone", L+'Touch/init.luau', '\tif inside(pick, x, y) then\n\t\treturn "pick"\n\tend\n', '', 'touch'),
+("U3 the pick on the lift", L+'Touch/init.luau', '\t\t\t\telseif zone == "pick" then\n\t\t\t\t\ttable.insert(effects, { kind = "pick" })\n', '', 'touch'),
+("U4 Controls drops the pick effect", C+'Controls.luau', '\t\t\telseif effect.kind == "pick" then\n\t\t\t\tintent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it\n', '', 'controls'),
+("U5 Controls hands no pick rectangle", C+'Controls.luau', '\t\t\tpick = placed and placed.pick,\n', '', 'controls'),
+("U6 Y not bound", L+'Pad/init.luau', '\tButtonY = "Pick", -- the wall pick (f0126; user, 2026-10-25: "Y / triangle")\n', '', 'controls'),
+("U7 the PICK frame not placed", C+'HudView.luau', '\tplace(pickButton, placed.pick, l.textSize)\n', '', 'controls'),
+("U8 the PICK frame on every screen", C+'HudView.luau', 'pickButton = button("Pick", "PICK", GOLD, gui)', 'pickButton = button("Pick", "PICK", GOLD, gui)\n\tif pickButton then\n\t\tpickButton.frame.Visible = true\n\tend', 'controls'),
+("U9 the PICK button fires", C+'Controls.luau', 'intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it', 'fire() -- the PICK button (f0126), as F and Y send it', 'controls'),
+("U11 the PICK frame without the inset", C+'HudView.luau', '\tplace(pickButton, placed.pick, l.textSize)\n', '\tplace(pickButton, Touch.buttons(Hud.layout(sw, sh)).pick, l.textSize)\n', 'controls'),
+("U12 the PICK frame placed once", C+'HudView.luau', '\tplace(pickButton, placed.pick, l.textSize)\n', '\tif pickButton and pickButton.frame.Position == nil then\n\t\tplace(pickButton, placed.pick, l.textSize)\n\tend\n', 'controls'),
+("U13 every tap on the right sends the pick", C+'Controls.luau', '\t\t\telseif effect.kind == "look" then\n', '\t\t\telseif effect.kind == "look" then\n\t\t\t\tintent:FireServer(View.PICK_INTENT)\n', 'controls'),
+("U14 PICK checked before the snap, FIRE and JUMP", L+'Touch/init.luau', '\tif inside(snap, x, y) then\n\t\treturn "snap"\n\tend\n', '\tif inside(pick, x, y) then\n\t\treturn "pick"\n\tend\n\tif inside(snap, x, y) then\n\t\treturn "snap"\n\tend\n', 'touch'),
+("U15 a closed rectangle", L+'Touch/init.luau', '\tif inside(pick, x, y) then\n\t\treturn "pick"\n\tend\n', '\tif pick and x >= pick.x and y >= pick.y and x <= pick.x + pick.w and y <= pick.y + pick.h then\n\t\treturn "pick"\n\tend\n', 'touch'),
+("U16 a missing rectangle picks at the old place", C+'Controls.luau', '\t\t\tpick = placed and placed.pick,\n', '\t\t\tpick = (placed and placed.pick) or { x = 520, y = 300, w = 70, h = 70 },\n', 'controls'),
+("U17 F and Y do not pick on the press", C+'Controls.luau', '\t\t\telseif action == "Pick" then\n\t\t\t\tintent:FireServer(View.PICK_INTENT)\n', '\t\t\telseif action == "Pick" then\n', 'controls'),
+("U18 the PICK frame takes input", C+'HudView.luau', 'pickButton = button("Pick", "PICK", GOLD, gui)', 'pickButton = button("Pick", "PICK", GOLD, gui)\n\tif pickButton then\n\t\tpickButton.frame.Active = true\n\tend', 'controls'),
+("U19 the PICK frame captioned FIRE", C+'HudView.luau', 'button("Pick", "PICK", GOLD, gui)', 'button("Pick", "FIRE", GOLD, gui)', 'controls'),
+("U20 the PICK frame cyan", C+'HudView.luau', 'button("Pick", "PICK", GOLD, gui)', 'button("Pick", "PICK", CYAN, gui)', 'controls'),
+("U21 the pick bar down among the buttons", L+'Hud/init.luau', 'Hud.PICK_BAR_AT = 0.4', 'Hud.PICK_BAR_AT = 0.85', 'touch'),
+("V1 marked walls not gold", L+'View/init.luau', '\t\telseif marked then View.WALL_MARKED_COLOR\n', '', 'parts'),
+("V2 marked walls green while edible", L+'View/init.luau', '\t\telseif marked then View.WALL_MARKED_COLOR\n\t\telseif edible then View.WALL_EDIBLE_COLOR\n', '\t\telseif edible then View.WALL_EDIBLE_COLOR\n\t\telseif marked then View.WALL_MARKED_COLOR\n', 'parts'),
+("V3 the repaint skips the marked walls", C+'MazeView.luau', 'if (child.Name == "Wall" or child.Name == "MarkedWall") and child:IsA("BasePart") then\n\t\t\tchild.Color = wallColorOf(model, child.Name == "MarkedWall")', 'if child.Name == "Wall" and child:IsA("BasePart") then\n\t\t\tchild.Color = wallColorOf(model, false)', 'views'),
+("V6 the pick timed by the untuned ghosts", L+'Session/init.luau', 'local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)', 'local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal")', 'classic'),
+("V4 a rebuild ignores the edible time", C+'MazeView.luau', 'View.wallColor(model:GetAttribute("Lit") == true, model:GetAttribute("Edible") == true, marked)', 'View.wallColor(model:GetAttribute("Lit") == true, false, marked)', 'views'),
+("V5 the stop capped only at a walking speed", L+'Session/init.luau', 'if beside and distance <= config.speed then', 'if beside and distance <= config.speed and config.speed <= 34 then', 'pick'),
+("U10 Touch.buttons without the pick", L+'Touch/init.luau', '\t\tpick = Touch.pickRect(box),\n', '', 'touch'),
+]
+M = M + NEW + NEW2 + NEW3 + NEW4 + NEW5 + NEW6
 
 # Correct variants (design review 005 F2): each is a right change a later issue may make to an adapter; the specs
 # that load it must stay green.
@@ -176,14 +207,43 @@ CORRECT = [
 ("C5 MazeView reuses its Walls model", C+'MazeView.luau', '\tlocal old = model:FindFirstChild("Walls")\n\tif old then\n\t\told:Destroy()\n\tend\n\tlocal folder = Instance.new("Model")\n', '\tlocal folder = model:FindFirstChild("Walls") or Instance.new("Model")\n\tfolder:ClearAllChildren()\n', 'views'),
 ]
 
+def f0109_moved():
+    tree = os.path.join(os.path.dirname(REPO), "proto-f0109") if os.path.basename(os.path.dirname(REPO)) == ".worktree" else os.path.join(REPO, ".worktree", "proto-f0109")
+    if not os.path.isdir(tree):
+        print("note: no proto-f0109 worktree; the base's f0109 is as recorded", flush=True)
+        return None
+    import glob, hashlib
+    diff = subprocess.run(["git", "-C", tree, "diff", "--", "pickman/src"], capture_output=True, check=True).stdout
+    specs = b"".join(open(f, "rb").read() for f in sorted(glob.glob(os.path.join(tree, "pickman/tests/acceptance/f0109/*.luau"))))
+    moved = []
+    if hashlib.sha256(diff).hexdigest() != F0109_SRC:
+        moved.append("its source")
+    if hashlib.sha256(specs).hexdigest() != F0109_SPECS:
+        moved.append("its specs")
+    return moved or None
+
 def main():
+    moved = f0109_moved()
+    if moved:
+        sys.exit("refusing: proto-f0109 has moved (" + ", ".join(moved) + ") since base.patch was cut; cut the base again (E12)")
     subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", REPO, CLONE], check=True)
     subprocess.run(["git", "-C", CLONE, "checkout", "--quiet", BASE], check=True)
+    subprocess.run(["git", "-C", CLONE, "apply", os.path.join(HERE, "base.patch")], check=True)
     subprocess.run(["git", "-C", CLONE, "apply", os.path.join(HERE, "prototype.patch")], check=True)
     dest = os.path.join(HOME, A)
     os.makedirs(dest, exist_ok=True)
     for name in os.listdir(os.path.join(HERE, "..", "acceptance")):
         shutil.copy(os.path.join(HERE, "..", "acceptance", name), dest)
+    # the unmutated prototype first: f0126's specs and f0109's own all pass, or no mutant result means anything
+    names = sorted(os.listdir(dest))
+    base_specs = [A + n for n in names if n.endswith(".spec.luau")]
+    f0109 = os.path.join(HOME, "tests/acceptance/f0109")
+    base_specs += ["tests/acceptance/f0109/" + n for n in sorted(os.listdir(f0109)) if n.endswith(".spec.luau")] if os.path.isdir(f0109) else []
+    out = subprocess.run(["lune", "run", "tests/run", "--"] + base_specs, cwd=HOME, capture_output=True, text=True, timeout=900).stdout
+    summary = [l for l in out.split("\n") if " passed, " in l]
+    print("BASELINE".ljust(30), summary[-1] if summary else out[-300:], flush=True)
+    if " 0 failed" not in out:
+        sys.exit("refusing: the unmutated prototype fails: " + "; ".join(l for l in out.split("\n") if l.startswith("FAIL"))[:600])
     only = sys.argv[1:]
     for mid, rel, old, new, spec in M + [(c[0], c[1], c[2], c[3], c[4]) for c in CORRECT]:
         name = mid.split(" ")[0]

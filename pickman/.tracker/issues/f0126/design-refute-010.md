@@ -1,0 +1,4 @@
+# Refute 010: f0126 (answers to design-review-010, round 5 of the re-prep, the final round)
+
+- F1: fixed: step 8 names MazeView's `wallColorOf` and runs f0109's promoted specs (`tests/acceptance/f0109/`); game-design.md gives the pick as ten paces of the ghosts as tuned (43 steps today, 47 with f0125's slower ghosts); the prep-written c0155 line is gone from the Problem (the Overrides line in the Regression guard records it); Unknowns records that f0109's and f0125's preps were told and that f0126 needs neither's answer (it builds on f0109's code once done and reads the tuning in either order, proved on proto-f0125's diff). The other preps' own documents are theirs to update. consequences: none.
+- F2: fixed: the promotion dry run and its lint and type checks are recorded in Unknowns & experiments. consequences: none.

@@ -29,3 +29,30 @@
 - design-review-005 F2: pickman-test/stub-loaders-fall-back, zz-test/source-pins-name-what-the-design-names, z-design/mutation-runner-runs-correct-variants
 - design-review-005 F3: zz-test/seed-every-enumerated-case
 - design-review-005 F4: z-design/restated-rules-move-together
+- design-review-006 F1: z-design/required-steps-on-every-path, z-design/quote-other-preps-before-promising
+- design-review-006 F2: z-design/quote-other-preps-before-promising, z-design/run-the-other-rafts-specs
+- design-review-006 F3: z-design/quote-other-preps-before-promising
+- design-review-006 F4: pickman-test/new-controls-get-inset-and-turn-cases
+- design-review-006 F5: z-design/accepted-risks-checked-and-decided
+- design-review-006 F6: one-off: a real phone and a real controller are not in any headless spec; OC3 and OC4 cover them
+- design-review-006 F7: z-design/restated-rules-move-together
+- design-review-006 F8: z-design/restated-rules-move-together
+- design-review-006 F9: one-off: the f0126 specs are pure Lune with no OS-dependent step; CI's Linux runs them on the executor's first push
+- note a scripted cut ended at the next case's `end)` and deleted design-review-005's camera case; the mutation rerun (A2, A3 survived) caught it: z-design/rerun-skipped-checks-after-edits
+- design-review-007 F1: pickman-test/assert-between-press-and-release
+- design-review-007 F2: z-design/quote-other-preps-before-promising
+- design-review-007 F3: z-design/quote-other-preps-before-promising, z-design/run-the-other-rafts-specs
+- design-review-007 F4: z-design/restated-rules-move-together
+- design-review-007 F5: pickman-test/new-controls-get-inset-and-turn-cases
+- design-review-007 F6: z-design/accepted-risks-checked-and-decided
+- design-review-008 F1: z-design/mutation-runner-runs-correct-variants, pickman-test/stub-loaders-fall-back
+- design-review-008 F2: z-design/quote-other-preps-before-promising
+- design-review-008 F3: z-design/instructions-runnable-where-they-run
+- design-review-008 F4: z-design/quote-other-preps-before-promising
+- design-review-008 F5: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/in-flight-bases-pin-their-source
+- design-review-009 F2: z-design/derive-from-the-live-value
+- design-review-009 F3: z-design/restated-rules-move-together
+- design-review-010 F1: z-design/quote-other-preps-before-promising
+- design-review-010 F2: z-design/prove-specs-pass-on-a-prototype
+- note design-review-010 lesson candidate (hash the specs that will be promoted, not the prototype's copy): z-design/in-flight-bases-pin-their-source

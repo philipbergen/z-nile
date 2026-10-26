@@ -2,6 +2,7 @@
 -- f0126 AC7: picks in the real maze, with its ghosts. A ghost pill turns the ghosts blue in the step the wall comes
 -- down, as a power pellet does; the hole is open in the frame; the classic maze always shows three marked walls,
 -- each a wall that can be picked; and a run of picks plays the same twice from one seed.
+local Levels = require("@logic/Levels")
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
 local Picks = require("@logic/Picks")
@@ -103,4 +104,35 @@ return t.spec("f0126 picks in the classic maze", function(it)
 		end
 		error("no seed")
 	end)
+
+	it(
+		"the pick lasts ten paces of the member's own ghosts, their tuning included (f0125's slower ghosts)",
+		function()
+			local TUNING = 1 / 1.1
+			local base = Movement.DEFAULT_CONFIG.speed
+			local tuned = Picks.ticks(Levels.ghostSpeed(base, 1, "normal", TUNING), false)
+			t.expect(tuned ~= Picks.ticks(Levels.ghostSpeed(base, 1, "normal"), false)).toBe(true)
+			for seed = 1, 4000 do
+				local s = new(seed)
+				if markOnRun(s) then
+					local set = (s :: any).members.p.ghosts
+					t.expect(set ~= nil).toBe(true)
+					set.tuning = TUNING -- as f0125's shipped config makes the member's ghosts
+					Session.submit(s, "p", "Pick")
+					for _ = 1, 120 do
+						for _, e in Session.step(s) do
+							if e.kind == "PickStarted" then
+								t.expect(e.ticks).toBe(tuned)
+								return
+							end
+						end
+						if s.tick % 10 == 0 then
+							Session.submit(s, "p", "Pick")
+						end
+					end
+				end
+			end
+			error("no seed started a pick")
+		end
+	)
 end)

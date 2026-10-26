@@ -634,4 +634,33 @@ return t.spec("f0126 picks in the session", function(it)
 		t.expect(runs >= 20).toBe(true)
 		t.expect(changed >= runs - 2).toBe(true)
 	end)
+
+	it("whatever sets the step's speed, the player stops exactly on the marked wall's centre", function()
+		-- a faster step (the frightened run, f0143's boost) is capped at the distance to that centre all the same
+		for _, speed in { 45, 60, 90, 96 } do -- 96: the fastest base speed checkLevelSpeeds allows
+			local config: Session.Config =
+				{ movement = { speed = speed, turnBufferTicks = BUFFER }, maxIntentsPerTick = 4 }
+			for seed = 1, 200 do
+				local s = new(seed, config)
+				local stopX, wall = firstStop(s, 5)
+				if stopX and (firstStop(s, 6)) ~= 6 then
+					Session.submit(s, "p", "Pick")
+					local started: Session.Event? = nil
+					for _ = 1, 40 do
+						local r = run(s, 1)
+						started = find(r, "PickStarted")
+						if started then
+							break
+						end
+					end
+					t.expect(started ~= nil).toBe(true)
+					t.expect((started :: Session.Event).x).toBe((wall :: Maze.Tile).x)
+					local f = Session.frame(s, "p") -- in the step the pick started
+					t.expect(f.player.x).toBe(stopX)
+					t.expect(f.player.moving).toBe(false)
+					break
+				end
+			end
+		end
+	end)
 end)

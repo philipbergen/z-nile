@@ -112,6 +112,15 @@ local function instance(class: string): Inst
 					end
 					props.Parent = nil
 				end
+			elseif key == "GetAttribute" then
+				return function(_: any, name: string): any
+					return (props.attributes or {})[name]
+				end
+			elseif key == "SetAttribute" then
+				return function(_: any, name: string, value: any)
+					props.attributes = props.attributes or {}
+					props.attributes[name] = value
+				end
 			elseif key == "ClearAllChildren" then
 				return function()
 					table.clear(children)
@@ -486,7 +495,7 @@ return t.spec("f0126 what the adapters build", function(it)
 				local pick: Session.Pick = { wall = at(2, 2), started = 100, ticks = 40, fast = false }
 				w.hud.pick(pick, { tick = 100, kind = "shot" }, 110)
 				w.render()
-				local bar, banner = w.find("Pick"), w.find("Boon")
+				local bar, banner = w.find("PickBar"), w.find("Boon")
 				t.expect(bar ~= nil and banner ~= nil).toBe(true)
 				t.expect(boxOf(bar :: Inst)).toEqual(Hud.pickBox(w.layout()))
 				t.expect(boxOf(banner :: Inst)).toEqual(Hud.boonBox(w.layout()))
@@ -502,7 +511,7 @@ return t.spec("f0126 what the adapters build", function(it)
 			w.render()
 			local pick: Session.Pick = { wall = at(2, 2), started = 100, ticks = 40, fast = false }
 			w.hud.pick(pick, { tick = 100, kind = "longpill" }, 120)
-			local bar, banner = w.find("Pick") :: Inst, w.find("Boon") :: Inst
+			local bar, banner = w.find("PickBar") :: Inst, w.find("Boon") :: Inst
 			local fill = (bar :: Inst).children[1]
 			t.expect(bar.Visible).toBe(true)
 			t.expect(fill.Size.sx).toBe(0.5)
@@ -518,7 +527,7 @@ return t.spec("f0126 what the adapters build", function(it)
 		local mv = mazeView()
 		local marks = { at(2, 2), at(7, 2), at(25, 6) }
 		local model = mv.build(classic)
-		mv.rewall(model, classic, marks, false)
+		mv.rewall(model, classic, marks)
 		local rects = View.walls(classic, nil, marks)
 		local gold = partsNamed(model, "MarkedWall")
 		t.expect(runsOfParts(gold)).toEqual(runsOf(rects, true))
@@ -539,8 +548,8 @@ return t.spec("f0126 what the adapters build", function(it)
 		pellet.Name = "Pellet"
 		pellet.Parent = model
 		local holed = Maze.opened(classic, { at(2, 2), at(14, 10) })
-		mv.rewall(model, holed, {}, false)
-		mv.rewall(model, holed, { at(3, 2) }, false)
+		mv.rewall(model, holed, {})
+		mv.rewall(model, holed, { at(3, 2) })
 		t.expect(model:FindFirstChild("Pellet")).toBe(pellet)
 		local folders = 0
 		for _, c in model:GetChildren() do
@@ -562,7 +571,7 @@ return t.spec("f0126 what the adapters build", function(it)
 	it("MazeView's flash lights the marked walls with the rest, and gives them back their gold", function()
 		local mv = mazeView()
 		local model = mv.build(classic)
-		mv.rewall(model, classic, { at(2, 2) }, false)
+		mv.rewall(model, classic, { at(2, 2) })
 		mv.flash(model, true)
 		for _, name in { "Wall", "MarkedWall" } do
 			for _, p in partsNamed(model, name) do
@@ -576,7 +585,8 @@ return t.spec("f0126 what the adapters build", function(it)
 		for _, p in partsNamed(model, "Wall") do
 			t.expect(p.Color).toEqual(BLUE)
 		end
-		mv.rewall(model, classic, { at(2, 2) }, true) -- rebuilt while lit: lit
+		mv.flash(model, true)
+		mv.rewall(model, classic, { at(2, 2) }) -- rebuilt while lit: lit
 		for _, p in partsNamed(model, "MarkedWall") do
 			t.expect(p.Color).toEqual(LIT)
 		end
@@ -639,7 +649,7 @@ return t.spec("f0126 what the adapters build", function(it)
 		for _, s in turns do
 			w.screen(s.w, s.h, s.core)
 			w.render()
-			t.expect(boxOf(w.find("Pick") :: Inst)).toEqual(Hud.pickBox(w.layout()))
+			t.expect(boxOf(w.find("PickBar") :: Inst)).toEqual(Hud.pickBox(w.layout()))
 			t.expect(boxOf(w.find("Boon") :: Inst)).toEqual(Hud.boonBox(w.layout()))
 		end
 	end)
@@ -653,4 +663,34 @@ return t.spec("f0126 what the adapters build", function(it)
 		t.expect(#rewalls).toBe(3)
 		t.expect(rewalls[3][3]).toEqual({ at(3, 2), at(8, 2), at(25, 6) })
 	end)
+
+	it(
+		"while the ghosts are edible the walls are green and the marked walls stay gold, rebuilt or not",
+		function()
+			local GREEN = { r = 0, g = 152, b = 0 }
+			local mv = mazeView()
+			local model = mv.build(classic)
+			mv.rewall(model, classic, { at(2, 2) })
+			mv.edible(model, true)
+			for _, p in partsNamed(model, "Wall") do
+				t.expect(p.Color).toEqual(GREEN)
+			end
+			for _, p in partsNamed(model, "MarkedWall") do
+				t.expect(p.Color).toEqual(GOLD) -- the user: marked walls stay gold while the walls are green
+			end
+			-- a pick finishing while the ghosts are edible (a pill boon) rebuilds the walls: they come out green and gold
+			mv.rewall(model, Maze.opened(classic, { at(2, 2) }), { at(7, 2) })
+			t.expect(#partsNamed(model, "Wall") > 0).toBe(true)
+			for _, p in partsNamed(model, "Wall") do
+				t.expect(p.Color).toEqual(GREEN)
+			end
+			for _, p in partsNamed(model, "MarkedWall") do
+				t.expect(p.Color).toEqual(GOLD)
+			end
+			mv.edible(model, false)
+			for _, p in partsNamed(model, "Wall") do
+				t.expect(p.Color).toEqual(BLUE)
+			end
+		end
+	)
 end)

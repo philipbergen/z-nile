@@ -385,4 +385,24 @@ return t.spec("f0126 parts", function(it)
 			end
 		end
 	)
+
+	it(
+		"View.wallColor: the flash wins, then a marked wall's gold, then the edible green, else blue",
+		function()
+			local GOLD, GREEN, BLUE, WHITE =
+				{ r = 255, g = 191, b = 0 },
+				{ r = 0, g = 152, b = 0 },
+				{ r = 33, g = 33, b = 222 },
+				{ r = 255, g = 255, b = 255 }
+			local wc = (View :: any).wallColor
+			t.expect(wc(false, false, true)).toEqual(GOLD)
+			t.expect(wc(false, true, true)).toEqual(GOLD) -- the user: gold while the walls are green
+			t.expect(wc(true, true, true)).toEqual(WHITE)
+			t.expect(wc(true, false, true)).toEqual(WHITE)
+			t.expect(wc(false, true, false)).toEqual(GREEN)
+			t.expect(wc(false, false, false)).toEqual(BLUE)
+			t.expect(wc(false, true)).toEqual(GREEN) -- no third argument: f0109's two-argument call, as before
+			t.expect(wc(false, false)).toEqual(BLUE)
+		end
+	)
 end)

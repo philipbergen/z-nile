@@ -50,16 +50,12 @@ return t.spec("f0126 adapters", function(it)
 	)
 
 	it(
-		"Controls requires no Logic feature it did not already (stub loaders of the adapter stay valid)",
+		"Controls adds no require for the pick: its wire string comes through View (stub loaders stay valid)",
 		function()
-			-- the specs that load Controls with a table of its modules (tests/place/touch-adapters, f0110's) keep working
+			-- specs that load Controls with a table of its modules (tests/place/touch-adapters, f0110's) keep working
 			local src = source("Controls")
-			local found: { string } = {}
-			for name in string.gmatch(src, 'require%("@game/ReplicatedStorage/Shared/Logic/([%w_]+)"%)') do
-				table.insert(found, name)
-			end
-			table.sort(found)
-			t.expect(table.concat(found, " ")).toBe("Blaster Hop Maze Movement Touch View")
+			t.expect(has(src, "Shared/Logic/Picks")).toBe(false)
+			t.expect(has(src, "Picks.INTENT")).toBe(false)
 		end
 	)
 
@@ -98,18 +94,13 @@ return t.spec("f0126 adapters", function(it)
 	end)
 
 	it(
-		"MazeView draws the marked walls gold, as walls of their own, and flashes them with the rest",
+		"MazeView builds the marked walls as walls of their own (their colours and flash: views.spec)",
 		function()
 			local src = source("MazeView")
 			t.expect(has(src, "function MazeView.rewall(")).toBe(true)
 			t.expect(matches(src, "View%.walls%(%s*[%w_]+%s*,%s*[%w_]+%s*,%s*[%w_%.]+%s*%)")).toBe(true)
-			t.expect(matches(src, "Color3%.fromRGB%(%s*255%s*,%s*191%s*,%s*0%s*%)")).toBe(true)
 			t.expect(has(src, '"MarkedWall"')).toBe(true)
 			t.expect(has(src, ".marked")).toBe(true)
-			-- the flash lights every wall part, marked ones included, wherever they sit in the model
-			local flash = string.match(src, "function MazeView%.flash%(.-\nend") or ""
-			t.expect(has(flash, "GetDescendants")).toBe(true)
-			t.expect(has(flash, "MarkedWall")).toBe(true)
 		end
 	)
 
