@@ -328,6 +328,23 @@ function mergecheck.judge(dir: string, head: string, say: ((string) -> ())?): Ve
 	for _, p in lines(prFiles) do
 		mine[p] = true
 	end
+	-- design review 004 F2: a notrial file counts only while its item's document is still in that folder in the merged
+	-- tree (the PR's copy when the PR changed that folder, else main's), so a row written for a folder the PR moved away
+	-- is no row of a live item and is tried
+	local function liveItem(p: string, at: string): boolean
+		local folder = string.match(p, "^(.*)/[^/]+$")
+		local id = folder and string.match(folder, "([fdcR]%d%d%d%d)$")
+		if not folder or not id then
+			return false
+		end
+		local prChanged = false
+		for q in mine do
+			if string.sub(q, 1, #folder + 1) == folder .. "/" then
+				prChanged = true
+			end
+		end
+		return (git(dir, { "cat-file", "-e", `{if prChanged then h else at}:{folder}/{id}.md` }))
+	end
 	local bad, count, _, whyC = judgeCommits(dir, h, tip, roots, mine)
 	if not bad then
 		return no({ whyC or "git read failed" }, h)
@@ -377,7 +394,7 @@ function mergecheck.judge(dir: string, head: string, say: ((string) -> ())?): Ve
 		count += more
 		local only = true
 		for _, p in paths do
-			if not matchesAny(p, notrial) then
+			if not matchesAny(p, notrial) or not liveItem(p, now) then
 				only = false
 			end
 		end
