@@ -4,7 +4,9 @@
 -- least 2.5 against the maze blue (33, 33, 222), f0109's edible green (14, 64, 14), the level-clear white flash and
 -- f0126's marked-wall gold (255, 215, 0). It is a red (red channel high, green and blue low). Where View already
 -- names a wall colour (f0109's View.wallColor), it must still be the number measured here.
-local View = require("@logic/View")
+-- Casts keep the spec type-legal on main before f0158 (Awareness.ring, RING, View.DANGER_COLOR) and f0109 (fake.module)
+-- exist; a missing member fails at the call.
+local View: any = require("@logic/View")
 local t = require("@tests/lib/t")
 
 type Rgb = { r: number, g: number, b: number }

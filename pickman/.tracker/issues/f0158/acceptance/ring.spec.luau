@@ -6,23 +6,19 @@
 -- ghost that can kill (look "normal") lights a sector, at the nearest such ghost's brightness (clamped to 0..1);
 -- frightened and blinking ghosts never light it, nor hide a dangerous one farther away in the same sector
 -- (decided with the user, 2026-10-26: one warning colour, not a colour match; edible ghosts not shown, prep's choice).
-local Awareness = require("@logic/Awareness")
+-- Casts keep the spec type-legal on main before f0158 (Awareness.ring, RING, View.DANGER_COLOR) and f0109 (fake.module)
+-- exist; a missing member fails at the call.
+local Awareness: any = require("@logic/Awareness")
 local t = require("@tests/lib/t")
 
 local SCREENS = { { 1280, 720 }, { 1920, 1080 }, { 1024, 768 }, { 390, 844 }, { 844, 390 } }
 
-local function centre(d: Awareness.RingDot): (number, number)
+local function centre(d: any): (number, number)
 	return d.x + d.w / 2, d.y + d.h / 2
 end
 
 -- an indicator in `sector` (its bearing: an eighth of a turn per sector, positive left), as Awareness.indicators makes
-local function ind(
-	index: number,
-	sector: number,
-	distance: number,
-	brightness: number,
-	look: Awareness.Look
-): Awareness.Indicator
+local function ind(index: number, sector: number, distance: number, brightness: number, look: any): any
 	return {
 		index = index,
 		bearing = sector * math.pi / 4,
@@ -35,12 +31,30 @@ local function ind(
 end
 
 return t.spec("f0158 the danger ring", function(it)
-	it("the ring's numbers are the capture's: about 60% of the smaller side, eight sectors", function()
-		t.expect(Awareness.RING.share).toBe(0.6)
-		t.expect(Awareness.SECTORS).toBe(8)
-		t.expect(Awareness.RING.dots >= 3).toBe(true)
-		t.expect(Awareness.RING.dot > 0 and Awareness.RING.dot < 0.1).toBe(true)
-	end)
+	it(
+		"the ring's numbers are the user's: 60% across, 8 x 6 dots, dots 3.5%, lit 35-85%, idle 15%",
+		function()
+			-- the capture (60%) and G3, G5, G7, decided with the user 2026-10-26 (review 001 F3)
+			t.expect(Awareness.RING.share).toBe(0.6)
+			t.expect(Awareness.SECTORS).toBe(8)
+			t.expect(Awareness.RING.dots).toBe(6)
+			t.expect(Awareness.RING.dot).toBe(0.035)
+			t.expect(Awareness.RING.lit.min).toBe(0.35)
+			t.expect(Awareness.RING.lit.max).toBe(0.85)
+			t.expect(Awareness.RING.idle).toBe(0.15)
+		end
+	)
+
+	it(
+		"every dot is translucent and an unlit one is fainter than any lit one: idle < lit.min < lit.max < 1",
+		function()
+			local r = Awareness.RING
+			t.expect(r.idle > 0).toBe(true)
+			t.expect(r.idle < r.lit.min).toBe(true)
+			t.expect(r.lit.min < r.lit.max).toBe(true)
+			t.expect(r.lit.max < 1).toBe(true)
+		end
+	)
 
 	it(
 		"every sector has its dots, on one circle centred on the screen, 60% of the smaller side across",
@@ -100,7 +114,7 @@ return t.spec("f0158 the danger ring", function(it)
 
 	it("a sector's dots are evenly spaced, and the gap to the next sector is wider than that step", function()
 		local dots = Awareness.ring({}, 1280, 720)
-		local function angle(d: Awareness.RingDot): number
+		local function angle(d: any): number
 			local x, y = centre(d)
 			return math.atan2(-(x - 640), -(y - 360)) -- positive to the left, 0 at the top
 		end
@@ -142,11 +156,18 @@ return t.spec("f0158 the danger ring", function(it)
 		end
 	end)
 
-	it("a screen side that is not a positive finite number gives empty dots at the centre", function()
+	it("a width or height that is not a positive finite number gives empty, finite dots", function()
+		-- review 001 F4: both sides; math.min(1280, NaN) is 1280 in Luau, so an unguarded height would draw a ring
+		local function finite(n: number): boolean
+			return n == n and n > -math.huge and n < math.huge
+		end
 		for _, bad in { 0, -5, 0 / 0, math.huge } do
-			for _, d in Awareness.ring({}, bad, 720) do
-				t.expect(d.w).toBe(0)
-				t.expect(d.x).toBe(0)
+			for _, size in { { bad, 720 }, { 1280, bad } } do
+				for _, d in Awareness.ring({}, size[1], size[2]) do
+					t.expect(d.w).toBe(0)
+					t.expect(d.h).toBe(0)
+					t.expect(finite(d.x) and finite(d.y)).toBe(true)
+				end
 			end
 		end
 	end)

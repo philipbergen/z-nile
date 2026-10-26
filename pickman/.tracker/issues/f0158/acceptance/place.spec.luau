@@ -1,74 +1,156 @@
 --!strict
--- f0158 AC3: DangerHud draws the danger ring and decides nothing. It hands Awareness.ring the indicators (in view
--- or not), places every dot where Awareness.ring puts it on the ring's screen, draws a lit dot in the one warning
--- colour (View.DANGER_COLOR) Awareness.RING.lit opaque at its brightness, and an unlit one Awareness.RING.idle. The ring's screen sits in the device's safe area under the HUD (DisplayOrder below the
--- HUD's 1), so the HUD draws over it. The edge glows' boxes are gone; no geometry is done here.
+-- f0158 AC3: DangerHud draws the danger ring and decides nothing. Its real source runs on the fake engine
+-- (pickman/tests/lib/fakeengine's fake.module, from f0109, which f0158 depends on) with a real snapshot: after a
+-- render step the ring's screen holds Awareness.SECTORS x Awareness.RING.dots frames, still those same frames
+-- after a second step (reused, not remade), each at the box Awareness.ring gives for the indicators Awareness
+-- computes; a lit dot in View.DANGER_COLOR at transparency 1 - (lit.min + (lit.max - lit.min) x brightness), an
+-- unlit one white at 1 - RING.idle, so a near dangerous ghost's sector is more opaque than a far one's (review 001
+-- F2). The ring's screen is the core-UI safe area, below Roblox's top bar (G8, the HUD's own frame), under the HUD
+-- (DisplayOrder below the HUD's 1). The edge
+-- glows' boxes are gone and the adapter does no geometry (source reads).
+-- Casts keep the spec type-legal on main before f0158 (Awareness.ring, RING, View.DANGER_COLOR) and f0109 (fake.module)
+-- exist; a missing member fails at the call.
+local Awareness: any = require("@logic/Awareness")
+local Maze = require("@logic/Maze")
+local Session = require("@logic/Session")
+local View: any = require("@logic/View")
+local fake: any = require("@tests/lib/fakeengine")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
 local game = place.load()
 
-local function source(name: string): string
+local function client(name: string): any
 	local node: any = game
 	for _, part in { "StarterPlayer", "StarterPlayerScripts", "Client", name } do
 		node = node and node:FindFirstChild(part)
 	end
 	t.expect(node ~= nil).toBe(true)
-	return (string.gsub(node.Source, "%-%-[^\n]*", ""))
+	return node
+end
+
+local function source(name: string): string
+	return (string.gsub(client(name).Source, "%-%-[^\n]*", ""))
 end
 
 local function has(src: string, needle: string): boolean
 	return string.find(src, needle, 1, true) ~= nil
 end
 
-return t.spec("f0158 ring adapter", function(it)
-	it("it hands Awareness.ring the indicators and places each dot where Awareness.ring says", function()
-		local src = source("DangerHud")
-		t.expect(string.find(src, "Awareness%.ring%(%s*list%s*,%s*area%.X%s*,%s*area%.Y%s*%)") ~= nil)
-			.toBe(true)
-		t.expect(string.find(src, "local list = Awareness%.indicators%(") ~= nil).toBe(true)
-		t.expect(string.find(src, "%.Position%s*=%s*UDim2%.fromOffset%(%s*d%.x%s*,%s*d%.y%s*%)") ~= nil)
-			.toBe(true)
-		t.expect(string.find(src, "%.Size%s*=%s*UDim2%.fromOffset%(%s*d%.w%s*,%s*d%.h%s*%)") ~= nil)
-			.toBe(true)
-	end)
+local W, H = 1280, 720
+local EPS = 1e-6
 
+local function near(a: number, b: number): boolean
+	return math.abs(a - b) < EPS
+end
+
+-- an open tile `lo`..`hi` steps from the player along the maze, in another sector than `notSector`
+local function ghostAt(m: Maze.Maze, pose: any, lo: number, hi: number, notSector: number?): (number, number)
+	local from = { x = math.floor(pose.x + 0.5), y = math.floor(pose.y + 0.5) }
+	for y = 0, m.height - 1 do
+		for x = 0, m.width - 1 do
+			if Maze.kind(m, { x = x, y = y }) ~= "wall" then
+				local d = Awareness.pathDistance(m, from, { x = x, y = y }, hi)
+				if d and d >= lo and Awareness.sector(Awareness.bearing(pose, x, y)) ~= notSector then
+					return x, y
+				end
+			end
+		end
+	end
+	error(`no open tile {lo}..{hi} away`, 0)
+end
+
+return t.spec("f0158 ring adapter", function(it)
 	it(
-		"a lit dot is the one warning colour at the ring's lit opacity, an unlit one the idle opacity",
+		"its real source draws Awareness.ring's dots: boxes, the warning colour, the opacities, frames reused",
 		function()
-			local src = source("DangerHud")
-			-- the lit branch paints the warning colour itself: a local bound to View.DANGER_COLOR, read field by field
-			local var = string.match(src, "local%s+([%w_]+)%s*=%s*View%.DANGER_COLOR")
-			t.expect(var ~= nil).toBe(true)
-			local lit = string.match(src, "if%s+d%.lit%s+then(.-)else")
-			t.expect(lit ~= nil).toBe(true)
-			local v = var :: string
-			t.expect(
-				string.find(
-					lit :: string,
-					`BackgroundColor3%s*=%s*Color3%.fromRGB%(%s*{v}%.r%s*,%s*{v}%.g%s*,%s*{v}%.b%s*%)`
-				) ~= nil
-			).toBe(true)
-			t.expect(has(src, "View.ghostColor(")).toBe(false) -- no colour match
-			t.expect(has(src, "Awareness.RING.lit.min")).toBe(true)
-			t.expect(has(src, "Awareness.RING.lit.max")).toBe(true)
-			t.expect(has(src, "d.brightness")).toBe(true)
-			t.expect(has(src, "Awareness.RING.idle")).toBe(true)
+			local DangerHud, view = fake.module(client("DangerHud").Source, "DangerHud", { X = W, Y = H })
+			local classic = Maze.layout("classic")
+			local session = Session.new(classic, 1, Session.GAME_CONFIG)
+			Session.join(session, "p")
+			for _ = 1, 61 do
+				Session.step(session)
+			end
+			local snap: any = Session.snapshot(session, "p")
+			local pose = { x = snap.player.x, y = snap.player.y, yaw = 0 }
+			local nx, ny = ghostAt(classic, pose, 2, 3, nil)
+			local nearSector = Awareness.sector(Awareness.bearing(pose, nx, ny))
+			local fx, fy = ghostAt(classic, pose, 9, 11, nearSector)
+			local farSector = Awareness.sector(Awareness.bearing(pose, fx, fy))
+			local ghosts: { any } = {
+				{ x = nx, y = ny, look = "normal", name = "blinky", flash = false },
+				{ x = fx, y = fy, look = "normal", name = "inky", flash = false },
+			}
+			snap.ghosts = ghosts
+			DangerHud.start(function(): any
+				return pose
+			end)
+			DangerHud.push(snap, classic)
+			view.renderStepped:fire(1 / 60)
+			local ring = view.playerGui:FindFirstChild("Ring")
+			t.expect(ring ~= nil).toBe(true)
+			local want = Awareness.ring(Awareness.indicators(classic, pose, ghosts, { inView = true }), W, H)
+			local count = Awareness.SECTORS * Awareness.RING.dots
+			t.expect(#want).toBe(count)
+			local frames = ring:GetChildren()
+			t.expect(#frames).toBe(count)
+			local lit = 0
+			local opacity: { [number]: number } = {}
+			for i, f in frames do
+				local d = want[i]
+				t.expect(f.Visible).toBe(true)
+				t.expect(near(f.Position.X.Offset, d.x) and near(f.Position.Y.Offset, d.y)).toBe(true)
+				t.expect(near(f.Size.X.Offset, d.w) and near(f.Size.Y.Offset, d.h)).toBe(true)
+				local c = f.BackgroundColor3
+				if d.lit then
+					lit += 1
+					local r = View.DANGER_COLOR
+					t.expect(near(c.R, r.r / 255) and near(c.G, r.g / 255) and near(c.B, r.b / 255))
+						.toBe(true)
+					local a = Awareness.RING.lit.min
+						+ (Awareness.RING.lit.max - Awareness.RING.lit.min) * d.brightness
+					t.expect(near(f.BackgroundTransparency, 1 - a)).toBe(true)
+					opacity[d.sector] = 1 - f.BackgroundTransparency
+				else
+					t.expect(c.R == 1 and c.G == 1 and c.B == 1).toBe(true)
+					t.expect(near(f.BackgroundTransparency, 1 - Awareness.RING.idle)).toBe(true)
+				end
+			end
+			t.expect(lit).toBe(2 * Awareness.RING.dots)
+			t.expect(opacity[nearSector] > opacity[farSector]).toBe(true)
+			-- a second step keeps the same frames
+			view.renderStepped:fire(1 / 60)
+			local again = ring:GetChildren()
+			t.expect(#again).toBe(count)
+			for i, f in frames do
+				t.expect(again[i] == f).toBe(true)
+			end
 		end
 	)
 
-	it("the ring has its own screen in the device's safe area, under the HUD", function()
+	it("it asks Awareness.ring and paints from View.DANGER_COLOR, never a ghost's colour", function()
 		local src = source("DangerHud")
-		t.expect(string.find(src, "%.ScreenInsets%s*=%s*Enum%.ScreenInsets%.DeviceSafeInsets") ~= nil)
-			.toBe(true)
-		local orders = {}
-		for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
-			table.insert(orders, tonumber(n) :: number)
-		end
-		t.expect(#orders).toBe(1)
-		t.expect(orders[1] < 1).toBe(true)
-		t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
+		t.expect(has(src, "Awareness.ring(")).toBe(true)
+		t.expect(has(src, "View.DANGER_COLOR")).toBe(true)
+		t.expect(has(src, "View.ghostColor(")).toBe(false)
 	end)
+
+	it(
+		"the ring has its own screen, the core-UI safe area below the top bar (the HUD's frame), under the HUD",
+		function()
+			-- G8, decided with the user 2026-10-26: "Centre below top bar"
+			local src = source("DangerHud")
+			t.expect(string.find(src, "%.ScreenInsets%s*=%s*Enum%.ScreenInsets%.CoreUISafeInsets") ~= nil)
+				.toBe(true)
+			local orders = {}
+			for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
+				table.insert(orders, tonumber(n) :: number)
+			end
+			t.expect(#orders).toBe(1)
+			t.expect(orders[1] < 1).toBe(true)
+			t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
+		end
+	)
 
 	it("the edge glows are gone and the adapter does no geometry", function()
 		local src = source("DangerHud")
