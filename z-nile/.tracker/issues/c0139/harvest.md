@@ -1,0 +1,6 @@
+- design-review-001 F1: zz-arch/guards-keyed-on-a-lists-meaning
+- design-review-001 F2: zz-arch/one-reader-per-format
+- design-review-001 F3: zz-test/seed-every-enumerated-case
+- design-review-001 F4: zz-arch/refusals-are-gate-checks
+- design-review-001 F5: zz-review/lists-paste-their-search
+- design-review-001 F6: z-design/spec-design-correspondence
