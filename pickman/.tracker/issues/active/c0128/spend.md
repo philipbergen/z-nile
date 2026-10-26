@@ -14,6 +14,7 @@
 | 10 | 2026-10-26 01:30 | c0128: Verification log | 0 | 0 | 3.0 | explicit | build |  |
 | 11 | 2026-10-26 01:40 | c0128: Phase 3 in the Verification log | 0 | 0 | 2.0 | explicit | build |  |
 | 12 | 2026-10-26 03:59 | R0045: review-001 | 0 | 0 | 25.0 | raft | code-review |  |
+| 13 | 2026-10-26 04:19 | R0045: refute-001 (F1 deferred to c0156, the user's decision), harvest, lesson | 3 | 1 | 10.0 | raft | code-review |  |
 
-**Total:** +282 / -19 lines, 117.0 agent-minutes, 207132 tokens over 12 records
-<!-- totals: added=282 removed=19 minutes=117.0 records=12 tokens=207132 -->
+**Total:** +285 / -20 lines, 127.0 agent-minutes, 207132 tokens over 13 records
+<!-- totals: added=285 removed=20 minutes=127.0 records=13 tokens=207132 -->
