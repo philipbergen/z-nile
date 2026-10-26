@@ -24,6 +24,7 @@
 | 20 | 2026-10-26 14:44 | R0045: refute-002 sha | 0 | 0 | 1.0 | raft | code-review |  |
 | 21 | 2026-10-26 15:06 | c0128: Verification log, review 002 | 0 | 0 | 2.0 | explicit | deliver |  |
 | 22 | 2026-10-26 15:15 | tracker: done R0045 | 0 | 0 | 4.0 | raft | deliver |  |
+| 23 | 2026-10-26 15:28 | deliver | 0 | 0 | 20.0 | spend | deliver |  |
 
-**Total:** +289 / -22 lines, 202.0 agent-minutes, 207132 tokens over 22 records
-<!-- totals: added=289 removed=22 minutes=202.0 records=22 tokens=207132 -->
+**Total:** +289 / -22 lines, 222.0 agent-minutes, 207132 tokens over 23 records
+<!-- totals: added=289 removed=22 minutes=222.0 records=23 tokens=207132 -->
