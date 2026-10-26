@@ -1,7 +1,7 @@
 ---
 title: After any edit to a sequestered check.sh, it parses and lists before the prep commit
 when: design
-tags: [check.sh, sequestration, prep]
+tags: [check-sh, sequestration, prep]
 check: Does the edited check.sh still pass `bash -n`, and does `AC_LIST=1 bash check.sh` end "criteria listed (none run)", with each label matching the document's criterion?
 ---
 A sequestered check.sh can only be fixed in the prep: once execution starts, an edit is a sequestration violation. An answer to a review that rewrites its criteria with a scripted edit can leave a fragment that breaks the whole file, and only c0114's promoted `classified.spec` (which lists every unfinished check.sh) would catch it, in the gate.
