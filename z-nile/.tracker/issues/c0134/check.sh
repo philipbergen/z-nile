@@ -11,8 +11,8 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: accept.spec's header describes its two acceptances and leaves the refusals to refuse.spec" \
   lune run tests/run -- "$A/header.spec.luau"
-# AC2: the body of accept.spec (everything from the first line after `--!strict` that is not a comment, cut by
-# acceptance/split.luau, the same reader as header.spec) is what it was where the branch left origin/main. It judges
+# AC2: the body of accept.spec (every byte but its header, one run of plain `-- ` comment lines after line 1, cut by
+# acceptance/split.luau, the same rule as header.spec; line 1 and the end of the file are body) is what it was where the branch left origin/main. It judges
 # the branch's own change only: the base is the merge-base with origin/main, which the branch can't move; on main, and
 # on any branch after the change has landed, the base is HEAD or holds the change, and there is nothing to compare
 # (design review 001 F2), which it says.

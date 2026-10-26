@@ -20,15 +20,18 @@ local function has(text: string, needle: string): boolean
 end
 
 return t.spec("c0134 accept.spec's header describes what it tests", function(it)
-	it(
-		"the one reader cuts after the comment block that follows --!strict, and every other line is body",
-		function()
-			local h, b = split.cut("--!strict\n-- one\n-- two\n_G.x = true\nlocal x = 1\n-- not header\n")
-			t.expect(h).toBe("-- one\n-- two")
-			-- a code line at the boundary is body, so AC2 compares it (review 001 F1)
-			t.expect(b).toBe("_G.x = true\nlocal x = 1\n-- not header")
-		end
-	)
+	it("only a run of plain line comments after line 1 is header; every other byte is body", function()
+		local h, b = split.cut("--!strict\n-- one\n--\n-- two\n--[[x]] y()\nlocal x = 1\n-- not header\nz()")
+		t.expect(h).toBe("-- one\n--\n-- two")
+		-- line 1, a block comment that hides code, and a last line with no newline are body (review 002 F1)
+		t.expect(b).toBe("--!strict\n--[[x]] y()\nlocal x = 1\n-- not header\nz()")
+		local h2, b2 = split.cut("--!strict\n--!nonstrict\n-- a\nlocal x = 1\n")
+		t.expect(h2).toBe("")
+		t.expect(b2).toBe("--!strict\n--!nonstrict\n-- a\nlocal x = 1\n")
+		-- a code line at the boundary is body (review 001 F1), and the trailing newline is kept
+		t.expect(select(2, split.cut("--!strict\n-- a\n_G.x = true\nx()\n")))
+			.toBe("--!strict\n_G.x = true\nx()\n")
+	end)
 
 	it("AC1: the header names AC1's two acceptances", function()
 		local h = header(fs.readFile(FILE))
