@@ -44,19 +44,19 @@ return t.spec("f0146 Pad", function(it)
 	end)
 
 	it("a push engages a sector once, heading-relative, ties vertical", function()
-		for _, case in
-			{
-				{ 0, 1, "Forward" },
-				{ 0, -1, "Back" },
-				{ -1, 0, "Left" },
-				{ 1, 0, "Right" },
-				{ 0.5, 0.5, "Forward" }, -- a tie goes vertical
-				{ -0.5, -0.5, "Back" },
-				{ 0.7, 0.3, "Right" },
-			}
-		do
-			local _, intent = Pad.steer(Pad.steerStart(), case[1], case[2])
-			t.expect(intent).toBe(case[3])
+		type Case = { x: number, y: number, want: string }
+		local cases: { Case } = {
+			{ x = 0, y = 1, want = "Forward" },
+			{ x = 0, y = -1, want = "Back" },
+			{ x = -1, y = 0, want = "Left" },
+			{ x = 1, y = 0, want = "Right" },
+			{ x = 0.5, y = 0.5, want = "Forward" }, -- a tie goes vertical
+			{ x = -0.5, y = -0.5, want = "Back" },
+			{ x = 0.7, y = 0.3, want = "Right" },
+		}
+		for _, case in cases do
+			local _, intent = Pad.steer(Pad.steerStart(), case.x, case.y)
+			t.expect(intent).toBe(case.want)
 		end
 		local s, intent = Pad.steer(Pad.steerStart(), 0, Pad.STEER_ON - 0.01)
 		t.expect(intent).toBe(nil)
@@ -121,8 +121,10 @@ return t.spec("f0146 Pad", function(it)
 		near(two, 2 * one)
 		-- a tilt past 1 counts as 1
 		near((Pad.look(2, 0, 0.1)), one)
-		for _, bad in { { NAN, 0, 0.1 }, { 1, 0, NAN }, { 1, 0, 0 }, { 1, 0, -0.1 }, { 1, math.huge, 0.1 } } do
-			local bx, by = Pad.look(bad[1], bad[2], bad[3])
+		local bad: { { number } } =
+			{ { NAN, 0, 0.1 }, { 1, 0, NAN }, { 1, 0, 0 }, { 1, 0, -0.1 }, { 1, math.huge, 0.1 } }
+		for _, b in bad do
+			local bx, by = Pad.look(b[1], b[2], b[3])
 			t.expect(bx).toBe(0)
 			t.expect(by).toBe(0)
 		end

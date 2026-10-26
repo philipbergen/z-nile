@@ -113,8 +113,9 @@ return t.spec("f0146 the gamepad's adapters and documents", function(it)
 		"the lobby's Main boots LobbyPad after LobbyView; LobbyPad selects Start for a gamepad only, when nothing is selected",
 		function()
 			local main = lobbyClient("Main")
-			local view = string.find(main, 'require("./LobbyView").start()', 1, true)
-			local pad = string.find(main, 'require("./LobbyPad").start()', 1, true)
+			-- patterns, not literals: a literal require string here would read as a require of this spec (tests/meta)
+			local view = string.find(main, 'require%("%./LobbyView"%)%.start%(%)')
+			local pad = string.find(main, 'require%("%./LobbyPad"%)%.start%(%)')
 			t.expect(view ~= nil and pad ~= nil and (view :: number) < (pad :: number)).toBe(true)
 			t.expect(
 				resolvesPad(lobbyPlace, { "StarterPlayer", "StarterPlayerScripts", "Lobby", "LobbyPad" })
