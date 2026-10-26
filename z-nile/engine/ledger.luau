@@ -1,5 +1,6 @@
 --!strict
--- The pure format of spend.md (c0084): nine columns, rows only appended.
+-- The pure format of spend.md (c0084): nine columns, rows only appended. A tenth column, the model id, appears only
+-- when some row records one (c0117): a file with no model row keeps the nine-column header.
 local ledger = {}
 
 ledger.PHASES = { "capture", "prep", "design-review", "build", "code-review", "deliver" }
@@ -17,12 +18,21 @@ export type Row = {
 	how: string,
 	phase: string,
 	tokens: number?,
+	model: string?,
 }
 export type Totals = { added: number, removed: number, minutes: number, records: number, tokens: number }
 export type Ledger = { id: string, title: string, rows: { Row } }
 
 ledger.HEADER = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |\n"
 	.. "|---|---|---|---|---|---|---|---|---|\n"
+-- the header once any row records the model that spent its tokens (c0117)
+ledger.HEADER_MODEL = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n"
+	.. "|---|---|---|---|---|---|---|---|---|---|\n"
+
+-- A model id as spend.md stores it: letters, digits, dots, dashes and underscores (no cell separator or space).
+function ledger.isModel(s: string): boolean
+	return string.match(s, "^[%w][%w%._%-]*$") ~= nil
+end
 
 function ledger.isPhase(s: string): boolean
 	return IS[s] == true
@@ -80,8 +90,8 @@ function ledger.parse(text: string): (Ledger?, string?)
 		for cell in string.gmatch(string.sub(line, 2, -2) .. "|", "([^|]*)|") do
 			table.insert(c, trim(cell))
 		end
-		if #c ~= 7 and #c ~= 9 then
-			return nil, `not a spend row (7 or 9 cells): {line}`
+		if #c ~= 7 and #c ~= 9 and #c ~= 10 then
+			return nil, `not a spend row (7, 9 or 10 cells): {line}`
 		end
 		local n, added, removed = count(c[1]), count(c[4]), count(c[5])
 		local minutes = if string.match(c[6], "^%d+%.?%d*$") then tonumber(c[6]) else nil
@@ -91,16 +101,23 @@ function ledger.parse(text: string): (Ledger?, string?)
 		if not string.match(c[2], "^%d%d%d%d%-%d%d%-%d%d") then
 			return nil, `not a spend row (when): {line}`
 		end
-		local phase = if #c == 9 then c[8] else "build"
+		local phase = if #c >= 9 then c[8] else "build"
 		if not IS[phase] then
 			return nil, `unknown phase {phase}: {line}`
 		end
 		local tokens: number? = nil
-		if #c == 9 and c[9] ~= "" then
+		if #c >= 9 and c[9] ~= "" then
 			tokens = count(c[9])
 			if not tokens then
 				return nil, `not a spend row (tokens): {line}`
 			end
+		end
+		local model: string? = nil
+		if #c == 10 and c[10] ~= "" then
+			if not ledger.isModel(c[10]) then
+				return nil, `not a spend row (model): {line}`
+			end
+			model = c[10]
 		end
 		table.insert(out.rows, {
 			when = c[2],
@@ -111,6 +128,7 @@ function ledger.parse(text: string): (Ledger?, string?)
 			how = c[7],
 			phase = phase,
 			tokens = tokens,
+			model = model,
 		})
 	end
 	return out
@@ -151,12 +169,19 @@ local function clean(s: string): string
 end
 
 function ledger.render(id: string, title: string, rows: { Row }): string
-	local lines = { `# Spend: {id} {title}`, "", (string.gsub(ledger.HEADER, "\n$", "")) }
+	local withModel = false
+	for _, r in rows do
+		if r.model then
+			withModel = true
+		end
+	end
+	local header = if withModel then ledger.HEADER_MODEL else ledger.HEADER
+	local lines = { `# Spend: {id} {title}`, "", (string.gsub(header, "\n$", "")) }
 	for i, r in rows do
 		table.insert(
 			lines,
 			string.format(
-				"| %d | %s | %s | %d | %d | %.1f | %s | %s | %s |",
+				"| %d | %s | %s | %d | %d | %.1f | %s | %s | %s |" .. (if withModel then " %s |" else "%s"),
 				i,
 				r.when,
 				clean(r.subject),
@@ -165,7 +190,8 @@ function ledger.render(id: string, title: string, rows: { Row }): string
 				tenths(r.minutes) / 10,
 				clean(r.how),
 				r.phase,
-				if r.tokens then tostring(r.tokens) else ""
+				if r.tokens then tostring(r.tokens) else "",
+				if withModel then r.model or "" else ""
 			)
 		)
 	end
@@ -211,6 +237,9 @@ function ledger.append(text: string?, id: string, title: string, row: Row): stri
 	if not IS[row.phase] then
 		error(`unknown phase {row.phase}`)
 	end
+	if row.model and not ledger.isModel(row.model) then
+		error(`not a model id: {row.model}`)
+	end
 	table.insert(rows, row)
 	return ledger.render(id, title, rows)
 end
@@ -224,6 +253,7 @@ local function same(a: Row, b: Row): boolean
 		and a.how == b.how
 		and a.phase == b.phase
 		and a.tokens == b.tokens
+		and a.model == b.model
 end
 
 -- True when every row of `prefix` is field-equal to the same position in `rows` (minutes in tenths,

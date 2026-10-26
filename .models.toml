@@ -1,0 +1,138 @@
+# Which model runs each model step (c0117). Files stack like .gitignore: a .models.toml closer to the work (a
+# project's home, an issue's folder) replaces only the keys it sets. A step about one issue reads that issue's walk; a
+# step about a raft takes, for each CLI, the strongest of its members' specs (higher rank, then larger max_tokens).
+# Only the CLIs below are supported, and nothing defaults: a skill no file names is an error. See zz-rules, Dispatch.
+#
+# Guess (pending user): the order, the models, the ranks and the caps below are the prep's first guess.
+# max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
+
+# The CLI priority order: the dispatcher moves down it only when a CLI fails on quota.
+order = ["claude", "grok", "agent"]
+
+[dispatch]
+# the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
+# Unset, or unreadable, means none: a closer file's `auto_merge = []` turns them off for its items.
+auto_merge = ["prep", "raft"]
+# a step that prints nothing for this long is killed (a CLI never waits for quota)
+stall_seconds = 300
+# the same limit while a tool call runs (a full gate is quiet for minutes)
+tool_seconds = 900
+
+[z-ticket.claude]
+model = "claude-sonnet-5"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 300000
+
+[z-ticket.grok]
+model = "grok-4.7"
+effort = "medium"
+rank = 2
+runtime = "grok-cli"
+max_tokens = 300000
+
+[z-ticket.agent]
+model = "claude-sonnet-5-thinking-high"
+rank = 2
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+max_tokens = 300000
+
+[z-design.claude]
+model = "claude-opus-5-5"
+effort = "high"
+rank = 3
+runtime = "claude-cli"
+max_tokens = 3000000
+
+[z-design.grok]
+model = "grok-4.7"
+effort = "high"
+rank = 3
+runtime = "grok-cli"
+max_tokens = 3000000
+
+[z-design.agent]
+model = "claude-opus-5-5-high"
+rank = 3
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+max_tokens = 3000000
+
+[z-raft.claude]
+model = "claude-sonnet-5"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 600000
+
+[z-raft.grok]
+model = "grok-4.7"
+effort = "medium"
+rank = 2
+runtime = "grok-cli"
+max_tokens = 600000
+
+[z-raft.agent]
+model = "claude-sonnet-5-thinking-high"
+rank = 2
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+max_tokens = 600000
+
+[z-run.claude]
+model = "claude-opus-5-5"
+effort = "high"
+rank = 3
+runtime = "claude-cli"
+max_tokens = 12000000
+
+[z-run.grok]
+model = "grok-4.7"
+effort = "high"
+rank = 3
+runtime = "grok-cli"
+max_tokens = 12000000
+
+[z-run.agent]
+model = "claude-opus-5-5-high"
+rank = 3
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+max_tokens = 12000000
+
+# The review model belongs to the CLI (the user's decision): Opus through claude or agent, any grok model at xhigh
+# through grok.
+[zz-review.claude]
+model = "claude-opus-5-5"
+rank = 4
+runtime = "claude-cli"
+max_tokens = 2000000
+
+[zz-review.grok]
+model = "grok-4.7"
+effort = "xhigh"
+rank = 4
+runtime = "grok-cli"
+max_tokens = 2000000
+
+[zz-review.agent]
+model = "claude-opus-5-5-high"
+rank = 4
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+max_tokens = 2000000

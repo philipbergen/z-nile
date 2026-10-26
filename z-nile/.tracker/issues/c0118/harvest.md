@@ -15,3 +15,14 @@
 - design-review-004 F1: zz-rules/item-history-spans-moves-and-compaction, zz-test/seed-every-enumerated-case
 - design-review-005 F1: zz-arch/guard-no-is-explicit, zz-test/seed-every-enumerated-case
 - design-review-005 F2: zz-rules/item-history-spans-moves-and-compaction
+- design-review-006 F1: z-design/restated-rules-move-together
+- design-review-006 F2: z-design/new-rules-migrate-existing-work
+- design-review-006 F3: zz-test/one-rule-one-function
+- design-review-006 F4: z-design/watch-steps-name-their-base
+- design-review-006 F5: one-off: inputs from c0117's pending guesses named in Unknowns
+- design-review-007 F1: z-design/watch-steps-name-their-base
+- design-review-007 F2: zz-test/source-text-pins-read-the-code
+- design-review-008 F1: z-design/rerun-skipped-checks-after-edits
+- design-review-008 F2: zz-test/source-text-pins-read-the-code
+- design-review-008 F3: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/restated-rules-move-together

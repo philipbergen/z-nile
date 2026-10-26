@@ -9,3 +9,5 @@ When two checks refuse the same input (a local check and the publish's origin ch
 **Why:** c0116 prep: the mutation run left M24 (recombine's raft type check) and M27 (recombine's membership check) alive. The members' type check and the publish's origin check refused the same inputs, so their cases passed with either guard removed.
 
 **How to apply:** in the mutation check, a surviving mutant whose case still sees a refusal means a second guard: give the case an input only this guard can refuse (an empty raft of another type), or assert the message the Design states for this guard.
+
+R0050 code review 003 F2: `unfold`'s refusal of a done issue in its dead-raft branch had no case, so dropping it left every spec green.

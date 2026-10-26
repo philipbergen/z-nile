@@ -8,6 +8,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 -- c0120 override: the spec runs from z-nile/, its home, after the move
+local projects = require("@znile/engine/projects")
 local serde = require("@lune/serde")
 local store = require("@znile/engine/store")
 local t = require("@tests/lib/t")
@@ -253,6 +254,33 @@ local function bySlug(kind: string): { [string]: store.Item }
 			error(`two {kind}s share the slug {item.slug}: {out[item.slug].id}, {item.id}`)
 		end
 		out[item.slug] = item
+	end
+	-- c0116 override: a raft recombine retired keeps its folder in <root>/rafts/retired/, where no finder looks, and is
+	-- still filed in that root
+	if kind == "raft" then
+		-- read at the checkout's top, as the items are: this spec runs from z-nile/ (c0120)
+		for _, root in projects.roots(projects.load(TOP)) do
+			local base = `{TOP}/{root}/rafts/retired`
+			local names: { string } = if fs.isDir(base) then fs.readDir(base) else {}
+			for _, name in names do
+				local doc = `{base}/{name}/{name}.md`
+				if string.match(name, "^R%d%d%d%d$") and fs.isFile(doc) then
+					local slug = store.readFront(doc).slug or ""
+					if out[slug] then
+						error(`two {kind}s share the slug {slug}: {out[slug].id}, {name}`)
+					end
+					out[slug] = {
+						id = name,
+						kind = "raft",
+						state = "retired",
+						dir = `{base}/{name}`,
+						doc = doc,
+						slug = slug,
+						root = root,
+					}
+				end
+			end
+		end
 	end
 	return out
 end

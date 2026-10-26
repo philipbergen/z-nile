@@ -31,8 +31,8 @@ links_check() {
   grep -qxF '[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check' "$ZN_ROOT/z-nile/check.sh"
 }
 check "AC2: the committed links pass ./zn skills --check in a clean copy, which it leaves unchanged, and the gate runs it" links_check
-check "AC3: the eleven skills are renamed into their folders, nothing old is left, and z-raft is not made here" \
-  bash -c 'lune run tests/run -- "$1" && test -z "$(git -C "$ZN_ROOT" ls-files -- z-nile/skills/z-raft .claude/skills/z-raft)"' _ "$A/layout.spec.luau"
+check "AC3: the eleven skills are renamed into their folders and nothing old is left (c0116 override: z-raft now exists)" \
+  lune run tests/run -- "$A/layout.spec.luau"
 check "AC4: no live file names an old skill or cites an old lesson id, and no code or spec reads through a .claude/skills link" lune run tests/run -- "$A/absence.spec.luau"
 check "AC5: lessons live in the real skill folders under the new ids, and no ledger names an old id" lune run tests/run -- "$A/lessons.spec.luau"
 check "AC6: the real tree's lessons and harvest ledgers check clean, every finding covered" \
