@@ -10,3 +10,6 @@
 - review-002 F2: zz-arch/guards-decide-from-the-tools-resolution
 - review-002 F3: zz-arch/guards-trust-only-origin
 - review-002 F4: zz-test/pin-fail-safes-where-they-act
+- review-003 F1: zz-arch/item-rules-scoped-to-their-call
+- review-003 F2: zz-arch/item-rules-scoped-to-their-call
+- review-003 F3: zz-arch/guards-decide-from-the-tools-resolution
