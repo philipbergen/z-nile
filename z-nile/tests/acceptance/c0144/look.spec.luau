@@ -351,13 +351,12 @@ return t.spec("c0144 ./zn output in a terminal and in a pipe", function(it)
 					env = env,
 					esc = has(run, ESC),
 					pass = has(run, "PASS  AC1: it holds"),
+				}).toEqual({
+					direct = true,
+					env = env,
+					esc = false,
+					pass = true,
 				})
-					.toEqual({
-						direct = true,
-						env = env,
-						esc = false,
-						pass = true,
-					})
 			end
 		end
 	)
