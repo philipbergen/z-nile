@@ -18,6 +18,7 @@
 | 14 | 2026-10-26 23:05 | R0056: review-001 | 0 | 0 | 22.0 | focus | code-review | 95000 |
 | 15 | 2026-10-26 23:08 | f0109: pin where Main hands the walls' state over, test the fake's attribute refusals, fix the fake's header (review 001 F1-F3) | 151 | 3 | 35.0 | focus | code-review |  |
 | 16 | 2026-10-26 23:09 | R0056: refute-001, harvest, verification log | 2 | 0 | 15.0 | focus | code-review |  |
+| 17 | 2026-10-27 00:42 | R0056: review-002 | 0 | 0 | 37.0 | focus | code-review | 100000 |
 
-**Total:** +337 / -15 lines, 338.0 agent-minutes, 95000 tokens over 16 records
-<!-- totals: added=337 removed=15 minutes=338.0 records=16 tokens=95000 -->
+**Total:** +337 / -15 lines, 375.0 agent-minutes, 195000 tokens over 17 records
+<!-- totals: added=337 removed=15 minutes=375.0 records=17 tokens=195000 -->
