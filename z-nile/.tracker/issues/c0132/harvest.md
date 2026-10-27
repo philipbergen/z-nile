@@ -10,3 +10,4 @@
 - design-review-002 F2: zz-test/guard-needs-its-own-case
 - design-review-002 F3: zz-test/no-vacuous-pass
 - design-review-002 F4: zz-arch/children-need-a-lifeline
+- design-review-003 F1: zz-test/check-sh-judges-the-whole-spec-run, z-design/spec-design-correspondence
