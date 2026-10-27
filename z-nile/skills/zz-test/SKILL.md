@@ -12,7 +12,7 @@ description: How z-nile tests and gates every project - the gate and its modes, 
 | `z-nile/check.sh --full` | every project's gate, every spec. Used by `land` and `setup.sh` |
 | `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate: its static stages and its specs alone (each project has its own gate; no `--project` runs every project's). A home's `scripts/check.sh` runs that project's gate (c0120): `pickman/scripts/check.sh` pickman's, `z-nile/scripts/check.sh` z-nile's. CI runs one job per project, `gate (<project>)`, each required by branch protection |
 | `z-nile/check.sh --plan` | print what each stage reads for each project, and run nothing |
-| `lune run tests/run -- <spec files>` | specific specs, from the project's home: `z-nile/` for z-nile's, `pickman/` for pickman's (`cd pickman && lune run tests/run -- tests/unit/Maze`). The runner refuses any other folder: the repository root belongs to no project |
+| `lune run tests/run -- <spec files>` | specific specs, from the project's home: `z-nile/` for z-nile's, `pickman/` for pickman's (`cd pickman && lune run tests/run -- tests/unit/Maze`). The runner refuses any other folder: the repository root belongs to no project. The runner runs on the Lune `rokit.toml` pins (c0162): it names it on its first line, tries `$HOME/.rokit/bin`'s when the shell's `lune` is another, and refuses otherwise; `PATH="$HOME/.rokit/bin:$PATH"` puts it first. |
 | `lune run z-nile/affected -- [--base REF] [files…]` | show which specs a change selects (`ALL` = full run) |
 | `./zn check <id>` | an item's acceptance checks |
 | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |

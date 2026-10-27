@@ -116,13 +116,12 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
 	local runsOn = RUNNING
 	if PIN ~= nil and RUNNING ~= PIN then
 		path = `{process.env.HOME or ""}/.rokit/bin:{path}`
-		local probe = pcall(function()
+		-- the Lune the child will run on, as that PATH resolves it; a probe that fails keeps the shell's (G1)
+		local ok, found = pcall(function(): string?
 			local r = process.exec("lune", { "--version" }, { env = { PATH = path } })
-			runsOn = if r.ok then lunepin.reported((string.gsub(r.stdout, "%s+$", ""))) else nil
+			return if r.ok then lunepin.reported((string.gsub(r.stdout, "%s+$", ""))) else nil
 		end)
-		if not probe then
-			runsOn = nil
-		end
+		runsOn = (if ok then found else nil) or RUNNING
 	end
 	local refusal = lunepin.check(PIN, PIN_PROBLEM, runsOn, PIN_FILE)
 	if refusal then
