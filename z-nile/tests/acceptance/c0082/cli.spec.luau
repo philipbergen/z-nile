@@ -41,12 +41,14 @@ local function write(path: string, text: string)
 	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(path, text)
 end
-local function doc(id: string, body: string): string
-	return `---\nid: {id}\ntype: chore\ntitle: T {id}\nslug: s\nraft: \ndepends_on: []\ndesign: draft\n---\n\n# {id}: T\n\n{body}\n`
+-- c0135 override: each item has a slug of its own (a slug names one item of its kind), never containing an id that
+-- `renumber` rewrites: the two c0010s are different work that collided on an id, so their slugs differ
+local function doc(id: string, slug: string, body: string): string
+	return `---\nid: {id}\ntype: chore\ntitle: T {id}\nslug: {slug}\nraft: \ndepends_on: []\ndesign: draft\n---\n\n# {id}: T\n\n{body}\n`
 end
-local C10 = doc("c0010", "The one in the backlog.")
-local DONE10 = doc("c0010", "The emergent one that was filed in done.")
-local C20 = doc("c0020", "Waits for c0010.")
+local C10 = doc("c0010", "the-backlog-one", "The one in the backlog.")
+local DONE10 = doc("c0010", "the-emergent-one", "The emergent one that was filed in done.")
+local C20 = doc("c0020", "the-waiting-one", "Waits for c0010.")
 
 return t.spec("c0880 audit, list and renumber by directory", function(it)
 	it("sets up a tracker repository", function()

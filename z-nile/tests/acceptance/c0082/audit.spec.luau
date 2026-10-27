@@ -20,7 +20,11 @@ local function write(path: string, text: string)
 	fs.writeFile(path, text)
 end
 local function doc(id: string, extra: string?): string
-	return `---\nid: {id}\ntype: chore\ntitle: T\nslug: s\n{extra or ""}---\n\n# {id}\n`
+	-- c0135 override: one slug per item, and no id in it (one id's copies keep one slug: one item twice)
+	local slug = string.gsub(string.lower(id), "%d", function(d: string): string
+		return string.char(97 + (tonumber(d) :: number))
+	end)
+	return `---\nid: {id}\ntype: chore\ntitle: T\nslug: s-{slug}\n{extra or ""}---\n\n# {id}\n`
 end
 -- a fresh tree: `items` maps an item path under pickman/.tracker/ to its document text (false: the folder only)
 -- c0120 override: pickman's items live in pickman/.tracker (tracker/ is retired)
