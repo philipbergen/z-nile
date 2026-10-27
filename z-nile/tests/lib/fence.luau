@@ -756,9 +756,9 @@ local REAPER = table.concat({
 	"my $g = getpgrp(); my ($me) = map { /^$$ (.*)$/ ? ($1) : () } split /\\n/, `pgrep -lf -a -g $g 2>/dev/null`; $me //= '';",
 	"my @left; my $wd = 'gone'; for my $l (split /\\n/, `pgrep -lf -a -g $pid 2>/dev/null`) {",
 	"my ($p, $c) = $l =~ /^(\\d+) (.*)$/ or next; if ($me ne '' && $c eq $me) { $wd = \"alive (pid $p)\"; next }",
-	"push @left, \"tests/run:   $p \" . substr($c, 0, 200) . \"\\n\" }",
+	'push @left, "tests/run:   $p " . substr($c, 0, 200) . "\\n" }',
 	'@report = (sprintf("tests/run: the jail\'s sweeper was killed (signal %d): processes the specs left may still run. Stop and report this.\\n", $st & 127),',
-	'sprintf("tests/run: who: at %s, %ds after the specs started; launcher %d (the run\'s top process %s, %s); specs group %d (the sweeper\'s own pid); watchdog %s; %d other process(es) still in the group%s\\n",',
+	"sprintf(\"tests/run: who: at %s, %ds after the specs started; launcher %d (the run's top process %s, %s); specs group %d (the sweeper's own pid); watchdog %s; %d other process(es) still in the group%s\\n\",",
 	"scalar(localtime), $secs, $$, $top eq '' ? '?' : $top, $up, $pid, $wd, scalar(@left), @left ? ':' : ''), @left) }",
 	-- whatever is left in the group, the watchdog included
 	"kill 'KILL', -$pid;",

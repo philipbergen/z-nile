@@ -37,8 +37,10 @@ end
 -- Lune unless `top` names another pid) or not
 local function launch(script: string, swept: boolean, args: { string }?, top: string?): Result
 	local argv = { "-e", fence.REAPER, "sh", "-c", script, "_" }
-	for _, a in args or {} do
-		table.insert(argv, a)
+	if args then
+		for _, a in args do
+			table.insert(argv, a)
+		end
 	end
 	local env = { PICKMAN_REAP_SWEPT = "", PICKMAN_REAP_TOP = "" }
 	if swept then
@@ -92,8 +94,7 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 			t.expect(string.match(line, "watchdog alive %(pid %d+%)") ~= nil).toBe(true)
 			t.expect(string.match(line, "; 1 other process%(es%) still in the group:$") ~= nil).toBe(true)
 			-- the left process, orphaned by the stand-in's death, with its command line
-			t.expect(string.match(r.stderr, `\ntests/run:   {left} perl %-e select`) ~= nil)
-				.toBe(true)
+			t.expect(string.match(r.stderr, `\ntests/run:   {left} perl %-e select`) ~= nil).toBe(true)
 			-- the watchdog is counted as such, never listed among the others
 			t.expect(select(2, string.gsub(r.stderr, "\ntests/run:   ", "")) :: number).toBe(1)
 		end
