@@ -1,0 +1,3 @@
+- note prototype subagent: gate.spec's fixture shadowed by rokit's real tools, a rokit shim broken by the fixture HOME, sourcemap.json dirtying the digest, no runner copied: zz-test/gate-fixtures-own-their-home
+- note prototype subagent: `cd && cmd &` made `$!` a subshell, and a rokit shim's child carried the owner pid: zz-test/background-pid-is-the-owner
+- note lead: gate.spec passed on Homebrew lune 0.11.1 and failed under ./zn check on rokit's 0.10.5: zz-test/run-the-pinned-tools
