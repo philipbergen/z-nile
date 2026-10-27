@@ -54,6 +54,8 @@ return t.spec("c0165 reuse decisions and the learning plan", function(it)
 		t.expect(reuseplan.records("outer sandbox (a fixture of a guarded checkout)", true, "macos"))
 			.toBe(true)
 		t.expect(reuseplan.records("", true, "linux")).toBe(true)
+		-- an empty jail is no jail the runner chose: it records nothing, on any host
+		t.expect(reuseplan.records("", false, "linux")).toBe(false)
 	end)
 
 	it("AC8: only failures the selector didn't pick are misses; ALL picked everything", function()

@@ -117,4 +117,23 @@ return t.spec("c0165 claims, waits and owners", function(it)
 		t.expect(has(out, "results file missing")).toBe(true)
 		t.expect(gatefix.sql(dir, "select count(*) from specs")).toBe("0")
 	end)
+
+	it("AC5: the runner's output is forwarded while it runs, not held until it ends", function()
+		local dir =
+			gatefix.make(base, "live", { extra = { afail = { broken = true }, bhold = { hold = true } } })
+		fs.writeFile(`{dir}/hold.marker`, "")
+		-- one job, path order: afail fails at once, then bhold holds; afail's FAIL line must be out while bhold holds
+		local r = process.exec("bash", {
+			"-c",
+			'd=$1; (cd "$d"; PICKMAN_JOBS=1 PATH="$d/bin:$PATH" lune run z-nile/specs -- run --project pickman -- tests/unit/afail.spec.luau tests/unit/bhold.spec.luau > "$d/../live.out" 2>&1) & '
+				.. 'seen=1; for i in $(seq 1 300); do grep -q "FAIL tests/unit/afail.spec.luau" "$d/../live.out" 2>/dev/null && { seen=0; break; }; sleep 0.1; done; '
+				.. 'rm -f "$d/hold.marker"; wait; exit $seen',
+			"_",
+			dir,
+		}, { env = { PICKMAN_OPEN_GUARD = "" } })
+		-- 0: seen within 30 s, while bhold still held (its hold lasts up to 60 s, so held output would show only after);
+		-- 1: not seen in that time
+		t.expect(r.code).toBe(0)
+		t.expect(count(ran(dir), "bhold")).toBe(1)
+	end)
 end)

@@ -27,7 +27,7 @@ check "AC8: a seeded graph miss (a tracker file's too) fails the full gate, is r
 check "AC9: inputs.tsv parses comments, blank lines, files and folders, and refuses the whole file on a malformed line" lune run tests/run -- "$S"
 check "AC10: the skills, the templates, AGENTS.md and .gitignore say the new gate modes and name the db" lune run tests/run -- "$A/docs.spec.luau"
 # promoted specs (every project's tests/acceptance) are unchanged, except the four Overrides and c0165's own folder
-OVERRIDES='^z-nile/tests/acceptance/(c0165/|c0120/docs\.spec\.luau$|c0114/docs\.spec\.luau$|c0120/homes\.spec\.luau$|c0120/promote-home\.spec\.luau$)'
+OVERRIDES='^z-nile/tests/acceptance/(c0165/|c0120/docs\.spec\.luau$|c0114/docs\.spec\.luau$|c0120/homes\.spec\.luau$|c0120/promote-home\.spec\.luau$|c0114/gate-cover\.spec\.luau$|c0120/graph-homes\.spec\.luau$)'
 promoted_unchanged() {
   local out changed
   # git's own failure (no origin/main, a bad pathspec) is red, never filtered away
@@ -36,7 +36,7 @@ promoted_unchanged() {
   changed=$(printf '%s\n' "$out" | grep -Ev "$OVERRIDES" | grep -v '^$' || true)
   [[ -z $changed ]] || { echo "promoted specs changed: $changed"; return 1; }
 }
-check "AC11: no promoted spec changes except the four Overrides and c0165's own folder" promoted_unchanged
+check "AC11: no promoted spec changes except the six Overrides and c0165's own folder" promoted_unchanged
 # each Override changes only its RC0 line: on the lines that call the template's gate (`z-nile/check.sh" --project <p>
 # --affected`) and nowhere else, "--affected" and "(affected)" read back as "--full" and "(full)"; the file is then main's
 # byte for byte, so everything else it pins stays (design review 001 F10: a global substitution let line 93's
@@ -51,7 +51,19 @@ overrides_narrowed() {
     grep -Eq -- 'z-nile/check\.sh" --project [^ ]+ --affected' "$ZN_ROOT/$f" || { echo "$f does not pin the --affected RC0 line"; return 1; }
   done
 }
-check "AC12: each Override changes only its RC0 line, to --affected" overrides_narrowed
+# the two selector pins change only by `--graph-only` in their one `affected` helper: with that argument removed, each
+# file is main's byte for byte, and the argument is there
+graph_only_narrowed() {
+  local f old new
+  for f in z-nile/tests/acceptance/c0114/gate-cover.spec.luau z-nile/tests/acceptance/c0120/graph-homes.spec.luau; do
+    old=$(git -C "$ZN_ROOT" show "origin/main:$f" 2>&1) || { echo "cannot read origin/main:$f: $old"; return 1; }
+    [[ $(grep -c -- '"--graph-only"' "$ZN_ROOT/$f") == 1 ]] || { echo "$f does not pass --graph-only exactly once"; return 1; }
+    new=$(sed -E -e 's/"--", "--graph-only"/"--"/' "$ZN_ROOT/$f") || return 1
+    [[ $new == "$old" ]] || { echo "$f changes more than its affected helper's --graph-only"; return 1; }
+  done
+}
+overrides_all() { overrides_narrowed && graph_only_narrowed; }
+check "AC12: each Override changes only what it must: RC0 to --affected, the selector pins by --graph-only" overrides_all
 # the declared inputs this issue ships (design review 002 F2): every line of each list is a line of its home's file
 declared_shipped() {
   local list home line missing=0
@@ -63,7 +75,7 @@ declared_shipped() {
       grep -qxF -- "$line" "$home" || { echo "$list/tests/inputs.tsv lacks: $line"; missing=1; }
     done < "$HERE/declared/$list.tsv"
     # the selector reads the file and refuses a malformed one (exit 2): it parses
-    lune run "$ZN_ROOT/z-nile/affected" -- --project "$list" "$list/tests/inputs.tsv" > /dev/null || { echo "$list/tests/inputs.tsv does not parse"; missing=1; }
+    (cd "$ZN_ROOT" && lune run z-nile/affected -- --project "$list" "$list/tests/inputs.tsv" > /dev/null) || { echo "$list/tests/inputs.tsv does not parse"; missing=1; }
   done
   return $missing
 }

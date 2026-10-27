@@ -58,6 +58,8 @@ export type SpecOpts = {
 	writes: { path: string, text: string }?,
 	opens: boolean?,
 	quits: boolean?,
+	-- logs `remote:<git remote of its checkout>` and `realgit:<PICKMAN_FENCE_REAL_GIT>` (a learning trial's view)
+	probe: boolean?,
 }
 function gatefix.specText(dir: string, name: string, o: SpecOpts): string
 	local lines = {
@@ -93,6 +95,12 @@ function gatefix.specText(dir: string, name: string, o: SpecOpts): string
 	end
 	if o.reads then
 		table.insert(lines, `\t\tt.expect(fs.readFile("{o.reads}")).toBe("ok\\n")`)
+	end
+	if o.probe then
+		table.insert(
+			lines,
+			`\t\tprocess.exec("sh", \{ "-c", 'echo "remote:$(git remote | head -1)" >> "$1"; echo "realgit:$PICKMAN_FENCE_REAL_GIT" >> "$1"', "_", "{dir}/ran.log" })`
+		)
 	end
 	if o.opens then
 		-- the runner's browser guard answers this (its recording stub), and fails the run after the spec passed
@@ -179,7 +187,7 @@ function gatefix.make(base: string, name: string, opts: MakeOpts?): string
 		slow2 = { hold = true },
 		hang = { hang = true },
 	}
-	for n, spec in o.extra or {} do
+	for n, spec in o.extra or ({} :: { [string]: SpecOpts }) do
 		specs[n] = spec
 	end
 	for n, spec in specs do

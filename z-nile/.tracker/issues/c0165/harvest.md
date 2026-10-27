@@ -33,3 +33,5 @@
 - design-review-002 F10: zz-arch/guards-trust-only-origin
 - design-review-002 F11: z-design/decided-guesses-rewrite-their-body
 - note inventory subagent (round 2): specs that clone HEAD or read git history depend on state no path's content shows: z-design/declare-what-full-runs-covered
+- note prototype subagent (round 2): the design's own names collided with the promoted repo-fence scan, and the `*` entries changed two promoted selector pins, found only by running them on the prototype: z-design/prove-specs-pass-on-a-prototype
+- note prototype subagent (round 2): a pure table test passed while the call site ignored it (records), and end-state checks missed forwarded output and the clone's remote: zz-test/pin-call-site-arguments

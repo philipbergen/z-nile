@@ -84,7 +84,13 @@ local function stable(out: string): string
 	end
 	return table.concat(keep, "\n")
 end
-type FileResult = { file: string, loaded: boolean, cases: { { name: string, ok: boolean } }, seconds: number }
+type FileResult = {
+	file: string,
+	loaded: boolean,
+	cases: { { name: string, ok: boolean } },
+	detail: string,
+	seconds: number,
+}
 local function byFile(path: string): { [string]: FileResult }
 	local doc = serde.decode("json", fs.readFile(path)) :: any
 	local out: { [string]: FileResult } = {}
