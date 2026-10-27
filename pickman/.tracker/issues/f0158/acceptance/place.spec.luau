@@ -94,6 +94,8 @@ return t.spec("f0158 ring adapter", function(it)
 			-- ScreenInsets to the device area), and below the radar's screen (Danger, the default 0)
 			t.expect(tostring(ring.ScreenInsets)).toBe("ScreenInsets.CoreUISafeInsets")
 			t.expect(ring.IgnoreGuiInset == nil or ring.IgnoreGuiInset == false).toBe(true)
+			-- kept across a respawn (review 005 F1): with ResetOnSpawn on, Roblox would destroy the ring when the player respawns
+			t.expect(ring.ResetOnSpawn).toBe(false)
 			t.expect(ring.DisplayOrder ~= nil and ring.DisplayOrder < 0).toBe(true)
 			local danger = view.playerGui:FindFirstChild("Danger")
 			t.expect(danger.DisplayOrder == nil or danger.DisplayOrder == 0).toBe(true)

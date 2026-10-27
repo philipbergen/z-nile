@@ -18,3 +18,4 @@
 - design-review-003 F4: z-design/restated-rules-move-together
 - design-review-004 F1: zz-test/source-pins-name-what-the-design-names
 - design-review-004 F2: z-design/restated-rules-move-together
+- design-review-005 F1: pickman-test/drawn-from-the-visible-root
