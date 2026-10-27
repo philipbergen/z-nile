@@ -196,8 +196,15 @@ return t.spec("f0145 the continue offer", function(it)
 			local left = Pellets.remaining(s.members.p.pellets)
 			t.expect(left < Pellets.total(s.members.p.pellets)).toBe(true)
 			local score = Session.frame(s, "p").play.score
-			for _ = 1, 3 do
+			for i = 1, 3 do
 				stepUntil(s, "playing")
+				if i == 3 then
+					for _ = 1, 8 do -- the last death away from the start, so the continue must bring the player back
+						Session.submit(s, "p", "Right")
+						Session.step(s)
+					end
+					t.expect(Session.frame(s, "p").player.x ~= 3).toBe(true)
+				end
 				Session.kill(s, "p")
 				Session.step(s)
 			end
