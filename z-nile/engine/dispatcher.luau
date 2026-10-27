@@ -756,6 +756,33 @@ function dispatcher.tripwire(ctx: Ctx, _st: State, before: Snapshot): string?
 end
 
 -- Runs one model step: each CLI of the order in turn, moving down only when one fails on quota. Returns the outcome.
+-- A nested step beats for its whole process, not only while its CLI runs (code review 002, the stall cases: a review
+-- whose CLI was done still had its review to land and its spend to record, and its author stalled at the silence).
+-- The runner enforces the CLI's own limits; outside it the beat lasts NESTED_BEAT seconds from the process's start and
+-- again from the runner's return, so a hung post-step still stops beating and its author stalls.
+local NESTED_BEAT = 300
+local beatUntil = 0
+local function holdBeat()
+	beatUntil = os.time() + NESTED_BEAT
+end
+dispatcher.holdBeat = holdBeat
+local function keepBeating(dir: string): () -> ()
+	local running, n = true, 0
+	holdBeat()
+	task.spawn(function()
+		while running do
+			if os.time() < beatUntil then
+				n += 1
+				pcall(fs.writeFile, `{dir}/beat`, `{os.time()} process {n}`)
+			end
+			task.wait(1)
+		end
+	end)
+	return function()
+		running = false
+	end
+end
+
 function dispatcher.modelStep(
 	ctx: Ctx,
 	st: State,
@@ -993,6 +1020,7 @@ function dispatcher.modelStep(
 				end
 				else nil,
 		})
+		holdBeat() -- the review still lands and the spend is recorded: beat through it
 		local outcomeNow: string = result.outcome
 		local detail = result.detail
 		if shot then
@@ -1801,7 +1829,13 @@ function dispatcher.oneStep(
 		return body(given)
 	end
 	if nested then
-		return body(load(ctx, id))
+		local stop = keepBeating(nested :: string)
+		local ok, code = pcall(body, load(ctx, id))
+		stop()
+		if not ok then
+			error(code, 0)
+		end
+		return code
 	end
 	return dispatcher.top(ctx, id, opts, body)
 end

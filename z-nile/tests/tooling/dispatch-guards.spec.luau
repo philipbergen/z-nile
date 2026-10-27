@@ -63,6 +63,11 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			["pickman/.tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
 			["pickman/.tracker/issues/c0091/c0091.md"] = prepared("c0091", "member-thing"),
 			["pickman/.tracker/issues/c0091/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0091/acceptance/a.spec.luau\n",
+			["pickman/.tracker/issues/c0012/c0012.md"] = trackerfix.stub(
+				"c0012",
+				"nested-beat",
+				"new-quiet-copper-falcon"
+			),
 			-- code review 002 F1: an active raft and a backlog raft on main, each with its exit criteria
 			["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\ntitle: an active raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/active/R0040/check.sh"] = "bash members-check.sh\n",
@@ -108,6 +113,28 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			t.expect(has(r.stdout .. r.stderr, ".models.toml is not read from it")).toBe(true)
 		end
 	)
+
+	it("a nested step beats until its process ends, not only while its CLI runs (the stall cases)", function()
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.z-design", "waitreview")
+		fakecli.mode(h, "claude.zz-review", "reviewer")
+		local r = zn({ "dispatch", "z-design", "c0012" })
+		fakecli.mode(h, "claude.z-design", nil)
+		fakecli.mode(h, "claude.zz-review", nil)
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		local dir = `{h.f.main}/.cache/dispatch/c0012/zz-review-design-c0012-1`
+		t.expect(fakecli.state(h, "c0012", "zz-review-design-c0012-1").outcome).toBe("ok")
+		-- the last beat is the process's own, written after the review landed and its spend was recorded
+		t.expect(has(fs.readFile(`{dir}/beat`), " process ")).toBe(true)
+		local beat = fs.metadata(`{dir}/beat`).modifiedAt
+		local saved = fs.metadata(`{dir}/state.json`).modifiedAt
+		t.expect(
+			beat ~= nil and saved ~= nil and (beat :: any).unixTimestamp >= (saved :: any).unixTimestamp - 1
+		)
+			.toBe(true)
+	end)
 
 	it("a pending row its item may take is written at the next run's start (F6)", function()
 		fakecli.clear(h)
