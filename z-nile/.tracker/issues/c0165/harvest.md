@@ -35,3 +35,4 @@
 - note inventory subagent (round 2): specs that clone HEAD or read git history depend on state no path's content shows: z-design/declare-what-full-runs-covered
 - note prototype subagent (round 2): the design's own names collided with the promoted repo-fence scan, and the `*` entries changed two promoted selector pins, found only by running them on the prototype: z-design/prove-specs-pass-on-a-prototype
 - note prototype subagent (round 2): a pure table test passed while the call site ignored it (records), and end-state checks missed forwarded output and the clone's remote: zz-test/pin-call-site-arguments
+- note prototype subagent (round 2): an unused local in a new spec failed selene, which stops the full gate at its lint stage; the spec runs and promote-check passed: z-design/rerun-skipped-checks-after-edits
