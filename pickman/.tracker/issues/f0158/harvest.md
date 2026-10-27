@@ -1,0 +1,21 @@
+- note c0159's capture: a chained `./zn land …; git worktree remove … && git branch -D` removed the worktree after a lost race, losing the filled text: z-ticket/confirm-landed-before-removing
+- design-review-001 F1: zz-arch/name-each-coordinate-space, pickman-test/new-controls-get-inset-and-turn-cases
+- design-review-001 F2: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F3: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F4: one-off: a stated rule (both sides count as 0) tested on one side only; the case now loops both
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: z-design/quote-other-preps-before-promising, zz-arch/name-each-coordinate-space
+- design-review-001 F7: one-off: the Affected specs paragraph paraphrased the selector instead of pasting its output
+- design-review-001 F8: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F1: zz-test/pin-call-site-arguments
+- design-review-002 F2: z-design/quote-other-preps-before-promising, z-design/run-the-other-rafts-specs
+- design-review-002 F3: zz-test/source-pins-name-what-the-design-names
+- design-review-002 F4: one-off: a rule another item's spec held today (f0102's DisplayOrder < 0) that f0158 relied on without pinning; now its own case holds it
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-003 F1: zz-test/feed-the-real-producers-extremes, zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/source-pins-name-what-the-design-names, pickman-test/drawn-from-the-visible-root
+- design-review-003 F3: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F4: z-design/restated-rules-move-together
+- design-review-004 F1: zz-test/source-pins-name-what-the-design-names
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-005 F1: pickman-test/drawn-from-the-visible-root

@@ -22,6 +22,7 @@
 local Flow = require("@logic/Flow")
 local Lobby = require("@logic/Lobby")
 local Maze = require("@logic/Maze")
+local Pad = require("@logic/Pad")
 local Session = require("@logic/Session")
 local Travel = require("@logic/Travel")
 local luau = require("@lune/luau")
@@ -55,7 +56,7 @@ function fake.signal(): Signal
 end
 
 local LOGIC: { [string]: any } =
-	{ Travel = Travel, Lobby = Lobby, Flow = Flow, Maze = Maze, Session = Session }
+	{ Travel = Travel, Lobby = Lobby, Flow = Flow, Maze = Maze, Pad = Pad, Session = Session }
 
 -- The require an adapter gets: the real Logic modules, or `overrides` for some of them (a spy on Session, say);
 -- an override can only replace a module the fake already serves.

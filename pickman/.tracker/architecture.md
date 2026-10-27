@@ -17,6 +17,7 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Awareness | How the player senses ghosts they cannot see, engine-free: the radar around the player and the edge indicators that grow and brighten as a ghost nears along the maze (R0010, f0033); the eight edge glows, their sectors and boxes (R0035, f0102) |
 | Blaster | The ghost blaster's shots: the seeded drop when a ghost is eaten, at most three held, the fire intents, and which active ghost a shot along the grid hits (R0035, f0100); a shot granted outright, the blaster boon (f0126) |
 | Hop | The spy hop counted in steps: when a hop may start, the eye's rise through it, and the airborne window over the wall tops in which no ghost meets the player and no pellet is eaten; the hop intent (R0035, f0101); a hop of a given length, the long hop of the jumps boon (f0126) |
+| Pad | The gamepad: its buttons mapped to the keys' actions, the left stick folded into turn intents one a push, the right stick's look rate in View.look's units, and which input types are gamepads (f0146) |
 | Picks | Risky wall picks: which walls can be marked, the three marked walls and their seeded roll, the wall a player beside one would pick, how long a pick takes, the six boons and their even roll; the pick intent (f0126) |
 | Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0024, f0061) |
 | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
@@ -24,13 +25,8 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0004, f0013); fire intents, shots and drops (R0035, f0100); the hop intent and the airborne player (R0035, f0101); the pick intent, a pick stood and wasted, the picked holes in each member's maze, the boons granted, and the walls, pick and boon in the frame (f0126) |
 | Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout, including an optional safe-area inset (R0015, f0019; R0012, f0029); the shot bars after the lives (R0035, f0100); the pick's progress and the boon banner, and where they go (f0126) |
 | Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065) |
-<<<<<<< HEAD
-| Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029); the fire and hop buttons, placed in Roblox's jump corner from `Hud.jumpButtons` (R0051, f0110) |
-| View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030); the lowered walls and the ghost body (R0035, f0101), the ghost colours and the beam's end (f0100, f0102), the new keys, the arrow look and the shot's aim (f0104) |
-=======
-| Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029); the PICK button beside f0110's FIRE and JUMP, its zone and effect (f0126) |
+| Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029); the fire and hop buttons, placed in Roblox's jump corner from `Hud.jumpButtons` (R0051, f0110); the PICK button beside f0110's FIRE and JUMP, its zone and effect (f0126) |
 | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030); the lowered walls and the ghost body (R0035, f0101), the ghost colours and the beam's end (f0100, f0102), the new keys, the arrow look and the shot's aim (f0104); the pick key and its wire string, the marked walls' runs, the frame's maze with its holes and the walls key (f0126) |
->>>>>>> origin/main
 
 Hiscores has no row in the deps block. It takes the store as a parameter. Session, Lobby and Flow do not require it; the server and lobby adapters call it (R0011).
 
@@ -52,6 +48,8 @@ Hud -> Levels
 Hud -> Session
 Lobby -> Travel
 Movement -> Maze
+Pad -> Movement
+Pad -> View
 Pellets -> Maze
 Picks -> Maze
 Picks -> Movement
@@ -63,11 +61,8 @@ Session -> Levels
 Session -> Maze
 Session -> Movement
 Session -> Pellets
-<<<<<<< HEAD
-Touch -> Hud
-=======
 Session -> Picks
->>>>>>> origin/main
+Touch -> Hud
 Touch -> View
 View -> Maze
 View -> Movement
