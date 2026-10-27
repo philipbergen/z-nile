@@ -28,7 +28,8 @@ plain_matches_base() {
     echo "the base $base already holds c0144: comparing the engine with itself"
   fi
   rm -rf "$out" && mkdir -p "$out" || return 1
-  (cd "$ZN_ROOT" && git archive "$base" zn z-nile/engine z-nile/lib) | tar -x -C "$out" ||
+  # top-relative pathspecs (:/…): the base's command, engine and library, named from the repository's top
+  git -C "$ZN_ROOT" archive "$base" :/zn :/z-nile/engine :/z-nile/lib | tar -x -C "$out" ||
     { echo "cannot unpack the base's tooling from $base"; return 1; }
   [[ -f $out/zn && -f $out/z-nile/engine/main.luau ]] || { echo "the base's tooling is incomplete in $out"; return 1; }
   C0144_BASE="$(cd "$out" && pwd -P)" lune run tests/run -- "$A/plain-base.luau"
