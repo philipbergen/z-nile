@@ -1,0 +1,7 @@
+# Refute 001: c0160 (design mode)
+
+The user decided (2026-10-26): G1 "Yes, change both"; G2 "Keep the hand lists". Both are recorded in Guesses.
+
+- F1: fixed: a new case, "the default homes are the registry's of the checkout a reader runs in, never a fixed list", writes a git checkout under `.cache/c0160-default/` (`git init`, no commit; registry z-nile and tern, not pickman) and a probe script that requires both modules by relative path, and runs it with a child `lune` from that checkout: `cp:z-nile/b.luau,cp:tern/c.luau,rw:z-nile/b.luau,rw:tern/c.luau`. It ran under the runner's macOS jail (6/6, three runs). Linux CI: see the Verification log. Mutants M8 (checkpaths' default the old hand list) and M9 (rewrites') each fail it (5 passed, 1 failed), new Rules row; the in-process "called without homes" case stays. Consequences: the spec now starts one child Lune and one `git init` inside `.cache`.
+- F2: fixed: E4's record is stream D's fix in c0141's rafting branch before c0141 is grouped (the coordinator's answer to this finding, instead of a new capture), cited in E4; AC4 runs `"$PWD"/tests/acceptance/c0141/*.spec.luau` (a no-match glob stays literal and the runner fails, as the reviewer ran); `AC_LIST=1` and main's check-paths spec rerun on the prep tree. Consequences: none.
+- F3: fixed: the own-work case asserts `checkpaths.literals(<c0003's check.sh>, { "pickman", "z-nile", "tern" })` contains `../tern/src/new/init.luau`, so the exemption, not a missed word, keeps it off the list.
