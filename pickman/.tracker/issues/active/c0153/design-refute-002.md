@@ -1,0 +1,7 @@
+# Refute 002: c0153 (design mode)
+
+- F1: fixed: the one-ulp case also runs `plain.roundTrip(frame, 0)`, which returns false with a reason starting `value.ghosts.1.x: ` (the path only, so the double's text can't differ by platform), so the round trip is shown to compare the decoded value (and E1's lost ulp is pinned); the Design says it compares what came back; Rules row Q1 (compares `v` with itself) and Q2 (never compares), both run and killed. Consequences: `eps` 0 is a used input, already used by the equalWithin case.
+- F2: fixed: "plain data is accepted" checks `{ a = shared, b = { shared, shared } }` with `check` and `roundTrip`, both true; the Design says a table reached twice is not a cycle; Rules row Q3 (`seen` never cleared), run and killed. Consequences: none.
+- F3: fixed: the helper's header and Maintainability state the bound: 1e-9 absolute holds for non-integers under about 1e6, a larger non-integer needs a larger tolerance, integers round-trip exactly. No behaviour change. Consequences: the header is in the patch (the helper is not pinned by a digest).
+- F4: fixed: the Design pastes the search `git grep -nE 'serde\.(de|en)code\(\s*"json"' origin/main -- pickman/tests pickman/src | cut -d: -f2 | sort | uniq -c` with its counts per file, and names sim.luau's three uses (a debug description, a replay file written and read) as excluded. Consequences: none.
+- F5: fixed: the Problem carries `Scope decision (user, 2026-10-26): "Widen to all five"` with the four added specs. Consequences: none.
