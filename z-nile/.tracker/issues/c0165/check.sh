@@ -12,15 +12,18 @@ A="$HERE/acceptance"
 S="$A/select.spec.luau"
 P="$A/plan.spec.luau"
 D="$A/store.spec.luau"
-G="$A/gate.spec.luau"
+GR="$A/gate-reuse.spec.luau"
+GW="$A/gate-wait.spec.luau"
+GF="$A/gate-full.spec.luau"
+GL="$A/gate-learn.spec.luau"
 check "AC1: one predicate decides both selection and fingerprints, and the moved rules keep their outcomes" lune run tests/run -- "$S"
 check "AC2: a spec's fingerprint changes for each kind of input (tracker paths through explicit entries, the gate mode) and for nothing else" lune run tests/run -- "$S"
 check "AC3: reuseplan.decide gives the table's action for every row, and a gone or reused pid doesn't hold" lune run tests/run -- "$P"
 check "AC4: the db claims by insert or compare-and-swap with one winner, records only into its own or an absent row, round-trips any text, and open answers nil with a reason" lune run tests/run -- "$D"
-check "AC5: through the orchestrator and the gate, same content reuses every spec, an edit reruns exactly its selection, concurrent runs run each spec once, a killed owner is taken over and its runner dies, only an exit of 0 records passes, and reuse off runs everything" lune run tests/run -- "$G"
+check "AC5: through the orchestrator and the gate, same content reuses every spec, an edit reruns exactly its selection, concurrent runs run each spec once, a killed owner is taken over and its runner dies, only an exit of 0 records passes, and reuse off runs everything" lune run tests/run -- "$GR" "$GW"
 check "AC6: the runner writes every file's cases and results in process and concurrently, marks a dead worker's file not loaded, and its output and exit code are unchanged" lune run tests/run -- "$A/results.spec.luau"
-check "AC7: --full runs every spec, --full --reuse skips only on a full record of the same content digest (done's staged tree included), a tree that changed records nothing, the digest ignores spend.md and ignored files, and the reads write nothing to git and fail closed" lune run tests/run -- "$A/digest.spec.luau" "$G"
-check "AC8: a seeded graph miss (a tracker file's too) fails the full gate, is recorded in the db and printed for inputs.tsv, affected --learned then selects it and a bare call does not; only unselected failures that pass on the base are learned, within a budget" lune run tests/run -- "$P" "$G"
+check "AC7: --full runs every spec, --full --reuse skips only on a full record of the same content digest (done's staged tree included), a tree that changed records nothing, the digest ignores spend.md and ignored files, and the reads write nothing to git and fail closed" lune run tests/run -- "$A/digest.spec.luau" "$GF" "$GR"
+check "AC8: a seeded graph miss (a tracker file's too) fails the full gate, is recorded in the db and printed for inputs.tsv, affected --learned then selects it and a bare call does not; only unselected failures that pass on the base are learned, within a budget" lune run tests/run -- "$P" "$GL"
 check "AC9: inputs.tsv parses comments, blank lines, files and folders, and refuses the whole file on a malformed line" lune run tests/run -- "$S"
 check "AC10: the skills, the templates, AGENTS.md and .gitignore say the new gate modes and name the db" lune run tests/run -- "$A/docs.spec.luau"
 # promoted specs (every project's tests/acceptance) are unchanged, except the four Overrides and c0165's own folder
@@ -49,5 +52,21 @@ overrides_narrowed() {
   done
 }
 check "AC12: each Override changes only its RC0 line, to --affected" overrides_narrowed
+# the declared inputs this issue ships (design review 002 F2): every line of each list is a line of its home's file
+declared_shipped() {
+  local list home line missing=0
+  for list in pickman z-nile; do
+    home="$ZN_ROOT/$list/tests/inputs.tsv"
+    [[ -f $home ]] || { echo "no $list/tests/inputs.tsv"; return 1; }
+    while IFS= read -r line; do
+      [[ -z $line || $line == \#* ]] && continue
+      grep -qxF -- "$line" "$home" || { echo "$list/tests/inputs.tsv lacks: $line"; missing=1; }
+    done < "$HERE/declared/$list.tsv"
+    # the selector reads the file and refuses a malformed one (exit 2): it parses
+    lune run "$ZN_ROOT/z-nile/affected" -- --project "$list" "$list/tests/inputs.tsv" > /dev/null || { echo "$list/tests/inputs.tsv does not parse"; missing=1; }
+  done
+  return $missing
+}
+check "AC13: every declared input line is in its home's inputs.tsv, and each home's file parses" declared_shipped
 
 finish

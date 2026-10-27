@@ -109,6 +109,11 @@ return t.spec("c0165 runner results", function(it)
 			t.expect(code ~= 0).toBe(true)
 			t.expect(stable(out)).toBe(stable(plainOut))
 			local r = byFile(path)
+			-- the run reports its jail (the orchestrator records only the host's strongest); a nested run inherits this run's
+			local doc = serde.decode("json", fs.readFile(path)) :: any
+			t.expect(doc.jail).toBe(process.env.PICKMAN_TEST_JAIL or "")
+			t.expect(r["tests/a.spec.luau"].detail).toBe("")
+			t.expect(string.find(r["tests/b.spec.luau"].detail, "fails", 1, true) ~= nil).toBe(true)
 			t.expect(r["tests/a.spec.luau"].loaded).toBe(true)
 			t.expect(r["tests/a.spec.luau"].cases)
 				.toEqual({ { name = "first", ok = true }, { name = "second", ok = true } })

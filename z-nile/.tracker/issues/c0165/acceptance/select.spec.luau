@@ -317,6 +317,24 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			.toEqual({ "pickman/.tracker/issues/done/f0031/acceptance/" })
 	end)
 
+	it("AC9: a * entry (always run) parses, and makes every path an input of its spec alone", function()
+		local inputs, err = select.parseInputs("tests/unit/Maze.spec.luau\t*\n", "pickman/")
+		t.expect(err).toBe(nil)
+		t.expect((inputs :: select.Inputs)[MAZE_SPEC]).toEqual({ "*" })
+		local ctx = ctxWith(inputs :: select.Inputs)
+		for _, p in
+			{
+				"AGENTS.md",
+				"pickman/.tracker/issues/f0001/f0001.md",
+				"pickman/.tracker/issues/f0001/spend.md",
+				"z-nile/engine/main.luau",
+			}
+		do
+			t.expect(select.isInput(ctx, MAZE_SPEC, p)).toBe(true)
+			t.expect(select.isInput(ctx, GHOST_SPEC, p) == false or p == "z-nile/engine/main.luau").toBe(true)
+		end
+	end)
+
 	it("AC9: one malformed line refuses the whole file, naming its line", function()
 		local good = "tests/unit/Maze.spec.luau\tpickman/tests/fixtures/data/levels.json\n"
 		for _, bad in

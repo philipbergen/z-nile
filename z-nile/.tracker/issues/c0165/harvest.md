@@ -21,3 +21,15 @@
 - note prototype subagent (round 1): two spec type errors (a multi-return call inside t.expect, string? into a typed table) showed only in promote-check: z-design/rerun-skipped-checks-after-edits
 - note prototype subagent (round 1): the newline guard was masked by the hash batch's own failure until a case bypassed that layer: z-design/reasoned-rows-claim-testable-reasons
 - note prototype subagent (round 1): the clone lacked the new lessons harvest.md names, so the lessons audit failed in its full gate: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: zz-arch/children-need-a-lifeline
+- design-review-002 F2: z-design/declare-what-full-runs-covered
+- design-review-002 F3: zz-arch/guard-state-out-of-reach-or-checked
+- design-review-002 F4: zz-test/seed-every-enumerated-case
+- design-review-002 F5: zz-test/hold-on-markers-not-sleeps
+- design-review-002 F6: one-off: a wrapper that captures a long child's output needs a sign of life
+- design-review-002 F7: one-off: a poll loop's cost scales with what it waits on
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-002 F9: one-off: a slow sequestered spec is split by mechanism so promotion adds no gate floor
+- design-review-002 F10: zz-arch/guards-trust-only-origin
+- design-review-002 F11: z-design/decided-guesses-rewrite-their-body
+- note inventory subagent (round 2): specs that clone HEAD or read git history depend on state no path's content shows: z-design/declare-what-full-runs-covered

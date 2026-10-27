@@ -43,6 +43,19 @@ return t.spec("c0165 reuse decisions and the learning plan", function(it)
 		t.expect(reuseplan.decide(row("running", 7, "other"), false, holds)).toBe("wait")
 	end)
 
+	it("AC5: only a run in the host's strongest jail, or a nested fixture run, records", function()
+		t.expect(reuseplan.records("sandbox-exec", false, "macos")).toBe(true)
+		t.expect(reuseplan.records("outer sandbox (a probe refused writes)", false, "macos")).toBe(false)
+		t.expect(reuseplan.records("none (not macOS)", false, "macos")).toBe(false)
+		t.expect(reuseplan.records("", false, "macos")).toBe(false)
+		t.expect(reuseplan.records("none (not macOS)", false, "linux")).toBe(true)
+		t.expect(reuseplan.records("outer sandbox (a probe refused writes)", false, "linux")).toBe(false)
+		-- a nested run writes only its fixture's own db, whatever jail it reports
+		t.expect(reuseplan.records("outer sandbox (a fixture of a guarded checkout)", true, "macos"))
+			.toBe(true)
+		t.expect(reuseplan.records("", true, "linux")).toBe(true)
+	end)
+
 	it("AC8: only failures the selector didn't pick are misses; ALL picked everything", function()
 		local failed = { "tests/a.spec.luau", "tests/b.spec.luau", "tests/c.spec.luau" }
 		t.expect(learn.misses(failed, { "tests/b.spec.luau" }))

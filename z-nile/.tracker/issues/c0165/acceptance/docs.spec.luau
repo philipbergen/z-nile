@@ -76,6 +76,10 @@ return t.spec("c0165 restated gate rules", function(it)
 			"**Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. The full gate finds the file it depends on, records it in the results db and prints the line to commit to the home's `tests/inputs.tsv`."
 		)
 		never(f, "That's a selector bug. File it as a chore")
+		says(
+			f,
+			"**Declared inputs**: a spec that reads files outside its requires (a folder it walks, a document it reads as text) declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file or folder/>` line each; a path under a project root is allowed only below it, never the root itself or a `spend.md`. `lune run z-nile/affected -- --learned` also reads the inputs the full gate learned; a bare call reads only `inputs.tsv`."
+		)
 		says(f, "**Reuse**:")
 		says(f, ".claude/.znile_tests.sqlite")
 		says(
