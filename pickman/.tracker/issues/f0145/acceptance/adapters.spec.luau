@@ -73,6 +73,8 @@ type World = {
 	records: { [string]: any }, -- the PaidPlay store, by user id
 	failWrites: boolean,
 	failReads: boolean,
+	reads: number,
+	onRead: (() -> ())?, -- runs inside a read, as another press would while a real read yields
 	prompts: { { player: any, id: number } },
 	teleports: { any },
 	sent: { Sent },
@@ -140,6 +142,12 @@ local function world(mode: string?): World
 						return nextValue
 					end,
 					GetAsync = function(_: any, key: string): any
+						w.reads += 1
+						local hook = w.onRead
+						if hook then
+							w.onRead = nil
+							hook()
+						end
 						if w.failReads then
 							error("store down", 0)
 						end
@@ -247,6 +255,8 @@ local function world(mode: string?): World
 		records = {},
 		failWrites = false,
 		failReads = false,
+		reads = 0,
+		onRead = nil,
 		prompts = {},
 		teleports = {},
 		sent = {},
@@ -424,6 +434,22 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 		t.expect(#live.teleports).toBe(0)
 	end)
 
+	it(
+		"a second press while the lobby's read is under way is dropped: one read, one teleport, no prompt",
+		function()
+			local w = lobby("live")
+			local p = w.player(7)
+			local before = w.reads
+			w.onRead = function()
+				press(w, p)
+			end
+			press(w, p)
+			t.expect(w.reads - before).toBe(1)
+			t.expect(#w.teleports).toBe(1)
+			t.expect(#w.prompts).toBe(0)
+		end
+	)
+
 	it("a held play starts; a store that cannot be read lets the player start", function()
 		local w = lobby("live")
 		w.records["7"] = { free = NOW - 60, plays = 1, continues = 0, receipts = {} }
@@ -445,6 +471,23 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 		t.expect(Pay.record(a.w.records["7"]).plays).toBe(1)
 		t.expect(Session.offering(a.s, "7")).toBe(true)
 		t.expect(a.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
+	end)
+
+	it("an arrival whose store write fails still plays, with the offer on, and charges nothing", function()
+		local w = world("live")
+		w.failWrites = true
+		local p = w.player(9)
+		local s9 =
+			Session.new(Maze.parse({ "#######", "#..P..#", "#######" }, "corridor"), 1, Session.GAME_CONFIG)
+		Session.join(s9, "9")
+		local continues = luau.load(CONTINUES, { environment = w.env, debugName = "Continues" })() :: any
+		continues.start(function(player: any): Session.Session?
+			return if player == p then s9 else nil
+		end)
+		w.remote("Ready").OnServerEvent.fire(p)
+		w.flush()
+		t.expect(w.records["9"]).toBe(nil)
+		t.expect(s9.members["9"].play.offer).toBe(Game.OFFER_TICKS)
 	end)
 
 	it("a continue asked with one held is used at once: three new lives", function()

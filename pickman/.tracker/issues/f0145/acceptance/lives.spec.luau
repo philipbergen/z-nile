@@ -63,10 +63,11 @@ return t.spec("f0145 lives spent on the boards", function(it)
 		t.expect(Lobby.livesText(6)).toBe(` {Lobby.LIVES_MARK}6`)
 		t.expect(Lobby.livesText(nil)).toBe("")
 		t.expect(Lobby.livesText(0)).toBe("")
-		local p = Lobby.panel({
+		local rows: { Lobby.Row } = {
 			{ rank = 1, name = "Ada", score = 800, level = 3, lives = 6 },
-			{ rank = 2, name = "Bea", score = 600, level = 1 },
-		})
+			{ rank = 2, name = "Bea", score = 600, level = 1, lives = nil },
+		}
+		local p = Lobby.panel(rows)
 		t.expect(Lobby.lines(p)).toBe(`1 Ada 800 3 {Lobby.LIVES_MARK}6\n2 Bea 600 1`)
 	end)
 end)
