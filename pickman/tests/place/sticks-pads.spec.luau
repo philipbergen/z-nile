@@ -1,8 +1,8 @@
 --!strict
 -- R0058 code review 001 F3 and F4: Pads and Sticks run from their real sources on a small stub engine. Sticks' fold
--- over the left stick starts afresh when its source changes: a read of nothing (a disconnect) and a change of driving
--- controller both reset it, so the next controller's first push the same way still turns; a reconnect at rest sends
--- nothing. Pads counts a pad's button press (InputBegan) as a full press, but a non-stick InputChanged (a trigger's
+-- over the left stick starts afresh only when the driving controller changes, so another controller's first push the
+-- same way still turns; a read of nothing (a dropout) keeps it, so the same pad returning still pushed sends no second
+-- turn (review 002 F1); a reconnect at rest sends nothing. Pads counts a pad's button press (InputBegan) as a full press, but a non-stick InputChanged (a trigger's
 -- travel) as nothing, so it never takes over.
 local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
@@ -140,21 +140,24 @@ local function world(): World
 end
 
 return t.spec("Sticks and Pads across a change of controller", function(it)
-	it("a disconnect mid-push resets the fold: the other pad's first push the same way turns", function()
-		local w = world()
-		w.connected.Gamepad1 = true
-		w.changed("Gamepad1", "Thumbstick1", -0.9, 0)
-		w.sticks.Gamepad1 = { x = -0.9, y = 0 }
-		w.beat()
-		t.expect(w.fired).toEqual({ "Left" })
-		w.connected.Gamepad1 = false
-		w.beat() -- reads nothing
-		w.connected.Gamepad2 = true
-		w.changed("Gamepad2", "Thumbstick1", -0.9, 0)
-		w.sticks.Gamepad2 = { x = -0.9, y = 0 }
-		w.beat()
-		t.expect(w.fired).toEqual({ "Left", "Left" })
-	end)
+	it(
+		"after a disconnect mid-push, the other pad taking over resets the fold: its first push the same way turns",
+		function()
+			local w = world()
+			w.connected.Gamepad1 = true
+			w.changed("Gamepad1", "Thumbstick1", -0.9, 0)
+			w.sticks.Gamepad1 = { x = -0.9, y = 0 }
+			w.beat()
+			t.expect(w.fired).toEqual({ "Left" })
+			w.connected.Gamepad1 = false
+			w.beat() -- reads nothing
+			w.connected.Gamepad2 = true
+			w.changed("Gamepad2", "Thumbstick1", -0.9, 0)
+			w.sticks.Gamepad2 = { x = -0.9, y = 0 }
+			w.beat()
+			t.expect(w.fired).toEqual({ "Left", "Left" })
+		end
+	)
 
 	it(
 		"two connected pads: Gamepad1 still held left, Gamepad2's stick takes over pushed left, and turns",

@@ -5,3 +5,4 @@
 - review-001 F5: one-off: a widened case's title claimed pad buttons it did not press
 - review-002 F1: pickman-arch/folds-reset-when-their-source-changes
 - review-002 F2: zz-test/no-vacuous-pass
+- review-003 F1: z-design/restated-rules-move-together
