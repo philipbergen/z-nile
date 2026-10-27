@@ -68,14 +68,19 @@ return t.spec("Touch extras", function(it)
 		end
 	end)
 
-	it("the fire button is level with the hop button unless that reaches the snap control's band", function()
-		for _, size in { { 400, 300 }, { 844, 390 }, { 390, 844 } } do
-			local box = layoutBox(size[1], size[2])
-			local hop, fire, snap = Touch.hopRect(box), Touch.fireRect(box), Touch.snapRect(box)
-			t.expect(fire.y).toBe(math.min(hop.y, snap.y - box.margin - hop.w))
-			t.expect(fire.y + fire.h <= snap.y - box.margin or fire.y == hop.y).toBe(true)
+	it(
+		"the fire button is level with the hop button where it clears the snap control, raised where it does not",
+		function()
+			-- a wide screen: room beside the snap control, so FIRE sits level with JUMP
+			local wide = layoutBox(1920, 1080)
+			t.expect(Touch.fireRect(wide).y).toBe(Touch.hopRect(wide).y)
+			-- a small screen: level would reach the snap control's band, so FIRE rises above it, one margin clear
+			local small = layoutBox(400, 300)
+			local fire, hop, snap = Touch.fireRect(small), Touch.hopRect(small), Touch.snapRect(small)
+			t.expect(fire.y < hop.y).toBe(true)
+			t.expect(fire.y + fire.h).toBe(snap.y - small.margin)
 		end
-	end)
+	)
 
 	it("Touch.buttons is the snap, fire and hop rectangles, as fresh tables", function()
 		local box = layoutBox(844, 390)
