@@ -1,0 +1,5 @@
+- review-001 F1: zz-test/source-pins-name-what-the-design-names
+- review-001 F2: zz-test/source-pins-name-what-the-design-names
+- review-001 F3: pickman-arch/folds-reset-when-their-source-changes
+- review-001 F4: z-design/spec-design-correspondence
+- review-001 F5: one-off: a widened case's title claimed pad buttons it did not press
