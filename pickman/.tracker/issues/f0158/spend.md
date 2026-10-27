@@ -8,6 +8,7 @@
 | 4 | 2026-10-27 04:11 | design-review-003 | 0 | 0 | 11.0 | spend | design-review | 150000 |
 | 5 | 2026-10-27 04:25 | design-review-004 | 0 | 0 | 15.0 | spend | design-review | 150000 |
 | 6 | 2026-10-27 04:31 | design-review-005 | 0 | 0 | 15.0 | spend | design-review | 85000 |
+| 7 | 2026-10-27 04:32 | prep stream I: design, prototype, specs, mutants, c0159 capture; review answering excluded | 698 | 1 | 150.0 | spend | prep |  |
 
-**Total:** +0 / -0 lines, 70.0 agent-minutes, 710000 tokens over 6 records
-<!-- totals: added=0 removed=0 minutes=70.0 records=6 tokens=710000 -->
+**Total:** +698 / -1 lines, 220.0 agent-minutes, 710000 tokens over 7 records
+<!-- totals: added=698 removed=1 minutes=220.0 records=7 tokens=710000 -->
