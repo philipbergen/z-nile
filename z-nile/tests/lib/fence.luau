@@ -744,9 +744,22 @@ local REAPER = table.concat({
 	-- the command holds neither end, so it can't keep the watchdog waiting
 	'close $r; close $w; exec { $ARGV[0] } @ARGV or die "exec: $!"; }',
 	-- the launcher keeps $w open until it exits
-	"close $r; setpgrp($pid, $pid);",
+	"close $r; setpgrp($pid, $pid); my $t0 = time;",
 	"for my $s (qw(INT TERM HUP)) { $SIG{$s} = sub { kill $s, -$pid } }",
 	"waitpid($pid, 0); my $st = $?;",
+	-- a spec, or something outside, can kill the jail's sweeper: before the group is stopped, say who was still there
+	-- (c0132). pgrep, not ps: ps is setuid, which a jail refuses to run (a launcher a spec starts is jailed). The
+	-- watchdog is the group's process whose command line is the launcher's own (a fork, never exec'd)
+	"my $swept = ($ENV{PICKMAN_REAP_SWEPT} // '') eq '1' && ($st & 127); my @report;",
+	"if ($swept) { my $secs = time - $t0; my $top = $ENV{PICKMAN_REAP_TOP} // '';",
+	"my $up = $top !~ /^\\d+$/ ? 'unknown' : kill(0, $top) || $!{EPERM} ? 'alive' : 'gone';",
+	"my $g = getpgrp(); my ($me) = map { /^$$ (.*)$/ ? ($1) : () } split /\\n/, `pgrep -lf -a -g $g 2>/dev/null`; $me //= '';",
+	"my @left; my $wd = 'gone'; for my $l (split /\\n/, `pgrep -lf -a -g $pid 2>/dev/null`) {",
+	"my ($p, $c) = $l =~ /^(\\d+) (.*)$/ or next; if ($me ne '' && $c eq $me) { $wd = \"alive (pid $p)\"; next }",
+	"push @left, \"tests/run:   $p \" . substr($c, 0, 200) . \"\\n\" }",
+	'@report = (sprintf("tests/run: the jail\'s sweeper was killed (signal %d): processes the specs left may still run. Stop and report this.\\n", $st & 127),',
+	'sprintf("tests/run: who: at %s, %ds after the specs started; launcher %d (the run\'s top process %s, %s); specs group %d (the sweeper\'s own pid); watchdog %s; %d other process(es) still in the group%s\\n",',
+	"scalar(localtime), $secs, $$, $top eq '' ? '?' : $top, $up, $pid, $wd, scalar(@left), @left ? ':' : ''), @left) }",
 	-- whatever is left in the group, the watchdog included
 	"kill 'KILL', -$pid;",
 	-- with the specs stopped, unlink every symlink at the top of the cache folder it was given, never following one
@@ -755,9 +768,7 @@ local REAPER = table.concat({
 	"my $c = $ENV{PICKMAN_REAP_CACHE}; if (defined $c && $c ne '' && opendir(my $dh, $c)) {",
 	"for my $e (readdir $dh) { unlink \"$c/$e\" if $e ne '.' && $e ne '..' && -l \"$c/$e\" } closedir $dh }",
 	-- a spec can kill the jail's sweeper (same sandbox): then its leftovers may live on, so the run fails (c0076)
-	"if (($ENV{PICKMAN_REAP_SWEPT} // '') eq '1' && ($st & 127)) { printf STDERR",
-	'"tests/run: the jail\'s sweeper was killed (signal %d): processes the specs left may still run. Stop and report this.\\n",',
-	"$st & 127; exit 1 }",
+	"if ($swept) { print STDERR @report; exit 1 }",
 	"exit($st & 127 ? 128 + ($st & 127) : $st >> 8);",
 }, " ")
 fence.REAPER = REAPER
@@ -855,7 +866,7 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE PICKMAN_REAP_TOP; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
@@ -890,6 +901,7 @@ function fence.enter()
 		env = {
 			PICKMAN_REAP_CACHE = cache,
 			PICKMAN_REAP_SWEPT = if prefix[1] == "sandbox-exec" then "1" else "",
+			PICKMAN_REAP_TOP = myPid(), -- named in a killed sweeper's report (c0132)
 		},
 	})
 	-- with the specs stopped, unlink any symlink one swapped in at the top of .cache (review 006 F1); the launcher
