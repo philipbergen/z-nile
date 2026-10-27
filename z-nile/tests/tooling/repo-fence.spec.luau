@@ -211,6 +211,11 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
 		["sandbox-exec"] = "tests whether it runs jailed",
 	},
+	-- c0132: a killed sweeper's report probes the run's top process, which it finds as c0078's spec does
+	["z-nile/tests/acceptance/c0132/killed-report.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "reads the run's lock to find the top process, outside the jail",
+		["sandbox-exec"] = "tests whether it runs jailed",
+	},
 }
 -- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
 -- rewrite never maps it a second time

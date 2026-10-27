@@ -202,6 +202,55 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 		t.expect(has(line, "watchdog gone")).toBe(false)
 	end)
 
+	-- a pgrep stand-in first on PATH that fails (exit 2) for one of the two groups the report reads: `own` (the
+	-- launcher's own group, which the stand-in is in: it runs from the launcher's backticks) or `specs` (any other),
+	-- and passes the other to the real pgrep. It answers only the report's form, `pgrep -lf -a -g <group>`
+	local function failingPgrep(fails: string): Result
+		local bin = `{base}/pgrep-fails-{fails}`
+		fs.writeDir(bin)
+		fs.writeFile(
+			`{bin}/pgrep`,
+			"#!/bin/sh\n"
+				.. '[ $# -eq 4 ] && [ "$1 $2 $3" = "-lf -a -g" ] || { echo "pgrep stand-in: unexpected $*" >&2; exit 2; }\n'
+				.. "own=$(perl -e 'print getpgrp')\n"
+				.. `if [ "$4" = "$own" ]; then side=own; else side=specs; fi\n`
+				.. `[ "$side" = "{fails}" ] && exit 2\n`
+				.. 'exec /usr/bin/pgrep "$@"\n'
+		)
+		process.exec("chmod", { "+x", `{bin}/pgrep` })
+		return process.exec(
+			"perl",
+			{
+				"-e",
+				fence.REAPER,
+				"sh",
+				"-c",
+				'perl -e "select(undef, undef, undef, 30)" & sleep 0.3; kill -KILL $$',
+			},
+			{
+				env = {
+					PICKMAN_REAP_SWEPT = "1",
+					PICKMAN_REAP_TOP = myPid(),
+					PATH = `{bin}:{process.env.PATH or ""}`,
+				},
+			}
+		)
+	end
+
+	it("a specs group pgrep fails to read is unread, even when the launcher's own line reads", function()
+		local line = who(failingPgrep("specs").stderr)
+		t.expect(has(line, "; watchdog ?; group unread; reading: unread, no conclusion")).toBe(true)
+		t.expect(has(line, "other process(es)")).toBe(false)
+	end)
+
+	it("the launcher's own line not found is unread, even when the specs group reads", function()
+		local r = failingPgrep("own")
+		local line = who(r.stderr)
+		t.expect(has(line, "; watchdog ?; group unread; reading: unread, no conclusion")).toBe(true)
+		t.expect(has(line, "watchdog gone")).toBe(false)
+		t.expect(has(r.stderr, "\ntests/run:   ")).toBe(false) -- no list
+	end)
+
 	it("when jailed, a top process outside the jail (its probe refused) reads as alive", function()
 		if not jailed then
 			return -- the top process is signalable unjailed; check.sh requires the jailed run on macOS

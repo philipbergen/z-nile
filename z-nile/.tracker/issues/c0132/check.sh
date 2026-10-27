@@ -9,6 +9,7 @@ A="$HERE/acceptance"
 
 # The spec's cases share one setup, so it runs once (here, outside `check`: list mode refuses it); a check then
 # requires its named cases to exist in the spec and not fail, and the spec to have loaded.
+rm -f .cache/c0132-jailed-ran # the jailed case writes it afresh: an earlier run's marker vouches for nothing
 report_out=$(lune run tests/run -- "$A/killed-report.spec.luau" 2>&1)
 report() { # $1...: case-name prefixes that must exist in the spec and not fail
   local spec="$A/killed-report.spec.luau" c
@@ -58,16 +59,15 @@ check "AC6: the testing skill says how to read the report, and that the next one
 # wrote down).
 real_readings() {
   [[ $(uname -s) == Darwin ]] || { echo "not macOS: no jail, nothing to check"; return 0; }
-  local top fx rel out job g waited
+  local top fx out job g waited
   top=$(git rev-parse --show-toplevel) || return 1
-  fx="$PWD/.cache/c0132-real"
-  rm -rf "$fx" && mkdir -p "$fx/repo/z-nile/tests/probe" || return 1
-  for rel in z-nile/tests/run.luau z-nile/tests/lib z-nile/.luaurc z-nile/lib/ac.sh z-nile/lib/fence.sh z-nile/lib/git-hooks \
-    .luaurc rokit.toml .gitignore; do
-    [[ -e $top/$rel ]] || continue
-    mkdir -p "$fx/repo/$(dirname "$rel")" && cp -R "$top/$rel" "$fx/repo/$rel" || return 1
-  done
-  probe() { # $1: name, $2: the perl the probe spec runs
+  fx="$(pwd -P)/.cache/c0132-real"
+  rm -rf "$fx" && mkdir -p "$fx/repo/z-nile/tests/probe" "$fx/repo/z-nile/lib" || return 1
+  # the runner and its guards: what fence-leftovers' fixture copies, every path built from $top
+  cp -R "$top/z-nile/tests/run.luau" "$top/z-nile/tests/lib" "$fx/repo/z-nile/tests/" || return 1
+  cp -R "$top/z-nile/lib/ac.sh" "$top/z-nile/lib/fence.sh" "$top/z-nile/lib/git-hooks" "$fx/repo/z-nile/lib/" || return 1
+  cp "$top/z-nile/.luaurc" "$fx/repo/z-nile/" && cp "$top/.luaurc" "$top/rokit.toml" "$top/.gitignore" "$fx/repo/" || return 1
+  probe() { # $1: name, $2: the perl the probe spec runs (from the fixture's home, so .cache/group is the fixture's)
     printf '%s\n' '--!strict' 'local process = require("@lune/process")' 'local t = require("@tests/lib/t")' \
       "return t.spec(\"$1\", function(it)" "	it(\"$1\", function()" \
       "		process.exec(\"perl\", { \"-e\", [[$2]], \".cache/group\" })" "		t.expect(1).toBe(1)" "	end)" "end)" \
@@ -79,7 +79,9 @@ real_readings() {
   git init -q -b main "$fx/repo" || return 1
   [[ $(git -C "$fx/repo" rev-parse --show-toplevel) == "$(cd "$fx/repo" && pwd -P)" ]] || { echo "not a fixture repository"; return 1; }
   git -C "$fx/repo" add -A && git -C "$fx/repo" -c user.name=dev -c user.email=dev@example.invalid commit -qm runner || return 1
-  run() { (cd "$fx/repo/z-nile" && PICKMAN_TEST_FENCE= exec lune run tests/run -- "tests/probe/$1.spec.luau" 2>&1); }
+  # a top-level run of the fixture's runner, which jails itself (this check.sh runs outside the jail, and no runner's
+  # marker reaches it; if one did, the fixture's run would go unjailed and the readings below fail, never pass)
+  run() { (cd "$fx/repo/z-nile" && exec lune run tests/run -- "$fx/repo/z-nile/tests/probe/$1.spec.luau" 2>&1); }
   reads() { # $1: the run, $2: its output, $3: an extended regex its who line must match
     grep -q "the jail's sweeper was killed (signal 9)" <<<"$2" || { echo "$1: no killed sweeper's report (not jailed?):"; tail -5 <<<"$2"; return 1; }
     grep -Eq "^tests/run: who: .*$3" <<<"$2" || { echo "$1: the report does not read it:"; grep "who:" <<<"$2"; return 1; }
@@ -94,7 +96,11 @@ real_readings() {
   waited=0
   while [[ ! -s $fx/repo/z-nile/.cache/group && $waited -lt 600 ]]; do perl -e 'select(undef, undef, undef, 0.1)'; waited=$((waited + 1)); done
   g=$(cat "$fx/repo/z-nile/.cache/group" 2>/dev/null)
-  [[ $g =~ ^[0-9]+$ ]] || { wait "$job"; cat "$fx/outside.out"; echo "the outside probe wrote no group"; return 1; }
+  # a -9 to a group read from a file: only a group above 1 that holds this fixture's runner (-1 is every process the
+  # user owns, 0 this check's own group)
+  if ! [[ $g =~ ^[0-9]+$ ]] || (( g <= 1 )) || ! pgrep -g "$g" -f -- "$fx/repo/z-nile/tests/probe/outside" >/dev/null; then
+    wait "$job"; cat "$fx/outside.out"; echo "the outside probe wrote no group of this fixture's runner: '$g'"; return 1
+  fi
   kill -KILL -- "-$g"
   wait "$job"
   reads outside "$(cat "$fx/outside.out")" "; watchdog gone; 0 other process\(es\) still in the group; reading: the whole group was signalled from outside the jail$" || return 1
