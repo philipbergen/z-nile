@@ -84,6 +84,13 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 			t.expect(why ~= nil and why ~= "").toBe(true)
 			fs.removeFile(`{repo}/odd\nname.luau`)
 			t.expect(workspace.blobs(repo) ~= nil).toBe(true)
+			-- a tracked, clean path holding a newline never reaches hash-object: only the read's own refusal catches it
+			write(`{repo}/odd\nname.luau`, "return 6\n")
+			fixture.git(repo, { "add", "-A" })
+			fixture.git(repo, { "commit", "-qm", "odd name" })
+			local clean, cleanWhy = workspace.blobs(repo)
+			t.expect(clean).toBe(nil)
+			t.expect(cleanWhy ~= nil and cleanWhy ~= "").toBe(true)
 		end
 	)
 
@@ -114,7 +121,11 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		t.expect(fingerprint.digest(table.clone(blobs), tools, extra)).toBe(d)
 		local function with(path: string, blob: string?): string
 			local b = table.clone(blobs)
-			b[path] = blob
+			if blob then
+				b[path] = blob
+			else
+				b[path] = nil
+			end
 			return fingerprint.digest(b, tools, extra)
 		end
 		t.expect(with("pickman/.tracker/issues/f0001/spend.md", "100644 " .. string.rep("9", 40))).toBe(d)
@@ -139,9 +150,9 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		setup()
 		fixture.git(repo, { "commit", "-qam", "more" })
 		local main = fixture.physical(repo) :: string
-		t.expect(workspace.dbPath(repo)).toBe(`{main}/.claude/.znile_tests.sqlite`)
+		t.expect((workspace.dbPath(repo))).toBe(`{main}/.claude/.znile_tests.sqlite`)
 		fixture.git(repo, { "worktree", "add", "-q", `{base}/wt`, "-b", "wt" })
-		t.expect(workspace.dbPath(`{base}/wt`)).toBe(`{main}/.claude/.znile_tests.sqlite`)
+		t.expect((workspace.dbPath(`{base}/wt`))).toBe(`{main}/.claude/.znile_tests.sqlite`)
 		-- a folder in no repository has no db path
 		fs.writeDir(`{base}/plain`)
 		local p, why = workspace.dbPath(`{base}/plain`)

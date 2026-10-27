@@ -17,3 +17,7 @@
 - design-review-001 F14: one-off: a list introduced by "all of" whose items start with "or"
 - design-review-001 F15: one-off: an "exactly when" invariant whose input set changes with the change itself
 - design-review-001 F16: one-off: a skipped step must still show the output a later instruction reads
+- note prototype subagent (round 1): a nested fixture runner inherited PICKMAN_OPEN_GUARD and left the browser guard to the outer run: zz-test/gate-fixtures-own-their-home
+- note prototype subagent (round 1): two spec type errors (a multi-return call inside t.expect, string? into a typed table) showed only in promote-check: z-design/rerun-skipped-checks-after-edits
+- note prototype subagent (round 1): the newline guard was masked by the hash batch's own failure until a case bypassed that layer: z-design/reasoned-rows-claim-testable-reasons
+- note prototype subagent (round 1): the clone lacked the new lessons harvest.md names, so the lessons audit failed in its full gate: z-design/prove-specs-pass-on-a-prototype

@@ -215,6 +215,9 @@ local function env(dir: string, extra: { [string]: string }?): { [string]: strin
 		PATH = `{dir}/bin:{process.env.PATH or ""}`,
 		PICKMAN_JOBS = "2",
 		HOME = `{dir}/home`,
+		-- "" makes the fixture's runner the outermost for the browser guard (it installs its own stubs and fails its own
+		-- run), instead of leaving an opener to the real run around this spec
+		PICKMAN_OPEN_GUARD = "",
 	}
 	for k, v in (extra or {}) :: { [string]: string } do
 		e[k] = v
