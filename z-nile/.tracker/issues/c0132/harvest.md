@@ -6,3 +6,7 @@
 - design-review-001 F5: z-design/spec-design-correspondence
 - design-review-001 F6: one-off: check.sh's failure detail printed the next case's lines (`grep -A3`)
 - note the first prototype listed the group with `ps`, which is setuid and refused in the jail, and every jailed case failed: zz-test/jail-reach-proved-by-a-real-run
+- design-review-002 F1: z-design/prototype-ci-green-before-the-round, z-design/prove-specs-pass-on-a-prototype, z-design/rerun-skipped-checks-after-edits
+- design-review-002 F2: zz-test/guard-needs-its-own-case
+- design-review-002 F3: zz-test/no-vacuous-pass
+- design-review-002 F4: zz-arch/children-need-a-lifeline
