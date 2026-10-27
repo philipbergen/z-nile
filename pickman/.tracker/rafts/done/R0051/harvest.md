@@ -19,3 +19,5 @@
 - design-review-005 F3: z-design/restated-rules-move-together
 - design-review-005 F4: z-design/prove-specs-pass-on-a-prototype
 - note the takeover merge of main (2026-10-26) committed conflict markers in architecture.md (fixed by fix-arch-markers): zz-rules/grep-markers-before-merge-commit
+- note R0051's sequestered check.sh joined $ZN_ROOT to a home-relative `zn find` path; RC1 failed before promotion (fixed in place with the user's approval): z-design/check-paths-from-the-home
+- review-001 F1: z-design/reasoned-rows-claim-testable-reasons
