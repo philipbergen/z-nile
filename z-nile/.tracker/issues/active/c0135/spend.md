@@ -8,6 +8,7 @@
 | 4 | 2026-10-27 03:55 | design-review-001 | 0 | 0 | 10.0 | spend+proportional | design-review | 36667 |
 | 5 | 2026-10-27 04:18 | c0135: c0082 fixtures give each item its own slug (tests first) | 12 | 6 | 10.0 | focus | build |  |
 | 6 | 2026-10-27 04:26 | c0135: new issue and new raft refuse a used slug; audit reports slug-duplicate; raft-plan picks free slugs | 208 | 12 | 25.0 | focus | build |  |
+| 7 | 2026-10-27 05:10 | R0061: Phase 3 verification (raft check 5/5, gate speed, sequestration: one authorized edit) | 0 | 0 | 10.0 | explicit | build |  |
 
-**Total:** +220 / -18 lines, 136.0 agent-minutes, 36667 tokens over 6 records
-<!-- totals: added=220 removed=18 minutes=136.0 records=6 tokens=36667 -->
+**Total:** +220 / -18 lines, 146.0 agent-minutes, 36667 tokens over 7 records
+<!-- totals: added=220 removed=18 minutes=146.0 records=7 tokens=36667 -->
