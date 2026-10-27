@@ -8,7 +8,7 @@
 -- the user 2026-10-26: "Centre below top bar"): its dots (Awareness.ring of that frame's size) are shifted by the
 -- frame's top-left. Every f0029 sample screen (tests/acceptance/f0029/jump.spec.luau's SAMPLES, copied below) is
 -- checked, plus the short screens under a 58 px top bar (480 x 320 and 320 x 568) and their turns, on desktop (no
--- touch controls) and on touch. No dot may overlap a box unless ACCEPTED names that screen and box.
+-- touch controls) and on touch. No dot may overlap a box unless ACCEPTED (G9, the user's) names that screen and box.
 -- f0110's FIRE and HOP buttons (Touch.buttons(l).fire and .hop, f0110 lands first) are touch boxes too: f0158 owns
 -- this clearance (review 001 F5, the coordinator 2026-10-26, after z-design/design-the-execution-window).
 local Awareness: any = require("@logic/Awareness")
@@ -20,7 +20,14 @@ type Rect = { x: number, y: number, w: number, h: number }
 type Inset = { top: number, bottom: number, left: number, right: number }
 type Screen = { name: string, width: number, height: number, inset: Inset?, device: Inset? }
 
-local ACCEPTED: { [string]: { [string]: boolean } } = {} -- screen name -> box names the user accepted under dots
+-- G9, decided with the user 2026-10-26: "Accept those overlaps": the ring stays 60% everywhere, and exactly these
+-- controls may draw over its dots (each draws above the ring, which takes no input); any other overlap fails
+local ACCEPTED: { [string]: { [string]: boolean } } = {
+	["old phone, landscape"] = { fire = true },
+	["old phone, landscape, under a 58 px top bar"] = { fire = true },
+	["small phone, portrait, under a 58 px top bar"] = { radar = true },
+	["old phone, portrait, under a 58 px top bar"] = { radar = true, jump2 = true, fire = true },
+}
 local RADAR = (Awareness.RADAR_RADIUS * 2 + 1) * 8 -- DangerHud's CELL, f0029's SIZE
 local ZERO: Inset = { top = 0, bottom = 0, left = 0, right = 0 }
 local BAR: Inset = { top = 58, bottom = 0, left = 0, right = 0 } -- Roblox's top bar, core-UI only
@@ -159,6 +166,30 @@ return t.spec("f0158 the ring clears the HUD", function(it)
 			end
 		)
 	end
+
+	it("every accepted overlap names a real screen and happens there, so the list stays exact", function()
+		for name, boxes in ACCEPTED do
+			local screen: Screen? = nil
+			for _, s in SCREENS do
+				if s.name == name then
+					screen = s
+				end
+			end
+			if screen == nil then
+				error(`ACCEPTED names an unknown screen: {name}`, 0)
+			end
+			local all = hudBoxes(screen :: Screen, true)
+			for box in boxes do
+				local hit = false
+				for _, d in ringDots(screen :: Screen) do
+					hit = hit or (all[box] ~= nil and overlaps(d, all[box]))
+				end
+				if not hit then
+					error(`{name}: {box} is accepted but no ring dot overlaps it`, 0)
+				end
+			end
+		end
+	end)
 
 	it("every dot is inside the screen", function()
 		for _, s in SCREENS do
