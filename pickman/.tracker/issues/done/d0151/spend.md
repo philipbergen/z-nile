@@ -9,6 +9,7 @@
 | 5 | 2026-10-27 01:57 | R0060: review-001 | 0 | 0 | 2.0 | focus | code-review |  |
 | 6 | 2026-10-27 01:57 | R0060: addressed during execution | 0 | 0 | 1.0 | focus | deliver |  |
 | 7 | 2026-10-27 02:12 | tracker: done R0060 | 0 | 0 | 15.2 | raft | deliver |  |
+| 8 | 2026-10-27 02:22 | deliver | 0 | 0 | 2.0 | spend | deliver |  |
 
-**Total:** +0 / -0 lines, 45.2 agent-minutes, 120536 tokens over 7 records
-<!-- totals: added=0 removed=0 minutes=45.2 records=7 tokens=120536 -->
+**Total:** +0 / -0 lines, 47.2 agent-minutes, 120536 tokens over 8 records
+<!-- totals: added=0 removed=0 minutes=47.2 records=8 tokens=120536 -->
