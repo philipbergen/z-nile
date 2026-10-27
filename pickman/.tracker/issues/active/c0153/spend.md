@@ -13,6 +13,7 @@
 | 9 | 2026-10-27 01:02 | c0153: verification log | 0 | 0 | 5.0 | focus | build |  |
 | 10 | 2026-10-27 03:55 | R0059: review-001 | 0 | 0 | 30.0 | focus | code-review | 140000 |
 | 11 | 2026-10-27 03:56 | c0153: own plain spec for -inf and strings; verification log corrected (review 001 F1, F2); refute-001, harvest, lessons | 38 | 0 | 25.0 | focus | code-review |  |
+| 12 | 2026-10-27 03:56 | R0059: refute-001 cites the right commits | 0 | 0 | 2.0 | focus | code-review |  |
 
-**Total:** +236 / -13 lines, 257.0 agent-minutes, 361000 tokens over 11 records
-<!-- totals: added=236 removed=13 minutes=257.0 records=11 tokens=361000 -->
+**Total:** +236 / -13 lines, 259.0 agent-minutes, 361000 tokens over 12 records
+<!-- totals: added=236 removed=13 minutes=259.0 records=12 tokens=361000 -->
