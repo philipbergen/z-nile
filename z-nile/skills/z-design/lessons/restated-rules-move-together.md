@@ -6,7 +6,7 @@ check: After changing a rule, does every place that restates it (AGENTS.md, othe
 ---
 A rule is usually stated in one place and summarized in several others. A fix that changes the rule but not the summaries leaves an executor or a future agent reading the old rule.
 
-**Why:** R0039's late rounds were mostly contradictions between the issue, the specs and the experiments. R0040 design review 2 (F5): round 1 split "every skill records lessons" into two forms, but the new AGENTS.md sentence still said every skill records them.
+**Why:** R0039's late rounds were mostly contradictions between the issue, the specs and the experiments. R0040 design review 2 (F5): round 1 split "every skill records lessons" into two forms, but the new AGENTS.md sentence still said every skill records them. f0158 design review 002 F5: depends_on gained f0110 in round 1, but the implementation step, the Regression guard, E1 and the test plan's screen count still stated round 1's earlier state.
 
 c0120 design review 002 F2: the design still named a superseded prototype commit, a `prototype.patch` "beside this document" that was never committed, and a 15/16 the Verification log had made 15/17. Pointers to prototype artifacts are restatements too.
 

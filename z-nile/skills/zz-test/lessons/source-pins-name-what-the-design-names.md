@@ -6,7 +6,7 @@ check: Does every pattern a sequestered spec matches in source (a local's name, 
 ---
 Source pins are the house style for adapters, but a pin on a private name (`member.maze`, `local function finishPick`, `local function walls`) fails a correct implementation that names it otherwise, and the executor may not edit a sequestered spec to fix it.
 
-**Why:** f0126 design review 002 F5: three adapter cases matched private names the Design never gave; the behaviour they guarded was already pinned by session cases (the player walks into the hole, ghosts stand in holes), so the pins only added ways to fail a right answer.
+**Why:** f0126 design review 002 F5: three adapter cases matched private names the Design never gave; the behaviour they guarded was already pinned by session cases (the player walks into the hole, ghosts stand in holes), so the pins only added ways to fail a right answer. f0158 design review 001 F2: the ring's lit/unlit case only checked that `Awareness.RING.lit.min`, `d.brightness` and `Awareness.RING.idle` were spelled somewhere, so an adapter with Roblox's transparency inverted (nearest faintest, the idle ring almost opaque) passed; f0109's fake.module could already run the real source.
 
 **How to apply:** pin a documented name (a public function, a field of an exported type, a constant) or the absence of a wrong one (`s.maze`, the session's own field, never passed to a reader); write any name a pin needs into the Design's Interfaces; drop a pin a behavioural case already covers.
 
