@@ -47,6 +47,21 @@ then
 end
 local HOME_PREFIX = (HOME :: string) .. "/"
 
+-- c0162: specs run on the Lune rokit.toml pins (the one CI runs), read from the runner's own repository, never from
+-- the current folder; a mismatch, an unknown version or an unreadable pin refuses (zz-arch rule 7)
+local lunepin = require("./lib/lunepin")
+local PIN_FILE = `{ROOT}/rokit.toml`
+local PIN: string?, PIN_PROBLEM: string? = nil, nil
+do
+	local ok, text = pcall(fs.readFile, PIN_FILE)
+	if ok then
+		PIN, PIN_PROBLEM = lunepin.pinned(text :: string)
+	else
+		PIN_PROBLEM = "no readable rokit.toml"
+	end
+end
+local RUNNING = lunepin.running(_VERSION)
+
 local function collect(dir: string, out: { string })
 	for _, name in fs.readDir(dir) do
 		local path = `{dir}/{name}`
@@ -91,6 +106,31 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
 		fs.writeFile(`{dir}/{name}`, `#!/bin/sh\necho "{name} $*" >> "{dir}/opened.log"\n`)
 		process.exec("chmod", { "+x", `{dir}/{name}` })
 	end
+	-- the outermost run on another Lune first tries rokit's (G1): its shim, first on PATH, resolves rokit.toml's pin
+	-- from the home; the run then goes on only if that Lune is the pin, and names the version it runs on
+	local path = process.env.PATH or ""
+	local runsOn = RUNNING
+	if PIN ~= nil and RUNNING ~= PIN then
+		path = `{process.env.HOME or ""}/.rokit/bin:{path}`
+		local probe = pcall(function()
+			local r = process.exec("lune", { "--version" }, { env = { PATH = path } })
+			runsOn = if r.ok then lunepin.reported((string.gsub(r.stdout, "%s+$", ""))) else nil
+		end)
+		if not probe then
+			runsOn = nil
+		end
+	end
+	local refusal = lunepin.check(PIN, PIN_PROBLEM, runsOn, PIN_FILE)
+	if refusal then
+		fs.removeDir(dir)
+		stdio.ewrite(refusal .. "\n")
+		process.exit(2)
+	end
+	print(
+		if runsOn == RUNNING
+			then `tests/run: lune {runsOn} (rokit.toml pins {PIN})`
+			else `tests/run: lune {runsOn} (rokit.toml pins {PIN}; this shell's lune is {RUNNING or "unknown"}, so ~/.rokit/bin's runs)`
+	)
 	local args = { "run", "tests/run", "--" }
 	for _, a in process.args do
 		if a ~= "--" then
@@ -99,7 +139,7 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
 	end
 	local ok, r = pcall(function()
 		return process.exec("lune", args, {
-			env = { PATH = `{dir}:{process.env.PATH or ""}`, PICKMAN_OPEN_GUARD = dir },
+			env = { PATH = `{dir}:{path}`, PICKMAN_OPEN_GUARD = dir },
 			stdio = { stdout = "forward", stderr = "forward" },
 		})
 	end)
@@ -115,6 +155,15 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
 		process.exit(1)
 	end
 	process.exit(r.code)
+end
+
+-- every inner run (the guarded child, each worker, a spec's nested run) checks the Lune it is on
+do
+	local refusal = lunepin.check(PIN, PIN_PROBLEM, RUNNING, PIN_FILE)
+	if refusal then
+		stdio.ewrite(refusal .. "\n")
+		process.exit(2)
+	end
 end
 
 local USAGE = "usage: lune run tests/run [--jobs N] [spec files]"
