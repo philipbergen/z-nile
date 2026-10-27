@@ -2,7 +2,8 @@
 -- f0101 AC5: the spy hop's adapters. The server decides the hop (airborne.spec); the clients only send it and show
 -- it (f0104 binds Space to send Hop.INTENT). Main hands each frame's `hopped` to Camera, and Camera lifts the eye
 -- by Hop.rise of it at the tick being shown (View.shownTick of the two latest snapshots, the blend the ghosts are
--- drawn at), so the rise matches the server's airborne window. Camera keeps no jump of its own and sends nothing. The ghosts are drawn GHOST-sized and the walls and doors at the lowered SCALE.wallHeight.
+-- drawn at), so the rise matches the server's airborne window. Narrowed by c0150: Hop.rise may take further arguments
+-- after the shown tick (f0126 passes the hop's length). Camera keeps no jump of its own and sends nothing. The ghosts are drawn GHOST-sized and the walls and doors at the lowered SCALE.wallHeight.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -46,7 +47,7 @@ return t.spec("f0101 spy hop adapters", function(it)
 		function()
 			local src = source("Camera")
 			local at =
-				string.match(src, "View%.SCALE%.eyeHeight%s*%+%s*Hop%.rise%(%s*hopped%s*,%s*([%w_]+)%s*%)")
+				string.match(src, "View%.SCALE%.eyeHeight%s*%+%s*Hop%.rise%(%s*hopped%s*,%s*([%w_]+)%s*[,%)]")
 			t.expect(at ~= nil).toBe(true)
 			-- that tick is View.shownTick of the two snapshots the pose is blended from, at the same View.alpha
 			local blend = string.match(

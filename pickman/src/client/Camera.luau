@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
 local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
@@ -19,6 +20,7 @@ local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- t
 local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
 local hopped: number? = nil -- the tick the latest hop started, from the server's frame (f0101)
 local yaw: number? = nil
+local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
 local cursor = false -- the mouse is free (and shown) for a prompt
 local current: Awareness.Pose? = nil
 -- a touch looked, or a finger went down or came up, since the last render step; and a finger is down (the
@@ -82,6 +84,11 @@ function Camera.setCursor(free: boolean)
 	cursor = free
 end
 
+-- The driving controller's sticks (f0146: Pads.stick, the one tracker Sticks reads too).
+function Camera.pad(read: (name: string) -> (number?, number?, string?))
+	padStick = read
+end
+
 function Camera.start()
 	local camera = workspace.CurrentCamera :: Camera
 	camera.CameraType = Enum.CameraType.Scriptable
@@ -98,6 +105,14 @@ function Camera.start()
 		end
 		-- cleared here, after the guard read it: a touch that began and ended before this step still counts
 		lookedThisFrame = false
+		-- the right stick looks (f0146), at a rate, and stays where it is left, like the mouse
+		local read = padStick
+		if read then
+			local x, y = read("Thumbstick2")
+			if x and y then
+				look = View.look(look, Pad.look(x, y, dt))
+			end
+		end
 		steer = View.steer(steer, look, arrows, dt)
 		look = steer.look
 
