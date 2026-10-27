@@ -10,10 +10,16 @@
 -- checked, plus the short screens under a 58 px top bar (480 x 320 and 320 x 568) and their turns, on desktop (no
 -- touch controls) and on touch. No dot may overlap a box unless ACCEPTED (G9, the user's) names that screen and box.
 -- f0110's FIRE and HOP buttons (Touch.buttons(l).fire and .hop, f0110 lands first) and f0126's PICK button
--- (Touch.buttons(l).pick, f0126 lands first; review 002 F2) are touch boxes too: f0158 owns this clearance (review 001 F5, the coordinator 2026-10-26, after z-design/design-the-execution-window).
+-- (Touch.buttons(l).pick, f0126 lands first; review 002 F2) are touch boxes too: f0158 owns this clearance
+-- (review 001 F5, the coordinator 2026-10-26, after z-design/design-the-execution-window).
+-- ACCEPTED is a permission (G9, G10: these controls "may draw over" the ring). That each accepted overlap still
+-- happens is checked only when F0158_EXACT is set, which only AC2's line in f0158's check.sh does (at `check` and
+-- `done`): once promoted, a later change that moves a control off the ring (d0149's circles, a smaller FIRE) is not
+-- an override (review 003 F3, zz-test/promoted-specs-pin-rules-not-sets).
 local Awareness: any = require("@logic/Awareness")
 local Hud = require("@logic/Hud")
 local Touch = require("@logic/Touch")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 type Rect = { x: number, y: number, w: number, h: number }
@@ -173,7 +179,8 @@ return t.spec("f0158 the ring clears the HUD", function(it)
 		)
 	end
 
-	it("every accepted overlap names a real screen and happens there, so the list stays exact", function()
+	it("every accepted overlap names a real screen, and at check time still happens there", function()
+		local exact = process.env.F0158_EXACT == "1"
 		for name, boxes in ACCEPTED do
 			local screen: Screen? = nil
 			for _, s in SCREENS do
@@ -184,14 +191,16 @@ return t.spec("f0158 the ring clears the HUD", function(it)
 			if screen == nil then
 				error(`ACCEPTED names an unknown screen: {name}`, 0)
 			end
-			local all = hudBoxes(screen :: Screen, true)
-			for box in boxes do
-				local hit = false
-				for _, d in ringDots(screen :: Screen) do
-					hit = hit or (all[box] ~= nil and overlaps(d, all[box]))
-				end
-				if not hit then
-					error(`{name}: {box} is accepted but no ring dot overlaps it`, 0)
+			if exact then
+				local all = hudBoxes(screen :: Screen, true)
+				for box in boxes do
+					local hit = false
+					for _, d in ringDots(screen :: Screen) do
+						hit = hit or (all[box] ~= nil and overlaps(d, all[box]))
+					end
+					if not hit then
+						error(`{name}: {box} is accepted but no ring dot overlaps it`, 0)
+					end
 				end
 			end
 		end

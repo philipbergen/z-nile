@@ -1,14 +1,14 @@
 --!strict
 -- f0158 AC3: DangerHud draws the danger ring and decides nothing. Its real source runs on the fake engine
--- (pickman/tests/lib/fakeengine's fake.module, from f0109, which f0158 depends on) with a real snapshot: after a
--- render step the ring's screen holds Awareness.SECTORS x Awareness.RING.dots frames, still those same frames
--- after a second step (reused, not remade), each at the box Awareness.ring gives for the indicators Awareness
--- computes; a lit dot in View.DANGER_COLOR at transparency 1 - (lit.min + (lit.max - lit.min) x brightness), an
--- unlit one white at 1 - RING.idle, so a near dangerous ghost's sector is more opaque than a far one's (review 001
--- F2), and every dot is round and anchored at its box's top-left (review 002 F3). When the Ring screen's area differs
--- from the screen's, the dots follow the Ring screen's area (review 002 F1). The ring's screen is the core-UI safe area, below Roblox's top bar (G8, the HUD's own frame), under the HUD
--- (DisplayOrder below the HUD's 1). The edge
--- glows' boxes are gone and the adapter does no geometry (source reads).
+-- (pickman/tests/lib/fakeengine's fake.module, from f0109, which f0158 depends on) with a real snapshot. After a
+-- render step the drawn Ring screen is the core-UI safe area below Roblox's top bar (G8: ScreenInsets
+-- CoreUISafeInsets, never IgnoreGuiInset, review 003 F2), under the radar and the HUD (DisplayOrder below 0). It
+-- holds Awareness.SECTORS x Awareness.RING.dots frames, the same frames after a second step, each round and anchored
+-- at its box's top-left (review 002 F3), at the box Awareness.ring gives for the indicators Awareness computes; a lit
+-- dot in View.DANGER_COLOR at transparency 1 - (lit.min + (lit.max - lit.min) x closeness), an unlit one white at
+-- 1 - RING.idle, so a near dangerous ghost's sector is more opaque than a far one's (review 001 F2). When the Ring
+-- screen's area differs from the screen's, the dots follow the Ring screen's area (review 002 F1). The edge glows'
+-- boxes are gone and the adapter does no geometry (source reads).
 -- Casts keep the spec type-legal on main before f0158 (Awareness.ring, RING, View.DANGER_COLOR) and f0109 (fake.module)
 -- exist; a missing member fails at the call.
 local Awareness: any = require("@logic/Awareness")
@@ -90,6 +90,13 @@ return t.spec("f0158 ring adapter", function(it)
 			view.renderStepped:fire(1 / 60)
 			local ring = view.playerGui:FindFirstChild("Ring")
 			t.expect(ring ~= nil).toBe(true)
+			-- review 003 F2: the drawn Ring screen is the core-UI area (G8), never IgnoreGuiInset (which in Roblox resets
+			-- ScreenInsets to the device area), and below the radar's screen (Danger, the default 0)
+			t.expect(tostring(ring.ScreenInsets)).toBe("ScreenInsets.CoreUISafeInsets")
+			t.expect(ring.IgnoreGuiInset == nil or ring.IgnoreGuiInset == false).toBe(true)
+			t.expect(ring.DisplayOrder ~= nil and ring.DisplayOrder < 0).toBe(true)
+			local danger = view.playerGui:FindFirstChild("Danger")
+			t.expect(danger.DisplayOrder == nil or danger.DisplayOrder == 0).toBe(true)
 			local want = Awareness.ring(Awareness.indicators(classic, pose, ghosts, { inView = true }), W, H)
 			local count = Awareness.SECTORS * Awareness.RING.dots
 			t.expect(#want).toBe(count)
@@ -119,7 +126,7 @@ return t.spec("f0158 ring adapter", function(it)
 					t.expect(near(c.R, r.r / 255) and near(c.G, r.g / 255) and near(c.B, r.b / 255))
 						.toBe(true)
 					local a = Awareness.RING.lit.min
-						+ (Awareness.RING.lit.max - Awareness.RING.lit.min) * d.brightness
+						+ (Awareness.RING.lit.max - Awareness.RING.lit.min) * d.closeness
 					t.expect(near(f.BackgroundTransparency, 1 - a)).toBe(true)
 					opacity[d.sector] = 1 - f.BackgroundTransparency
 				else
