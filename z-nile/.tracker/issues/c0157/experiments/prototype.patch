@@ -1,0 +1,321 @@
+diff --git a/scripts/hooks/stop.sh b/scripts/hooks/stop.sh
+index fd363aea..3af556f0 100755
+--- a/scripts/hooks/stop.sh
++++ b/scripts/hooks/stop.sh
+@@ -24,7 +24,8 @@ fi
+ # scripts/check.sh is the gate in a tree from before c0114 and its forwarder after: this hook runs from the main
+ # checkout against any worktree, so it calls the path both have (design review 001 F2); the forwarder-removal raft
+ # switches it to z-nile/check.sh
+-if ! out=$(scripts/check.sh --affected 2>&1); then
++# a gate slot is waited for at most 120 s here, inside the hook's 300 s budget (c0157)
++if ! out=$(ZN_GATE_SLOT_WAIT=120 scripts/check.sh --affected 2>&1); then
+   echo "scripts/check.sh --affected failed; fix before finishing:" >&2
+   echo "$out" | grep -v -e '^\[INFO\]' -e '^\[WARN\]' | tail -n 40 >&2
+   exit 2
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+index 5b0afb58..2b5662f2 100755
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -185,14 +185,21 @@ done
+ par_wait || exit 1
+ 
+ # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
++# Each project's spec stage holds a machine-wide gate slot while it runs (c0157, z-nile/tests/slot.luau): this shell
++# takes one before the stage and gives it back after it, or on exit; concurrent gates on this machine queue for the
++# CPUs instead of oversubscribing them, and a lone gate never waits.
++slot="$PWD/z-nile/tests/slot.luau"
++trap 'lune run "$slot" -- release $$ || true' EXIT
+ run_specs() { # run_specs <home> [spec paths relative to the home]
+   local h=$1
+   shift
++  lune run "$slot" -- acquire $$
+   if [[ $h == . ]]; then
+     lune run tests/run -- "$@"
+   else
+     (cd "$h" && lune run tests/run -- "$@")
+   fi
++  lune run "$slot" -- release $$
+ }
+ for i in "${!names[@]}"; do
+   picked "${names[$i]}" || continue
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 9baa6675..e8d47cef 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -53,7 +53,8 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+   - This is what makes the checks unfakeable and sequestered.
+   - They never change the real repository: every command that changes anything runs in a fixture under `.cache/<unique name>` with its own repository, checked before each write, committing as `<name>@example.invalid` (zz-test skill, "Specs never touch the real repository"). Before the guards exist on your branch, or while prototyping them, run them only in a clone under `$TMPDIR`.
+ - **Verify the wiring**: `./zn check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
+-- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
++- **Where a prototype lives**: Prototypes and experiments live in a scratch clone (`git clone` of the checkout into the scratchpad or `$TMPDIR`), never in a branch or worktree of the real repository, and nothing is ever committed in the real repository under a fixture identity (`@example.invalid`): every gate running on the machine reads such a ref as a spec's escape and fails (c0157).
++- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch clone, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
+ - **Dry-run the promotion**: `./zn promote-check <id>`. The only acceptable failures before implementation are requires of modules the issue will create.
+ 
+ ## 5. Adversarial design review (required)
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index d840bc37..acc99479 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -18,6 +18,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
+    - Write down, for yourself, which files each issue touches.
+ 
+ ## Phase 1: Experiments (fail fast)
++- Prototypes and experiments live in a scratch clone (`git clone` of the checkout into the scratchpad or `$TMPDIR`), never in a branch or worktree of the real repository, and nothing is ever committed in the real repository under a fixture identity (`@example.invalid`): every gate running on the machine reads such a ref as a spec's escape and fails (c0157).
+ - For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
+ - **If an experiment fails:**
+   - Switch to the documented fallback, and note that in the issue.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 8443fff7..d1d02e07 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -120,6 +120,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+   - **The guards trust their own environment**: a caller that sets `PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` as the jail does makes the home fence waive a sentinel it couldn't write (a `.cache` made unwritable outside any jail), and `PICKMAN_FENCE_HOOKS` at a folder of permissive hooks switches the ref guard off (captured as c0123). Nothing in the fence tells a real jail from forged markers (c0120 code review 004 F5): review a check or spec that sets any `PICKMAN_TEST_*` or `PICKMAN_FENCE_*` variable.
+   - **AC18 trusts the `origin` it resolves** (c0120): it reads the published main with `git ls-remote origin`, so a swapped `origin` URL, a `url.*.insteadOf` or `GIT_CONFIG_*` in the environment can make any repository's main the reference. Every verdict prints the URL it resolved; check it names the project's GitHub repository (c0120 code review 009 F4).
+ - **Running specs against unguarded code**: only in a clone under `$TMPDIR`, outside every repository (`git clone --no-hardlinks . "$(mktemp -d)/repo"`). That applies when prototyping the guards themselves, or on a branch from before them. A broken fixture there can only reach the clone.
++- **Other sessions' refs**: Prototypes and experiments live in a scratch clone (`git clone` of the checkout into the scratchpad or `$TMPDIR`), never in a branch or worktree of the real repository, and nothing is ever committed in the real repository under a fixture identity (`@example.invalid`): every gate running on the machine reads such a ref as a spec's escape and fails (c0157). The tripwire's message names each such ref's author and subject, so its victim can tell another session's prototype from a spec's escape.
+ - **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it.
+ 
+ ## Hooks (Claude Code only)
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index 7d70b836..ec414448 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -126,6 +126,7 @@ local alive = fence.alive
+ local function myPid(): string
+ 	return shell("echo $PPID")
+ end
++fence.myPid = myPid -- this process's pid (c0157's gate slots record it)
+ 
+ -- A file's trimmed contents, or "" when it is missing: another run may release its lock while this one reads it.
+ local function readMaybe(path: string): string
+@@ -398,11 +399,35 @@ local function changes(before: Snapshot, after: Snapshot): { string }
+ 	end
+ 	table.sort(added)
+ 	if #added > 0 then
+-		table.insert(out, `  refs written by a fixture appeared\n    {table.concat(added, "\n    ")}`)
++		-- each with its tip's author and subject: another session committing a prototype under a fixture identity in
++		-- the real repository looks the same as a spec's escape, and only the reader can tell (c0157)
++		local lines: { string } = {}
++		for _, ref in added do
++			-- each entry is "<refname> <tip>": the tip names the commit the ref pointed at when it was seen
++			local tipSha = string.match(ref, "%S+$") or ref
++			local tip = git({ "log", "-1", "--format=%an <%ae>, %ci: %s", tipSha }) or "?"
++			table.insert(lines, `{ref} ({tip})`)
++		end
++		table.insert(
++			out,
++			`  refs written by a fixture appeared\n    {table.concat(lines, "\n    ")}\n`
++				.. `    (a session that commits under an @example.invalid identity in the real repository, such as a `
++				.. `prototype branch, trips this too: prototypes belong in scratch clones, z-design skill)`
++		)
+ 	end
+ 	return out
+ end
+ 
++-- whether this process runs inside a guarded test run (any marker set: c0157's gate slots take none there; the
++-- marker is the fence's to read, never a caller's)
++function fence.inRun(): boolean
++	return (process.env[MARKER] or "") ~= ""
++end
++
++-- the tripwire's two halves, read by c0157's spec on a fixture repository (its working folder)
++fence.snapshot = snapshot
++fence.changes = changes
++
+ local function guarded(here: string): boolean
+ 	local marker = process.env[MARKER]
+ 	if marker == nil or marker == "" then
+diff --git a/z-nile/tests/lib/gateslot.luau b/z-nile/tests/lib/gateslot.luau
+new file mode 100644
+index 00000000..cb4fa7a0
+--- /dev/null
++++ b/z-nile/tests/lib/gateslot.luau
+@@ -0,0 +1,105 @@
++--!strict
++-- The machine-wide gate slots (c0157): a gate's spec stage runs only while it holds one of `max` slots shared by every
++-- checkout of this user on this machine, so concurrent gates queue instead of oversubscribing the CPUs. A slot is a
++-- folder `slot-<n>` (mkdir is atomic) holding `owner`: "<pid> <start id> <label>". A slot whose owner is gone, or a
++-- reused pid (its start id differs), is free. Taken by z-nile/tests/slot.luau around each project's spec stage of
++-- z-nile/check.sh.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++
++local gateslot = {}
++
++-- the runner's lane cap (z-nile/tests/run.luau): a gate's spec stage uses up to this many CPUs
++gateslot.LANES = 8
++
++-- How many gates may run their specs at once: the CPUs divided by a gate's lanes, at least 1, so the running gates'
++-- lanes never add up to more than the machine has (one gate alone always runs at once).
++function gateslot.slotsFor(cpus: number, lanes: number): number
++	return math.max(1, math.floor(cpus / lanes))
++end
++
++-- The slot folder: ZN_GATE_SLOTS, or `$XDG_STATE_HOME/zn/gate-slots`, or `~/.local/state/zn/gate-slots`.
++function gateslot.dir(env: { [string]: string? }): string?
++	local set = env.ZN_GATE_SLOTS
++	if set ~= nil and set ~= "" then
++		return set
++	end
++	local state = env.XDG_STATE_HOME
++	if state ~= nil and state ~= "" then
++		return `{state}/zn/gate-slots`
++	end
++	local home = env.HOME
++	if home ~= nil and home ~= "" then
++		return `{home}/.local/state/zn/gate-slots`
++	end
++	return nil
++end
++
++-- "<pid> <start id> <label>" parsed; nil for anything else (a slot whose owner is not written yet)
++function gateslot.parseOwner(text: string): (string?, string?, string?)
++	local pid, id, label = string.match(text, "^(%d+) (%S+) ?(.*)$")
++	return pid, id, label
++end
++
++export type Probe = { holds: (pid: string, id: string) -> boolean }
++
++local function readMaybe(path: string): string
++	local ok, text = pcall(fs.readFile, path)
++	return if ok then (string.gsub(text :: string, "%s+$", "")) else ""
++end
++
++-- One attempt: takes a free slot of `max` under `dir` for (`me`, `myId`, `label`) and returns its folder, or nil and
++-- the labels of the slots' holders. A slot whose owner file stays unwritten for `unownedSeconds` (its taker died
++-- between mkdir and writing it) is free too.
++function gateslot.try(
++	dir: string,
++	max: number,
++	me: string,
++	myId: string,
++	label: string,
++	probe: Probe,
++	unownedSeconds: number
++): (string?, { string })
++	fs.writeDir(dir)
++	local holders: { string } = {}
++	for n = 1, max do
++		local slot = `{dir}/slot-{n}`
++		if process.exec("mkdir", { slot }).ok then
++			fs.writeFile(`{slot}/owner`, `{me} {myId} {label}`)
++			return slot, {}
++		end
++		local pid, id, held = gateslot.parseOwner(readMaybe(`{slot}/owner`))
++		local free
++		if pid and id then
++			free = not probe.holds(pid, id)
++		else
++			local ok, meta = pcall(fs.metadata, slot)
++			local age = if ok and meta.modifiedAt then os.time() - meta.modifiedAt.unixTimestamp else 0
++			free = age >= unownedSeconds
++		end
++		if free then
++			-- a stale slot: remove it and retry this one; another waiter may win the mkdir, which is fine
++			pcall(fs.removeDir, slot)
++			if process.exec("mkdir", { slot }).ok then
++				fs.writeFile(`{slot}/owner`, `{me} {myId} {label}`)
++				return slot, {}
++			end
++		else
++			table.insert(
++				holders,
++				if held and held ~= "" then `pid {pid} ({held})` else `pid {pid or "starting"}`
++			)
++		end
++	end
++	return nil, holders
++end
++
++-- Gives a slot back, only if this process still owns it.
++function gateslot.release(slot: string, me: string)
++	local pid = gateslot.parseOwner(readMaybe(`{slot}/owner`))
++	if pid == me then
++		pcall(fs.removeDir, slot)
++	end
++end
++
++return gateslot
+diff --git a/z-nile/tests/slot.luau b/z-nile/tests/slot.luau
+new file mode 100644
+index 00000000..8c97b73a
+--- /dev/null
++++ b/z-nile/tests/slot.luau
+@@ -0,0 +1,77 @@
++--!strict
++-- c0157: takes or gives back a machine-wide gate slot (z-nile/tests/lib/gateslot.luau) for a holder process.
++-- Usage: lune run <this file> -- acquire <pid>   waits for a free slot and records <pid> (and its start id) as its holder
++--        lune run <this file> -- release <pid>   gives back the slot <pid> holds, if any
++-- z-nile/check.sh acquires for its own shell before each project's spec stage and releases after it (and on exit), so a
++-- gate killed mid-stage leaves a slot whose holder is gone, which the next waiter takes.
++-- No slot is taken inside a guarded test run (`fence.inRun()`: a gate a spec runs in a fixture already runs in its
++-- outer gate's slot, and the jail refuses the slot folder), unless ZN_GATE_SLOTS names one (the slots' own specs).
++-- ZN_GATE_SLOTS_MAX overrides the count; 0 takes no slot. ZN_GATE_SLOT_WAIT bounds the wait in seconds (the Stop
++-- hook's 300 s budget): past it acquire returns without a slot, and says so. Unset, a gate waits for a slot.
++local fence = require("./lib/fence")
++local gateslot = require("./lib/gateslot")
++local process = require("@lune/process")
++local stdio = require("@lune/stdio")
++local task = require("@lune/task")
++
++local argv: { string } = {}
++for _, a in process.args do
++	if a ~= "--" then
++		table.insert(argv, a)
++	end
++end
++local verb, holder = argv[1], argv[2]
++if (verb ~= "acquire" and verb ~= "release") or holder == nil or not string.match(holder, "^%d+$") then
++	stdio.ewrite("usage: lune run z-nile/tests/slot -- acquire|release <pid>\n")
++	process.exit(2)
++end
++
++local env = process.env
++local explicit = (env.ZN_GATE_SLOTS or "") ~= ""
++local dir = gateslot.dir(env)
++local function cpus(): number
++	local r = if process.os == "macos"
++		then process.exec("sysctl", { "-n", "hw.ncpu" })
++		else process.exec("nproc")
++	return if r.ok then tonumber((string.gsub(r.stdout, "%s+", ""))) or 1 else 1
++end
++local max = tonumber(env.ZN_GATE_SLOTS_MAX or "") or gateslot.slotsFor(cpus(), gateslot.LANES)
++if (fence.inRun() and not explicit) or dir == nil or max < 1 then
++	process.exit(0)
++end
++
++if verb == "release" then
++	for n = 1, max do
++		gateslot.release(`{dir}/slot-{n}`, holder)
++	end
++	process.exit(0)
++end
++
++local holderId = fence.startOf(holder) or "unknown"
++local label = process.cwd
++local probe: gateslot.Probe = {
++	holds = function(pid: string, id: string): boolean
++		local alive = process.exec("kill", { "-0", pid }).ok
++		return fence.holds(alive, if id == "unknown" then nil else id, fence.startOf(pid))
++	end,
++}
++local limit = tonumber(env.ZN_GATE_SLOT_WAIT or "")
++local waited, said = 0, false
++while true do
++	local got, holders = gateslot.try(dir :: string, max, holder, holderId, label, probe, 5)
++	if got then
++		process.exit(0)
++	end
++	if not said then
++		stdio.ewrite(
++			`waiting for a gate slot: {max} of {max} held ({table.concat(holders, ", ")}); slots in {dir}\n`
++		)
++		said = true
++	end
++	if limit ~= nil and waited >= limit then
++		stdio.ewrite(`no gate slot after {limit}s; running without one\n`)
++		process.exit(0)
++	end
++	task.wait(1)
++	waited += 1
++end
