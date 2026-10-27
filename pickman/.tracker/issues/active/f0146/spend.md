@@ -15,6 +15,7 @@
 | 11 | 2026-10-27 00:43 | R0058: refute-001, harvest, lesson | 11 | 0 | 10.0 | focus | code-review |  |
 | 12 | 2026-10-27 03:55 | R0058: review-002 | 0 | 0 | 30.0 | focus | code-review | 150000 |
 | 13 | 2026-10-27 03:56 | f0146: review-002 fixes (Sticks keeps its fold across a dropout; resets only on a change of controller) | 42 | 8 | 20.0 | focus | code-review |  |
+| 14 | 2026-10-27 03:56 | R0058: refute-002, harvest, lesson note | 4 | 2 | 10.0 | focus | code-review |  |
 
-**Total:** +1800 / -45 lines, 360.0 agent-minutes, 330000 tokens over 13 records
-<!-- totals: added=1800 removed=45 minutes=360.0 records=13 tokens=330000 -->
+**Total:** +1804 / -47 lines, 370.0 agent-minutes, 330000 tokens over 14 records
+<!-- totals: added=1804 removed=47 minutes=370.0 records=14 tokens=330000 -->
