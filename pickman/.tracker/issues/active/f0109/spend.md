@@ -20,6 +20,7 @@
 | 16 | 2026-10-26 23:09 | R0056: refute-001, harvest, verification log | 2 | 0 | 15.0 | focus | code-review |  |
 | 17 | 2026-10-27 00:42 | R0056: review-002 | 0 | 0 | 37.0 | focus | code-review | 100000 |
 | 18 | 2026-10-27 00:48 | f0109: main-walls reads Main from the place without comments or strings, counts calls, refuses early returns; the fake refuses RBX names (review 002 F1-F3) | 171 | 59 | 50.0 | focus | code-review |  |
+| 19 | 2026-10-27 00:49 | R0056: refute-002, harvest, lesson | 11 | 0 | 10.0 | focus | code-review |  |
 
-**Total:** +508 / -74 lines, 425.0 agent-minutes, 195000 tokens over 18 records
-<!-- totals: added=508 removed=74 minutes=425.0 records=18 tokens=195000 -->
+**Total:** +519 / -74 lines, 435.0 agent-minutes, 195000 tokens over 19 records
+<!-- totals: added=519 removed=74 minutes=435.0 records=19 tokens=195000 -->

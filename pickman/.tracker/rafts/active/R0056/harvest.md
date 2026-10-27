@@ -2,3 +2,7 @@
 - review-001 F2: zz-test/refusals-tested-on-both-sides
 - review-001 F3: z-design/restated-rules-move-together
 - review-001 F4: one-off: a decided colour's side effect on another view is relayed to that view's issue
+- review-002 F1: zz-test/specs-read-sources-through-the-selector
+- review-002 F2: zz-test/narrowing-pins-the-whole-file
+- review-002 F3: zz-test/refusals-tested-on-both-sides
+- review-002 F4: one-off: a main with committed conflict markers is merged only after its fix lands
