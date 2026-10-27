@@ -47,6 +47,8 @@ return t.spec("c0117 a new raft's check.sh (R0052 code review 003 F2)", function
 				reset = head .. "\n_ac_failed=0\nfinish\n",
 				substitution = head .. '\ncheck "RC1: x" true $(_ac_failed=0)\nfinish\n',
 				brace = head .. '\ncheck "RC1: x" true ${_ac_failed:=0}\nfinish\n',
+				quotedsubstitution = head .. '\ncheck "RC1: x" true "$(_ac_failed=0)"\nfinish\n',
+				quotedbrace = head .. '\ncheck "RC1: x" true "${_ac_failed:=0}"\nfinish\n',
 				backquote = head .. '\ncheck "RC1: x" true `x`\nfinish\n',
 				redirect = head .. '\ncheck "RC1: x" true > /dev/null\nfinish\n',
 				andand = head .. '\ncheck "RC1: x" true && exit 0\nfinish\n',

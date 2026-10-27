@@ -288,6 +288,14 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					files = { [c0092] = inRaft(doc(c0092), "R0040") },
 					says = "only between empty and a raft this PR carries",
 				},
+				-- a new raft straight into active/, outside the backlog folder
+				{
+					n = 61,
+					files = {
+						["pickman/.tracker/rafts/active/R0051/R0051.md"] = "---\nid: R0051\ntitle: x\nissues: []\n---\n",
+					},
+					says = "outside the backlog folder",
+				},
 				-- a retired raft's document
 				{
 					n = 55,
