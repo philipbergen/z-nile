@@ -68,7 +68,14 @@ local function probe(): string
 		"",
 	}, "\n")
 end
+-- the same PR with a lighter stage list (the PR may change the list: it is read from the merged tree), for the cases
+-- that test merge-check's own loop rather than what the stages judge (design review 005 F2: the spec's time on CI)
+local LIGHT = "notrial */.tracker/**/spend.md -- spend rows (the user's decision, 2026-10-26)\n"
+	.. "run z-nile tests/tooling/c0152-trial-probe.spec.luau -- the trial's own guards, and a move of main during it\n"
+	.. "run z-nile tests/acceptance/c0082/real-tree.spec.luau -- audit\n"
+	.. "run z-nile tests/acceptance/c0120/check-paths.spec.luau -- check-paths\n"
 local f: trackerfix.Fixture
+local light = ""
 local head = ""
 local baseline = ""
 
@@ -143,6 +150,14 @@ return t.spec(
 			seed[OLD_SPEC] = "return nil\n"
 			seed[PROBE] = probe()
 			f = trackerfix.new("c0152-merge-check", seed)
+			-- no automatic gc: the seed leaves thousands of loose objects, and a detached gc in the origin would pack them
+			-- away while a later push moves objects in ("unable to write file ./objects/…", seen on a full run)
+			for _, repo in { f.main, f.other } do
+				fixture.git(repo, { "config", "gc.auto", "0" })
+			end
+			-- the bare origin through its config file (the fixture helper runs git only in a work tree)
+			fixture.git(f.main, { "config", "--file", `{f.origin}/config`, "gc.auto", "0" })
+			fixture.git(f.main, { "config", "--file", `{f.origin}/config`, "receive.autogc", "false" })
 			-- the PR: code, c0901's document, a new item, and the deletion of a spec
 			fixture.git(f.main, { "checkout", "-q", "-b", "pr" })
 			fs.writeFile(`{f.main}/z-nile/engine/c0152-demo.luau`, "return nil\n")
@@ -153,6 +168,11 @@ return t.spec(
 			fixture.git(f.main, { "add", "-A" })
 			fixture.git(f.main, { "commit", "-qm", "the PR" })
 			head = trim(fixture.git(f.main, { "rev-parse", "HEAD" }))
+			fixture.git(f.main, { "checkout", "-q", "-b", "pr-light" })
+			fs.writeFile(`{f.main}/z-nile/tests/merge-stages.txt`, LIGHT)
+			fixture.git(f.main, { "commit", "-qam", "the PR, with a lighter stage list" })
+			light = trim(fixture.git(f.main, { "rev-parse", "HEAD" }))
+			fixture.git(f.main, { "checkout", "-q", "pr" })
 			baseline = originMain()
 			local r = check()
 			t.expect(r.code).toBe(0)
@@ -336,7 +356,7 @@ return t.spec(
 					{ [R .. "c0902/spend.md"] = "| a spend row |\n| another |\n" },
 					"tracker: spend"
 				)
-				local r = check()
+				local r = check(light)
 				if r.code ~= 0 then
 					error(`expected ok:\n{r.stdout}{r.stderr}`)
 				end
@@ -352,7 +372,7 @@ return t.spec(
 			local moved = moveDuringTrial({
 				[R .. "c0905/c0905.md"] = stub("c0905", "c0152-fixture-five", "new-a-b-c"),
 			}, "tracker: new c0905")
-			local r = check()
+			local r = check(light)
 			if r.code ~= 0 then
 				error(`expected ok:\n{r.stdout}{r.stderr}`)
 			end
@@ -361,7 +381,7 @@ return t.spec(
 			t.expect(has(r.stdout, `judged main {moved}`)).toBe(true)
 			reset()
 			moveDuringTrial({ ["z-nile/engine/late.luau"] = "return nil\n" }, "code, mid-check")
-			local r2 = check()
+			local r2 = check(light)
 			t.expect(r2.code).toBe(1)
 			t.expect(has(r2.stdout, "z-nile/engine/late.luau is not tracker state")).toBe(true)
 			t.expect(has(r2.stdout, "judged main")).toBe(false)
@@ -371,7 +391,7 @@ return t.spec(
 		-- design review 004 F1: the bound is three trials
 		it("three tracker moves during the check: a no after the third trial", function()
 			movesDuringTrial({ item("0911"), item("0912"), item("0913"), item("0914") })
-			local r = check()
+			local r = check(light)
 			t.expect(r.code).toBe(1)
 			t.expect(trials(r.stdout)).toBe(3)
 			t.expect(has(r.stdout, "origin's main kept moving during the check (3 trials)")).toBe(true)
@@ -391,7 +411,7 @@ return t.spec(
 					msg = "tracker: spend, late",
 				},
 			})
-			local r = check()
+			local r = check(light)
 			if r.code ~= 0 then
 				error(`expected ok:\n{r.stdout}{r.stderr}`)
 			end
@@ -403,7 +423,7 @@ return t.spec(
 
 		-- design review 004 F2: a spend row for a folder the PR moved away belongs to no live item: tried, and audit says no
 		it("a first spend row at the old folder of an item the PR moves is tried again", function()
-			fixture.git(f.main, { "checkout", "-q", "-b", "pr-move", head })
+			fixture.git(f.main, { "checkout", "-q", "-b", "pr-move", light })
 			fs.writeDir(`{f.main}/{R}done`)
 			fixture.git(f.main, { "mv", R .. "c0901", R .. "done/c0901" })
 			fixture.git(f.main, { "commit", "-qm", "the PR moves c0901 to done/" })
@@ -424,6 +444,41 @@ return t.spec(
 			).toBe(true)
 			fixture.git(f.main, { "checkout", "-q", "pr" })
 			fixture.git(f.main, { "branch", "-q", "-D", "pr-move" })
+			reset()
+		end)
+
+		-- design review 005 F1: the other half of the live-item rule (main's copy, when the PR didn't touch the folder)
+		it("main moves an item the PR doesn't touch, then a spend row at its old folder: never ok", function()
+			-- the probe pushes a move of c0902 on trial 1 (tracker state, not notrial: a second trial), then a first spend
+			-- row at c0902's old folder on trial 2 (notrial by glob, but no live item in main's copy: a third trial).
+			-- Main first moves past the PR's base, so the check runs a trial at all.
+			trackerfix.elsewhere(f, { [R .. "c0902/spend.md"] = "| a spend row |\n" }, "tracker: spend c0902")
+			fetch()
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fs.writeDir(`{f.other}/{R}done`)
+			fixture.git(f.other, { "mv", R .. "c0902", R .. "done/c0902" })
+			fixture.git(f.other, { "commit", "-qm", "tracker: done c0902" })
+			local moved = trim(fixture.git(f.other, { "rev-parse", "HEAD" }))
+			fs.writeDir(`{f.other}/{R}c0902`)
+			fs.writeFile(`{f.other}/{R}c0902/spend.md`, "| a row from a session that missed the done |\n")
+			fixture.git(f.other, { "add", "-A" })
+			fixture.git(f.other, { "commit", "-qm", "tracker: spend c0902 (old folder)" })
+			local row = trim(fixture.git(f.other, { "rev-parse", "HEAD" }))
+			fs.writeFile(TRIGGER, `{moved}\n{row}\n`)
+			local r = check(light)
+			if r.code ~= 1 or has(r.stdout, "judged main") then
+				error(`expected a no:\n{r.stdout}{r.stderr}`)
+			end
+			t.expect(
+				has(r.stdout, "the merged tree fails z-nile/tests/acceptance/c0114/classified.spec.luau")
+					or has(
+						r.stdout,
+						"the merged tree fails z-nile/tests/acceptance/c0082/real-tree.spec.luau"
+					)
+			).toBe(true)
+			if fs.isFile(TRIGGER) then
+				fs.removeFile(TRIGGER)
+			end
 			reset()
 		end)
 

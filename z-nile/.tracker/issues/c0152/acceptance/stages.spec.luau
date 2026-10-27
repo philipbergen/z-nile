@@ -44,11 +44,17 @@ end
 return t.spec("c0152 the gate stages that read tracker files are one complete list", function(it)
 	it("every spec the search finds is run or skipped with a reason", function()
 		local kind = listed()
-		local r = process.exec(
-			"git",
-			{ "grep", "-lE", PATTERN, "--", "z-nile/tests/**/*.spec.luau", "pickman/tests/**/*.spec.luau" },
-			{ cwd = TOP }
-		)
+		local r = process.exec("git", {
+			"grep",
+			"-lE",
+			PATTERN,
+			"--",
+			"z-nile/tests/**/*.spec.luau",
+			"pickman/tests/**/*.spec.luau",
+			-- c0152's own promoted specs: this one holds the pattern, and merge-check.spec reads only its fixture
+			-- (found when the promoted specs ran on CI, design review 005 F2)
+			":(exclude)z-nile/tests/acceptance/c0152/**",
+		}, { cwd = TOP })
 		t.expect(r.ok).toBe(true)
 		local missing: { string } = {}
 		for p in string.gmatch(r.stdout, "[^\n]+") do

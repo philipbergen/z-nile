@@ -15,3 +15,6 @@
 - design-review-004 F1: zz-test/loop-bounds-reach-the-bound
 - design-review-004 F2: zz-arch/skips-pin-what-they-verified
 - design-review-004 F3: z-design/instructions-runnable-where-they-run
+- design-review-005 F1: zz-test/either-branch-picks-a-different-source
+- design-review-005 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F3: z-design/instructions-runnable-where-they-run
