@@ -12,6 +12,7 @@
 | 8 | 2026-10-26 04:01 | design-refute-004 | 0 | 0 | 30.0 | spend | design-review |  |
 | 9 | 2026-10-26 04:14 | design-review-005 | 0 | 0 | 7.0 | spend | design-review |  |
 | 10 | 2026-10-26 04:15 | design-refute-005 | 0 | 0 | 12.0 | spend | design-review |  |
+| 11 | 2026-10-27 02:37 | f0110: touch FIRE and JUMP buttons (Touch zones and placement, Controls hook, HudView discs, Main) | 177 | 16 | 25.0 | focus | build |  |
 
-**Total:** +0 / -0 lines, 148.0 agent-minutes, 0 tokens over 10 records
-<!-- totals: added=0 removed=0 minutes=148.0 records=10 tokens=0 -->
+**Total:** +177 / -16 lines, 173.0 agent-minutes, 0 tokens over 11 records
+<!-- totals: added=177 removed=16 minutes=173.0 records=11 tokens=0 -->
