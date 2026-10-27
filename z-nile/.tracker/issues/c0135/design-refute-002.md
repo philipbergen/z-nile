@@ -1,0 +1,5 @@
+# Refute 002: c0135 (design mode)
+
+- F1: fixed: the pure case adds a one-op plan with `same` and `same-2` taken, expecting `same-3`; the Rules table gains "a suffix a raft already has is skipped, per slug" with M17 (a one-step suffix, and a counter shared across the plan): both fail that case on the prototype. consequences: none (the rule was already per slug; now pinned).
+- F2: fixed: the Design says an emergent issue lives on its raft branch until it lands, so a capture on main (or another stream) can take its slug meanwhile; the gate's audit reports it when the branch merges main, and the raft renames its own emergent issue's `slug:`. consequences: none for the code (closing the window would mean publishing branch-only items, which the capture does not ask for).
+- F3: fixed: the hint is `(edit slug: in all but one; branch and worktree names need not follow)`, the Design says the fix is a hand edit of one `slug:` line and that branch and worktree names keep the old slug, and the audit case applies that fix (renames c0099's `slug:`) and expects a clean audit. consequences: the whole-line pin in slugs.spec changes with the hint.

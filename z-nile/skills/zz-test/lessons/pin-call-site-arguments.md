@@ -16,4 +16,8 @@ R0035 code review 001 (F1, F2): the same gap came back on new adapter branches. 
 
 R0035 code review 002 (F1): the stub-engine spec for HudView's bars compared positions relative to their parent frame, so deleting the frame's own placement passed. Compare GUI positions in the screen coordinates the player sees: the parent's placement plus the child's.
 
+c0154 code review 001 (F1): the pure `render(old, runs, keep)` was pinned, but nothing pinned what the runner passes it: `keep` on every run (not only a full one), or `{}` instead of the recorded record, each turned every `--affected` run into a record of only its subset, and schedule.spec stayed green. A partial run through the real runner, from a hand-written record, pins both.
+
+f0146 design review 001 (F1): source pins on Controls and Sticks passed `if action == Pad.CONTINUE` (an action compared with a key name, never true) and `Pad.steer(steer, x, -y)` (an inverted stick). Running both on a stub engine with a recording handler per bound code list, a scripted `GetGamepadState` and a Heartbeat the case fires killed both.
+
 R0056 code review 001 F1: f0109's place case found `MazeView.edible(model, View.edible(frame.play))` in Main's text, so the call moved into the flash block (run only when the flash toggles) or guarded with `and false` passed every case. A wiring check pins where the call runs (which blocks enclose it in the handler), not only that it is written.

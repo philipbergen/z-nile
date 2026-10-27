@@ -1,0 +1,14 @@
+- design-review-001 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F2: zz-review/lists-paste-their-search
+- design-review-001 F3: one-off: a tolerance compare written as `> eps` lets NaN take the equal branch
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/spec-design-correspondence
+- note renamed.id sends today's f0100 to f0011 (the map's f0100 is a pre-compaction id): zz-test/split-paths-still-need-renamed-id
+- design-review-002 F1: z-design/spec-design-correspondence
+- design-review-002 F2: z-design/spec-design-correspondence
+- design-review-002 F3: one-off: an absolute tolerance's range is stated where its users read it
+- design-review-002 F4: zz-review/lists-paste-their-search
+- design-review-002 F5: z-design/never-narrow-captured-scope
+- design-review-003 F1: zz-review/run-the-evidence-you-cite
+- design-review-003 F2: z-design/spec-design-correspondence
+- note this shell's PATH put Homebrew's Lune 0.11.1 before rokit's pinned 0.10.5, so local runs used another Lune than CI: zz-test/run-the-pinned-tools
