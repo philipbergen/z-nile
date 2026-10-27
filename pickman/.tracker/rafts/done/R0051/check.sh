@@ -14,7 +14,7 @@ done
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0051
 
 F0110="$("$ZN_ROOT/zn" find f0110)"
-F0110_SPECS="$ZN_ROOT/$F0110/acceptance"
+F0110_SPECS="$PWD/$F0110/acceptance" # zn find prints from the home ac.sh cds to (user-approved fix, 2026-10-26)
 [[ -d $F0110_SPECS ]] || F0110_SPECS="$PWD/tests/acceptance/f0110"
 check "RC1: a touch ghost hunt end to end: a fire tap eats the ghost the look points at, and a hop tap hops" lune run tests/run -- "$F0110_SPECS/hunt.spec.luau"
 
