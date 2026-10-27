@@ -18,3 +18,4 @@
 - design-review-005 F2: one-off: a capture edit still landing (its local gate queued behind another session's) when the refute said it had landed
 - design-review-005 F3: z-design/restated-rules-move-together
 - design-review-005 F4: z-design/prove-specs-pass-on-a-prototype
+- note the takeover merge of main (2026-10-26) committed conflict markers in architecture.md (fixed by fix-arch-markers): zz-rules/grep-markers-before-merge-commit
