@@ -300,6 +300,14 @@ return t.spec("touch adapters", function(it)
 				t.expect(press(w, name, "Begin")).toBe(w.enum.ContextActionResult.Sink)
 				t.expect(press(w, name, "End")).toBe(w.enum.ContextActionResult.Sink)
 			end
+			-- the pad's buttons too (R0058 review 001 F5): sunk, but the continue passed on, going down and up
+			for name in Pad.BUTTONS do
+				local want = if name == Pad.CONTINUE
+					then w.enum.ContextActionResult.Pass
+					else w.enum.ContextActionResult.Sink
+				t.expect(press(w, name, "Begin")).toBe(want)
+				t.expect(press(w, name, "End")).toBe(want)
+			end
 		end
 	)
 

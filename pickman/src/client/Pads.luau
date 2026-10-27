@@ -31,23 +31,24 @@ function Pads.start()
 	end)
 end
 
--- A stick's position (KeyCode name "Thumbstick1" or "Thumbstick2") on the controller that drives; nil when none
--- drives yet or it is disconnected.
-function Pads.stick(name: string): (number?, number?)
+-- A stick's position (KeyCode name "Thumbstick1" or "Thumbstick2") on the controller that drives, and that
+-- controller's input type name (so a fold over the readings can tell when its source changed); nil when none drives
+-- yet or it is disconnected.
+function Pads.stick(name: string): (number?, number?, string?)
 	local current = active
 	if current == nil then
-		return nil
+		return nil, nil, nil
 	end
 	local pad = (Enum.UserInputType :: any)[current]
 	if not UserInputService:GetGamepadConnected(pad) then
-		return nil
+		return nil, nil, nil
 	end
 	for _, state in UserInputService:GetGamepadState(pad) do
 		if state.KeyCode.Name == name then
-			return state.Position.X, state.Position.Y
+			return state.Position.X, state.Position.Y, current
 		end
 	end
-	return nil
+	return nil, nil, nil
 end
 
 return Pads

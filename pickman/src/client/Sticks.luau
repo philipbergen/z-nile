@@ -11,13 +11,20 @@ local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 
 local Sticks = {}
 
-function Sticks.start(stick: (name: string) -> (number?, number?))
+function Sticks.start(stick: (name: string) -> (number?, number?, string?))
 	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
 	local steer = Pad.steerStart()
+	local source: string? = nil -- the controller the fold's state came from
 	RunService.Heartbeat:Connect(function()
-		local x, y = stick("Thumbstick1")
+		local x, y, from = stick("Thumbstick1")
 		if x == nil or y == nil then
+			-- nothing to read (a disconnect): the fold starts afresh, so the next push of any controller counts
+			steer, source = Pad.steerStart(), nil
 			return
+		end
+		if from ~= source then
+			-- another controller drives now: its stick is a new reading, not the old one held (R0058 review 001 F3)
+			steer, source = Pad.steerStart(), from
 		end
 		local emitted: Movement.Intent?
 		steer, emitted = Pad.steer(steer, x, y)

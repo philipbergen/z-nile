@@ -44,7 +44,7 @@ end
 -- gamepad of `magnitude` (1 for a button, the tilt for a stick) takes over when it is at least STEER_OFF, so an idle
 -- pad's drift never does; any other input keeps the one before.
 function Pad.track(active: string?, inputType: string, magnitude: number): string?
-	if Pad.isPad(inputType) and magnitude == magnitude and magnitude >= Pad.STEER_OFF then
+	if Pad.isPad(inputType) and finite(magnitude) and magnitude >= Pad.STEER_OFF then
 		return inputType
 	end
 	return active

@@ -11,6 +11,7 @@
 | 7 | 2026-10-26 23:17 | f0146: Logic/Pad, Pads, Sticks, the pad in Controls, Camera, FlowView and the lobby, the documents (from the reviewed prototype) | 269 | 2 | 20.0 | focus | build |  |
 | 8 | 2026-10-26 23:38 | f0146: Verification log (Phase 3) | 0 | 0 | 5.0 | focus | build |  |
 | 9 | 2026-10-27 00:36 | R0058: review-001 | 0 | 0 | 40.0 | focus | code-review | 180000 |
+| 10 | 2026-10-27 00:43 | f0146: review-001 fixes (stub-run Camera, LobbyPad, Pads and Sticks; Sticks resets on a change of source; finite track) | 622 | 12 | 45.0 | focus | code-review |  |
 
-**Total:** +1125 / -25 lines, 255.0 agent-minutes, 180000 tokens over 9 records
-<!-- totals: added=1125 removed=25 minutes=255.0 records=9 tokens=180000 -->
+**Total:** +1747 / -37 lines, 300.0 agent-minutes, 180000 tokens over 10 records
+<!-- totals: added=1747 removed=37 minutes=300.0 records=10 tokens=180000 -->

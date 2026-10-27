@@ -20,7 +20,7 @@ local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- t
 local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
 local hopped: number? = nil -- the tick the latest hop started, from the server's frame (f0101)
 local yaw: number? = nil
-local padStick: ((name: string) -> (number?, number?))? = nil -- the driving controller's sticks (Pads.stick)
+local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
 local cursor = false -- the mouse is free (and shown) for a prompt
 local current: Awareness.Pose? = nil
 -- a touch looked, or a finger went down or came up, since the last render step; and a finger is down (the
@@ -85,7 +85,7 @@ function Camera.setCursor(free: boolean)
 end
 
 -- The driving controller's sticks (f0146: Pads.stick, the one tracker Sticks reads too).
-function Camera.pad(read: (name: string) -> (number?, number?))
+function Camera.pad(read: (name: string) -> (number?, number?, string?))
 	padStick = read
 end
 
