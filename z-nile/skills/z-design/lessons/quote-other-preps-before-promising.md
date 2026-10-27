@@ -6,7 +6,7 @@ check: Does every rule this design says another issue will follow ("f0146 keeps 
 ---
 An issue in flight elsewhere may already have settled the point differently. A design that assumes it will follow this one's plan writes a promise nobody keeps.
 
-**Why:** f0126 design review 006 F2: f0126 bound the controller's Y in `View.KEYS` and said f0146 would keep it, while f0146's prep (in flight) had already put every gamepad button in its own exactly-pinned `Pad.BUTTONS`; the user then chose to land f0126 after f0146, as a row of that table. f0158 design review 001 F5: the capture asked the ring to clear the touch buttons, but f0158 never read f0110's in-flight prep, whose FIRE button sits under the ring on 480×320; neither issue said who checks the overlap.
+**Why:** f0126 design review 006 F2: f0126 bound the controller's Y in `View.KEYS` and said f0146 would keep it, while f0146's prep (in flight) had already put every gamepad button in its own exactly-pinned `Pad.BUTTONS`; the user then chose to land f0126 after f0146, as a row of that table. f0158 design review 001 F5: the capture asked the ring to clear the touch buttons, but f0158 never read f0110's in-flight prep, whose FIRE button sits under the ring on 480×320; neither issue said who checks the overlap. f0158 design review 002 F2: after round 1 made f0158 own FIRE's clearance, f0126's prepared PICK button, next in the same row, sat under the ring on seven screens and neither document said who owned it.
 
 **How to apply:** for each issue the design leans on, find its prep worktree (`git worktree list`), read its current design and specs, quote what they say, and run their specs on a merged prototype. Where they disagree, ask the user or that prep before writing the promise.
 

@@ -9,8 +9,8 @@
 -- frame's top-left. Every f0029 sample screen (tests/acceptance/f0029/jump.spec.luau's SAMPLES, copied below) is
 -- checked, plus the short screens under a 58 px top bar (480 x 320 and 320 x 568) and their turns, on desktop (no
 -- touch controls) and on touch. No dot may overlap a box unless ACCEPTED (G9, the user's) names that screen and box.
--- f0110's FIRE and HOP buttons (Touch.buttons(l).fire and .hop, f0110 lands first) are touch boxes too: f0158 owns
--- this clearance (review 001 F5, the coordinator 2026-10-26, after z-design/design-the-execution-window).
+-- f0110's FIRE and HOP buttons (Touch.buttons(l).fire and .hop, f0110 lands first) and f0126's PICK button
+-- (Touch.buttons(l).pick, f0126 lands first; review 002 F2) are touch boxes too: f0158 owns this clearance (review 001 F5, the coordinator 2026-10-26, after z-design/design-the-execution-window).
 local Awareness: any = require("@logic/Awareness")
 local Hud = require("@logic/Hud")
 local Touch = require("@logic/Touch")
@@ -23,10 +23,15 @@ type Screen = { name: string, width: number, height: number, inset: Inset?, devi
 -- G9, decided with the user 2026-10-26: "Accept those overlaps": the ring stays 60% everywhere, and exactly these
 -- controls may draw over its dots (each draws above the ring, which takes no input); any other overlap fails
 local ACCEPTED: { [string]: { [string]: boolean } } = {
-	["old phone, landscape"] = { fire = true },
-	["old phone, landscape, under a 58 px top bar"] = { fire = true },
+	["old phone, landscape"] = { fire = true, pick = true },
+	["old phone, landscape, under a 58 px top bar"] = { fire = true, pick = true },
 	["small phone, portrait, under a 58 px top bar"] = { radar = true },
-	["old phone, portrait, under a 58 px top bar"] = { radar = true, jump2 = true, fire = true },
+	["old phone, portrait, under a 58 px top bar"] = { radar = true, jump2 = true, fire = true, pick = true },
+	-- G10, decided with the user 2026-10-26: "Accept these too": f0126's PICK button over the ring on these screens
+	["small phone, landscape"] = { pick = true },
+	["small phone, landscape, under a 58 px top bar"] = { pick = true },
+	["small phone, landscape 667, under a 58 px top bar"] = { pick = true },
+	["desktop 1024"] = { pick = true },
 }
 local RADAR = (Awareness.RADAR_RADIUS * 2 + 1) * 8 -- DangerHud's CELL, f0029's SIZE
 local ZERO: Inset = { top = 0, bottom = 0, left = 0, right = 0 }
@@ -126,6 +131,7 @@ local function hudBoxes(s: Screen, touch: boolean): { [string]: Rect }
 		local buttons = (Touch :: any).buttons(l)
 		out.fire = buttons.fire
 		out.hop = buttons.hop
+		out.pick = buttons.pick -- f0126's (f0158 depends on it); no escape when absent: the accepted-overlap case fails
 		for i, j in Hud.jumpButtons(l.safeX, l.safeY, l.safeW, l.safeH) do
 			out["jump" .. i] = j
 		end

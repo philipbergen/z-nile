@@ -5,7 +5,8 @@
 -- after a second step (reused, not remade), each at the box Awareness.ring gives for the indicators Awareness
 -- computes; a lit dot in View.DANGER_COLOR at transparency 1 - (lit.min + (lit.max - lit.min) x brightness), an
 -- unlit one white at 1 - RING.idle, so a near dangerous ghost's sector is more opaque than a far one's (review 001
--- F2). The ring's screen is the core-UI safe area, below Roblox's top bar (G8, the HUD's own frame), under the HUD
+-- F2), and every dot is round and anchored at its box's top-left (review 002 F3). When the Ring screen's area differs
+-- from the screen's, the dots follow the Ring screen's area (review 002 F1). The ring's screen is the core-UI safe area, below Roblox's top bar (G8, the HUD's own frame), under the HUD
 -- (DisplayOrder below the HUD's 1). The edge
 -- glows' boxes are gone and the adapter does no geometry (source reads).
 -- Casts keep the spec type-legal on main before f0158 (Awareness.ring, RING, View.DANGER_COLOR) and f0109 (fake.module)
@@ -99,6 +100,16 @@ return t.spec("f0158 ring adapter", function(it)
 			for i, f in frames do
 				local d = want[i]
 				t.expect(f.Visible).toBe(true)
+				-- round, and anchored at its box's top-left (review 002 F3): a centre anchor would draw the ring half a dot off
+				t.expect(f.AnchorPoint == nil or (f.AnchorPoint.X == 0 and f.AnchorPoint.Y == 0)).toBe(true)
+				local corners = 0
+				for _, c in f:GetChildren() do
+					if c.ClassName == "UICorner" then
+						corners += 1
+						t.expect(c.CornerRadius.Scale).toBe(0.5)
+					end
+				end
+				t.expect(corners).toBe(1)
 				t.expect(near(f.Position.X.Offset, d.x) and near(f.Position.Y.Offset, d.y)).toBe(true)
 				t.expect(near(f.Size.X.Offset, d.w) and near(f.Size.Y.Offset, d.h)).toBe(true)
 				local c = f.BackgroundColor3
@@ -125,6 +136,20 @@ return t.spec("f0158 ring adapter", function(it)
 			for i, f in frames do
 				t.expect(again[i] == f).toBe(true)
 			end
+			-- review 002 F1: the ring is sized and centred by its own screen's area (G8), not the radar's or the camera's.
+			-- The fake gives every screen the screen's size, so the Ring screen gets a core-UI-sized area (f0029's
+			-- 58 / 21 / 59 / 59 inset) while the Danger screen keeps W x H.
+			local cw, ch = W - 118, H - 79
+			ring.AbsoluteSize = { X = cw, Y = ch }
+			t.expect(view.playerGui:FindFirstChild("Danger").AbsoluteSize.X).toBe(W)
+			view.renderStepped:fire(1 / 60)
+			local inner =
+				Awareness.ring(Awareness.indicators(classic, pose, ghosts, { inView = true }), cw, ch)
+			for i, f in ring:GetChildren() do
+				local d = inner[i]
+				t.expect(near(f.Position.X.Offset, d.x) and near(f.Position.Y.Offset, d.y)).toBe(true)
+				t.expect(near(f.Size.X.Offset, d.w) and near(f.Size.Y.Offset, d.h)).toBe(true)
+			end
 		end
 	)
 
@@ -147,7 +172,11 @@ return t.spec("f0158 ring adapter", function(it)
 				table.insert(orders, tonumber(n) :: number)
 			end
 			t.expect(#orders).toBe(1)
-			t.expect(orders[1] < 1).toBe(true)
+			-- below 0 (review 002 F4): the radar (Danger, the default 0), the Flow overlay and the HUD (1) draw over the
+			-- ring, which G9's accepted overlaps rely on
+			t.expect(orders[1] < 0).toBe(true)
+			local flow = string.match(source("FlowView"), "DisplayOrder%s*=%s*(%-?%d+)")
+			t.expect(flow == nil or (tonumber(flow) :: number) > orders[1]).toBe(true)
 			t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
 		end
 	)
