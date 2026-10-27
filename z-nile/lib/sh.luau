@@ -23,8 +23,9 @@ function sh.run(cmd: string, args: { string }, stdin: string?): Result
 end
 
 -- Run with output streamed to the terminal; returns success.
-function sh.stream(cmd: string, args: { string }): boolean
-	return process.exec(cmd, args, { stdio = { stdout = "forward", stderr = "forward" } }).ok
+-- `env` adds variables to the child's environment (c0144: NO_COLOR for a run told not to color).
+function sh.stream(cmd: string, args: { string }, env: { [string]: string }?): boolean
+	return process.exec(cmd, args, { env = env, stdio = { stdout = "forward", stderr = "forward" } }).ok
 end
 
 -- sh.stream with `dir` as the working directory (c0120: a project's specs run from its home).

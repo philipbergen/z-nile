@@ -9,6 +9,7 @@ local gateLib = require("./gate")
 local idsLib = require("./ids")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local look = require("./look")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -20,6 +21,7 @@ local spend = require("./spend")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
+local term = require("./term")
 local trailLib = require("./trail")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
@@ -88,7 +90,47 @@ local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retire
 -- the issue, raft and prompt templates: engine files, shared by every project (c0114)
 local TEMPLATES = "z-nile/templates"
 
+-- c0144: how output is shown. The dispatch at the end of this file sets the --color choice before any command runs;
+-- the mode is worked out on first use: one probe of stdout (`[ -t 1 ]` in a child that shares it) and, on a
+-- terminal, one of its width. Nothing is exported to child processes, so a nested ./zn decides for its own stdout.
+local colorChoice: term.Choice = "auto"
+local outMode: term.Mode? = nil
+
+local function isTerminal(fd: number): boolean
+	return process.exec("sh", { "-c", `[ -t {fd} ]` }, { stdio = { stdout = "forward", stderr = "forward" } }).ok
+end
+
+local function terminalColumns(): number?
+	local r = process.exec("sh", { "-c", "stty size </dev/tty 2>/dev/null" })
+	return if r.ok then tonumber(string.match(r.stdout, "%d+%s+(%d+)") or "") else nil
+end
+
+local function outputMode(): term.Mode
+	if not outMode then
+		local tty = isTerminal(1)
+		outMode = term.decide(colorChoice, process.env, tty, if tty then terminalColumns() else nil)
+	end
+	return outMode :: term.Mode
+end
+
+-- Prints `text` as it is, or on a terminal the lines `rich` makes of it.
+local function say(text: string, rich: ((term.Mode, string) -> { string })?)
+	local m = outputMode()
+	if m.rich and rich then
+		for _, l in rich(m, text) do
+			print(l)
+		end
+	else
+		print(text)
+	end
+end
+
 local function fail(msg: string): never
+	-- a refusal on a terminal's stderr is shown in the error style; piped, it is today's text
+	local m = term.decide(colorChoice, process.env, isTerminal(2), nil)
+	if m.color then
+		msg = term.paint(m, "error", term.glyph(m, "error") .. " " .. msg)
+	end
 	stdio.ewrite(msg .. "\n")
 	return process.exit(1)
 end
@@ -763,8 +805,11 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--tags"
 			or a == "--uncovered"
 			or a == "--apply"
+			or a == "--no-color"
 		then
 			opts[a] = { "true" }
+		elseif string.sub(a, 1, 8) == "--color=" then
+			opts["--color"] = { string.sub(a, 9) }
 		elseif string.sub(a, 1, 1) == "-" then
 			opts[a] = opts[a] or {}
 			table.insert(opts[a], args[i + 1] or "")
@@ -1575,14 +1620,33 @@ function cmd.status(pos: { string })
 	if not id then
 		local listed = originPaths()
 		local roots = originRoots() :: { string }
+		local lines: { string } = {}
+		local rows: { look.StatusRow } = {}
 		for _, p in listed do
 			-- the item's own document only: spend.md sits beside it and must not list the item twice
 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
 			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
+				local state = statusLib.effective(front, stateOfPath(p))
+				table.insert(lines, `{fid} {state} {front.title or ""}`)
+				local root = projects.rootOf(p, roots)
+				table.insert(rows, {
+					id = fid,
+					state = state,
+					kind = if string.sub(fid, 1, 1) == "R"
+						then (front.type or "raft")
+						else (store.TYPES[string.sub(fid, 1, 1)] or "?"),
+					title = front.title or "",
+					raft = front.raft or "",
+					claim = string.match(front.status or "", "^%a+%-(.+)$") or "",
+					project = (root and projects.folderOf(root)) or root or "",
+					url = `file://{process.cwd}{p}`,
+				})
 			end
 		end
+		say(table.concat(lines, "\n"), function(m: term.Mode): { string }
+			return look.status(m, rows)
+		end)
 		return
 	end
 	if not to then
@@ -2323,8 +2387,18 @@ function cmd.find(pos: { string })
 end
 
 function cmd.members(pos: { string })
+	local paths: { string } = {}
 	for _, m in store.members(pos[1] or fail("usage: members <R-id>")) do
-		print(callerPath(m.dir))
+		table.insert(paths, callerPath(m.dir))
+	end
+	if #paths > 0 then
+		say(table.concat(paths, "\n"), function(mo: term.Mode): { string }
+			return look.members(mo, paths, function(path: string): string?
+				local id = string.match(path, "([fdcR]%d%d%d%d)$")
+				local item = id and store.find(id)
+				return if item then `file://{process.cwd}{item.doc}` else nil
+			end)
+		end)
 	end
 end
 
@@ -2562,6 +2636,10 @@ end
 -- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
 -- While a move's freeze is on (freezesOn: c0120's, c0115's), a branch it ignores, a worktree on one, and an active raft
 -- that lists the item, are named on stderr and not counted.
+local function busyLook(m: term.Mode, line: string): { string }
+	return look.busy(m, { line })
+end
+
 function cmd.busy(pos: { string })
 	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
 	local own = string.match(current, "^(R%d%d%d%d)%-")
@@ -2595,7 +2673,7 @@ function cmd.busy(pos: { string })
 			if ownOf then
 				stdio.ewrite(`ignored for {ownOf}'s freeze: raft {r} ({ownOf}'s own)\n`)
 			else
-				print(`raft {r} is active`)
+				say(`raft {r} is active`, busyLook)
 				found += 1
 			end
 		end
@@ -2606,7 +2684,7 @@ function cmd.busy(pos: { string })
 		if item then
 			stdio.ewrite(`ignored for {item}'s freeze: {short} ({why})\n`)
 		else
-			print(`branch {short} changes {table.concat(paths, ", ")}`)
+			say(`branch {short} changes {table.concat(paths, ", ")}`, busyLook)
 			found += 1
 		end
 	end
@@ -2621,7 +2699,7 @@ function cmd.busy(pos: { string })
 		if item then
 			stdio.ewrite(`ignored for {item}'s freeze: worktree {wt} on {on} ({why})\n`)
 		else
-			print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
+			say(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`, busyLook)
 			found += 1
 		end
 	end
@@ -2658,6 +2736,8 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
+	local listLines: { string } = {}
+	local listRows: { look.ListRow } = {}
 	for _, kind in { "raft", "issue" } do
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
@@ -2671,7 +2751,8 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 					local ftype = if kind == "issue"
 						then store.TYPES[string.sub(f.id, 1, 1)]
 						else (fm.type or "?")
-					print(
+					table.insert(
+						listLines,
 						string.format(
 							"%-6s %-8s %-8s %-7s %s",
 							f.id,
@@ -2681,9 +2762,22 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 							fm.title or fm.slug or ""
 						)
 					)
+					table.insert(listRows, {
+						id = f.id,
+						state = state,
+						kind = ftype,
+						raft = fm.raft or "",
+						title = fm.title or fm.slug or "",
+						url = `file://{process.cwd}{doc}`,
+					})
 				end
 			end
 		end
+	end
+	if #listLines > 0 then
+		say(table.concat(listLines, "\n"), function(m: term.Mode): { string }
+			return look.list(m, listRows)
+		end)
 	end
 	local broken = 0
 	for _, p in audit.run(".") do
@@ -2717,11 +2811,23 @@ end
 -- Every problem in the tracker tree (c0880); fails when any is an error. Read-only.
 function cmd.audit()
 	local problems = audit.run(".")
+	local lines: { string } = {}
 	for _, p in problems do
-		print(audit.format(p))
+		table.insert(lines, audit.format(p))
 	end
 	local errors = audit.errors(problems)
-	print(`audit: {errors} errors, {#problems - errors} warnings`)
+	local summary = `audit: {errors} errors, {#problems - errors} warnings`
+	local m = outputMode()
+	if m.rich then
+		for _, l in look.audit(m, lines, summary) do
+			print(l)
+		end
+	else
+		for _, l in lines do
+			print(l)
+		end
+		print(summary)
+	end
 	if errors > 0 then
 		process.exit(1)
 	end
@@ -2738,8 +2844,16 @@ end
 -- Runs check.sh for an item. A raft's check.sh is responsible for running its members' checks.
 local function runCheck(item: store.Item): boolean
 	refuseListMode()
-	print(`\n=== {item.id} check.sh`)
-	return sh.stream("bash", { `{item.dir}/check.sh` })
+	say(`\n=== {item.id} check.sh`, function(m: term.Mode, text: string): { string }
+		return { "", look.heading(m, (string.gsub(text, "^\n", ""))) }
+	end)
+	-- ac.sh colors its own lines on its own terminal; a run told not to color says so to it (NO_COLOR)
+	local m = outputMode()
+	return sh.stream(
+		"bash",
+		{ `{item.dir}/check.sh` },
+		if m.rich and not m.color then { NO_COLOR = "1" } else nil
+	)
 end
 
 function cmd.check(pos: { string })
@@ -3562,7 +3676,7 @@ function cmd.workstreams(pos: { string })
 	for _, w in warnings do
 		stdio.ewrite(w .. "\n")
 	end
-	print(text)
+	say(text, look.workstreams)
 end
 
 -- `raft-plan [--apply]` (c0116, z-raft with no argument): prints the plan for every prepared, raftless issue as the
@@ -3955,7 +4069,12 @@ end
 
 cmd["promote-check"] = function(pos: { string })
 	local raft = store.get(pos[1] or fail("usage: promote-check <R-id|issue-id>"))
-	print(`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`)
+	say(
+		`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`,
+		function(m: term.Mode, t: string)
+			return { look.heading(m, t) }
+		end
+	)
 	if
 		not withPromotedCopies(raft, function(specs)
 			-- c0116: say how many were copied, so a promotion that found nothing to copy is not mistaken for a clean one
@@ -3965,7 +4084,9 @@ cmd["promote-check"] = function(pos: { string })
 	then
 		fail("promoted acceptance specs would break tests/ (see above)")
 	end
-	print("promote-check OK")
+	say("promote-check OK", function(m: term.Mode, t: string)
+		return { look.ok(m, t) }
+	end)
 end
 
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
@@ -4284,7 +4405,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 				entries += #e
 			end
 		end
-		print(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`)
+		say(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`, look.lessons)
 		return
 	end
 	if opts["--uncovered"] then
@@ -4311,7 +4432,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 			print(table.concat(gaps, "\n"))
 			process.exit(1)
 		end
-		print("harvest: every finding is covered")
+		say("harvest: every finding is covered", look.lessons)
 		return
 	end
 	local all = parsedLessons(tree)
@@ -4344,7 +4465,15 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		words = pos,
 	})
 	if not opts["--full"] then
-		stdio.write(lessonsLib.index(chosen, sources))
+		local index = lessonsLib.index(chosen, sources)
+		local m = outputMode()
+		if m.rich then
+			for _, l in look.lessons(m, index) do
+				print(l)
+			end
+		else
+			stdio.write(index)
+		end
 		return
 	end
 	for i, l in chosen do
@@ -4355,7 +4484,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		if l.from then
 			table.insert(src, l.from)
 		end
-		print(`== {lessonsLib.folderOf(tree, l.skill)}/lessons/{l.slug}.md`)
+		say(`== {lessonsLib.folderOf(tree, l.skill)}/lessons/{l.slug}.md`, look.lessons)
 		print(`sources: {if #src > 0 then table.concat(src, ", ") else "none"}`)
 		stdio.write(tree.lessons[l.id])
 	end
@@ -5129,7 +5258,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	for _, share in kept do
 		local tok = if share.tokens ~= nil then ` {share.tokens} tokens` else ""
-		print(
+		say(
 			string.format(
 				"%s %s +%d/-%d %.1f min%s",
 				share.id,
@@ -5138,11 +5267,14 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 				share.removed,
 				share.minutes,
 				tok
-			)
+			),
+			look.spend
 		)
 	end
 	if r.sha then
-		print(r.sha)
+		say(r.sha, function(m: term.Mode, t: string): { string }
+			return { look.ok(m, t) }
+		end)
 	end
 end
 
@@ -5299,11 +5431,23 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	for _, note in notes do
 		marks ..= ` (history before {note.sha} not followed: it changed {note.file})`
 	end
-	print(`capture {c.sha} {c.path} {c.subject}{marks}`)
-	stdio.write(shown.stdout)
+	local m = outputMode()
+	if m.rich then
+		for _, l in look.capture(m, `capture {c.sha} {c.path} {c.subject}{marks}\n{shown.stdout}`) do
+			print(l)
+		end
+	else
+		print(`capture {c.sha} {c.path} {c.subject}{marks}`)
+		stdio.write(shown.stdout)
+	end
 end
 
 function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+	-- c0144: the report is collected as one page, printed as it is, or boxed and aligned on a terminal
+	local page: { string } = {}
+	local function print(line: string)
+		table.insert(page, line)
+	end
 	type Counted = {
 		id: string,
 		type: string,
@@ -5578,6 +5722,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	print(`  by lines added:  {pct(d.added, f.added)}`)
 	print(`  by issues:       {pct(d.count, f.count)}`)
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+	say(table.concat(page, "\n"), look.markdown)
 end
 
 function cmd.board(pos: { string }, opts: { [string]: { string } })
@@ -5615,7 +5760,7 @@ end
 local name = args[1]
 local handler = name and (cmd :: any)[name]
 if not handler then
-	print(USAGE)
+	say(USAGE, look.usage)
 	process.exit(if name then 1 else 0)
 end
 -- Every command that can change a repository checks first that git's root is the checkout the tracker
@@ -5637,6 +5782,19 @@ if not READ_ONLY[name :: string] then
 end
 local rest = table.move(args, 2, #args, 1, {})
 local pos, opts = flags(rest)
+-- c0144: --color=<auto|always|never> (or --color <choice>) and --no-color, for every command; the last one wins
+do
+	local value = if opts["--no-color"]
+		then "never"
+		else (opts["--color"] and opts["--color"][#opts["--color"]])
+	local choice, why = term.choice(value)
+	if not choice then
+		fail(why :: string)
+	end
+	colorChoice = choice :: term.Choice
+	opts["--color"] = nil
+	opts["--no-color"] = nil
+end
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)
