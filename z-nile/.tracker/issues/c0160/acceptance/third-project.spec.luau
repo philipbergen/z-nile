@@ -5,6 +5,7 @@
 -- The third project, `tern`, exists only in this fixture, under .cache/c0160-third.
 local checkpaths = require("@znile/tests/acceptance/c0120/checkpaths")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local rewrites = require("@znile/tests/acceptance/c0120/rewrites")
 local t = require("@tests/lib/t")
 
@@ -72,6 +73,10 @@ return t.spec("c0160 the check-paths scan reads a third project like the first t
 			"tern/.tracker/issues/c0003/check.sh",
 			"test -d src/new\ncd .. && test -f tern/src/new/init.luau\n"
 		)
+		-- the reader finds the tern word, so the exemption (not a missed word) is what keeps it off the list (review 001 F3)
+		local homes = { "pickman", "z-nile", "tern" }
+		local words = checkpaths.literals(fs.readFile(FX .. "tern/.tracker/issues/c0003/check.sh"), homes)
+		t.expect(table.find(words, "../tern/src/new/init.luau") ~= nil).toBe(true)
 		local s = scanFixture()
 		for _, line in s.bad do
 			t.expect((string.find(line, "c0003", 1, true))).toBe(nil)
@@ -107,4 +112,51 @@ return t.spec("c0160 the check-paths scan reads a third project like the first t
 				.toEqual({ "pickman/a.luau", "z-nile/b.luau" })
 		end
 	)
+
+	it("the default homes are the registry's of the checkout a reader runs in, never a fixed list", function()
+		-- review 001 F1: a child Lune in another checkout (a git repository under .cache/c0160-default whose registry has
+		-- tern and z-nile, not pickman) reads tern/ and z-nile/ paths and not pickman/ ones, through both readers
+		local DX = ".cache/c0160-default/"
+		if fs.isDir(DX) then
+			fs.removeDir(DX)
+		end
+		fs.writeDir(DX .. "checkout/z-nile")
+		fs.writeFile(
+			DX .. "checkout/z-nile/projects.toml",
+			'[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n\n[[project]]\nname = "tern"\nroot = "tern/.tracker"\n'
+		)
+		t.expect(process.exec("git", { "init", "-q", DX .. "checkout" }).ok).toBe(true)
+		local R = "req" .. "uire" -- keeps literal require text out of this file (the require scanner)
+		fs.writeDir(DX .. "probe")
+		fs.writeFile(
+			DX .. "probe/probe.luau",
+			table.concat({
+				`local checkpaths = {R}("../../../tests/acceptance/c0120/checkpaths")`,
+				`local rewrites = {R}("../../../tests/acceptance/c0120/rewrites")`,
+				'local text = "test -f pickman/a.luau z-nile/b.luau tern/c.luau"',
+				"local out = {}",
+				"for _, w in checkpaths.literals(text) do",
+				'\ttable.insert(out, "cp:" .. w)',
+				"end",
+				"for _, l in rewrites.literals(text) do",
+				'\ttable.insert(out, "rw:" .. l.path)',
+				"end",
+				'print(table.concat(out, ","))',
+				"",
+			}, "\n")
+		)
+		local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
+		local r = process.exec(
+			"lune",
+			{ "run", `{here}/{DX}probe/probe.luau` },
+			{ cwd = `{here}/{DX}checkout` }
+		)
+		if not r.ok then
+			print(r.stdout .. r.stderr)
+		end
+		t.expect(r.ok).toBe(true)
+		t.expect((string.gsub(r.stdout, "%s+$", "")))
+			.toBe("cp:z-nile/b.luau,cp:tern/c.luau,rw:z-nile/b.luau,rw:tern/c.luau")
+		fs.removeDir(DX)
+	end)
 end)
