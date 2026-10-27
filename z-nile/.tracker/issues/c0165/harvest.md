@@ -1,3 +1,19 @@
 - note prototype subagent: gate.spec's fixture shadowed by rokit's real tools, a rokit shim broken by the fixture HOME, sourcemap.json dirtying the digest, no runner copied: zz-test/gate-fixtures-own-their-home
 - note prototype subagent: `cd && cmd &` made `$!` a subshell, and a rokit shim's child carried the owner pid: zz-test/background-pid-is-the-owner
 - note lead: gate.spec passed on Homebrew lune 0.11.1 and failed under ./zn check on rokit's 0.10.5: zz-test/run-the-pinned-tools
+- design-review-001 F1: zz-arch/child-exit-status-counts
+- design-review-001 F2: zz-test/promoted-commands-read-no-local-state
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: zz-arch/guard-no-is-explicit
+- design-review-001 F5: z-design/run-examples-through-the-reader
+- design-review-001 F6: z-design/never-narrow-captured-scope
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-001 F8: z-design/spec-design-correspondence
+- design-review-001 F9: z-design/restated-rules-move-together
+- design-review-001 F10: zz-test/split-checks-share-one-boundary
+- design-review-001 F11: zz-test/seed-every-enumerated-case
+- design-review-001 F12: zz-arch/children-need-a-lifeline
+- design-review-001 F13: one-off: a per-item cap needs a total cap when items multiply (learning trials per miss)
+- design-review-001 F14: one-off: a list introduced by "all of" whose items start with "or"
+- design-review-001 F15: one-off: an "exactly when" invariant whose input set changes with the change itself
+- design-review-001 F16: one-off: a skipped step must still show the output a later instruction reads

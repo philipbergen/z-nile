@@ -57,7 +57,7 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		function()
 			setup()
 			local before = gitState()
-			local blobs = workspace.blobs(repo)
+			local blobs = workspace.blobs(repo) :: fingerprint.Blobs
 			t.expect(gitState()).toBe(before)
 			local function id(rel: string): string
 				return trim(fixture.git(repo, { "hash-object", "--no-filters", rel }))
@@ -71,6 +71,19 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 			-- hash-object without -w wrote no object: the new file's blob is not in the store
 			local cat = fixture.exec(repo, "git", { "cat-file", "-e", id("new.luau") })
 			t.expect(cat.ok).toBe(false)
+		end
+	)
+
+	it(
+		"AC7: the blob read fails closed: a path holding a newline gives nil and a reason, never a partial map",
+		function()
+			setup()
+			write(`{repo}/odd\nname.luau`, "return 5\n")
+			local blobs, why = workspace.blobs(repo)
+			t.expect(blobs).toBe(nil)
+			t.expect(why ~= nil and why ~= "").toBe(true)
+			fs.removeFile(`{repo}/odd\nname.luau`)
+			t.expect(workspace.blobs(repo) ~= nil).toBe(true)
 		end
 	)
 
@@ -93,7 +106,7 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 
 	it("AC7: the digest ignores spend.md under a project root and changes for anything else", function()
 		setup()
-		local blobs = workspace.blobs(repo)
+		local blobs = workspace.blobs(repo) :: fingerprint.Blobs
 		local tools = "Darwin arm64 | lune 0.11.1"
 		local extra = { "full", "pickman,z-nile" }
 		local d = fingerprint.digest(blobs, tools, extra)
@@ -119,7 +132,7 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		t.expect(fingerprint.digest(blobs, tools, { "full", "pickman" }) ~= d).toBe(true)
 		-- an ignored file's edit leaves the digest alone (the read never lists it)
 		write(`{repo}/ignored.txt`, "changed\n")
-		t.expect(fingerprint.digest(workspace.blobs(repo), tools, extra)).toBe(d)
+		t.expect(fingerprint.digest(workspace.blobs(repo) :: fingerprint.Blobs, tools, extra)).toBe(d)
 	end)
 
 	it("AC7: the db path is the main checkout's .claude, from a worktree as well", function()

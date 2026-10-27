@@ -61,7 +61,8 @@ local function ctxWith(inputs: select.Inputs): select.Context
 	return { rules = select.rules(reg), graph = graphOf(), inputs = inputs }
 end
 
-local DECLARED: select.Inputs = { [TEXT_SPEC] = { "pickman/tests/fixtures/data/" } }
+local DECLARED: select.Inputs =
+	{ [TEXT_SPEC] = { "pickman/tests/fixtures/data/", "pickman/.tracker/issues/f0001/" } }
 
 -- every file the fixture tree holds, with a blob id each
 local function tree(): fingerprint.Blobs
@@ -85,6 +86,7 @@ local function tree(): fingerprint.Blobs
 			"pickman/scripts/check.sh",
 			"pickman/tests/inputs.tsv",
 			"pickman/.tracker/issues/f0001/f0001.md",
+			"pickman/.tracker/issues/f0001/spend.md",
 			"z-nile/.tracker/issues/c0001/c0001.md",
 			"z-nile/engine/main.luau",
 			"z-nile/lib/graph.luau",
@@ -142,7 +144,8 @@ local CHANGES: { Edit } = {
 	{ kind = "modified", path = "zn" }, -- SHARED_FULL
 	{ kind = "modified", path = ".luaurc" }, -- SHARED_FULL
 	{ kind = "added", path = "tests/old.luau" }, -- OLD_ROOTS (z-nile)
-	{ kind = "modified", path = "pickman/.tracker/issues/f0001/f0001.md" }, -- a project root: nothing
+	{ kind = "modified", path = "pickman/.tracker/issues/f0001/f0001.md" }, -- under a root: only its declaring spec
+	{ kind = "modified", path = "pickman/.tracker/issues/f0001/spend.md" }, -- spend.md: never, declared folder or not
 	{ kind = "modified", path = "z-nile/.tracker/issues/c0001/c0001.md" }, -- a project root: nothing
 	{ kind = "modified", path = "AGENTS.md" }, -- no rule: nothing
 	{ kind = "modified", path = DATA }, -- a declared folder input
@@ -161,8 +164,8 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			for _, e in CHANGES do
 				local after = apply(before, e)
 				for _, spec in SPECS do
-					local changedFp = fingerprint.of(ctx, spec, before, TOOLS)
-						~= fingerprint.of(ctx, spec, after, TOOLS)
+					local changedFp = fingerprint.of(ctx, spec, before, TOOLS, "affected")
+						~= fingerprint.of(ctx, spec, after, TOOLS, "affected")
 					local picked = picks(ctx, e.path, spec)
 					if changedFp ~= picked then
 						error(
@@ -212,8 +215,14 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		local ctx = ctxWith(DECLARED)
 		local base = tree()
 		local function moves(spec: string, path: string): boolean
-			return fingerprint.of(ctx, spec, base, TOOLS)
-				~= fingerprint.of(ctx, spec, apply(base, { kind = "modified", path = path }), TOOLS)
+			return fingerprint.of(ctx, spec, base, TOOLS, "affected")
+				~= fingerprint.of(
+					ctx,
+					spec,
+					apply(base, { kind = "modified", path = path }),
+					TOOLS,
+					"affected"
+				)
 		end
 		t.expect(moves(MAZE_SPEC, MAZE_SPEC)).toBe(true) -- its own file
 		t.expect(moves(GHOST_SPEC, MAZE)).toBe(true) -- a file it requires through another
@@ -229,24 +238,32 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		t.expect(moves(MAZE_SPEC, UNUSED)).toBe(false) -- an unrelated src file, for a spec without the place library
 		t.expect(moves(MAZE_SPEC, "AGENTS.md")).toBe(false)
 		t.expect(moves(MAZE_SPEC, DATA)).toBe(false) -- another spec's declared input
+		-- a tracker file under a declared folder (it names a path under the root) is an input; its spend.md never is
+		t.expect(moves(TEXT_SPEC, "pickman/.tracker/issues/f0001/f0001.md")).toBe(true)
+		t.expect(moves(TEXT_SPEC, "pickman/.tracker/issues/f0001/spend.md")).toBe(false)
+		-- the gate mode is part of the fingerprint: a full run's rows never serve an affected run
+		t.expect(
+			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")
+				~= fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "full")
+		).toBe(true)
 		-- the tools line, and a new declared or learned entry, change it too
 		t.expect(
-			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS)
-				~= fingerprint.of(ctx, MAZE_SPEC, base, TOOLS .. " | git 2")
+			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")
+				~= fingerprint.of(ctx, MAZE_SPEC, base, TOOLS .. " | git 2", "affected")
 		).toBe(true)
 		local learned = ctxWith({ [MAZE_SPEC] = { DATA } })
 		t.expect(
-			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS) ~= fingerprint.of(learned, MAZE_SPEC, base, TOOLS)
-		)
-			.toBe(true)
+			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")
+				~= fingerprint.of(learned, MAZE_SPEC, base, TOOLS, "affected")
+		).toBe(true)
 		-- a file input (not a folder) matches only itself
 		t.expect(select.isInput(learned, MAZE_SPEC, DATA)).toBe(true)
 		t.expect(select.isInput(learned, MAZE_SPEC, "pickman/tests/fixtures/data/levels.json.bak"))
 			.toBe(false)
 		-- the same inputs, in any order of the blob map, give the same fingerprint (no time, no pid, no order)
-		t.expect(fingerprint.of(ctx, MAZE_SPEC, base, TOOLS))
-			.toBe(fingerprint.of(ctx, MAZE_SPEC, tree(), TOOLS))
-		t.expect(#fingerprint.of(ctx, MAZE_SPEC, base, TOOLS)).toBe(64)
+		t.expect(fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected"))
+			.toBe(fingerprint.of(ctx, MAZE_SPEC, tree(), TOOLS, "affected"))
+		t.expect(#fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")).toBe(64)
 		-- the inputs list is sorted and holds only isInput paths that exist
 		local ins = fingerprint.inputs(ctx, GHOST_SPEC, base)
 		local sorted = table.clone(ins)
@@ -267,8 +284,15 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			t.expect(select.isInput(wide, MAZE_SPEC, doc)).toBe(false)
 			t.expect(select.isInput(wide, MAZE_SPEC, DATA)).toBe(true)
 			local base = tree()
-			t.expect(fingerprint.of(wide, MAZE_SPEC, apply(base, { kind = "modified", path = doc }), TOOLS))
-				.toBe(fingerprint.of(wide, MAZE_SPEC, base, TOOLS))
+			t.expect(
+				fingerprint.of(
+					wide,
+					MAZE_SPEC,
+					apply(base, { kind = "modified", path = doc }),
+					TOOLS,
+					"affected"
+				)
+			).toBe(fingerprint.of(wide, MAZE_SPEC, base, TOOLS, "affected"))
 		end
 	)
 
@@ -283,10 +307,14 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		local text = "# extra inputs\n\ntests/acceptance/x/narrowed.spec.luau\tpickman/tests/fixtures/data/\n"
 			.. "tests/unit/Maze.spec.luau\tpickman/tests/fixtures/data/levels.json\n"
 			.. "tests/unit/Maze.spec.luau\tz-nile/templates/raft/check.sh\n"
+			.. "tests/acceptance/c0063/narrowed.spec.luau\tpickman/.tracker/issues/done/f0031/acceptance/\n"
 		local inputs, err = select.parseInputs(text, "pickman/")
 		t.expect(err).toBe(nil)
 		t.expect((inputs :: select.Inputs)[TEXT_SPEC]).toEqual({ "pickman/tests/fixtures/data/" })
 		t.expect((inputs :: select.Inputs)[MAZE_SPEC]).toEqual({ DATA, "z-nile/templates/raft/check.sh" })
+		-- the Design's own example: a done item's folder under the root
+		t.expect((inputs :: select.Inputs)["pickman/tests/acceptance/c0063/narrowed.spec.luau"])
+			.toEqual({ "pickman/.tracker/issues/done/f0031/acceptance/" })
 	end)
 
 	it("AC9: one malformed line refuses the whole file, naming its line", function()
@@ -297,7 +325,9 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 				"tests/unit/Maze.luau\tpickman/x.json\n", -- not a spec
 				"tests/unit/Maze.spec.luau\t/abs/x.json\n", -- absolute
 				"tests/unit/Maze.spec.luau\tpickman/../x.json\n", -- ..
-				"tests/unit/Maze.spec.luau\tpickman/.tracker/issues/x.md\n", -- a project root
+				"tests/unit/Maze.spec.luau\tpickman/.tracker\n", -- a project root itself
+				"tests/unit/Maze.spec.luau\tpickman/.tracker/\n", -- the same, as a folder
+				"tests/unit/Maze.spec.luau\tpickman/.tracker/issues/f0001/spend.md\n", -- a spend.md
 				"tests/unit/Maze.spec.luau\t\n", -- empty input
 				"tests/unit/Maze.spec.luau\ta\tb\n", -- three fields
 			}

@@ -75,6 +75,31 @@ return t.spec("c0165 reuse decisions and the learning plan", function(it)
 	)
 
 	it(
+		"AC8: a total budget: a plan that doesn't fit what is left is empty, and the rest is handed back",
+		function()
+			local plan, left = learn.plan({ "x.md", "y.luau" }, 16, 40)
+			t.expect(#plan).toBe(4)
+			t.expect(left).toBe(36)
+			-- three left: (a), (b) and the two candidates don't fit, so nothing is tried and nothing is spent
+			local none, still = learn.plan({ "x.md", "y.luau" }, 16, 3)
+			t.expect(#none).toBe(0)
+			t.expect(still).toBe(3)
+			-- over the per-miss cap, (a) and (b) alone fit in two
+			local many: { string } = {}
+			for i = 1, 17 do
+				table.insert(many, `f{string.format("%02d", i)}`)
+			end
+			local capped, rest = learn.plan(many, 16, 2)
+			t.expect(#capped).toBe(2)
+			t.expect(rest).toBe(0)
+			-- no budget given: no total cap
+			local free, freeLeft = learn.plan({ "x.md" }, 16, nil)
+			t.expect(#free).toBe(3)
+			t.expect(freeLeft).toBe(nil)
+		end
+	)
+
+	it(
 		"AC8: the results teach the candidates the spec fails with, and nothing when it doesn't reproduce",
 		function()
 			local cands = { "x.md", "y.luau" }

@@ -151,8 +151,9 @@ return t.spec("c0165 results db", function(it)
 	it("AC4: gates and learned inputs are kept; prune drops only old rows", function()
 		local db = opened("gates")
 		t.expect(resultsdb.gatePassed(db, "k1")).toBe(nil)
-		resultsdb.recordGate(db, "k1", "full", "pickman,z-nile", 1000)
-		t.expect(resultsdb.gatePassed(db, "k1")).toBe(1000)
+		local summary = "== lint (selene) (0.4s)\nwarnings: 0 it's\n== format (stylua --check) (0.1s)\n"
+		resultsdb.recordGate(db, "k1", "full", "pickman,z-nile", summary, 1000)
+		t.expect(resultsdb.gatePassed(db, "k1")).toEqual({ passedAt = 1000, summary = summary })
 		resultsdb.learn(db, "pickman", "tests/unit/Maze.spec.luau", "pickman/tests/fixtures/data/", 1000)
 		resultsdb.learn(db, "pickman", "tests/unit/Maze.spec.luau", "pickman/tests/fixtures/data/", 1001) -- once only
 		resultsdb.learn(db, "z-nile", "tests/a.spec.luau", "z-nile/templates/raft/check.sh", 1000)

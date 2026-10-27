@@ -31,7 +31,12 @@ return t.spec("c0165 restated gate rules", function(it)
 			says(f, "Confirm `z-nile/check.sh --affected` passes here.")
 			never(f, "Confirm `z-nile/check.sh --full` passes here.")
 			says(f, "Double-check that `z-nile/check.sh --affected` passes as well")
-			says(f, "from `./zn done`'s full gate")
+			says(
+				f,
+				"**Gate speed**: post the `gate wall time` and the `slowest:` specs of `./zn done`'s full gate in the `Ready to merge` PR comment (Phase 5 step 5)."
+			)
+			-- nothing tracked is edited after done: that would change the content the merge condition reuses
+			never(f, "in each issue's Verification log. If a stage")
 			says(f, "Run `z-nile/check.sh --affected` and read the whole lint summary")
 			never(f, "Run `z-nile/check.sh --full` and read the whole lint summary")
 			says(f, "rerun `z-nile/check.sh --affected`")
@@ -75,6 +80,14 @@ return t.spec("c0165 restated gate rules", function(it)
 		says(f, ".claude/.znile_tests.sqlite")
 		says(
 			f,
+			"a raft's `check.sh` runs its project's gate (`\"$ZN_ROOT/z-nile/check.sh\" --project <project> --affected`)"
+		)
+		never(
+			f,
+			"a raft's `check.sh` runs its project's gate (`\"$ZN_ROOT/z-nile/check.sh\" --project <project> --full`)"
+		)
+		says(
+			f,
 			"the gate's results db (`.claude/.znile_tests.sqlite` in the main checkout, written by `z-nile/specs` outside the jail)"
 		)
 	end)
@@ -92,7 +105,10 @@ return t.spec("c0165 restated gate rules", function(it)
 		-- AGENTS.md names the db in its list of what writes the main checkout
 		local agents = read("AGENTS.md")
 		local line = string.match(agents, "[^\n]*the main checkout is never edited[^\n]*") or ""
-		t.expect(string.find(line, ".claude/.znile_tests.sqlite", 1, true) ~= nil).toBe(true)
+		t.expect(
+			string.find(line, "and the gate writes its results db, `.claude/.znile_tests.sqlite`", 1, true)
+				~= nil
+		).toBe(true)
 		-- ignored, sidecars included, and git agrees
 		local ignore = read(".gitignore")
 		t.expect(string.find(ignore, "\n/.claude/.znile_tests.sqlite*\n", 1, true) ~= nil).toBe(true)

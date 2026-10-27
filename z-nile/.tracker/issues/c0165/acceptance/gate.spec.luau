@@ -45,6 +45,8 @@ type SpecOpts = {
 	hang: boolean?,
 	broken: boolean?,
 	writes: { path: string, text: string }?,
+	opens: boolean?,
+	quits: boolean?,
 }
 local function specText(dir: string, name: string, o: SpecOpts): string
 	local lines = {
@@ -60,6 +62,11 @@ local function specText(dir: string, name: string, o: SpecOpts): string
 	table.insert(lines, '\tit("runs", function()')
 	table.insert(lines, `\t\tprocess.exec("sh", \{ "-c", 'echo {name} >> "$1"', "_", "{dir}/ran.log" })`)
 	if o.hang then
+		-- the process running this spec (the runner, or its worker), so a case can tell whether it outlived its owner
+		table.insert(
+			lines,
+			`\t\tprocess.exec("sh", \{ "-c", 'echo "hangpid $PPID" >> "$1"', "_", "{dir}/ran.log" })`
+		)
 		table.insert(lines, `\t\tif fs.isFile("{dir}/hang.marker") then process.exec("sleep", \{ "30" }) end`)
 	end
 	if o.sleep then
@@ -70,6 +77,14 @@ local function specText(dir: string, name: string, o: SpecOpts): string
 	end
 	if o.reads then
 		table.insert(lines, `\t\tt.expect(fs.readFile("{o.reads}")).toBe("ok\\n")`)
+	end
+	if o.opens then
+		-- the runner's browser guard answers this (its recording stub), and fails the run after the spec passed
+		table.insert(lines, '\t\tprocess.exec("open", { "-O", "x" })')
+	end
+	if o.quits then
+		-- ends the runner's process (one job: in process) before it can write its results
+		table.insert(lines, "\t\tprocess.exit(0)")
 	end
 	if o.writes then
 		table.insert(lines, `\t\tfs.writeFile("{o.writes.path}", "{o.writes.text}")`)
@@ -128,7 +143,7 @@ local function make(name: string, withBroken: boolean?): string
 	end
 	write(
 		`{dir}/.gitignore`,
-		".cache/\nsourcemap.json\n/.claude/.znile_tests.sqlite*\nran.log\nhang.marker\nbin/\nbin-silent/\nhome/\n"
+		".cache/\nsourcemap.json\n/.claude/.znile_tests.sqlite*\nran.log\nhang.marker\nbin/\nbin-silent/\nbin-gitfail/\nhome/\nw1.out\n"
 	)
 	write(`{dir}/pickman/.tracker/.gitkeep`, "")
 	write(`{dir}/z-nile/.tracker/.gitkeep`, "")
@@ -150,6 +165,26 @@ local function make(name: string, withBroken: boolean?): string
 		specs.broken = { broken = true }
 	end
 	-- only the "changed" fixture: aa_edit dirties the tree mid-run, and cdep passes only on the edited content
+	if name == "opener" then
+		specs.opener = { opens = true }
+	end
+	if name == "waitfail" then
+		specs.slowfail = { sleep = 3, broken = true }
+	end
+	if name == "dirty" then
+		specs.dirty = { needs = "A", writes = { path = `{dir}/pickman/notes-dirty.txt`, text = "dirty\\n" } }
+	end
+	if name == "quitter" then
+		specs.quitter = { quits = true }
+	end
+	if name == "trackmiss" then
+		specs.trk = { reads = ".tracker/issues/f0009/notes.md" }
+		write(`{dir}/pickman/.tracker/issues/f0009/notes.md`, "ok\n")
+	end
+	if name == "donetree" then
+		write(`{dir}/pickman/docs/a.md`, "a\n")
+		write(`{dir}/pickman/.tracker/issues/f0009/f0009.md`, "# f0009\n")
+	end
 	if name == "changed" then
 		specs.cdep = { needs = "C", expect = 2 }
 		-- aa_edit runs first in path order and rewrites C.luau, an input of cdep, before cdep loads it
@@ -265,6 +300,8 @@ return t.spec("c0165 reuse through the orchestrator and the gate", function(it)
 			local ok2, out2 = gate(dir, { "--affected" })
 			t.expect(ok2).toBe(true)
 			t.expect(has(out2, "reused: an affected gate passed on this content")).toBe(true)
+			-- the static stages' report is shown from the record (the lint summary zz-execute Phase 4 reads)
+			t.expect(has(out2, "== lint (selene)")).toBe(true)
 			t.expect(has(out2, "GATE PASSED (affected)")).toBe(true)
 			t.expect(ran(dir)).toBe("")
 			-- --fresh runs the selection again
@@ -492,9 +529,16 @@ return t.spec("c0165 reuse through the orchestrator and the gate", function(it)
 			-- the edge is in the db now: affected selects text.spec for that file, in this worktree and every other
 			local after = process.exec(
 				"lune",
+				{ "run", "z-nile/affected", "--", "--project", "pickman", "--learned", "pickman/data/x.txt" },
+				{ cwd = dir, env = env(dir) }
+			)
+			-- a bare call never reads the db: what reviewers paste and promoted specs run stays the committed answer
+			local bare = process.exec(
+				"lune",
 				{ "run", "z-nile/affected", "--", "--project", "pickman", "pickman/data/x.txt" },
 				{ cwd = dir, env = env(dir) }
 			)
+			t.expect((string.gsub(bare.stdout, "%s+$", ""))).toBe("")
 			t.expect((string.gsub(after.stdout, "%s+$", ""))).toBe("tests/unit/text.spec.luau")
 			-- the gate wrote no committed file: inputs.tsv is untouched, the tree is as it was
 			t.expect(fs.readFile(`{dir}/pickman/tests/inputs.tsv`)).toBe("# extra inputs per spec\n")
@@ -503,6 +547,213 @@ return t.spec("c0165 reuse through the orchestrator and the gate", function(it)
 			for _, name in fs.readDir(`{dir}/.cache`) do
 				t.expect(string.sub(name, 1, 6) ~= "learn-").toBe(true)
 			end
+		end
+	)
+
+	it("AC5: a run the runner fails after every spec passed (the browser guard) records no pass", function()
+		local dir = make("opener")
+		local one = { "--", "tests/unit/opener.spec.luau" }
+		local ok1, out1 = specs(dir, one)
+		t.expect(ok1).toBe(false)
+		t.expect(has(out1, "results not recorded")).toBe(true)
+		local ok2, _ = specs(dir, one)
+		t.expect(ok2).toBe(false)
+		t.expect(count(ran(dir), "opener")).toBe(2)
+		local rows = process.exec("sqlite3", {
+			`{dir}/.claude/.znile_tests.sqlite`,
+			"select count(*) from specs where state = 'passed'",
+		})
+		t.expect((string.gsub(rows.stdout, "%s+$", ""))).toBe("0")
+		-- through the full gate too: red, and no passed row
+		local okF, _ = gate(dir, { "--full" })
+		t.expect(okF).toBe(false)
+		local rowsF = process.exec("sqlite3", {
+			`{dir}/.claude/.znile_tests.sqlite`,
+			"select count(*) from specs where state = 'passed' and spec = 'tests/unit/opener.spec.luau'",
+		})
+		t.expect((string.gsub(rowsF.stdout, "%s+$", ""))).toBe("0")
+	end)
+
+	it("AC5: a waiter whose owner's spec fails counts the failure, and the spec ran once", function()
+		local dir = make("waitfail")
+		local wt = `{base}/waitfail-wt`
+		if fs.isDir(wt) then
+			fs.removeDir(wt)
+		end
+		fixture.git(dir, { "worktree", "add", "-q", "--detach", wt })
+		stubTools(wt)
+		local r = process.exec("bash", {
+			"-c",
+			'(cd "$1"; PATH="$1/bin:$PATH" lune run z-nile/specs -- run --project pickman -- tests/unit/slowfail.spec.luau > "$1/../w1.out" 2>&1; echo "$?" > "$1/../w1.rc") & '
+				.. '(cd "$2"; PATH="$2/bin:$PATH" lune run z-nile/specs -- run --project pickman -- tests/unit/slowfail.spec.luau > "$1/../w2.out" 2>&1; echo "$?" > "$1/../w2.rc") & '
+				.. "wait",
+			"_",
+			dir,
+			wt,
+		})
+		t.expect(r.ok).toBe(true)
+		t.expect(count(ran(dir), "slowfail")).toBe(1)
+		t.expect((string.gsub(fs.readFile(`{base}/w1.rc`), "%s+$", ""))).toBe("1")
+		t.expect((string.gsub(fs.readFile(`{base}/w2.rc`), "%s+$", ""))).toBe("1")
+		t.expect(has(fs.readFile(`{base}/w1.out`) .. fs.readFile(`{base}/w2.out`), "failed in pid"))
+			.toBe(true)
+	end)
+
+	it("AC5: a claimed spec with no result (the runner quit early) is released and counted failed", function()
+		local dir = make("quitter")
+		local ok, out = specs(
+			dir,
+			{ "--", "tests/unit/a.spec.luau", "tests/unit/quitter.spec.luau" },
+			{ PICKMAN_JOBS = "1" }
+		)
+		t.expect(ok).toBe(false)
+		t.expect(has(out, "results file missing")).toBe(true)
+		local rows =
+			process.exec("sqlite3", { `{dir}/.claude/.znile_tests.sqlite`, "select count(*) from specs" })
+		t.expect((string.gsub(rows.stdout, "%s+$", ""))).toBe("0")
+	end)
+
+	it(
+		"AC5: a killed orchestrator's runner dies with it (the lifeline), and the next run takes the spec over",
+		function()
+			local dir = make("orphan")
+			fs.writeFile(`{dir}/hang.marker`, "")
+			local db = `{dir}/.claude/.znile_tests.sqlite`
+			-- the owner in its own process group; then only the orchestrator (the pid its db row names) is killed
+			local r = process.exec("bash", {
+				"-c",
+				'cd "$1"; PATH="$1/bin:$PATH" perl -e \'setpgrp(0,0); exec @ARGV\' lune run z-nile/specs -- run --project pickman -- tests/unit/hang.spec.luau > /dev/null 2>&1 < /dev/null & '
+					.. 'echo "$!"; for i in $(seq 1 150); do grep -q "^hangpid " "$1/ran.log" 2>/dev/null && break; sleep 0.1; done; '
+					.. 'o=$(sqlite3 "$2" "select owner_pid from specs where state = \'running\'"); kill -9 "$o"; exit 0',
+				"_",
+				dir,
+				db,
+			})
+			t.expect(r.ok).toBe(true)
+			local group = (string.gsub(r.stdout, "%s+$", ""))
+			local runner = string.match(ran(dir), "hangpid (%d+)") :: string
+			fs.removeFile(`{dir}/hang.marker`)
+			local ok, out = specs(dir, { "--", "tests/unit/hang.spec.luau" })
+			t.expect(ok).toBe(true)
+			t.expect(has(out, "1 passed, 0 failed, 1 spec files")).toBe(true)
+			t.expect(count(ran(dir), "hang")).toBe(2)
+			-- give the lifeline its poll (1 s), TERM and grace (2 s): then the orphaned runner, still in its 30 s sleep, is gone
+			process.exec("sleep", { "5" })
+			local alive = process.exec("sh", { "-c", 'kill -0 "$1" 2>/dev/null', "_", runner })
+			process.exec("bash", { "-c", 'kill -9 -- "-$1" 2>/dev/null; exit 0', "_", group })
+			t.expect(alive.ok).toBe(false)
+		end
+	)
+
+	it(
+		"AC5: a failed blob read (hash-object) turns reuse off: every spec runs and nothing is recorded",
+		function()
+			local dir = make("gitfail")
+			local realGit = (string.gsub(process.exec("sh", { "-c", "command -v git" }).stdout, "%s+$", ""))
+			write(
+				`{dir}/bin-gitfail/git`,
+				'#!/bin/sh\nif [ "$1" = hash-object ]; then exit 1; fi\n' .. `exec "{realGit}" "$@"\n`
+			)
+			process.exec("chmod", { "+x", `{dir}/bin-gitfail/git` })
+			write(`{dir}/pickman/src/A.luau`, "return { value = 1 } -- edited\n")
+			local env1 = { PATH = `{dir}/bin-gitfail:{dir}/bin:{process.env.PATH or ""}` }
+			local ok1, out1 = specs(dir, AB, env1)
+			t.expect(ok1).toBe(true)
+			t.expect(has(out1, "reuse off:")).toBe(true)
+			local ok2, _ = specs(dir, AB, env1)
+			t.expect(ok2).toBe(true)
+			t.expect(count(ran(dir), "a")).toBe(2)
+			t.expect(count(ran(dir), "b")).toBe(2)
+		end
+	)
+
+	it("AC7: a gate whose tree changes while it runs records no whole-gate pass, affected or full", function()
+		local dir = make("dirty")
+		local note = `{dir}/pickman/notes-dirty.txt`
+		local function unnote()
+			if fs.isFile(note) then
+				fs.removeFile(note)
+			end
+		end
+		write(`{dir}/pickman/src/A.luau`, "return { value = 1 } -- edited\n") -- selects dirty.spec and a.spec
+		-- dirty.spec writes an untracked file while the gate runs: the digest moves, so no gates row
+		local ok1, _ = gate(dir, { "--affected" })
+		t.expect(ok1).toBe(true)
+		t.expect(fs.isFile(note)).toBe(true)
+		unnote()
+		local ok2, out2 = gate(dir, { "--affected" })
+		t.expect(ok2).toBe(true)
+		t.expect(has(out2, "reused: an affected gate passed on this content")).toBe(false)
+		unnote()
+		-- the full gate: record --full finds the digest moved, records no row, and says so
+		local okF, outF = gate(dir, { "--full" })
+		t.expect(okF).toBe(true)
+		t.expect(has(outF, "records nothing")).toBe(true)
+		local rows = process.exec("sqlite3", {
+			`{dir}/.claude/.znile_tests.sqlite`,
+			"select count(*) from specs where spec = 'tests/unit/dirty.spec.luau' and state = 'passed'",
+		})
+		-- the one affected-mode row from the first gate (dirty.spec's own inputs didn't change); none from the full gate
+		t.expect((string.gsub(rows.stdout, "%s+$", ""))).toBe("1")
+		unnote()
+		local okR, outR = gate(dir, { "--full", "--reuse" })
+		t.expect(okR).toBe(true)
+		t.expect(has(outR, "reused: a full gate passed on this content")).toBe(false)
+	end)
+
+	it(
+		"AC7: done's uncommitted tree (staged moves and edits) is reused on the committed head; spend.md may change, nothing else",
+		function()
+			local dir = make("donetree")
+			fixture.git(dir, { "mv", "pickman/docs/a.md", "pickman/docs/b.md" })
+			write(`{dir}/pickman/src/B.luau`, "return { value = 1 } -- staged\n")
+			fixture.git(dir, { "add", "pickman/src/B.luau" })
+			local ok1, _ = gate(dir, { "--full" })
+			t.expect(ok1).toBe(true)
+			-- what done does after its gate: spend rows, then the commit of everything
+			write(`{dir}/pickman/.tracker/issues/f0009/spend.md`, "# spend\n| phase | minutes |\n")
+			fixture.git(dir, { "add", "-A" })
+			fixture.git(dir, { "commit", "-qm", "done" })
+			clearRan(dir)
+			local ok2, out2 = gate(dir, { "--full", "--reuse" })
+			t.expect(ok2).toBe(true)
+			t.expect(has(out2, "reused: a full gate passed on this content")).toBe(true)
+			t.expect(ran(dir)).toBe("")
+			-- any other tracker document is content: it runs again
+			write(`{dir}/pickman/.tracker/issues/f0009/f0009.md`, "# f0009 edited\n")
+			fixture.git(dir, { "commit", "-qam", "edit" })
+			local ok3, out3 = gate(dir, { "--full", "--reuse" })
+			t.expect(ok3).toBe(true)
+			t.expect(has(out3, "reused: a full gate passed on this content")).toBe(false)
+			t.expect(count(ran(dir), "a")).toBe(1)
+		end
+	)
+
+	it(
+		"AC8: a miss caused by a tracker file is learned too, and affected reads learned rows only when asked",
+		function()
+			local dir = make("trackmiss")
+			write(`{dir}/pickman/.tracker/issues/f0009/notes.md`, "bad\n")
+			fixture.git(dir, { "commit", "-qam", "change notes" })
+			local ok, out = gate(dir, { "--full" })
+			t.expect(ok).toBe(false)
+			t.expect(
+				has(
+					out,
+					"graph miss: pickman/tests/unit/trk.spec.luau depends on pickman/.tracker/issues/f0009/notes.md"
+				)
+			).toBe(true)
+			local function affected(args: { string }): string
+				local argv = { "run", "z-nile/affected", "--", "--project", "pickman" }
+				for _, a in args do
+					table.insert(argv, a)
+				end
+				local r = process.exec("lune", argv, { cwd = dir, env = env(dir) })
+				return (string.gsub(r.stdout, "%s+$", ""))
+			end
+			local file = "pickman/.tracker/issues/f0009/notes.md"
+			t.expect(affected({ "--learned", file })).toBe("tests/unit/trk.spec.luau")
+			t.expect(affected({ file })).toBe("")
 		end
 	)
 end)
