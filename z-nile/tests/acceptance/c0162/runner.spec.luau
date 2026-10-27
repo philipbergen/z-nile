@@ -35,7 +35,7 @@ local function has(text: string, needle: string): boolean
 end
 
 -- a planted spec that leaves a mark when it runs
-local MARK = `{base}/z-nile/.cache/ran`
+local MARK = `{base}/z-nile/.cache/c0162-ran`
 local SPEC = table.concat({
 	"--!strict",
 	`local fs = {R}("@lune/fs")`,
