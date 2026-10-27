@@ -1,8 +1,8 @@
 --!strict
 -- c0132: when the jail's sweeper dies of a signal, the launcher (fence.REAPER) says who was still there before it stops
 -- the specs' group: when, how long after the specs started, its own pid, the run's top process (PICKMAN_REAP_TOP, which
--- the runner sets to its own pid) and whether that lives, the specs' group (the sweeper's own pid), whether the
--- watchdog lives, and every other process still in the group with its command line. A sweeper killed alone (a signal to its pid) leaves the
+-- the runner sets to its own pid) and whether that lives, the memory the OS saw, the specs' group (the sweeper's own
+-- pid), whether the watchdog lives, and every other process still in the group with its command line. A sweeper killed alone (a signal to its pid) leaves the
 -- watchdog and the specs alive; a signal to the whole group leaves nothing. Each case runs a launcher of its own (as
 -- c0076's spec does) whose command stands in for the sweeper and kills itself, or its whole group, with SIGKILL.
 local fence = require("@tests/lib/fence")
@@ -75,7 +75,7 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 			t.expect(has(r.stderr, "the jail's sweeper was killed (signal 9)")).toBe(true)
 			local launcher, top, group = string.match(
 				line,
-				"launcher (%d+) %(the run's top process (%d+), alive%); specs group (%d+) "
+				"launcher (%d+) %(the run's top process (%d+), alive%); memory [^;]+; specs group (%d+) "
 			)
 			t.expect(launcher ~= nil).toBe(true)
 			t.expect(top).toBe(myPid())
@@ -99,6 +99,21 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 			t.expect(select(2, string.gsub(r.stderr, "\ntests/run:   ", "")) :: number).toBe(1)
 		end
 	)
+
+	it("the report gives the memory the OS saw: percent free and swap used, read on macOS", function()
+		local r = launch("kill -KILL $$", true)
+		local free, swap =
+			string.match(who(r.stderr), "; memory (%S+)%% free, swap used ([^;]+); specs group ")
+		t.expect(free ~= nil and swap ~= nil).toBe(true)
+		if process.os == "macos" then
+			-- kern.memorystatus_level and vm.swapusage, which sysctl reads in the jail too
+			t.expect(string.match(free :: string, "^%d+$") ~= nil and (tonumber(free) :: number) <= 100)
+				.toBe(true)
+			t.expect(string.match(swap :: string, "^%d+%.%d+[KMGT]$") ~= nil).toBe(true)
+		else
+			t.expect({ free, swap }).toEqual({ "?", "?" }) -- no such sysctl: unread, never invented
+		end
+	end)
 
 	it("the report says when the run's top process is gone", function()
 		local dead = trim(process.exec("sh", { "-c", "true & echo $!; wait" }).stdout) -- finished and reaped
@@ -170,6 +185,7 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 		local bullet = string.match(skill, "\n%s*%- %*%*Sweeper%*%*:[^\n]*") or ""
 		-- the report, and the two readings of it the issue exists for
 		t.expect(has(bullet, "`tests/run: who:`")).toBe(true)
+		t.expect(has(bullet, "the memory the OS saw")).toBe(true)
 		t.expect(has(bullet, "`watchdog alive`")).toBe(true)
 		t.expect(has(bullet, "`watchdog gone`")).toBe(true)
 		t.expect(has(bullet, "only the sweeper's pid was signalled")).toBe(true)

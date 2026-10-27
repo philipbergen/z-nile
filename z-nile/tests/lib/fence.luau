@@ -753,13 +753,15 @@ local REAPER = table.concat({
 	"my $swept = ($ENV{PICKMAN_REAP_SWEPT} // '') eq '1' && ($st & 127); my @report;",
 	"if ($swept) { my $secs = time - $t0; my $top = $ENV{PICKMAN_REAP_TOP} // '';",
 	"my $up = $top !~ /^\\d+$/ ? 'unknown' : kill(0, $top) || $!{EPERM} ? 'alive' : 'gone';",
+	-- the memory the OS saw (macOS: percent free, swap used); `?` where it can't be read (Linux)
+	"my ($mem) = `sysctl -n kern.memorystatus_level 2>/dev/null` =~ /^(\\d+)/; my ($swap) = `sysctl -n vm.swapusage 2>/dev/null` =~ /used = (\\S+)/;",
 	"my $g = getpgrp(); my ($me) = map { /^$$ (.*)$/ ? ($1) : () } split /\\n/, `pgrep -lf -a -g $g 2>/dev/null`; $me //= '';",
 	"my @left; my $wd = 'gone'; for my $l (split /\\n/, `pgrep -lf -a -g $pid 2>/dev/null`) {",
 	"my ($p, $c) = $l =~ /^(\\d+) (.*)$/ or next; if ($me ne '' && $c eq $me) { $wd = \"alive (pid $p)\"; next }",
 	'push @left, "tests/run:   $p " . substr($c, 0, 200) . "\\n" }',
 	'@report = (sprintf("tests/run: the jail\'s sweeper was killed (signal %d): processes the specs left may still run. Stop and report this.\\n", $st & 127),',
-	"sprintf(\"tests/run: who: at %s, %ds after the specs started; launcher %d (the run's top process %s, %s); specs group %d (the sweeper's own pid); watchdog %s; %d other process(es) still in the group%s\\n\",",
-	"scalar(localtime), $secs, $$, $top eq '' ? '?' : $top, $up, $pid, $wd, scalar(@left), @left ? ':' : ''), @left) }",
+	"sprintf(\"tests/run: who: at %s, %ds after the specs started; launcher %d (the run's top process %s, %s); memory %s%% free, swap used %s; specs group %d (the sweeper's own pid); watchdog %s; %d other process(es) still in the group%s\\n\",",
+	"scalar(localtime), $secs, $$, $top eq '' ? '?' : $top, $up, $mem // '?', $swap // '?', $pid, $wd, scalar(@left), @left ? ':' : ''), @left) }",
 	-- whatever is left in the group, the watchdog included
 	"kill 'KILL', -$pid;",
 	-- with the specs stopped, unlink every symlink at the top of the cache folder it was given, never following one
