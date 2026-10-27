@@ -14,6 +14,7 @@
 | 10 | 2026-10-26 18:11 | R0055: Addressed during execution (none) | 0 | 0 | 5.0 | raft | deliver |  |
 | 11 | 2026-10-26 22:55 | c0154: run-record-merge spec no longer spells the record's path literally (c0049's scan read it as a fixture shared with schedule.spec) | 4 | 2 | 15.0 | explicit | deliver |  |
 | 12 | 2026-10-26 23:34 | tracker: done R0055 | 0 | 0 | 38.5 | raft | deliver |  |
+| 13 | 2026-10-27 00:24 | deliver | 0 | 0 | 70.0 | spend | deliver |  |
 
-**Total:** +814 / -8 lines, 427.5 agent-minutes, 0 tokens over 12 records
-<!-- totals: added=814 removed=8 minutes=427.5 records=12 tokens=0 -->
+**Total:** +814 / -8 lines, 497.5 agent-minutes, 0 tokens over 13 records
+<!-- totals: added=814 removed=8 minutes=497.5 records=13 tokens=0 -->
