@@ -13,6 +13,7 @@
 | 9 | 2026-10-26 04:14 | design-review-005 | 0 | 0 | 7.0 | spend | design-review |  |
 | 10 | 2026-10-26 04:15 | design-refute-005 | 0 | 0 | 12.0 | spend | design-review |  |
 | 11 | 2026-10-27 02:37 | f0110: touch FIRE and JUMP buttons (Touch zones and placement, Controls hook, HudView discs, Main) | 177 | 16 | 25.0 | focus | build |  |
+| 12 | 2026-10-27 03:05 | R0051: fix RC1's spec path in check.sh (user-approved); lesson | 11 | 0 | 15.0 | focus | build |  |
 
-**Total:** +177 / -16 lines, 173.0 agent-minutes, 0 tokens over 11 records
-<!-- totals: added=177 removed=16 minutes=173.0 records=11 tokens=0 -->
+**Total:** +188 / -16 lines, 188.0 agent-minutes, 0 tokens over 12 records
+<!-- totals: added=188 removed=16 minutes=188.0 records=12 tokens=0 -->
