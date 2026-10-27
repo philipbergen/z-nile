@@ -1,0 +1,31 @@
+# Review 003: c0139 (design mode)
+Inputs: prep `prep-scripts-refuse-conflicts` 3c1923e5 (`git diff 70735ebd~1..3c1923e5`: c0139.md, check.sh, acceptance/conflicts.spec.luau, design-refute-002.md, harvest.md, zz-test/lessons/sequestered-edits-parse-and-list.md); prototype `proto-scripts-refuse-conflicts` 14013f7e (`z-nile/engine/conflicts.luau`, `main.luau` dispatch, `audit.luau`); `./zn lessons --when design`; `./zn capture c0139`. Probes ran in a `--shared` scratch clone of 14013f7e, origin removed (scratchpad `dr-chores-4/c0139`).
+Dropped from design-review-002: F1, F2, F3, F4
+
+Rulings on refute 002:
+- F1 fixed: `bash -n check.sh` rc 0; `AC_LIST=1 bash .tracker/issues/c0139/check.sh` from `z-nile/` ends `---- 4 criteria listed (none run)`; the AC2 label matches the document.
+- F2 fixed for the reads it names: a mid-merge refusal is the baseline (`./zn new issue …` in my clone mid-merge: "refusing to run while the checkout has unmerged paths … c0139.md"), and the corrupted-index case is in `conflicts.spec`. But the follow-up commit 14013f7e added a waiver to the fail-closed read, and that waiver reopens the hole (F1 below).
+- F3 fixed: `conflictOk` reads `status` through `flags`, and both forms are in the conflict-OK loop.
+- F4 fixed: Maintainability names `conflictOk`. Audit skips the scan when the registry can't be read, and the registry is reported: with a broken `projects.toml`, `./zn audit` prints `Error registry z-nile/projects.toml: … is not valid TOML`.
+
+### F1 [high] The "not a git repository" waiver keys on git's message, which git also prints for broken or redirected real checkouts, so writing commands run mid-merge or over a whole conflict
+Where: prototype `conflicts.refusal` (`rev-parse --is-inside-work-tree` failing with stderr containing "not a git repository" → `return nil`); Design rule 3's last sentence; Rules row "outside any git repository the guard has nothing to check" (only mutant G5, "refused", is listed)
+Evidence: I ran each of these in the scratch clone, starting from a real mid-merge with `z-nile/.tracker/issues/c0139/c0139.md` unmerged (`UU`) and `PICKMAN_PUBLISH=0`:
+- **Inherited GIT_DIR naming no repository**: `GIT_DIR=/nonexistent git rev-parse --is-inside-work-tree` prints `fatal: not a git repository: '/nonexistent'`. `GIT_DIR=/nonexistent ./zn new issue c probe-x --project z-nile` printed `z-nile/.tracker/issues/c0154/c0154.md`, rc 0, and `git status` then showed `UU …c0139.md` and `?? z-nile/.tracker/issues/c0154/`. `guardRepoRoot` lets it through as well, because it only compares when both reads succeed.
+- **Corrupt HEAD** (`echo garbage > .git/HEAD`, the merge still in progress): git prints `fatal: not a git repository (or any of the parent directories): .git`, and `./zn new issue …` wrote `c0154/c0154.md`.
+- **Linked worktree whose admin folder is gone** (`git worktree add ../wt side`, a whole conflict appended to `c0139.md`): `./zn new` first refused, naming `c0139.md:79`. After `rm -rf ../repo/.git/worktrees/wt`, git prints `fatal: not a git repository: (null)` and the same `./zn new` wrote `c0154/c0154.md`. Rule 2 (a whole conflict in a working file) needs no git state at all, yet the waiver skips it too. Worktrees under `.worktree/` are this project's normal way of working, and a pruned or moved admin folder is a plausible accident.
+- **`.git` a `gitdir:` file pointing nowhere**, and **`.git` unreadable** (`chmod 000 .git`): both print "not a git repository" (in a `git init` scratch repo).
+In every case, git's message means "I could not use the repository here", not "there is no checkout here". The Design itself says the guard should skip "as audit skips its scan without `.git`", and audit tests the condition (`fs.isDir(root/.git) or fs.isFile(root/.git)`). So the repository has two definitions of "outside a repository", and the guard's is the one a broken checkout satisfies.
+Critique: lesson zz-arch/guard-no-is-explicit asks "when a guard call's failure is tolerated, does the waiver test for the condition that makes it safe". This waiver tests the wording of a failure, which a non-English git also changes (there it fails closed, so migrate breaks). Lesson zz-test/derive-after-stripping-overrides asks for an inherited-`GIT_DIR` case, and none exists. The tempting fix is to add more message patterns, or to `unset GIT_DIR` before the read. Neither covers a corrupt HEAD or a pruned worktree.
+Consequences: if the waiver tests the condition instead, the condition is "no `.git` entry at `top`, and no git location variable (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`) inherited". Everything else that fails refuses, naming the command and its error: a broken checkout then stops every writing command until it is repaired, which is right, because none of its git operations can succeed anyway. migrate-odd's fixture (`mktemp -d`, no `.git`, no variables) still runs. A non-English git no longer matters. audit and the guard can then share one predicate (`conflicts.outsideRepo(top)` or similar), so the two definitions can't drift apart (lesson zz-test/one-rule-one-function).
+Recommendation: replace the stderr test with the condition above, used by both `refusal` and audit's scan. Add `conflicts.spec` cases, each mid-merge or with a whole conflict, each expecting a refusal and no new file:
+(a) an inherited `GIT_DIR` that names no repository;
+(b) a corrupt `.git/HEAD`;
+(c) a linked worktree whose admin folder was removed;
+keep migrate-odd as the case that must still run. Add the Rules row "a broken or redirected checkout refuses" with the mutant "waiver by git's message" (it must fail (a)–(c)), and record the mutation run in E2.
+Lesson: zz-arch/guard-no-is-explicit
+
+Candidate lessons (for the lead):
+- zz-arch (note on guard-no-is-explicit): a waiver for "not applicable here" tests the condition on disk and in the environment (no `.git` entry, no inherited git variables), never the wording of a tool's error, because git prints "not a git repository" for a corrupt HEAD, a pruned worktree, an unreadable `.git` and an inherited `GIT_DIR`, as well as for a folder outside any repository. Check: can a real but broken or redirected checkout produce the message this waiver matches?
+
+Verdict: changes
