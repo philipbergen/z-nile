@@ -119,6 +119,9 @@ return t.spec("c0144 ./zn output in a terminal and in a pipe", function(it)
 		function()
 			for _, args in COMMANDS do
 				local plain = zn(args)
+				-- something was printed: "no escape" is not "no output"
+				t.expect({ args = args, printed = plain.stdout ~= "" })
+					.toEqual({ args = args, printed = true })
 				t.expect({ args = args, esc = has(plain.stdout .. plain.stderr, ESC) })
 					.toEqual({ args = args, esc = false })
 				for _, other in
@@ -282,7 +285,7 @@ return t.spec("c0144 ./zn output in a terminal and in a pipe", function(it)
 
 	it("uses ASCII glyphs and an ASCII ellipsis outside a UTF-8 locale", function()
 		local out = zn({ "status", "--color=always" }, { COLUMNS = "60", LANG = "C", LC_ALL = "C" }).stdout
-		t.expect(string.find(strip(out), "[\128-\255]")).toBe(nil)
+		t.expect((string.find(strip(out), "[\128-\255]"))).toBe(nil)
 	end)
 
 	it(
@@ -291,6 +294,11 @@ return t.spec("c0144 ./zn output in a terminal and in a pipe", function(it)
 			local auto = pty({ "status" }, { LANG = "en_US.UTF-8" })
 			t.expect(has(auto, ESC)).toBe(true)
 			t.expect(has(auto, "ACTIVE (2)")).toBe(true)
+			-- script's terminal has no size (stty says 0 columns): the width falls back to 80
+			for line in string.gmatch(strip(auto), "[^\n]+") do
+				t.expect({ line = line, fits = (utf8.len(line) or #line) <= 80 })
+					.toEqual({ line = line, fits = true })
+			end
 			for _, run in
 				{
 					pty({ "status" }, { NO_COLOR = "1" }),
@@ -325,6 +333,32 @@ return t.spec("c0144 ./zn output in a terminal and in a pipe", function(it)
 			local no = pty({ "check", "c0004", "--no-color" }, {})
 			t.expect(has(no, ESC)).toBe(false)
 			t.expect(has(no, "PASS  AC1: it holds")).toBe(true)
+			-- ac.sh's own rule (it decides for its own stdout) honours TERM=dumb and NO_COLOR as the engine's does
+			local envs: { { [string]: string } } = { { TERM = "dumb" }, { NO_COLOR = "1" } }
+			for _, env in envs do
+				local run = pty({ "check", "c0004" }, env)
+				t.expect({ env = env, esc = has(run, ESC), pass = has(run, "PASS  AC1: it holds") })
+					.toEqual({ env = env, esc = false, pass = true })
+			end
+			-- ac.sh decides for its own stdout: a check.sh run directly on a terminal is colored, and plain with TERM=dumb or
+			-- NO_COLOR (here no ./zn stands between, to pass NO_COLOR on)
+			local direct = pty({}, {}, "bash pickman/.tracker/issues/active/c0004/check.sh")
+			t.expect(has(direct, "\27[32;1mPASS\27[0m  AC1: it holds")).toBe(true)
+			for _, env in envs do
+				local run = pty({}, env, "bash pickman/.tracker/issues/active/c0004/check.sh")
+				t.expect({
+					direct = true,
+					env = env,
+					esc = has(run, ESC),
+					pass = has(run, "PASS  AC1: it holds"),
+				})
+					.toEqual({
+						direct = true,
+						env = env,
+						esc = false,
+						pass = true,
+					})
+			end
 		end
 	)
 

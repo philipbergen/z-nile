@@ -100,7 +100,7 @@ function term.paint(mode: Mode, style: string, text: string): string
 	if not mode.color or text == "" then
 		return text
 	end
-	local names = STYLE[style] or { style }
+	local names: { string } = STYLE[style] or { style }
 	local codes = {}
 	for _, n in names do
 		table.insert(codes, SGR[n] or error(`term.paint: unknown style {n}`))

@@ -261,8 +261,8 @@ end
 function look.audit(mode: Mode, lines: { string }, summary: string): { string }
 	local out: { string } = {}
 	for _, l in lines do
-		local sev, code, rest = string.match(l, "^(%S+) (%S+) (.*)$")
-		if sev and code and rest then
+		local sev, code, rest = string.match(l, "^(%a+) (%S+) (.*)$")
+		if (sev == "error" or sev == "warning") and code and rest then
 			local style = if sev == "error" then "error" else "warning"
 			local glyph = if sev == "error" then "error" else "warning"
 			table.insert(

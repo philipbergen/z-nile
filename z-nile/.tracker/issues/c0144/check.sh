@@ -9,8 +9,8 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-check "AC1: the pure rules: rich and colored only on a terminal or when forced, NO_COLOR, TERM=dumb, the width, fit, wrap, columns, bars, links" \
-  lune run tests/run -- "$A/term.spec.luau"
+check "AC1: the pure rules: rich and colored only on a terminal or when forced, NO_COLOR, TERM=dumb, the width, fit, wrap, columns, bars, links; each command's look" \
+  lune run tests/run -- "$A/term.spec.luau" "$A/render.spec.luau"
 check "AC2: piped output is plain and unchanged by the color options; on a terminal or with --color=always it is the rich look, fits the width and keeps every fact; check, refusals, usage and zz-rules" \
   lune run tests/run -- "$A/look.spec.luau"
 # AC3 (here only, never a gate rule after done: lesson zz-test/promoted-specs-pin-rules-not-sets): piped, every command
@@ -34,12 +34,14 @@ plain_matches_base() {
   C0144_BASE="$(cd "$out" && pwd -P)" lune run tests/run -- "$A/plain-base.luau"
 }
 check "AC3: piped, every command prints byte for byte what the engine before c0144 printed" plain_matches_base
-check "AC4: the specs that read ./zn's output still pass" \
+check "AC4: the specs that read ./zn's output, or the touched files as text, still pass" \
   lune run tests/run -- tests/acceptance/c0082/cli.spec.luau tests/acceptance/c0111/metrics-lessons.spec.luau \
   tests/acceptance/c0111/lessons-cli.spec.luau tests/acceptance/c0045/workstreams.spec.luau \
   tests/acceptance/c0120/freeze.spec.luau tests/acceptance/c0120/homes.spec.luau \
   tests/acceptance/c0119/capture-cli.spec.luau tests/acceptance/c0084/spend-command.spec.luau \
   tests/acceptance/c0084/metrics-phases.spec.luau tests/acceptance/c0120/promote-home.spec.luau \
-  tests/acceptance/c0053/commands-sync.spec.luau
+  tests/acceptance/c0053/commands-sync.spec.luau tests/acceptance/c0115/docs.spec.luau \
+  tests/acceptance/c0116/docs.spec.luau tests/acceptance/c0120/docs.spec.luau tests/acceptance/c0114/docs.spec.luau \
+  tests/acceptance/c0120/check-paths.spec.luau
 
 finish

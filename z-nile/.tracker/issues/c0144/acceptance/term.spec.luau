@@ -7,7 +7,7 @@ local t = require("@tests/lib/t")
 local term = require("@znile/engine/term")
 
 local ESC = "\27"
-local UTF8 = { LANG = "en_US.UTF-8" }
+local UTF8: { [string]: string? } = { LANG = "en_US.UTF-8" }
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -19,23 +19,29 @@ end
 
 return t.spec("c0144 terminal output rules", function(it)
 	it("decides rich layout and color from the terminal, the choice, NO_COLOR and TERM", function()
-		local cases = {
-			-- choice, env, tty → rich, color
-			{ "auto", {}, false, false, false },
-			{ "auto", {}, true, true, true },
-			{ "auto", { NO_COLOR = "1" }, true, true, false },
-			{ "auto", { NO_COLOR = "" }, true, true, true }, -- an empty NO_COLOR is unset (no-color.org)
-			{ "auto", { TERM = "dumb" }, true, true, false },
-			{ "never", {}, true, true, false },
-			{ "never", {}, false, false, false },
-			{ "always", {}, false, true, true },
-			{ "always", { NO_COLOR = "1" }, false, true, true }, -- the explicit flag wins
-			{ "always", { TERM = "dumb" }, true, true, true },
+		type Case = {
+			choice: term.Choice,
+			env: { [string]: string? },
+			tty: boolean,
+			rich: boolean,
+			color: boolean,
 		}
-		for _, c in cases do
-			local m = term.decide(c[1] :: any, c[2] :: any, c[3] :: boolean, 100)
-			t.expect({ case = c, rich = m.rich, color = m.color })
-				.toEqual({ case = c, rich = c[4], color = c[5] })
+		local cases: { Case } = {
+			{ choice = "auto", env = {}, tty = false, rich = false, color = false },
+			{ choice = "auto", env = {}, tty = true, rich = true, color = true },
+			{ choice = "auto", env = { NO_COLOR = "1" }, tty = true, rich = true, color = false },
+			{ choice = "auto", env = { NO_COLOR = "" }, tty = true, rich = true, color = true }, -- an empty NO_COLOR is unset (no-color.org)
+			{ choice = "auto", env = { TERM = "dumb" }, tty = true, rich = true, color = false },
+			{ choice = "never", env = {}, tty = true, rich = true, color = false },
+			{ choice = "never", env = {}, tty = false, rich = false, color = false },
+			{ choice = "always", env = {}, tty = false, rich = true, color = true },
+			{ choice = "always", env = { NO_COLOR = "1" }, tty = false, rich = true, color = true }, -- the explicit flag wins
+			{ choice = "always", env = { TERM = "dumb" }, tty = true, rich = true, color = true },
+		}
+		for n, c in cases do
+			local m = term.decide(c.choice, c.env, c.tty, 100)
+			t.expect({ case = n, rich = m.rich, color = m.color })
+				.toEqual({ case = n, rich = c.rich, color = c.color })
 		end
 		-- not a terminal and not forced: exactly the plain mode
 		t.expect(term.decide("auto", { NO_COLOR = "" }, false, 100)).toBe(term.PLAIN)
@@ -61,10 +67,10 @@ return t.spec("c0144 terminal output rules", function(it)
 	end)
 
 	it("reads the --color choice and refuses any other value, naming the rule", function()
-		t.expect(term.choice(nil)).toBe("auto")
-		t.expect(term.choice("auto")).toBe("auto")
-		t.expect(term.choice("always")).toBe("always")
-		t.expect(term.choice("never")).toBe("never")
+		t.expect((term.choice(nil))).toBe("auto")
+		t.expect((term.choice("auto"))).toBe("auto")
+		t.expect((term.choice("always"))).toBe("always")
+		t.expect((term.choice("never"))).toBe("never")
 		local bad, why = term.choice("sometimes")
 		t.expect(bad).toBe(nil)
 		t.expect(why).toBe('--color takes auto, always or never (got "sometimes")')
