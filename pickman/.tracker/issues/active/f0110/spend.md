@@ -16,6 +16,7 @@
 | 12 | 2026-10-27 03:05 | R0051: fix RC1's spec path in check.sh (user-approved); lesson | 11 | 0 | 15.0 | focus | build |  |
 | 13 | 2026-10-27 03:08 | R0051: review-001 | 0 | 0 | 12.0 | focus | code-review | 95381 |
 | 14 | 2026-10-27 03:08 | f0110: the fire button's unit case covers level and raised (review-001 F1) | 12 | 7 | 8.0 | focus | code-review |  |
+| 15 | 2026-10-27 03:08 | R0051: refute-001 | 0 | 0 | 3.0 | focus | code-review |  |
 
-**Total:** +200 / -23 lines, 208.0 agent-minutes, 95381 tokens over 14 records
-<!-- totals: added=200 removed=23 minutes=208.0 records=14 tokens=95381 -->
+**Total:** +200 / -23 lines, 211.0 agent-minutes, 95381 tokens over 15 records
+<!-- totals: added=200 removed=23 minutes=211.0 records=15 tokens=95381 -->
