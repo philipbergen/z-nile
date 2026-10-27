@@ -231,7 +231,7 @@ return t.spec("f0145 the continue offer", function(it)
 				end
 			end
 			t.expect(Session.frame(s, "p").play.phase).toBe("dying")
-			Session.leave(s, "p")
+			Session.depart(s, "p")
 			local seen = stepUntil(s, "gameover", 100)
 			t.expect(find(seen, "Offer")).toBe(nil)
 			local o = new(true)
@@ -242,11 +242,40 @@ return t.spec("f0145 the continue offer", function(it)
 			end
 			stepUntil(o, "offer")
 			Session.hold(o, "p", true)
-			Session.leave(o, "p")
+			Session.depart(o, "p")
 			Session.step(o)
 			t.expect(Session.isOver(o, "p")).toBe(true)
 		end
 	)
+
+	it(
+		"departing and refusing do nothing for a player the session does not know; f0013's leave still removes",
+		function()
+			local s = new(true)
+			Session.depart(s, "nobody")
+			Session.refuse(s, "nobody")
+			t.expect(Session.players(s)).toEqual({ "p" })
+			Session.depart(s, "p")
+			t.expect(Session.players(s)).toEqual({ "p" }) -- departing parks the run, it does not remove the player
+			Session.leave(s, "p")
+			t.expect(Session.players(s)).toEqual({})
+		end
+	)
+
+	it("a refused run is over at once and never yields a GameOver event", function()
+		local s = new(true)
+		stepUntil(s, "playing")
+		Session.refuse(s, "p")
+		t.expect(Session.isOver(s, "p")).toBe(true)
+		for _ = 1, 200 do
+			t.expect(find(Session.step(s), "GameOver")).toBe(nil)
+		end
+		local g = Game.new(Game.IMMEDIATE_CONFIG)
+		Game.allowOffer(g, 3)
+		Game.refuse(g)
+		t.expect(g.phase).toBe("gameover")
+		t.expect(g.offer).toBe(0)
+	end)
 
 	it(
 		"in a session: the offer keeps the run alive, a continue respawns at the start with the pellets eaten kept",

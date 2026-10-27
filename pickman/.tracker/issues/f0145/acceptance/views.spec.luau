@@ -56,6 +56,9 @@ return t.spec("f0145 the offer and the price on screen", function(it)
 			t.expect(Flow.offerPrice({ mode = "live", held = 2 })).toBe(Flow.OFFER.held)
 			t.expect(Flow.offerPrice({ mode = "test", held = 0 })).toBe(Flow.OFFER.test)
 			t.expect(Flow.offerPrice(nil)).toBe(Flow.OFFER.test)
+			t.expect(Flow.OFFER.closed).toBe("STORE UNAVAILABLE")
+			t.expect(Flow.offerPrice({ mode = "closed", held = 0 })).toBe(Flow.OFFER.closed)
+			t.expect(Flow.offerPrice({ mode = "closed", held = 1 })).toBe(Flow.OFFER.held)
 			t.expect(string.find(Flow.OFFER.price, "1 ROBUX", 1, true) ~= nil).toBe(true)
 			t.expect(string.find(Flow.OFFER.test, "NOTHING IS CHARGED", 1, true) ~= nil).toBe(true)
 			t.expect(Flow.OFFER.buy).toBe("CONTINUE")
@@ -84,6 +87,17 @@ return t.spec("f0145 the offer and the price on screen", function(it)
 				.toBe("1 ROBUX A GAME")
 		end
 	)
+
+	it("a closed server's lobby line says the store is unavailable, free and held as ever", function()
+		-- decided with the user, 2026-10-26: "Refuse paid play"
+		t.expect(
+			Lobby.payLine({ free = false, nextFree = NOW + 60, plays = 0, continues = 0 }, "closed", NOW)
+		)
+			.toBe("STORE UNAVAILABLE, NEXT FREE GAME IN 1 MIN")
+		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "closed", NOW)).toBe("FREE GAME")
+		t.expect(Lobby.payLine({ free = false, plays = 1, continues = 0 }, "closed", NOW))
+			.toBe("1 GAME YOU BOUGHT")
+	end)
 
 	it("in test mode the lobby's line says nothing is charged", function()
 		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "test", NOW))

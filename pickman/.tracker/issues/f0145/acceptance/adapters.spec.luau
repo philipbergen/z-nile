@@ -77,6 +77,14 @@ type World = {
 	twice: boolean, -- UpdateAsync calls the transform first with the value it read before the race, then again
 	failWrites: boolean,
 	failReads: boolean,
+	failPassReads: boolean, -- the MemoryStore pass map cannot be read
+	failTeleport: boolean, -- TeleportAsync errors
+	writes: number, -- UpdateAsync calls
+	onWrite: (() -> ())?, -- runs inside the next write, before its transform, as events would while a real write yields
+	kicks: { { player: any, message: string } },
+	delayed: { { seconds: number, fn: (...any) -> (), args: { any } } },
+	elapse: () -> (), -- runs every task.delay callback
+	leave: (player: any) -> (),
 	reads: number,
 	onRead: (() -> ())?, -- runs inside a read, as another press would while a real read yields
 	prompts: { { player: any, id: number } },
@@ -137,6 +145,12 @@ local function world(mode: string?): World
 				local held = w.stores[name]
 				return {
 					UpdateAsync = function(_: any, key: string, fn: (any) -> any): any
+						w.writes += 1
+						local during = w.onWrite
+						if during then
+							w.onWrite = nil
+							during()
+						end
 						if w.failWrites then
 							error("store down", 0)
 						end
@@ -179,6 +193,9 @@ local function world(mode: string?): World
 						w.passes[key] = value
 					end,
 					GetAsync = function(_: any, key: string): any
+						if w.failPassReads then
+							error("memory store down", 0)
+						end
 						return w.passes[key]
 					end,
 					RemoveAsync = function(_: any, key: string)
@@ -222,6 +239,9 @@ local function world(mode: string?): World
 		TeleportService = {
 			TeleportAsync = function(_: any, destination: number, list: { any })
 				table.insert(w.teleports, { destination = destination, player = list[1] })
+				if w.failTeleport then
+					error("teleport failed", 0)
+				end
 			end,
 			TeleportInitFailed = signal(),
 		},
@@ -279,6 +299,9 @@ local function world(mode: string?): World
 			spawn = function(fn: () -> ())
 				fn()
 			end,
+			delay = function(seconds: number, fn: (...any) -> (), ...: any)
+				table.insert(w.delayed, { seconds = seconds, fn = fn, args = { ... } })
+			end,
 		},
 	}
 	w = {
@@ -289,6 +312,27 @@ local function world(mode: string?): World
 		twice = false,
 		failWrites = false,
 		failReads = false,
+		failPassReads = false,
+		failTeleport = false,
+		writes = 0,
+		onWrite = nil,
+		kicks = {},
+		delayed = {},
+		elapse = function()
+			local list = w.delayed
+			w.delayed = {}
+			for _, d in list do
+				d.fn(table.unpack(d.args))
+			end
+		end,
+		leave = function(player: any)
+			player.Parent = nil
+			local i = table.find(players, player)
+			if i then
+				table.remove(players, i)
+			end
+			removing.fire(player)
+		end,
 		reads = 0,
 		onRead = nil,
 		prompts = {},
@@ -305,7 +349,11 @@ local function world(mode: string?): World
 			return assert(remotes[name], `no remote {name}`)
 		end,
 		player = function(userId: number): any
-			local p = { UserId = userId, Parent = {}, Name = `P{userId}` }
+			local p: any = { UserId = userId, Parent = {}, Name = `P{userId}` }
+			p.Kick = function(_: any, message: string)
+				table.insert(w.kicks, { player = p, message = message })
+				w.leave(p)
+			end
 			table.insert(players, p)
 			added.fire(p)
 			return p
@@ -359,21 +407,34 @@ end
 
 type Arena = { w: World, s: Session.Session, p: any }
 
--- the game place with one player whose run is in the continue offer
-local function arena(mode: string?, ticks: number?, setup: ((World) -> ())?): Arena
+-- the game place with one player who has just arrived (their first Ready)
+local function arrive(mode: string?, setup: ((World) -> ())?): Arena
 	local w = world(mode)
 	local p = w.player(7)
 	local s = Session.new(Maze.parse({ "#######", "#..P..#", "#######" }, "corridor"), 1, Session.GAME_CONFIG)
 	Session.join(s, "7")
 	local continues = luau.load(CONTINUES, { environment = w.env, debugName = "Continues" })() :: any
 	continues.start(function(player: any): Session.Session?
-		return if player == p then s else nil
+		return if player == p and p.Parent ~= nil then s else nil
+	end)
+	-- as Sessions does: a departing player's run is parked and ends its offer (f0145 Session.depart)
+	w.env.game:GetService("Players").PlayerRemoving:Connect(function(player: any)
+		if player == p then
+			Session.depart(s, "7")
+		end
 	end)
 	if setup then
 		setup(w)
 	end
 	w.remote("Ready").OnServerEvent.fire(p)
 	w.flush()
+	return { w = w, s = s, p = p }
+end
+
+-- the game place with one player whose run is in the continue offer
+local function arena(mode: string?, ticks: number?, setup: ((World) -> ())?): Arena
+	local a = arrive(mode, setup)
+	local w, s, p = a.w, a.s, a.p
 	if ticks then
 		Session.allowOffer(s, "7", ticks)
 	end
@@ -646,14 +707,38 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 	end)
 
 	it(
-		"a live mode with a product id missing is test mode: an ask opens the test screen, never hangs",
+		"a live server with a product id missing refuses paid play: free and held still work, nothing is sold",
 		function()
+			-- decided with the user, 2026-10-26: "Refuse paid play"
 			local a = arena("live", 50, function(w: World)
 				w.attributes.ContinueProductId = nil
 			end)
 			a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
 			t.expect(#a.w.prompts).toBe(0)
-			t.expect(sentOn(a.w, "Purchase", a.p)).toEqual({ { "continue" } })
+			t.expect(#sentOn(a.w, "Purchase", a.p)).toBe(0)
+			t.expect(a.s.members["7"].play.held).toBe(false) -- the countdown runs on
+			a.w.remote("Purchase").OnServerEvent.fire(a.p, "confirm")
+			t.expect(Pay.record(a.w.records["7"]).continues).toBe(0)
+			t.expect(a.w.records).toBe(a.w.stores[Pay.STORE]) -- the live records, not the test ones
+			local b = arena("live", 50, function(w: World)
+				w.attributes.PlayProductId = 0
+			end)
+			b.w.records["7"].continues = 1
+			b.w.remote("Continue").OnServerEvent.fire(b.p, "ask")
+			t.expect(Session.offering(b.s, "7")).toBe(false) -- a held continue is still used
+			local l = lobby("live")
+			l.attributes.PlayProductId = nil
+			l.stores[Pay.STORE]["8"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			local q = l.player(8)
+			press(l, q)
+			t.expect(#l.prompts).toBe(0)
+			t.expect(#sentOn(l, "Purchase", q)).toBe(0)
+			t.expect(#l.teleports).toBe(0)
+			local said = sentOn(l, "PayStatus", q)
+			t.expect(said[#said][1]).toBe("closed")
+			l.stores[Pay.STORE]["9"] = { free = nil, plays = 0, continues = 0, receipts = {} }
+			press(l, l.player(9)) -- a free game still starts
+			t.expect(#l.teleports).toBe(1)
 		end
 	)
 
@@ -687,18 +772,100 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 		t.expect(#a.w.teleports).toBe(0)
 	end)
 
-	it("a buy arrival goes back to the lobby with no offer; a failed write plays", function()
+	it(
+		"a buy arrival is refused at once (over, nothing submitted) and sent back; a failed write plays",
+		function()
+			local a = arrive("live", function(w: World)
+				w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			end)
+			t.expect(Session.frame(a.s, "7").play.score).toBe(0)
+			t.expect(#a.w.teleports).toBe(1)
+			t.expect(a.w.teleports[1].destination).toBe(555)
+			t.expect(Session.isOver(a.s, "7")).toBe(true)
+			for _ = 1, 100 do
+				for _, e in Session.step(a.s) do
+					t.expect(e.kind ~= "GameOver").toBe(true)
+				end
+			end
+			t.expect(#a.w.kicks).toBe(0)
+			local b = arrive("live", function(w: World)
+				w.failWrites = true
+			end)
+			t.expect(#b.w.teleports).toBe(0)
+			t.expect(Session.isOver(b.s, "7")).toBe(false)
+			t.expect(b.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
+		end
+	)
+
+	it(
+		"a player sent back whose teleport errors, fails to start, has no lobby, or does not leave in time is kicked",
+		function()
+			local function buyer(setup: ((World) -> ())?): Arena
+				return arena("live", nil, function(w: World)
+					w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+					if setup then
+						setup(w)
+					end
+				end)
+			end
+			local a = buyer(function(w: World)
+				w.failTeleport = true
+			end)
+			t.expect(#a.w.kicks).toBe(1)
+			t.expect(a.w.kicks[1].message).toBe("Start a game from the lobby.")
+			local b = buyer(function(w: World)
+				w.attributes.LobbyPlaceId = nil
+			end)
+			t.expect(#b.w.teleports).toBe(0)
+			t.expect(#b.w.kicks).toBe(1)
+			local c = buyer()
+			t.expect(#c.w.kicks).toBe(0)
+			c.w.env.game
+				:GetService("TeleportService").TeleportInitFailed
+				.fire(c.p, "Enum.TeleportResult.Failure", "x")
+			t.expect(#c.w.kicks).toBe(1)
+			local d = buyer()
+			t.expect(#d.w.delayed).toBe(1)
+			t.expect(d.w.delayed[1].seconds).toBe(10)
+			d.w.elapse()
+			t.expect(#d.w.kicks).toBe(1)
+			local e = buyer()
+			e.w.leave(e.p) -- the teleport took them: nobody is kicked later
+			e.w.elapse()
+			t.expect(#e.w.kicks).toBe(0)
+			local f = arena("live") -- a paying player is never kicked
+			f.w.env.game
+				:GetService("TeleportService").TeleportInitFailed
+				.fire(f.p, "Enum.TeleportResult.Failure", "x")
+			f.w.elapse()
+			t.expect(#f.w.kicks).toBe(0)
+		end
+	)
+
+	it(
+		"the lobby's pass is taken on every arrival: after a free arrival, a later buy arrival is sent back",
+		function()
+			local a = arena("live", nil, function(w: World)
+				w.records["7"] = { free = nil, plays = 0, continues = 0, receipts = {} }
+				w.passes["7"] = true
+			end)
+			t.expect(a.w.passes["7"]).toBe(nil)
+			t.expect(#a.w.teleports).toBe(0)
+			local b = arena("live", nil, function(w: World)
+				w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			end)
+			t.expect(#b.w.teleports).toBe(1)
+		end
+	)
+
+	it('a buy arrival whose pass map cannot be read plays (the user, 2026-10-26: "Let them play")', function()
 		local a = arena("live", nil, function(w: World)
 			w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			w.failPassReads = true
 		end)
-		t.expect(#a.w.teleports).toBe(1)
-		t.expect(a.w.teleports[1].destination).toBe(555)
-		t.expect(a.s.members["7"].play.offer).toBe(0)
-		local b = arena("live", nil, function(w: World)
-			w.failWrites = true
-		end)
-		t.expect(#b.w.teleports).toBe(0)
-		t.expect(b.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
+		t.expect(#a.w.teleports).toBe(0)
+		t.expect(Session.isOver(a.s, "7")).toBe(false)
+		t.expect(a.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
 	end)
 
 	it(
@@ -753,6 +920,68 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 				Session.step(b.s)
 			end
 			t.expect(Session.isOver(b.s, "7")).toBe(true)
+		end
+	)
+
+	it(
+		"a second ask while a continue's write is in flight is dropped: two held, one spent, one continue",
+		function()
+			local a = arena("live", 50)
+			a.w.records["7"].continues = 2
+			a.w.onWrite = function()
+				a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+			end
+			a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+			t.expect(Pay.record(a.w.records["7"]).continues).toBe(1)
+			t.expect(Session.frame(a.s, "7").play.lives).toBe(Game.CONTINUE_LIVES)
+			t.expect(a.w.writes).toBe(1 + 1) -- the arrival's and this continue's
+			t.expect(#a.w.prompts).toBe(0)
+		end
+	)
+
+	it("twenty asks during a continue's write make one write and no prompt", function()
+		local a = arena("live", 50)
+		local before = a.w.writes
+		a.w.onWrite = function()
+			for _ = 1, 20 do
+				a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+			end
+		end
+		a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+		t.expect(a.w.writes - before).toBe(1)
+		t.expect(#a.w.prompts).toBe(1) -- the first ask's, none held
+	end)
+
+	it("a decline during a continue's write keeps the continue held and ends the run", function()
+		local a = arena("live", 50)
+		a.w.records["7"].continues = 1
+		a.w.onWrite = function()
+			a.w.remote("Continue").OnServerEvent.fire(a.p, "decline")
+		end
+		a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+		t.expect(Pay.record(a.w.records["7"]).continues).toBe(1)
+		Session.step(a.s)
+		t.expect(Session.isOver(a.s, "7")).toBe(true)
+	end)
+
+	it(
+		"a leave during a receipt's continue write keeps the continue held and ends the run within LEAVE_STEPS",
+		function()
+			local a = arena("live", 50)
+			a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+			a.w.onWrite = function()
+				-- the receipt's own write runs first; the leave comes during the continue's write that follows
+				a.w.onWrite = function()
+					a.w.leave(a.p)
+				end
+			end
+			t.expect(a.w.receipt(7, CONTINUE_ID, "C9")).toBe("ProductPurchaseDecision.PurchaseGranted")
+			t.expect(Pay.record(a.w.records["7"]).continues).toBe(1)
+			t.expect(Session.frame(a.s, "7").play.lives).toBe(0)
+			for _ = 1, 45 do
+				Session.step(a.s)
+			end
+			t.expect(Session.isOver(a.s, "7")).toBe(true)
 		end
 	)
 end)

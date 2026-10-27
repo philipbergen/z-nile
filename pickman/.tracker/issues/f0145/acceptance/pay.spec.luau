@@ -22,7 +22,7 @@ return t.spec("f0145 Pay", function(it)
 	end)
 
 	it(
-		'the mode is live only for exactly "live" with both product ids configured; anything else is test',
+		'the mode is live only for exactly "live" with both ids; "live" with an id missing or bad is closed; else test',
 		function()
 			local ids = { play = 111, continue = 222 }
 			t.expect(Pay.mode("live", ids)).toBe("live")
@@ -30,18 +30,21 @@ return t.spec("f0145 Pay", function(it)
 				t.expect(Pay.mode(raw, ids)).toBe("test")
 			end
 			t.expect(Pay.mode(nil, ids)).toBe("test")
-			-- a missing or bad id would leave a live server unable to sell: test mode instead (design review 001 F8)
-			t.expect(Pay.mode("live", nil)).toBe("test")
-			t.expect(Pay.mode("live", { play = 111 })).toBe("test")
-			t.expect(Pay.mode("live", { play = 111, continue = 0 })).toBe("test")
-			t.expect(Pay.mode("live", { play = 1.5, continue = 222 })).toBe("test")
-			t.expect(Pay.mode("live", { play = "111" :: any, continue = 222 })).toBe("test")
+			-- a live server with a missing or bad id sells nothing and grants nothing free (decided with the user,
+			-- 2026-10-26: "Refuse paid play")
+			t.expect(Pay.mode("live", nil)).toBe("closed")
+			t.expect(Pay.mode("live", { play = 111 })).toBe("closed")
+			t.expect(Pay.mode("live", { play = 111, continue = 0 })).toBe("closed")
+			t.expect(Pay.mode("live", { play = 1.5, continue = 222 })).toBe("closed")
+			t.expect(Pay.mode("live", { play = "111" :: any, continue = 222 })).toBe("closed")
+			t.expect(Pay.mode("test", nil)).toBe("test")
 		end
 	)
 
 	it("each mode has its own store: test credits never reach a live record", function()
 		t.expect(Pay.store("live")).toBe(Pay.STORE)
 		t.expect(Pay.store("test")).toBe(Pay.TEST_STORE)
+		t.expect(Pay.store("closed")).toBe(Pay.STORE) -- a closed server's free starts and credits are the live ones
 		t.expect(Pay.STORE ~= Pay.TEST_STORE).toBe(true)
 	end)
 
