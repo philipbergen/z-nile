@@ -83,7 +83,9 @@ usage: ./zn <command> ...
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
                                                 list skill lessons; also --tags, --check, and --uncovered <id>...
   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
-                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
+                                                <project>/skills); --check writes nothing and exits 1 on a problem
+every command also takes --color=auto|always|never and --no-color: on a terminal output is laid out in colored
+columns (NO_COLOR or --no-color drops the color, TERM=dumb too); piped it is plain text, as scripts read it]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
@@ -1641,10 +1643,24 @@ function cmd.status(pos: { string })
 					claim = string.match(front.status or "", "^%a+%-(.+)$") or "",
 					project = (root and projects.folderOf(root)) or root or "",
 					url = `file://{process.cwd}{p}`,
+					branch = if string.sub(fid, 1, 1) == "R"
+							and state == "active"
+							and front.slug
+						then `{fid}-{front.slug}`
+						else nil,
 				})
 			end
 		end
 		say(table.concat(lines, "\n"), function(m: term.Mode): { string }
+			-- an active raft links to its pull request (c0144): origin's configured URL, read only for links
+			if m.links then
+				local origin = sh.run("git", { "config", "--get", "remote.origin.url" })
+				for _, r in rows do
+					if r.branch then
+						r.pr = look.prUrl(if origin.ok then origin.stdout else nil, r.branch :: string)
+					end
+				end
+			end
 			return look.status(m, rows)
 		end)
 		return
@@ -2769,6 +2785,11 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 						raft = fm.raft or "",
 						title = fm.title or fm.slug or "",
 						url = `file://{process.cwd}{doc}`,
+						branch = if kind == "raft"
+								and state == "active"
+								and fm.slug
+							then `{f.id}-{fm.slug}`
+							else nil,
 					})
 				end
 			end
@@ -2776,6 +2797,15 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	end
 	if #listLines > 0 then
 		say(table.concat(listLines, "\n"), function(m: term.Mode): { string }
+			-- an active raft links to its pull request (c0144), as in status
+			if m.links then
+				local origin = sh.run("git", { "config", "--get", "remote.origin.url" })
+				for _, r in listRows do
+					if r.branch then
+						r.pr = look.prUrl(if origin.ok then origin.stdout else nil, r.branch :: string)
+					end
+				end
+			end
 			return look.list(m, listRows)
 		end)
 	end
@@ -5341,7 +5371,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
 	return out
 end
 
-local function metricsLessons()
+local function metricsLessons(print: (string) -> ())
 	local tree = lessonsLib.load(".")
 	local all: { lessonsLib.Lesson } = {}
 	for id, text in tree.lessons do
@@ -5716,7 +5746,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
 		end
 	end
-	metricsLessons()
+	metricsLessons(print)
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
 	print("Rework counts every phase, capture to deliver.")
 	print(`  by lines added:  {pct(d.added, f.added)}`)

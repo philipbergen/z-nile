@@ -152,6 +152,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
 - **Can be postponed**: `./zn new issue <f|d|c> <slug> --project <name>` into the backlog, mention it in the final report, and don't fix it now.
 
 ## Other commands
+Output (c0144): on a terminal, `./zn` lays its output out in aligned, colored columns with links to item files; it is plain text when piped (a script, a spec, `$(...)`, CI, an agent's shell), byte for byte what scripts and specs read, so parse only piped output. `--no-color` (or `--color=never`, `NO_COLOR`, `TERM=dumb`) keeps the layout and drops the color; `--color=always` forces the rich look into a pipe (`| less -R`).
 - `./zn list [backlog|active|done]`
 - `./zn members R0010`
 - `./zn check <id>`

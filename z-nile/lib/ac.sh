@@ -71,19 +71,31 @@ export PATH="$HOME/.rokit/bin:$PATH"
 _ac_failed=0
 _ac_total=0
 
+# c0144: on a terminal (this script's own stdout), PASS, FAIL, LIST and the summary are colored; the words stay the
+# same, so stripped of color the text is today's. Never when piped (a check run by a spec, or inside $(...)), when
+# NO_COLOR is set and not empty (./zn check --no-color sets it), or when TERM is dumb. Nothing is exported.
+_ac_paint=
+if [[ -t 1 && -z ${NO_COLOR:-} && ${TERM:-} != dumb ]]; then
+  _ac_paint=1
+fi
+# _ac_word <sgr> <word>: the word in that SGR style on a terminal, else as it is.
+_ac_word() {
+  if [[ -n $_ac_paint ]]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
+}
+
 check() {
   local label="$1"; shift
   _ac_total=$((_ac_total + 1))
   if [[ -n ${AC_LIST:-} ]]; then
-    printf 'LIST  %s\n' "$label"
+    printf '%s  %s\n' "$(_ac_word 2 LIST)" "$label"
     return 0
   fi
   local out
   if out=$("$@" 2>&1); then
-    printf 'PASS  %s\n' "$label"
+    printf '%s  %s\n' "$(_ac_word '32;1' PASS)" "$label"
   else
     _ac_failed=$((_ac_failed + 1))
-    printf 'FAIL  %s\n' "$label"
+    printf '%s  %s\n' "$(_ac_word '31;1' FAIL)" "$label"
     printf '%s\n' "$out" | tail -n 25 | sed 's/^/      /'
   fi
 }
@@ -97,6 +109,6 @@ finish() {
     printf -- '---- %d criteria listed (none run)\n' "$_ac_total"
     return 0
   fi
-  printf -- '---- %d/%d criteria passed\n' "$((_ac_total - _ac_failed))" "$_ac_total"
+  printf -- '%s\n' "$(_ac_word "$(if [[ $_ac_failed -eq 0 ]]; then echo '32'; else echo '31'; fi)" "$(printf -- '---- %d/%d criteria passed' "$((_ac_total - _ac_failed))" "$_ac_total")")"
   [[ $_ac_failed -eq 0 ]]
 }

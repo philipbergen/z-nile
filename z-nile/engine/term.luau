@@ -184,17 +184,24 @@ end
 -- numbers; `style` paints each cell (a function of the plain cell, or nil for none).
 export type Column = { flex: boolean?, right: boolean?, style: ((string) -> string)? }
 
--- Rows of plain cells laid out in aligned columns two spaces apart, the flex column shrunk so each line fits
+-- Rows of plain cells laid out in aligned columns `sep` apart (two spaces by default), the flex column shrunk so each line fits
 -- `mode.width` (down to 8 columns; a table that can't fit then is wider). Cells are styled after fitting.
-function term.columns(mode: Mode, cols: { Column }, rows: { { string } }, indent: string?): { string }
+function term.columns(
+	mode: Mode,
+	cols: { Column },
+	rows: { { string } },
+	indent: string?,
+	sep: string?
+): { string }
 	local lead = indent or ""
+	local between = sep or "  "
 	local widths: { number } = {}
 	for _, row in rows do
 		for i, cell in row do
 			widths[i] = math.max(widths[i] or 0, utf8.len(cell) or #cell)
 		end
 	end
-	local total = term.width(lead) + 2 * math.max(0, #cols - 1)
+	local total = term.width(lead) + term.width(between) * math.max(0, #cols - 1)
 	for i = 1, #cols do
 		total += widths[i] or 0
 	end
@@ -213,7 +220,7 @@ function term.columns(mode: Mode, cols: { Column }, rows: { { string } }, indent
 			local shown = if c.style then (c.style :: (string) -> string)(plain) else plain
 			cells[i] = if i == #cols and not c.right then shown else pad(shown, widths[i] or 0, c.right)
 		end
-		table.insert(out, lead .. table.concat(cells, "  "))
+		table.insert(out, lead .. table.concat(cells, between))
 	end
 	return out
 end
@@ -240,8 +247,12 @@ end
 -- A heading rule: `title` in bold followed by a line to the width.
 function term.rule(mode: Mode, title: string): string
 	local line = if mode.unicode then "─" else "-"
+	-- a title too long for a rule is wrapped in bold instead, so no word of it is lost
+	if term.width(title) > mode.width - 6 then
+		return term.paint(mode, "heading", table.concat(term.wrap(term.strip(title), mode.width), "\n"))
+	end
 	local head = ` {title} `
-	local n = math.max(2, mode.width - (utf8.len(head) or #head) - 2)
+	local n = math.max(2, mode.width - term.width(head) - 2)
 	return term.paint(mode, "muted", string.rep(line, 2))
 		.. term.paint(mode, "heading", head)
 		.. term.paint(mode, "muted", string.rep(line, n))

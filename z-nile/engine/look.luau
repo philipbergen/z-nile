@@ -8,6 +8,31 @@ local look = {}
 
 type Mode = term.Mode
 
+-- The pull requests of an active raft's branch on GitHub, from origin's configured URL (`git@github.com:o/r.git`,
+-- `https://github.com/o/r(.git)`, `ssh://git@github.com/o/r`): a search, so no network call is needed to find it.
+-- nil for any other origin (a path, another host).
+function look.prUrl(origin: string?, branch: string): string?
+	if not origin then
+		return nil
+	end
+	local o = string.gsub(origin, "%s+$", "")
+	local owner, repo = string.match(o, "^git@github%.com:([%w%-%._]+)/([%w%-%._]+)$")
+	if not owner then
+		owner, repo = string.match(o, "^https://github%.com/([%w%-%._]+)/([%w%-%._]+)$")
+	end
+	if not owner then
+		owner, repo = string.match(o, "^ssh://git@github%.com/([%w%-%._]+)/([%w%-%._]+)$")
+	end
+	if not owner or not repo then
+		return nil
+	end
+	local name = string.gsub(repo :: string, "%.git$", "")
+	local q = string.gsub(branch, "[^%w%-_%.]", function(c: string): string
+		return string.format("%%%02X", string.byte(c))
+	end)
+	return `https://github.com/{owner}/{name}/pulls?q=is%3Apr+head%3A{q}`
+end
+
 -- Every item id in `text` painted by its kind, and linked when `url` gives it an address.
 function look.ids(mode: Mode, text: string, url: ((string) -> string?)?): string
 	return (
@@ -30,6 +55,8 @@ export type StatusRow = {
 	claim: string, -- the three stamp words, or ""
 	project: string,
 	url: string?, -- the item document, for the id's link
+	branch: string?, -- an active raft's branch (`<id>-<slug>`), for its pull request
+	pr: string?, -- an active raft's pull request (a GitHub search for its branch), linked from its id and raft cells
 }
 
 -- Grouped by project, then by state (active first), aligned in columns (id, type, state, title, raft, claim),
@@ -46,8 +73,18 @@ function look.status(mode: Mode, rows: { StatusRow }): { string }
 	table.sort(projects)
 	local out: { string } = {}
 	local counts: { [string]: number } = {}
+	local rafts: { [string]: StatusRow } = {}
+	for _, r in rows do
+		if string.sub(r.id, 1, 1) == "R" then
+			rafts[r.id] = r
+		end
+	end
 	for _, project in projects do
 		table.insert(out, term.rule(mode, project))
+		-- one layout per project, so the columns line up under every state heading
+		local cells: { { string } } = {}
+		local byId: { [string]: StatusRow } = {}
+		local starts: { [number]: string } = {}
 		for _, state in STATE_ORDER do
 			local group: { StatusRow } = {}
 			for _, r in rows do
@@ -60,46 +97,67 @@ function look.status(mode: Mode, rows: { StatusRow }): { string }
 				table.sort(group, function(a, b)
 					return a.id < b.id
 				end)
-				table.insert(out, "  " .. term.paint(mode, state, `{string.upper(state)} ({#group})`))
-				local cells: { { string } } = {}
-				local byId: { [string]: StatusRow } = {}
+				starts[#cells + 1] = "  " .. term.paint(mode, state, `{string.upper(state)} ({#group})`)
 				for _, r in group do
 					byId[r.id] = r
 					table.insert(cells, { r.id, r.kind, r.state, r.title, r.raft, r.claim })
 				end
-				local cols: { term.Column } = {
-					{
-						style = function(id: string): string
-							local r = byId[id]
-							return term.link(mode, r and r.url, term.paint(mode, term.kindOf(id), id))
-						end,
-					},
-					{
-						style = function(kind: string): string
-							return term.paint(mode, kind, kind)
-						end,
-					},
-					{
-						style = function(s: string): string
-							return term.paint(mode, s, s)
-						end,
-					},
-					{ flex = true },
-					{
-						style = function(raft: string): string
-							return look.ids(mode, raft)
-						end,
-					},
-					{
-						style = function(claim: string): string
-							return term.paint(mode, "muted", claim)
-						end,
-					},
-				}
-				for _, line in term.columns(mode, cols, cells, "    ") do
-					table.insert(out, (string.gsub(line, "%s+$", "")))
-				end
 			end
+		end
+		local cols: { term.Column } = {
+			{
+				style = function(id: string): string
+					local r = byId[id]
+					return term.link(mode, r and (r.pr or r.url), term.paint(mode, term.kindOf(id), id))
+				end,
+			},
+			{
+				style = function(kind: string): string
+					return term.paint(mode, kind, kind)
+				end,
+			},
+			{
+				style = function(st: string): string
+					return term.paint(mode, st, st)
+				end,
+			},
+			{ flex = true },
+			{
+				style = function(raft: string): string
+					return look.ids(mode, raft, function(id: string): string?
+						local r = rafts[id]
+						return r and (r.pr or r.url)
+					end)
+				end,
+			},
+			{
+				style = function(claim: string): string
+					return term.paint(mode, "muted", claim)
+				end,
+			},
+		}
+		-- the claim words are extra (today's text has none): they go first when the title would get under 24 columns
+		local fixed = 4 + 2 * 5
+		for c = 1, 6 do
+			if c ~= 4 then
+				local w = 0
+				for _, row in cells do
+					w = math.max(w, utf8.len(row[c]) or #row[c])
+				end
+				fixed += w
+			end
+		end
+		if mode.width - fixed < 24 then
+			table.remove(cols, 6)
+			for _, row in cells do
+				table.remove(row, 6)
+			end
+		end
+		for n, line in term.columns(mode, cols, cells, "    ") do
+			if starts[n] then
+				table.insert(out, starts[n])
+			end
+			table.insert(out, (string.gsub(line, "%s+$", "")))
 		end
 		-- any state outside the usual four (a hand-edited stamp) still shows, last
 		for _, r in rows do
@@ -126,7 +184,16 @@ function look.status(mode: Mode, rows: { StatusRow }): { string }
 end
 
 -- `list`: one row per item, as today's columns (id, state, type, raft, title), colored, the title fitted.
-export type ListRow = { id: string, state: string, kind: string, raft: string, title: string, url: string? }
+export type ListRow = {
+	id: string,
+	state: string,
+	kind: string,
+	raft: string,
+	title: string,
+	url: string?,
+	branch: string?, -- an active raft's branch, for its pull request
+	pr: string?,
+}
 function look.list(mode: Mode, rows: { ListRow }): { string }
 	local cells: { { string } } = {}
 	local byId: { [string]: ListRow } = {}
@@ -138,7 +205,7 @@ function look.list(mode: Mode, rows: { ListRow }): { string }
 		{
 			style = function(id: string): string
 				local r = byId[id]
-				return term.link(mode, r and r.url, term.paint(mode, term.kindOf(id), id))
+				return term.link(mode, r and (r.pr or r.url), term.paint(mode, term.kindOf(id), id))
 			end,
 		},
 		{
@@ -278,16 +345,17 @@ function look.lessons(mode: Mode, text: string): { string }
 	end
 	local out: { string } = {}
 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
-		local id, when, count, check = string.match(line, "^%- (%S+) %((%a+), (%d+) sources?%): (.*)$")
-		if id and when and count and check then
+		local id, when, count, noun, check =
+			string.match(line, "^%- (%S+) %((%a+), (%d+) (sources?)%): (.*)$")
+		if id and when and count and noun and check then
 			local n = tonumber(count) :: number
 			table.insert(
 				out,
-				`{term.paint(mode, "heading", id)}  {term.paint(mode, "muted", when)}  {term.paint(
+				`{term.paint(mode, "heading", id)}  {term.paint(mode, "cyan", term.bar(mode, n / most, 8))} {term.paint(
 					mode,
-					"cyan",
-					term.bar(mode, n / most, 8)
-				)} {count} sources`
+					"muted",
+					`({when}, {count} {noun})`
+				)}`
 			)
 			for _, piece in term.wrap(check, math.max(20, mode.width - 4)) do
 				table.insert(out, "    " .. piece)
@@ -358,9 +426,9 @@ function look.markdown(mode: Mode, text: string): { string }
 			for c = 1, n do
 				cols[c] = { right = numeric[c], flex = c == n and not numeric[c] }
 			end
-			local laid = term.columns(mode, cols, rows)
-			for ri, l in laid do
-				local shown = string.gsub(l, "  ", ` {term.paint(mode, "muted", v)} `)
+			local laid = term.columns(mode, cols, rows, "", ` {term.paint(mode, "muted", v)} `)
+			for ri, shown in laid do
+				local l = shown
 				if header and ri == 1 then
 					table.insert(out, term.paint(mode, "heading", shown))
 					table.insert(
@@ -372,7 +440,20 @@ function look.markdown(mode: Mode, text: string): { string }
 				end
 			end
 		else
-			if line ~= "" and not string.match(line, "^%s") and string.match(line, "[%.:]$") then
+			local pct = string.match(line, "^  by .-:%s+([%d%.]+)%%$")
+			if pct then
+				-- a rework rate: a bar against the 20% target, green under it and red over it
+				local n = tonumber(pct) :: number
+				local style = if n < 20 then "ok" else "error"
+				table.insert(
+					out,
+					`{line}  {term.paint(mode, style, term.bar(mode, n / 40, 20))}{term.paint(
+						mode,
+						"muted",
+						"| 20% target at the middle"
+					)}`
+				)
+			elseif line ~= "" and not string.match(line, "^%s") and string.match(line, "[%.:]$") then
 				table.insert(out, term.paint(mode, "heading", line))
 			else
 				table.insert(out, look.ids(mode, line))
