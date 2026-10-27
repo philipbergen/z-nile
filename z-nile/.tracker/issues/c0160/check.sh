@@ -12,7 +12,7 @@ A="$HERE/acceptance"
 # c0141's AC3 note: no literal path to c0120's promoted folder here (main's scan reads them before c0141 lands)
 S="$A/third-project.spec.luau"
 C120="$PWD/tests/acceptance/c0120"
-check "AC1: the check-paths scan reads a third registered project's check.sh files from its home, checks the paths they name, and exempts its own Touched work, as it does for pickman and z-nile" lune run tests/run -- "$S"
+check "AC1: the check-paths scan reads a third registered project's check.sh files, backlog and active, from its home, checks the paths they name, and exempts its own Touched work, as it does for pickman and z-nile" lune run tests/run -- "$S"
 check "AC2: a word starting with any registered project's home is a literal path to the check-paths reader, the homes taken from the scanned checkout's registry (or, called alone, the running checkout's), never a hand list" lune run tests/run -- "$S"
 check "AC3: c0120's finished-file reader takes the homes the same way" lune run tests/run -- "$S"
 check "AC4: c0120's check-paths and finished specs, and c0141's specs, still pass" lune run tests/run -- "$C120/check-paths.spec.luau" "$C120/finished.spec.luau" "$PWD"/tests/acceptance/c0141/*.spec.luau

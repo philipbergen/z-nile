@@ -96,7 +96,7 @@ index c3749ab6..0295e082 100644
  					if not present(base, home, p) and not (at and under(at, own)) then
  						table.insert(out.bad, `{file}: {p} (from {home})`)
 diff --git a/z-nile/tests/acceptance/c0120/rewrites.luau b/z-nile/tests/acceptance/c0120/rewrites.luau
-index 87ab0190..91ad1d3b 100644
+index 87ab0190..f309335a 100644
 --- a/z-nile/tests/acceptance/c0120/rewrites.luau
 +++ b/z-nile/tests/acceptance/c0120/rewrites.luau
 @@ -8,6 +8,7 @@
@@ -159,3 +159,11 @@ index 87ab0190..91ad1d3b 100644
  					if string.sub(w, 1, #p) == p and #w > #p then
  						path = w
  					end
+@@ -492,6 +516,7 @@ end
+ 
+ -- `text` (a finished check.sh) rewritten for its item's home `home` ("pickman", "z-nile").
+ function rewrites.rewrite(text: string, home: string, world: World): string
++	-- the homes of the checkout this runs in, not of the one `world` reads (identical for every caller today; c0160)
+ 	local lits = rewrites.literals(text)
+ 	local byLine: { [number]: { Literal } } = {}
+ 	for _, l in lits do

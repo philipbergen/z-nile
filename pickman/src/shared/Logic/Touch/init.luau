@@ -1,12 +1,14 @@
 --!strict
 -- Touch: the phone's gestures as a pure fold over begin, move and end events, engine-free. A finger is
--- classified once, when it goes down: the snap control, the turn half (left) or the look half (right).
+-- classified once, when it goes down: the snap control, the fire or the hop button (f0110), the turn half (left)
+-- or the look half (right).
 -- A turn finger is one straight-line swipe on release; a look finger is a pixel step per move.
 --
 -- Every point and rectangle here is in screen pixels (origin the top-left of the device screen).
+local Hud = require("./Hud")
 local View = require("./View")
 
-export type Zone = "turn" | "look" | "snap"
+export type Zone = "turn" | "look" | "snap" | "fire" | "hop"
 export type Rect = { x: number, y: number, w: number, h: number } -- half-open [x, x+w) x [y, y+h)
 export type Phase = "begin" | "move" | "end"
 export type Event = { id: number, phase: Phase, x: number, y: number }
@@ -17,7 +19,11 @@ export type Effect =
 	{ kind: "turn", intent: Turn }
 	| { kind: "look", dx: number, dy: number }
 	| { kind: "snap" }
-export type Context = { width: number, snap: Rect? }
+	| { kind: "fire" }
+	| { kind: "hop" }
+export type Context = { width: number, snap: Rect?, fire: Rect?, hop: Rect? }
+-- The touch controls' rectangles, as Touch.buttons places them.
+export type Buttons = { snap: Rect, fire: Rect, hop: Rect }
 -- Min/Max, the shape of an inset area.
 export type Area = { Min: { X: number, Y: number }, Max: { X: number, Y: number } }
 -- The HUD's sizes and its safe rectangle, as Hud.layout reports them.
@@ -46,9 +52,19 @@ function Touch.empty(): State
 	return { fingers = {} }
 end
 
-function Touch.zone(width: number, x: number, y: number, snap: Rect?): Zone
-	if snap and x >= snap.x and y >= snap.y and x < snap.x + snap.w and y < snap.y + snap.h then
+local function inside(r: Rect?, x: number, y: number): boolean
+	return r ~= nil and x >= r.x and y >= r.y and x < r.x + r.w and y < r.y + r.h
+end
+
+function Touch.zone(width: number, x: number, y: number, snap: Rect?, fire: Rect?, hop: Rect?): Zone
+	if inside(snap, x, y) then
 		return "snap"
+	end
+	if inside(fire, x, y) then
+		return "fire"
+	end
+	if inside(hop, x, y) then
+		return "hop"
 	end
 	if finite(width) and width > 0 and x < width / 2 then
 		return "turn"
@@ -81,7 +97,7 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
 	local finger: Finger? = fingers[event.id]
 	if event.phase == "begin" then
 		if finger == nil then
-			local zone: Zone = Touch.zone(ctx.width, event.x, event.y, ctx.snap)
+			local zone: Zone = Touch.zone(ctx.width, event.x, event.y, ctx.snap, ctx.fire, ctx.hop)
 			local taken = false
 			for _, f in fingers do
 				taken = taken or f.zone == zone
@@ -90,6 +106,10 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
 				fingers[event.id] = { zone = zone, x0 = event.x, y0 = event.y, x = event.x, y = event.y }
 				if zone == "snap" then
 					table.insert(effects, { kind = "snap" })
+				elseif zone == "fire" then
+					table.insert(effects, { kind = "fire" })
+				elseif zone == "hop" then
+					table.insert(effects, { kind = "hop" })
 				end
 			end
 		end
@@ -156,6 +176,31 @@ function Touch.snapRect(box: Box): Rect
 		w = side,
 		h = side,
 	}
+end
+
+-- The hop button (f0110): Roblox's legacy touch jump button, in the safe rectangle (the touch GUI's frame).
+function Touch.hopRect(box: Box): Rect
+	local b = Hud.jumpButtons(box.safeX, box.safeY, box.safeW, box.safeH)[1]
+	return { x = b.x, y = b.y, w = b.w, h = b.h }
+end
+
+-- The fire button (f0110): the hop button's size, one margin left of it, level with it unless that would
+-- reach the snap control's band: then its bottom is one margin above the snap control's top.
+function Touch.fireRect(box: Box): Rect
+	local hop = Touch.hopRect(box)
+	local snap = Touch.snapRect(box)
+	local side = hop.w
+	return {
+		x = hop.x - box.margin - side,
+		y = math.min(hop.y, snap.y - box.margin - side),
+		w = side,
+		h = side,
+	}
+end
+
+-- Every touch control's rectangle.
+function Touch.buttons(box: Box): Buttons
+	return { snap = Touch.snapRect(box), fire = Touch.fireRect(box), hop = Touch.hopRect(box) }
 end
 
 -- The screen's size from the full-screen area, or the fallback while that area is empty or bad.

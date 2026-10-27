@@ -25,7 +25,7 @@ end
 
 return t.spec("c0160 the check-paths scan reads a third project like the first two", function(it)
 	it(
-		"a third project's check.sh is read from its own home: a missing path is listed, a present one not",
+		"a third project's check.sh, backlog and active, is read from its own home: a missing path or glob is listed",
 		function()
 			if fs.isDir(FX) then
 				fs.removeDir(FX)
@@ -35,10 +35,16 @@ return t.spec("c0160 the check-paths scan reads a third project like the first t
 			put("tern/src/here.luau", "--!strict\nreturn nil\n")
 			put("tern/.tracker/issues/c0001/c0001.md", "---\nid: c0001\n---\n")
 			put("tern/.tracker/issues/c0001/check.sh", "test -f src/here.luau\ntest -f src/gone.luau\n")
+			-- an active item too, with a glob that matches and one that doesn't (the capture's outcomes)
+			put("tern/.tracker/issues/active/c0004/c0004.md", "---\nid: c0004\n---\n")
+			put("tern/.tracker/issues/active/c0004/check.sh", "ls src/*.luau\nls src/*.nope\n")
 			local s = scanFixture()
-			t.expect(s.bad).toEqual({ "tern/.tracker/issues/c0001/check.sh: src/gone.luau (from tern)" })
-			t.expect(s.checked).toBe(1)
-			t.expect(s.byHome).toEqual({ tern = 1 })
+			t.expect(s.bad).toEqual({
+				"tern/.tracker/issues/active/c0004/check.sh: src/*.nope (from tern)",
+				"tern/.tracker/issues/c0001/check.sh: src/gone.luau (from tern)",
+			})
+			t.expect(s.checked).toBe(2)
+			t.expect(s.byHome).toEqual({ tern = 2 })
 		end
 	)
 
@@ -53,10 +59,11 @@ return t.spec("c0160 the check-paths scan reads a third project like the first t
 			)
 			local s = scanFixture()
 			t.expect(s.bad).toEqual({
+				"tern/.tracker/issues/active/c0004/check.sh: src/*.nope (from tern)",
 				"tern/.tracker/issues/c0001/check.sh: src/gone.luau (from tern)",
 				"z-nile/.tracker/issues/c0002/check.sh: ../tern/src/missing.luau (from z-nile)",
 			})
-			t.expect(s.byHome).toEqual({ tern = 1, ["z-nile"] = 1 })
+			t.expect(s.byHome).toEqual({ tern = 2, ["z-nile"] = 1 })
 			-- the homes are the scanned checkout's: a word under a folder that is no registered home is no path
 			t.expect(checkpaths.literals("test -f tern/a.luau ternary/b.luau", { "tern" }))
 				.toEqual({ "tern/a.luau" })
@@ -81,7 +88,7 @@ return t.spec("c0160 the check-paths scan reads a third project like the first t
 		for _, line in s.bad do
 			t.expect((string.find(line, "c0003", 1, true))).toBe(nil)
 		end
-		t.expect(s.byHome).toEqual({ tern = 2, ["z-nile"] = 1 })
+		t.expect(s.byHome).toEqual({ tern = 3, ["z-nile"] = 1 })
 		fs.removeDir(FX)
 	end)
 
