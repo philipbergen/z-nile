@@ -1,0 +1,12 @@
+- design-review-001 F1: z-design/spec-design-correspondence
+- design-review-001 F2: z-design/new-refusals-reach-every-caller
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: zz-test/fixture-values-embed-no-rewritten-ids
+- design-review-001 F5: one-off: the audit line's format choice was not written down
+- design-review-001 F6: one-off: a second cost of an accepted decision, now named beside it
+- design-review-002 F1: zz-test/seed-every-enumerated-case
+- design-review-002 F2: one-off: a window inherent to branch-only items, now written down
+- design-review-002 F3: zz-rules/audit-what-new-refuses
+- design-review-003 F1: zz-rules/audit-what-new-refuses
+- design-review-003 F2: zz-test/seed-every-enumerated-case
+- design-review-003 F3: zz-test/no-vacuous-pass
