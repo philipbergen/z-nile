@@ -2,10 +2,10 @@
 
 | issue | type | emergent | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|---|---|
-| f0146 | feature |  | 1825 | 65 | 389.0 | 435000 |
+| f0146 | feature |  | 1825 | 65 | 406.7 | 435000 |
 
-**Total:** +1825 / -65 lines, 389.0 agent-minutes, 435000 tokens over 17 records
-<!-- totals: added=1825 removed=65 minutes=389.0 records=17 tokens=435000 -->
+**Total:** +1825 / -65 lines, 406.7 agent-minutes, 435000 tokens over 18 records
+<!-- totals: added=1825 removed=65 minutes=406.7 records=18 tokens=435000 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
@@ -14,4 +14,4 @@
 | design-review | 0 | 0 | 60.0 | 0 |
 | build | 314 | 20 | 30.0 | 0 |
 | code-review | 700 | 40 | 169.0 | 435000 |
-| deliver | 0 | 0 | 5.0 | 0 |
+| deliver | 0 | 0 | 22.7 | 0 |
