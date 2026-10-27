@@ -11,8 +11,7 @@ local t = require("@tests/lib/t")
 
 local here = gatefix.trim(process.exec("pwd", { "-P" }).stdout)
 local base = `{here}/.cache/c0165-gate-learn`
-local has, count, ran, clearRan, write =
-	gatefix.has, gatefix.count, gatefix.ran, gatefix.clearRan, gatefix.write
+local has, count, ran, write = gatefix.has, gatefix.count, gatefix.ran, gatefix.write
 
 return t.spec("c0165 learning and declared inputs", function(it)
 	it(
