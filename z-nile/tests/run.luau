@@ -5,10 +5,13 @@
 --   lune run tests/run -- a b     -- only the listed spec files (paths relative to the current folder)
 --   --jobs N / PICKMAN_JOBS=N     -- run spec files in N concurrent workers (default min(max(cpus, 2), 8);
 --                                    1 or a single file runs in-process). --jobs wins over the environment.
+-- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154), from
+-- .cache/spec-durations.tsv in the home, which every concurrent run updates; the report stays in path order.
 -- Exits non-zero if any case fails or any spec fails to load.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local schedule = require("./lib/schedule")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
@@ -171,21 +174,30 @@ else
 	end
 	jobs = parseJobs(env, "PICKMAN_JOBS") or math.min(math.max(cpuCount(), 2), 8)
 end
-if #files == 0 then
+local fullRun = #files == 0
+if fullRun then
 	collect("tests", files)
 end
 table.sort(files)
 
 type Outcome = { file: string, seconds: number, code: number, stdout: string, stderr: string }
 
--- Coordinator: `jobs` lanes pull the next file and run it as a one-file, one-job runner process.
+-- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
+local DURATIONS = ".cache/spec-durations.tsv"
+local function recorded(): schedule.Durations
+	local ok, text = pcall(fs.readFile, DURATIONS)
+	return (if ok then schedule.parse(text :: string) else nil) or {}
+end
+
+-- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
 local function runConcurrently()
 	local outcomes: { Outcome } = {}
+	local queue = schedule.order(files, recorded())
 	local nextIndex, running = 1, math.min(jobs, #files)
 	for _ = 1, math.min(jobs, #files) do
 		task.spawn(function()
-			while nextIndex <= #files do
-				local index = nextIndex
+			while nextIndex <= #queue do
+				local index = queue[nextIndex]
 				nextIndex += 1
 				local file = files[index]
 				local started = os.clock()
@@ -203,6 +215,38 @@ local function runConcurrently()
 	end
 	while running > 0 do
 		task.wait(0.005)
+	end
+
+	-- record this run's durations, merged over what an earlier run recorded; written to a temporary file and renamed
+	-- over the record, so a concurrent reader sees the old record or the new one, never a truncated one (design review
+	-- 001 F5); not written when the run had none of the home's files. A failure to write costs only the order.
+	do
+		local runs: schedule.Durations = {}
+		local any = false
+		for _, o in outcomes do
+			-- the home's own spec files only: a spec's nested run of a fixture's files (under .cache) is not this home's
+			if string.sub(o.file, 1, 6) == "tests/" then
+				runs[o.file] = o.seconds
+				any = true
+			end
+		end
+		if any then
+			-- a full run (no files named) knows every spec file of the home: lines for files gone since are dropped
+			local keep: { [string]: boolean }? = nil
+			if fullRun then
+				local k: { [string]: boolean } = {}
+				for _, f in files do
+					k[f] = true
+				end
+				keep = k
+			end
+			pcall(function()
+				fs.writeDir(".cache")
+				local tmp = `{DURATIONS}.{math.random(1, 1e9)}{string.format("%.0f", os.clock() * 1e6)}.tmp`
+				fs.writeFile(tmp, schedule.render(recorded(), runs, keep))
+				fs.move(tmp, DURATIONS, true)
+			end)
+		end
 	end
 
 	-- merge in sorted file order, never in finish order
