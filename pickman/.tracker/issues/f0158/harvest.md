@@ -12,3 +12,7 @@
 - design-review-002 F3: zz-test/source-pins-name-what-the-design-names
 - design-review-002 F4: one-off: a rule another item's spec held today (f0102's DisplayOrder < 0) that f0158 relied on without pinning; now its own case holds it
 - design-review-002 F5: z-design/restated-rules-move-together
+- design-review-003 F1: zz-test/feed-the-real-producers-extremes, zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/source-pins-name-what-the-design-names, pickman-test/drawn-from-the-visible-root
+- design-review-003 F3: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F4: z-design/restated-rules-move-together
