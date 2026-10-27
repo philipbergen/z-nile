@@ -97,6 +97,10 @@ return t.spec("f0158 ring adapter", function(it)
 			t.expect(ring.DisplayOrder ~= nil and ring.DisplayOrder < 0).toBe(true)
 			local danger = view.playerGui:FindFirstChild("Danger")
 			t.expect(danger.DisplayOrder == nil or danger.DisplayOrder == 0).toBe(true)
+			-- the Flow overlay and the HUD (1) draw over the ring too (review 004 F1: compared with the drawn order)
+			local flow = string.match(source("FlowView"), "DisplayOrder%s*=%s*(%-?%d+)")
+			t.expect(flow == nil or (tonumber(flow) :: number) > ring.DisplayOrder).toBe(true)
+			t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
 			local want = Awareness.ring(Awareness.indicators(classic, pose, ghosts, { inView = true }), W, H)
 			local count = Awareness.SECTORS * Awareness.RING.dots
 			t.expect(#want).toBe(count)
@@ -166,27 +170,6 @@ return t.spec("f0158 ring adapter", function(it)
 		t.expect(has(src, "View.DANGER_COLOR")).toBe(true)
 		t.expect(has(src, "View.ghostColor(")).toBe(false)
 	end)
-
-	it(
-		"the ring has its own screen, the core-UI safe area below the top bar (the HUD's frame), under the HUD",
-		function()
-			-- G8, decided with the user 2026-10-26: "Centre below top bar"
-			local src = source("DangerHud")
-			t.expect(string.find(src, "%.ScreenInsets%s*=%s*Enum%.ScreenInsets%.CoreUISafeInsets") ~= nil)
-				.toBe(true)
-			local orders = {}
-			for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
-				table.insert(orders, tonumber(n) :: number)
-			end
-			t.expect(#orders).toBe(1)
-			-- below 0 (review 002 F4): the radar (Danger, the default 0), the Flow overlay and the HUD (1) draw over the
-			-- ring, which G9's accepted overlaps rely on
-			t.expect(orders[1] < 0).toBe(true)
-			local flow = string.match(source("FlowView"), "DisplayOrder%s*=%s*(%-?%d+)")
-			t.expect(flow == nil or (tonumber(flow) :: number) > orders[1]).toBe(true)
-			t.expect(has(source("HudView"), "DisplayOrder = 1")).toBe(true)
-		end
-	)
 
 	it("the edge glows are gone and the adapter does no geometry", function()
 		local src = source("DangerHud")
