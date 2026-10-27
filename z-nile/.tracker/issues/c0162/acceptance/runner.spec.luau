@@ -128,17 +128,20 @@ return t.spec("c0162 the runner runs on the pinned Lune", function(it)
 		t.expect(has(r.out, "2 passed, 0 failed, 2 spec files")).toBe(true)
 	end)
 
-	it("on another Lune with no rokit Lune to try, it refuses before any spec, naming both and the fix", function()
-		setup(pins("9.9.9"))
-		local r = run()
-		t.expect(r.code).toBe(2)
-		t.expect(fs.isFile(MARK)).toBe(false)
-		t.expect(has(r.err, `Lune {PIN}`)).toBe(true)
-		t.expect(has(r.err, "pins 9.9.9")).toBe(true)
-		t.expect(has(r.err, `{base}/rokit.toml`)).toBe(true)
-		t.expect(has(r.err, 'PATH="$HOME/.rokit/bin:$PATH"')).toBe(true)
-		t.expect(has(r.out, "passed,")).toBe(false)
-	end)
+	it(
+		"on another Lune with no rokit Lune to try, it refuses before any spec, naming both and the fix",
+		function()
+			setup(pins("9.9.9"))
+			local r = run()
+			t.expect(r.code).toBe(2)
+			t.expect(fs.isFile(MARK)).toBe(false)
+			t.expect(has(r.err, `Lune {PIN}`)).toBe(true)
+			t.expect(has(r.err, "pins 9.9.9")).toBe(true)
+			t.expect(has(r.err, `{base}/rokit.toml`)).toBe(true)
+			t.expect(has(r.err, 'PATH="$HOME/.rokit/bin:$PATH"')).toBe(true)
+			t.expect(has(r.out, "passed,")).toBe(false)
+		end
+	)
 
 	it(
 		"on another Lune it first tries rokit's: the probe and the run go through $HOME/.rokit/bin, and it says so",
@@ -149,7 +152,8 @@ return t.spec("c0162 the runner runs on the pinned Lune", function(it)
 			local calls = if fs.isFile(LOG) then fs.readFile(LOG) else ""
 			t.expect(has(calls, "--version")).toBe(true)
 			t.expect(has(calls, "run tests/run")).toBe(true)
-			t.expect(has(r.out, `tests/run: lune 9.9.9 (rokit.toml pins 9.9.9; this shell's lune is {PIN}`)).toBe(true)
+			t.expect(has(r.out, `tests/run: lune 9.9.9 (rokit.toml pins 9.9.9; this shell's lune is {PIN}`))
+				.toBe(true)
 			-- rokit's `lune` here is the same binary underneath, so the guarded child finds itself on {PIN} and refuses
 			t.expect(r.code).toBe(2)
 			t.expect(has(r.err, `this is Lune {PIN}, but rokit.toml`)).toBe(true)
