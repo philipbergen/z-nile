@@ -1,0 +1,1095 @@
+diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
+index f67757e0..1033cdbd 100644
+--- a/pickman/.tracker/game-design.md
++++ b/pickman/.tracker/game-design.md
+@@ -19,6 +19,7 @@ This is the source of truth for product decisions. Every raft design must agree
+ | Platforms | Desktop (keyboard and mouse) and **mobile (touch)**. Gamepad isn't planned; it gets the same intents if it's added later. |
+ | Danger awareness (2026-10-01) | **A minimap/radar and edge indicators** show where ghosts are in first person. The indicators give a sense of distance, not just direction: bigger and brighter as the ghost gets closer (R0010, f0033). Audio and a proximity vignette were not chosen. |
+ | Slower ghosts (2026-10-01) | Ghosts may be slower than the classic tables, through **one tuning factor** (`Levels.GHOST_TUNING`) on the hunting and frightened ghost speeds, not on eyes. It ships at the classic 1 until the user gives the factor, after a Beta playtest (R0010, f0021). |
++| Inky's colour and the edible walls (f0109, 2026-10-25) | Inky's body (and its glow) was `(0, 255, 255)`, which the user sees as white; it is now lemon **(230, 255, 0)**. The maze walls (and the danger radar's) are green **(14, 64, 14)** while the power timer runs, the blink and revived dangerous ghosts included, blue (33, 33, 222) otherwise, and white during the level-clear flash, which wins. f0126's gold marked walls stay gold while the walls are green. |
+ 
+ ## Movement model: rail with free look
+ **All durations and speeds in this document are game time** (30 ticks per game second); the game is played at half speed, so real time is twice as long (see *Game speed* below).
+@@ -83,7 +84,6 @@ The user's captures (f0100, f0101, f0102), with the details chosen in R0035's pr
+ - **A shot grace at junctions** (R0035 prep): keep the shot from the server's tile (the (prep) default above), or add a short grace so a side shot pressed on a junction the player sees still goes up the side corridor (a later issue).
+ - **The drop seed** (R0035 prep): keep seeding by the player's user id (a player's n-th eaten ghost rolls the same every game), or seed each session freshly in the server (which also varies the frightened ghosts' wander).
+ - **The shot bars on touch** (R0035 prep): shown until f0110 gives touch a fire control, or hidden until then.
+-- **Inky's colour** (f0109): Inky's body (and, with R0035, its glow) is `(0, 255, 255)`, which the user sees as white; a new colour is wanted but not chosen.
+ - **The slower-ghosts factor** (f0021): a number for `Levels.GHOST_TUNING`, after a Beta playtest of the classic tables with the radar and the edge indicators.
+ 
+ ## Roadmap (single-type rafts; order a1 → a2 → b → c → c2 → d → e, with f any time after a2)
+diff --git a/pickman/src/client/Camera.luau b/pickman/src/client/Camera.luau
+index 51494939..b6622087 100644
+--- a/pickman/src/client/Camera.luau
++++ b/pickman/src/client/Camera.luau
+@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
+ local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
+ local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
+ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
++local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
+ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+@@ -98,6 +99,15 @@ function Camera.start()
+ 		end
+ 		-- cleared here, after the guard read it: a touch that began and ended before this step still counts
+ 		lookedThisFrame = false
++		-- the right stick looks (f0146), at a rate, and stays where it is left, like the mouse
++		local pad = (Enum.UserInputType :: any)[Pad.GAMEPAD]
++		if UserInputService:GetGamepadConnected(pad) then
++			for _, state in UserInputService:GetGamepadState(pad) do
++				if state.KeyCode == Enum.KeyCode.Thumbstick2 then
++					look = View.look(look, Pad.look(state.Position.X, state.Position.Y, dt))
++				end
++			end
++		end
+ 		steer = View.steer(steer, look, arrows, dt)
+ 		look = steer.look
+ 
+diff --git a/pickman/src/client/Controls.luau b/pickman/src/client/Controls.luau
+index 3a879b40..76014974 100644
+--- a/pickman/src/client/Controls.luau
++++ b/pickman/src/client/Controls.luau
+@@ -12,6 +12,7 @@ local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
+ local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
+ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+ local Movement = require("@game/ReplicatedStorage/Shared/Logic/Movement")
++local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
+ local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+@@ -54,7 +55,7 @@ function Controls.start(
+ 		state: Enum.UserInputState,
+ 		input: InputObject
+ 	): Enum.ContextActionResult
+-		local action: View.Action? = View.action(input.KeyCode.Name)
++		local action: View.Action? = View.action(input.KeyCode.Name) or Pad.action(input.KeyCode.Name)
+ 		local k = keys
+ 		if state == Enum.UserInputState.Begin then
+ 			if action == "Snap" then
+@@ -83,6 +84,10 @@ function Controls.start(
+ 				end
+ 			end
+ 		end
++		-- the pad's continue is FlowView's too (f0146): it jumps here and goes on to FlowView's binding
++		if input.KeyCode.Name == Pad.CONTINUE then
++			return Enum.ContextActionResult.Pass
++		end
+ 		return Enum.ContextActionResult.Sink
+ 	end
+ 
+@@ -90,6 +95,9 @@ function Controls.start(
+ 	for name in View.KEYS do
+ 		table.insert(codes, (Enum.KeyCode :: any)[name])
+ 	end
++	for name in Pad.BUTTONS do
++		table.insert(codes, (Enum.KeyCode :: any)[name])
++	end
+ 	ContextActionService:BindActionAtPriority(
+ 		"PickmanControls",
+ 		handle,
+diff --git a/pickman/src/client/DangerHud.luau b/pickman/src/client/DangerHud.luau
+index 5f0f11c8..665da837 100644
+--- a/pickman/src/client/DangerHud.luau
++++ b/pickman/src/client/DangerHud.luau
+@@ -50,6 +50,13 @@ end
+ local latest: Session.Snapshot? = nil
+ local maze: Maze.Maze? = nil
+ 
++-- f0109: the radar's walls follow the maze's colour rule (View.wallColor): lit in the level-clear flash, green
++-- while the ghosts are edible, blue otherwise. Main hands the state over each frame.
++local wallLit, wallEdible = false, false
++function DangerHud.wallState(lit: boolean, edible: boolean)
++	wallLit, wallEdible = lit, edible
++end
++
+ function DangerHud.push(snap: Session.Snapshot, m: Maze.Maze)
+ 	if latest == nil or snap.tick > latest.tick then
+ 		latest = snap
+@@ -79,6 +86,10 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
+ 	radar.BackgroundTransparency = 0.35
+ 	radar.ClipsDescendants = true
+ 	radar.Parent = gui
++	local function wallColor(): Color3
++		local c = View.wallColor(wallLit, wallEdible)
++		return Color3.fromRGB(c.r, c.g, c.b)
++	end
+ 	local function dot(parent: Instance, color: Color3, size: number): Frame
+ 		local f = Instance.new("Frame")
+ 		f.AnchorPoint = Vector2.new(0.5, 0.5)
+@@ -115,10 +126,12 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
+ 			table.insert(ghosts, entry)
+ 		end
+ 		local r = Awareness.radar(m, pose, ghosts)
++		local wc = wallColor() -- once per step: the state changes a few times per power pellet
+ 		for i, w in r.walls do
+-			local f: Frame = walls[i] or dot(radar, Color3.fromRGB(33, 33, 222), CELL)
++			local f: Frame = walls[i] or dot(radar, wc, CELL)
+ 			walls[i] = f
+ 			f.Visible = true
++			f.BackgroundColor3 = wc
+ 			f.Position = UDim2.fromOffset(radarSize / 2 + w.x * CELL, radarSize / 2 + w.y * CELL)
+ 		end
+ 		for i = #r.walls + 1, #walls do
+diff --git a/pickman/src/client/FlowView.luau b/pickman/src/client/FlowView.luau
+index b3411f12..8313037b 100644
+--- a/pickman/src/client/FlowView.luau
++++ b/pickman/src/client/FlowView.luau
+@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
+ local ReplicatedStorage = game:GetService("ReplicatedStorage")
+ 
+ local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
++local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
+ 
+ local YELLOW = Color3.fromRGB(255, 255, 0)
+ local BLACK = Color3.fromRGB(0, 0, 0)
+@@ -104,10 +105,14 @@ function FlowView.start()
+ 	for _, name in Flow.CONTINUE_KEYS do
+ 		table.insert(keys, (Enum.KeyCode :: any)[name])
+ 	end
++	table.insert(keys, (Enum.KeyCode :: any)[Pad.CONTINUE]) -- the gamepad's continue (f0146)
+ 	ContextActionService:BindAction(
+ 		"PickmanContinue",
+ 		function(_name: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
+-			if state == Enum.UserInputState.Begin and Flow.isContinueKey(input.KeyCode.Name) then
++			if
++				state == Enum.UserInputState.Begin
++				and (Flow.isContinueKey(input.KeyCode.Name) or input.KeyCode.Name == Pad.CONTINUE)
++			then
+ 				ask()
+ 			end
+ 			return Enum.ContextActionResult.Pass
+diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
+index 9da8a2cf..2c684409 100644
+--- a/pickman/src/client/Main.client.luau
++++ b/pickman/src/client/Main.client.luau
+@@ -14,6 +14,8 @@ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+ local MazeView = require("./MazeView")
+ local PelletView = require("./PelletView")
+ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
++local Sticks = require("./Sticks")
++local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+ local remotes = ReplicatedStorage:WaitForChild("Remotes")
+ local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
+@@ -52,6 +54,10 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+ 		lit = overlay.flash
+ 		MazeView.flash(model, overlay.flash)
+ 	end
++	if model then
++		MazeView.edible(model, View.edible(frame.play))
++	end
++	DangerHud.wallState(overlay.flash, View.edible(frame.play))
+ 	Camera.setCursor(overlay.cursor)
+ 	-- last: a code that fails to decode can't stop the rest of the frame
+ 	if pellets then
+@@ -65,6 +71,7 @@ DangerHud.start(Camera.pose)
+ Controls.keys({ arrows = Camera.arrows, aim = Camera.aim })
+ Controls.start(Camera.snap, Camera.lookBy, HudView.snapRect, Camera.holdMouse, HudView.buttons)
+ PelletView.start()
++Sticks.start()
+ HudView.start()
+ FlowView.start()
+ 
+diff --git a/pickman/src/client/MazeView.luau b/pickman/src/client/MazeView.luau
+index d485ecff..958a997d 100644
+--- a/pickman/src/client/MazeView.luau
++++ b/pickman/src/client/MazeView.luau
+@@ -3,13 +3,18 @@
+ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+-local WALL = Color3.fromRGB(33, 33, 222)
+ local DOOR = Color3.fromRGB(255, 184, 255)
+ local FLOOR = Color3.fromRGB(0, 0, 0)
+-local LIT = Color3.fromRGB(255, 255, 255)
+ 
+ local MazeView = {}
+ 
++-- The colour of a wall part of `model` now: View.wallColor of its lit and edible state, for every wall made or
++-- repainted (f0126's rewall too), so a wall built while the ghosts are edible comes out green.
++local function wallColorOf(model: Model): Color3
++	local c = View.wallColor(model:GetAttribute("Lit") == true, model:GetAttribute("Edible") == true)
++	return Color3.fromRGB(c.r, c.g, c.b)
++end
++
+ local function part(parent: Model, name: string, color: Color3, size: Vector3, center: Vector3)
+ 	local p = Instance.new("Part")
+ 	p.Name = name
+@@ -31,7 +36,7 @@ function MazeView.build(m: Maze.Maze): Model
+ 	for _, r in View.walls(m) do
+ 		local cx, cz = View.world((r.x0 + r.x1) / 2, r.y0)
+ 		local size = Vector3.new((r.x1 - r.x0 + 1) * s.tileStuds, s.wallHeight, s.tileStuds)
+-		part(model, "Wall", WALL, size, Vector3.new(cx, s.wallHeight / 2, cz))
++		part(model, "Wall", wallColorOf(model), size, Vector3.new(cx, s.wallHeight / 2, cz))
+ 	end
+ 	for _, d in Maze.tiles(m, "door") do
+ 		local cx, cz = View.world(d.x, d.y)
+@@ -59,14 +64,30 @@ function MazeView.build(m: Maze.Maze): Model
+ 	return model
+ end
+ 
+--- The walls lit (the level-clear flash) or back in their own colour.
+-function MazeView.flash(model: Model, lit: boolean)
+-	local color = if lit then LIT else WALL
++-- Repaint the walls from the model's lit and edible state (View.wallColor).
++local function paint(model: Model)
++	local c = wallColorOf(model)
+ 	for _, child in model:GetChildren() do
+ 		if child.Name == "Wall" and child:IsA("BasePart") then
+-			child.Color = color
++			child.Color = c
+ 		end
+ 	end
+ end
+ 
++-- The walls lit (the level-clear flash) or back in their own colour.
++function MazeView.flash(model: Model, lit: boolean)
++	if model:GetAttribute("Lit") ~= lit then
++		model:SetAttribute("Lit", lit)
++		paint(model)
++	end
++end
++
++-- f0109: the walls green while the ghosts are edible.
++function MazeView.edible(model: Model, edible: boolean)
++	if model:GetAttribute("Edible") ~= edible then
++		model:SetAttribute("Edible", edible)
++		paint(model)
++	end
++end
++
+ return MazeView
+diff --git a/pickman/src/client/Sticks.luau b/pickman/src/client/Sticks.luau
+new file mode 100644
+index 00000000..be791f9a
+--- /dev/null
++++ b/pickman/src/client/Sticks.luau
+@@ -0,0 +1,33 @@
++--!strict
++-- Client adapter (f0146): the first gamepad's left stick turns. Every frame it reads the stick and folds it through
++-- Pad.steer, which emits one turn intent a push, and sends that intent on the Intent remote. The right stick's
++-- look is the camera's (Camera reads it in its render step).
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local RunService = game:GetService("RunService")
++local UserInputService = game:GetService("UserInputService")
++
++local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
++
++local Sticks = {}
++
++function Sticks.start()
++	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
++	local pad = (Enum.UserInputType :: any)[Pad.GAMEPAD]
++	local steer = Pad.steerStart()
++	RunService.Heartbeat:Connect(function()
++		if not UserInputService:GetGamepadConnected(pad) then
++			return
++		end
++		for _, state in UserInputService:GetGamepadState(pad) do
++			if state.KeyCode == Enum.KeyCode.Thumbstick1 then
++				local turn
++				steer, turn = Pad.steer(steer, state.Position.X, state.Position.Y)
++				if turn then
++					intent:FireServer(turn)
++				end
++			end
++		end
++	end)
++end
++
++return Sticks
+diff --git a/pickman/src/lobby/client/LobbyPad.luau b/pickman/src/lobby/client/LobbyPad.luau
+new file mode 100644
+index 00000000..6ef408cf
+--- /dev/null
++++ b/pickman/src/lobby/client/LobbyPad.luau
+@@ -0,0 +1,27 @@
++--!strict
++-- Lobby client adapter (f0146): with a controller, Roblox's own gamepad selection starts on START GAME, so the D-pad
++-- moves between it and the board tabs and the select button presses them through LobbyView's own handlers.
++local GuiService = game:GetService("GuiService")
++local Players = game:GetService("Players")
++local UserInputService = game:GetService("UserInputService")
++
++local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
++
++local LobbyPad = {}
++
++function LobbyPad.start()
++	local gui = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
++	local function choose(inputType: Enum.UserInputType)
++		if not (Pad.isPad(inputType.Name) and GuiService.SelectedObject == nil) then
++			return
++		end
++		local start = gui:FindFirstChild("Start", true)
++		if start and start:IsA("GuiObject") then
++			GuiService.SelectedObject = start
++		end
++	end
++	choose(UserInputService:GetLastInputType())
++	UserInputService.LastInputTypeChanged:Connect(choose)
++end
++
++return LobbyPad
+diff --git a/pickman/src/lobby/client/Main.client.luau b/pickman/src/lobby/client/Main.client.luau
+index 5b1c42ed..8045d718 100644
+--- a/pickman/src/lobby/client/Main.client.luau
++++ b/pickman/src/lobby/client/Main.client.luau
+@@ -1,4 +1,5 @@
+ --!strict
+ -- Lobby client entry point. Boots the lobby screen; holds no logic itself.
+ require("./LobbyView").start()
++require("./LobbyPad").start()
+ print("[pickman] lobby client started")
+diff --git a/pickman/src/shared/Logic/Pad/init.luau b/pickman/src/shared/Logic/Pad/init.luau
+new file mode 100644
+index 00000000..659ec295
+--- /dev/null
++++ b/pickman/src/shared/Logic/Pad/init.luau
+@@ -0,0 +1,94 @@
++--!strict
++-- Pad: the gamepad (f0146), engine-free. The buttons map to the same actions as the keys; the left stick folds into
++-- turn intents relative to the heading, one a push; the right stick looks at a rate, in View.look's units.
++local Movement = require("./Movement")
++local View = require("./View")
++
++export type Steer = { held: Movement.Intent? } -- the sector the left stick is engaged in, nil when released
++
++local BUTTONS: { [string]: View.Action } = {
++	ButtonA = "Jump", -- the bottom face button: PlayStation's cross, Xbox's A
++	ButtonR2 = "Fire",
++	ButtonR3 = "Snap",
++	DPadUp = "Forward",
++	DPadDown = "Back",
++	DPadLeft = "Left",
++	DPadRight = "Right",
++}
++
++local Pad = {}
++Pad.GAMEPAD = "Gamepad1" -- the first controller only
++Pad.BUTTONS = table.freeze(BUTTONS)
++Pad.CONTINUE = "ButtonA" -- continues on the overlay at the end of a run
++Pad.STEER_ON = 0.6 -- stick tilt that engages a sector
++Pad.STEER_OFF = 0.4 -- tilt below which the stick is released
++Pad.LOOK_DEAD = 0.15 -- radial dead zone of the right stick
++Pad.LOOK_YAW = 3 -- radians a second at full tilt, left and right
++Pad.LOOK_PITCH = 2 -- radians a second at full tilt, up and down
++Pad.INVERT = false -- pushing up looks up
++
++local function finite(v: any): boolean
++	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
++end
++
++function Pad.action(keyName: string): View.Action?
++	return BUTTONS[keyName]
++end
++
++function Pad.isPad(inputType: string): boolean
++	local n = tonumber(string.match(inputType, "^Gamepad(%d)$"))
++	return n ~= nil and n >= 1 and n <= 8
++end
++
++function Pad.steerStart(): Steer
++	return { held = nil }
++end
++
++-- the sector of a tilt: the dominant axis, a tie going vertical (x right, y up)
++local function sector(x: number, y: number): Movement.Intent
++	local up: Movement.Intent, down: Movement.Intent = "Forward", "Back"
++	local right: Movement.Intent, left: Movement.Intent = "Right", "Left"
++	if math.abs(y) >= math.abs(x) then
++		return if y >= 0 then up else down
++	end
++	return if x > 0 then right else left
++end
++
++-- One reading of the left stick: the new state and the turn intent to send, if any.
++function Pad.steer(s: Steer, x: number, y: number): (Steer, Movement.Intent?)
++	if not finite(x) or not finite(y) then
++		return { held = nil }, nil
++	end
++	local r = math.sqrt(x * x + y * y)
++	if r >= Pad.STEER_ON then
++		local now: Movement.Intent = sector(x, y)
++		local next: Steer = { held = now }
++		if now ~= s.held then
++			return next, now
++		end
++		return next, nil
++	end
++	if s.held ~= nil and r >= Pad.STEER_OFF then
++		return { held = s.held }, nil
++	end
++	return { held = nil }, nil
++end
++
++-- One reading of the right stick over `dt` seconds: the dx, dy that View.look turns by.
++function Pad.look(x: number, y: number, dt: number): (number, number)
++	if not finite(x) or not finite(y) or not finite(dt) or dt <= 0 then
++		return 0, 0
++	end
++	local r = math.sqrt(x * x + y * y)
++	if r < Pad.LOOK_DEAD then
++		return 0, 0
++	end
++	local scaled = (math.min(r, 1) - Pad.LOOK_DEAD) / (1 - Pad.LOOK_DEAD)
++	local a = scaled * scaled
++	local k = View.MOUSE_RADIANS_PER_PIXEL
++	local dx = a * (x / r) * Pad.LOOK_YAW * dt / k
++	local dy = a * (y / r) * Pad.LOOK_PITCH * dt / k
++	return dx, if Pad.INVERT then dy else -dy
++end
++
++return Pad
+diff --git a/pickman/src/shared/Logic/View/init.luau b/pickman/src/shared/Logic/View/init.luau
+index c257db85..a8e3ea57 100644
+--- a/pickman/src/shared/Logic/View/init.luau
++++ b/pickman/src/shared/Logic/View/init.luau
+@@ -53,7 +53,7 @@ local ARROWS: { [string]: string } =
+ local GHOST_COLORS: { [string]: Rgb } = {
+ 	blinky = table.freeze({ r = 255, g = 0, b = 0 }),
+ 	pinky = table.freeze({ r = 255, g = 184, b = 255 }),
+-	inky = table.freeze({ r = 0, g = 255, b = 255 }),
++	inky = table.freeze({ r = 230, g = 255, b = 0 }), -- f0109: lemon, so the ghost stands out (G1)
+ 	clyde = table.freeze({ r = 255, g = 184, b = 82 }),
+ }
+ local YAWS: { [Maze.Heading]: number } = { N = 0, W = PI / 2, S = PI, E = -PI / 2 }
+@@ -70,6 +70,21 @@ View.GHOST = table.freeze({ width = 6, height = 10 })
+ View.GHOST_COLORS = table.freeze(GHOST_COLORS)
+ View.FRIGHTENED_COLOR = table.freeze({ r = 33, g = 33, b = 255 } :: Rgb)
+ View.WHITE = table.freeze({ r = 255, g = 255, b = 255 } :: Rgb)
++-- f0109: the maze walls' colours: blue, green while the ghosts are edible, lit white in the level-clear flash
++View.WALL_COLOR = table.freeze({ r = 33, g = 33, b = 222 } :: Rgb)
++View.WALL_EDIBLE_COLOR = table.freeze({ r = 14, g = 64, b = 14 } :: Rgb)
++
++-- The walls' colour: the level-clear flash wins, then green while the ghosts are edible, else blue.
++function View.wallColor(lit: boolean, edible: boolean): Rgb
++	local c = if lit then View.WHITE elseif edible then View.WALL_EDIBLE_COLOR else View.WALL_COLOR
++	return { r = c.r, g = c.g, b = c.b }
++end
++
++-- Whether the ghosts are edible: the power timer runs (0 on a death, at level clear and on levels with no
++-- frightened time).
++function View.edible(play: Session.PlayFrame): boolean
++	return play.frightened > 0
++end
+ -- Pellets float just below the eye line; a power pellet is bigger and pulses, in real seconds.
+ View.PELLET = table.freeze({ height = 3, pellet = 1, power = 3, pulseSeconds = 0.5, pulseMin = 0.7 })
+ 
+diff --git a/pickman/tests/acceptance/f0109/colors.spec.luau b/pickman/tests/acceptance/f0109/colors.spec.luau
+new file mode 100644
+index 00000000..43e112cf
+--- /dev/null
++++ b/pickman/tests/acceptance/f0109/colors.spec.luau
+@@ -0,0 +1,115 @@
++--!strict
++-- f0109: Inky gets a colour of its own that stands out (the user: the near-white ghost "is just not very visible"),
++-- and the maze walls are green while the ghosts are edible (the power timer runs), blue otherwise, lit white during
++-- the level-clear flash, which wins. Visibility is measured: WCAG contrast against what a ghost is seen against, and
++-- CIE76 colour distance from the other ghost colours. The pellets' and shots' colours are read from their views
++-- (place.spec).
++local View = require("@logic/View")
++local t = require("@tests/lib/t")
++
++type Rgb = View.Rgb
++
++local function lin(v: number): number
++	local c = v / 255
++	return if c <= 0.03928 then c / 12.92 else ((c + 0.055) / 1.055) ^ 2.4
++end
++local function luminance(c: Rgb): number
++	return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
++end
++local function contrast(a: Rgb, b: Rgb): number
++	local la, lb = luminance(a), luminance(b)
++	return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05)
++end
++local function lab(c: Rgb): (number, number, number)
++	local r, g, b = lin(c.r), lin(c.g), lin(c.b)
++	local x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
++	local y = 0.2126 * r + 0.7152 * g + 0.0722 * b
++	local z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
++	local function f(v: number): number
++		return if v > 0.008856 then v ^ (1 / 3) else 7.787 * v + 16 / 116
++	end
++	return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
++end
++local function distance(a: Rgb, b: Rgb): number
++	local l1, a1, b1 = lab(a)
++	local l2, a2, b2 = lab(b)
++	return math.sqrt((l1 - l2) ^ 2 + (a1 - a2) ^ 2 + (b1 - b2) ^ 2)
++end
++local function rgb(c: Rgb): string
++	return `{c.r},{c.g},{c.b}`
++end
++local FLOOR: Rgb = { r = 0, g = 0, b = 0 } -- MazeView's floor (black; f0109 does not change it)
++local DANGEROUS = { "blinky", "pinky", "clyde", "inky" }
++
++return t.spec("f0109 Inky's colour and green walls", function(it)
++	it("Inky is lemon, 230,255,0, for its body and its glow (G1)", function()
++		t.expect(rgb(View.GHOST_COLORS.inky)).toBe("230,255,0")
++		t.expect(rgb(View.ghostColor("inky", "normal", false))).toBe("230,255,0")
++		t.expect(rgb(View.ghostColor("inky", "normal", true))).toBe("230,255,0")
++	end)
++
++	it("Inky stands out against the blue walls and the floor", function()
++		local inky = View.GHOST_COLORS.inky
++		t.expect(contrast(inky, View.WALL_COLOR) >= 4.5).toBe(true)
++		t.expect(contrast(inky, FLOOR) >= 4.5).toBe(true)
++	end)
++
++	it("Inky's colour is far from every other ghost's and from the frightened and white looks", function()
++		local inky = View.GHOST_COLORS.inky
++		for _, name in { "blinky", "pinky", "clyde" } do
++			t.expect(distance(inky, View.GHOST_COLORS[name]) >= 30).toBe(true)
++		end
++		for _, other in { View.FRIGHTENED_COLOR, View.WHITE } do
++			t.expect(distance(inky, other) >= 30).toBe(true)
++		end
++	end)
++
++	it("the other ghosts and the frightened, blinking and eyes looks are unchanged", function()
++		t.expect(rgb(View.GHOST_COLORS.blinky)).toBe("255,0,0")
++		t.expect(rgb(View.GHOST_COLORS.pinky)).toBe("255,184,255")
++		t.expect(rgb(View.GHOST_COLORS.clyde)).toBe("255,184,82")
++		for _, name in { "blinky", "pinky", "inky", "clyde" } do
++			t.expect(rgb(View.ghostColor(name, "frightened", false))).toBe("33,33,255")
++			t.expect(rgb(View.ghostColor(name, "blinking", false))).toBe("33,33,255")
++			t.expect(rgb(View.ghostColor(name, "blinking", true))).toBe("255,255,255")
++			t.expect(rgb(View.ghostColor(name, "eyes", false))).toBe("255,255,255")
++		end
++	end)
++
++	it("the walls are blue, green while edible, and white in the level-clear flash, which wins", function()
++		t.expect(rgb(View.WALL_COLOR)).toBe("33,33,222")
++		t.expect(rgb(View.WALL_EDIBLE_COLOR)).toBe("14,64,14")
++		t.expect(rgb(View.wallColor(false, false))).toBe("33,33,222")
++		t.expect(rgb(View.wallColor(false, true))).toBe("14,64,14")
++		t.expect(rgb(View.wallColor(true, false))).toBe("255,255,255")
++		t.expect(rgb(View.wallColor(true, true))).toBe("255,255,255")
++	end)
++
++	-- The user (2026-10-25, "Darker green"): every dangerous ghost must stand out on the green walls (an eaten ghost
++	-- revives dangerous, in its own colour, while they are still green); frightened (blue) ghosts may be harder to
++	-- see. The user chose the middle of three greens on the walls' trade-off with the floor (E2c): (14, 64, 14).
++	it(
++		"every dangerous ghost stands out on the green walls, and the walls still stand out from the floor",
++		function()
++			local g = View.WALL_EDIBLE_COLOR
++			t.expect(g.g > g.r and g.g > g.b).toBe(true)
++			for _, name in DANGEROUS do
++				t.expect(contrast(View.GHOST_COLORS[name], g) >= 2.9).toBe(true) -- Blinky, the weakest, is 2.99
++			end
++			t.expect(contrast(g, FLOOR) >= 1.7).toBe(true) -- 1.76
++			-- the frightened blue on this green (1.55), recorded so it can't quietly get worse
++			t.expect(contrast(View.FRIGHTENED_COLOR, g) >= 1.5).toBe(true)
++		end
++	)
++
++	it("the ghosts are edible exactly while the power timer runs", function()
++		local function play(frightened: number, phase: string): any
++			return { phase = phase, level = 1, score = 0, lives = 3, timer = 0, frightened = frightened }
++		end
++		t.expect(View.edible(play(1, "playing"))).toBe(true)
++		t.expect(View.edible(play(180, "playing"))).toBe(true)
++		t.expect(View.edible(play(0, "playing"))).toBe(false) -- no power, or a level with no frightened time
++		t.expect(View.edible(play(0, "dying"))).toBe(false)
++		t.expect(View.edible(play(0, "levelclear"))).toBe(false)
++	end)
++end)
+diff --git a/pickman/tests/acceptance/f0109/docs.spec.luau b/pickman/tests/acceptance/f0109/docs.spec.luau
+new file mode 100644
+index 00000000..f407a9a4
+--- /dev/null
++++ b/pickman/tests/acceptance/f0109/docs.spec.luau
+@@ -0,0 +1,26 @@
++--!strict
++-- f0109: game-design.md records the decisions (Inky's colour and the edible walls) and no longer asks for Inky's
++-- colour; it keeps the fact f0110 relies on, that the user sees (0, 255, 255) as white.
++local fs = require("@lune/fs")
++local t = require("@tests/lib/t")
++
++return t.spec("f0109 the game design records the colours", function(it)
++	it(
++		"the decision gives lemon Inky, the green, the power timer, the flash and the gold marked walls",
++		function()
++			local text = fs.readFile(".tracker/game-design.md")
++			local row = string.match(text, "\n[^\n]*Inky's colour and the edible walls[^\n]*") or ""
++			t.expect(row ~= "").toBe(true)
++			for _, want in
++				{ "f0109", "(230, 255, 0)", "(14, 64, 14)", "power timer", "flash", "gold", "(0, 255, 255)" }
++			do
++				t.expect(string.find(row, want, 1, true) ~= nil).toBe(true)
++			end
++		end
++	)
++
++	it("the Open questions no longer ask for Inky's colour", function()
++		local text = fs.readFile(".tracker/game-design.md")
++		t.expect((string.find(text, "a new colour is wanted but not chosen", 1, true))).toBe(nil)
++	end)
++end)
+diff --git a/pickman/tests/acceptance/f0109/place.spec.luau b/pickman/tests/acceptance/f0109/place.spec.luau
+new file mode 100644
+index 00000000..69cee635
+--- /dev/null
++++ b/pickman/tests/acceptance/f0109/place.spec.luau
+@@ -0,0 +1,197 @@
++--!strict
++-- f0109: the walls are painted by one rule, View.wallColor (the flash wins, then green while the ghosts are edible,
++-- else blue). MazeView's real source runs here on the fake engine (pickman/tests/lib/fakeengine, extended by f0109
++-- for Vector3, :SetAttribute, :IsA, the client services and fake.module): every wall part follows blue, green, white,
++-- green, blue, and so does every wall dot of the danger radar (DangerHud's real source), whose walls follow the same
++-- rule (the user, 2026-10-25). Main hands the lit and edible state to both. The pellets' and shots' colours are read from their views' sources.
++local Maze = require("@logic/Maze")
++local View = require("@logic/View")
++local fake = require("@tests/lib/fakeengine")
++local place = require("@tests/lib/place")
++local t = require("@tests/lib/t")
++
++local game = place.load()
++
++local function client(name: string): any
++	local node = game
++	for _, n in { "StarterPlayer", "StarterPlayerScripts", "Client", name } do
++		node = node and node:FindFirstChild(n)
++	end
++	return node
++end
++
++-- a script's source without comments, so a mention in a comment proves nothing
++local function source(node: any): string
++	local src = string.gsub(node.Source, "%-%-[^\n]*", "")
++	return src
++end
++
++-- the RGB a fake Color3 (fractions, Color3.fromRGB / 255) stands for
++local function rgb255(c: any): string
++	return `{math.floor(c.R * 255 + 0.5)},{math.floor(c.G * 255 + 0.5)},{math.floor(c.B * 255 + 0.5)}`
++end
++
++-- the colour every part named `name` of the model has, or "mixed"
++local function colourOf(model: any, name: string): string
++	local seen: string? = nil
++	local n = 0
++	for _, c in model:GetChildren() do
++		if c.Name == name then
++			n += 1
++			local key = rgb255(c.Color)
++			if seen ~= nil and seen ~= key then
++				return "mixed"
++			end
++			seen = key
++		end
++	end
++	t.expect(n > 0).toBe(true)
++	return seen :: string
++end
++
++-- the `local COLOR = Color3.fromRGB(r, g, b)` of a view's source
++local function viewColour(name: string): View.Rgb
++	local r, g, b =
++		string.match(source(client(name)), "local COLOR = Color3%.fromRGB%((%d+),%s*(%d+),%s*(%d+)%)")
++	t.expect(r ~= nil).toBe(true)
++	return { r = tonumber(r) :: number, g = tonumber(g) :: number, b = tonumber(b) :: number }
++end
++
++local function lin(v: number): number
++	local c = v / 255
++	return if c <= 0.03928 then c / 12.92 else ((c + 0.055) / 1.055) ^ 2.4
++end
++local function lab(c: View.Rgb): (number, number, number)
++	local r, g, b = lin(c.r), lin(c.g), lin(c.b)
++	local x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
++	local y = 0.2126 * r + 0.7152 * g + 0.0722 * b
++	local z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
++	local function f(v: number): number
++		return if v > 0.008856 then v ^ (1 / 3) else 7.787 * v + 16 / 116
++	end
++	return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
++end
++local function distance(a: View.Rgb, b: View.Rgb): number
++	local l1, a1, b1 = lab(a)
++	local l2, a2, b2 = lab(b)
++	return math.sqrt((l1 - l2) ^ 2 + (a1 - a2) ^ 2 + (b1 - b2) ^ 2)
++end
++
++return t.spec("f0109 the walls follow View.wallColor", function(it)
++	it(
++		"MazeView's real source paints every wall blue, green when edible, white in the flash, green again, then blue",
++		function()
++			local MazeView = fake.module(client("MazeView").Source, "MazeView")
++			local model = MazeView.build(Maze.layout("classic"))
++			local function walls(): string
++				return colourOf(model, "Wall")
++			end
++			t.expect(walls()).toBe("33,33,222")
++			-- the real level-clear flash first: lit while not edible (the level clear zeroes the power timer)
++			MazeView.flash(model, true)
++			t.expect(walls()).toBe("255,255,255")
++			MazeView.flash(model, false)
++			t.expect(walls()).toBe("33,33,222")
++			MazeView.edible(model, true)
++			t.expect(walls()).toBe("14,64,14")
++			MazeView.flash(model, true)
++			t.expect(walls()).toBe("255,255,255")
++			MazeView.flash(model, false)
++			t.expect(walls()).toBe("14,64,14") -- the flash ends while the ghosts are still edible
++			MazeView.edible(model, false)
++			t.expect(walls()).toBe("33,33,222")
++			-- the door and the floor keep their own colours throughout
++			t.expect(colourOf(model, "Door")).toBe("255,184,255")
++			t.expect(colourOf(model, "Floor")).toBe("0,0,0")
++		end
++	)
++
++	it(
++		"every wall part MazeView makes takes the model's current colour (a wall built while edible is green)",
++		function()
++			local src = source(client("MazeView"))
++			t.expect((string.find(src, "View.wallColor(false, false)", 1, true))).toBe(nil)
++			t.expect(string.find(src, "local function wallColorOf(", 1, true) ~= nil).toBe(true)
++			t.expect(string.find(src, '"Wall", wallColorOf(', 1, true) ~= nil).toBe(true)
++		end
++	)
++
++	it("Main hands the lit and edible state to MazeView and to the danger radar each frame", function()
++		local src = source(client("Main"))
++		t.expect(
++			string.find(src, "MazeView%.edible%(%s*[%w_]+%s*,%s*View%.edible%(%s*[%w_]+%.play%s*%)%s*%)")
++				~= nil
++		)
++			.toBe(true)
++		t.expect(string.find(src, "MazeView%.flash%([^)]*%.flash%s*%)") ~= nil).toBe(true)
++		t.expect(
++			string.find(
++				src,
++				"DangerHud%.wallState%(%s*[%w_]+%.flash%s*,%s*View%.edible%(%s*[%w_]+%.play%s*%)%s*%)"
++			) ~= nil
++		).toBe(true)
++	end)
++
++	-- design review 002 F1: DangerHud's real source on the fake engine, a real snapshot, one render step per state
++	it(
++		"the danger radar's real source paints its wall dots by View.wallColor for each state Main hands it",
++		function()
++			local DangerHud, view = fake.module(client("DangerHud").Source, "DangerHud")
++			local Session = require("@logic/Session")
++			local classic = Maze.layout("classic")
++			local s = Session.new(classic, 1, Session.GAME_CONFIG)
++			Session.join(s, "p")
++			for _ = 1, 61 do
++				Session.step(s)
++			end
++			local snap = Session.snapshot(s, "p")
++			local pose = { x = snap.player.x, y = snap.player.y, yaw = 0 }
++			DangerHud.start(function(): any
++				return pose
++			end)
++			DangerHud.push(snap, classic)
++			local radar = view.playerGui:FindFirstChild("Danger"):FindFirstChild("Radar")
++			local YOU, BLIP = "255,255,0", "255,60,60" -- the player's dot and a hunting ghost's blip
++			local function wallDots(): (number, { [string]: boolean })
++				local n, seen = 0, {}
++				for _, f in radar:GetChildren() do
++					if f.Visible ~= false then
++						local key = rgb255(f.BackgroundColor3)
++						if key ~= YOU and key ~= BLIP then
++							n += 1
++							seen[key] = true
++						end
++					end
++				end
++				return n, seen
++			end
++			for _, state in
++				{
++					{ false, false },
++					{ true, false },
++					{ false, false },
++					{ false, true },
++					{ true, true },
++					{ false, true },
++					{ false, false },
++				}
++			do
++				DangerHud.wallState(state[1], state[2])
++				view.renderStepped:fire(1 / 60)
++				local c = View.wallColor(state[1], state[2])
++				local want = `{c.r},{c.g},{c.b}`
++				local n, seen = wallDots()
++				t.expect(n > 0).toBe(true)
++				for key in seen do
++					t.expect(key).toBe(want)
++				end
++			end
++		end
++	)
++
++	it("Inky's colour is far from the pellets' and the shots' as their views draw them", function()
++		local inky = View.GHOST_COLORS.inky
++		t.expect(distance(inky, viewColour("PelletView")) >= 30).toBe(true)
++		t.expect(distance(inky, viewColour("BlastView")) >= 30).toBe(true)
++	end)
++end)
+diff --git a/pickman/tests/lib/fakeengine.luau b/pickman/tests/lib/fakeengine.luau
+index 17e576b7..69fc5da1 100644
+--- a/pickman/tests/lib/fakeengine.luau
++++ b/pickman/tests/lib/fakeengine.luau
+@@ -13,17 +13,29 @@
+ --   * `task.spawn`, `task.defer`, `task.delay` and `task.wait`, driven by the fake clock (`tick`);
+ --   * an error in a thread the fake resumes later (a spawned or deferred function, a timer, a waiter) does not
+ --     unwind whoever started it, as in Roblox, but the server call the spec made fails with it afterwards;
+---   * `os.clock`, `Instance.new`, `Enum`, `UDim2`, `Vector2` and `Color3` as plain data.
++--   * `os.clock`, `Instance.new`, `Enum`, `UDim2`, `Vector2`, `Vector3` and `Color3` as plain data;
++--   * f0109: `:SetAttribute` (refusing what Roblox refuses: a name that is not 1-100 letters, digits or
++--     underscores, and a table, function, thread or Instance value), `:IsA` (only the classes the specs use: a
++--     class is itself, and a Part is a BasePart), and `fake.module`, which runs one client view module's real source (MazeView, DangerHud) with the
++--     real Logic, a `workspace` (with a CurrentCamera), and the client services a view asks for: GuiService
++--     (`GetInsetArea`: no insets), Players (a LocalPlayer with a PlayerGui), RunService (`RenderStepped`, a
++--     signal the spec fires) and UserInputService (`TouchEnabled`); a ScreenGui's AbsoluteSize is the screen; and,
++--     for these view modules only, `UDim`, `UDim2.fromOffset`, `Vector3` and `NumberSequence(Keypoint)` as plain
++--     data (the lobby's environment is unchanged: f0109's re-run of f0061's mutants, E6).
+ -- The fake must stay exact in both directions: it must not accept less than it does now (a correct idiom
+ -- that works today must keep working), and it must not accept more (a wrong adapter that fails today must
+ -- keep failing: the mutants in f0061's Rules and mutants table that depend on it are re-run, as exact
+ -- substitutions, whenever it changes).
+ -- It models nothing about what the real engine does with TeleportAsync (E7 in f0061).
++local Awareness = require("@logic/Awareness")
+ local Flow = require("@logic/Flow")
++local Hud = require("@logic/Hud")
+ local Lobby = require("@logic/Lobby")
+ local Maze = require("@logic/Maze")
++local Pad = require("@logic/Pad")
+ local Session = require("@logic/Session")
+ local Travel = require("@logic/Travel")
++local View = require("@logic/View")
+ local luau = require("@lune/luau")
+ 
+ local fake = {}
+@@ -54,8 +66,17 @@ function fake.signal(): Signal
+ 	return s
+ end
+ 
+-local LOGIC: { [string]: any } =
+-	{ Travel = Travel, Lobby = Lobby, Flow = Flow, Maze = Maze, Session = Session }
++local LOGIC: { [string]: any } = {
++	Travel = Travel,
++	Lobby = Lobby,
++	Flow = Flow,
++	Maze = Maze,
++	Pad = Pad,
++	Session = Session,
++	View = View,
++	Awareness = Awareness,
++	Hud = Hud,
++}
+ 
+ -- The require an adapter gets: the real Logic modules, or `overrides` for some of them (a spy on Session, say);
+ -- an override can only replace a module the fake already serves.
+@@ -133,6 +154,30 @@ function fake.node(className: string, name: string?): any
+ 	raw.GetAttribute = function(_: any, attribute: string): any
+ 		return raw.attributes[attribute]
+ 	end
++	raw.SetAttribute = function(_: any, attribute: string, value: any)
++		if
++			type(attribute) ~= "string"
++			or #attribute == 0
++			or #attribute > 100
++			or string.find(attribute, "[^%w_]")
++		then
++			error(`fake engine: {attribute} is not a valid attribute name`, 0)
++		end
++		local kind = type(value)
++		if kind == "table" or kind == "function" or kind == "thread" or raws[value] ~= nil then
++			error(
++				`fake engine: an attribute can't hold a value of type {if raws[value]
++					then "Instance"
++					else kind}`,
++				0
++			)
++		end
++		raw.attributes[attribute] = value
++	end
++	raw.IsA = function(_: any, class: string): boolean
++		return raw.ClassName == class
++			or (class == "BasePart" and (raw.ClassName == "Part" or raw.ClassName == "WedgePart"))
++	end
+ 	setmetatable(proxy, {
+ 		__index = function(_: any, key: any): any
+ 			local v = raw[key]
+@@ -252,6 +297,81 @@ local function standardEnv(services: { [string]: any }, overrides: { [string]: a
+ 	}
+ end
+ 
++export type View = {
++	workspace: any,
++	playerGui: any,
++	renderStepped: Signal, -- RunService.RenderStepped: the spec fires it
++	input: { TouchEnabled: boolean },
++}
++
++-- One client view module's real source (MazeView, DangerHud) under the standard environment with the client
++-- services a view asks for; returns the module and its view world. A ScreenGui's AbsoluteSize is `screen`.
++function fake.module(source: string, name: string, screen: { X: number, Y: number }?): (any, View)
++	local size = screen or { X = 1280, Y = 720 }
++	local workspace = fake.node("Workspace", "Workspace")
++	workspace.CurrentCamera = { FieldOfView = 70 }
++	local player = fake.node("Player", "LocalPlayer")
++	local playerGui = child(player, "PlayerGui", "PlayerGui")
++	local renderStepped = fake.signal()
++	local input = { TouchEnabled = false }
++	local services = {
++		GuiService = {
++			GetInsetArea = function(_: any, _which: any): any
++				return { Min = { X = 0, Y = 0 }, Max = { X = size.X, Y = size.Y } }
++			end,
++		},
++		Players = { LocalPlayer = player },
++		RunService = { RenderStepped = renderStepped },
++		UserInputService = input,
++	}
++	local env = standardEnv(services)
++	env.workspace = workspace
++	-- the views' extra constructors, only here: the lobby's environment stays exactly as f0061 specified it (an
++	-- off-screen button placed by fromOffset must keep failing f0061's specs)
++	env.UDim = {
++		new = function(scale: number, offset: number): any
++			return { Scale = scale, Offset = offset }
++		end,
++	}
++	env.NumberSequence = {
++		new = function(points: any): any
++			return { Keypoints = points }
++		end,
++	}
++	env.NumberSequenceKeypoint = {
++		new = function(time: number, value: number): any
++			return { Time = time, Value = value }
++		end,
++	}
++	env.Vector3 = {
++		new = function(x: number, y: number, z: number): any
++			return { X = x, Y = y, Z = z }
++		end,
++	}
++	local udim2 = table.clone(env.UDim2)
++	udim2.fromOffset = function(x: number, y: number): any
++		return { X = { Scale = 0, Offset = x }, Y = { Scale = 0, Offset = y } }
++	end
++	env.UDim2 = udim2
++	local new = env.Instance.new
++	env.Instance = {
++		new = function(className: string): any
++			local n = new(className)
++			if className == "ScreenGui" then
++				n.AbsoluteSize = { X = size.X, Y = size.Y }
++			end
++			return n
++		end,
++	}
++	return load(source, env, name),
++		{
++			workspace = workspace,
++			playerGui = playerGui,
++			renderStepped = renderStepped,
++			input = input,
++		}
++end
++
+ -- The server ------------------------------------------------------------------------------------------------
+ 
+ export type Server = {
+diff --git a/pickman/tests/place/touch-adapters.spec.luau b/pickman/tests/place/touch-adapters.spec.luau
+index e4ddf899..c4ffd880 100644
+--- a/pickman/tests/place/touch-adapters.spec.luau
++++ b/pickman/tests/place/touch-adapters.spec.luau
+@@ -7,6 +7,7 @@ local Blaster = require("@logic/Blaster")
+ local Hop = require("@logic/Hop")
+ local Maze = require("@logic/Maze")
+ local Movement = require("@logic/Movement")
++local Pad = require("@logic/Pad")
+ local Touch = require("@logic/Touch")
+ local View = require("@logic/View")
+ local luau = require("@lune/luau")
+@@ -153,6 +154,7 @@ local function start(rect: Touch.Rect?, keys: Keys?): World
+ 	}
+ 	local modules: { [string]: any } = {
+ 		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
++		["@game/ReplicatedStorage/Shared/Logic/Pad"] = Pad,
+ 		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
+ 		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
+ 		["@game/ReplicatedStorage/Shared/Logic/Movement"] = Movement,
+@@ -276,24 +278,30 @@ return t.spec("touch adapters", function(it)
+ 		return { up = up, down = down, left = left, right = right }
+ 	end
+ 
+-	it("Controls binds exactly the keys of View.KEYS and sinks every one", function()
+-		local w = start(nil)
+-		local names = {}
+-		for _, code in w.bound.codes do
+-			table.insert(names, code.Name)
+-		end
+-		table.sort(names)
+-		local wantNames = {}
+-		for name in View.KEYS do
+-			table.insert(wantNames, name)
+-		end
+-		table.sort(wantNames)
+-		t.expect(names).toEqual(wantNames)
+-		for name in View.KEYS do
+-			t.expect(press(w, name, "Begin")).toBe(w.enum.ContextActionResult.Sink)
+-			t.expect(press(w, name, "End")).toBe(w.enum.ContextActionResult.Sink)
++	it(
++		"Controls binds exactly the keys of View.KEYS and Pad.BUTTONS, and sinks every one but the pad's continue",
++		function()
++			local w = start(nil)
++			local names = {}
++			for _, code in w.bound.codes do
++				table.insert(names, code.Name)
++			end
++			table.sort(names)
++			local wantNames = {}
++			for name in View.KEYS do
++				table.insert(wantNames, name)
++			end
++			for name in Pad.BUTTONS do
++				table.insert(wantNames, name)
++			end
++			table.sort(wantNames)
++			t.expect(names).toEqual(wantNames)
++			for name in View.KEYS do
++				t.expect(press(w, name, "Begin")).toBe(w.enum.ContextActionResult.Sink)
++				t.expect(press(w, name, "End")).toBe(w.enum.ContextActionResult.Sink)
++			end
+ 		end
+-	end)
++	)
+ 
+ 	it("Controls sends W A S D as movement intents on the key going down only", function()
+ 		local w = start(nil)
+diff --git a/pickman/tests/unit/Pad/pad.spec.luau b/pickman/tests/unit/Pad/pad.spec.luau
+new file mode 100644
+index 00000000..65b95e48
+--- /dev/null
++++ b/pickman/tests/unit/Pad/pad.spec.luau
+@@ -0,0 +1,18 @@
++--!strict
++local Pad = require("@logic/Pad")
++local t = require("@tests/lib/t")
++
++return t.spec("Pad", function(it)
++	it("a push of the left stick turns once", function()
++		local s, turn = Pad.steer(Pad.steerStart(), -1, 0)
++		t.expect(turn).toBe("Left")
++		s, turn = Pad.steer(s, -1, 0)
++		t.expect(turn).toBe(nil)
++	end)
++
++	it("a resting right stick does not look", function()
++		local dx, dy = Pad.look(0.05, -0.05, 0.016)
++		t.expect(dx).toBe(0)
++		t.expect(dy).toBe(0)
++	end)
++end)
