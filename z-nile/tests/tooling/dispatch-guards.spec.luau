@@ -8,6 +8,7 @@ local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local raftcheck = require("@znile/engine/raftcheck")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -38,6 +39,9 @@ local function has(text: string, needle: string): boolean
 end
 local function zn(args: { string }, extra: { [string]: string }?): fixture.Result
 	return fakecli.zn(h, args, extra)
+end
+local function inRaft(doc: string, rid: string): string
+	return (string.gsub(doc, "\nraft: \n", `\nraft: {rid}\n`, 1))
 end
 local function prepared(id: string, slug: string): string
 	return (
@@ -71,7 +75,15 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			-- code review 002 F1: an active raft and a backlog raft on main, each with its exit criteria
 			["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\ntitle: an active raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/active/R0040/check.sh"] = "bash members-check.sh\n",
-			["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
+			["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: [c0094]\n---\n",
+			-- code review 003 F1: an active raft's member, a backlog raft's member, a retired raft
+			["pickman/.tracker/issues/active/c0093/c0093.md"] = inRaft(
+				prepared("c0093", "active-member"),
+				"R0040"
+			),
+			["pickman/.tracker/issues/active/c0093/check.sh"] = "bash acceptance.sh\n",
+			["pickman/.tracker/issues/c0094/c0094.md"] = inRaft(prepared("c0094", "backlog-member"), "R0041"),
+			["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\ntitle: a retired raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/R0041/check.sh"] = "bash members-check.sh\n",
 			["pickman/.tracker/issues/c0092/c0092.md"] = prepared("c0092", "bystander-thing"),
 		})
@@ -229,7 +241,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local backlog = gate(
 				42,
 				with({
-					["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft \nissues: []\n---\n",
+					["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft \nissues: [c0094]\n---\n",
 					["pickman/.tracker/rafts/R0041/check.sh"] = "exit 0\n",
 				})
 			)
@@ -247,11 +259,101 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			t.expect(listed.code).toBe(4)
 			t.expect(has(listed.stdout, "c0092/c0092.md")).toBe(true)
 			t.expect(has(fakecli.log(h), "realgh pr merge")).toBe(false)
-			-- merges: the raft's own document and its members' raft: lines, pinned to the head
-			local sha = fakecli.pullRequest(h, 34, own)
-			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(34, sha))
-			zn({ "dispatch", "c0096" })
-			t.expect(has(fakecli.log(h), `realgh pr merge 34 --squash --match-head-commit {sha}`)).toBe(true)
+			-- code review 003 F1: an existing issue's change is judged by its shape against main
+			local function doc(path: string): string
+				return process.exec("git", { "show", `main:{path}` }, { cwd = h.f.origin }).stdout
+			end
+			local c0093 = "pickman/.tracker/issues/active/c0093/c0093.md"
+			local c0092 = "pickman/.tracker/issues/c0092/c0092.md"
+			local c0094 = "pickman/.tracker/issues/c0094/c0094.md"
+			local refused: { { n: number, files: { [string]: string }, says: string } } = {
+				-- PR #51: an active raft's member moved to the new raft, its design rewritten
+				{
+					n = 51,
+					files = {
+						[c0093] = (string.gsub(doc(c0093), "\nraft: R0040\n", "\nraft: R0050\n"))
+							.. "rewritten design\n",
+					},
+					says = "issues/active/c0093/c0093.md, an issue in active/",
+				},
+				-- a backlog member's raft: line and a design edit
+				{
+					n = 53,
+					files = { [c0092] = inRaft(doc(c0092), "R0050") .. "rewritten design\n" },
+					says = "beyond its raft: line",
+				},
+				-- an issue naming the active raft
+				{
+					n = 54,
+					files = { [c0092] = inRaft(doc(c0092), "R0040") },
+					says = "only between empty and a raft this PR carries",
+				},
+				-- a retired raft's document
+				{
+					n = 55,
+					files = {
+						["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\ntitle: x\nissues: []\n---\n",
+					},
+					says = "raft R0042 is retired",
+				},
+			}
+			for _, case in refused do
+				local r = gate(case.n, with(case.files))
+				if r.code ~= 4 or not has(r.stdout, case.says) then
+					error(`PR #{case.n}: exit {r.code}, wanted 4 saying "{case.says}"\n{r.stdout}{r.stderr}`)
+				end
+			end
+			-- code review 003 F2: a new raft's check.sh is the rendered template's RC0 lines, then only RCn checks
+			local template =
+				raftcheck.render(doc("z-nile/templates/raft/check.sh"), { ID = "R0050", PROJECT = "pickman" })
+			local check = "pickman/.tracker/rafts/R0050/check.sh"
+			for _, case in
+				{
+					{ n = 52, text = "exit 0\n" },
+					{ n = 56, text = (string.gsub(template, "%-%-full", "--quick")) },
+					{ n = 57, text = (string.gsub(template, "\nfinish\n", "\nexit 0\nfinish\n")) },
+				}
+			do
+				local r = gate(case.n, with({ [check] = case.text }))
+				if r.code ~= 4 or not has(r.stdout, "rafts/R0050/check.sh") then
+					error(
+						`PR #{case.n}: exit {r.code}, wanted 4 naming the raft's check.sh\n{r.stdout}{r.stderr}`
+					)
+				end
+			end
+			t.expect(has(fakecli.log(h), "realgh pr merge")).toBe(false)
+			-- merges, pinned to the head: the raft's own document and its members' raft: lines (PR #34); the rendered
+			-- template; the template with an RC1 check; a recombine moving a backlog raft's member into the new raft
+			local rc1 = (
+				string.gsub(
+					template,
+					"\nfinish\n",
+					"\ncheck \"RC1: the thing works\" bash -c 'true'\n\nfinish\n"
+				)
+			)
+			for _, case in
+				{
+					{ n = 34, files = own },
+					{ n = 58, files = with({ [check] = template }) },
+					{ n = 59, files = with({ [check] = rc1 }) },
+					{
+						n = 60,
+						files = with({
+							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
+							["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
+							[c0094] = (string.gsub(doc(c0094), "\nraft: R0041\n", "\nraft: R0050\n")),
+						}),
+					},
+				}
+			do
+				fakecli.clear(h)
+				local sha = fakecli.pullRequest(h, case.n, case.files)
+				fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(case.n, sha))
+				local r = zn({ "dispatch", "c0096" })
+				if not has(fakecli.log(h), `realgh pr merge {case.n} --squash --match-head-commit {sha}`) then
+					error(`PR #{case.n} did not merge\n{r.stdout}{r.stderr}`)
+				end
+			end
 		end
 	)
 end)

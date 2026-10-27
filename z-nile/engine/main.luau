@@ -16,6 +16,7 @@ local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
+local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
@@ -117,12 +118,7 @@ local function projectNameOf(root: string): string
 end
 
 local function render(path: string, vars: { [string]: string }): string
-	local text = fs.readFile(path)
-	return (
-		string.gsub(text, "{{([%w_]+)}}", function(k: string): string
-			return vars[k] or "{{" .. k .. "}}"
-		end)
-	)
+	return raftcheck.render(fs.readFile(path), vars)
 end
 
 local function today(): string

@@ -117,8 +117,12 @@ wrapper.GH_ALLOWED = {
 	api = {},
 } :: { [string]: { [string]: boolean } }
 -- `gh api` write endpoints a dispatched agent may use (a PR or issue comment); any other write is refused.
-wrapper.API_WRITES =
-	{ "^/?repos/[^/]+/[^/]+/issues/%d+/comments$", "^/?repos/[^/]+/[^/]+/pulls/%d+/comments$" }
+-- (code review 003 F3: owner and repository as GitHub names them, so no `?` or `#` rides in a segment; gh's own
+-- `{owner}` and `{repo}` placeholders are read as names before matching)
+wrapper.API_WRITES = {
+	"^/?repos/[%w%-%._]+/[%w%-%._]+/issues/%d+/comments$",
+	"^/?repos/[%w%-%._]+/[%w%-%._]+/pulls/%d+/comments$",
+}
 
 -- gh's words after its global options, with an alias expanded by `aliases` (name -> expansion words).
 function wrapper.splitGh(args: { string }, aliases: { [string]: { string } }): { string }
@@ -240,8 +244,9 @@ local function apiDecision(rest: { string }): Decision
 	if not writes then
 		return OK
 	end
+	local named = string.gsub(string.gsub(endpoint, "{owner}", "owner"), "{repo}", "repo")
 	for _, pattern in wrapper.API_WRITES do
-		if string.match(endpoint, pattern) and (method == nil or method == "POST") then
+		if string.match(named, pattern) and (method == nil or method == "POST") then
 			return OK
 		end
 	end

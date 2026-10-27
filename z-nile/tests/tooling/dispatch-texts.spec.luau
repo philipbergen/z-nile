@@ -41,7 +41,7 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 			-- code review 002 F1: the rafting gate's rule, as the code applies it
 			at(
 				read("z-nile/skills/zz-rules/SKILL.md"),
-				"a rafting PR: only the files of rafts new or in the backlog on the base and of the issues their base documents list or whose own `raft:` line names one of them, never any item's sequestered files and never anything under an active or done raft; both sets come from the base, never from what the PR says)",
+				"a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check \"RCn: …\"` lines and `finish`; nothing of an active, done or retired item)",
 				"zz-rules The chain"
 			)
 		end

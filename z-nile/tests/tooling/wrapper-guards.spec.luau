@@ -128,6 +128,9 @@ return t.spec("c0117 the agent's git never rewinds main, and its gh api reads it
 				{ "api", "--jq=.x", "-XPOST", "repos/o/r/merges", "-f", "base=main" },
 				{ "api", "--frobnicate", "repos/o/r/issues/1/comments", "-f", "body=x" },
 				-- code review 002 F2: a GraphQL body gh reads itself, which the wrapper can't judge
+				-- code review 003 F3: a query or fragment riding in the repository segment
+				{ "api", "repos/o/r?/issues/1/comments", "-f", "body=x" },
+				{ "api", "repos/o#/r/pulls/1/comments", "-f", "body=x" },
 				{ "api", "graphql", "-F", "query=@q.graphql" },
 				{ "api", "graphql", "--input", "body.json" },
 				{ "api", "graphql", "-f", "query={viewer{login}}", "-F", "owner=@-" },
@@ -146,6 +149,15 @@ return t.spec("c0117 the agent's git never rewinds main, and its gh api reads it
 			}).ok
 		)
 			.toBe(true)
+		-- gh's own placeholders still name a comment endpoint
+		t.expect(
+			fixture.exec(
+				repo,
+				shim,
+				{ "api", "repos/{owner}/{repo}/issues/1/comments", "-f", "body=x" },
+				{ env = env }
+			).ok
+		).toBe(true)
 		-- an inline GraphQL read still passes
 		t.expect(
 			fixture.exec(repo, shim, { "api", "graphql", "-f", "query={viewer{login}}" }, { env = env }).ok

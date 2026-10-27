@@ -20,6 +20,7 @@ local fs = require("@lune/fs")
 local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
+local raftcheck = require("./raftcheck")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
@@ -1222,9 +1223,11 @@ end
 -- Whether a gate may merge PR `pr` (review 003 F5): its head, fetched from the pinned URL into a private ref, must be
 -- the head gh reports, and `merge-base(main, head)..head` must be tracker state by the one function, sequestered, with
 -- the gate's own narrower rule: a prep PR only its issue's folder (whose sequestered files it may change) and skill
--- lessons; a rafting PR only the files of rafts that are new or in the backlog on the base and of their members (each
--- derived from the base, never from the PR's own text: code review 002 F1), never any item's sequestered files and
--- never anything under an active or done raft. Returns why not, or nil.
+-- lessons; a rafting PR each item's change judged by its shape against the base, never by what the PR says (code
+-- review 002 F1, 003 F1, F2): an existing backlog issue only its document's `raft:` line, between empty and a raft the
+-- PR carries; an existing backlog raft any non-sequestered file; a new raft its backlog folder, its check.sh the rendered
+-- template's RC0 lines then only RCn checks and `finish`; never anything of an active, done or retired item. Returns
+-- why not, or nil.
 function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch.Pr, folder: string): string?
 	local root = ctx.mainRoot()
 	local origin = pinOrigin(ctx)
@@ -1251,11 +1254,10 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 	local function gitFn(a: { string }): (boolean, string)
 		return git(root, a)
 	end
-	-- two sets (code review 001 F1, 002 F1): `items` are the items whose files this PR may carry (the `only` rule);
-	-- `own` are the items whose sequestered files it may change: the issue being prepared at the prep gate, and none at
-	-- the rafting gate (a new raft's own files pass as a new item; an existing item's reviewed check.sh and acceptance
-	-- specs are never a rafting PR's to change). Both are derived from the base, never from what the PR itself says.
-	local items: { [string]: boolean } = { [id] = true }
+	-- `own` are the items whose sequestered files this PR may change (code review 001 F1, 002 F1): the issue being
+	-- prepared at the prep gate, and none at the rafting gate (a new raft's own files pass as a new item, its check.sh
+	-- judged against the template below; an existing item's reviewed check.sh and acceptance specs are never a rafting
+	-- PR's to change)
 	local own: { [string]: boolean } = if gateName == "prep" then { [id] = true } else {}
 	local only: (path: string) -> string?
 	if gateName == "prep" then
@@ -1269,68 +1271,134 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			return `it carries {path}, outside the issue's own folder and the skill lessons`
 		end
 	else
+		-- the rafting gate judges each item's change by its shape against the base (code review 003 F1, F2), never by
+		-- what the PR says: an existing issue only its document's `raft:` line, in the backlog, between empty and a raft
+		-- this PR carries; an existing backlog raft any non-sequestered file; a new raft its own backlog folder, its
+		-- check.sh the rendered template's RC0 lines then only RCn checks; `z-nile/next`; nothing else
 		local from = if okBase then base else trackerstate.EMPTY_TREE
 		local function atBase(path: string): boolean
 			return okBase and (git(root, { "cat-file", "-e", `{base}:{path}` })) or false
 		end
-		-- a raft's lifecycle on the base: "new" (no document in any folder), "backlog", "active" or "done"
-		local function raftOnBase(rid: string): string
-			for _, r in roots :: { string } do
-				for _, life in { "", "active/", "done/" } do
-					if atBase(`{r}/rafts/{life}{rid}/{rid}.md`) then
-						return if life == "" then "backlog" else string.sub(life, 1, -2)
-					end
+		local function show(rev: string, path: string): string?
+			local ok, text = git(root, { "show", `{rev}:{path}` })
+			return if ok then text else nil
+		end
+		local LIVES = { "", "active/", "done/", "retired/" }
+		-- where an item's folder is on the base ("" for the backlog), or nil when it has none: every lifecycle
+		-- folder trackerstate.itemOf knows
+		local function lifeOnBase(r: string, kind: string, xid: string): string?
+			for _, life in LIVES do
+				if atBase(`{r}/{kind}/{life}{xid}/{xid}.md`) then
+					return life
 				end
 			end
-			return "new"
+			return nil
+		end
+		local function rootOf(path: string): string?
+			for _, r in roots :: { string } do
+				if string.sub(path, 1, #r + 1) == r .. "/" then
+					return r
+				end
+			end
+			return nil
 		end
 		local _, names = git(root, { "diff", "--name-only", "--no-renames", from, ref })
-		local rafts: { [string]: boolean } = {}
-		local live: { string } = {}
+		local paths: { string } = {}
 		for path in string.gmatch(names, "[^\n]+") do
-			local rid = trackerstate.itemOf(path, roots :: { string })
+			table.insert(paths, path)
+		end
+		-- the rafts this PR carries: new, or in the backlog on the base
+		local rafts: { [string]: string } = {} -- id -> "new" or "backlog"
+		local live: { string } = {}
+		for _, path in paths do
+			local rid, dirOfItem = trackerstate.itemOf(path, roots :: { string })
 			if rid and store.isRaftId(rid :: string) then
-				local life = raftOnBase(rid :: string)
-				if life == "active" or life == "done" then
-					table.insert(live, `{path} (raft {rid} is {life})`)
-				elseif not rafts[rid :: string] then
-					rafts[rid :: string] = true
-					items[rid :: string] = true
-					-- an existing backlog raft's members as the base lists them
-					for _, r in roots :: { string } do
-						local okDoc, text = git(root, { "show", `{base}:{r}/rafts/{rid}/{rid}.md` })
-						if okBase and okDoc then
-							for m in
-								string.gmatch(string.match(text, "\nissues:%s*%[([^%]]*)%]") or "", "[%w]+")
-							do
-								items[m] = true
-							end
-						end
+				local r = rootOf(path) :: string
+				local life = lifeOnBase(r, "rafts", rid :: string)
+				if life == nil then
+					if dirOfItem ~= `{r}/rafts/{rid}` then
+						return `it adds raft {rid} outside the backlog folder ({path})`
 					end
+					rafts[rid :: string] = "new"
+				elseif life == "" then
+					rafts[rid :: string] = "backlog"
+				else
+					table.insert(live, `{path} (raft {rid} is {string.sub(life, 1, -2)})`)
 				end
 			end
 		end
 		if #live > 0 then
-			return `it changes an active or done raft: {table.concat(live, ", ")}`
+			return `it changes an active, done or retired raft: {table.concat(live, ", ")}`
 		end
-		-- an issue joins a raft by its own raft: line naming one of those rafts (its document in the PR); nothing else
-		-- the PR says (a raft's issues: line) makes an issue carry-able
-		for path in string.gmatch(names, "[^\n]+") do
+		local function raftLine(text: string): string?
+			local front = string.match(text, "^%-%-%-\n(.-\n)%-%-%-")
+			return if front then string.match("\n" .. front, "\nraft:[ \t]*([^\n]-)[ \t]*\n") else nil
+		end
+		local fresh = guard.fresh :: string
+		local carried: { [string]: boolean } = {}
+		for _, path in paths do
 			local pid, _, rel = trackerstate.itemOf(path, roots :: { string })
-			if pid and not store.isRaftId(pid :: string) and rel == `{pid}.md` then
-				local _, text = git(root, { "show", `{ref}:{path}` })
-				local named = string.match(text, "\nraft:[ \t]*(R%d%d%d%d)")
-				if named and rafts[named] then
-					items[pid :: string] = true
+			if pid and store.isRaftId(pid :: string) then
+				if rafts[pid :: string] == "new" and rel == "check.sh" then
+					local r = rootOf(path) :: string
+					local reg = projects.at(fresh, root)
+					local p = if reg then projects.projectOf(reg :: projects.Registry, r) else nil
+					local template = show(fresh, "z-nile/templates/raft/check.sh")
+					local text = show(ref, path)
+					if not template or not text then
+						return `it carries {path}, which could not be judged against the raft template`
+					end
+					local why = raftcheck.judge(
+						text :: string,
+						raftcheck.render(
+							template :: string,
+							{ ID = pid :: string, PROJECT = if p then (p :: projects.Project).name else r }
+						)
+					)
+					if why then
+						return `it carries {path}: {why}`
+					end
 				end
+				carried[path] = true
+			elseif pid then
+				local r = rootOf(path) :: string
+				local life = lifeOnBase(r, "issues", pid :: string)
+				local doc = `{r}/issues/{pid}/{pid}.md`
+				if life == nil then
+					return `it adds issue {pid} ({path}): a rafting PR adds no issue`
+				elseif life ~= "" then
+					return `it changes {path}, an issue in {string.sub(life, 1, -2)}/: a rafting PR changes only a backlog issue's raft: line`
+				elseif path ~= doc then
+					return `it changes {path}: a rafting PR changes only a backlog issue's raft: line`
+				end
+				local before, after = show(base, path), show(ref, path)
+				local was = if before then raftLine(before :: string) else nil
+				local became = if after then raftLine(after :: string) else nil
+				if not before or not after or was == nil or became == nil then
+					return `it changes {path}: no raft: line to judge`
+				end
+				-- the PR's document with the base's raft: line put back must be the base's document
+				local baseLine = string.match(before :: string, "\nraft:[^\n]*") :: string
+				if
+					string.gsub(after :: string, "\nraft:[^\n]*", function()
+						return baseLine
+					end, 1) ~= before
+				then
+					return `it changes {path} beyond its raft: line`
+				end
+				for _, v in { was, became } do
+					if v ~= "" and not rafts[v :: string] then
+						return `it moves {pid}'s raft: line from {if was == "" then "empty" else was} to {if became
+								== ""
+							then "empty"
+							else became}: only between empty and a raft this PR carries`
+					end
+				end
+				carried[path] = true
 			end
 		end
 		only = function(path: string): string?
-			if path == trackerstate.COUNTER then
-				return nil
-			end
-			local pid = trackerstate.itemOf(path, roots :: { string })
-			if pid and items[pid :: string] then
+			if path == trackerstate.COUNTER or carried[path] then
 				return nil
 			end
 			return `it carries {path}, which is not one of the raft's own items`
