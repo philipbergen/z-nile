@@ -218,23 +218,19 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 				.. 'exec /usr/bin/pgrep "$@"\n'
 		)
 		process.exec("chmod", { "+x", `{bin}/pgrep` })
-		return process.exec(
-			"perl",
-			{
-				"-e",
-				fence.REAPER,
-				"sh",
-				"-c",
-				'perl -e "select(undef, undef, undef, 30)" & sleep 0.3; kill -KILL $$',
+		return process.exec("perl", {
+			"-e",
+			fence.REAPER,
+			"sh",
+			"-c",
+			'perl -e "select(undef, undef, undef, 30)" & sleep 0.3; kill -KILL $$',
+		}, {
+			env = {
+				PICKMAN_REAP_SWEPT = "1",
+				PICKMAN_REAP_TOP = myPid(),
+				PATH = `{bin}:{process.env.PATH or ""}`,
 			},
-			{
-				env = {
-					PICKMAN_REAP_SWEPT = "1",
-					PICKMAN_REAP_TOP = myPid(),
-					PATH = `{bin}:{process.env.PATH or ""}`,
-				},
-			}
-		)
+		})
 	end
 
 	it("a specs group pgrep fails to read is unread, even when the launcher's own line reads", function()
