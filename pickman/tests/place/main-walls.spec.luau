@@ -164,29 +164,52 @@ return t.spec("R0056 Main hands the walls' state over on every frame", function(
 	)
 
 	it(
-		"the rule sees a call folded into the flash block, guarded, hidden, doubled or returned past",
+		"the rule names each hole: a call folded into the flash block, guarded, hidden, doubled or returned past",
 		function()
 			local src = main()
 			local block = "\tif model then\n\t\tMazeView.edible(model, View.edible(frame.play))\n\tend\n"
 			local radar = "\tDangerHud.wallState(overlay.flash, View.edible(frame.play))\n"
-			local variants: { string } = {
-				swap(
-					src,
-					"\tif model then\n\t\tMazeView.edible(",
-					"\tif model and false then\n\t\tMazeView.edible("
-				),
-				swap(
-					src,
-					block,
-					"\t--[[\n" .. block .. "\t]]\n\tif model then\n\t\tMazeView.edible(model, false)\n\tend\n"
-				),
-				swap(src, radar, "\tlocal _ = [[\n" .. radar .. "\t]]\n"),
-				swap(src, block, "\tif not model then\n\t\treturn\n\tend\n" .. block),
-				swap(src, block, block .. "\tMazeView.edible(model, false)\n"),
-				swap(src, radar, "\tif overlay.flash then\n\t" .. radar .. "\tend\n"),
+			local h = HANDLER
+			local variants: { { src: string, says: string } } = {
+				{
+					src = swap(
+						src,
+						"\tif model then\n\t\tMazeView.edible(",
+						"\tif model and false then\n\t\tMazeView.edible("
+					),
+					says = `MazeView.edible runs inside if model and false then of {h}`,
+				},
+				{ src = swap(src, block, "\t--[[\n" .. block .. "\t]]\n"), says = "0 MazeView.edible calls" },
+				{
+					src = swap(src, radar, "\tlocal _ = [[\n" .. radar .. "\t]]\n"),
+					says = "0 DangerHud.wallState calls",
+				},
+				{
+					src = swap(src, block, "\tif not model then\n\t\treturn\n\tend\n" .. block),
+					says = "a return before MazeView.edible",
+				},
+				{
+					src = swap(src, block, block .. "\tMazeView.edible(model, false)\n"),
+					says = "2 MazeView.edible calls",
+				},
+				{
+					src = swap(src, radar, "\tif overlay.flash then\n\t" .. radar .. "\tend\n"),
+					says = `DangerHud.wallState runs inside if overlay.flash then of {h}`,
+				},
+				{ src = swap(src, radar, radar .. radar), says = "2 DangerHud.wallState calls" },
 			}
 			for _, variant in variants do
-				t.expect(broken(variant) ~= nil).toBe(true)
+				t.expect(broken(variant.src)).toBe(variant.says)
+			end
+			-- and a call mentioned in a line comment or a quoted string is not a call: the rule still holds
+			local mentioned: { string } = {
+				swap(src, radar, radar .. "\t-- " .. string.sub(radar, 2)),
+				swap(src, radar, radar .. '\tlocal _ = "' .. string.sub(radar, 2, -2) .. '"\n'),
+				swap(src, block, block .. "\t-- MazeView.edible(model, false)\n"),
+				swap(src, block, block .. "\tlocal _ = 'MazeView.edible(model, false)'\n"),
+			}
+			for _, variant in mentioned do
+				t.expect(broken(variant)).toBe(nil)
 			end
 		end
 	)

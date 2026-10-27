@@ -6,3 +6,5 @@
 - review-002 F2: zz-test/narrowing-pins-the-whole-file
 - review-002 F3: zz-test/refusals-tested-on-both-sides
 - review-002 F4: one-off: a main with committed conflict markers is merged only after its fix lands
+- review-003 F1: zz-test/seed-every-enumerated-case
+- review-003 F2: z-design/never-narrow-captured-scope
