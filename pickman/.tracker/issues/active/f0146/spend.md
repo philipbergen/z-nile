@@ -14,6 +14,7 @@
 | 10 | 2026-10-27 00:43 | f0146: review-001 fixes (stub-run Camera, LobbyPad, Pads and Sticks; Sticks resets on a change of source; finite track) | 622 | 12 | 45.0 | focus | code-review |  |
 | 11 | 2026-10-27 00:43 | R0058: refute-001, harvest, lesson | 11 | 0 | 10.0 | focus | code-review |  |
 | 12 | 2026-10-27 03:55 | R0058: review-002 | 0 | 0 | 30.0 | focus | code-review | 150000 |
+| 13 | 2026-10-27 03:56 | f0146: review-002 fixes (Sticks keeps its fold across a dropout; resets only on a change of controller) | 42 | 8 | 20.0 | focus | code-review |  |
 
-**Total:** +1758 / -37 lines, 340.0 agent-minutes, 330000 tokens over 12 records
-<!-- totals: added=1758 removed=37 minutes=340.0 records=12 tokens=330000 -->
+**Total:** +1800 / -45 lines, 360.0 agent-minutes, 330000 tokens over 13 records
+<!-- totals: added=1800 removed=45 minutes=360.0 records=13 tokens=330000 -->

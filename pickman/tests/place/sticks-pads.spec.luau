@@ -175,6 +175,38 @@ return t.spec("Sticks and Pads across a change of controller", function(it)
 		end
 	)
 
+	it(
+		"the same pad dropping mid-push and returning still pushed sends nothing more: one push, one turn",
+		function()
+			local w = world()
+			w.connected.Gamepad1 = true
+			w.changed("Gamepad1", "Thumbstick1", -0.9, 0)
+			w.sticks.Gamepad1 = { x = -0.9, y = 0 }
+			w.beat()
+			w.connected.Gamepad1 = false
+			w.beat()
+			w.connected.Gamepad1 = true
+			w.beat()
+			t.expect(w.fired).toEqual({ "Left" })
+		end
+	)
+
+	it("the same pad dropping mid-push, returning released, then pushed the same way, turns again", function()
+		local w = world()
+		w.connected.Gamepad1 = true
+		w.changed("Gamepad1", "Thumbstick1", -0.9, 0)
+		w.sticks.Gamepad1 = { x = -0.9, y = 0 }
+		w.beat()
+		w.connected.Gamepad1 = false
+		w.beat()
+		w.connected.Gamepad1 = true
+		w.sticks.Gamepad1 = { x = 0, y = 0 }
+		w.beat()
+		w.sticks.Gamepad1 = { x = -0.9, y = 0 }
+		w.beat()
+		t.expect(w.fired).toEqual({ "Left", "Left" })
+	end)
+
 	it("a reconnect of the same pad at rest sends nothing", function()
 		local w = world()
 		w.connected.Gamepad1 = true

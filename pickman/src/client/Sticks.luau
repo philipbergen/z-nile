@@ -18,8 +18,8 @@ function Sticks.start(stick: (name: string) -> (number?, number?, string?))
 	RunService.Heartbeat:Connect(function()
 		local x, y, from = stick("Thumbstick1")
 		if x == nil or y == nil then
-			-- nothing to read (a disconnect): the fold starts afresh, so the next push of any controller counts
-			steer, source = Pad.steerStart(), nil
+			-- nothing to read (a dropout): not a change of source, so the fold is kept; the same pad coming back
+			-- still held is the same push, and another pad coming back is a change of source below
 			return
 		end
 		if from ~= source then

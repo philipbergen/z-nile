@@ -16,10 +16,12 @@ return t.spec("Pad", function(it)
 		t.expect(dy).toBe(0)
 	end)
 
-	it("a non-finite magnitude never takes over (R0058 review 001 F4)", function()
-		t.expect(Pad.track("Gamepad1", "Gamepad2", math.huge)).toBe("Gamepad1")
-		t.expect(Pad.track("Gamepad1", "Gamepad2", -math.huge)).toBe("Gamepad1")
-		t.expect(Pad.track("Gamepad1", "Gamepad2", 0 / 0)).toBe("Gamepad1")
-		t.expect(Pad.track("Gamepad1", "Gamepad2", 1)).toBe("Gamepad2")
-	end)
+	it(
+		"a non-finite magnitude never takes over (R0058 review 001 F4): +inf is the one the threshold would let through",
+		function()
+			t.expect(Pad.track("Gamepad1", "Gamepad2", math.huge)).toBe("Gamepad1")
+			t.expect(Pad.track("Gamepad1", "Gamepad2", 0 / 0)).toBe("Gamepad1")
+			t.expect(Pad.track("Gamepad1", "Gamepad2", 1)).toBe("Gamepad2")
+		end
+	)
 end)
