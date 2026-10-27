@@ -2,9 +2,11 @@
 -- c0132: when the jail's sweeper dies of a signal, the launcher (fence.REAPER) says who was still there before it stops
 -- the specs' group: when, how long after the specs started, its own pid, the run's top process (PICKMAN_REAP_TOP, which
 -- the runner sets to its own pid) and whether that lives, the memory the OS saw, the specs' group (the sweeper's own
--- pid), whether the watchdog lives, and every other process still in the group with its command line. A sweeper killed alone (a signal to its pid) leaves the
--- watchdog and the specs alive; a signal to the whole group leaves nothing. Each case runs a launcher of its own (as
--- c0076's spec does) whose command stands in for the sweeper and kills itself, or its whole group, with SIGKILL.
+-- pid), whether the watchdog lives, every other process still in the group with its command line, and its reading of
+-- them. Each case runs a launcher of its own (as c0076's spec does) whose command stands in for the sweeper and kills
+-- itself, or more, with SIGKILL. Here the launcher, its watchdog and the stand-in share this spec's one sandbox, so a
+-- group signal reaches the watchdog, as one from outside the jail does in a real run; a real run's watchdog is outside
+-- the jail, which only check.sh can build (AC7: a jail can't be nested).
 local fence = require("@tests/lib/fence")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -15,6 +17,7 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local home = string.gsub(process.cwd, "/+$", "")
 local base = `{home}/.cache/c0132-report`
+local jailed = process.env.PICKMAN_TEST_JAIL == "sandbox-exec"
 
 local function trim(s: string): string
 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
@@ -52,6 +55,14 @@ end
 -- the report's "who" line
 local function who(stderr: string): string
 	return string.match(stderr, "tests/run: who: [^\n]*") or ""
+end
+
+-- the run's top process: outside the jail, same user, alive for the whole run (as c0076's spec reads it)
+local function outsidePid(): string
+	local checkout = process.env.PICKMAN_TEST_FENCE or ""
+	local pid = trim(fs.readFile(`{checkout}/.cache/tests-run.lock/pid`))
+	assert(string.match(pid, "^%d+$"), "no top process recorded in the run's lock")
+	return pid
 end
 
 -- a stand-in for the specs: a process left in the group, its pid written to $1, then the stand-in sweeper's own death
@@ -92,7 +103,13 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 			local left = trim(fs.readFile(pidfile))
 			local line = who(r.stderr)
 			t.expect(string.match(line, "watchdog alive %(pid %d+%)") ~= nil).toBe(true)
-			t.expect(string.match(line, "; 1 other process%(es%) still in the group:$") ~= nil).toBe(true)
+			t.expect(
+				has(
+					line,
+					"; 1 other process(es) still in the group; reading: the sweeper's pid alone was signalled"
+				)
+			).toBe(true)
+			t.expect(string.match(line, "was signalled$") ~= nil).toBe(true)
 			-- the left process, orphaned by the stand-in's death, with its command line
 			t.expect(string.match(r.stderr, `\ntests/run:   {left} perl %-e select`) ~= nil).toBe(true)
 			-- the watchdog is counted as such, never listed among the others
@@ -136,16 +153,63 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 		t.expect(lived).toBe(false)
 	end)
 
-	it("a whole group killed: the watchdog is gone and nothing is left in the group", function()
+	it(
+		"a whole group killed with the watchdog in reach, as from outside the jail: gone, nothing left",
+		function()
+			local r = launch(
+				'perl -e "select(undef, undef, undef, 30)" & perl -e "select(undef, undef, undef, 0.3)"; kill -KILL 0',
+				true
+			)
+			local line = who(r.stderr)
+			t.expect(r.code).toBe(1)
+			t.expect(
+				has(
+					line,
+					"; watchdog gone; 0 other process(es) still in the group; reading: the whole group was signalled from outside the jail"
+				)
+			).toBe(true)
+			t.expect(string.match(line, "outside the jail$") ~= nil).toBe(true)
+			t.expect(has(r.stderr, "\ntests/run:   ")).toBe(false)
+		end
+	)
+
+	it("the watchdog killed with the sweeper and the rest left: read as neither group signal", function()
+		-- the stand-in kills every other process of its group (the watchdog among them) but the one it left, then itself
 		local r = launch(
-			'perl -e "select(undef, undef, undef, 30)" & perl -e "select(undef, undef, undef, 0.3)"; kill -KILL 0',
+			'perl -e "select(undef, undef, undef, 30)" & bg=$!; perl -e "select(undef, undef, undef, 0.3)"; '
+				.. 'for p in $(pgrep -g $$); do [ "$p" = "$bg" ] || [ "$p" = "$$" ] || kill -KILL "$p"; done; kill -KILL $$',
 			true
+		)
+		t.expect(
+			has(
+				who(r.stderr),
+				"; watchdog gone; 1 other process(es) still in the group; reading: the watchdog was signalled with the sweeper, the rest of the group was not"
+			)
+		).toBe(true)
+	end)
+
+	it("a group pgrep can't read is unread, never an empty group", function()
+		-- no pgrep (nor sysctl) on PATH: perl, sh and sleep by absolute path
+		local r = process.exec(
+			"/usr/bin/perl",
+			{ "-e", fence.REAPER, "/bin/sh", "-c", "/bin/sleep 5 & /bin/sleep 0.3; kill -KILL $$" },
+			{ env = { PICKMAN_REAP_SWEPT = "1", PICKMAN_REAP_TOP = myPid(), PATH = `{base}/no-such-dir` } }
 		)
 		local line = who(r.stderr)
 		t.expect(r.code).toBe(1)
-		t.expect(has(line, "; watchdog gone; 0 other process(es) still in the group")).toBe(true)
-		t.expect(string.match(line, "still in the group$") ~= nil).toBe(true)
-		t.expect(has(r.stderr, "\ntests/run:   ")).toBe(false)
+		t.expect(has(line, "; watchdog ?; group unread; reading: unread, no conclusion")).toBe(true)
+		t.expect(has(line, "other process(es)")).toBe(false)
+		t.expect(has(line, "watchdog gone")).toBe(false)
+	end)
+
+	it("when jailed, a top process outside the jail (its probe refused) reads as alive", function()
+		if not jailed then
+			return -- the top process is signalable unjailed; check.sh requires the jailed run on macOS
+		end
+		local top = outsidePid()
+		local r = launch("kill -KILL $$", true, nil, top)
+		t.expect(has(who(r.stderr), `(the run's top process {top}, alive)`)).toBe(true)
+		fs.writeFile(`{home}/.cache/c0132-jailed-ran`, "")
 	end)
 
 	it("the report says when, and how long after the specs started, the sweeper died", function()
@@ -183,13 +247,28 @@ return t.spec("c0132 a killed sweeper's report", function(it)
 		local top = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 		local skill = fs.readFile(`{top}/z-nile/skills/zz-test/SKILL.md`)
 		local bullet = string.match(skill, "\n%s*%- %*%*Sweeper%*%*:[^\n]*") or ""
-		-- the report, and the two readings of it the issue exists for
+		-- the report, its readings, and the issue that takes the next one (c0167)
 		t.expect(has(bullet, "`tests/run: who:`")).toBe(true)
 		t.expect(has(bullet, "the memory the OS saw")).toBe(true)
-		t.expect(has(bullet, "`watchdog alive`")).toBe(true)
-		t.expect(has(bullet, "`watchdog gone`")).toBe(true)
-		t.expect(has(bullet, "only the sweeper's pid was signalled")).toBe(true)
-		t.expect(has(bullet, "the whole group was signalled")).toBe(true)
+		t.expect(has(bullet, "outside the jail), every other process")).toBe(true) -- where the watchdog runs
+		t.expect(
+			has(bullet, "`watchdog alive` with processes listed means only the sweeper's pid was signalled")
+		)
+			.toBe(true)
+		t.expect(
+			has(
+				bullet,
+				"`watchdog alive` with nothing left means the whole group was signalled from inside the jail (a spec), or the sweeper's pid alone once the specs had ended"
+			)
+		).toBe(true)
+		t.expect(
+			has(
+				bullet,
+				"`watchdog gone` with nothing left means the whole group was signalled from outside the jail"
+			)
+		).toBe(true)
+		t.expect(has(bullet, "`?` means unread, no conclusion")).toBe(true)
+		t.expect(has(bullet, "Copy the whole report into c0167")).toBe(true)
 	end)
 
 	it("cleans up", function()

@@ -748,20 +748,29 @@ local REAPER = table.concat({
 	"for my $s (qw(INT TERM HUP)) { $SIG{$s} = sub { kill $s, -$pid } }",
 	"waitpid($pid, 0); my $st = $?;",
 	-- a spec, or something outside, can kill the jail's sweeper: before the group is stopped, say who was still there
-	-- (c0132). pgrep, not ps: ps is setuid, which a jail refuses to run (a launcher a spec starts is jailed). The
-	-- watchdog is the group's process whose command line is the launcher's own (a fork, never exec'd)
+	-- and what that means (c0132). pgrep, not ps: ps is setuid, which a jail refuses to run (a launcher a spec starts is
+	-- jailed). The watchdog is the group's process whose command line is the launcher's own (a fork, never exec'd); it
+	-- is forked before sandbox-exec, so it is outside the jail: a spec's signal to the whole group can't reach it, one
+	-- from outside can. What can't be read is `?` (unread), never an empty group
 	"my $swept = ($ENV{PICKMAN_REAP_SWEPT} // '') eq '1' && ($st & 127); my @report;",
 	"if ($swept) { my $secs = time - $t0; my $top = $ENV{PICKMAN_REAP_TOP} // '';",
 	"my $up = $top !~ /^\\d+$/ ? 'unknown' : kill(0, $top) || $!{EPERM} ? 'alive' : 'gone';",
 	-- the memory the OS saw (macOS: percent free, swap used); `?` where it can't be read (Linux)
 	"my ($mem) = `sysctl -n kern.memorystatus_level 2>/dev/null` =~ /^(\\d+)/; my ($swap) = `sysctl -n vm.swapusage 2>/dev/null` =~ /used = (\\S+)/;",
-	"my $g = getpgrp(); my ($me) = map { /^$$ (.*)$/ ? ($1) : () } split /\\n/, `pgrep -lf -a -g $g 2>/dev/null`; $me //= '';",
-	"my @left; my $wd = 'gone'; for my $l (split /\\n/, `pgrep -lf -a -g $pid 2>/dev/null`) {",
-	"my ($p, $c) = $l =~ /^(\\d+) (.*)$/ or next; if ($me ne '' && $c eq $me) { $wd = \"alive (pid $p)\"; next }",
-	'push @left, "tests/run:   $p " . substr($c, 0, 200) . "\\n" }',
+	-- its own line: its own group always holds it, so none found means pgrep could not be read
+	"my $g = getpgrp(); my ($me) = map { /^$$ (.*)$/ ? ($1) : () } split /\\n/, `pgrep -lf -a -g $g 2>/dev/null`;",
+	-- the specs' group: pgrep exits 0 (found) or 1 (none); anything else (not found, a failed fork: -1) is unread
+	"my $out = `pgrep -lf -a -g $pid 2>/dev/null`; my $x = $? == -1 ? -1 : $? >> 8; my (@left, $wd, $group, $reading);",
+	"if (!defined $me || ($x != 0 && $x != 1)) { ($wd, $group, $reading) = ('?', 'group unread', 'unread, no conclusion') }",
+	"else { $wd = 'gone'; for my $l (split /\\n/, $out) { my ($p, $c) = $l =~ /^(\\d+) (.*)$/ or next;",
+	'if ($c eq $me) { $wd = "alive (pid $p)"; next } push @left, "tests/run:   $p " . substr($c, 0, 200) . "\\n" }',
+	"$group = scalar(@left) . ' other process(es) still in the group';",
+	"$reading = $wd eq 'gone' ? (@left ? 'the watchdog was signalled with the sweeper, the rest of the group was not'",
+	": 'the whole group was signalled from outside the jail') : @left ? \"the sweeper's pid alone was signalled\"",
+	": 'the whole group was signalled from inside the jail, or the sweeper alone after the specs ended' }",
 	'@report = (sprintf("tests/run: the jail\'s sweeper was killed (signal %d): processes the specs left may still run. Stop and report this.\\n", $st & 127),',
-	"sprintf(\"tests/run: who: at %s, %ds after the specs started; launcher %d (the run's top process %s, %s); memory %s%% free, swap used %s; specs group %d (the sweeper's own pid); watchdog %s; %d other process(es) still in the group%s\\n\",",
-	"scalar(localtime), $secs, $$, $top eq '' ? '?' : $top, $up, $mem // '?', $swap // '?', $pid, $wd, scalar(@left), @left ? ':' : ''), @left) }",
+	"sprintf(\"tests/run: who: at %s, %ds after the specs started; launcher %d (the run's top process %s, %s); memory %s%% free, swap used %s; specs group %d (the sweeper's own pid); watchdog %s; %s; reading: %s\\n\",",
+	"scalar(localtime), $secs, $$, $top eq '' ? '?' : $top, $up, $mem // '?', $swap // '?', $pid, $wd, $group, $reading), @left) }",
 	-- whatever is left in the group, the watchdog included
 	"kill 'KILL', -$pid;",
 	-- with the specs stopped, unlink every symlink at the top of the cache folder it was given, never following one
