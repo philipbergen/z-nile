@@ -19,6 +19,7 @@
 | 15 | 2026-10-26 23:08 | f0109: pin where Main hands the walls' state over, test the fake's attribute refusals, fix the fake's header (review 001 F1-F3) | 151 | 3 | 35.0 | focus | code-review |  |
 | 16 | 2026-10-26 23:09 | R0056: refute-001, harvest, verification log | 2 | 0 | 15.0 | focus | code-review |  |
 | 17 | 2026-10-27 00:42 | R0056: review-002 | 0 | 0 | 37.0 | focus | code-review | 100000 |
+| 18 | 2026-10-27 00:48 | f0109: main-walls reads Main from the place without comments or strings, counts calls, refuses early returns; the fake refuses RBX names (review 002 F1-F3) | 171 | 59 | 50.0 | focus | code-review |  |
 
-**Total:** +337 / -15 lines, 375.0 agent-minutes, 195000 tokens over 17 records
-<!-- totals: added=337 removed=15 minutes=375.0 records=17 tokens=195000 -->
+**Total:** +508 / -74 lines, 425.0 agent-minutes, 195000 tokens over 18 records
+<!-- totals: added=508 removed=74 minutes=425.0 records=18 tokens=195000 -->

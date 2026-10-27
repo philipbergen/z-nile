@@ -15,15 +15,16 @@
 --     unwind whoever started it, as in Roblox, but the server call the spec made fails with it afterwards;
 --   * `os.clock`, `Instance.new`, `Enum`, `UDim2`, `Vector2`, `Vector3` and `Color3` as plain data;
 --   * f0109: `:SetAttribute` (refusing what Roblox refuses: a name that is not 1-100 letters, digits or
---     underscores, and a table, function, thread or Instance value), `:IsA` (only the classes the specs use: a
---     class is itself, and a Part is a BasePart), and `fake.module`, which runs one client view module's real
---     source (MazeView, DangerHud) with the real Logic, a `workspace` (with a CurrentCamera), and the client services a view asks for: GuiService
---     (`GetInsetArea`: no insets), Players (a LocalPlayer with a PlayerGui), RunService (`RenderStepped`, a
---     signal the spec fires) and UserInputService (`TouchEnabled`); a ScreenGui's AbsoluteSize is the screen; and,
---     for these view modules only, `UDim`, `UDim2.fromOffset`, `Vector3` and `NumberSequence(Keypoint)` as plain
---     data (the lobby's environment is unchanged: f0109's re-run of f0061's mutants, E8).
---     `:SetAttribute` refuses Roblox datatypes (Color3, Vector3, UDim2 …) as values, which Roblox accepts,
---     because they are plain tables here; no adapter stores one today (tests/place/fakeengine-attributes.spec).
+--     underscores, or one starting with RBX, which Roblox reserves, and a table, function, thread or Instance
+--     value), `:IsA` (only the classes the specs use: a class is itself, and a Part is a BasePart), and
+--     `fake.module`, which runs one client view module's real source (MazeView, DangerHud) with the real Logic, a
+--     `workspace` (with a CurrentCamera), and the client services a view asks for: GuiService (`GetInsetArea`: no
+--     insets), Players (a LocalPlayer with a PlayerGui), RunService (`RenderStepped`, a signal the spec fires) and
+--     UserInputService (`TouchEnabled`); a ScreenGui's AbsoluteSize is the screen; and, for these view modules
+--     only, `UDim`, `UDim2.fromOffset`, `Vector3` and `NumberSequence(Keypoint)` as plain data (the lobby's
+--     environment is unchanged: f0109's re-run of f0061's mutants, E8). `:SetAttribute` refuses Roblox datatypes
+--     (Color3, Vector3, UDim2 …) as values, which Roblox accepts, because they are plain tables here; no adapter
+--     stores one today (tests/place/fakeengine-attributes.spec).
 -- The fake must stay exact in both directions: it must not accept less than it does now (a correct idiom
 -- that works today must keep working), and it must not accept more (a wrong adapter that fails today must
 -- keep failing: the mutants in f0061's Rules and mutants table that depend on it are re-run, as exact
@@ -160,6 +161,7 @@ function fake.node(className: string, name: string?): any
 			or #attribute == 0
 			or #attribute > 100
 			or string.find(attribute, "[^%w_]")
+			or string.sub(attribute, 1, 3) == "RBX"
 		then
 			error(`fake engine: {attribute} is not a valid attribute name`, 0)
 		end
