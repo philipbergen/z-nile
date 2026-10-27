@@ -11,11 +11,31 @@ A="$HERE/acceptance"
 # requires its named cases to exist in the spec and not fail, and the spec to have loaded.
 rm -f .cache/c0132-jailed-ran # the jailed case writes it afresh: an earlier run's marker vouches for nothing
 report_out=$(lune run tests/run -- "$A/killed-report.spec.luau" 2>&1)
-report() { # $1...: case-name prefixes that must exist in the spec and not fail
+# every case some criterion names: the indented case lines of the check calls below (design review 003 F1)
+named=$(grep -E '^  "' "$HERE/check.sh" | sed -E 's/^  "//; s/" ?\\?$//')
+is_named() { # $1: a case name; true if a criterion names it (a named prefix)
+  local k
+  while IFS= read -r k; do [[ -n $k && $1 == "$k"* ]] && return 0; done <<<"$named"
+  return 1
+}
+whole_run() { # the spec's whole run: every case is named by a criterion (but set-up and clean-up), and any failing
+  # case that no criterion names (set-up and clean-up included) fails every criterion
+  local spec="$A/killed-report.spec.luau" line c
+  while IFS= read -r line; do
+    c=${line#*:: }
+    is_named "$c" || { echo "a case no criterion names failed:"; grep -F -A1 -- "$line" <<<"$report_out"; return 1; }
+  done < <(grep -E "^FAIL .* :: " <<<"$report_out")
+  while IFS= read -r c; do
+    [[ $c == "sets up" || $c == "cleans up" ]] && continue
+    is_named "$c" || { echo "the spec's case \"$c\" is named by no criterion"; return 1; }
+  done < <(tr -d "\n\t" < "$spec" | grep -oE 'it\("[^"]+"' | sed -E 's/^it\("//; s/"$//')
+}
+report() { # $1...: case-name prefixes that must exist in the spec and not fail; and the spec's whole run (whole_run)
   local spec="$A/killed-report.spec.luau" c
   [[ -f $spec ]] || { echo "missing $spec"; return 1; }
   if grep -q "could not load spec" <<<"$report_out"; then echo "$report_out"; return 1; fi
   grep -Eq "^[0-9]+ passed, [0-9]+ failed, 1 spec files$" <<<"$report_out" || { echo "$report_out" | tail -20; return 1; }
+  whole_run || return 1
   for c in "$@"; do
     tr -d "\n\t" < "$spec" | grep -qF "it(\"$c" || { echo "$spec has no case starting \"$c\""; return 1; }
     if grep -F "FAIL" <<<"$report_out" | grep -qF ":: $c"; then grep -F -A1 ":: $c" <<<"$report_out"; return 1; fi
@@ -39,6 +59,8 @@ check "AC2: the report says whether the watchdog lives, lists every other proces
   "a whole group killed with the watchdog in reach, as from outside the jail: gone, nothing left" \
   "the watchdog killed with the sweeper and the rest left: read as neither group signal" \
   "a group pgrep can't read is unread, never an empty group" \
+  "a specs group pgrep fails to read is unread, even when the launcher's own line reads" \
+  "the launcher's own line not found is unread, even when the specs group reads" \
   "the group is still stopped after the report"
 check "AC3: the report says when, how many seconds after the specs started, and the memory the OS saw when the sweeper died" report \
   "the report says when, and how long after the specs started, the sweeper died" \
