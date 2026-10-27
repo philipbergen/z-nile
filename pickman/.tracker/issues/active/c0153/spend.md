@@ -17,6 +17,7 @@
 | 13 | 2026-10-27 03:56 | R0059: refute-001 cites #156's head | 0 | 0 | 2.0 | focus | code-review |  |
 | 14 | 2026-10-27 04:23 | R0059: review-002 | 0 | 0 | 9.0 | focus | code-review | 90000 |
 | 15 | 2026-10-27 04:24 | R0059: refute-002; c0153 deviation line names the tier rule and c0170 | 0 | 0 | 10.0 | focus | code-review |  |
+| 16 | 2026-10-27 04:41 | R0059: addressed during execution | 0 | 0 | 3.0 | focus | deliver |  |
 
-**Total:** +236 / -13 lines, 280.0 agent-minutes, 451000 tokens over 15 records
-<!-- totals: added=236 removed=13 minutes=280.0 records=15 tokens=451000 -->
+**Total:** +236 / -13 lines, 283.0 agent-minutes, 451000 tokens over 16 records
+<!-- totals: added=236 removed=13 minutes=283.0 records=16 tokens=451000 -->
