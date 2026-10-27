@@ -19,3 +19,5 @@ c0120 code review 011 F2: a user decision exempted named branches from c0120's f
 R0050 code review 003 F3: `retired/` joined the audit scan's states, but `list` and the bare `status` mapped every path that is not `active/` or `done/` to `backlog`, so a retired raft showed as a live backlog raft no command takes. A new state seeds a case in every display that maps paths to states.
 
 f0109 design review 003 F1: the MazeView and radar cases walked lit × edible as (F,F), (F,T), (T,T), but the game's only flash is (lit, not edible), since the level clear zeroes the power timer; a MazeView lit only while edible (MM1) and a radar that never flashes (DM1) passed. Walk the states the real producer emits, not only the rule's table.
+
+R0059 code review 001 F1: c0153's plain.spec seeded NaN and +inf but not -inf, and compared numbers, tables and booleans but never two strings, so a `check` that let -inf through and an `equalWithin` that never compared strings both passed. For each type and each sign an equality or refusal handles, seed one case.

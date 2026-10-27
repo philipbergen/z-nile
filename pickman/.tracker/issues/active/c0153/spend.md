@@ -12,6 +12,7 @@
 | 8 | 2026-10-27 00:32 | c0153: tests/lib/plain (check, equalWithin, roundTrip within 1e-9); the five JSON round trips narrowed | 131 | 10 | 10.0 | focus | build |  |
 | 9 | 2026-10-27 01:02 | c0153: verification log | 0 | 0 | 5.0 | focus | build |  |
 | 10 | 2026-10-27 03:55 | R0059: review-001 | 0 | 0 | 30.0 | focus | code-review | 140000 |
+| 11 | 2026-10-27 03:56 | c0153: own plain spec for -inf and strings; verification log corrected (review 001 F1, F2); refute-001, harvest, lessons | 38 | 0 | 25.0 | focus | code-review |  |
 
-**Total:** +198 / -13 lines, 232.0 agent-minutes, 361000 tokens over 10 records
-<!-- totals: added=198 removed=13 minutes=232.0 records=10 tokens=361000 -->
+**Total:** +236 / -13 lines, 257.0 agent-minutes, 361000 tokens over 11 records
+<!-- totals: added=236 removed=13 minutes=257.0 records=11 tokens=361000 -->

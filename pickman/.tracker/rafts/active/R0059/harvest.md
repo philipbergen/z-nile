@@ -1,0 +1,2 @@
+- review-001 F1: zz-test/seed-every-enumerated-case
+- review-001 F2: zz-execute/check-a-stand-in-before-logging-it
