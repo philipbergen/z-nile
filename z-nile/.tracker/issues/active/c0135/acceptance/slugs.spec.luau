@@ -91,10 +91,7 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			end, { same = true, ["same-2"] = true }) :: { { string } }
 			t.expect(one[1][4]).toBe("same-3")
 			-- two different bases, both taken: each gets its own -2 (review 003 F2: no counter shared across the plan)
-			local two = raftplan.commands({
-				{ kind = "new", type = "chore", issues = { "c0001" }, root = "pickman/.tracker" },
-				{ kind = "new", type = "chore", issues = { "c0002" }, root = "pickman/.tracker" },
-			}, { c0001 = "a", c0002 = "b" }, function(): string?
+			local two = raftplan.commands(ops, { c0001 = "a", c0002 = "b" }, function(): string?
 				return "pickman"
 			end, { a = true, b = true }) :: { { string } }
 			t.expect({ two[1][4], two[2][4] }).toEqual({ "a-2", "b-2" })
