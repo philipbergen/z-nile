@@ -77,11 +77,13 @@ local function run(env: { [string]: string }?, args: { string }?): Run
 		PICKMAN_OPEN_GUARD = "",
 		PICKMAN_JOBS = "",
 	}
-	for k, v in env or {} do
+	local extra: { [string]: string } = env or {}
+	for k, v in extra do
 		e[k] = v
 	end
 	local argv = { "run", "tests/run", "--" }
-	for _, a in args or { "tests/tooling/a.spec.luau" } do
+	local files: { string } = args or { "tests/tooling/a.spec.luau" }
+	for _, a in files do
 		table.insert(argv, a)
 	end
 	local r = process.exec(REAL, argv, { cwd = `{base}/z-nile`, env = e })
