@@ -42,6 +42,21 @@ function lunepin.pinned(text: string): (string?, string?)
 	return found, nil
 end
 
+-- Where to look for rokit.toml, nearest first: the runner's repository root, then each folder above it, as rokit's own
+-- shim looks (a fixture checkout under .cache takes its repository's pin).
+function lunepin.places(root: string): { string }
+	local out = {}
+	local dir = string.gsub(root, "/+$", "")
+	while true do
+		table.insert(out, (if dir == "" then "" else dir) .. "/rokit.toml")
+		if dir == "" then
+			break
+		end
+		dir = string.match(dir, "^(.*)/[^/]*$") or ""
+	end
+	return out
+end
+
 -- The running Lune's version from its _VERSION ("Lune 0.10.5+709" -> "0.10.5"), or nil when it has none.
 function lunepin.running(version: string?): string?
 	if type(version) ~= "string" then

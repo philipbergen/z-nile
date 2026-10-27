@@ -50,14 +50,18 @@ local HOME_PREFIX = (HOME :: string) .. "/"
 -- c0162: specs run on the Lune rokit.toml pins (the one CI runs), read from the runner's own repository, never from
 -- the current folder; a mismatch, an unknown version or an unreadable pin refuses (zz-arch rule 7)
 local lunepin = require("./lib/lunepin")
-local PIN_FILE = `{ROOT}/rokit.toml`
-local PIN: string?, PIN_PROBLEM: string? = nil, nil
-do
-	local ok, text = pcall(fs.readFile, PIN_FILE)
-	if ok then
-		PIN, PIN_PROBLEM = lunepin.pinned(text :: string)
-	else
-		PIN_PROBLEM = "no readable rokit.toml"
+local PIN_FILE = `{ROOT}/rokit.toml (or a folder above it)`
+local PIN: string?, PIN_PROBLEM: string? = nil, "no rokit.toml"
+for _, place in lunepin.places(ROOT) do
+	if fs.isFile(place) then
+		PIN_FILE = place
+		local ok, text = pcall(fs.readFile, place)
+		if ok then
+			PIN, PIN_PROBLEM = lunepin.pinned(text :: string)
+		else
+			PIN_PROBLEM = "rokit.toml cannot be read"
+		end
+		break
 	end
 end
 local RUNNING = lunepin.running(_VERSION)
