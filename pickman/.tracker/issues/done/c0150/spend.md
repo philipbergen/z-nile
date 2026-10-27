@@ -10,6 +10,12 @@
 | 6 | 2026-10-25 23:11 | design-review-002-tokens | 0 | 0 | 0.0 | spend | design-review | 103539 |
 | 7 | 2026-10-25 23:11 | design-refute-002 | 0 | 0 | 5.0 | spend | design-review |  |
 | 8 | 2026-10-25 23:17 | prep | 208 | 5 | 35.0 | spend | prep |  |
+| 9 | 2026-10-27 03:42 | c0150: narrow f0104's key-map and f0101's hop-camera pins | 20 | 9 | 10.0 | focus | build |  |
+| 10 | 2026-10-27 03:45 | c0150: phase 3 log | 0 | 0 | 1.0 | focus | deliver |  |
+| 11 | 2026-10-27 03:50 | R0057: review-001 | 0 | 0 | 4.0 | focus | code-review |  |
+| 12 | 2026-10-27 03:50 | R0057: addressed during execution | 0 | 0 | 1.0 | focus | deliver |  |
+| 13 | 2026-10-27 03:53 | tracker: done R0057 | 0 | 0 | 3.3 | raft | deliver |  |
+| 14 | 2026-10-27 04:02 | deliver | 0 | 0 | 2.0 | spend | deliver |  |
 
-**Total:** +208 / -5 lines, 84.0 agent-minutes, 215134 tokens over 8 records
-<!-- totals: added=208 removed=5 minutes=84.0 records=8 tokens=215134 -->
+**Total:** +228 / -14 lines, 105.3 agent-minutes, 215134 tokens over 14 records
+<!-- totals: added=228 removed=14 minutes=105.3 records=14 tokens=215134 -->
