@@ -1,9 +1,9 @@
 --!strict
 -- c0131 AC1: the ref guard (z-nile/lib/git-hooks/reference-transaction since c0114) accepts an empty ref transaction (a
--- fetch with nothing new) in a protected repository from a check.sh flow, and refuses everything it refused
--- before: an empty transaction during a spec run, any update outside refs/remotes/, and a deleted ref. The hook
--- is driven directly, as git calls it, in a fixture repository under .cache that the environment names as
--- protected (PICKMAN_FENCE_REAL_GIT), so nothing outside the fixture is involved.
+-- fetch with nothing new) in a protected repository from a check.sh flow, in every phase, and still accepts a fetch that
+-- creates or moves a remote-tracking ref. What the guard still refuses is refuse.spec.luau's (c0131 AC2). The hook is
+-- driven directly, as git calls it, in a fixture repository under .cache that the environment names as protected
+-- (PICKMAN_FENCE_REAL_GIT), so nothing outside the fixture is involved.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
