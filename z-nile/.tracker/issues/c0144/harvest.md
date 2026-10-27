@@ -1,0 +1,5 @@
+- note c0144 prep: ac.sh's copy of the color rule was hidden by the engine passing NO_COLOR first (M33 survived until a direct check.sh case): zz-test/one-rule-one-function
+- note c0144 prep: a `─+` pattern repeats one byte of a multi-byte glyph: zz-test/plain-find-for-literals
+- note c0144 prep: promote-check found about 40 type errors in specs the runner passed: z-design/rerun-skipped-checks-after-edits
+- note c0144 prep: the first hyperlink guess dropped the captured PR links: z-design/never-narrow-captured-scope
+- note c0144 prep: AC3 named root files from the home and failed c0120's check-paths scan in the prototype's gate: z-design/check-paths-from-the-home

@@ -11,3 +11,5 @@ Some checks pass once and are never run again, because the everyday loop (runnin
 **How to apply:** list the checks the runner skips for the files this draft changes, and put each one's rerun in the step that edits those files (for sequestered specs: z-design step 5.3).
 
 Run those checks before committing to a branch other agents read, not after: in c0115's round 4 the promotion type check caught a two-value `string.find` passed to `t.expect`, but only after the commit holding it had been read by another agent.
+
+c0144 prep: the specs passed 35/35 under the runner, but `./zn promote-check` found about 40 type errors (mixed-type case arrays, two returns passed to `t.expect`, literal env tables against `{ [string]: string? }`). Run promote-check as soon as a spec first passes, not only at the end.

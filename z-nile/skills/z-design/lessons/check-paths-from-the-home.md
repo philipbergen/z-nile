@@ -9,3 +9,5 @@ check: Does every path a check.sh builds from `./zn find` or `./zn members` outp
 **Why:** R0051's RC1, 2026-10-26: `F0110_SPECS="$ZN_ROOT/$F0110/acceptance"` failed at execution's Phase 3; the user approved a one-line fix of the sequestered file.
 
 **How to apply:** use `$PWD/$(…zn find <id>)` (or the path as printed); run the raft's `check.sh` in prep with the specs still sequestered, the way `done` runs it.
+
+c0144 prep: a check.sh that needs files named from the repository's top (`git archive "$base" zn z-nile/engine`) fails c0120's check-paths scan, which reads every literal path from the home. Name them with git's top-relative pathspecs (`git -C "$ZN_ROOT" archive "$base" :/zn :/z-nile/engine`), which both git and the scan read correctly, and run c0120/check-paths.spec on the draft before review: only the full gate runs it.

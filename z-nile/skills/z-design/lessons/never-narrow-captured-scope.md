@@ -11,3 +11,5 @@ The capture (title, Problem and the user's Solution ideas) is the scope. Prep ad
 **How to apply:** before each round and before `design: ready`, compare each item's document with `./zn capture <id>`: only added detail and decision lines may appear in the title, Problem and Solution ideas, and captured Solution bullets stay as they are. An earlier prep's landed rewrite is not scope: restore it, or get a decision. For a finding whose only fix is a cut, ask the user before answering it, with the options and what each costs.
 
 R0044 design review 4 (F2): a design that meets a captured outcome except in rare failure modes (a write that fails for good, an old build) must say so in Risks and name the option that would close the gap for the user, rather than leave the limit unstated or reword the outcome.
+
+c0144 prep: the first draft's hyperlink guess offered "PR links: none" as the recommendation, though the capture asks for links "to item files and PRs". Caught by this lesson's pass before review; the design found a cheap way to keep the outcome (a GitHub search URL from origin's URL, no network call) instead of asking to drop it.

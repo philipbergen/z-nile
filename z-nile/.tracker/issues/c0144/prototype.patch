@@ -1,0 +1,1382 @@
+diff --git a/z-nile/engine/look.luau b/z-nile/engine/look.luau
+new file mode 100644
+index 00000000..62f771f9
+--- /dev/null
++++ b/z-nile/engine/look.luau
+@@ -0,0 +1,537 @@
++--!strict
++-- The terminal look of each command (c0144): pure renderers from the rows or the plain lines a command prints
++-- today to the lines it prints on a terminal. Each takes a rich term.Mode; plain mode never calls them. Every
++-- renderer keeps every fact of the plain form (the plain-text pin and the information case in its spec).
++local term = require("./term")
++
++local look = {}
++
++type Mode = term.Mode
++
++-- The pull requests of an active raft's branch on GitHub, from origin's configured URL (`git@github.com:o/r.git`,
++-- `https://github.com/o/r(.git)`, `ssh://git@github.com/o/r`): a search, so no network call is needed to find it.
++-- nil for any other origin (a path, another host).
++function look.prUrl(origin: string?, branch: string): string?
++	if not origin then
++		return nil
++	end
++	local o = string.gsub(origin, "%s+$", "")
++	local owner, repo = string.match(o, "^git@github%.com:([%w%-%._]+)/([%w%-%._]+)$")
++	if not owner then
++		owner, repo = string.match(o, "^https://github%.com/([%w%-%._]+)/([%w%-%._]+)$")
++	end
++	if not owner then
++		owner, repo = string.match(o, "^ssh://git@github%.com/([%w%-%._]+)/([%w%-%._]+)$")
++	end
++	if not owner or not repo then
++		return nil
++	end
++	local name = string.gsub(repo :: string, "%.git$", "")
++	local q = string.gsub(branch, "[^%w%-_%.]", function(c: string): string
++		return string.format("%%%02X", string.byte(c))
++	end)
++	return `https://github.com/{owner}/{name}/pulls?q=is%3Apr+head%3A{q}`
++end
++
++-- Every item id in `text` painted by its kind, and linked when `url` gives it an address.
++function look.ids(mode: Mode, text: string, url: ((string) -> string?)?): string
++	return (
++		string.gsub(text, "%f[%w]([fdcR]%d%d%d%d)%f[^%w]", function(id: string): string
++			local shown = term.paint(mode, term.kindOf(id), id)
++			return if url then term.link(mode, url(id), shown) else shown
++		end)
++	)
++end
++
++local STATE_ORDER = { "active", "preparing", "prepared", "new" }
++
++-- `status`: one row per unfinished item on origin/main.
++export type StatusRow = {
++	id: string,
++	state: string,
++	kind: string, -- feature, defect, chore, raft
++	title: string,
++	raft: string, -- the issue's raft, or ""
++	claim: string, -- the three stamp words, or ""
++	project: string,
++	url: string?, -- the item document, for the id's link
++	branch: string?, -- an active raft's branch (`<id>-<slug>`), for its pull request
++	pr: string?, -- an active raft's pull request (a GitHub search for its branch), linked from its id and raft cells
++}
++
++-- Grouped by project, then by state (active first), aligned in columns (id, type, state, title, raft, claim),
++-- the title shrunk to the width, and a summary line of counts.
++function look.status(mode: Mode, rows: { StatusRow }): { string }
++	local projects: { string } = {}
++	local seen: { [string]: boolean } = {}
++	for _, r in rows do
++		if not seen[r.project] then
++			seen[r.project] = true
++			table.insert(projects, r.project)
++		end
++	end
++	table.sort(projects)
++	local out: { string } = {}
++	local counts: { [string]: number } = {}
++	local rafts: { [string]: StatusRow } = {}
++	for _, r in rows do
++		if string.sub(r.id, 1, 1) == "R" then
++			rafts[r.id] = r
++		end
++	end
++	for _, project in projects do
++		table.insert(out, term.rule(mode, project))
++		-- one layout per project, so the columns line up under every state heading
++		local cells: { { string } } = {}
++		local byId: { [string]: StatusRow } = {}
++		local starts: { [number]: string } = {}
++		for _, state in STATE_ORDER do
++			local group: { StatusRow } = {}
++			for _, r in rows do
++				if r.project == project and r.state == state then
++					table.insert(group, r)
++				end
++			end
++			if #group > 0 then
++				counts[state] = (counts[state] or 0) + #group
++				table.sort(group, function(a, b)
++					return a.id < b.id
++				end)
++				starts[#cells + 1] = "  " .. term.paint(mode, state, `{string.upper(state)} ({#group})`)
++				for _, r in group do
++					byId[r.id] = r
++					table.insert(cells, { r.id, r.kind, r.state, r.title, r.raft, r.claim })
++				end
++			end
++		end
++		local cols: { term.Column } = {
++			{
++				style = function(id: string): string
++					local r = byId[id]
++					return term.link(mode, r and (r.pr or r.url), term.paint(mode, term.kindOf(id), id))
++				end,
++			},
++			{
++				style = function(kind: string): string
++					return term.paint(mode, kind, kind)
++				end,
++			},
++			{
++				style = function(st: string): string
++					return term.paint(mode, st, st)
++				end,
++			},
++			{ flex = true },
++			{
++				style = function(raft: string): string
++					return look.ids(mode, raft, function(id: string): string?
++						local r = rafts[id]
++						return r and (r.pr or r.url)
++					end)
++				end,
++			},
++			{
++				style = function(claim: string): string
++					return term.paint(mode, "muted", claim)
++				end,
++			},
++		}
++		-- the claim words are extra (today's text has none): they go first when the title would get under 24 columns
++		local fixed = 4 + 2 * 5
++		for c = 1, 6 do
++			if c ~= 4 then
++				local w = 0
++				for _, row in cells do
++					w = math.max(w, utf8.len(row[c]) or #row[c])
++				end
++				fixed += w
++			end
++		end
++		if mode.width - fixed < 24 then
++			table.remove(cols, 6)
++			for _, row in cells do
++				table.remove(row, 6)
++			end
++		end
++		for n, line in term.columns(mode, cols, cells, "    ") do
++			if starts[n] then
++				table.insert(out, starts[n])
++			end
++			table.insert(out, (string.gsub(line, "%s+$", "")))
++		end
++		-- any state outside the usual four (a hand-edited stamp) still shows, last
++		for _, r in rows do
++			if r.project == project and not table.find(STATE_ORDER, r.state) then
++				counts[r.state] = (counts[r.state] or 0) + 1
++				table.insert(out, `    {look.ids(mode, r.id)}  {r.kind}  {r.state}  {r.title}`)
++			end
++		end
++	end
++	local parts: { string } = {}
++	for _, state in STATE_ORDER do
++		if counts[state] then
++			table.insert(parts, term.paint(mode, state, `{counts[state]} {state}`))
++		end
++	end
++	for state, n in counts do
++		if not table.find(STATE_ORDER, state) then
++			table.insert(parts, `{n} {state}`)
++		end
++	end
++	local dot = ` {term.paint(mode, "muted", term.glyph(mode, "dot"))} `
++	table.insert(out, term.paint(mode, "heading", `{#rows} items`) .. ": " .. table.concat(parts, dot))
++	return out
++end
++
++-- `list`: one row per item, as today's columns (id, state, type, raft, title), colored, the title fitted.
++export type ListRow = {
++	id: string,
++	state: string,
++	kind: string,
++	raft: string,
++	title: string,
++	url: string?,
++	branch: string?, -- an active raft's branch, for its pull request
++	pr: string?,
++}
++function look.list(mode: Mode, rows: { ListRow }): { string }
++	local cells: { { string } } = {}
++	local byId: { [string]: ListRow } = {}
++	for _, r in rows do
++		byId[r.id] = r
++		table.insert(cells, { r.id, r.state, r.kind, r.raft, r.title })
++	end
++	local cols: { term.Column } = {
++		{
++			style = function(id: string): string
++				local r = byId[id]
++				return term.link(mode, r and (r.pr or r.url), term.paint(mode, term.kindOf(id), id))
++			end,
++		},
++		{
++			style = function(s: string): string
++				return term.paint(mode, s, s)
++			end,
++		},
++		{
++			style = function(k: string): string
++				return term.paint(mode, k, k)
++			end,
++		},
++		{
++			style = function(raft: string): string
++				return look.ids(mode, raft)
++			end,
++		},
++		{ flex = true },
++	}
++	local out: { string } = {}
++	for _, line in term.columns(mode, cols, cells) do
++		table.insert(out, (string.gsub(line, "%s+$", "")))
++	end
++	return out
++end
++
++-- `members`: each member's folder, its id in front.
++function look.members(mode: Mode, paths: { string }, url: (string) -> string?): { string }
++	local out: { string } = {}
++	for _, p in paths do
++		local id = string.match(p, "([fdcR]%d%d%d%d)$") or ""
++		local shown = term.link(mode, url(p), term.paint(mode, term.kindOf(id), id))
++		table.insert(out, `{term.glyph(mode, "bullet")} {shown}  {term.paint(mode, "muted", p)}`)
++	end
++	return out
++end
++
++-- `busy`: each reason the item is busy, with a warning glyph.
++function look.busy(mode: Mode, lines: { string }): { string }
++	local out: { string } = {}
++	for _, l in lines do
++		local mark = term.paint(mode, "warning", term.glyph(mode, "warning"))
++		for _, piece in term.wrap(l, math.max(20, mode.width - 2)) do
++			table.insert(out, `{mark} {look.ids(mode, piece)}`)
++			mark = " "
++		end
++	end
++	return out
++end
++
++-- `audit`: problems as `<severity> <code> <path>: <message>` (audit.format), each one glyph, severity and code on
++-- one line and the path and message wrapped under it; the summary colored by its counts.
++function look.audit(mode: Mode, lines: { string }, summary: string): { string }
++	local out: { string } = {}
++	for _, l in lines do
++		local sev, code, rest = string.match(l, "^(%a+) (%S+) (.*)$")
++		if (sev == "error" or sev == "warning") and code and rest then
++			local style = if sev == "error" then "error" else "warning"
++			local glyph = if sev == "error" then "error" else "warning"
++			table.insert(
++				out,
++				`{term.paint(mode, style, term.glyph(mode, glyph) .. " " .. sev)}  {term.paint(
++					mode,
++					"heading",
++					code
++				)}`
++			)
++			for _, piece in term.wrap(rest, math.max(20, mode.width - 4)) do
++				table.insert(out, "    " .. look.ids(mode, piece))
++			end
++		else
++			table.insert(out, l)
++		end
++	end
++	local errors = tonumber(string.match(summary, "(%d+) errors") or "0") or 0
++	local warnings = tonumber(string.match(summary, "(%d+) warnings") or "0") or 0
++	local e = term.paint(mode, if errors > 0 then "error" else "ok", `{errors} errors`)
++	local w = term.paint(mode, if warnings > 0 then "warning" else "ok", `{warnings} warnings`)
++	table.insert(out, `{term.paint(mode, "heading", "audit:")} {e}, {w}`)
++	return out
++end
++
++-- A `=== <title>` heading line (check, promote-check) as a rule.
++function look.heading(mode: Mode, line: string): string
++	local title = string.match(line, "^=== (.*)$")
++	return if title then term.rule(mode, look.ids(mode, title)) else line
++end
++
++-- `workstreams`: the plan as waves, ids colored, `parallel:` green for yes.
++function look.workstreams(mode: Mode, text: string): { string }
++	local out: { string } = {}
++	local waves: { [number]: { string } } = {}
++	local order: { number } = {}
++	local tail: { string } = {}
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local id, wave = string.match(line, "^([fdcR]%d%d%d%d) wave (%d+)$")
++		if id and wave then
++			local n = tonumber(wave) :: number
++			if not waves[n] then
++				waves[n] = {}
++				table.insert(order, n)
++			end
++			table.insert(waves[n], id)
++		elseif string.match(line, "^parallel: yes") then
++			table.insert(tail, term.paint(mode, "ok", line))
++		elseif string.match(line, "^parallel: ") then
++			table.insert(tail, term.paint(mode, "warning", line))
++		elseif string.match(line, "^raft ") then
++			table.insert(out, term.paint(mode, "heading", look.ids(mode, line)))
++		elseif line ~= "" then
++			table.insert(tail, look.ids(mode, line))
++		end
++	end
++	table.sort(order)
++	for _, n in order do
++		local ids: { string } = {}
++		for _, id in waves[n] do
++			table.insert(ids, look.ids(mode, id))
++		end
++		table.insert(
++			out,
++			`  {term.paint(mode, "muted", "wave " .. n)} {term.glyph(mode, "arrow")} {table.concat(ids, "  ")}`
++		)
++	end
++	for _, l in tail do
++		table.insert(out, l)
++	end
++	return out
++end
++
++-- `lessons` list lines `- <skill>/<slug> (<when>, <n> sources): <check>` with the check wrapped under the id, a
++-- bar for the number of sources against the largest; any other line passes through, ids colored.
++function look.lessons(mode: Mode, text: string): { string }
++	local most = 1
++	for count in string.gmatch(text, ", (%d+) sources?%)") do
++		most = math.max(most, tonumber(count) or 1)
++	end
++	local out: { string } = {}
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local id, when, count, noun, check =
++			string.match(line, "^%- (%S+) %((%a+), (%d+) (sources?)%): (.*)$")
++		if id and when and count and noun and check then
++			local n = tonumber(count) :: number
++			table.insert(
++				out,
++				`{term.paint(mode, "heading", id)}  {term.paint(mode, "cyan", term.bar(mode, n / most, 8))} {term.paint(
++					mode,
++					"muted",
++					`({when}, {count} {noun})`
++				)}`
++			)
++			for _, piece in term.wrap(check, math.max(20, mode.width - 4)) do
++				table.insert(out, "    " .. piece)
++			end
++		elseif string.match(line, "^== ") then
++			table.insert(out, term.paint(mode, "heading", line))
++		elseif string.match(line, "^lessons: .* ok$") or string.match(line, "^harvest: every finding") then
++			table.insert(out, term.paint(mode, "ok", line))
++		else
++			table.insert(out, look.ids(mode, line))
++		end
++	end
++	if out[#out] == "" then
++		table.remove(out)
++	end
++	return out
++end
++
++local function splitRow(line: string): { string }
++	local cells: { string } = {}
++	local inner = string.match(line, "^|(.*)|%s*$") or line
++	for cell in string.gmatch(inner .. "|", "([^|]*)|") do
++		table.insert(cells, (string.gsub(string.gsub(cell, "^%s+", ""), "%s+$", "")))
++	end
++	return cells
++end
++
++-- `metrics`: its markdown tables boxed and aligned (numbers right), headings bold; other lines pass through.
++function look.markdown(mode: Mode, text: string): { string }
++	local out: { string } = {}
++	local lines: { string } = {}
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		table.insert(lines, line)
++	end
++	if lines[#lines] == "" then
++		table.remove(lines)
++	end
++	local v = if mode.unicode then "│" else "|"
++	local h = if mode.unicode then "─" else "-"
++	local i = 1
++	while i <= #lines do
++		local line = lines[i]
++		if string.sub(line, 1, 1) == "|" then
++			local rows: { { string } } = {}
++			local header: { string }? = nil
++			while i <= #lines and string.sub(lines[i], 1, 1) == "|" do
++				if string.match(lines[i], "^|[%s%-:|]+|%s*$") then
++					header = rows[1]
++				else
++					table.insert(rows, splitRow(lines[i]))
++				end
++				i += 1
++			end
++			local n = 0
++			for _, r in rows do
++				n = math.max(n, #r)
++			end
++			local numeric: { boolean } = {}
++			for c = 1, n do
++				numeric[c] = true
++				for ri, r in rows do
++					if not (header and ri == 1) and (r[c] or "") ~= "" and not tonumber(r[c]) then
++						numeric[c] = false
++					end
++				end
++			end
++			local cols: { term.Column } = {}
++			for c = 1, n do
++				cols[c] = { right = numeric[c], flex = c == n and not numeric[c] }
++			end
++			local laid = term.columns(mode, cols, rows, "", ` {term.paint(mode, "muted", v)} `)
++			for ri, shown in laid do
++				local l = shown
++				if header and ri == 1 then
++					table.insert(out, term.paint(mode, "heading", shown))
++					table.insert(
++						out,
++						term.paint(mode, "muted", string.rep(h, math.min(mode.width, term.width(l))))
++					)
++				else
++					table.insert(out, look.ids(mode, shown))
++				end
++			end
++		else
++			local pct = string.match(line, "^  by .-:%s+([%d%.]+)%%$")
++			if pct then
++				-- a rework rate: a bar against the 20% target, green under it and red over it
++				local n = tonumber(pct) :: number
++				local style = if n < 20 then "ok" else "error"
++				table.insert(
++					out,
++					`{line}  {term.paint(mode, style, term.bar(mode, n / 40, 20))}{term.paint(
++						mode,
++						"muted",
++						"| 20% target at the middle"
++					)}`
++				)
++			elseif line ~= "" and not string.match(line, "^%s") and string.match(line, "[%.:]$") then
++				table.insert(out, term.paint(mode, "heading", line))
++			else
++				table.insert(out, look.ids(mode, line))
++			end
++			i += 1
++		end
++	end
++	return out
++end
++
++-- `capture`: the header line with its parts told apart; the document below as is.
++function look.capture(mode: Mode, text: string): { string }
++	local out: { string } = {}
++	local first = true
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		if first then
++			first = false
++			local sha, path, subject = string.match(line, "^capture (%S+) (%S+) (.*)$")
++			if sha and path and subject then
++				line =
++					`{term.paint(mode, "heading", "capture")} {term.paint(mode, "muted", sha)} {path} {look.ids(
++						mode,
++						subject
++					)}`
++			end
++		end
++		table.insert(out, line)
++	end
++	if out[#out] == "" then
++		table.remove(out)
++	end
++	return out
++end
++
++-- A `spend` row `<id> <phase> +<added>/-<removed> <minutes> min[ <tokens> tokens]`: id colored, phase muted,
++-- additions green and removals red.
++function look.spend(mode: Mode, line: string): { string }
++	local id, phase, added, removed, rest = string.match(line, "^(%S+) (%S+) %+(%d+)/%-(%d+) (.*)$")
++	if not (id and phase and added and removed and rest) then
++		return { look.ids(mode, line) }
++	end
++	return {
++		`{look.ids(mode, id)} {term.paint(mode, "muted", phase)} {term.paint(mode, "green", "+" .. added)}/{term.paint(
++			mode,
++			"red",
++			"-" .. removed
++		)} {rest}`,
++	}
++end
++
++-- The usage text: each command name in bold, its description muted.
++function look.usage(mode: Mode, text: string): { string }
++	local out: { string } = {}
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local lead, name, rest = string.match(line, "^(  )(%S+)(.*)$")
++		if lead and name and rest then
++			local args, desc = string.match(rest, "^(.-)(%s%s%s+.*)$")
++			if args and desc then
++				line = lead .. term.paint(mode, "heading", name) .. args .. term.paint(mode, "muted", desc)
++			else
++				line = lead .. term.paint(mode, "heading", name) .. rest
++			end
++		elseif string.match(line, "^%s%s%s+") then
++			line = term.paint(mode, "muted", line)
++		elseif line ~= "" then
++			line = term.paint(mode, "heading", line)
++		end
++		table.insert(out, line)
++	end
++	if out[#out] == "" then
++		table.remove(out)
++	end
++	return out
++end
++
++-- A one-line result (`promote-check OK`, a spend sha) marked ok.
++function look.ok(mode: Mode, line: string): string
++	return `{term.paint(mode, "ok", term.glyph(mode, "pass"))} {term.paint(mode, "ok", line)}`
++end
++
++return look
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..362a8627 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -9,6 +9,7 @@ local gateLib = require("./gate")
+ local idsLib = require("./ids")
+ local ledger = require("./ledger")
+ local lessonsLib = require("./lessons")
++local look = require("./look")
+ local pathsLib = require("./paths")
+ local process = require("@lune/process")
+ local projects = require("./projects")
+@@ -20,6 +21,7 @@ local spend = require("./spend")
+ local statusLib = require("./status")
+ local stdio = require("@lune/stdio")
+ local store = require("./store")
++local term = require("./term")
+ local trailLib = require("./trail")
+ 
+ -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
+@@ -81,14 +83,56 @@ usage: ./zn <command> ...
+   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
+                                                 list skill lessons; also --tags, --check, and --uncovered <id>...
+   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
+-                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
++                                                <project>/skills); --check writes nothing and exits 1 on a problem
++every command also takes --color=auto|always|never and --no-color: on a terminal output is laid out in colored
++columns (NO_COLOR or --no-color drops the color, TERM=dumb too); piped it is plain text, as scripts read it]]
+ 
+ local FOCUS_FILE = ".cache/tracker-focus"
+ local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
+ -- the issue, raft and prompt templates: engine files, shared by every project (c0114)
+ local TEMPLATES = "z-nile/templates"
+ 
++-- c0144: how output is shown. The dispatch at the end of this file sets the --color choice before any command runs;
++-- the mode is worked out on first use: one probe of stdout (`[ -t 1 ]` in a child that shares it) and, on a
++-- terminal, one of its width. Nothing is exported to child processes, so a nested ./zn decides for its own stdout.
++local colorChoice: term.Choice = "auto"
++local outMode: term.Mode? = nil
++
++local function isTerminal(fd: number): boolean
++	return process.exec("sh", { "-c", `[ -t {fd} ]` }, { stdio = { stdout = "forward", stderr = "forward" } }).ok
++end
++
++local function terminalColumns(): number?
++	local r = process.exec("sh", { "-c", "stty size </dev/tty 2>/dev/null" })
++	return if r.ok then tonumber(string.match(r.stdout, "%d+%s+(%d+)") or "") else nil
++end
++
++local function outputMode(): term.Mode
++	if not outMode then
++		local tty = isTerminal(1)
++		outMode = term.decide(colorChoice, process.env, tty, if tty then terminalColumns() else nil)
++	end
++	return outMode :: term.Mode
++end
++
++-- Prints `text` as it is, or on a terminal the lines `rich` makes of it.
++local function say(text: string, rich: ((term.Mode, string) -> { string })?)
++	local m = outputMode()
++	if m.rich and rich then
++		for _, l in rich(m, text) do
++			print(l)
++		end
++	else
++		print(text)
++	end
++end
++
+ local function fail(msg: string): never
++	-- a refusal on a terminal's stderr is shown in the error style; piped, it is today's text
++	local m = term.decide(colorChoice, process.env, isTerminal(2), nil)
++	if m.color then
++		msg = term.paint(m, "error", term.glyph(m, "error") .. " " .. msg)
++	end
+ 	stdio.ewrite(msg .. "\n")
+ 	return process.exit(1)
+ end
+@@ -763,8 +807,11 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 			or a == "--tags"
+ 			or a == "--uncovered"
+ 			or a == "--apply"
++			or a == "--no-color"
+ 		then
+ 			opts[a] = { "true" }
++		elseif string.sub(a, 1, 8) == "--color=" then
++			opts["--color"] = { string.sub(a, 9) }
+ 		elseif string.sub(a, 1, 1) == "-" then
+ 			opts[a] = opts[a] or {}
+ 			table.insert(opts[a], args[i + 1] or "")
+@@ -1575,14 +1622,47 @@ function cmd.status(pos: { string })
+ 	if not id then
+ 		local listed = originPaths()
+ 		local roots = originRoots() :: { string }
++		local lines: { string } = {}
++		local rows: { look.StatusRow } = {}
+ 		for _, p in listed do
+ 			-- the item's own document only: spend.md sits beside it and must not list the item twice
+ 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
+ 			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
+ 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
+-				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
++				local state = statusLib.effective(front, stateOfPath(p))
++				table.insert(lines, `{fid} {state} {front.title or ""}`)
++				local root = projects.rootOf(p, roots)
++				table.insert(rows, {
++					id = fid,
++					state = state,
++					kind = if string.sub(fid, 1, 1) == "R"
++						then (front.type or "raft")
++						else (store.TYPES[string.sub(fid, 1, 1)] or "?"),
++					title = front.title or "",
++					raft = front.raft or "",
++					claim = string.match(front.status or "", "^%a+%-(.+)$") or "",
++					project = (root and projects.folderOf(root)) or root or "",
++					url = `file://{process.cwd}{p}`,
++					branch = if string.sub(fid, 1, 1) == "R"
++							and state == "active"
++							and front.slug
++						then `{fid}-{front.slug}`
++						else nil,
++				})
+ 			end
+ 		end
++		say(table.concat(lines, "\n"), function(m: term.Mode): { string }
++			-- an active raft links to its pull request (c0144): origin's configured URL, read only for links
++			if m.links then
++				local origin = sh.run("git", { "config", "--get", "remote.origin.url" })
++				for _, r in rows do
++					if r.branch then
++						r.pr = look.prUrl(if origin.ok then origin.stdout else nil, r.branch :: string)
++					end
++				end
++			end
++			return look.status(m, rows)
++		end)
+ 		return
+ 	end
+ 	if not to then
+@@ -2323,8 +2403,18 @@ function cmd.find(pos: { string })
+ end
+ 
+ function cmd.members(pos: { string })
++	local paths: { string } = {}
+ 	for _, m in store.members(pos[1] or fail("usage: members <R-id>")) do
+-		print(callerPath(m.dir))
++		table.insert(paths, callerPath(m.dir))
++	end
++	if #paths > 0 then
++		say(table.concat(paths, "\n"), function(mo: term.Mode): { string }
++			return look.members(mo, paths, function(path: string): string?
++				local id = string.match(path, "([fdcR]%d%d%d%d)$")
++				local item = id and store.find(id)
++				return if item then `file://{process.cwd}{item.doc}` else nil
++			end)
++		end)
+ 	end
+ end
+ 
+@@ -2562,6 +2652,10 @@ end
+ -- uncommitted changes under them. c0120's raft is readied only when `./zn busy tracker src tests` prints nothing.
+ -- While a move's freeze is on (freezesOn: c0120's, c0115's), a branch it ignores, a worktree on one, and an active raft
+ -- that lists the item, are named on stderr and not counted.
++local function busyLook(m: term.Mode, line: string): { string }
++	return look.busy(m, { line })
++end
++
+ function cmd.busy(pos: { string })
+ 	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
+ 	local own = string.match(current, "^(R%d%d%d%d)%-")
+@@ -2595,7 +2689,7 @@ function cmd.busy(pos: { string })
+ 			if ownOf then
+ 				stdio.ewrite(`ignored for {ownOf}'s freeze: raft {r} ({ownOf}'s own)\n`)
+ 			else
+-				print(`raft {r} is active`)
++				say(`raft {r} is active`, busyLook)
+ 				found += 1
+ 			end
+ 		end
+@@ -2606,7 +2700,7 @@ function cmd.busy(pos: { string })
+ 		if item then
+ 			stdio.ewrite(`ignored for {item}'s freeze: {short} ({why})\n`)
+ 		else
+-			print(`branch {short} changes {table.concat(paths, ", ")}`)
++			say(`branch {short} changes {table.concat(paths, ", ")}`, busyLook)
+ 			found += 1
+ 		end
+ 	end
+@@ -2621,7 +2715,7 @@ function cmd.busy(pos: { string })
+ 		if item then
+ 			stdio.ewrite(`ignored for {item}'s freeze: worktree {wt} on {on} ({why})\n`)
+ 		else
+-			print(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`)
++			say(`worktree {wt} has uncommitted changes under {table.concat(paths, ", ")}`, busyLook)
+ 			found += 1
+ 		end
+ 	end
+@@ -2658,6 +2752,8 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
+ 	table.sort(found, function(a, b)
+ 		return if a.id == b.id then a.path < b.path else a.id < b.id
+ 	end)
++	local listLines: { string } = {}
++	local listRows: { look.ListRow } = {}
+ 	for _, kind in { "raft", "issue" } do
+ 		for _, f in found do
+ 			local doc = `{f.path}/{f.id}.md`
+@@ -2671,7 +2767,8 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
+ 					local ftype = if kind == "issue"
+ 						then store.TYPES[string.sub(f.id, 1, 1)]
+ 						else (fm.type or "?")
+-					print(
++					table.insert(
++						listLines,
+ 						string.format(
+ 							"%-6s %-8s %-8s %-7s %s",
+ 							f.id,
+@@ -2681,10 +2778,37 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
+ 							fm.title or fm.slug or ""
+ 						)
+ 					)
++					table.insert(listRows, {
++						id = f.id,
++						state = state,
++						kind = ftype,
++						raft = fm.raft or "",
++						title = fm.title or fm.slug or "",
++						url = `file://{process.cwd}{doc}`,
++						branch = if kind == "raft"
++								and state == "active"
++								and fm.slug
++							then `{f.id}-{fm.slug}`
++							else nil,
++					})
+ 				end
+ 			end
+ 		end
+ 	end
++	if #listLines > 0 then
++		say(table.concat(listLines, "\n"), function(m: term.Mode): { string }
++			-- an active raft links to its pull request (c0144), as in status
++			if m.links then
++				local origin = sh.run("git", { "config", "--get", "remote.origin.url" })
++				for _, r in listRows do
++					if r.branch then
++						r.pr = look.prUrl(if origin.ok then origin.stdout else nil, r.branch :: string)
++					end
++				end
++			end
++			return look.list(m, listRows)
++		end)
++	end
+ 	local broken = 0
+ 	for _, p in audit.run(".") do
+ 		if audit.ITEM_CODES[p.code] then
+@@ -2717,11 +2841,23 @@ end
+ -- Every problem in the tracker tree (c0880); fails when any is an error. Read-only.
+ function cmd.audit()
+ 	local problems = audit.run(".")
++	local lines: { string } = {}
+ 	for _, p in problems do
+-		print(audit.format(p))
++		table.insert(lines, audit.format(p))
+ 	end
+ 	local errors = audit.errors(problems)
+-	print(`audit: {errors} errors, {#problems - errors} warnings`)
++	local summary = `audit: {errors} errors, {#problems - errors} warnings`
++	local m = outputMode()
++	if m.rich then
++		for _, l in look.audit(m, lines, summary) do
++			print(l)
++		end
++	else
++		for _, l in lines do
++			print(l)
++		end
++		print(summary)
++	end
+ 	if errors > 0 then
+ 		process.exit(1)
+ 	end
+@@ -2738,8 +2874,16 @@ end
+ -- Runs check.sh for an item. A raft's check.sh is responsible for running its members' checks.
+ local function runCheck(item: store.Item): boolean
+ 	refuseListMode()
+-	print(`\n=== {item.id} check.sh`)
+-	return sh.stream("bash", { `{item.dir}/check.sh` })
++	say(`\n=== {item.id} check.sh`, function(m: term.Mode, text: string): { string }
++		return { "", look.heading(m, (string.gsub(text, "^\n", ""))) }
++	end)
++	-- ac.sh colors its own lines on its own terminal; a run told not to color says so to it (NO_COLOR)
++	local m = outputMode()
++	return sh.stream(
++		"bash",
++		{ `{item.dir}/check.sh` },
++		if m.rich and not m.color then { NO_COLOR = "1" } else nil
++	)
+ end
+ 
+ function cmd.check(pos: { string })
+@@ -3562,7 +3706,7 @@ function cmd.workstreams(pos: { string })
+ 	for _, w in warnings do
+ 		stdio.ewrite(w .. "\n")
+ 	end
+-	print(text)
++	say(text, look.workstreams)
+ end
+ 
+ -- `raft-plan [--apply]` (c0116, z-raft with no argument): prints the plan for every prepared, raftless issue as the
+@@ -3955,7 +4099,12 @@ end
+ 
+ cmd["promote-check"] = function(pos: { string })
+ 	local raft = store.get(pos[1] or fail("usage: promote-check <R-id|issue-id>"))
+-	print(`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`)
++	say(
++		`=== {raft.id}: dry-run promotion of acceptance specs (type check + meta)`,
++		function(m: term.Mode, t: string)
++			return { look.heading(m, t) }
++		end
++	)
+ 	if
+ 		not withPromotedCopies(raft, function(specs)
+ 			-- c0116: say how many were copied, so a promotion that found nothing to copy is not mistaken for a clean one
+@@ -3965,7 +4114,9 @@ cmd["promote-check"] = function(pos: { string })
+ 	then
+ 		fail("promoted acceptance specs would break tests/ (see above)")
+ 	end
+-	print("promote-check OK")
++	say("promote-check OK", function(m: term.Mode, t: string)
++		return { look.ok(m, t) }
++	end)
+ end
+ 
+ -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
+@@ -4284,7 +4435,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 				entries += #e
+ 			end
+ 		end
+-		print(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`)
++		say(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`, look.lessons)
+ 		return
+ 	end
+ 	if opts["--uncovered"] then
+@@ -4311,7 +4462,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 			print(table.concat(gaps, "\n"))
+ 			process.exit(1)
+ 		end
+-		print("harvest: every finding is covered")
++		say("harvest: every finding is covered", look.lessons)
+ 		return
+ 	end
+ 	local all = parsedLessons(tree)
+@@ -4344,7 +4495,15 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 		words = pos,
+ 	})
+ 	if not opts["--full"] then
+-		stdio.write(lessonsLib.index(chosen, sources))
++		local index = lessonsLib.index(chosen, sources)
++		local m = outputMode()
++		if m.rich then
++			for _, l in look.lessons(m, index) do
++				print(l)
++			end
++		else
++			stdio.write(index)
++		end
+ 		return
+ 	end
+ 	for i, l in chosen do
+@@ -4355,7 +4514,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 		if l.from then
+ 			table.insert(src, l.from)
+ 		end
+-		print(`== {lessonsLib.folderOf(tree, l.skill)}/lessons/{l.slug}.md`)
++		say(`== {lessonsLib.folderOf(tree, l.skill)}/lessons/{l.slug}.md`, look.lessons)
+ 		print(`sources: {if #src > 0 then table.concat(src, ", ") else "none"}`)
+ 		stdio.write(tree.lessons[l.id])
+ 	end
+@@ -5129,7 +5288,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 	end
+ 	for _, share in kept do
+ 		local tok = if share.tokens ~= nil then ` {share.tokens} tokens` else ""
+-		print(
++		say(
+ 			string.format(
+ 				"%s %s +%d/-%d %.1f min%s",
+ 				share.id,
+@@ -5138,11 +5297,14 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 				share.removed,
+ 				share.minutes,
+ 				tok
+-			)
++			),
++			look.spend
+ 		)
+ 	end
+ 	if r.sha then
+-		print(r.sha)
++		say(r.sha, function(m: term.Mode, t: string): { string }
++			return { look.ok(m, t) }
++		end)
+ 	end
+ end
+ 
+@@ -5209,7 +5371,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
+ 	return out
+ end
+ 
+-local function metricsLessons()
++local function metricsLessons(print: (string) -> ())
+ 	local tree = lessonsLib.load(".")
+ 	local all: { lessonsLib.Lesson } = {}
+ 	for id, text in tree.lessons do
+@@ -5299,11 +5461,23 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
+ 	for _, note in notes do
+ 		marks ..= ` (history before {note.sha} not followed: it changed {note.file})`
+ 	end
+-	print(`capture {c.sha} {c.path} {c.subject}{marks}`)
+-	stdio.write(shown.stdout)
++	local m = outputMode()
++	if m.rich then
++		for _, l in look.capture(m, `capture {c.sha} {c.path} {c.subject}{marks}\n{shown.stdout}`) do
++			print(l)
++		end
++	else
++		print(`capture {c.sha} {c.path} {c.subject}{marks}`)
++		stdio.write(shown.stdout)
++	end
+ end
+ 
+ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
++	-- c0144: the report is collected as one page, printed as it is, or boxed and aligned on a terminal
++	local page: { string } = {}
++	local function print(line: string)
++		table.insert(page, line)
++	end
+ 	type Counted = {
+ 		id: string,
+ 		type: string,
+@@ -5572,12 +5746,13 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+ 			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
+ 		end
+ 	end
+-	metricsLessons()
++	metricsLessons(print)
+ 	print("\nRework = defect / (defect + feature). Target: under 20%.")
+ 	print("Rework counts every phase, capture to deliver.")
+ 	print(`  by lines added:  {pct(d.added, f.added)}`)
+ 	print(`  by issues:       {pct(d.count, f.count)}`)
+ 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
++	say(table.concat(page, "\n"), look.markdown)
+ end
+ 
+ function cmd.board(pos: { string }, opts: { [string]: { string } })
+@@ -5615,7 +5790,7 @@ end
+ local name = args[1]
+ local handler = name and (cmd :: any)[name]
+ if not handler then
+-	print(USAGE)
++	say(USAGE, look.usage)
+ 	process.exit(if name then 1 else 0)
+ end
+ -- Every command that can change a repository checks first that git's root is the checkout the tracker
+@@ -5637,6 +5812,19 @@ if not READ_ONLY[name :: string] then
+ end
+ local rest = table.move(args, 2, #args, 1, {})
+ local pos, opts = flags(rest)
++-- c0144: --color=<auto|always|never> (or --color <choice>) and --no-color, for every command; the last one wins
++do
++	local value = if opts["--no-color"]
++		then "never"
++		else (opts["--color"] and opts["--color"][#opts["--color"]])
++	local choice, why = term.choice(value)
++	if not choice then
++		fail(why :: string)
++	end
++	colorChoice = choice :: term.Choice
++	opts["--color"] = nil
++	opts["--no-color"] = nil
++end
+ local ok, err = pcall(handler, pos, opts)
+ if not ok then
+ 	fail(`tracker {name}: {err}`)
+diff --git a/z-nile/engine/term.luau b/z-nile/engine/term.luau
+new file mode 100644
+index 00000000..6153cca8
+--- /dev/null
++++ b/z-nile/engine/term.luau
+@@ -0,0 +1,276 @@
++--!strict
++-- Terminal output (c0144): pure rules, no I/O. main.luau decides the mode once from the --color choice, the
++-- environment and what it learned about stdout (a terminal or not, and its width), and every command that prints
++-- for a person renders through it. Plain mode is today's text, byte for byte: nothing here runs for it.
++local term = {}
++
++-- How output is shown. `rich`: the terminal layout (columns, groups, glyphs). `color`: ANSI styles inside it.
++-- `links`: OSC 8 hyperlinks. `unicode`: box and bar glyphs (else ASCII). `width`: the columns a line may use.
++export type Mode = { rich: boolean, color: boolean, links: boolean, unicode: boolean, width: number }
++
++export type Choice = "auto" | "always" | "never"
++
++-- The mode every non-terminal run gets: today's plain text.
++term.PLAIN = table.freeze({ rich = false, color = false, links = false, unicode = false, width = 80 }) :: Mode
++
++-- `--color=<choice>` / `--no-color` as a choice, or nil and the rule a bad value broke.
++function term.choice(value: string?): (Choice?, string?)
++	if value == nil or value == "auto" then
++		return "auto", nil
++	elseif value == "always" or value == "never" then
++		return value :: Choice, nil
++	end
++	return nil, `--color takes auto, always or never (got "{value}")`
++end
++
++local function utf8Locale(env: { [string]: string? }): boolean
++	for _, key in { "LC_ALL", "LC_CTYPE", "LANG" } do
++		local v = env[key]
++		if v and v ~= "" then
++			local l = string.lower(v)
++			return string.find(l, "utf-8", 1, true) ~= nil or string.find(l, "utf8", 1, true) ~= nil
++		end
++	end
++	return false
++end
++
++-- The mode for a run. `tty`: stdout is a terminal. `ttyColumns`: the terminal's width, when known.
++-- Rich layout only on a terminal, or when the choice is `always`; color only inside rich layout, never when the
++-- choice is `never`, and in `auto` only when NO_COLOR is unset or empty and TERM is not `dumb`. An explicit
++-- `always` wins over NO_COLOR (the flag is the more specific request).
++function term.decide(choice: Choice, env: { [string]: string? }, tty: boolean, ttyColumns: number?): Mode
++	local rich = choice == "always" or tty
++	if not rich then
++		return term.PLAIN
++	end
++	local noColor = env.NO_COLOR ~= nil and env.NO_COLOR ~= ""
++	local color = choice == "always" or (choice == "auto" and not noColor and env.TERM ~= "dumb")
++	local cols = tonumber(env.COLUMNS or "")
++	local width = if cols and cols >= 20
++		then math.floor(cols)
++		elseif ttyColumns and ttyColumns >= 20 then ttyColumns
++		else 80
++	return {
++		rich = true,
++		color = color,
++		links = color and env.ZN_HYPERLINKS ~= "0",
++		unicode = utf8Locale(env),
++		width = width,
++	}
++end
++
++-- 16-color SGR codes, so the terminal's own theme picks the shades (light or dark backgrounds both work).
++local SGR: { [string]: string } = {
++	bold = "1",
++	dim = "2",
++	underline = "4",
++	red = "31",
++	green = "32",
++	yellow = "33",
++	blue = "34",
++	magenta = "35",
++	cyan = "36",
++}
++
++-- What each kind of thing looks like: item types, lifecycle states, check outcomes, audit severities.
++local STYLE: { [string]: { string } } = {
++	feature = { "green" },
++	defect = { "red" },
++	chore = { "blue" },
++	raft = { "magenta" },
++	new = {},
++	preparing = { "cyan" },
++	prepared = { "green" },
++	active = { "yellow", "bold" },
++	done = { "dim" },
++	backlog = {},
++	retired = { "dim" },
++	pass = { "green", "bold" },
++	fail = { "red", "bold" },
++	error = { "red", "bold" },
++	warning = { "yellow" },
++	ok = { "green" },
++	heading = { "bold" },
++	id = { "bold" },
++	muted = { "dim" },
++}
++
++-- `text` in the named style (a STYLE key or a raw SGR name), or `text` unchanged when color is off.
++function term.paint(mode: Mode, style: string, text: string): string
++	if not mode.color or text == "" then
++		return text
++	end
++	local names: { string } = STYLE[style] or { style }
++	local codes = {}
++	for _, n in names do
++		table.insert(codes, SGR[n] or error(`term.paint: unknown style {n}`))
++	end
++	if #codes == 0 then
++		return text
++	end
++	return `\27[{table.concat(codes, ";")}m{text}\27[0m`
++end
++
++-- The style of an id by its prefix: f feature, d defect, c chore, R raft.
++function term.kindOf(id: string): string
++	local p = string.sub(id, 1, 1)
++	return if p == "f" then "feature" elseif p == "d" then "defect" elseif p == "R" then "raft" else "chore"
++end
++
++-- `text` as an OSC 8 hyperlink to `url` when links are on.
++function term.link(mode: Mode, url: string?, text: string): string
++	if not mode.links or not url or url == "" then
++		return text
++	end
++	return `\27]8;;{url}\27\\{text}\27]8;;\27\\`
++end
++
++-- `text` without ANSI SGR sequences and OSC 8 wrappers: what a terminal shows.
++function term.strip(text: string): string
++	local s = string.gsub(text, "\27%]8;;[^\27]*\27\\", "")
++	s = string.gsub(s, "\27%[[%d;]*m", "")
++	return s
++end
++
++-- The columns `text` takes on screen: escape sequences take none, each UTF-8 character one.
++function term.width(text: string): number
++	return utf8.len(term.strip(text)) or #term.strip(text)
++end
++
++-- Plain `text` cut to `n` columns, ending in an ellipsis when cut.
++function term.fit(mode: Mode, text: string, n: number): string
++	if n <= 0 then
++		return ""
++	end
++	local len = utf8.len(text) or #text
++	if len <= n then
++		return text
++	end
++	local dots = if mode.unicode then "…" else "."
++	local keep = n - (utf8.len(dots) or 1)
++	if keep <= 0 then
++		return string.sub(dots, 1, n)
++	end
++	local stop = utf8.offset(text, keep + 1) or (#text + 1)
++	return string.sub(text, 1, stop - 1) .. dots
++end
++
++-- Plain `text` broken into lines of at most `n` columns at spaces (a word longer than `n` stays whole).
++function term.wrap(text: string, n: number): { string }
++	local lines: { string } = {}
++	local line = ""
++	for word in string.gmatch(text, "%S+") do
++		if line == "" then
++			line = word
++		elseif (utf8.len(line) or #line) + 1 + (utf8.len(word) or #word) <= n then
++			line ..= " " .. word
++		else
++			table.insert(lines, line)
++			line = word
++		end
++	end
++	if line ~= "" or #lines == 0 then
++		table.insert(lines, line)
++	end
++	return lines
++end
++
++local function pad(text: string, n: number, right: boolean?): string
++	local gap = math.max(0, n - term.width(text))
++	return if right then string.rep(" ", gap) .. text else text .. string.rep(" ", gap)
++end
++
++-- A column of a table: `flex` columns shrink (with an ellipsis) so the row fits the width; `right` aligns
++-- numbers; `style` paints each cell (a function of the plain cell, or nil for none).
++export type Column = { flex: boolean?, right: boolean?, style: ((string) -> string)? }
++
++-- Rows of plain cells laid out in aligned columns `sep` apart (two spaces by default), the flex column shrunk so each line fits
++-- `mode.width` (down to 8 columns; a table that can't fit then is wider). Cells are styled after fitting.
++function term.columns(
++	mode: Mode,
++	cols: { Column },
++	rows: { { string } },
++	indent: string?,
++	sep: string?
++): { string }
++	local lead = indent or ""
++	local between = sep or "  "
++	local widths: { number } = {}
++	for _, row in rows do
++		for i, cell in row do
++			widths[i] = math.max(widths[i] or 0, utf8.len(cell) or #cell)
++		end
++	end
++	local total = term.width(lead) + term.width(between) * math.max(0, #cols - 1)
++	for i = 1, #cols do
++		total += widths[i] or 0
++	end
++	for i, c in cols do
++		if c.flex and total > mode.width then
++			local w = math.max(8, (widths[i] or 0) - (total - mode.width))
++			total -= (widths[i] or 0) - w
++			widths[i] = w
++		end
++	end
++	local out: { string } = {}
++	for _, row in rows do
++		local cells: { string } = {}
++		for i, c in cols do
++			local plain = term.fit(mode, row[i] or "", widths[i] or 0)
++			local shown = if c.style then (c.style :: (string) -> string)(plain) else plain
++			cells[i] = if i == #cols and not c.right then shown else pad(shown, widths[i] or 0, c.right)
++		end
++		table.insert(out, lead .. table.concat(cells, between))
++	end
++	return out
++end
++
++-- A bar of `cells` columns filled to `fraction` (0..1): eighth-block glyphs, or `#` and `.` without Unicode.
++function term.bar(mode: Mode, fraction: number, cells: number): string
++	local f = math.clamp(fraction, 0, 1)
++	if not mode.unicode then
++		local n = math.floor(f * cells + 0.5)
++		return string.rep("#", n) .. string.rep(".", cells - n)
++	end
++	local eighths = math.floor(f * cells * 8 + 0.5)
++	local full = eighths // 8
++	local part = eighths % 8
++	local PARTS = { "▏", "▎", "▍", "▌", "▋", "▊", "▉" }
++	local s = string.rep("█", full)
++	if part > 0 and full < cells then
++		s ..= PARTS[part]
++		full += 1
++	end
++	return s .. string.rep(" ", cells - full)
++end
++
++-- A heading rule: `title` in bold followed by a line to the width.
++function term.rule(mode: Mode, title: string): string
++	local line = if mode.unicode then "─" else "-"
++	-- a title too long for a rule is wrapped in bold instead, so no word of it is lost
++	if term.width(title) > mode.width - 6 then
++		return term.paint(mode, "heading", table.concat(term.wrap(term.strip(title), mode.width), "\n"))
++	end
++	local head = ` {title} `
++	local n = math.max(2, mode.width - term.width(head) - 2)
++	return term.paint(mode, "muted", string.rep(line, 2))
++		.. term.paint(mode, "heading", head)
++		.. term.paint(mode, "muted", string.rep(line, n))
++end
++
++-- A glyph by name, with its ASCII fallback.
++local GLYPHS: { [string]: { string } } = {
++	pass = { "✔", "+" },
++	fail = { "✘", "x" },
++	warning = { "▲", "!" },
++	error = { "✖", "x" },
++	bullet = { "•", "*" },
++	dot = { "·", "-" },
++	arrow = { "→", "->" },
++}
++function term.glyph(mode: Mode, name: string): string
++	local g = GLYPHS[name] or error(`term.glyph: unknown glyph {name}`)
++	return if mode.unicode then g[1] else g[2]
++end
++
++return term
+diff --git a/z-nile/lib/ac.sh b/z-nile/lib/ac.sh
+index fd9c527e..3833a12d 100755
+--- a/z-nile/lib/ac.sh
++++ b/z-nile/lib/ac.sh
+@@ -71,19 +71,31 @@ export PATH="$HOME/.rokit/bin:$PATH"
+ _ac_failed=0
+ _ac_total=0
+ 
++# c0144: on a terminal (this script's own stdout), PASS, FAIL, LIST and the summary are colored; the words stay the
++# same, so stripped of color the text is today's. Never when piped (a check run by a spec, or inside $(...)), when
++# NO_COLOR is set and not empty (./zn check --no-color sets it), or when TERM is dumb. Nothing is exported.
++_ac_paint=
++if [[ -t 1 && -z ${NO_COLOR:-} && ${TERM:-} != dumb ]]; then
++  _ac_paint=1
++fi
++# _ac_word <sgr> <word>: the word in that SGR style on a terminal, else as it is.
++_ac_word() {
++  if [[ -n $_ac_paint ]]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
++}
++
+ check() {
+   local label="$1"; shift
+   _ac_total=$((_ac_total + 1))
+   if [[ -n ${AC_LIST:-} ]]; then
+-    printf 'LIST  %s\n' "$label"
++    printf '%s  %s\n' "$(_ac_word 2 LIST)" "$label"
+     return 0
+   fi
+   local out
+   if out=$("$@" 2>&1); then
+-    printf 'PASS  %s\n' "$label"
++    printf '%s  %s\n' "$(_ac_word '32;1' PASS)" "$label"
+   else
+     _ac_failed=$((_ac_failed + 1))
+-    printf 'FAIL  %s\n' "$label"
++    printf '%s  %s\n' "$(_ac_word '31;1' FAIL)" "$label"
+     printf '%s\n' "$out" | tail -n 25 | sed 's/^/      /'
+   fi
+ }
+@@ -97,6 +109,6 @@ finish() {
+     printf -- '---- %d criteria listed (none run)\n' "$_ac_total"
+     return 0
+   fi
+-  printf -- '---- %d/%d criteria passed\n' "$((_ac_total - _ac_failed))" "$_ac_total"
++  printf -- '%s\n' "$(_ac_word "$(if [[ $_ac_failed -eq 0 ]]; then echo '32'; else echo '31'; fi)" "$(printf -- '---- %d/%d criteria passed' "$((_ac_total - _ac_failed))" "$_ac_total")")"
+   [[ $_ac_failed -eq 0 ]]
+ }
+diff --git a/z-nile/lib/sh.luau b/z-nile/lib/sh.luau
+index 739a0415..c6d537ea 100644
+--- a/z-nile/lib/sh.luau
++++ b/z-nile/lib/sh.luau
+@@ -23,8 +23,9 @@ function sh.run(cmd: string, args: { string }, stdin: string?): Result
+ end
+ 
+ -- Run with output streamed to the terminal; returns success.
+-function sh.stream(cmd: string, args: { string }): boolean
+-	return process.exec(cmd, args, { stdio = { stdout = "forward", stderr = "forward" } }).ok
++-- `env` adds variables to the child's environment (c0144: NO_COLOR for a run told not to color).
++function sh.stream(cmd: string, args: { string }, env: { [string]: string }?): boolean
++	return process.exec(cmd, args, { env = env, stdio = { stdout = "forward", stderr = "forward" } }).ok
+ end
+ 
+ -- sh.stream with `dir` as the working directory (c0120: a project's specs run from its home).
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 006f758e..ac3167b5 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -152,6 +152,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - **Can be postponed**: `./zn new issue <f|d|c> <slug> --project <name>` into the backlog, mention it in the final report, and don't fix it now.
+ 
+ ## Other commands
++Output (c0144): on a terminal, `./zn` lays its output out in aligned, colored columns with links to item files; it is plain text when piped (a script, a spec, `$(...)`, CI, an agent's shell), byte for byte what scripts and specs read, so parse only piped output. `--no-color` (or `--color=never`, `NO_COLOR`, `TERM=dumb`) keeps the layout and drops the color; `--color=always` forces the rich look into a pipe (`| less -R`).
+ - `./zn list [backlog|active|done]`
+ - `./zn members R0010`
+ - `./zn check <id>`
