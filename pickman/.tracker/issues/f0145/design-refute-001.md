@@ -14,4 +14,4 @@ The user decided one more reading of G10, recorded in the Problem and in G10: De
 
 Lesson candidates written: pickman-arch/new-phases-meet-the-leave-rules, pickman-arch/purchase-close-before-receipt, zz-test/store-stubs-race-the-transform. Every finding is harvested in harvest.md.
 
-Prototype (proto-f0145 at 29b3acff): AC1 to AC6 pass; AC7 needs d0124's API (as before); AC8 passes after a comment rewording. Every earlier mutant was rerun and killed (Y8, G2 to G5, A8 and A11 were retargeted to the changed text; A4 was dropped, since N7 to N9 replace it), and N1 to N15 are killed.
+Prototype (proto-f0145 at 7df17147): AC1 to AC6 and AC8 pass; AC7 needs d0124's API, and on the combined f0145 + d0124 tree (R0044's prototype.patch) all eight pass. promote-check reports only top.spec's expected d0124 types and a FormatString warning main's f0061 lobby-tooling.spec already has. Every earlier mutant was rerun and killed (Y8, G2 to G5, A8 and A11 were retargeted to the changed text; A4 was dropped, since N7 to N9 replace it), and N1 to N15 are killed.

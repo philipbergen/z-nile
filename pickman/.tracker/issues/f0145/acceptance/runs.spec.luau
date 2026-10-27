@@ -98,7 +98,7 @@ local function run(): Run
 	local submitsModule = luau.load(SUBMITS, { environment = env, debugName = "Submits" })() :: any
 	local sessions = luau.load(SESSIONS, { environment = env, debugName = "Sessions" })() :: any
 	sessions.start(submitsModule)
-	local player = { UserId = 7, Name = "Ada", DisplayName = "Ada", Parent = {} }
+	local player: any = { UserId = 7, Name = "Ada", DisplayName = "Ada", Parent = {} }
 	remotes.Ready.OnServerEvent.fire(player)
 	local r: Run
 	r = {
