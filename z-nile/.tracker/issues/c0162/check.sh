@@ -9,6 +9,9 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the runner's pin reader: rokit.toml's [tools] lune pin, refusing an ambiguous file; the running version; where rokit.toml is looked for; a check that passes only the pin, with the fix" lune run tests/run -- "$A/pin.spec.luau"
+check "AC2: the runner runs on the pinned Lune: the outermost run names the version first, tries rokit's Lune when the shell's is another, and refuses otherwise before any spec; every inner run checks itself; an ambiguous rokit.toml refuses" lune run tests/run -- "$A/runner.spec.luau"
+check "AC3: zz-test, pickman-test and SETUP.md say the runner runs on rokit.toml's Lune, with the fix" lune run tests/run -- "$A/docs.spec.luau"
+check "AC4: the tooling's structural rules hold" lune run tests/run -- tests/meta/architecture.spec.luau
 
 finish
