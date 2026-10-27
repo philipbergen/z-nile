@@ -57,7 +57,9 @@ return t.spec("c0117 a new raft's check.sh (R0052 code review 003 F2)", function
 			after = rendered .. "exit 0\n",
 		}
 		for name, text in cases do
-			t.expect({ name, raftcheck.judge(text, rendered) ~= nil }).toEqual({ name, true })
+			if raftcheck.judge(text, rendered) == nil then
+				error(`{name}: passed, but must be refused`)
+			end
 		end
 	end)
 end)
