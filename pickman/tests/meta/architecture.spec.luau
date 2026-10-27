@@ -1,6 +1,7 @@
 --!strict
 -- Structural rules from the `pickman-arch` and `pickman-test` skills, enforced mechanically: pickman's (c0120), run from
 -- pickman/ like every pickman spec. The tooling's own rules are in the root's tests/meta/architecture.spec.luau.
+local depsReader = require("@znile/lib/deps")
 local fs = require("@lune/fs")
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
@@ -24,19 +25,15 @@ local function featureOf(file: string): string?
 	return string.match(file, "^src/shared/Logic/([^/]+)/")
 end
 
+-- The declared graph, through the one deps reader (c0163): it fails closed, so a conflict marker or a stray line in
+-- the block fails here, naming the line, instead of being skipped.
 local function declaredDeps(): { [string]: { [string]: boolean } }
-	local md = fs.readFile(".tracker/architecture.md")
-	local block = string.match(md, "```deps\n(.-)```") or ""
-	local deps: { [string]: { [string]: boolean } } = {}
-	for line in string.gmatch(block, "[^\n]+") do
-		local consumer, provider = string.match(line, "^%s*(%w+)%s*%->%s*(%w+)%s*$")
-		if consumer and provider then
-			local set = deps[consumer] or {}
-			set[provider] = true
-			deps[consumer] = set
-		end
+	local declared, problems =
+		depsReader.parse(fs.readFile(".tracker/architecture.md"), ".tracker/architecture.md")
+	if #problems > 0 then
+		error(table.concat(problems, "\n"), 0)
 	end
-	return deps
+	return declared
 end
 
 return t.spec("architecture", function(it)

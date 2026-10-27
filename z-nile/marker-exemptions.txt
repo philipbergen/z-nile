@@ -1,0 +1,4 @@
+# Files the conflict marker gate (c0163, ./zn markers) does not scan: one repository-relative path per line, for a
+# file that documents conflict markers at the start of a line on purpose. Plain paths only (no patterns), each a
+# tracked file. The gate reads origin/main's copy, so an exemption takes effect only once it has landed.
+# None today.

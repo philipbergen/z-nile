@@ -9,6 +9,7 @@ local gateLib = require("./gate")
 local idsLib = require("./ids")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local markersLib = require("./markers")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -81,7 +82,9 @@ usage: ./zn <command> ...
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
                                                 list skill lessons; also --tags, --check, and --uncovered <id>...
   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
-                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
+                                                <project>/skills); --check writes nothing and exits 1 on a problem
+  markers                                       name every committed conflict marker line in a tracked text file
+                                                (file:line); exits 1 on one (read-only; the gate runs it, c0163)]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
@@ -4224,6 +4227,103 @@ function cmd.skills(pos: { string }, opts: { [string]: { string } })
 		print(line)
 	end
 	print(`skills: {#list} skills linked`)
+end
+
+-- `markers` (c0163): every tracked text file of the working tree (the tree being gated: the merge `land` makes, the
+-- branch CI checks out) is scanned for conflict marker lines. Symbolic links and submodules are not files to scan;
+-- an index entry whose file is gone from the working tree has nothing to scan. The exemptions come from origin/main's
+-- copy of the list (zz-arch rule 7), none when origin/main has none; the working tree's copy must still parse, so a
+-- malformed edit fails on the branch that makes it. Read-only, so it runs anywhere, the main checkout included.
+function cmd.markers(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		fail(`usage: ./zn markers (unknown option {k})`)
+	end
+	if #pos > 0 then
+		fail("usage: ./zn markers")
+	end
+	local problems: { string } = {}
+	local exempt: { [string]: boolean } = {}
+	local shown = sh.run("git", { "show", `origin/main:{markersLib.EXEMPTIONS}` })
+	if shown.ok then
+		local list, bad = markersLib.parseExemptions(shown.stdout)
+		exempt = list
+		for _, b in bad do
+			table.insert(problems, `origin/main's {b}`)
+		end
+	end
+	if fs.isFile(markersLib.EXEMPTIONS) then
+		local _, bad = markersLib.parseExemptions(fs.readFile(markersLib.EXEMPTIONS))
+		for _, b in bad do
+			table.insert(problems, b)
+		end
+	end
+	-- Every tracked entry's mode, for the exemptions' "is it tracked" check and to leave out links and submodules.
+	local listed = sh.run("git", { "ls-files", "-s", "-z" })
+	if not listed.ok then
+		fail(`markers: git ls-files failed: {listed.stderr}`)
+	end
+	local modes: { [string]: string } = {}
+	for entry in string.gmatch(listed.stdout, "([^%z]+)") do
+		local mode, path = string.match(entry, "^(%d+) %x+ %d+\t(.+)$")
+		if mode and path then
+			modes[path] = mode
+		end
+	end
+	-- Speed (E1): git grep, over the working tree's tracked files, names the files with a line that starts like a
+	-- marker (a superset of markers.isMarker's lines); only those are read, and markers.scan decides. Exit 1 is
+	-- "no match"; anything else is a failure, never a pass.
+	local grep = sh.run("git", {
+		"grep",
+		"-z",
+		"-l",
+		"-I",
+		"-e",
+		"^<<<<<<<",
+		"-e",
+		"^>>>>>>>",
+		"-e",
+		"^|||||||",
+		"-e",
+		"^=======",
+	})
+	if not grep.ok and grep.code ~= 1 then
+		fail(`markers: git grep failed: {grep.stderr}`)
+	end
+	local files: { { path: string, text: string } } = {}
+	for path in string.gmatch(grep.stdout, "([^%z]+)") do
+		local mode = modes[path]
+		-- 120000 a symbolic link, 160000 a submodule: neither is a text file of this tree
+		if mode and mode ~= "120000" and mode ~= "160000" and fs.isFile(path) then
+			local ok, text = pcall(fs.readFile, path)
+			if not ok then
+				fail(`markers: could not read {path}: {text}`)
+			end
+			table.insert(files, { path = path, text = text })
+		end
+	end
+	-- an exempted path must still be a tracked text file
+	local tracked: { [string]: boolean } = {}
+	for p, mode in modes do
+		if mode ~= "120000" and mode ~= "160000" then
+			tracked[p] = true
+		end
+	end
+	for _, p in markersLib.check(files, exempt, tracked) do
+		table.insert(problems, p)
+	end
+	if #problems > 0 then
+		fail(
+			table.concat(problems, "\n")
+				.. "\nresolve each conflict (or, for a file that documents markers, name it in origin/main's "
+				.. markersLib.EXEMPTIONS
+				.. ")"
+		)
+	end
+	local count = 0
+	for _ in tracked do
+		count += 1
+	end
+	print(`markers: {count} tracked files, no conflict markers`)
 end
 
 -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
