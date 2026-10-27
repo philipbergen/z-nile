@@ -70,7 +70,11 @@ end
 
 type Sent = { remote: string, player: any, args: { any } }
 type World = {
-	records: { [string]: any }, -- the PaidPlay store, by user id
+	records: { [string]: any }, -- the store of the world's mode, by user id
+	stores: { [string]: { [string]: any } }, -- every store, by name
+	passes: { [string]: any }, -- the MemoryStore pass map
+	race: ((store: { [string]: any }, key: string) -> ())?, -- another server's write, just before this one's transform
+	twice: boolean, -- UpdateAsync calls the transform first with the value it read before the race, then again
 	failWrites: boolean,
 	failReads: boolean,
 	reads: number,
@@ -129,15 +133,25 @@ local function world(mode: string?): World
 	local services: { [string]: any } = {
 		DataStoreService = {
 			GetDataStore = function(_: any, name: string): any
-				assert(name == Pay.STORE, name)
+				assert(name == Pay.STORE or name == Pay.TEST_STORE, name)
+				local held = w.stores[name]
 				return {
 					UpdateAsync = function(_: any, key: string, fn: (any) -> any): any
 						if w.failWrites then
 							error("store down", 0)
 						end
-						local nextValue = fn(w.records[key])
+						local stale = held[key]
+						local race = w.race
+						if race then
+							w.race = nil
+							race(held, key)
+						end
+						if w.twice then
+							fn(stale) -- a first call on an outdated value: its answer must not count
+						end
+						local nextValue = fn(held[key])
 						if nextValue ~= nil then
-							w.records[key] = nextValue
+							held[key] = nextValue
 						end
 						return nextValue
 					end,
@@ -151,12 +165,28 @@ local function world(mode: string?): World
 						if w.failReads then
 							error("store down", 0)
 						end
-						return w.records[key]
+						return held[key]
 					end,
 				}
 			end,
 		},
 		MarketplaceService = marketplace,
+		MemoryStoreService = {
+			GetHashMap = function(_: any, name: string): any
+				assert(name == "PaidPlayPass", name)
+				return {
+					SetAsync = function(_: any, key: string, value: any, _ttl: number)
+						w.passes[key] = value
+					end,
+					GetAsync = function(_: any, key: string): any
+						return w.passes[key]
+					end,
+					RemoveAsync = function(_: any, key: string)
+						w.passes[key] = nil
+					end,
+				}
+			end,
+		},
 		HttpService = {
 			GenerateGUID = function(): string
 				guid += 1
@@ -253,6 +283,10 @@ local function world(mode: string?): World
 	}
 	w = {
 		records = {},
+		stores = { [Pay.STORE] = {}, [Pay.TEST_STORE] = {} },
+		passes = {},
+		race = nil,
+		twice = false,
 		failWrites = false,
 		failReads = false,
 		reads = 0,
@@ -265,6 +299,7 @@ local function world(mode: string?): World
 			PlayProductId = PLAY_ID,
 			ContinueProductId = CONTINUE_ID,
 			GamePlaceId = 777,
+			LobbyPlaceId = 555,
 		},
 		remote = function(name: string): any
 			return assert(remotes[name], `no remote {name}`)
@@ -295,6 +330,8 @@ local function world(mode: string?): World
 			end
 		end,
 	}
+	w.records = w.stores[Pay.store(Pay.mode(mode, { play = PLAY_ID, continue = CONTINUE_ID }))]
+
 	return w
 end
 
@@ -323,7 +360,7 @@ end
 type Arena = { w: World, s: Session.Session, p: any }
 
 -- the game place with one player whose run is in the continue offer
-local function arena(mode: string?, ticks: number?): Arena
+local function arena(mode: string?, ticks: number?, setup: ((World) -> ())?): Arena
 	local w = world(mode)
 	local p = w.player(7)
 	local s = Session.new(Maze.parse({ "#######", "#..P..#", "#######" }, "corridor"), 1, Session.GAME_CONFIG)
@@ -332,6 +369,9 @@ local function arena(mode: string?, ticks: number?): Arena
 	continues.start(function(player: any): Session.Session?
 		return if player == p then s else nil
 	end)
+	if setup then
+		setup(w)
+	end
 	w.remote("Ready").OnServerEvent.fire(p)
 	w.flush()
 	if ticks then
@@ -419,19 +459,58 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 		end
 	)
 
-	it("a test confirmation grants a play and starts at once, in test mode only", function()
-		local test = lobby("test")
-		test.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
-		local p = test.player(7)
-		test.remote("Purchase").OnServerEvent.fire(p, "confirm")
-		t.expect(Pay.record(test.records["7"]).plays).toBe(1)
-		t.expect(#test.teleports).toBe(1)
-		local live = lobby("live")
-		live.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
-		local q = live.player(7)
-		live.remote("Purchase").OnServerEvent.fire(q, "confirm")
-		t.expect(Pay.record(live.records["7"]).plays).toBe(0)
-		t.expect(#live.teleports).toBe(0)
+	it(
+		"a test confirmation grants a play and starts at once, for a screen this server opened, in test mode only",
+		function()
+			local test = lobby("test")
+			test.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			local p = test.player(7)
+			press(test, p) -- opens the test screen
+			test.remote("Purchase").OnServerEvent.fire(p, "confirm")
+			t.expect(Pay.record(test.records["7"]).plays).toBe(1)
+			t.expect(#test.teleports).toBe(1)
+			local live = lobby("live")
+			live.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			local q = live.player(7)
+			press(live, q) -- Roblox's screen, not the test one
+			live.remote("Purchase").OnServerEvent.fire(q, "confirm")
+			t.expect(Pay.record(live.records["7"]).plays).toBe(0)
+			t.expect(#live.teleports).toBe(0)
+		end
+	)
+
+	it(
+		"a confirm with no test screen open, or after a cancel, grants nothing (lobby and play place)",
+		function()
+			local w = lobby("test")
+			w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			local p = w.player(7)
+			for _ = 1, 5 do
+				w.remote("Purchase").OnServerEvent.fire(p, "confirm")
+			end
+			t.expect(Pay.record(w.records["7"]).plays).toBe(0)
+			press(w, p)
+			w.remote("Purchase").OnServerEvent.fire(p, "cancel")
+			w.remote("Purchase").OnServerEvent.fire(p, "confirm")
+			t.expect(Pay.record(w.records["7"]).plays).toBe(0)
+			t.expect(#w.teleports).toBe(0)
+			local a = arena("test", 50)
+			for _ = 1, 5 do
+				a.w.remote("Purchase").OnServerEvent.fire(a.p, "confirm")
+			end
+			t.expect(Pay.record(a.w.records["7"]).continues).toBe(0)
+			t.expect(Session.offering(a.s, "7")).toBe(true)
+		end
+	)
+
+	it("test credits live in their own store: a live read never sees them", function()
+		local w = lobby("test")
+		w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+		local p = w.player(7)
+		press(w, p)
+		w.remote("Purchase").OnServerEvent.fire(p, "confirm")
+		t.expect(Pay.record(w.stores[Pay.TEST_STORE]["7"]).plays).toBe(1)
+		t.expect(w.stores[Pay.STORE]["7"]).toBe(nil)
 	end)
 
 	it(
@@ -557,4 +636,123 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 		t.expect(a.w.receipt(7, CONTINUE_ID, "C9")).toBe("ProductPurchaseDecision.PurchaseGranted")
 		t.expect(Pay.record(a.w.records["7"]).continues).toBe(1)
 	end)
+
+	it("in live mode a confirm during the offer grants nothing and does not continue", function()
+		local a = arena("live", 50)
+		a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+		a.w.remote("Purchase").OnServerEvent.fire(a.p, "confirm")
+		t.expect(Pay.record(a.w.records["7"]).continues).toBe(0)
+		t.expect(Session.offering(a.s, "7")).toBe(true)
+	end)
+
+	it(
+		"a live mode with a product id missing is test mode: an ask opens the test screen, never hangs",
+		function()
+			local a = arena("live", 50, function(w: World)
+				w.attributes.ContinueProductId = nil
+			end)
+			a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+			t.expect(#a.w.prompts).toBe(0)
+			t.expect(sentOn(a.w, "Purchase", a.p)).toEqual({ { "continue" } })
+		end
+	)
+
+	it(
+		"a receipt another server granted during this write counts once and is not handed on as fresh",
+		function()
+			local w = lobby("live")
+			w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+			w.player(7)
+			w.race = function(held: { [string]: any }, key: string)
+				held[key] = { free = NOW - 60, plays = 1, continues = 0, receipts = { "R1" } }
+			end
+			w.twice = true
+			t.expect(w.receipt(7, PLAY_ID, "R1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+			t.expect(Pay.record(w.records["7"]).plays).toBe(1)
+			t.expect(#w.teleports).toBe(0) -- the other server's grant started (or will start) the game, not this one
+		end
+	)
+
+	it("an arrival racing another server's free start uses a held play, not a second free start", function()
+		local a = arena("live", nil, function(w: World)
+			w.records["7"] = { free = nil, plays = 1, continues = 0, receipts = {} }
+			w.race = function(held: { [string]: any }, key: string)
+				held[key] = { free = NOW, plays = 1, continues = 0, receipts = {} }
+			end
+			w.twice = true
+		end)
+		local r = Pay.record(a.w.records["7"])
+		t.expect(r.free).toBe(NOW)
+		t.expect(r.plays).toBe(0)
+		t.expect(#a.w.teleports).toBe(0)
+	end)
+
+	it("a buy arrival goes back to the lobby with no offer; a failed write plays", function()
+		local a = arena("live", nil, function(w: World)
+			w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+		end)
+		t.expect(#a.w.teleports).toBe(1)
+		t.expect(a.w.teleports[1].destination).toBe(555)
+		t.expect(a.s.members["7"].play.offer).toBe(0)
+		local b = arena("live", nil, function(w: World)
+			w.failWrites = true
+		end)
+		t.expect(#b.w.teleports).toBe(0)
+		t.expect(b.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
+	end)
+
+	it(
+		"a player the lobby let in on a failed read plays that one game free (the user, 2026-10-26)",
+		function()
+			local a = arena("live", nil, function(w: World)
+				w.records["7"] = { free = NOW - 60, plays = 0, continues = 0, receipts = {} }
+				w.passes["7"] = true -- the lobby's pass
+			end)
+			t.expect(#a.w.teleports).toBe(0)
+			t.expect(a.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
+			t.expect(a.w.passes["7"]).toBe(nil) -- taken once
+			local l = lobby("live")
+			l.failReads = true
+			local p = l.player(8)
+			press(l, p)
+			t.expect(l.passes["8"]).toBe(true)
+		end
+	)
+
+	it("a screen closed bought before its receipt holds the offer until the receipt continues it", function()
+		local a = arena("live", 3)
+		a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+		a.w.finished(7, CONTINUE_ID, true)
+		for _ = 1, 5 do
+			Session.step(a.s)
+		end
+		t.expect(Session.offering(a.s, "7")).toBe(true)
+		t.expect(a.w.receipt(7, CONTINUE_ID, "C1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(Session.offering(a.s, "7")).toBe(false)
+		t.expect(Session.frame(a.s, "7").play.lives).toBe(Game.CONTINUE_LIVES)
+	end)
+
+	it(
+		"bought with no receipt, the countdown runs again after RECEIPT_WAIT_TICKS; not bought, at once",
+		function()
+			local a = arena("live", 3)
+			a.w.remote("Continue").OnServerEvent.fire(a.p, "ask")
+			a.w.finished(7, CONTINUE_ID, true)
+			for _ = 1, Game.RECEIPT_WAIT_TICKS - 1 do
+				Session.step(a.s)
+			end
+			t.expect(Session.frame(a.s, "7").play.timer).toBe(3)
+			for _ = 1, 4 do
+				Session.step(a.s)
+			end
+			t.expect(Session.isOver(a.s, "7")).toBe(true)
+			local b = arena("live", 3)
+			b.w.remote("Continue").OnServerEvent.fire(b.p, "ask")
+			b.w.finished(7, CONTINUE_ID, false)
+			for _ = 1, 3 do
+				Session.step(b.s)
+			end
+			t.expect(Session.isOver(b.s, "7")).toBe(true)
+		end
+	)
 end)

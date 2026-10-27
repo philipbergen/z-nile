@@ -185,6 +185,70 @@ return t.spec("f0145 the continue offer", function(it)
 	end)
 
 	it(
+		"a bought continue's receipt is awaited for RECEIPT_WAIT_TICKS at most; a continue in that wait works",
+		function()
+			t.expect(Game.RECEIPT_WAIT_TICKS).toBe(450)
+			local g = Game.new(Game.IMMEDIATE_CONFIG)
+			Game.allowOffer(g, 3)
+			for _ = 1, 3 do
+				Game.died(g)
+				Game.step(g)
+			end
+			Game.awaitReceipt(g)
+			for _ = 1, Game.RECEIPT_WAIT_TICKS - 1 do
+				Game.step(g)
+			end
+			t.expect(g.phase).toBe("offer")
+			t.expect(g.timer).toBe(3)
+			Game.step(g) -- the wait ends: the countdown runs again
+			for _ = 1, 3 do
+				Game.step(g)
+			end
+			t.expect(g.phase).toBe("gameover")
+			local h = Game.new(Game.IMMEDIATE_CONFIG)
+			Game.allowOffer(h, 3)
+			for _ = 1, 3 do
+				Game.died(h)
+				Game.step(h)
+			end
+			Game.awaitReceipt(h)
+			for _ = 1, 10 do
+				Game.step(h)
+			end
+			t.expect((select(2, Game.continue(h, Game.CONTINUE_LIVES)))).toBe(true)
+		end
+	)
+
+	it(
+		"leaving ends the run: in the last dying pause the offer never opens; in a held offer it ends next step",
+		function()
+			local s = new(true)
+			for _ = 1, 3 do
+				stepUntil(s, "playing")
+				Session.kill(s, "p")
+				if Session.frame(s, "p").play.lives > 0 then
+					Session.step(s)
+				end
+			end
+			t.expect(Session.frame(s, "p").play.phase).toBe("dying")
+			Session.leave(s, "p")
+			local seen = stepUntil(s, "gameover", 100)
+			t.expect(find(seen, "Offer")).toBe(nil)
+			local o = new(true)
+			for _ = 1, 3 do
+				stepUntil(o, "playing")
+				Session.kill(o, "p")
+				Session.step(o)
+			end
+			stepUntil(o, "offer")
+			Session.hold(o, "p", true)
+			Session.leave(o, "p")
+			Session.step(o)
+			t.expect(Session.isOver(o, "p")).toBe(true)
+		end
+	)
+
+	it(
 		"in a session: the offer keeps the run alive, a continue respawns at the start with the pellets eaten kept",
 		function()
 			local s = new(true)
