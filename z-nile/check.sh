@@ -103,7 +103,7 @@ if [[ -n $plan ]]; then
   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
   [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
-  printf 'markers: %s\n' 'every tracked text file'
+  [[ -f z-nile/engine/markers.luau ]] && printf 'markers: %s\n' 'every tracked text file'
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -183,8 +183,9 @@ for e in ${places[@]+"${places[@]}"}; do
 done
 # the skill links (c0115): one committed relative link in .claude/skills per skill folder, every project's
 [[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check
-# committed conflict markers (c0163): every tracked text file, in every mode, so land and CI both see them
-par_start "markers (./zn markers)" ./zn markers
+# committed conflict markers (c0163): every tracked text file, in every mode, so land and CI both see them; a tree
+# without z-nile's engine (a gate fixture, a one-project layout) has no ./zn to run it, as it has no skill links
+[[ -f z-nile/engine/markers.luau ]] && par_start "markers (./zn markers)" ./zn markers
 par_wait || exit 1
 
 # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
