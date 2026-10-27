@@ -1335,8 +1335,9 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			return if front then string.match("\n" .. front, "\nraft:[ \t]*([^\n]-)[ \t]*\n") else nil
 		end
 		local fresh = guard.fresh :: string
-		local carried: { [string]: boolean } = {}
-		for _, path in paths do
+		-- why each path may not be carried (nil: it may); the `only` rule reports it, after the judge's own rules
+		-- (configuration, links, sequestered names) have had their say
+		local function shapeOf(path: string): string?
 			local pid, _, rel = trackerstate.itemOf(path, roots :: { string })
 			if pid and store.isRaftId(pid :: string) then
 				if rafts[pid :: string] == "new" and rel == "check.sh" then
@@ -1359,7 +1360,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 						return `it carries {path}: {why}`
 					end
 				end
-				carried[path] = true
+				return nil
 			elseif pid then
 				local r = rootOf(path) :: string
 				local life = lifeOnBase(r, "issues", pid :: string)
@@ -1394,6 +1395,17 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 							else became}: only between empty and a raft this PR carries`
 					end
 				end
+				return nil
+			end
+			return `it carries {path}, which is not one of the raft's own items`
+		end
+		local reasons: { [string]: string } = {}
+		local carried: { [string]: boolean } = {}
+		for _, path in paths do
+			local why = shapeOf(path)
+			if why then
+				reasons[path] = why
+			else
 				carried[path] = true
 			end
 		end
@@ -1401,7 +1413,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			if path == trackerstate.COUNTER or carried[path] then
 				return nil
 			end
-			return `it carries {path}, which is not one of the raft's own items`
+			return reasons[path] or `it carries {path}, which is not one of the raft's own items`
 		end
 	end
 	local why = trackerstate.check(

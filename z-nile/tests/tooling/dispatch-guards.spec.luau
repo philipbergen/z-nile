@@ -260,7 +260,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			t.expect(has(listed.stdout, "c0092/c0092.md")).toBe(true)
 			t.expect(has(fakecli.log(h), "realgh pr merge")).toBe(false)
 			-- code review 003 F1: an existing issue's change is judged by its shape against main
-			local function doc(path: string): string
+			local function onMain(path: string): string
 				return process.exec("git", { "show", `main:{path}` }, { cwd = h.f.origin }).stdout
 			end
 			local c0093 = "pickman/.tracker/issues/active/c0093/c0093.md"
@@ -271,7 +271,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 51,
 					files = {
-						[c0093] = (string.gsub(doc(c0093), "\nraft: R0040\n", "\nraft: R0050\n"))
+						[c0093] = (string.gsub(onMain(c0093), "\nraft: R0040\n", "\nraft: R0050\n"))
 							.. "rewritten design\n",
 					},
 					says = "issues/active/c0093/c0093.md, an issue in active/",
@@ -279,13 +279,13 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				-- a backlog member's raft: line and a design edit
 				{
 					n = 53,
-					files = { [c0092] = inRaft(doc(c0092), "R0050") .. "rewritten design\n" },
+					files = { [c0092] = inRaft(onMain(c0092), "R0050") .. "rewritten design\n" },
 					says = "beyond its raft: line",
 				},
 				-- an issue naming the active raft
 				{
 					n = 54,
-					files = { [c0092] = inRaft(doc(c0092), "R0040") },
+					files = { [c0092] = inRaft(onMain(c0092), "R0040") },
 					says = "only between empty and a raft this PR carries",
 				},
 				-- a new raft straight into active/, outside the backlog folder
@@ -312,8 +312,10 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				end
 			end
 			-- code review 003 F2: a new raft's check.sh is the rendered template's RC0 lines, then only RCn checks
-			local template =
-				raftcheck.render(doc("z-nile/templates/raft/check.sh"), { ID = "R0050", PROJECT = "pickman" })
+			local template = raftcheck.render(
+				onMain("z-nile/templates/raft/check.sh"),
+				{ ID = "R0050", PROJECT = "pickman" }
+			)
 			local check = "pickman/.tracker/rafts/R0050/check.sh"
 			for _, case in
 				{
@@ -349,7 +351,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 						files = with({
 							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
 							["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
-							[c0094] = (string.gsub(doc(c0094), "\nraft: R0041\n", "\nraft: R0050\n")),
+							[c0094] = (string.gsub(onMain(c0094), "\nraft: R0041\n", "\nraft: R0050\n")),
 						}),
 					},
 				}

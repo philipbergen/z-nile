@@ -15,21 +15,20 @@ local head = raftcheck.head(rendered) :: string
 
 return t.spec("c0117 a new raft's check.sh (R0052 code review 003 F2)", function(it)
 	it("renders the template for the raft and keeps its RC0 lines as the head", function()
-		t.expect(string.find(rendered, "{{", 1, true)).toBe(nil)
+		t.expect(string.find(rendered, "{{", 1, true) == nil).toBe(true)
 		t.expect(string.find(head, "promote-check R0050", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(head, "finish", 1, true)).toBe(nil)
+		t.expect(string.find(head, "finish", 1, true) == nil).toBe(true)
 	end)
 
 	it("passes the template, and RCn checks after its RC0 lines", function()
-		for name, text in
-			{
-				template = rendered,
-				rc1 = head .. "\ncheck \"RC1: x\" bash -c 'true'\n\nfinish\n",
-				multiline = head .. "\ncheck \"RC1: x\" bash -c '\n  exit 0\n'\nfinish\n",
-				continued = head .. '\ncheck "RC1: x" "$ZN_ROOT/zn" \\\n  promote-check R0050\nfinish\n',
-				comments = head .. '\n# RC1 below\ncheck "RC1: x" true\n\n# done\nfinish\n',
-			}
-		do
+		local cases: { [string]: string } = {
+			template = rendered,
+			rc1 = head .. "\ncheck \"RC1: x\" bash -c 'true'\n\nfinish\n",
+			multiline = head .. "\ncheck \"RC1: x\" bash -c '\n  exit 0\n'\nfinish\n",
+			continued = head .. '\ncheck "RC1: x" "$ZN_ROOT/zn" \\\n  promote-check R0050\nfinish\n',
+			comments = head .. '\n# RC1 below\ncheck "RC1: x" true\n\n# done\nfinish\n',
+		}
+		for name, text in cases do
 			local why = raftcheck.judge(text, rendered)
 			if why then
 				error(`{name}: {why}`)
@@ -38,27 +37,26 @@ return t.spec("c0117 a new raft's check.sh (R0052 code review 003 F2)", function
 	end)
 
 	it("refuses an RC0 line changed, and anything after them that could change the result", function()
-		for name, text in
-			{
-				exit0 = "exit 0\n",
-				tampered = (string.gsub(rendered, "%-%-full", "--quick")),
-				semicolon = head .. '\ncheck "RC1: x" true; exit 0\nfinish\n',
-				bare = head .. "\nexit 0\nfinish\n",
-				reset = head .. "\n_ac_failed=0\nfinish\n",
-				substitution = head .. '\ncheck "RC1: x" true $(_ac_failed=0)\nfinish\n',
-				brace = head .. '\ncheck "RC1: x" true ${_ac_failed:=0}\nfinish\n',
-				quotedsubstitution = head .. '\ncheck "RC1: x" true "$(_ac_failed=0)"\nfinish\n',
-				quotedbrace = head .. '\ncheck "RC1: x" true "${_ac_failed:=0}"\nfinish\n',
-				backquote = head .. '\ncheck "RC1: x" true `x`\nfinish\n',
-				redirect = head .. '\ncheck "RC1: x" true > /dev/null\nfinish\n',
-				andand = head .. '\ncheck "RC1: x" true && exit 0\nfinish\n',
-				func = head .. '\nf() { true; }\ncheck "RC1: x" f\nfinish\n',
-				rc0 = head .. '\ncheck "RC0: again" true\nfinish\n',
-				nocommand = head .. '\ncheck "RC1: x"\nfinish\n',
-				nofinish = head .. '\ncheck "RC1: x" true\n',
-				after = rendered .. "exit 0\n",
-			}
-		do
+		local cases: { [string]: string } = {
+			exit0 = "exit 0\n",
+			tampered = (string.gsub(rendered, "%-%-full", "--quick")),
+			semicolon = head .. '\ncheck "RC1: x" true; exit 0\nfinish\n',
+			bare = head .. "\nexit 0\nfinish\n",
+			reset = head .. "\n_ac_failed=0\nfinish\n",
+			substitution = head .. '\ncheck "RC1: x" true $(_ac_failed=0)\nfinish\n',
+			brace = head .. '\ncheck "RC1: x" true ${_ac_failed:=0}\nfinish\n',
+			quotedsubstitution = head .. '\ncheck "RC1: x" true "$(_ac_failed=0)"\nfinish\n',
+			quotedbrace = head .. '\ncheck "RC1: x" true "${_ac_failed:=0}"\nfinish\n',
+			backquote = head .. '\ncheck "RC1: x" true `x`\nfinish\n',
+			redirect = head .. '\ncheck "RC1: x" true > /dev/null\nfinish\n',
+			andand = head .. '\ncheck "RC1: x" true && exit 0\nfinish\n',
+			func = head .. '\nf() { true; }\ncheck "RC1: x" f\nfinish\n',
+			rc0 = head .. '\ncheck "RC0: again" true\nfinish\n',
+			nocommand = head .. '\ncheck "RC1: x"\nfinish\n',
+			nofinish = head .. '\ncheck "RC1: x" true\n',
+			after = rendered .. "exit 0\n",
+		}
+		for name, text in cases do
 			t.expect({ name, raftcheck.judge(text, rendered) ~= nil }).toEqual({ name, true })
 		end
 	end)
