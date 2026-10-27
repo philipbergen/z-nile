@@ -11,3 +11,6 @@
 - design-review-002 F3: zz-test/no-vacuous-pass
 - design-review-002 F4: zz-arch/children-need-a-lifeline
 - design-review-003 F1: zz-test/check-sh-judges-the-whole-spec-run, z-design/spec-design-correspondence
+- design-review-004 F1: z-design/quote-evidence-not-temp-paths
+- design-review-004 F2: z-design/spec-design-correspondence
+- design-review-004 F3: zz-test/check-sh-judges-the-whole-spec-run

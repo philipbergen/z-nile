@@ -20,7 +20,11 @@ is_named() { # $1: a case name; true if a criterion names it (a named prefix)
 }
 whole_run() { # the spec's whole run: every case is named by a criterion (but set-up and clean-up), and any failing
   # case that no criterion names (set-up and clean-up included) fails every criterion
-  local spec="$A/killed-report.spec.luau" line c
+  local spec="$A/killed-report.spec.luau" line c failed lines
+  # every failure is one `FAIL <file> :: <case>` line: the summary's count must match them (design review 004 F3)
+  failed=$(sed -nE 's/^[0-9]+ passed, ([0-9]+) failed, 1 spec files$/\1/p' <<<"$report_out")
+  lines=$(grep -cE "^FAIL .* :: " <<<"$report_out")
+  [[ $failed == "$lines" ]] || { echo "the run counts ${failed:-no} failure(s) but names $lines:"; tail -20 <<<"$report_out"; return 1; }
   while IFS= read -r line; do
     c=${line#*:: }
     is_named "$c" || { echo "a case no criterion names failed:"; grep -F -A1 -- "$line" <<<"$report_out"; return 1; }
