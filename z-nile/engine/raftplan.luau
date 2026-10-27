@@ -305,20 +305,30 @@ end
 local serde = require("@lune/serde")
 
 -- The commands that carry out a plan, one argument list per op (`fold <R> <ids…>`, `new raft <type> <slug> <ids…>
--- [--single] --project <name>`), a new raft's slug its first issue's. `projectName` gives a root's project name in
+-- [--single] --project <name>`), a new raft's slug its first issue's, or that slug with `-2`, `-3`, … when a raft in
+-- `taken` (every raft's slug, from audit.sluggedLocal: c0135, a slug names one raft) or an earlier op of the plan has it. `projectName` gives a root's project name in
 -- the registry. A root it doesn't name refuses the whole plan, so nothing is printed or run (design review 006 F1).
 function raftplan.commands(
 	ops: { Op },
 	slugOf: { [string]: string },
-	projectName: (root: string) -> string?
+	projectName: (root: string) -> string?,
+	taken: { [string]: boolean }?
 ): ({ { string } }?, string?)
 	local runs: { { string } } = {}
+	local used: { [string]: boolean } = table.clone(taken or {})
 	for _, op in ops do
 		local args: { string }
 		if op.kind == "fold" then
 			args = { "fold", op.raft :: string }
 		else
-			args = { "new", "raft", op.type, slugOf[op.issues[1]] }
+			local base = slugOf[op.issues[1]]
+			local slug, n = base, 2
+			while used[slug] do
+				slug = `{base}-{n}`
+				n += 1
+			end
+			used[slug] = true
+			args = { "new", "raft", op.type, slug }
 		end
 		for _, id in op.issues do
 			table.insert(args, id)

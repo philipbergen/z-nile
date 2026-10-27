@@ -13,13 +13,15 @@ local publish = {}
 export type Change = { path: string, content: string, mode: string?, from: string? }
 export type Result = { ok: boolean, sha: string?, reason: string? }
 -- `roots`: origin/main's project roots (its z-nile/projects.toml), the only roots this publish may write under;
+-- `listed`: every file under the roots (read-only: what the build may consult, not write);
 -- `counter`: origin/main's live id counter, z-nile/next, or tracker/next while origin/main has no registry (c0114's
 -- execution window: the branch has moved the counter, origin has not yet)
 export type Build = (
 	paths: { string },
 	read: (string) -> string?,
 	roots: { string },
-	counter: string
+	counter: string,
+	listed: { string }? -- c0135: every file under the roots, read-only (`paths` holds only what may be written)
 ) -> { Change } | string
 
 local function isIssue(id: string): boolean
@@ -390,18 +392,20 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			return fail("cannot list origin/main: " .. trim(listing.stderr))
 		end
 		local paths: { string } = {}
+		local listed: { string } = {} -- c0135: every file under the roots, read-only (the slug rule reads retired rafts)
 		local onOrigin: { [string]: string } = {} -- every file under the roots (and the counter) -> its mode
 		for _, rec in string.split(listing.stdout, "\0") do
 			local mode, p = string.match(rec, "^(%d+) %a+ %x+\t(.+)$")
 			if mode and p then
 				onOrigin[p] = mode
+				table.insert(listed, p)
 				local _, _, root = publish.itemPath(p)
 				if publish.allowed(p, roots, counter) or (root and table.find(roots, root)) then
 					table.insert(paths, p)
 				end
 			end
 		end
-		local out = build(paths, buildRead, roots, counter)
+		local out = build(paths, buildRead, roots, counter, listed)
 		if type(out) == "string" then
 			return fail(out)
 		end

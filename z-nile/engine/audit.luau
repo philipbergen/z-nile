@@ -93,6 +93,112 @@ function audit.scan(root: string): { Found }
 	return out
 end
 
+-- c0135: an item's kind, slug and where it is, for the slug rule (unique within a kind, across every project root and
+-- every state, retired rafts included: a slug names one thing for good, and compaction keys items by kind and slug).
+export type Slugged = { kind: string, slug: string, id: string, path: string }
+
+-- The item of `kind` that already uses `slug` among `items`, or nil. An empty slug is never "taken".
+function audit.slugOwner(items: { Slugged }, kind: string, slug: string): Slugged?
+	if slug == "" then
+		return nil
+	end
+	for _, it in items do
+		if it.kind == kind and it.slug == slug then
+			return it
+		end
+	end
+	return nil
+end
+
+export type Clash = { kind: string, slug: string, ids: { string }, paths: { string } }
+
+-- Every slug that two or more items of one kind share, sorted by kind then slug; each clash's ids sorted.
+function audit.slugClashes(items: { Slugged }): { Clash }
+	local by: { [string]: { Slugged } } = {}
+	for _, it in items do
+		if it.slug ~= "" then
+			local key = it.kind .. "\0" .. it.slug
+			by[key] = by[key] or {}
+			table.insert(by[key], it)
+		end
+	end
+	local out: { Clash } = {}
+	for _, list in by do
+		local distinct: { [string]: boolean } = {}
+		local n = 0
+		for _, it in list do
+			if not distinct[it.id] then
+				distinct[it.id] = true
+				n += 1
+			end
+		end
+		-- one id in two folders is one item twice (`duplicate`, reported already), not two items sharing a slug
+		if n > 1 then
+			table.sort(list, function(a, b)
+				return a.id < b.id
+			end)
+			local c: Clash = { kind = list[1].kind, slug = list[1].slug, ids = {}, paths = {} }
+			for _, it in list do
+				if not table.find(c.ids, it.id) then
+					table.insert(c.ids, it.id)
+					table.insert(c.paths, it.path)
+				end
+			end
+			table.insert(out, c)
+		end
+	end
+	table.sort(out, function(a, b)
+		return if a.kind ~= b.kind then a.kind < b.kind else a.slug < b.slug
+	end)
+	return out
+end
+
+-- The items in a tree listing (repository-relative `paths`, read through `read`) under `roots`: every issue and raft
+-- document in every state folder (STATES), with its slug.
+function audit.sluggedFromTree(paths: { string }, roots: { string }, read: (string) -> string?): { Slugged }
+	local out: { Slugged } = {}
+	for _, p in paths do
+		for _, r in roots do
+			if string.sub(p, 1, #r + 1) == r .. "/" then
+				local rest = string.sub(p, #r + 2)
+				for _, kind in KINDS do
+					for _, state in STATES do
+						local pre = `{kind.dir}/{state}`
+						if string.sub(rest, 1, #pre) == pre then
+							local id, again = string.match(
+								string.sub(rest, #pre + 1),
+								"^([%u%l]%d%d%d%d)/([%u%l]%d%d%d%d)%.md$"
+							)
+							if id and id == again and ids.spaceOf(id) == kind.space then
+								local text = read(p)
+								local slug = if text then (front(text).slug or "") else ""
+								table.insert(out, {
+									kind = kind.space,
+									slug = slug,
+									id = id,
+									path = string.match(p, "^(.*)/[^/]+$") :: string,
+								})
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
+-- The items of the checkout at `root` (audit.scan's reach), with their slugs.
+function audit.sluggedLocal(root: string): { Slugged }
+	local out: { Slugged } = {}
+	for _, f in audit.scan(root) do
+		local doc = `{root}/{f.path}/{f.id}.md`
+		local slug = if fs.isFile(doc) then (front(fs.readFile(doc)).slug or "") else ""
+		table.insert(out, { kind = f.kind, slug = slug, id = f.id, path = f.path })
+	end
+	return out
+end
+
 -- The files under `dir` (relative to the checkout at `root`): the tracked ones when `root` is a repository, else every
 -- file on disk. Relative paths.
 local function filesUnder(root: string, dir: string): { string }
@@ -228,6 +334,16 @@ function audit.run(root: string): { Problem }
 				add("error", "no-document", f.path, `no {f.id}.md`)
 			end
 		end
+	end
+	-- c0135: a slug is used by one item of its kind (what `new` refuses, caught here when a merge or another engine
+	-- brings a second one in)
+	for _, c in audit.slugClashes(audit.sluggedLocal(root)) do
+		-- c0135 review 003 F1: a raft's branch is `<id>-<slug>` (the engine finds a started raft by it), so only a raft with
+		-- no branch yet may take a new slug; an issue's derived names (prep-<slug>) are only names
+		local hint = if c.kind == "raft"
+			then "edit slug: in all but one, never in a raft that has its <id>-<slug> branch: the branch name is derived from it"
+			else "edit slug: in all but one; branch and worktree names need not follow"
+		add("error", "slug-duplicate", c.paths[1], `{c.kind} {c.slug}: {table.concat(c.ids, ", ")} ({hint})`)
 	end
 	for _, paths in byId do
 		if #paths > 1 then

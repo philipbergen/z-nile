@@ -712,10 +712,44 @@ end
 
 -- Reserves the next number of `space` on origin/main by pushing only the raised counter; nil when origin/main has
 -- no tracker/next. `extra`: ids that count besides origin's (the local tree's).
-local function reserveOnOrigin(space: string, extra: { string }): number?
+-- c0135: the item of `kind` that already uses `slug` in this checkout or, when `listed` (origin/main's files under the
+-- roots, from a publish callback) is given, on origin/main too: a slug names one item of its kind wherever it is.
+local function slugTaken(
+	kind: string,
+	slug: string,
+	listed: { string }?,
+	roots: { string }?,
+	read: ((string) -> string?)?
+): audit.Slugged?
+	local items = audit.sluggedLocal(".")
+	if listed and roots and read then
+		for _, it in audit.sluggedFromTree(listed, roots, read) do
+			table.insert(items, it)
+		end
+	end
+	return audit.slugOwner(items, kind, slug)
+end
+
+-- `check` (c0135), when given, runs inside the publish callback on the tree the reservation commits on; a reason it
+-- returns fails the reservation, so nothing is published.
+local function reserveOnOrigin(
+	space: string,
+	extra: { string },
+	check: ((
+		listed: { string },
+		roots: { string },
+		read: (string) -> string?
+	) -> string?)?
+): number?
 	local chosen: number? = nil
 	refuseStale()
-	local r = published(publish.commit(".", function(paths, read, _roots, counter)
+	local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
+		if check then
+			local why = check(listed :: { string }, roots, read)
+			if why then
+				return why
+			end
+		end
 		local used = idsOf(paths, space)
 		for _, id in extra do
 			table.insert(used, id)
@@ -1064,9 +1098,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if state == "backlog" and publishing() then
 			local chosen = ""
 			refuseStale()
-			local r = published(publish.commit(".", function(paths, read, roots, counter)
+			local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
 				if not table.find(roots, root) then
 					return `{root} is not a project root in origin/main's {projects.FILE}`
+				end
+				local taken = slugTaken("issue", slug, listed :: { string }, roots, read)
+				if taken then
+					return `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
 				end
 				local ids = idsOf(paths, "issue")
 				for _, id in localIds("issue") do
@@ -1119,8 +1157,20 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			print(`{root}/issues/{chosen}/{chosen}.md`)
 			return
 		end
+		-- offline only this checkout is known; publishing, the reservation checks origin/main too, on its own tree
+		local takenHere = slugTaken("issue", slug)
+		if takenHere then
+			fail(`new: slug {slug} is taken by {takenHere.id} ({takenHere.path}): choose another`)
+		end
 		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
-		local reserved = if publishing() then reserveOnOrigin("issue", localIds("issue")) else nil
+		local reserved = if publishing()
+			then reserveOnOrigin("issue", localIds("issue"), function(listed, roots, read)
+				local taken = slugTaken("issue", slug, listed, roots, read)
+				return if taken
+					then `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
+					else nil
+			end)
+			else nil
 		local n = reserved
 			or localNumber("issue", function()
 				return store.nextNumber("issue", originIds("issue"))
@@ -1171,7 +1221,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			-- c0116: one fresh value, so `release` and the same-claim test never mistake another raft's claim for it
 			local claim = freshStamp("preparing")
 			refuseStale()
-			local r = published(publish.commit(".", function(paths, read, roots, counter)
+			local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
+				local taken = slugTaken("raft", slug, listed :: { string }, roots, read)
+				if taken then
+					return `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
+				end
 				-- a raft lives in its members' project, and never spans two (c0114)
 				root = ""
 				for _, id in ids do
@@ -1298,6 +1352,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			sh.git({ "commit", "--quiet", "-m", `tracker: {chosen} members` })
 			print(`{root}/rafts/{chosen}/{chosen}.md`)
 			return
+		end
+		local takenHere = slugTaken("raft", slug)
+		if takenHere then
+			fail(`new: slug {slug} is taken by {takenHere.id} ({takenHere.path}): choose another`)
 		end
 		local members: { store.Item } = {}
 		for i = 4, #pos do
@@ -3614,10 +3672,17 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 	-- since c0115 a new raft names its project: every command is built, and a root no project holds refused, before
 	-- anything is printed or run (design review 006 F1)
 	local reg = projects.load()
+	-- c0135: every raft's slug, so a planned raft never asks `new raft` for one a raft already has
+	local takenRaftSlugs: { [string]: boolean } = {}
+	for _, it in audit.sluggedLocal(".") do
+		if it.kind == "raft" and it.slug ~= "" then
+			takenRaftSlugs[it.slug] = true
+		end
+	end
 	local runs, why = raftplan.commands(ops, slugOf, function(root: string): string?
 		local project = projects.projectOf(reg, root)
 		return if project then project.name else nil
-	end)
+	end, takenRaftSlugs)
 	if not runs then
 		fail(why :: string)
 	end
