@@ -13,6 +13,7 @@
 | 9 | 2026-10-29 04:08 | design-refute-005 | 0 | 0 | 10.0 | spend | design-review |  |
 | 10 | 2026-10-29 04:52 | design, acceptance specs, and the cicd prototype; design-review minutes already recorded | 1037 | 1 | 180.0 | spend | prep |  |
 | 11 | 2026-10-29 05:44 | c0172: verify on the merging machine and let Actions only deploy  A merge runs the local full gate in a clone outside the repo, then lune run scripts/cicd. GitHub Actions publishes a ready pull request and is not read. | 1015 | 898 | 25.0 | focus | build |  |
+| 12 | 2026-10-29 05:50 | c0172: record the promote-check stop  The sequestered cicd spec does not type-check once promoted, so the raft check cannot pass and execution stops. | 0 | 0 | 10.0 | focus | build |  |
 
-**Total:** +2052 / -899 lines, 418.0 agent-minutes, 0 tokens over 11 records
-<!-- totals: added=2052 removed=899 minutes=418.0 records=11 tokens=0 -->
+**Total:** +2052 / -899 lines, 428.0 agent-minutes, 0 tokens over 12 records
+<!-- totals: added=2052 removed=899 minutes=428.0 records=12 tokens=0 -->
