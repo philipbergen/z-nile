@@ -19,6 +19,7 @@
 | 15 | 2026-10-29 06:23 | R0063: review-001 | 0 | 0 | 15.0 | focus | code-review |  |
 | 16 | 2026-10-29 06:24 | R0063: refute-001 | 2 | 0 | 8.0 | focus | code-review |  |
 | 17 | 2026-10-29 06:26 | R0063: review-002 | 0 | 0 | 12.0 | focus | code-review |  |
+| 18 | 2026-10-29 06:26 | c0172: record the review and the follow-ups | 0 | 0 | 6.0 | focus | deliver |  |
 
-**Total:** +2054 / -899 lines, 476.0 agent-minutes, 0 tokens over 17 records
-<!-- totals: added=2054 removed=899 minutes=476.0 records=17 tokens=0 -->
+**Total:** +2054 / -899 lines, 482.0 agent-minutes, 0 tokens over 18 records
+<!-- totals: added=2054 removed=899 minutes=482.0 records=18 tokens=0 -->
