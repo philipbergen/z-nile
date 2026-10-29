@@ -21,6 +21,7 @@
 | 17 | 2026-10-29 06:26 | R0063: review-002 | 0 | 0 | 12.0 | focus | code-review |  |
 | 18 | 2026-10-29 06:26 | c0172: record the review and the follow-ups | 0 | 0 | 6.0 | focus | deliver |  |
 | 19 | 2026-10-29 06:30 | c0172: record the gate after merging main | 0 | 0 | 4.0 | focus | deliver |  |
+| 20 | 2026-10-29 06:35 | c0172: allow the merge spec to quote the fence variable | 9 | 0 | 8.0 | focus | deliver |  |
 
-**Total:** +2054 / -899 lines, 486.0 agent-minutes, 0 tokens over 19 records
-<!-- totals: added=2054 removed=899 minutes=486.0 records=19 tokens=0 -->
+**Total:** +2063 / -899 lines, 494.0 agent-minutes, 0 tokens over 20 records
+<!-- totals: added=2063 removed=899 minutes=494.0 records=20 tokens=0 -->
