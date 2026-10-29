@@ -17,6 +17,7 @@
 | 13 | 2026-10-29 06:14 | c0172: make the cicd spec type-check on promotion  The user asked to fix the promote-check failure and land. The written version is a local, and the publish branch requires the place capture, which a match already fills. | 0 | 0 | 8.0 | focus | build |  |
 | 14 | 2026-10-29 06:21 | c0172: record the full-gate times  The raft check is 3/3 and the every-project full gate passed. The slow specs are the ones R0055 already scheduled. | 0 | 0 | 5.0 | focus | build |  |
 | 15 | 2026-10-29 06:23 | R0063: review-001 | 0 | 0 | 15.0 | focus | code-review |  |
+| 16 | 2026-10-29 06:24 | R0063: refute-001 | 2 | 0 | 8.0 | focus | code-review |  |
 
-**Total:** +2052 / -899 lines, 456.0 agent-minutes, 0 tokens over 15 records
-<!-- totals: added=2052 removed=899 minutes=456.0 records=15 tokens=0 -->
+**Total:** +2054 / -899 lines, 464.0 agent-minutes, 0 tokens over 16 records
+<!-- totals: added=2054 removed=899 minutes=464.0 records=16 tokens=0 -->
