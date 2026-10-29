@@ -178,15 +178,18 @@ local function serve(opts: {
 							return { status = 412, body = "conflict" }
 						end
 						versionN += 1
-						saved = { version = `v{versionN}`, body = req.body }
+						-- `saved` is an upvalue, so the assignment does not narrow it for the type checker
+						local writtenVersion = `v{versionN}`
+						saved = { version = writtenVersion, body = req.body }
 						return {
 							status = 200,
-							body = serde.encode("json" :: "json", { version = saved.version }),
+							body = serde.encode("json" :: "json", { version = writtenVersion }),
 						}
 					end
 				end
 				local universe, place = string.match(req.path, "^/universes/v1/(%d+)/places/(%d+)/versions$")
-				if req.method == "POST" and universe ~= nil then
+				-- a match fills both captures, so requiring place narrows it and changes no request
+				if req.method == "POST" and universe ~= nil and place ~= nil then
 					if opts.failPublish then
 						return { status = 400, body = "publish failed" }
 					end

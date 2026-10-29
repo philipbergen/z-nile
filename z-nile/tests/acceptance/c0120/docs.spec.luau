@@ -66,14 +66,13 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 			"`./zn check` runs a pickman item's `check.sh` from `pickman/` and a z-nile item's from `z-nile/`",
 			w
 		)
-		at(s, "CI runs one gate job per project, `gate (<project>)`, and branch protection requires each", w)
-		at(s, "adding a project means a registry entry, a CI matrix entry and a new required check", w)
+		at(s, "Adding a project needs a registry entry only.", w)
 		at(s, "`./zn find` and `members` print paths from the folder you run them in", w)
 		at(s, "`tracker/` is a retired root (c0120)", w)
 		at(s, "`./zn audit` and the gate fail if anything else appears there", w)
 		at(
 			s,
-			"`check.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`",
+			"`deploy.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`.",
 			w
 		)
 		at(s, "a branch from before c0120 that added a file in a pickman item's folder", w)
