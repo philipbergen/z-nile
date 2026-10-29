@@ -9,6 +9,13 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the only Actions workflow publishes the place and does not run the gate or the runtime tests" \
+	lune run tests/run -- "$A/deploy.spec.luau"
+check "AC2: deliver and merge on the local full gate, and the skills do not send the agent to Actions" \
+	lune run tests/run -- "$A/merge.spec.luau"
+check "AC3: the narrowed promoted specs are exactly the narrowed text" \
+	lune run tests/run -- "$A/narrowed.spec.luau"
+check "AC4: the cicd command reserves the CICD places, publishes them, and runs both runtime suites" \
+	bash -c 'cd "$ZN_ROOT/pickman" && lune run tests/run -- "$1"' cicd "../${A#"$ZN_ROOT/"}/cicd.spec.luau"
 
 finish
