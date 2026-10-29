@@ -1,0 +1,44 @@
+# Harvest: c0166
+
+- design-review-001 F1: z-design/never-narrow-captured-scope, z-design/filter-proves-recall
+- design-review-001 F2: z-design/run-the-other-rafts-specs
+- design-review-001 F3: z-design/new-rules-migrate-existing-work
+- design-review-001 F4: z-design/one-reading-per-value
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/required-steps-on-every-path, zz-arch/refusals-are-gate-checks
+- design-review-001 F7: z-design/one-reading-per-value
+- design-review-001 F8: z-design/spec-design-correspondence, zz-test/pin-fail-safes-where-they-act
+- design-review-001 F9: z-design/accepted-risks-checked-and-decided
+- design-review-001 F10: zz-test/promoted-specs-pin-rules-not-sets, zz-review/recommendations-pick-spec-or-check
+- design-review-001 F11: z-design/instructions-runnable-where-they-run, z-design/no-check-red-between-steps
+- design-review-001 F12: z-design/spec-design-correspondence
+- design-review-001 F13: z-design/spec-design-correspondence
+- design-review-001 F14: z-design/prove-specs-pass-on-a-prototype
+- note review 001 asked for a recall lesson, filed here: z-design/filter-proves-recall
+- design-review-002 F1: zz-arch/table-reaches-pure-functions, zz-arch/one-reader-per-format
+- design-review-002 F2: z-design/spec-design-correspondence, z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F3: z-design/one-reading-per-value
+- design-review-002 F4: zz-test/no-vacuous-pass
+- design-review-002 F5: zz-test/pin-fail-safes-where-they-act, z-design/fallbacks-name-the-modes-they-cover
+- design-review-002 F6: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-002 F7: zz-test/promoted-specs-pin-rules-not-sets, zz-review/recommendations-pick-spec-or-check
+- design-review-002 F8: z-design/never-narrow-captured-scope, z-design/filter-proves-recall
+- design-review-002 F9: zz-arch/parsers-refuse-ambiguity
+- design-review-002 F10: z-design/new-rules-migrate-existing-work
+- design-review-002 F11: z-design/spec-design-correspondence, zz-test/kill-mutants-where-the-value-is-built
+- design-review-002 F12: z-design/restated-rules-move-together
+- design-review-002 F13: z-design/rerun-skipped-checks-after-edits
+- note review 002 candidate lesson, table passed to pure functions: zz-arch/table-reaches-pure-functions
+- design-review-003 F1: z-design/spec-design-correspondence, z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F2: z-design/prove-specs-pass-on-a-prototype, zz-test/no-vacuous-pass
+- design-review-003 F3: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F4: zz-test/pin-fail-safes-where-they-act
+- design-review-003 F5: z-design/restated-rules-move-together
+- design-review-003 F6: z-design/one-reading-per-value
+- design-review-003 F7: z-design/new-rules-migrate-existing-work
+- design-review-003 F8: zz-test/pin-fail-safes-where-they-act
+- design-review-003 F9: z-design/accepted-risks-checked-and-decided
+- design-review-003 F10: z-design/spec-design-correspondence
+- design-review-003 F11: z-design/one-reading-per-value
+- design-review-003 F12: z-design/restated-rules-move-together
+- note review 003 candidate lesson, two rules on the same record: z-design/spec-design-correspondence

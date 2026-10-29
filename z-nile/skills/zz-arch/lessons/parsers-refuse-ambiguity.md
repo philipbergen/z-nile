@@ -2,7 +2,7 @@
 title: A format holds every repeat, and its parser refuses ambiguity
 when: both
 tags: [parsers, formats, data-loss]
-check: Can this format hold every repeat of what it records (several sources, several values), and does its parser refuse a repeated or ambiguous field instead of silently keeping one?
+check: Can this format hold every repeat of what it records, and does its parser refuse a repeated field or a reserved keyword used as a name instead of silently keeping one?
 ---
 A record shaped for one value loses the second one, and a parser that keeps the last of two keys loses the first without a word. Both look fine in every test that writes one value. Give repeatable things a repeatable form (a list or one entry per value), and make the parser name a repeated single-value field as a problem.
 

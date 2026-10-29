@@ -2,7 +2,7 @@
 title: A fail-safe is pinned where the code acts on it
 when: both
 tags: [fail-safe, mutants, specs]
-check: For each fail-safe the design states ("when X can't be read, keep the old answer"), is there a case that makes X unreadable where the decision is taken (end to end), not only a case on the pure rule, so a caller that bypasses the rule's fallback fails? And is it pinned at every place it is applied (each reader of the record, each owner check), not only the first one?
+check: For each fail-safe the design states ("when X can't be read, keep the old answer"), is there an end-to-end case that makes X unreadable at every caller that acts on it, not only on the pure rule or the first reader?
 ---
 A pure rule can say "unknown means hold", while the function that feeds it turns the unknown into something else first (returns early, defaults a value). A spec on the pure rule passes either way.
 

@@ -2,7 +2,7 @@
 title: One reader per format
 when: both
 tags: [parsers, drift]
-check: Does a new reader of an existing format reuse the existing reader, or match it exactly and say so?
+check: Does a new reader of an existing format reuse the existing reader (passing the parsed value into pure functions from the caller), or match it exactly and say so?
 ---
 Two parsers of one format drift apart, and then each tool sees a different set of records. Reuse the existing reader. If it cannot be shared, copy its pattern exactly and name it in a comment and in the Design.
 

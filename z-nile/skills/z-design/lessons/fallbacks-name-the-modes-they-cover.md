@@ -2,7 +2,7 @@
 title: A fallback names every supported mode that takes it
 when: design
 tags: [fallbacks, scope, sandboxes]
-check: For each fallback ("where X is refused, keep the old behaviour"), which supported modes of running take it (the jail, an outer sandbox, CI, Linux, a plain shell), and does the Problem the issue solves still get solved in each of them?
+check: For each fallback ("where X is refused, keep the old behaviour"), which supported modes of running take it (the jail, an outer sandbox, CI, Linux, a plain shell), does the Problem the issue solves still get solved in each of them, and does each named mode have a case (both absent and present-but-unusable)?
 ---
 A fallback written for one place ("inside the jail ps is refused, so the pid holds as before") can quietly cover a mode the issue exists to fix, and then the fix does nothing there and nobody decided that.
 

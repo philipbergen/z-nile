@@ -2,7 +2,7 @@
 title: No check is red between the steps that use it
 when: design
 tags: [process, gate]
-check: Does any check that runs between rounds or steps (the reviewer's own run, the gate, an acceptance check) depend on work the process does only at a later step?
+check: Does any check that runs between rounds or steps (the reviewer's own run, the gate, an acceptance check) depend on work the process does only at a later step, rather than letting the same commit add the data the check reads before it runs?
 ---
 If a step's output is checked but the step comes late in the process, every run of that check before then fails. Reviewers then report it, and a gate turns red. Do the work at the step that creates its input, or make the check run only after that step.
 

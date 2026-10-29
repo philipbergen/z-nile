@@ -2,7 +2,7 @@
 title: A "comes from X" mutant is killed where the value is built, not where it is passed in
 when: design
 tags: [mutants, call-sites, registry]
-check: For each "comes from X" rule, does some case go through the caller that reads X, rather than a function the test hands the value to?
+check: For each "comes from X" rule, does some case go through the caller that reads X (rather than handing the value in), and is that the case whose deletion lets the mutant live?
 ---
 A case that calls `f(value)` with the value supplied by the test proves `f` uses its parameter, not that the caller builds that parameter from the right source. A hand list in the caller then passes every spec while the Rules table claims the kill.
 

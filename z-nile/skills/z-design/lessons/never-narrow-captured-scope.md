@@ -2,7 +2,8 @@
 title: Only the user narrows captured scope
 when: design
 tags: [scope, process]
-check: Does every outcome in the issue's capture (`./zn capture <id>`: its title, Problem and Solution ideas) still have a Design and an acceptance criterion (Checked, or Judged or Observed only where the zz-test skill allows it), and is every outcome removed, deferred or reworded away backed by a `Scope decision (user, …)` or `Decided with the user (…)` line?
+check: Does every outcome in the issue's capture (`./zn capture <id>`: its title, Problem and Solution ideas) still have a Design and an acceptance criterion (Checked, or Judged or Observed only where the zz-test skill allows it), and is every outcome removed, deferred, reworded away, or dropped by a selector backed by a `Scope decision (user, …)` or `Decided with the user (…)` line?
+
 ---
 The capture (title, Problem and the user's Solution ideas) is the scope. Prep adds the Design and criteria and may add detail, but it never rewrites, narrows, defers or drops an outcome the capture asks for. When an outcome is too hard, too big, or blocked by today's code, the options go to the user, and the answer is written into the Problem with its date and words. A captured scope too big for one raft is split into sequenced rafts, not shrunk.
 

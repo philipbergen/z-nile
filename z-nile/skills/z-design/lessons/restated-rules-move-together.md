@@ -2,7 +2,7 @@
 title: Restated rules move together
 when: design
 tags: [stale-text, docs]
-check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree, and is the new wording pinned? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone, by a search for the old non-goal's words and for "either order"?
+check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree or point to one owner, with the new wording pinned and any lesson rewrite folded into the general rule? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone?
 ---
 A rule is usually stated in one place and summarized in several others. A fix that changes the rule but not the summaries leaves an executor or a future agent reading the old rule.
 

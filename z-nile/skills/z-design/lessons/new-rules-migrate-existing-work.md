@@ -2,7 +2,7 @@
 title: A new rule says how existing work gets through it
 when: design
 tags: [process, migration, rollout]
-check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up?
+check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what named path or fallback does the design give them instead of a silent empty match, and, for a one-time migration, do writers that still produce the old shape get picked up?
 ---
 A new requirement is written for the work that comes after it, but it is checked against everything already in flight. Prepared rafts, active ones and preps open on a branch were made under the old rules and fail the new check the moment it lands, unless the design gives them a path (a migration, a harvest-at-confirm, an exemption, or an order).
 

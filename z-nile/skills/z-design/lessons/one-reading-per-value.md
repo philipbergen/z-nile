@@ -2,7 +2,7 @@
 title: A value two conventions could mean gets one reading, chosen from its own text
 when: design
 tags: [conventions, exemptions, paths]
-check: For each value this rule reads (a path, an id, a name), which readings could it have, which one does the rule pick and from what in the value, and does a case show that the reading not meant exempts or matches nothing?
+check: For each value this rule reads (a path, an id, a name, a per-loop count versus a sum, an order), which readings could it have, which one does the rule pick from its text or history, and does a case show that the reading not meant exempts or matches nothing?
 ---
 When a field is written in two conventions (Touched modules repository-relative in some documents, home-relative in others), accepting both readings for every value doubles what each value claims: an exemption meant for one path now covers a second path nobody creates.
 

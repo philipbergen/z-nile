@@ -2,7 +2,7 @@
 title: A rule handed to another raft is run against that raft's specs
 when: design
 tags: [rafts, conflicts, specs]
-check: When this raft hands another prepared raft a rule ("whoever lands second does X"), has X been checked against that raft's sequestered and promoted specs, and do both rafts' specs pass with both changes in, whichever lands second?
+check: When this raft hands another prepared raft a rule ("whoever lands second does X"), has X been checked against that raft's sequestered and promoted specs (including any backticked command pin and its closing backtick), and do both rafts' specs pass with both changes in, whichever lands second?
 ---
 A rule that looks easy from this raft's side can be impossible from the other's: the other raft's sequestered specs pin what it builds, and its executor may not edit them, so a rule that breaks one of them stops that raft.
 

@@ -2,7 +2,7 @@
 title: A promoted spec pins the rule, not today's set
 when: both
 tags: [specs, regression, promotion]
-check: Does any promoted case assert the exact current set of something later work is expected to extend (skills, folders, links, registry entries, lessons), instead of the rule each member must meet?
+check: Does any promoted case assert the exact current set of something later work is expected to extend (skills, folders, links, registry entries, lessons, an area table), instead of the rule each member must meet?
 ---
 A spec that says "these are exactly the ten skills" or "pickman's skills hold no lesson" is true on the day it is promoted and turns red the day a planned issue adds the eleventh skill or the first lesson. That issue must then override it, or worse, an unrelated raft's `done` gate goes red.
 

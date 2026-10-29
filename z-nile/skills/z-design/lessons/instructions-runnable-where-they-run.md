@@ -2,7 +2,7 @@
 title: Instructions must be runnable where they are read
 when: design
 tags: [skills, worktrees]
-check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a reviewer or stream subagent that may not publish), and without breaking a project rule? And does every step that runs specs before the issue's code exists name the cases expected to pass then, and what a failure means?
+check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a harvest that edits only data files it is allowed to change, a reviewer or stream subagent that may not publish), and without breaking a project rule? And does every step that runs specs before the issue's code exists name the cases expected to pass then, and what a failure means?
 ---
 An instruction added to many skills has to fit each skill's context. Writing a file is impossible in the main checkout, cannot land through a capture, and is forbidden to a reviewer. Where the action cannot happen, route it to something that can land (an issue, the author's harvest).
 

@@ -2,7 +2,7 @@
 title: Rerun the checks the runner skips after every edit they guard
 when: design
 tags: [acceptance, types, process]
-check: Which checks for this draft does the test runner not run (a type check, a promotion dry run, a lint, a format check), and has each been rerun since the last edit it guards?
+check: Which checks for this draft does the test runner not run (a type check, a promotion dry run, a lint, a format check), and has each been rerun since the last edit it guards, including a lint after a rename?
 ---
 Some checks pass once and are never run again, because the everyday loop (running specs) does not include them. An edit made after that single run can break them silently, and the breakage surfaces only when someone (the executor, CI, `done`) finally runs them, often where it can no longer be fixed.
 

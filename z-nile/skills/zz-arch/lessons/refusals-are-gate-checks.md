@@ -2,7 +2,7 @@
 title: A refusal any one tracked file can trigger is also a gate check
 when: design
 tags: [guards, gate, recovery]
-check: Can a pull request that triggers this refusal pass CI? If one lands anyway, where is the recovery written, and does it work while the tool refuses?
+check: Can a pull request that triggers this refusal pass CI, or does the gate run the same check against the merge base so a clean main stays green? If one lands anyway, where is the recovery written, and does it work while the tool refuses?
 ---
 A guard that fails closed on the contents of a tracked file (a committed conflict, a bad registry) stops the whole tool in every checkout once one such file reaches main, and the tool's own commands can't fix it because they refuse.
 

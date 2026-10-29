@@ -2,7 +2,7 @@
 title: Specs and Design correspond one to one
 when: design
 tags: [acceptance, rules-and-mutants]
-check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older, stricter case (delete the case: does its row's mutant still die)?
+check: Does every behaviour and label the Design states (including metrics rows, harvest notes, and unparseable-file refusals) have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older case? And when two rules read the same record, does a case show one commit satisfying both without one rule refusing what the other requires?
 ---
 Sequestered specs and the Design must match in both directions. A stated behaviour with no failing case (a refusal, an output format, an order) can be implemented wrong. An assertion the Design never states (message wording, which stream) can fail a correct implementation that the executor may not fix.
 

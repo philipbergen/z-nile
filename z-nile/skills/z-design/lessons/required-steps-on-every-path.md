@@ -2,7 +2,7 @@
 title: A required step sits on every path
 when: design
 tags: [process, branches]
-check: Does every step that must always happen sit on a path that every branch of the process takes (an approving round, no findings, a single issue, no streams), and does something notice if it was skipped?
+check: Does every step or refusal that must always happen sit on every path of the process (an approving round, no findings, a single issue, no streams, a plain git commit caught by a command or gate check against the merge base), and does something notice if it was skipped?
 ---
 A step placed inside a branch runs only when that branch is taken. Processes have shortcuts ("approve with no findings, go to Phase 5"), and a required step behind a shortcut is silently skipped in the common case.
 
