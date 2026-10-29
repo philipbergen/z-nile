@@ -23,6 +23,7 @@
 | 19 | 2026-10-29 06:30 | c0172: record the gate after merging main | 0 | 0 | 4.0 | focus | deliver |  |
 | 20 | 2026-10-29 06:35 | c0172: allow the merge spec to quote the fence variable | 9 | 0 | 8.0 | focus | deliver |  |
 | 21 | 2026-10-29 06:42 | tracker: done R0063 | 0 | 0 | 6.4 | raft | deliver |  |
+| 22 | 2026-10-29 06:48 | deliver | 0 | 0 | 6.0 | spend | deliver |  |
 
-**Total:** +2063 / -899 lines, 500.4 agent-minutes, 0 tokens over 21 records
-<!-- totals: added=2063 removed=899 minutes=500.4 records=21 tokens=0 -->
+**Total:** +2063 / -899 lines, 506.4 agent-minutes, 0 tokens over 22 records
+<!-- totals: added=2063 removed=899 minutes=506.4 records=22 tokens=0 -->
