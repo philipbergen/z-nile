@@ -16,6 +16,7 @@
 | 12 | 2026-10-29 05:50 | c0172: record the promote-check stop  The sequestered cicd spec does not type-check once promoted, so the raft check cannot pass and execution stops. | 0 | 0 | 10.0 | focus | build |  |
 | 13 | 2026-10-29 06:14 | c0172: make the cicd spec type-check on promotion  The user asked to fix the promote-check failure and land. The written version is a local, and the publish branch requires the place capture, which a match already fills. | 0 | 0 | 8.0 | focus | build |  |
 | 14 | 2026-10-29 06:21 | c0172: record the full-gate times  The raft check is 3/3 and the every-project full gate passed. The slow specs are the ones R0055 already scheduled. | 0 | 0 | 5.0 | focus | build |  |
+| 15 | 2026-10-29 06:23 | R0063: review-001 | 0 | 0 | 15.0 | focus | code-review |  |
 
-**Total:** +2052 / -899 lines, 441.0 agent-minutes, 0 tokens over 14 records
-<!-- totals: added=2052 removed=899 minutes=441.0 records=14 tokens=0 -->
+**Total:** +2052 / -899 lines, 456.0 agent-minutes, 0 tokens over 15 records
+<!-- totals: added=2052 removed=899 minutes=456.0 records=15 tokens=0 -->
