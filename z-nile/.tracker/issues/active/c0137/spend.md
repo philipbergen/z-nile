@@ -10,6 +10,7 @@
 | 6 | 2026-10-27 03:55 | design-review-001 | 0 | 0 | 10.0 | spend+proportional | design-review | 36666 |
 | 7 | 2026-10-27 04:31 | c0137: verified on the raft's tree (edits landed with the prep) | 0 | 0 | 5.0 | focus | build |  |
 | 8 | 2026-10-27 04:51 | c0135: slugs.spec two-bases case passes the typed ops (user-authorized sequestered edit; promote-check type error) | 0 | 0 | 10.0 | focus | build |  |
+| 9 | 2026-10-31 20:42 | R0061: review-001 | 0 | 0 | 20.0 | focus | code-review | 140000 |
 
-**Total:** +0 / -0 lines, 110.0 agent-minutes, 126666 tokens over 8 records
-<!-- totals: added=0 removed=0 minutes=110.0 records=8 tokens=126666 -->
+**Total:** +0 / -0 lines, 130.0 agent-minutes, 266666 tokens over 9 records
+<!-- totals: added=0 removed=0 minutes=130.0 records=9 tokens=266666 -->
