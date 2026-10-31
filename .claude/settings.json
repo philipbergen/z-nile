@@ -1,5 +1,8 @@
 {
   "permissions": {
+    "deny": [
+      "Agent(fork)"
+    ],
     "allow": [
       "Bash(scripts/check.sh:*)",
       "Bash(scripts/tracker.sh list:*)",
