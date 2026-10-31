@@ -195,4 +195,15 @@ return t.spec("f0145 Pay", function(it)
 		t.expect(s1.continues).toBe(1)
 		t.expect(Pay.status(r, NOW + Pay.FREE_SECONDS).free).toBe(true)
 	end)
+
+	it("a refund is its own credit: each one counts, and none takes a receipt slot", function()
+		-- design review 003 F4
+		local r = Pay.record({ free = nil, plays = 0, continues = 0, receipts = { "A", "B" } })
+		local once = Pay.refund(r)
+		local twice = Pay.refund(once)
+		t.expect(once.continues).toBe(1)
+		t.expect(twice.continues).toBe(2)
+		t.expect(twice.receipts).toEqual({ "A", "B" })
+		t.expect(r.continues).toBe(0) -- the record given is not changed
+	end)
 end)

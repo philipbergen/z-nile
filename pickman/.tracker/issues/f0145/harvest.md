@@ -14,3 +14,8 @@
 - design-review-002 F4: z-design/accepted-risks-checked-and-decided
 - design-review-002 F5: z-design/fallbacks-name-the-modes-they-cover
 - design-review-002 F6: z-design/spec-design-correspondence
+- design-review-003 F1: zz-arch/client-triggered-reads-guarded
+- design-review-003 F2: zz-arch/spends-recheck-after-the-write
+- design-review-003 F3: z-design/accepted-risks-checked-and-decided
+- design-review-003 F4: z-design/reasoned-rows-claim-testable-reasons
+- design-review-003 F5: one-off: a table keyed by a Player set after a yield the player left during; the arrival now returns when the player is gone
