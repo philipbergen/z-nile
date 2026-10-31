@@ -58,8 +58,12 @@ MUTANTS = [
     ("C2", C, "touchTaps, pair = Boost.tap(touchTaps, os.clock())", "touchTaps, pair = Boost.taps(), false", "adapters"),
     ("C3", C, "					k.point(effect.quarters)", "					local _ = effect.quarters", "adapters"),
     ("C4", C, "		forget()\n		ids = {}", "		fingers = Touch.empty()\n		ids = {}", "adapters"),
-    ("C8", C, "fingers, effects = Touch.tick(fingers, os.clock(), controlsNow())", "fingers, effects = fingers, {}", "adapters"),
-    ("C9", C, "			if laidOut ~= nil then\n				forget()\n			end\n", "", "adapters"),
+    ("C8", C, "fingers, ticked = Touch.tick(fingers, os.clock(), controlsNow())", "fingers, ticked = fingers, {}", "adapters"),
+    ("C9", C, "		if laidOut ~= nil and not Touch.same(placed, laidOut) then\n			forget()\n		end\n", "", "adapters"),
+    ("C10", C, "if laidOut ~= nil and not Touch.same(placed, laidOut) then", "if laidOut ~= nil and placed ~= laidOut then", "adapters"),
+    ("C11", C, "task.delay(Touch.TAP_SECONDS, function()", "task.delay(0, function()", "adapters"),
+    ("U1", T, "		return p.x == q.x and p.y == q.y and p.r == q.r", "		return p.x == q.x and p.y == q.y", "fold"),
+    ("U2", T, "		return p.x == q.x and p.y == q.y and p.w == q.w and p.h == q.h", "		return p.x == q.x and p.y == q.y", "fold"),
     ("C5", C, "			onKnobs(Touch.knobs(fingers, placed))", "			onKnobs({})", "adapters"),
     ("C6", C, "x = sx, y = sy, t = os.clock() }", "x = sx, y = sy }", "adapters"),
     ("C7", C, "elseif effect.kind == \"hop\" then\n				intent:FireServer(Hop.INTENT)", "elseif effect.kind == \"hop\" then\n				fire()", "adapters"),
@@ -95,6 +99,11 @@ def run(spec):
 
 
 def main():
+    # every mutant is undone with `git checkout`, so uncommitted work would be lost with it
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", "src"], capture_output=True, text=True).stdout
+    if dirty.strip():
+        print("refusing: the prototype's src has uncommitted changes; commit them first:\n" + dirty)
+        sys.exit(2)
     bad = []
     for spec in ["fold", "clear", "adapters", "look", "docs"]:
         o = run(spec)

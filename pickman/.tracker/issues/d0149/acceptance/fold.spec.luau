@@ -304,6 +304,33 @@ return t.spec("d0149 the touch circles' fold", function(it)
 		end
 	)
 
+	it(
+		"Touch.same: the same places are the same controls, whatever the tables; any moved number is not",
+		function()
+			local function copy(b: any): any
+				return {
+					steer = table.clone(b.steer),
+					look = table.clone(b.look),
+					fire = table.clone(b.fire),
+					pick = table.clone(b.pick),
+				}
+			end
+			local a = copy(CTX)
+			t.expect(Touch.same(a, copy(CTX))).toBe(true)
+			t.expect(Touch.same(nil, nil)).toBe(true)
+			t.expect(Touch.same(a, nil)).toBe(false)
+			for _, key in { "steer", "look", "fire", "pick" } do
+				for _, field in { "x", "y", "r", "w", "h" } do
+					local b = copy(CTX)
+					if b[key][field] ~= nil then
+						b[key][field] += 1
+						t.expect(Touch.same(a, b)).toBe(false)
+					end
+				end
+			end
+		end
+	)
+
 	it("the given state is never changed", function()
 		local s0 = Touch.empty()
 		local s1 = Touch.track(s0, ev(1, "begin", 100, 300), CTX)

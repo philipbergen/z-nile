@@ -102,7 +102,7 @@ type World = {
 	move: (id: number, x: number, y: number) -> (),
 	up: (id: number, x: number, y: number) -> (),
 	focusLost: () -> (),
-	frame: () -> (), -- one Heartbeat
+	frame: () -> (), -- runs every task.delay callback due by the clock now
 	relayout: (b: any) -> (), -- what the buttons hook returns from now on (a turn, the top bar)
 }
 
@@ -119,7 +119,8 @@ local function controls(aim: Maze.Heading?): World
 			return remote
 		end,
 	}
-	local began, changed, ended, focus, heartbeat = signal(), signal(), signal(), signal(), signal()
+	local began, changed, ended, focus = signal(), signal(), signal(), signal()
+	local delayed: { { at: number, fn: () -> () } } = {}
 	local current: any = PLACED
 	local inputs: { [number]: any } = {}
 	local clock = { now = 100 }
@@ -134,7 +135,6 @@ local function controls(aim: Maze.Heading?): World
 	end
 	local services: { [string]: any } = {
 		ContextActionService = { BindActionAtPriority = function() end },
-		RunService = { Heartbeat = heartbeat },
 		GuiService = {
 			GetInsetArea = function(_: any, _which: any): any
 				return { Min = { X = 0, Y = 0 }, Max = { X = 844, Y = 390 } }
@@ -163,6 +163,11 @@ local function controls(aim: Maze.Heading?): World
 		os = {
 			clock = function(): number
 				return clock.now
+			end,
+		},
+		task = {
+			delay = function(seconds: number, fn: () -> ())
+				table.insert(delayed, { at = clock.now + seconds, fn = fn })
 			end,
 		},
 		require = requirer(),
@@ -204,7 +209,15 @@ local function controls(aim: Maze.Heading?): World
 			focus.fire()
 		end,
 		frame = function()
-			heartbeat.fire(1 / 60)
+			local due = {}
+			for i = #delayed, 1, -1 do
+				if delayed[i].at <= clock.now then
+					table.insert(due, 1, table.remove(delayed, i).fn)
+				end
+			end
+			for _, fn in due do
+				fn()
+			end
 		end,
 		relayout = function(b: any)
 			current = b
@@ -509,6 +522,24 @@ return t.spec("d0149 the touch adapters", function(it)
 			w.up(2, L.x, L.y)
 			w.down(3, moved.steer.x - moved.steer.r * 0.9, moved.steer.y) -- a new finger uses the new place
 			t.expect(w.fired).toEqual({ "Left" })
+		end
+	)
+
+	it(
+		"a new layout table in the same places keeps every held finger (a HUD refresh is no re-layout)",
+		function()
+			local w = controls("E")
+			w.down(1, S.x, S.y)
+			local copy = {
+				steer = table.clone(PLACED.steer),
+				look = table.clone(PLACED.look),
+				fire = table.clone(PLACED.fire),
+				pick = table.clone(PLACED.pick),
+			}
+			w.relayout(copy)
+			w.move(1, S.x - S.r * 0.9, S.y)
+			t.expect(w.fired).toEqual({ "Left" }) -- still steering
+			t.expect(#w.points).toBe(0)
 		end
 	)
 

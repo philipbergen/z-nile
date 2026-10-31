@@ -167,7 +167,12 @@ return t.spec("d0149 the touch controls fit every screen", function(it)
 			if r.w < Touch.MIN_TARGET or r.h < Touch.MIN_TARGET then
 				return `is {r.w} x {r.h}`
 			end
-			if r.x < l.safeX or r.y < l.safeY or r.x + r.w > l.safeX + l.safeW or r.y + r.h > l.safeY + l.safeH then
+			if
+				r.x < l.safeX
+				or r.y < l.safeY
+				or r.x + r.w > l.safeX + l.safeW
+				or r.y + r.h > l.safeY + l.safeH
+			then
 				return "leaves the safe rectangle"
 			end
 			return nil
@@ -185,28 +190,34 @@ return t.spec("d0149 the touch controls fit every screen", function(it)
 		end)
 	end)
 
-	it("no control overlaps a HUD box: the edge blocks, shots, boost, power bar, radar, pick bar or banner", function()
-		each(function(s, _name, r)
-			for box, b in hudBoxes(s) do
-				if overlaps(r, b) then
-					return `overlaps {box}`
+	it(
+		"no control overlaps a HUD box: the edge blocks, shots, boost, power bar, radar, pick bar or banner",
+		function()
+			each(function(s, _name, r)
+				for box, b in hudBoxes(s) do
+					if overlaps(r, b) then
+						return `overlaps {box}`
+					end
 				end
-			end
-			return nil
-		end)
-	end)
-
-	it("no control overlaps a dot of the danger ring, but PICK on the one screen the user accepted", function()
-		each(function(s, name, r)
-			if (ACCEPTED[s.name] or {})[name] then
 				return nil
-			end
-			for _, d in ringDots(s) do
-				if overlaps(r, d) then
-					return "overlaps the ring"
+			end)
+		end
+	)
+
+	it(
+		"no control overlaps a dot of the danger ring, but PICK on the one screen the user accepted",
+		function()
+			each(function(s, name, r)
+				if (ACCEPTED[s.name] or {})[name] then
+					return nil
 				end
-			end
-			return nil
-		end)
-	end)
+				for _, d in ringDots(s) do
+					if overlaps(r, d) then
+						return "overlaps the ring"
+					end
+				end
+				return nil
+			end)
+		end
+	)
 end)

@@ -27,35 +27,41 @@ return t.spec("d0149 the look circle's point", function(it)
 		t.expect(View.arrowQuarters(arrows(-1, true))).toBe(1)
 	end)
 
-	it("the look turns toward the point at the arrows' rate, pitch level, and springs back when it goes", function()
-		local s = { look = { yaw = 0, pitch = 0.3 }, spring = false }
-		local dt = 0.01
-		local step = View.turnRate() * dt
-		s = View.steer(s, s.look, arrows(1), dt)
-		t.expect(s.look.yaw).toBeNear(step, 1e-9)
-		t.expect(s.look.pitch).toBeNear(0.3 - step, 1e-9)
-		for _ = 1, 200 do
+	it(
+		"the look turns toward the point at the arrows' rate, pitch level, and springs back when it goes",
+		function()
+			local s = { look = { yaw = 0, pitch = 0.3 }, spring = false }
+			local dt = 0.01
+			local step = View.turnRate() * dt
 			s = View.steer(s, s.look, arrows(1), dt)
-		end
-		t.expect(s.look.yaw).toBeNear(PI / 2, 1e-9)
-		t.expect(s.look.pitch).toBeNear(0, 1e-9)
-		t.expect(s.spring).toBe(true)
-		s = View.steer(s, s.look, arrows(nil), dt)
-		t.expect(s.look.yaw).toBeNear(PI / 2 - step, 1e-9) -- let go: back toward the heading
-		for _ = 1, 200 do
+			t.expect(s.look.yaw).toBeNear(step, 1e-9)
+			t.expect(s.look.pitch).toBeNear(0.3 - step, 1e-9)
+			for _ = 1, 200 do
+				s = View.steer(s, s.look, arrows(1), dt)
+			end
+			t.expect(s.look.yaw).toBeNear(PI / 2, 1e-9)
+			t.expect(s.look.pitch).toBeNear(0, 1e-9)
+			t.expect(s.spring).toBe(true)
 			s = View.steer(s, s.look, arrows(nil), dt)
+			t.expect(s.look.yaw).toBeNear(PI / 2 - step, 1e-9) -- let go: back toward the heading
+			for _ = 1, 200 do
+				s = View.steer(s, s.look, arrows(nil), dt)
+			end
+			t.expect(s.look.yaw).toBeNear(0, 1e-9)
+			t.expect(s.spring).toBe(false)
 		end
-		t.expect(s.look.yaw).toBeNear(0, 1e-9)
-		t.expect(s.spring).toBe(false)
-	end)
+	)
 
-	it("a shot aims by the point, rounded to the nearest heading, and a tie goes the way of travel", function()
-		local still = { look = { yaw = 0, pitch = 0 }, spring = false }
-		t.expect(View.aim("N", still, arrows(1))).toBe("W")
-		t.expect(View.aim("N", still, arrows(-0.6))).toBe("E")
-		t.expect(View.aim("N", still, arrows(1.8))).toBe("S")
-		t.expect(View.aim("N", still, arrows(0.5))).toBe("N") -- exactly half way: ahead
-		t.expect(View.aim("N", still, arrows(1.5))).toBe("S") -- exactly half way behind: behind
-		t.expect(View.aim("N", still, arrows(nil))).toBe("N")
-	end)
+	it(
+		"a shot aims by the point, rounded to the nearest heading, and a tie goes the way of travel",
+		function()
+			local still = { look = { yaw = 0, pitch = 0 }, spring = false }
+			t.expect(View.aim("N", still, arrows(1))).toBe("W")
+			t.expect(View.aim("N", still, arrows(-0.6))).toBe("E")
+			t.expect(View.aim("N", still, arrows(1.8))).toBe("S")
+			t.expect(View.aim("N", still, arrows(0.5))).toBe("N") -- exactly half way: ahead
+			t.expect(View.aim("N", still, arrows(1.5))).toBe("S") -- exactly half way behind: behind
+			t.expect(View.aim("N", still, arrows(nil))).toBe("N")
+		end
+	)
 end)
