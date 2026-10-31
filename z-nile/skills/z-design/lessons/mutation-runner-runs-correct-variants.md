@@ -11,3 +11,5 @@ Mutants prove a spec fails for wrong code; nothing proves it passes for right co
 **How to apply:** beside the mutants, keep a list of correct variants in the runner (the kinds of change the issues sequenced next will make), run them with the mutants, and treat a red one as a finding against the spec.
 
 f0126 design review 008 F1: imagined variants passed, but f0109's real prototype (colours in View, state in model attributes, one shared paint) failed two f0126 cases; with the user's "f0109 first" its prototype became part of f0126's base.
+
+c0159 design review 001 F1: a chore that narrowed promoted specs for an already prepared feature (f0158) replaced a needle with a stricter spelling pin, which the feature's own design reviews had already removed from its spec as rejecting correct code. When a chore narrows for a prepared feature, run that feature's review rounds' correct variants against the narrowed specs.
