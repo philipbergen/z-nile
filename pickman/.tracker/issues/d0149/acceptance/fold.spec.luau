@@ -47,6 +47,7 @@ return t.spec("d0149 the touch circles' fold", function(it)
 		t.expect(Touch.TAP_SECONDS).toBe(0.25)
 		t.expect(Touch.TAP_SLOP).toBe(12)
 		t.expect(Touch.MIN_TARGET).toBe(44)
+		t.expect(Touch.LOOK_DEAD).toBe(0.25)
 	end)
 
 	it("zones: FIRE, then PICK, then the steer and look circles; anywhere else is no zone", function()
@@ -143,6 +144,8 @@ return t.spec("d0149 the touch circles' fold", function(it)
 		t.expect(Touch.quarters(0, -1)).toBeNear(2, 1e-9)
 		t.expect(Touch.quarters(-0.5, 0.5)).toBeNear(0.5, 1e-9)
 		t.expect(Touch.quarters(0.1, 0.1)).toBe(nil)
+		t.expect(Touch.quarters(0, 0.249)).toBe(nil) -- inside LOOK_DEAD
+		t.expect(Touch.quarters(0, 0.25)).toBeNear(0, 1e-9) -- on it: a direction
 		t.expect(Touch.quarters(0 / 0, 1)).toBe(nil)
 	end)
 
@@ -154,12 +157,71 @@ return t.spec("d0149 the touch circles' fold", function(it)
 			ev(1, "end", 500, 340, 0.5),
 		})
 		local points = kinds(effects, "point")
-		t.expect(points[1].quarters).toBe(nil) -- went down on the centre: the heading
-		t.expect(points[2].quarters).toBeNear(1, 1e-9)
-		t.expect(points[3].quarters).toBeNear(2, 1e-9)
-		t.expect(points[#points].quarters).toBe(nil)
+		t.expect(#points).toBe(3) -- going down pointed nothing: it might have been a tap
+		t.expect(points[1].quarters).toBeNear(1, 1e-9)
+		t.expect(points[2].quarters).toBeNear(2, 1e-9)
+		t.expect(points[3].quarters).toBe(nil)
 		t.expect(#kinds(effects, "hop")).toBe(0) -- a pull, not a tap
 		t.expect(#kinds(effects, "turn")).toBe(0) -- the look circle never turns
+	end)
+
+	it("a tap off the look circle's centre only hops: the view never moves (review 001 F2)", function()
+		for _, at in { { 530, 300 }, { 500, 330 }, { 470, 280 } } do
+			local effects = run({ ev(1, "begin", at[1], at[2], 0), ev(1, "move", at[1] + 5, at[2], 0.05) })
+			t.expect(#effects).toBe(0) -- down and a small move: undecided, nothing yet
+			effects = run({
+				ev(1, "begin", at[1], at[2], 0),
+				ev(1, "move", at[1] + 5, at[2], 0.05),
+				ev(1, "end", at[1] + 5, at[2], 0.1),
+			})
+			t.expect(#effects).toBe(1)
+			t.expect(effects[1].kind).toBe("hop")
+		end
+	end)
+
+	it(
+		"a pull starts pointing on the move that takes it TAP_SLOP from where it went down, or once held TAP_SECONDS",
+		function()
+			local near = run({ ev(1, "begin", 530, 300, 0), ev(1, "move", 541, 300, 0.1) })
+			t.expect(#kinds(near, "point")).toBe(0) -- 11 px, 0.1 s: still a tap
+			local far = run({ ev(1, "begin", 530, 300, 0), ev(1, "move", 542, 300, 0.1) })
+			t.expect(#kinds(far, "point")).toBe(1) -- 12 px: a pull
+			local slow = run({ ev(1, "begin", 530, 300, 0), ev(1, "move", 531, 300, 0.25) })
+			t.expect(#kinds(slow, "point")).toBe(1) -- held 0.25 s: a pull
+			t.expect(kinds(slow, "point")[1].quarters).toBeNear(-1, 1e-9) -- where it rests: right
+		end
+	)
+
+	it("a look finger held still starts pointing on the first tick TAP_SECONDS after it went down, once", function()
+		local state = Touch.empty()
+		local effects
+		state = Touch.track(state, ev(1, "begin", 530, 300, 10), CTX)
+		state, effects = Touch.tick(state, 10.2, CTX)
+		t.expect(#effects).toBe(0)
+		local before = state
+		state, effects = Touch.tick(state, 10.25, CTX)
+		t.expect(#effects).toBe(1)
+		t.expect(effects[1].kind).toBe("point")
+		t.expect(effects[1].quarters).toBeNear(-1, 1e-9)
+		t.expect(before.fingers[1].looking).toBe(false) -- the given state is never changed
+		state, effects = Touch.tick(state, 10.5, CTX)
+		t.expect(#effects).toBe(0) -- once
+		state, effects = Touch.track(state, ev(1, "end", 530, 300, 10.6), CTX)
+		t.expect(#effects).toBe(1) -- let go: point nil, and no hop
+		t.expect(effects[1].kind).toBe("point")
+		t.expect(effects[1].quarters).toBe(nil)
+	end)
+
+	it("a tick points nothing for other controls, without a look circle, or at a bad time", function()
+		local state = Touch.track(Touch.empty(), ev(1, "begin", 100, 300, 0), CTX)
+		state = Touch.track(state, ev(2, "begin", 410, 340, 0), CTX)
+		local _, effects = Touch.tick(state, 5, CTX)
+		t.expect(#effects).toBe(0)
+		local look = Touch.track(Touch.empty(), ev(1, "begin", 530, 300, 0), CTX)
+		_, effects = Touch.tick(look, 5, { steer = STEER })
+		t.expect(#effects).toBe(0)
+		_, effects = Touch.tick(look, 0 / 0, CTX)
+		t.expect(#effects).toBe(0)
 	end)
 
 	it("a short tap on the look circle hops when it lifts, once", function()
@@ -205,14 +267,14 @@ return t.spec("d0149 the touch circles' fold", function(it)
 			ev(4, "begin", 410, 340),
 		})
 		t.expect(#kinds(effects, "turn")).toBe(0)
-		t.expect(kinds(effects, "point")[2].quarters).toBeNear(1, 1e-9)
+		t.expect(kinds(effects, "point")[1].quarters).toBeNear(1, 1e-9)
 		t.expect(#kinds(effects, "fire")).toBe(1)
 	end)
 
 	it("a finger keeps its control when it slides off it, and a control's absence makes its place nothing", function()
 		local effects = run({ ev(1, "begin", 500, 300, 0), ev(1, "move", 100, 300, 0.1) }) -- onto the steer circle
 		t.expect(#kinds(effects, "turn")).toBe(0)
-		t.expect(kinds(effects, "point")[2].quarters).toBeNear(1, 1e-9) -- still the look circle, pulled hard left
+		t.expect(kinds(effects, "point")[1].quarters).toBeNear(1, 1e-9) -- still the look circle, pulled hard left
 		t.expect(#run({ ev(1, "begin", 410, 340) }, { steer = STEER, look = LOOK })).toBe(0)
 	end)
 

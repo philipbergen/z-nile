@@ -102,6 +102,8 @@ type World = {
 	move: (id: number, x: number, y: number) -> (),
 	up: (id: number, x: number, y: number) -> (),
 	focusLost: () -> (),
+	frame: () -> (), -- one Heartbeat
+	relayout: (b: any) -> (), -- what the buttons hook returns from now on (a turn, the top bar)
 }
 
 local function controls(aim: Maze.Heading?): World
@@ -117,7 +119,8 @@ local function controls(aim: Maze.Heading?): World
 			return remote
 		end,
 	}
-	local began, changed, ended, focus = signal(), signal(), signal(), signal()
+	local began, changed, ended, focus, heartbeat = signal(), signal(), signal(), signal(), signal()
+	local current: any = PLACED
 	local inputs: { [number]: any } = {}
 	local clock = { now = 100 }
 	local points: { any } = {}
@@ -131,6 +134,7 @@ local function controls(aim: Maze.Heading?): World
 	end
 	local services: { [string]: any } = {
 		ContextActionService = { BindActionAtPriority = function() end },
+		RunService = { Heartbeat = heartbeat },
 		GuiService = {
 			GetInsetArea = function(_: any, _which: any): any
 				return { Min = { X = 0, Y = 0 }, Max = { X = 844, Y = 390 } }
@@ -176,7 +180,7 @@ local function controls(aim: Maze.Heading?): World
 	Controls.start(function() end, function(h: boolean)
 		table.insert(held, h)
 	end, function(): any
-		return PLACED
+		return current
 	end, function(k: any)
 		table.insert(knobs, k)
 	end)
@@ -198,6 +202,12 @@ local function controls(aim: Maze.Heading?): World
 		end,
 		focusLost = function()
 			focus.fire()
+		end,
+		frame = function()
+			heartbeat.fire(1 / 60)
+		end,
+		relayout = function(b: any)
+			current = b
 		end,
 	}
 end
@@ -441,11 +451,64 @@ return t.spec("d0149 the touch adapters", function(it)
 			w.move(1, L.x - L.r * 0.8, L.y) -- left
 			w.move(1, L.x, L.y + L.r * 0.8) -- behind
 			w.up(1, L.x, L.y + L.r * 0.8)
-			t.expect(w.points[1]).toBe("nil") -- went down on the centre
-			t.expect(w.points[2]).toBeNear(1, 1e-9)
-			t.expect(w.points[3]).toBeNear(2, 1e-9)
+			t.expect(w.points[1]).toBeNear(1, 1e-9) -- going down pointed nothing: it might have been a tap
+			t.expect(w.points[2]).toBeNear(2, 1e-9)
 			t.expect(w.points[#w.points]).toBe("nil")
 			t.expect(#w.fired).toBe(0) -- looking sends nothing to the server
+		end
+	)
+
+	it(
+		"a thumb held still off the look circle's centre points the view on the frame TAP_SECONDS after it went down",
+		function()
+			local w = controls("E")
+			w.down(1, L.x + L.r * 0.6, L.y)
+			w.frame()
+			t.expect(#w.points).toBe(0)
+			w.clock.now += Touch.TAP_SECONDS
+			w.frame()
+			t.expect(#w.points).toBe(1)
+			t.expect(w.points[1]).toBeNear(-1, 1e-9) -- right of the centre: a quarter right
+			w.frame()
+			t.expect(#w.points).toBe(1)
+			w.up(1, L.x + L.r * 0.6, L.y)
+			t.expect(w.points[2]).toBe("nil")
+			t.expect(#w.fired).toBe(0) -- held too long for a tap: no hop
+		end
+	)
+
+	it("a tap off the look circle's centre hops and never points the view", function()
+		local w = controls("E")
+		w.down(1, L.x + L.r * 0.6, L.y + 3)
+		w.clock.now += 0.1
+		w.frame()
+		w.up(1, L.x + L.r * 0.6 + 4, L.y + 3)
+		t.expect(w.fired).toEqual({ Hop.INTENT })
+		t.expect(#w.points).toBe(0)
+	end)
+
+	it(
+		"when the controls move (a turn, the top bar), every held finger is let go and pulls nothing more",
+		function()
+			local w = controls("E")
+			w.down(1, S.x, S.y)
+			w.down(2, L.x, L.y)
+			w.move(2, L.x - L.r, L.y)
+			local moved = table.clone(PLACED)
+			moved.steer = { x = S.x + 60, y = S.y, r = S.r }
+			moved.look = { x = L.x - 60, y = L.y, r = L.r }
+			w.relayout(moved)
+			w.move(1, S.x + 1, S.y) -- would be a hard pull left from the moved circle's centre
+			t.expect(#w.fired).toBe(0)
+			t.expect(w.points[#w.points]).toBe("nil") -- the view springs back
+			t.expect((next(w.knobs[#w.knobs]))).toBe(nil)
+			local n = #w.points
+			w.move(2, L.x - L.r - 20, L.y)
+			t.expect(#w.points).toBe(n) -- the look finger is let go too
+			w.up(1, S.x + 1, S.y)
+			w.up(2, L.x, L.y)
+			w.down(3, moved.steer.x - moved.steer.r * 0.9, moved.steer.y) -- a new finger uses the new place
+			t.expect(w.fired).toEqual({ "Left" })
 		end
 	)
 

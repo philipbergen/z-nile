@@ -9,6 +9,12 @@
   - A finger that lands outside the controls does nothing; one finger per control. There is no snap button: the look springs back on its own.
   - The controls clear each other, the HUD, the corner radar, the danger ring (f0158), the pick bar and the boon banner on every sample screen, except that PICK may draw over a few ring dots on a 480 x 320 screen under a 58 px top bar (the user, 2026-10-31).
 
+## game-design.md, the other touch statements (review 001 F5)
+
+- *Look* (core rules): "on touch a "snap look to heading" button recentres it" becomes "on touch the look circle points the view and springs back when let go (d0149)".
+- *Wall picks*, the pick (f0126): "on touch a PICK button one margin left of FIRE, level with it and its size, added after f0110, which on narrow portrait phones takes a 70 px square of the swipe-to-turn half: user, 2026-10-25" becomes "on touch the PICK button, left of FIRE beside the look circle (user, 2026-10-25; placed by d0149)".
+- *Speed boost* (f0143): "on touch, two quick swipes up" becomes "on touch, two quick pulls up on the steer circle (d0149)".
+
 ## architecture.md, the Touch row
 
 | Touch | The phone's controls as a pure fold over begin, move and end (d0149, replacing R0012's swipes, drag look and snap and f0110's JUMP): a steer circle whose pull folds through `Pad.steer` into turn intents, a look circle whose pull points the view and whose tap hops, FIRE and PICK buttons; one finger per control, nothing elsewhere; `Touch.buttons` places them in the HUD's safe rectangle; the HUD blocks and screen-pixel conversion (R0012) |

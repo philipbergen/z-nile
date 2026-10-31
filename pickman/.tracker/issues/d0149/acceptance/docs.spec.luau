@@ -13,32 +13,67 @@ local function section(doc: string, heading: string): string
 end
 
 return t.spec("d0149 the documents", function(it)
-	it("game-design.md's Mobile section states the circles, the tap, the buttons and the dead space", function()
-		local mobile = section(fs.readFile(".tracker/game-design.md"), "Mobile")
+	it(
+		"game-design.md's Mobile section states the circles, the tap, the buttons and the dead space",
+		function()
+			local mobile = section(fs.readFile(".tracker/game-design.md"), "Mobile")
+			for _, needle in
+				{
+					"d0149",
+					"Steer circle",
+					"Look circle",
+					"30% of the screen's shorter side",
+					"96 to 160 px",
+					"springs the view back",
+					"0.25 s",
+					"12 px",
+					"FIRE and PICK",
+					"outside the controls does nothing",
+					"two quick pulls up boost",
+					"480 x 320",
+				}
+			do
+				t.expect(string.find(mobile, needle, 1, true) ~= nil).toBe(true)
+			end
+		end
+	)
+
+	it(
+		"nowhere in game-design.md offers the swipes, the drag look, the snap button or JUMP any more",
+		function()
+			-- the Touch circles bullet names what it replaces; every other line is read (review 001 F5: f0126's and
+			-- f0143's sections and the Look rule restate the touch controls too)
+			local doc = fs.readFile(".tracker/game-design.md")
+			local rest: { string } = {}
+			for _, line in string.split(doc, "\n") do
+				if string.sub(line, 1, 20) ~= "- **Touch circles** " then
+					table.insert(rest, line)
+				end
+			end
+			local text = string.lower(table.concat(rest, "\n"))
+			local found: { string } = {}
+			for _, gone in
+				{ "swipe", "snap look to heading", "drag on the right half", "jump button", "jump control" }
+			do
+				if string.find(text, gone, 1, true) then
+					table.insert(found, gone)
+				end
+			end
+			t.expect(table.concat(found, ", ")).toBe("")
+			t.expect((string.find(table.concat(rest, "\n"), "JUMP", 1, true))).toBe(nil)
+		end
+	)
+
+	it("the Look rule, the pick and the boost say how touch does them now", function()
+		local doc = fs.readFile(".tracker/game-design.md")
 		for _, needle in
 			{
-				"d0149",
-				"Steer circle",
-				"Look circle",
-				"30% of the screen's shorter side",
-				"96 to 160 px",
-				"springs the view back",
-				"0.25 s",
-				"12 px",
-				"FIRE and PICK",
-				"outside the controls does nothing",
-				"two quick pulls up boost",
-				"480 x 320",
+				"on touch the look circle points the view",
+				"on touch the PICK button, left of FIRE beside the look circle",
+				"on touch, two quick pulls up on the steer circle",
 			}
 		do
-			t.expect(string.find(mobile, needle, 1, true) ~= nil).toBe(true)
-		end
-	end)
-
-	it("game-design.md's Mobile section no longer offers the swipes, the drag look or the snap button", function()
-		local mobile = section(fs.readFile(".tracker/game-design.md"), "Mobile")
-		for _, gone in { "**Turns:** a swipe", "drag on the right half", '"snap look to heading" button' } do
-			t.expect((string.find(mobile, gone, 1, true))).toBe(nil)
+			t.expect(string.find(doc, needle, 1, true) ~= nil).toBe(true)
 		end
 	end)
 
