@@ -1,5 +1,5 @@
 --!strict
--- c0152: may a pull request merge although origin's main moved after its green CI? Yes only when
+-- c0152: may a pull request merge although origin's main moved after its head passed Merging steps 2 and 3? Yes only when
 -- 1. every commit main gained since the PR's head left it is tracker state the publisher allows (publish.allowed: an
 --    item's document, check.sh or spend.md under a registered root, and the id counter; until c0117's trackerstate
 --    lands, then that one definition) that adds or edits only documents and spend rows and adds new items' check.sh
