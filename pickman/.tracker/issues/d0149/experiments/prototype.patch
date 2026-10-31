@@ -1,0 +1,819 @@
+diff --git a/pickman/.tracker/architecture.md b/pickman/.tracker/architecture.md
+index bf78c57e..e719a028 100644
+--- a/pickman/.tracker/architecture.md
++++ b/pickman/.tracker/architecture.md
+@@ -65,8 +65,7 @@ Session -> Maze
+ Session -> Movement
+ Session -> Pellets
+ Session -> Picks
+-Touch -> Hud
+-Touch -> View
++Touch -> Pad
+ View -> Maze
+ View -> Movement
+ View -> Pellets
+diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
+index 2f7e1a3a..650cce6f 100644
+--- a/pickman/.tracker/game-design.md
++++ b/pickman/.tracker/game-design.md
+@@ -68,11 +68,13 @@ This is the source of truth for product decisions. Every raft design must agree
+ - **Storage:** behind a Logic-facing interface. A fake store is used in tests, and Roblox's ordered store in the adapter. Beta and production have separate stores, because they are separate experiences.
+ 
+ ## Mobile
+-- **Turns:** a swipe left/right/down triggers `Left`/`Right`/`Back`, and a swipe up triggers `Forward`, to take the next junction's straight exit.
+-- **Look:** drag on the right half of the screen.
++- **Touch circles** (d0149; the user, 2026-10-25 and 2026-10-31; they replace R0012's swipes, drag look and snap button and f0110's JUMP button): two fixed circles, each **30% of the screen's shorter side** (of the safe rectangle; 96 to 160 px), shown only on a touch screen, and two buttons.
++  - **Steer circle** (lower left, one margin above the lives row, **(prep)**): pull on it from its centre. A pull left, down, up or right is `Left`, `Back`, `Forward` or `Right`, as A, S, W and D, once a pull, folded as a controller's left stick is (`Pad.steer`); two quick pulls up boost, as a double W does (f0143).
++  - **Look circle** (lower right, on the power bar, **(prep)**): the pull's direction from its centre is where the view points, relative to the heading (up ahead, left a quarter turn left, down behind), at the arrows' turn rate with the pitch level, and it aims the blaster as the arrows do; letting go springs the view back to the heading. A **tap** (lifted within 0.25 s, having moved less than 12 px) hops, on the lift. **(prep)**: a pull under a quarter of the radius points ahead, so a tap on the centre never looks; each circle shows a knob where the thumb pulls.
++  - **FIRE and PICK** (cyan and gold discs, captioned; **(prep)**: 0.45 of a circle's diameter, at least 44 px) sit left of the look circle in the row PICK, FIRE, look, on the steer circle's bottom line; each acts when the finger goes down.
++  - A finger that lands outside the controls does nothing; one finger per control. There is no snap button: the look springs back on its own.
++  - The controls clear each other, the HUD, the corner radar, the danger ring (f0158), the pick bar and the boon banner on every sample screen, except that PICK may draw over a few ring dots on a 480 x 320 screen under a 58 px top bar (the user, 2026-10-31).
+ - **HUD:** scales to small screens. Touch targets are at least 44 pt.
+-- **Recentring:** a "snap look to heading" button.
+-- **Fire and hop** (f0110; a stopgap until d0149's touch circle controls, user, 2026-10-25): touch has a fire control for the blaster, aimed as on desktop (the look's nearest heading), and a jump control for the spy hop (f0101), placed with R0012's touch layout. **(prep, R0051)**: both are buttons (not gestures), shown only on a touch screen: a cyan **FIRE** disc (the shot bars' cyan) and a white **JUMP** disc, told apart by their outlined captions, since the user sees that cyan as white (see Inky's colour). Each acts once, when the finger goes down; a finger on them never looks or turns, so a look drag that starts on FIRE spends a shot (firing on the lift would avoid that but delay every shot). JUMP is Roblox's own touch jump button's place (its legacy placement, the corner R0012 keeps clear); FIRE is the same size, one margin to its left, raised clear of the snap button. On the shortest screens (320 px under a 58 px top bar) FIRE's top 14 px sit under the radar's bottom, as the radar already overlaps Roblox's second jump placement there; on a 320 px wide portrait screen JUMP shares one pixel column with the snap button, and with a 500 px short side its bottom row lies on the power bar.
+ 
+ ## Ghost hunter tools (user, 2026-10-17; R0035)
+ The user's captures (f0100, f0101, f0102), with the details chosen in R0035's prep marked **(prep)**; the user may veto any of those.
+diff --git a/pickman/src/client/Camera.luau b/pickman/src/client/Camera.luau
+index f7d8109d..637b1876 100644
+--- a/pickman/src/client/Camera.luau
++++ b/pickman/src/client/Camera.luau
+@@ -49,10 +49,11 @@ function Camera.snap()
+ 	look = View.snap(look)
+ end
+ 
+--- A touch look of dx, dy pixels, at the mouse's rate and pitch limit.
+-function Camera.lookBy(dx: number, dy: number)
+-	lookedThisFrame = true
+-	look = View.look(look, dx, dy)
++-- Where the touch look circle points the view (d0149): quarter turns from the heading, positive left, the pitch
++-- level; nil when it is let go, and the view springs back as it does after the arrows.
++function Camera.point(quarters: number?)
++	arrows =
++		{ up = arrows.up, down = arrows.down, left = arrows.left, right = arrows.right, point = quarters }
+ end
+ 
+ -- Whether a touch finger is down; while it is, the mouse delta is not applied. The frame of the change is
+@@ -64,7 +65,7 @@ end
+ 
+ -- The arrow keys held (f0104): they look, and the view springs back when they are let go.
+ function Camera.arrows(a: View.Arrows)
+-	arrows = { up = a.up, down = a.down, left = a.left, right = a.right }
++	arrows = { up = a.up, down = a.down, left = a.left, right = a.right, point = arrows.point }
+ end
+ 
+ -- The spy hop (f0101): the tick the latest hop started, as the server's frame says (nil: none yet). The server
+diff --git a/pickman/src/client/Controls.luau b/pickman/src/client/Controls.luau
+index 3c606b8c..1026023f 100644
+--- a/pickman/src/client/Controls.luau
++++ b/pickman/src/client/Controls.luau
+@@ -1,8 +1,9 @@
+ --!strict
+ -- Client adapter: binds the key map from View and relays intents to the server. The movement keys, the fire key
+ -- and the jump (a hop, f0101) send intents; the arrow look is the camera's, handed in through Controls.keys (f0104). On a touch
+--- screen it feeds every finger through Touch's fold and applies what it emits: the fire and hop buttons (f0110) send
+--- the same intents as E and Space.
++-- screen it feeds every finger through Touch's fold and applies what it emits (d0149): the steer circle's turns (a
++-- pull up folds the boost's touch taps, f0143), the look circle's point (to the camera, through Controls.keys) and
++-- its tap's hop, FIRE and PICK; the knobs go to the hook HudView gives.
+ local ContextActionService = game:GetService("ContextActionService")
+ local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
+ local ReplicatedStorage = game:GetService("ReplicatedStorage")
+@@ -17,11 +18,13 @@ local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
+ local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+--- What the keys drive besides the intents: the camera's arrow look, and the way a shot would go now (nil before the
+--- first snapshot).
++-- What the keys drive besides the intents: the camera's arrow look, the way a shot would go now (nil before the
++-- first snapshot), and where the touch look circle points the view (d0149: quarter turns from the heading, nil
++-- when let go).
+ export type Keys = {
+ 	arrows: (View.Arrows) -> (),
+ 	aim: () -> Maze.Heading?,
++	point: ((quarters: number?) -> ())?,
+ }
+ 
+ local Controls = {}
+@@ -38,10 +41,9 @@ end
+ 
+ function Controls.start(
+ 	onSnap: () -> (),
+-	onLook: ((dx: number, dy: number) -> ())?,
+-	snapRect: (() -> Touch.Rect?)?,
+ 	onTouch: ((held: boolean) -> ())?,
+-	buttons: (() -> Touch.Buttons?)?
++	buttons: (() -> Touch.Buttons?)?,
++	onKnobs: ((Touch.Knobs) -> ())?
+ )
+ 	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
+ 
+@@ -123,7 +125,6 @@ function Controls.start(
+ 
+ 	-- the platform thumbstick would take the left half, which is the turn zone
+ 	GuiService.TouchControlsEnabled = false
+-	local camera = workspace.CurrentCamera :: Camera
+ 	local fingers = Touch.empty()
+ 	local ids: { [InputObject]: number } = {}
+ 	local lastId = 0
+@@ -163,21 +164,10 @@ function Controls.start(
+ 			input.Position.X,
+ 			input.Position.Y
+ 		)
+-		local sw = Touch.screenSize(
+-			GuiService:GetInsetArea(Enum.ScreenInsets.None),
+-			camera.ViewportSize.X,
+-			camera.ViewportSize.Y
+-		)
+-		local rect = if snapRect then snapRect() else nil
+-		local placed = if buttons then buttons() else nil
++		local placed: Touch.Context = (if buttons then buttons() else nil) or {}
+ 		local effects
+-		fingers, effects = Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy }, {
+-			width = sw,
+-			snap = rect,
+-			fire = placed and placed.fire,
+-			hop = placed and placed.hop,
+-			pick = placed and placed.pick,
+-		})
++		fingers, effects =
++			Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy, t = os.clock() }, placed)
+ 		for _, effect in effects do
+ 			if effect.kind == "turn" then
+ 				intent:FireServer(effect.intent)
+@@ -188,12 +178,11 @@ function Controls.start(
+ 						intent:FireServer(Boost.INTENT)
+ 					end
+ 				end
+-			elseif effect.kind == "look" then
+-				if onLook then
+-					onLook(effect.dx, effect.dy)
++			elseif effect.kind == "point" then
++				local k = keys
++				if k and k.point then
++					k.point(effect.quarters)
+ 				end
+-			elseif effect.kind == "snap" then
+-				onSnap()
+ 			elseif effect.kind == "fire" then
+ 				fire()
+ 			elseif effect.kind == "hop" then
+@@ -202,6 +191,9 @@ function Controls.start(
+ 				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
+ 			end
+ 		end
++		if onKnobs then
++			onKnobs(Touch.knobs(fingers, placed))
++		end
+ 		hold()
+ 	end
+ 
+@@ -218,6 +210,13 @@ function Controls.start(
+ 	UserInputService.WindowFocusReleased:Connect(function()
+ 		fingers = Touch.empty()
+ 		ids = {}
++		local k = keys
++		if k and k.point then
++			k.point(nil) -- a look circle held when focus went springs back
++		end
++		if onKnobs then
++			onKnobs({})
++		end
+ 		hold()
+ 	end)
+ end
+diff --git a/pickman/src/client/HudView.luau b/pickman/src/client/HudView.luau
+index b238f481..fc46eeea 100644
+--- a/pickman/src/client/HudView.luau
++++ b/pickman/src/client/HudView.luau
+@@ -2,9 +2,10 @@
+ -- Client adapter: the HUD as a ScreenGui over the whole screen. Hud.model of each frame's play record gives the
+ -- content, Hud.layout of the screen and its safe inset the sizes, and Touch.blocks the places: score top-left,
+ -- level top-right, a disc per life bottom-left, and the power bar bottom-right, hidden when no power is
+--- running. The snap control sits left of the bar (Touch.snapRect); Controls hit-tests the same rectangle. The
+--- blaster's shots (f0100) are bars after the lives, placed by Hud.shotIcons. On a touch screen the fire and hop
+--- buttons (f0110) sit in Roblox's jump corner (Touch.buttons); Controls hit-tests the same rectangles.
++-- running. The blaster's shots (f0100) are bars after the lives, placed by Hud.shotIcons. On a touch screen the
++-- controls (d0149) are drawn where Touch.buttons puts them, and Controls hit-tests the same shapes: the steer circle
++-- lower left, the look circle lower right, each with a knob where its finger pulls, and the FIRE and PICK discs left
++-- of the look circle.
+ local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
+ local Players = game:GetService("Players")
+ local RunService = game:GetService("RunService")
+@@ -29,12 +30,13 @@ local level: TextLabel? = nil
+ local lives: Frame? = nil
+ local bar: Frame? = nil
+ local fill: Frame? = nil
+-local snapFrame: Frame? = nil
+ local shownLives = -1
+-local snapAt: Touch.Rect? = nil
+ type Button = { frame: Frame, caption: TextLabel }
+ local fireButton: Button? = nil
+-local hopButton: Button? = nil
++local steerCircle: Frame? = nil
++local lookCircle: Frame? = nil
++local steerKnob: Frame? = nil
++local lookKnob: Frame? = nil
+ local pickButton: Button? = nil
+ local buttonsAt: Touch.Buttons? = nil
+ -- the screen size and inset of the last layout, so a change of any of them re-lays
+@@ -69,6 +71,14 @@ local function place(b: Button?, r: Touch.Rect, textSize: number)
+ 	end
+ end
+ 
++-- A circle's frame on its bounding square.
++local function placeCircle(f: Frame?, c: Touch.Circle)
++	if f then
++		f.Size = UDim2.fromOffset(2 * c.r, 2 * c.r)
++		f.Position = UDim2.fromOffset(c.x - c.r, c.y - c.r)
++	end
++end
++
+ -- Places everything for a screen of sw x sh pixels with `inset` kept free, in screen pixels.
+ local function lay(sw: number, sh: number, inset: Hud.Inset)
+ 	local l = Hud.layout(sw, sh, inset)
+@@ -123,20 +133,16 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
+ 		banner.Position = UDim2.fromOffset(boonBox.x, boonBox.y)
+ 		banner.Size = UDim2.fromOffset(boonBox.w, boonBox.h)
+ 	end
+-	local rect = Touch.snapRect(l)
+-	snapAt = rect
+-	if snapFrame then
+-		snapFrame.Size = UDim2.fromOffset(rect.w, rect.h)
+-		snapFrame.Position = UDim2.fromOffset(rect.x, rect.y)
+-	end
+ 	local placed = Touch.buttons(l)
+ 	buttonsAt = placed
++	placeCircle(steerCircle, placed.steer)
++	placeCircle(lookCircle, placed.look)
+ 	place(fireButton, placed.fire, l.textSize)
+-	place(hopButton, placed.hop, l.textSize)
+ 	place(pickButton, placed.pick, l.textSize)
++	HudView.knobs({}) -- each knob at its circle's centre until a finger pulls it
+ end
+ 
+--- A touch button (f0110): a drawn disc with a caption. Like the snap control it takes no input itself.
++-- A touch button (f0110): a drawn disc with a caption. It takes no input itself: Controls hit-tests it.
+ local function button(name: string, caption: string, colour: Color3, parent: Instance): Button
+ 	local f = Instance.new("Frame")
+ 	f.Name = name
+@@ -152,23 +158,59 @@ local function button(name: string, caption: string, colour: Color3, parent: Ins
+ 	l.Active = false
+ 	l.Size = UDim2.fromScale(1, 1)
+ 	l.Text = caption
+-	-- a full outline: the caption, not the colour alone, tells FIRE from JUMP
++	-- a full outline: the caption, not the colour alone, tells FIRE from PICK
+ 	l.TextStrokeColor3 = BLACK
+ 	l.TextStrokeTransparency = 0
+ 	f.Parent = parent
+ 	return { frame = f, caption = l }
+ end
+ 
+--- The snap control's rectangle in screen pixels, or nil before the first layout.
+-function HudView.snapRect(): Touch.Rect?
+-	return snapAt
++-- A drawn circle (d0149): a translucent white disc with a white outline, taking no input. `share` of its parent's
++-- size, centred (1 for a control's circle; a knob is KNOB of its circle).
++local KNOB = 0.4
++local function circle(name: string, transparency: number, parent: Instance): Frame
++	local f = Instance.new("Frame")
++	f.Name = name
++	f.Active = false
++	f.Visible = UserInputService.TouchEnabled
++	f.BackgroundColor3 = WHITE
++	f.BackgroundTransparency = transparency
++	f.BorderSizePixel = 0
++	local corner = Instance.new("UICorner")
++	corner.CornerRadius = UDim.new(0.5, 0)
++	corner.Parent = f
++	local stroke = Instance.new("UIStroke")
++	stroke.Color = WHITE
++	stroke.Transparency = 0.3
++	stroke.Thickness = 2
++	stroke.Parent = f
++	f.Parent = parent
++	return f
+ end
+ 
+--- The touch controls' rectangles in screen pixels (f0110), or nil before the first layout.
++-- The touch controls in screen pixels (d0149), or nil before the first layout.
+ function HudView.buttons(): Touch.Buttons?
+ 	return buttonsAt
+ end
+ 
++-- Where each circle's knob is drawn (Touch.knobs, from Controls): at the finger's pull, or back at the centre.
++function HudView.knobs(k: Touch.Knobs)
++	local placed = buttonsAt
++	if placed == nil then
++		return
++	end
++	local function put(knob: Frame?, c: Touch.Circle, at: Touch.Point?)
++		if knob then
++			local p = at or { x = c.x, y = c.y }
++			local side = 2 * c.r * KNOB
++			knob.Size = UDim2.fromOffset(side, side)
++			knob.Position = UDim2.fromOffset(p.x - side / 2, p.y - side / 2)
++		end
++	end
++	put(steerKnob, placed.steer, k.steer)
++	put(lookKnob, placed.look, k.look)
++end
++
+ function HudView.start()
+ 	local gui = Instance.new("ScreenGui")
+ 	gui.Name = "Hud"
+@@ -213,22 +255,12 @@ function HudView.start()
+ 	f.Size = UDim2.fromScale(0, 1)
+ 	f.Parent = b
+ 	fill = f
+-	-- drawn only: a touch on it is the snap zone in Touch's fold, so it takes no input itself. A mouse click
+-	-- on it does nothing, so a screen without touch does not show it.
+-	local s = Instance.new("Frame")
+-	s.Name = "Snap"
+-	s.Active = false
+-	s.Visible = UserInputService.TouchEnabled
+-	s.BackgroundColor3 = WHITE
+-	s.BackgroundTransparency = 0.6
+-	s.BorderSizePixel = 0
+-	local corner = Instance.new("UICorner")
+-	corner.CornerRadius = UDim.new(0.5, 0)
+-	corner.Parent = s
+-	s.Parent = gui
+-	snapFrame = s
++	-- d0149: the two circles and their knobs, drawn only (Controls hit-tests them), on touch screens only
++	steerCircle = circle("Steer", 0.8, gui)
++	lookCircle = circle("Look", 0.8, gui)
++	steerKnob = circle("SteerKnob", 0.5, gui)
++	lookKnob = circle("LookKnob", 0.5, gui)
+ 	fireButton = button("Fire", "FIRE", CYAN, gui)
+-	hopButton = button("Hop", "JUMP", WHITE, gui)
+ 	pickButton = button("Pick", "PICK", GOLD, gui) -- f0126: a wall pick, gold as the walls it picks
+ 	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
+ 	local camera = workspace.CurrentCamera :: Camera
+diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
+index 2b559ee0..b6bc0919 100644
+--- a/pickman/src/client/Main.client.luau
++++ b/pickman/src/client/Main.client.luau
+@@ -83,8 +83,8 @@ Camera.pad(Pads.stick)
+ Camera.start()
+ GhostView.start()
+ DangerHud.start(Camera.pose)
+-Controls.keys({ arrows = Camera.arrows, aim = Camera.aim })
+-Controls.start(Camera.snap, Camera.lookBy, HudView.snapRect, Camera.holdMouse, HudView.buttons)
++Controls.keys({ arrows = Camera.arrows, aim = Camera.aim, point = Camera.point })
++Controls.start(Camera.snap, Camera.holdMouse, HudView.buttons, HudView.knobs)
+ PelletView.start()
+ Sticks.start(Pads.stick)
+ HudView.start()
+diff --git a/pickman/src/shared/Logic/Awareness/init.luau b/pickman/src/shared/Logic/Awareness/init.luau
+index 45c0b4f4..402e32ab 100644
+--- a/pickman/src/shared/Logic/Awareness/init.luau
++++ b/pickman/src/shared/Logic/Awareness/init.luau
+@@ -345,4 +345,29 @@ function Awareness.radar(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, radius: nu
+ 	return { radius = r, walls = walls, blips = blips }
+ end
+ 
++-- PROTOTYPE STUB of f0158's ring geometry (d0149 prep only): 8 sectors of RING.dots dots and a one-dot gap, sector 0
++-- centred at the top, the dots' outer edge on a circle of RING.share of the smaller side, centred in the frame.
++Awareness.RING = { share = 0.6, dot = 0.035, dots = 6 }
++function Awareness.ring(
++	_list: any,
++	width: number,
++	height: number
++): { { x: number, y: number, w: number, h: number } }
++	local w = if width > 0 and width < math.huge then width else 0
++	local h = if height > 0 and height < math.huge then height else 0
++	local small = math.min(w, h)
++	local s = Awareness.RING.dot * small
++	local rad = Awareness.RING.share * small / 2 - s / 2
++	local out = {}
++	local slots = Awareness.RING.dots + 1
++	for sector = 0, 7 do
++		for i = 0, Awareness.RING.dots - 1 do
++			local a = math.rad(sector * 45 - 22.5 + (i + 1) * 45 / slots)
++			local cx, cy = w / 2 - rad * math.sin(a), h / 2 - rad * math.cos(a)
++			table.insert(out, { x = cx - s / 2, y = cy - s / 2, w = s, h = s })
++		end
++	end
++	return out
++end
++
+ return Awareness
+diff --git a/pickman/src/shared/Logic/Touch/init.luau b/pickman/src/shared/Logic/Touch/init.luau
+index 326c5f6f..153638f1 100644
+--- a/pickman/src/shared/Logic/Touch/init.luau
++++ b/pickman/src/shared/Logic/Touch/init.luau
+@@ -1,30 +1,47 @@
+ --!strict
+--- Touch: the phone's gestures as a pure fold over begin, move and end events, engine-free. A finger is
+--- classified once, when it goes down: the snap control, the fire or the hop button (f0110), the turn half (left)
+--- or the look half (right).
+--- A turn finger is one straight-line swipe on release; a look finger is a pixel step per move.
++-- Touch: the phone's controls (d0149) as a pure fold over begin, move and end events, engine-free. Two fixed circles
++-- and two buttons, each a finger's zone from the moment it goes down:
++-- - the steer circle (lower left): a pull from its centre is a stick tilt, folded by Pad.steer, so each push left,
++--   down, up or right sends one Left, Back, Forward or Right, as A, S, W and D do;
++-- - the look circle (lower right): the pull's direction from its centre is where the view points, relative to the
++--   heading (up ahead, left a quarter turn left, down behind), and letting go points it back; a short tap hops;
++-- - the FIRE and PICK buttons, left of the look circle: each acts once, when the finger goes down.
++-- A finger that lands on no control does nothing (decided with the user, 2026-10-31).
+ --
+ -- Every point and rectangle here is in screen pixels (origin the top-left of the device screen).
+-local Hud = require("./Hud")
+-local View = require("./View")
++local Pad = require("./Pad")
+ 
+-export type Zone = "turn" | "look" | "snap" | "fire" | "hop" | "pick"
++export type Zone = "steer" | "look" | "fire" | "pick"
+ export type Rect = { x: number, y: number, w: number, h: number } -- half-open [x, x+w) x [y, y+h)
++export type Circle = { x: number, y: number, r: number } -- centre and radius; open: a point at r is outside
++export type Point = { x: number, y: number }
+ export type Phase = "begin" | "move" | "end"
+-export type Event = { id: number, phase: Phase, x: number, y: number }
+-export type Finger = { zone: Zone, x0: number, y0: number, x: number, y: number }
++-- t: the event's time in seconds on any one clock (Controls passes os.clock()); nil counts as 0
++export type Event = { id: number, phase: Phase, x: number, y: number, t: number? }
++export type Finger = {
++	zone: Zone,
++	x0: number,
++	y0: number,
++	t0: number,
++	x: number,
++	y: number,
++	far: boolean, -- it has been TAP_SLOP or more from where it went down
++	steer: Pad.Steer, -- the steer circle's fold (a fresh one for every other zone)
++}
+ export type State = { fingers: { [number]: Finger } }
+ export type Turn = "Left" | "Right" | "Back" | "Forward"
+ export type Effect =
+ 	{ kind: "turn", intent: Turn }
+-	| { kind: "look", dx: number, dy: number }
+-	| { kind: "snap" }
+-	| { kind: "fire" }
++	| { kind: "point", quarters: number? } -- where the view points, quarter turns from the heading, positive left
+ 	| { kind: "hop" }
+-	| { kind: "pick" } -- the PICK button (f0126)
+-export type Context = { width: number, snap: Rect?, fire: Rect?, hop: Rect?, pick: Rect? }
+--- The touch controls' rectangles, as Touch.buttons places them.
+-export type Buttons = { snap: Rect, fire: Rect, hop: Rect, pick: Rect }
++	| { kind: "fire" }
++	| { kind: "pick" }
++-- The touch controls, as Touch.buttons places them.
++export type Buttons = { steer: Circle, look: Circle, fire: Rect, pick: Rect }
++-- What the fold hit-tests against: Touch.buttons' controls, any of them absent (nil: nothing there).
++export type Context = { steer: Circle?, look: Circle?, fire: Rect?, pick: Rect? }
++-- Where each circle's knob is drawn: the finger's point, held inside the circle; nil when no finger holds it.
++export type Knobs = { steer: Point?, look: Point? }
+ -- Min/Max, the shape of an inset area.
+ export type Area = { Min: { X: number, Y: number }, Max: { X: number, Y: number } }
+ -- The HUD's sizes and its safe rectangle, as Hud.layout reports them.
+@@ -41,65 +58,85 @@ export type Box = {
+ }
+ 
+ local Touch = {}
+-Touch.MIN_SWIPE = 48 -- px, straight line from finger-down to finger-up
+-Touch.AXIS_DEGREES = 30 -- the cone around each screen axis
+ Touch.MIN_TARGET = 44 -- px, the smallest side of a touch control
++Touch.CIRCLE_SHARE = 0.3 -- a circle's diameter, of the safe rectangle's smaller side (the user, 2026-10-31)
++Touch.CIRCLE_MIN = 96 -- px
++Touch.CIRCLE_MAX = 160 -- px
++Touch.BUTTON_SHARE = 0.45 -- FIRE's and PICK's side, of a circle's diameter (at least MIN_TARGET)
++Touch.TAP_SECONDS = 0.25 -- a look finger that lifts sooner than this ...
++Touch.TAP_SLOP = 12 -- px ... having never been this far from where it went down, is a tap: a hop
++Touch.LOOK_DEAD = 0.25 -- of the look circle's radius: a pull shorter than this points nowhere (the heading)
+ 
+ local function finite(v: number): boolean
+ 	return v == v and math.abs(v) ~= math.huge
+ end
+ 
++local function round(v: number): number
++	return math.floor(v + 0.5)
++end
++
+ function Touch.empty(): State
+ 	return { fingers = {} }
+ end
+ 
+-local function inside(r: Rect?, x: number, y: number): boolean
++local function inRect(r: Rect?, x: number, y: number): boolean
+ 	return r ~= nil and x >= r.x and y >= r.y and x < r.x + r.w and y < r.y + r.h
+ end
+ 
+-function Touch.zone(
+-	width: number,
+-	x: number,
+-	y: number,
+-	snap: Rect?,
+-	fire: Rect?,
+-	hop: Rect?,
+-	pick: Rect?
+-): Zone
+-	if inside(snap, x, y) then
+-		return "snap"
++local function inCircle(c: Circle?, x: number, y: number): boolean
++	if c == nil then
++		return false
+ 	end
+-	if inside(fire, x, y) then
+-		return "fire"
++	local dx, dy = x - c.x, y - c.y
++	return dx * dx + dy * dy < c.r * c.r
++end
++
++-- The control a finger going down at (x, y) takes, or nil: FIRE, then PICK, then the steer and look circles.
++function Touch.zone(x: number, y: number, ctx: Context): Zone?
++	if not finite(x) or not finite(y) then
++		return nil
+ 	end
+-	if inside(hop, x, y) then
+-		return "hop"
++	if inRect(ctx.fire, x, y) then
++		return "fire"
+ 	end
+-	if inside(pick, x, y) then
++	if inRect(ctx.pick, x, y) then
+ 		return "pick"
+ 	end
+-	if finite(width) and width > 0 and x < width / 2 then
+-		return "turn"
++	if inCircle(ctx.steer, x, y) then
++		return "steer"
+ 	end
+-	return "look"
++	if inCircle(ctx.look, x, y) then
++		return "look"
++	end
++	return nil
+ end
+ 
+--- The intent of a straight-line swipe from finger-down to finger-up, or nil. Screen-down is Back.
+-function Touch.swipe(dx: number, dy: number): Turn?
+-	if not finite(dx) or not finite(dy) then
+-		return nil
++-- A finger at (x, y) as a stick tilt of circle c: x right, y up, its length the distance from the centre over the
++-- radius, at most 1. A bad point or circle is no tilt.
++function Touch.pull(c: Circle, x: number, y: number): (number, number)
++	if not (finite(x) and finite(y) and finite(c.x) and finite(c.y) and finite(c.r)) or c.r <= 0 then
++		return 0, 0
+ 	end
+-	if math.sqrt(dx * dx + dy * dy) < Touch.MIN_SWIPE then
+-		return nil
++	local px, py = (x - c.x) / c.r, (c.y - y) / c.r
++	local len = math.sqrt(px * px + py * py)
++	if len > 1 then
++		return px / len, py / len
+ 	end
+-	local angle = math.atan2(math.abs(dy), math.abs(dx)) -- 0 horizontal .. pi/2 vertical
+-	local fromAxis = math.min(angle, math.pi / 2 - angle)
+-	-- the epsilon absorbs the ulps of a vector built at exactly the cone's edge
+-	if fromAxis > math.rad(Touch.AXIS_DEGREES) + 1e-9 then
++	return px, py
++end
++
++-- Where a tilt (x right, y up) points the view: quarter turns from the heading, positive left (up 0, left 1,
++-- right -1, down 2), in (-2, 2]; nil inside LOOK_DEAD.
++function Touch.quarters(x: number, y: number): number?
++	if not finite(x) or not finite(y) or math.sqrt(x * x + y * y) < Touch.LOOK_DEAD then
+ 		return nil
+ 	end
+-	local key = if angle <= math.pi / 4 then (if dx < 0 then "A" else "D") else (if dy > 0 then "S" else "W")
+-	return View.action(key) :: Turn
++	local q = math.atan2(-x, y) / (math.pi / 2)
++	return if q <= -2 then q + 4 else q -- straight down is 2, whichever side of zero x is
++end
++
++local function distance(ax: number, ay: number, bx: number, by: number): number
++	return math.sqrt((ax - bx) ^ 2 + (ay - by) ^ 2)
+ end
+ 
+ -- Folds one event into a fresh state and the effects it causes. The given state is never changed.
+@@ -107,43 +144,72 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
+ 	local fingers: { [number]: Finger } = table.clone(state.fingers)
+ 	local effects: { Effect } = {}
+ 	local finger: Finger? = fingers[event.id]
++	local t = if event.t and finite(event.t) then event.t else 0
++
++	local function steerTo(f: Finger, c: Circle): Pad.Steer
++		local px, py = Touch.pull(c, event.x, event.y)
++		local s, emitted = Pad.steer(f.steer, px, py)
++		if emitted then
++			table.insert(effects, { kind = "turn", intent = emitted :: Turn })
++		end
++		return s
++	end
++	local function pointTo(c: Circle)
++		local px, py = Touch.pull(c, event.x, event.y)
++		table.insert(effects, { kind = "point", quarters = Touch.quarters(px, py) })
++	end
++
+ 	if event.phase == "begin" then
+-		if finger == nil then
+-			local zone: Zone = Touch.zone(ctx.width, event.x, event.y, ctx.snap, ctx.fire, ctx.hop, ctx.pick)
+-			local taken = false
+-			for _, f in fingers do
+-				taken = taken or f.zone == zone
+-			end
+-			if not taken then
+-				fingers[event.id] = { zone = zone, x0 = event.x, y0 = event.y, x = event.x, y = event.y }
+-				if zone == "snap" then
+-					table.insert(effects, { kind = "snap" })
+-				elseif zone == "fire" then
+-					table.insert(effects, { kind = "fire" })
+-				elseif zone == "hop" then
+-					table.insert(effects, { kind = "hop" })
+-				elseif zone == "pick" then
+-					table.insert(effects, { kind = "pick" })
+-				end
++		local zone: Zone? = if finger == nil then Touch.zone(event.x, event.y, ctx) else nil
++		local taken = false
++		for _, f in fingers do
++			taken = taken or f.zone == zone
++		end
++		if zone ~= nil and not taken then
++			local z: Zone = zone
++			local f: Finger = {
++				zone = z,
++				x0 = event.x,
++				y0 = event.y,
++				t0 = t,
++				x = event.x,
++				y = event.y,
++				far = false,
++				steer = Pad.steerStart(),
++			}
++			if zone == "fire" then
++				table.insert(effects, { kind = "fire" })
++			elseif zone == "pick" then
++				table.insert(effects, { kind = "pick" })
++			elseif zone == "steer" and ctx.steer then
++				f.steer = steerTo(f, ctx.steer)
++			elseif zone == "look" and ctx.look then
++				pointTo(ctx.look)
+ 			end
++			fingers[event.id] = f
+ 		end
+ 	elseif event.phase == "move" then
+-		if finger then
+-			local moved: Finger =
+-				{ zone = finger.zone, x0 = finger.x0, y0 = finger.y0, x = event.x, y = event.y }
+-			fingers[event.id] = moved
+-			if finger.zone == "look" then
+-				table.insert(effects, { kind = "look", dx = event.x - finger.x, dy = event.y - finger.y })
++		if finger and finite(event.x) and finite(event.y) then
++			local moved: Finger = table.clone(finger)
++			moved.x, moved.y = event.x, event.y
++			moved.far = finger.far or distance(event.x, event.y, finger.x0, finger.y0) >= Touch.TAP_SLOP
++			if finger.zone == "steer" and ctx.steer then
++				moved.steer = steerTo(finger, ctx.steer)
++			elseif finger.zone == "look" and ctx.look then
++				pointTo(ctx.look)
+ 			end
++			fingers[event.id] = moved
+ 		end
+ 	elseif event.phase == "end" then
+ 		if finger then
+ 			fingers[event.id] = nil
+-			if finger.zone == "turn" then
+-				local intent: Turn? = Touch.swipe(event.x - finger.x0, event.y - finger.y0)
+-				if intent then
+-					local turn: Effect = { kind = "turn", intent = intent }
+-					table.insert(effects, turn)
++			if finger.zone == "look" then
++				table.insert(effects, { kind = "point", quarters = nil })
++				local far = finger.far
++					or not (finite(event.x) and finite(event.y))
++					or distance(event.x, event.y, finger.x0, finger.y0) >= Touch.TAP_SLOP
++				if not far and t - finger.t0 < Touch.TAP_SECONDS then
++					table.insert(effects, { kind = "hop" })
+ 				end
+ 			end
+ 		end
+@@ -151,6 +217,24 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
+ 	return { fingers = fingers }, effects
+ end
+ 
++-- Where each circle's knob is drawn now.
++function Touch.knobs(state: State, ctx: Context): Knobs
++	local out: Knobs = {}
++	for _, f in state.fingers do
++		local c: Circle? = if f.zone == "steer" then ctx.steer elseif f.zone == "look" then ctx.look else nil
++		if c then
++			local px, py = Touch.pull(c, f.x, f.y)
++			local p: Point = { x = c.x + px * c.r, y = c.y - py * c.r }
++			if f.zone == "steer" then
++				out.steer = p
++			else
++				out.look = p
++			end
++		end
++	end
++	return out
++end
++
+ -- An input position (measured from the core-UI area's top-left) in screen pixels. A nil area is the
+ -- identity; a non-finite origin component counts as 0 on its axis.
+ function Touch.toScreen(none: Area?, x: number, y: number): (number, number)
+@@ -180,52 +264,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
+ 	}
+ end
+ 
+--- The snap control: a square of at least MIN_TARGET, bottom-aligned, one margin left of the power bar. It has
+--- one placement; it never climbs into the forward view.
+-function Touch.snapRect(box: Box): Rect
+-	local side = math.max(Touch.MIN_TARGET, box.iconSize)
+-	return {
+-		x = box.safeX + box.safeW - 2 * box.margin - box.barWidth - side,
+-		y = box.safeY + box.safeH - box.margin - side,
+-		w = side,
+-		h = side,
+-	}
+-end
+-
+--- The hop button (f0110): Roblox's legacy touch jump button, in the safe rectangle (the touch GUI's frame).
+-function Touch.hopRect(box: Box): Rect
+-	local b = Hud.jumpButtons(box.safeX, box.safeY, box.safeW, box.safeH)[1]
+-	return { x = b.x, y = b.y, w = b.w, h = b.h }
+-end
+-
+--- The fire button (f0110): the hop button's size, one margin left of it, level with it unless that would
+--- reach the snap control's band: then its bottom is one margin above the snap control's top.
+-function Touch.fireRect(box: Box): Rect
+-	local hop = Touch.hopRect(box)
+-	local snap = Touch.snapRect(box)
+-	local side = hop.w
+-	return {
+-		x = hop.x - box.margin - side,
+-		y = math.min(hop.y, snap.y - box.margin - side),
+-		w = side,
+-		h = side,
+-	}
+-end
+-
+--- Every touch control's rectangle.
+--- The pick button (f0126): the fire button's size, one margin left of it, level with it, so the row reads PICK,
+--- FIRE, JUMP. It clears every HUD block, the radar and the pick bar and banner on f0110's samples.
+-function Touch.pickRect(box: Box): Rect
+-	local fire = Touch.fireRect(box)
+-	return { x = fire.x - box.margin - fire.w, y = fire.y, w = fire.w, h = fire.h }
+-end
+-
++-- The touch controls in the safe rectangle. Each circle's diameter is CIRCLE_SHARE of the rectangle's smaller side,
++-- whole pixels, between CIRCLE_MIN and CIRCLE_MAX. The look circle's right edge is one margin in from the
++-- rectangle's, its bottom one margin above the power bar (where the corner radar's own bottom rule puts it); the
++-- steer circle's left edge is one margin in, its bottom one margin above the lives row. FIRE and PICK are squares of
++-- BUTTON_SHARE of the diameter (at least MIN_TARGET), bottom-aligned with the look circle: FIRE one margin left of
++-- it, PICK one margin left of FIRE, so the row reads PICK, FIRE, look.
+ function Touch.buttons(box: Box): Buttons
++	local m = box.margin
++	local d = math.clamp(
++		round(Touch.CIRCLE_SHARE * math.max(0, math.min(box.safeW, box.safeH))),
++		Touch.CIRCLE_MIN,
++		Touch.CIRCLE_MAX
++	)
++	local r = d / 2
++	local lookRight = box.safeX + box.safeW - m
++	local lookBottom = box.safeY + box.safeH - m - box.barHeight
++	local rowBottom = box.safeY + box.safeH - 2 * m - math.max(box.iconSize, box.barHeight)
++	local side = math.max(Touch.MIN_TARGET, round(Touch.BUTTON_SHARE * d))
++	local fire: Rect = { x = lookRight - d - m - side, y = rowBottom - side, w = side, h = side }
+ 	return {
+-		snap = Touch.snapRect(box),
+-		fire = Touch.fireRect(box),
+-		hop = Touch.hopRect(box),
+-		pick = Touch.pickRect(box),
++		steer = { x = box.safeX + m + r, y = rowBottom - r, r = r },
++		look = { x = lookRight - r, y = lookBottom - r, r = r },
++		fire = fire,
++		pick = { x = fire.x - m - side, y = fire.y, w = side, h = side },
+ 	}
+ end
+ 
+diff --git a/pickman/src/shared/Logic/View/init.luau b/pickman/src/shared/Logic/View/init.luau
+index d9e2e36d..9fc93e80 100644
+--- a/pickman/src/shared/Logic/View/init.luau
++++ b/pickman/src/shared/Logic/View/init.luau
+@@ -24,7 +24,8 @@ export type Action =
+ 	| "Snap"
+ 	| "Boost" -- f0143: a pad button that asks for a boost by itself (L3); no key maps to it
+ -- The arrow keys held down.
+-export type Arrows = { up: boolean, down: boolean, left: boolean, right: boolean }
++-- `point` (d0149): where the touch look circle points, in arrowQuarters' quarter turns; held arrows win over it.
++export type Arrows = { up: boolean, down: boolean, left: boolean, right: boolean, point: number? }
+ -- The look and whether it is springing back to the heading (after the arrows were let go).
+ export type Steer = { look: Look, spring: boolean }
+ export type Rgb = { r: number, g: number, b: number } -- 0..255
+@@ -320,9 +321,13 @@ end
+ -- Where the held arrows look, in quarter turns from the heading, positive left: up 0, left 1, right -1, down 2;
+ -- two together give the half quarters between (up and left 0.5, down and left 1.5, down and right -1.5).
+ -- Opposite arrows cancel; if every arrow held cancels, it is 0. Nil when none is held.
++--
++-- With no arrow held, the touch look circle's `point` (d0149) is the answer when it is a finite number, so the look
++-- turns toward it and aims by it as by the arrows, and springs back when it is let go (nil).
+ function View.arrowQuarters(a: Arrows): number?
+ 	if not (a.up or a.down or a.left or a.right) then
+-		return nil
++		local p = a.point
++		return if p ~= nil and finite(p) then p else nil
+ 	end
+ 	local side = (if a.left then 1 else 0) - (if a.right then 1 else 0)
+ 	local ahead = (if a.up then 1 else 0) - (if a.down then 1 else 0)
