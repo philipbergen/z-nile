@@ -6,3 +6,10 @@
 - design-review-001 F6: z-design/restated-rules-move-together
 - design-review-001 F7: z-design/quote-other-preps-before-promising
 - design-review-001 F8: z-design/restated-rules-move-together
+- design-review-002 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F2: zz-test/set-read-fields-apart
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-002 F6: one-off: a bound loop over a ramp's own top, capped by Levels.MAX_TOP with a case
+- design-review-002 F7: z-design/restated-rules-move-together

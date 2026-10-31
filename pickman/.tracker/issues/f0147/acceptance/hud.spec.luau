@@ -47,7 +47,8 @@ local INSETS: { Hud.Inset } = {
 }
 
 local function play(fields: { [string]: any }): Session.PlayFrame
-	local p: { [string]: any } = { phase = "playing", level = 1, score = 0, lives = 3, timer = 0, frightened = 0 }
+	local p: { [string]: any } =
+		{ phase = "playing", level = 1, score = 0, lives = 3, timer = 0, frightened = 0 }
 	for k, v in fields do
 		p[k] = v
 	end
@@ -75,8 +76,11 @@ return t.spec("f0147 the HUD's pick counter and power share", function(it)
 		"a ramped session's frame carries the picks, the goal and the power period; a classic one only its period",
 		function()
 			local m = Maze.parse({ "#######", "#  P  #", "#######" }, "room")
-			local ramped =
-				Session.new(m, 1, { movement = Movement.DEFAULT_CONFIG, maxIntentsPerTick = 4, ramp = Levels.RAMP })
+			local ramped = Session.new(
+				m,
+				1,
+				{ movement = Movement.DEFAULT_CONFIG, maxIntentsPerTick = 4, ramp = Levels.RAMP }
+			)
 			Session.join(ramped, "p")
 			local f = Session.frame(ramped, "p").play
 			t.expect(f.picks).toBe(0)
@@ -356,31 +360,34 @@ return t.spec("f0147 the HUD's pick counter and power share", function(it)
 		return { x = l.Position.X.Offset, y = l.Position.Y.Offset, w = l.Size.X.Offset, h = l.Size.Y.Offset }
 	end
 
-	it("HudView draws the counter under the score from the frame, left-aligned, and hides it without picks", function()
-		local screen = hudView(1280, 720)
-		screen.render()
-		screen.hud.show(play({ picks = 4, picksGoal = 10, level = 2 }))
-		screen.render()
-		local gui = find(screen.root, "Hud")
-		t.expect(gui ~= nil and (gui :: Inst).Parent == screen.root).toBe(true)
-		local label = find(gui :: Inst, "Picks")
-		t.expect(label ~= nil).toBe(true)
-		local l = label :: Inst
-		t.expect(l.Parent).toBe(gui)
-		t.expect(l.Text).toBe("PICKS 4/10")
-		t.expect(l.Visible).toBe(true)
-		t.expect(l.TextXAlignment.Name).toBe("Left")
-		t.expect(l.TextSize).toBe(Hud.layout(1280, 720).textSize)
-		t.expect(placed(l)).toEqual(expected(1280, 720))
-		local score = find(gui :: Inst, "Score") :: Inst
-		t.expect(l.TextColor3).toEqual(score.TextColor3) -- drawn as the score is
-		screen.hud.show(play({}))
-		screen.render()
-		t.expect(l.Visible).toBe(false)
-		screen.hud.show(play({ picks = 9, picksGoal = 10 }))
-		t.expect(l.Visible).toBe(true)
-		t.expect(l.Text).toBe("PICKS 9/10")
-	end)
+	it(
+		"HudView draws the counter under the score from the frame, left-aligned, and hides it without picks",
+		function()
+			local screen = hudView(1280, 720)
+			screen.render()
+			screen.hud.show(play({ picks = 4, picksGoal = 10, level = 2 }))
+			screen.render()
+			local gui = find(screen.root, "Hud")
+			t.expect(gui ~= nil and (gui :: Inst).Parent == screen.root).toBe(true)
+			local label = find(gui :: Inst, "Picks")
+			t.expect(label ~= nil).toBe(true)
+			local l = label :: Inst
+			t.expect(l.Parent).toBe(gui)
+			t.expect(l.Text).toBe("PICKS 4/10")
+			t.expect(l.Visible).toBe(true)
+			t.expect(l.TextXAlignment.Name).toBe("Left")
+			t.expect(l.TextSize).toBe(Hud.layout(1280, 720).textSize)
+			t.expect(placed(l)).toEqual(expected(1280, 720))
+			local score = find(gui :: Inst, "Score") :: Inst
+			t.expect(l.TextColor3).toEqual(score.TextColor3) -- drawn as the score is
+			screen.hud.show(play({}))
+			screen.render()
+			t.expect(l.Visible).toBe(false)
+			screen.hud.show(play({ picks = 9, picksGoal = 10 }))
+			t.expect(l.Visible).toBe(true)
+			t.expect(l.Text).toBe("PICKS 9/10")
+		end
+	)
 
 	it("HudView places the counter by the layout's inset, and again when the screen turns", function()
 		local screen = hudView(844, 390)

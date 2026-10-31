@@ -71,6 +71,23 @@ MUTANTS = {
         ("		local pick = member.pick\n		if pick and s.tick >= pick.started + pick.ticks then\n			finishPick(s, id, member, out)", "		local pick = member.pick\n		local finishLate = pick and s.tick >= pick.started + pick.ticks\n		if false then\n			finishPick(s, id, member, out)"),
         ("			stepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)\n", "			stepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)\n		end\n		if finishLate and member.pick then\n			finishPick(s, id, member, out)\n"),
     ], "levels"),
+    "M51": (L + "Game/init.luau", "g.score >= c.extraLifeScore * g.start then", "g.score >= c.extraLifeScore * g.level then", "levels"),
+    # the count taken when a pick starts, not when it finishes (two edits)
+    "M52": (L + "Session/init.luau", [
+        ("	member.levelPicks += 1\n	local ramp = s.config.ramp", "	local ramp = s.config.ramp"),
+        ("	member.armed = 0\n	member.pick = {", "	member.armed = 0\n	member.levelPicks += 1\n	member.pick = {"),
+    ], "levels"),
+    "M53": (L + "Ghosts/init.luau", [
+        ("		local total = (g.carry or 0.5)", "		local total = (g.carry or 0)"),
+        ("		carry = 0.5, -- f0147", "		carry = 0, -- f0147"),
+    ], "ramp"),
+    # one carry per ghost name, shared by every set (two edits)
+    "M54": (L + "Ghosts/init.luau", [
+        ("local function speedOf(set: Set, g: Ghost, input: Input): number", "local SHARED: { [string]: number } = {}\nlocal function speedOf(set: Set, g: Ghost, input: Input): number"),
+        ("local total = (g.carry or 0.5)", "local total = (SHARED[g.name] or 0.5)"),
+        ("		g.carry = total - units", "		SHARED[g.name] = total - units"),
+    ], "ramp"),
+    "M55": (L + "Levels/init.luau", "if not whole(r.top) or r.top > Levels.MAX_TOP then", "if not whole(r.top) then", "ramp"),
     "M41": (L + "Hud/init.luau", 'bonanza = "BONANZA!"', 'bonanza = "BONUS"', "hud"),
     "M42": (L + "Session/init.luau", "then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning, ramp = s.config.ramp })", "then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning })", "ramp"),
     "M43": (L + "Session/init.luau", "			picks = if s.config.ramp then s.members[id].levelPicks else nil,", "			picks = s.members[id].levelPicks,", "levels"),

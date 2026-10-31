@@ -26,8 +26,10 @@ local CORRIDOR = Maze.parse({ "#########", "#########", "#.....P.#", "#########"
 local WEST = Maze.parse({ "#########", "#########", "#.....P #", "#########", "#########" }, "west")
 local BARE = Maze.parse({ "#########", "#########", "#     P #", "#########", "#########" }, "bare")
 -- the player starts heading west (Movement.spawn), so it runs from the east end
-local LONG =
-	Maze.parse({ "##########################", "#                       P#", "##########################" }, "long")
+local LONG = Maze.parse(
+	{ "##########################", "#                       P#", "##########################" },
+	"long"
+)
 local R = Levels.RAMP
 
 -- the ramp's rules with no pauses and no ghosts (a level clear goes straight to the next level's play)
@@ -120,27 +122,30 @@ return t.spec("f0147 levels by picked walls", function(it)
 		t.expect(frame(s).play.picks).toBe(0)
 	end)
 
-	it("the next level is a fresh maze: holes closed, every pellet back, new marks, the player at the start", function()
-		local s = new(CORRIDOR, RAMPED)
-		picks(s, 9)
-		t.expect(#(frame(s).walls :: Session.Walls).opened).toBe(9)
-		for x = 1, 5 do
-			Pellets.eat(s.members.p.pellets, { x = x, y = 2 }) -- whatever the walk left, eaten
+	it(
+		"the next level is a fresh maze: holes closed, every pellet back, new marks, the player at the start",
+		function()
+			local s = new(CORRIDOR, RAMPED)
+			picks(s, 9)
+			t.expect(#(frame(s).walls :: Session.Walls).opened).toBe(9)
+			for x = 1, 5 do
+				Pellets.eat(s.members.p.pellets, { x = x, y = 2 }) -- whatever the walk left, eaten
+			end
+			t.expect(Pellets.remaining(s.members.p.pellets)).toBe(0)
+			picks(s, 1)
+			playingOn(s, 2)
+			local f = frame(s)
+			local walls = f.walls :: Session.Walls
+			t.expect(#walls.opened).toBe(0)
+			t.expect(#walls.marked).toBe(Picks.MARKED)
+			for _, tile in walls.marked do
+				t.expect(Maze.kind(CORRIDOR, tile)).toBe("wall")
+			end
+			t.expect(Pellets.remaining(s.members.p.pellets)).toBe(Pellets.remaining(Pellets.new(CORRIDOR)))
+			local at = Movement.occupied(CORRIDOR, s.members.p.move)
+			t.expect(at.x == CORRIDOR.spawn.x and at.y == CORRIDOR.spawn.y).toBe(true)
 		end
-		t.expect(Pellets.remaining(s.members.p.pellets)).toBe(0)
-		picks(s, 1)
-		playingOn(s, 2)
-		local f = frame(s)
-		local walls = f.walls :: Session.Walls
-		t.expect(#walls.opened).toBe(0)
-		t.expect(#walls.marked).toBe(Picks.MARKED)
-		for _, tile in walls.marked do
-			t.expect(Maze.kind(CORRIDOR, tile)).toBe("wall")
-		end
-		t.expect(Pellets.remaining(s.members.p.pellets)).toBe(Pellets.remaining(Pellets.new(CORRIDOR)))
-		local at = Movement.occupied(CORRIDOR, s.members.p.move)
-		t.expect(at.x == CORRIDOR.spawn.x and at.y == CORRIDOR.spawn.y).toBe(true)
-	end)
+	)
 
 	it("eating every pellet does not end a ramped level, and the emptied maze stays empty", function()
 		local s = new(WEST, RAMPED) -- the player runs west, over all five pellets, to the wall
@@ -179,6 +184,31 @@ return t.spec("f0147 levels by picked walls", function(it)
 		t.expect(cleared).toBe(true)
 	end)
 
+	it("a wasted pick does not count toward the level; a finished one does", function()
+		local s = new(BARE, RAMPED)
+		Session.submit(s, "p", "Pick")
+		local started = false
+		for _ = 1, 200 do
+			if has(Session.step(s), "PickStarted") then
+				started = true
+				break
+			end
+			if not s.members.p.move.moving and s.members.p.pick == nil then
+				Session.submit(s, "p", "Back")
+			end
+			if s.members.p.pick == nil and s.tick % 8 == 0 then
+				Session.submit(s, "p", "Pick")
+			end
+		end
+		t.expect(started).toBe(true)
+		Session.submit(s, "p", "Back") -- a movement key wastes it
+		local stopped = has(Session.step(s), "PickStopped")
+		t.expect(stopped ~= nil and stopped.reason == "moved").toBe(true)
+		t.expect(frame(s).play.picks).toBe(0)
+		picks(s, 1)
+		t.expect(frame(s).play.picks).toBe(1)
+	end)
+
 	it("a death keeps the level's pick count; a new run starts it at 0", function()
 		local s = new(CORRIDOR, RAMPED)
 		picks(s, 3)
@@ -211,49 +241,59 @@ return t.spec("f0147 levels by picked walls", function(it)
 		end
 	end)
 
-	it("a pick lasts ten paces of the level's ramped hunting ghost: 60 steps on level 1, 55 on level 3", function()
-		for level, want in { [1] = 60, [3] = 55 } do
-			local s = new(BARE, RAMPED)
-			s.members.p.play.level = level
-			local _, all = pickOnce(s)
-			local started = has(all, "PickStarted") :: Session.Event
-			t.expect(started.ticks).toBe(want)
-			t.expect(started.ticks).toBe(Picks.ticks(Levels.ghostSpeed(30, level, "normal", nil, R), false))
+	it(
+		"a pick lasts ten paces of the level's ramped hunting ghost: 60 steps on level 1, 55 on level 3",
+		function()
+			for level, want in { [1] = 60, [3] = 55 } do
+				local s = new(BARE, RAMPED)
+				s.members.p.play.level = level
+				local _, all = pickOnce(s)
+				local started = has(all, "PickStarted") :: Session.Event
+				t.expect(started.ticks).toBe(want)
+				t.expect(started.ticks)
+					.toBe(Picks.ticks(Levels.ghostSpeed(30, level, "normal", nil, R), false))
+			end
 		end
-	end)
+	)
 
 	-- the bonanza --------------------------------------------------------------------------------------------------
 
-	it("the tenth pick grants the bonanza, not a rolled boon: a banked faster pick and a shot at once", function()
-		local s = new(CORRIDOR, RAMPED)
-		picks(s, 9)
-		s.members.p.picks.fast = 0 -- whatever the first nine rolled: the tenth pick is not a fast one
-		local fast = 0
-		local shots = s.members.p.blaster.shots
-		s.members.p.longHops = false -- whatever the first nine rolled: the tenth must not start them
-		local tenth = picks(s, 1)
-		local picked = has(tenth, "WallPicked") :: Session.Event
-		t.expect(picked.item).toBe("bonanza")
-		t.expect(Picks.BONANZA).toBe("bonanza")
-		t.expect(s.members.p.picks.fast).toBe(fast + 1)
-		t.expect(s.members.p.blaster.shots).toBe(math.min(shots + 1, Blaster.MAX_SHOTS))
-		-- nothing a rolled boon does happens in that step
-		t.expect(has(tenth, "PelletsBack")).toBe(nil)
-		t.expect(has(tenth, "PowerStarted")).toBe(nil)
-		t.expect(s.members.p.longHops).toBe(false) -- the long hops wait for the next level
-		local f = frame(s)
-		t.expect(f.boon ~= nil and (f.boon :: Session.BoonGrant).kind == "bonanza").toBe(true)
-		t.expect((f.boon :: Session.BoonGrant).tick).toBe(s.tick)
-	end)
+	it(
+		"the tenth pick grants the bonanza, not a rolled boon: a banked faster pick and a shot at once",
+		function()
+			local s = new(CORRIDOR, RAMPED)
+			picks(s, 9)
+			s.members.p.picks.fast = 0 -- whatever the first nine rolled: the tenth pick is not a fast one
+			local fast = 0
+			local shots = s.members.p.blaster.shots
+			s.members.p.longHops = false -- whatever the first nine rolled: the tenth must not start them
+			local tenth = picks(s, 1)
+			local picked = has(tenth, "WallPicked") :: Session.Event
+			t.expect(picked.item).toBe("bonanza")
+			t.expect(Picks.BONANZA).toBe("bonanza")
+			t.expect(s.members.p.picks.fast).toBe(fast + 1)
+			t.expect(s.members.p.blaster.shots).toBe(math.min(shots + 1, Blaster.MAX_SHOTS))
+			-- nothing a rolled boon does happens in that step
+			t.expect(has(tenth, "PelletsBack")).toBe(nil)
+			t.expect(has(tenth, "PowerStarted")).toBe(nil)
+			t.expect(s.members.p.longHops).toBe(false) -- the long hops wait for the next level
+			local f = frame(s)
+			t.expect(f.boon ~= nil and (f.boon :: Session.BoonGrant).kind == "bonanza").toBe(true)
+			t.expect((f.boon :: Session.BoonGrant).tick).toBe(s.tick)
+		end
+	)
 
-	it("a tenth pick that spends a banked faster pick still leaves one banked: one spent, one granted", function()
-		local s = new(BARE, RAMPED)
-		picks(s, 9)
-		s.members.p.picks.fast = 1
-		local tenth = picks(s, 1)
-		t.expect((has(tenth, "WallPicked") :: Session.Event).item).toBe("bonanza")
-		t.expect(s.members.p.picks.fast).toBe(1)
-	end)
+	it(
+		"a tenth pick that spends a banked faster pick still leaves one banked: one spent, one granted",
+		function()
+			local s = new(BARE, RAMPED)
+			picks(s, 9)
+			s.members.p.picks.fast = 1
+			local tenth = picks(s, 1)
+			t.expect((has(tenth, "WallPicked") :: Session.Event).item).toBe("bonanza")
+			t.expect(s.members.p.picks.fast).toBe(1)
+		end
+	)
 
 	it("the bonanza's shot is wasted when three are held", function()
 		local s = new(CORRIDOR, RAMPED)
@@ -269,41 +309,44 @@ return t.spec("f0147 levels by picked walls", function(it)
 		t.expect(t2.members.p.blaster.shots).toBe(1)
 	end)
 
-	it("the next level has long hops from its start, kept over a death, until the following fresh maze", function()
-		local s = new(CORRIDOR, RAMPED)
-		picks(s, 10)
-		playingOn(s, 2)
-		Session.submit(s, "p", "Hop")
-		Session.step(s)
-		t.expect(frame(s).hopTicks).toBe(Hop.LONG_TICKS)
-		Session.kill(s, "p")
-		playingOn(s, 2)
-		for _ = 1, Hop.LONG_TICKS + Hop.COOLDOWN do
+	it(
+		"the next level has long hops from its start, kept over a death, until the following fresh maze",
+		function()
+			local s = new(CORRIDOR, RAMPED)
+			picks(s, 10)
+			playingOn(s, 2)
+			Session.submit(s, "p", "Hop")
 			Session.step(s)
-		end
-		Session.submit(s, "p", "Hop")
-		Session.step(s)
-		t.expect(frame(s).hopTicks).toBe(Hop.LONG_TICKS)
-		-- a new run after a game over on level 2: ordinary hops again
-		for _ = 1, 3 do
+			t.expect(frame(s).hopTicks).toBe(Hop.LONG_TICKS)
 			Session.kill(s, "p")
-			for _ = 1, 5 do
+			playingOn(s, 2)
+			for _ = 1, Hop.LONG_TICKS + Hop.COOLDOWN do
 				Session.step(s)
 			end
-		end
-		t.expect(Session.isOver(s, "p")).toBe(true)
-		local _, ok = Session.playAgain(s, "p")
-		t.expect(ok).toBe(true)
-		local r = s
-		playingOn(r, 1)
-		for _ = 1, 3 do
+			Session.submit(s, "p", "Hop")
+			Session.step(s)
+			t.expect(frame(s).hopTicks).toBe(Hop.LONG_TICKS)
+			-- a new run after a game over on level 2: ordinary hops again
+			for _ = 1, 3 do
+				Session.kill(s, "p")
+				for _ = 1, 5 do
+					Session.step(s)
+				end
+			end
+			t.expect(Session.isOver(s, "p")).toBe(true)
+			local _, ok = Session.playAgain(s, "p")
+			t.expect(ok).toBe(true)
+			local r = s
+			playingOn(r, 1)
+			for _ = 1, 3 do
+				Session.step(r)
+			end
+			Session.submit(r, "p", "Hop")
 			Session.step(r)
+			t.expect(frame(r).hopTicks).toBe(Hop.TICKS)
+			t.expect(r.members.p.play.frightened).toBe(0)
 		end
-		Session.submit(r, "p", "Hop")
-		Session.step(r)
-		t.expect(frame(r).hopTicks).toBe(Hop.TICKS)
-		t.expect(r.members.p.play.frightened).toBe(0)
-	end)
+	)
 
 	it("when the next level's play starts, a long ghost pill runs: twice level 1's power time", function()
 		local s = new(CORRIDOR, RAMPED)
@@ -316,9 +359,10 @@ return t.spec("f0147 levels by picked walls", function(it)
 				break
 			end
 			t.expect(
-				s.members.p.play.phase == "playing" and s.members.p.play.level == 2 and s.members.p.play.frightened > 0
-			)
-				.toBe(false)
+				s.members.p.play.phase == "playing"
+					and s.members.p.play.level == 2
+					and s.members.p.play.frightened > 0
+			).toBe(false)
 		end
 		t.expect(power ~= nil).toBe(true)
 		t.expect((power :: Session.Event).ticks).toBe(2 * Levels.frightenedTicks(1, Session.TICK_RATE))
@@ -335,7 +379,8 @@ return t.spec("f0147 levels by picked walls", function(it)
 		playingOn(s, 1)
 		local set = p.ghosts :: Ghosts.Set
 		set.house.idle = -100000 -- nobody leaves the house during the test
-		local events = pickOnce(s, Picks.ticks(Levels.ghostSpeed(30, 1, "normal", set.tuning, c.ramp), false) + 5)
+		local events =
+			pickOnce(s, Picks.ticks(Levels.ghostSpeed(30, 1, "normal", set.tuning, c.ramp), false) + 5)
 		t.expect(events ~= nil and has(events :: { Session.Event }, "LevelCleared") ~= nil).toBe(true)
 		local sawReady = false
 		for _ = 1, 200 do
@@ -367,7 +412,8 @@ return t.spec("f0147 levels by picked walls", function(it)
 			playingOn(s, 1)
 			local set = p.ghosts :: Ghosts.Set
 			for _, g in set.ghosts do
-				g.tile, g.progress, g.status, g.frightened, g.reverse = { x = 13, y = 14 }, 0, "house", false, false
+				g.tile, g.progress, g.status, g.frightened, g.reverse =
+					{ x = 13, y = 14 }, 0, "house", false, false
 			end
 			set.house.idle = -100000
 			Session.submit(s, "p", "Pick")
@@ -411,32 +457,37 @@ return t.spec("f0147 levels by picked walls", function(it)
 
 	-- the points --------------------------------------------------------------------------------------------------
 
-	it("with a ramp a pellet on level n scores 10 x n and a power pellet 50 x n; without one, as ever", function()
-		local m = Maze.parse({ "#######", "#o..P.#", "#######" }, "dots")
-		for _, level in { 1, 2, 3, 7 } do
-			for _, config in { RAMPED, CLASSIC } do
-				local s = new(m, config)
-				s.members.p.play.level = level -- the player runs west over two pellets and the power pellet
-				local got: { [string]: number } = {}
-				for _ = 1, 60 do
-					for _, e in Session.step(s) do
-						if e.kind == "PelletEaten" then
-							got[e.item :: string] = e.points :: number
+	it(
+		"with a ramp a pellet on level n scores 10 x n and a power pellet 50 x n; without one, as ever",
+		function()
+			local m = Maze.parse({ "#######", "#o..P.#", "#######" }, "dots")
+			for _, level in { 1, 2, 3, 7 } do
+				for _, config in { RAMPED, CLASSIC } do
+					local s = new(m, config)
+					s.members.p.play.level = level -- the player runs west over two pellets and the power pellet
+					local got: { [string]: number } = {}
+					for _ = 1, 60 do
+						for _, e in Session.step(s) do
+							if e.kind == "PelletEaten" then
+								got[e.item :: string] = e.points :: number
+							end
 						end
 					end
+					local n = if config == RAMPED then level else 1
+					t.expect(got.pellet).toBe(10 * n)
+					t.expect(got.power).toBe(50 * n)
+					t.expect(s.members.p.play.score).toBe((2 * 10 + 50) * n)
 				end
-				local n = if config == RAMPED then level else 1
-				t.expect(got.pellet).toBe(10 * n)
-				t.expect(got.power).toBe(50 * n)
-				t.expect(s.members.p.play.score).toBe((2 * 10 + 50) * n)
 			end
 		end
-	end)
+	)
 
 	it(
 		"with a ramp a ghost eaten on level n scores its chain value x n, by contact and by a shot; without one, as ever",
 		function()
-			for _, case in { { level = 1, ramped = true }, { level = 3, ramped = true }, { level = 3, ramped = false } } do
+			for _, case in
+				{ { level = 1, ramped = true }, { level = 3, ramped = true }, { level = 3, ramped = false } }
+			do
 				local level = case.level
 				local c = table.clone(Session.GAME_CONFIG) :: any
 				if not case.ramped then
@@ -449,7 +500,8 @@ return t.spec("f0147 levels by picked walls", function(it)
 				playingOn(s, level)
 				local set = p.ghosts :: Ghosts.Set
 				for _, g in set.ghosts do
-					g.tile, g.progress, g.status, g.frightened, g.reverse = { x = 13, y = 14 }, 0, "house", false, false
+					g.tile, g.progress, g.status, g.frightened, g.reverse =
+						{ x = 13, y = 14 }, 0, "house", false, false
 				end
 				set.house.idle = -100000
 				-- a shot along the row: Blinky three tiles west of the player, active
@@ -494,31 +546,41 @@ return t.spec("f0147 levels by picked walls", function(it)
 		end
 	)
 
-	it("the extra life comes at 10,000 x the run's starting level, counted on the multiplied score", function()
-		local g = Game.new(Game.IMMEDIATE_CONFIG, R)
-		t.expect(g.start).toBe(1)
-		t.expect(#Game.addScore(g, 9999)).toBe(0)
-		local life = Game.addScore(g, 1)
-		t.expect(#life == 1 and life[1].kind == "ExtraLife").toBe(true)
-		local h = Game.new(Game.IMMEDIATE_CONFIG, R)
-		h.start, h.level = 2, 2
-		t.expect(#Game.addScore(h, Game.points(h, 5000))).toBe(0) -- 10,000 on level 2: not yet 20,000
-		t.expect(#Game.addScore(h, Game.points(h, 4999))).toBe(0) -- 19,998
-		t.expect(#Game.addScore(h, Game.points(h, 1))).toBe(1) -- 20,000
-		t.expect(Game.points(h, 10)).toBe(20)
-		t.expect(Game.points(Game.new(Game.IMMEDIATE_CONFIG), 10)).toBe(10) -- no ramp: as it is
-		-- a new run starts on the starting level again
-		local again = Game.new(Game.IMMEDIATE_CONFIG, R)
-		again.level, again.phase = 5, "gameover"
-		local events, ok = Game.playAgain(again)
-		t.expect(ok).toBe(true)
-		t.expect(again.level).toBe(1)
-		t.expect(events[1].level).toBe(1)
-		local later = Game.new(Game.IMMEDIATE_CONFIG, R)
-		later.start, later.level, later.phase = 3, 6, "gameover" -- f0148 sets the start; a new run begins there
-		local again3, ok3 = Game.playAgain(later)
-		t.expect(ok3).toBe(true)
-		t.expect(later.level).toBe(3)
-		t.expect(again3[1].level).toBe(3)
-	end)
+	it(
+		"the extra life comes at 10,000 x the run's starting level, counted on the multiplied score",
+		function()
+			local g = Game.new(Game.IMMEDIATE_CONFIG, R)
+			t.expect(g.start).toBe(1)
+			t.expect(#Game.addScore(g, 9999)).toBe(0)
+			local life = Game.addScore(g, 1)
+			t.expect(#life == 1 and life[1].kind == "ExtraLife").toBe(true)
+			local h = Game.new(Game.IMMEDIATE_CONFIG, R)
+			h.start, h.level = 2, 2
+			t.expect(#Game.addScore(h, Game.points(h, 5000))).toBe(0) -- 10,000 on level 2: not yet 20,000
+			t.expect(#Game.addScore(h, Game.points(h, 4999))).toBe(0) -- 19,998
+			t.expect(#Game.addScore(h, Game.points(h, 1))).toBe(1) -- 20,000
+			t.expect(Game.points(h, 10)).toBe(20)
+			t.expect(Game.points(Game.new(Game.IMMEDIATE_CONFIG), 10)).toBe(10) -- no ramp: as it is
+			-- a new run starts on the starting level again
+			local again = Game.new(Game.IMMEDIATE_CONFIG, R)
+			again.level, again.phase = 5, "gameover"
+			local events, ok = Game.playAgain(again)
+			t.expect(ok).toBe(true)
+			t.expect(again.level).toBe(1)
+			t.expect(events[1].level).toBe(1)
+			-- the threshold reads the start, not the level being played
+			for _, case in { { start = 1, level = 3, at = 10000 }, { start = 2, level = 5, at = 20000 } } do
+				local g2 = Game.new(Game.IMMEDIATE_CONFIG, R)
+				g2.start, g2.level = case.start, case.level
+				t.expect(#Game.addScore(g2, case.at - 1)).toBe(0)
+				t.expect(#Game.addScore(g2, 1)).toBe(1)
+			end
+			local later = Game.new(Game.IMMEDIATE_CONFIG, R)
+			later.start, later.level, later.phase = 3, 6, "gameover" -- f0148 sets the start; a new run begins there
+			local again3, ok3 = Game.playAgain(later)
+			t.expect(ok3).toBe(true)
+			t.expect(later.level).toBe(3)
+			t.expect(again3[1].level).toBe(3)
+		end
+	)
 end)

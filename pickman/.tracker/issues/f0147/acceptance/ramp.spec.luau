@@ -56,18 +56,22 @@ return t.spec("f0147 the speed ramp", function(it)
 		t.expect(sp.eyes).toBe(42) -- eyes are never tuned
 	end)
 
-	it("every speed on level n is the classic level 1's x 0.7 x 1.05^(n-1), in whole units, up to level 34", function()
-		for level = 1, 34 do
-			t.expect(Levels.playerSpeed(BASE, level, false, R)).toBe(ramped(1, level))
-			t.expect(Levels.playerSpeed(BASE, level, true, R)).toBe(ramped(1.125, level))
-			for _, k in TUNINGS do
-				for _, g in KINDS do
-					t.expect(Levels.ghostSpeed(BASE, level, g.kind, k, R)).toBe(ramped(g.factor * k, level))
+	it(
+		"every speed on level n is the classic level 1's x 0.7 x 1.05^(n-1), in whole units, up to level 34",
+		function()
+			for level = 1, 34 do
+				t.expect(Levels.playerSpeed(BASE, level, false, R)).toBe(ramped(1, level))
+				t.expect(Levels.playerSpeed(BASE, level, true, R)).toBe(ramped(1.125, level))
+				for _, k in TUNINGS do
+					for _, g in KINDS do
+						t.expect(Levels.ghostSpeed(BASE, level, g.kind, k, R))
+							.toBe(ramped(g.factor * k, level))
+					end
 				end
+				t.expect(Levels.ghostSpeed(BASE, level, "eyes", 1, R)).toBe(ramped(2, level))
 			end
-			t.expect(Levels.ghostSpeed(BASE, level, "eyes", 1, R)).toBe(ramped(2, level))
 		end
-	end)
+	)
 
 	it(
 		"each level up to 34 is faster than the one before: the player and the hunting ghosts in whole units, the tunnel and frightened ghosts on average",
@@ -86,8 +90,7 @@ return t.spec("f0147 the speed ramp", function(it)
 					t.expect(
 						Levels.ghostRate(BASE, level, "tunnel", k, R)
 							> Levels.ghostRate(BASE, level - 1, "tunnel", k, R)
-					)
-						.toBe(true)
+					).toBe(true)
 					local frightRate = Levels.ghostRate(BASE, level, "frightened", k, R)
 					t.expect(frightRate > Levels.ghostRate(BASE, level - 1, "frightened", k, R)).toBe(true)
 				end
@@ -166,6 +169,7 @@ return t.spec("f0147 the speed ramp", function(it)
 			{ picks = 2.5 },
 			{ top = 0 },
 			{ top = math.huge },
+			{ top = 1001 }, -- over Levels.MAX_TOP: Session.new would check every level up to it
 			{ first = 0 },
 			{ first = 0 / 0 },
 			{ step = 0.99 },
@@ -249,41 +253,44 @@ return t.spec("f0147 the speed ramp", function(it)
 		end
 	end
 
-	it("a shipped session's ghosts move the ramp's units a step, hunting and as eyes (capped at a tile)", function()
-		for _, level in { 1, 8, 30 } do
-			local s = Session.new(Maze.layout("classic"), 1, Session.GAME_CONFIG) :: any
-			Session.join(s, "p")
-			s.members.p.play.level = level
-			local set = s.members.p.ghosts :: Ghosts.Set
-			set.level = level
-			while s.members.p.play.phase ~= "playing" do
-				Session.step(s)
-			end
-			local sp = Session.speeds(Session.GAME_CONFIG, level)
-			if level < 30 then
+	it(
+		"a shipped session's ghosts move the ramp's units a step, hunting and as eyes (capped at a tile)",
+		function()
+			for _, level in { 1, 8, 30 } do
+				local s = Session.new(Maze.layout("classic"), 1, Session.GAME_CONFIG) :: any
+				Session.join(s, "p")
+				s.members.p.play.level = level
+				local set = s.members.p.ghosts :: Ghosts.Set
+				set.level = level
+				while s.members.p.play.phase ~= "playing" do
+					Session.step(s)
+				end
+				local sp = Session.speeds(Session.GAME_CONFIG, level)
+				if level < 30 then
+					allEqual(
+						measure(s, set, function(g: any): boolean
+							return g.status == "active" and not g.frightened
+						end, 30),
+						sp.ghost,
+						`level {level} hunting`
+					)
+				end
+				local blinky = Ghosts.ghost(set, "blinky") :: any
+				local w = blinky.walker or blinky
+				w.tile, w.progress, w.heading = { x = 1, y = 1 }, 0, "E" -- the far corner: a long way home
+				Ghosts.eat(set, "blinky")
 				allEqual(
 					measure(s, set, function(g: any): boolean
-						return g.status == "active" and not g.frightened
-					end, 30),
-					sp.ghost,
-					`level {level} hunting`
+						return g.status == "eyes"
+					end, 10),
+					sp.eyes,
+					`level {level} eyes`
 				)
 			end
-			local blinky = Ghosts.ghost(set, "blinky") :: any
-			local w = blinky.walker or blinky
-			w.tile, w.progress, w.heading = { x = 1, y = 1 }, 0, "E" -- the far corner: a long way home
-			Ghosts.eat(set, "blinky")
-			allEqual(
-				measure(s, set, function(g: any): boolean
-					return g.status == "eyes"
-				end, 10),
-				sp.eyes,
-				`level {level} eyes`
-			)
+			t.expect(Session.speeds(Session.GAME_CONFIG, 8).ghost).toBe(25)
+			t.expect(Session.speeds(Session.GAME_CONFIG, 30).eyes).toBe(UNITS)
 		end
-		t.expect(Session.speeds(Session.GAME_CONFIG, 8).ghost).toBe(25)
-		t.expect(Session.speeds(Session.GAME_CONFIG, 30).eyes).toBe(UNITS)
-	end)
+	)
 
 	it("a ramped ghost set keeps level 1's timetable, house limits and flashes on later levels", function()
 		local m = Maze.layout("classic")
@@ -324,72 +331,125 @@ return t.spec("f0147 the speed ramp", function(it)
 		t.expect(Ghosts.look(classic, Ghosts.ghost(classic, "blinky"))).toBe("frightened")
 	end)
 
-	it("with a ramp the tunnel and frightened ghosts move the exact rate on average, carrying the fraction", function()
-		-- the rates, unrounded: classic level 1's factor x 0.7 x 1.05^(n-1) x the tuning
-		for _, k in TUNINGS do
-			for level = 1, 40 do
-				local f = 0.7 * 1.05 ^ (math.min(level, 34) - 1)
-				t.expect(math.abs(Levels.ghostRate(BASE, level, "tunnel", k, R) - BASE * 0.5 * f * k) < 1e-9).toBe(true)
-				t.expect(math.abs(Levels.ghostRate(BASE, level, "frightened", k, R) - BASE * 0.625 * f * k) < 1e-9)
-					.toBe(true)
-				t.expect(Levels.ghostRate(BASE, level, "normal", k, R))
-					.toBe(Levels.ghostSpeed(BASE, level, "normal", k, R))
-				t.expect(Levels.ghostRate(BASE, level, "eyes", k, R)).toBe(Levels.ghostSpeed(BASE, level, "eyes", k, R))
+	it(
+		"with a ramp the tunnel and frightened ghosts move the exact rate on average, carrying the fraction",
+		function()
+			-- the rates, unrounded: classic level 1's factor x 0.7 x 1.05^(n-1) x the tuning
+			for _, k in TUNINGS do
+				for level = 1, 40 do
+					local f = 0.7 * 1.05 ^ (math.min(level, 34) - 1)
+					t.expect(
+						math.abs(Levels.ghostRate(BASE, level, "tunnel", k, R) - BASE * 0.5 * f * k) < 1e-9
+					)
+						.toBe(true)
+					t.expect(
+						math.abs(Levels.ghostRate(BASE, level, "frightened", k, R) - BASE * 0.625 * f * k)
+							< 1e-9
+					).toBe(true)
+					t.expect(Levels.ghostRate(BASE, level, "normal", k, R))
+						.toBe(Levels.ghostSpeed(BASE, level, "normal", k, R))
+					t.expect(Levels.ghostRate(BASE, level, "eyes", k, R))
+						.toBe(Levels.ghostSpeed(BASE, level, "eyes", k, R))
+				end
 			end
-		end
-		t.expect(Levels.ghostRate(BASE, 5, "frightened")).toBe(Levels.ghostSpeed(BASE, 5, "frightened")) -- no ramp: whole
-		-- a frightened ghost on the shipped level 5: 14.5 units a step on average, as 14s and 15s
-		local m = Maze.layout("classic")
-		local rate = Levels.ghostRate(BASE, 5, "frightened", 1 / 1.1, R)
-		t.expect(math.abs(rate - 14.5) < 0.01).toBe(true)
-		local set = Ghosts.new(m, 1, { start = "active", level = 5, tuning = 1 / 1.1, ramp = R })
-		Ghosts.power(set, 100000)
-		local input: Ghosts.Input = { player = m.spawn, heading = "W", level = 5, baseSpeed = BASE, tickRate = 30 }
-		local steps: { number } = {}
-		for _ = 1, 60 do
-			local g = Ghosts.ghost(set, "blinky") :: any
-			local before = snap(g.walker or g)
-			local inTunnel = Ghosts.tunnel(m, Ghosts.occupied(g.walker or g))
-			Ghosts.step(set, input)
-			local d = travelled(m, before, snap(g.walker or g))
-			if d and not inTunnel and not Ghosts.tunnel(m, Ghosts.occupied(g.walker or g)) then
-				table.insert(steps, d)
+			t.expect(Levels.ghostRate(BASE, 5, "frightened")).toBe(Levels.ghostSpeed(BASE, 5, "frightened")) -- no ramp: whole
+			-- a frightened ghost on the shipped level 5: 14.5 units a step on average, as 14s and 15s
+			local m = Maze.layout("classic")
+			local rate = Levels.ghostRate(BASE, 5, "frightened", 1 / 1.1, R)
+			t.expect(math.abs(rate - 14.5) < 0.01).toBe(true)
+			local set = Ghosts.new(m, 1, { start = "active", level = 5, tuning = 1 / 1.1, ramp = R })
+			Ghosts.power(set, 100000)
+			local input: Ghosts.Input =
+				{ player = m.spawn, heading = "W", level = 5, baseSpeed = BASE, tickRate = 30 }
+			local steps: { number } = {}
+			for _ = 1, 60 do
+				local g = Ghosts.ghost(set, "blinky") :: any
+				local before = snap(g.walker or g)
+				local inTunnel = Ghosts.tunnel(m, Ghosts.occupied(g.walker or g))
+				Ghosts.step(set, input)
+				local d = travelled(m, before, snap(g.walker or g))
+				if d and not inTunnel and not Ghosts.tunnel(m, Ghosts.occupied(g.walker or g)) then
+					table.insert(steps, d)
+				end
 			end
-		end
-		t.expect(#steps >= 40).toBe(true)
-		local sum, saw = 0, { [14] = 0, [15] = 0 }
-		for _, d in steps do
-			if d ~= 14 and d ~= 15 then
-				error(`a frightened step covered {d} units, want 14 or 15`)
+			t.expect(#steps >= 40).toBe(true)
+			local sum, saw = 0, { [14] = 0, [15] = 0 }
+			for _, d in steps do
+				if d ~= 14 and d ~= 15 then
+					error(`a frightened step covered {d} units, want 14 or 15`)
+				end
+				saw[d] += 1
+				sum += d
 			end
-			saw[d] += 1
-			sum += d
-		end
-		t.expect(saw[14] > 0 and saw[15] > 0).toBe(true)
-		t.expect(math.abs(sum / #steps - rate) < 0.1).toBe(true)
-		-- a hunting ghost through the side tunnel on level 5: 11.6 units a step on average, as 11s and 12s
-		local hunt = Ghosts.new(m, 1, { start = "active", level = 5, tuning = 1 / 1.1, ramp = R })
-		local blinky = Ghosts.ghost(hunt, "blinky") :: any
-		local w = blinky.walker or blinky
-		local tunnelRate = Levels.ghostRate(BASE, 5, "tunnel", 1 / 1.1, R)
-		local inside: { number } = {}
-		for x = 0, m.width - 1 do
-			if Ghosts.tunnel(m, { x = x, y = 14 }) and #inside == 0 then
-				w.tile, w.progress, w.heading = { x = x, y = 14 }, 0, if x < m.width / 2 then "W" else "E"
-				for _ = 1, 8 do
-					local before = snap(w)
-					Ghosts.step(hunt, input)
-					local d = travelled(m, before, snap(w))
-					if d and Ghosts.tunnel(m, before.tile) and Ghosts.tunnel(m, Ghosts.occupied(w)) then
-						table.insert(inside, d)
+			t.expect(saw[14] > 0 and saw[15] > 0).toBe(true)
+			t.expect(math.abs(sum / #steps - rate) < 0.1).toBe(true)
+			-- a hunting ghost through the side tunnel on level 5: 11.6 units a step on average, as 11s and 12s
+			local hunt = Ghosts.new(m, 1, { start = "active", level = 5, tuning = 1 / 1.1, ramp = R })
+			local blinky = Ghosts.ghost(hunt, "blinky") :: any
+			local w = blinky.walker or blinky
+			local tunnelRate = Levels.ghostRate(BASE, 5, "tunnel", 1 / 1.1, R)
+			local inside: { number } = {}
+			for x = 0, m.width - 1 do
+				if Ghosts.tunnel(m, { x = x, y = 14 }) and #inside == 0 then
+					w.tile, w.progress, w.heading = { x = x, y = 14 }, 0, if x < m.width / 2 then "W" else "E"
+					for _ = 1, 8 do
+						local before = snap(w)
+						Ghosts.step(hunt, input)
+						local d = travelled(m, before, snap(w))
+						if d and Ghosts.tunnel(m, before.tile) and Ghosts.tunnel(m, Ghosts.occupied(w)) then
+							table.insert(inside, d)
+						end
 					end
 				end
 			end
+			t.expect(#inside >= 3).toBe(true)
+			t.expect(table.find(inside, math.floor(tunnelRate)) ~= nil).toBe(true) -- rounding alone would give 12 every step
+			for _, d in inside do
+				t.expect(d == math.floor(tunnelRate) or d == math.ceil(tunnelRate)).toBe(true)
+			end
 		end
-		t.expect(#inside >= 3).toBe(true)
-		t.expect(table.find(inside, math.floor(tunnelRate)) ~= nil).toBe(true) -- rounding alone would give 12 every step
-		for _, d in inside do
-			t.expect(d == math.floor(tunnelRate) or d == math.ceil(tunnelRate)).toBe(true)
+	)
+
+	it(
+		"each ghost's carry starts at a half whenever it is placed, and belongs to that ghost of that set",
+		function()
+			local m = Maze.layout("classic")
+			local K = 1 / 1.1
+			local rate = Levels.ghostRate(BASE, 2, "frightened", K, R) -- 12.53: rounded 13, floored 12
+			t.expect(math.floor(rate + 0.5)).toBe(13)
+			local input: Ghosts.Input =
+				{ player = m.spawn, heading = "W", level = 2, baseSpeed = BASE, tickRate = 30 }
+			local function blue(): Ghosts.Set
+				local set = Ghosts.new(m, 1, { start = "active", level = 2, tuning = K, ramp = R })
+				Ghosts.power(set, 100000)
+				return set
+			end
+			local function stepOf(set: Ghosts.Set): number?
+				local g = Ghosts.ghost(set, "blinky") :: any
+				local before = snap(g.walker or g)
+				Ghosts.step(set, input)
+				return travelled(m, before, snap(g.walker or g))
+			end
+			-- a fresh set: the first step is the rate rounded (a carry of 0 would give 12)
+			t.expect(stepOf(blue())).toBe(13)
+			-- after an odd number of steps, a death places the ghosts again: the carry is a half again
+			local set = blue()
+			for _ = 1, 3 do
+				stepOf(set)
+			end
+			Ghosts.reset(set, "respawn", 2)
+			Ghosts.power(set, 100000)
+			t.expect(stepOf(set)).toBe(13)
+			-- two sets stepped in turn move exactly as one alone: each ghost keeps its own carry
+			local alone, a, b = blue(), blue(), blue()
+			for n = 1, 12 do
+				local want = stepOf(alone)
+				local got = stepOf(a)
+				stepOf(b)
+				if got ~= want then
+					error(`step {n}: {got} units beside another set, {want} alone`)
+				end
+			end
 		end
-	end)
+	)
 end)
