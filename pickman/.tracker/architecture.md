@@ -17,6 +17,7 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Awareness | How the player senses ghosts they cannot see, engine-free: the radar around the player and the edge indicators that grow and brighten as a ghost nears along the maze (R0010, f0033); the eight edge glows, their sectors and boxes (R0035, f0102) |
 | Blaster | The ghost blaster's shots: the seeded drop when a ghost is eaten, at most three held, the fire intents, and which active ghost a shot along the grid hits (R0035, f0100); a shot granted outright, the blaster boon (f0126) |
 | Hop | The spy hop counted in steps: when a hop may start, the eye's rise through it, and the airborne window over the wall tops in which no ghost meets the player and no pellet is eaten; the hop intent (R0035, f0101); a hop of a given length, the long hop of the jumps boon (f0126) |
+| Pad | The gamepad: its buttons mapped to the keys' actions, the left stick folded into turn intents one a push, the right stick's look rate in View.look's units, and which input types are gamepads (f0146) |
 | Picks | Risky wall picks: which walls can be marked, the three marked walls and their seeded roll, the wall a player beside one would pick, how long a pick takes, the six boons and their even roll; the pick intent (f0126) |
 | Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0024, f0061) |
 | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
@@ -47,6 +48,8 @@ Hud -> Levels
 Hud -> Session
 Lobby -> Travel
 Movement -> Maze
+Pad -> Movement
+Pad -> View
 Pellets -> Maze
 Picks -> Maze
 Picks -> Movement

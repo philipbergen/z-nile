@@ -268,6 +268,13 @@ do
 		}
 	end
 end
+-- c0172: merge.spec quotes the fence variable as a needle in the Merging skill text. It never sets it.
+local C0172 = renamed.id("c0172")
+for _, dir in { "z-nile/tests/acceptance/" .. C0172 } do
+	ALLOWED[`{dir}/merge.spec.luau`] = {
+		PICKMAN_FENCE_ = "quotes the fence variable as a needle in the Merging skill text, and never sets it (c0172)",
+	}
+end
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
 local EXEMPT_DIRS = { "z-nile/lib/git-hooks/" }
 local function exempt(path: string): boolean

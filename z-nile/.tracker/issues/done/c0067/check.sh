@@ -64,10 +64,8 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
   "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
-check "AC13: CI dispatched gate runs only the acceptance specs of the branch raft" bash -c '
-  w=../.github/workflows/check.yml
-  grep -qF "*/active/*/acceptance/*.spec.luau" "$w" || { echo "check.yml: the active acceptance glob is gone (c0001 pins it)"; exit 1; }
-  grep -qF "./zn members" "$w" || { echo "check.yml: the dispatched step does not select the raft members"; exit 1; }
-  grep -qF "GITHUB_REF_NAME" "$w" || { echo "check.yml: the raft is not taken from the dispatched ref"; exit 1; }'
+# AC13 (the dispatched gate's glob, ./zn members and GITHUB_REF_NAME in check.yml) is removed here, in c0172's
+# prep, so the execution branch does not edit this finished check.sh. c0172's deploy spec is the pin: GitHub
+# Actions no longer runs a gate. c0001's promoted spec keeps the old pin until that execution changes it.
 
 finish

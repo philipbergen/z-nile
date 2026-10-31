@@ -12,6 +12,7 @@ local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
 local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local Movement = require("@game/ReplicatedStorage/Shared/Logic/Movement")
+local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
@@ -54,7 +55,7 @@ function Controls.start(
 		state: Enum.UserInputState,
 		input: InputObject
 	): Enum.ContextActionResult
-		local action: View.Action? = View.action(input.KeyCode.Name)
+		local action: View.Action? = View.action(input.KeyCode.Name) or Pad.action(input.KeyCode.Name)
 		local k = keys
 		if state == Enum.UserInputState.Begin then
 			if action == "Snap" then
@@ -83,11 +84,18 @@ function Controls.start(
 				end
 			end
 		end
+		-- the pad's continue is FlowView's too (f0146): it jumps here and goes on to FlowView's binding
+		if input.KeyCode.Name == Pad.CONTINUE then
+			return Enum.ContextActionResult.Pass
+		end
 		return Enum.ContextActionResult.Sink
 	end
 
 	local codes: { EnumItem } = {}
 	for name in View.KEYS do
+		table.insert(codes, (Enum.KeyCode :: any)[name])
+	end
+	for name in Pad.BUTTONS do
 		table.insert(codes, (Enum.KeyCode :: any)[name])
 	end
 	ContextActionService:BindActionAtPriority(

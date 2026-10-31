@@ -274,7 +274,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			-- c0120 override: the real tree is read from its top
 			local roots = projects.roots(projects.load(root))
 			local dirs = luauDirs()
-			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
+			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/deploy.yml`)) :: any
 			local ignored: { string } = wf["on"].push["paths-ignore"]
 			for _, r in roots do
 				t.expect(table.find(dirs, r) ~= nil).toBe(true)
@@ -285,26 +285,11 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 		end
 	)
 
-	it(
-		"CI bootstraps with z-nile/setup.sh and skips tracker-only pushes to every root and the counter",
-		function()
-			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
-			-- c0120 override: pickman's root moved; tracker/ (retired) is no longer ignored. The workflows are read from
-			-- the top
-			t.expect(wf["on"].push["paths-ignore"])
-				.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
-			local runs = ""
-			for _, step in wf.jobs.gate.steps do
-				runs ..= (step.run or "") .. "\n"
-			end
-			-- c0120 override: the bootstrap installs the tools only; each job then runs its own project's gate
-			t.expect(has(runs, "z-nile/setup.sh --tools\n")).toBe(true)
-			t.expect(has(runs, "./zn members")).toBe(true)
-			t.expect(has(runs, "scripts/")).toBe(false)
-			-- c0120 override: the spec runs from z-nile/, its home, after the move
-			local board = fs.readFile(`{root}/.github/workflows/board.yml`)
-			t.expect(has(board, "run: ./zn board --out dist/board.html -O")).toBe(true)
-			fs.removeDir(base)
-		end
-	)
+	it("deploy.yml skips tracker-only pushes to every root and the counter", function()
+		local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/deploy.yml`)) :: any
+		-- c0172 override: the ignore list moved with the gate. The workflow is read from the top.
+		t.expect(wf["on"].push["paths-ignore"])
+			.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
+		fs.removeDir(base)
+	end)
 end)
