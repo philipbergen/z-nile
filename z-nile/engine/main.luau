@@ -710,8 +710,10 @@ local function reserve(
 	return n, { path = counter, content = idsLib.format(raised, phrase()) }, nil
 end
 
--- Reserves the next number of `space` on origin/main by pushing only the raised counter; nil when origin/main has
--- no tracker/next. `extra`: ids that count besides origin's (the local tree's).
+-- R0061 review 001 F2: a publish callback with no listing of origin/main refuses, rather than checking only this
+-- checkout (a guard fails closed).
+local NO_LISTING = "publish gave no listing of origin/main: cannot check the slug"
+
 -- c0135: the item of `kind` that already uses `slug` in this checkout or, when `listed` (origin/main's files under the
 -- roots, from a publish callback) is given, on origin/main too: a slug names one item of its kind wherever it is.
 local function slugTaken(
@@ -730,6 +732,8 @@ local function slugTaken(
 	return audit.slugOwner(items, kind, slug)
 end
 
+-- Reserves the next number of `space` on origin/main by pushing only the raised counter; nil when origin/main has
+-- no tracker/next. `extra`: ids that count besides origin's (the local tree's).
 -- `check` (c0135), when given, runs inside the publish callback on the tree the reservation commits on; a reason it
 -- returns fails the reservation, so nothing is published.
 local function reserveOnOrigin(
@@ -745,7 +749,11 @@ local function reserveOnOrigin(
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
 		if check then
-			local why = check(listed :: { string }, roots, read)
+			-- fails closed (R0061 review 001 F2): with no listing of origin/main the slug can't be checked there
+			if not listed then
+				return NO_LISTING
+			end
+			local why = check(listed, roots, read)
 			if why then
 				return why
 			end
@@ -1102,7 +1110,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				if not table.find(roots, root) then
 					return `{root} is not a project root in origin/main's {projects.FILE}`
 				end
-				local taken = slugTaken("issue", slug, listed :: { string }, roots, read)
+				if not listed then
+					return NO_LISTING
+				end
+				local taken = slugTaken("issue", slug, listed, roots, read)
 				if taken then
 					return `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
 				end
@@ -1222,7 +1233,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			local claim = freshStamp("preparing")
 			refuseStale()
 			local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
-				local taken = slugTaken("raft", slug, listed :: { string }, roots, read)
+				if not listed then
+					return NO_LISTING
+				end
+				local taken = slugTaken("raft", slug, listed, roots, read)
 				if taken then
 					return `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
 				end
