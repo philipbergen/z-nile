@@ -1,3 +1,9 @@
 - design-review-001 F1: z-raft/order-reasons-survive-workstreams
 - design-review-001 F2: z-design/restated-rules-move-together
 - design-review-001 F3: zz-rules/exhaustive-lists-name-new-things
+- review-001 F1: z-design/restated-rules-move-together
+- review-001 F2: zz-arch/guard-no-is-explicit
+- review-001 F3: zz-test/seed-every-enumerated-case
+- review-001 F4: one-off: a hand-wrapped comment line stylua does not wrap
+- review-001 F5: zz-execute/focus-before-spend
+- note R0061 review 001's candidate lesson (focus before spend): zz-execute/focus-before-spend
