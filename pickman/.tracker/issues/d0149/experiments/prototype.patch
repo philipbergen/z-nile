@@ -13,9 +13,18 @@ index bf78c57e..e719a028 100644
  View -> Movement
  View -> Pellets
 diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
-index 2f7e1a3a..650cce6f 100644
+index 2f7e1a3a..4df82506 100644
 --- a/pickman/.tracker/game-design.md
 +++ b/pickman/.tracker/game-design.md
+@@ -35,7 +35,7 @@ This is the source of truth for product decisions. Every raft design must agree
+   - The buffer expires after **0.8 s of game time** (24 ticks; R0004), 1.6 s in real time. A re-press restarts it.
+   - **Cornering grace** (user, 2026-09-29): a turn arriving one tick after passing straight through a centre where that exit exists is taken there, cutting the corner.
+   - **Missed turns** (user, 2026-09-29): a later press for a turn the player just passed straight by is discarded while the player is still nearer that junction than the next one ahead with that exit, so a late press never diverts the player at a later junction. A press nearer the next such junction is buffered for it.
+-- **Look:** the camera's yaw and pitch are free and never change the heading. On desktop the arrow keys look relative to the heading (see *Desktop keys*); on touch a "snap look to heading" button recentres it.
++- **Look:** the camera's yaw and pitch are free and never change the heading. On desktop the arrow keys look relative to the heading (see *Desktop keys*); on touch the look circle points the view and springs back when let go (d0149).
+ - **Desktop keys** (user, 2026-10-17; f0104, R0035): **W** `Forward` (the straight exit, and it cancels a buffered turn), **A** `Left`, **D** `Right`, **S** `Back`, as before. **Space** jumps (the spy hop, f0101). **E** fires the blaster (f0100). **F** picks a marked wall (f0126; user, 2026-10-25: "A new pick key"). The **arrow keys look** relative to the direction of travel while held (up ahead, down behind, left and right to the sides, two together give the diagonals) and the view springs back to the heading on release; pressing an arrow also snaps the view out of any mouse look. The snap-look key goes away.
+ - **Gamepad** (f0146, user 2026-10-25: prep's defaults accepted): the left stick and the D-pad turn, relative to the heading as W A S D do (up `Forward`, down `Back`, left and right the sides; a push of the stick past 0.6 sends one intent, released below 0.4), the right stick looks (a 0.15 dead zone, a squared response, 3 rad/s across and 2 rad/s up and down at full tilt, not inverted; the look stays where it is left), R3 recentres it, the bottom face button jumps (PlayStation's cross, Xbox's A) and continues at game over, R2 fires; in the lobby the D-pad moves between START GAME and the boards and the bottom face button presses them; Start is Roblox's menu. The most recently used controller drives, judged by its buttons and a stick pushed past 0.4, so an idle controller's drift never takes over (user, 2026-10-25); an engaged stick changes direction only 15 degrees past the diagonal. After ButtonB clears the lobby's selection, START GAME is selected again.
+ - **Collisions are grid rules in Logic:**
 @@ -68,11 +68,13 @@ This is the source of truth for product decisions. Every raft design must agree
  - **Storage:** behind a Logic-facing interface. A fake store is used in tests, and Roblox's ordered store in the adapter. Beta and production have separate stores, because they are separate experiences.
  
@@ -34,6 +43,23 @@ index 2f7e1a3a..650cce6f 100644
  
  ## Ghost hunter tools (user, 2026-10-17; R0035)
  The user's captures (f0100, f0101, f0102), with the details chosen in R0035's prep marked **(prep)**; the user may veto any of those.
+@@ -85,14 +87,14 @@ The user's captures (f0100, f0101, f0102), with the details chosen in R0035's pr
+ The user's words: "tick should take the time it takes for a ghost to move 10 paces, only interior walls with special color and there are only ever 2-3 of them after you pick one it new interior wall will become picked, even chance on each boon", and "Another boon should be all pills eaten come back". Then, asked: one tile per pick ("One tile only"), "Always 3", "A new pick key", "Gold", the boon defaults below ("Use these defaults"), and the pellets boon brings back "Dots and power pellets".
+ - **Marked walls:** three interior walls (not on the maze's outer edge) at a time are gold; a finished pick marks the next at once.
+ - **Every input** (user, 2026-10-25: "We support keyboard, cosole, and touch for every feature"): the pick is asked for on the keyboard, a controller and a touch screen alike.
+-- **The pick:** F asks for one (on a controller Y / triangle, `ButtonY`, a row of f0146's controller map; on touch a PICK button one margin left of FIRE, level with it and its size, added after f0110, which on narrow portrait phones takes a 70 px square of the swipe-to-turn half: user, 2026-10-25; the pick works on every input, the user's rule); the player stops on the next tile centre beside a marked wall and stands there as long as a ghost takes to move 10 paces (the user's words; **(prep)**: a hunting ghost walking 10 tiles at its speed on that level) (43 steps on level 1, 2.9 s of real time, at today's ghost speed; ten paces of the ghosts as tuned, so 47 steps with f0125's slower ghosts). A movement key, a hop, or leaving play (a death, a cleared level) wastes it. A finished pick opens that one wall tile, for the player and the ghosts, and the player goes on.
++- **The pick:** F asks for one (on a controller Y / triangle, `ButtonY`, a row of f0146's controller map; on touch the PICK button, left of FIRE beside the look circle (user, 2026-10-25; placed by d0149); the pick works on every input, the user's rule); the player stops on the next tile centre beside a marked wall and stands there as long as a ghost takes to move 10 paces (the user's words; **(prep)**: a hunting ghost walking 10 tiles at its speed on that level) (43 steps on level 1, 2.9 s of real time, at today's ghost speed; ten paces of the ghosts as tuned, so 47 steps with f0125's slower ghosts). A movement key, a hop, or leaving play (a death, a cleared level) wastes it. A finished pick opens that one wall tile, for the player and the ghosts, and the player goes on.
+ - **The gold** is 255, 215, 0 (user, 2026-10-26: "Brighter gold"), at least 30 CIE76 from every ghost colour (Clyde 33.3, Inky 31.4).
+ - **Marked walls stay gold** while the walls are green (f0109; user, 2026-10-25: "Stay gold"); the level-clear flash still lights them white.
+ - **Boons**, each with the same chance (1 in 6): **longer jumps** (every hop airborne 1.5 times as long, until the maze is fresh again), a **faster pick** (the next pick that finishes takes half the time), a **ghost pill** (a power pellet's frightened time), a **long ghost pill** (twice that), a **blaster shot** (one more, wasted when three are held) and **pellets back** (every eaten pellet and power pellet reappears).
+ - **(prep)**, the user may veto any: a wall can be marked only when no door or house tile is among its eight neighbours (the ghost house stays shut) and the player can walk next to it, and the marks are a seeded roll among those walls; a ghost that catches a picking player wastes the pick, and a blue ghost met while picking is eaten without wasting it; the HUD's power bar is the share of a power pellet's time, so it stays full for the first half of a long ghost pill; the long hop is 19 steps (airborne 15 against a hop's 10, the same 14-stud rise, the same 8-step cool-down after landing); a pick request stays pending as long as a buffered turn (24 steps) and one pressed during a pick is ignored; no pick starts while a hop is under way; the wall picked from a tile is the marked one ahead, then left, right, behind; the pick that ends this step finishes before that step's keys, and the player sets off in the same step; firing does not waste a pick; a death keeps the holes and the marks, while a new level or a new run closes the holes and rolls new marks; banked faster picks last until a new run, and a wasted pick keeps its faster pick; the marks and the boons follow the session seed, as the blaster's drops do (the open drop-seed decision applies to them too); the HUD shows a gold bar for the pick under way and the boon's name for 2 s; the radar shows the holes but not the marks.
+ 
+ ## Speed boost (f0143)
+-**Speed boost** (f0143, user 2026-10-25: "a speed boost that lasts a second or two to help get away from a ghost"; the trigger decided: a double tap on **W**). Decided with the user (2026-10-25), prep's defaults accepted: a double tap on **W** (two presses within 0.3 s of real time) asks the server for a boost, and so does a double tap of the D-pad's Up; on touch, two quick swipes up; on a gamepad, the left stick's click (L3) asks by itself, and a quick double push of the left stick up boosts too (user, 2026-10-26). A boost cancels a buffered turn, as W does, however it is asked for. The server starts it only in play and at most once every 112 steps: it lasts 22 steps (1.47 s of real time) and the next may start 90 steps (6 s) after it ends. While it lasts the player runs 1.5 times the level's speed, frightened time included, never more than a tile a step (level 1: 45 units a step against a hunting ghost's 28). A death, a new level or a new run ends it, and the next life has one ready. The HUD shows a chevron after the shot bars (yellow ready, white boosting, grey cooling), and the view widens 8 degrees while it lasts.
++**Speed boost** (f0143, user 2026-10-25: "a speed boost that lasts a second or two to help get away from a ghost"; the trigger decided: a double tap on **W**). Decided with the user (2026-10-25), prep's defaults accepted: a double tap on **W** (two presses within 0.3 s of real time) asks the server for a boost, and so does a double tap of the D-pad's Up; on touch, two quick pulls up on the steer circle (d0149); on a gamepad, the left stick's click (L3) asks by itself, and a quick double push of the left stick up boosts too (user, 2026-10-26). A boost cancels a buffered turn, as W does, however it is asked for. The server starts it only in play and at most once every 112 steps: it lasts 22 steps (1.47 s of real time) and the next may start 90 steps (6 s) after it ends. While it lasts the player runs 1.5 times the level's speed, frightened time included, never more than a tile a step (level 1: 45 units a step against a hunting ghost's 28). A death, a new level or a new run ends it, and the next life has one ready. The HUD shows a chevron after the shot bars (yellow ready, white boosting, grey cooling), and the view widens 8 degrees while it lasts.
+ 
+ ## Open decisions
+ - **The blaster's drop chance** (f0100): a number for `Blaster.DROP_PERCENT` (50 until then), after a Beta playtest.
 diff --git a/pickman/src/client/Camera.luau b/pickman/src/client/Camera.luau
 index f7d8109d..637b1876 100644
 --- a/pickman/src/client/Camera.luau
@@ -64,10 +90,10 @@ index f7d8109d..637b1876 100644
  
  -- The spy hop (f0101): the tick the latest hop started, as the server's frame says (nil: none yet). The server
 diff --git a/pickman/src/client/Controls.luau b/pickman/src/client/Controls.luau
-index 3c606b8c..1026023f 100644
+index 3c606b8c..ab50c3bc 100644
 --- a/pickman/src/client/Controls.luau
 +++ b/pickman/src/client/Controls.luau
-@@ -1,8 +1,9 @@
+@@ -1,11 +1,13 @@
  --!strict
  -- Client adapter: binds the key map from View and relays intents to the server. The movement keys, the fire key
  -- and the jump (a hop, f0101) send intents; the arrow look is the camera's, handed in through Controls.keys (f0104). On a touch
@@ -79,7 +105,11 @@ index 3c606b8c..1026023f 100644
  local ContextActionService = game:GetService("ContextActionService")
  local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
  local ReplicatedStorage = game:GetService("ReplicatedStorage")
-@@ -17,11 +18,13 @@ local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
++local RunService = game:GetService("RunService")
+ local UserInputService = game:GetService("UserInputService")
+ 
+ local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
+@@ -17,11 +19,13 @@ local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
  local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
  local View = require("@game/ReplicatedStorage/Shared/Logic/View")
  
@@ -95,7 +125,7 @@ index 3c606b8c..1026023f 100644
  }
  
  local Controls = {}
-@@ -38,10 +41,9 @@ end
+@@ -38,10 +42,9 @@ end
  
  function Controls.start(
  	onSnap: () -> (),
@@ -108,15 +138,86 @@ index 3c606b8c..1026023f 100644
  )
  	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
  
-@@ -123,7 +125,6 @@ function Controls.start(
+@@ -121,13 +124,13 @@ function Controls.start(
+ 		table.unpack(codes)
+ 	)
  
- 	-- the platform thumbstick would take the left half, which is the turn zone
+-	-- the platform thumbstick would take the left half, which is the turn zone
++	-- Roblox's own thumbstick and jump button would sit where the circles are
  	GuiService.TouchControlsEnabled = false
 -	local camera = workspace.CurrentCamera :: Camera
  	local fingers = Touch.empty()
  	local ids: { [InputObject]: number } = {}
  	local lastId = 0
-@@ -163,21 +164,10 @@ function Controls.start(
+ 	local touching = false
++	local laidOut: Touch.Buttons? = nil -- the controls the held fingers were measured against
+ 
+ 	-- Held while any physical touch is down, including one the fold ignored: it still moves the locked mouse.
+ 	local function hold()
+@@ -140,8 +143,60 @@ function Controls.start(
+ 		end
+ 	end
+ 
+-	-- Every touch event is converted to screen pixels and measured against the full screen, read afresh each
+-	-- time: the first frames can report an empty area, and a rotation changes it.
++	-- Every finger is let go: the view springs back and the knobs centre. Fingers still down stay unheard until
++	-- they lift (their ids stay, so the mouse stays held).
++	local function forget()
++		fingers = Touch.empty()
++		local k = keys
++		if k and k.point then
++			k.point(nil)
++		end
++		if onKnobs then
++			onKnobs({})
++		end
++	end
++
++	-- The controls now. When they moved (a turn, the top bar shown or hidden), a held finger's pull would be measured
++	-- from the new place, so every finger is let go first (the fold's source changed).
++	local function controlsNow(): Touch.Context
++		local placed = if buttons then buttons() else nil
++		if placed ~= laidOut then
++			if laidOut ~= nil then
++				forget()
++			end
++			laidOut = placed
++		end
++		return placed or {}
++	end
++
++	local function apply(effects: { Touch.Effect })
++		for _, effect in effects do
++			if effect.kind == "turn" then
++				intent:FireServer(effect.intent)
++				if effect.intent == "Forward" then
++					local pair
++					touchTaps, pair = Boost.tap(touchTaps, os.clock())
++					if pair then
++						intent:FireServer(Boost.INTENT)
++					end
++				end
++			elseif effect.kind == "point" then
++				local k = keys
++				if k and k.point then
++					k.point(effect.quarters)
++				end
++			elseif effect.kind == "fire" then
++				fire()
++			elseif effect.kind == "hop" then
++				intent:FireServer(Hop.INTENT)
++			elseif effect.kind == "pick" then
++				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
++			end
++		end
++	end
++
++	-- Every touch event is converted to screen pixels, read afresh each time: the first frames can report an empty
++	-- area, and a rotation changes it.
+ 	local function onInput(input: InputObject, phase: Touch.Phase)
+ 		if input.UserInputType ~= Enum.UserInputType.Touch then
+ 			return
+@@ -163,44 +218,13 @@ function Controls.start(
  			input.Position.X,
  			input.Position.Y
  		)
@@ -127,7 +228,7 @@ index 3c606b8c..1026023f 100644
 -		)
 -		local rect = if snapRect then snapRect() else nil
 -		local placed = if buttons then buttons() else nil
-+		local placed: Touch.Context = (if buttons then buttons() else nil) or {}
++		local placed = controlsNow()
  		local effects
 -		fingers, effects = Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy }, {
 -			width = sw,
@@ -136,52 +237,58 @@ index 3c606b8c..1026023f 100644
 -			hop = placed and placed.hop,
 -			pick = placed and placed.pick,
 -		})
-+		fingers, effects =
-+			Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy, t = os.clock() }, placed)
- 		for _, effect in effects do
- 			if effect.kind == "turn" then
- 				intent:FireServer(effect.intent)
-@@ -188,12 +178,11 @@ function Controls.start(
- 						intent:FireServer(Boost.INTENT)
- 					end
- 				end
+-		for _, effect in effects do
+-			if effect.kind == "turn" then
+-				intent:FireServer(effect.intent)
+-				if effect.intent == "Forward" then
+-					local pair
+-					touchTaps, pair = Boost.tap(touchTaps, os.clock())
+-					if pair then
+-						intent:FireServer(Boost.INTENT)
+-					end
+-				end
 -			elseif effect.kind == "look" then
 -				if onLook then
 -					onLook(effect.dx, effect.dy)
-+			elseif effect.kind == "point" then
-+				local k = keys
-+				if k and k.point then
-+					k.point(effect.quarters)
- 				end
+-				end
 -			elseif effect.kind == "snap" then
 -				onSnap()
- 			elseif effect.kind == "fire" then
- 				fire()
- 			elseif effect.kind == "hop" then
-@@ -202,6 +191,9 @@ function Controls.start(
- 				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
- 			end
- 		end
+-			elseif effect.kind == "fire" then
+-				fire()
+-			elseif effect.kind == "hop" then
+-				intent:FireServer(Hop.INTENT)
+-			elseif effect.kind == "pick" then
+-				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
+-			end
++		fingers, effects =
++			Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy, t = os.clock() }, placed)
++		apply(effects)
 +		if onKnobs then
 +			onKnobs(Touch.knobs(fingers, placed))
-+		end
+ 		end
  		hold()
  	end
- 
-@@ -218,6 +210,13 @@ function Controls.start(
+@@ -214,9 +238,18 @@ function Controls.start(
+ 	UserInputService.InputEnded:Connect(function(input: InputObject, _: boolean)
+ 		onInput(input, "end")
+ 	end)
+-	-- a touch held while the window loses focus may never end; drop every finger so no zone stays locked
++	-- every frame: a look finger held still long enough starts pointing (Touch.tick)
++	RunService.Heartbeat:Connect(function()
++		if next(fingers.fingers) == nil then
++			return
++		end
++		local effects
++		fingers, effects = Touch.tick(fingers, os.clock(), controlsNow())
++		apply(effects)
++	end)
++	-- a touch held while the window loses focus may never end; drop every finger so no control stays held
  	UserInputService.WindowFocusReleased:Connect(function()
- 		fingers = Touch.empty()
+-		fingers = Touch.empty()
++		forget()
  		ids = {}
-+		local k = keys
-+		if k and k.point then
-+			k.point(nil) -- a look circle held when focus went springs back
-+		end
-+		if onKnobs then
-+			onKnobs({})
-+		end
  		hold()
  	end)
- end
 diff --git a/pickman/src/client/HudView.luau b/pickman/src/client/HudView.luau
 index b238f481..fc46eeea 100644
 --- a/pickman/src/client/HudView.luau
@@ -366,10 +473,10 @@ index 2b559ee0..b6bc0919 100644
  Sticks.start(Pads.stick)
  HudView.start()
 diff --git a/pickman/src/shared/Logic/Awareness/init.luau b/pickman/src/shared/Logic/Awareness/init.luau
-index 45c0b4f4..402e32ab 100644
+index 45c0b4f4..c7210b46 100644
 --- a/pickman/src/shared/Logic/Awareness/init.luau
 +++ b/pickman/src/shared/Logic/Awareness/init.luau
-@@ -345,4 +345,29 @@ function Awareness.radar(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, radius: nu
+@@ -345,4 +345,32 @@ function Awareness.radar(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, radius: nu
  	return { radius = r, walls = walls, blips = blips }
  end
  
@@ -392,7 +499,10 @@ index 45c0b4f4..402e32ab 100644
 +		for i = 0, Awareness.RING.dots - 1 do
 +			local a = math.rad(sector * 45 - 22.5 + (i + 1) * 45 / slots)
 +			local cx, cy = w / 2 - rad * math.sin(a), h / 2 - rad * math.cos(a)
-+			table.insert(out, { x = cx - s / 2, y = cy - s / 2, w = s, h = s })
++			table.insert(
++				out,
++				{ x = cx - s / 2, y = cy - s / 2, w = s, h = s, sector = sector, lit = false, closeness = 0 }
++			)
 +		end
 +	end
 +	return out
@@ -400,10 +510,10 @@ index 45c0b4f4..402e32ab 100644
 +
  return Awareness
 diff --git a/pickman/src/shared/Logic/Touch/init.luau b/pickman/src/shared/Logic/Touch/init.luau
-index 326c5f6f..153638f1 100644
+index 326c5f6f..c2eee082 100644
 --- a/pickman/src/shared/Logic/Touch/init.luau
 +++ b/pickman/src/shared/Logic/Touch/init.luau
-@@ -1,30 +1,47 @@
+@@ -1,30 +1,48 @@
  --!strict
 --- Touch: the phone's gestures as a pure fold over begin, move and end events, engine-free. A finger is
 --- classified once, when it goes down: the snap control, the fire or the hop button (f0110), the turn half (left)
@@ -441,6 +551,7 @@ index 326c5f6f..153638f1 100644
 +	x: number,
 +	y: number,
 +	far: boolean, -- it has been TAP_SLOP or more from where it went down
++	looking: boolean, -- a look finger decided to be a pull (far, or held TAP_SECONDS): it points the view
 +	steer: Pad.Steer, -- the steer circle's fold (a fresh one for every other zone)
 +}
  export type State = { fingers: { [number]: Finger } }
@@ -467,7 +578,7 @@ index 326c5f6f..153638f1 100644
  -- Min/Max, the shape of an inset area.
  export type Area = { Min: { X: number, Y: number }, Max: { X: number, Y: number } }
  -- The HUD's sizes and its safe rectangle, as Hud.layout reports them.
-@@ -41,65 +58,85 @@ export type Box = {
+@@ -41,65 +59,85 @@ export type Box = {
  }
  
  local Touch = {}
@@ -510,12 +621,13 @@ index 326c5f6f..153638f1 100644
 -): Zone
 -	if inside(snap, x, y) then
 -		return "snap"
+-	end
+-	if inside(fire, x, y) then
+-		return "fire"
 +local function inCircle(c: Circle?, x: number, y: number): boolean
 +	if c == nil then
 +		return false
- 	end
--	if inside(fire, x, y) then
--		return "fire"
++	end
 +	local dx, dy = x - c.x, y - c.y
 +	return dx * dx + dy * dy < c.r * c.r
 +end
@@ -538,11 +650,11 @@ index 326c5f6f..153638f1 100644
 -		return "turn"
 +	if inCircle(ctx.steer, x, y) then
 +		return "steer"
- 	end
--	return "look"
++	end
 +	if inCircle(ctx.look, x, y) then
 +		return "look"
-+	end
+ 	end
+-	return "look"
 +	return nil
  end
  
@@ -587,7 +699,7 @@ index 326c5f6f..153638f1 100644
  end
  
  -- Folds one event into a fresh state and the effects it causes. The given state is never changed.
-@@ -107,43 +144,72 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
+@@ -107,43 +145,77 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
  	local fingers: { [number]: Finger } = table.clone(state.fingers)
  	local effects: { Effect } = {}
  	local finger: Finger? = fingers[event.id]
@@ -639,6 +751,7 @@ index 326c5f6f..153638f1 100644
 +				x = event.x,
 +				y = event.y,
 +				far = false,
++				looking = false,
 +				steer = Pad.steerStart(),
 +			}
 +			if zone == "fire" then
@@ -647,9 +760,8 @@ index 326c5f6f..153638f1 100644
 +				table.insert(effects, { kind = "pick" })
 +			elseif zone == "steer" and ctx.steer then
 +				f.steer = steerTo(f, ctx.steer)
-+			elseif zone == "look" and ctx.look then
-+				pointTo(ctx.look)
  			end
++			-- a look finger points nothing yet: it may be a tap (decided with the user, 2026-10-31: a tap only hops)
 +			fingers[event.id] = f
  		end
  	elseif event.phase == "move" then
@@ -666,7 +778,10 @@ index 326c5f6f..153638f1 100644
 +			if finger.zone == "steer" and ctx.steer then
 +				moved.steer = steerTo(finger, ctx.steer)
 +			elseif finger.zone == "look" and ctx.look then
-+				pointTo(ctx.look)
++				moved.looking = finger.looking or moved.far or t - finger.t0 >= Touch.TAP_SECONDS
++				if moved.looking then
++					pointTo(ctx.look)
++				end
  			end
 +			fingers[event.id] = moved
  		end
@@ -679,7 +794,9 @@ index 326c5f6f..153638f1 100644
 -					local turn: Effect = { kind = "turn", intent = intent }
 -					table.insert(effects, turn)
 +			if finger.zone == "look" then
-+				table.insert(effects, { kind = "point", quarters = nil })
++				if finger.looking then
++					table.insert(effects, { kind = "point", quarters = nil })
++				end
 +				local far = finger.far
 +					or not (finite(event.x) and finite(event.y))
 +					or distance(event.x, event.y, finger.x0, finger.y0) >= Touch.TAP_SLOP
@@ -688,10 +805,31 @@ index 326c5f6f..153638f1 100644
  				end
  			end
  		end
-@@ -151,6 +217,24 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
+@@ -151,6 +223,45 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
  	return { fingers = fingers }, effects
  end
  
++-- One frame's time passing (Controls calls it every frame with os.clock()): a look finger held still for
++-- TAP_SECONDS is no tap, so it starts pointing the view from where it rests. The given state is never changed.
++function Touch.tick(state: State, t: number, ctx: Context): (State, { Effect })
++	local fingers: { [number]: Finger } = table.clone(state.fingers)
++	local effects: { Effect } = {}
++	local c = ctx.look
++	if c == nil or not finite(t) then
++		return { fingers = fingers }, effects
++	end
++	for id, f in state.fingers do
++		if f.zone == "look" and not f.looking and t - f.t0 >= Touch.TAP_SECONDS then
++			local held: Finger = table.clone(f)
++			held.looking = true
++			fingers[id] = held
++			local px, py = Touch.pull(c, f.x, f.y)
++			table.insert(effects, { kind = "point", quarters = Touch.quarters(px, py) })
++		end
++	end
++	return { fingers = fingers }, effects
++end
++
 +-- Where each circle's knob is drawn now.
 +function Touch.knobs(state: State, ctx: Context): Knobs
 +	local out: Knobs = {}
@@ -713,7 +851,7 @@ index 326c5f6f..153638f1 100644
  -- An input position (measured from the core-UI area's top-left) in screen pixels. A nil area is the
  -- identity; a non-finite origin component counts as 0 on its axis.
  function Touch.toScreen(none: Area?, x: number, y: number): (number, number)
-@@ -180,52 +264,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
+@@ -180,52 +291,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
  	}
  end
  

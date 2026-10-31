@@ -1,0 +1,11 @@
+- design-review-001 F1: z-design/quote-other-preps-before-promising
+- design-review-001 F2: pickman-arch/decide-the-gesture-before-acting
+- design-review-001 F3: z-design/finished-overrides-land-before-ready
+- design-review-001 F4: zz-test/narrowing-keeps-each-members-check
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: pickman-arch/folds-reset-when-their-source-changes
+- design-review-001 F8: one-off: the Overrides line written as a bullet; the template's line form restored
+- design-review-001 F9: z-design/quote-other-preps-before-promising
+- design-review-001 F10: z-design/late-pins-run-on-the-merged-deps-tree
+- note c0182's capture land lost the race to main twice (other sessions pushing): its filled text moved into d0149's prep PR instead of a third retry: z-design/results-land-on-every-path
