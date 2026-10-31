@@ -13,6 +13,7 @@
 | 9 | 2026-10-31 20:42 | R0061: review-001 | 0 | 0 | 20.0 | focus | code-review | 140000 |
 | 10 | 2026-10-31 20:45 | c0135: review 001 F1-F5: reserveOnOrigin's comment back in place; a publish with no origin listing refuses the slug check; tooling spec for clash order and folder-named documents; raftplan comment wrapped; spend rows moved to c0135 | 75 | 7 | 25.0 | focus | code-review |  |
 | 11 | 2026-10-31 20:50 | R0061: refute-001, harvest, lesson zz-execute/focus-before-spend | 12 | 0 | 10.0 | focus | code-review |  |
+| 12 | 2026-10-31 20:50 | R0061: Phase 5 verification logs and Addressed during execution | 0 | 0 | 5.0 | focus | deliver |  |
 
-**Total:** +307 / -25 lines, 211.0 agent-minutes, 176667 tokens over 11 records
-<!-- totals: added=307 removed=25 minutes=211.0 records=11 tokens=176667 -->
+**Total:** +307 / -25 lines, 216.0 agent-minutes, 176667 tokens over 12 records
+<!-- totals: added=307 removed=25 minutes=216.0 records=12 tokens=176667 -->
