@@ -209,10 +209,12 @@ local function controls(aim: Maze.Heading?): World
 			focus.fire()
 		end,
 		frame = function()
-			local due = {}
+			local due: { () -> () } = {}
 			for i = #delayed, 1, -1 do
-				if delayed[i].at <= clock.now then
-					table.insert(due, 1, table.remove(delayed, i).fn)
+				local entry = delayed[i]
+				if entry.at <= clock.now then
+					table.remove(delayed, i)
+					table.insert(due, 1, entry.fn)
 				end
 			end
 			for _, fn in due do
