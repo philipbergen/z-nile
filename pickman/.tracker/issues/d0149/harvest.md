@@ -9,3 +9,9 @@
 - design-review-001 F9: z-design/quote-other-preps-before-promising
 - design-review-001 F10: z-design/late-pins-run-on-the-merged-deps-tree
 - note c0182's capture land lost the race to main twice (other sessions pushing): its filled text moved into d0149's prep PR instead of a third retry: z-design/results-land-on-every-path
+- design-review-002 F1: pickman-arch/source-changes-compare-values
+- design-review-002 F2: z-design/rerun-the-sweep-after-each-round
+- design-review-002 F3: z-design/rerun-the-sweep-after-each-round, z-design/restated-rules-move-together
+- design-review-002 F4: z-design/restated-rules-move-together
+- design-review-002 F5: z-design/restated-rules-move-together
+- note the mutation runner undid uncommitted prototype edits (each mutant is restored with git checkout); it now refuses a dirty src: z-design/mutation-runner-runs-correct-variants

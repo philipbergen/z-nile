@@ -13,7 +13,7 @@ index bf78c57e..e719a028 100644
  View -> Movement
  View -> Pellets
 diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
-index 2f7e1a3a..4df82506 100644
+index 2f7e1a3a..a9ee707c 100644
 --- a/pickman/.tracker/game-design.md
 +++ b/pickman/.tracker/game-design.md
 @@ -35,7 +35,7 @@ This is the source of truth for product decisions. Every raft design must agree
@@ -33,7 +33,7 @@ index 2f7e1a3a..4df82506 100644
 -- **Look:** drag on the right half of the screen.
 +- **Touch circles** (d0149; the user, 2026-10-25 and 2026-10-31; they replace R0012's swipes, drag look and snap button and f0110's JUMP button): two fixed circles, each **30% of the screen's shorter side** (of the safe rectangle; 96 to 160 px), shown only on a touch screen, and two buttons.
 +  - **Steer circle** (lower left, one margin above the lives row, **(prep)**): pull on it from its centre. A pull left, down, up or right is `Left`, `Back`, `Forward` or `Right`, as A, S, W and D, once a pull, folded as a controller's left stick is (`Pad.steer`); two quick pulls up boost, as a double W does (f0143).
-+  - **Look circle** (lower right, on the power bar, **(prep)**): the pull's direction from its centre is where the view points, relative to the heading (up ahead, left a quarter turn left, down behind), at the arrows' turn rate with the pitch level, and it aims the blaster as the arrows do; letting go springs the view back to the heading. A **tap** (lifted within 0.25 s, having moved less than 12 px) hops, on the lift. **(prep)**: a pull under a quarter of the radius points ahead, so a tap on the centre never looks; each circle shows a knob where the thumb pulls.
++  - **Look circle** (lower right, on the power bar, **(prep)**): the pull's direction from its centre is where the view points, relative to the heading (up ahead, left a quarter turn left, down behind), at the arrows' turn rate with the pitch level, and it aims the blaster as the arrows do; letting go springs the view back to the heading. A **tap** (lifted within 0.25 s, having moved less than 12 px) only hops, on the lift: the view does not move for a tap, so a pull starts pointing once the thumb has moved 12 px or been held 0.25 s. **(prep)**: a pull under a quarter of the radius points ahead; each circle shows a knob where the thumb pulls.
 +  - **FIRE and PICK** (cyan and gold discs, captioned; **(prep)**: 0.45 of a circle's diameter, at least 44 px) sit left of the look circle in the row PICK, FIRE, look, on the steer circle's bottom line; each acts when the finger goes down.
 +  - A finger that lands outside the controls does nothing; one finger per control. There is no snap button: the look springs back on its own.
 +  - The controls clear each other, the HUD, the corner radar, the danger ring (f0158), the pick bar and the boon banner on every sample screen, except that PICK may draw over a few ring dots on a 480 x 320 screen under a 58 px top bar (the user, 2026-10-31).
@@ -90,10 +90,10 @@ index f7d8109d..637b1876 100644
  
  -- The spy hop (f0101): the tick the latest hop started, as the server's frame says (nil: none yet). The server
 diff --git a/pickman/src/client/Controls.luau b/pickman/src/client/Controls.luau
-index 3c606b8c..ab50c3bc 100644
+index 3c606b8c..6c48d387 100644
 --- a/pickman/src/client/Controls.luau
 +++ b/pickman/src/client/Controls.luau
-@@ -1,11 +1,13 @@
+@@ -1,8 +1,9 @@
  --!strict
  -- Client adapter: binds the key map from View and relays intents to the server. The movement keys, the fire key
  -- and the jump (a hop, f0101) send intents; the arrow look is the camera's, handed in through Controls.keys (f0104). On a touch
@@ -105,11 +105,7 @@ index 3c606b8c..ab50c3bc 100644
  local ContextActionService = game:GetService("ContextActionService")
  local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
  local ReplicatedStorage = game:GetService("ReplicatedStorage")
-+local RunService = game:GetService("RunService")
- local UserInputService = game:GetService("UserInputService")
- 
- local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
-@@ -17,11 +19,13 @@ local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
+@@ -17,11 +18,13 @@ local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
  local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
  local View = require("@game/ReplicatedStorage/Shared/Logic/View")
  
@@ -125,7 +121,7 @@ index 3c606b8c..ab50c3bc 100644
  }
  
  local Controls = {}
-@@ -38,10 +42,9 @@ end
+@@ -38,10 +41,9 @@ end
  
  function Controls.start(
  	onSnap: () -> (),
@@ -138,7 +134,7 @@ index 3c606b8c..ab50c3bc 100644
  )
  	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
  
-@@ -121,13 +124,13 @@ function Controls.start(
+@@ -121,13 +123,13 @@ function Controls.start(
  		table.unpack(codes)
  	)
  
@@ -154,7 +150,7 @@ index 3c606b8c..ab50c3bc 100644
  
  	-- Held while any physical touch is down, including one the fold ignored: it still moves the locked mouse.
  	local function hold()
-@@ -140,8 +143,60 @@ function Controls.start(
+@@ -140,8 +142,58 @@ function Controls.start(
  		end
  	end
  
@@ -177,12 +173,10 @@ index 3c606b8c..ab50c3bc 100644
 +	-- from the new place, so every finger is let go first (the fold's source changed).
 +	local function controlsNow(): Touch.Context
 +		local placed = if buttons then buttons() else nil
-+		if placed ~= laidOut then
-+			if laidOut ~= nil then
-+				forget()
-+			end
-+			laidOut = placed
++		if laidOut ~= nil and not Touch.same(placed, laidOut) then
++			forget()
 +		end
++		laidOut = placed
 +		return placed or {}
 +	end
 +
@@ -217,7 +211,7 @@ index 3c606b8c..ab50c3bc 100644
  	local function onInput(input: InputObject, phase: Touch.Phase)
  		if input.UserInputType ~= Enum.UserInputType.Touch then
  			return
-@@ -163,44 +218,13 @@ function Controls.start(
+@@ -163,44 +215,22 @@ function Controls.start(
  			input.Position.X,
  			input.Position.Y
  		)
@@ -263,25 +257,25 @@ index 3c606b8c..ab50c3bc 100644
 +		fingers, effects =
 +			Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy, t = os.clock() }, placed)
 +		apply(effects)
++		local f = fingers.fingers[id]
++		if phase == "begin" and f and f.zone == "look" then
++			-- a thumb that rests without moving sends no events: look again once a tap's time has passed
++			task.delay(Touch.TAP_SECONDS, function()
++				local ticked
++				fingers, ticked = Touch.tick(fingers, os.clock(), controlsNow())
++				apply(ticked)
++			end)
++		end
 +		if onKnobs then
 +			onKnobs(Touch.knobs(fingers, placed))
  		end
  		hold()
  	end
-@@ -214,9 +238,18 @@ function Controls.start(
+@@ -214,9 +244,9 @@ function Controls.start(
  	UserInputService.InputEnded:Connect(function(input: InputObject, _: boolean)
  		onInput(input, "end")
  	end)
 -	-- a touch held while the window loses focus may never end; drop every finger so no zone stays locked
-+	-- every frame: a look finger held still long enough starts pointing (Touch.tick)
-+	RunService.Heartbeat:Connect(function()
-+		if next(fingers.fingers) == nil then
-+			return
-+		end
-+		local effects
-+		fingers, effects = Touch.tick(fingers, os.clock(), controlsNow())
-+		apply(effects)
-+	end)
 +	-- a touch held while the window loses focus may never end; drop every finger so no control stays held
  	UserInputService.WindowFocusReleased:Connect(function()
 -		fingers = Touch.empty()
@@ -473,27 +467,23 @@ index 2b559ee0..b6bc0919 100644
  Sticks.start(Pads.stick)
  HudView.start()
 diff --git a/pickman/src/shared/Logic/Awareness/init.luau b/pickman/src/shared/Logic/Awareness/init.luau
-index 45c0b4f4..c7210b46 100644
+index 45c0b4f4..64088cf0 100644
 --- a/pickman/src/shared/Logic/Awareness/init.luau
 +++ b/pickman/src/shared/Logic/Awareness/init.luau
-@@ -345,4 +345,32 @@ function Awareness.radar(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, radius: nu
+@@ -345,4 +345,28 @@ function Awareness.radar(m: Maze.Maze, pose: Pose, ghosts: { Ghost }, radius: nu
  	return { radius = r, walls = walls, blips = blips }
  end
  
 +-- PROTOTYPE STUB of f0158's ring geometry (d0149 prep only): 8 sectors of RING.dots dots and a one-dot gap, sector 0
 +-- centred at the top, the dots' outer edge on a circle of RING.share of the smaller side, centred in the frame.
 +Awareness.RING = { share = 0.6, dot = 0.035, dots = 6 }
-+function Awareness.ring(
-+	_list: any,
-+	width: number,
-+	height: number
-+): { { x: number, y: number, w: number, h: number } }
++function Awareness.ring(_list: any, width: number, height: number): { any }
 +	local w = if width > 0 and width < math.huge then width else 0
 +	local h = if height > 0 and height < math.huge then height else 0
 +	local small = math.min(w, h)
 +	local s = Awareness.RING.dot * small
 +	local rad = Awareness.RING.share * small / 2 - s / 2
-+	local out = {}
++	local out: { any } = {}
 +	local slots = Awareness.RING.dots + 1
 +	for sector = 0, 7 do
 +		for i = 0, Awareness.RING.dots - 1 do
@@ -510,7 +500,7 @@ index 45c0b4f4..c7210b46 100644
 +
  return Awareness
 diff --git a/pickman/src/shared/Logic/Touch/init.luau b/pickman/src/shared/Logic/Touch/init.luau
-index 326c5f6f..c2eee082 100644
+index 326c5f6f..6b38fd5f 100644
 --- a/pickman/src/shared/Logic/Touch/init.luau
 +++ b/pickman/src/shared/Logic/Touch/init.luau
 @@ -1,30 +1,48 @@
@@ -627,7 +617,9 @@ index 326c5f6f..c2eee082 100644
 +local function inCircle(c: Circle?, x: number, y: number): boolean
 +	if c == nil then
 +		return false
-+	end
+ 	end
+-	if inside(hop, x, y) then
+-		return "hop"
 +	local dx, dy = x - c.x, y - c.y
 +	return dx * dx + dy * dy < c.r * c.r
 +end
@@ -637,12 +629,10 @@ index 326c5f6f..c2eee082 100644
 +	if not finite(x) or not finite(y) then
 +		return nil
  	end
--	if inside(hop, x, y) then
--		return "hop"
+-	if inside(pick, x, y) then
 +	if inRect(ctx.fire, x, y) then
 +		return "fire"
- 	end
--	if inside(pick, x, y) then
++	end
 +	if inRect(ctx.pick, x, y) then
  		return "pick"
  	end
@@ -805,7 +795,7 @@ index 326c5f6f..c2eee082 100644
  				end
  			end
  		end
-@@ -151,6 +223,45 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
+@@ -151,6 +223,63 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
  	return { fingers = fingers }, effects
  end
  
@@ -830,6 +820,24 @@ index 326c5f6f..c2eee082 100644
 +	return { fingers = fingers }, effects
 +end
 +
++-- Whether two sets of controls are in the same places (a re-layout that moved nothing is no change). Nil is
++-- only the same as nil.
++function Touch.same(a: Buttons?, b: Buttons?): boolean
++	if a == nil or b == nil then
++		return a == b
++	end
++	local function circle(p: Circle, q: Circle): boolean
++		return p.x == q.x and p.y == q.y and p.r == q.r
++	end
++	local function rect(p: Rect, q: Rect): boolean
++		return p.x == q.x and p.y == q.y and p.w == q.w and p.h == q.h
++	end
++	return circle(a.steer, b.steer)
++		and circle(a.look, b.look)
++		and rect(a.fire, b.fire)
++		and rect(a.pick, b.pick)
++end
++
 +-- Where each circle's knob is drawn now.
 +function Touch.knobs(state: State, ctx: Context): Knobs
 +	local out: Knobs = {}
@@ -851,7 +859,7 @@ index 326c5f6f..c2eee082 100644
  -- An input position (measured from the core-UI area's top-left) in screen pixels. A nil area is the
  -- identity; a non-finite origin component counts as 0 on its axis.
  function Touch.toScreen(none: Area?, x: number, y: number): (number, number)
-@@ -180,52 +291,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
+@@ -180,52 +309,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
  	}
  end
  
