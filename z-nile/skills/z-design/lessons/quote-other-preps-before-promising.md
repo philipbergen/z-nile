@@ -14,4 +14,6 @@ f0126 design review 007 F2, F3: f0146's documents still recorded neither the Y r
 
 f0126 design review 012 F2: the user's brighter gold (255, 215, 0) left f0109.md quoting 255, 191, 0 and Inky at 45.4.
 
+c0159 design review 002 F1: a chore wrote "f0158 must not spell it so" in its own Existing work only; f0158's documents, the ones its executor reads, said the opposite (its review called that spelling correct). A constraint one prep puts on another goes into the other item's own document, as a dated decision line, in the same round, or to the user when they disagree.
+
 d0149 design review 001 F1, F9: c0155's in-flight `narrowed.spec` runs f0110's buttons case through `Touch.snapRect`, and f0147's in-flight `hud.spec` reads `Touch.buttons(l).snap`; d0149 removes both, and its Overrides searched only `tests/acceptance` on main.
