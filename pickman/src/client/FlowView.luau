@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
+local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 
 local YELLOW = Color3.fromRGB(255, 255, 0)
 local BLACK = Color3.fromRGB(0, 0, 0)
@@ -104,10 +105,14 @@ function FlowView.start()
 	for _, name in Flow.CONTINUE_KEYS do
 		table.insert(keys, (Enum.KeyCode :: any)[name])
 	end
+	table.insert(keys, (Enum.KeyCode :: any)[Pad.CONTINUE]) -- the gamepad's continue (f0146)
 	ContextActionService:BindAction(
 		"PickmanContinue",
 		function(_name: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
-			if state == Enum.UserInputState.Begin and Flow.isContinueKey(input.KeyCode.Name) then
+			if
+				state == Enum.UserInputState.Begin
+				and (Flow.isContinueKey(input.KeyCode.Name) or input.KeyCode.Name == Pad.CONTINUE)
+			then
 				ask()
 			end
 			return Enum.ContextActionResult.Pass

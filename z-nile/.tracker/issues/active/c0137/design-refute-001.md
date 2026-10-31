@@ -1,0 +1,6 @@
+# Refute 001: c0137 (design mode)
+
+Reviewer spend: noted by the coordinator (about 75 minutes across three reviews, this one included).
+
+- F1: fixed: each of the three grep lines drops `|| true` for `) || [ $? -eq 1 ] || { echo "a folder this scan reads is missing"; exit 1; }`: no match (exit 1) is fine, a missing operand (exit 2) stops the check. scans.spec gains "a grep line stops, not passes, when a folder it reads is missing" (a fixture without z-nile/skills), and its real-home case requires exit 0 and empty stderr for each line and that the make-prompt test's three folders exist. Mutants M6 (an operand renamed to a missing folder), M7 (`|| true` kept), M8 (the make-prompt folder missing) all fail the spec on the prep tree. consequences: these edits go a little beyond the operands, inside the same four lines G1 lets this prep change; a real grep error (unreadable file) now also stops the check, which is right for a guard; c0067's other grep (line 63) keeps its `|| true` (not widened, G2).
+- F2: fixed: decided with the user (2026-10-25): "don't widen". The Design says the root `scripts/` and `.claude/settings.json` are left out, and why, and that c0067:63 is not vacuous; recorded as G2. consequences: none.

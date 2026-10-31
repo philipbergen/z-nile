@@ -266,7 +266,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
 		)
 		probe(
 			"fetch",
-			-- a spec fetches into no protected repository (only check.sh flows may: ci-verify)
+			-- a spec fetches into no protected repository (only a check.sh flow outside a spec run may)
 			'\t\tt.expect(sh("git fetch -q . HEAD:refs/remotes/self/main").ok).toBe(false)\n'
 				.. '\t\tt.expect(sh("git update-ref -d refs/remotes/self/main").ok).toBe(false)'
 		)

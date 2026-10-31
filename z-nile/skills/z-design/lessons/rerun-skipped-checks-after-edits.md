@@ -11,3 +11,5 @@ Some checks pass once and are never run again, because the everyday loop (runnin
 **How to apply:** list the checks the runner skips for the files this draft changes, and put each one's rerun in the step that edits those files (for sequestered specs: z-design step 5.3).
 
 Run those checks before committing to a branch other agents read, not after: in c0115's round 4 the promotion type check caught a two-value `string.find` passed to `t.expect`, but only after the commit holding it had been read by another agent.
+
+**Note** (R0063 review 001 F1): c0172 recorded `./zn promote-check` OK on the prototype, and the readied `cicd.spec.luau` was that file, but promotion on the execution tree failed two type errors (an upvalue left `Saved?`, a `string.match` capture left `string?`) while the runtime spec stayed green. Rerun `./zn promote-check` on the issue after the last edit of its acceptance specs, against those bytes, and record that run.
