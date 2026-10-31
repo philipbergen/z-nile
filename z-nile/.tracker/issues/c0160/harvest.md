@@ -1,0 +1,5 @@
+- design-review-001 F1: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F2: z-design/check-open-defects-on-the-path
+- design-review-001 F3: zz-test/no-vacuous-pass
+- design-review-002 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-002 F2: z-design/restated-rules-move-together
