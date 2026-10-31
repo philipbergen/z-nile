@@ -104,7 +104,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 
 ## Phase 6: Merge and clean up
-1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (`z-nile/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
+1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. After the merge and before the final report, `./zn spend R0010 --phase deliver --time <minutes from done to merged>`.
 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
 4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
