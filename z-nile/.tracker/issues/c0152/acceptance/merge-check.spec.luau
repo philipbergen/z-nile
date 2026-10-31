@@ -1,5 +1,5 @@
 --!strict
--- c0152 AC1: `./zn merge-check <head>` says whether a PR whose CI went green at <head> may merge although origin's main
+-- c0152 AC1: `./zn merge-check <head>` says whether a PR whose head passed Merging steps 2 and 3 (the local full gate and scripts/cicd) may merge although origin's main
 -- moved since: exit 0 only when every commit main gained is tracker state the publisher allows that edits no existing
 -- item's check.sh (a new item's, or the same item's moved unchanged, is fine) and touches none of the PR's files (merge
 -- commits judged by their first-parent diff), and the would-be merged tree passes every gate stage that reads tracker
