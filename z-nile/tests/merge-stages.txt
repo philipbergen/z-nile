@@ -24,7 +24,9 @@ run z-nile tests/tooling/board.spec.luau -- the board over the real tracker
 run z-nile tests/tooling/repo-fence.spec.luau -- every check.sh under every root: no guard switched off
 skip pickman/tests/acceptance/c0063/narrowed.spec.luau -- one fixed done item's check.sh (f0031), which nothing moves
 skip pickman/tests/acceptance/c0103/narrowed.spec.luau -- one fixed done item's check.sh (f0014), which nothing moves
+skip pickman/tests/acceptance/c0150/narrowed.spec.luau -- two fixed done items' check.sh (f0104, f0101), which nothing moves
 skip pickman/tests/acceptance/f0054/docs.spec.luau -- the root's game-design.md, not item state (a change to it is not tracker-only)
+skip pickman/tests/acceptance/f0146/place.spec.luau -- the root's game-design.md and architecture.md, not item state
 skip pickman/tests/meta/architecture.spec.luau -- the root's architecture.md, not item state
 skip z-nile/tests/acceptance/c0060/fixture.spec.luau -- only that the fixture helper refuses the real checkout
 skip z-nile/tests/acceptance/c0081/renamed.spec.luau -- the compaction map, not item state
