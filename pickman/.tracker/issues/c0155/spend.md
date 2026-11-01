@@ -14,6 +14,9 @@
 | 10 | 2026-10-31 23:30 | design-review-005 | 0 | 0 | 7.0 | spend | design-review | 124990 |
 | 11 | 2026-10-31 23:30 | design-refute-005 | 0 | 0 | 5.0 | spend | design-review |  |
 | 12 | 2026-10-31 23:32 | prep | 364 | 1 | 40.0 | spend | prep |  |
+| 13 | 2026-11-01 16:34 | design-review-001 | 0 | 0 | 3.0 | spend+proportional | design-review |  |
+| 14 | 2026-11-01 16:34 | design-review-001 tokens; the 12 min row was the reviewer's own estimate, measured 2.5 min | 0 | 0 | 0.0 | spend+proportional | design-review | 19644 |
+| 15 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
 
-**Total:** +364 / -1 lines, 131.0 agent-minutes, 592058 tokens over 12 records
-<!-- totals: added=364 removed=1 minutes=131.0 records=12 tokens=592058 -->
+**Total:** +364 / -1 lines, 135.3 agent-minutes, 611702 tokens over 15 records
+<!-- totals: added=364 removed=1 minutes=135.3 records=15 tokens=611702 -->
