@@ -1,0 +1,79 @@
+{
+  "permissions": {
+    "deny": [
+      "Agent(fork)"
+    ],
+    "allow": [
+      "Bash(scripts/check.sh:*)",
+      "Bash(scripts/tracker.sh list:*)",
+      "Bash(scripts/tracker.sh find:*)",
+      "Bash(scripts/tracker.sh members:*)",
+      "Bash(scripts/tracker.sh check:*)",
+      "Bash(scripts/tracker.sh metrics:*)",
+      "Bash(scripts/tracker.sh worktree:*)",
+      "Bash(scripts/tracker.sh worktree-prune:*)",
+      "Bash(./zn list:*)",
+      "Bash(./zn find:*)",
+      "Bash(./zn members:*)",
+      "Bash(./zn check:*)",
+      "Bash(./zn metrics:*)",
+      "Bash(./zn worktree:*)",
+      "Bash(./zn worktree-prune:*)",
+      "Bash(lune run tests/run:*)",
+      "Bash(lune run scripts/affected:*)",
+      "Bash(stylua:*)",
+      "Bash(selene:*)",
+      "Bash(luau-lsp analyze:*)",
+      "Bash(rojo build:*)",
+      "Bash(rojo sourcemap:*)",
+      "Bash(./zn run:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/post-edit.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/stop.sh",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/pre-bash.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/session-end.sh",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -53,7 +53,7 @@ local ARROWS: { [string]: string } =
 local GHOST_COLORS: { [string]: Rgb } = {
 	blinky = table.freeze({ r = 255, g = 0, b = 0 }),
 	pinky = table.freeze({ r = 255, g = 184, b = 255 }),
-	inky = table.freeze({ r = 0, g = 255, b = 255 }),
+	inky = table.freeze({ r = 230, g = 255, b = 0 }), -- f0109: lemon, so the ghost stands out (G1)
 	clyde = table.freeze({ r = 255, g = 184, b = 82 }),
 }
 local YAWS: { [Maze.Heading]: number } = { N = 0, W = PI / 2, S = PI, E = -PI / 2 }
@@ -70,6 +70,21 @@ View.GHOST = table.freeze({ width = 6, height = 10 })
 View.GHOST_COLORS = table.freeze(GHOST_COLORS)
 View.FRIGHTENED_COLOR = table.freeze({ r = 33, g = 33, b = 255 } :: Rgb)
 View.WHITE = table.freeze({ r = 255, g = 255, b = 255 } :: Rgb)
+-- f0109: the maze walls' colours: blue, green while the ghosts are edible, lit white in the level-clear flash
+View.WALL_COLOR = table.freeze({ r = 33, g = 33, b = 222 } :: Rgb)
+View.WALL_EDIBLE_COLOR = table.freeze({ r = 14, g = 64, b = 14 } :: Rgb)
+
+-- The walls' colour: the level-clear flash wins, then green while the ghosts are edible, else blue.
+function View.wallColor(lit: boolean, edible: boolean): Rgb
+	local c = if lit then View.WHITE elseif edible then View.WALL_EDIBLE_COLOR else View.WALL_COLOR
+	return { r = c.r, g = c.g, b = c.b }
+end
+
+-- Whether the ghosts are edible: the power timer runs (0 on a death, at level clear and on levels with no
+-- frightened time).
+function View.edible(play: Session.PlayFrame): boolean
+	return play.frightened > 0
+end
 -- Pellets float just below the eye line; a power pellet is bigger and pulses, in real seconds.
 View.PELLET = table.freeze({ height = 3, pellet = 1, power = 3, pulseSeconds = 0.5, pulseMin = 0.7 })
 

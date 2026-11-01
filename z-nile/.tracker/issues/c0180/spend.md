@@ -7,6 +7,7 @@
 | 3 | 2026-11-01 12:22 | design-review-001 | 0 | 0 | 15.0 | spend | design-review | 267213 |
 | 4 | 2026-11-01 16:44 | design-refute-001 | 0 | 0 | 150.0 | spend | design-review |  |
 | 5 | 2026-11-01 17:06 | design-review-002 | 0 | 0 | 20.0 | spend | design-review | 284710 |
+| 6 | 2026-11-01 19:49 | design-refute-002 | 0 | 0 | 160.0 | spend | design-review |  |
 
-**Total:** +0 / -0 lines, 198.0 agent-minutes, 551923 tokens over 5 records
-<!-- totals: added=0 removed=0 minutes=198.0 records=5 tokens=551923 -->
+**Total:** +0 / -0 lines, 358.0 agent-minutes, 551923 tokens over 6 records
+<!-- totals: added=0 removed=0 minutes=358.0 records=6 tokens=551923 -->
