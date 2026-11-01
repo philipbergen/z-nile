@@ -90,7 +90,7 @@ index f7d8109d..637b1876 100644
  
  -- The spy hop (f0101): the tick the latest hop started, as the server's frame says (nil: none yet). The server
 diff --git a/pickman/src/client/Controls.luau b/pickman/src/client/Controls.luau
-index 3c606b8c..6c48d387 100644
+index 3c606b8c..ddcdba7d 100644
 --- a/pickman/src/client/Controls.luau
 +++ b/pickman/src/client/Controls.luau
 @@ -1,8 +1,9 @@
@@ -211,7 +211,7 @@ index 3c606b8c..6c48d387 100644
  	local function onInput(input: InputObject, phase: Touch.Phase)
  		if input.UserInputType ~= Enum.UserInputType.Touch then
  			return
-@@ -163,44 +215,22 @@ function Controls.start(
+@@ -163,44 +215,24 @@ function Controls.start(
  			input.Position.X,
  			input.Position.Y
  		)
@@ -260,10 +260,12 @@ index 3c606b8c..6c48d387 100644
 +		local f = fingers.fingers[id]
 +		if phase == "begin" and f and f.zone == "look" then
 +			-- a thumb that rests without moving sends no events: look again once a tap's time has passed
++			-- the timer acts on the fold as it is when it fires, by this finger's id (ids are never reused): a finger
++			-- lifted or let go meanwhile is simply not there
 +			task.delay(Touch.TAP_SECONDS, function()
-+				local ticked
-+				fingers, ticked = Touch.tick(fingers, os.clock(), controlsNow())
-+				apply(ticked)
++				local promoted
++				fingers, promoted = Touch.hold(fingers, id, controlsNow())
++				apply(promoted)
 +			end)
 +		end
 +		if onKnobs then
@@ -271,7 +273,7 @@ index 3c606b8c..6c48d387 100644
  		end
  		hold()
  	end
-@@ -214,9 +244,9 @@ function Controls.start(
+@@ -214,9 +246,9 @@ function Controls.start(
  	UserInputService.InputEnded:Connect(function(input: InputObject, _: boolean)
  		onInput(input, "end")
  	end)
@@ -284,7 +286,7 @@ index 3c606b8c..6c48d387 100644
  		hold()
  	end)
 diff --git a/pickman/src/client/HudView.luau b/pickman/src/client/HudView.luau
-index b238f481..fc46eeea 100644
+index b238f481..dc102e22 100644
 --- a/pickman/src/client/HudView.luau
 +++ b/pickman/src/client/HudView.luau
 @@ -2,9 +2,10 @@
@@ -301,7 +303,7 @@ index b238f481..fc46eeea 100644
  local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
  local Players = game:GetService("Players")
  local RunService = game:GetService("RunService")
-@@ -29,12 +30,13 @@ local level: TextLabel? = nil
+@@ -29,14 +30,16 @@ local level: TextLabel? = nil
  local lives: Frame? = nil
  local bar: Frame? = nil
  local fill: Frame? = nil
@@ -317,8 +319,11 @@ index b238f481..fc46eeea 100644
 +local lookKnob: Frame? = nil
  local pickButton: Button? = nil
  local buttonsAt: Touch.Buttons? = nil
++local knobsAt: Touch.Knobs = {} -- the knobs last drawn
  -- the screen size and inset of the last layout, so a change of any of them re-lays
-@@ -69,6 +71,14 @@ local function place(b: Button?, r: Touch.Rect, textSize: number)
+ type Key = { sw: number, sh: number, inset: Hud.Inset }
+ local laidFor: Key? = nil
+@@ -69,6 +72,14 @@ local function place(b: Button?, r: Touch.Rect, textSize: number)
  	end
  end
  
@@ -333,7 +338,7 @@ index b238f481..fc46eeea 100644
  -- Places everything for a screen of sw x sh pixels with `inset` kept free, in screen pixels.
  local function lay(sw: number, sh: number, inset: Hud.Inset)
  	local l = Hud.layout(sw, sh, inset)
-@@ -123,20 +133,16 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
+@@ -123,20 +134,19 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
  		banner.Position = UDim2.fromOffset(boonBox.x, boonBox.y)
  		banner.Size = UDim2.fromOffset(boonBox.w, boonBox.h)
  	end
@@ -344,13 +349,16 @@ index b238f481..fc46eeea 100644
 -		snapFrame.Position = UDim2.fromOffset(rect.x, rect.y)
 -	end
  	local placed = Touch.buttons(l)
++	local moved = not Touch.same(placed, buttonsAt)
  	buttonsAt = placed
 +	placeCircle(steerCircle, placed.steer)
 +	placeCircle(lookCircle, placed.look)
  	place(fireButton, placed.fire, l.textSize)
 -	place(hopButton, placed.hop, l.textSize)
  	place(pickButton, placed.pick, l.textSize)
-+	HudView.knobs({}) -- each knob at its circle's centre until a finger pulls it
++	-- a refresh (a shot, a life) leaves the controls where they are, and a held knob where its thumb is; controls
++	-- that moved start with their knobs at the centre (Controls lets every finger go then too)
++	HudView.knobs(if moved then {} else knobsAt)
  end
  
 --- A touch button (f0110): a drawn disc with a caption. Like the snap control it takes no input itself.
@@ -358,7 +366,7 @@ index b238f481..fc46eeea 100644
  local function button(name: string, caption: string, colour: Color3, parent: Instance): Button
  	local f = Instance.new("Frame")
  	f.Name = name
-@@ -152,23 +158,59 @@ local function button(name: string, caption: string, colour: Color3, parent: Ins
+@@ -152,23 +162,60 @@ local function button(name: string, caption: string, colour: Color3, parent: Ins
  	l.Active = false
  	l.Size = UDim2.fromScale(1, 1)
  	l.Text = caption
@@ -404,6 +412,7 @@ index b238f481..fc46eeea 100644
  
 +-- Where each circle's knob is drawn (Touch.knobs, from Controls): at the finger's pull, or back at the centre.
 +function HudView.knobs(k: Touch.Knobs)
++	knobsAt = k
 +	local placed = buttonsAt
 +	if placed == nil then
 +		return
@@ -423,7 +432,7 @@ index b238f481..fc46eeea 100644
  function HudView.start()
  	local gui = Instance.new("ScreenGui")
  	gui.Name = "Hud"
-@@ -213,22 +255,12 @@ function HudView.start()
+@@ -213,22 +260,12 @@ function HudView.start()
  	f.Size = UDim2.fromScale(0, 1)
  	f.Parent = b
  	fill = f
@@ -500,7 +509,7 @@ index 45c0b4f4..64088cf0 100644
 +
  return Awareness
 diff --git a/pickman/src/shared/Logic/Touch/init.luau b/pickman/src/shared/Logic/Touch/init.luau
-index 326c5f6f..6b38fd5f 100644
+index 326c5f6f..ec8d0ad2 100644
 --- a/pickman/src/shared/Logic/Touch/init.luau
 +++ b/pickman/src/shared/Logic/Touch/init.luau
 @@ -1,30 +1,48 @@
@@ -790,46 +799,52 @@ index 326c5f6f..6b38fd5f 100644
 +				local far = finger.far
 +					or not (finite(event.x) and finite(event.y))
 +					or distance(event.x, event.y, finger.x0, finger.y0) >= Touch.TAP_SLOP
-+				if not far and t - finger.t0 < Touch.TAP_SECONDS then
++				if not finger.looking and not far and t - finger.t0 < Touch.TAP_SECONDS then
 +					table.insert(effects, { kind = "hop" })
  				end
  			end
  		end
-@@ -151,6 +223,63 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
+@@ -151,6 +223,69 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
  	return { fingers = fingers }, effects
  end
  
-+-- One frame's time passing (Controls calls it every frame with os.clock()): a look finger held still for
-+-- TAP_SECONDS is no tap, so it starts pointing the view from where it rests. The given state is never changed.
-+function Touch.tick(state: State, t: number, ctx: Context): (State, { Effect })
++-- A tap's time has passed for finger `id` (Controls' timer, started when a look finger goes down: a thumb that
++-- rests without moving sends no events). If that finger is still down on the look circle and not yet looking, it is
++-- no tap: it starts pointing the view from where it rests. Anything else (lifted, let go, already looking, another
++-- control) does nothing. The timer is the witness that the time passed, so no clock is compared. The given state is
++-- never changed.
++function Touch.hold(state: State, id: number, ctx: Context): (State, { Effect })
 +	local fingers: { [number]: Finger } = table.clone(state.fingers)
 +	local effects: { Effect } = {}
++	local f = state.fingers[id]
 +	local c = ctx.look
-+	if c == nil or not finite(t) then
-+		return { fingers = fingers }, effects
-+	end
-+	for id, f in state.fingers do
-+		if f.zone == "look" and not f.looking and t - f.t0 >= Touch.TAP_SECONDS then
-+			local held: Finger = table.clone(f)
-+			held.looking = true
-+			fingers[id] = held
-+			local px, py = Touch.pull(c, f.x, f.y)
-+			table.insert(effects, { kind = "point", quarters = Touch.quarters(px, py) })
-+		end
++	if f and c and f.zone == "look" and not f.looking then
++		local held: Finger = table.clone(f)
++		held.looking = true
++		fingers[id] = held
++		local px, py = Touch.pull(c, f.x, f.y)
++		table.insert(effects, { kind = "point", quarters = Touch.quarters(px, py) })
 +	end
 +	return { fingers = fingers }, effects
 +end
 +
-+-- Whether two sets of controls are in the same places (a re-layout that moved nothing is no change). Nil is
-+-- only the same as nil.
-+function Touch.same(a: Buttons?, b: Buttons?): boolean
++-- Whether two sets of controls are in the same places (a re-layout that moved nothing is no change), any of them
++-- possibly absent. Nil is only the same as nil.
++function Touch.same(a: Context?, b: Context?): boolean
 +	if a == nil or b == nil then
 +		return a == b
 +	end
-+	local function circle(p: Circle, q: Circle): boolean
++	-- a missing control only matches a missing one
++	local function circle(p: Circle?, q: Circle?): boolean
++		if p == nil or q == nil then
++			return p == q
++		end
 +		return p.x == q.x and p.y == q.y and p.r == q.r
 +	end
-+	local function rect(p: Rect, q: Rect): boolean
++	local function rect(p: Rect?, q: Rect?): boolean
++		if p == nil or q == nil then
++			return p == q
++		end
 +		return p.x == q.x and p.y == q.y and p.w == q.w and p.h == q.h
 +	end
 +	return circle(a.steer, b.steer)
@@ -859,7 +874,7 @@ index 326c5f6f..6b38fd5f 100644
  -- An input position (measured from the core-UI area's top-left) in screen pixels. A nil area is the
  -- identity; a non-finite origin component counts as 0 on its axis.
  function Touch.toScreen(none: Area?, x: number, y: number): (number, number)
-@@ -180,52 +309,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
+@@ -180,52 +315,30 @@ function Touch.blocks(box: Box): { score: Rect, level: Rect, lives: Rect, power:
  	}
  end
  

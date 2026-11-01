@@ -103,6 +103,7 @@ type World = {
 	up: (id: number, x: number, y: number) -> (),
 	focusLost: () -> (),
 	frame: () -> (), -- runs every task.delay callback due by the clock now
+	fireTimers: () -> (), -- runs every pending task.delay callback, due or not (a timer that fires early)
 	relayout: (b: any) -> (), -- what the buttons hook returns from now on (a turn, the top bar)
 }
 
@@ -219,6 +220,13 @@ local function controls(aim: Maze.Heading?): World
 			end
 			for _, fn in due do
 				fn()
+			end
+		end,
+		fireTimers = function()
+			local all = delayed
+			delayed = {}
+			for _, entry in all do
+				entry.fn()
 			end
 		end,
 		relayout = function(b: any)
@@ -492,6 +500,65 @@ return t.spec("d0149 the touch adapters", function(it)
 		end
 	)
 
+	it(
+		"a thumb held still points when its timer fires, even a moment before the clock says the time is up",
+		function()
+			local w = controls("E")
+			w.down(1, L.x + L.r * 0.6, L.y)
+			w.clock.now += Touch.TAP_SECONDS - 0.001
+			w.fireTimers()
+			t.expect(#w.points).toBe(1)
+			t.expect(w.points[1]).toBeNear(-1, 1e-9)
+		end
+	)
+
+	it(
+		"a timer firing after its finger lifted does nothing, and the look circle works for the next finger",
+		function()
+			local w = controls("E")
+			w.down(1, L.x + L.r * 0.6, L.y)
+			w.clock.now += 0.1
+			w.up(1, L.x + L.r * 0.6, L.y)
+			t.expect(w.fired).toEqual({ Hop.INTENT })
+			w.clock.now += 1
+			w.fireTimers()
+			t.expect(#w.points).toBe(0) -- the tap never swings the view, even late
+			w.down(2, L.x, L.y)
+			w.move(2, L.x - L.r, L.y)
+			t.expect(w.points[1]).toBeNear(1, 1e-9) -- the look circle is free again
+			w.up(2, L.x - L.r, L.y)
+			t.expect(w.points[2]).toBe("nil")
+		end
+	)
+
+	it(
+		"a timer firing after focus was lost or the controls moved does nothing, and a new finger works",
+		function()
+			for _, how in { "focus", "relayout" } do
+				local w = controls("E")
+				w.down(1, L.x + L.r * 0.6, L.y)
+				local look = L
+				if how == "focus" then
+					w.focusLost()
+				else
+					local moved = table.clone(PLACED)
+					moved.look = { x = L.x - 60, y = L.y, r = L.r }
+					look = moved.look
+					w.relayout(moved)
+					w.down(9, 1, 1) -- any touch reads the moved controls
+					w.up(9, 1, 1)
+				end
+				local n = #w.points
+				w.clock.now += 1
+				w.fireTimers()
+				t.expect(#w.points).toBe(n) -- nothing from the old finger
+				w.down(2, look.x, look.y)
+				w.move(2, look.x, look.y + look.r)
+				t.expect(w.points[#w.points]).toBeNear(2, 1e-9) -- behind: the new finger points
+			end
+		end
+	)
+
 	it("a tap off the look circle's centre hops and never points the view", function()
 		local w = controls("E")
 		w.down(1, L.x + L.r * 0.6, L.y + 3)
@@ -699,6 +766,28 @@ return t.spec("d0149 the touch adapters", function(it)
 		h.hud.knobs({})
 		x, y, s = at(h.find("LookKnob"))
 		t.expect(x + s / 2).toBeNear(b.look.x, 1e-9)
+	end)
+
+	it("a HUD refresh (a shot, a life) leaves a pulled knob where its thumb is; a turn centres it", function()
+		local h = hudView(true)
+		h.render()
+		local b = h.hud.buttons()
+		local p = { x = b.steer.x - b.steer.r, y = b.steer.y }
+		h.hud.knobs({ steer = p })
+		h.hud.shots(2)
+		h.hud.show(
+			{ phase = "playing", level = 1, score = 0, lives = 2, timer = 0, frightened = 0 } :: Session.PlayFrame
+		)
+		h.render()
+		local x, y, s = at(h.find("SteerKnob"))
+		t.expect(x + s / 2).toBeNear(p.x, 1e-9)
+		t.expect(y + s / 2).toBeNear(p.y, 1e-9)
+		h.screen(390, 844, { left = 0, top = 47, right = 0, bottom = 34 })
+		h.render()
+		local turned = h.hud.buttons()
+		x, y, s = at(h.find("SteerKnob"))
+		t.expect(x + s / 2).toBeNear(turned.steer.x, 1e-9)
+		t.expect(y + s / 2).toBeNear(turned.steer.y, 1e-9)
 	end)
 
 	it("a screen without touch shows none of the touch controls", function()

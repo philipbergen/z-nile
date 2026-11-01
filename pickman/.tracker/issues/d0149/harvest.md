@@ -15,3 +15,9 @@
 - design-review-002 F4: z-design/restated-rules-move-together
 - design-review-002 F5: z-design/restated-rules-move-together
 - note the mutation runner undid uncommitted prototype edits (each mutant is restored with git checkout); it now refuses a dirty src: z-design/mutation-runner-runs-correct-variants
+- design-review-003 F1: pickman-arch/timers-read-live-state
+- design-review-003 F2: pickman-arch/source-changes-compare-values
+- design-review-003 F3: pickman-arch/timers-read-live-state
+- design-review-003 F4: z-design/finished-overrides-land-before-ready
+- design-review-003 F5: z-design/restated-rules-move-together
+- note the new hold case found that a timer-promoted finger lifted under TAP_SECONDS still hopped; a looking finger now never hops: pickman-arch/decide-the-gesture-before-acting
