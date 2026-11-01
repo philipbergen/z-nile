@@ -25,3 +25,10 @@
 - design-review-003 F4: z-design/restated-rules-move-together
 - design-review-003 F5: zz-test/no-vacuous-pass
 - design-review-003 F6: zz-test/pin-call-site-arguments
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: zz-arch/records-cover-what-was-reviewed, zz-arch/read-paired-facts-at-one-moment
+- design-review-004 F3: z-design/spec-design-correspondence
+- design-review-004 F4: z-design/required-steps-on-every-path
+- design-review-004 F5: zz-test/no-vacuous-pass
+- design-review-004 F6: zz-test/specs-read-sources-through-the-selector
+- note prep round 5: the mutation runner's `git checkout` restore reverted uncommitted prototype edits, so one mutant ran on broken code; re-applied, committed, rerun: z-design/rerun-skipped-checks-after-edits

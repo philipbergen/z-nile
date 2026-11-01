@@ -61,10 +61,10 @@ index f6f53e7d..8f976d4a 100644
  		local src = graph.stripComments(fs.readFile(file))
 diff --git a/z-nile/lib/recordkey.luau b/z-nile/lib/recordkey.luau
 new file mode 100644
-index 00000000..589f3691
+index 00000000..ebbd0fb3
 --- /dev/null
 +++ b/z-nile/lib/recordkey.luau
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,140 @@
 +--!strict
 +-- c0180: the one key function of the spec-commands record. A spec's key covers the files that decide which `./zn`
 +-- commands it runs: its require closure under its home's tests/, and the tooling that launches `./zn` (zn, scripts/,
@@ -133,20 +133,24 @@ index 00000000..589f3691
 +	return (string.gsub(tree.stdout, "%s+$", ""))
 +end
 +
-+-- "clean" when z-nile/engine in the working tree equals the merge base's (no change, staged or not, and no untracked
-+-- file), else "edited"; with no merge base, "edited", so other worktrees never trust the record
-+function recordkey.engineState(root: string): string
++-- "clean" when the working tree equals the merge base's everywhere but the project roots' tracker documents (no
++-- change, staged or not, and no untracked file), else "edited": the runner, the programs and the engine a record's
++-- commands came from are then the base's; with no merge base, "edited", so other worktrees never trust the record
++recordkey.STATE_PATHS = { ".", ":(exclude,glob)**/.tracker/**" }
++function recordkey.treeState(root: string): string
 +	local base = process.exec("git", { "merge-base", "HEAD", "refs/remotes/origin/main" }, { cwd = root })
 +	if not base.ok then
 +		return "edited"
 +	end
 +	local commit = (string.gsub(base.stdout, "%s+$", ""))
-+	local diff = process.exec("git", { "diff", "--quiet", commit, "--", "z-nile/engine" }, { cwd = root })
-+	local untracked = process.exec(
-+		"git",
-+		{ "ls-files", "-o", "--exclude-standard", "--", "z-nile/engine" },
-+		{ cwd = root }
-+	)
++	local diffArgs = { "diff", "--quiet", commit, "--" }
++	local lsArgs = { "ls-files", "-o", "--exclude-standard", "--" }
++	for _, p in recordkey.STATE_PATHS do
++		table.insert(diffArgs, p)
++		table.insert(lsArgs, p)
++	end
++	local diff = process.exec("git", diffArgs, { cwd = root })
++	local untracked = process.exec("git", lsArgs, { cwd = root })
 +	if diff.code == 0 and untracked.ok and untracked.stdout == "" then
 +		return "clean"
 +	end
@@ -203,7 +207,7 @@ index 00000000..589f3691
 +return recordkey
 diff --git a/z-nile/recordkey.luau b/z-nile/recordkey.luau
 new file mode 100644
-index 00000000..b08066a4
+index 00000000..4c3d4ea6
 --- /dev/null
 +++ b/z-nile/recordkey.luau
 @@ -0,0 +1,37 @@
@@ -240,7 +244,7 @@ index 00000000..b08066a4
 +	stdio.ewrite(`recordkey: {keys}\n`)
 +	process.exit(2)
 +end
-+print(`engine\t{recordkey.engineState(root)}`)
++print(`engine\t{recordkey.treeState(root)}`)
 +for _, spec in specs do
 +	print(`{spec}\t{(keys :: { [string]: string })[spec]}`)
 +end
@@ -549,7 +553,7 @@ index 00000000..b1323eab
 +
 +return commandrecord
 diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
-index e85dc659..ad89ea1e 100644
+index e85dc659..ccb00fd0 100644
 --- a/z-nile/tests/run.luau
 +++ b/z-nile/tests/run.luau
 @@ -9,6 +9,7 @@
@@ -576,7 +580,7 @@ index e85dc659..ad89ea1e 100644
  
  -- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
  local DURATIONS = ".cache/spec-durations.tsv"
-@@ -189,8 +197,90 @@ local function recorded(): schedule.Durations
+@@ -189,8 +197,100 @@ local function recorded(): schedule.Durations
  	return (if ok then schedule.parse(text :: string) else nil) or {}
  end
  
@@ -615,7 +619,9 @@ index e85dc659..ad89ea1e 100644
 +	return out, clean
 +end
 +
-+local function recordCommands(outcomes: { Outcome })
++-- `before`, `cleanBefore`: the keys and tree state read before the workers started (nil when that read failed): an
++-- entry is written only when its key is the same after the run, so a record never vouches for code that changed mid-run
++local function recordCommands(outcomes: { Outcome }, before: { [string]: string }?, cleanBefore: boolean)
 +	local passing: { Outcome } = {}
 +	local names: { string } = {}
 +	for _, o in outcomes do
@@ -637,14 +643,15 @@ index e85dc659..ad89ea1e 100644
 +	end
 +	local why: any = nil
 +	local wrote = xpcall(function()
-+		local keys, clean = keysOf(names)
-+		if keys == nil then
++		local keys, cleanAfter = keysOf(names)
++		if keys == nil or before == nil then
 +			return -- no keys, no record: selection only loses precision
 +		end
++		local clean = cleanBefore and cleanAfter
 +		local new: commandrecord.Records = {}
 +		for _, o in passing do
 +			local key = (keys :: { [string]: string })[o.file]
-+			if key then
++			if key and key == (before :: { [string]: string })[o.file] then
 +				new[o.file] = { key = key, commands = o.commands, clean = clean }
 +			end
 +		end
@@ -664,10 +671,17 @@ index e85dc659..ad89ea1e 100644
  -- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
  local function runConcurrently()
 +	fs.writeDir(TRACES)
++	local homeFiles: { string } = {}
++	for _, f in files do
++		if string.sub(f, 1, 6) == "tests/" then
++			table.insert(homeFiles, f)
++		end
++	end
++	local keysBefore, cleanBefore = keysOf(homeFiles)
  	local outcomes: { Outcome } = {}
  	local queue = schedule.order(files, recorded())
  	local nextIndex, running = 1, math.min(jobs, #files)
-@@ -200,14 +290,40 @@ local function runConcurrently()
+@@ -200,14 +300,40 @@ local function runConcurrently()
  				local index = queue[nextIndex]
  				nextIndex += 1
  				local file = files[index]
@@ -709,11 +723,11 @@ index e85dc659..ad89ea1e 100644
  				}
  			end
  			running -= 1
-@@ -249,6 +365,8 @@ local function runConcurrently()
+@@ -249,6 +375,8 @@ local function runConcurrently()
  		end
  	end
  
-+	recordCommands(outcomes)
++	recordCommands(outcomes, keysBefore, cleanBefore)
 +
  	-- merge in sorted file order, never in finish order
  	local passed, failed = 0, 0

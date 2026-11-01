@@ -206,7 +206,7 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		local w1 = fs.readFile(`{W1}/z-nile/.cache/spec-commands.tsv`)
 		local key = string.match(w1, "\n" .. B .. "\t(%x+)\t") :: string
 		t.expect(key ~= nil).toBe(true)
-		write(W2, "z-nile/.cache/spec-commands.tsv", `# spec commands v1\n{B}\t{key}\tfind\tedited\n`)
+		write(W2, "z-nile/.cache/spec-commands.tsv", `# spec commands v1\n{B}\t{key}\tfind\tclean\n`)
 		t.expect((affected(W2, "z-nile/engine/cmd/find.luau"))).toBe(lines({ B, C }))
 		t.expect((affected(W1, "z-nile/engine/cmd/find.luau"))).toBe(lines({ B, C }))
 		fs.removeFile(`{W2}/z-nile/.cache/spec-commands.tsv`)
@@ -259,10 +259,14 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 	it("a malformed record file is skipped with a warning, and every spec is selected", function()
 		local record = `{W1}/z-nile/.cache/spec-commands.tsv`
 		local before = fs.readFile(record)
-		fs.writeFile(record, "garbage\n")
-		local out, err = affected(W2, "z-nile/engine/cmd/list.luau")
+		-- a valid header and A's own line, then one bad line: the whole file is refused, A's line included
+		local aLine = string.match(before, "\n(" .. A .. "\t[^\n]+)\n") :: string
+		t.expect(aLine ~= nil).toBe(true)
+		fs.writeFile(record, `# spec commands v1\n{aLine}\ngarbage\n`)
+		-- cmd/find: a reader that kept A's valid line would leave A out
+		local out, err = affected(W2, "z-nile/engine/cmd/find.luau")
 		t.expect(out).toBe(lines({ A, B, C, D, F }))
-		t.expect((string.find(err, `affected: ignoring {record}: line 1`, 1, true)) ~= nil).toBe(true)
+		t.expect((string.find(err, `affected: ignoring {record}: line 3`, 1, true)) ~= nil).toBe(true)
 		fs.writeFile(record, before)
 	end)
 

@@ -11,7 +11,7 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the engine is split by command, with a thin dispatch core that narrows" lune run tests/run -- "$A/split.spec.luau"
 check "AC2: the engine traces the command it runs, by physical .cache/spec-trace paths only" lune run tests/run -- "$A/trace.spec.luau"
-check "AC3: the runner records each passing spec's commands through recordkey, merging by union" lune run tests/run -- "$A/record.spec.luau"
+check "AC3: the runner records each passing spec's commands through recordkey, merging by union" lune run tests/run -- "$A/record.spec.luau" "$A/realtree.spec.luau"
 check "AC4: commandrecord keys, parses, renders and merges the record" lune run tests/run -- "$A/commandrecord.spec.luau"
 check "AC5: with records, an engine file is an input by requires, declarations, missing records or commands" lune run tests/run -- "$A/select.spec.luau"
 check "AC6: affected --recorded selects by commands across worktrees, failing closed" lune run tests/run -- "$A/endtoend.spec.luau"

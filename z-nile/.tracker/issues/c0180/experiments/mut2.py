@@ -16,6 +16,8 @@ M=[
 ('R51',RUN,'\tif not wrote then\n\t\tstdio.ewrite(`tests/run: could not write','\tif false then\n\t\tstdio.ewrite(`tests/run: could not write','record'),
 ('R52',RK,'local roots: { string } = { "scripts", "z-nile/engine", "z-nile/lib" }','local roots: { string } = { "z-nile/engine", "z-nile/lib" }','record'),
 ('R53',RK,'\tif diff.code == 0 and untracked.ok and untracked.stdout == "" then','\tif true then','record'),
+('R57',RUN,'if key and key == (before :: { [string]: string })[o.file] then','if key then','record'),
+('R58',RK,'recordkey.STATE_PATHS = { ".", ":(exclude,glob)**/.tracker/**" }','recordkey.STATE_PATHS = { "z-nile/engine" }','record'),
 ('R54',CR,'clean = before.clean and e.clean }','clean = e.clean }','commandrecord'),
 ]
 only=sys.argv[1:]

@@ -28,6 +28,20 @@ local DECLARED = {
 	{ A .. renamed.id("c0180") .. "/record.spec.luau", "z-nile/engine/projects.luau" },
 	{ A .. renamed.id("c0114") .. "/roots-cli.spec.luau", "z-nile/engine/spend.luau" },
 	{ "tests/tooling/tracker-review-guards.spec.luau", "z-nile/engine/store.luau" },
+	{ A .. renamed.id("c0180") .. "/realtree.spec.luau", "*" },
+	{ A .. renamed.id("c0180") .. "/inputs.spec.luau", "z-nile/tests/inputs.tsv" },
+	{
+		A .. renamed.id("c0180") .. "/narrowed.spec.luau",
+		"z-nile/" .. A .. renamed.id("c0081") .. "/publish-guard.spec.luau",
+	},
+	{
+		A .. renamed.id("c0180") .. "/narrowed.spec.luau",
+		"z-nile/" .. A .. renamed.id("c0074") .. "/done-gate.spec.luau",
+	},
+	{
+		A .. renamed.id("c0180") .. "/narrowed.spec.luau",
+		"z-nile/" .. A .. renamed.id("c0115") .. "/docs.spec.luau",
+	},
 }
 
 return t.spec("c0180 engine-text readers declare their engine inputs", function(it)

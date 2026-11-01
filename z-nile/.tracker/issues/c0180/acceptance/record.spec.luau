@@ -4,7 +4,7 @@
 -- test-side closure and the tooling that launches ./zn), merging by union while the key holds. Run on a copy of the
 -- runner under .cache/c0180-record (its own repository root, as c0154 does for durations), whose specs call a stub
 -- `zn` that writes <dir>/<command> for each directory ZN_SPEC_TRACE lists, so the runner is checked apart from the
--- engine. One case keys the real tree, read only.
+-- engine. Its real-tree cases are in realtree.spec.
 local cr = require("@tests/lib/commandrecord")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -154,6 +154,25 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 			write("z-nile/tests/d.spec.luau", spec({}, false, true))
 			write("z-nile/tests/e.spec.luau", fromFile())
 			write("z-nile/tests/f.spec.luau", spec({ "litter" }))
+			-- g edits the helper it requires while it runs (while g-edits exists): its key after the run differs
+			write("z-nile/tests/helper2.luau", "--!strict\nreturn {}\n")
+			write("g-edits", "")
+			write("z-nile/tests/g.spec.luau", table.concat({
+				"--!strict",
+				`local fs = {R}("@lune/fs")`,
+				`local process = {R}("@lune/process")`,
+				`local _helper2 = {R}("@tests/helper2")`,
+				`local t = {R}("@tests/lib/t")`,
+				'return t.spec("fixture", function(it)',
+				'\tit("runs", function()',
+				`\t\tassert(process.exec("bash", \{ "{STUB}", "list" \}).ok)`,
+				`\t\tlocal h = "{home}/tests/helper2.luau"`,
+				`\t\tif fs.isFile("{base}/g-edits") then`,
+				'\t\t\tfs.writeFile(h, fs.readFile(h) .. "-- run\\n")',
+				"\t\tend",
+				"\tend)",
+				"end)",
+			}, "\n") .. "\n")
 			local ok, out = run({ "--jobs", "2" })
 			t.expect(ok).toBe(false) -- c fails
 			t.expect((string.find(out, "fails on purpose", 1, true)) ~= nil).toBe(true)
@@ -163,6 +182,9 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 			t.expect(commandsOf(records, "tests/c.spec.luau")).toBe(nil)
 			t.expect(commandsOf(records, "tests/d.spec.luau")).toEqual({ "status" })
 			t.expect(commandsOf(records, "tests/e.spec.luau")).toEqual({ "list" })
+			-- g's code changed while it ran: no record vouches for the code that didn't run
+			t.expect(commandsOf(records, "tests/g.spec.luau")).toBe(nil)
+			fs.removeFile(`{base}/g-edits`)
 			for _, s in { "tests/a.spec.luau", "tests/b.spec.luau", "tests/d.spec.luau" } do
 				t.expect(string.match(records[s].key, "^%x+$") ~= nil and #records[s].key == 64).toBe(true)
 			end
@@ -238,7 +260,7 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		local names = fs.readDir(outer)
 		table.sort(names)
 		t.expect(names)
-			.toEqual({ ".list.pickman-tmp.1.abcdef", "Foo", "find", "litter", "status", "worktree" })
+			.toEqual({ ".list.pickman-tmp.1.abcdef", "Foo", "find", "list", "litter", "status", "worktree" })
 		-- the new record holds a's new command (a new key: its text changed), and the inherited directory took nothing
 		t.expect(commandsOf(record(), "tests/a.spec.luau")).toEqual({ "worktree" })
 		local inProcess = freshOuter("outer-one")
@@ -296,6 +318,14 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 			t.expect(after[s].key ~= before[s].key).toBe(true)
 			t.expect(after[s].clean).toBe(true)
 		end
+		-- a tracker document's edit leaves the tree clean; untracked code anywhere else makes it edited
+		write("z-nile/.tracker/notes.md", "a tracker document\n")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		t.expect(record()["tests/a.spec.luau"].clean).toBe(true)
+		write("z-nile/notes.luau", "--!strict\nreturn {}\n")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		t.expect(record()["tests/a.spec.luau"].clean).toBe(false)
+		fs.removeFile(`{base}/z-nile/notes.luau`)
 	end)
 
 	it("a record that can't be written is reported, and the run's outcome stands", function()
@@ -309,49 +339,5 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 
 	it("cleans up", function()
 		fs.removeDir(base)
-	end)
-
-	it("on the real tree, no spec's closure reaches a file the graph didn't build, read only", function()
-		local listed = process.exec("git", { "ls-files", "*.spec.luau" }, { cwd = root })
-		local argv = { "run", "z-nile/recordkey", "--", "--dangling" }
-		local n = 0
-		for line in string.gmatch(listed.stdout, "[^\n]+") do
-			if string.match(line, "^[^/]+/tests/") then
-				table.insert(argv, line)
-				n += 1
-			end
-		end
-		t.expect(n > 300).toBe(true)
-		local r = process.exec("lune", argv, { cwd = root })
-		t.expect(r.ok).toBe(true)
-		t.expect(r.stdout).toBe("")
-	end)
-
-	it("on the real tree, z-nile/recordkey keys every spec of every home, read only", function()
-		local listed = process.exec("git", { "ls-files", "*.spec.luau" }, { cwd = root })
-		t.expect(listed.ok).toBe(true)
-		local specs: { string } = {}
-		for line in string.gmatch(listed.stdout, "[^\n]+") do
-			if string.match(line, "^[^/]+/tests/") then
-				table.insert(specs, line)
-			end
-		end
-		t.expect(#specs > 300).toBe(true)
-		local argv = { "run", "z-nile/recordkey", "--" }
-		for _, s in specs do
-			table.insert(argv, s)
-		end
-		local r = process.exec("lune", argv, { cwd = root })
-		t.expect(r.ok).toBe(true)
-		local keyed = 0
-		for line in string.gmatch(r.stdout, "[^\n]+") do
-			if string.sub(line, 1, 7) ~= "engine\t" then
-				local s, key = string.match(line, "^(.-)\t(%x+)$")
-				t.expect(s ~= nil and #(key :: string) == 64).toBe(true)
-				keyed += 1
-			end
-		end
-		t.expect(keyed).toBe(#specs)
-		t.expect(string.match(r.stdout, "^engine\t(%a+)\n") ~= nil).toBe(true)
 	end)
 end)
