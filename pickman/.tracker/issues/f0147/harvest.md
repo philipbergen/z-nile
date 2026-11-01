@@ -20,3 +20,7 @@
 - design-review-003 F5: z-design/instructions-runnable-where-they-run
 - design-review-003 F6: z-design/restated-rules-move-together
 - design-review-003 F7: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: z-design/rejected-options-fail-a-case
+- design-review-004 F3: z-design/spec-design-correspondence
+- design-review-004 F4: z-design/quote-other-preps-before-promising

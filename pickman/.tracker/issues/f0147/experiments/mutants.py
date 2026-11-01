@@ -95,6 +95,8 @@ MUTANTS = {
     "M59": (L + "Ghosts/init.luau", "	set.frightened = ticks\n	set.chain = 0\n", "	set.frightened = ticks\n	set.chain = 0\n	for _, g in set.ghosts do\n		g.carry = 0.5\n	end\n", "ramp"),
     "M60": (L + "Ghosts/init.luau", "	if set.ramp and kind ~= \"normal\" then", "	if kind == \"normal\" then\n		g.carry = 0.5\n	end\n	if set.ramp and kind ~= \"normal\" then", "ramp"),
     "M61": (L + "Session/init.luau", "picksGoal = if s.config.ramp then s.config.ramp.picks else nil,", "picksGoal = if s.config.ramp then 10 else nil,", "hud"),
+    "M62": (L + "Session/init.luau", "				member.bonanza = false", "				member.bonanza = false\n				if e.reason == \"respawn\" and member.longHops then\n					member.bonanzaPill = true\n				end", "levels"),
+    "M63": (L + "Session/init.luau", "	local boon: Picks.Boon = Picks.roll(member.picks)", "	local boon: Picks.Boon = Picks.roll(member.picks)\n	while boon == \"jumps\" and member.longHops do\n		boon = Picks.roll(member.picks)\n	end", "levels"),
     "M41": (L + "Hud/init.luau", 'bonanza = "BONANZA!"', 'bonanza = "BONUS"', "hud"),
     "M42": (L + "Session/init.luau", "then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning, ramp = s.config.ramp })", "then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning })", "ramp"),
     "M43": (L + "Session/init.luau", "			picks = if s.config.ramp then s.members[id].levelPicks else nil,", "			picks = s.members[id].levelPicks,", "levels"),

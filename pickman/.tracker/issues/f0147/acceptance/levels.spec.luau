@@ -11,6 +11,7 @@ local Blaster = require("@logic/Blaster")
 local Game = require("@logic/Game")
 local Ghosts = require("@logic/Ghosts")
 local Hop = require("@logic/Hop")
+local Hud = require("@logic/Hud")
 local Levels = require("@logic/Levels")
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
@@ -452,6 +453,62 @@ return t.spec("f0147 levels by picked walls", function(it)
 			w2.tile, w2.progress, w2.heading = { x = here.x, y = here.y }, 0, "E"
 			b2.status, b2.frightened, b2.reverse = "active", false, false
 			t.expect(has(Session.step(again), "LifeLost") ~= nil).toBe(true)
+		end
+	)
+
+	it("a death on a level the bonanza reached does not start its long ghost pill again", function()
+		local s = new(CORRIDOR, RAMPED)
+		picks(s, 10)
+		local first: Session.Event? = nil
+		for _ = 1, 20 do
+			first = has(Session.step(s), "PowerStarted")
+			if first then
+				break
+			end
+		end
+		t.expect(first ~= nil).toBe(true)
+		Session.step(s)
+		Session.kill(s, "p")
+		local again: Session.Event? = nil
+		for _ = 1, 30 do
+			again = again or has(Session.step(s), "PowerStarted")
+		end
+		t.expect(again).toBe(nil)
+		t.expect(s.members.p.play.frightened).toBe(0)
+		t.expect(s.members.p.play.level).toBe(2)
+		t.expect(s.members.p.longHops).toBe(true) -- the long hops stay over the death
+	end)
+
+	it(
+		"with long hops on, a rolled longer-jumps boon still comes up and grants nothing more (the user's choice)",
+		function()
+			-- the first seed whose first pick on level 2, with the bonanza's long hops on, rolls longer jumps
+			local found = false
+			for seed = 1, 120 do
+				local s = new(BARE, RAMPED, seed)
+				local p = s.members.p
+				p.play.level = 2
+				p.longHops = true
+				p.picks.fast = 0
+				p.blaster.shots = 0
+				local events = pickOnce(s)
+				assert(events, `seed {seed}: the pick finished`)
+				local picked = has(events :: { Session.Event }, "WallPicked") :: Session.Event
+				if picked.item == "jumps" then
+					found = true
+					local e = events :: { Session.Event }
+					t.expect(has(e, "PowerStarted")).toBe(nil)
+					t.expect(has(e, "PelletsBack")).toBe(nil)
+					t.expect(has(e, "ShotGained")).toBe(nil)
+					t.expect(p.picks.fast).toBe(0)
+					t.expect(p.blaster.shots).toBe(0)
+					t.expect(p.longHops).toBe(true)
+					t.expect((frame(s).boon :: Session.BoonGrant).kind).toBe("jumps")
+					t.expect(Hud.boonBanner(frame(s).boon, s.tick)).toBe("LONGER JUMPS")
+					break
+				end
+			end
+			t.expect(found).toBe(true)
 		end
 	)
 
