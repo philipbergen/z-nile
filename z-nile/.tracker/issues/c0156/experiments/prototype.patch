@@ -1,0 +1,437 @@
+diff --git a/pickman/.tracker/rafts/done/R0045/experiments/mutants.py b/pickman/.tracker/rafts/done/R0045/experiments/mutants.py
+index a7df96d8..08333405 100644
+--- a/pickman/.tracker/rafts/done/R0045/experiments/mutants.py
++++ b/pickman/.tracker/rafts/done/R0045/experiments/mutants.py
+@@ -1,11 +1,15 @@
+ #!/usr/bin/env python3
+-# R0045 prep mutation check. Usage: python3 mutants.py <tree with narrowing.patch applied>
+-# Each mutant weakens a narrowed case the way a careless narrowing could; one of c0128's specs (titles, guards, golden)
+-# must fail on an assertion.
+-import subprocess, sys, pathlib
+-root = pathlib.Path(sys.argv[1])
++# R0045 prep mutation check. Usage: python3 mutants.py <the pickman home of a separate clone, narrowing applied>
++#   e.g. python3 mutants.py "$TMPDIR/x/clone/pickman"; python3 mutants.py --joins prints the join entries as JSON.
++# Each mutant weakens a narrowed case the way a careless narrowing could; one of c0128's specs (titles, guards, golden,
++# and c0103's narrowed) must fail on an assertion. c0156: the specs are the promoted ones; the join entries put a line
++# onto the comment above it in each pinned file; the run refuses anything but a separate clone under the temp folder
++# (it edits and restores files there), sets the guard's real-repository variable, times a run out at 120 s and kills
++# its process group.
++import json, os, pathlib, signal, subprocess, sys, tempfile
+ A = 'tests/acceptance/f0024/adapter.spec.luau'
+ B = 'tests/acceptance/f0026/adapters.spec.luau'
++K = 'tests/acceptance/f0014/keys.spec.luau'
+ MUTANTS = [
+   ('drop-a-per-player-store', A, '\t\t\t"Hiscores|all",\n\t\t\t"Hiscores|day:2026-10-16",', '\t\t\t"Hiscores|day:2026-10-16",'),
+   ('count-any-updates', A, 't.expect(updates).toBe(6)', 't.expect(updates >= 6).toBe(true)'),
+@@ -23,8 +27,36 @@ MUTANTS = [
+ ''', '''
+ '''),
+   ('comment-edit', A, '-- c0128: the six per-player stores', '-- c0128: the per-player stores'),
++  # c0156: a line joined onto the comment line above it (a Luau comment ends at the line), one per pinned file
++  ('join-f0024-comment', A, "only d0124's top-N list of runs\n", "only d0124's top-N list of runs "),
++  ('join-f0026-reads-comment', B, 'each at page sizes 10 and 50\n', 'each at page sizes 10 and 50 '),
++  ('join-f0026-companion-comment', B, '-- c0128: the per-player companion store is still read\n', '-- c0128: the per-player companion store is still read '),
++  ('join-f0014-comment', K, 'can be added without a red main.\nlocal Movement', 'can be added without a red main. local Movement'),
+ ]
+-specs = [str(root / 'tracker/issues/c0128/acceptance' / f) for f in ('titles.spec.luau', 'guards.spec.luau', 'golden.spec.luau')]
++specs = ['tests/acceptance/c0128/' + f for f in ('titles.spec.luau', 'guards.spec.luau', 'golden.spec.luau')] + ['tests/acceptance/c0103/narrowed.spec.luau']
++if sys.argv[1:] == ['--joins']:
++    print(json.dumps([{'name': n, 'path': r, 'old': o, 'new': w} for n, r, o, w in MUTANTS if n.startswith('join-')]))
++    sys.exit(0)
++if len(sys.argv) != 2:
++    sys.exit('usage: mutants.py <pickman home of a separate clone under the temp folder> | --joins')
++root = pathlib.Path(sys.argv[1]).resolve()
++tmp = pathlib.Path(tempfile.gettempdir()).resolve()
++clone = root.parent
++if root.name != 'pickman' or tmp not in clone.parents or not (clone / '.git').is_dir() or (clone / '.worktree').exists():
++    sys.exit(f'{root}: not the pickman home of a separate clone under {tmp}')
++env = dict(os.environ)
++here = pathlib.Path(__file__).resolve().parent
++real = subprocess.run(['git', '-C', str(here), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
++                      capture_output=True, text=True, check=True).stdout.strip()
++env['PICKMAN_FENCE_REAL_GIT'] = (env['PICKMAN_FENCE_REAL_GIT'] + ':' if env.get('PICKMAN_FENCE_REAL_GIT') else '') + real
++def run():
++    p = subprocess.Popen(['lune', 'run', 'tests/run', '--'] + specs, cwd=root, env=env, stdout=subprocess.PIPE,
++                         stderr=subprocess.STDOUT, text=True, start_new_session=True)
++    try:
++        return p.communicate(timeout=120)[0]
++    except subprocess.TimeoutExpired:
++        os.killpg(p.pid, signal.SIGKILL)
++        return p.communicate()[0] + '\nTIMEOUT'
+ bad = []
+ for name, rel, old, new in MUTANTS:
+     path = root / rel
+@@ -33,11 +65,13 @@ for name, rel, old, new in MUTANTS:
+         bad.append(f'{name}: anchor found {src.count(old)} times'); continue
+     path.write_text(src.replace(old, new))
+     try:
+-        out = subprocess.run(['lune', 'run', 'tests/run', '--'] + specs, cwd=root, capture_output=True, text=True).stdout
++        out = run()
+     finally:
+         path.write_text(src)
+     fails = [l for l in out.splitlines() if l.startswith('FAIL ')]
+-    if not fails or any('could not load' in l for l in fails):
++    if 'TIMEOUT' in out:
++        bad.append(f'{name}: timed out')
++    elif not fails or any('could not load' in l for l in fails):
+         bad.append(f'{name}: {"survived" if not fails else "load error"}')
+     else:
+         print(f'killed {name}: {fails[0].split(" :: ", 1)[-1]}')
+diff --git a/pickman/tests/acceptance/c0103/narrowed.spec.luau b/pickman/tests/acceptance/c0103/narrowed.spec.luau
+index e7888cd8..ee523aff 100644
+--- a/pickman/tests/acceptance/c0103/narrowed.spec.luau
++++ b/pickman/tests/acceptance/c0103/narrowed.spec.luau
+@@ -1,12 +1,20 @@
+ --!strict
+ -- c0103 AC1: f0014's promoted key-map spec is narrowed, not deleted. It no longer pins the arrow keys, Space, the
+ -- exact number of keys or that Q and E are unbound (f0104 binds jump, fire and arrow look), and it still pins the
+--- movement keys W, A, S and D, that other keys do nothing, and that every mapped action is a real name.
+--- The narrowed file is pinned token for token (only whitespace, a trailing comma before `}` and item ids are tolerated),
+--- so a case whose loops or lists were emptied cannot pass. This spec reads f0014's spec as text, so `--affected`
+--- never selects it (only `--full` runs it): any later change to tests/acceptance/f0014/keys.spec.luau must update
+--- the golden text here.
++-- movement keys W, A, S and D, that other keys do nothing and that every mapped action is a real name.
++-- The narrowed file is pinned whole, by the SHA-256 of its text under the shared whole-file pin rule,
++-- z-nile/tests/lib/pin.luau (c0156, the rule c0128's golden.spec uses too): only item ids, line endings, the spaces
++-- within a line, a line's trailing whitespace, a trailing comma before `}` and the text's outer blank lines are
++-- tolerated, and every line break is kept, so a case whose loops or lists were emptied cannot pass, and neither can a
++-- check joined onto the comment line above it. Comments are pinned too, so no code can hide in one; the require lines
++-- are pinned, so a stub for View or Movement must not pass. Every verdict goes through `exactly`: the "exactly" case
++-- asserts it on the file, and the mutant cases (a line joined onto the comment above it, a deleted assertion) assert
++-- it is false on the file changed in memory, so a weakened comparison turns a mutant case red. This spec reads
++-- f0014's spec as text, so `--affected` never selects it (only `--full` runs it): any later change to
++-- tests/acceptance/f0014/keys.spec.luau must update the digest here (`pin.digest` of the file's text). On a
++-- mismatch, diff the file against experiments/narrowing.patch in c0103's folder.
+ local fs = require("@lune/fs")
++local pin = require("@tests/lib/pin")
+ local renamed = require("@tests/lib/renamed")
+ local t = require("@tests/lib/t")
+ 
+@@ -14,35 +22,17 @@ local t = require("@tests/lib/t")
+ local DIR = "tests/" .. "acceptance/" .. renamed.id("f0014")
+ local FILE = `{DIR}/keys.spec.luau`
+ 
+--- the file as one line. Exactly three things are tolerated: whitespace (collapsed), a trailing comma before a closing
+--- brace (stylua may reflow a table to one line) and item ids such as f0130 (masked, so a compaction cannot break it).
+--- Comments are NOT stripped: their text is pinned too, so no code can hide in one (a line comment, a long comment or
+--- a string that opens a long comment). The require lines are pinned, so a stub for View or Movement must not pass.
+-local function normalised(): string
+-	local text = string.gsub(fs.readFile(FILE), "%f[%w_][fdcR]%d+%f[^%w_]", "ID")
+-	text = string.gsub(text, "%s+", " ")
+-	text = string.gsub(text, ",%s*}", " }")
+-	text = string.gsub(text, "^ ", "")
+-	text = string.gsub(text, " $", "")
+-	return text
++local DIGEST = "ed27eb8bf258d9019129336876becd8133428099b4653d7b6546fcc5db052be6"
++
++-- the one verdict: a text is the narrowed file when its pin digest is the recorded one
++local function exactly(text: string): boolean
++	return pin.digest(text) == DIGEST
+ end
+ 
+-local GOLDEN = "--!strict -- ID AC5: the key map, by Enum.KeyCode name. -- Narrowed by ID: only the moveme"
+-	.. "nt keys W, A, S and D are pinned. The arrow keys, Space and the number of keys -- are free"
+-	.. " to change, so the jump, fire and arrow-look bindings (ID) can be added without a red main"
+-	.. ". local Movement = requ"
+-	.. 'ire("@logic/Movement") local View = requ'
+-	.. 'ire("@logic/View") local t '
+-	.. "= requ"
+-	.. 'ire("@tests/lib/t") return t.spec("ID key map", function(it) it("maps W, A, S and D '
+-	.. 'to the movement intents", function() local want: { [string]: string } = { W = "Forward", A'
+-	.. ' = "Left", D = "Right", S = "Back" } for key, action in want do t.expect(View.action(key))'
+-	.. ".toBe(action) end local n = 0 for _ in View.KEYS do n += 1 end t.expect(n >= 4).toBe(true)"
+-	.. ' end) it("other keys do nothing", function() for _, key in { "w", "Return", "LeftShift", "'
+-	.. '" } do t.expect(View.action(key)).toBe(nil) end end) it("every mapped action is a name, an'
+-	.. 'd W, A, S and D map to movement intents", function() for _, action in View.KEYS do t.expec'
+-	.. 't(type(action) == "string" and action ~= "").toBe(true) end for _, key in { "W", "A", "S",'
+-	.. ' "D" } do t.expect(Movement.isIntent(View.action(key))).toBe(true) end end) end)'
++-- the narrowed file's header comments, whose next lines a careless join would turn into comment text
++local HEADER =
++	"-- are free to change, so the jump, fire and arrow-look bindings (f0104) can be added without a red main."
++local TITLE = "-- f0130 AC5: the key map, by Enum.KeyCode name."
+ 
+ return t.spec("c0103 the key-map spec, narrowed", function(it)
+ 	it("the spec is still there, and f0014's check.sh still runs it", function()
+@@ -53,6 +43,19 @@ return t.spec("c0103 the key-map spec, narrowed", function(it)
+ 	end)
+ 
+ 	it("the spec is exactly the narrowed one: W, A, S and D, unbound keys, the shape of the map", function()
+-		t.expect(normalised()).toBe(GOLDEN)
++		t.expect(exactly(fs.readFile(FILE))).toBe(true)
++	end)
++
++	it("a line joined onto the comment line above it is not the narrowed spec", function()
++		local src = fs.readFile(FILE)
++		-- the require of Movement, swallowed by the comment above it
++		t.expect(exactly(pin.joined(src, HEADER))).toBe(false)
++		t.expect(exactly(pin.joined(src, TITLE))).toBe(false)
++	end)
++
++	it("a deleted assertion is not the narrowed spec, and another line ending is", function()
++		local src = fs.readFile(FILE)
++		t.expect(exactly(pin.without(src, "t.expect(n >= 4).toBe(true)"))).toBe(false)
++		t.expect(exactly((string.gsub(string.gsub(src, "\r\n", "\n"), "\n", "\r\n")))).toBe(true)
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/c0128/golden.spec.luau b/pickman/tests/acceptance/c0128/golden.spec.luau
+index 0187cfc4..be10e50c 100644
+--- a/pickman/tests/acceptance/c0128/golden.spec.luau
++++ b/pickman/tests/acceptance/c0128/golden.spec.luau
+@@ -1,17 +1,20 @@
+ --!strict
+ -- c0128 AC4: no other case changes. Both narrowed files are pinned whole: the file is normalised and its sha256 must
+--- equal the digest of the narrowing in R0045/experiments/narrowing.patch applied to origin/main. The normalisation
+--- masks item ids (so a compaction cannot break it), makes line endings LF, collapses runs of spaces and tabs within a
+--- line, drops trailing whitespace and a trailing comma before `}`, and KEEPS every line break: a Luau `--` comment
+--- ends at a newline, so collapsing newlines would let a check joined onto the comment line above it vanish into the
+--- comment unseen (R0045 code review 001 F1; decided with the user, 2026-10-25: "Fix the pin now"). A digest, not the
+--- text, because the files are about 1,300 lines. Any later change to either file must update the digest here: run
+--- `normalise` on the file's text and `serde.hash("sha256", …)` it. On a failure, titles.spec and guards.spec say which
+--- case moved or which guard went, and a diff against narrowing.patch shows the rest; this file says that nothing else
+--- did. c0103's promoted narrowed.spec has the old, newline-collapsing rule: c0156 fixes it.
++-- equal the digest of the narrowing in R0045/experiments/narrowing.patch applied to origin/main. The normalisation is
++-- the shared whole-file pin rule, z-nile/tests/lib/pin.luau (c0156, the rule c0103's narrowed.spec uses too): it masks
++-- item ids (so a compaction cannot break it), makes line endings LF, collapses runs of spaces and tabs within a line,
++-- drops trailing whitespace on a line, a trailing comma before `}` and the text's outer blank lines, and KEEPS every
++-- line break: a Luau `--` comment ends at a newline, so collapsing newlines would let a check joined onto the comment
++-- line above it vanish into the comment unseen (R0045 code review 001 F1; decided with the user, 2026-10-25: "Fix the
++-- pin now"). A digest, not the text, because the files are about 1,300 lines. Every verdict goes through one function
++-- per file, `exactly24` and `exactly26`: the "exactly" cases assert it on the file, and the mutant cases (a comment
++-- joined with the line below it, a deleted assertion) assert `not exactly…` on the file changed in memory, so a pin
++-- whose comparison was weakened turns a mutant case red. Any later change to either file must update its digest here:
++-- run `pin.digest` on the file's text. On a failure, titles.spec and guards.spec say which case moved or which guard
++-- went, and a diff against narrowing.patch shows the rest; this file says that nothing else did.
+ local fs = require("@lune/fs")
++local pin = require("@tests/lib/pin")
+ local renamed = require("@tests/lib/renamed")
+-local serde = require("@lune/serde")
+ local t = require("@tests/lib/t")
+ 
+ -- spelled in two parts so a compaction does not rewrite it; the ids are mapped through tracker/compaction.txt
+@@ -19,57 +22,59 @@ local ROOT = "tests/" .. "acceptance/"
+ local F24 = ROOT .. renamed.id("f0024") .. "/adapter.spec.luau"
+ local F26 = ROOT .. renamed.id("f0026") .. "/adapters.spec.luau"
+ 
+-local function normalise(text: string): string
+-	text = string.gsub(text, "%f[%w_][fdcR]%d+%f[^%w_]", "ID")
+-	text = string.gsub(text, "\r\n?", "\n")
+-	text = string.gsub(text, "[ \t]+", " ")
+-	text = string.gsub(text, " \n", "\n")
+-	text = string.gsub(text, ",( ?\n?[ ]?)}", "%1}")
+-	text = string.gsub(text, "^[%s]+", "")
+-	text = string.gsub(text, "[%s]+$", "")
+-	return text
+-end
+-local function normalised(path: string): string
+-	return normalise(fs.readFile(path))
++local D24 = "7f791c55bab7441df495cc59a1ed1989ff6daa6494e0719e748ef38bd66b992b"
++local D26 = "744eeb0f1d525ee47f52c01dd8cab3c4bcd511fd2edf28919f894712f64cbfc6"
++
++local function exactly24(text: string): boolean
++	return pin.digest(text) == D24
+ end
+-local function digest(text: string): string
+-	return serde.hash("sha256", normalise(text))
++local function exactly26(text: string): boolean
++	return pin.digest(text) == D26
+ end
+ 
+--- one line of the file joined onto the comment line above it (a newline turned into a space)
+-local function joined(path: string, comment: string): string
+-	local src = fs.readFile(path)
+-	local at = string.find(src, comment .. "\n", 1, true)
+-	assert(at ~= nil, `no comment line "{comment}" in {path}`)
+-	local cut = at + #comment
+-	local rest = string.gsub(string.sub(src, cut + 1), "^[ \t]+", "", 1)
+-	return string.sub(src, 1, cut - 1) .. " " .. rest
++-- comment lines whose next line a careless join would turn into comment text
++local PER_PLAYER = "-- c0128: the six per-player stores, and besides them only d0124's top-N list of runs"
++local READS = "-- reads at 0, 2 and 6 s (failure waits of 2, 4, then 8 s), each at page sizes 10 and 50"
++local COMPANION = "-- c0128: the per-player companion store is still read"
++
++local function crlf(text: string): string
++	return (string.gsub(string.gsub(text, "\r\n", "\n"), "\n", "\r\n"))
+ end
+ 
+ return t.spec("c0128 the narrowed files, whole", function(it)
+ 	it("f0024 adapter is exactly the narrowed file", function()
+-		t.expect(serde.hash("sha256", normalised(F24)))
+-			.toBe("7f791c55bab7441df495cc59a1ed1989ff6daa6494e0719e748ef38bd66b992b")
++		t.expect(exactly24(fs.readFile(F24))).toBe(true)
+ 	end)
+ 
+-	it("a check joined onto the comment line above it changes the normalised text", function()
+-		t.expect(normalise("-- x\nassert()") == normalise("-- x assert()")).toBe(false)
+-		t.expect(normalise("a  =\t1  \n}") == normalise("a = 1\n}")).toBe(true)
+-	end)
++	it(
++		"f0024: a line joined onto the comment above it, or a deleted assertion, is not the narrowed file",
++		function()
++			local src = fs.readFile(F24)
++			t.expect(exactly24(pin.joined(src, PER_PLAYER))).toBe(false)
++			t.expect(exactly24(pin.without(src, "t.expect(updates).toBe(6)"))).toBe(false)
++		end
++	)
++
++	it(
++		"the review's two joins in f0026 adapters, or a deleted assertion, are not the narrowed file",
++		function()
++			local src = fs.readFile(F26)
++			t.expect(exactly26(pin.joined(src, READS))).toBe(false)
++			t.expect(exactly26(pin.joined(src, COMPANION))).toBe(false)
++			t.expect(exactly26(pin.without(src, "t.expect(#w.reads).toBe(0)"))).toBe(false)
++		end
++	)
+ 
+-	it("the review's two joins in f0026 adapters each change its digest", function()
+-		local pinned = digest(fs.readFile(F26))
+-		local first = joined(
+-			F26,
+-			"-- reads at 0, 2 and 6 s (failure waits of 2, 4, then 8 s), each at page sizes 10 and 50"
+-		)
+-		local second = joined(F26, "-- c0128: the per-player companion store is still read")
+-		t.expect(digest(first) == pinned).toBe(false)
+-		t.expect(digest(second) == pinned).toBe(false)
++	it("the pins and the joins do not depend on the files' line endings", function()
++		local src24, src26 = fs.readFile(F24), fs.readFile(F26)
++		t.expect(exactly24(crlf(src24))).toBe(true)
++		t.expect(exactly26(crlf(src26))).toBe(true)
++		t.expect(pin.joined(crlf(src24), PER_PLAYER)).toBe(pin.joined(src24, PER_PLAYER))
++		t.expect(pin.joined(crlf(src26), READS)).toBe(pin.joined(src26, READS))
++		t.expect(pin.joined(crlf(src26), COMPANION)).toBe(pin.joined(src26, COMPANION))
+ 	end)
+ 
+ 	it("f0026 adapters is exactly the narrowed file", function()
+-		t.expect(serde.hash("sha256", normalised(F26)))
+-			.toBe("744eeb0f1d525ee47f52c01dd8cab3c4bcd511fd2edf28919f894712f64cbfc6")
++		t.expect(exactly26(fs.readFile(F26))).toBe(true)
+ 	end)
+ end)
+diff --git a/pickman/tests/lib/pin.luau b/pickman/tests/lib/pin.luau
+new file mode 100644
+index 00000000..c0b51e34
+--- /dev/null
++++ b/pickman/tests/lib/pin.luau
+@@ -0,0 +1,4 @@
++--!strict
++-- The whole-file pin rule is the shared harness's (z-nile/tests/lib/pin.luau); pickman's specs reach it as
++-- @tests/lib/pin, which pickman/.luaurc points at pickman/tests (c0120).
++return require("../../../z-nile/tests/lib/pin")
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..b64ed2b9 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -18,7 +18,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
+ 
+ ## Spec layout (`*.spec.luau`)
+-Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's. A project's own tiers (pickman's `tests/unit`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place` and `fakeengine` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has.
++Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`), `renamed` and `pin` (the whole-file pin rule: `pin.digest` keeps every line break, `pin.joined` and `pin.without` build the comment-join and deleted-assertion mutants) are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's. A project's own tiers (pickman's `tests/unit`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place` and `fakeengine` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has.
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |
+diff --git a/z-nile/skills/zz-test/lessons/narrowing-pins-the-whole-file.md b/z-nile/skills/zz-test/lessons/narrowing-pins-the-whole-file.md
+index ed43a849..d2775fe0 100644
+--- a/z-nile/skills/zz-test/lessons/narrowing-pins-the-whole-file.md
++++ b/z-nile/skills/zz-test/lessons/narrowing-pins-the-whole-file.md
+@@ -2,19 +2,19 @@
+ title: A narrowed promoted spec is pinned whole
+ when: design
+ tags: [acceptance, narrowing, golden]
+-check: When a chore narrows a promoted spec, does its acceptance pin the whole narrowed file (a normalised golden or digest), so that any edit outside the intended hunks, a deleted assertion included, turns it red, and do the Implementation steps check the pinned file's base and stop when it has moved? And can joining two lines, or changing the spaces inside a string, change what the pinned file asserts while its normalised text stays the same? Does the mutant set include "join a line onto the comment above it"? And does every raw read of the pinned file in the spec (a search, a mutant builder) go through the same normaliser as the digest?
++check: When a chore narrows a promoted spec, does its acceptance pin the whole narrowed file (a normalised golden or digest), so that any edit outside the intended hunks, a deleted assertion included, turns it red, and do the Implementation steps check the pinned file's base and stop when it has moved? And can joining two lines, or changing the spaces inside a string, change what the pinned file asserts while its normalised text stays the same? Does the mutant set include "join a line onto the comment above it"? And does every raw read of the pinned file in the spec (a search, a mutant builder) go through the same normaliser as the digest? Is the normaliser `pin.normalise` (`@tests/lib/pin`), not a copy of its rule? For each pinned file, weaken its comparison and drop its own mutant case: does a check.sh check go red, through the pin's verdict run from outside the pin on the mutated file (a mutant counts as killed by the verdict's assertion, not by a helper that raised)?
+ ---
+ Text probes for the narrowed lines miss every other way the file can be weakened: an assertion deleted from an untouched case, a loop emptied, a comment hiding code. A narrowing chore's outcome is usually "nothing else changes", and only a pin of the whole file checks that.
+ 
+ **Why:** R0045 design review 1 (F1): c0128's checks pinned the case titles and probed each narrowed guard, and a mutant that deleted an assertion from an unnarrowed case passed every check.
+ 
+-**How to apply:** pin the narrowed file's exact text, with only item ids masked and line endings made LF, by a digest or a golden string (c0150's `narrowed.spec` is the model; c0103's collapses whitespace, which lets a check be joined into a comment unseen). Make the Implementation steps check the pinned file's base and stop when it has moved.
++**How to apply:** pin the narrowed file's exact text, with only item ids masked and line endings made LF, by a digest or a golden string (c0150's `narrowed.spec` pins the exact text; to tolerate formatting, use `pin.digest` from `@tests/lib/pin`, which keeps every line break (it collapses spaces inside strings too, so a file with a string holding a run of spaces or a tab keeps the exact-text pin): c0103's and c0128's pins collapsed them, which let a check be joined into a comment unseen). Make the Implementation steps check the pinned file's base and stop when it has moved.
+ 
+ R0045 design review 2 (F1): a whole-file pin taken in prep ties the executor to prep's base. "If a hunk does not apply, follow the Design" can then never pass, because the executor may not edit the sequestered pin. The steps must check the base blobs before applying and escalate for a re-prep when they differ.
+ 
+-Normalising whitespace is not harmless: a newline ends a line comment, so a check joined onto a comment line disappears from the code with the collapsed text unchanged, and the spaces inside a string are part of what a `string.find` asserts. Pin the exact text (ids masked, line endings made LF), or keep those newlines and string contents when normalising (c0150 design review 001 F3; c0103's normalisation has the same gap).
++Normalising whitespace is not harmless: a newline ends a line comment, so a check joined onto a comment line disappears from the code with the collapsed text unchanged, and the spaces inside a string are part of what a `string.find` asserts. Pin the exact text (ids masked, line endings made LF), or keep those newlines and string contents when normalising (c0150 design review 001 F3; c0103's normalisation had the same gap, closed by c0156).
+ 
+-R0045 code review 001 F1: c0128's golden.spec (copied from c0103's narrowed.spec) normalised with `%s+` → space, so joining an assertion onto the `--` comment line above it turned it into a comment and every pin, the text probes included, stayed green. A whole-file normalisation of code keeps the newlines that end a line comment (or marks each comment's end before collapsing). Fixed in c0128's golden.spec by R0045; c0103's by c0156.
++R0045 code review 001 F1: c0128's golden.spec (copied from c0103's narrowed.spec) normalised with `%s+` → space, so joining an assertion onto the `--` comment line above it turned it into a comment and every pin, the text probes included, stayed green. A whole-file normalisation of code keeps the newlines that end a line comment (or marks each comment's end before collapsing). Fixed in c0128's golden.spec by R0045; c0103's by c0156, which moved the rule into `pin` so both pins use one copy.
+ 
+ R0045 code review 002 F1: the fixed golden.spec's `joined()` mutant builder searched the raw file, so a CRLF checkout turned a case red while both digests passed. Every helper that reads the pinned file reads it through the same normaliser as the digest, or the pin's independence from line endings holds for the digest only.
+ 
+diff --git a/z-nile/tests/lib/pin.luau b/z-nile/tests/lib/pin.luau
+new file mode 100644
+index 00000000..9ee21b2c
+--- /dev/null
++++ b/z-nile/tests/lib/pin.luau
+@@ -0,0 +1,71 @@
++--!strict
++-- The one rule for pinning a narrowed Luau spec whole (c0156): its text is normalised, then compared as a digest or a
++-- golden string. The pin keeps every line break, blank lines included, and tolerates only:
++--   * item ids such as f0130 (masked, so a compaction cannot break the pin),
++--   * line endings (CRLF and a lone CR become LF),
++--   * runs of spaces and tabs within a line (collapsed to one space; inside a string literal too, so a file with a
++--     string holding a run of spaces or a tab keeps the exact-text pin) and trailing whitespace on a line,
++--   * a comma before a closing brace, across at most one line break (stylua's table layout),
++--   * the blank lines at the start and end of the text.
++-- A vertical tab and a form feed stay as they are: a Luau comment runs through them, so they are neither a space nor a
++-- line break (c0156 E9). A Luau `--` comment ends at its line, so a check joined onto the comment line above it is a
++-- comment: the normalised text must change when a line break goes (R0045 code review 001 F1). Every reader of a pinned
++-- file goes through `normalise` before it searches (code review 002 F1): `joined` and `without` do.
++-- Pure over texts: the caller reads the file.
++local serde = require("@lune/serde")
++
++local pin = {}
++
++function pin.normalise(text: string): string
++	text = string.gsub(text, "%f[%w_][fdcR]%d+%f[^%w_]", "ID")
++	text = string.gsub(text, "\r\n?", "\n")
++	text = string.gsub(text, "[ \t]+", " ")
++	text = string.gsub(text, " \n", "\n")
++	text = string.gsub(text, ",( ?\n?[ ]?)}", "%1}")
++	text = string.gsub(text, "^[%s]+", "")
++	text = string.gsub(text, "[%s]+$", "")
++	return text
++end
++
++-- the SHA-256 of the normalised text, as lowercase hex
++function pin.digest(text: string): string
++	return serde.hash("sha256", pin.normalise(text))
++end
++
++-- The mutant a careless edit makes: the normalised text with the line after the first line that ends in `comment`
++-- joined onto it, the line break between them a space. Raises when no line ends in `comment` followed by a line break
++-- (a comment on the last line has none), and when a blank line follows it: with nothing to join, a pin that "kills"
++-- the result would prove nothing. Both texts go through `normalise`, so an id in the comment or the file's line
++-- endings change nothing.
++function pin.joined(text: string, comment: string): string
++	local src = pin.normalise(text)
++	local needle = pin.normalise(comment)
++	local at = string.find(src, needle .. "\n", 1, true)
++	if at == nil then
++		error(`no line ends in the comment "{needle}"`, 2)
++	end
++	local cut = at + #needle
++	local rest = string.sub(src, cut + 1)
++	if string.sub(rest, 1, 1) == "\n" then
++		error(`the comment "{needle}" is followed by a blank line: no line to join`, 2)
++	end
++	return string.sub(src, 1, cut - 1) .. " " .. (string.gsub(rest, "^ ", "", 1))
++end
++
++-- The other careless edit: the normalised text with the one occurrence of `piece` (normalised, so an assertion line may
++-- be given with its indent and line ending) deleted. Raises when `piece` is empty, absent or occurs more than once, so
++-- a pin that "kills" the result has deleted something certain.
++function pin.without(text: string, piece: string): string
++	local src = pin.normalise(text)
++	local needle = pin.normalise(piece)
++	local at, to = string.find(src, needle, 1, true)
++	if needle == "" or at == nil or to == nil then
++		error(`the text has no "{needle}" to delete`, 2)
++	end
++	if string.find(src, needle, to + 1, true) ~= nil then
++		error(`"{needle}" occurs more than once in the text: nothing certain to delete`, 2)
++	end
++	return string.sub(src, 1, at - 1) .. string.sub(src, to + 1)
++end
++
++return pin

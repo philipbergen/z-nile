@@ -1,0 +1,25 @@
+- design-review-001 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F2: z-design/instructions-runnable-where-they-run
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: z-design/quote-other-preps-before-promising
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: z-design/restated-rules-move-together
+- design-review-001 F8: zz-review/lists-paste-their-search
+- design-review-002 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-002 F2: zz-test/guard-needs-its-own-case, zz-test/refusals-tested-on-both-sides, z-design/reasoned-rows-claim-testable-reasons
+- design-review-002 F3: zz-test/specs-pin-only-their-own-project
+- design-review-002 F4: z-design/instructions-runnable-where-they-run
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-002 F6: zz-test/narrowing-pins-the-whole-file
+- design-review-003 F1: zz-test/narrowing-pins-the-whole-file, zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/guard-needs-its-own-case, zz-arch/guard-no-is-explicit
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: zz-test/narrowing-pins-the-whole-file
+- design-review-004 F1: zz-test/narrowing-pins-the-whole-file, zz-test/seed-every-enumerated-case
+- design-review-004 F2: z-design/spec-design-correspondence
+- design-review-004 F3: zz-arch/guard-no-is-explicit, z-design/restated-rules-move-together
+- design-review-005 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-005 F3: z-design/restated-rules-move-together
+- design-review-005 F4: z-design/spec-design-correspondence
