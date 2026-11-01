@@ -69,9 +69,10 @@ I = [
         "Each run counts its revives for the boards (A1)."],
   ngs=["Each game's own revive screen: S5, I4 and T4.", "The portal's badge, timer and play buttons: P1, P3 and P4.",
        "Pickman switching to it: K3 (Switch to arcade paid play).", "The live publish of the products: f0169."]),
- dict(key="K3", project="pickman", type="c", slug="switch-to-arcade-paid-play", title="Switch to arcade paid play", deps=["A3", "f0145", "f0186"],
+ dict(key="K3", project="pickman", type="c", slug="switch-to-arcade-paid-play", title="Switch to arcade paid play", deps=["A3", "f0145", "f0186"], also=["portal"],
   file=ARCH, parts="**Technical skeleton**, \"Pickman migrates one feature at a time\", for PaidPlay and Receipts",
-  outs=["Pickman's paid play (f0145, with f0186's revives and per-game free hour) runs on arcade's PaidPlay and Receipts, with no pickman-only copy."],
+  outs=["Pickman's paid play (f0145, with f0186's revives and per-game free hour) runs on arcade's PaidPlay and Receipts, with no pickman-only copy.",
+        "Pickman's game place consumes the portal's entitlement on arrival (a player who paid, or took the free game, on the portal's Pickman card plays at once), as every game place does, so the portal can replace the lobby (P5, c0188)."],
   ngs=["f0145 (Paid play and continues) and f0186 (Boards show revives) themselves."]),
  dict(key="A4", project="arcade", type="f", slug="input-and-look-cores", title="Input and look cores", deps=["c0185"],
   file=ARCH, parts="**Technical skeleton**, \"What moves into arcade\", items 4 to 6 (Rng, the Pad and Touch cores, first-person Look)",
@@ -104,15 +105,15 @@ I = [
   outs=["PLAY on a card starts that game: free when the hour allows, else the 1 R$ play product (5 R$ struck through on the button); the server records the entitlement and teleports; the game place consumes it on arrival; TeleportData is never trusted.",
         "**ARENA** on Snake joins a shared arena; **2 PLAYERS** on Invaders and Asteroids puts the player on a waiting card until a second player in the portal server (or an invited friend) joins, then both teleport together to a reserved server (E5 is run on Beta by I3).",
         "Playtests never charge."],
-  ngs=["The arrival side (joining a shared arena, a 2-player match started for the party, and E5): S2, I3 and T3.", "The revive product, bought in each game place: S5, I4 and T4."]),
- dict(key="P5", project="portal", type="f", slug="portal-start-place", title="Portal start place", deps=["Z3", "P2", "P4"], also=[ARCH],
+  ngs=["The arrival side, in each game's place: S3, S2 (the arena), I3, T3 (and the 2-player matches and E5) and K3 (Pickman's).", "The revive product, bought in each game place: S5, I4 and T4."]),
+ dict(key="P5", project="portal", type="f", slug="portal-start-place", title="Portal start place", deps=["Z3", "P2", "P4", "K3"], also=[ARCH],
   file="portal", parts="\"The experience's start place\", and from `arcade/.tracker/architecture.md`'s **Places and publishing**, \"`ROBLOX_BETA_PLACE_ID` is the portal (start place)\"",
   outs=["The portal is the experience's start place (Beta first): the manifest's start-place entry (`ROBLOX_BETA_PLACE_ID`) publishes the portal instead of pickman's lobby, so the start place's id, which pickman reads as `LobbyPlaceId` until f0187, now leads to the portal, and every game's game over returns there.",
         "The lobby is no longer published; its code goes with c0188."],
   ngs=["Retiring pickman's lobby: c0188 (Retire lobby place).", "Each game's return to the portal: f0187, S5, I4 and T4."]),
  dict(key="Z3", project="portal", type="c", slug="n-place-deploy", title="N-place deploy", deps=["P2", "P4"],
   file=ARCH, parts="**Technical skeleton**, its **Places and publishing** part: the manifest, the places' env vars, the place-id attributes and where the scripts live (not the start place, P5's; not pickman's switch to `PortalPlaceId`, f0187's)",
-  outs=["The Beta publish handles every place of the experience from one manifest (`portal/experience.json`: each place's project file and env var), not pickman's fixed lobby and game pair. It lists all of them (the start place, pickman, snake, invaders, asteroids); a place whose project file doesn't exist yet, or whose env var is unset, is skipped and its id attribute is 0, so each game's place is published as soon as its view issue builds it, with no edit here.",
+  outs=["The Beta publish handles every place of the experience from one manifest (`portal/experience.json`: each place's project file and env var), not pickman's fixed lobby and game pair. It lists all of them (the start place, pickman, snake, invaders, asteroids); a place whose env var (its Beta place id) is unset is skipped and its id attribute is 0, so a place is published from the moment its env var is set, with no edit here. The env var is the one signal: every home's project file exists from c0184 on, so a file's presence says nothing.",
         "Until P5, the start place's entry (`ROBLOX_BETA_PLACE_ID`) is still pickman's lobby, published as today.",
         "Every place gets every place id as attributes (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 means not published); the old `ROBLOX_BETA_GAME_PLACE_ID` is still accepted for pickman, and pickman's places keep getting `LobbyPlaceId` as today until f0187 switches pickman to `PortalPlaceId` and c0188 retires the lobby, so pickman's game over keeps working on Beta in between.",
         "The deploy scripts and the runtime-test runner (`--place <name>`) move to `portal/scripts/`."],
@@ -134,7 +135,8 @@ I = [
   file="snake", parts="**Arena and view** (the camera, the minimap and the eased turn), **Movement** (the keys, gamepad and touch), **Players** (\"Solo\", and each snake's colour, name and the HUD but its top 3), and what the solo rules show (\"MAP CLEAR\", \"Ready\", and how S1's and S4's food and boost look)",
   outs=["The game seen from the snake's head, with the minimap, the eased turn, the HUD (length / goal, map, lives, score), and every input: A/D, the arrows to look, Space to boost; gamepad; touch LEFT, RIGHT and BOOST.",
         "Everything the solo rules show, from their state (S1's and S4's): the apples, golden apples and crumbs, the boost, the 2 s \"MAP CLEAR\" and the 2 s \"Ready\".",
-        "The Snake place: its project file, the server session that runs each solo game in its own arena (pickman's solo-instances model) and replicates it to the player, and a player's arrival from the portal's PLAY."],
+        "The Snake place: its project file, the server session that runs each solo game in its own arena (pickman's solo-instances model) and replicates it to the player, and a player's arrival from the portal's PLAY.",
+        "Publishing the Snake place: once the place is playable, the user creates it on Roblox and sets `ROBLOX_BETA_SNAKE_PLACE_ID` (a step this issue's Observed criteria name), and Z3's manifest publishes it from then on; until then the portal's card says \"coming soon\"."],
   ngs=["The rules: S1 and S4.", "The shared arena, and what only an arena shows (the map winner's banner, the top 3 of lengths): S2.", "Boards, revives and the portal return: S5."]),
  dict(key="S4", project="snake", type="f", slug="boost-golden-apples-crumbs", title="Boost, golden apples and crumbs", deps=["S1"],
   file="snake", parts="**Movement** (\"Boost\") and **Food** (\"Golden apple\" and \"Crumbs\")",
@@ -158,7 +160,8 @@ I = [
   outs=["The cannon's first-person view and field radar, with every input: A/D or the arrows and Space; gamepad; touch LEFT, RIGHT and FIRE.",
         "Everything the rules show or sound, from their state: the march's beat speeding up as the formation thins.",
         "The Invaders place: its project file, the server session that runs each solo game and replicates it to the player, and its arrival: a player from the portal's PLAY, or a party from its 2 PLAYERS in a reserved server, which starts and runs one 2-player match (I2's rules) replicated to both.",
-        "E5: the party teleport into a reserved server, tested on Beta with the portal as the start place (P5), its 2 PLAYERS (P4) and every place published (Z3); T3 uses its result."],
+        "E5: the party teleport into a reserved server, tested on Beta with the portal as the start place (P5), its 2 PLAYERS (P4) and every place published (Z3); T3 uses its result.",
+        "Publishing the Invaders place: once the place is playable, the user creates it on Roblox and sets `ROBLOX_BETA_INVADERS_PLACE_ID` (a step this issue's Observed criteria name), and Z3's manifest publishes it from then on; until then the portal's card says \"coming soon\"."],
   ngs=["The rules: I1 and I2.", "Boards, revives and the portal return: I4.", "The waiting card and the teleport: P4."]),
  dict(key="I4", project="invaders", type="f", slug="invaders-scores-and-revives", title="Invaders scores and revives", deps=["I1", "I3", "A1", "A2", "A3"], also=["portal"],
   file="invaders", parts="**Solo (the classic)** (\"Invasion\": the revive offer) and the boards every game keeps",
@@ -177,15 +180,17 @@ I = [
   file="asteroids", parts="**The field and view** (the cockpit camera, the wrap drawn tiled, the rocks' 3-D tumble, the radar, the rear-danger glow and the controls), what the rules show (the respawn flicker), and the game's side of \"Pairing\"; in `arcade/.tracker/architecture.md`, **Unknowns** E7",
   outs=["The cockpit view with the wrap-around drawn tiled at true distance, the radar and the rear-danger glow, with every input: A/D, W, Space, Shift, the arrows to look; gamepad; touch rotate, THRUST, FIRE and HYPER. A Studio prototype settles the tiled-field cost (E7).",
         "Everything the rules show, from their state: the rocks tumbling in 3-D (for looks only) and the flicker of a protected ship.",
-        "The Asteroids place: its project file, the server session that runs each solo game and replicates it to the player, and its arrival: a player from the portal's PLAY, or a party from its 2 PLAYERS in a reserved server, which starts and runs one 2-player game (T2's rules) replicated to both, as E5 (run by I3) found."],
+        "The Asteroids place: its project file, the server session that runs each solo game and replicates it to the player, and its arrival: a player from the portal's PLAY, or a party from its 2 PLAYERS in a reserved server, which starts and runs one 2-player game (T2's rules) replicated to both, as E5 (run by I3) found.",
+        "Publishing the Asteroids place: once the place is playable, the user creates it on Roblox and sets `ROBLOX_BETA_ASTEROIDS_PLACE_ID` (a step this issue's Observed criteria name), and Z3's manifest publishes it from then on; until then the portal's card says \"coming soon\"."],
   ngs=["The rules: T1 and T2.", "Boards, revives and the portal return: T4.", "The waiting card and the teleport: P4."]),
  dict(key="T4", project="asteroids", type="f", slug="asteroids-scores-and-revives", title="Asteroids scores and revives", deps=["T1", "T3", "A1", "A2", "A3"], also=["portal"],
   file="asteroids", parts="**Rules (the classic)** (\"Game over\": the revive offer) and the boards every game keeps",
   outs=["Asteroids' runs go to its boards (score, wave, revives); game over offers the 1 R$ revive; game over returns to the portal."],
   ngs=["The boards' store: A1.", "Paid play: A3."]),
 ]
-# the plan's order "Z3 and P5 -> retire the lobby": pickman's issues captured with c0183 gain the portal's ids
-EXTRA = [("c0188", ["P5", "Z3"]), ("f0187", ["Z3"])]
+# the plan's order "Z3 and P5 -> retire the lobby", and the lobby's shop stays until pickman takes the portal's
+# entitlement (K3): pickman's issues captured with c0183 gain those ids
+EXTRA = [("c0188", ["P5", "Z3", "K3"]), ("f0187", ["Z3"])]
 
 IDS = re.compile(r"^[fdc]\d{4}$")
 

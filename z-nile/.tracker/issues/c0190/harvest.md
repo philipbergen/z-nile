@@ -29,3 +29,5 @@
 - design-review-004 F3: z-ticket/split-designs-name-each-owner
 - design-review-004 F4: z-ticket/split-designs-name-each-owner
 - design-review-004 F5: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-005 F1: z-ticket/split-designs-name-each-owner
+- design-review-005 F2: z-ticket/publishers-skip-places-not-built-yet

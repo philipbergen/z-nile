@@ -22,7 +22,7 @@ ROWS="A1:arcade:hiscores-with-revives:c0185 \
 	P2:portal:boards-per-game:A1,P1 \
 	P3:portal:free-game-timer:A3,P1 \
 	P4:portal:play-buttons:A2,A3,P1 \
-	P5:portal:portal-start-place:Z3,P2,P4 \
+	P5:portal:portal-start-place:Z3,P2,P4,K3 \
 	Z3:portal:n-place-deploy:P2,P4 \
 	S1:snake:arena-maps-growth:c0184 \
 	S2:snake:shared-snake-arena:S3,A2,A3 \
@@ -96,7 +96,7 @@ ac2() {
 }
 check "AC2: all the issues were captured by one land, whose subject lists every id, each filled, not a stub" ac2
 # At the capture, each issue's depends_on is exactly the list's, and pickman's lobby retirement waits for the portal:
-# retire-lobby-place (c0188) gains P5 and Z3, game-over-returns-to-portal (f0187) gains Z3, both read at the same commit.
+# retire-lobby-place (c0188) gains P5, Z3 and K3, game-over-returns-to-portal (f0187) gains Z3, both read at the same commit.
 ac3() {
 	local row id want sha="" k hit p=pickman
 	for row in $ROWS; do
@@ -108,7 +108,7 @@ ac3() {
 		[[ $(tail -n +2 <<<"$body" | depsof) == "$want" ]] ||
 			{ echo "${row%%:*} ($SLUG): captured depends_on is [$(tail -n +2 <<<"$body" | depsof | tr '\n' ' ')], want [$(tr '\n' ' ' <<<"$want")]"; return 1; }
 	done
-	for row in retire-lobby-place:P5,Z3 game-over-returns-to-portal:Z3; do
+	for row in retire-lobby-place:P5,Z3,K3 game-over-returns-to-portal:Z3; do
 		hit=$(git -C "$ZN_ROOT" grep -l -e "^slug: ${row%%:*}$" "$sha" -- "$p/.tracker/issues" | grep -E '/([fdc][0-9]{4})/\1\.md$')
 		[[ -n $hit && $hit != *$'\n'* ]] || { echo "${row%%:*}: not exactly one issue at $sha"; return 1; }
 		k=${row#*:}
@@ -126,28 +126,28 @@ DIGESTS="b342322ab4a3588e457d2020ac1dca127d61a9aee49fa19add82774e0ba6d1b3:hiscor
 	0cef8b1dde871e8ef865abe749d9028a6a4bbe1079ce6f8a65501a8148213df4:shared-travel \
 	397c1382c52e9c5a6ebd4e4251f998b83e20a08f62a857d3b547902191b05058:switch-to-arcade-travel \
 	4056af7e5faf53f272d412a87358bb2eb26fe0d0b9935eb405030bba478c8656:paid-play-and-receipts \
-	1d5852137fb1d5d3efd30ab2ca1bf75ed68bdeef54a8f8d32b78f69e00c557c6:switch-to-arcade-paid-play \
+	2220d871a2a9d1b321f74298cb21a69e4f0291b85cc57b46ae14e3d6308c2613:switch-to-arcade-paid-play \
 	aa990726e6f2a5ea93cc98aa59fd3a2ab50550e203750690288c970ffc94cf57:input-and-look-cores \
 	cf60137b49ac1b55fd03ee3cebee21383d8fabd662a66ef1f6c6c8bf74415453:switch-to-arcade-input-cores \
-	f40a1c7f3b945dc0c65fd362474497d714e4f2d431bc14ed487338dd76fb81f3:game-carousel \
-	44d47684b4c606ec3bacc5b278bf904472a3e14c02b308e79a68a43102d31ac0:boards-per-game \
-	7d00158fb01bdc99ed28e06cdcafbc84cb2ae177db0dfaf4c6c68bf697c1f076:free-game-timer \
-	daac0631ca88579d7b6faeacccb9c9f078081a4616a68f24e42779bb4d93bcf6:play-buttons \
-	635843d85eac49b69636fdc6353292b402af26f973b097a7341f75067e5057fa:portal-start-place \
-	d80c8347a7c50349de450dce30425cacaefb716b5cd8e01c51737f1f93165cec:n-place-deploy \
+	0f6dd6bb0eedbc4f6de7c2c912a2c008463fe848c1afee8c24c3fa77003f4040:game-carousel \
+	167f67a76f385a0835a7f6641a64d429a354ca4b5deeb2e33d8b0e6937469803:boards-per-game \
+	fb219522df9f6dd4582bad87b8e605dad4fd2ca61598a5590bbfebe24caf22b8:free-game-timer \
+	fa055c97d3b780b48bb9f1935297fe083a8f958cd42bbcca44a4ce6f4b76416b:play-buttons \
+	ee66d97293ce20f2d8cdfcf6fa2a983d7171c44ead2353ce184a64bbab59b557:portal-start-place \
+	4c0bb5b2b39c8a352c92abcc9bdc07989d532fd711f36b48f0bc76d0b9959956:n-place-deploy \
 	f9e09887a117b4b8e3ab1bb3e04c47d207eb4d6639e0953783702b6a219a73cb:arena-maps-growth \
 	abd94f64ddd24d48890779e034d14193170920fdf8338b47775aff41b49348e9:shared-snake-arena \
-	122922a6f13841bc0de8379fe7fb11ff873ffbe8bec96c87050b4d297d27f157:snake-first-person-view \
+	29af9cb343ceab4052673557a08562764eb0307426466aa4a60ba7700fe4e478:snake-first-person-view \
 	38536e4bb6dda866074d74da00648e7d652d8ebbd7454113a7f92807f5100c6c:boost-golden-apples-crumbs \
-	386de29b194bd2bda814a0b055fe7329c5ab7a758b0866007327f4a057c3cf39:snake-scores-and-revives \
+	5d5505ba1a00326a418476bade0c2737eb0df9864e5a583b026f9a9cfc324aea:snake-scores-and-revives \
 	a3736b06dae80450f0f661cb7776b4d0c5ad5d3ffa8e8f03a7e4ac6fc192cb58:invaders-classic-rules \
 	aec93b189b1ead601af93b575fac809baffc9f392fab4bd6c15583919048b301:invaders-two-players \
-	c0d21136e43f7dc451418dcb1e4e64ba42499b9370ae4e72c5d7955ea18ea25c:invaders-cannon-view \
-	da0ef242d4c9eb35b3c26a6b1408cca4642d4c76d3f217b3b04ffd838b91be34:invaders-scores-and-revives \
+	479281c79ac2701f5035f1408446b63f2e7ff3039bd0f85e30962d4702e88826:invaders-cannon-view \
+	ac0e798a85cbfe9c004b6a4d3a7b2f6ec257d5c5134e0d80e8f4b9d18f3d1a98:invaders-scores-and-revives \
 	28095e203f3e2818990f6640d95d5b70a142e7f54f9a411f231968d85063f262:asteroids-classic-rules \
 	c3db791985dff1fdadf4c4ec96ab135c9528824304c879c30c186b1d5da541f0:asteroids-two-players \
-	75e9ac5c3ae98d2d7cf760ff19c4345e796f7bc8efdeb6d55566e2e8e4a35fb8:asteroids-cockpit-view \
-	01ee94db7d518065fcb1d994da3f7deda6eb2faea2109cf561932fb12b4e36be:asteroids-scores-and-revives"
+	ac8b284871a2cfdff1adbaf4b063efc08116d51ba7a0b9c86f7fb07003781df6:asteroids-cockpit-view \
+	4957fc64e49874864abd8eab7595ebafd4666ab1ea2c9632f81225be2a64ff15:asteroids-scores-and-revives"
 section() { { grep -m1 '^title: '; } <<<"$1"; awk '/^## Design$/{exit} f||/^## Problem$/{f=1; print}' <<<"$1"; }
 ac4() {
 	local row r s p doc body got id keys=()

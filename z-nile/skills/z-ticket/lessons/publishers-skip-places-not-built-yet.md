@@ -9,3 +9,5 @@ A publish step captured before the places it publishes either fails, publishes n
 **Why:** c0190 design review 004 F2: Z3's manifest ("every place of the experience") came before the issues that build the snake, invaders and asteroids places, yet E5 assumed "every place published (Z3)".
 
 **How to apply:** say in the publisher's outcome what happens to a place that doesn't exist yet, and check each experiment's premise against the order.
+
+c0190 design review 005 F2: the "not built yet" test must read something only the builder (or the user) creates, never a file the scaffold already makes: every home's project file existed from c0184 on, so the env var became the one signal.

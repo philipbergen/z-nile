@@ -38,7 +38,7 @@ thin() { python3 -c "import re,sys;p=sys.argv[1];t=open(p).read();t=re.sub(r'\n-
 fixit() { git checkout -q "$Cc" -- "$(d snake snake-scores-and-revives)"; gc "tracker: fix S5 text"; }
 a1() { sed -i '' 's/^depends_on: \[c0185\]$/depends_on: []/' "$(d arcade hiscores-with-revives)"; }
 z3() { sed -i '' "s/, $(idk portal play-buttons)\]/]/" "$(d portal n-place-deploy)"; }
-c188() { sed -i '' "s/, $(idk portal n-place-deploy)\]/]/" "$(d pickman retire-lobby-place)"; }
+c188() { sed -i '' "s/, $(idk portal n-place-deploy)//" "$(d pickman retire-lobby-place)"; }
 i3() { sed -i '' "s/\[\([^]]*\)$(idk invaders invaders-two-players), /[\1/" "$(d invaders invaders-cannon-view)"; }
 s3() { sed -i '' "s/, $(idk arcade input-and-look-cores)\]/]/" "$(d snake snake-first-person-view)"; }
 halfB() { # the snake issues out of the capture, landed by a second commit
@@ -50,6 +50,8 @@ s5s3() { sed -i '' "s/, $(idk snake snake-first-person-view)//" "$(d snake snake
 i4i3() { sed -i '' "s/, $(idk invaders invaders-cannon-view)//" "$(d invaders invaders-scores-and-revives)"; }
 s3s4() { sed -i '' "s/, $(idk snake boost-golden-apples-crumbs), /, /" "$(d snake snake-first-person-view)"; }
 p1a2() { sed -i '' "s/^depends_on: \[$(idk arcade shared-travel), /depends_on: [/" "$(d portal game-carousel)"; }
+p5k3() { sed -i '' "s/, $(idk pickman switch-to-arcade-paid-play)\]/]/" "$(d portal portal-start-place)"; }
+c188k3() { sed -i '' "s/, $(idk pickman switch-to-arcade-paid-play)\]/]/" "$(d pickman retire-lobby-place)"; }
 mut "correct" none
 mut "thin capture, later fix commit" thin fixit
 mut "two lands" halfB halfC
@@ -63,4 +65,6 @@ mut "S5 without S3" s5s3
 mut "I4 without I3" i4i3
 mut "S3 without S4" s3s4
 mut "P1 without A2" p1a2
+mut "P5 without K3" p5k3
+mut "c0188 without K3" c188k3
 mut "a prep edits S1 after the land (stays green)" none prepedit
