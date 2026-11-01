@@ -5,6 +5,7 @@
 | 1 | 2026-10-27 05:36 | capture amended (R0056 code review 003 F2) | 0 | 0 | 10.0 | spend | capture |  |
 | 2 | 2026-10-31 23:53 | design-review-001 | 0 | 0 | 25.0 | spend | design-review |  |
 | 3 | 2026-10-31 23:55 | design-refute-001 | 0 | 0 | 15.0 | spend | design-review |  |
+| 4 | 2026-11-01 00:06 | design-review-002 | 0 | 0 | 10.0 | spend | design-review | 133303 |
 
-**Total:** +0 / -0 lines, 50.0 agent-minutes, 0 tokens over 3 records
-<!-- totals: added=0 removed=0 minutes=50.0 records=3 tokens=0 -->
+**Total:** +0 / -0 lines, 60.0 agent-minutes, 133303 tokens over 4 records
+<!-- totals: added=0 removed=0 minutes=60.0 records=4 tokens=133303 -->
