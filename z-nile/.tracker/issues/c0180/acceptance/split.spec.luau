@@ -7,6 +7,7 @@
 local fs = require("@lune/fs")
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 local MAIN = "engine/main.luau"
 local CMD = "engine/cmd/"
@@ -38,7 +39,7 @@ end
 return t.spec("c0180 the engine is split by command", function(it)
 	it("every command has its module, and main.luau dispatches each by a literal require", function()
 		local names = commandFiles()
-		t.expect(#names >= 37).toBe(true)
+		t.expect(#names > 0).toBe(true)
 		local main = code(MAIN)
 		local dispatched = {}
 		for name in string.gmatch(main, 'require%("%./cmd/([%w%-]+)"%)') do
@@ -203,6 +204,18 @@ return t.spec("c0180 the engine is split by command", function(it)
 			visit(file, {})
 		end
 		t.expect(cycle).toBe(nil)
+	end)
+
+	it("dispatch is lazy: a command module that fails at load breaks only its own command", function()
+		local f = trackerfix.new("c0180-lazy")
+		local metrics = `{f.main}/z-nile/engine/cmd/metrics.luau`
+		fs.writeFile(metrics, 'error("c0180: fails at load")\n' .. fs.readFile(metrics))
+		local list = trackerfix.tr(f, f.main, { "list" })
+		t.expect(list.ok).toBe(true)
+		local broken = trackerfix.tr(f, f.main, { "metrics" })
+		t.expect(broken.ok).toBe(false)
+		t.expect((string.find(broken.stderr, "c0180: fails at load", 1, true)) ~= nil).toBe(true)
+		fs.removeDir(f.base)
 	end)
 
 	it("USAGE and the READ_ONLY declaration stay in main.luau", function()

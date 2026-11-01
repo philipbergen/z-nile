@@ -23,3 +23,5 @@ f0146 design review 001 (F1): source pins on Controls and Sticks passed `if acti
 c0170 design review 001 F1: a spy on a pure rule's input compared one spec's requires only; a call site that handed over a filtered list (only `@tests/lib/` requires) passed. A spy case compares every element the call site gathers with an independent reading.
 
 c0170 design review 002 F2: a spy compared what the call site gathered with the real tree, which had no example of one kind of input (a fixture dep in a helper or unit spec), so a call site that dropped that kind passed. A spy is only as strong as the kinds today's tree holds; hand the pure function the whole source (the graph) and let it choose, or seed a synthetic input with every kind.
+
+c0180 design review 002 F2: a new flag (`--recorded`) that narrows selection had cases on the selector alone, so the gate could drop it and every criterion still passed. A flag a caller must pass gets a case through every real caller (here a rule over `z-nile/check.sh`'s selection lines).

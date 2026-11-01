@@ -224,6 +224,33 @@ return t.spec("c0180 selection by command", function(it)
 	)
 
 	it(
+		"on a context without records (the fingerprints'), every engine file is a z-nile spec's input",
+		function()
+			local blobs: { [string]: string } = {}
+			for _, file in files do
+				blobs[file] = "100644 " .. string.rep("1", 40)
+			end
+			local noRecords: select.Context = table.clone(ctx)
+			noRecords.recorded = nil
+			local engineInputs = {}
+			for _, path in fingerprint.inputs(noRecords, LISTS, blobs) do
+				if string.sub(path, 1, #E) == E then
+					table.insert(engineInputs, path)
+				end
+			end
+			table.sort(engineInputs)
+			local every = {}
+			for _, file in files do
+				if string.sub(file, 1, #E) == E then
+					table.insert(every, file)
+				end
+			end
+			table.sort(every)
+			t.expect(engineInputs).toEqual(every)
+		end
+	)
+
+	it(
 		"a spec's fingerprint inputs hold exactly the engine files isInput holds, forced ones included",
 		function()
 			local blobs: { [string]: string } = {}

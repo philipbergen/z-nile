@@ -155,6 +155,7 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		write(W1, `z-nile/{D}`, spec({}, false, true))
 		fixture.git(W1, { "add", "-A" })
 		fixture.git(W1, { "commit", "-q", "-m", "seed" })
+		fixture.git(W1, { "update-ref", "refs/remotes/origin/main", "HEAD" }) -- the base every record starts from
 		fixture.git(W1, { "worktree", "add", "-q", W2 })
 		local r = process.exec(
 			"lune",
@@ -232,6 +233,19 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 			"#!/usr/bin/env bash\n# the fixture's gate: launching tooling, part of every key\n"
 		)
 		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, C }))
+	end)
+
+	it("records made on another merge base don't count: W2 takes a main whose engine changed", function()
+		write(
+			W2,
+			"z-nile/engine/store.luau",
+			"--!strict\nlocal changed = true\nreturn { changed = changed }\n"
+		)
+		fixture.git(W2, { "commit", "-qam", "engine change on main" })
+		fixture.git(W2, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, B, C, D }))
+		-- W1 is still on its old base, where its records hold
+		t.expect((affected(W1, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, C }))
 	end)
 
 	it("a malformed record file is skipped with a warning, and every spec is selected", function()

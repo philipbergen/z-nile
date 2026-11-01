@@ -1,7 +1,7 @@
 --!strict
 -- c0180: the spec-commands record (`<home>/.cache/spec-commands.tsv`) and its closure key, through their one reader,
 -- z-nile/lib/commandrecord.luau. Pure: no files, no processes.
-local cr = require("@znile/lib/commandrecord")
+local cr = require("@tests/lib/commandrecord")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
@@ -38,6 +38,23 @@ return t.spec("c0180 command record", function(it)
 				.. `tests/lib/t.luau\t{sha(FILES["tests/lib/t.luau"])}\n`
 		)
 		t.expect(cr.key({ "tests/lib/t.luau", "tests/a.spec.luau" }, bytes)).toBe(expected)
+	end)
+
+	it("the key ends with the extra lines it is given, in their order", function()
+		local expected = sha(
+			"spec commands key v1\n"
+				.. `tests/a.spec.luau\t{sha(FILES["tests/a.spec.luau"])}\n`
+				.. "engine-base 0123abcd\n"
+				.. "second line\n"
+		)
+		t.expect(cr.key({ "tests/a.spec.luau" }, bytes, { "engine-base 0123abcd", "second line" }))
+			.toBe(expected)
+		t.expect(
+			cr.key({ "tests/a.spec.luau" }, bytes, { "second line", "engine-base 0123abcd" }) ~= expected
+		)
+			.toBe(true)
+		t.expect(cr.key({ "tests/a.spec.luau" }, bytes, {}) == cr.key({ "tests/a.spec.luau" }, bytes))
+			.toBe(true)
 	end)
 
 	it("the key ignores the order and repeats of the paths it is given", function()

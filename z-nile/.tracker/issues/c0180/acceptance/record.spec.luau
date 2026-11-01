@@ -5,7 +5,8 @@
 -- runner under .cache/c0180-record (its own repository root, as c0154 does for durations), whose specs call a stub
 -- `zn` that writes <dir>/<command> for each directory ZN_SPEC_TRACE lists, so the runner is checked apart from the
 -- engine. One case keys the real tree, read only.
-local cr = require("@znile/lib/commandrecord")
+local cr = require("@tests/lib/commandrecord")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -254,6 +255,49 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		t.expect(records["tests/b.spec.luau"]).toBe(nil)
 		t.expect(records["tests/gone.spec.luau"]).toBe(nil)
 		t.expect(commandsOf(records, "tests/d.spec.luau")).toEqual({ "status" })
+	end)
+
+	it("the key holds the engine at the merge base: a new engine on origin/main changes every key", function()
+		local function commit(message: string)
+			fixture.git(base, { "add", "-A" })
+			fixture.git(base, {
+				"-c",
+				"user.name=c0180-record",
+				"-c",
+				"user.email=c0180-record@example.invalid",
+				"commit",
+				"-q",
+				"-m",
+				message,
+			})
+			fixture.git(base, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+		end
+		commit("base")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		local before = record()
+		-- an engine edit of the branch itself (uncommitted, so not at the merge base) leaves every key alone
+		write("z-nile/engine/extra.luau", "--!strict\nreturn {}\n")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		local same = record()
+		for _, s in { "tests/a.spec.luau", "tests/d.spec.luau" } do
+			t.expect(same[s].key).toBe(before[s].key)
+		end
+		-- the same engine change landed on origin/main: every key changes
+		commit("engine change on main")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		local after = record()
+		for _, s in { "tests/a.spec.luau", "tests/d.spec.luau" } do
+			t.expect(after[s].key ~= before[s].key).toBe(true)
+		end
+	end)
+
+	it("a record that can't be written is reported, and the run's outcome stands", function()
+		fs.removeFile(RECORD)
+		fs.writeDir(RECORD) -- a folder where the record goes: the rename over it fails
+		local ok, out = run({ "--jobs", "2" })
+		t.expect(ok).toBe(true)
+		t.expect((string.find(out, "tests/run: could not write", 1, true)) ~= nil).toBe(true)
+		fs.removeDir(RECORD)
 	end)
 
 	it("cleans up", function()

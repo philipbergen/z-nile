@@ -29,10 +29,10 @@ return t.spec("c0180 the skills state selection by command", function(it)
 		function()
 			for _, text in
 				{
-					"**Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran (`usage` for the usage path), in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure and of the tooling that launches `./zn`",
+					"**Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran (`usage` for the usage path), in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure, of the tooling that launches `./zn`, and of the engine at the merge base with `origin/main`",
 					"the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of `.cache/spec-trace/<name>` directories",
 					"With `--recorded` (the gate's selection passes it), a change to an engine Luau file that no program requires selects the z-nile specs that require it, declare it, are `*`, ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key",
-					"an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the forwarders in `scripts/tracker/` aside) still forces z-nile's run",
+					"an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the require forwarders that only specs load aside) still forces z-nile's run",
 					"Records come from this worktree and every other worktree of the checkout.",
 					"A spec that runs engine code another way than through `./zn`, `engine/main` or those programs declares the engine files it runs.",
 					"A spec that sets `ZN_SPEC_TRACE` for a command it starts appends the value it inherited (`<its dir>:<inherited>`)",

@@ -18,5 +18,6 @@ check "AC6: affected --recorded selects by commands across worktrees, failing cl
 check "AC7: zz-test, zz-arch and zz-rules state the new rules" lune run tests/run -- "$A/docs.spec.luau"
 check "AC8: every engine-text reader declares its engine input" lune run tests/run -- "$A/inputs.spec.luau"
 check "AC9: the three overridden specs hold exactly their narrowings" lune run tests/run -- "$A/narrowed.spec.luau"
+check "AC10: the gate's selection passes --recorded; fingerprints never load records" lune run tests/run -- "$A/gate.spec.luau"
 
 finish

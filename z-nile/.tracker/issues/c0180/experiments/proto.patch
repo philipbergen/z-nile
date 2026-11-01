@@ -1,0 +1,640 @@
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..ebf0ff64 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -5614,6 +5614,36 @@ if args[1] == "--" then
+ end
+ local name = args[1]
+ local handler = name and (cmd :: any)[name]
++-- c0180: the spec runner's command trace. Each ZN_SPEC_TRACE entry gets an empty file named after the command (`usage`
++-- for none or an unknown one), before the command does anything. An entry counts only when its physical path is itself
++-- and ends .cache/spec-trace/<name>; a bad entry or a failed write refuses (exit 2), so a traced run never loses one.
++do
++	local trace = process.env.ZN_SPEC_TRACE
++	if trace and trace ~= "" then
++		local dirs = string.split(trace, ":")
++		for _, dir in dirs do
++			local ran, real = pcall(process.exec, "pwd", { "-P" }, { cwd = dir })
++			local physical = if ran and real.ok then sh.trim(real.stdout) else nil
++			if physical ~= dir or string.match(dir, "/%.cache/spec%-trace/[^/]+$") == nil then
++				stdio.ewrite(
++					`zn: ZN_SPEC_TRACE entry {dir} is not a .cache/spec-trace/<name> directory by its physical path\n`
++				)
++				process.exit(2)
++			end
++		end
++		local recorded = if handler then name :: string else "usage"
++		for _, dir in dirs do
++			local why: any = nil
++			local wrote = xpcall(sh.writeReplacing, function(e: any)
++				why = e
++			end, `{dir}/{recorded}`, "")
++			if not wrote then
++				stdio.ewrite(`zn: cannot record the spec trace in {dir}: {why}\n`)
++				process.exit(2)
++			end
++		end
++	end
++end
+ if not handler then
+ 	print(USAGE)
+ 	process.exit(if name then 1 else 0)
+diff --git a/z-nile/lib/recordkey.luau b/z-nile/lib/recordkey.luau
+new file mode 100644
+index 00000000..2ade3a9a
+--- /dev/null
++++ b/z-nile/lib/recordkey.luau
+@@ -0,0 +1,96 @@
++--!strict
++-- c0180: the one key function of the spec-commands record. A spec's key covers the files that decide which `./zn`
++-- commands it runs: its require closure under its home's tests/, and the tooling that launches `./zn` (zn, scripts/,
++-- z-nile/check.sh, z-nile/lib/, z-nile/templates/). The runner (through z-nile/recordkey.luau) and the selector's
++-- context both call `keys`, from the repository root, so their keys agree by construction.
++local commandrecord = require("../tests/lib/commandrecord")
++local fs = require("@lune/fs")
++local graph = require("./graph")
++local process = require("@lune/process")
++local projects = require("../engine/projects")
++
++local recordkey = {}
++
++-- the tooling folders and files whose bytes join every key
++recordkey.TOOLING = { "zn", "scripts", "z-nile/check.sh", "z-nile/lib", "z-nile/templates" }
++
++-- pure: the spec's closure files under its home's tests/, then the tooling files
++function recordkey.files(g: graph.Graph, spec: string, tooling: { string }): { string }
++	local prefix = string.match(spec, "^(.-)tests/") or ""
++	local tests = prefix .. "tests/"
++	local out: { string } = {}
++	for path in graph.closure(g, spec) do
++		if string.sub(path, 1, #tests) == tests then
++			table.insert(out, path)
++		end
++	end
++	for _, path in tooling do
++		table.insert(out, path)
++	end
++	return out
++end
++
++-- the tooling files at `root`: tracked and untracked (not ignored), as git lists them
++function recordkey.tooling(root: string): { string }
++	local args = { "ls-files", "-co", "--exclude-standard", "--" }
++	for _, p in recordkey.TOOLING do
++		table.insert(args, p)
++	end
++	local r = process.exec("git", args, { cwd = root })
++	if not r.ok then
++		error(`recordkey: git ls-files failed in {root}: {r.stderr}`, 0)
++	end
++	local out: { string } = {}
++	for line in string.gmatch(r.stdout, "[^\n]+") do
++		table.insert(out, line)
++	end
++	table.sort(out)
++	return out
++end
++
++-- the tree id of z-nile/engine at the merge base of HEAD and origin/main, or "none" when either can't be read
++function recordkey.engineBase(root: string): string
++	local base = process.exec("git", { "merge-base", "HEAD", "refs/remotes/origin/main" }, { cwd = root })
++	if not base.ok then
++		return "none"
++	end
++	local commit = (string.gsub(base.stdout, "%s+$", ""))
++	local tree = process.exec(
++		"git",
++		{ "rev-parse", "--verify", "-q", `{commit}:z-nile/engine` },
++		{ cwd = root }
++	)
++	if not tree.ok then
++		return "none"
++	end
++	return (string.gsub(tree.stdout, "%s+$", ""))
++end
++
++-- every home's src and tests, plus the engine: the graph the selector's context builds; run from the root
++function recordkey.graph(): graph.Graph
++	local roots: { string } = {}
++	for _, p in projects.load().projects do
++		local prefix = if p.home == "." then "" else p.home .. "/"
++		table.insert(roots, prefix .. "src")
++		table.insert(roots, prefix .. "tests")
++	end
++	table.insert(roots, "z-nile/engine")
++	return graph.build(roots)
++end
++
++-- the key of each repo-relative spec; the current directory must be the repository root `root`
++function recordkey.keys(root: string, specs: { string }, g: graph.Graph?): { [string]: string }
++	local built = g or recordkey.graph()
++	local tooling = recordkey.tooling(root)
++	local extra = { "engine-base " .. recordkey.engineBase(root) }
++	local out: { [string]: string } = {}
++	for _, spec in specs do
++		if not fs.isFile(spec) then
++			error(`recordkey: no spec {spec}`, 0)
++		end
++		out[spec] = commandrecord.key(recordkey.files(built, spec, tooling), fs.readFile, extra)
++	end
++	return out
++end
++
++return recordkey
+diff --git a/z-nile/recordkey.luau b/z-nile/recordkey.luau
+new file mode 100644
+index 00000000..b75e3489
+--- /dev/null
++++ b/z-nile/recordkey.luau
+@@ -0,0 +1,23 @@
++--!strict
++-- c0180: `lune run z-nile/recordkey -- <repo-relative spec paths>`, from the repository root: prints `<spec>\t<key>`
++-- per spec (z-nile/lib/recordkey.luau); exits 2 naming what it can't key. The spec runner calls it after a multi-file
++-- run to key the spec-commands record.
++local process = require("@lune/process")
++local recordkey = require("./lib/recordkey")
++local stdio = require("@lune/stdio")
++
++local specs: { string } = {}
++for _, a in process.args do
++	if a ~= "--" then
++		table.insert(specs, a)
++	end
++end
++local root = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
++local ok, keys = pcall(recordkey.keys, root, specs)
++if not ok then
++	stdio.ewrite(`recordkey: {keys}\n`)
++	process.exit(2)
++end
++for _, spec in specs do
++	print(`{spec}\t{(keys :: { [string]: string })[spec]}`)
++end
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index 5d60a654..9c21bb8f 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -11,7 +11,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ | path | contains |
+ |---|---|
+ | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
+-| `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
++| `z-nile/engine/` | the tracker engine. `main.luau` parses arguments, guards and dispatches; each command is `cmd/<name>.luau`, and the helpers several commands share are modules beside it (`cli`, `gitroot`, `guard`, `origin`, …). Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+ | `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
+ | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
+ | `z-nile/templates/` | the item, raft and prompt templates |
+@@ -23,7 +23,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ 1. **`--!strict` is the first line of every Luau file**, `.tracker/` folders aside.
+ 2. **The tooling is Luau on Lune.** Shell only where a shell must run it: `zn`, `check.sh` files, `ac.sh`, `fence.sh` and the hooks.
+ 3. **Requires are relative, or through the root `.luaurc` aliases** (`@znile`, `@tests`, `@scripts`, `@lune`); `@znile` names `z-nile/`, because an alias can't hold a hyphen. Every require under `z-nile/tests/` resolves. Specs require only through aliases, because `done` moves them.
+-4. **Pure over texts, reads at the edge.** A module that parses, plans or checks takes text and data and returns results or problems; one `load` function, or `main.luau`, does the reading and writing. Spec the pure part directly and the command through a fixture (zz-test skill, "Specs never touch the real repository").
++4. **Pure over texts, reads at the edge.** A module that parses, plans or checks takes text and data and returns results or problems; one `load` function, or the engine's CLI (`main.luau` and the command modules in `engine/cmd/` with the shared helpers beside them), does the reading and writing. Spec the pure part directly and the command through a fixture (zz-test skill, "Specs never touch the real repository").
+ 5. **One reader per format.** Each file format has one reader, and every command uses it: `projects.luau` for `projects.toml` (and `roots.luau` for the shell), `lessons.luau` for lessons and `harvest.md`, `skills.luau` for the skill folders and their links, `ids.luau` for the counter and the compaction map.
+ 6. **Parsers refuse ambiguity.** A repeated single-value field, an unknown key or an out-of-shape value is a problem the parser names, with the file and the rule.
+ 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index aae9a04c..1bedce91 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -75,7 +75,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | worktree | `./zn worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `./zn worktree ws-<issue> --from <raft branch>`). |
+ | workstreams | `./zn workstreams <R-id>` | read-only plan for parallel execution (zz-execute Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
+ | board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as the specs do; `--open`, the old opt-in, is still accepted and is the default). The board is the local page; GitHub Actions does not build it. Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
+-| busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`; c0115: `./zn busy .claude/skills z-nile/skills pickman/skills`) is readied only when it prints nothing. Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own and `origin/main` still holds the move's mark; then the move's own branches, the branches listed as stacked on them, the ones the user approved by name, any branch holding the move commit, the move's own active raft, and worktrees on those branches, are named on stderr (`ignored for c0115's freeze: ...`) and not counted; without paths, with a path outside the move's, or once the move lands, nothing is exempt |
++| busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`; c0115: `./zn busy .claude/skills z-nile/skills pickman/skills`) is readied only when it prints nothing. c0180's split of `z-nile/engine/main.luau` is readied only when `./zn busy z-nile/engine/main.luau` lists no active raft (the user's decision). c0180's split of `z-nile/engine/main.luau` is readied only when `./zn busy z-nile/engine/main.luau` lists no active raft (the user's decision). Each move's freeze (`FREEZES` in `z-nile/engine/cmd/busy.luau`) is on only while every path given lies inside the move's own and `origin/main` still holds the move's mark; then the move's own branches, the branches listed as stacked on them, the ones the user approved by name, any branch holding the move commit, the move's own active raft, and worktrees on those branches, are named on stderr (`ignored for c0115's freeze: ...`) and not counted; without paths, with a path outside the move's, or once the move lands, nothing is exempt |
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
+ | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..73b37f4b 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -37,8 +37,9 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ 
+ ## Affected selection
+ `z-nile/affected.luau` builds the static require graph of `src/` and `tests/`. It selects every spec whose transitive requires include a changed file.
+-- **Full run**: changes to the shared runner and harness (`z-nile/tests/run.luau`, `z-nile/tests/lib`), z-nile's libraries (`z-nile/lib/`), `./zn`, the root's `scripts/` or a root config file (`.luaurc`, `rokit.toml`, `selene.toml`, `stylua.toml`) force one of every project; a change to a project's own `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, `.luaurc` or `default.project.json` (under its home) forces that project's, and any other change under `z-nile/` (the engine, the gate) z-nile's. A change at an old place (the root's `tests/`, `tracker/`, `src/`, the root's project files) forces z-nile's, whose old-roots check then fails. `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
++- **Full run**: changes to the shared runner and harness (`z-nile/tests/run.luau`, `z-nile/tests/lib`), z-nile's libraries (`z-nile/lib/`), `./zn`, the root's `scripts/` or a root config file (`.luaurc`, `rokit.toml`, `selene.toml`, `stylua.toml`) force one of every project; a change to a project's own `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, `.luaurc` or `default.project.json` (under its home) forces that project's, and any other change under `z-nile/` (the gate, the templates, the skills) z-nile's; a change to the engine's Luau files (`z-nile/engine/**/*.luau`) selects instead, see **Command trace**. A change at an old place (the root's `tests/`, `tracker/`, `src/`, the root's project files) forces z-nile's, whose old-roots check then fails. `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
+ - **Reliability** depends on the architecture rules: literal requires, and features used only through `init`. `tests/meta` enforces those rules.
++- **Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran (`usage` for the usage path), in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure, of the tooling that launches `./zn`, and of the engine at the merge base with `origin/main`; the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of `.cache/spec-trace/<name>` directories. With `--recorded` (the gate's selection passes it), a change to an engine Luau file that no program requires selects the z-nile specs that require it, declare it, are `*`, ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key; an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the require forwarders that only specs load aside) still forces z-nile's run. Records come from this worktree and every other worktree of the checkout. A spec that runs engine code another way than through `./zn`, `engine/main` or those programs declares the engine files it runs. A spec that sets `ZN_SPEC_TRACE` for a command it starts appends the value it inherited (`<its dir>:<inherited>`), or its own record loses those commands. The merge's full gate is the backstop.
+ - **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a chore, since CI and test bugs are always chores: `./zn new issue c affected-graph-miss-… --project z-nile`.
+ 
+ ## Acceptance checks (`check.sh`)
+diff --git a/z-nile/tests/acceptance/c0074/done-gate.spec.luau b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+index bcc34d2f..34a58c8a 100644
+--- a/z-nile/tests/acceptance/c0074/done-gate.spec.luau
++++ b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+@@ -237,9 +237,23 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
+ 		t.expect(gate.doneGate({ PICKMAN_DONE_GATE = "1" })).toBe("full")
+ 		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "", PICKMAN_DONE_GATE = "" })).toBe("full")
+ 		-- and done decides through it, reading nothing else
+-		local main = fs.readFile(`{root}/z-nile/engine/main.luau`)
+-		t.expect(string.find(main, "doneGate(process.env)", 1, true) ~= nil).toBe(true)
+-		t.expect((string.find(main, "PICKMAN_DONE_GATE", 1, true))).toBe(nil)
++		-- c0180 override: done moved to engine/cmd/done.luau, and no engine module reads the switch itself
++		local doneSource = fs.readFile(`{root}/z-nile/engine/cmd/done.luau`)
++		t.expect(string.find(doneSource, "doneGate(process.env)", 1, true) ~= nil).toBe(true)
++		local scanned = 0
++		local function scan(dir: string)
++			for _, name in fs.readDir(dir) do
++				local path = `{dir}/{name}`
++				if fs.isDir(path) then
++					scan(path)
++				elseif string.match(name, "%.luau$") then
++					scanned += 1
++					t.expect((string.find(fs.readFile(path), "PICKMAN_DONE_GATE", 1, true))).toBe(nil)
++				end
++			end
++		end
++		scan(`{root}/z-nile/engine`)
++		t.expect(scanned > 1).toBe(true)
+ 	end)
+ 
+ 	it("cleans up", function()
+diff --git a/z-nile/tests/acceptance/c0081/publish-guard.spec.luau b/z-nile/tests/acceptance/c0081/publish-guard.spec.luau
+index 2a260ff2..960d2ad6 100644
+--- a/z-nile/tests/acceptance/c0081/publish-guard.spec.luau
++++ b/z-nile/tests/acceptance/c0081/publish-guard.spec.luau
+@@ -36,18 +36,28 @@ local function mentions(text: string): { Mention }
+ end
+ 
+ return t.spec("c0870 every publish checks for a stale tree", function(it)
+-	it("main.luau refuses a stale tree right before every publish.commit but remap's", function()
++	it("every engine module refuses a stale tree right before every publish.commit but remap's", function()
+ 		-- c0120 override: specs run from z-nile's home, so the engine is z-nile's engine/
+-		local found = mentions(fs.readFile("engine/main.luau"))
+-		t.expect(#found > 0).toBe(true)
++		-- c0180 override: the commands moved to engine/cmd/, so every engine module is read; cmd/remap.luau is the
++		-- exception, and engine/publish.luau, which defines publish.commit, is not a caller
+ 		local others = 0
+-		for _, m in found do
+-			t.expect(string.find(m.code, "publish.commit(", 1, true) ~= nil).toBe(true) -- a call, never an alias
+-			if m.fn ~= "cmd.remap" then
+-				others += 1
+-				t.expect(m.refused).toBe(true)
++		local function scan(dir: string)
++			for _, name in fs.readDir(dir) do
++				local path = `{dir}/{name}`
++				if fs.isDir(path) then
++					scan(path)
++				elseif string.match(name, "%.luau$") and path ~= "engine/publish.luau" then
++					for _, m in mentions(fs.readFile(path)) do
++						t.expect(string.find(m.code, "publish.commit(", 1, true) ~= nil).toBe(true) -- a call, never an alias
++						if path ~= "engine/cmd/remap.luau" then
++							others += 1
++							t.expect(m.refused).toBe(true)
++						end
++					end
++				end
+ 			end
+ 		end
++		scan("engine")
+ 		t.expect(others > 0).toBe(true)
+ 	end)
+ 
+diff --git a/z-nile/tests/acceptance/c0115/docs.spec.luau b/z-nile/tests/acceptance/c0115/docs.spec.luau
+index 70f84707..53c8091c 100644
+--- a/z-nile/tests/acceptance/c0115/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0115/docs.spec.luau
+@@ -163,7 +163,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
+ 			-- design review 013 F3: the busy row states every move's freeze, c0115's included
+ 			at(
+ 				zr,
+-				"Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own",
++				"Each move's freeze (`FREEZES` in `z-nile/engine/cmd/busy.luau`) is on only while every path given lies inside the move's own",
+ 				"zz-rules busy row"
+ 			)
+ 			at(zr, "the move's own active raft", "zz-rules busy row")
+diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
+index e853a6f4..fa9db116 100644
+--- a/z-nile/tests/lib/cachepaths.luau
++++ b/z-nile/tests/lib/cachepaths.luau
+@@ -124,6 +124,8 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
+ 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
+ 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
++		['if physical ~= dir or string.match(dir, "/%.cache/spec%-trace/[^/]+$") == nil then'] = "a read: the trace entry must be its own physical path under .cache/spec-trace (c0180)",
++		["`zn: ZN_SPEC_TRACE entry {dir} is not a .cache/spec-trace/<name> directory by its physical path\\n`"] = "a message",
+ 	},
+ 	["z-nile/engine/history.luau"] = {
+ 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
+diff --git a/z-nile/tests/lib/commandrecord.luau b/z-nile/tests/lib/commandrecord.luau
+new file mode 100644
+index 00000000..319b4ca2
+--- /dev/null
++++ b/z-nile/tests/lib/commandrecord.luau
+@@ -0,0 +1,145 @@
++--!strict
++-- c0180: the one reader of <home>/.cache/spec-commands.tsv, the record of which `./zn` commands each spec ran in its
++-- last passing multi-file run, keyed by a hash of the spec's test-side require closure. Pure: the runner writes the
++-- record and the selector's context reads it, each through these functions.
++local serde = require("@lune/serde")
++
++local commandrecord = {}
++
++export type Entry = { key: string, commands: { string } }
++export type Records = { [string]: Entry }
++
++commandrecord.HEADER = "# spec commands v1"
++
++local function sha(text: string): string
++	return serde.hash("sha256", text)
++end
++
++-- the closure key: sha256 of a versioned text with one `<path>\t<sha256 of its bytes>` line per distinct path, sorted,
++-- then the extra lines in their order
++function commandrecord.key(paths: { string }, bytes: (string) -> string, extra: { string }?): string
++	local seen: { [string]: boolean } = {}
++	local sorted: { string } = {}
++	for _, p in paths do
++		if not seen[p] then
++			seen[p] = true
++			table.insert(sorted, p)
++		end
++	end
++	table.sort(sorted)
++	local parts = { "spec commands key v1\n" }
++	for _, p in sorted do
++		table.insert(parts, `{p}\t{sha(bytes(p))}\n`)
++	end
++	for _, line in (extra or {}) :: { string } do
++		table.insert(parts, line .. "\n")
++	end
++	return sha(table.concat(parts))
++end
++
++local function validCommand(name: string): boolean
++	return string.match(name, "^[a-z][a-z%-]*$") ~= nil
++end
++
++function commandrecord.parse(text: string): (Records?, string?)
++	if string.sub(text, -1) ~= "\n" then
++		local n = 1
++		for _ in string.gmatch(text, "\n") do
++			n += 1
++		end
++		return nil, `line {n}: the record must end with a newline`
++	end
++	local records: Records = {}
++	local n = 0
++	for line in string.gmatch(text, "([^\n]*)\n") do
++		n += 1
++		if n == 1 then
++			if line ~= commandrecord.HEADER then
++				return nil, `line 1: the first line must be "{commandrecord.HEADER}"`
++			end
++			continue
++		end
++		local fields = string.split(line, "\t")
++		if #fields ~= 3 then
++			return nil, `line {n}: a record line has three tab-separated fields`
++		end
++		local spec, key, list = fields[1], fields[2], fields[3]
++		if string.match(spec, "^tests/.+%.spec%.luau$") == nil then
++			return nil, `line {n}: the spec must be a tests/…/*.spec.luau path`
++		end
++		if #key ~= 64 or string.match(key, "^[0-9a-f]+$") == nil then
++			return nil, `line {n}: the key must be 64 lowercase hex characters`
++		end
++		local commands: { string } = {}
++		if list ~= "-" then
++			local names = string.split(list, ",")
++			for i, name in names do
++				if not validCommand(name) then
++					return nil, `line {n}: "{name}" is not a command name`
++				end
++				if i > 1 and names[i - 1] >= name then
++					return nil, `line {n}: the commands must be sorted and distinct`
++				end
++				table.insert(commands, name)
++			end
++		end
++		if records[spec] then
++			return nil, `line {n}: {spec} appears twice`
++		end
++		records[spec] = { key = key, commands = commands }
++	end
++	if n == 0 then
++		return nil, `line 1: the first line must be "{commandrecord.HEADER}"`
++	end
++	return records, nil
++end
++
++function commandrecord.render(records: Records): string
++	local specs: { string } = {}
++	for spec in records do
++		table.insert(specs, spec)
++	end
++	table.sort(specs)
++	local out = { commandrecord.HEADER .. "\n" }
++	for _, spec in specs do
++		local e = records[spec]
++		local list = if #e.commands == 0 then "-" else table.concat(e.commands, ",")
++		table.insert(out, `{spec}\t{e.key}\t{list}\n`)
++	end
++	return table.concat(out)
++end
++
++-- every new entry over the old (the union of their commands when the key is unchanged); old entries kept unless `keep`
++-- is given and lacks them; the inputs are not changed
++function commandrecord.merge(old: Records, new: Records, keep: { [string]: boolean }?): Records
++	local out: Records = {}
++	for spec, e in old do
++		if keep == nil or keep[spec] then
++			out[spec] = { key = e.key, commands = table.clone(e.commands) }
++		end
++	end
++	for spec, e in new do
++		local before = old[spec]
++		if before and before.key == e.key then
++			-- the same code: what any run recorded, together
++			local set: { [string]: boolean } = {}
++			for _, c in before.commands do
++				set[c] = true
++			end
++			for _, c in e.commands do
++				set[c] = true
++			end
++			local union: { string } = {}
++			for c in set do
++				table.insert(union, c)
++			end
++			table.sort(union)
++			out[spec] = { key = e.key, commands = union }
++		else
++			out[spec] = { key = e.key, commands = table.clone(e.commands) }
++		end
++	end
++	return out
++end
++
++return commandrecord
+diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
+index e85dc659..eaac9b69 100644
+--- a/z-nile/tests/run.luau
++++ b/z-nile/tests/run.luau
+@@ -9,6 +9,7 @@
+ -- .cache/spec-durations.tsv in the home, which every concurrent run updates; the report stays in path order.
+ -- Exits non-zero if any case fails or any spec fails to load.
+ 
++local commandrecord = require("./lib/commandrecord")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local schedule = require("./lib/schedule")
+@@ -180,7 +181,14 @@ if fullRun then
+ end
+ table.sort(files)
+ 
+-type Outcome = { file: string, seconds: number, code: number, stdout: string, stderr: string }
++type Outcome = {
++	file: string,
++	seconds: number,
++	code: number,
++	stdout: string,
++	stderr: string,
++	commands: { string },
++}
+ 
+ -- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
+ local DURATIONS = ".cache/spec-durations.tsv"
+@@ -189,8 +197,89 @@ local function recorded(): schedule.Durations
+ 	return (if ok then schedule.parse(text :: string) else nil) or {}
+ end
+ 
++-- c0180: the commands each spec ran, recorded after a multi-file run (see the zz-test skill, Command trace)
++local COMMANDS = ".cache/spec-commands.tsv"
++local INHERITED = process.env.ZN_SPEC_TRACE or ""
++local TRACES = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/spec-trace`
++
++local function allPassed(o: Outcome): boolean
++	local last = string.match(o.stdout, "([^\n]+)\n?$")
++	local f = string.match(last or "", "^%d+ passed, (%d+) failed, 1 spec files$")
++	return o.code == 0 and f == "0"
++end
++
++-- the keys of the home's passing spec files, from `lune run z-nile/recordkey` at the repository root (the home's parent)
++local function keysOf(specs: { string }): { [string]: string }?
++	if #specs == 0 then
++		return {}
++	end
++	local argv = { "run", "z-nile/recordkey", "--" }
++	for _, f in specs do
++		table.insert(argv, HOME_PREFIX .. f)
++	end
++	local ok, r = pcall(process.exec, "lune", argv, { cwd = ".." })
++	if not ok or not r.ok then
++		return nil
++	end
++	local out: { [string]: string } = {}
++	for line in string.gmatch(r.stdout, "[^\n]+") do
++		local spec, key = string.match(line, "^(.-)\t(%x+)$")
++		if spec and key and string.sub(spec, 1, #HOME_PREFIX) == HOME_PREFIX then
++			out[string.sub(spec, #HOME_PREFIX + 1)] = key
++		end
++	end
++	return out
++end
++
++local function recordCommands(outcomes: { Outcome })
++	local passing: { Outcome } = {}
++	local names: { string } = {}
++	for _, o in outcomes do
++		if string.sub(o.file, 1, 6) == "tests/" and allPassed(o) then
++			table.insert(passing, o)
++			table.insert(names, o.file)
++		end
++	end
++	local keep: { [string]: boolean }? = nil
++	if fullRun then
++		local k: { [string]: boolean } = {}
++		for _, f in files do
++			k[f] = true
++		end
++		keep = k
++	end
++	if #passing == 0 and keep == nil then
++		return
++	end
++	local why: any = nil
++	local wrote = xpcall(function()
++		local keys = keysOf(names)
++		if keys == nil then
++			return -- no keys, no record: selection only loses precision
++		end
++		local new: commandrecord.Records = {}
++		for _, o in passing do
++			local key = (keys :: { [string]: string })[o.file]
++			if key then
++				new[o.file] = { key = key, commands = o.commands }
++			end
++		end
++		local okRead, text = pcall(fs.readFile, COMMANDS)
++		local old = (if okRead then commandrecord.parse(text :: string) else nil) or {}
++		local tmp = `{COMMANDS}.{math.random(1, 1e9)}{string.format("%.0f", os.clock() * 1e6)}.tmp`
++		fs.writeFile(tmp, commandrecord.render(commandrecord.merge(old, new, keep)))
++		fs.move(tmp, COMMANDS, true)
++	end, function(e: any)
++		why = e
++	end)
++	if not wrote then
++		stdio.ewrite(`tests/run: could not write {COMMANDS}: {why}\n`)
++	end
++end
++
+ -- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
+ local function runConcurrently()
++	fs.writeDir(TRACES)
+ 	local outcomes: { Outcome } = {}
+ 	local queue = schedule.order(files, recorded())
+ 	local nextIndex, running = 1, math.min(jobs, #files)
+@@ -200,14 +289,40 @@ local function runConcurrently()
+ 				local index = queue[nextIndex]
+ 				nextIndex += 1
+ 				local file = files[index]
++				-- c0180: the file's own trace directory, ahead of any inherited one (a nested run traces into both)
++				local dir = `{TRACES}/{index}-{math.random(1, 1e9)}`
++				fs.writeDir(dir)
++				local trace = if INHERITED ~= "" then `{dir}:{INHERITED}` else dir
+ 				local started = os.clock()
+-				local ok, r = pcall(process.exec, "lune", { "run", "tests/run", "--", "--jobs", "1", file })
++				local ok, r = pcall(
++					process.exec,
++					"lune",
++					{ "run", "tests/run", "--", "--jobs", "1", file },
++					{ env = { ZN_SPEC_TRACE = trace } }
++				)
++				-- the recorded commands are the names a command can have; every regular file is removed (a leftover
++				-- temporary file of a killed write included), then the folder, never recursively
++				local commands: { string } = {}
++				for _, n in fs.readDir(dir) do
++					if string.match(n, "^[a-z][a-z%-]*$") then
++						table.insert(commands, n)
++					end
++					if fs.isFile(`{dir}/{n}`) then
++						fs.removeFile(`{dir}/{n}`)
++					end
++				end
++				-- fs.removeDir is recursive: only an emptied folder is removed
++				if #fs.readDir(dir) > 0 or not pcall(fs.removeDir, dir) then
++					stdio.ewrite(`tests/run: could not remove {dir}\n`)
++				end
++				table.sort(commands)
+ 				outcomes[index] = {
+ 					file = file,
+ 					seconds = os.clock() - started,
+ 					code = if ok then r.code else -1,
+ 					stdout = if ok then r.stdout else "",
+ 					stderr = if ok then r.stderr else tostring(r),
++					commands = commands,
+ 				}
+ 			end
+ 			running -= 1
+@@ -249,6 +364,8 @@ local function runConcurrently()
+ 		end
+ 	end
+ 
++	recordCommands(outcomes)
++
+ 	-- merge in sorted file order, never in finish order
+ 	local passed, failed = 0, 0
+ 	for _, o in outcomes do

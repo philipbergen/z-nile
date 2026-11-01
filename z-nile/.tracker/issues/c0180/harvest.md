@@ -9,3 +9,13 @@
 - design-review-001 F9: zz-test/narrowing-pins-the-whole-file
 - design-review-001 F10: z-design/restated-rules-move-together
 - note prep round 2: a "the split narrows" case written for F5 was vacuous (every command misses the other 36 command modules) and was rewritten before its mutant could pass: zz-test/no-vacuous-pass
+- design-review-002 F1: z-design/quote-other-preps-before-promising
+- design-review-002 F2: zz-test/pin-call-site-arguments
+- design-review-002 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: zz-arch/records-cover-what-was-reviewed
+- design-review-002 F6: zz-arch/records-cover-what-was-reviewed, z-design/quote-other-preps-before-promising
+- design-review-002 F7: z-design/required-steps-on-every-path, z-design/instructions-runnable-where-they-run, z-design/in-flight-bases-pin-their-source
+- design-review-002 F8: zz-review/lists-paste-their-search, z-design/trace-every-way-code-runs
+- design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F10: zz-test/promoted-specs-pin-rules-not-sets
