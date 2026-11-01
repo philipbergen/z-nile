@@ -1,0 +1,48 @@
+# Harvest: c0112
+
+- design-review-001 F1: z-design/checks-run-as-done-runs-them
+- design-review-001 F2: z-design/checks-run-as-done-runs-them, z-design/check-paths-from-the-home
+- design-review-001 F3: zz-test/nothing-lost-compares-sets
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/quote-other-preps-before-promising
+- design-review-001 F7: z-design/design-the-execution-window
+- design-review-001 F8: z-design/new-refusals-reach-every-caller
+- design-review-001 F9: zz-test/no-live-counts-in-promoted-specs
+- design-review-001 F10: z-design/judged-criteria-pass-per-stratum
+- design-review-001 F11: z-design/restated-rules-move-together
+- design-review-001 F12: z-design/spec-design-correspondence
+- design-review-001 F13: zz-test/seed-every-enumerated-case
+- design-review-001 F14: z-design/restated-rules-move-together
+- design-review-001 F15: z-design/results-land-on-every-path
+- design-review-002 F1: zz-test/pin-expected-text-not-documents
+- design-review-002 F2: zz-test/any-rule-places-the-decider-first-and-last, zz-test/nothing-lost-compares-sets
+- design-review-002 F3: z-design/new-refusals-reach-every-caller
+- design-review-002 F4: zz-test/one-rule-one-function
+- design-review-002 F5: z-design/run-a-rule-over-the-whole-input
+- design-review-002 F6: z-design/design-the-execution-window
+- design-review-002 F7: z-design/exact-checks-compare-against-the-merge-base
+- design-review-002 F8: z-design/spec-design-correspondence
+- design-review-002 F9: z-design/restated-rules-move-together
+- design-review-002 F10: z-design/bulk-renames-skip-ordinary-words
+- design-review-002 F11: z-design/instructions-runnable-where-they-run
+- design-review-003 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-003 F2: z-design/prove-specs-pass-on-a-prototype, zz-test/nothing-lost-compares-sets
+- design-review-003 F3: zz-arch/lock-reads-live-state
+- design-review-003 F4: zz-test/nothing-lost-compares-sets
+- design-review-003 F5: z-design/restated-rules-move-together
+- design-review-003 F6: z-design/restated-rules-move-together
+- design-review-003 F7: z-design/spec-design-correspondence
+- design-review-003 F8: z-design/instructions-runnable-where-they-run
+- design-review-004 F1: z-design/run-the-other-rafts-specs, zz-test/nothing-lost-compares-sets
+- design-review-004 F2: zz-arch/guard-no-is-explicit
+- design-review-004 F3: z-design/instructions-runnable-where-they-run
+- design-review-004 F4: z-design/restated-rules-move-together
+- design-review-004 F5: z-design/run-a-rule-over-the-whole-input
+- design-review-005 F1: zz-test/nothing-lost-compares-sets, zz-test/refusals-tested-on-both-sides
+- design-review-005 F2: z-design/run-the-other-rafts-specs
+- design-review-005 F3: zz-arch/guard-no-is-explicit
+- design-review-005 F4: zz-rules/exhaustive-lists-name-new-things
+- design-review-005 F5: z-design/spec-design-correspondence
+- design-review-005 F6: z-design/new-refusals-reach-every-caller
+- design-review-005 F7: z-design/restated-rules-move-together

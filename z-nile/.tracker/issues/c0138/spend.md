@@ -9,6 +9,11 @@
 | 5 | 2026-11-01 18:29 | design-refute-002 | 0 | 0 | 45.0 | spend | design-review |  |
 | 6 | 2026-11-01 18:47 | design-review-003 | 0 | 0 | 40.0 | spend | design-review | 190000 |
 | 7 | 2026-11-01 18:54 | design-refute-003 | 0 | 0 | 50.0 | spend | design-review |  |
+| 8 | 2026-11-01 19:13 | design-review-004 | 0 | 0 | 45.0 | spend | design-review | 230000 |
+| 9 | 2026-11-01 19:19 | design-refute-004 | 0 | 0 | 50.0 | spend | design-review |  |
+| 10 | 2026-11-01 19:36 | design-review-005 | 0 | 0 | 16.0 | spend | design-review | 190000 |
+| 11 | 2026-11-01 19:37 | design-refute-005 | 0 | 0 | 12.0 | spend | design-review |  |
+| 12 | 2026-11-01 19:40 | prep | 742 | 1 | 100.0 | spend | prep |  |
 
-**Total:** +0 / -0 lines, 223.0 agent-minutes, 560000 tokens over 7 records
-<!-- totals: added=0 removed=0 minutes=223.0 records=7 tokens=560000 -->
+**Total:** +742 / -1 lines, 446.0 agent-minutes, 980000 tokens over 12 records
+<!-- totals: added=742 removed=1 minutes=446.0 records=12 tokens=980000 -->
