@@ -39,6 +39,11 @@ return t.spec("View marks", function(it)
 		local m1 = View.frameMaze(f1)
 		t.expect(View.frameMaze(f1)).toBe(m1)
 		t.expect(m1).toBe(Maze.layout("classic"))
+		local f2 = { maze = "classic", walls = { opened = { { x = 2, y = 2 } }, marked = {} } } :: any
+		local m2 = View.frameMaze(f2)
+		t.expect(m2 == m1).toBe(false)
+		t.expect(Maze.kind(m2, { x = 2, y = 2 })).toBe("empty")
+		t.expect(Maze.kind(m1, { x = 2, y = 2 })).toBe("wall")
 	end)
 
 	it("the gold wins over the edible green, and the flash over the gold", function()

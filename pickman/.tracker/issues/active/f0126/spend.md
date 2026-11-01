@@ -42,6 +42,7 @@
 | 38 | 2026-11-01 19:41 | R0053: experiments (E11 passes on d0151's touch path) | 1048 | 60 | 5.0 | raft | build |  |
 | 39 | 2026-11-01 19:43 | f0126: verification log (12/12 ACs, RC0) | 0 | 0 | 10.0 | focus | build |  |
 | 40 | 2026-11-01 19:52 | R0053: review-001 | 0 | 0 | 6.0 | focus | code-review |  |
+| 41 | 2026-11-01 20:00 | f0126: review-001 fixes, refute-001, harvest | 105 | 4 | 15.0 | focus | code-review |  |
 
-**Total:** +5562 / -64 lines, 1007.0 agent-minutes, 2301065 tokens over 40 records
-<!-- totals: added=5562 removed=64 minutes=1007.0 records=40 tokens=2301065 -->
+**Total:** +5667 / -68 lines, 1022.0 agent-minutes, 2301065 tokens over 41 records
+<!-- totals: added=5667 removed=68 minutes=1022.0 records=41 tokens=2301065 -->

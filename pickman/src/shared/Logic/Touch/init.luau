@@ -212,7 +212,6 @@ function Touch.fireRect(box: Box): Rect
 	}
 end
 
--- Every touch control's rectangle.
 -- The pick button (f0126): the fire button's size, one margin left of it, level with it, so the row reads PICK,
 -- FIRE, JUMP. It clears every HUD block, the radar and the pick bar and banner on f0110's samples.
 function Touch.pickRect(box: Box): Rect
@@ -220,6 +219,7 @@ function Touch.pickRect(box: Box): Rect
 	return { x = fire.x - box.margin - fire.w, y = fire.y, w = fire.w, h = fire.h }
 end
 
+-- Every touch control's rectangle.
 function Touch.buttons(box: Box): Buttons
 	return {
 		snap = Touch.snapRect(box),

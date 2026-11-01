@@ -188,7 +188,7 @@ function Hud.boonBanner(boon: Session.BoonGrant?, tick: number): string?
 end
 
 -- Where the pick's bar and the boon's banner go (f0126), in the same pixels as Hud.layout (screen pixels, inside its
--- safe rectangle): both centred across it, the bar a little below the middle (under the crosshair, clear of the
+-- safe rectangle): both centred across it, the bar a little above the middle (clear of the
 -- bottom row of lives, shots, power bar, snap button and radar), the banner in the upper third (clear of the top
 -- row of score and level).
 Hud.PICK_BAR_AT = 0.4 -- of the safe rectangle's height, the bar's top: above the middle, so above the touch radar on a narrow phone

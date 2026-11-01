@@ -290,7 +290,7 @@ function HudView.pick(pick: Session.Pick?, boon: Session.BoonGrant?, tick: numbe
 		l.BackgroundTransparency = 1
 		l.TextScaled = true
 		l.Font = Enum.Font.Arcade
-		l.TextColor3 = Color3.fromRGB(255, 215, 0)
+		l.TextColor3 = GOLD
 		l.Parent = gui
 		banner = l
 		local last = laidFor

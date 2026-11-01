@@ -28,6 +28,7 @@ return t.spec("Touch pick", function(it)
 		local pick = Touch.pickRect(box)
 		local x, y = pick.x + 1, pick.y + 1
 		t.expect(Touch.zone(800, x, y, nil, nil, nil, pick)).toBe("pick")
-		t.expect(Touch.zone(800, x, y, nil, nil, nil, nil)).toBe(if x < 400 then "turn" else "look")
+		t.expect(x).toBe(556) -- in the right half, so without PICK the place is the look half
+		t.expect(Touch.zone(800, x, y, nil, nil, nil, nil)).toBe("look")
 	end)
 end)

@@ -34,5 +34,19 @@ return t.spec("Session pick", function(it)
 			return (Session.frame(s, "a").walls :: Session.Walls).marked
 		end
 		t.expect(marks(11)).toEqual(marks(11))
+		local function key(list: { { x: number, y: number } }): string
+			local parts = {}
+			for _, tile in list do
+				table.insert(parts, `{tile.x},{tile.y}`)
+			end
+			return table.concat(parts, ";")
+		end
+		local differs = false
+		for seed = 12, 20 do
+			if key(marks(seed)) ~= key(marks(11)) then
+				differs = true
+			end
+		end
+		t.expect(differs).toBe(true)
 	end)
 end)
