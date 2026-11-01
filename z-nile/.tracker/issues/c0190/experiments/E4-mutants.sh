@@ -48,6 +48,8 @@ prepedit() { p=$(d snake arena-maps-growth); sed -i '' 's/^depends_on: \[c0184\]
 wrongid() { sed -i '' "s/^- The boards' store: $(idk arcade hiscores-with-revives)\.$/- The boards' store: $(idk arcade shared-travel)./" "$(d snake snake-scores-and-revives)"; }
 s5s3() { sed -i '' "s/, $(idk snake snake-first-person-view)//" "$(d snake snake-scores-and-revives)"; }
 i4i3() { sed -i '' "s/, $(idk invaders invaders-cannon-view)//" "$(d invaders invaders-scores-and-revives)"; }
+s3s4() { sed -i '' "s/, $(idk snake boost-golden-apples-crumbs), /, /" "$(d snake snake-first-person-view)"; }
+p1a2() { sed -i '' "s/^depends_on: \[$(idk arcade shared-travel), /depends_on: [/" "$(d portal game-carousel)"; }
 mut "correct" none
 mut "thin capture, later fix commit" thin fixit
 mut "two lands" halfB halfC
@@ -59,4 +61,6 @@ mut "S3 without A4" s3
 mut "S5's Non-goals naming A2's id for the boards' store" wrongid
 mut "S5 without S3" s5s3
 mut "I4 without I3" i4i3
+mut "S3 without S4" s3s4
+mut "P1 without A2" p1a2
 mut "a prep edits S1 after the land (stays green)" none prepedit

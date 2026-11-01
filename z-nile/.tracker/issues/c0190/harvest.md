@@ -24,3 +24,8 @@
 - design-review-003 F5: z-design/pin-text-that-lands-outside-the-pr
 - design-review-003 F6: one-off: references and lines left over from the criteria and spec that round 2 retired
 - design-review-003 F7: z-design/instructions-runnable-where-they-run
+- design-review-004 F1: z-ticket/split-designs-name-each-owner
+- design-review-004 F2: z-ticket/publishers-skip-places-not-built-yet
+- design-review-004 F3: z-ticket/split-designs-name-each-owner
+- design-review-004 F4: z-ticket/split-designs-name-each-owner
+- design-review-004 F5: z-ticket/carry-the-plan-order-into-depends-on

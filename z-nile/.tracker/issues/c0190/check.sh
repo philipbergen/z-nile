@@ -18,7 +18,7 @@ ROWS="A1:arcade:hiscores-with-revives:c0185 \
 	K3:pickman:switch-to-arcade-paid-play:A3,f0145,f0186 \
 	A4:arcade:input-and-look-cores:c0185 \
 	K4:pickman:switch-to-arcade-input-cores:A4 \
-	P1:portal:game-carousel:A3 \
+	P1:portal:game-carousel:A2,A3 \
 	P2:portal:boards-per-game:A1,P1 \
 	P3:portal:free-game-timer:A3,P1 \
 	P4:portal:play-buttons:A2,A3,P1 \
@@ -26,7 +26,7 @@ ROWS="A1:arcade:hiscores-with-revives:c0185 \
 	Z3:portal:n-place-deploy:P2,P4 \
 	S1:snake:arena-maps-growth:c0184 \
 	S2:snake:shared-snake-arena:S3,A2,A3 \
-	S3:snake:snake-first-person-view:S1,A2,A3,A4 \
+	S3:snake:snake-first-person-view:S1,S4,A2,A3,A4 \
 	S4:snake:boost-golden-apples-crumbs:S1 \
 	S5:snake:snake-scores-and-revives:S1,S2,S3,A1,A2,A3 \
 	I1:invaders:invaders-classic-rules:c0184 \
@@ -129,25 +129,25 @@ DIGESTS="b342322ab4a3588e457d2020ac1dca127d61a9aee49fa19add82774e0ba6d1b3:hiscor
 	1d5852137fb1d5d3efd30ab2ca1bf75ed68bdeef54a8f8d32b78f69e00c557c6:switch-to-arcade-paid-play \
 	aa990726e6f2a5ea93cc98aa59fd3a2ab50550e203750690288c970ffc94cf57:input-and-look-cores \
 	cf60137b49ac1b55fd03ee3cebee21383d8fabd662a66ef1f6c6c8bf74415453:switch-to-arcade-input-cores \
-	32868d1ed97962f24a7c809a1d192aa019b2f50c94ca2094a84632795dc6b8e8:game-carousel \
-	e7b81c9ea8d52a3baa722f92a9b60d02de355c9a97660c3f400b1d47350617ef:boards-per-game \
-	d9257f34777afa72324496df67a151c656208d3f4053893b2b2b12a28e91aa98:free-game-timer \
-	77a0dcadb2748b9ba5de8472892fb703df4f046a855757f66bf252c6ae88068c:play-buttons \
-	9ce650d151db8ac2337d26485d06eb4f335a3a6935c6b364bcd8d55bda0ddea4:portal-start-place \
-	9f33cdb4d97eb2eb84f82518a25734d470c3592765c75b309c0b5e0959877ec9:n-place-deploy \
+	f40a1c7f3b945dc0c65fd362474497d714e4f2d431bc14ed487338dd76fb81f3:game-carousel \
+	44d47684b4c606ec3bacc5b278bf904472a3e14c02b308e79a68a43102d31ac0:boards-per-game \
+	7d00158fb01bdc99ed28e06cdcafbc84cb2ae177db0dfaf4c6c68bf697c1f076:free-game-timer \
+	daac0631ca88579d7b6faeacccb9c9f078081a4616a68f24e42779bb4d93bcf6:play-buttons \
+	635843d85eac49b69636fdc6353292b402af26f973b097a7341f75067e5057fa:portal-start-place \
+	d80c8347a7c50349de450dce30425cacaefb716b5cd8e01c51737f1f93165cec:n-place-deploy \
 	f9e09887a117b4b8e3ab1bb3e04c47d207eb4d6639e0953783702b6a219a73cb:arena-maps-growth \
-	9adebcfe8d4d7fe80fc42488427bae17d4041f5e301bc96bb66607454d28079f:shared-snake-arena \
-	d4843c4b1e30c1dc6ea96fd10a7b84cab492861252156645f023e023b246565a:snake-first-person-view \
+	abd94f64ddd24d48890779e034d14193170920fdf8338b47775aff41b49348e9:shared-snake-arena \
+	122922a6f13841bc0de8379fe7fb11ff873ffbe8bec96c87050b4d297d27f157:snake-first-person-view \
 	38536e4bb6dda866074d74da00648e7d652d8ebbd7454113a7f92807f5100c6c:boost-golden-apples-crumbs \
-	e4155ee095885a9b6b056bf26f372bea0a9f2d1dc803baae008b893941de536c:snake-scores-and-revives \
+	386de29b194bd2bda814a0b055fe7329c5ab7a758b0866007327f4a057c3cf39:snake-scores-and-revives \
 	a3736b06dae80450f0f661cb7776b4d0c5ad5d3ffa8e8f03a7e4ac6fc192cb58:invaders-classic-rules \
 	aec93b189b1ead601af93b575fac809baffc9f392fab4bd6c15583919048b301:invaders-two-players \
 	c0d21136e43f7dc451418dcb1e4e64ba42499b9370ae4e72c5d7955ea18ea25c:invaders-cannon-view \
-	6702aea30d096f888a6538601f0d6dcbc64d90c60faee5f2429dd0dbb623bd69:invaders-scores-and-revives \
+	da0ef242d4c9eb35b3c26a6b1408cca4642d4c76d3f217b3b04ffd838b91be34:invaders-scores-and-revives \
 	28095e203f3e2818990f6640d95d5b70a142e7f54f9a411f231968d85063f262:asteroids-classic-rules \
 	c3db791985dff1fdadf4c4ec96ab135c9528824304c879c30c186b1d5da541f0:asteroids-two-players \
 	75e9ac5c3ae98d2d7cf760ff19c4345e796f7bc8efdeb6d55566e2e8e4a35fb8:asteroids-cockpit-view \
-	6f2719285fafc60cbbd6fac8a939467999f630adc1ff68ebda2ace2f5561dfcf:asteroids-scores-and-revives"
+	01ee94db7d518065fcb1d994da3f7deda6eb2faea2109cf561932fb12b4e36be:asteroids-scores-and-revives"
 section() { { grep -m1 '^title: '; } <<<"$1"; awk '/^## Design$/{exit} f||/^## Problem$/{f=1; print}' <<<"$1"; }
 ac4() {
 	local row r s p doc body got id keys=()
