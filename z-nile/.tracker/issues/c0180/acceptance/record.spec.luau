@@ -272,15 +272,21 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 			})
 			fixture.git(base, { "update-ref", "refs/remotes/origin/main", "HEAD" })
 		end
+		-- no merge base yet: what the first runs recorded is "edited", so another worktree never trusts it
+		t.expect(record()["tests/a.spec.luau"].clean).toBe(false)
 		commit("base")
 		t.expect((run({ "--jobs", "2" }))).toBe(true)
 		local before = record()
+		-- a new key on a clean engine: a fresh, clean entry
+		t.expect(before["tests/a.spec.luau"].clean).toBe(true)
 		-- an engine edit of the branch itself (uncommitted, so not at the merge base) leaves every key alone
 		write("z-nile/engine/extra.luau", "--!strict\nreturn {}\n")
 		t.expect((run({ "--jobs", "2" }))).toBe(true)
 		local same = record()
 		for _, s in { "tests/a.spec.luau", "tests/d.spec.luau" } do
 			t.expect(same[s].key).toBe(before[s].key)
+			-- recorded on an edited engine: the entry no longer serves other worktrees
+			t.expect(same[s].clean).toBe(false)
 		end
 		-- the same engine change landed on origin/main: every key changes
 		commit("engine change on main")
@@ -288,6 +294,7 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		local after = record()
 		for _, s in { "tests/a.spec.luau", "tests/d.spec.luau" } do
 			t.expect(after[s].key ~= before[s].key).toBe(true)
+			t.expect(after[s].clean).toBe(true)
 		end
 	end)
 
@@ -302,6 +309,22 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 
 	it("cleans up", function()
 		fs.removeDir(base)
+	end)
+
+	it("on the real tree, no spec's closure reaches a file the graph didn't build, read only", function()
+		local listed = process.exec("git", { "ls-files", "*.spec.luau" }, { cwd = root })
+		local argv = { "run", "z-nile/recordkey", "--", "--dangling" }
+		local n = 0
+		for line in string.gmatch(listed.stdout, "[^\n]+") do
+			if string.match(line, "^[^/]+/tests/") then
+				table.insert(argv, line)
+				n += 1
+			end
+		end
+		t.expect(n > 300).toBe(true)
+		local r = process.exec("lune", argv, { cwd = root })
+		t.expect(r.ok).toBe(true)
+		t.expect(r.stdout).toBe("")
 	end)
 
 	it("on the real tree, z-nile/recordkey keys every spec of every home, read only", function()
@@ -322,10 +345,13 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		t.expect(r.ok).toBe(true)
 		local keyed = 0
 		for line in string.gmatch(r.stdout, "[^\n]+") do
-			local s, key = string.match(line, "^(.-)\t(%x+)$")
-			t.expect(s ~= nil and #(key :: string) == 64).toBe(true)
-			keyed += 1
+			if string.sub(line, 1, 7) ~= "engine\t" then
+				local s, key = string.match(line, "^(.-)\t(%x+)$")
+				t.expect(s ~= nil and #(key :: string) == 64).toBe(true)
+				keyed += 1
+			end
 		end
 		t.expect(keyed).toBe(#specs)
+		t.expect(string.match(r.stdout, "^engine\t(%a+)\n") ~= nil).toBe(true)
 	end)
 end)

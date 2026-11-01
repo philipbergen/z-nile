@@ -18,6 +18,7 @@ local W2 = `{base}/w2`
 local STUB = `{base}/zn-stub`
 local R = "req" .. "uire" -- keeps literal require text out of this file (the graph scanner)
 local A, B, C, D = "tests/a.spec.luau", "tests/b.spec.luau", "tests/c.spec.luau", "tests/d.spec.luau"
+local F = "tests/f.spec.luau" -- requires an engine module through a forwarder in scripts/tracker/, and runs no command
 
 local function write(dir: string, rel: string, text: string)
 	local path = `{dir}/{rel}`
@@ -153,6 +154,13 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		write(W1, `z-nile/{C}`, spec({ "find" }, true))
 		write(W1, "z-nile/tests/helper.luau", helperText(""))
 		write(W1, `z-nile/{D}`, spec({}, false, true))
+		write(W1, "scripts/tracker/store.luau", `--!strict\nreturn {R}("../../z-nile/engine/store")\n`)
+		write(
+			W1,
+			`z-nile/{F}`,
+			`--!strict\nlocal store = {R}("@scripts/tracker/store")\nlocal t = {R}("@tests/lib/t")\n`
+				.. 'return t.spec("fixture", function(it)\n\tit("runs", function()\n\t\tassert(store ~= nil)\n\tend)\nend)\n'
+		)
 		fixture.git(W1, { "add", "-A" })
 		fixture.git(W1, { "commit", "-q", "-m", "seed" })
 		fixture.git(W1, { "update-ref", "refs/remotes/origin/main", "HEAD" }) -- the base every record starts from
@@ -172,7 +180,8 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 			for _, w in { W1, W2 } do
 				t.expect((affected(w, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, C }))
 				t.expect((affected(w, "z-nile/engine/cmd/new.luau"))).toBe(lines({ C, D }))
-				t.expect((affected(w, "z-nile/engine/store.luau"))).toBe(lines({ A, C }))
+				-- F reaches store.luau through the forwarder: the graph follows it
+				t.expect((affected(w, "z-nile/engine/store.luau"))).toBe(lines({ A, C, F }))
 			end
 		end
 	)
@@ -197,7 +206,7 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		local w1 = fs.readFile(`{W1}/z-nile/.cache/spec-commands.tsv`)
 		local key = string.match(w1, "\n" .. B .. "\t(%x+)\t") :: string
 		t.expect(key ~= nil).toBe(true)
-		write(W2, "z-nile/.cache/spec-commands.tsv", `# spec commands v1\n{B}\t{key}\tfind\n`)
+		write(W2, "z-nile/.cache/spec-commands.tsv", `# spec commands v1\n{B}\t{key}\tfind\tedited\n`)
 		t.expect((affected(W2, "z-nile/engine/cmd/find.luau"))).toBe(lines({ B, C }))
 		t.expect((affected(W1, "z-nile/engine/cmd/find.luau"))).toBe(lines({ B, C }))
 		fs.removeFile(`{W2}/z-nile/.cache/spec-commands.tsv`)
@@ -226,13 +235,35 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 
 	it("a record whose launching tooling changed no longer counts: every spec is selected", function()
 		write(W2, "z-nile/check.sh", "#!/usr/bin/env bash\n# the fixture's gate, edited in W2\n")
-		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, B, C, D }))
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, B, C, D, F }))
 		write(
 			W2,
 			"z-nile/check.sh",
 			"#!/usr/bin/env bash\n# the fixture's gate: launching tooling, part of every key\n"
 		)
 		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, C }))
+	end)
+
+	it("another worktree's entry recorded on an edited engine serves only its own worktree", function()
+		local record = `{W1}/z-nile/.cache/spec-commands.tsv`
+		local before = fs.readFile(record)
+		local edited = string.gsub(before, "\n(" .. A .. "\t%x+\t[^\t]+)\tclean\n", "\n%1\tedited\n")
+		t.expect(edited ~= before).toBe(true)
+		fs.writeFile(record, edited)
+		-- W2 can't use A's entry: A has no record there, so cmd/find selects it; W1 still uses its own
+		t.expect((affected(W2, "z-nile/engine/cmd/find.luau"))).toBe(lines({ A, C }))
+		t.expect((affected(W1, "z-nile/engine/cmd/find.luau"))).toBe(lines({ C }))
+		fs.writeFile(record, before)
+	end)
+
+	it("a malformed record file is skipped with a warning, and every spec is selected", function()
+		local record = `{W1}/z-nile/.cache/spec-commands.tsv`
+		local before = fs.readFile(record)
+		fs.writeFile(record, "garbage\n")
+		local out, err = affected(W2, "z-nile/engine/cmd/list.luau")
+		t.expect(out).toBe(lines({ A, B, C, D, F }))
+		t.expect((string.find(err, `affected: ignoring {record}: line 1`, 1, true)) ~= nil).toBe(true)
+		fs.writeFile(record, before)
 	end)
 
 	it("records made on another merge base don't count: W2 takes a main whose engine changed", function()
@@ -243,17 +274,9 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		)
 		fixture.git(W2, { "commit", "-qam", "engine change on main" })
 		fixture.git(W2, { "update-ref", "refs/remotes/origin/main", "HEAD" })
-		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, B, C, D }))
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, B, C, D, F }))
 		-- W1 is still on its old base, where its records hold
 		t.expect((affected(W1, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, C }))
-	end)
-
-	it("a malformed record file is skipped with a warning, and every spec is selected", function()
-		local record = `{W1}/z-nile/.cache/spec-commands.tsv`
-		fs.writeFile(record, "garbage\n")
-		local out, err = affected(W2, "z-nile/engine/cmd/list.luau")
-		t.expect(out).toBe(lines({ A, B, C, D }))
-		t.expect((string.find(err, `affected: ignoring {record}: line 1`, 1, true)) ~= nil).toBe(true)
 	end)
 
 	it("cleans up", function()

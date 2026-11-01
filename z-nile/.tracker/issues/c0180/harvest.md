@@ -19,3 +19,9 @@
 - design-review-002 F8: zz-review/lists-paste-their-search, z-design/trace-every-way-code-runs
 - design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
 - design-review-002 F10: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F1: z-design/trace-every-way-code-runs
+- design-review-003 F2: zz-arch/records-cover-what-was-reviewed
+- design-review-003 F3: z-design/spec-design-correspondence, z-design/required-steps-on-every-path
+- design-review-003 F4: z-design/restated-rules-move-together
+- design-review-003 F5: zz-test/no-vacuous-pass
+- design-review-003 F6: zz-test/pin-call-site-arguments

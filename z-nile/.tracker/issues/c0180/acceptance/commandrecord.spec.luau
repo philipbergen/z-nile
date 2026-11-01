@@ -74,20 +74,24 @@ return t.spec("c0180 command record", function(it)
 
 	it("parse and render round-trip, sorted by spec, with - for a spec that ran no command", function()
 		local text = "# spec commands v1\n"
-			.. `tests/a.spec.luau\t{KEY_A}\tlist,new,raft-plan,usage,worktree-prune\n`
-			.. `tests/tooling/b.spec.luau\t{KEY_B}\t-\n`
+			.. `tests/a.spec.luau\t{KEY_A}\tlist,new,raft-plan,usage,worktree-prune\tclean\n`
+			.. `tests/tooling/b.spec.luau\t{KEY_B}\t-\tedited\n`
 		local records = cr.parse(text) :: cr.Records
 		t.expect(records["tests/a.spec.luau"]).toEqual({
 			key = KEY_A,
 			commands = { "list", "new", "raft-plan", "usage", "worktree-prune" },
+			clean = true,
 		})
-		t.expect(records["tests/tooling/b.spec.luau"]).toEqual({ key = KEY_B, commands = {} })
+		t.expect(records["tests/tooling/b.spec.luau"]).toEqual({ key = KEY_B, commands = {}, clean = false })
 		t.expect(cr.render(records)).toBe(text)
 		-- render sorts by spec path whatever order the table was built in
 		local built: cr.Records = {}
-		built["tests/tooling/b.spec.luau"] = { key = KEY_B, commands = {} }
-		built["tests/a.spec.luau"] =
-			{ key = KEY_A, commands = { "list", "new", "raft-plan", "usage", "worktree-prune" } }
+		built["tests/tooling/b.spec.luau"] = { key = KEY_B, commands = {}, clean = false }
+		built["tests/a.spec.luau"] = {
+			key = KEY_A,
+			commands = { "list", "new", "raft-plan", "usage", "worktree-prune" },
+			clean = true,
+		}
 		t.expect(cr.render(built)).toBe(text)
 		t.expect(cr.render({})).toBe("# spec commands v1\n")
 	end)
@@ -95,66 +99,75 @@ return t.spec("c0180 command record", function(it)
 	it("parse refuses every malformed record, naming the line", function()
 		local H = "# spec commands v1\n"
 		refused("", "line 1")
-		refused(`tests/a.spec.luau\t{KEY_A}\tnew\n`, "line 1")
-		refused(`# spec commands v2\ntests/a.spec.luau\t{KEY_A}\tnew\n`, "line 1")
+		refused(`tests/a.spec.luau\t{KEY_A}\tnew\tclean\n`, "line 1")
+		refused(`# spec commands v2\ntests/a.spec.luau\t{KEY_A}\tnew\tclean\n`, "line 1")
 		refused(H .. `tests/a.spec.luau\t{KEY_A}\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\textra\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{string.rep("a", 63)}\tnew\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{string.rep("A", 64)}\tnew\n`, "line 2")
-		refused(H .. `src/a.spec.luau\t{KEY_A}\tnew\n`, "line 2")
-		refused(H .. `tests/a.luau\t{KEY_A}\tnew\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tNew\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\traft_plan\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\t1new\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew,list\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tlist,list\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\t\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tlist,\n`, "line 2")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\ntests/a.spec.luau\t{KEY_B}\tlist\n`, "line 3")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\n\ntests/b.spec.luau\t{KEY_B}\tlist\n`, "line 3")
-		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\tclean\textra\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\tdirty\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\t\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{string.rep("a", 63)}\tnew\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{string.rep("A", 64)}\tnew\tclean\n`, "line 2")
+		refused(H .. `src/a.spec.luau\t{KEY_A}\tnew\tclean\n`, "line 2")
+		refused(H .. `tests/a.luau\t{KEY_A}\tnew\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tNew\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\traft_plan\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\t1new\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew,list\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tlist,list\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\t\tclean\n`, "line 2")
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tlist,\tclean\n`, "line 2")
+		refused(
+			H .. `tests/a.spec.luau\t{KEY_A}\tnew\tclean\ntests/a.spec.luau\t{KEY_B}\tlist\tclean\n`,
+			"line 3"
+		)
+		refused(
+			H .. `tests/a.spec.luau\t{KEY_A}\tnew\tclean\n\ntests/b.spec.luau\t{KEY_B}\tlist\tclean\n`,
+			"line 3"
+		)
+		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\tclean`, "line 2")
 	end)
 
 	it(
-		"merge unions the commands of an entry whose key is unchanged, and replaces one whose key changed",
+		"merge unions the commands of an unchanged key (clean only if both runs were), and replaces a changed one",
 		function()
 			local old: cr.Records = {
-				["tests/a.spec.luau"] = { key = KEY_A, commands = { "list", "new" } },
-				["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" } },
+				["tests/a.spec.luau"] = { key = KEY_A, commands = { "list", "new" }, clean = false },
+				["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" }, clean = true },
 			}
 			local new: cr.Records = {
-				["tests/a.spec.luau"] = { key = KEY_A, commands = { "find", "new" } },
-				["tests/b.spec.luau"] = { key = KEY_B, commands = { "status" } },
+				["tests/a.spec.luau"] = { key = KEY_A, commands = { "find", "new" }, clean = true },
+				["tests/b.spec.luau"] = { key = KEY_B, commands = { "status" }, clean = true },
 			}
 			t.expect(cr.merge(old, new, nil)).toEqual({
-				["tests/a.spec.luau"] = { key = KEY_A, commands = { "find", "list", "new" } },
-				["tests/b.spec.luau"] = { key = KEY_B, commands = { "status" } },
+				["tests/a.spec.luau"] = { key = KEY_A, commands = { "find", "list", "new" }, clean = false },
+				["tests/b.spec.luau"] = { key = KEY_B, commands = { "status" }, clean = true },
 			})
 		end
 	)
 
 	it("merge puts every new entry over the old, keeps the rest, and drops what keep lacks", function()
 		local old: cr.Records = {
-			["tests/a.spec.luau"] = { key = KEY_A, commands = { "new" } },
-			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" } },
-			["tests/gone.spec.luau"] = { key = KEY_A, commands = { "find" } },
+			["tests/a.spec.luau"] = { key = KEY_A, commands = { "new" }, clean = true },
+			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" }, clean = true },
+			["tests/gone.spec.luau"] = { key = KEY_A, commands = { "find" }, clean = true },
 		}
 		local new: cr.Records = {
-			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" } },
-			["tests/c.spec.luau"] = { key = KEY_B, commands = {} },
+			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" }, clean = true },
+			["tests/c.spec.luau"] = { key = KEY_B, commands = {}, clean = true },
 		}
 		t.expect(cr.merge(old, new, nil)).toEqual({
-			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" } },
-			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" } },
-			["tests/c.spec.luau"] = { key = KEY_B, commands = {} },
-			["tests/gone.spec.luau"] = { key = KEY_A, commands = { "find" } },
+			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" }, clean = true },
+			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" }, clean = true },
+			["tests/c.spec.luau"] = { key = KEY_B, commands = {}, clean = true },
+			["tests/gone.spec.luau"] = { key = KEY_A, commands = { "find" }, clean = true },
 		})
 		-- keep drops old entries only: a new entry stays even where keep lacks it
 		local keep = { ["tests/a.spec.luau"] = true, ["tests/b.spec.luau"] = true }
 		t.expect(cr.merge(old, new, keep)).toEqual({
-			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" } },
-			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" } },
-			["tests/c.spec.luau"] = { key = KEY_B, commands = {} },
+			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" }, clean = true },
+			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" }, clean = true },
+			["tests/c.spec.luau"] = { key = KEY_B, commands = {}, clean = true },
 		})
 		-- the inputs are not changed
 		t.expect(old["tests/a.spec.luau"].key).toBe(KEY_A)
