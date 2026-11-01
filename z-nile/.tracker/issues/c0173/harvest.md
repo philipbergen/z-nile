@@ -1,0 +1,17 @@
+- design-review-001 F1: z-design/finished-overrides-land-before-ready
+- design-review-001 F2: zz-test/split-checks-share-one-boundary
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: z-design/quote-other-preps-before-promising
+- design-review-001 F5: z-design/never-narrow-captured-scope
+- design-review-001 F6: z-design/restated-rules-move-together
+- design-review-002 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-002 F2: z-design/restated-rules-move-together
+- design-review-002 F3: z-design/new-rules-migrate-existing-work
+- design-review-002 F4: one-off: the forward patch could prompt on a terminal; fixed with -f in the same change as F1
+- design-review-002 F5: z-design/finished-overrides-land-before-ready
+- design-review-003 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-003 F2: z-design/spec-design-correspondence
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/decided-guesses-rewrite-their-body
+- design-review-004 F2: z-design/new-rules-migrate-existing-work
+- note design-refute-004 carry-over from c0174 design-review-005 F1: z-design/decided-guesses-rewrite-their-body, z-design/exact-checks-compare-against-the-merge-base
