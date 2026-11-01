@@ -39,6 +39,7 @@
 | 35 | 2026-10-26 16:26 | design-review-013 | 0 | 0 | 17.0 | spend | design-review |  |
 | 36 | 2026-10-26 16:26 | design-review-013-tokens | 0 | 0 | 0.0 | spend | design-review | 113101 |
 | 37 | 2026-10-26 16:37 | design-refute-013 | 0 | 0 | 20.0 | spend | design-review |  |
+| 38 | 2026-11-01 19:41 | R0053: experiments (E11 passes on d0151's touch path) | 1048 | 60 | 5.0 | raft | build |  |
 
-**Total:** +4514 / -4 lines, 986.0 agent-minutes, 2301065 tokens over 37 records
-<!-- totals: added=4514 removed=4 minutes=986.0 records=37 tokens=2301065 -->
+**Total:** +5562 / -64 lines, 991.0 agent-minutes, 2301065 tokens over 38 records
+<!-- totals: added=5562 removed=64 minutes=991.0 records=38 tokens=2301065 -->
