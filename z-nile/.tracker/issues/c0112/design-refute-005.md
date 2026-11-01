@@ -1,0 +1,11 @@
+# Refute 005: c0112 (answers to design-review-005)
+
+Round 5 is the final round. It has no high finding.
+
+- F1: fixed: `--merges` keeps a deleted lesson when at least one lesson of the same skill holds every source it had and names every holder; zero holders (a source in another skill, or in no lesson) is the loss. The promoted `sources-kept.spec` case for two holders is flipped to green with both named (`merged into zz-test/extra, zz-test/into`), the other-skill and missing-source cases stay red, and the rows, the Design text and the script's header say "at least one". consequences: a source held by two lessons passes, which is right for the invariant (nothing lost); the mutant "zero holders accepted" replaces "any number of survivors".
+- F2: fixed: Existing work (d) no longer reruns the validator over earlier waves' old outputs after c0181's rename; it runs the tree checks (`--check`, `--check --policy`, both lists over the whole tree, `sources-kept.luau --merges` against the tree before the merge) and renames the worker outputs not yet applied. consequences: none.
+- F3: fixed: `held.sh` loops over `${refs[@]+"${refs[@]}"}` (bash 3.2, `set -u`; tried under `/bin/bash`), so an empty list is not an error; the skip of the raft's own branch and PR is a Rules row (run in round 4's reproduction by the reviewer, reasoned for the empty list: the idiom is the gate's own).
+- F4: fixed: `focused-review-NNN` joins `check.sh` ac2 and ac6 pathspecs, `batches.sh`'s byte and finding counts and the brief's list of review files (c0136 adds the stem; none exists on main yet, so the counts are unchanged today). consequences: none.
+- F5: fixed: the AC3 label says it runs `sources-kept.spec` (both modes) and then compares the merge base.
+- F6: fixed: the merge pass says a lesson id already in the tree survives: a draft that duplicates an existing lesson has its id rewritten to the existing one, never the reverse.
+- F7: fixed: `experiments/proposed-lessons.md` `zz-test/nothing-lost-compares-sets` now states the invariant over contents (sources), not ids, when a sibling merges ids, and carries the case where the invariant holds and only the check's extra condition fails; its Why names design reviews 004 F1 and 005 F1.
