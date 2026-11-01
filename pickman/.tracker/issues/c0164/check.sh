@@ -9,6 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: R0056's main-walls spec is narrowed to where the calls sit, and f0126's views.spec is exactly f0126's with c0164's every-frame walls-and-radar case added, which passes" lune run tests/run -- "$A/walls.spec.luau"
+check "AC2: f0126's and f0109's acceptance checks pass" bash -c 'bash "$("$ZN_ROOT/zn" find f0126)/check.sh" && bash "$("$ZN_ROOT/zn" find f0109)/check.sh"'
 
 finish

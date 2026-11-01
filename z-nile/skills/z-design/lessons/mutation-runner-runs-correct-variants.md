@@ -11,3 +11,5 @@ Mutants prove a spec fails for wrong code; nothing proves it passes for right co
 **How to apply:** beside the mutants, keep a list of correct variants in the runner (the kinds of change the issues sequenced next will make), run them with the mutants, and treat a red one as a finding against the spec.
 
 f0126 design review 008 F1: imagined variants passed, but f0109's real prototype (colours in View, state in model attributes, one shared paint) failed two f0126 cases; with the user's "f0109 first" its prototype became part of f0126's base.
+
+c0164 design review 001 F2: correct variants were called green because the new case passed them, while another promoted spec reading the same file (f0109's place.spec, a text pin) went red. A correct variant is green only if every promoted spec that reads the mutated file stays green; the runner runs them too and reports it.
