@@ -1,0 +1,36 @@
+# Harvest: c0193
+
+- design-review-001 F1: zz-test/no-vacuous-pass
+- design-review-001 F2: zz-arch/guard-no-is-explicit
+- design-review-001 F3: zz-arch/children-need-a-lifeline
+- design-review-001 F4: zz-test/guard-needs-its-own-case
+- design-review-001 F5: z-design/new-rules-migrate-existing-work
+- design-review-001 F6: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F7: zz-test/no-vacuous-pass
+- design-review-001 F8: one-off: records that did not match the document (an empty Verification section cited, text counts, a crash reported as a timeout), fixed in the text and the message
+- design-review-002 F1: zz-test/no-vacuous-pass
+- design-review-002 F2: zz-arch/guard-no-is-explicit
+- design-review-002 F3: zz-arch/children-need-a-lifeline
+- design-review-002 F4: zz-test/guard-needs-its-own-case
+- design-review-002 F5: z-design/new-rules-migrate-existing-work, z-design/quote-other-preps-before-promising
+- design-review-002 F6: z-design/quote-other-preps-before-promising, zz-test/promoted-specs-pin-rules-not-sets
+- design-review-002 F7: one-off: a wording claim wider than the reader (AC7 said every compared character, the reader sees == and ~= literals)
+- design-review-002 F8: z-design/spec-design-correspondence
+- design-review-002 F9: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-002 F10: one-off: a 4 s spin in every full gate where 3 s holds the same assertions
+- design-review-003 F1: zz-test/no-vacuous-pass
+- design-review-003 F2: z-design/quote-other-preps-before-promising
+- design-review-003 F3: z-design/new-rules-migrate-existing-work
+- design-review-003 F4: one-off: a breadcrumb at a case's start was reported as a block of texts that never ran
+- design-review-003 F5: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F6: one-off: proportionality of the lint's proof (3 of 36 loops), answered with a recorded reason and the alternative
+- design-review-003 F7: z-design/spec-design-correspondence
+- design-review-004 F1: zz-test/no-vacuous-pass, z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F2: z-design/no-check-red-between-steps, z-design/quote-other-preps-before-promising
+- design-review-004 F3: zz-test/pipe-filter-keeps-the-failure
+- design-review-004 F4: one-off: the Design said 12 lines, the lesson has 13
+- design-review-005 F1: z-design/reasoned-rows-claim-testable-reasons
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-005 F3: one-off: an over-wide claim in a comment (every text reaches the loop), no coverage lost
+- design-review-005 F4: z-design/no-check-red-between-steps
+- design-review-005 F5: z-design/probe-free-cli-lines-in-prep

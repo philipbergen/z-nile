@@ -16,7 +16,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
 | `z-nile/templates/` | the item, raft and prompt templates |
 | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
-| `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh`, `ci-verify.sh` | the gate, the affected-spec selector, the registry's shell reader, the bootstrap and CI dispatch |
+| `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh` | the gate, the affected-spec selector, the registry's shell reader and the bootstrap |
 | `z-nile/tests/run.luau`, `lib/`, `tooling/`, `meta/`, `acceptance/` | the shared runner and harness, the tooling's specs, its structural rules and z-nile's promoted specs; they run from z-nile's home, `z-nile/` |
 
 ## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`)

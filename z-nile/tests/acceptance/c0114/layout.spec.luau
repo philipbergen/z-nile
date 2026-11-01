@@ -1,7 +1,7 @@
 --!strict
 -- c0114 AC2: the engine and the whole build moved into z-nile/, ./zn is the command, and every path that a
 -- check.sh or a spec of an unfinished raft names still works through a forwarder: scripts/tracker.sh, scripts/check.sh,
--- scripts/setup.sh, scripts/ci-verify.sh, scripts/lib/ac.sh and scripts/affected.luau run the moved file, and each
+-- scripts/setup.sh, scripts/lib/ac.sh and scripts/affected.luau run the moved file, and each
 -- scripts/tracker/<module>.luau and scripts/lib/{sh,graph,changed}.luau returns the moved module itself. The shared
 -- engine files (templates, compaction map) left tracker/. The counter is never moved by the branch: it is z-nile/next
 -- with a tombstone at tracker/next once origin has moved it (the first publish after landing), and tracker/next before.
@@ -76,7 +76,6 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 				"z-nile/check.sh",
 				"z-nile/affected.luau",
 				"z-nile/setup.sh",
-				"z-nile/ci-verify.sh",
 				"z-nile/templates/issue/doc.md",
 				"z-nile/templates/issue/check.sh",
 				"z-nile/templates/raft/doc.md",
@@ -95,7 +94,6 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 				"zn",
 				"z-nile/check.sh",
 				"z-nile/setup.sh",
-				"z-nile/ci-verify.sh",
 				"z-nile/lib/git-hooks/pre-push",
 			}
 		do
@@ -157,7 +155,6 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 			["scripts/tracker.sh"] = 'exec bash "$(dirname "$0")/../zn" "$@"',
 			["scripts/check.sh"] = 'exec bash "$(dirname "$0")/../z-nile/check.sh" "$@"',
 			["scripts/setup.sh"] = 'exec bash "$(dirname "$0")/../z-nile/setup.sh" "$@"',
-			["scripts/ci-verify.sh"] = 'exec bash "$(dirname "$0")/../z-nile/ci-verify.sh" "$@"',
 		}
 		for path, line in want do
 			t.expect(commands(path)).toEqual({ line })

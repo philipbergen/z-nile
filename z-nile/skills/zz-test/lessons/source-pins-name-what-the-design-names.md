@@ -13,3 +13,5 @@ Source pins are the house style for adapters, but a pin on a private name (`memb
 A pin that finds the right call cannot tell whether its result is used. f0126 design review 004 F1: `View.walls(m, nil, nil)`, a HudView that never laid out the bar, a bar placed off its box, boxes from a layout without the inset, and walls rebuilt every frame all passed every source pin and the whole suite. Where `tests/place/hud-shots` shows an adapter can run from its real source on a stub engine, judge it by what it builds (parts, their places and colours; how many times a call is made), with the stub require falling back to the real Logic modules.
 
 f0126 design review 005 F2: two absence pins left beside the new behaviour cases (no `ClearAllChildren` in MazeView, no `UDim2.fromScale(0.5` in HudView) caught no mutant the behaviour cases missed and failed correct code; they were deleted.
+
+c0164 design reviews 002 and 003: when a behaviour case replaces a text pin, try a guard mutant on each field the case holds constant, against the case, the deleted pin and every kept spec; whatever only the deleted pin killed must be killed by the case.
