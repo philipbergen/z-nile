@@ -81,8 +81,15 @@ return t.spec("c0140 deploy job", function(it)
 		function()
 			local on: any = wf["on"]
 			t.expect(on.push.branches).toEqual({ "main" })
-			t.expect(on.push["paths-ignore"])
-				.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
+			-- c0183 override: pickman's own concern, the shape of the list: its root and the counter are ignored, and every
+			-- other entry is a project root `<name>/.tracker/**` (the exact list, against the registry, is gate-cover's and ci's)
+			local ignored: { string } = on.push["paths-ignore"]
+			t.expect(table.find(ignored, "pickman/.tracker/**") ~= nil).toBe(true)
+			t.expect(table.find(ignored, "z-nile/next") ~= nil).toBe(true)
+			for _, e in ignored do
+				t.expect(e == "z-nile/next" or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil)
+					.toBe(true)
+			end
 			t.expect(on.pull_request)
 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
 			t.expect(on.workflow_dispatch ~= nil).toBe(true)

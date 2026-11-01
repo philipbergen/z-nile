@@ -3,6 +3,7 @@
 -- counter skips the deploy (c0172: deploy.yml carries the ignore list). deploy-beta builds a project's "$path"s
 -- relative to the project file's own folder, and its step runs from pickman/. The stop hook gates pickman/ and
 -- z-nile/ too. These specs run from z-nile/: the repository is read from its top. Fixtures under .cache/c0120-ci.
+local deploylist = require("@tests/lib/deploylist")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -26,8 +27,7 @@ end
 
 return t.spec("c0120 CI follows the homes", function(it)
 	it("pushes touching only a project root or the counter skip the gate; tracker/ is not ignored", function()
-		t.expect(wf["on"].push["paths-ignore"])
-			.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
+		t.expect(wf["on"].push["paths-ignore"]).toEqual(deploylist.ignored(TOP)) -- c0183 override: every registered root, then the counter
 	end)
 
 	it("the deploy job publishes from pickman/, and sets up from the root", function()
