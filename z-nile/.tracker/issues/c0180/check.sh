@@ -9,6 +9,14 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the engine is split by command, with a thin dispatch core" lune run tests/run -- "$A/split.spec.luau"
+check "AC2: the engine traces the command it runs and refuses bad trace entries" lune run tests/run -- "$A/trace.spec.luau"
+check "AC3: the runner records each passing spec's commands by closure key" lune run tests/run -- "$A/record.spec.luau"
+check "AC4: commandrecord keys, parses, renders and merges the record" lune run tests/run -- "$A/commandrecord.spec.luau"
+check "AC5: an engine file is an input by requires, declarations, missing records or recorded commands" lune run tests/run -- "$A/select.spec.luau"
+check "AC6: affected selects by recorded commands across worktrees, failing closed" lune run tests/run -- "$A/endtoend.spec.luau"
+check "AC7: zz-test, zz-arch and zz-rules state the new rules" lune run tests/run -- "$A/docs.spec.luau"
+check "AC8: every engine-text reader declares its engine input" lune run tests/run -- "$A/inputs.spec.luau"
+check "AC9: the overridden specs hold exactly their narrowings" lune run tests/run -- "$A/narrowed.spec.luau"
 
 finish
