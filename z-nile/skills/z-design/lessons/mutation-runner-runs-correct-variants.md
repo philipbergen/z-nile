@@ -13,3 +13,5 @@ Mutants prove a spec fails for wrong code; nothing proves it passes for right co
 f0126 design review 008 F1: imagined variants passed, but f0109's real prototype (colours in View, state in model attributes, one shared paint) failed two f0126 cases; with the user's "f0109 first" its prototype became part of f0126's base.
 
 c0159 design review 001 F1: a chore that narrowed promoted specs for an already prepared feature (f0158) replaced a needle with a stricter spelling pin, which the feature's own design reviews had already removed from its spec as rejecting correct code. When a chore narrows for a prepared feature, run that feature's review rounds' correct variants against the narrowed specs.
+
+c0164 design review 001 F2: correct variants were called green because the new case passed them, while another promoted spec reading the same file (f0109's place.spec, a text pin) went red. A correct variant is green only if every promoted spec that reads the mutated file stays green; the runner runs them too and reports it.
