@@ -1,8 +1,10 @@
 --!strict
 -- c0180: end to end, on a fixture repository under .cache/c0180-e2e: a small engine (main, cli, store, three command
--- modules), the copied runner, selector and libraries, four z-nile specs that call a stub `zn`, and a second worktree.
--- The runner records in worktree W1; `z-nile/affected` then selects by those records in W1 and in W2 (which has none of
--- its own), drops a record whose test code changed, and fails closed on a malformed record file.
+-- modules, and the real projects.luau, which the copied z-nile/affected requires), the copied runner, selector,
+-- recordkey and libraries, four z-nile specs that call a stub `zn`, and a second worktree. The runner records in
+-- worktree W1; `z-nile/affected --recorded` then selects by those records in W1 and in W2 (which has none of its own),
+-- joins W2's own record, drops a record whose test code or launching tooling changed, forces for a program's engine
+-- file, and fails closed on a malformed record file; a bare call is unchanged.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -67,10 +69,14 @@ local function helperText(extra: string): string
 	}, "\n") .. "\n"
 end
 
--- `z-nile/affected -- [flags] --project z-nile <path>` in a worktree: (stdout, stderr)
-local function affected(dir: string, path: string, graphOnly: boolean?): (string, string)
+-- `z-nile/affected -- [--recorded | --graph-only] --project z-nile <path>` in a worktree: (stdout, stderr); the mode
+-- is "recorded" unless given ("bare" passes neither flag)
+local function affected(dir: string, path: string, mode: string?): (string, string)
 	local argv = { "run", "z-nile/affected", "--" }
-	if graphOnly then
+	local m = mode or "recorded"
+	if m == "recorded" then
+		table.insert(argv, "--recorded")
+	elseif m == "graph-only" then
 		table.insert(argv, "--graph-only")
 	end
 	for _, a in { "--project", "z-nile", path } do
@@ -98,6 +104,7 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 				".luaurc",
 				"z-nile/.luaurc",
 				"z-nile/affected.luau",
+				"z-nile/recordkey.luau",
 				"z-nile/lib",
 				"z-nile/roots.luau",
 				"z-nile/engine/projects.luau",
@@ -124,6 +131,11 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		write(W1, "pickman/tests/p.spec.luau", "--!strict\nreturn nil\n")
 		write(W1, "z-nile/tests/inputs.tsv", "# extra inputs per spec\n")
 		write(W1, ".gitignore", ".cache/\n")
+		write(
+			W1,
+			"z-nile/check.sh",
+			"#!/usr/bin/env bash\n# the fixture's gate: launching tooling, part of every key\n"
+		)
 		write(W1, "z-nile/engine/main.luau", module({ "./cli", "./cmd/list", "./cmd/new", "./cmd/find" }))
 		write(W1, "z-nile/engine/cli.luau", module({ "../lib/sh" }))
 		write(W1, "z-nile/engine/store.luau", module({}))
@@ -164,6 +176,33 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 		end
 	)
 
+	it("a worktree with no record file of its own is read silently", function()
+		local _, err = affected(W2, "z-nile/engine/cmd/list.luau")
+		t.expect((string.find(err, "ignoring", 1, true))).toBe(nil)
+	end)
+
+	it("a bare call loads no records: engine files force z-nile's run as today", function()
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau", "bare"))).toBe("ALL\n")
+	end)
+
+	it(
+		"an engine file a program requires (projects.luau, through z-nile/affected) forces z-nile's run",
+		function()
+			t.expect((affected(W2, "z-nile/engine/projects.luau"))).toBe("ALL\n")
+		end
+	)
+
+	it("W2's own record for the same key adds its commands to W1's", function()
+		local w1 = fs.readFile(`{W1}/z-nile/.cache/spec-commands.tsv`)
+		local key = string.match(w1, "\n" .. B .. "\t(%x+)\t") :: string
+		t.expect(key ~= nil).toBe(true)
+		write(W2, "z-nile/.cache/spec-commands.tsv", `# spec commands v1\n{B}\t{key}\tfind\n`)
+		t.expect((affected(W2, "z-nile/engine/cmd/find.luau"))).toBe(lines({ B, C }))
+		t.expect((affected(W1, "z-nile/engine/cmd/find.luau"))).toBe(lines({ B, C }))
+		fs.removeFile(`{W2}/z-nile/.cache/spec-commands.tsv`)
+		t.expect((affected(W2, "z-nile/engine/cmd/find.luau"))).toBe(lines({ C }))
+	end)
+
 	it("the dispatch core selects every spec that ran a command, never one that ran none", function()
 		t.expect((affected(W2, "z-nile/engine/main.luau"))).toBe(lines({ A, C, D }))
 		t.expect((affected(W2, "z-nile/engine/cli.luau"))).toBe(lines({ A, C, D }))
@@ -171,7 +210,7 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 
 	it("a non-Luau engine file, or a selection without records, still forces z-nile's run", function()
 		t.expect((affected(W2, "z-nile/engine/board.html"))).toBe("ALL\n")
-		t.expect((affected(W2, "z-nile/engine/cmd/list.luau", true))).toBe("ALL\n")
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau", "graph-only"))).toBe("ALL\n")
 	end)
 
 	it(
@@ -183,6 +222,17 @@ return t.spec("c0180 affected selects by recorded commands, end to end", functio
 			write(W2, "z-nile/tests/helper.luau", helperText(""))
 		end
 	)
+
+	it("a record whose launching tooling changed no longer counts: every spec is selected", function()
+		write(W2, "z-nile/check.sh", "#!/usr/bin/env bash\n# the fixture's gate, edited in W2\n")
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, B, C, D }))
+		write(
+			W2,
+			"z-nile/check.sh",
+			"#!/usr/bin/env bash\n# the fixture's gate: launching tooling, part of every key\n"
+		)
+		t.expect((affected(W2, "z-nile/engine/cmd/list.luau"))).toBe(lines({ A, C }))
+	end)
 
 	it("a malformed record file is skipped with a warning, and every spec is selected", function()
 		local record = `{W1}/z-nile/.cache/spec-commands.tsv`

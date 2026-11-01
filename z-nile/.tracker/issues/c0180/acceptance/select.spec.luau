@@ -1,7 +1,8 @@
 --!strict
--- c0180: selection by command, on a hand-built select.Context (c0165's types plus `commands`): an engine Luau file is an
--- input of a tooling spec through its requires, a declaration, `*`, a missing record, or a recorded command whose
--- module closure (plus the dispatch core) reaches it; engine files force z-nile only when no records were loaded.
+-- c0180: selection by command, on a hand-built select.Context (c0165's types plus `recorded`): with records loaded, an
+-- engine Luau file is an input of a tooling spec through its requires, a declaration, `*`, a missing record, or a
+-- recorded command whose module closure (plus the dispatch core) reaches it; engine files force z-nile when no records
+-- were loaded, and when a program requires them.
 local fingerprint = require("@znile/lib/fingerprint")
 local select = require("@znile/lib/select")
 local t = require("@tests/lib/t")
@@ -12,7 +13,8 @@ local T = "z-nile/tests/lib/t.luau"
 local X = "z-nile/tests/acceptance/x/"
 local LISTS, UNKNOWN, VANISHED, NONE =
 	X .. "lists.spec.luau", X .. "unknown.spec.luau", X .. "vanished.spec.luau", X .. "none.spec.luau"
-local REQUIRER, DECLARED, STAR = X .. "requirer.spec.luau", X .. "declared.spec.luau", X .. "star.spec.luau"
+local REQUIRER, DECLARED, STAR, USAGE =
+	X .. "requirer.spec.luau", X .. "declared.spec.luau", X .. "star.spec.luau", X .. "usage.spec.luau"
 local PICK = "pickman/tests/unit/p.spec.luau"
 
 local deps: { [string]: { string } } = {
@@ -27,9 +29,18 @@ local deps: { [string]: { string } } = {
 	[SH] = {},
 	[E .. "cmd/list.luau"] = { E .. "cli.luau", E .. "store.luau" },
 	[E .. "cmd/new.luau"] = { E .. "cli.luau", E .. "front.luau" },
-	[E .. "cmd/find.luau"] = { E .. "cli.luau" },
+	[E .. "cmd/find.luau"] = { E .. "cli.luau", E .. "projects.luau" },
 	[E .. "store.luau"] = {},
 	[E .. "front.luau"] = { E .. "store.luau" },
+	[E .. "projects.luau"] = {},
+	[E .. "paths.luau"] = {},
+	[E .. "ids.luau"] = {},
+	-- programs: a Luau file at the top of z-nile/, under scripts/ (the forwarders in scripts/tracker/ aside) or under a
+	-- home's scripts/
+	["z-nile/affected.luau"] = { "z-nile/lib/select.luau" },
+	["z-nile/lib/select.luau"] = { E .. "projects.luau" },
+	["pickman/scripts/tool.luau"] = { E .. "paths.luau" },
+	["scripts/tracker/ids.luau"] = { E .. "ids.luau" },
 	[T] = {},
 	[LISTS] = { T },
 	[UNKNOWN] = { T },
@@ -38,6 +49,7 @@ local deps: { [string]: { string } } = {
 	[REQUIRER] = { T, E .. "front.luau" },
 	[DECLARED] = { T },
 	[STAR] = { T },
+	[USAGE] = { T },
 	[PICK] = {},
 }
 local files: { string } = {}
@@ -50,10 +62,8 @@ local rules: select.Rules = {
 	homes = { { name = "pickman", prefix = "pickman/" }, { name = "z-nile", prefix = "z-nile/" } },
 	roots = { "pickman/.tracker", "z-nile/.tracker" },
 }
-local ctx: select.Context = {
-	rules = rules,
-	graph = { files = files, deps = deps, unresolved = {}, dynamic = {} } :: any,
-	inputs = { [DECLARED] = { E }, [STAR] = { "*" } },
+local graphValue: any = { files = files, deps = deps, unresolved = {}, dynamic = {} }
+local recorded: select.Recorded = {
 	commands = {
 		[LISTS] = { "list" },
 		[VANISHED] = { "gone" },
@@ -61,7 +71,15 @@ local ctx: select.Context = {
 		[REQUIRER] = {},
 		[DECLARED] = {},
 		[STAR] = {},
+		[USAGE] = { "usage" },
 	},
+	forced = select.forcedEngine(graphValue),
+}
+local ctx: select.Context = {
+	rules = rules,
+	graph = graphValue,
+	inputs = { [DECLARED] = { E }, [STAR] = { "*" } },
+	recorded = recorded,
 }
 
 local function keys(set: { [string]: boolean }?): { string }?
@@ -85,15 +103,22 @@ local function sorted(list: { string } | string): { string } | string
 end
 
 return t.spec("c0180 selection by command", function(it)
-	it("engine Luau files force z-nile only when no records were loaded", function()
-		t.expect(select.forces(rules, E .. "cmd/list.luau", {})).toBe(nil)
-		t.expect(select.forces(rules, E .. "sub/deep.luau", {})).toBe(nil)
-		t.expect(select.forces(rules, E .. "main.luau", {})).toBe(nil)
+	it("a program's engine files are forced; a forwarder in scripts/tracker/ is no program", function()
+		t.expect(keys(select.forcedEngine(graphValue))).toEqual({ E .. "paths.luau", E .. "projects.luau" })
+	end)
+
+	it("engine Luau files force z-nile without records and for a program's file, and only then", function()
+		t.expect(select.forces(rules, E .. "cmd/list.luau", recorded)).toBe(nil)
+		t.expect(select.forces(rules, E .. "sub/deep.luau", recorded)).toBe(nil)
+		t.expect(select.forces(rules, E .. "main.luau", recorded)).toBe(nil)
+		t.expect(select.forces(rules, E .. "ids.luau", recorded)).toBe(nil)
+		t.expect(select.forces(rules, E .. "projects.luau", recorded)).toBe("z-nile")
+		t.expect(select.forces(rules, E .. "paths.luau", recorded)).toBe("z-nile")
 		t.expect(select.forces(rules, E .. "cmd/list.luau", nil)).toBe("z-nile")
-		t.expect(select.forces(rules, E .. "board.html", {})).toBe("z-nile")
-		t.expect(select.forces(rules, "z-nile/templates/issue.md", {})).toBe("z-nile")
-		t.expect(select.forces(rules, "z-nile/check.sh", {})).toBe("z-nile")
-		t.expect(select.forces(rules, SH, {})).toBe("all")
+		t.expect(select.forces(rules, E .. "board.html", recorded)).toBe("z-nile")
+		t.expect(select.forces(rules, "z-nile/templates/issue.md", recorded)).toBe("z-nile")
+		t.expect(select.forces(rules, "z-nile/check.sh", recorded)).toBe("z-nile")
+		t.expect(select.forces(rules, SH, recorded)).toBe("all")
 	end)
 
 	it("a command uses its module's closure and the core, which does not follow the cmd/ edges", function()
@@ -112,6 +137,7 @@ return t.spec("c0180 selection by command", function(it)
 			E .. "store.luau",
 			SH,
 		})
+		t.expect(keys(select.engineUses(ctx, "usage"))).toEqual({ E .. "cli.luau", E .. "main.luau", SH })
 		t.expect(keys(select.engineUses(ctx, "gone"))).toBe(nil)
 	end)
 
@@ -123,6 +149,14 @@ return t.spec("c0180 selection by command", function(it)
 		t.expect(select.isInput(ctx, LISTS, E .. "cmd/new.luau")).toBe(false)
 		t.expect(select.isInput(ctx, LISTS, E .. "front.luau")).toBe(false)
 		t.expect(select.isInput(ctx, LISTS, E .. "cmd/find.luau")).toBe(false)
+		t.expect(select.isInput(ctx, LISTS, E .. "projects.luau")).toBe(true) -- forced: a program requires it
+	end)
+
+	it("the usage path's record makes the core, and only the core, its inputs", function()
+		t.expect(select.isInput(ctx, USAGE, E .. "main.luau")).toBe(true)
+		t.expect(select.isInput(ctx, USAGE, E .. "cli.luau")).toBe(true)
+		t.expect(select.isInput(ctx, USAGE, E .. "cmd/list.luau")).toBe(false)
+		t.expect(select.isInput(ctx, USAGE, E .. "store.luau")).toBe(false)
 	end)
 
 	it(
@@ -153,50 +187,65 @@ return t.spec("c0180 selection by command", function(it)
 		t.expect(select.isInput(ctx, PICK, E .. "main.luau")).toBe(false)
 	end)
 
-	it("affected selects by command, and still forces for other tooling files", function()
-		t.expect(sorted(select.affected(ctx, { E .. "cmd/list.luau" }, nil))).toEqual({
-			DECLARED,
-			LISTS,
-			STAR,
-			UNKNOWN,
-			VANISHED,
-		})
-		t.expect(sorted(select.affected(ctx, { E .. "front.luau" }, nil))).toEqual({
-			DECLARED,
-			REQUIRER,
-			STAR,
-			UNKNOWN,
-			VANISHED,
-		})
-		t.expect(sorted(select.affected(ctx, { E .. "main.luau" }, nil))).toEqual({
-			DECLARED,
-			LISTS,
-			STAR,
-			UNKNOWN,
-			VANISHED,
-		})
-		t.expect(select.affected(ctx, { E .. "board.html" }, nil)).toBe("ALL")
-		t.expect(select.affected(ctx, { E .. "cmd/list.luau", "z-nile/templates/issue.md" }, nil)).toBe("ALL")
-		t.expect(sorted(select.affected(ctx, { E .. "cmd/list.luau" }, "pickman"))).toEqual({})
-		local noRecords: select.Context = table.clone(ctx)
-		noRecords.commands = nil
-		t.expect(select.affected(noRecords, { E .. "cmd/list.luau" }, nil)).toBe("ALL")
-	end)
+	it(
+		"affected selects by command, and still forces for a program's file and for other tooling files",
+		function()
+			t.expect(sorted(select.affected(ctx, { E .. "cmd/list.luau" }, nil))).toEqual({
+				DECLARED,
+				LISTS,
+				STAR,
+				UNKNOWN,
+				VANISHED,
+			})
+			t.expect(sorted(select.affected(ctx, { E .. "front.luau" }, nil))).toEqual({
+				DECLARED,
+				REQUIRER,
+				STAR,
+				UNKNOWN,
+				VANISHED,
+			})
+			t.expect(sorted(select.affected(ctx, { E .. "main.luau" }, nil))).toEqual({
+				DECLARED,
+				LISTS,
+				STAR,
+				UNKNOWN,
+				USAGE,
+				VANISHED,
+			})
+			t.expect(select.affected(ctx, { E .. "projects.luau" }, nil)).toBe("ALL")
+			t.expect(select.affected(ctx, { E .. "board.html" }, nil)).toBe("ALL")
+			t.expect(select.affected(ctx, { E .. "cmd/list.luau", "z-nile/templates/issue.md" }, nil))
+				.toBe("ALL")
+			t.expect(sorted(select.affected(ctx, { E .. "cmd/list.luau" }, "pickman"))).toEqual({})
+			local noRecords: select.Context = table.clone(ctx)
+			noRecords.recorded = nil
+			t.expect(select.affected(noRecords, { E .. "cmd/list.luau" }, nil)).toBe("ALL")
+		end
+	)
 
-	it("a spec's fingerprint inputs hold exactly the engine files isInput holds", function()
-		local blobs: { [string]: string } = {}
-		for _, file in files do
-			blobs[file] = "100644 " .. string.rep("1", 40)
-		end
-		blobs[E .. "sub/deep.luau"] = "100644 " .. string.rep("2", 40)
-		local engineInputs = {}
-		for _, path in fingerprint.inputs(ctx, LISTS, blobs) do
-			if string.sub(path, 1, #E) == E then
-				table.insert(engineInputs, path)
+	it(
+		"a spec's fingerprint inputs hold exactly the engine files isInput holds, forced ones included",
+		function()
+			local blobs: { [string]: string } = {}
+			for _, file in files do
+				blobs[file] = "100644 " .. string.rep("1", 40)
 			end
+			blobs[E .. "sub/deep.luau"] = "100644 " .. string.rep("2", 40)
+			local engineInputs = {}
+			for _, path in fingerprint.inputs(ctx, LISTS, blobs) do
+				if string.sub(path, 1, #E) == E then
+					table.insert(engineInputs, path)
+				end
+			end
+			table.sort(engineInputs)
+			t.expect(engineInputs).toEqual({
+				E .. "cli.luau",
+				E .. "cmd/list.luau",
+				E .. "main.luau",
+				E .. "paths.luau",
+				E .. "projects.luau",
+				E .. "store.luau",
+			})
 		end
-		table.sort(engineInputs)
-		t.expect(engineInputs)
-			.toEqual({ E .. "cli.luau", E .. "cmd/list.luau", E .. "main.luau", E .. "store.luau" })
-	end)
+	)
 end)

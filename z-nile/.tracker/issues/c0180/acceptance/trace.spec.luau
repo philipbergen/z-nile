@@ -1,7 +1,9 @@
 --!strict
--- c0180: the engine records the command it is about to run in every directory ZN_SPEC_TRACE lists, as an empty file
--- named after the command; it refuses a bad entry or a failed write with exit 2 before doing anything, and changes
--- nothing else. Run on a trackerfix fixture under .cache/c0180-trace (the fixture's own copy of the engine).
+-- c0180: the engine records the command it is about to run (`usage` for no command or an unknown one) in every
+-- directory ZN_SPEC_TRACE lists, as an empty file named after it; it accepts an entry only when the entry's physical
+-- path is itself and ends .cache/spec-trace/<name>; it refuses a bad entry or a failed write with exit 2 before doing
+-- anything, and changes nothing else. Run on a trackerfix fixture under .cache/c0180-trace (the fixture's own copy of
+-- the engine).
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -9,7 +11,8 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local f = trackerfix.new("c0180-trace")
-local traces = `{f.base}/traces`
+local traces = `{f.base}/.cache/spec-trace`
+local MESSAGE = "is not a .cache/spec-trace/<name> directory by its physical path"
 
 local function freshDir(name: string): string
 	local dir = `{traces}/{name}`
@@ -36,9 +39,9 @@ local function run(args: { string }, trace: string?): fixture.Result
 	return trackerfix.tr(f, f.main, args, { ZN_SPEC_TRACE = value })
 end
 
-local function refusedWith(r: fixture.Result, text: string)
+local function refusedWith(r: fixture.Result, entry: string)
 	t.expect(r.code).toBe(2)
-	t.expect((string.find(r.stderr, text, 1, true)) ~= nil).toBe(true)
+	t.expect((string.find(r.stderr, `ZN_SPEC_TRACE entry {entry} {MESSAGE}`, 1, true)) ~= nil).toBe(true)
 end
 
 local function clean()
@@ -85,18 +88,24 @@ return t.spec("c0180 the engine traces the command it runs", function(it)
 		t.expect(entries(dir)).toEqual({ "find", "list" })
 	end)
 
-	it("an unknown command prints the usage as before and records nothing", function()
-		local plain = run({ "nosuchcommand" }, "")
-		local dir = freshDir("unknown")
-		local r = run({ "nosuchcommand" }, dir)
-		t.expect(r.code).toBe(plain.code)
-		t.expect(r.stdout).toBe(plain.stdout)
-		t.expect(entries(dir)).toEqual({})
+	it("an unknown command and no command record usage, and print the usage as before", function()
+		local plainUnknown = run({ "nosuchcommand" }, "")
+		local plainNone = run({}, "")
+		local unknown, none = freshDir("unknown"), freshDir("none")
+		local r = run({ "nosuchcommand" }, unknown)
+		t.expect(r.code).toBe(plainUnknown.code)
+		t.expect(r.stdout).toBe(plainUnknown.stdout)
+		t.expect(entries(unknown)).toEqual({ "usage" })
+		local n = run({}, none)
+		t.expect(n.code).toBe(plainNone.code)
+		t.expect(n.stdout).toBe(plainNone.stdout)
+		t.expect(entries(none)).toEqual({ "usage" })
 	end)
 
 	it("a relative entry refuses with exit 2 before the command does anything", function()
-		local r = run({ "new", "issue", "c", "probe-relative", "--project", "z-nile" }, "rel/traces")
-		refusedWith(r, "ZN_SPEC_TRACE entry rel/traces is not an absolute directory under a .cache folder")
+		local r =
+			run({ "new", "issue", "c", "probe-relative", "--project", "z-nile" }, "rel/.cache/spec-trace/x")
+		refusedWith(r, "rel/.cache/spec-trace/x")
 		clean()
 	end)
 
@@ -111,23 +120,61 @@ return t.spec("c0180 the engine traces the command it runs", function(it)
 		)
 		t.expect((string.find(tmp, "/.cache/", 1, true))).toBe(nil)
 		local r = run({ "new", "issue", "c", "probe-outside", "--project", "z-nile" }, tmp)
-		refusedWith(r, `ZN_SPEC_TRACE entry {tmp} is not an absolute directory under a .cache folder`)
+		refusedWith(r, tmp)
 		clean()
 	end)
 
-	it("a missing directory refuses, even after a good entry", function()
+	it("a directory under .cache but not under spec-trace refuses", function()
+		local other = `{f.base}/.cache/other`
+		fs.writeDir(other)
+		local r = run({ "new", "issue", "c", "probe-other", "--project", "z-nile" }, other)
+		refusedWith(r, other)
+		t.expect(entries(other)).toEqual({})
+		clean()
+	end)
+
+	it("a missing directory refuses, even after a good entry, and the good entry gets nothing", function()
 		local good = freshDir("good")
 		local missing = `{traces}/missing`
 		local r = run({ "new", "issue", "c", "probe-missing", "--project", "z-nile" }, `{good}:{missing}`)
-		refusedWith(r, `ZN_SPEC_TRACE entry {missing} is not an absolute directory under a .cache folder`)
+		refusedWith(r, missing)
+		t.expect(entries(good)).toEqual({})
 		clean()
 	end)
+
+	it("an entry reached through .. refuses, though its spelling holds .cache/spec-trace", function()
+		local dir = freshDir("dots")
+		fs.writeDir(`{dir}/x`)
+		local dotted = `{dir}/x/..`
+		local r = run({ "new", "issue", "c", "probe-dots", "--project", "z-nile" }, dotted)
+		refusedWith(r, dotted)
+		t.expect(entries(dir)).toEqual({ "x" })
+		clean()
+	end)
+
+	it(
+		"a symlink under spec-trace that points out of it refuses, and nothing is written through it",
+		function()
+			freshDir("placeholder")
+			local link = `{traces}/link`
+			if fs.isFile(link) or fs.isDir(link) then
+				fs.removeFile(link)
+			end
+			t.expect(process.exec("ln", { "-s", f.main, link }).ok).toBe(true)
+			local r = run({ "new", "issue", "c", "probe-link", "--project", "z-nile" }, link)
+			refusedWith(r, link)
+			t.expect(fs.isFile(`{f.main}/new`)).toBe(false)
+			clean()
+			fs.removeFile(link)
+		end
+	)
 
 	it("a write that fails refuses with exit 2 and does nothing", function()
 		local dir = freshDir("blocked")
 		fs.writeDir(`{dir}/new`) -- a folder where the trace file goes: the rename over it fails
 		local r = run({ "new", "issue", "c", "probe-blocked", "--project", "z-nile" }, dir)
-		refusedWith(r, `cannot record the spec trace in {dir}`)
+		t.expect(r.code).toBe(2)
+		t.expect((string.find(r.stderr, `cannot record the spec trace in {dir}`, 1, true)) ~= nil).toBe(true)
 		clean()
 	end)
 

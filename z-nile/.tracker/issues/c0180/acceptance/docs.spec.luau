@@ -29,10 +29,12 @@ return t.spec("c0180 the skills state selection by command", function(it)
 		function()
 			for _, text in
 				{
-					"**Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran, in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure",
-					"the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of trace directories",
-					"ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key",
+					"**Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran (`usage` for the usage path), in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure and of the tooling that launches `./zn`",
+					"the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of `.cache/spec-trace/<name>` directories",
+					"With `--recorded` (the gate's selection passes it), a change to an engine Luau file that no program requires selects the z-nile specs that require it, declare it, are `*`, ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key",
+					"an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the forwarders in `scripts/tracker/` aside) still forces z-nile's run",
 					"Records come from this worktree and every other worktree of the checkout.",
+					"A spec that runs engine code another way than through `./zn`, `engine/main` or those programs declares the engine files it runs.",
 					"A spec that sets `ZN_SPEC_TRACE` for a command it starts appends the value it inherited (`<its dir>:<inherited>`)",
 					"The merge's full gate is the backstop.",
 				}
@@ -65,8 +67,14 @@ return t.spec("c0180 the skills state selection by command", function(it)
 		t.expect(has(ARCH, "one `load` function, or `main.luau`, does the reading and writing")).toBe(false)
 	end)
 
-	it("zz-rules: the busy row names FREEZES where it now lives", function()
+	it("zz-rules: the busy row names FREEZES where it now lives and c0180's readiness condition", function()
 		t.expect(has(RULES, "(`FREEZES` in `z-nile/engine/cmd/busy.luau`)")).toBe(true)
 		t.expect(has(RULES, "(`FREEZES` in `z-nile/engine/main.luau`)")).toBe(false)
+		t.expect(
+			has(
+				RULES,
+				"c0180's split of `z-nile/engine/main.luau` is readied only when `./zn busy z-nile/engine/main.luau` lists no active raft (the user's decision)."
+			)
+		).toBe(true)
 	end)
 end)

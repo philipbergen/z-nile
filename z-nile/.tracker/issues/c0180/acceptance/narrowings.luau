@@ -1,9 +1,9 @@
 --!strict
--- c0180: the exact narrowings of the four promoted specs this chore overrides (the Regression guard's Overrides).
--- Each is { id, file, old, new }: the file is tests/acceptance/<id>/<file> in z-nile's home, `old` occurs in it exactly
--- once in main's file, and the narrowing replaces it with `new`; `digest` is the sha256 of the narrowed file with every
--- item id (c, d, f or R and four digits) written ID, so a compaction leaves it valid. Read by narrowed.spec; applied by
--- the executor.
+-- c0180: the exact narrowings of the three promoted specs this chore overrides (the Regression guard's Overrides).
+-- Each is { id, file, digest, old, new }: the file is tests/acceptance/<id>/<file> in z-nile's home, `old` occurs in
+-- it exactly once in main's file, and the narrowing replaces it with `new`; `digest` is the sha256 of the narrowed file
+-- with CRLF written LF and every item id (c, d, f or R and four digits) written ID, so a checkout's line endings and a
+-- compaction leave it valid. Read by narrowed.spec; applied by the executor.
 export type Narrowing = { id: string, file: string, digest: string, old: string, new: string }
 
 local narrowings: { Narrowing } = {
@@ -27,13 +27,6 @@ local narrowings: { Narrowing } = {
 		digest = "3f608ecc23f1185222f1effc81c29a33a7f61eae4cd51730fefd5ca715094633",
 		old = "(`FREEZES` in `z-nile/engine/main.luau`)",
 		new = "(`FREEZES` in `z-nile/engine/cmd/busy.luau`)",
-	},
-	{
-		id = "c" .. "0114",
-		file = "layout.spec.luau",
-		digest = "1b04b71ab29dbfc1219d206449b40f83ea51a22b49488ddd1a8d8b7cdf23c08b",
-		old = '{ "run", "scripts/affected", "--", "z-nile/engine/main.luau" },',
-		new = '{ "run", "scripts/affected", "--", "z-nile/engine/board.html" },',
 	},
 }
 

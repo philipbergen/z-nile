@@ -57,12 +57,12 @@ return t.spec("c0180 command record", function(it)
 
 	it("parse and render round-trip, sorted by spec, with - for a spec that ran no command", function()
 		local text = "# spec commands v1\n"
-			.. `tests/a.spec.luau\t{KEY_A}\tlist,new,raft-plan,worktree-prune\n`
+			.. `tests/a.spec.luau\t{KEY_A}\tlist,new,raft-plan,usage,worktree-prune\n`
 			.. `tests/tooling/b.spec.luau\t{KEY_B}\t-\n`
 		local records = cr.parse(text) :: cr.Records
 		t.expect(records["tests/a.spec.luau"]).toEqual({
 			key = KEY_A,
-			commands = { "list", "new", "raft-plan", "worktree-prune" },
+			commands = { "list", "new", "raft-plan", "usage", "worktree-prune" },
 		})
 		t.expect(records["tests/tooling/b.spec.luau"]).toEqual({ key = KEY_B, commands = {} })
 		t.expect(cr.render(records)).toBe(text)
@@ -70,7 +70,7 @@ return t.spec("c0180 command record", function(it)
 		local built: cr.Records = {}
 		built["tests/tooling/b.spec.luau"] = { key = KEY_B, commands = {} }
 		built["tests/a.spec.luau"] =
-			{ key = KEY_A, commands = { "list", "new", "raft-plan", "worktree-prune" } }
+			{ key = KEY_A, commands = { "list", "new", "raft-plan", "usage", "worktree-prune" } }
 		t.expect(cr.render(built)).toBe(text)
 		t.expect(cr.render({})).toBe("# spec commands v1\n")
 	end)
@@ -97,6 +97,24 @@ return t.spec("c0180 command record", function(it)
 		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew\n\ntests/b.spec.luau\t{KEY_B}\tlist\n`, "line 3")
 		refused(H .. `tests/a.spec.luau\t{KEY_A}\tnew`, "line 2")
 	end)
+
+	it(
+		"merge unions the commands of an entry whose key is unchanged, and replaces one whose key changed",
+		function()
+			local old: cr.Records = {
+				["tests/a.spec.luau"] = { key = KEY_A, commands = { "list", "new" } },
+				["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" } },
+			}
+			local new: cr.Records = {
+				["tests/a.spec.luau"] = { key = KEY_A, commands = { "find", "new" } },
+				["tests/b.spec.luau"] = { key = KEY_B, commands = { "status" } },
+			}
+			t.expect(cr.merge(old, new, nil)).toEqual({
+				["tests/a.spec.luau"] = { key = KEY_A, commands = { "find", "list", "new" } },
+				["tests/b.spec.luau"] = { key = KEY_B, commands = { "status" } },
+			})
+		end
+	)
 
 	it("merge puts every new entry over the old, keeps the rest, and drops what keep lacks", function()
 		local old: cr.Records = {

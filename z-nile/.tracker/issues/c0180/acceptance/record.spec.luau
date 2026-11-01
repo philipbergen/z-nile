@@ -1,8 +1,10 @@
 --!strict
 -- c0180: the spec runner gives each spec file of a multi-file run its own trace directory and records, for every spec
--- that passed, the commands it ran in <home>/.cache/spec-commands.tsv, keyed by its test-side require closure. Run on a
--- copy of the runner under .cache/c0180-record (as c0154 does), whose specs call a stub `zn` that writes
--- <dir>/<command> for each directory ZN_SPEC_TRACE lists, so the runner is checked apart from the engine.
+-- that passed, the commands it ran in <home>/.cache/spec-commands.tsv, keyed through z-nile/recordkey (the spec's
+-- test-side closure and the tooling that launches ./zn), merging by union while the key holds. Run on a copy of the
+-- runner under .cache/c0180-record (its own repository root, as c0154 does for durations), whose specs call a stub
+-- `zn` that writes <dir>/<command> for each directory ZN_SPEC_TRACE lists, so the runner is checked apart from the
+-- engine. One case keys the real tree, read only.
 local cr = require("@znile/lib/commandrecord")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -14,6 +16,7 @@ local base = `{here}/.cache/c0180-record`
 local home = `{base}/z-nile`
 local RECORD = `{home}/.cache/spec-commands.tsv`
 local STUB = `{base}/zn-stub`
+local E_COMMANDS = `{base}/e-commands.txt`
 local R = "req" .. "uire" -- keeps literal require text out of this file (the graph scanner)
 
 local function write(rel: string, text: string)
@@ -51,6 +54,22 @@ local function spec(commands: { string }, fails: boolean?, helper: boolean?): st
 	table.insert(lines, "end)")
 	return table.concat(lines, "\n") .. "\n"
 end
+-- a fixture spec whose commands come from a file outside its closure: they change while its key holds
+local function fromFile(): string
+	return table.concat({
+		"--!strict",
+		`local fs = {R}("@lune/fs")`,
+		`local process = {R}("@lune/process")`,
+		`local t = {R}("@tests/lib/t")`,
+		'return t.spec("fixture", function(it)',
+		'\tit("runs", function()',
+		`\t\tfor c in string.gmatch(fs.readFile("{E_COMMANDS}"), "%a+") do`,
+		`\t\t\tassert(process.exec("bash", \{ "{STUB}", c \}).ok)`,
+		"\t\tend",
+		"\tend)",
+		"end)",
+	}, "\n") .. "\n"
+end
 local function helperText(extra: string): string
 	return table.concat({
 		"--!strict",
@@ -82,6 +101,14 @@ local function commandsOf(records: cr.Records, path: string): { string }?
 	local entry = records[path]
 	return if entry then entry.commands else nil
 end
+local function freshOuter(name: string): string
+	local dir = `{base}/.cache/spec-trace/{name}`
+	if fs.isDir(dir) then
+		fs.removeDir(dir)
+	end
+	fs.writeDir(dir)
+	return dir
+end
 
 return t.spec("c0180 the runner records the commands each spec ran", function(it)
 	it(
@@ -90,23 +117,42 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 			if fs.isDir(base) then
 				fs.removeDir(base)
 			end
+			fs.writeDir(base)
+			t.expect(process.exec("git", { "init", "-q", "-b", "main", base }).ok).toBe(true)
 			for _, rel in
-				{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/lib", "z-nile/.luaurc", ".luaurc" }
+				{
+					"z-nile/tests/run.luau",
+					"z-nile/tests/lib",
+					"z-nile/lib",
+					"z-nile/recordkey.luau",
+					"z-nile/roots.luau",
+					"z-nile/engine/projects.luau",
+					"z-nile/.luaurc",
+					".luaurc",
+				}
 			do
 				copy(rel)
 			end
+			write("z-nile/projects.toml", '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n')
 			write("z-nile/.tracker/.gitkeep", "")
+			write(".gitignore", ".cache/\n")
+			write("zn", "#!/usr/bin/env bash\n# the fixture's launcher: part of every key\n")
 			fs.writeDir(`{home}/.cache`)
 			write(
 				"zn-stub",
 				'#!/usr/bin/env bash\nIFS=: read -r -a dirs <<< "${ZN_SPEC_TRACE:-}"\n'
-					.. 'for d in "${dirs[@]}"; do [[ -n $d ]] && : > "$d/$1"; done\nexit 0\n'
+					.. 'for d in "${dirs[@]}"; do\n\t[[ -n $d ]] || continue\n\t: > "$d/$1"\n'
+					.. '\tif [[ $1 == litter ]]; then : > "$d/.list.pickman-tmp.1.abcdef"; : > "$d/Foo"; fi\n'
+					.. "done\nexit 0\n"
 			)
+			write("e-commands.txt", "list\n")
 			write("z-nile/tests/a.spec.luau", spec({ "new", "list", "new" }))
 			write("z-nile/tests/b.spec.luau", spec({}))
 			write("z-nile/tests/c.spec.luau", spec({ "find" }, true))
 			write("z-nile/tests/helper.luau", helperText(""))
 			write("z-nile/tests/d.spec.luau", spec({}, false, true))
+			write("z-nile/tests/e.spec.luau", fromFile())
+			write("z-nile/tests/f.spec.luau", spec({ "litter" }))
 			local ok, out = run({ "--jobs", "2" })
 			t.expect(ok).toBe(false) -- c fails
 			t.expect((string.find(out, "fails on purpose", 1, true)) ~= nil).toBe(true)
@@ -115,11 +161,16 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 			t.expect(commandsOf(records, "tests/b.spec.luau")).toEqual({})
 			t.expect(commandsOf(records, "tests/c.spec.luau")).toBe(nil)
 			t.expect(commandsOf(records, "tests/d.spec.luau")).toEqual({ "status" })
+			t.expect(commandsOf(records, "tests/e.spec.luau")).toEqual({ "list" })
 			for _, s in { "tests/a.spec.luau", "tests/b.spec.luau", "tests/d.spec.luau" } do
 				t.expect(string.match(records[s].key, "^%x+$") ~= nil and #records[s].key == 64).toBe(true)
 			end
 		end
 	)
+
+	it("a leftover temporary file and a stray name never reach the record, and are removed", function()
+		t.expect(commandsOf(record(), "tests/f.spec.luau")).toEqual({ "litter" })
+	end)
 
 	it("no trace directory is left behind", function()
 		local dir = `{home}/.cache/spec-trace`
@@ -139,6 +190,22 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		t.expect(edited["tests/d.spec.luau"].key ~= before["tests/d.spec.luau"].key).toBe(true)
 		t.expect(edited["tests/a.spec.luau"].key).toBe(before["tests/a.spec.luau"].key)
 		t.expect(edited["tests/b.spec.luau"].key).toBe(before["tests/b.spec.luau"].key)
+	end)
+
+	it("editing the launching tooling (the fixture's zn) changes every key", function()
+		local before = record()
+		write("zn", "#!/usr/bin/env bash\n# the fixture's launcher: part of every key, edited\n")
+		run({ "--jobs", "2" })
+		local after = record()
+		for _, s in { "tests/a.spec.luau", "tests/b.spec.luau", "tests/d.spec.luau" } do
+			t.expect(after[s].key ~= before[s].key).toBe(true)
+		end
+	end)
+
+	it("a spec that runs other commands under the same key keeps the union", function()
+		write("e-commands.txt", "status\n")
+		run({ "--jobs", "2" })
+		t.expect(commandsOf(record(), "tests/e.spec.luau")).toEqual({ "list", "status" })
 	end)
 
 	it("a spec that fails keeps the line an earlier passing run wrote", function()
@@ -165,22 +232,15 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 	end)
 
 	it("an inherited ZN_SPEC_TRACE directory also receives the commands, in either path", function()
-		local outer = `{base}/.cache/outer`
-		if fs.isDir(outer) then
-			fs.removeDir(outer)
-		end
-		fs.writeDir(outer)
+		local outer = freshOuter("outer")
 		t.expect((run({ "--jobs", "2" }, outer))).toBe(true)
 		local names = fs.readDir(outer)
 		table.sort(names)
-		t.expect(names).toEqual({ "find", "status", "worktree" })
-		-- the new record holds a's new command, and the inherited directory took nothing away from it
+		t.expect(names)
+			.toEqual({ ".list.pickman-tmp.1.abcdef", "Foo", "find", "litter", "status", "worktree" })
+		-- the new record holds a's new command (a new key: its text changed), and the inherited directory took nothing
 		t.expect(commandsOf(record(), "tests/a.spec.luau")).toEqual({ "worktree" })
-		local inProcess = `{base}/.cache/outer-one`
-		if fs.isDir(inProcess) then
-			fs.removeDir(inProcess)
-		end
-		fs.writeDir(inProcess)
+		local inProcess = freshOuter("outer-one")
 		t.expect((run({ "--jobs", "1", "tests/c.spec.luau" }, inProcess))).toBe(true)
 		t.expect(fs.readDir(inProcess)).toEqual({ "find" })
 	end)
@@ -192,10 +252,36 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		t.expect((run({ "--jobs", "2" }))).toBe(true)
 		local records = record()
 		t.expect(records["tests/b.spec.luau"]).toBe(nil)
+		t.expect(records["tests/gone.spec.luau"]).toBe(nil)
 		t.expect(commandsOf(records, "tests/d.spec.luau")).toEqual({ "status" })
 	end)
 
 	it("cleans up", function()
 		fs.removeDir(base)
+	end)
+
+	it("on the real tree, z-nile/recordkey keys every spec of every home, read only", function()
+		local listed = process.exec("git", { "ls-files", "*.spec.luau" }, { cwd = root })
+		t.expect(listed.ok).toBe(true)
+		local specs: { string } = {}
+		for line in string.gmatch(listed.stdout, "[^\n]+") do
+			if string.match(line, "^[^/]+/tests/") then
+				table.insert(specs, line)
+			end
+		end
+		t.expect(#specs > 300).toBe(true)
+		local argv = { "run", "z-nile/recordkey", "--" }
+		for _, s in specs do
+			table.insert(argv, s)
+		end
+		local r = process.exec("lune", argv, { cwd = root })
+		t.expect(r.ok).toBe(true)
+		local keyed = 0
+		for line in string.gmatch(r.stdout, "[^\n]+") do
+			local s, key = string.match(line, "^(.-)\t(%x+)$")
+			t.expect(s ~= nil and #(key :: string) == 64).toBe(true)
+			keyed += 1
+		end
+		t.expect(keyed).toBe(#specs)
 	end)
 end)

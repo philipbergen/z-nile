@@ -92,6 +92,94 @@ return t.spec("c0180 the engine is split by command", function(it)
 		t.expect(core).toEqual({ "engine/cli.luau", MAIN, "lib/sh.luau" })
 	end)
 
+	it("no command module is named usage, the trace's name for the usage path", function()
+		t.expect(fs.isFile(`{CMD}usage.luau`)).toBe(false)
+	end)
+
+	it("outside main.luau only raft-plan requires command modules: exactly fold and new", function()
+		for _, file in engineFiles() do
+			local cmds: { string } = {}
+			for _, dep in (g.deps[file] or {}) :: { string } do
+				if string.sub(dep, 1, #CMD) == CMD then
+					table.insert(cmds, dep)
+				end
+			end
+			table.sort(cmds)
+			if file == `{CMD}raft-plan.luau` then
+				t.expect(cmds).toEqual({ `{CMD}fold.luau`, `{CMD}new.luau` })
+			elseif file ~= MAIN then
+				t.expect(cmds).toEqual({})
+			end
+		end
+	end)
+
+	it(
+		"the split narrows: a module every command reaches is the core or one the engine had before the split",
+		function()
+			local common: { [string]: boolean }? = nil
+			for _, name in commandFiles() do
+				local seen: { [string]: boolean } = {}
+				local stack = { `{CMD}{name}.luau` }
+				while #stack > 0 do
+					local file = table.remove(stack) :: string
+					if not seen[file] then
+						seen[file] = true
+						for _, dep in (g.deps[file] or {}) :: { string } do
+							table.insert(stack, dep)
+						end
+					end
+				end
+				if common == nil then
+					common = seen
+				else
+					for file in common :: { [string]: boolean } do
+						if not seen[file] then
+							(common :: { [string]: boolean })[file] = nil
+						end
+					end
+				end
+			end
+			-- the engine's modules before the split (a fixed list): a new module every command needs would undo the split
+			local before: { [string]: boolean } = { ["engine/cli.luau"] = true, ["lib/sh.luau"] = true }
+			for _, m in
+				{
+					"audit",
+					"board",
+					"chart",
+					"claims",
+					"compact",
+					"gate",
+					"history",
+					"ids",
+					"ledger",
+					"lessons",
+					"paths",
+					"projects",
+					"publish",
+					"raftplan",
+					"skills",
+					"spend",
+					"stats",
+					"status",
+					"store",
+					"trail",
+				}
+			do
+				before[`engine/{m}.luau`] = true
+			end
+			t.expect(common ~= nil).toBe(true)
+			for file in common :: { [string]: boolean } do
+				t.expect(`{file}: {before[file] == true}`).toBe(`{file}: true`)
+			end
+		end
+	)
+
+	it("no engine file requires a computed path", function()
+		for _, file in g.dynamic do
+			t.expect(string.sub(file, 1, 7) ~= "engine/").toBe(true)
+		end
+	end)
+
 	it("the engine's requires form no cycle", function()
 		local state: { [string]: string } = {}
 		local cycle: string? = nil
