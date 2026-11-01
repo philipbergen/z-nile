@@ -155,6 +155,8 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		write("z-nile/tests/c.spec.luau", spec({ "find" }))
 		t.expect((run({ "--jobs", "2" }))).toBe(true)
 		write("z-nile/tests/a.spec.luau", spec({ "worktree" }))
+		-- a line no multi-file full run would keep (its spec is gone): any rewrite of the record changes its bytes
+		fs.writeFile(RECORD, fs.readFile(RECORD) .. `tests/gone.spec.luau\t{string.rep("a", 64)}\tlist\n`)
 		local before = fs.readFile(RECORD)
 		t.expect((run({ "--jobs", "1" }))).toBe(true)
 		t.expect(fs.readFile(RECORD)).toBe(before)

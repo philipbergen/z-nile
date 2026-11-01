@@ -114,8 +114,8 @@ return t.spec("c0180 command record", function(it)
 			["tests/c.spec.luau"] = { key = KEY_B, commands = {} },
 			["tests/gone.spec.luau"] = { key = KEY_A, commands = { "find" } },
 		})
-		local keep =
-			{ ["tests/a.spec.luau"] = true, ["tests/b.spec.luau"] = true, ["tests/c.spec.luau"] = true }
+		-- keep drops old entries only: a new entry stays even where keep lacks it
+		local keep = { ["tests/a.spec.luau"] = true, ["tests/b.spec.luau"] = true }
 		t.expect(cr.merge(old, new, keep)).toEqual({
 			["tests/a.spec.luau"] = { key = KEY_B, commands = { "status" } },
 			["tests/b.spec.luau"] = { key = KEY_A, commands = { "list" } },

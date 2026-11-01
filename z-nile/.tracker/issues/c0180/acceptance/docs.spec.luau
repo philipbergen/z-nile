@@ -55,6 +55,16 @@ return t.spec("c0180 the skills state selection by command", function(it)
 			.toBe(false)
 	end)
 
+	it("zz-arch: rule 4 names the command modules as the CLI that reads and writes", function()
+		t.expect(
+			has(
+				ARCH,
+				"one `load` function, or the engine's CLI (`main.luau` and the command modules in `engine/cmd/` with the shared helpers beside them), does the reading and writing"
+			)
+		).toBe(true)
+		t.expect(has(ARCH, "one `load` function, or `main.luau`, does the reading and writing")).toBe(false)
+	end)
+
 	it("zz-rules: the busy row names FREEZES where it now lives", function()
 		t.expect(has(RULES, "(`FREEZES` in `z-nile/engine/cmd/busy.luau`)")).toBe(true)
 		t.expect(has(RULES, "(`FREEZES` in `z-nile/engine/main.luau`)")).toBe(false)
