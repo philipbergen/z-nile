@@ -2,7 +2,7 @@
 title: A promise made for another prep quotes that prep's own documents
 when: design
 tags: [coordination, dependencies, review]
-check: Does every rule this design says another issue will follow ("f0146 keeps Y for the pick", "f0110 lands first") appear in that issue's current documents or specs, read from its prep worktree if it is in flight, and is any disagreement put to the user or to that prep before the design relies on it? And has `git worktree list` been rerun this round, so that every prep touching the Touched modules (not only those named in earlier rounds) is quoted with its current status? When this issue changes a number another prep quotes (a colour, a size), is it sent to that prep in the same round, the sending recorded, and the worktrees grepped for the old value?
+check: Does every rule this design says another issue will follow ("f0146 keeps Y for the pick", "f0110 lands first") appear in that issue's current documents or specs, read from its prep worktree if it is in flight, and is any disagreement put to the user or to that prep before the design relies on it? And has `git worktree list` been rerun this round, so that every prep touching the Touched modules (not only those named in earlier rounds) is quoted with its current status? When this issue changes a number another prep quotes (a colour, a size), is it sent to that prep in the same round, the sending recorded, and the worktrees grepped for the old value? And has every in-flight prep's sequestered specs (each `.worktree/prep-*`'s `.tracker/issues/*/acceptance`) been searched for the API this issue changes or removes, since such a spec is an override the day it lands?
 ---
 An issue in flight elsewhere may already have settled the point differently. A design that assumes it will follow this one's plan writes a promise nobody keeps.
 
@@ -15,3 +15,5 @@ f0126 design review 007 F2, F3: f0146's documents still recorded neither the Y r
 f0126 design review 012 F2: the user's brighter gold (255, 215, 0) left f0109.md quoting 255, 191, 0 and Inky at 45.4.
 
 c0159 design review 002 F1: a chore wrote "f0158 must not spell it so" in its own Existing work only; f0158's documents, the ones its executor reads, said the opposite (its review called that spelling correct). A constraint one prep puts on another goes into the other item's own document, as a dated decision line, in the same round, or to the user when they disagree.
+
+d0149 design review 001 F1, F9: c0155's in-flight `narrowed.spec` runs f0110's buttons case through `Touch.snapRect`, and f0147's in-flight `hud.spec` reads `Touch.buttons(l).snap`; d0149 removes both, and its Overrides searched only `tests/acceptance` on main.
