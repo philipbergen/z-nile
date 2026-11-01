@@ -167,11 +167,11 @@ return t.spec("c0136 tracker lessons --unattributed", function(it)
 		function()
 			local dir = `{f.base}/dispatch-state` -- outside the fixture's checkout, as a dispatcher's state folder is
 			fs.writeDir(dir)
-			local function write(name: string, lines: string): string
+			local function write(name: string, body: string): string
 				local path = `{dir}/{name}`
 				fs.writeFile(
 					path,
-					`# Review 001\n\n### F1 [low] a claim\nEvidence: x\n{lines}\nVerdict: changes\n`
+					`# Review 001\n\n### F1 [low] a claim\nEvidence: x\n{body}\nVerdict: changes\n`
 				)
 				return path
 			end
