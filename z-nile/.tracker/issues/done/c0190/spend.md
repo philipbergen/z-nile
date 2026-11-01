@@ -21,6 +21,7 @@
 | 17 | 2026-11-01 18:29 | R0067: review-001 | 0 | 0 | 4.0 | focus | code-review |  |
 | 18 | 2026-11-01 18:30 | R0067: refute-001, harvest, c0190 quote source | 2 | 0 | 8.0 | focus | code-review |  |
 | 19 | 2026-11-01 18:39 | tracker: done R0067 | 0 | 0 | 8.6 | raft | deliver |  |
+| 20 | 2026-11-01 18:44 | deliver | 0 | 0 | 10.0 | spend | deliver |  |
 
-**Total:** +601 / -6 lines, 490.6 agent-minutes, 955815 tokens over 19 records
-<!-- totals: added=601 removed=6 minutes=490.6 records=19 tokens=955815 -->
+**Total:** +601 / -6 lines, 500.6 agent-minutes, 955815 tokens over 20 records
+<!-- totals: added=601 removed=6 minutes=500.6 records=20 tokens=955815 -->
