@@ -14,3 +14,4 @@
 - design-review-003 F3: z-design/restated-rules-move-together
 - design-review-004 F1: z-design/decided-guesses-rewrite-their-body
 - design-review-004 F2: z-design/new-rules-migrate-existing-work
+- note design-refute-004 carry-over from c0174 design-review-005 F1: z-design/decided-guesses-rewrite-their-body, z-design/exact-checks-compare-against-the-merge-base
