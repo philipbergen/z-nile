@@ -15,6 +15,7 @@
 | 11 | 2026-11-01 12:03 | R0064: review-001 | 0 | 0 | 13.0 | focus | code-review | 148322 |
 | 12 | 2026-11-01 12:04 | R0064: refute-001, c0183 verification log, harvest | 0 | 0 | 6.0 | focus | code-review |  |
 | 13 | 2026-11-01 12:14 | tracker: done R0064 | 0 | 0 | 10.1 | raft | deliver |  |
+| 14 | 2026-11-01 12:19 | deliver | 0 | 0 | 12.0 | spend | deliver |  |
 
-**Total:** +722 / -39 lines, 292.1 agent-minutes, 148322 tokens over 13 records
-<!-- totals: added=722 removed=39 minutes=292.1 records=13 tokens=148322 -->
+**Total:** +722 / -39 lines, 304.1 agent-minutes, 148322 tokens over 14 records
+<!-- totals: added=722 removed=39 minutes=304.1 records=14 tokens=148322 -->
