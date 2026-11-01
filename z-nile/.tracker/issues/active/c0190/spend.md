@@ -17,6 +17,7 @@
 | 13 | 2026-11-01 14:33 | design-refute-005 | 0 | 0 | 35.0 | spend | design-review |  |
 | 14 | 2026-11-01 16:51 | design-review-006 | 0 | 0 | 25.0 | spend | design-review | 137643 |
 | 15 | 2026-11-01 17:48 | prep | 599 | 6 | 120.0 | spend | prep |  |
+| 16 | 2026-11-01 18:24 | c0190: the 27 step-2 issues captured (land d7714681) | 0 | 0 | 30.0 | focus | build |  |
 
-**Total:** +599 / -6 lines, 440.0 agent-minutes, 955815 tokens over 15 records
-<!-- totals: added=599 removed=6 minutes=440.0 records=15 tokens=955815 -->
+**Total:** +599 / -6 lines, 470.0 agent-minutes, 955815 tokens over 16 records
+<!-- totals: added=599 removed=6 minutes=470.0 records=16 tokens=955815 -->
