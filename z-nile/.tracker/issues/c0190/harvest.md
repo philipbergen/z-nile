@@ -8,3 +8,12 @@
 - design-review-001 F8: one-off: the fill script never wrote the title, so titles were the slug's words; fill now writes `title:` and the heading, and AC6's digest covers the title
 - design-review-001 F9: one-off: create trusted an ignored ids file; it now looks each issue up by slug in its project's root
 - design-review-001 F10: one-off: the batch script skipped z-ticket step 6's capture spend; it now has a `spend` command, run after land
+- design-review-002 F1: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-002 F2: z-ticket/split-designs-name-each-owner
+- design-review-002 F3: z-design/pin-text-that-lands-outside-the-pr
+- design-review-002 F4: z-ticket/split-designs-name-each-owner
+- design-review-002 F5: z-ticket/split-designs-name-each-owner
+- design-review-002 F6: one-off: a game issue was told to move another project's code; the move now goes through an arcade issue and a pickman chore that S2's prep captures
+- design-review-002 F7: zz-test/specs-pin-only-their-own-project
+- design-review-002 F8: one-off: fill's "prep began" test read design: only; it now also requires status: new-
+- design-review-002 F9: one-off: AC4 missed one of capture's three markers and docof matched any .md in an item folder; both fixed
