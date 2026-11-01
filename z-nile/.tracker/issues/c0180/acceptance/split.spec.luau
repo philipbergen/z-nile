@@ -1,8 +1,9 @@
 --!strict
 -- c0180: the engine is split by command, on the real tree. Every command is its own module in engine/cmd/, dispatched
--- by main.luau through a literal lazy require; only main.luau requires a command module, and nothing requires
--- main.luau; the dispatch core (main.luau's closure without the cmd/ edges) is main, cli and lib/sh, so a change
--- elsewhere in the engine never selects every command by itself; there is no require cycle. Runs from z-nile's home.
+-- by main.luau through a literal lazy require; only main.luau and command modules (raft-plan runs fold and new) require
+-- a command module, and nothing requires main.luau; the dispatch core (main.luau's closure without the cmd/ edges) is
+-- main, cli and lib/sh, so a change elsewhere in the engine never selects every command by itself; there is no require
+-- cycle. Runs from z-nile's home.
 local fs = require("@lune/fs")
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
@@ -51,7 +52,7 @@ return t.spec("c0180 the engine is split by command", function(it)
 	end)
 
 	it(
-		"no engine file defines a cmd handler, only main.luau requires a command module, nothing requires it",
+		"no engine file defines a cmd handler, only main.luau and command modules require a command module, nothing requires main.luau",
 		function()
 			local files = engineFiles()
 			t.expect(#files > #commandFiles()).toBe(true)
@@ -62,7 +63,7 @@ return t.spec("c0180 the engine is split by command", function(it)
 				for _, dep in (g.deps[file] or {}) :: { string } do
 					t.expect(dep ~= MAIN).toBe(true)
 					if string.sub(dep, 1, #CMD) == CMD then
-						t.expect(file).toBe(MAIN)
+						t.expect(file == MAIN or string.sub(file, 1, #CMD) == CMD).toBe(true)
 					end
 				end
 			end
