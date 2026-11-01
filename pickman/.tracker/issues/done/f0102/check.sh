@@ -13,7 +13,7 @@ check "AC1: eight sectors from the bearing, ties to the edge, each landing on it
 check "AC2: in-view ghosts listed on request; one glow per sector, lit by the nearest ghost" lune run tests/run -- "$A/glows.spec.luau"
 check "AC3: a glow's box hugs the edge, scales with its size and never covers the middle" lune run tests/run -- "$A/box.spec.luau"
 check "AC4: one ghost colour table, blue when frightened, white on a flash and for eyes" lune run tests/run -- "$A/colors.spec.luau"
-check "AC5: the danger HUD draws glows from Awareness and View, in the safe area under the HUD, with no arrows" lune run tests/run -- "$A/place.spec.luau"
+check "AC5: the danger HUD draws the danger directions from Awareness (the glows, or f0158's ring), on a screen of its own under the HUD, with no arrows (narrowed by c0159)" lune run tests/run -- "$A/place.spec.luau"
 check "AC6: Logic stays engine-free and every dependency is declared" lune run tests/run -- tests/meta/architecture.spec.luau
 
 finish

@@ -3,6 +3,20 @@
 | # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-10-27 05:36 | capture amended (R0056 code review 003 F2) | 0 | 0 | 10.0 | spend | capture |  |
+| 2 | 2026-10-31 23:53 | design-review-001 | 0 | 0 | 25.0 | spend | design-review |  |
+| 3 | 2026-10-31 23:55 | design-refute-001 | 0 | 0 | 15.0 | spend | design-review |  |
+| 4 | 2026-11-01 00:06 | design-review-002 | 0 | 0 | 10.0 | spend | design-review | 133303 |
+| 5 | 2026-11-01 00:08 | design-refute-002 | 0 | 0 | 15.0 | spend | design-review |  |
+| 6 | 2026-11-01 00:21 | design-review-003 | 0 | 0 | 13.0 | spend | design-review |  |
+| 7 | 2026-11-01 00:28 | design-refute-003 | 0 | 0 | 25.0 | spend | design-review |  |
+| 8 | 2026-11-01 00:39 | design-review-004 | 0 | 0 | 10.0 | spend | design-review | 122747 |
+| 9 | 2026-11-01 11:07 | design-refute-004 | 0 | 0 | 30.0 | spend | design-review |  |
+| 10 | 2026-11-01 11:19 | design-review-005 | 0 | 0 | 8.0 | spend | design-review |  |
+| 11 | 2026-11-01 11:21 | design-refute-005 | 0 | 0 | 15.0 | spend | design-review |  |
+| 12 | 2026-11-01 11:23 | prep | 391 | 1 | 80.0 | spend | prep |  |
+| 13 | 2026-11-01 16:34 | design-review-001 | 0 | 0 | 3.0 | spend+proportional | design-review |  |
+| 14 | 2026-11-01 16:34 | design-review-001 tokens; the 12 min row was the reviewer's own estimate, measured 2.5 min | 0 | 0 | 0.0 | spend+proportional | design-review | 19644 |
+| 15 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
 
-**Total:** +0 / -0 lines, 10.0 agent-minutes, 0 tokens over 1 records
-<!-- totals: added=0 removed=0 minutes=10.0 records=1 tokens=0 -->
+**Total:** +391 / -1 lines, 260.3 agent-minutes, 275694 tokens over 15 records
+<!-- totals: added=391 removed=1 minutes=260.3 records=15 tokens=275694 -->

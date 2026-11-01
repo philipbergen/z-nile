@@ -1,0 +1,5 @@
+# c0170 design refute 004
+
+- F1: fixed: a unit spec may load nothing outside pickman/ (graph.build keeps the leading `../`), directly or through a test file; `../pickman/tests/lib/plain.luau` and `../z-nile/tests/lib/renamed.luau` are both caught. consequences: a tiers.spec case (including t's own outside require, which ends at `tests/lib/` and is not the spec's); mutant V1, run, killed.
+- F2: decided as the review recommended (forbid): the walk now lists every file it reaches, and each is judged by the rule for a direct load, so a helper spec's fixture may not reach a feature or another tier's module. consequences: messages "reaches, through another test file, …"; a tiers.spec case; mutant V2 (only `tests/lib/` and outside files listed), run, killed.
+- F3: fixed: E4 says 15; a helper may be a folder (`tests/lib/<helper>/init.luau`, any file in it counting as that helper), in tiers and in the meta case's helper set (and layout.spec's comparison). consequences: a tiers.spec case; mutants V3 (killed) and V4 (survives today, reasoned: no folder helper exists; layout's comparison fails once one is added); the unused `s` table round 3 noted is gone in the rewrite.
