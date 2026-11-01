@@ -1,0 +1,8 @@
+# Answers to design-review-005 (c0184)
+
+Round 5 is the final round and holds a high, so this goes to the user whatever is answered here (z-design step 5.4). The answers are made so that the user rules on a design without the known defects.
+
+- F1: fixed: the c0120 docs digest in c0172's `narrowed.spec` is recomputed by `experiments/rehash.py` as the last step (Implementation step 3), and narrowed.spec is in Touched modules; c0115 `layout.spec` takes the link's folder from `skills.folders`. c0114 `docs.spec`, c0115 `layout`, `docs`, `absence` and c0172 `narrowed` are in AC9, and the `Overrides:` line names ten cases and the one digest. The "none is in narrowed.spec" claim of round 4 is corrected in the document (its table writes item and file as separate strings). Run on the prototype: 39 of 39 for narrowed, c0115 layout, docs, absence, readme, and c0114 and c0120 docs; red before the fix (E17).
+- F2: fixed where it was a hand list this chore can edit: c0115 `docs.spec` (the lessons paragraphs) and `absence.spec` (`LIVE_DIRS`, and every home's promoted specs) now read the registry. Not editable here: c0117's sequestered `wrapper.spec` (an active raft's), which Existing work names, with the second-to-land merge of the `readme.spec` edits both rafts make. The search the design relies on is now zz-review item 4's, by path and by basename for each Touched path, then every hit that reads the real tree.
+- F3: fixed: the Checklist says ten cases and one digest.
+- F4: fixed: homes.spec has a case for a map with two deps blocks and one never closed (prefix and path pinned); mutants (no unclosed check, no doubled check) killed.
