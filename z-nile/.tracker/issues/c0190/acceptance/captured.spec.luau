@@ -1,7 +1,7 @@
 --!strict
 -- c0190: c0183's step-2 issues are captured in their projects. Each listed issue exists exactly once in its project's
 -- root (backlog, active/ or done/), with its type, found by its slug, never by its id (a compaction or a renumber
--- changes ids, never slugs); its depends_on holds at least the issues the list implies (prep may add more); and its
+-- changes ids, never slugs); its depends_on holds at least the dependencies the capture names (prep may add more); and its
 -- Problem quotes the user and points at its section of the project's game-design.md, or at the arcade's
 -- architecture.md. This spec is promoted and runs in every later gate, so it pins only what a later prep keeps: the
 -- issue, its type and project, the captured dependencies and the captured Problem's quote and pointer (z-design:
@@ -18,7 +18,9 @@ type Entry = { key: string, project: string, prefix: string, slug: string, deps:
 
 local GAME = "game-design.md"
 local ARCH = "arcade/.tracker/architecture.md"
--- the issues the step-2 list names, in its order; deps name a key of this list or a pickman slug ("pickman:<slug>")
+-- the issues the step-2 list names, in its order. deps holds only the dependencies the capture names (c0190's Problem:
+-- each pickman switch chore on its arcade feature, the per-game scores issues on A1 and A3, P5 on Z3), which every
+-- later design keeps; the ones prep added (c0184, c0185, the cards and views) are check.sh's AC5, at done only.
 local LIST: { Entry } = {
 	{ key = "A1", project = "arcade", prefix = "f", slug = "hiscores-with-revives", deps = {} },
 	{ key = "K1", project = "pickman", prefix = "c", slug = "switch-to-arcade-hiscores", deps = { "A1" } },
@@ -30,46 +32,46 @@ local LIST: { Entry } = {
 		project = "pickman",
 		prefix = "c",
 		slug = "switch-to-arcade-paid-play",
-		deps = { "A3", "pickman:paid-play-and-continues", "pickman:boards-show-revives" },
+		deps = { "A3" },
 	},
 	{ key = "A4", project = "arcade", prefix = "f", slug = "input-and-look-cores", deps = {} },
 	{ key = "K4", project = "pickman", prefix = "c", slug = "switch-to-arcade-input-cores", deps = { "A4" } },
-	{ key = "P1", project = "portal", prefix = "f", slug = "game-carousel", deps = { "A3" } },
-	{ key = "P2", project = "portal", prefix = "f", slug = "boards-per-game", deps = { "A1", "P1" } },
-	{ key = "P3", project = "portal", prefix = "f", slug = "free-game-timer", deps = { "A3", "P1" } },
-	{ key = "P4", project = "portal", prefix = "f", slug = "play-buttons", deps = { "A2", "A3", "P1" } },
-	{ key = "P5", project = "portal", prefix = "f", slug = "portal-start-place", deps = { "Z3", "P4" } },
+	{ key = "P1", project = "portal", prefix = "f", slug = "game-carousel", deps = {} },
+	{ key = "P2", project = "portal", prefix = "f", slug = "boards-per-game", deps = {} },
+	{ key = "P3", project = "portal", prefix = "f", slug = "free-game-timer", deps = {} },
+	{ key = "P4", project = "portal", prefix = "f", slug = "play-buttons", deps = {} },
+	{ key = "P5", project = "portal", prefix = "f", slug = "portal-start-place", deps = { "Z3" } },
 	{ key = "Z3", project = "portal", prefix = "c", slug = "n-place-deploy", deps = {} },
 	{ key = "S1", project = "snake", prefix = "f", slug = "arena-maps-growth", deps = {} },
-	{ key = "S2", project = "snake", prefix = "f", slug = "shared-snake-arena", deps = { "S1" } },
-	{ key = "S3", project = "snake", prefix = "f", slug = "snake-first-person-view", deps = { "S1" } },
-	{ key = "S4", project = "snake", prefix = "f", slug = "boost-golden-apples-crumbs", deps = { "S1" } },
+	{ key = "S2", project = "snake", prefix = "f", slug = "shared-snake-arena", deps = {} },
+	{ key = "S3", project = "snake", prefix = "f", slug = "snake-first-person-view", deps = {} },
+	{ key = "S4", project = "snake", prefix = "f", slug = "boost-golden-apples-crumbs", deps = {} },
 	{
 		key = "S5",
 		project = "snake",
 		prefix = "f",
 		slug = "snake-scores-and-revives",
-		deps = { "S1", "A1", "A2", "A3" },
+		deps = { "A1", "A3" },
 	},
 	{ key = "I1", project = "invaders", prefix = "f", slug = "invaders-classic-rules", deps = {} },
-	{ key = "I2", project = "invaders", prefix = "f", slug = "invaders-two-players", deps = { "I1" } },
-	{ key = "I3", project = "invaders", prefix = "f", slug = "invaders-cannon-view", deps = { "I1" } },
+	{ key = "I2", project = "invaders", prefix = "f", slug = "invaders-two-players", deps = {} },
+	{ key = "I3", project = "invaders", prefix = "f", slug = "invaders-cannon-view", deps = {} },
 	{
 		key = "I4",
 		project = "invaders",
 		prefix = "f",
 		slug = "invaders-scores-and-revives",
-		deps = { "I1", "A1", "A2", "A3" },
+		deps = { "A1", "A3" },
 	},
 	{ key = "T1", project = "asteroids", prefix = "f", slug = "asteroids-classic-rules", deps = {} },
-	{ key = "T2", project = "asteroids", prefix = "f", slug = "asteroids-two-players", deps = { "T1" } },
-	{ key = "T3", project = "asteroids", prefix = "f", slug = "asteroids-cockpit-view", deps = { "T1" } },
+	{ key = "T2", project = "asteroids", prefix = "f", slug = "asteroids-two-players", deps = {} },
+	{ key = "T3", project = "asteroids", prefix = "f", slug = "asteroids-cockpit-view", deps = {} },
 	{
 		key = "T4",
 		project = "asteroids",
 		prefix = "f",
 		slug = "asteroids-scores-and-revives",
-		deps = { "T1", "A1", "A2", "A3" },
+		deps = { "A1", "A3" },
 	},
 }
 
@@ -140,7 +142,7 @@ return t.spec("c0190 the arcade's step-2 issues are captured", function(it)
 		end
 	end)
 
-	it("AC2: each issue's depends_on holds the issues the list implies", function()
+	it("AC2: each issue's depends_on holds the dependencies the capture names", function()
 		local reg = registry()
 		local byKey: { [string]: Entry } = {}
 		for _, e in LIST do
@@ -154,10 +156,7 @@ return t.spec("c0190 the arcade's step-2 issues are captured", function(it)
 				have[id] = true
 			end
 			for _, d in e.deps do
-				local slug = string.match(d, "^pickman:(.+)$")
-				local dep = if slug
-					then one(reg, "pickman", slug, d)
-					else one(reg, byKey[d].project, byKey[d].slug, d)
+				local dep = one(reg, byKey[d].project, byKey[d].slug, d)
 				if not have[dep.id] then
 					table.insert(wrong, `{e.key} ({f.id}) does not depend on {d} ({dep.id})`)
 				end
