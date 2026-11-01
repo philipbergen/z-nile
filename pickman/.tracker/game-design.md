@@ -19,6 +19,7 @@ This is the source of truth for product decisions. Every raft design must agree 
 | Platforms | Desktop (keyboard and mouse), mobile (touch) and gamepad: every input produces the same intents, and every feature supports keyboard, console and touch (f0146). |
 | Danger awareness (2026-10-01) | **A minimap/radar and edge indicators** show where ghosts are in first person. The indicators give a sense of distance, not just direction: bigger and brighter as the ghost gets closer (R0010, f0033). Audio and a proximity vignette were not chosen. |
 | Slower ghosts (2026-10-01) | Ghosts may be slower than the classic tables, through **one tuning factor** (`Levels.GHOST_TUNING`) on the hunting and frightened ghost speeds, not on eyes. It ships at the classic 1 until the user gives the factor, after a Beta playtest (R0010, f0021). |
+| Inky's colour and the edible walls (f0109, 2026-10-25) | Inky's body (and its glow) was `(0, 255, 255)`, which the user sees as white; it is now lemon **(230, 255, 0)**. The maze walls (and the danger radar's) are green **(14, 64, 14)** while the power timer runs, the blink and revived dangerous ghosts included, blue (33, 33, 222) otherwise, and white during the level-clear flash, which wins. f0126's gold marked walls stay gold while the walls are green. The shot bars and the touch FIRE button (f0110) keep the cyan Inky gave up. |
 
 ## Movement model: rail with free look
 **All durations and speeds in this document are game time** (30 ticks per game second); the game is played at half speed, so real time is twice as long (see *Game speed* below).
@@ -105,7 +106,6 @@ The user's words, while setting f0126's tuning: "After 10 picked walls new level
 - **The blaster's drop chance** (f0100): a number for `Blaster.DROP_PERCENT` (50 until then), after a Beta playtest.
 - **A shot grace at junctions** (R0035 prep): keep the shot from the server's tile (the (prep) default above), or add a short grace so a side shot pressed on a junction the player sees still goes up the side corridor (a later issue).
 - **The drop seed** (R0035 prep): keep seeding by the player's user id (a player's n-th eaten ghost rolls the same every game), or seed each session freshly in the server (which also varies the frightened ghosts' wander).
-- **Inky's colour** (f0109): Inky's body (and, with R0035, its glow) is `(0, 255, 255)`, which the user sees as white; a new colour is wanted but not chosen. The shot bars and the touch FIRE button (f0110) are that same cyan.
 - **The slower-ghosts factor** (f0021): a number for `Levels.GHOST_TUNING`, after a Beta playtest of the classic tables with the radar and the edge indicators.
 
 ## Roadmap (single-type rafts; order a1 → a2 → b → c → c2 → d → e, with f any time after a2)
