@@ -15,7 +15,7 @@ check "AC2: both whole-file pins take the rule from the shared module, carry no 
 	lune run "$A/consumers.luau" -- "$ZN_ROOT"
 # the pins are pickman's specs and read pickman's files from its home (the pattern c0172's AC4 uses)
 check "AC3: c0103's narrowed.spec and c0128's golden.spec pass on the pinned files as they are, their in-memory mutant cases (a comment join, a deleted assertion) and line-ending cases included (a regression check: green before and after)" \
-	bash -c 'cd "$ZN_ROOT/pickman" && lune run tests/run -- tests/acceptance/c0103/narrowed.spec.luau tests/acceptance/c0128/golden.spec.luau'
+	bash -c 'cd "$ZN_ROOT/pickman" && lune run tests/run -- ../pickman/tests/acceptance/c0103/narrowed.spec.luau ../pickman/tests/acceptance/c0128/golden.spec.luau'
 check "AC4: the testing skill and the narrowing lesson name the shared rule" \
 	lune run tests/run -- "$A/docs.spec.luau"
 check "AC5: R0045's mutation record lists a join entry in each pinned file that turns one line break after a comment into a space and changes the pin, and refuses a folder that is not the pickman home of a separate clone, each of its four conditions on its own" \
