@@ -1,0 +1,140 @@
+diff --git a/pickman/tests/acceptance/c0106/narrow-adapter.spec.luau b/pickman/tests/acceptance/c0106/narrow-adapter.spec.luau
+index 1cc3ac44..c14bc793 100644
+--- a/pickman/tests/acceptance/c0106/narrow-adapter.spec.luau
++++ b/pickman/tests/acceptance/c0106/narrow-adapter.spec.luau
+@@ -134,6 +134,8 @@ local function adapterPasses(source: string): boolean
+ 	return passes(caseNamed(spec, ADAPTER_CASE))
+ end
+ 
++-- The fingerprint below is of adapter.spec as c0159 narrowed it (2026-10-31: its last case no longer requires
++-- Awareness.edgePoint, for f0158's danger ring); before that it was 732226448:2134.
+ local REGION_FROM = "\t\t\t-- the radarBox call may take"
+ local REGION_TO = "\t\t\tlocal function count("
+ 
+@@ -210,7 +212,7 @@ return t.spec("c0106 the narrowed d0105 adapter spec", function(it)
+ 
+ 	it("adapter.spec is exactly today's file outside the narrowed radarBox assertion", function()
+ 		local sum, len = fingerprint(fs.readFile(DIR .. "adapter.spec.luau"), REGION_FROM, REGION_TO)
+-		t.expect(sum .. ":" .. len).toBe("732226448:2134")
++		t.expect(sum .. ":" .. len).toBe("1671723699:2275")
+ 	end)
+ 
+ 	it("the adapter fingerprint ignores tracker ids, so a compaction does not move it", function()
+@@ -218,6 +220,6 @@ return t.spec("c0106 the narrowed d0105 adapter spec", function(it)
+ 		local renumbered = string.gsub(text, "d0105", "d0123")
+ 		t.expect(renumbered ~= text).toBe(true)
+ 		local sum, len = fingerprint(renumbered, REGION_FROM, REGION_TO)
+-		t.expect(sum .. ":" .. len).toBe("732226448:2134")
++		t.expect(sum .. ":" .. len).toBe("1671723699:2275")
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/d0105/adapter.spec.luau b/pickman/tests/acceptance/d0105/adapter.spec.luau
+index f8275618..3294bf80 100644
+--- a/pickman/tests/acceptance/d0105/adapter.spec.luau
++++ b/pickman/tests/acceptance/d0105/adapter.spec.luau
+@@ -1,6 +1,8 @@
+ --!strict
+ -- d0105 AC3: DangerHud places the radar from Hud.radarBox of the current screen on every render step,
+ -- before a snapshot is required. It keeps the default anchor and does not turn a CoreGui off.
++-- Narrowed by c0159 (2026-10-31): the last case no longer requires Awareness.edgePoint, because f0158's danger ring
++-- replaces the edge glows (decided with the user, 2026-10-26); it still requires the radar and the indicators.
+ local place = require("@tests/lib/place")
+ local t = require("@tests/lib/t")
+ 
+@@ -75,6 +77,5 @@ return t.spec("d0105 danger hud corner", function(it)
+ 		local src = source()
+ 		t.expect(string.find(src, "Awareness.radar(", 1, true) ~= nil).toBe(true)
+ 		t.expect(string.find(src, "Awareness.indicators(", 1, true) ~= nil).toBe(true)
+-		t.expect(string.find(src, "Awareness.edgePoint(", 1, true) ~= nil).toBe(true)
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/f0033/adapters.spec.luau b/pickman/tests/acceptance/f0033/adapters.spec.luau
+index fb1f21f2..e98e3703 100644
+--- a/pickman/tests/acceptance/f0033/adapters.spec.luau
++++ b/pickman/tests/acceptance/f0033/adapters.spec.luau
+@@ -1,6 +1,8 @@
+ --!strict
+ -- f0320: the danger HUD is a thin client adapter. All the geometry is Awareness; the adapter reads the
+ -- replicated snapshot and the camera's pose, draws what Awareness returns, and decides nothing.
++-- Narrowed by c0159 (2026-10-31): the second case no longer requires Awareness.edgePoint, because f0158's danger
++-- ring replaces the edge glows (decided with the user, 2026-10-26); it still requires the radar and the indicators.
+ local place = require("@tests/lib/place")
+ local t = require("@tests/lib/t")
+ 
+@@ -29,9 +31,9 @@ return t.spec("f0320 danger hud adapter", function(it)
+ 		t.expect(node.ClassName).toBe("ModuleScript")
+ 	end)
+ 
+-	it("it draws what Awareness computes: the radar, the indicators and the edge points", function()
++	it("it draws what Awareness computes: the radar and the indicators", function()
+ 		local src = source("DangerHud")
+-		for _, call in { "Awareness.radar(", "Awareness.indicators(", "Awareness.edgePoint(" } do
++		for _, call in { "Awareness.radar(", "Awareness.indicators(" } do
+ 			t.expect(string.find(src, call, 1, true) ~= nil).toBe(true)
+ 		end
+ 	end)
+diff --git a/pickman/tests/acceptance/f0102/place.spec.luau b/pickman/tests/acceptance/f0102/place.spec.luau
+index 7ed53cf0..415e4f30 100644
+--- a/pickman/tests/acceptance/f0102/place.spec.luau
++++ b/pickman/tests/acceptance/f0102/place.spec.luau
+@@ -3,6 +3,14 @@
+ -- the camera's field of view, the screen's aspect and inView, groups them with Awareness.glows, places each at
+ -- Awareness.edgePoint through Awareness.glowBox and colours it with View.ghostColor of that ghost. The glows live in
+ -- a ScreenGui of their own in the device's safe area, below the HUD. The ghost bodies use the same colours.
++-- Narrowed by c0159 (2026-10-31), because f0158's danger ring replaces the edge glows (decided with the user,
++-- 2026-10-26: "Replace edge glows"; its screen is the core-UI safe area, G8). No longer pinned: the calls to
++-- Awareness.glows, edgePoint and glowBox, a glow coloured with View.ghostColor of its ghost's name and flash (and
++-- so the names and flashes handed to Awareness), and the screen's ScreenInsets (f0158's own spec checks the drawn
++-- ring's). Still pinned: DangerHud draws the danger directions from Awareness (Awareness.glows or Awareness.ring),
++-- on a screen of its own under the radar, the Flow overlay and the HUD (its DisplayOrder rules), and colours
++-- nothing by position. As before, the screen case reads orders, not which screen draws what: dots drawn on the
++-- radar's screen, or one screen for both at -1, pass it; f0158's place.spec checks the drawn screens.
+ local place = require("@tests/lib/place")
+ local t = require("@tests/lib/t")
+ 
+@@ -35,13 +43,9 @@ return t.spec("f0102 glow adapters", function(it)
+ 		end
+ 	end)
+ 
+-	it("it draws the glows Awareness computes, where Awareness puts them, in View's colours", function()
++	it("it draws the danger directions Awareness computes: the edge glows, or f0158's ring", function()
+ 		local src = source("DangerHud")
+-		for _, call in
+-			{ "Awareness.glows(", "Awareness.edgePoint(", "Awareness.glowBox(", "View.ghostColor(" }
+-		do
+-			t.expect(has(src, call)).toBe(true)
+-		end
++		t.expect(has(src, "Awareness.glows(") or has(src, "Awareness.ring(")).toBe(true)
+ 	end)
+ 
+ 	it("the arrows are gone", function()
+@@ -51,12 +55,9 @@ return t.spec("f0102 glow adapters", function(it)
+ 	end)
+ 
+ 	it(
+-		"the glows have their own screen, in the device's safe area, under the radar, the Flow overlay and the HUD",
++		"the danger directions have their own screen, under the radar, the Flow overlay and the HUD",
+ 		function()
+ 			local src = source("DangerHud")
+-			-- the screen itself is set to the safe area (R0012 also reads DeviceSafeInsets in this file, for the radar)
+-			t.expect(string.find(src, "%.ScreenInsets%s*=%s*Enum%.ScreenInsets%.DeviceSafeInsets") ~= nil)
+-				.toBe(true)
+ 			local orders = {}
+ 			for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
+ 				table.insert(orders, tonumber(n) :: number)
+@@ -69,14 +70,9 @@ return t.spec("f0102 glow adapters", function(it)
+ 		end
+ 	)
+ 
+-	it("a glow is coloured from its own ghost's name and flash, not by position", function()
++	it("DangerHud colours nothing by position", function()
+ 		local src = source("DangerHud")
+-		t.expect(string.find(src, "View%.ghostColor%(%s*g%.name") ~= nil).toBe(true)
+-		t.expect(string.find(src, "g%.flash") ~= nil).toBe(true)
+ 		t.expect(string.find(src, "snap%.ghosts%[") == nil).toBe(true)
+-		-- the snapshot's names and flashes reach Awareness
+-		t.expect(string.find(src, "name%s*=%s*g%.name") ~= nil).toBe(true)
+-		t.expect(string.find(src, "flash%s*=%s*g%.flash") ~= nil).toBe(true)
+ 	end)
+ 
+ 	it("the HUD still does no geometry itself", function()

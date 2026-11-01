@@ -1,0 +1,5 @@
+# Refute 005: d0149 (design mode)
+
+- F1: fixed: Controls has one `step(fold)` that reads the controls first (letting every finger go when they moved), then folds, applies and reports the knobs; the touch event and the hold timer both go through it. adapters case "a re-layout with no touch before a still thumb's timer…" (the reviewer's probe); rows Y0 (the timer folds before reading the controls) and Y1 (the timer reads `buttons()` past the reset) run and killed; 75 of 75. consequences: none beyond the case and rows. Round 5 is final and had a high: this answer goes to the user with the design.
+- F2: fixed: docs.spec's whole-document absence scan runs only under `D0149_EXACT=1`, which AC5's check.sh line sets (as f0158 gates its exact overlaps); the positive needles always run.
+- F3: fixed: c0182's sentence reads "(the screen-pixel conversion, the HUD blocks, the radar's place, the ring's clearance of the HUD; the touch FIRE shot, PICK and boost go to d0149's own cases, as the choice above says)".
