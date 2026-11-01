@@ -180,10 +180,10 @@ index 8045d718..557eb8f2 100644
  print("[pickman] lobby client started")
 diff --git a/pickman/src/lobby/server/Bests.luau b/pickman/src/lobby/server/Bests.luau
 new file mode 100644
-index 00000000..4ac924fd
+index 00000000..182e38f7
 --- /dev/null
 +++ b/pickman/src/lobby/server/Bests.luau
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,68 @@
 +--!strict
 +-- Lobby server adapter (f0148): reads each player's best level into a player attribute (Best.ATTRIBUTE) for the
 +-- picker, and writes the level a player chose into their record before the teleport, where the game place claims it.
@@ -227,17 +227,28 @@ index 00000000..4ac924fd
 +	end
 +end
 +
-+-- The player's choice, written before the teleport (it yields); a failed write is not retried.
++Bests.CHOOSE_WAIT = 5 -- seconds the teleport waits for the write, well under Travel's cap (60 s)
++
++-- The player's choice, written before the teleport: waits (yields) for the write up to CHOOSE_WAIT seconds, then lets
++-- the teleport go; a write that lands later leaves its choice for the next claim. A failed write is not retried.
 +function Bests.choose(player: Player, requested: any)
 +	local s = open()
 +	if s == nil then
 +		return
 +	end
-+	pcall(function()
-+		s:UpdateAsync(tostring(player.UserId), function(raw: any): any
-+			return Best.choose(Best.decode(raw), requested)
++	local done = false
++	task.spawn(function()
++		pcall(function()
++			s:UpdateAsync(tostring(player.UserId), function(raw: any): any
++				return Best.choose(Best.decode(raw), requested)
++			end)
 +		end)
++		done = true
 +	end)
++	local waited = 0
++	while not done and waited < Bests.CHOOSE_WAIT do
++		waited += task.wait(0.1)
++	end
 +end
 +
 +return Bests

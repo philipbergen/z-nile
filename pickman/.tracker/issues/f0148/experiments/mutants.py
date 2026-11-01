@@ -62,6 +62,10 @@ MUTANTS = {
     "A14": ("src/server/Sessions.luau", "			for _, fn in made do\n				fn(player, s)\n			end", "", "adapters"),
     "S6": (L + "Game/init.luau", "g.score >= c.extraLifeScore * g.start then", "g.score >= c.extraLifeScore * g.level then", "session"),
     "S7": (L + "Game/init.luau", "= g.start, 0, g.config.lives, 0, false", "= g.level, 0, g.config.lives, 0, false", "session"),
+    "A15": ("src/server/Sessions.luau", "			if sessions[player] ~= nil or player.Parent == nil then", "			if sessions[player] ~= nil then", "adapters"),
+    "A16": ("src/server/Bests.luau", "	for _, player in Players:GetPlayers() do\n		task.spawn(claim, player)\n	end", "", "adapters"),
+    "A17": ("src/lobby/server/Bests.luau", "	while not done and waited < Bests.CHOOSE_WAIT do", "	while not done and waited < 100 do", "adapters"),
+    "A18": ("src/lobby/server/Bests.luau", "	while not done and waited < Bests.CHOOSE_WAIT do", "	while waited < Bests.CHOOSE_WAIT do", "adapters"),
     "A11": ("src/server/Bests.luau", "		starts[player] = if ok then start else 1", "		starts[player] = start", "adapters"),
 }
 

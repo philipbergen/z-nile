@@ -209,6 +209,27 @@ return t.spec("f0148 the server adapters", function(it)
 		end
 	)
 
+	it(
+		"the lobby's write waits at most Bests.CHOOSE_WAIT seconds, so a silent store never holds the teleport",
+		function()
+			local e = engine()
+			local mod = load(e, sourceOf(lobby, LOBBY_BESTS), "Bests")
+			mod.start()
+			local p = player(26, e.players)
+			e.stores.mode = "hang"
+			local before = e.clock.now
+			mod.choose(p, 2) -- returns: the teleport can go
+			t.expect(e.clock.now - before >= mod.CHOOSE_WAIT).toBe(true)
+			t.expect(e.clock.now - before < mod.CHOOSE_WAIT + 1).toBe(true)
+			t.expect(mod.CHOOSE_WAIT).toBe(5)
+			t.expect(mod.CHOOSE_WAIT < 60).toBe(true) -- under Travel's cap
+			e.stores.mode = "ok"
+			before = e.clock.now
+			mod.choose(p, 2) -- an answering store does not wait out the limit
+			t.expect(e.clock.now - before < 1).toBe(true)
+		end
+	)
+
 	-- the game place --------------------------------------------------------------------------------------------------
 
 	it("the game place claims each arriving player's chosen start once and clears it", function()
@@ -224,6 +245,17 @@ return t.spec("f0148 the server adapters", function(it)
 		t.expect(e.stores.data[Best.STORE]["31"]).toEqual({ best = 5 })
 		t.expect(mod.startOf(b)).toBe(1) -- a choice over the best is never played
 		t.expect(mod.startOf(c)).toBe(1) -- nothing stored
+	end)
+
+	it("the game place claims the players already in the server when it starts", function()
+		local e = engine()
+		e.stores.data[Best.STORE] = { ["37"] = { best = 4, next = 2 } }
+		local early = player(37, e.players)
+		table.insert(e.players.list, early)
+		local mod = load(e, sourceOf(gamePlace, GAME_BESTS), "Bests")
+		mod.start()
+		t.expect(mod.startOf(early)).toBe(2)
+		t.expect(e.stores.data[Best.STORE]["37"]).toEqual({ best = 4 })
 	end)
 
 	it(
