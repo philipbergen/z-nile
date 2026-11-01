@@ -64,7 +64,7 @@ local PINNED = {
 		"z-nile",
 		"c0114",
 		"gate-cover.spec.luau",
-		"16ca93e1df7a5f138a04eda4cbd31c1f755c15df2cf66f3058fcd3e0fc1f11ef",
+		"b95f71b3b4d4adf6da3853d16bf9bec906ff6f374ab6673d50a5c96f58bff948",
 	},
 	{
 		"z-nile",
@@ -72,12 +72,12 @@ local PINNED = {
 		"layout.spec.luau",
 		"455f35da75608dbc6818cd2ffc96f5a79e97c3fa5fef2c491aefaede866818d7",
 	},
-	{ "z-nile", "c0120", "ci.spec.luau", "d67676e90d2a6f23f7ca77ae225f168f11f5f8b5b5223c92f148457c865b5565" },
+	{ "z-nile", "c0120", "ci.spec.luau", "d2ddf12ce5287da6870f38a4e972bd93bfece9ed0a0c2a09581d05b9a1987892" },
 	{
 		"z-nile",
 		"c0120",
 		"docs.spec.luau",
-		"ed6221c0c4d2f6f5d815ad93361e0f2c163d9165847c6b0f807ca53e993242c1",
+		"a9c5f2a2c47d32b1aa5ad13300621b9ab941f81c13ff65c3c8284c0221d98c12",
 	},
 	{
 		"pickman",
@@ -95,7 +95,7 @@ local PINNED = {
 		"pickman",
 		"c0015",
 		"workflow.spec.luau",
-		"62e46f54027dab1ec70866abfb4fe21e4f5878ee1fc2ff119d83f93950b2509b",
+		"8107ba9fb712fad54191c941a1842833082f90e83684858f11a9b463b176fc8f",
 	},
 	{
 		"pickman",
