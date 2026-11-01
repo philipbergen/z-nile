@@ -1,0 +1,5 @@
+# Refute 004: d0149 (design mode)
+
+- F1: fixed: adapters cases "an old timer that fires while a second look finger is down leaves the second alone: a double tap hops twice" and "after focus loss or a re-layout, the old finger's timer leaves a new tap alone (ids are never reused)", on absolute clock values; rows X1 (the newest finger) and X2 (ids restart at focus loss) run and killed. consequences: none (the code was right; the cases now pin it).
+- F2: fixed: AC1 and AC3 (document and check.sh) describe the timer by finger id, not a tick; the clock-row is now C13 (the timer re-checks the clock), run and killed by the 1 ms-early case.
+- F3: fixed: c0182's choice is one rule (narrow where a rule survives; remove what cannot pass on both sides, naming d0149's case that takes it over; an emptied file goes with its `check.sh` line in a tracker PR before ready), its Problem and Solution agree with it, and the stub note moved to d0149's step 4. d0149's Overrides and AC6 note follow (35 files match AC6 today; it refuses fewer than 20).
