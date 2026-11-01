@@ -1,0 +1,65 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/fallbacks-name-the-modes-they-cover
+- design-review-001 F3: zz-test/new-commands-run-in-a-copy
+- design-review-001 F4: one-off: the capture exempts ./zn from the wrapper, not from every limit; no rule beyond F1's
+- design-review-001 F5: zz-arch/guard-no-is-explicit
+- design-review-001 F6: zz-arch/guard-no-is-explicit
+- design-review-001 F7: zz-test/refusals-tested-on-both-sides
+- design-review-001 F8: zz-arch/guard-no-is-explicit
+- design-review-001 F9: zz-test/stand-ins-answer-only-named-arguments, z-design/spec-design-correspondence
+- design-review-001 F10: zz-arch/children-need-a-lifeline
+- design-review-001 F11: z-design/new-rules-migrate-existing-work, zz-rules/exhaustive-lists-name-new-things, zz-review/lists-paste-their-search
+- design-review-001 F12: z-design/quote-other-preps-before-promising, zz-test/source-pins-name-what-the-design-names
+- design-review-001 F13: z-design/restated-rules-move-together
+- design-review-001 F14: zz-test/specs-set-host-markers-explicitly
+- design-review-001 F15: one-off: a decoy's life tied to wall-clock sleep; fixed by a release file, no general rule beyond zz-test's no-wall-clock rule
+- design-review-001 F16: one-off: the shim hides SIGXCPU; the evidence rule is specific to the runner
+- design-review-001 F17: z-design/instructions-runnable-where-they-run
+- design-review-001 F18: zz-arch/children-need-a-lifeline, zz-arch/read-paired-facts-at-one-moment
+- design-review-001 F19: one-off: a cached guard answer swallowing its message; no recurring shape yet
+- design-review-001 F20: z-design/fallbacks-name-the-modes-they-cover
+- design-review-001 F21: zz-test/refusals-tested-on-both-sides
+- design-review-002 F1: z-design/never-narrow-captured-scope, zz-arch/guard-no-is-explicit
+- design-review-002 F2: zz-test/stand-ins-answer-only-named-arguments, z-design/spec-design-correspondence
+- design-review-002 F3: z-design/accepted-risks-checked-and-decided
+- design-review-002 F4: zz-test/seed-every-enumerated-case
+- design-review-002 F5: z-design/instructions-runnable-where-they-run
+- design-review-002 F6: zz-arch/guard-no-is-explicit
+- design-review-002 F7: z-design/accepted-risks-checked-and-decided
+- design-review-002 F8: z-design/spec-design-correspondence
+- design-review-002 F9: z-design/never-narrow-captured-scope
+- design-review-002 F10: z-design/restated-rules-move-together
+- design-review-002 F11: z-design/quote-other-preps-before-promising
+- design-review-002 F12: one-off: a fixed work folder; fixed by a unique name
+- design-review-002 F13: zz-arch/children-need-a-lifeline
+- design-review-002 F14: z-design/spec-design-correspondence
+- design-review-003 F1: zz-arch/guards-decide-from-the-tools-resolution, zz-test/seed-every-enumerated-case
+- design-review-003 F2: z-design/never-narrow-captured-scope, z-design/accepted-risks-checked-and-decided
+- design-review-003 F3: zz-test/narrow-guard-allowances
+- design-review-003 F4: zz-arch/children-need-a-lifeline
+- design-review-003 F5: z-design/accepted-risks-checked-and-decided
+- design-review-003 F6: zz-test/source-pins-name-what-the-design-names
+- design-review-003 F7: zz-test/seed-every-enumerated-case
+- design-review-003 F8: zz-test/timing-margins-above-jitter
+- design-review-003 F9: zz-test/one-rule-one-function, z-design/restated-rules-move-together
+- design-review-004 F1: z-design/never-narrow-captured-scope, zz-arch/guard-no-is-explicit
+- design-review-004 F2: zz-test/seed-every-enumerated-case
+- design-review-004 F3: zz-test/seed-every-enumerated-case
+- design-review-004 F4: zz-test/count-calls-in-poll-loops
+- design-review-004 F5: zz-test/seed-every-enumerated-case
+- design-review-004 F6: zz-test/narrow-guard-allowances
+- design-review-004 F7: z-design/restated-rules-move-together, z-design/instructions-runnable-where-they-run
+- design-review-004 F8: z-design/quote-other-preps-before-promising
+- design-review-004 F9: z-design/accepted-risks-checked-and-decided
+- design-review-004 F10: one-off: a candidate lesson missing from the ledger; it is now a note
+- note a hook that refuses agent commands is measured on real session history before it ships, with the refusal rate and the false refusals recorded (candidate lesson zz-review/measure-a-refusing-guard-on-real-history, proposed to the lead): z-design/spec-design-correspondence
+- design-review-005 F1: z-design/never-narrow-captured-scope
+- design-review-005 F2: zz-test/kill-mutants-where-the-value-is-built, zz-test/pin-fail-safes-where-they-act
+- design-review-005 F3: zz-test/one-rule-one-function, zz-arch/guards-decide-from-the-tools-resolution
+- design-review-005 F4: zz-test/seed-every-enumerated-case
+- design-review-005 F5: zz-test/count-calls-in-poll-loops, zz-arch/read-paired-facts-at-one-moment
+- design-review-005 F6: z-design/quote-other-preps-before-promising
+- design-review-005 F7: z-design/decided-guesses-rewrite-their-body
+- design-review-005 F8: z-design/spec-design-correspondence
+- note ownership by ancestry wherever the owner is known, the folder scope only once the owner is gone (round 4 candidate lesson, proposed to the lead as zz-arch/ownership-by-ancestry-before-folder): zz-arch/guard-no-is-explicit
+- note when a capture names several owners of one outcome ("agent or session"), the design says how each owner's end is observed or records a decided reading (round 5 candidate lesson, proposed to the lead): z-design/never-narrow-captured-scope
