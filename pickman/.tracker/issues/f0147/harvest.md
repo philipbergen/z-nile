@@ -24,3 +24,5 @@
 - design-review-004 F2: z-design/rejected-options-fail-a-case
 - design-review-004 F3: z-design/spec-design-correspondence
 - design-review-004 F4: z-design/quote-other-preps-before-promising
+- design-review-005 F1: z-design/rejected-options-fail-a-case
+- design-review-005 F2: z-design/reasoned-rows-claim-testable-reasons

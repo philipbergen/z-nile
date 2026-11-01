@@ -465,6 +465,15 @@ return t.spec("f0147 the speed ramp", function(it)
 			t.expect(hunting).toBe(Levels.ghostSpeed(BASE, 2, "normal", K, R))
 			bh.frightened = true
 			t.expect(stepOf(hunted)).toBe(12)
+			-- an eaten ghost keeps its carry: one blue step (13, carry 0.03), eaten, one step as eyes (whole units), then
+			-- blue again by hand: the next step is 12, not the 13 a carry reset to a half would give
+			local eaten = blue()
+			t.expect(stepOf(eaten)).toBe(13)
+			Ghosts.eat(eaten, "blinky")
+			stepOf(eaten)
+			local be = Ghosts.ghost(eaten, "blinky") :: any
+			be.status, be.frightened, be.reverse = "active", true, false
+			t.expect(stepOf(eaten)).toBe(12)
 			-- two sets stepped in turn move exactly as one alone: each ghost keeps its own carry
 			local alone, a, b = blue(), blue(), blue()
 			for n = 1, 12 do

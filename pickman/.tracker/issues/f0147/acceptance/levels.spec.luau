@@ -512,6 +512,31 @@ return t.spec("f0147 levels by picked walls", function(it)
 		end
 	)
 
+	it("long hops on or off, the same seed rolls the same boon: the roll stays even among the six", function()
+		local jumps = 0
+		for seed = 1, 40 do
+			local items: { string } = {}
+			for _, hops in { false, true } do
+				local s = new(BARE, RAMPED, seed)
+				s.members.p.play.level = 2
+				s.members.p.longHops = hops
+				local events = pickOnce(s)
+				assert(events, `seed {seed}: the pick finished`)
+				table.insert(
+					items,
+					(has(events :: { Session.Event }, "WallPicked") :: Session.Event).item :: string
+				)
+			end
+			if items[1] ~= items[2] then
+				error(`seed {seed}: {items[1]} with long hops off, {items[2]} with them on`)
+			end
+			if items[1] == "jumps" then
+				jumps += 1
+			end
+		end
+		t.expect(jumps >= 3).toBe(true)
+	end)
+
 	-- the points --------------------------------------------------------------------------------------------------
 
 	it(
