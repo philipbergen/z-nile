@@ -12,6 +12,7 @@
 | 8 | 2026-11-01 01:19 | design-review-004 | 0 | 0 | 9.0 | spend | design-review |  |
 | 9 | 2026-11-01 01:21 | prep | 615 | 1 | 120.0 | spend | prep |  |
 | 10 | 2026-11-01 11:49 | c0183: register arcade, portal, snake, invaders and asteroids, move their designs, override the two-project pins | 107 | 38 | 15.0 | focus | build |  |
+| 11 | 2026-11-01 12:03 | R0064: review-001 | 0 | 0 | 13.0 | focus | code-review | 148322 |
 
-**Total:** +722 / -39 lines, 263.0 agent-minutes, 0 tokens over 10 records
-<!-- totals: added=722 removed=39 minutes=263.0 records=10 tokens=0 -->
+**Total:** +722 / -39 lines, 276.0 agent-minutes, 148322 tokens over 11 records
+<!-- totals: added=722 removed=39 minutes=276.0 records=11 tokens=148322 -->
