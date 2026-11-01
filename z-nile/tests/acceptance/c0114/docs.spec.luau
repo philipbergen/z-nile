@@ -191,7 +191,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		)
 		at(make, "Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`")
 		-- c0120 override: pickman has its folder now, pickman/; at the root game work still names --project pickman
-		at(make, "game work is `--project pickman`, or a capture run in `pickman/`")
+		-- c0183 override: a game's, the portal's or the library's work is its own project's, pickman one of them
+		at(make, "the work of a game, the portal or the arcade library is its project's (`--project pickman`")
 		at(tracker, "the directory gives the project unless `--project` names one")
 		at(
 			tracker,
