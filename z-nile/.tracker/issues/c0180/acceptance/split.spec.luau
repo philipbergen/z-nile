@@ -59,7 +59,7 @@ return t.spec("c0180 the engine is split by command", function(it)
 				local text = code(file)
 				t.expect((string.find(text, "function cmd.", 1, true))).toBe(nil)
 				t.expect((string.find(text, "cmd[", 1, true))).toBe(nil)
-				for _, dep in g.deps[file] or {} do
+				for _, dep in (g.deps[file] or {}) :: { string } do
 					t.expect(dep ~= MAIN).toBe(true)
 					if string.sub(dep, 1, #CMD) == CMD then
 						t.expect(file).toBe(MAIN)
@@ -76,7 +76,7 @@ return t.spec("c0180 the engine is split by command", function(it)
 			local file = table.remove(stack) :: string
 			if not seen[file] then
 				seen[file] = true
-				for _, dep in g.deps[file] or {} do
+				for _, dep in (g.deps[file] or {}) :: { string } do
 					if string.sub(dep, 1, #CMD) ~= CMD then
 						table.insert(stack, dep)
 					end
@@ -104,7 +104,7 @@ return t.spec("c0180 the engine is split by command", function(it)
 			end
 			state[file] = "open"
 			table.insert(path, file)
-			for _, dep in g.deps[file] or {} do
+			for _, dep in (g.deps[file] or {}) :: { string } do
 				visit(dep, path)
 			end
 			table.remove(path)

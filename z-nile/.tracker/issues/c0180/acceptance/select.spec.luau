@@ -178,7 +178,7 @@ return t.spec("c0180 selection by command", function(it)
 		t.expect(select.affected(ctx, { E .. "board.html" }, nil)).toBe("ALL")
 		t.expect(select.affected(ctx, { E .. "cmd/list.luau", "z-nile/templates/issue.md" }, nil)).toBe("ALL")
 		t.expect(sorted(select.affected(ctx, { E .. "cmd/list.luau" }, "pickman"))).toEqual({})
-		local noRecords = table.clone(ctx)
+		local noRecords: select.Context = table.clone(ctx)
 		noRecords.commands = nil
 		t.expect(select.affected(noRecords, { E .. "cmd/list.luau" }, nil)).toBe("ALL")
 	end)

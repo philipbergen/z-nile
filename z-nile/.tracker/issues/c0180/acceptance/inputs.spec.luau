@@ -3,8 +3,8 @@
 -- declares them in z-nile/tests/inputs.tsv (c0165's format), so a change to them still selects it. Runs from z-nile's
 -- home; the lines are the Design's Declarations, found by prep's audit (E8).
 local fs = require("@lune/fs")
-local select = require("@znile/lib/select")
 local renamed = require("@tests/lib/renamed")
+local select = require("@znile/lib/select")
 local t = require("@tests/lib/t")
 
 local A = "tests/" .. "acceptance/"
