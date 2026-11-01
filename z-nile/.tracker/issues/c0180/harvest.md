@@ -37,3 +37,4 @@
 - design-review-005 F3: z-design/instructions-runnable-where-they-run
 - design-review-005 F4: z-design/restated-rules-move-together
 - design-review-005 F5: z-design/restated-rules-move-together
+- note prep merge gate: a new lesson named the retired path `scripts/tracker/`, which c0114/docs bans from skills and lessons; only the full gate on the prep's head found it: z-design/prove-specs-pass-on-a-prototype
