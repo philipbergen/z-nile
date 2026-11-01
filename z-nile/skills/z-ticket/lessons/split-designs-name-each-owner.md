@@ -19,3 +19,5 @@ c0190 design review 004 F1: walk the rule both ways: a view also depends on ever
 c0190 design review 005 F1: when a capture adds a new front door to an existing game (a portal selling Pickman), walk the existing game's side too: who makes the game accept the new door, and does every issue that removes the old door (the lobby) depend on it?
 
 c0190 design review 006 F1, F6: when a step is handed to several issues (each view publishing its own place), walk each one's dependency closure for what the step needs (the manifest, Z3), and apply the rule to every issue the new outcome touches (K3's arrival needs A2 like every arrival).
+
+R0067 review 001 F1: build the "rest of" lines from the ownership table's owners, issues captured earlier included (f0187 owns a part of the arcade's map but was missing from its line).
