@@ -42,13 +42,13 @@ return t.spec("c0180 the record's keys on the real tree", function(it)
 		t.expect(r.ok).toBe(true)
 		local keyed = 0
 		for line in string.gmatch(r.stdout, "[^\n]+") do
-			if string.sub(line, 1, 7) ~= "engine\t" then
+			if string.sub(line, 1, 5) ~= "tree\t" then
 				local s, key = string.match(line, "^(.-)\t(%x+)$")
 				t.expect(s ~= nil and #(key :: string) == 64).toBe(true)
 				keyed += 1
 			end
 		end
 		t.expect(keyed).toBe(#specs)
-		t.expect(string.match(r.stdout, "^engine\t(%a+)\n") ~= nil).toBe(true)
+		t.expect(string.match(r.stdout, "^tree\t(%a+)\n") ~= nil).toBe(true)
 	end)
 end)

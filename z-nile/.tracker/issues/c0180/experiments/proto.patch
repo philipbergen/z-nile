@@ -207,12 +207,12 @@ index 00000000..ebbd0fb3
 +return recordkey
 diff --git a/z-nile/recordkey.luau b/z-nile/recordkey.luau
 new file mode 100644
-index 00000000..4c3d4ea6
+index 00000000..75cc82f6
 --- /dev/null
 +++ b/z-nile/recordkey.luau
 @@ -0,0 +1,37 @@
 +--!strict
-+-- c0180: `lune run z-nile/recordkey -- <repo-relative spec paths>`, from the repository root: prints `engine\t<clean|edited>`,
++-- c0180: `lune run z-nile/recordkey -- <repo-relative spec paths>`, from the repository root: prints `tree\t<clean|edited>`,
 +-- then `<spec>\t<key>` per spec (z-nile/lib/recordkey.luau); exits 2 naming what it can't key. The spec runner calls it after a multi-file
 +-- run to key the spec-commands record.
 +local process = require("@lune/process")
@@ -244,7 +244,7 @@ index 00000000..4c3d4ea6
 +	stdio.ewrite(`recordkey: {keys}\n`)
 +	process.exit(2)
 +end
-+print(`engine\t{recordkey.treeState(root)}`)
++print(`tree\t{recordkey.treeState(root)}`)
 +for _, spec in specs do
 +	print(`{spec}\t{(keys :: { [string]: string })[spec]}`)
 +end
@@ -284,7 +284,7 @@ index aae9a04c..1bedce91 100644
  | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
  | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
 diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
-index 14e8f252..73b37f4b 100644
+index 14e8f252..9730348a 100644
 --- a/z-nile/skills/zz-test/SKILL.md
 +++ b/z-nile/skills/zz-test/SKILL.md
 @@ -37,8 +37,9 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
@@ -294,7 +294,7 @@ index 14e8f252..73b37f4b 100644
 -- **Full run**: changes to the shared runner and harness (`z-nile/tests/run.luau`, `z-nile/tests/lib`), z-nile's libraries (`z-nile/lib/`), `./zn`, the root's `scripts/` or a root config file (`.luaurc`, `rokit.toml`, `selene.toml`, `stylua.toml`) force one of every project; a change to a project's own `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, `.luaurc` or `default.project.json` (under its home) forces that project's, and any other change under `z-nile/` (the engine, the gate) z-nile's. A change at an old place (the root's `tests/`, `tracker/`, `src/`, the root's project files) forces z-nile's, whose old-roots check then fails. `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
 +- **Full run**: changes to the shared runner and harness (`z-nile/tests/run.luau`, `z-nile/tests/lib`), z-nile's libraries (`z-nile/lib/`), `./zn`, the root's `scripts/` or a root config file (`.luaurc`, `rokit.toml`, `selene.toml`, `stylua.toml`) force one of every project; a change to a project's own `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, `.luaurc` or `default.project.json` (under its home) forces that project's, and any other change under `z-nile/` (the gate, the templates, the skills) z-nile's; a change to the engine's Luau files (`z-nile/engine/**/*.luau`) selects instead, see **Command trace**. A change at an old place (the root's `tests/`, `tracker/`, `src/`, the root's project files) forces z-nile's, whose old-roots check then fails. `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
  - **Reliability** depends on the architecture rules: literal requires, and features used only through `init`. `tests/meta` enforces those rules.
-+- **Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran (`usage` for the usage path), in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure, of the tooling that launches `./zn`, and of the engine at the merge base with `origin/main`; the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of `.cache/spec-trace/<name>` directories. With `--recorded` (the gate's selection passes it), a change to an engine Luau file that no program requires selects the z-nile specs that require it, declare it, are `*`, ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key; an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the require forwarders that only specs load aside) still forces z-nile's run. Records come from this worktree and every other worktree of the checkout. A spec that runs engine code another way than through `./zn`, `engine/main` or those programs declares the engine files it runs. A spec that sets `ZN_SPEC_TRACE` for a command it starts appends the value it inherited (`<its dir>:<inherited>`), or its own record loses those commands. The merge's full gate is the backstop.
++- **Command trace** (c0180): each multi-file spec run records which `./zn` commands every passing spec ran (`usage` for the usage path), in `<home>/.cache/spec-commands.tsv`, keyed by a hash of the spec's test-side require closure, of the tooling that launches `./zn`, and of the engine at the merge base with `origin/main`; the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of `.cache/spec-trace/<name>` directories. With `--recorded` (the gate's selection passes it), a change to an engine Luau file that no program requires selects the z-nile specs that require it, declare it, are `*`, ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key; an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the require forwarders that only specs load aside) still forces z-nile's run. Records come from this worktree and, when recorded on a tree equal to its merge base outside the tracker documents (`clean`), from every other worktree of the checkout. A spec that runs engine code another way than through `./zn`, `engine/main` or those programs declares the engine files it runs. A spec that sets `ZN_SPEC_TRACE` for a command it starts appends the value it inherited (`<its dir>:<inherited>`), or its own record loses those commands. The merge's full gate is the backstop.
  - **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a chore, since CI and test bugs are always chores: `./zn new issue c affected-graph-miss-… --project z-nile`.
  
  ## Acceptance checks (`check.sh`)
@@ -553,7 +553,7 @@ index 00000000..b1323eab
 +
 +return commandrecord
 diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
-index e85dc659..ccb00fd0 100644
+index e85dc659..35c943b2 100644
 --- a/z-nile/tests/run.luau
 +++ b/z-nile/tests/run.luau
 @@ -9,6 +9,7 @@
@@ -609,7 +609,7 @@ index e85dc659..ccb00fd0 100644
 +		return nil, false
 +	end
 +	local out: { [string]: string } = {}
-+	local clean = string.match(r.stdout, "^engine\tclean\n") ~= nil
++	local clean = string.match(r.stdout, "^tree\tclean\n") ~= nil
 +	for line in string.gmatch(r.stdout, "[^\n]+") do
 +		local spec, key = string.match(line, "^(.-)\t(%x+)$")
 +		if spec and key and string.sub(spec, 1, #HOME_PREFIX) == HOME_PREFIX then

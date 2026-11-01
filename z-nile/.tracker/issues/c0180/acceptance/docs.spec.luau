@@ -33,7 +33,7 @@ return t.spec("c0180 the skills state selection by command", function(it)
 					"the runner passes the engine `ZN_SPEC_TRACE`, a `:`-separated list of `.cache/spec-trace/<name>` directories",
 					"With `--recorded` (the gate's selection passes it), a change to an engine Luau file that no program requires selects the z-nile specs that require it, declare it, are `*`, ran a command whose module (`z-nile/engine/cmd/<name>.luau`) or the dispatch core (`main.luau`, `cli.luau`, `z-nile/lib/sh.luau`) reaches it, or have no record for their current key",
 					"an engine file a program requires (a Luau file at the top of `z-nile/` or under `scripts/` or a home's `scripts/`, the require forwarders that only specs load aside) still forces z-nile's run",
-					"Records come from this worktree and every other worktree of the checkout.",
+					"Records come from this worktree and, when recorded on a tree equal to its merge base outside the tracker documents (`clean`), from every other worktree of the checkout.",
 					"A spec that runs engine code another way than through `./zn`, `engine/main` or those programs declares the engine files it runs.",
 					"A spec that sets `ZN_SPEC_TRACE` for a command it starts appends the value it inherited (`<its dir>:<inherited>`)",
 					"The merge's full gate is the backstop.",

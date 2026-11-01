@@ -326,6 +326,43 @@ return t.spec("c0180 the runner records the commands each spec ran", function(it
 		t.expect((run({ "--jobs", "2" }))).toBe(true)
 		t.expect(record()["tests/a.spec.luau"].clean).toBe(false)
 		fs.removeFile(`{base}/z-nile/notes.luau`)
+		-- the tree changes while the run goes on, each way: an entry is clean only when both reads were
+		write("z-nile/tests/h.spec.luau", table.concat({
+			"--!strict",
+			`local fs = {R}("@lune/fs")`,
+			`local t = {R}("@tests/lib/t")`,
+			'return t.spec("fixture", function(it)',
+			'\tit("runs", function()',
+			`\t\tif fs.isFile("{base}/.cache/h-create") then`,
+			`\t\t\tfs.writeFile("{base}/z-nile/late.luau", "--!strict\\nreturn \{\}\\n")`,
+			"\t\tend",
+			`\t\tif fs.isFile("{base}/.cache/h-remove") then`,
+			`\t\t\tfs.removeFile("{base}/z-nile/early.luau")`,
+			"\t\tend",
+			"\tend)",
+			"end)",
+		}, "\n") .. "\n")
+		commit("h")
+		fs.writeDir(`{base}/.cache`)
+		-- clean before, edited after
+		fs.removeFile(RECORD)
+		fs.writeFile(`{base}/.cache/h-create`, "")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		t.expect(record()["tests/a.spec.luau"].clean).toBe(false)
+		fs.removeFile(`{base}/.cache/h-create`)
+		fs.removeFile(`{base}/z-nile/late.luau`)
+		-- edited before, clean after
+		fs.removeFile(RECORD)
+		write("z-nile/early.luau", "--!strict\nreturn {}\n")
+		fs.writeFile(`{base}/.cache/h-remove`, "")
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		t.expect(fs.isFile(`{base}/z-nile/early.luau`)).toBe(false)
+		t.expect(record()["tests/a.spec.luau"].clean).toBe(false)
+		fs.removeFile(`{base}/.cache/h-remove`)
+		-- the control: clean throughout
+		fs.removeFile(RECORD)
+		t.expect((run({ "--jobs", "2" }))).toBe(true)
+		t.expect(record()["tests/a.spec.luau"].clean).toBe(true)
 	end)
 
 	it("a record that can't be written is reported, and the run's outcome stands", function()
