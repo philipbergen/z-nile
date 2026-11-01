@@ -7,8 +7,8 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local images = require("@tests/lib/images")
-local pruning = require("@tests/lib/pruning")
 local process = require("@lune/process")
+local pruning = require("@tests/lib/pruning")
 local t = require("@tests/lib/t")
 local tally = require("@tests/lib/tally")
 local task = require("@lune/task")
@@ -50,14 +50,14 @@ local function fresh(name: string): (string, string)
 end
 
 local function names(dir: string): { string }
-	local out = {}
+	local found = {}
 	if fs.isDir(dir) then
 		for _, n in fs.readDir(dir) do
-			table.insert(out, n)
+			table.insert(found, n)
 		end
 	end
-	table.sort(out)
-	return out
+	table.sort(found)
+	return found
 end
 
 -- A spec over `root` whose build writes built.txt and counts its calls in `calls[1]`.
@@ -123,22 +123,25 @@ return t.spec("c0178 fixture image store", function(it)
 		t.expect(images.dir()).toBe(`{HOME}/.cache/images`)
 	end)
 
-	it("builds an image once: a second call for the same content returns the same folder and builds nothing", function()
-		local root, dir = fresh("once")
-		write(`{root}/in/a.txt`, "alpha")
-		local calls = { 0 }
-		local before = images.builds()
-		local first = images.ensure(specOf("kind", root, calls), { dir = dir })
-		local second = images.ensure(specOf("kind", root, calls), { dir = dir })
-		t.expect(second).toBe(first)
-		t.expect(calls[1]).toBe(1)
-		t.expect(images.builds() - before).toBe(1)
-		t.expect(fs.readFile(`{first}/built.txt`)).toBe("built")
-		t.expect(string.match(first, "/kind%-%x+$") ~= nil).toBe(true)
-		t.expect(#(string.match(first, "%-(%x+)$") :: string)).toBe(24)
-		-- nothing but the image is left in the images folder: no build folder, no lock
-		t.expect(names(dir)).toEqual({ string.match(first, "([^/]+)$") :: string })
-	end)
+	it(
+		"builds an image once: a second call for the same content returns the same folder and builds nothing",
+		function()
+			local root, dir = fresh("once")
+			write(`{root}/in/a.txt`, "alpha")
+			local calls = { 0 }
+			local before = images.builds()
+			local first = images.ensure(specOf("kind", root, calls), { dir = dir })
+			local second = images.ensure(specOf("kind", root, calls), { dir = dir })
+			t.expect(second).toBe(first)
+			t.expect(calls[1]).toBe(1)
+			t.expect(images.builds() - before).toBe(1)
+			t.expect(fs.readFile(`{first}/built.txt`)).toBe("built")
+			t.expect(string.match(first, "/kind%-%x+$") ~= nil).toBe(true)
+			t.expect(#(string.match(first, "%-(%x+)$") :: string)).toBe(24)
+			-- nothing but the image is left in the images folder: no build folder, no lock
+			t.expect(names(dir)).toEqual({ string.match(first, "([^/]+)$") :: string })
+		end
+	)
 
 	it("a file's bytes decide the image: same name and size, one byte different, another image", function()
 		local rootA, dir = fresh("bytes")
@@ -451,7 +454,11 @@ return t.spec("c0178 fixture image store", function(it)
 		local done = 0
 		for i = 1, 4 do
 			task.spawn(function()
-				local r = process.exec("lune", { "run", script, "--", dir, root, `{BASE}/conc/log` }, { cwd = HOME })
+				local r = process.exec(
+					"lune",
+					{ "run", script, "--", dir, root, `{BASE}/conc/log` },
+					{ cwd = HOME }
+				)
 				outputs[i] = if r.ok then (string.gsub(r.stdout, "%s+$", "")) else `FAILED: {r.stderr}`
 				done += 1
 			end)
@@ -511,28 +518,36 @@ return t.spec("c0178 fixture image store", function(it)
 				{ `p-{K("1")}`, `p-{K("2")}`, `p-{K("3")}`, ".build.OLD", `p-{K("d")}.lock` },
 				{ `p-q-{K("b")}`, `p-{K("c")}`, ".build.NEW" }
 			)
-			pruneCase("prune2", 2, { `p-{K("1")}`, `p-{K("2")}` }, { `p-{K("3")}`, `p-{K("c")}`, `p-q-{K("b")}` })
+			pruneCase(
+				"prune2",
+				2,
+				{ `p-{K("1")}`, `p-{K("2")}` },
+				{ `p-{K("3")}`, `p-{K("c")}`, `p-q-{K("b")}` }
+			)
 		end
 	)
 
-	it("ensure never removes an image: after many publishes of one kind every earlier image is still there", function()
-		local root, dir = fresh("keeps")
-		local ids = {}
-		for i = 1, 5 do
-			write(`{root}/in/a{i}.txt`, `content {i}`)
-			local rooti = `{BASE}/keeps/root{i}`
-			write(`{rooti}/in/a.txt`, `content {i}`)
-			table.insert(ids, idOf(specOf("kind", rooti, nil), dir))
+	it(
+		"ensure never removes an image: after many publishes of one kind every earlier image is still there",
+		function()
+			local root, dir = fresh("keeps")
+			local ids = {}
+			for i = 1, 5 do
+				write(`{root}/in/a{i}.txt`, `content {i}`)
+				local rooti = `{BASE}/keeps/root{i}`
+				write(`{rooti}/in/a.txt`, `content {i}`)
+				table.insert(ids, idOf(specOf("kind", rooti, nil), dir))
+			end
+			touch(`{dir}/{ids[1]}`, "202001010000") -- the oldest is long past any age limit
+			write(`{BASE}/keeps/rootX/in/a.txt`, "one more")
+			table.insert(ids, idOf(specOf("kind", `{BASE}/keeps/rootX`, nil), dir))
+			t.expect(names(dir)).toEqual((function()
+				local want = table.clone(ids)
+				table.sort(want)
+				return want
+			end)())
 		end
-		touch(`{dir}/{ids[1]}`, "202001010000") -- the oldest is long past any age limit
-		write(`{BASE}/keeps/rootX/in/a.txt`, "one more")
-		table.insert(ids, idOf(specOf("kind", `{BASE}/keeps/rootX`, nil), dir))
-		t.expect(names(dir)).toEqual((function()
-			local want = table.clone(ids)
-			table.sort(want)
-			return want
-		end)())
-	end)
+	)
 
 	it("prune never removes an image younger than minAge, however many there are", function()
 		local root, dir = fresh("young")

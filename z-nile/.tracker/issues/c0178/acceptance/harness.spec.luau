@@ -6,8 +6,8 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local images = require("@tests/lib/images")
-local pruning = require("@tests/lib/pruning")
 local process = require("@lune/process")
+local pruning = require("@tests/lib/pruning")
 local swept = require("@tests/lib/swept")
 local t = require("@tests/lib/t")
 local tally = require("@tests/lib/tally")
@@ -163,14 +163,18 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 		t.expect(tally.count(`{BASE}/walk`)).toBe(3)
 	end)
 
-	it("the runner sweeps a passing file's folders and prints what the helpers cost beside slowest:", function()
-		local folder = `{BASE}/run-pass/fx`
-		local code, output = nested("run-pass", specBody(folder, false))
-		t.expect(code).toBe(0)
-		t.expect(fs.isDir(folder)).toBe(false)
-		t.expect(string.match(output, "fixtures: (%d+) files written, (%d+) processes started") ~= nil).toBe(true)
-		t.expect(string.find(output, "2 passed, 0 failed, 1 spec files", 1, true) ~= nil).toBe(true)
-	end)
+	it(
+		"the runner sweeps a passing file's folders and prints what the helpers cost beside slowest:",
+		function()
+			local folder = `{BASE}/run-pass/fx`
+			local code, output = nested("run-pass", specBody(folder, false))
+			t.expect(code).toBe(0)
+			t.expect(fs.isDir(folder)).toBe(false)
+			t.expect(string.match(output, "fixtures: (%d+) files written, (%d+) processes started") ~= nil)
+				.toBe(true)
+			t.expect(string.find(output, "2 passed, 0 failed, 1 spec files", 1, true) ~= nil).toBe(true)
+		end
+	)
 
 	it("the runner keeps a failing file's folders", function()
 		local folder = `{BASE}/run-fail/fx`
@@ -209,7 +213,8 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 			end
 			t.expect(#all).toBe(3)
 			t.expect(string.sub(all[1], 1, 9)).toBe("slowest: ")
-			local files, procs = string.match(all[2], "^fixtures: (%d+) files written, (%d+) processes started")
+			local files, procs =
+				string.match(all[2], "^fixtures: (%d+) files written, (%d+) processes started")
 			t.expect(tonumber(files)).toBe(14) -- 7 from each of the two files
 			t.expect(tonumber(procs)).toBe(6) -- 3 from each
 			t.expect(all[3]).toBe("4 passed, 0 failed, 2 spec files")
@@ -217,30 +222,33 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 		end
 	)
 
-	it("a folder that cannot be removed is shown by name and fails the run, though every case passed", function()
-		local folder = `{BASE}/run-stuck/fx`
-		local body = table.concat({
-			"--!strict",
-			`local fs = {REQ}("@lune/fs")`,
-			`local process = {REQ}("@lune/process")`,
-			`local swept = {REQ}("@tests/lib/swept")`,
-			`local t = {REQ}("@tests/lib/t")`,
-			`return t.spec("x", function(it)`,
-			`	it("leaves a folder nobody can empty", function()`,
-			`		fs.writeDir("{folder}/locked")`,
-			`		fs.writeFile("{folder}/locked/f.txt", "x")`,
-			'		process.exec("chmod", { "555", "' .. folder .. '/locked" })',
-			`		swept.register("{folder}")`,
-			`	end)`,
-			`end)`,
-			"",
-		}, "\n")
-		local code, output = nested("run-stuck", body)
-		pcall(process.exec, "chmod", { "-R", "u+w", folder })
-		t.expect(code).toBe(1)
-		t.expect(string.find(output, `swept: could not remove {folder}`, 1, true) ~= nil).toBe(true)
-		t.expect(string.find(output, "1 passed, 0 failed, 1 spec files", 1, true) ~= nil).toBe(true)
-	end)
+	it(
+		"a folder that cannot be removed is shown by name and fails the run, though every case passed",
+		function()
+			local folder = `{BASE}/run-stuck/fx`
+			local body = table.concat({
+				"--!strict",
+				`local fs = {REQ}("@lune/fs")`,
+				`local process = {REQ}("@lune/process")`,
+				`local swept = {REQ}("@tests/lib/swept")`,
+				`local t = {REQ}("@tests/lib/t")`,
+				`return t.spec("x", function(it)`,
+				`	it("leaves a folder nobody can empty", function()`,
+				`		fs.writeDir("{folder}/locked")`,
+				`		fs.writeFile("{folder}/locked/f.txt", "x")`,
+				'		process.exec("chmod", { "555", "' .. folder .. '/locked" })',
+				`		swept.register("{folder}")`,
+				`	end)`,
+				`end)`,
+				"",
+			}, "\n")
+			local code, output = nested("run-stuck", body)
+			pcall(process.exec, "chmod", { "-R", "u+w", folder })
+			t.expect(code).toBe(1)
+			t.expect(string.find(output, `swept: could not remove {folder}`, 1, true) ~= nil).toBe(true)
+			t.expect(string.find(output, "1 passed, 0 failed, 1 spec files", 1, true) ~= nil).toBe(true)
+		end
+	)
 
 	it(
 		"a hand-built fixture copied into with engine.copy is swept too, and a folder nobody registered stays",
@@ -273,28 +281,35 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 		end
 	)
 
-	it("a spec that writes into git's template is named, the template is restored, and the run fails", function()
-		local template = process.env.GIT_TEMPLATE_DIR or ""
-		local body = table.concat({
-			"--!strict",
-			`local fs = {REQ}("@lune/fs")`,
-			`local process = {REQ}("@lune/process")`,
-			`local t = {REQ}("@tests/lib/t")`,
-			`return t.spec("x", function(it)`,
-			`	it("writes a hook into the template", function()`,
-			'		fs.writeFile(process.env.GIT_TEMPLATE_DIR .. "/hooks/post-checkout", "x")',
-			'		fs.writeFile(process.env.GIT_TEMPLATE_DIR .. "/description", "x")',
-			`	end)`,
-			`end)`,
-			"",
-		}, "\n")
-		local code, output = nested("run-template", body)
-		t.expect(code).toBe(1)
-		t.expect(string.find(output, `git template changed: {template}/hooks/post-checkout`, 1, true) ~= nil).toBe(true)
-		t.expect(string.find(output, `git template changed: {template}/description`, 1, true) ~= nil).toBe(true)
-		t.expect(names(template)).toEqual({ "hooks", "info" })
-		t.expect(names(`{template}/hooks`)).toEqual({})
-	end)
+	it(
+		"a spec that writes into git's template is named, the template is restored, and the run fails",
+		function()
+			local template = process.env.GIT_TEMPLATE_DIR or ""
+			local body = table.concat({
+				"--!strict",
+				`local fs = {REQ}("@lune/fs")`,
+				`local process = {REQ}("@lune/process")`,
+				`local t = {REQ}("@tests/lib/t")`,
+				`return t.spec("x", function(it)`,
+				`	it("writes a hook into the template", function()`,
+				'		fs.writeFile(process.env.GIT_TEMPLATE_DIR .. "/hooks/post-checkout", "x")',
+				'		fs.writeFile(process.env.GIT_TEMPLATE_DIR .. "/description", "x")',
+				`	end)`,
+				`end)`,
+				"",
+			}, "\n")
+			local code, output = nested("run-template", body)
+			t.expect(code).toBe(1)
+			t.expect(
+				string.find(output, `git template changed: {template}/hooks/post-checkout`, 1, true) ~= nil
+			)
+				.toBe(true)
+			t.expect(string.find(output, `git template changed: {template}/description`, 1, true) ~= nil)
+				.toBe(true)
+			t.expect(names(template)).toEqual({ "hooks", "info" })
+			t.expect(names(`{template}/hooks`)).toEqual({})
+		end
+	)
 
 	it(
 		"each spec file of a concurrent run has a git template of its own: a write is blamed on its writer alone",
@@ -325,7 +340,11 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 							.. '/a-wrote", "")\n		waitFor("'
 							.. meet
 							.. '/b-done")'
-						else '		waitFor("' .. meet .. '/a-wrote")\n		fs.writeFile("' .. meet .. '/b-done", "")',
+						else '		waitFor("'
+							.. meet
+							.. '/a-wrote")\n		fs.writeFile("'
+							.. meet
+							.. '/b-done", "")',
 					`	end)`,
 					`end)`,
 					"",
@@ -346,8 +365,10 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 				".cache/c0178-harness/run-owns/b.spec.luau",
 			}, { cwd = HOME, env = { PICKMAN_JOBS = "", PICKMAN_WORKER = "", PICKMAN_TALLY = "" } })
 			t.expect(r.code).toBe(1)
-			t.expect(string.find(r.stdout, "run-owns/a.spec.luau: git template changed", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(r.stdout, "run-owns/b.spec.luau: git template changed", 1, true) == nil).toBe(true)
+			t.expect(string.find(r.stdout, "run-owns/a.spec.luau: git template changed", 1, true) ~= nil)
+				.toBe(true)
+			t.expect(string.find(r.stdout, "run-owns/b.spec.luau: git template changed", 1, true) == nil)
+				.toBe(true)
 		end
 	)
 
@@ -368,41 +389,45 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 	end)
 
 	it("a worker of a concurrent run leaves the printing to its coordinator", function()
-		local _, output = nested("run-worker", specBody(`{BASE}/run-worker/fx`, false), { PICKMAN_WORKER = "1" })
+		local _, output =
+			nested("run-worker", specBody(`{BASE}/run-worker/fx`, false), { PICKMAN_WORKER = "1" })
 		t.expect(string.find(output, "fixtures:", 1, true) == nil).toBe(true)
 	end)
 
-	it("git's template is an empty hooks/ and an empty info/, and a spec's git init and git clone use it", function()
-		local template = process.env.GIT_TEMPLATE_DIR or ""
-		t.expect(template ~= "").toBe(true)
-		t.expect(names(template)).toEqual({ "hooks", "info" })
-		t.expect(names(`{template}/hooks`)).toEqual({})
-		t.expect(names(`{template}/info`)).toEqual({})
-		local dir = `{BASE}/template`
-		if fs.isDir(dir) then
-			fs.removeDir(dir)
+	it(
+		"git's template is an empty hooks/ and an empty info/, and a spec's git init and git clone use it",
+		function()
+			local template = process.env.GIT_TEMPLATE_DIR or ""
+			t.expect(template ~= "").toBe(true)
+			t.expect(names(template)).toEqual({ "hooks", "info" })
+			t.expect(names(`{template}/hooks`)).toEqual({})
+			t.expect(names(`{template}/info`)).toEqual({})
+			local dir = `{BASE}/template`
+			if fs.isDir(dir) then
+				fs.removeDir(dir)
+			end
+			fs.writeDir(dir)
+			must(process.exec("git", { "init", "-q", "-b", "main", `{dir}/made` }), "git init")
+			t.expect(fs.isDir(`{dir}/made/.git/hooks`)).toBe(true)
+			t.expect(names(`{dir}/made/.git/hooks`)).toEqual({})
+			t.expect(fs.isDir(`{dir}/made/.git/info`)).toBe(true)
+			t.expect(fs.isFile(`{dir}/made/.git/description`)).toBe(false)
+			fixture.git(`{dir}/made`, {
+				"-c",
+				"user.name=c0178",
+				"-c",
+				"user.email=c0178@example.invalid",
+				"commit",
+				"-q",
+				"--allow-empty",
+				"-m",
+				"x",
+			})
+			must(process.exec("git", { "clone", "-q", `{dir}/made`, `{dir}/cloned` }), "git clone")
+			t.expect(names(`{dir}/cloned/.git/hooks`)).toEqual({})
+			-- a spec that installs a hook writes into the folder, as the older specs do, with no mkdir
+			fs.writeFile(`{dir}/made/.git/hooks/pre-push`, "#!/bin/sh\nexit 0\n")
+			t.expect(fs.isFile(`{dir}/made/.git/hooks/pre-push`)).toBe(true)
 		end
-		fs.writeDir(dir)
-		must(process.exec("git", { "init", "-q", "-b", "main", `{dir}/made` }), "git init")
-		t.expect(fs.isDir(`{dir}/made/.git/hooks`)).toBe(true)
-		t.expect(names(`{dir}/made/.git/hooks`)).toEqual({})
-		t.expect(fs.isDir(`{dir}/made/.git/info`)).toBe(true)
-		t.expect(fs.isFile(`{dir}/made/.git/description`)).toBe(false)
-		fixture.git(`{dir}/made`, {
-			"-c",
-			"user.name=c0178",
-			"-c",
-			"user.email=c0178@example.invalid",
-			"commit",
-			"-q",
-			"--allow-empty",
-			"-m",
-			"x",
-		})
-		must(process.exec("git", { "clone", "-q", `{dir}/made`, `{dir}/cloned` }), "git clone")
-		t.expect(names(`{dir}/cloned/.git/hooks`)).toEqual({})
-		-- a spec that installs a hook writes into the folder, as the older specs do, with no mkdir
-		fs.writeFile(`{dir}/made/.git/hooks/pre-push`, "#!/bin/sh\nexit 0\n")
-		t.expect(fs.isFile(`{dir}/made/.git/hooks/pre-push`)).toBe(true)
-	end)
+	)
 end)

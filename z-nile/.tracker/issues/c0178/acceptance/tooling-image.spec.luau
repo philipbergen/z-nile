@@ -123,9 +123,9 @@ local function lines(text: string): { string }
 	return list
 end
 
-local function count(lines: { string }, prefix: string): number
+local function count(rows: { string }, prefix: string): number
 	local n = 0
-	for _, l in lines do
+	for _, l in rows do
 		if string.sub(l, 1, #prefix) == prefix then
 			n += 1
 		end

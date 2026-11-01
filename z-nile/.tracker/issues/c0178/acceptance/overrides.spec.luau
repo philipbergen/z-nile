@@ -81,7 +81,9 @@ return t.spec("c0178 the specs it edits", function(it)
 	it(
 		"the specs whose reset or rollback deletes what is outside the sparse set carry the tooling the engine runs",
 		function()
-			for _, spec in { "acceptance/c0038/deferred", "acceptance/c0120/promote-home", "acceptance/c0116/promote" } do
+			for _, spec in
+				{ "acceptance/c0038/deferred", "acceptance/c0120/promote-home", "acceptance/c0116/promote" }
+			do
 				if not has(read(`{spec}.spec.luau`), "tooling = true") then
 					error(`{spec} does not take tooling = true`)
 				end
@@ -93,7 +95,11 @@ return t.spec("c0178 the specs it edits", function(it)
 		"the specs that list their own tooling list its folders, so a module the engine newly requires survives a reset",
 		function()
 			for _, spec in
-				{ "acceptance/c0008/done-order", "acceptance/c0074/done-gate", "acceptance/c0080/consequences" }
+				{
+					"acceptance/c0008/done-order",
+					"acceptance/c0074/done-gate",
+					"acceptance/c0080/consequences",
+				}
 			do
 				local text = read(`{spec}.spec.luau`)
 				for _, folder in { '"zn"', '"scripts/"', '"z-nile/engine/"', '"z-nile/lib/"' } do

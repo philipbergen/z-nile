@@ -52,7 +52,8 @@ return t.spec("c0178 trackerfix.worktrees", function(it)
 				t.expect(string.match(branch, "^[a-z][a-z0-9%-]*$") ~= nil).toBe(true)
 				t.expect(fixture.git(wt, { "rev-parse", "HEAD" })).toBe(tip)
 				t.expect(fixture.git(wt, { "status", "--porcelain" })).toBe("")
-				t.expect(fixture.exec(wt, "git", { "config", "--get", `branch.{branch}.merge` }).ok).toBe(false) -- no upstream
+				t.expect(fixture.exec(wt, "git", { "config", "--get", `branch.{branch}.merge` }).ok)
+					.toBe(false) -- no upstream
 				t.expect(string.find(listed, `worktree {wt}\n`, 1, true) ~= nil).toBe(true)
 				t.expect(string.find(listed, `branch refs/heads/{branch}\n`, 1, true) ~= nil).toBe(true)
 				t.expect(fixture.git(wt, { "rev-parse", "--show-toplevel" })).toBe(wt)
@@ -128,7 +129,10 @@ return t.spec("c0178 trackerfix.worktrees", function(it)
 		fs.writeDir(`{dir}/bin`)
 		for _, cmd in { "bash" } do
 			local real = out("which", { cmd })
-			fs.writeFile(`{dir}/bin/{cmd}`, `#!/bin/sh\necho "{cmd} $1 $2" >> "$SHIM_LOG"\nexec {real} "$@"\n`)
+			fs.writeFile(
+				`{dir}/bin/{cmd}`,
+				`#!/bin/sh\necho "{cmd} $1 $2" >> "$SHIM_LOG"\nexec {real} "$@"\n`
+			)
 			out("chmod", { "+x", `{dir}/bin/{cmd}` })
 		end
 		local names = {}

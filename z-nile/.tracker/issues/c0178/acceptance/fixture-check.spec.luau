@@ -37,7 +37,10 @@ local function gitCalls(name: string, target: string, body: string, shimmed: { s
 	fs.writeDir(`{dir}/bin`)
 	local commands: { string } = shimmed or { "git" }
 	for _, cmd in commands do
-		write(`{dir}/bin/{cmd}`, `#!/bin/sh\necho "{cmd} $1 $2 $3" >> "$SHIM_LOG"\nexec {out("which", { cmd })} "$@"\n`)
+		write(
+			`{dir}/bin/{cmd}`,
+			`#!/bin/sh\necho "{cmd} $1 $2 $3" >> "$SHIM_LOG"\nexec {out("which", { cmd })} "$@"\n`
+		)
 		out("chmod", { "+x", `{dir}/bin/{cmd}` })
 	end
 	write(

@@ -63,7 +63,10 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 	it(
 		"builds a bare origin and two clones that hold the same single seed commit, authored by the fixture's name",
 		function()
-			f = trackerfix.new("c0178-seed-a", { ["notes/extra.txt"] = "extra\n", [".gitignore"] = "mine/\n" })
+			f = trackerfix.new(
+				"c0178-seed-a",
+				{ ["notes/extra.txt"] = "extra\n", [".gitignore"] = "mine/\n" }
+			)
 			t.expect(fixture.git(f.origin, { "rev-list", "--count", "main" })).toBe("1")
 			t.expect(fixture.git(f.origin, { "rev-list", "--max-parents=0", "main" }))
 				.toBe(fixture.git(f.origin, { "rev-parse", "main" }))
@@ -76,7 +79,8 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 				t.expect(fixture.git(clone, { "status", "--porcelain" })).toBe("")
 				t.expect(fixture.git(clone, { "config", "remote.origin.url" })).toBe(f.origin)
 				t.expect(fixture.git(clone, { "config", "user.email" })).toBe("c0178-seed-a@example.invalid")
-				t.expect(fixture.git(clone, { "rev-parse", "--abbrev-ref", "main@{upstream}" })).toBe("origin/main")
+				t.expect(fixture.git(clone, { "rev-parse", "--abbrev-ref", "main@{upstream}" }))
+					.toBe("origin/main")
 			end
 			-- the origin has no remote of its own: the image's path (or main's) is not the fixture's business
 			t.expect(fixture.git(f.origin, { "remote" })).toBe("")
@@ -120,10 +124,12 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 			-- made by this very call: still at the seed, the origin ahead of it, only the seed's branch known
 			t.expect(fixture.git(fresh.other, { "rev-parse", "HEAD" })).toBe(seedTip)
 			t.expect(fixture.git(fresh.other, { "rev-parse", "origin/main" })).toBe(seedTip)
-			t.expect(fixture.git(fresh.other, { "branch", "-r" })).toBe("origin/HEAD -> origin/main\n  origin/main")
+			t.expect(fixture.git(fresh.other, { "branch", "-r" }))
+				.toBe("origin/HEAD -> origin/main\n  origin/main")
 			t.expect(fixture.git(fresh.other, { "rev-parse", "main@{upstream}" })).toBe(seedTip)
 			t.expect(fs.isDir(fresh.other)).toBe(true)
-			t.expect(fixture.git(fresh.other, { "config", "user.email" })).toBe("c0178-seed-lazy@example.invalid")
+			t.expect(fixture.git(fresh.other, { "config", "user.email" }))
+				.toBe("c0178-seed-lazy@example.invalid")
 			-- a terminal that is behind stays behind: its own commit is rejected until it pulls
 			write(`{fresh.other}/mine.txt`, "mine\n")
 			fixture.git(fresh.other, { "add", "-A" })
@@ -141,7 +147,8 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 			t.expect(fs.isDir(fresh.other)).toBe(false)
 			trackerfix.elsewhere(fresh, { ["from/other.txt"] = "x\n" }, "from another terminal")
 			t.expect(fs.isDir(fresh.other)).toBe(true)
-			t.expect(fixture.git(fresh.origin, { "log", "-1", "--format=%s", "main" })).toBe("from another terminal")
+			t.expect(fixture.git(fresh.origin, { "log", "-1", "--format=%s", "main" }))
+				.toBe("from another terminal")
 			t.expect(fixture.git(fresh.origin, { "show", "main:from/other.txt" })).toBe("x")
 		end
 	)
@@ -156,19 +163,25 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 		t.expect(fixture.git(plain.main, { "show", "HEAD:.gitignore" })).toBe(".cache/\n.worktree/")
 	end)
 
-	it("the skills' lessons are in the default fixture and out of the noLessons one, in every skill", function()
-		local lessons = out("find", { "z-nile/skills", "-path", "*/lessons/*.md" }, f.main)
-		t.expect(#lines(lessons) > 0).toBe(true)
-		bare = trackerfix.new("c0178-seed-bare", nil, { noLessons = true })
-		fixture.git(bare.other, { "status", "--porcelain" }) -- makes `other`
-		for _, clone in { bare.main, bare.other } do
-			t.expect(out("find", { "z-nile/skills", "-path", "*/lessons/*" }, clone)).toBe("")
-			t.expect(fs.isFile(`{clone}/z-nile/skills/zz-test/SKILL.md`)).toBe(true) -- the skills themselves stay
+	it(
+		"the skills' lessons are in the default fixture and out of the noLessons one, in every skill",
+		function()
+			local lessons = out("find", { "z-nile/skills", "-path", "*/lessons/*.md" }, f.main)
+			t.expect(#lines(lessons) > 0).toBe(true)
+			bare = trackerfix.new("c0178-seed-bare", nil, { noLessons = true })
+			fixture.git(bare.other, { "status", "--porcelain" }) -- makes `other`
+			for _, clone in { bare.main, bare.other } do
+				t.expect(out("find", { "z-nile/skills", "-path", "*/lessons/*" }, clone)).toBe("")
+				t.expect(fs.isFile(`{clone}/z-nile/skills/zz-test/SKILL.md`)).toBe(true) -- the skills themselves stay
+			end
+			t.expect(
+				fixture.git(bare.origin, { "ls-tree", "-r", "--name-only", "main", "z-nile/skills" }) ~= ""
+			)
+				.toBe(true)
+			local tracked = fixture.git(bare.origin, { "ls-tree", "-r", "--name-only", "main" })
+			t.expect(string.find(tracked, "/lessons/", 1, true) == nil).toBe(true)
 		end
-		t.expect(fixture.git(bare.origin, { "ls-tree", "-r", "--name-only", "main", "z-nile/skills" }) ~= "").toBe(true)
-		local tracked = fixture.git(bare.origin, { "ls-tree", "-r", "--name-only", "main" })
-		t.expect(string.find(tracked, "/lessons/", 1, true) == nil).toBe(true)
-	end)
+	)
 
 	it("a second fixture in the same process builds no image", function()
 		local before = images.builds()
@@ -218,7 +231,8 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 			t.expect(files(fx.base) <= 2 * tree + 120).toBe(true)
 			t.expect(files(fx.origin) <= 40).toBe(true)
 			-- the tooling's objects are in the packs; only what the seed changed is loose
-			t.expect(#lines(out("find", { fx.origin, "-path", "*/objects/??/*", "-type", "f" })) <= 25).toBe(true)
+			t.expect(#lines(out("find", { fx.origin, "-path", "*/objects/??/*", "-type", "f" })) <= 25)
+				.toBe(true)
 			t.expect(#lines(out("find", { `{fx.main}/.git`, "-path", "*/objects/??/*", "-type", "f" })) <= 25)
 				.toBe(true)
 			-- and a fixture whose `other` nobody used is one working tree lighter
@@ -268,14 +282,22 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 				["tools/run.sh"] = "#!/bin/sh\necho run\n",
 				["tools/plain.txt"] = "plain\n",
 			}, { copy = { ".luaurc", "pickman/.tracker/architecture.md" }, executable = { "tools/run.sh" } })
-			t.expect(fixture.git(fx.origin, { "show", "main:.luaurc" })).toBe(out("cat", { `{engine.TOP}/.luaurc` }))
-			t.expect(string.match(fixture.git(fx.origin, { "ls-tree", "main", "tools/run.sh" }), "^100755 blob") ~= nil)
-				.toBe(true)
+			t.expect(fixture.git(fx.origin, { "show", "main:.luaurc" }))
+				.toBe(out("cat", { `{engine.TOP}/.luaurc` }))
 			t.expect(
-				string.match(fixture.git(fx.origin, { "ls-tree", "main", "tools/plain.txt" }), "^100644 blob") ~= nil
+				string.match(fixture.git(fx.origin, { "ls-tree", "main", "tools/run.sh" }), "^100755 blob")
+					~= nil
+			).toBe(true)
+			t.expect(
+				string.match(fixture.git(fx.origin, { "ls-tree", "main", "tools/plain.txt" }), "^100644 blob")
+					~= nil
+			).toBe(true)
+			t.expect(
+				fixture.git(
+					fx.origin,
+					{ "ls-tree", "--name-only", "main", "pickman/.tracker/architecture.md" }
+				)
 			)
-				.toBe(true)
-			t.expect(fixture.git(fx.origin, { "ls-tree", "--name-only", "main", "pickman/.tracker/architecture.md" }))
 				.toBe("pickman/.tracker/architecture.md")
 			local ok, err = pcall(function(): any
 				trackerfix.new("c0178-seed-opts-bad", nil, { copy = { "no/such/file" } })
@@ -286,38 +308,44 @@ return t.spec("c0178 trackerfix.new from the seed image", function(it)
 		end
 	)
 
-	it("the helpers count what they start and write: the tally is the shim log and the files on disk", function()
-		local dir = `{BASE}/counted`
-		if fs.isDir(dir) then
-			fs.removeDir(dir)
+	it(
+		"the helpers count what they start and write: the tally is the shim log and the files on disk",
+		function()
+			local dir = `{BASE}/counted`
+			if fs.isDir(dir) then
+				fs.removeDir(dir)
+			end
+			fs.writeDir(`{dir}/bin`)
+			for _, cmd in { "git", "cp", "pwd", "perl", "mkdir", "mktemp", "chmod", "sh" } do
+				local real = out("which", { cmd })
+				write(
+					`{dir}/bin/{cmd}`,
+					`#!/bin/sh\necho "{cmd} $1 $2 $3" >> "$SHIM_LOG"\nexec {real} "$@"\n`
+				)
+				out("chmod", { "+x", `{dir}/bin/{cmd}` })
+			end
+			write(
+				`{dir}/child.luau`,
+				table.concat({
+					"--!strict",
+					`local fixture = {REQ}("@tests/lib/fixture")`,
+					`local tally = {REQ}("@tests/lib/tally")`,
+					`local trackerfix = {REQ}("@tests/lib/trackerfix")`,
+					'local f = trackerfix.new("c0178-seed-counted", { ["a/b.txt"] = "x\\n" })',
+					'fixture.git(f.other, { "status", "--porcelain" })',
+					"local files, procs = tally.read()",
+					'print(files .. " " .. procs .. " " .. f.base)',
+					"",
+				}, "\n")
+			)
+			local r = process.exec("lune", { "run", `{dir}/child.luau` }, {
+				cwd = HOME,
+				env = { PATH = `{dir}/bin:{process.env.PATH or ""}`, SHIM_LOG = `{dir}/log` },
+			})
+			t.expect(r.ok).toBe(true)
+			local written, procs, base = string.match(r.stdout, "^(%d+) (%d+) (%S+)")
+			t.expect(tonumber(procs)).toBe(#lines(fs.readFile(`{dir}/log`)))
+			t.expect(tonumber(written)).toBe(#lines(out("find", { base :: string, "-type", "f" })))
 		end
-		fs.writeDir(`{dir}/bin`)
-		for _, cmd in { "git", "cp", "pwd", "perl", "mkdir", "mktemp", "chmod", "sh" } do
-			local real = out("which", { cmd })
-			write(`{dir}/bin/{cmd}`, `#!/bin/sh\necho "{cmd} $1 $2 $3" >> "$SHIM_LOG"\nexec {real} "$@"\n`)
-			out("chmod", { "+x", `{dir}/bin/{cmd}` })
-		end
-		write(
-			`{dir}/child.luau`,
-			table.concat({
-				"--!strict",
-				`local fixture = {REQ}("@tests/lib/fixture")`,
-				`local tally = {REQ}("@tests/lib/tally")`,
-				`local trackerfix = {REQ}("@tests/lib/trackerfix")`,
-				'local f = trackerfix.new("c0178-seed-counted", { ["a/b.txt"] = "x\\n" })',
-				'fixture.git(f.other, { "status", "--porcelain" })',
-				"local files, procs = tally.read()",
-				'print(files .. " " .. procs .. " " .. f.base)',
-				"",
-			}, "\n")
-		)
-		local r = process.exec("lune", { "run", `{dir}/child.luau` }, {
-			cwd = HOME,
-			env = { PATH = `{dir}/bin:{process.env.PATH or ""}`, SHIM_LOG = `{dir}/log` },
-		})
-		t.expect(r.ok).toBe(true)
-		local files, procs, base = string.match(r.stdout, "^(%d+) (%d+) (%S+)")
-		t.expect(tonumber(procs)).toBe(#lines(fs.readFile(`{dir}/log`)))
-		t.expect(tonumber(files)).toBe(#lines(out("find", { base :: string, "-type", "f" })))
-	end)
+	)
 end)
