@@ -11,3 +11,5 @@ check: For each ordering sentence in the plan the captures come from ("X then Y"
 **How to apply:** list the plan's order sentences next to the dependency table, one row per edge, and give the land a step that adds the new ids to earlier drafts' `depends_on`.
 
 c0190 design review 004 F5: for a handover across several issues (a lobby replaced by a portal), name every intermediate state and what each issue does in it, so no step leaves a path (a game over) leading nowhere.
+
+c0190 design review 006 F3, F7: an edge into a hub (P5) enlarges every closure through it: list whose (I3, T3 now wait on Pickman's paid play) and tell the user; and check each handover issue's own edges (f0187 must follow P5, or it reads an id that may still be 0).

@@ -17,3 +17,5 @@ c0190 design review 003 F1, F3, F4: the same gap a third time (the scores issues
 c0190 design review 004 F1: walk the rule both ways: a view also depends on every rules issue whose state it shows or steers (S3 on S4), and a display only one issue's rule needs goes to that issue when the dependency would otherwise be a cycle. Keep a check that the ownership table and the script's records agree (E6-table.py).
 
 c0190 design review 005 F1: when a capture adds a new front door to an existing game (a portal selling Pickman), walk the existing game's side too: who makes the game accept the new door, and does every issue that removes the old door (the lobby) depend on it?
+
+c0190 design review 006 F1, F6: when a step is handed to several issues (each view publishing its own place), walk each one's dependency closure for what the step needs (the manifest, Z3), and apply the rule to every issue the new outcome touches (K3's arrival needs A2 like every arrival).

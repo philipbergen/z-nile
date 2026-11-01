@@ -69,7 +69,7 @@ I = [
         "Each run counts its revives for the boards (A1)."],
   ngs=["Each game's own revive screen: S5, I4 and T4.", "The portal's badge, timer and play buttons: P1, P3 and P4.",
        "Pickman switching to it: K3 (Switch to arcade paid play).", "The live publish of the products: f0169."]),
- dict(key="K3", project="pickman", type="c", slug="switch-to-arcade-paid-play", title="Switch to arcade paid play", deps=["A3", "f0145", "f0186"], also=["portal"],
+ dict(key="K3", project="pickman", type="c", slug="switch-to-arcade-paid-play", title="Switch to arcade paid play", deps=["A2", "A3", "f0145", "f0186"], also=["portal"],
   file=ARCH, parts="**Technical skeleton**, \"Pickman migrates one feature at a time\", for PaidPlay and Receipts",
   outs=["Pickman's paid play (f0145, with f0186's revives and per-game free hour) runs on arcade's PaidPlay and Receipts, with no pickman-only copy.",
         "Pickman's game place consumes the portal's entitlement on arrival (a player who paid, or took the free game, on the portal's Pickman card plays at once), as every game place does, so the portal can replace the lobby (P5, c0188)."],
@@ -131,7 +131,7 @@ I = [
         "A load experiment (E6) sets the cap: step cost and snapshot bytes per tick.",
         "If the arena needs pickman's Session clock or intent limiter, they move into arcade first (\"The Session clock and intent limiter move only when Snake needs them\"), by an arcade issue and a pickman switch chore that S2's prep captures and S2 then depends on (a raft never spans two projects)."],
   ngs=["The rules every arena runs: S1 and S4.", "The ARENA button: P4."]),
- dict(key="S3", project="snake", type="f", slug="snake-first-person-view", title="Snake first person view", deps=["S1", "S4", "A2", "A3", "A4"],
+ dict(key="S3", project="snake", type="f", slug="snake-first-person-view", title="Snake first person view", deps=["S1", "S4", "A2", "A3", "A4", "Z3"],
   file="snake", parts="**Arena and view** (the camera, the minimap and the eased turn), **Movement** (the keys, gamepad and touch), **Players** (\"Solo\", and each snake's colour, name and the HUD but its top 3), and what the solo rules show (\"MAP CLEAR\", \"Ready\", and how S1's and S4's food and boost look)",
   outs=["The game seen from the snake's head, with the minimap, the eased turn, the HUD (length / goal, map, lives, score), and every input: A/D, the arrows to look, Space to boost; gamepad; touch LEFT, RIGHT and BOOST.",
         "Everything the solo rules show, from their state (S1's and S4's): the apples, golden apples and crumbs, the boost, the 2 s \"MAP CLEAR\" and the 2 s \"Ready\".",
@@ -160,7 +160,7 @@ I = [
   outs=["The cannon's first-person view and field radar, with every input: A/D or the arrows and Space; gamepad; touch LEFT, RIGHT and FIRE.",
         "Everything the rules show or sound, from their state: the march's beat speeding up as the formation thins.",
         "The Invaders place: its project file, the server session that runs each solo game and replicates it to the player, and its arrival: a player from the portal's PLAY, or a party from its 2 PLAYERS in a reserved server, which starts and runs one 2-player match (I2's rules) replicated to both.",
-        "E5: the party teleport into a reserved server, tested on Beta with the portal as the start place (P5), its 2 PLAYERS (P4) and every place published (Z3); T3 uses its result.",
+        "E5: the party teleport into a reserved server, tested on Beta with the portal as the start place (P5), its 2 PLAYERS (P4) and the Invaders place published: the raft's experiments phase first asks the user to create the Invaders place and set `ROBLOX_BETA_INVADERS_PLACE_ID`, so Z3's manifest publishes it before E5 runs; T3 uses its result.",
         "Publishing the Invaders place: once the place is playable, the user creates it on Roblox and sets `ROBLOX_BETA_INVADERS_PLACE_ID` (a step this issue's Observed criteria name), and Z3's manifest publishes it from then on; until then the portal's card says \"coming soon\"."],
   ngs=["The rules: I1 and I2.", "Boards, revives and the portal return: I4.", "The waiting card and the teleport: P4."]),
  dict(key="I4", project="invaders", type="f", slug="invaders-scores-and-revives", title="Invaders scores and revives", deps=["I1", "I3", "A1", "A2", "A3"], also=["portal"],
@@ -190,7 +190,7 @@ I = [
 ]
 # the plan's order "Z3 and P5 -> retire the lobby", and the lobby's shop stays until pickman takes the portal's
 # entitlement (K3): pickman's issues captured with c0183 gain those ids
-EXTRA = [("c0188", ["P5", "Z3", "K3"]), ("f0187", ["Z3"])]
+EXTRA = [("c0188", ["P5", "Z3", "K3"]), ("f0187", ["Z3", "P5"])]
 
 IDS = re.compile(r"^[fdc]\d{4}$")
 

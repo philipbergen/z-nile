@@ -31,3 +31,10 @@
 - design-review-004 F5: z-ticket/carry-the-plan-order-into-depends-on
 - design-review-005 F1: z-ticket/split-designs-name-each-owner
 - design-review-005 F2: z-ticket/publishers-skip-places-not-built-yet
+- design-review-006 F1: z-ticket/split-designs-name-each-owner
+- design-review-006 F2: z-design/user-steps-before-the-experiments-that-need-them
+- design-review-006 F3: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-006 F4: one-off: when a game first goes on the private Beta is a product choice, put to the user and recorded
+- design-review-006 F5: one-off: prose and a prototype log left behind by round 5's fix
+- design-review-006 F6: z-ticket/split-designs-name-each-owner
+- design-review-006 F7: z-ticket/carry-the-plan-order-into-depends-on

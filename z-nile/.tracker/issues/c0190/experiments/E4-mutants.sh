@@ -33,25 +33,30 @@ mut() { # $1 name; $2 edit of the capture tree; $3 commits after the capture (op
 	git push -qf origin HEAD:main; echo "== $1"
 	./zn check c0190 2>&1 | grep -E '^(FAIL|---- )|^      [a-zA-Z]' | grep -v "^      FAIL" | head -3
 	git checkout -q main; git reset -q --hard "$G"; git push -qf origin "$G:main"; }
+# drop id $2 from the depends_on line of document $1, wherever it stands in the list
+drop() { sed -i '' -E "/^depends_on:/{s/\[$2, /[/;s/, $2([],])/\1/;s/\[$2\]/[]/;}" "$1"; grep -q "^depends_on:.*$2" "$1" && { echo "drop: $2 still in $1" >&2; exit 1; }; return 0; }
 none() { :; }
 thin() { python3 -c "import re,sys;p=sys.argv[1];t=open(p).read();t=re.sub(r'\n- Snake.s runs go[^\n]*','\n- Snake has scores.',t);open(p,'w').write(t)" "$(d snake snake-scores-and-revives)"; }
 fixit() { git checkout -q "$Cc" -- "$(d snake snake-scores-and-revives)"; gc "tracker: fix S5 text"; }
-a1() { sed -i '' 's/^depends_on: \[c0185\]$/depends_on: []/' "$(d arcade hiscores-with-revives)"; }
-z3() { sed -i '' "s/, $(idk portal play-buttons)\]/]/" "$(d portal n-place-deploy)"; }
-c188() { sed -i '' "s/, $(idk portal n-place-deploy)//" "$(d pickman retire-lobby-place)"; }
-i3() { sed -i '' "s/\[\([^]]*\)$(idk invaders invaders-two-players), /[\1/" "$(d invaders invaders-cannon-view)"; }
-s3() { sed -i '' "s/, $(idk arcade input-and-look-cores)\]/]/" "$(d snake snake-first-person-view)"; }
+a1() { drop "$(d arcade hiscores-with-revives)" c0185; }
+z3() { drop "$(d portal n-place-deploy)" "$(idk portal play-buttons)"; }
+c188() { drop "$(d pickman retire-lobby-place)" "$(idk portal n-place-deploy)"; }
+i3() { drop "$(d invaders invaders-cannon-view)" "$(idk invaders invaders-two-players)"; }
+s3() { drop "$(d snake snake-first-person-view)" "$(idk arcade input-and-look-cores)"; }
 halfB() { # the snake issues out of the capture, landed by a second commit
 	for f in snake/.tracker/issues/*/f*.md; do git show "$B:$f" > "$f"; done; }
 halfC() { git checkout -q "$Cc" -- snake/.tracker/issues; gc "tracker: new $(for f in snake/.tracker/issues/*/f*.md; do basename "$f" .md; done | tr '\n' ' ')snake"; }
 prepedit() { p=$(d snake arena-maps-growth); sed -i '' 's/^depends_on: \[c0184\]$/depends_on: [c0184, f0195]/' "$p"; echo "- Prep detail." >> "$p"; gc "tracker: prep S1 detail"; }
 wrongid() { sed -i '' "s/^- The boards' store: $(idk arcade hiscores-with-revives)\.$/- The boards' store: $(idk arcade shared-travel)./" "$(d snake snake-scores-and-revives)"; }
-s5s3() { sed -i '' "s/, $(idk snake snake-first-person-view)//" "$(d snake snake-scores-and-revives)"; }
-i4i3() { sed -i '' "s/, $(idk invaders invaders-cannon-view)//" "$(d invaders invaders-scores-and-revives)"; }
-s3s4() { sed -i '' "s/, $(idk snake boost-golden-apples-crumbs), /, /" "$(d snake snake-first-person-view)"; }
-p1a2() { sed -i '' "s/^depends_on: \[$(idk arcade shared-travel), /depends_on: [/" "$(d portal game-carousel)"; }
-p5k3() { sed -i '' "s/, $(idk pickman switch-to-arcade-paid-play)\]/]/" "$(d portal portal-start-place)"; }
-c188k3() { sed -i '' "s/, $(idk pickman switch-to-arcade-paid-play)\]/]/" "$(d pickman retire-lobby-place)"; }
+s5s3() { drop "$(d snake snake-scores-and-revives)" "$(idk snake snake-first-person-view)"; }
+i4i3() { drop "$(d invaders invaders-scores-and-revives)" "$(idk invaders invaders-cannon-view)"; }
+s3s4() { drop "$(d snake snake-first-person-view)" "$(idk snake boost-golden-apples-crumbs)"; }
+p1a2() { drop "$(d portal game-carousel)" "$(idk arcade shared-travel)"; }
+p5k3() { drop "$(d portal portal-start-place)" "$(idk pickman switch-to-arcade-paid-play)"; }
+c188k3() { drop "$(d pickman retire-lobby-place)" "$(idk pickman switch-to-arcade-paid-play)"; }
+s3z3() { drop "$(d snake snake-first-person-view)" "$(idk portal n-place-deploy)"; }
+f187p5() { drop "$(d pickman game-over-returns-to-portal)" "$(idk portal portal-start-place)"; }
+s5a2() { drop "$(d snake snake-scores-and-revives)" "$(idk arcade shared-travel)"; }
 mut "correct" none
 mut "thin capture, later fix commit" thin fixit
 mut "two lands" halfB halfC
@@ -61,10 +66,13 @@ mut "c0188 without Z3" c188
 mut "I3 without I2" i3
 mut "S3 without A4" s3
 mut "S5's Non-goals naming A2's id for the boards' store" wrongid
+mut "S5 without A2" s5a2
 mut "S5 without S3" s5s3
 mut "I4 without I3" i4i3
 mut "S3 without S4" s3s4
 mut "P1 without A2" p1a2
 mut "P5 without K3" p5k3
 mut "c0188 without K3" c188k3
+mut "S3 without Z3" s3z3
+mut "f0187 without P5" f187p5
 mut "a prep edits S1 after the land (stays green)" none prepedit

@@ -15,7 +15,7 @@ ROWS="A1:arcade:hiscores-with-revives:c0185 \
 	A2:arcade:shared-travel:c0185 \
 	K2:pickman:switch-to-arcade-travel:A2 \
 	A3:arcade:paid-play-and-receipts:c0185 \
-	K3:pickman:switch-to-arcade-paid-play:A3,f0145,f0186 \
+	K3:pickman:switch-to-arcade-paid-play:A2,A3,f0145,f0186 \
 	A4:arcade:input-and-look-cores:c0185 \
 	K4:pickman:switch-to-arcade-input-cores:A4 \
 	P1:portal:game-carousel:A2,A3 \
@@ -26,7 +26,7 @@ ROWS="A1:arcade:hiscores-with-revives:c0185 \
 	Z3:portal:n-place-deploy:P2,P4 \
 	S1:snake:arena-maps-growth:c0184 \
 	S2:snake:shared-snake-arena:S3,A2,A3 \
-	S3:snake:snake-first-person-view:S1,S4,A2,A3,A4 \
+	S3:snake:snake-first-person-view:S1,S4,A2,A3,A4,Z3 \
 	S4:snake:boost-golden-apples-crumbs:S1 \
 	S5:snake:snake-scores-and-revives:S1,S2,S3,A1,A2,A3 \
 	I1:invaders:invaders-classic-rules:c0184 \
@@ -96,7 +96,7 @@ ac2() {
 }
 check "AC2: all the issues were captured by one land, whose subject lists every id, each filled, not a stub" ac2
 # At the capture, each issue's depends_on is exactly the list's, and pickman's lobby retirement waits for the portal:
-# retire-lobby-place (c0188) gains P5, Z3 and K3, game-over-returns-to-portal (f0187) gains Z3, both read at the same commit.
+# retire-lobby-place (c0188) gains P5, Z3 and K3, game-over-returns-to-portal (f0187) gains Z3 and P5, both read at the same commit.
 ac3() {
 	local row id want sha="" k hit p=pickman
 	for row in $ROWS; do
@@ -108,7 +108,7 @@ ac3() {
 		[[ $(tail -n +2 <<<"$body" | depsof) == "$want" ]] ||
 			{ echo "${row%%:*} ($SLUG): captured depends_on is [$(tail -n +2 <<<"$body" | depsof | tr '\n' ' ')], want [$(tr '\n' ' ' <<<"$want")]"; return 1; }
 	done
-	for row in retire-lobby-place:P5,Z3,K3 game-over-returns-to-portal:Z3; do
+	for row in retire-lobby-place:P5,Z3,K3 game-over-returns-to-portal:Z3,P5; do
 		hit=$(git -C "$ZN_ROOT" grep -l -e "^slug: ${row%%:*}$" "$sha" -- "$p/.tracker/issues" | grep -E '/([fdc][0-9]{4})/\1\.md$')
 		[[ -n $hit && $hit != *$'\n'* ]] || { echo "${row%%:*}: not exactly one issue at $sha"; return 1; }
 		k=${row#*:}
@@ -142,7 +142,7 @@ DIGESTS="b342322ab4a3588e457d2020ac1dca127d61a9aee49fa19add82774e0ba6d1b3:hiscor
 	5d5505ba1a00326a418476bade0c2737eb0df9864e5a583b026f9a9cfc324aea:snake-scores-and-revives \
 	a3736b06dae80450f0f661cb7776b4d0c5ad5d3ffa8e8f03a7e4ac6fc192cb58:invaders-classic-rules \
 	aec93b189b1ead601af93b575fac809baffc9f392fab4bd6c15583919048b301:invaders-two-players \
-	479281c79ac2701f5035f1408446b63f2e7ff3039bd0f85e30962d4702e88826:invaders-cannon-view \
+	6977f5363914cb2d6720b5a21b3eeccb8b5c5eac7d5dada571a84ff1229a884c:invaders-cannon-view \
 	ac0e798a85cbfe9c004b6a4d3a7b2f6ec257d5c5134e0d80e8f4b9d18f3d1a98:invaders-scores-and-revives \
 	28095e203f3e2818990f6640d95d5b70a142e7f54f9a411f231968d85063f262:asteroids-classic-rules \
 	c3db791985dff1fdadf4c4ec96ab135c9528824304c879c30c186b1d5da541f0:asteroids-two-players \
