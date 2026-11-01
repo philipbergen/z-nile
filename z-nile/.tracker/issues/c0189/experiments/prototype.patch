@@ -1,0 +1,705 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index e7cb2351..cd47cde4 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -6,7 +6,7 @@ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune
+ 
+ **Subagents:** don't use `fork` subagents. Delegate to a plain subagent (general-purpose) with `model: "sonnet"` and a full brief. The exceptions are design and code reviewers, which the skills pin to Opus 5.5.
+ 
+-**No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout and project home at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (zz-test skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself.
++**No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout and project home at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (zz-test skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself. One exception: If the tripwire's only finding is "refs written by a fixture appeared" and every listed ref is checked out in a live `.worktree/<name>` outside `.cache` (`git worktree list`), retry the gate or `./zn land` once without asking, and say so; if it fires again, or reports anything else, stop and report.
+ 
+ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills/`); `.claude/skills/<name>` links to each one (`./zn skills`). `z-nile/README.md` is the map: the flow, the five parts and every skill.
+ 
+diff --git a/SETUP.md b/SETUP.md
+index 03bc1a5b..acb1587b 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -24,7 +24,8 @@ z-nile/setup.sh
+    - To upgrade a tool: `rokit add --force <owner/tool>`, then commit `rokit.toml` as a chore issue.
+ 3. **Lune type definitions**: `lune setup` writes them to `~/.lune/.typedefs/<version>/`.
+    - `.luaurc` refers to them through the `lune` alias (`~/.lune/.typedefs/<version>/`). The version in that alias must match `rokit.toml`.
+-4. **Gate**: runs `z-nile/check.sh --full`.
++4. **Repository hook**: runs `./zn hooks`, which installs `origin/main`'s `z-nile/lib/repo-hooks/reference-transaction` in the git directory every worktree shares (it refuses a commit under the spec fixtures' identity, `@example.invalid`). The gate checks it (`./zn hooks --check`); a missing one is fixed by running `./zn hooks` again.
++5. **Gate**: runs `z-nile/check.sh --full`.
+    - The first run downloads the Roblox type definitions for luau-lsp to `.cache/globalTypes.d.luau`. This is gitignored and fetched again if missing.
+ 
+ ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
+@@ -48,6 +49,7 @@ Verification is local. `z-nile/check.sh --full` runs every project's gate on the
+ | luau-lsp can't resolve `@lune/...` | run `lune setup`, and check that the `lune` alias version in `.luaurc` matches `rokit.toml` |
+ | `sourcemap parsing failed` | a Rojo `$path` directory has no `.luau` files. Every root needs at least one |
+ | `./zn start` fails on `gh pr create` | `gh auth status`. A non-GitHub `origin` skips the draft PR, and with no `origin` the push is skipped too |
++| the gate fails at `hooks (./zn hooks --check)` | the repository hook is missing or older than `origin/main`'s: run `./zn hooks` (in any worktree of this repository: they share one git directory). A message about a hook it does not recognise, a link or a git setting that moves the hooks folder names the file to move or the setting to remove |
+ | lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
+ 
+ ## Beta publishing (Pickman Beta)
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+index f193d40a..1b41aeb7 100755
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -103,6 +103,7 @@ if [[ -n $plan ]]; then
+   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
+   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
+   [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
++  [[ -f z-nile/lib/repo-hooks/reference-transaction ]] && printf 'hooks: reference-transaction in the git directory (./zn hooks --check)\n'
+   for i in "${!names[@]}"; do
+     picked "${names[$i]}" || continue
+     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
+@@ -182,6 +183,8 @@ for e in ${places[@]+"${places[@]}"}; do
+ done
+ # the skill links (c0115): one committed relative link in .claude/skills per skill folder, every project's
+ [[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check
++# the repository hook (c0189): refuses a commit under a fixture identity; a missing one is fixed by ./zn hooks
++[[ -f z-nile/lib/repo-hooks/reference-transaction ]] && par_start "hooks (./zn hooks --check)" ./zn hooks --check
+ par_wait || exit 1
+ 
+ # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
+diff --git a/z-nile/engine/hooks.luau b/z-nile/engine/hooks.luau
+new file mode 100644
+index 00000000..32329c56
+--- /dev/null
++++ b/z-nile/engine/hooks.luau
+@@ -0,0 +1,160 @@
++--!strict
++-- The repository hook that refuses commits under a fixture identity (c0189). `z-nile/lib/repo-hooks/reference-transaction`
++-- is its source; `./zn hooks` installs it as <git common dir>/hooks/reference-transaction, and `./zn hooks --check`
++-- (the gate's static stage) reports what is wrong with the installed copy. The installed file is one file every worktree
++-- shares, so the text it is judged against and installed from is one reference for all of them: `origin/main`'s copy of
++-- the source, never the working tree of the checkout that happens to run the command (a branch's unmerged edit, or an
++-- older branch, would turn the other checkouts' gates red and could install an unreviewed hook for every session). A
++-- repository with no `origin/main` ref (a clone made for the final check) has nothing else, so it uses its own tree's
++-- copy. `plan` is pure: main.luau reads the state (the reference text, what is installed, the git configuration) and
++-- writes the one file the plan allows.
++local hooks = {}
++
++hooks.NAME = "reference-transaction"
++hooks.SOURCE = "z-nile/lib/repo-hooks/reference-transaction"
++-- The line that makes a hook this tool's own: `./zn hooks` replaces a file only when it carries it.
++hooks.MARKER = "# pickman-repo-hook: reference-transaction"
++-- The git setting that moves the hooks folder. Spelled here, in the one pure module, so that only this file needs the
++-- fence scan's allowance for the name (repo-fence.spec); main.luau passes the constant to git.
++hooks.CONFIG_KEY = "core.hooksPath"
++
++-- What is at the hook's place: nothing, a regular file, a symbolic link, or anything else (a folder, a special file).
++export type Kind = "absent" | "file" | "link" | "other"
++-- A hooks folder git is configured to read instead of the repository's: where the setting is and its value.
++export type Redirect = { scope: string, path: string }
++-- Where the reference text came from: `origin/main`'s copy of the source, or the checkout's own tree (no origin/main).
++export type From = "origin/main" | "tree"
++export type State = {
++	dest: string, -- <git common dir>/hooks/reference-transaction
++	from: From,
++	source: string?, -- the reference hook text; nil when `from` has none
++	kind: Kind,
++	installed: string?, -- the text at dest, for a regular file
++	executable: boolean, -- for a regular file
++	reviewed: boolean, -- the installed text is a copy origin/main's history of the source has held (an older, reviewed one)
++	redirects: { Redirect },
++}
++-- `none`: origin/main has no hook yet (before the change that adds it lands), so there is nothing to judge or install.
++-- `older`: the one thing to do is to update an older reviewed copy, which `--check` accepts with a note and the command updates.
++export type Plan = { action: "ok" | "install" | "refuse" | "none", problems: { string }, older: boolean? }
++
++-- Whether `text` is a hook this tool wrote: a line that is exactly the marker.
++function hooks.isOurs(text: string): boolean
++	for line in string.gmatch(text, "[^\n]+") do
++		if line == hooks.MARKER then
++			return true
++		end
++	end
++	return false
++end
++
++-- What to do about `state`, and what is wrong. Pure. Problems that only a person can clear make the action `refuse`
++-- (nothing is written, in either mode); a missing, stale or non-executable copy of our own file is `install`; an exact,
++-- executable copy is `ok` with no problems; origin/main having no hook is `none`. Every other state refuses (a guard acts
++-- on its one explicit "ok").
++function hooks.plan(s: State): Plan
++	local label = if s.from == "origin/main"
++		then `origin/main's {hooks.SOURCE}`
++		else `this tree's {hooks.SOURCE}`
++	if s.source == nil and s.from == "origin/main" then
++		return {
++			action = "none",
++			problems = {
++				`hooks: origin/main has no {hooks.SOURCE} yet, so there is nothing to install or check`,
++			},
++		}
++	end
++	local problems: { string } = {}
++	local refuse = false
++	local older = false
++	if s.source == nil or not hooks.isOurs(s.source) then
++		table.insert(
++			problems,
++			`hooks: {label} is missing or has no "{hooks.MARKER}" line, so there is nothing to install`
++		)
++		refuse = true
++	end
++	for _, r in s.redirects do
++		table.insert(
++			problems,
++			`hooks: git reads hooks from {r.path} ({r.scope} configuration), so {s.dest} would never run; remove that setting from your {r.scope} git configuration, or set it to this repository's own hooks folder`
++		)
++		refuse = true
++	end
++	if s.kind == "link" then
++		table.insert(
++			problems,
++			`hooks: {s.dest} is a symbolic link; ./zn hooks replaces only its own regular file: remove the link, then run ./zn hooks`
++		)
++		refuse = true
++	elseif s.kind == "other" then
++		table.insert(
++			problems,
++			`hooks: {s.dest} is not a regular file; ./zn hooks replaces only its own regular file: move it aside, then run ./zn hooks`
++		)
++		refuse = true
++	elseif s.kind == "absent" then
++		table.insert(problems, `hooks: {s.dest} is missing; run ./zn hooks`)
++	elseif s.installed == nil or not hooks.isOurs(s.installed) then
++		table.insert(
++			problems,
++			`hooks: {s.dest} is a hook ./zn hooks does not recognise (no "{hooks.MARKER}" line); it never overwrites one: move it aside, then run ./zn hooks`
++		)
++		refuse = true
++	elseif s.installed ~= s.source then
++		if s.reviewed and s.executable then
++			older = true
++			table.insert(
++				problems,
++				`hooks: {s.dest} is an older reviewed copy of {label}; run ./zn hooks to update`
++			)
++		else
++			table.insert(problems, `hooks: {s.dest} differs from {label}; run ./zn hooks`)
++		end
++	elseif not s.executable then
++		table.insert(problems, `hooks: {s.dest} is not executable, so git skips it; run ./zn hooks`)
++	end
++	if refuse then
++		return { action = "refuse", problems = problems }
++	end
++	return {
++		action = if #problems == 0 then "ok" else "install",
++		problems = problems,
++		older = older and #problems == 1,
++	}
++end
++
++-- The blob ids a `git log --first-parent --format= --raw --no-abbrev <ref> -- <source>` output names as the source's text after a
++-- commit (`:<mode> <mode> <old> <new> <status><TAB><path>` lines): every text origin/main's first-parent history (the texts main itself held; not the work-in-progress commits of a merged branch) has held. A deletion's zero
++-- name is left out.
++function hooks.blobIds(raw: string): { [string]: boolean }
++	local out: { [string]: boolean } = {}
++	for line in string.gmatch(raw, "[^\n]+") do
++		local new = string.match(line, "^:%d+ %d+ %x+ (%x+) ")
++		if new and not string.match(new, "^0+$") then
++			out[new] = true
++		end
++	end
++	return out
++end
++
++-- The redirect git really follows, from `git config --show-scope --get-all <CONFIG_KEY>`: one "<scope><TAB><value>"
++-- line per value, in the order git reads them, the last one winning. The `command` scope (what the fence passes through
++-- the environment) is not the person's configuration and is left out. None when the winning value names the
++-- repository's own hooks folder, or when nothing is set; so a global value that a local one sets back to the own folder
++-- is no redirect.
++function hooks.redirects(listed: string, own: string): { Redirect }
++	local winner: Redirect? = nil
++	for line in string.gmatch(listed, "[^\n]+") do
++		local scope, path = string.match(line, "^([^\t]+)\t(.*)$")
++		if scope and path and scope ~= "command" then
++			winner = { scope = scope, path = path }
++		end
++	end
++	if winner and winner.path ~= own then
++		return { winner }
++	end
++	return {}
++end
++
++return hooks
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..b8cec884 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -6,6 +6,7 @@ local claimsLib = require("./claims")
+ local compactLib = require("./compact")
+ local fs = require("@lune/fs")
+ local gateLib = require("./gate")
++local hooksLib = require("./hooks")
+ local idsLib = require("./ids")
+ local ledger = require("./ledger")
+ local lessonsLib = require("./lessons")
+@@ -81,7 +82,10 @@ usage: ./zn <command> ...
+   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
+                                                 list skill lessons; also --tags, --check, and --uncovered <id>...
+   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
+-                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
++                                                <project>/skills); --check writes nothing and exits 1 on a problem
++  hooks [--check]                               install origin/main's reference-transaction hook (it refuses commits under
++                                                a fixture identity) in the git directory every worktree shares;
++                                                --check writes nothing and exits 1 on a problem]]
+ 
+ local FOCUS_FILE = ".cache/tracker-focus"
+ local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
+@@ -4226,6 +4230,138 @@ function cmd.skills(pos: { string }, opts: { [string]: { string } })
+ 	print(`skills: {#list} skills linked`)
+ end
+ 
++-- `hooks [--check]` (c0189): the repository hook that refuses a ref update to a commit under a fixture identity. It
++-- is installed in the git directory every worktree shares, so it runs in the main checkout too (setup.sh does). The
++-- state is read here; hooks.plan decides; the only write is the hook file, renamed into place, never over a hook this
++-- tool does not recognise. What it installs and judges against is origin/main's copy of the source (hooks.luau says
++-- why), or the tree's own when the repository has no origin/main ref.
++function cmd.hooks(pos: { string }, opts: { [string]: { string } })
++	for k in opts do
++		if k ~= "--check" then
++			fail(`usage: ./zn hooks [--check] (unknown option {k})`)
++		end
++	end
++	if #pos > 0 then
++		fail("usage: ./zn hooks [--check]")
++	end
++	local common = sh.git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
++	local dir = `{common}/hooks`
++	local dest = `{dir}/{hooksLib.NAME}`
++	local kind: hooksLib.Kind = "absent"
++	if sh.run("test", { "-L", dest }).ok then
++		kind = "link"
++	elseif sh.run("test", { "-f", dest }).ok then
++		kind = "file"
++	elseif sh.run("test", { "-e", dest }).ok then
++		kind = "other"
++	end
++	-- the reference text: origin/main's, when the ref exists (a read that fails is an error, never "no hook")
++	local from: hooksLib.From = "tree"
++	local source: string? = if fs.isFile(hooksLib.SOURCE) then fs.readFile(hooksLib.SOURCE) else nil
++	local hasOrigin = false
++	for remote in string.gmatch(sh.git({ "remote" }), "[^\n]+") do
++		hasOrigin = hasOrigin or remote == "origin"
++	end
++	local fetched = sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/main" }).ok
++	if hasOrigin and not fetched then
++		-- an origin whose main was never fetched must not fall back to a branch's unmerged copy
++		fail("hooks: origin has no main fetched; run git fetch origin main")
++	end
++	if fetched then
++		from = "origin/main"
++		local listed = sh.run("git", { "ls-tree", "--name-only", "origin/main", "--", hooksLib.SOURCE })
++		if not listed.ok then
++			fail(`hooks: cannot read origin/main: {sh.trim(listed.stderr)}`)
++		end
++		source = nil
++		if sh.trim(listed.stdout) ~= "" then
++			-- the raw bytes of the blob (sh.git trims): the installed file's blob id is then one origin/main holds
++			local shown = sh.run("git", { "cat-file", "blob", `origin/main:{hooksLib.SOURCE}` })
++			if not shown.ok then
++				fail(`hooks: cannot read origin/main: {sh.trim(shown.stderr)}`)
++			end
++			source = shown.stdout
++		end
++	end
++	-- an installed copy of ours that differs from the reference: is it one origin/main has held? (one read, only then)
++	local installed = if kind == "file" then fs.readFile(dest) else nil
++	local reviewed = false
++	if
++		from == "origin/main"
++		and source
++		and installed
++		and installed ~= source
++		and hooksLib.isOurs(installed)
++	then
++		local log = sh.run("git", {
++			"log",
++			"--first-parent",
++			"--format=",
++			"--raw",
++			"--no-abbrev",
++			"origin/main",
++			"--",
++			hooksLib.SOURCE,
++		})
++		if not log.ok then
++			fail(`hooks: cannot read origin/main's history of {hooksLib.SOURCE}: {sh.trim(log.stderr)}`)
++		end
++		reviewed = hooksLib.blobIds(log.stdout)[sh.git({ "hash-object", dest })] == true
++	end
++	-- git config exits 1 when the setting is unset: no redirect
++	local configured = sh.run("git", { "config", "--show-scope", "--get-all", hooksLib.CONFIG_KEY })
++	local state: hooksLib.State = {
++		dest = dest,
++		from = from,
++		source = source,
++		kind = kind,
++		installed = installed,
++		executable = kind == "file" and sh.run("test", { "-x", dest }).ok,
++		reviewed = reviewed,
++		redirects = hooksLib.redirects(if configured.ok then configured.stdout else "", dir),
++	}
++	local plan = hooksLib.plan(state)
++	if plan.action == "none" then
++		print(plan.problems[1])
++		return
++	end
++	if opts["--check"] then
++		if plan.action == "install" and plan.older then
++			print(plan.problems[1]) -- accepted: an older copy origin/main has held still refuses fixture commits
++			return
++		end
++		if plan.action ~= "ok" then
++			fail(table.concat(plan.problems, "\n"))
++		end
++		print(`hooks: {hooksLib.NAME} installed in {dir}, ok`)
++		return
++	end
++	if plan.action == "refuse" then
++		fail(table.concat(plan.problems, "\n"))
++	end
++	if plan.action == "ok" then
++		print(`hooks: {dest} is up to date`)
++		return
++	end
++	-- the new file is complete and executable before it replaces anything: git skips a hook that is not executable
++	fs.writeDir(dir)
++	local tmp = ""
++	local ok, err = pcall(function()
++		-- a name of its own (two installs at once must not share one, or one could move the other's non-executable file in)
++		tmp = sh.must("mktemp", { `{dir}/.{hooksLib.NAME}.new.XXXXXX` })
++		sh.writeReplacing(tmp, state.source :: string)
++		sh.must("chmod", { "755", tmp })
++		sh.must("mv", { "-f", tmp, dest })
++	end)
++	if not ok then
++		if tmp ~= "" then
++			pcall(fs.removeFile, tmp)
++		end
++		fail(`hooks: could not install {dest}: {err}`)
++	end
++	print(`hooks: {if kind == "absent" then "installed" else "updated"} {dest}`)
++end
++
+ -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
+ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 	local function usage(why: string): never
+diff --git a/z-nile/lib/repo-hooks/reference-transaction b/z-nile/lib/repo-hooks/reference-transaction
+new file mode 100755
+index 00000000..3e2c4238
+--- /dev/null
++++ b/z-nile/lib/repo-hooks/reference-transaction
+@@ -0,0 +1,77 @@
++#!/bin/sh
++# pickman-repo-hook: reference-transaction
++# The repository's own ref guard (c0189; zz-test skill, "Specs never touch the real repository"). ./zn hooks installs
++# origin/main's copy of this file as <git common dir>/hooks/reference-transaction, so it covers the main checkout and
++# every worktree.
++# It refuses an update of HEAD or of a ref to a commit whose author or committer email ends in @example.invalid (any
++# letter case), the identity reserved for spec fixtures: every running gate reads a ref at such a commit as a spec's
++# escape (the tripwire), so a prototype committed under it would fail other sessions' gates.
++# Only the "prepared" phase acts. Allowed: deleting a ref, an update of a ref to the value it already holds (whether the
++# line says old = new or leaves old unverified: rebase --abort, pack-refs; not for HEAD, see below), a symbolic update, a pseudo-ref (ORIG_HEAD,
++# CHERRY_PICK_HEAD, ...) and an object that is not a commit. If the new commits cannot be read, it refuses.
++[ "$1" = prepared ] || exit 0
++refuse() {
++  echo "reference-transaction (z-nile/lib/repo-hooks): $1" >&2
++  exit 1
++}
++# One awk reads the transaction. Its output is the distinct new object names of the updates of HEAD or a refs/ ref
++# to a non-zero hex name, a blank line, then "sha ref" per such update (for the message).
++nl='
++'
++out=$(awk '
++  $1 != $2 && ($3 == "HEAD" || $3 ~ /^refs\//) && $2 ~ /^[0-9a-f]+$/ && $2 !~ /^0+$/ {
++    pairs = pairs $2 " " $3 "\n"
++    if (!seen[$2]++) shas = shas $2 "\n"
++  }
++  END { if (pairs != "") printf "%s\n%s", shas, pairs }')
++[ -n "$out" ] || exit 0
++shas=${out%%"$nl$nl"*}
++updates=${out#*"$nl$nl"}
++# "commit <sha>" then "<author email>, a tab, <committer email>" per distinct new commit (a tree or blob prints nothing)
++who=$(printf '%s\n' "$shas" | git rev-list --no-walk=unsorted --stdin --format='%ae%x09%ce' 2>/dev/null) ||
++  refuse "cannot read the new commits; refusing (remove the hook only if git itself is broken)"
++# cheap test first: no fixture identity anywhere in the output, in any letter case
++case $who in
++*@[eE][xX][aA][mM][pP][lL][eE].[iI][nN][vV][aA][lL][iI][dD]*) ;;
++*) exit 0 ;;
++esac
++# exact test: one "sha role email" line per identity that ends in the fixture domain
++found=$(printf '%s\n' "$who" | awk -F '\t' '
++  /^commit / { sha = substr($0, 8); next }
++  { if (tolower($1) ~ /@example\.invalid$/) print sha, "author", $1
++    if (tolower($2) ~ /@example\.invalid$/) print sha, "committer", $2 }')
++[ -n "$found" ] || exit 0
++# An update whose ref already holds the new name changes nothing, whatever the line's old field says: git sends a
++# same-value update as "<v> <v>" or, when it did not verify the old value (rebase --abort, pack-refs), as "0000 <v>".
++# Read on this path only. During "prepared" the ref is locked but not yet written, so this is its value before.
++# HEAD and the per-worktree refs are left out of this test: git runs a "worktree add" in the calling worktree, so
++# rev-parse would read that worktree's HEAD, not the one being written; they are judged by the line's old = new only.
++changed=$(printf '%s\n' "$updates" | while read -r sha ref; do
++  if [ "$ref" != HEAD ] && [ "${ref#refs/bisect/}" = "$ref" ] && [ "${ref#refs/worktree/}" = "$ref" ] &&
++    [ "${ref#refs/rewritten/}" = "$ref" ] && [ "$(git rev-parse -q --verify "$ref" 2>/dev/null)" = "$sha" ]; then
++    continue
++  fi
++  printf '%s %s\n' "$sha" "$ref"
++done)
++[ -n "$changed" ] || exit 0
++# the refs after the colon: rev-list names a tag's commit, the transaction names the tag object, so each update is
++# keyed by the commit it peels to (only on this path, which is rare)
++peeled=$(printf '%s\n' "$changed" | while read -r sha ref; do
++  printf '%s %s\n' "$(git rev-parse -q --verify "$sha^{commit}" 2>/dev/null || printf '%s' "$sha")" "$ref"
++done)
++listed=$(printf '%s\n%s\n' "$peeled" "$found" | awk '
++  NF == 2 { refs[$1] = refs[$1] " " $2; next }
++  refs[$1] != "" { print "  " substr($1, 1, 8) " (" $2 " " $3 "):" refs[$1]; if (refs[$1] ~ / refs\/remotes\//) remote = 1 }
++  refs[$1] != "" && refs[$1] ~ / HEAD( |$)/ { head = 1 }
++  END {
++    if (remote) print "A remote-tracking ref means a branch on the remote carries the identity: delete that branch there."
++    if (head) print "If this stopped a checkout, switch, reset or fast-forward merge (not a commit), git has already changed your files: git reset --merge puts them back and keeps your own edits. Merge a prototype branch with git merge --no-ff; look at one with git worktree add <dir> <branch>."
++  }')
++[ -n "$listed" ] || exit 0
++{
++  echo "reference-transaction (z-nile/lib/repo-hooks): refused. A commit written under a fixture identity (@example.invalid) cannot become a ref of this repository:"
++  printf '%s\n' "$listed"
++  echo "If this stopped a rebase or cherry-pick of older prototype commits: git rebase --abort (or git cherry-pick --abort), then merge instead of rebasing, or move the prototype to a scratch clone."
++  echo "Fixture identities belong only to spec fixtures under .cache. A prototype lives in a scratch clone (git clone this checkout into \$TMPDIR or the scratchpad) or commits under your own identity (git commit --amend --reset-author takes over a prototype commit; c0189, zz-test skill). Pushing a prototype to a repository with this hook is refused the same way."
++} >&2
++exit 1
+diff --git a/z-nile/setup.sh b/z-nile/setup.sh
+index 1690f2c3..d5b285a9 100755
+--- a/z-nile/setup.sh
++++ b/z-nile/setup.sh
+@@ -69,6 +69,9 @@ if [[ ${1:-} == --tools ]]; then
+   exit 0
+ fi
+ 
++say "repository hook"
++./zn hooks # refuses commits under a fixture identity; the gate checks it
++
+ say "gate"
+ z-nile/check.sh --full
+ 
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 9baa6675..a673a590 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -28,6 +28,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
+   - Each gets a pass/fail question, a method and a fallback.
+   - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
++  - A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape.
+ - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
+ - **Override check**: promoted specs in `tests/acceptance/` are never edited during execution, so find the conflicts now.
+   - For each Touched path, run `lune run z-nile/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.
+@@ -53,7 +54,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+   - This is what makes the checks unfakeable and sequestered.
+   - They never change the real repository: every command that changes anything runs in a fixture under `.cache/<unique name>` with its own repository, checked before each write, committing as `<name>@example.invalid` (zz-test skill, "Specs never touch the real repository"). Before the guards exist on your branch, or while prototyping them, run them only in a clone under `$TMPDIR`.
+ - **Verify the wiring**: `./zn check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
+-- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
++- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch clone or worktree (the rule under Unknowns & experiments), apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
+ - **Dry-run the promotion**: `./zn promote-check <id>`. The only acceptable failures before implementation are requires of modules the issue will create.
+ 
+ ## 5. Adversarial design review (required)
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index 5d60a654..66a48c0f 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -12,7 +12,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ |---|---|
+ | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
+ | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+-| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
++| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards of a check run), `repo-hooks/` (the hook installed in the real repository by `./zn hooks`), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
+ | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
+ | `z-nile/templates/` | the item, raft and prompt templates |
+ | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 5628ff86..c9f96de3 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -19,6 +19,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
+ 
+ ## Phase 1: Experiments (fail fast)
+ - For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
++- A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape.
+ - **If an experiment fails:**
+   - Switch to the documented fallback, and note that in the issue.
+   - If there's no fallback: **stop** and escalate (see Stop conditions).
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index cec2eae1..9488f35e 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -98,7 +98,7 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh`
+ 5. **Architecture rules** from the skill, including thin adapters and server authority.
+ 6. **Performance**: per-frame allocations, O(n²) work in a tick, and replication volume.
+ 7. **Judged criteria**: give a ruling on each against its rubric.
+-8. **Repository safety**: no spec, `check.sh` or script in the diff may change the real repository, run a command that changes anything outside a `.cache` fixture, or weaken a guard: `tests/lib/fence.luau`, `z-nile/lib/fence.sh`, `z-nile/lib/git-hooks/`, the fence in `z-nile/lib/ac.sh`, `tests/tooling/repo-fence.spec.luau`. Check the "Caught only by review" list in the zz-test skill's "Specs never touch the real repository" section line by line. Any such path is **high**.
++8. **Repository safety**: no spec, `check.sh` or script in the diff may change the real repository, run a command that changes anything outside a `.cache` fixture, or weaken a guard: `tests/lib/fence.luau`, `z-nile/lib/fence.sh`, `z-nile/lib/git-hooks/`, `z-nile/lib/repo-hooks/`, the fence in `z-nile/lib/ac.sh`, `tests/tooling/repo-fence.spec.luau`. Check the "Caught only by review" list in the zz-test skill's "Specs never touch the real repository" section line by line. Any such path is **high**.
+ 9. **Fix delta** (re-review rounds): review the fix delta as well as the whole diff: `git diff <the previous review's commit>..HEAD` (the commit that added the previous `review-NNN.md`). For each fix, what new behaviour does it add, and what does that break or open? A defect in a fix is a finding like any other.
+ 10. **Lessons**: the same as design mode's item 10, with `./zn lessons --when build --full`.
+ 
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index aae9a04c..5d72683e 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -43,9 +43,9 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ 1. **The main checkout is read-only.** The complete list of commands that may run there:
+    - `git fetch`, `./zn sync` (a fast-forward there, which also rebuilds the board), and read-only inspection (`git status|log|diff|show|worktree list`);
+    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
+-   - `z-nile/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
++   - `z-nile/setup.sh`, once, when bootstrapping a new machine (SETUP.md), and `./zn hooks` (it writes only the reference-transaction hook in the git directory every worktree shares, never the working tree);
+    - `./zn ready` and `stop`, which publish to `origin/main`, fast-forward it there; `ready` writes the ignored `<root>/rafts/active/<R-id>/prompt.md` beside the raft and `stop` removes it;
+-   - the read-only tracker commands `list`, `audit`, `find`, `members`, `busy`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>` (it reads a readied raft's prompt and writes nothing), `lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read), and the worktree commands `worktree` and `worktree-prune`. (`./zn check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
++   - the read-only tracker commands `list`, `audit`, `find`, `members`, `busy`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>` (it reads a readied raft's prompt and writes nothing), `lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read), `hooks --check` (it only reads), and the worktree commands `worktree` and `worktree-prune`. (`./zn check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`, `remap` and `skills` (without `--check`) refuse to run in the main checkout of a repo that has an `origin`; `ready` and `stop` refuse to run anywhere else.
+ 2. **Every change starts with a worktree**: `cd "$(./zn worktree <target>)"`.
+ 
+@@ -79,6 +79,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
+ | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
++| hooks | `./zn hooks [--check]` | installs `origin/main`'s copy of `z-nile/lib/repo-hooks/reference-transaction` (this tree's own when the repository has no `origin/main`, as in the Merging clone; never an unmerged edit) as the git directory's `hooks/reference-transaction` (one hook for the main checkout and every worktree; it refuses a ref update to a commit whose author or committer email ends in `@example.invalid`): a missing, differing or non-executable copy of our own file is replaced by writing a new file and renaming it into place (when `origin/main` has no such file yet there is nothing to install and nothing to check), and a hook it does not recognise (no `# pickman-repo-hook: reference-transaction` line), a link, a folder, or a git configuration that moves the hooks folder is refused with the reason. With `--check` it writes nothing and exits 1 naming each problem and its fix. `z-nile/setup.sh` runs it; the gate runs `--check`. It works in the main checkout |
+ | raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
+ | fold | `./zn fold <R-id> <issue>...` | in a worktree, on a clean tree. Puts prepared backlog issues with no `raft:` into a prepared backlog raft of their type and project: publishes the raft's claim (its `status:` only; a raft this checkout already claimed is not claimed again), then writes each issue's `raft:` and the raft's `issues:` here and commits. Refuses a solo issue with others, and a raft that is new, being prepared, active or done |
+ | unfold | `./zn unfold <R-id> <issue>...` | in a worktree, on a clean tree. Takes members out of a backlog raft: claims it as `fold` does, then empties each issue's `raft:`, drops it from `issues:` and `grouped:` here and commits. The route back to z-design for a rafted issue, during a rafting or after it landed |
+@@ -104,7 +105,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+ ## Merging
+ The agent that delivered the change merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
+ 1. **For a raft**, `./zn done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (zz-execute Phase 4). Only a *significant* finding in the final round's `review-NNN.md` (any high, or a failed Judged criterion) blocks the merge and engages the human; mediums and lows become follow-up issues (zz-execute Phase 4 step 7).
+-2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Spawn the gate there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check.
++2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Run `./zn hooks` in the clone (the gate's static stage checks the repository it runs in, and a fresh clone has no hook of its own). Spawn the gate there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check.
+ 3. In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`.
+ 4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it), repeat step 2 (rerun `z-nile/check.sh --full` in that clone) and step 3 (`lune run scripts/cicd`), push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
+ 5. The human hasn't said to hold.
+@@ -154,6 +155,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - `./zn spend <id> --phase <phase> --time <minutes>`
+ - `./zn audit`
+ - `./zn skills [--check]`
++- `./zn hooks [--check]`
+ - `./zn raft-plan [--apply]`, `./zn fold <R-id> <issue>...`, `./zn unfold <R-id> <issue>...`, `./zn recombine <keeper> <other> [<issue>...]`, `./zn release <R-id> [--force]`
+ - `./zn compact [--force]`
+ - `./zn remap`
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..d3c08925 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -8,7 +8,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ ## Running tests
+ | command | use |
+ |---|---|
+-| `z-nile/check.sh` / `--affected` | while iterating: format, lint, types for src (Roblox definitions) and tests/scripts (Lune definitions), rojo build, and **only the affected specs** |
++| `z-nile/check.sh` / `--affected` | while iterating: format, lint, types for src (Roblox definitions) and tests/scripts (Lune definitions), rojo build, the skill links and the repository hook (`./zn skills --check`, `./zn hooks --check`), and **only the affected specs** |
+ | `z-nile/check.sh --full` | every project's gate, every spec. Used by `land` and `setup.sh` |
+ | `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate: its static stages and its specs alone (each project has its own gate; no `--project` runs every project's). A home's `scripts/check.sh` runs that project's gate (c0120): `pickman/scripts/check.sh` pickman's, `z-nile/scripts/check.sh` z-nile's. The local full gate runs every project (`z-nile/check.sh --full` with no `--project`). GitHub Actions does not run it. |
+ | `z-nile/check.sh --plan` | print what each stage reads for each project, and run nothing |
+@@ -119,8 +119,9 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+   - **A pid above 99999**: the sweep doesn't reach it, should a future macOS raise `PID_MAX`.
+   - **The guards trust their own environment**: a caller that sets `PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` as the jail does makes the home fence waive a sentinel it couldn't write (a `.cache` made unwritable outside any jail), and `PICKMAN_FENCE_HOOKS` at a folder of permissive hooks switches the ref guard off (captured as c0123). Nothing in the fence tells a real jail from forged markers (c0120 code review 004 F5): review a check or spec that sets any `PICKMAN_TEST_*` or `PICKMAN_FENCE_*` variable.
+   - **AC18 trusts the `origin` it resolves** (c0120): it reads the published main with `git ls-remote origin`, so a swapped `origin` URL, a `url.*.insteadOf` or `GIT_CONFIG_*` in the environment can make any repository's main the reference. Every verdict prints the URL it resolved; check it names the project's GitHub repository (c0120 code review 009 F4).
++- **Fixture identities stay in fixtures**: A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape. The hook is `z-nile/lib/repo-hooks/reference-transaction`, installed in the git directory every worktree shares by `./zn hooks` (`z-nile/setup.sh` runs it; the gate's static stage runs `./zn hooks --check`, which only reads), from `origin/main`'s copy and never from a branch's unmerged edit. It refuses, in the `prepared` phase, an update of `HEAD` or a ref to a commit whose author or committer email ends in `@example.invalid`; deleting a ref and a no-op update are allowed. It cannot see `git branch -m` or `git branch -c` (git writes those refs outside a transaction), so never rename or copy a branch whose tip is a fixture commit: delete it, or look at it with `git worktree add <dir> <branch>`. Spec fixtures have repositories of their own, which never run it.
+ - **Running specs against unguarded code**: only in a clone under `$TMPDIR`, outside every repository (`git clone --no-hardlinks . "$(mktemp -d)/repo"`). That applies when prototyping the guards themselves, or on a branch from before them. A broken fixture there can only reach the clone.
+-- **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it.
++- **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it. One exception: If the tripwire's only finding is "refs written by a fixture appeared" and every listed ref is checked out in a live `.worktree/<name>` outside `.cache` (`git worktree list`), retry the gate or `./zn land` once without asking, and say so; if it fires again, or reports anything else, stop and report.
+ 
+ ## Hooks (Claude Code only)
+ - After every `.luau` edit: stylua formats the file and selene lints it.
+diff --git a/z-nile/tests/acceptance/c0055/setup-run.spec.luau b/z-nile/tests/acceptance/c0055/setup-run.spec.luau
+index 1856a365..d6ae1ad8 100644
+--- a/z-nile/tests/acceptance/c0055/setup-run.spec.luau
++++ b/z-nile/tests/acceptance/c0055/setup-run.spec.luau
+@@ -85,6 +85,8 @@ local function build()
+ 	end
+ 	-- c0114 override: the bootstrap and the gate moved to z-nile/
+ 	link(STUB, `{REPO}/z-nile/check.sh`)
++	-- c0189 override: setup.sh runs ./zn hooks before the gate; the stub records the call
++	link(STUB, `{REPO}/zn`)
+ 	-- c0120 override: specs run in z-nile's home, so the script is read from the checkout's top
+ 	local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+ 	fs.writeFile(`{REPO}/z-nile/setup.sh`, fs.readFile(`{top}/z-nile/setup.sh`))
+@@ -267,6 +269,10 @@ return t.spec("c0530 setup.sh, run whole", function(it)
+ 				t.expect(index(log, "rokit install") > 0).toBe(true)
+ 				t.expect(index(log, "lune setup") > index(log, "rokit install")).toBe(true)
+ 				t.expect(index(log, "check.sh") > index(log, "lune setup")).toBe(true)
++				-- c0189 override: the repository hook is installed once, after the tools and before the gate
++				t.expect(count(log, "zn hooks")).toBe(1)
++				t.expect(index(log, "zn hooks") > index(log, "lune setup")).toBe(true)
++				t.expect(index(log, "check.sh") > index(log, "zn hooks")).toBe(true)
+ 				t.expect(has(r.stdout, "SETUP OK")).toBe(true)
+ 			end
+ 		end
+@@ -279,6 +285,7 @@ return t.spec("c0530 setup.sh, run whole", function(it)
+ 			t.expect(r.ok).toBe(true)
+ 			local log = calls()
+ 			t.expect(index(log, "check.sh")).toBe(0)
++			t.expect(index(log, "zn")).toBe(0) -- c0189 override: no repository hook for a tools-only run
+ 			t.expect(index(log, "lune setup") > index(log, "rokit install")).toBe(true)
+ 			t.expect(has(r.stdout, "tools only: gate skipped")).toBe(true)
+ 			t.expect(has(r.stdout, "SETUP OK")).toBe(false)
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index 6a540447..544dc29f 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -275,6 +275,42 @@ for _, dir in { "z-nile/tests/acceptance/" .. C0172 } do
+ 		PICKMAN_FENCE_ = "quotes the fence variable as a needle in the Merging skill text, and never sets it (c0172)",
+ 	}
+ end
++-- c0189: the repository hook's specs. hooks-command.spec sets the setting that moves the hooks folder in its own
++-- fixture checkout, to prove `./zn hooks` refuses it; repo-hook.spec drives the ref guard hook in its own .cache fixture,
++-- naming only that fixture as protected, to prove it passes what it allows on to the repository hook; hooks.luau, a
++-- pure module with no process call, holds the name of the setting (hooks.CONFIG_KEY): the one setting under which the
++-- hook never runs, read to report it and never written. main.luau passes the constant to git and names nothing.
++-- Each entry is added to the file's table, not assigned over it, so an entry another branch adds there survives.
++local C0189 = renamed.id("c0189")
++local function allow(path: string, name: string, reason: string)
++	ALLOWED[path] = ALLOWED[path] or {}
++	ALLOWED[path][name] = reason
++end
++allow(
++	`z-nile/tests/acceptance/{C0189}/hooks-command.spec.luau`,
++	"hooksPath",
++	"sets the setting in a fixture checkout, to prove ./zn hooks refuses it (c0189)"
++)
++allow(
++	`z-nile/tests/acceptance/{C0189}/repo-hook.spec.luau`,
++	"PICKMAN_FENCE_",
++	"drives the ref guard hook in a .cache fixture, naming only that fixture as protected (c0189)"
++)
++allow(
++	"z-nile/engine/hooks.luau",
++	"hooksPath",
++	"holds hooks.CONFIG_KEY, the name of the setting ./zn hooks reads to report a hooks folder git does not use, and never writes (c0189)"
++)
++-- c0189: addresses a spec may commit under in its own .cache fixture although they are not the fixture identity, each to
++-- prove the repository hook lets it through. Keyed like ALLOWED; the scan below accepts exactly these for that file.
++local OTHER_IDENTITIES: { [string]: { [string]: string } } = {
++	[`z-nile/tests/acceptance/{C0189}/repo-hook.spec.luau`] = {
++		["real@normal.test"] = "an ordinary address: the hook allows it",
++		["x@notexample.invalid"] = "ends in a longer name: not the fixture domain",
++		["x@example.invalid.test"] = "the fixture domain followed by more: not the fixture domain",
++		["example.invalid@normal.test"] = "the fixture domain in the local part: not the fixture domain",
++	},
++}
+ -- The guard's own hooks (and their helper .repo.sh) name what they guard.
+ local EXEMPT_DIRS = { "z-nile/lib/git-hooks/" }
+ local function exempt(path: string): boolean
+@@ -601,6 +637,9 @@ return t.spec("repository fence", function(it)
+ 			for key in ALLOWED do
+ 				table.insert(keys, key)
+ 			end
++			for key in OTHER_IDENTITIES do
++				table.insert(keys, key)
++			end
+ 			-- a root's home: the folder holding it (`pickman/.tracker` is pickman/'s), as the registry derives it
+ 			local function homeOfRoot(root: string): string
+ 				return string.match(root, "^(.*)/[^/]+$") or "."
+@@ -694,7 +733,8 @@ return t.spec("repository fence", function(it)
+ 				continue
+ 			end
+ 			for _, email in identitiesIn(fs.readFile(`{checkout}/{path}`)) do
+-				if not string.match(email, "@example%.invalid$") then
++				local other = OTHER_IDENTITIES[path]
++				if not string.match(email, "@example%.invalid$") and not (other and other[email]) then
+ 					table.insert(bad, `{path}: {email}`)
+ 				end
+ 			end
