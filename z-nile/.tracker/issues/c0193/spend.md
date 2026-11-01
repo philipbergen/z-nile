@@ -5,6 +5,7 @@
 | 1 | 2026-11-01 11:15 | capture | 0 | 0 | 3.0 | spend | capture |  |
 | 2 | 2026-11-01 12:57 | design-review-001 | 0 | 0 | 13.2 | spend | design-review | 184468 |
 | 3 | 2026-11-01 13:08 | design-refute-001 | 0 | 0 | 45.0 | spend | design-review |  |
+| 4 | 2026-11-01 13:23 | design-review-002 | 0 | 0 | 13.0 | spend | design-review | 190000 |
 
-**Total:** +0 / -0 lines, 61.2 agent-minutes, 184468 tokens over 3 records
-<!-- totals: added=0 removed=0 minutes=61.2 records=3 tokens=184468 -->
+**Total:** +0 / -0 lines, 74.2 agent-minutes, 374468 tokens over 4 records
+<!-- totals: added=0 removed=0 minutes=74.2 records=4 tokens=374468 -->
