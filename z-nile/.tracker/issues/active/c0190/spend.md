@@ -19,6 +19,7 @@
 | 15 | 2026-11-01 17:48 | prep | 599 | 6 | 120.0 | spend | prep |  |
 | 16 | 2026-11-01 18:24 | c0190: the 27 step-2 issues captured (land d7714681) | 0 | 0 | 30.0 | focus | build |  |
 | 17 | 2026-11-01 18:29 | R0067: review-001 | 0 | 0 | 4.0 | focus | code-review |  |
+| 18 | 2026-11-01 18:30 | R0067: refute-001, harvest, c0190 quote source | 2 | 0 | 8.0 | focus | code-review |  |
 
-**Total:** +599 / -6 lines, 474.0 agent-minutes, 955815 tokens over 17 records
-<!-- totals: added=599 removed=6 minutes=474.0 records=17 tokens=955815 -->
+**Total:** +601 / -6 lines, 482.0 agent-minutes, 955815 tokens over 18 records
+<!-- totals: added=601 removed=6 minutes=482.0 records=18 tokens=955815 -->
