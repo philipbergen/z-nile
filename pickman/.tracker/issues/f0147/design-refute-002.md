@@ -7,3 +7,5 @@
 - F5: fixed: Behaviour 2 says the eyes are strictly faster up to level 22 and capped at a tile from 23.
 - F6: fixed: `Levels.MAX_TOP = 1000`; `validateRamp` refuses a top over it (case: top 1001 refused by Levels and by `Session.new`); row M55, killed.
 - F7: fixed: c0177's Solution retitles the narrowed eyes case (the shipped eyes are the untuned config's).
+
+Pending for round 3's answers (from d0149's prep, 2026-10-31): hud.spec's touch clearance names `snap`, `fire`, `hop` and `pick`; d0149 changes `Touch.Buttons` to `{ steer, look: Circle, fire, pick: Rect }`. The clearance loop will walk every field `Touch.buttons` returns (a `Rect` as it is, a `Circle { x, y, r }` as its bounding square, anything else a failure), so it checks d0149's circles whichever lands first.

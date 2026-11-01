@@ -47,6 +47,8 @@ return t.spec("f0147 game-design.md", function(it)
 				"Carry into next level",
 				"carrying the fraction from step to step",
 				"Carry fractions",
+				"a rolled longer-jumps boon shows its banner and adds nothing",
+				"Keep it, record it",
 			}
 		do
 			if string.find(s, needle, 1, true) == nil then
@@ -64,6 +66,8 @@ return t.spec("f0147 game-design.md", function(it)
 		t.expect(has("- **Levels** (the classic rules, kept for the default config the specs use")).toBe(true)
 		t.expect(has("on f0147's ramp, 67 steps on level 1")).toBe(true)
 		t.expect(has("on the shipped speed ramp, 2.625 tiles/s of real time, f0147")).toBe(true)
+		t.expect(has("On the shipped game every point scored on level n is worth n times as much (f0147)"))
+			.toBe(true)
 		t.expect(has("at the shipped ramp's level 1 speed of 21 units, 10 and 31, f0147")).toBe(true)
 		t.expect(
 			has("on the shipped ramp, twice the level's ramped player speed, never past a tile a step, f0147")

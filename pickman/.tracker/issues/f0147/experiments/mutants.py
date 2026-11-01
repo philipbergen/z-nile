@@ -88,6 +88,13 @@ MUTANTS = {
         ("		g.carry = total - units", "		SHARED[g.name] = total - units"),
     ], "ramp"),
     "M55": (L + "Levels/init.luau", "if not whole(r.top) or r.top > Levels.MAX_TOP then", "if not whole(r.top) then", "ramp"),
+    # the carries kept over a new level or a new run (saved before the ghosts are placed again, restored after)
+    "M58": (L + "Ghosts/init.luau", [
+        ("		set.house.personal = { pinky = 0, inky = 0, clyde = 0 }\n		set.house.global = nil\n	end\n	place(set)", "		set.house.personal = { pinky = 0, inky = 0, clyde = 0 }\n		set.house.global = nil\n	end\n	local kept = {}\n	for _, g in set.ghosts do\n		kept[g.name] = g.carry\n	end\n	place(set)\n	if reason ~= \"respawn\" then\n		for _, g in set.ghosts do\n			g.carry = kept[g.name]\n		end\n	end"),
+    ], "ramp"),
+    "M59": (L + "Ghosts/init.luau", "	set.frightened = ticks\n	set.chain = 0\n", "	set.frightened = ticks\n	set.chain = 0\n	for _, g in set.ghosts do\n		g.carry = 0.5\n	end\n", "ramp"),
+    "M60": (L + "Ghosts/init.luau", "	if set.ramp and kind ~= \"normal\" then", "	if kind == \"normal\" then\n		g.carry = 0.5\n	end\n	if set.ramp and kind ~= \"normal\" then", "ramp"),
+    "M61": (L + "Session/init.luau", "picksGoal = if s.config.ramp then s.config.ramp.picks else nil,", "picksGoal = if s.config.ramp then 10 else nil,", "hud"),
     "M41": (L + "Hud/init.luau", 'bonanza = "BONANZA!"', 'bonanza = "BONUS"', "hud"),
     "M42": (L + "Session/init.luau", "then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning, ramp = s.config.ramp })", "then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning })", "ramp"),
     "M43": (L + "Session/init.luau", "			picks = if s.config.ramp then s.members[id].levelPicks else nil,", "			picks = s.members[id].levelPicks,", "levels"),

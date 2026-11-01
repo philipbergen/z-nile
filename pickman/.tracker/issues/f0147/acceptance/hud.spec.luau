@@ -95,6 +95,14 @@ return t.spec("f0147 the HUD's pick counter and power share", function(it)
 			(classic :: any).members.p.play.level = 17
 			t.expect(Session.frame(classic, "p").play.power).toBe(0)
 			t.expect(Hud.model(Session.frame(ramped, "p").play).picks).toBe("PICKS 0/10")
+			-- the goal is the ramp's own picks, not a fixed ten
+			local two = table.clone(Levels.RAMP) :: any
+			two.picks = 2
+			local short =
+				Session.new(m, 1, { movement = Movement.DEFAULT_CONFIG, maxIntentsPerTick = 4, ramp = two })
+			Session.join(short, "p")
+			t.expect(Session.frame(short, "p").play.picksGoal).toBe(2)
+			t.expect(Hud.model(Session.frame(short, "p").play).picks).toBe("PICKS 0/2")
 		end
 	)
 
@@ -121,21 +129,33 @@ return t.spec("f0147 the HUD's pick counter and power share", function(it)
 						local l = Hud.layout(s[1], s[2], inset)
 						local blocks = Touch.blocks(l)
 						local box = Hud.picksBox(blocks.score)
-						local b = Touch.buttons(l) :: any
 						local others: { Rect } = {
 							blocks.score,
 							blocks.level,
 							blocks.lives,
 							blocks.power,
-							b.snap,
-							b.fire,
-							b.hop,
-							b.pick,
 							Hud.pickBox(l),
 							Hud.boonBox(l),
 							Hud.radarBox(s[1], s[2], RADAR, false),
 							Hud.radarBox(s[1], s[2], RADAR, true, band),
 						}
+						-- every touch control Touch.buttons returns, whatever it holds (f0110's and f0126's buttons today, d0149's
+						-- circles later): a rectangle as it is, a circle { x, y, r } as its bounding square, anything else a failure
+						local controls = 0
+						for name, c in Touch.buttons(l) :: any do
+							if type(c) == "table" and c.w and c.h then
+								table.insert(others, c)
+							elseif type(c) == "table" and c.r then
+								table.insert(
+									others,
+									{ x = c.x - c.r, y = c.y - c.r, w = 2 * c.r, h = 2 * c.r }
+								)
+							else
+								error(`Touch.buttons' {name} is neither a rectangle nor a circle`)
+							end
+							controls += 1
+						end
+						t.expect(controls >= 2).toBe(true)
 						for lives = 0, 6 do
 							for _, sh in Hud.shotIcons(l, lives, 3) do
 								table.insert(others, {

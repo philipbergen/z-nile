@@ -440,6 +440,31 @@ return t.spec("f0147 the speed ramp", function(it)
 			Ghosts.reset(set, "respawn", 2)
 			Ghosts.power(set, 100000)
 			t.expect(stepOf(set)).toBe(13)
+			-- a new level and a new run place the ghosts again too
+			for _, reason in { "level", "run" } do
+				local again = blue()
+				stepOf(again)
+				Ghosts.reset(again, reason :: any, 2)
+				Ghosts.power(again, 100000)
+				t.expect(stepOf(again)).toBe(13)
+			end
+			-- after one step the carry is 0.03 (0.5 + 12.53 - 13): kept, the next step is 12; reset to a half it would be 13
+			-- a second power pellet keeps it
+			local powered = blue()
+			t.expect(stepOf(powered)).toBe(13)
+			Ghosts.power(powered, 100000)
+			local bp = Ghosts.ghost(powered, "blinky") :: any
+			bp.reverse = false -- the power's turn back is not what this measures
+			t.expect(stepOf(powered)).toBe(12)
+			-- hunting steps in whole units between two blue ones keep it
+			local hunted = blue()
+			t.expect(stepOf(hunted)).toBe(13)
+			local bh = Ghosts.ghost(hunted, "blinky") :: any
+			bh.frightened = false
+			local hunting = stepOf(hunted)
+			t.expect(hunting).toBe(Levels.ghostSpeed(BASE, 2, "normal", K, R))
+			bh.frightened = true
+			t.expect(stepOf(hunted)).toBe(12)
 			-- two sets stepped in turn move exactly as one alone: each ghost keeps its own carry
 			local alone, a, b = blue(), blue(), blue()
 			for n = 1, 12 do

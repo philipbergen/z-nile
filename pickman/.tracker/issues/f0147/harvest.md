@@ -13,3 +13,10 @@
 - design-review-002 F5: z-design/restated-rules-move-together
 - design-review-002 F6: one-off: a bound loop over a ramp's own top, capped by Levels.MAX_TOP with a case
 - design-review-002 F7: z-design/restated-rules-move-together
+- design-review-003 F1: z-design/spec-design-correspondence
+- design-review-003 F2: z-design/decisions-that-idle-other-rewards
+- design-review-003 F3: zz-test/walk-the-returned-table
+- design-review-003 F4: zz-test/set-read-fields-apart
+- design-review-003 F5: z-design/instructions-runnable-where-they-run
+- design-review-003 F6: z-design/restated-rules-move-together
+- design-review-003 F7: z-design/restated-rules-move-together
