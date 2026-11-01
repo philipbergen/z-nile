@@ -13,3 +13,5 @@ Some checks pass once and are never run again, because the everyday loop (runnin
 Run those checks before committing to a branch other agents read, not after: in c0115's round 4 the promotion type check caught a two-value `string.find` passed to `t.expect`, but only after the commit holding it had been read by another agent.
 
 **Note** (R0063 review 001 F1): c0172 recorded `./zn promote-check` OK on the prototype, and the readied `cicd.spec.luau` was that file, but promotion on the execution tree failed two type errors (an upvalue left `Saved?`, a `string.match` capture left `string?`) while the runtime spec stayed green. Rerun `./zn promote-check` on the issue after the last edit of its acceptance specs, against those bytes, and record that run.
+
+c0170 design review 003 F1: a refute rewrote prototype code after the last full gate, and its type step broke; the design still quoted the earlier green run. After a refute rewrites prototype code or a check.sh, rerun the full gate (every project, the type step included) and date the result.

@@ -19,3 +19,7 @@ R0035 code review 002 (F1): the stub-engine spec for HudView's bars compared pos
 c0154 code review 001 (F1): the pure `render(old, runs, keep)` was pinned, but nothing pinned what the runner passes it: `keep` on every run (not only a full one), or `{}` instead of the recorded record, each turned every `--affected` run into a record of only its subset, and schedule.spec stayed green. A partial run through the real runner, from a hand-written record, pins both.
 
 f0146 design review 001 (F1): source pins on Controls and Sticks passed `if action == Pad.CONTINUE` (an action compared with a key name, never true) and `Pad.steer(steer, x, -y)` (an inverted stick). Running both on a stub engine with a recording handler per bound code list, a scripted `GetGamepadState` and a Heartbeat the case fires killed both.
+
+c0170 design review 001 F1: a spy on a pure rule's input compared one spec's requires only; a call site that handed over a filtered list (only `@tests/lib/` requires) passed. A spy case compares every element the call site gathers with an independent reading.
+
+c0170 design review 002 F2: a spy compared what the call site gathered with the real tree, which had no example of one kind of input (a fixture dep in a helper or unit spec), so a call site that dropped that kind passed. A spy is only as strong as the kinds today's tree holds; hand the pure function the whole source (the graph) and let it choose, or seed a synthetic input with every kind.
