@@ -14,6 +14,7 @@
 | 10 | 2026-11-01 11:49 | c0183: register arcade, portal, snake, invaders and asteroids, move their designs, override the two-project pins | 107 | 38 | 15.0 | focus | build |  |
 | 11 | 2026-11-01 12:03 | R0064: review-001 | 0 | 0 | 13.0 | focus | code-review | 148322 |
 | 12 | 2026-11-01 12:04 | R0064: refute-001, c0183 verification log, harvest | 0 | 0 | 6.0 | focus | code-review |  |
+| 13 | 2026-11-01 12:14 | tracker: done R0064 | 0 | 0 | 10.1 | raft | deliver |  |
 
-**Total:** +722 / -39 lines, 282.0 agent-minutes, 148322 tokens over 12 records
-<!-- totals: added=722 removed=39 minutes=282.0 records=12 tokens=148322 -->
+**Total:** +722 / -39 lines, 292.1 agent-minutes, 148322 tokens over 13 records
+<!-- totals: added=722 removed=39 minutes=292.1 records=13 tokens=148322 -->
