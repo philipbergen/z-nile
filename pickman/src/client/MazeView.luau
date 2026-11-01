@@ -3,12 +3,17 @@
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
-local WALL = Color3.fromRGB(33, 33, 222)
 local DOOR = Color3.fromRGB(255, 184, 255)
 local FLOOR = Color3.fromRGB(0, 0, 0)
-local LIT = Color3.fromRGB(255, 255, 255)
 
 local MazeView = {}
+
+-- The colour of a wall part of `model` now: View.wallColor of its lit and edible state, for every wall made or
+-- repainted (f0126's rewall too), so a wall built while the ghosts are edible comes out green.
+local function wallColorOf(model: Model): Color3
+	local c = View.wallColor(model:GetAttribute("Lit") == true, model:GetAttribute("Edible") == true)
+	return Color3.fromRGB(c.r, c.g, c.b)
+end
 
 local function part(parent: Model, name: string, color: Color3, size: Vector3, center: Vector3)
 	local p = Instance.new("Part")
@@ -31,7 +36,7 @@ function MazeView.build(m: Maze.Maze): Model
 	for _, r in View.walls(m) do
 		local cx, cz = View.world((r.x0 + r.x1) / 2, r.y0)
 		local size = Vector3.new((r.x1 - r.x0 + 1) * s.tileStuds, s.wallHeight, s.tileStuds)
-		part(model, "Wall", WALL, size, Vector3.new(cx, s.wallHeight / 2, cz))
+		part(model, "Wall", wallColorOf(model), size, Vector3.new(cx, s.wallHeight / 2, cz))
 	end
 	for _, d in Maze.tiles(m, "door") do
 		local cx, cz = View.world(d.x, d.y)
@@ -59,13 +64,29 @@ function MazeView.build(m: Maze.Maze): Model
 	return model
 end
 
--- The walls lit (the level-clear flash) or back in their own colour.
-function MazeView.flash(model: Model, lit: boolean)
-	local color = if lit then LIT else WALL
+-- Repaint the walls from the model's lit and edible state (View.wallColor).
+local function paint(model: Model)
+	local c = wallColorOf(model)
 	for _, child in model:GetChildren() do
 		if child.Name == "Wall" and child:IsA("BasePart") then
-			child.Color = color
+			child.Color = c
 		end
+	end
+end
+
+-- The walls lit (the level-clear flash) or back in their own colour.
+function MazeView.flash(model: Model, lit: boolean)
+	if model:GetAttribute("Lit") ~= lit then
+		model:SetAttribute("Lit", lit)
+		paint(model)
+	end
+end
+
+-- f0109: the walls green while the ghosts are edible.
+function MazeView.edible(model: Model, edible: boolean)
+	if model:GetAttribute("Edible") ~= edible then
+		model:SetAttribute("Edible", edible)
+		paint(model)
 	end
 end
 

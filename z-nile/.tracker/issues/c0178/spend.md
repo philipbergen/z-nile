@@ -12,6 +12,7 @@
 | 8 | 2026-11-01 18:40 | design-refute-003 | 0 | 0 | 20.0 | spend | design-review |  |
 | 9 | 2026-11-01 18:56 | design-review-004 | 0 | 0 | 25.0 | spend | design-review | 200000 |
 | 10 | 2026-11-01 18:57 | design-refute-004 | 0 | 0 | 10.0 | spend | design-review |  |
+| 11 | 2026-11-01 19:06 | real prep time; the 0-minute prep row was recorded by mistake | 5547 | 1 | 180.0 | spend | prep |  |
 
-**Total:** +3370 / -1 lines, 192.0 agent-minutes, 1240000 tokens over 10 records
-<!-- totals: added=3370 removed=1 minutes=192.0 records=10 tokens=1240000 -->
+**Total:** +8917 / -2 lines, 372.0 agent-minutes, 1240000 tokens over 11 records
+<!-- totals: added=8917 removed=2 minutes=372.0 records=11 tokens=1240000 -->
