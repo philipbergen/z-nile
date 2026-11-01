@@ -1,15 +1,15 @@
 diff --git a/pickman/src/lobby/client/LobbyPicker.luau b/pickman/src/lobby/client/LobbyPicker.luau
 new file mode 100644
-index 00000000..72c8f655
+index 00000000..4a1203a4
 --- /dev/null
 +++ b/pickman/src/lobby/client/LobbyPicker.luau
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,101 @@
 +--!strict
 +-- Lobby client adapter (f0148): the level picker, two arrows either side of START (◀ lower, ▶ higher), shown once the
 +-- player's best (the attribute the lobby server sets) is 2 or more. Which level is chosen and which arrow works is
 +-- Logic (Best.picker, Best.step); LobbyView shows the level on START and sends it.
++local ContextActionService = game:GetService("ContextActionService")
 +local Players = game:GetService("Players")
-+local UserInputService = game:GetService("UserInputService")
 +
 +local Best = require("@game/ReplicatedStorage/Shared/Logic/Best")
 +local Lobby = require("@game/ReplicatedStorage/Shared/Logic/Lobby")
@@ -76,15 +76,28 @@ index 00000000..72c8f655
 +			arrows.down = arrow(backdrop, "LevelDown", "◀", 0.12, -1)
 +			arrows.up = arrow(backdrop, "LevelUp", "▶", 0.88, 1)
 +			player:GetAttributeChangedSignal(Best.ATTRIBUTE):Connect(render)
-+			-- the keyboard: Left and Right step the level while the picker is shown (Best.keyStep)
-+			UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-+				local delta = Best.keyStep(input.KeyCode.Name)
-+				if processed or delta == nil or not Best.picker(best(), chosen).shown then
-+					return
-+				end
-+				chosen = Best.step(best(), chosen, delta)
-+				render()
-+			end)
++			-- the keyboard: Left and Right step the level while the picker is shown (Best.keyStep), bound above the
++			-- default camera (which turns on the arrow keys) and sunk only when they stepped
++			ContextActionService:BindActionAtPriority(
++				"PickmanLevel",
++				function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++					local delta = Best.keyStep(input.KeyCode.Name)
++					if
++						state ~= Enum.UserInputState.Begin
++						or delta == nil
++						or not Best.picker(best(), chosen).shown
++					then
++						return Enum.ContextActionResult.Pass
++					end
++					chosen = Best.step(best(), chosen, delta)
++					render()
++					return Enum.ContextActionResult.Sink
++				end,
++				false,
++				Enum.ContextActionPriority.High.Value,
++				Enum.KeyCode.Left,
++				Enum.KeyCode.Right
++			)
 +			render()
 +		end,
 +	}
@@ -167,10 +180,10 @@ index 8045d718..557eb8f2 100644
  print("[pickman] lobby client started")
 diff --git a/pickman/src/lobby/server/Bests.luau b/pickman/src/lobby/server/Bests.luau
 new file mode 100644
-index 00000000..608fb83a
+index 00000000..4ac924fd
 --- /dev/null
 +++ b/pickman/src/lobby/server/Bests.luau
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,57 @@
 +--!strict
 +-- Lobby server adapter (f0148): reads each player's best level into a player attribute (Best.ATTRIBUTE) for the
 +-- picker, and writes the level a player chose into their record before the teleport, where the game place claims it.
@@ -184,10 +197,23 @@ index 00000000..608fb83a
 +
 +local store: DataStore? = nil
 +
++-- The store, opened on first use inside a pcall (opening fails where the place cannot reach DataStores); nil when not.
++local function open(): DataStore?
++	if store == nil then
++		local ok, s = pcall(function(): DataStore
++			return DataStoreService:GetDataStore(Best.STORE)
++		end)
++		store = if ok then s else nil
++	end
++	return store
++end
++
 +function Bests.start()
-+	local s = DataStoreService:GetDataStore(Best.STORE)
-+	store = s
 +	local function show(player: Player)
++		local s = open()
++		if s == nil then
++			return
++		end
 +		local ok, raw = pcall(function(): any
 +			return s:GetAsync(tostring(player.UserId))
 +		end)
@@ -203,7 +229,7 @@ index 00000000..608fb83a
 +
 +-- The player's choice, written before the teleport (it yields); a failed write is not retried.
 +function Bests.choose(player: Player, requested: any)
-+	local s = store
++	local s = open()
 +	if s == nil then
 +		return
 +	end
@@ -231,7 +257,7 @@ index 257c1bdf..a0034606 100644
  require("./Boards").start()
  print("[pickman] lobby server started")
 diff --git a/pickman/src/lobby/server/Starts.luau b/pickman/src/lobby/server/Starts.luau
-index ad0f811d..146c99ff 100644
+index ad0f811d..6c772fff 100644
 --- a/pickman/src/lobby/server/Starts.luau
 +++ b/pickman/src/lobby/server/Starts.luau
 @@ -12,6 +12,13 @@ local Travel = require("@game/ReplicatedStorage/Shared/Logic/Travel")
@@ -248,32 +274,50 @@ index ad0f811d..146c99ff 100644
  function Starts.start()
  	local remotes = ReplicatedStorage:WaitForChild("Remotes")
  	local startGame = remotes:WaitForChild("StartGame") :: RemoteEvent
-@@ -37,7 +44,7 @@ function Starts.start()
+@@ -37,8 +44,15 @@ function Starts.start()
  		push(player, Travel.status(travel, tostring(player.UserId), os.clock()))
  	end
  
 -	startGame.OnServerEvent:Connect(function(player: Player)
++	-- f0148: the level of a press that did not go, kept for the next press that does (a server-side press, such as
++	-- f0145's after a purchase, carries no level of its own)
++	local held: { [Player]: any } = {}
++
 +	startGame.OnServerEvent:Connect(function(player: Player, requested: any)
  		local id = tostring(player.UserId)
++		if requested ~= nil then
++			held[player] = requested
++		end
  		if destination == nil then
  			push(player, "idle")
-@@ -46,6 +53,10 @@ function Starts.start()
+ 			return
+@@ -46,6 +60,12 @@ function Starts.start()
  		local answer, ticket = Travel.request(travel, id, os.clock())
  		if answer == "go" then
  			push(player, "going")
++			local level = held[player]
++			held[player] = nil
 +			local store = choose
 +			if store then
-+				store(player, requested)
++				store(player, level)
 +			end
  			local ok = pcall(TeleportService.TeleportAsync, TeleportService, destination, { player })
  			if ok then
  				Travel.answered(travel, id, os.clock(), ticket)
+@@ -66,6 +86,7 @@ function Starts.start()
+ 	end)
+ 	Players.PlayerRemoving:Connect(function(player: Player)
+ 		Travel.left(travel, tostring(player.UserId))
++		held[player] = nil
+ 		shown[player] = nil
+ 	end)
+ 
 diff --git a/pickman/src/server/Bests.luau b/pickman/src/server/Bests.luau
 new file mode 100644
-index 00000000..494648df
+index 00000000..1a22a53c
 --- /dev/null
 +++ b/pickman/src/server/Bests.luau
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,81 @@
 +--!strict
 +-- Server adapter (f0148): each arriving player's start level, claimed once from their stored record (the lobby wrote
 +-- the choice there before the teleport), and the stored best raised whenever a run reaches a new level. What a start
@@ -289,19 +333,32 @@ index 00000000..494648df
 +local store: DataStore? = nil
 +local starts: { [Player]: number } = {}
 +
-+function Bests.start()
-+	local s = DataStoreService:GetDataStore(Best.STORE)
-+	store = s
-+	local function claim(player: Player)
-+		local start = 1
-+		local ok = pcall(function()
-+			s:UpdateAsync(tostring(player.UserId), function(raw: any): any
-+				local n, kept = Best.claim(Best.decode(raw))
-+				start = n
-+				return kept
-+			end)
++-- The store, opened on first use inside a pcall (opening fails where the place cannot reach DataStores); nil when not.
++local function open(): DataStore?
++	if store == nil then
++		local ok, s = pcall(function(): DataStore
++			return DataStoreService:GetDataStore(Best.STORE)
 +		end)
-+		starts[player] = if ok then start else 1
++		store = if ok then s else nil
++	end
++	return store
++end
++
++function Bests.start()
++	local function claim(player: Player)
++		local s = open()
++		local start = 1
++		local ok = s ~= nil
++			and pcall(function()
++				(s :: DataStore):UpdateAsync(tostring(player.UserId), function(raw: any): any
++					local n, kept = Best.claim(Best.decode(raw))
++					start = n
++					return kept
++				end)
++			end)
++		if player.Parent ~= nil then -- a player who left is not remembered
++			starts[player] = if ok then start else 1
++		end
 +	end
 +	Players.PlayerAdded:Connect(claim)
 +	for _, player in Players:GetPlayers() do
@@ -323,7 +380,7 @@ index 00000000..494648df
 +
 +-- Hears one step's events (Sessions.listen): a run that reaches a new level raises its player's stored best.
 +function Bests.reached(events: { any })
-+	local s = store
++	local s = open()
 +	if s == nil then
 +		return
 +	end
@@ -333,7 +390,7 @@ index 00000000..494648df
 +			task.spawn(function()
 +				pcall(function()
 +					s:UpdateAsync(key, function(raw: any): any
-+						return Best.reached(Best.decode(raw), level)
++						return Best.raise(Best.decode(raw), level) -- nil: already that high, no write
 +					end)
 +				end)
 +			end)
@@ -359,10 +416,10 @@ index e86da75e..65a5e0af 100644
  require("./Returns").start(Sessions.isOver)
  print("[pickman] server started")
 diff --git a/pickman/src/server/Sessions.luau b/pickman/src/server/Sessions.luau
-index 8bcc1e0e..52f9df0d 100644
+index 8bcc1e0e..febb4f7c 100644
 --- a/pickman/src/server/Sessions.luau
 +++ b/pickman/src/server/Sessions.luau
-@@ -18,6 +18,18 @@ export type Runs = {
+@@ -18,6 +18,26 @@ export type Runs = {
  local Sessions = {}
  
  local sessions: { [Player]: Session.Session } = {}
@@ -374,6 +431,14 @@ index 8bcc1e0e..52f9df0d 100644
 +	startOf = fn
 +end
 +
++local made: { (player: Player, s: Session.Session) -> () } = {} -- f0148: told when a session is made
++
++-- f0148: a function told each new session and its player, once made (after the start's wait: a Ready's own effect
++-- may come later than the next resume, so code that needs the session listens here, not with task.defer).
++function Sessions.made(fn: (player: Player, s: Session.Session) -> ())
++	table.insert(made, fn)
++end
++
 +-- f0148: a listener that hears every step's events, of every session, parked ones too.
 +function Sessions.listen(fn: (events: { Session.Event }) -> ())
 +	table.insert(listeners, fn)
@@ -381,7 +446,7 @@ index 8bcc1e0e..52f9df0d 100644
  
  -- Whether this player's run is over, as Logic says; a player with no session has no run.
  function Sessions.isOver(player: Player): boolean
-@@ -37,8 +49,12 @@ function Sessions.start(runs: Runs?)
+@@ -37,12 +57,19 @@ function Sessions.start(runs: Runs?)
  	-- the client is listening for snapshots once it signals Ready; a repeat signal is ignored
  	ready.OnServerEvent:Connect(function(player: Player)
  		if sessions[player] == nil then
@@ -395,7 +460,14 @@ index 8bcc1e0e..52f9df0d 100644
  			sessions[player] = s
  			if runs then
  				runs.ready(s, player)
-@@ -65,6 +81,9 @@ function Sessions.start(runs: Runs?)
+ 			end
++			for _, fn in made do
++				fn(player, s)
++			end
+ 		end
+ 	end)
+ 
+@@ -65,6 +92,9 @@ function Sessions.start(runs: Runs?)
  		for _ = 1, Session.advance(clock, dt) do
  			for player, s in sessions do
  				local events = Session.step(s)
@@ -405,7 +477,7 @@ index 8bcc1e0e..52f9df0d 100644
  				local here = player.Parent ~= nil
  				if runs then
  					runs.step(s, events, here)
-@@ -77,7 +96,11 @@ function Sessions.start(runs: Runs?)
+@@ -77,7 +107,11 @@ function Sessions.start(runs: Runs?)
  				-- a departed session steps on, unseen, until the runs let it go
  				local kept: { Session.Session } = {}
  				for _, s in parked do
@@ -420,10 +492,10 @@ index 8bcc1e0e..52f9df0d 100644
  				end
 diff --git a/pickman/src/shared/Logic/Best/init.luau b/pickman/src/shared/Logic/Best/init.luau
 new file mode 100644
-index 00000000..d9e65287
+index 00000000..60e13b7d
 --- /dev/null
 +++ b/pickman/src/shared/Logic/Best/init.luau
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,76 @@
 +--!strict
 +-- Best: a player's best level reached and the start level they chose in the lobby (f0148), engine-free. The record
 +-- lives in a DataStore (Best.STORE, keyed by the user id) that the lobby and the place runs are played in share; this module decides
@@ -462,9 +534,16 @@ index 00000000..d9e65287
 +	return { best = best, next = r.next }
 +end
 +
-+-- The record after the lobby's choice: the requested level when it is allowed, else the best (the picker's default).
++-- The record a run reaching `level` leaves, or nil when the best is already that high (nothing to write).
++function Best.raise(r: Record, level: number): Record?
++	local raised = Best.reached(r, level)
++	return if raised.best > r.best then raised else nil
++end
++
++-- The record after the lobby's choice: the requested level when it is allowed, else level 1 (a press with no level is
++-- START GAME, which the screen showed as level 1).
 +function Best.choose(r: Record, requested: any): Record
-+	return { best = r.best, next = Best.valid(requested, r.best) or r.best }
++	return { best = r.best, next = Best.valid(requested, r.best) or 1 }
 +end
 +
 +-- The place runs are played in takes the chosen start once: an allowed choice, else level 1; the choice is cleared.

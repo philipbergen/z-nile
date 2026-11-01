@@ -45,12 +45,16 @@ local function signal(): Signal
 end
 
 -- a DataStore stand-in: one table per store name; `mode` "ok", "fail" (every call errors), "hang" (calls never
--- return) or "failwrite" (UpdateAsync runs the transform, then fails to write it)
+-- return), "failwrite" (UpdateAsync runs the transform, then fails to write it) or "noopen" (GetDataStore itself
+-- throws, as where a place cannot reach DataStores). A transform that returns nil writes nothing, as in Roblox.
 type Stores = { data: { [string]: { [string]: any } }, names: { string }, mode: string, writes: number }
 local function stores(): (any, Stores)
 	local st: Stores = { data = {}, names = {}, mode = "ok", writes = 0 }
 	local service = {
 		GetDataStore = function(_: any, name: string): any
+			if st.mode == "noopen" then
+				error("stub: DataStores cannot be reached", 0)
+			end
 			table.insert(st.names, name)
 			st.data[name] = st.data[name] or {}
 			local d = st.data[name]
@@ -72,6 +76,9 @@ local function stores(): (any, Stores)
 					local v = fn(d[key])
 					if st.mode == "failwrite" then
 						error("stub DataStore write failure", 0)
+					end
+					if v == nil then
+						return d[key] -- cancelled: nothing written
 					end
 					d[key] = v
 					st.writes += 1
@@ -155,9 +162,9 @@ return t.spec("f0148 the server adapters", function(it)
 		e.stores.data[Best.STORE] = { ["21"] = { best = 4, next = 2 } }
 		local mod = load(e, sourceOf(lobby, LOBBY_BESTS), "Bests")
 		mod.start()
-		t.expect(e.stores.names[1]).toBe(Best.STORE)
 		local a, b = player(21, e.players), player(22, e.players)
 		e.players.PlayerAdded:fire(a)
+		t.expect(e.stores.names[1]).toBe(Best.STORE) -- opened on first use
 		e.players.PlayerAdded:fire(b)
 		t.expect(a:GetAttribute(Best.ATTRIBUTE)).toBe(4)
 		t.expect(b:GetAttribute(Best.ATTRIBUTE)).toBe(1)
@@ -187,13 +194,18 @@ return t.spec("f0148 the server adapters", function(it)
 			local p = player(25, e.players)
 			mod.choose(p, 2)
 			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 2 })
-			mod.choose(p, 9) -- more than the best: the best
-			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 4 })
-			mod.choose(p, "3") -- not a number: the best
-			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 4 })
+			mod.choose(p, 9) -- more than the best: level 1
+			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 1 })
+			mod.choose(p, 3)
+			mod.choose(p, "3") -- not a number: level 1
+			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 1 })
+			mod.choose(p, 3)
+			mod.choose(p, nil) -- START GAME: level 1
+			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 1 })
+			mod.choose(p, 3)
 			e.stores.mode = "fail"
 			mod.choose(p, 1)
-			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 4 })
+			t.expect(e.stores.data[Best.STORE]["25"]).toEqual({ best = 4, next = 3 })
 		end
 	)
 
@@ -259,11 +271,36 @@ return t.spec("f0148 the server adapters", function(it)
 			} :: { any })
 			t.expect(e.stores.writes).toBe(writes)
 			mod.reached({ { kind = "Ready", reason = "level", level = 2, player = "41" } })
+			mod.reached({ { kind = "Ready", reason = "level", level = 4, player = "41" } })
 			t.expect(e.stores.data[Best.STORE]["41"]).toEqual({ best = 4 })
+			t.expect(e.stores.writes).toBe(writes) -- already that high: no write
 			mod.reached({ { kind = "Ready", reason = "level", level = 2, player = "42" } })
 			t.expect(e.stores.data[Best.STORE]["42"]).toEqual({ best = 2 })
 		end
 	)
+
+	it("a place that cannot open the store still boots and plays: no picker, level 1, no error", function()
+		local lobbyEngine = engine()
+		lobbyEngine.stores.mode = "noopen"
+		local lobbyBests = load(lobbyEngine, sourceOf(lobby, LOBBY_BESTS), "Bests")
+		lobbyBests.start()
+		local a = player(61, lobbyEngine.players)
+		lobbyEngine.players.PlayerAdded:fire(a)
+		t.expect(a:GetAttribute(Best.ATTRIBUTE)).toBe(nil)
+		lobbyBests.choose(a, 2)
+		local gameEngine = engine()
+		gameEngine.stores.mode = "noopen"
+		local gameBests = load(gameEngine, sourceOf(gamePlace, GAME_BESTS), "Bests")
+		gameBests.start()
+		local b = player(62, gameEngine.players)
+		gameEngine.players.PlayerAdded:fire(b)
+		t.expect(gameBests.startOf(b)).toBe(1)
+		gameBests.reached({ { kind = "Ready", reason = "level", level = 3, player = "62" } })
+		-- once the store can be opened, the adapters use it
+		gameEngine.stores.mode = "ok"
+		gameBests.reached({ { kind = "Ready", reason = "level", level = 3, player = "62" } })
+		t.expect(gameEngine.stores.data[Best.STORE]["62"]).toEqual({ best = 3 })
+	end)
 
 	-- Sessions ---------------------------------------------------------------------------------------------------------
 
@@ -384,6 +421,44 @@ return t.spec("f0148 the server adapters", function(it)
 		t.expect(made).toBe(1)
 	end)
 
+	it(
+		"Sessions tells Sessions.made of each new session once it exists; a player who left during the wait gets none",
+		function()
+			local w = world()
+			local waiting: { thread } = {}
+			w.mod.starts(function(): number
+				table.insert(waiting, coroutine.running())
+				coroutine.yield()
+				return 2
+			end)
+			local told: { any } = {}
+			w.mod.made(function(p: any, s: any)
+				table.insert(told, { p = p, level = Session.frame(s, tostring(p.UserId)).play.level })
+			end)
+			local readied = 0
+			w.mod.start({
+				ready = function()
+					readied += 1
+				end,
+				step = function(): boolean
+					return false
+				end,
+			})
+			local stays, goes = player(71, w.e.players), player(72, w.e.players)
+			w.remotes.Ready.OnServerEvent:fire(stays)
+			w.remotes.Ready.OnServerEvent:fire(goes)
+			t.expect(#told).toBe(0) -- not before the start is known
+			goes.Parent = nil -- left the place while the store answered
+			for _, co in waiting do
+				coroutine.resume(co)
+			end
+			t.expect(#told).toBe(1)
+			t.expect(told[1].p).toBe(stays)
+			t.expect(told[1].level).toBe(2)
+			t.expect(readied).toBe(1)
+		end
+	)
+
 	-- the wiring ------------------------------------------------------------------------------------------------------
 
 	-- the source without comments
@@ -409,7 +484,7 @@ return t.spec("f0148 the server adapters", function(it)
 			t.expect(
 				order(
 					lobbyMain,
-					{ "Bests%.start%(%)", "Starts%.choosing%(%s*Bests%.choose%s*%)", "Starts%.start%(%)" }
+					{ "Bests%.start%(%)", "%.choosing%(%s*Bests%.choose%s*%)", 'Starts"?%)?%.start%(' }
 				)
 			).toBe(true)
 			local gameMain = code(gamePlace, { "ServerScriptService", "Server", "Main" })

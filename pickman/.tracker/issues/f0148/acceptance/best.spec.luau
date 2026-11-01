@@ -38,12 +38,23 @@ return t.spec("f0148 the best level", function(it)
 		t.expect(Best.reached({ best = 1 }, 2).best).toBe(2) -- clearing level 1 reaches 2: a choice exists
 	end)
 
-	it("the lobby's choice is kept when allowed, else the best is chosen", function()
-		t.expect(Best.choose({ best = 4 }, 2)).toEqual({ best = 4, next = 2 })
-		t.expect(Best.choose({ best = 4 }, 4)).toEqual({ best = 4, next = 4 })
-		t.expect(Best.choose({ best = 4 }, 9)).toEqual({ best = 4, next = 4 })
-		t.expect(Best.choose({ best = 4 }, nil)).toEqual({ best = 4, next = 4 })
-		t.expect(Best.choose({ best = 1 }, nil)).toEqual({ best = 1, next = 1 })
+	it(
+		"the lobby's choice is kept when allowed; a press with no level, or one not allowed, is level 1",
+		function()
+			t.expect(Best.choose({ best = 4 }, 2)).toEqual({ best = 4, next = 2 })
+			t.expect(Best.choose({ best = 4 }, 4)).toEqual({ best = 4, next = 4 })
+			t.expect(Best.choose({ best = 4 }, nil)).toEqual({ best = 4, next = 1 }) -- START GAME showed level 1
+			t.expect(Best.choose({ best = 4 }, 9)).toEqual({ best = 4, next = 1 })
+			t.expect(Best.choose({ best = 4 }, "3")).toEqual({ best = 4, next = 1 })
+			t.expect(Best.choose({ best = 1 }, nil)).toEqual({ best = 1, next = 1 })
+		end
+	)
+
+	it("raising the best writes only when it rises", function()
+		t.expect(Best.raise({ best = 3 }, 5)).toEqual({ best = 5 })
+		t.expect(Best.raise({ best = 3, next = 2 }, 4)).toEqual({ best = 4, next = 2 })
+		t.expect(Best.raise({ best = 5 }, 5)).toBe(nil)
+		t.expect(Best.raise({ best = 5 }, 2)).toBe(nil)
 	end)
 
 	it(

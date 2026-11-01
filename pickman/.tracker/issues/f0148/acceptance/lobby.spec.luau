@@ -7,6 +7,7 @@
 -- touch-sized.
 local Best = require("@logic/Best")
 local Lobby = require("@logic/Lobby")
+local Travel = require("@logic/Travel")
 local fake = require("@tests/lib/fakeengine")
 local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
@@ -98,6 +99,32 @@ return t.spec("f0148 the lobby's level picker", function(it)
 			t.expect(#seen).toBe(1)
 			t.expect(seen[1].requested).toBe(nil)
 			t.expect(#s.engine.calls).toBe(1)
+		end
+	)
+
+	it(
+		"a press that does not go keeps its level for the next press that does, which may carry none",
+		function()
+			local seen: { any } = {}
+			local s = server(function(_player: any, requested: any)
+				table.insert(seen, { level = requested })
+			end)
+			local p = fake.player(34)
+			s.join(p)
+			s.engine.mode = "hold"
+			s.press(p, 2) -- goes: stored 2, the teleport held
+			s.press(p, 3) -- refused while one is under way: kept
+			s.release(1, true) -- that teleport fails: a cool-down
+			s.tick(5)
+			s.engine.mode = "error" -- this one fails too, so a later press can go
+			s.press(p) -- a press with no level (a server-side press, as f0145's after a purchase) goes with the kept 3
+			t.expect(#seen).toBe(2)
+			t.expect(seen[1].level).toBe(2)
+			t.expect(seen[2].level).toBe(3)
+			s.tick(Travel.DEFAULT.coolSeconds + 1) -- past the cool-down
+			s.press(p) -- nothing kept now: no level
+			t.expect(#seen).toBe(3)
+			t.expect(seen[3].level).toBe(nil)
 		end
 	)
 
@@ -206,7 +233,7 @@ return t.spec("f0148 the lobby's level picker", function(it)
 	local function picker(best: number?): any
 		local attributes: { [string]: any } = { [Best.ATTRIBUTE] = best }
 		local changed = signal()
-		local inputBegan = signal()
+		local bound: { any } = {}
 		local player = instance("Player", "LocalPlayer")
 		rawset(player, "GetAttribute", function(_: any, n: string): any
 			return attributes[n]
@@ -226,8 +253,25 @@ return t.spec("f0148 the lobby's level picker", function(it)
 				GetService = function(_: any, name: string): any
 					if name == "Players" then
 						return { LocalPlayer = player }
-					elseif name == "UserInputService" then
-						return { InputBegan = inputBegan }
+					elseif name == "ContextActionService" then
+						return {
+							BindActionAtPriority = function(
+								_: any,
+								action: string,
+								fn: any,
+								touch: boolean,
+								priority: number,
+								...: any
+							)
+								table.insert(bound, {
+									action = action,
+									fn = fn,
+									touch = touch,
+									priority = priority,
+									keys = { ... },
+								})
+							end,
+						}
 					end
 					error(`LobbyPicker asks for {name}`)
 				end,
@@ -261,12 +305,17 @@ return t.spec("f0148 the lobby's level picker", function(it)
 				end,
 			},
 			Enum = setmetatable({}, {
-				__index = function(_: any, group: string): any
-					return setmetatable({}, {
-						__index = function(_: any, item: string): any
-							return { Name = item, group = group }
+				__index = function(groups: any, group: string): any
+					local g = setmetatable({}, {
+						__index = function(items: any, item: string): any
+							local v =
+								{ Name = item, Value = if item == "High" then 2000 else 0, group = group }
+							rawset(items, item, v)
+							return v
 						end,
 					})
+					rawset(groups, group, g)
+					return g
 				end,
 			}),
 		}
@@ -289,8 +338,21 @@ return t.spec("f0148 the lobby's level picker", function(it)
 				attributes[Best.ATTRIBUTE] = v
 				changed.fire()
 			end,
-			key = function(name: string, processed: boolean?)
-				inputBegan.fire({ KeyCode = { Name = name } }, processed == true)
+			bound = bound,
+			-- a key press (state Begin unless given) through the bound action; the action's result, or nil if unbound
+			key = function(name: string, state: string?): any
+				for _, b in bound do
+					for _, k in b.keys do
+						if k.Name == name then
+							return b.fn(
+								b.action,
+								env.Enum.UserInputState[state or "Begin"],
+								{ KeyCode = { Name = name } }
+							)
+						end
+					end
+				end
+				return nil
 			end,
 		}
 	end
@@ -345,19 +407,27 @@ return t.spec("f0148 the lobby's level picker", function(it)
 	end)
 
 	it(
-		"LobbyPicker's Left and Right keys step the level; a key the game took, or with no choice, does nothing",
+		"LobbyPicker binds Left and Right above the camera; they step the level and are sunk only when they do",
 		function()
 			local k = picker(4)
-			k.key("Left")
+			t.expect(#k.bound).toBe(1)
+			local b = k.bound[1]
+			t.expect(b.priority >= 2000).toBe(true) -- Enum.ContextActionPriority.High: above the default camera's arrow keys
+			t.expect(b.touch).toBe(false) -- no on-screen button of its own
+			local names: { string } = {}
+			for _, key in b.keys do
+				table.insert(names, key.Name)
+			end
+			table.sort(names)
+			t.expect(names).toEqual({ "Left", "Right" })
+			t.expect(k.key("Left").Name).toBe("Sink")
 			t.expect(k.p.level()).toBe(3)
-			k.key("Right")
+			t.expect(k.key("Right").Name).toBe("Sink")
 			t.expect(k.p.level()).toBe(4)
-			k.key("Left", true) -- typed into the chat
-			t.expect(k.p.level()).toBe(4)
-			k.key("A")
+			t.expect(k.key("Left", "End").Name).toBe("Pass") -- the release does nothing
 			t.expect(k.p.level()).toBe(4)
 			local none = picker(1)
-			none.key("Left")
+			t.expect(none.key("Left").Name).toBe("Pass") -- no choice: the camera keeps the key
 			t.expect(none.p.level()).toBe(nil)
 		end
 	)

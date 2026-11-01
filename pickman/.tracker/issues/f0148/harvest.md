@@ -1,0 +1,10 @@
+- design-review-001 F1: pickman-arch/missing-request-means-what-the-screen-showed
+- design-review-001 F2: pickman-arch/open-stores-guarded
+- design-review-001 F3: pickman-arch/yielding-handlers-announce-what-they-made
+- design-review-001 F4: zz-test/pins-accept-other-preps-spellings
+- design-review-001 F5: pickman-arch/count-processed-input-when-tracking
+- design-review-001 F6: one-off: DataStore timing needs the real engine; recorded as E6 with a pass/fail question and a fallback
+- design-review-001 F7: z-design/spec-design-correspondence
+- design-review-001 F8: z-design/quote-other-preps-before-promising
+- design-review-001 F9: zz-test/set-read-fields-apart
+- design-review-001 F10: z-design/restated-rules-move-together

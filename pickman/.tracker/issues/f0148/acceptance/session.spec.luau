@@ -74,6 +74,11 @@ return t.spec("f0148 a run started on a later level", function(it)
 		t.expect(g.level).toBe(3)
 		t.expect(#Game.addScore(g, 29999)).toBe(0)
 		t.expect(#Game.addScore(g, 1)).toBe(1)
+		-- the threshold reads the start, not the level reached since
+		local later = Game.new(Game.IMMEDIATE_CONFIG, Levels.RAMP, 3)
+		later.level = 6
+		t.expect(#Game.addScore(later, 29999)).toBe(0)
+		t.expect(#Game.addScore(later, 1)).toBe(1)
 	end)
 
 	it("a new run after game over starts on the same level again", function()
@@ -85,6 +90,7 @@ return t.spec("f0148 a run started on a later level", function(it)
 			end
 		end
 		t.expect(Session.isOver(s, "p")).toBe(true)
+		s.members.p.play.level = 6 -- a run that got further: the next run still starts on its start
 		local events, ok = Session.playAgain(s, "p")
 		t.expect(ok).toBe(true)
 		t.expect(s.members.p.play.level).toBe(3)
