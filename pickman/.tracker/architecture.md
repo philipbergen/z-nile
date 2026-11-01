@@ -63,6 +63,7 @@ Session -> Movement
 Session -> Pellets
 Session -> Picks
 Touch -> Hud
+Touch -> Pad
 Touch -> View
 View -> Maze
 View -> Movement

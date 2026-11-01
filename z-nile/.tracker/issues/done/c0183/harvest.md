@@ -1,0 +1,14 @@
+- design-review-001 F1: zz-test/history-tolerant-checks-need-a-done-check
+- design-review-001 F2: zz-test/pin-expected-text-not-documents
+- design-review-001 F3: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F4: z-design/quote-other-preps-before-promising
+- design-review-001 F5: z-design/never-narrow-captured-scope
+- design-review-001 F6: one-off: a hand-written section header in a non-standard form, now `Overrides:`
+- note c0183's capture landed with the subject `tracker: new c0183-c0188 …`, a range, so `./zn capture c0183` found the stub commit instead (design review 001): z-ticket/capture-subject-lists-every-id
+- design-review-002 F1: z-design/restated-rules-move-together
+- design-review-002 F2: zz-arch/one-reader-per-format
+- design-review-003 F1: zz-test/sentences-in-checks-are-grep-patterns
+- design-review-003 F2: one-off: refuted, the helper follows tests/lib's convention (gate-cover already uses cachepaths there unpinned)
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/decided-guesses-rewrite-their-body
+- design-review-004 F2: z-design/restated-rules-move-together
