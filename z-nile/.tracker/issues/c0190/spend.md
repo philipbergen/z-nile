@@ -15,6 +15,7 @@
 | 11 | 2026-11-01 14:14 | design-review-005 | 0 | 0 | 15.0 | spend | design-review |  |
 | 12 | 2026-11-01 14:14 | design-review-005-tokens | 0 | 0 | 0.0 | spend | design-review | 142626 |
 | 13 | 2026-11-01 14:33 | design-refute-005 | 0 | 0 | 35.0 | spend | design-review |  |
+| 14 | 2026-11-01 16:51 | design-review-006 | 0 | 0 | 25.0 | spend | design-review | 137643 |
 
-**Total:** +0 / -0 lines, 295.0 agent-minutes, 818172 tokens over 13 records
-<!-- totals: added=0 removed=0 minutes=295.0 records=13 tokens=818172 -->
+**Total:** +0 / -0 lines, 320.0 agent-minutes, 955815 tokens over 14 records
+<!-- totals: added=0 removed=0 minutes=320.0 records=14 tokens=955815 -->
