@@ -11,3 +11,5 @@ Sequestration covers `check.sh` and `acceptance/`. A script prep writes under `e
 **How to apply:** compute the digests on prep's prototype with the same normalisation the check uses (prove they agree), and keep them in check.sh, never in a promoted spec (later preps add detail).
 
 c0190 design review 002 F3: AC6 hashed the working document, so a thin capture followed by a fixing commit passed while `./zn capture` returned the thin text; every criterion now reads the capture commit, and one sha must cover all 27.
+
+c0190 design review 003 F5: masking every id hid a Non-goals line naming the wrong sibling; mask only the ids allocated at capture, each as its key, and keep the stable ones literal.

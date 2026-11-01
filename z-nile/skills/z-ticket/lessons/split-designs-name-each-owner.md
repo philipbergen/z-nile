@@ -11,3 +11,5 @@ A capture's Problem is its scope, and no prep can narrow it. When one design is 
 **How to apply:** build the ownership table first, then write each Problem's pointer from its rows.
 
 c0190 design review 002 F2: round 1 handed each game's party arrival and E5 to the 2-player issues, which the plan keeps pure Logic right after the scaffold, and split E5 across three issues none of which could run it on Beta; they moved to the view issues, with E5 owned by I3 after P4 and Z3.
+
+c0190 design review 003 F1, F3, F4: the same gap a third time (the scores issues ran in a place they didn't depend on; the "rest of" lists covered only each issue's main file; Z3 and P5 both claimed the start place). One rule (an issue running in a place depends on the issue that builds it), walked over every row, and one record of each issue's parts per file, from which the lists are built, closed it.

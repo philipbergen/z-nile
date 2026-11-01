@@ -17,3 +17,10 @@
 - design-review-002 F7: zz-test/specs-pin-only-their-own-project
 - design-review-002 F8: one-off: fill's "prep began" test read design: only; it now also requires status: new-
 - design-review-002 F9: one-off: AC4 missed one of capture's three markers and docof matched any .md in an item folder; both fixed
+- design-review-003 F1: z-ticket/split-designs-name-each-owner
+- design-review-003 F2: zz-test/new-commands-run-in-a-copy
+- design-review-003 F3: z-ticket/split-designs-name-each-owner
+- design-review-003 F4: z-ticket/split-designs-name-each-owner
+- design-review-003 F5: z-design/pin-text-that-lands-outside-the-pr
+- design-review-003 F6: one-off: references and lines left over from the criteria and spec that round 2 retired
+- design-review-003 F7: z-design/instructions-runnable-where-they-run

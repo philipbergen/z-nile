@@ -3,12 +3,8 @@
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
 source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home
-# sequestered specs: here before `./zn done`, promoted to its project's tests/acceptance/c0190 after it
-A="$HERE/acceptance"
-[[ -d $A ]] || A="$PWD/tests/acceptance/c0190"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `./zn members` and other cheap reads; everything else goes inside `check`.
+# Work outside `check` is limited to variables and function definitions; every read runs inside `check`.
 # Every criterion reads the capture as it landed: `./zn capture <id>` (the newest `tracker: new` commit on origin/main
 # whose subject lists the id), never the working tree, which later preps edit (design review 002 F3). They run at done
 # and never again, so there is no promoted spec: one in z-nile would read six other projects' documents (zz-test lesson
@@ -32,15 +28,15 @@ ROWS="A1:arcade:hiscores-with-revives:c0185 \
 	S2:snake:shared-snake-arena:S3,A2,A3 \
 	S3:snake:snake-first-person-view:S1,A2,A3,A4 \
 	S4:snake:boost-golden-apples-crumbs:S1 \
-	S5:snake:snake-scores-and-revives:S1,A1,A2,A3 \
+	S5:snake:snake-scores-and-revives:S1,S2,S3,A1,A2,A3 \
 	I1:invaders:invaders-classic-rules:c0184 \
 	I2:invaders:invaders-two-players:c0184 \
-	I3:invaders:invaders-cannon-view:I1,I2,A2,A3,A4,P4,Z3 \
-	I4:invaders:invaders-scores-and-revives:I1,A1,A2,A3 \
+	I3:invaders:invaders-cannon-view:I1,I2,A2,A3,A4,P5 \
+	I4:invaders:invaders-scores-and-revives:I1,I3,A1,A2,A3 \
 	T1:asteroids:asteroids-classic-rules:c0184 \
 	T2:asteroids:asteroids-two-players:c0184 \
 	T3:asteroids:asteroids-cockpit-view:T1,T2,A2,A3,A4,I3 \
-	T4:asteroids:asteroids-scores-and-revives:T1,A1,A2,A3"
+	T4:asteroids:asteroids-scores-and-revives:T1,T3,A1,A2,A3"
 # the document of the one issue of project $1 with slug $2 (`<id>/<id>.md` in its root's backlog, active/ or done/)
 docof() {
 	local f hits=""
@@ -122,38 +118,43 @@ ac3() {
 	done
 }
 check "AC3: as captured, each issue depends on exactly what the list gives it, and c0188 and f0187 wait for the portal" ac3
-# sha256:slug of each issue's title line and its text from Problem to Design, ids masked (experiments/capture.py
+# sha256:slug of each issue's title line and its text from Problem to Design, each of the 27 new ids written as its key
+# (they are allocated at capture time; every other id stays literal, so a wrong sibling id fails) (experiments/capture.py
 # digests, on prep's prototype): the titles, Problems and Non-goals prep wrote and the review read.
-DIGESTS="37a5294e0416314616640e4d6f731e45a74ea8ddc85883f5817e3e224006b456:hiscores-with-revives \
-	c73177cbf9fd39431e6fe446ee3d38e6adc495637f866b0965029a4e4e945c51:switch-to-arcade-hiscores \
-	d21be73c8199f215d796efedd043821f4ee073e13fd98e9ff4f031f38d03e835:shared-travel \
-	32307ea4e0e1a4f62a57d65a2d51d22c50ecfa26a782395e9a424a62277471df:switch-to-arcade-travel \
-	8bec5af007de1f48439aabac9395b9325f49cdfece73b08e8e6e4eec535f9199:paid-play-and-receipts \
-	eae47258031c4ab09253115ff4c1bab74be061036849ed7a5bce3323dfa52fef:switch-to-arcade-paid-play \
-	bea7a233a6b9c41cd592c6ccaf524674c552979ad6c2a4186912bcd149f1a140:input-and-look-cores \
-	419bda96068dd6e43f6ce959028fba18abc5fc8793549e8c936c03d21a9a8913:switch-to-arcade-input-cores \
-	1ec094b54fe3cd8351c1069d1c53e4ee57916d4c44f161890fd7802b548bfaae:game-carousel \
-	4a33a33bfab6d3ec84df46423f0dee71dbba189ca906cff58ddc4876a084ca4f:boards-per-game \
-	c39ef37ecf6a909d745a4b1912cfd88fa21c9595d6ce88085da539d7e421b14a:free-game-timer \
-	15c34cb31ca26edc812c821a515734b227afe54a8cb42beb1f6d3a071e99d352:play-buttons \
-	e40b80fb16e3dfd2d6f618621ed2439342cb455a7a239a1571f7237070dcb0dd:portal-start-place \
-	68654c92b467067bb9bba762c7390fdad6e40c47d90200eb27dabdcb22281757:n-place-deploy \
-	4993e6c4948e004f6cf57bb0d6f39badc7cf350a0d7727db1f82a99250b1caae:arena-maps-growth \
-	95096209e5dc02cccf0b57d2f69bd3104437a3fe44925e8818608e8dfe06e17a:shared-snake-arena \
-	33536be8b252c770418f8b4d005071dfeacc26b071a3381a9bca1f61c592fa6f:snake-first-person-view \
-	c343809b48b90a3de678bd0909b91554195be4be141716524d4bff0cf195f364:boost-golden-apples-crumbs \
-	853f5ef1e65fb938cd9d2ce6eaec2948e1559af6f3f86be3dc3b240f7dd3b710:snake-scores-and-revives \
-	aae737a5fe971fe02bc3e5fabbda6414a133ce6cdc28f79f7217e00ea9e46c38:invaders-classic-rules \
-	e4bed603104248ae5164953d38acdda7e0be29f3b180ad7fc4532704182202db:invaders-two-players \
-	77d4d33ca1e842a1fc26920876802ee5de65113de9a28471dfca07d056fa98e6:invaders-cannon-view \
-	5c6150e5eec08efc89167f6fa88041c2ae6947d705ce025e291aa144258a0a08:invaders-scores-and-revives \
-	db084f042be5434840327c2bb73f250bffb0388f2e198cd42c723d671aeb6639:asteroids-classic-rules \
-	f38dba8159b2c85ed08f9bb0095bfc53335e80bab01f26d783aa1016a7ce1cc4:asteroids-two-players \
-	f1554ec5b03942bb8ad15873b5900db36557d41f26c895a8f2b1581e0d0cd65e:asteroids-cockpit-view \
-	6f225fdede8718abfb45524f3c67ef767b266c702f5f79b40d5dd5cb9ece0a98:asteroids-scores-and-revives"
+DIGESTS="b342322ab4a3588e457d2020ac1dca127d61a9aee49fa19add82774e0ba6d1b3:hiscores-with-revives \
+	5870033e8971df6c3d96f17f18c545875d28475c6b0187d2cc4f4244ec788a01:switch-to-arcade-hiscores \
+	0cef8b1dde871e8ef865abe749d9028a6a4bbe1079ce6f8a65501a8148213df4:shared-travel \
+	397c1382c52e9c5a6ebd4e4251f998b83e20a08f62a857d3b547902191b05058:switch-to-arcade-travel \
+	4056af7e5faf53f272d412a87358bb2eb26fe0d0b9935eb405030bba478c8656:paid-play-and-receipts \
+	1d5852137fb1d5d3efd30ab2ca1bf75ed68bdeef54a8f8d32b78f69e00c557c6:switch-to-arcade-paid-play \
+	aa990726e6f2a5ea93cc98aa59fd3a2ab50550e203750690288c970ffc94cf57:input-and-look-cores \
+	cf60137b49ac1b55fd03ee3cebee21383d8fabd662a66ef1f6c6c8bf74415453:switch-to-arcade-input-cores \
+	32868d1ed97962f24a7c809a1d192aa019b2f50c94ca2094a84632795dc6b8e8:game-carousel \
+	e7b81c9ea8d52a3baa722f92a9b60d02de355c9a97660c3f400b1d47350617ef:boards-per-game \
+	d9257f34777afa72324496df67a151c656208d3f4053893b2b2b12a28e91aa98:free-game-timer \
+	77a0dcadb2748b9ba5de8472892fb703df4f046a855757f66bf252c6ae88068c:play-buttons \
+	9ce650d151db8ac2337d26485d06eb4f335a3a6935c6b364bcd8d55bda0ddea4:portal-start-place \
+	9f33cdb4d97eb2eb84f82518a25734d470c3592765c75b309c0b5e0959877ec9:n-place-deploy \
+	f9e09887a117b4b8e3ab1bb3e04c47d207eb4d6639e0953783702b6a219a73cb:arena-maps-growth \
+	9adebcfe8d4d7fe80fc42488427bae17d4041f5e301bc96bb66607454d28079f:shared-snake-arena \
+	d4843c4b1e30c1dc6ea96fd10a7b84cab492861252156645f023e023b246565a:snake-first-person-view \
+	38536e4bb6dda866074d74da00648e7d652d8ebbd7454113a7f92807f5100c6c:boost-golden-apples-crumbs \
+	e4155ee095885a9b6b056bf26f372bea0a9f2d1dc803baae008b893941de536c:snake-scores-and-revives \
+	a3736b06dae80450f0f661cb7776b4d0c5ad5d3ffa8e8f03a7e4ac6fc192cb58:invaders-classic-rules \
+	aec93b189b1ead601af93b575fac809baffc9f392fab4bd6c15583919048b301:invaders-two-players \
+	c0d21136e43f7dc451418dcb1e4e64ba42499b9370ae4e72c5d7955ea18ea25c:invaders-cannon-view \
+	6702aea30d096f888a6538601f0d6dcbc64d90c60faee5f2429dd0dbb623bd69:invaders-scores-and-revives \
+	28095e203f3e2818990f6640d95d5b70a142e7f54f9a411f231968d85063f262:asteroids-classic-rules \
+	c3db791985dff1fdadf4c4ec96ab135c9528824304c879c30c186b1d5da541f0:asteroids-two-players \
+	75e9ac5c3ae98d2d7cf760ff19c4345e796f7bc8efdeb6d55566e2e8e4a35fb8:asteroids-cockpit-view \
+	6f2719285fafc60cbbd6fac8a939467999f630adc1ff68ebda2ace2f5561dfcf:asteroids-scores-and-revives"
 section() { { grep -m1 '^title: '; } <<<"$1"; awk '/^## Design$/{exit} f||/^## Problem$/{f=1; print}' <<<"$1"; }
 ac4() {
-	local row s p doc body got
+	local row r s p doc body got id keys=()
+	for r in $ROWS; do
+		id=$(idof "${r%%:*}") || return 1
+		keys+=(-e "s/$id/${r%%:*}/g")
+	done
 	for row in $DIGESTS; do
 		s=${row#*:} p=
 		for r in $ROWS; do
@@ -162,7 +163,7 @@ ac4() {
 		done
 		doc=$(docof "$p" "$s") || return 1
 		body=$(capof "$(basename "$doc" .md)") || return 1
-		got=$(section "$(tail -n +2 <<<"$body")" | sed -E 's/[fdcR][0-9]{4}/ID/g' | shasum -a 256 | cut -d" " -f1)
+		got=$(section "$(tail -n +2 <<<"$body")" | sed "${keys[@]}" | shasum -a 256 | cut -d" " -f1)
 		[[ $got == "${row%%:*}" ]] || { echo "$s: the captured title, Problem or Non-goals differ from prep's"; return 1; }
 	done
 }

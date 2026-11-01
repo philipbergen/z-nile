@@ -7,8 +7,8 @@
 #   python3 <this file> subject         -> the capture commit's subject, every id written out (z-ticket lesson
 #                                          capture-subject-lists-every-id)
 #   python3 <this file> spend <minutes> -> ./zn spend <id> --phase capture for each, the minutes shared evenly
-#   python3 <this file> digests         -> the SHA-256 of each issue's title line and Problem to Solution (ids masked),
-#                                          as check.sh's AC6 computes them from the landed documents (prep pins them)
+#   python3 <this file> digests         -> the SHA-256 of each issue's title line and Problem to Solution (new ids as
+#                                          their keys), as check.sh's AC4 computes them from the capture (prep pins them)
 import hashlib, pathlib, re, subprocess, sys
 
 USER = ('The user, 2026-10-31: "I want to branch out into multiple games, they will each have their own directory in the '
@@ -90,7 +90,7 @@ I = [
         "A card whose place is not published (id 0) shows \"coming soon\".",
         "The badge text sits in one config table, because \"permanent sale\" pricing is an open decision for the user."],
   ngs=["The boards on the card: P2 (Boards per game).", "The countdown to the next free game: P3 (Free game timer).", "The play buttons and purchase: P4 (Play buttons)."]),
- dict(key="P2", project="portal", type="f", slug="boards-per-game", title="Boards per game", deps=["A1", "P1"],
+ dict(key="P2", project="portal", type="f", slug="boards-per-game", title="Boards per game", deps=["A1", "P1"], also=[ARCH],
   file="portal", parts="from \"Each card shows\", the game's hiscores; **Unknowns** E3 is in `arcade/.tracker/architecture.md`",
   outs=["Each card shows **the game's hiscores** with tabs All-time / Today / This week: rank, name, score, the game's progress figure and **revives used** (\"—\" for none), and the \"your best\" line below.",
         "The portal reads every game's boards within Roblox's DataStore budget (E3: a cache or a snapshot per board)."],
@@ -99,28 +99,28 @@ I = [
   file="portal", parts="from \"Each card shows\", \"FREE GAME READY\" and \"Next free game in mm:ss\"",
   outs=["Each card counts down to that game's next free game, per player (\"Next free game in mm:ss\"), and flips to FREE GAME READY when it is due."],
   ngs=["The free-hour rule itself: A3.", "The rest of the card: P1, P2 and P4."]),
- dict(key="P4", project="portal", type="f", slug="play-buttons", title="Play buttons", deps=["A2", "A3", "P1"],
+ dict(key="P4", project="portal", type="f", slug="play-buttons", title="Play buttons", deps=["A2", "A3", "P1"], also=["invaders", "asteroids"],
   file="portal", parts="from \"Each card shows\", the play buttons, and \"Purchase\"; the portal's side of the games' \"Pairing\"",
   outs=["PLAY on a card starts that game: free when the hour allows, else the 1 R$ play product (5 R$ struck through on the button); the server records the entitlement and teleports; the game place consumes it on arrival; TeleportData is never trusted.",
         "**ARENA** on Snake joins a shared arena; **2 PLAYERS** on Invaders and Asteroids puts the player on a waiting card until a second player in the portal server (or an invited friend) joins, then both teleport together to a reserved server (E5 is run on Beta by I3).",
         "Playtests never charge."],
   ngs=["The arrival side (joining a shared arena, a 2-player match started for the party, and E5): S2, I3 and T3.", "The revive product, bought in each game place: S5, I4 and T4."]),
- dict(key="P5", project="portal", type="f", slug="portal-start-place", title="Portal start place", deps=["Z3", "P2", "P4"],
-  file="portal", parts="\"The experience's start place\"",
-  outs=["The portal is the experience's start place (Beta first), and every game's game over returns there."],
+ dict(key="P5", project="portal", type="f", slug="portal-start-place", title="Portal start place", deps=["Z3", "P2", "P4"], also=[ARCH],
+  file="portal", parts="\"The experience's start place\", and from `arcade/.tracker/architecture.md`'s **Places and publishing**, \"`ROBLOX_BETA_PLACE_ID` is the portal (start place)\"",
+  outs=["The portal is the experience's start place (Beta first: `ROBLOX_BETA_PLACE_ID` publishes the portal, through Z3's manifest), and every game's game over returns there."],
   ngs=["Retiring pickman's lobby: c0188 (Retire lobby place).", "Each game's return to the portal: f0187, S5, I4 and T4."]),
  dict(key="Z3", project="portal", type="c", slug="n-place-deploy", title="N-place deploy", deps=["P2", "P4"],
-  file=ARCH, parts="**Technical skeleton**, its **Places and publishing** part",
+  file=ARCH, parts="**Technical skeleton**, its **Places and publishing** part: the manifest, the places' env vars, the place-id attributes and where the scripts live (not the start place, P5's; not pickman's switch to `PortalPlaceId`, f0187's)",
   outs=["The Beta publish handles every place of the experience from one manifest (`portal/experience.json`: each place's project file and env var), not pickman's fixed lobby and game pair.",
-        "Every place gets every place id as attributes (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`); `LobbyPlaceId` becomes `PortalPlaceId`; the old `ROBLOX_BETA_GAME_PLACE_ID` is still accepted for pickman.",
+        "Every place gets every place id as attributes (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 means not published); the old `ROBLOX_BETA_GAME_PLACE_ID` is still accepted for pickman, and pickman's places keep getting `LobbyPlaceId` as today until f0187 switches pickman to `PortalPlaceId` and c0188 retires the lobby, so pickman's game over keeps working on Beta in between.",
         "The deploy scripts and the runtime-test runner (`--place <name>`) move to `portal/scripts/`."],
-  ngs=["The live (production) publish: f0169, which builds on this.", "Reading the attributes: A2 (Shared travel)."]),
+  ngs=["The live (production) publish: f0169, which builds on this.", "Reading the attributes: A2 (Shared travel).", "Making the portal the start place (`ROBLOX_BETA_PLACE_ID`): P5.", "Pickman reading `PortalPlaceId` instead of `LobbyPlaceId`: f0187."]),
  dict(key="S1", project="snake", type="f", slug="arena-maps-growth", title="Arena, maps and growth", deps=["c0184"],
   file="snake", parts="**Arena and view** (the grid, its border and its size for N players), **Movement** (speed, the turns and their buffer; not Boost, not the keys), **Food** (apples), **Maps** (not \"Shared arena\"), and **Death, lives and revives** (death, lives and respawn; not the revive offer)",
   outs=["The Snake rules in pure Logic: the grid arena sized from the player count, movement with two buffered turns, apples and growth, death on walls, borders and bodies (heads meeting kill both), lives and respawn.",
         "**Maps**: map 1 is empty and **map k has k−1 straight walls**, horizontal or vertical, that **never connect** (one empty tile all round, diagonals included); reaching the goal length ends the map and the next one starts."],
   ngs=["Boost, golden apples and crumbs: S4.", "The shared arena: S2.", "The view, input, HUD, the place, and how the rules look (MAP CLEAR, Ready): S3.", "Boards, the revive offer and the portal return: S5."]),
- dict(key="S2", project="snake", type="f", slug="shared-snake-arena", title="Shared snake arena", deps=["S3", "A2", "A3"],
+ dict(key="S2", project="snake", type="f", slug="shared-snake-arena", title="Shared snake arena", deps=["S3", "A2", "A3"], also=[ARCH],
   file="snake", parts="**Maps** (\"Shared arena\") and **Players** (\"Arena\"); in `arcade/.tracker/architecture.md`, **Unknowns** E6 and the Session clock and intent limiter",
   outs=["**N players** (up to a tuning cap, 24 to start) share one arena whose size grows with the player count; the first to the goal length wins the map and everyone moves on together; joining mid-map spawns at the safest tile.",
         "The arena's server session in the Snake place (S3), and a player arriving from the portal's ARENA button joins it.",
@@ -137,7 +137,7 @@ I = [
   file="snake", parts="**Movement** (\"Boost\") and **Food** (\"Golden apple\" and \"Crumbs\")",
   outs=["Boost (double speed, sheds a segment every 0.5 s, never below 4), golden apples (+3, every 20 s for 6 s) and crumbs from a dead snake's body."],
   ngs=["The rest of the rules: S1."]),
- dict(key="S5", project="snake", type="f", slug="snake-scores-and-revives", title="Snake scores and revives", deps=["S1", "A1", "A2", "A3"],
+ dict(key="S5", project="snake", type="f", slug="snake-scores-and-revives", title="Snake scores and revives", deps=["S1", "S2", "S3", "A1", "A2", "A3"],
   file="snake", parts="**Death, lives and revives** (the game over and the revive offer) and **Players** (\"Every run, solo or arena, goes to Snake's boards\")",
   outs=["Snake's runs go to Snake's boards (score, map, revives); game over offers the 1 R$ revive (3 lives, keeping score and map; 10 s in an arena while play goes on); game over returns to the portal."],
   ngs=["The boards' store: A1.", "Paid play: A3."]),
@@ -150,14 +150,14 @@ I = [
   outs=["Two players at opposite ends of a field twice as deep; **each wave flies in from the side and splits into two groups**, one toward each player; **a shot crosses the whole field and can hit the other player's barriers** (not the player, by default); own scores, lives and revives; a lone survivor plays on.",
         "Pure Logic: the place that runs it, and the party's arrival, are I3's."],
   ngs=["The solo rules: I1.", "The place, the party's arrival and E5: I3.", "The portal's waiting card and teleport: P4."]),
- dict(key="I3", project="invaders", type="f", slug="invaders-cannon-view", title="Invaders cannon view", deps=["I1", "I2", "A2", "A3", "A4", "P4", "Z3"],
+ dict(key="I3", project="invaders", type="f", slug="invaders-cannon-view", title="Invaders cannon view", deps=["I1", "I2", "A2", "A3", "A4", "P5"], also=[ARCH],
   file="invaders", parts="**The field and view** (the camera, the radar and the controls), what the rules show and sound (the march's beat, which speeds up with it), and the game's side of \"Pairing\"; in `arcade/.tracker/architecture.md`, **Unknowns** E5",
   outs=["The cannon's first-person view and field radar, with every input: A/D or the arrows and Space; gamepad; touch LEFT, RIGHT and FIRE.",
         "Everything the rules show or sound, from their state: the march's beat speeding up as the formation thins.",
         "The Invaders place: its project file, the server session that runs each solo game and replicates it to the player, and its arrival: a player from the portal's PLAY, or a party from its 2 PLAYERS in a reserved server, which starts and runs one 2-player match (I2's rules) replicated to both.",
-        "E5: the party teleport into a reserved server, tested on Beta with the portal's 2 PLAYERS (P4) and every place published (Z3); T3 uses its result."],
+        "E5: the party teleport into a reserved server, tested on Beta with the portal as the start place (P5), its 2 PLAYERS (P4) and every place published (Z3); T3 uses its result."],
   ngs=["The rules: I1 and I2.", "Boards, revives and the portal return: I4.", "The waiting card and the teleport: P4."]),
- dict(key="I4", project="invaders", type="f", slug="invaders-scores-and-revives", title="Invaders scores and revives", deps=["I1", "A1", "A2", "A3"],
+ dict(key="I4", project="invaders", type="f", slug="invaders-scores-and-revives", title="Invaders scores and revives", deps=["I1", "I3", "A1", "A2", "A3"],
   file="invaders", parts="**Solo (the classic)** (\"Invasion\": the revive offer) and the boards every game keeps",
   outs=["Invaders' runs go to its boards (score, wave, revives); game over (including invasion) offers the 1 R$ revive; game over returns to the portal."],
   ngs=["The boards' store: A1.", "Paid play: A3."]),
@@ -170,13 +170,13 @@ I = [
   outs=["Two ships share one field from opposite sides with 1.5 × the rocks; own scores, lives and revives; no friendly fire by default, ships bounce; a lone survivor plays on.",
         "Pure Logic: the place that runs it, and the party's arrival, are T3's."],
   ngs=["The solo rules: T1.", "The place and the party's arrival: T3.", "The portal's waiting card and teleport: P4."]),
- dict(key="T3", project="asteroids", type="f", slug="asteroids-cockpit-view", title="Asteroids cockpit view", deps=["T1", "T2", "A2", "A3", "A4", "I3"],
+ dict(key="T3", project="asteroids", type="f", slug="asteroids-cockpit-view", title="Asteroids cockpit view", deps=["T1", "T2", "A2", "A3", "A4", "I3"], also=[ARCH],
   file="asteroids", parts="**The field and view** (the cockpit camera, the wrap drawn tiled, the rocks' 3-D tumble, the radar, the rear-danger glow and the controls), what the rules show (the respawn flicker), and the game's side of \"Pairing\"; in `arcade/.tracker/architecture.md`, **Unknowns** E7",
   outs=["The cockpit view with the wrap-around drawn tiled at true distance, the radar and the rear-danger glow, with every input: A/D, W, Space, Shift, the arrows to look; gamepad; touch rotate, THRUST, FIRE and HYPER. A Studio prototype settles the tiled-field cost (E7).",
         "Everything the rules show, from their state: the rocks tumbling in 3-D (for looks only) and the flicker of a protected ship.",
         "The Asteroids place: its project file, the server session that runs each solo game and replicates it to the player, and its arrival: a player from the portal's PLAY, or a party from its 2 PLAYERS in a reserved server, which starts and runs one 2-player game (T2's rules) replicated to both, as E5 (run by I3) found."],
   ngs=["The rules: T1 and T2.", "Boards, revives and the portal return: T4.", "The waiting card and the teleport: P4."]),
- dict(key="T4", project="asteroids", type="f", slug="asteroids-scores-and-revives", title="Asteroids scores and revives", deps=["T1", "A1", "A2", "A3"],
+ dict(key="T4", project="asteroids", type="f", slug="asteroids-scores-and-revives", title="Asteroids scores and revives", deps=["T1", "T3", "A1", "A2", "A3"],
   file="asteroids", parts="**Rules (the classic)** (\"Game over\": the revive offer) and the boards every game keeps",
   outs=["Asteroids' runs go to its boards (score, wave, revives); game over offers the 1 R$ revive; game over returns to the portal."],
   ngs=["The boards' store: A1.", "Paid play: A3."]),
@@ -204,17 +204,25 @@ def ids_for_keys(text, idof):
     return KEY.sub(lambda m: idof.get(m.group(1), m.group(1)), text)
 
 
+def files(e):
+    """every design file e owns parts of: its main file, then the others (`also`)"""
+    return [e["file"]] + e.get("also", [])
+
+
 def rest(e):
-    """the Non-goals line naming every other issue whose parts are in e's design file"""
-    others = [o["key"] for o in I if o["file"] == e["file"] and o["key"] != e["key"]]
-    name = f"`{ARCH}`" if e["file"] == ARCH else f"`{e['file']}/.tracker/game-design.md`"
-    extra = ", and c0184 and c0185 (the library's layout, wiring, gate and paths)" if e["file"] == ARCH else ""
-    return f"The rest of {name}: {', '.join(others)}{extra}."
+    """one Non-goals line per design file e owns parts of, naming every other issue with parts in that file"""
+    out = []
+    for f in files(e):
+        others = [o["key"] for o in I if f in files(o) and o["key"] != e["key"]]
+        name = f"`{ARCH}`" if f == ARCH else f"`{f}/.tracker/game-design.md`"
+        extra = ", and c0184 and c0185 (the library's layout, wiring, gate and paths)" if f == ARCH else ""
+        out.append(f"The rest of {name}: {', '.join(others)}{extra}.")
+    return out
 
 
 def body(e):
     pr = USER + "\n\n" + pointer(e) + "\n\nWhat should happen:\n" + "\n".join("- " + o for o in e["outs"])
-    ng = "\n".join("- " + n for n in e["ngs"] + [rest(e)])
+    ng = "\n".join("- " + n for n in e["ngs"] + rest(e))
     return f"## Problem\n{pr}\n\n## Non-goals\n{ng}\n\n## Solution\n<!-- The approach in one paragraph. -->\n"
 
 
@@ -241,16 +249,30 @@ def setdeps(p, add):
     p.write_text(t[:m.start()] + "depends_on: [" + ", ".join(new) + "]" + t[m.end():])
 
 
-def section(p):
-    """the title line and the text from ## Problem up to ## Design, every id masked (ids are allocated at capture time),
-    exactly as check.sh's AC6 builds it"""
+def section(p, keyof):
+    """the title line and the text from ## Problem up to ## Design, each of the 27 new ids written as its key (they are
+    allocated at capture time; every other id stays as it is), exactly as check.sh's AC4 builds it"""
     t = p.read_text()
     title = re.search(r"^title: .*$", t, re.M).group(0)
-    return re.sub(r"[fdcR]\d{4}", "ID", title + "\n" + t[t.index("## Problem\n"):t.index("## Design\n")])
+    s = title + "\n" + t[t.index("## Problem\n"):t.index("## Design\n")]
+    for i, k in keyof.items():  # plain text, as check.sh's sed does
+        s = s.replace(i, k)
+    return s
+
+
+def in_capture_worktree():
+    """create and fill run only at the top of a capture worktree (z-ticket step 0), never in the main checkout"""
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True).stdout.strip()
+    if pathlib.Path(top).resolve() != pathlib.Path.cwd().resolve() or not branch.startswith("capture-") \
+            or pathlib.Path(top).parent.name != ".worktree":
+        sys.exit(f"run from the top of a capture worktree (.worktree/capture-<slug>), not {pathlib.Path.cwd()} on {branch}")
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd in ("create", "fill"):
+        in_capture_worktree()
     if cmd == "create":
         for e in I:
             if found(e):
@@ -291,7 +313,8 @@ if __name__ == "__main__":
         for e in I:
             subprocess.run(["./zn", "spend", found(e).stem, "--phase", "capture", "--time", str(each)], check=True)
     elif cmd == "digests":
+        keyof = {found(e).stem: e["key"] for e in I}
         for e in I:
-            print(hashlib.sha256(section(found(e)).encode()).hexdigest(), e["project"], e["slug"])
+            print(hashlib.sha256(section(found(e), keyof).encode()).hexdigest(), e["project"], e["slug"])
     else:
         sys.exit("usage: create | fill | subject | spend <minutes> | digests")
