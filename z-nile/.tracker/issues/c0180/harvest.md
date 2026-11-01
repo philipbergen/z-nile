@@ -1,0 +1,11 @@
+- design-review-001 F1: z-design/trace-every-way-code-runs
+- design-review-001 F2: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-001 F3: z-design/quote-other-preps-before-promising
+- design-review-001 F4: zz-arch/records-cover-what-was-reviewed
+- design-review-001 F5: z-design/prove-specs-pass-on-a-prototype, z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/required-steps-on-every-path, z-design/design-the-execution-window
+- design-review-001 F7: z-design/spec-design-correspondence
+- design-review-001 F8: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F9: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F10: z-design/restated-rules-move-together
+- note prep round 2: a "the split narrows" case written for F5 was vacuous (every command misses the other 36 command modules) and was rewritten before its mutant could pass: zz-test/no-vacuous-pass
