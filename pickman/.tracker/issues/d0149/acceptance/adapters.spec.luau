@@ -559,6 +559,56 @@ return t.spec("d0149 the touch adapters", function(it)
 		end
 	)
 
+	it(
+		"an old timer that fires while a second look finger is down leaves the second alone: a double tap hops twice",
+		function()
+			local w = controls("E")
+			w.clock.now = 100
+			w.down(1, L.x + L.r * 0.6, L.y)
+			w.clock.now = 100.1
+			w.up(1, L.x + L.r * 0.6, L.y)
+			w.clock.now = 100.15
+			w.down(2, L.x + L.r * 0.6, L.y) -- the second tap is down when the first tap's timer fires
+			w.clock.now = 100.25
+			w.frame() -- only the first timer is due
+			t.expect(#w.points).toBe(0)
+			w.clock.now = 100.3
+			w.up(2, L.x + L.r * 0.6, L.y)
+			t.expect(w.fired).toEqual({ Hop.INTENT, Hop.INTENT })
+			t.expect(#w.points).toBe(0)
+		end
+	)
+
+	it(
+		"after focus loss or a re-layout, the old finger's timer leaves a new tap alone (ids are never reused)",
+		function()
+			for _, how in { "focus", "relayout" } do
+				local w = controls("E")
+				w.clock.now = 100
+				w.down(1, L.x + L.r * 0.6, L.y)
+				local look = L
+				if how == "focus" then
+					w.focusLost()
+				else
+					local moved = table.clone(PLACED)
+					moved.look = { x = L.x - 60, y = L.y, r = L.r }
+					look = moved.look
+					w.relayout(moved)
+				end
+				w.clock.now = 100.1
+				w.down(2, look.x + look.r * 0.6, look.y)
+				local n = #w.points
+				w.clock.now = 100.25
+				w.frame() -- the old finger's timer, with the new tap down
+				t.expect(#w.points).toBe(n)
+				w.clock.now = 100.3
+				w.up(2, look.x + look.r * 0.6, look.y)
+				t.expect(w.fired).toEqual({ Hop.INTENT })
+				t.expect(#w.points).toBe(n)
+			end
+		end
+	)
+
 	it("a tap off the look circle's centre hops and never points the view", function()
 		local w = controls("E")
 		w.down(1, L.x + L.r * 0.6, L.y + 3)

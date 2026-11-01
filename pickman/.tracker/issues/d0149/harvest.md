@@ -21,3 +21,6 @@
 - design-review-003 F4: z-design/finished-overrides-land-before-ready
 - design-review-003 F5: z-design/restated-rules-move-together
 - note the new hold case found that a timer-promoted finger lifted under TAP_SECONDS still hopped; a looking finger now never hops: pickman-arch/decide-the-gesture-before-acting
+- design-review-004 F1: pickman-arch/timers-read-live-state
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-004 F3: z-design/restated-rules-move-together

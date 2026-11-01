@@ -84,6 +84,9 @@ MUTANTS = [
     ("C12", C, "			task.delay(Touch.TAP_SECONDS, function()\n				local promoted\n				fingers, promoted = Touch.hold(fingers, id, controlsNow())", "			local pressed = fingers\n			task.delay(Touch.TAP_SECONDS, function()\n				local promoted\n				fingers, promoted = Touch.hold(pressed, id, controlsNow())", "adapters"),
     ("H9", H, "HudView.knobs(if moved then {} else knobsAt)", "HudView.knobs({})", "adapters"),
     ("H10", H, "HudView.knobs(if moved then {} else knobsAt)", "HudView.knobs(knobsAt)", "adapters"),
+    ("X1", C, "fingers, promoted = Touch.hold(fingers, id, controlsNow())", "fingers, promoted = Touch.hold(fingers, lastId, controlsNow())", "adapters"),
+    ("X2", C, "		forget()\n		ids = {}\n		hold()", "		forget()\n		ids = {}\n		lastId = 0\n		hold()", "adapters"),
+    ("C13", C, "			task.delay(Touch.TAP_SECONDS, function()\n				local promoted", "			local pressedAt = os.clock()\n			task.delay(Touch.TAP_SECONDS, function()\n				if os.clock() - pressedAt < Touch.TAP_SECONDS then\n					return\n				end\n				local promoted", "adapters"),
     ("M1", M, "point = Camera.point", "point = nil", "adapters"),
     ("M2", M, "Controls.start(Camera.snap, Camera.holdMouse, HudView.buttons, HudView.knobs)", "Controls.start(Camera.snap, Camera.holdMouse, HudView.buttons)", "adapters"),
 ]
