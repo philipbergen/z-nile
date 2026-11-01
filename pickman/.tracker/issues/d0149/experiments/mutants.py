@@ -3,7 +3,7 @@
 issue's Rules and mutants table to one source file, runs the row's spec from .cache/d0149/acc, and requires a FAIL
 on an assertion (a load or syntax error does not count). Restores each file with git afterwards. Then runs the
 unmutated tree and requires every spec to pass. Usage: python3 mutants.py <acceptance dir copied under .cache>."""
-import subprocess, sys
+import os, subprocess, sys
 
 ACC = sys.argv[1] if len(sys.argv) > 1 else ".cache/d0149/acc"
 T = "src/shared/Logic/Touch/init.luau"
@@ -80,13 +80,15 @@ MUTANTS = [
     ("F4", T, "		local held: Finger = table.clone(f)\n		held.looking = true", "		local held: Finger = f\n		held.looking = true", "fold"),
     ("N2", T, "if not finger.looking and not far and", "if not far and", "fold"),
     ("U3", T, "	local function circle(p: Circle?, q: Circle?): boolean\n		if p == nil or q == nil then\n			return p == q\n		end", "	local function circle(p: Circle?, q: Circle?): boolean\n		if p == nil and q == nil then\n			return true\n		end", "fold"),
-    ("C8", C, "fingers, promoted = Touch.hold(fingers, id, controlsNow())", "fingers, promoted = fingers, {}", "adapters"),
-    ("C12", C, "			task.delay(Touch.TAP_SECONDS, function()\n				local promoted\n				fingers, promoted = Touch.hold(fingers, id, controlsNow())", "			local pressed = fingers\n			task.delay(Touch.TAP_SECONDS, function()\n				local promoted\n				fingers, promoted = Touch.hold(pressed, id, controlsNow())", "adapters"),
     ("H9", H, "HudView.knobs(if moved then {} else knobsAt)", "HudView.knobs({})", "adapters"),
     ("H10", H, "HudView.knobs(if moved then {} else knobsAt)", "HudView.knobs(knobsAt)", "adapters"),
-    ("X1", C, "fingers, promoted = Touch.hold(fingers, id, controlsNow())", "fingers, promoted = Touch.hold(fingers, lastId, controlsNow())", "adapters"),
     ("X2", C, "		forget()\n		ids = {}\n		hold()", "		forget()\n		ids = {}\n		lastId = 0\n		hold()", "adapters"),
-    ("C13", C, "			task.delay(Touch.TAP_SECONDS, function()\n				local promoted", "			local pressedAt = os.clock()\n			task.delay(Touch.TAP_SECONDS, function()\n				if os.clock() - pressedAt < Touch.TAP_SECONDS then\n					return\n				end\n				local promoted", "adapters"),
+    ("C8", C, "					return Touch.hold(state, id, placed)", "					return state, {}", "adapters"),
+    ("X1", C, "					return Touch.hold(state, id, placed)", "					return Touch.hold(state, lastId, placed)", "adapters"),
+    ("C12", C, "			task.delay(Touch.TAP_SECONDS, function()\n				step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })\n					return Touch.hold(state, id, placed)\n				end)", "			local pressed = fingers\n			task.delay(Touch.TAP_SECONDS, function()\n				step(function(_state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })\n					return Touch.hold(pressed, id, placed)\n				end)", "adapters"),
+    ("C13", C, "			task.delay(Touch.TAP_SECONDS, function()\n				step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })\n					return Touch.hold(state, id, placed)\n				end)", "			local pressedAt = os.clock()\n			task.delay(Touch.TAP_SECONDS, function()\n				if os.clock() - pressedAt < Touch.TAP_SECONDS then\n					return\n				end\n				step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })\n					return Touch.hold(state, id, placed)\n				end)", "adapters"),
+    ("Y0", C, "				step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })\n					return Touch.hold(state, id, placed)\n				end)", "				local promoted\n				fingers, promoted = Touch.hold(fingers, id, controlsNow())\n				apply(promoted)", "adapters"),
+    ("Y1", C, "				step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })\n					return Touch.hold(state, id, placed)\n				end)", "				local promoted\n				fingers, promoted = Touch.hold(fingers, id, (if buttons then buttons() else nil) or {})\n				apply(promoted)", "adapters"),
     ("M1", M, "point = Camera.point", "point = nil", "adapters"),
     ("M2", M, "Controls.start(Camera.snap, Camera.holdMouse, HudView.buttons, HudView.knobs)", "Controls.start(Camera.snap, Camera.holdMouse, HudView.buttons)", "adapters"),
 ]
@@ -101,7 +103,8 @@ CORRECT = [
 
 
 def run(spec):
-    out = subprocess.run(["lune", "run", "tests/run", "--", f"{ACC}/{spec}.spec.luau"], capture_output=True, text=True)
+    env = dict(os.environ, D0149_EXACT="1")
+    out = subprocess.run(["lune", "run", "tests/run", "--", f"{ACC}/{spec}.spec.luau"], capture_output=True, text=True, env=env)
     return out.stdout + out.stderr
 
 

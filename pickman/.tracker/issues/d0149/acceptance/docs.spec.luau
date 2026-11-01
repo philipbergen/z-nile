@@ -1,8 +1,10 @@
 --!strict
--- d0149 AC5: the documents say what the game now does. game-design.md's Mobile section describes the touch circles
+-- d0149 AC5: the documents say what the game now does. The whole-document absence scan runs only under
+-- D0149_EXACT=1 (AC5's check.sh line); the positive needles always run. game-design.md's Mobile section describes the touch circles
 -- (the user's decisions, 2026-10-25 and 2026-10-31) and no longer the swipes, the drag look or the snap button;
 -- architecture.md declares Touch -> Pad and no longer the edges the new Touch does not use (Touch -> Hud, View).
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local function section(doc: string, heading: string): string
@@ -41,6 +43,11 @@ return t.spec("d0149 the documents", function(it)
 	it(
 		"nowhere in game-design.md offers the swipes, the drag look, the snap button or JUMP any more",
 		function()
+			-- checked only when D0149_EXACT is set, which only AC5's line in d0149's check.sh does: once promoted, a
+			-- later issue may use these words again (design review 005 F2, as f0158's F0158_EXACT)
+			if process.env.D0149_EXACT ~= "1" then
+				return
+			end
 			-- the Touch circles bullet names what it replaces; every other line is read (review 001 F5: f0126's and
 			-- f0143's sections and the Look rule restate the touch controls too)
 			local doc = fs.readFile(".tracker/game-design.md")

@@ -90,7 +90,7 @@ index f7d8109d..637b1876 100644
  
  -- The spy hop (f0101): the tick the latest hop started, as the server's frame says (nil: none yet). The server
 diff --git a/pickman/src/client/Controls.luau b/pickman/src/client/Controls.luau
-index 3c606b8c..ddcdba7d 100644
+index 3c606b8c..5ae742a4 100644
 --- a/pickman/src/client/Controls.luau
 +++ b/pickman/src/client/Controls.luau
 @@ -1,8 +1,9 @@
@@ -150,12 +150,24 @@ index 3c606b8c..ddcdba7d 100644
  
  	-- Held while any physical touch is down, including one the fold ignored: it still moves the locked mouse.
  	local function hold()
-@@ -140,8 +142,58 @@ function Controls.start(
+@@ -140,44 +142,31 @@ function Controls.start(
  		end
  	end
  
 -	-- Every touch event is converted to screen pixels and measured against the full screen, read afresh each
 -	-- time: the first frames can report an empty area, and a rotation changes it.
+-	local function onInput(input: InputObject, phase: Touch.Phase)
+-		if input.UserInputType ~= Enum.UserInputType.Touch then
+-			return
+-		end
+-		local id = ids[input]
+-		if id == nil then
+-			if phase ~= "begin" then
+-				return
+-			end
+-			lastId += 1
+-			id = lastId
+-			ids[input] = id
 +	-- Every finger is let go: the view springs back and the knobs centre. Fingers still down stay unheard until
 +	-- they lift (their ids stay, so the mouse stays held).
 +	local function forget()
@@ -163,16 +175,37 @@ index 3c606b8c..ddcdba7d 100644
 +		local k = keys
 +		if k and k.point then
 +			k.point(nil)
-+		end
+ 		end
+-		if phase == "end" then
+-			ids[input] = nil
 +		if onKnobs then
 +			onKnobs({})
-+		end
+ 		end
+-		local sx, sy = Touch.toScreen(
+-			GuiService:GetInsetArea(Enum.ScreenInsets.None),
+-			input.Position.X,
+-			input.Position.Y
+-		)
+-		local sw = Touch.screenSize(
+-			GuiService:GetInsetArea(Enum.ScreenInsets.None),
+-			camera.ViewportSize.X,
+-			camera.ViewportSize.Y
+-		)
+-		local rect = if snapRect then snapRect() else nil
 +	end
 +
 +	-- The controls now. When they moved (a turn, the top bar shown or hidden), a held finger's pull would be measured
 +	-- from the new place, so every finger is let go first (the fold's source changed).
 +	local function controlsNow(): Touch.Context
-+		local placed = if buttons then buttons() else nil
+ 		local placed = if buttons then buttons() else nil
+-		local effects
+-		fingers, effects = Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy }, {
+-			width = sw,
+-			snap = rect,
+-			fire = placed and placed.fire,
+-			hop = placed and placed.hop,
+-			pick = placed and placed.pick,
+-		})
 +		if laidOut ~= nil and not Touch.same(placed, laidOut) then
 +			forget()
 +		end
@@ -181,99 +214,86 @@ index 3c606b8c..ddcdba7d 100644
 +	end
 +
 +	local function apply(effects: { Touch.Effect })
-+		for _, effect in effects do
-+			if effect.kind == "turn" then
-+				intent:FireServer(effect.intent)
-+				if effect.intent == "Forward" then
-+					local pair
-+					touchTaps, pair = Boost.tap(touchTaps, os.clock())
-+					if pair then
-+						intent:FireServer(Boost.INTENT)
-+					end
-+				end
+ 		for _, effect in effects do
+ 			if effect.kind == "turn" then
+ 				intent:FireServer(effect.intent)
+@@ -188,12 +177,11 @@ function Controls.start(
+ 						intent:FireServer(Boost.INTENT)
+ 					end
+ 				end
+-			elseif effect.kind == "look" then
+-				if onLook then
+-					onLook(effect.dx, effect.dy)
 +			elseif effect.kind == "point" then
 +				local k = keys
 +				if k and k.point then
 +					k.point(effect.quarters)
-+				end
-+			elseif effect.kind == "fire" then
-+				fire()
-+			elseif effect.kind == "hop" then
-+				intent:FireServer(Hop.INTENT)
-+			elseif effect.kind == "pick" then
-+				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
-+			end
+ 				end
+-			elseif effect.kind == "snap" then
+-				onSnap()
+ 			elseif effect.kind == "fire" then
+ 				fire()
+ 			elseif effect.kind == "hop" then
+@@ -202,6 +190,58 @@ function Controls.start(
+ 				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
+ 			end
+ 		end
++	end
++
++	-- Every path into the fold (a touch event, a tap timer) goes through here: the controls are read first, so a
++	-- re-layout lets every finger go before the fold sees them; then the fold, its effects, and the knobs.
++	local function step(fold: (Touch.State, Touch.Context) -> (Touch.State, { Touch.Effect }))
++		local placed = controlsNow()
++		local effects
++		fingers, effects = fold(fingers, placed)
++		apply(effects)
++		if onKnobs then
++			onKnobs(Touch.knobs(fingers, placed))
 +		end
 +	end
 +
 +	-- Every touch event is converted to screen pixels, read afresh each time: the first frames can report an empty
 +	-- area, and a rotation changes it.
- 	local function onInput(input: InputObject, phase: Touch.Phase)
- 		if input.UserInputType ~= Enum.UserInputType.Touch then
- 			return
-@@ -163,44 +215,24 @@ function Controls.start(
- 			input.Position.X,
- 			input.Position.Y
- 		)
--		local sw = Touch.screenSize(
--			GuiService:GetInsetArea(Enum.ScreenInsets.None),
--			camera.ViewportSize.X,
--			camera.ViewportSize.Y
--		)
--		local rect = if snapRect then snapRect() else nil
--		local placed = if buttons then buttons() else nil
-+		local placed = controlsNow()
- 		local effects
--		fingers, effects = Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy }, {
--			width = sw,
--			snap = rect,
--			fire = placed and placed.fire,
--			hop = placed and placed.hop,
--			pick = placed and placed.pick,
--		})
--		for _, effect in effects do
--			if effect.kind == "turn" then
--				intent:FireServer(effect.intent)
--				if effect.intent == "Forward" then
--					local pair
--					touchTaps, pair = Boost.tap(touchTaps, os.clock())
--					if pair then
--						intent:FireServer(Boost.INTENT)
--					end
--				end
--			elseif effect.kind == "look" then
--				if onLook then
--					onLook(effect.dx, effect.dy)
--				end
--			elseif effect.kind == "snap" then
--				onSnap()
--			elseif effect.kind == "fire" then
--				fire()
--			elseif effect.kind == "hop" then
--				intent:FireServer(Hop.INTENT)
--			elseif effect.kind == "pick" then
--				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
--			end
-+		fingers, effects =
-+			Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy, t = os.clock() }, placed)
-+		apply(effects)
++	local function onInput(input: InputObject, phase: Touch.Phase)
++		if input.UserInputType ~= Enum.UserInputType.Touch then
++			return
++		end
++		local id = ids[input]
++		if id == nil then
++			if phase ~= "begin" then
++				return
++			end
++			lastId += 1
++			id = lastId
++			ids[input] = id
++		end
++		if phase == "end" then
++			ids[input] = nil
++		end
++		local sx, sy = Touch.toScreen(
++			GuiService:GetInsetArea(Enum.ScreenInsets.None),
++			input.Position.X,
++			input.Position.Y
++		)
++		local event: Touch.Event = { id = id, phase = phase, x = sx, y = sy, t = os.clock() }
++		step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })
++			return Touch.track(state, event, placed)
++		end)
 +		local f = fingers.fingers[id]
 +		if phase == "begin" and f and f.zone == "look" then
-+			-- a thumb that rests without moving sends no events: look again once a tap's time has passed
-+			-- the timer acts on the fold as it is when it fires, by this finger's id (ids are never reused): a finger
-+			-- lifted or let go meanwhile is simply not there
++			-- a thumb that rests without moving sends no events: once a tap's time has passed, its own timer asks the
++			-- fold, through the same step (so a re-layout meanwhile has let it go first), by this finger's id (ids are
++			-- never reused): a finger lifted or let go meanwhile is simply not there
 +			task.delay(Touch.TAP_SECONDS, function()
-+				local promoted
-+				fingers, promoted = Touch.hold(fingers, id, controlsNow())
-+				apply(promoted)
++				step(function(state: Touch.State, placed: Touch.Context): (Touch.State, { Touch.Effect })
++					return Touch.hold(state, id, placed)
++				end)
 +			end)
 +		end
-+		if onKnobs then
-+			onKnobs(Touch.knobs(fingers, placed))
- 		end
  		hold()
  	end
-@@ -214,9 +246,9 @@ function Controls.start(
+ 
+@@ -214,9 +254,9 @@ function Controls.start(
  	UserInputService.InputEnded:Connect(function(input: InputObject, _: boolean)
  		onInput(input, "end")
  	end)

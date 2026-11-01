@@ -609,6 +609,27 @@ return t.spec("d0149 the touch adapters", function(it)
 		end
 	)
 
+	it(
+		"a re-layout with no touch before a still thumb's timer: the timer finds the thumb let go and points nothing",
+		function()
+			local w = controls("E")
+			w.clock.now = 100
+			w.down(1, L.x + L.r * 0.6, L.y) -- a still thumb on the look circle
+			local moved = table.clone(PLACED)
+			moved.look = { x = L.x - 60, y = L.y, r = L.r }
+			w.relayout(moved) -- no touch event follows before the timer
+			w.clock.now = 100.25
+			w.frame()
+			t.expect(w.points).toEqual({ "nil" }) -- let go (the view springs back), never a quarter turn
+			w.move(1, L.x + L.r * 0.6 + 30, L.y)
+			t.expect(w.points).toEqual({ "nil" }) -- the let-go thumb pulls nothing until it lifts
+			w.up(1, L.x + L.r * 0.6 + 30, L.y)
+			w.down(2, moved.look.x, moved.look.y)
+			w.move(2, moved.look.x, moved.look.y + moved.look.r)
+			t.expect(w.points[#w.points]).toBeNear(2, 1e-9) -- a new finger on the moved circle points
+		end
+	)
+
 	it("a tap off the look circle's centre hops and never points the view", function()
 		local w = controls("E")
 		w.down(1, L.x + L.r * 0.6, L.y + 3)

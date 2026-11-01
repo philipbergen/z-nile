@@ -24,3 +24,6 @@
 - design-review-004 F1: pickman-arch/timers-read-live-state
 - design-review-004 F2: z-design/restated-rules-move-together
 - design-review-004 F3: z-design/restated-rules-move-together
+- design-review-005 F1: pickman-arch/one-step-into-the-fold
+- design-review-005 F2: one-off: a whole-document absence scan becomes a permanent ban once promoted; gated behind D0149_EXACT as f0158 gates its exact overlaps
+- design-review-005 F3: z-design/restated-rules-move-together
