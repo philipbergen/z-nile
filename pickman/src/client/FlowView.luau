@@ -84,8 +84,8 @@ function FlowView.start()
 	-- the server's own rank for a run, sent after its write; the remote is made when the server script runs
 	local rank = remotes:FindFirstChild("Rank")
 	if rank then
-		(rank :: RemoteEvent).OnClientEvent:Connect(function(run: number, place: number)
-			rankView = Flow.hearRank(rankView, run, place, gameOverUp)
+		(rank :: RemoteEvent).OnClientEvent:Connect(function(run: number, place: number?, missed: number?)
+			rankView = Flow.hearMiss(Flow.hearRank(rankView, run, place, gameOverUp), run, missed, gameOverUp)
 			drawRank()
 		end)
 	end

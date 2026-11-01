@@ -19,6 +19,7 @@
 | 15 | 2026-10-22 00:19 | design-refute-005 | 0 | 0 | 15.0 | spend | design-review |  |
 | 16 | 2026-10-22 03:55 | design-review-005-tokens | 0 | 0 | 0.0 | spend | design-review | 130714 |
 | 17 | 2026-10-22 03:55 | prep | 1651 | 2 | 120.0 | spend | prep |  |
+| 18 | 2026-11-01 19:40 | d0124: apply the prototype (hiscores top-ten list); adapters.spec FlowView case blocked by f0146's Pad require | 475 | 43 | 0.7 | focus | build |  |
 
-**Total:** +1651 / -2 lines, 262.0 agent-minutes, 677346 tokens over 17 records
-<!-- totals: added=1651 removed=2 minutes=262.0 records=17 tokens=677346 -->
+**Total:** +2126 / -45 lines, 262.7 agent-minutes, 677346 tokens over 18 records
+<!-- totals: added=2126 removed=45 minutes=262.7 records=18 tokens=677346 -->

@@ -6,9 +6,27 @@
 
 export type BoardId = "all" | "day" | "week"
 export type Board = { id: BoardId, period: string? }
-export type Attempt = { name: string, userId: string, level: number, score: number }
-export type Companion = { name: string, userId: string, level: number, score: number }
-export type Row = { rank: number, name: string, userId: string, score: number, level: number }
+-- `run` and `at` name the run that made a row (its top-N list id and instant); rows written before d0124 have neither
+export type Attempt =
+	{ name: string, userId: string, level: number, score: number, run: string?, at: number? }
+export type Companion = {
+	name: string,
+	userId: string,
+	level: number,
+	score: number,
+	run: string?,
+	at: number?,
+}
+export type Row = {
+	rank: number,
+	name: string,
+	userId: string,
+	score: number,
+	level: number,
+	run: string?,
+	at: number?,
+	runScore: number?, -- the companion's own score: the score of the run the row names (the page score can lag it)
+}
 export type PageEntry = { key: string, score: number }
 export type Page = { PageEntry }
 export type Store = {
@@ -25,12 +43,16 @@ export type Io = {
 	wait: (seconds: number) -> (),
 }
 export type Retry = { attempts: number, base: number, cap: number }
-export type DriveResult = { wrote: { [string]: boolean }, rank: number? }
+export type DriveResult = { wrote: { [string]: boolean }, rank: number?, rows: { Row }? } -- rows: the all-time board read after the write
 export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
 export type Submission = { score: number, level: number, run: number }
 export type StepEvent = { kind: string, score: number?, level: number? }
 export type CacheEntry = { at: number, rows: { Row } }
 export type Failure = { at: number, count: number } -- consecutive failed reads of one board key
+export type TopRun = { id: string, name: string, userId: string, score: number, level: number, at: number }
+export type TopIo = { update: (transform: ({ TopRun }?) -> { TopRun }?) -> (any, string?) }
+export type TopResult = { known: boolean, place: number?, missed: number? }
+export type Best = { score: number, level: number }
 
 local Hiscores = {}
 
@@ -43,6 +65,9 @@ Hiscores.LEAVE_STEPS = 45 -- how long a departed player's run is kept: the class
 Hiscores.CACHE_TTL = 15 -- seconds a read board is shared before it is read again
 Hiscores.READ_GAP = 1 -- the first wait after a failed read; it doubles up to CACHE_TTL
 Hiscores.CLOSE_WAIT = 25 -- seconds a closing server is held for hiscore work (the engine allows 30)
+Hiscores.TOP_STORE = "HiscoreTop" -- the all-time top-N list of runs: one key holds the whole list
+Hiscores.TOP_SCOPE = "all"
+Hiscores.TOP_KEY = "runs"
 
 local SECONDS_PER_DAY = 86400
 local MAX_INTEGER = 2 ^ 53 - 1
@@ -183,11 +208,14 @@ function Hiscores.commit(stored: Companion?, attempt: Attempt): Companion?
 	if not Hiscores.qualifies(stored, attempt) then
 		return nil
 	end
+	local named = type(attempt.run) == "string" and attempt.run ~= "" and whole(attempt.at)
 	return {
 		name = Hiscores.cleanName(attempt.name),
 		userId = attempt.userId,
 		level = attempt.level,
 		score = attempt.score,
+		run = if named then attempt.run else nil,
+		at = if named then attempt.at else nil,
 	}
 end
 
@@ -290,12 +318,18 @@ function Hiscores.rows(pages: { Page }, lookup: (string) -> (Companion?, string?
 				and companion.level >= 1
 				and sameUser(key, companion.userId)
 			then
+				local named = type(companion.run) == "string" and companion.run ~= "" and whole(companion.at)
 				table.insert(out, {
 					rank = 0,
 					name = Hiscores.cleanName(companion.name),
 					userId = companion.userId,
 					score = entry.score,
 					level = companion.level,
+					run = if named then companion.run else nil,
+					at = if named then companion.at else nil,
+					runScore = if whole(companion.score) and companion.score >= 0
+						then companion.score
+						else nil,
 				})
 			end
 		end
@@ -447,6 +481,23 @@ local function driveBoard(io: Io, id: BoardId, attempt: Attempt, unix: number, d
 	return false
 end
 
+-- The all-time per-player board through `io`: one page, then each row's companion, each companion read spending
+-- "get". Nil when the page or any row on it cannot be read. The list budget reads 0 by contract, so the page
+-- read is never gated on it.
+function Hiscores.readAll(io: Io, unix: number): { Row }?
+	local all = Hiscores.board("all", unix)
+	local pages = io.top(all)
+	if pages == nil then
+		return nil
+	end
+	return Hiscores.rows(pages, function(key: string): (Companion?, string?)
+		if not (Hiscores.spend(io.budget("get"), 1)) then
+			return nil, "budget"
+		end
+		return io.get(all, key)
+	end, Hiscores.N)
+end
+
 -- Submit an attempt through `io` and read the all-time board to find its rank. A board that fails does not
 -- stop the others. The rank is nil when the page or any of its rows cannot be read.
 function Hiscores.drive(io: Io, attempt: Attempt, unix: number, policy: Retry): DriveResult
@@ -458,21 +509,11 @@ function Hiscores.drive(io: Io, attempt: Attempt, unix: number, policy: Retry): 
 		end
 	end
 	local rank: number? = nil
-	local all = Hiscores.board("all", unix)
-	-- the list budget reads 0 by contract, so the top read is never gated on it
-	local pages = io.top(all)
-	if pages ~= nil then
-		local rows = Hiscores.rows(pages, function(key: string): (Companion?, string?)
-			if not (Hiscores.spend(io.budget("get"), 1)) then
-				return nil, "budget"
-			end
-			return io.get(all, key)
-		end, Hiscores.N)
-		if rows ~= nil then
-			rank = Hiscores.rankOf(rows, attempt.userId)
-		end
+	local rows = Hiscores.readAll(io, unix)
+	if rows ~= nil then
+		rank = Hiscores.rankOf(rows, attempt.userId)
 	end
-	return { wrote = wrote, rank = rank }
+	return { wrote = wrote, rank = rank, rows = rows }
 end
 
 -- One submit per run: record `runId` on a copy of `done`, or refuse it (a bad id, or one already recorded).
@@ -584,6 +625,228 @@ function Hiscores.lookup(
 		return cache, nil, { at = now, count = (if failure then failure.count else 0) + 1 }
 	end
 	return { at = now, rows = rows }, rows, nil
+end
+
+-- The all-time top-N list of runs ----------------------------------------------------------------------------------
+-- One key of Hiscores.TOP_STORE holds the N best runs of all players, so one player can hold several places. It
+-- lives beside the per-player boards, which keep each player's best as before.
+
+-- A run's id: unique per player, instant, run counter and server. `server` is the engine's job id, "" without one.
+function Hiscores.runId(userId: string, unix: number, run: number, server: string?): string
+	local job = if type(server) == "string" then server else ""
+	return `{userId}:{string.format("%d", unix)}:{string.format("%d", run)}:{job}`
+end
+
+-- The list entry for a finished run, or nil for an attempt `valid` refuses.
+function Hiscores.topRun(attempt: Attempt, unix: number, run: number, server: string?): TopRun?
+	if not Hiscores.valid(attempt) or not whole(unix) or not whole(run) then
+		return nil
+	end
+	return {
+		id = Hiscores.runId(attempt.userId, unix, run, server),
+		name = Hiscores.cleanName(attempt.name),
+		userId = attempt.userId,
+		score = attempt.score,
+		level = attempt.level,
+		at = unix,
+	}
+end
+
+local function validRun(e: any): boolean
+	return type(e) == "table"
+		and type(e.id) == "string"
+		and e.id ~= ""
+		and type(e.name) == "string"
+		and whole(e.at)
+		and Hiscores.valid({ name = e.name, userId = e.userId, score = e.score, level = e.level })
+end
+
+local function before(a: TopRun, b: TopRun): boolean
+	if a.score ~= b.score then
+		return a.score > b.score
+	elseif a.level ~= b.level then
+		return a.level > b.level
+	elseif a.at ~= b.at then
+		return a.at < b.at -- the earlier run keeps a tied place
+	end
+	return a.id < b.id
+end
+
+-- The stored list in order: valid entries only, each id once, at most N.
+local function ordered(list: any): { TopRun }
+	local out: { TopRun } = {}
+	if type(list) ~= "table" then
+		return out
+	end
+	local seen: { [string]: boolean } = {}
+	for _, e in list do
+		if validRun(e) and not seen[e.id] then
+			seen[e.id] = true
+			table.insert(out, {
+				id = e.id,
+				name = Hiscores.cleanName(e.name),
+				userId = e.userId,
+				score = e.score,
+				level = e.level,
+				at = e.at,
+			})
+		end
+	end
+	table.sort(out, before)
+	while #out > Hiscores.N do
+		table.remove(out)
+	end
+	return out
+end
+
+-- A per-player best row as a list entry, taken whole from its companion row: the companion's score and level, and,
+-- when it names its run, that run's id and instant, so the same run has one id (and one score) whichever server
+-- merges it. A row from before d0124 is an older run (at 0) with the id "best:<userId>:<score>:<level>", so a raised
+-- best is a new entry and the older one, a real older run, stays. Nil for a row without a valid companion score.
+function Hiscores.bestRun(row: Row): TopRun?
+	local score = row.runScore
+	if type(score) ~= "number" or not whole(score) or score < 0 then
+		return nil
+	end
+	if type(row.run) == "string" and row.run ~= "" and whole(row.at) then
+		return {
+			id = row.run :: string,
+			name = row.name,
+			userId = row.userId,
+			score = score,
+			level = row.level,
+			at = row.at :: number,
+		}
+	end
+	return {
+		id = `best:{row.userId}:{string.format("%d", score)}:{string.format("%d", row.level)}`,
+		name = row.name,
+		userId = row.userId,
+		score = score,
+		level = row.level,
+		at = 0,
+	}
+end
+
+-- Put `run`, then every per-player best in `bests`, into `list`: the new list (at most N, in order) and the run's
+-- place in it, nil when it does not make the list. Entries are one per id, and an id already stored keeps its
+-- stored entry and place; nothing else is skipped. Never mutates `list`.
+function Hiscores.mergeRun(list: { TopRun }, run: TopRun, bests: { Row }): ({ TopRun }, number?)
+	-- the stored copy comes first, so `ordered` keeps it when an id is already there
+	local all = ordered(list)
+	table.insert(all, run)
+	for _, row in bests do
+		local made = Hiscores.bestRun(row)
+		if made ~= nil then
+			table.insert(all, made)
+		end
+	end
+	local out = ordered(all)
+	for i, e in out do
+		if e.id == run.id then
+			return out, i
+		end
+	end
+	return out, nil
+end
+
+-- `mergeRun` with no bests.
+function Hiscores.addRun(list: { TopRun }, run: TopRun): ({ TopRun }, number?)
+	return Hiscores.mergeRun(list, run, {})
+end
+
+-- The lobby's rows of a stored list, ranked 1..N; nil when nothing is stored yet (not a table).
+function Hiscores.topRows(list: any): { Row }?
+	if type(list) ~= "table" then
+		return nil
+	end
+	local out: { Row } = {}
+	for i, e in ordered(list) do
+		table.insert(out, { rank = i, name = e.name, userId = e.userId, score = e.score, level = e.level })
+	end
+	return out
+end
+
+local function sameIds(a: { TopRun }, b: { TopRun }): boolean
+	if #a ~= #b then
+		return false
+	end
+	for i, e in a do
+		if e.id ~= b[i].id then
+			return false
+		end
+	end
+	return true
+end
+
+-- Write a run to the top-N list with retries, and say where it stands. `bests` is the per-player all-time board
+-- (drive's own read, after its write), merged in on every write so a best written by a build without the list is
+-- listed too; nil when it could not be read. The write is a transform the store applies to what it holds, so
+-- another server's list is never lost, and it writes nothing when the list would not change. A list is never
+-- created without the bests: with no list and no bests nothing is written. `known` is false when nothing was
+-- written or found, and then nothing is said about the run; otherwise `place` is its place, or `missed` is N.
+function Hiscores.driveTop(top: TopIo, io: Io, run: TopRun?, bests: { Row }?, policy: Retry): TopResult
+	local unknown: TopResult = { known = false, place = nil, missed = nil }
+	if run == nil or not validRun(run) then
+		return unknown
+	end
+	local entry = run :: TopRun
+	local place: number? = nil
+	local blind = false -- no list stored and no bests to start it from
+	local function transform(old: { TopRun }?): { TopRun }?
+		place = nil
+		blind = type(old) ~= "table" and bests == nil
+		if blind then
+			return nil
+		end
+		local base: { TopRun } = if type(old) == "table" then old else {}
+		local made, at = Hiscores.mergeRun(base, entry, bests or {})
+		place = at
+		if type(old) == "table" and sameIds(ordered(old), made) then
+			return nil -- nothing changes
+		end
+		return made
+	end
+	for _, delay in Hiscores.attemptDelays(policy) do
+		if delay > 0 then
+			io.wait(delay)
+		end
+		if affords(io, "get", "set") then
+			local _, err = top.update(transform)
+			if err == nil then
+				if blind then
+					return unknown
+				end
+				return { known = true, place = place, missed = if place == nil then Hiscores.N else nil }
+			end
+		end
+	end
+	return unknown
+end
+
+-- A player's best from their all-time companion row: score and level, or nil when there is none.
+function Hiscores.best(companion: any): Best?
+	if type(companion) ~= "table" or not whole(companion.score) or companion.score < 0 then
+		return nil
+	end
+	if not whole(companion.level) or companion.level < 1 then
+		return nil
+	end
+	return { score = companion.score, level = companion.level }
+end
+
+-- Whether a player's held best must be read again: nothing held, or a finished read that is no longer fresh. A
+-- read in flight is never doubled.
+function Hiscores.needsRead(held: { at: number, reading: boolean }?, now: number, ttl: number): boolean
+	if held == nil then
+		return true
+	end
+	return not held.reading and not Hiscores.fresh(held.at, now, ttl)
+end
+
+-- Whether a value read at `at` still answers at `now`: not from the future, and younger than `ttl` seconds.
+function Hiscores.fresh(at: number?, now: number, ttl: number): boolean
+	return type(at) == "number" and type(now) == "number" and now >= at and now - at < ttl
 end
 
 return Hiscores
