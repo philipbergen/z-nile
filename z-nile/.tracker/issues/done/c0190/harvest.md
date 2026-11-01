@@ -1,0 +1,40 @@
+- design-review-001 F1: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-001 F2: z-design/pin-text-that-lands-outside-the-pr
+- design-review-001 F3: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F4: z-ticket/split-designs-name-each-owner
+- design-review-001 F5: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-001 F6: z-ticket/split-designs-name-each-owner
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-001 F8: one-off: the fill script never wrote the title, so titles were the slug's words; fill now writes `title:` and the heading, and AC6's digest covers the title
+- design-review-001 F9: one-off: create trusted an ignored ids file; it now looks each issue up by slug in its project's root
+- design-review-001 F10: one-off: the batch script skipped z-ticket step 6's capture spend; it now has a `spend` command, run after land
+- design-review-002 F1: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-002 F2: z-ticket/split-designs-name-each-owner
+- design-review-002 F3: z-design/pin-text-that-lands-outside-the-pr
+- design-review-002 F4: z-ticket/split-designs-name-each-owner
+- design-review-002 F5: z-ticket/split-designs-name-each-owner
+- design-review-002 F6: one-off: a game issue was told to move another project's code; the move now goes through an arcade issue and a pickman chore that S2's prep captures
+- design-review-002 F7: zz-test/specs-pin-only-their-own-project
+- design-review-002 F8: one-off: fill's "prep began" test read design: only; it now also requires status: new-
+- design-review-002 F9: one-off: AC4 missed one of capture's three markers and docof matched any .md in an item folder; both fixed
+- design-review-003 F1: z-ticket/split-designs-name-each-owner
+- design-review-003 F2: zz-test/new-commands-run-in-a-copy
+- design-review-003 F3: z-ticket/split-designs-name-each-owner
+- design-review-003 F4: z-ticket/split-designs-name-each-owner
+- design-review-003 F5: z-design/pin-text-that-lands-outside-the-pr
+- design-review-003 F6: one-off: references and lines left over from the criteria and spec that round 2 retired
+- design-review-003 F7: z-design/instructions-runnable-where-they-run
+- design-review-004 F1: z-ticket/split-designs-name-each-owner
+- design-review-004 F2: z-ticket/publishers-skip-places-not-built-yet
+- design-review-004 F3: z-ticket/split-designs-name-each-owner
+- design-review-004 F4: z-ticket/split-designs-name-each-owner
+- design-review-004 F5: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-005 F1: z-ticket/split-designs-name-each-owner
+- design-review-005 F2: z-ticket/publishers-skip-places-not-built-yet
+- design-review-006 F1: z-ticket/split-designs-name-each-owner
+- design-review-006 F2: z-design/user-steps-before-the-experiments-that-need-them
+- design-review-006 F3: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-006 F4: one-off: when a game first goes on the private Beta is a product choice, put to the user and recorded
+- design-review-006 F5: one-off: prose and a prototype log left behind by round 5's fix
+- design-review-006 F6: z-ticket/split-designs-name-each-owner
+- design-review-006 F7: z-ticket/carry-the-plan-order-into-depends-on

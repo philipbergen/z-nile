@@ -1,0 +1,180 @@
+diff --git a/z-nile/engine/ids.luau b/z-nile/engine/ids.luau
+index 951fd933..843ff56d 100644
+--- a/z-nile/engine/ids.luau
++++ b/z-nile/engine/ids.luau
+@@ -185,4 +185,18 @@ function ids.parseMap(text: string): { [string]: string }?
+ 	return map
+ end
+ 
++-- The ids a compaction map renames: those on either side of a pair whose sides differ (`X Y`, X ~= Y). The old side is
++-- an id renumbered away, which the counter may hand out again; the new side names another item now. A pair whose sides
++-- agree renames nothing.
++function ids.renamedIn(map: { [string]: string }): { [string]: boolean }
++	local out: { [string]: boolean } = {}
++	for old, new in map do
++		if old ~= new then
++			out[old] = true
++			out[new] = true
++		end
++	end
++	return out
++end
++
+ return ids
+diff --git a/z-nile/engine/trail.luau b/z-nile/engine/trail.luau
+index 3b027518..034b0071 100644
+--- a/z-nile/engine/trail.luau
++++ b/z-nile/engine/trail.luau
+@@ -5,11 +5,14 @@
+ -- - an item's life starts the last time its document went from absent in all of the id's folders to present (a reused
+ --   number is a new life; a move or a rename in one folder is not);
+ -- - a commit that changed the compaction map (tracker/compaction.txt, z-nile/compaction.txt since c0114) and the
+---   item's document also starts its life, and `read` returns a note so `capture` marks that the history before it is
+---   not followed. Moving the map (c0114) is not a compaction.
++--   item's document also starts its life when the map as that commit leaves it names the item's id on either side of a
++--   pair whose sides differ (or does not parse or can't be read), or when the item first appears there, and `read`
++--   returns a note so `capture` marks that the history before it is not followed. A compaction that keeps an id and
++--   only rewrites its document in place (compact rewrites every kept document that names a renumbered id) starts
++--   nothing (c0138). Moving the map (c0114) is not a compaction.
+ -- An item's folders are its three state folders under every project root that ever held items (c0114): an id is
+ -- unique across roots, so a move between roots is a move like any other, never a new life.
+--- Everything here is pure over texts except `read`, which runs git and only reads.
++-- Everything here is pure over texts except `cuts`, `renames` and `read`, which run git and only read.
+ local process = require("@lune/process")
+ 
+ local ids = require("./ids")
+@@ -271,6 +274,66 @@ local function git(args: { string }): string?
+ 	return if r.ok then r.stdout else nil
+ end
+ 
++-- The ids that compaction maps rename: those on either side of a pair whose sides differ (`ids.renamedIn`), in each of
++-- `maps`, the whole texts of the map files a compaction commit leaves (`compact` writes the whole map each time, so the
++-- map as committed is that compaction's renames: a diff would drop a pair repeated word for word from the last map,
++-- c0118 design reviews 003 F2 and 004 F1). Nil when any map does not parse (`ids.parseMap`, the map's one reader): the
++-- caller resets.
++function trail.renamed(maps: { string }): { [string]: boolean }?
++	local out: { [string]: boolean } = {}
++	for _, text in maps do
++		local map = ids.parseMap(text)
++		if not map then
++			return nil
++		end
++		for id in ids.renamedIn(map) do
++			out[id] = true
++		end
++	end
++	return out
++end
++
++-- Whether a compaction commit starts a new life for `id`: its renamed ids name it, or they could not be read (nil).
++function trail.resets(renamed: { [string]: boolean }?, id: string): boolean
++	return renamed == nil or renamed[id] == true
++end
++
++-- The ids the compaction commit `sha` renames: the map files it added or changed (`ids.MAP_FILES`), as it leaves them,
++-- read whole and judged by `renamed`. A map file it did not touch is not read. Nil, so every touched item resets, when
++-- git fails or the commit changed no map file.
++function trail.renames(sha: string): { [string]: boolean }?
++	local args = {
++		"diff-tree",
++		"--root",
++		"-r",
++		"--no-renames",
++		"--diff-filter=AM",
++		"--name-only",
++		"--no-commit-id",
++		sha,
++		"--",
++	}
++	for _, f in ids.MAP_FILES do
++		table.insert(args, f)
++	end
++	local listed = git(args)
++	if not listed then
++		return nil
++	end
++	local maps: { string } = {}
++	for file in string.gmatch(listed, "[^\n]+") do
++		local text = git({ "show", `{sha}:{file}` })
++		if not text then
++			return nil
++		end
++		table.insert(maps, text)
++	end
++	if #maps == 0 then
++		return nil
++	end
++	return trail.renamed(maps)
++end
++
+ local function changes(
+ 	args: { string },
+ 	dirs: { string },
+@@ -313,9 +376,10 @@ end
+ 
+ -- The item's commits on `head` under `id` that touch files `want` accepts, newest first: its last life, where a life
+ -- starts at the item's last appearance (`life`) or at a later commit that changed a compaction map and its document
+--- (`since`). The second result lists such a start: its short sha and the map file it changed. The item's folders are
+--- under every root of `roots`, by default every root `head`'s registry names, retired ones included. Nil without git,
+--- `head`, or a registry that parses.
++-- and renamed its id, or whose map does not parse or can't be read (`since`; `renames`, `resets`). The second result
++-- lists such a start: its short sha and the map file it changed. The item's folders are under every root of `roots`,
++-- by default every root `head`'s registry names, retired ones included. Nil without git, `head`, or a registry that
++-- parses.
+ function trail.read(
+ 	kind: string,
+ 	id: string,
+@@ -336,13 +400,27 @@ function trail.read(
+ 		within = projects.allRoots(reg)
+ 	end
+ 	local cuts = trail.cuts(head)
++	-- what each compaction commit renames, read once and only for a commit that changed the item's document (`names` is
++	-- nil when it could not be read)
++	local renamed: { [string]: { names: { [string]: boolean }? } } = {}
++	local function cutsId(sha: string): boolean
++		if not cuts[sha] then
++			return false
++		end
++		local seen = renamed[sha]
++		if not seen then
++			seen = { names = trail.renames(sha) }
++			renamed[sha] = seen
++		end
++		return trail.resets(seen.names, id)
++	end
+ 	local function keep(name: string): boolean
+ 		return trail.isDoc(name) or want(name)
+ 	end
+ 	local lived, start =
+ 		trail.life(changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id))
+ 	lived, start = trail.since(lived, start, function(c: Commit): boolean
+-		return c.doc and cuts[c.sha] ~= nil
++		return c.doc and cutsId(c.sha)
+ 	end)
+ 	if start and cuts[start.sha] then
+ 		table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index aae9a04c..8e628096 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -76,7 +76,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | workstreams | `./zn workstreams <R-id>` | read-only plan for parallel execution (zz-execute Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
+ | board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as the specs do; `--open`, the old opt-in, is still accepted and is the default). The board is the local page; GitHub Actions does not build it. Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
+ | busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`; c0115: `./zn busy .claude/skills z-nile/skills pickman/skills`) is readied only when it prints nothing. Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own and `origin/main` still holds the move's mark; then the move's own branches, the branches listed as stacked on them, the ones the user approved by name, any branch holding the move commit, the move's own active raft, and worktrees on those branches, are named on stderr (`ignored for c0115's freeze: ...`) and not counted; without paths, with a path outside the move's, or once the move lands, nothing is exempt |
+-| capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
++| capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document and either renamed the item's id (the map, as that commit leaves it, names the id on either side of a pair whose sides differ, or does not parse or can't be read) or is where the item first appears; a compaction that only rewrites a kept item's document in place starts no life. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
+ | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
+ | raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
+diff --git a/z-nile/skills/zz-rules/lessons/item-history-spans-moves-and-compaction.md b/z-nile/skills/zz-rules/lessons/item-history-spans-moves-and-compaction.md
+index 7fabb3ef..58dfbcf1 100644
+--- a/z-nile/skills/zz-rules/lessons/item-history-spans-moves-and-compaction.md
++++ b/z-nile/skills/zz-rules/lessons/item-history-spans-moves-and-compaction.md
+@@ -8,6 +8,6 @@ Tracker items move between folders (`ready`, `stop`, `done`), were renamed by th
+ 
+ **Why:** R0042 design reviews 007 F1 and F2, 008 F1, 009 F1, 010 F1 and 011 F1: seven rounds of id-change holes (007 to 013), each in a rule that inferred identity across an id change. The user chose a rule that never follows an id change and marks the result, and that one is always safe. The capture lookup in c0119's draft found nothing for items made before the 2026-10-05 compaction. That is half of the one-time audit list, so the scope check passed with nothing to check. The metrics reader's `--follow` dated a re-added review by another raft's identical file.
+ 
+-**How to apply:** use `z-nile/engine/trail.luau` (`trail.read`). It reads the item's three folders under its current id with `--no-renames`, and stops at the newest commit that changed `z-nile/compaction.txt` together with the item's document. Never walk back to an old id: mark the result instead. `capture` prints `(history before <sha> not followed: …)`, and a `Scope decision` settles it once. The same goes for anything the history can't settle (a renumber, two copies of one id). Where a date must survive id changes, use a field no id change rewrites, as metrics does with `created:`. Seed a fixture with a move, a legacy name, a compaction with a reused number, and a look-alike file.
++**How to apply:** use `z-nile/engine/trail.luau` (`trail.read`). It reads the item's three folders under its current id with `--no-renames`, and stops at the newest commit that changed `z-nile/compaction.txt` together with the item's document and either renamed its id (the map, as that commit leaves it, names the id on either side of a pair whose sides differ, or does not parse or can't be read) or is where the item first appears (a compaction that only rewrites a kept item's document in place stops nothing, c0138). Never walk back to an old id: mark the result instead. `capture` prints `(history before <sha> not followed: …)`, and a `Scope decision` settles it once. The same goes for anything the history can't settle (a renumber, two copies of one id). Where a date must survive id changes, use a field no id change rewrites, as metrics does with `created:`. Seed a fixture with a move, a legacy name, a compaction with a reused number, and a look-alike file.
+ 
+ c0120 code review 006 F1: a check keyed by item id reads a compaction merged in as every file of the item deleted; it refuses instead, naming the renumber (z-nile/compaction.txt).

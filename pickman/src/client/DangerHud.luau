@@ -50,6 +50,13 @@ end
 local latest: Session.Snapshot? = nil
 local maze: Maze.Maze? = nil
 
+-- f0109: the radar's walls follow the maze's colour rule (View.wallColor): lit in the level-clear flash, green
+-- while the ghosts are edible, blue otherwise. Main hands the state over each frame.
+local wallLit, wallEdible = false, false
+function DangerHud.wallState(lit: boolean, edible: boolean)
+	wallLit, wallEdible = lit, edible
+end
+
 function DangerHud.push(snap: Session.Snapshot, m: Maze.Maze)
 	if latest == nil or snap.tick > latest.tick then
 		latest = snap
@@ -79,6 +86,10 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 	radar.BackgroundTransparency = 0.35
 	radar.ClipsDescendants = true
 	radar.Parent = gui
+	local function wallColor(): Color3
+		local c = View.wallColor(wallLit, wallEdible)
+		return Color3.fromRGB(c.r, c.g, c.b)
+	end
 	local function dot(parent: Instance, color: Color3, size: number): Frame
 		local f = Instance.new("Frame")
 		f.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -115,10 +126,12 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 			table.insert(ghosts, entry)
 		end
 		local r = Awareness.radar(m, pose, ghosts)
+		local wc = wallColor() -- once per step: the state changes a few times per power pellet
 		for i, w in r.walls do
-			local f: Frame = walls[i] or dot(radar, Color3.fromRGB(33, 33, 222), CELL)
+			local f: Frame = walls[i] or dot(radar, wc, CELL)
 			walls[i] = f
 			f.Visible = true
+			f.BackgroundColor3 = wc
 			f.Position = UDim2.fromOffset(radarSize / 2 + w.x * CELL, radarSize / 2 + w.y * CELL)
 		end
 		for i = #r.walls + 1, #walls do

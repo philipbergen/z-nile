@@ -33,6 +33,7 @@ local Levels = require("./Levels")
 local Maze = require("./Maze")
 local Movement = require("./Movement")
 local Pellets = require("./Pellets")
+local Picks = require("./Picks")
 
 export type PlayerId = string
 export type Config = {
@@ -85,7 +86,17 @@ export type Frame = {
 	shots: number?, -- blaster shots held, 0..Blaster.MAX_SHOTS (always set by Session.frame)
 	shot: Shot?, -- the latest shot taken (one that spent a shot), nil before any
 	hopped: number?, -- the tick the latest hop started (f0101), nil before any
+	hopTicks: number?, -- that hop's length in steps (Hop.TICKS, or Hop.LONG_TICKS with the jumps boon), f0126
+	walls: Walls?, -- the picked holes and the marked walls (f0126; always set by Session.frame)
+	pick: Pick?, -- the pick under way, nil when none
+	boon: BoonGrant?, -- the latest boon a finished pick granted, nil before any
 }
+-- f0126: `opened` are the walls picked open since the maze was fresh, in the order they opened; `marked` the walls
+-- that can be picked now.
+export type Walls = { opened: { Maze.Tile }, marked: { Maze.Tile } }
+-- wall: the marked wall being picked; started: the step that began it; ticks: steps it needs after that one
+export type Pick = { wall: Maze.Tile, started: number, ticks: number, fast: boolean }
+export type BoonGrant = { tick: number, kind: Picks.Boon }
 -- tick: the tick whose step took it; from: the tile the shot started from (the player's, before that step's move)
 export type Shot = { tick: number, heading: Maze.Heading, from: Maze.Tile }
 export type Event = {
@@ -119,6 +130,14 @@ type Member = {
 	shot: Shot?, -- the latest shot taken
 	hop: boolean, -- a hop asked for this tick
 	hopped: number?, -- the tick the latest hop started
+	hopTicks: number, -- the latest hop's length
+	opened: { Maze.Tile }, -- the one record of this member's holes: the maze it plays in is derived from it
+	cache: { list: { Maze.Tile }, n: number, maze: Maze.Maze }, -- mazeOf's last answer
+	picks: Picks.Picks,
+	armed: number, -- steps a pick request stays pending (0: none)
+	pick: Pick?,
+	longHops: boolean, -- the jumps boon, until the maze is fresh again
+	boon: BoonGrant?,
 }
 export type Session = {
 	tick: number, -- steps completed
@@ -195,7 +214,16 @@ function Session.join(s: Session, id: PlayerId)
 		blaster = Blaster.new(s.seed),
 		fire = nil,
 		hop = false,
+		hopTicks = Hop.TICKS,
+		opened = {},
+		cache = { list = {}, n = -1, maze = s.maze },
+		picks = Picks.new(s.seed),
+		armed = 0,
+		pick = nil,
+		longHops = false,
+		boon = nil,
 	}
+	Picks.reset(s.members[id].picks, s.maze)
 end
 
 function Session.leave(s: Session, id: PlayerId)
@@ -218,8 +246,17 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
 	end
 	local fire: Maze.Heading? = Blaster.heading(raw)
 	local hop = Hop.isIntent(raw)
-	if fire == nil and not hop and not Movement.isIntent(raw) then
+	local pick = Picks.isIntent(raw)
+	if fire == nil and not hop and not pick and not Movement.isIntent(raw) then
 		return false, "invalid intent"
+	end
+	if pick then
+		-- a pick request, pending like a buffered turn; a repeat only restarts it, and one during a pick is ignored.
+		-- It holds no queue slot, so it neither counts toward the per-tick limit nor is refused by it.
+		if member.pick == nil then
+			member.armed = s.config.movement.turnBufferTicks
+		end
+		return true, nil
 	end
 	local pending = #member.queue + (if member.fire then 1 else 0) + (if member.hop then 1 else 0)
 	if pending >= s.config.maxIntentsPerTick then
@@ -243,15 +280,34 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
 	return true, nil
 end
 
+-- The maze this member plays in: the session's with the member's holes open (f0126). Derived from `opened`, the one
+-- record of the holes, and kept for as long as `opened` is the same list of the same length.
+local function mazeOf(s: Session, member: Member): Maze.Maze
+	local c = member.cache
+	if c.list ~= member.opened or c.n ~= #member.opened then
+		member.cache = { list = member.opened, n = #member.opened, maze = Maze.opened(s.maze, member.opened) }
+	end
+	return member.cache.maze
+end
+
 -- the player back at the spawn: a teleport, so the camera cuts at `jumpTick`
 local function teleport(s: Session, member: Member, jumpTick: number)
-	member.move = Movement.spawn(s.maze)
+	member.move = Movement.spawn(mazeOf(s, member))
 	member.queue = {}
 	member.fire = nil
 	member.hop = false
 	member.hopped = nil
 	member.jumpTick = jumpTick
 	member.stall = 0
+	member.armed = 0
+	member.pick = nil
+end
+
+-- The member's maze fresh again (a new level, a new run): the holes close, new walls are marked, the long hops end.
+local function freshMaze(s: Session, member: Member)
+	member.opened = {}
+	member.longHops = false
+	Picks.reset(member.picks, mazeOf(s, member))
 end
 
 -- A hop that has not reached its second step is still on the ground, with the rise ahead of it. Leaving play
@@ -331,6 +387,15 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
 	end
 end
 
+-- A wasted pick: the player may go on (Forward alone never restarts a stopped player).
+local function stopPick(s: Session, member: Member, id: PlayerId, reason: string, out: { Event })
+	if member.pick then
+		member.pick = nil
+		table.insert(out, { kind = "PickStopped", player = id, reason = reason })
+		Movement.resume(mazeOf(s, member), member.move)
+	end
+end
+
 -- The ghosts take their step after the player, then meet the player. A pellet eaten this tick counts for the
 -- house first; a power pellet turns the ghosts blue after they have moved (so the clock matches the run's).
 local function stepGhosts(
@@ -355,13 +420,14 @@ local function stepGhosts(
 			power = e.ticks
 		end
 	end
-	local playerNow = Movement.occupied(s.maze, member.move)
+	local playerNow = Movement.occupied(mazeOf(s, member), member.move)
 	local input: Ghosts.Input = {
 		player = playerNow,
 		heading = member.move.heading,
 		level = member.play.level,
 		baseSpeed = s.config.movement.speed,
 		tickRate = Session.TICK_RATE,
+		maze = mazeOf(s, member), -- the ghosts walk the member's maze, holes and all
 	}
 	for _, g in Ghosts.step(set, input) do
 		local kind: string = g.kind
@@ -377,7 +443,7 @@ local function stepGhosts(
 	end
 	-- the last pellet clearing the level this very tick wins over a ghost that arrives at the same time; an
 	-- airborne player meets no ghost at all
-	if not Game.canMove(member.play) or Hop.airborne(member.hopped, s.tick) then
+	if not Game.canMove(member.play) or Hop.airborne(member.hopped, s.tick, member.hopTicks) then
 		return
 	end
 	local kill = false
@@ -391,6 +457,8 @@ local function stepGhosts(
 		end
 	end
 	if kill then
+		stopPick(s, member, id, "caught", out) -- caught while picking: the pick is wasted
+		member.armed = 0
 		for _, e in Game.died(member.play) do
 			table.insert(out, tagged(id, e))
 		end
@@ -417,13 +485,13 @@ local function shoot(s: Session, id: PlayerId, member: Member, heading: Maze.Hea
 	if set == nil or not Blaster.spend(member.blaster) then
 		return
 	end
-	local from = Movement.occupied(s.maze, member.move)
+	local from = Movement.occupied(mazeOf(s, member), member.move)
 	member.shot = { tick = s.tick, heading = heading, from = { x = from.x, y = from.y } }
 	local targets: { Blaster.Target } = {}
 	for i, tile in Ghosts.occupiedTiles(set) do
 		table.insert(targets, { tile = tile, active = set.ghosts[i].status == "active" })
 	end
-	local hit = Blaster.target(s.maze, from, heading, targets)
+	local hit = Blaster.target(mazeOf(s, member), from, heading, targets)
 	if hit == nil then
 		table.insert(out, { kind = "Shot", player = id, heading = heading })
 		return
@@ -434,6 +502,53 @@ local function shoot(s: Session, id: PlayerId, member: Member, heading: Maze.Hea
 	for _, e in Game.addScore(member.play, points) do
 		table.insert(out, tagged(id, e))
 	end
+end
+
+-- A finished pick: the wall opens (for the player and the ghosts), the next wall is marked, the boon is rolled and
+-- granted, and the player may go on.
+local function finishPick(s: Session, id: PlayerId, member: Member, out: { Event })
+	local pick = member.pick :: Pick
+	member.pick = nil
+	table.insert(member.opened, { x = pick.wall.x, y = pick.wall.y })
+	Picks.unmark(member.picks, pick.wall)
+	Picks.mark(member.picks, mazeOf(s, member))
+	if pick.fast then
+		member.picks.fast -= 1
+	end
+	local boon: Picks.Boon = Picks.roll(member.picks)
+	member.boon = { tick = s.tick, kind = boon }
+	local item: string = boon
+	table.insert(out, { kind = "WallPicked", player = id, x = pick.wall.x, y = pick.wall.y, item = item })
+	if boon == "jumps" then
+		member.longHops = true
+	elseif boon == "fastpick" then
+		member.picks.fast += 1
+	elseif boon == "pill" or boon == "longpill" then
+		for _, e in Game.power(member.play, if boon == "longpill" then Picks.LONG_PILL_FACTOR else 1) do
+			table.insert(out, tagged(id, e))
+		end
+	elseif boon == "shot" then
+		if Blaster.gain(member.blaster) then
+			table.insert(out, { kind = "ShotGained", player = id })
+		end
+	else
+		Pellets.reset(member.pellets)
+		table.insert(out, { kind = "PelletsBack", player = id })
+	end
+	Movement.resume(mazeOf(s, member), member.move)
+end
+
+-- The pick starts where the player stands on a tile centre next to a marked wall.
+local function startPick(s: Session, id: PlayerId, member: Member, wall: Maze.Tile, out: { Event })
+	Movement.halt(member.move)
+	local fast = member.picks.fast > 0
+	-- ten paces of this member's own ghosts: their tuning (f0125's slower ghosts) included
+	local tuning = if member.ghosts then member.ghosts.tuning else nil
+	local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)
+	local ticks = Picks.ticks(ghost, fast)
+	member.armed = 0
+	member.pick = { wall = { x = wall.x, y = wall.y }, started = s.tick, ticks = ticks, fast = fast }
+	table.insert(out, { kind = "PickStarted", player = id, x = wall.x, y = wall.y, ticks = ticks })
 end
 
 function Session.step(s: Session): { Event }
@@ -453,35 +568,61 @@ function Session.step(s: Session): { Event }
 		for _, e in Game.step(member.play) do
 			table.insert(out, tagged(id, e))
 			if e.kind == "Ready" then
-				teleport(s, member, s.tick)
 				if e.reason ~= "respawn" then
 					Pellets.reset(member.pellets) -- a new level or a new run: every pellet is back
+					freshMaze(s, member)
 				end
+				teleport(s, member, s.tick)
 				resetGhosts(member, e.reason, s.tick)
 			end
 		end
 		if not moving then
 			forgetYoungHop(member, id, s.tick - 1, out) -- already out of play; the last in-play tick is the previous one
+			stopPick(s, member, id, "pause", out)
+			member.armed = 0
 			continue
+		end
+		local before = #out
+		-- a pick that has stood its time finishes first, before this step's keys can waste it
+		local pick = member.pick
+		if pick and s.tick >= pick.started + pick.ticks then
+			finishPick(s, id, member, out)
 		end
 		if fire then
 			shoot(s, id, member, fire, out)
 		end
-		if hop and Hop.canStart(member.hopped, s.tick) then
+		if hop and Hop.canStart(member.hopped, s.tick, member.hopTicks) then
 			member.hopped = s.tick
+			member.hopTicks = if member.longHops then Hop.LONG_TICKS else Hop.TICKS
 			table.insert(out, { kind = "Hopped", player = id })
+			stopPick(s, member, id, "hopped", out)
 		end
-		local airborne = Hop.airborne(member.hopped, s.tick)
+		if member.pick and #queue > 0 then
+			stopPick(s, member, id, "moved", out) -- any movement key leaves the wall
+		end
+		local airborne = Hop.airborne(member.hopped, s.tick, member.hopTicks)
 		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level, frightened)
 		-- an eating pause is owed distance: this step covers what is left of the speed
 		local owed = math.min(member.stall, speed)
 		member.stall -= owed
 		local config: Movement.Config =
 			{ speed = speed - owed, turnBufferTicks = s.config.movement.turnBufferTicks }
-		local before = #out
-		local playerPrev = Movement.occupied(s.maze, member.move)
+		-- a pending pick stops the player on the next centre beside a marked wall: this step goes no further
+		local target: Maze.Tile? = nil
+		local wall: Maze.Tile? = nil
+		-- no pick starts while a hop is under way (from its take-off step until it lands), nor with keys this step
+		local hopping = member.hopped ~= nil and s.tick < (member.hopped :: number) + member.hopTicks
+		if member.armed > 0 and member.pick == nil and not hopping and #queue == 0 then
+			local distance, centre = Movement.nextCentre(mazeOf(s, member), member.move)
+			local beside = Picks.wallBeside(member.picks, mazeOf(s, member), centre, member.move.heading)
+			if beside and distance <= config.speed then
+				target, wall = centre, beside
+				config.speed = distance
+			end
+		end
+		local playerPrev = Movement.occupied(mazeOf(s, member), member.move)
 		local ghostsPrev = if member.ghosts then Ghosts.occupiedTiles(member.ghosts) else {}
-		for _, e in Movement.step(s.maze, member.move, queue, config) do
+		for _, e in Movement.step(mazeOf(s, member), member.move, queue, config) do
 			local event: Event = { kind = e.kind, player = id }
 			if e.kind == "Entered" or e.kind == "Stopped" then
 				event.x, event.y = e.x, e.y
@@ -492,6 +633,14 @@ function Session.step(s: Session): { Event }
 			if e.kind == "Entered" and not airborne then
 				eat(s, id, member, { x = e.x, y = e.y }, speed, out)
 			end
+		end
+		if target and wall and Game.canMove(member.play) then
+			local here = member.move
+			if here.progress == 0 and here.tile.x == target.x and here.tile.y == target.y then
+				startPick(s, id, member, wall, out)
+			end
+		elseif member.armed > 0 then
+			member.armed -= 1
 		end
 		if member.ghosts then
 			stepGhosts(s, id, member, playerPrev, ghostsPrev, before, out)
@@ -534,6 +683,9 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
 		table.insert(out, tagged(id, e))
 	end
 	if ok then
+		freshMaze(s, member)
+		member.picks.fast = 0
+		member.boon = nil
 		teleport(s, member, s.tick + 1)
 		Pellets.reset(member.pellets)
 		resetGhosts(member, "again", s.tick + 1)
@@ -582,6 +734,18 @@ function Session.snapshot(s: Session, id: PlayerId): Snapshot
 	}
 end
 
+local function copyTiles(tiles: { Maze.Tile }): { Maze.Tile }
+	local out: { Maze.Tile } = {}
+	for i, tile in tiles do
+		out[i] = { x = tile.x, y = tile.y }
+	end
+	return out
+end
+
+local function wallsOf(member: Member): Walls
+	return { opened = copyTiles(member.opened), marked = copyTiles(member.picks.marked) }
+end
+
 -- What the server replicates: the v1 snapshot plus the run's state. Later issues add fields beside
 -- `play`; a client ignores fields it doesn't know.
 function Session.frame(s: Session, id: PlayerId): Frame
@@ -611,6 +775,22 @@ function Session.frame(s: Session, id: PlayerId): Frame
 			}
 			else nil,
 		hopped = s.members[id].hopped,
+		hopTicks = s.members[id].hopTicks,
+		walls = wallsOf(s.members[id]),
+		pick = if s.members[id].pick
+			then {
+				wall = { x = (s.members[id].pick :: Pick).wall.x, y = (s.members[id].pick :: Pick).wall.y },
+				started = (s.members[id].pick :: Pick).started,
+				ticks = (s.members[id].pick :: Pick).ticks,
+				fast = (s.members[id].pick :: Pick).fast,
+			}
+			else nil,
+		boon = if s.members[id].boon
+			then {
+				tick = (s.members[id].boon :: BoonGrant).tick,
+				kind = (s.members[id].boon :: BoonGrant).kind,
+			}
+			else nil,
 	}
 end
 
