@@ -19,7 +19,9 @@ check "AC1: pickman and the arcade's five projects have the home scaffold, and a
 	bash -c 'lune run tests/run -- "$1" && for n in $2; do
 		"$ZN_ROOT/zn" list --project "$n" >/dev/null || { echo "no project $n"; exit 1; }
 		[[ -f $ZN_ROOT/$n/default.project.json ]] || { echo "no home for $n"; exit 1; }
-	done && lune run "$3/experiments/places.luau" "$ZN_ROOT"' ac1 "$A/homes.spec.luau" "$FIVE" "$HERE"
+	done || exit 1
+	[[ $(shasum -a 256 "$3/experiments/places.luau") == e627bf1b5cd88d82af9ff440cc5b42c26e6ac592b612dbcf96a4b9e5ab36ba68\ * ]] || { echo "experiments/places.luau is not the reviewed copy (c0185 design review 001 F1)"; exit 1; }
+	lune run "$3/experiments/places.luau" "$ZN_ROOT"' ac1 "$A/homes.spec.luau" "$FIVE" "$HERE"
 check "AC2: the gate plans each of the five homes: Roblox types for its src, a build of its place, and its specs from its home" \
 	bash -c 'p=$(./check.sh --full --plan) && for n in $1; do
 		printf "%s\n" "$p" | grep -qxF "types (Roblox): $n/src, from $n" || { echo "no Roblox types for $n"; exit 1; }
