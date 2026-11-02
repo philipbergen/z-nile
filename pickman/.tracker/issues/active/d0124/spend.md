@@ -28,6 +28,7 @@
 | 24 | 2026-11-02 05:55 | d0124: verification log after the re-prep | 0 | 0 | 0.3 | focus | build |  |
 | 25 | 2026-11-02 06:13 | R0044: review-001 | 0 | 0 | 8.0 | focus | code-review | 141212 |
 | 26 | 2026-11-02 06:13 | d0124: wrap two comment lines past 110 columns (review-001 F1) | 4 | 3 | 0.0 | focus | code-review |  |
+| 27 | 2026-11-02 06:14 | R0044: refute-001, harvest, final log | 0 | 0 | 0.4 | focus | deliver |  |
 
-**Total:** +2137 / -49 lines, 309.0 agent-minutes, 818558 tokens over 26 records
-<!-- totals: added=2137 removed=49 minutes=309.0 records=26 tokens=818558 -->
+**Total:** +2137 / -49 lines, 309.4 agent-minutes, 818558 tokens over 27 records
+<!-- totals: added=2137 removed=49 minutes=309.4 records=27 tokens=818558 -->

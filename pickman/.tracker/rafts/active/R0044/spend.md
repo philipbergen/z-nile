@@ -2,10 +2,10 @@
 
 | issue | type | emergent | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|---|---|
-| d0124 | defect |  | 2137 | 49 | 309.0 | 818558 |
+| d0124 | defect |  | 2137 | 49 | 309.4 | 818558 |
 
-**Total:** +2137 / -49 lines, 309.0 agent-minutes, 818558 tokens over 26 records
-<!-- totals: added=2137 removed=49 minutes=309.0 records=26 tokens=818558 -->
+**Total:** +2137 / -49 lines, 309.4 agent-minutes, 818558 tokens over 27 records
+<!-- totals: added=2137 removed=49 minutes=309.4 records=27 tokens=818558 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
@@ -14,3 +14,4 @@
 | design-review | 0 | 0 | 150.0 | 677346 |
 | build | 475 | 43 | 1.0 | 0 |
 | code-review | 4 | 3 | 8.0 | 141212 |
+| deliver | 0 | 0 | 0.4 | 0 |
