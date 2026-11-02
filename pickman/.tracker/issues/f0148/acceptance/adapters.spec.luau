@@ -529,7 +529,7 @@ return t.spec("f0148 the server adapters", function(it)
 			local clientMain = code(lobby, { "StarterPlayer", "StarterPlayerScripts", "Lobby", "Main" })
 			t.expect(order(clientMain, {
 				'LobbyView"%)%.start%(%)',
-				'LobbyPicker"%)%.new%(%)',
+				'LobbyPicker"?%)?%.new%(%)', -- an inline require or a local bound to it
 				"%.usePicker%(%s*picker%s*%)",
 				"picker%.attach%(%)",
 			})).toBe(true)

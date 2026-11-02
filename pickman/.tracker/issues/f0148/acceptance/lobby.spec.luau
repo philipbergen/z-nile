@@ -146,10 +146,19 @@ return t.spec("f0148 the lobby's level picker", function(it)
 			s.press(p, 2) -- a second press while the first waits: refused (one under way)
 			t.expect(#waiting).toBe(1)
 			t.expect(#s.engine.calls).toBe(0)
+			s.engine.mode = "error" -- that teleport will fail, so a later press can go
 			coroutine.resume(waiting[1])
 			t.expect(#stored).toBe(1)
 			t.expect(stored[1].level).toBe(3)
 			t.expect(#s.engine.calls).toBe(1) -- then exactly one teleport
+			-- the level pressed while the hook waited (2) was kept: the next press that goes, with no level, hands it on
+			s.tick(Travel.DEFAULT.coolSeconds + 1)
+			s.engine.mode = "ok"
+			s.press(p)
+			t.expect(#waiting).toBe(2)
+			coroutine.resume(waiting[2])
+			t.expect(#stored).toBe(2)
+			t.expect(stored[2].level).toBe(2)
 		end
 	)
 

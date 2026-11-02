@@ -41,6 +41,11 @@ MUTANTS = {
     ], "lobby"),
     "L4b": ("src/lobby/server/Starts.luau", "			if store then\n				store(player, level)\n			end", "			if store then\n				task.spawn(store, player, level)\n			end", "lobby"),
     "L4c": ("src/lobby/server/Starts.luau", "			if store then\n				store(player, level)\n			end", "			if store then\n				task.defer(store, player, level)\n			end", "lobby"),
+    # the kept level cleared after the hook, not before it: a level pressed while the hook waits is lost (two edits)
+    "L12": ("src/lobby/server/Starts.luau", [
+        ("			local level = held[player]\n			held[player] = nil\n", "			local level = held[player]\n"),
+        ("				store(player, level)\n			end\n", "				store(player, level)\n			end\n			held[player] = nil\n"),
+    ], "lobby"),
     "L5": ("src/lobby/server/Starts.luau", "		local answer, ticket = Travel.request(travel, id, os.clock())", "		if choose then\n			(choose :: any)(player, requested)\n		end\n		local answer, ticket = Travel.request(travel, id, os.clock())", "lobby"),
     "L6": ("src/lobby/client/LobbyPicker.luau", "			b.Visible = p.shown", "			b.Visible = true", "lobby"),
     "L7": ("src/lobby/client/LobbyPicker.luau", "				Enum.ContextActionPriority.High.Value,", "				Enum.ContextActionPriority.Default.Value,", "lobby"),

@@ -18,3 +18,6 @@
 - design-review-003 F3: z-design/restated-rules-move-together
 - design-review-003 F4: z-design/restated-rules-move-together
 - design-review-003 F5: z-design/spec-design-correspondence
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-004 F3: zz-test/pins-accept-other-preps-spellings
