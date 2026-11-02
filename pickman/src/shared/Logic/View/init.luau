@@ -7,14 +7,16 @@
 local Maze = require("./Maze")
 local Movement = require("./Movement")
 local Pellets = require("./Pellets")
+local Picks = require("./Picks")
 local Session = require("./Session")
 
-export type Rect = { x0: number, y0: number, x1: number, y1: number } -- inclusive tile range
+export type Rect = { x0: number, y0: number, x1: number, y1: number, marked: boolean? } -- inclusive tile range; marked: a pickable wall (f0126)
 -- A key's action. "Snap" is no key's any more (f0104): the touch snap button (R0012) still recentres the look.
 export type Action =
 	Movement.Intent
 	| "Jump"
 	| "Fire"
+	| "Pick"
 	| "LookUp"
 	| "LookDown"
 	| "LookLeft"
@@ -43,6 +45,7 @@ local KEYS: { [string]: Action } = {
 	S = "Back",
 	Space = "Jump",
 	E = "Fire",
+	F = "Pick", -- a wall pick (f0126; user, 2026-10-25: "A new pick key")
 	Up = "LookUp",
 	Down = "LookDown",
 	Left = "LookLeft",
@@ -65,6 +68,9 @@ View.TURN_SECONDS = 0.12 -- per quarter turn
 View.MAX_PITCH = math.rad(80)
 View.MOUSE_RADIANS_PER_PIXEL = 0.004
 View.KEYS = table.freeze(KEYS)
+-- The wire string the pick key sends (f0126): Picks.INTENT, handed to Controls through View, which already binds the
+-- keys, so Controls needs no require of its own for it.
+View.PICK_INTENT = Picks.INTENT
 -- A ghost's body: the walls' old height, so it stands a stud above the lowered walls (f0101).
 View.GHOST = table.freeze({ width = 6, height = 10 })
 View.GHOST_COLORS = table.freeze(GHOST_COLORS)
@@ -74,9 +80,17 @@ View.WHITE = table.freeze({ r = 255, g = 255, b = 255 } :: Rgb)
 View.WALL_COLOR = table.freeze({ r = 33, g = 33, b = 222 } :: Rgb)
 View.WALL_EDIBLE_COLOR = table.freeze({ r = 14, g = 64, b = 14 } :: Rgb)
 
--- The walls' colour: the level-clear flash wins, then green while the ghosts are edible, else blue.
-function View.wallColor(lit: boolean, edible: boolean): Rgb
-	local c = if lit then View.WHITE elseif edible then View.WALL_EDIBLE_COLOR else View.WALL_COLOR
+-- f0126: a wall that can be picked is gold (user, 2026-10-25), and stays gold while the walls are green
+View.WALL_MARKED_COLOR = table.freeze({ r = 255, g = 215, b = 0 } :: Rgb)
+
+-- The walls' colour: the level-clear flash wins, then a marked wall's gold (f0126), then green while the ghosts are
+-- edible, else blue.
+function View.wallColor(lit: boolean, edible: boolean, marked: boolean?): Rgb
+	local c = if lit
+		then View.WHITE
+		elseif marked then View.WALL_MARKED_COLOR
+		elseif edible then View.WALL_EDIBLE_COLOR
+		else View.WALL_COLOR
 	return { r = c.r, g = c.g, b = c.b }
 end
 
@@ -124,22 +138,71 @@ function View.bounds(m: Maze.Maze, margin: number?): Rect
 	return { x0 = -mx, y0 = -my, x1 = m.width - 1 + mx, y1 = m.height - 1 + my }
 end
 
-function View.walls(m: Maze.Maze, margin: number?): { Rect }
+-- The walls as horizontal runs. A tile of `marked` (f0126's pickable walls) is a run of its own, flagged `marked`,
+-- wherever it is drawn (its copies in the tunnel margins too); without `marked` the runs are as they always were.
+function View.walls(m: Maze.Maze, margin: number?, marked: { Maze.Tile }?): { Rect }
 	local b = View.bounds(m, margin)
+	local gold: { [number]: boolean } = {}
+	local marks: { Maze.Tile } = marked or {}
+	for _, tile in marks do
+		gold[tile.y * m.width + tile.x] = true
+	end
 	local rects: { Rect } = {}
 	for y = b.y0, b.y1 do
 		local start: number? = nil
-		for x = b.x0, b.x1 + 1 do
-			local wall = x <= b.x1 and Maze.kind(m, { x = x % m.width, y = y % m.height }) == "wall"
-			if wall then
-				start = start or x
-			elseif start then
+		local function close(x: number)
+			if start then
 				table.insert(rects, { x0 = start, y0 = y, x1 = x - 1, y1 = y })
 				start = nil
 			end
 		end
+		for x = b.x0, b.x1 + 1 do
+			local tx, ty = x % m.width, y % m.height
+			local wall = x <= b.x1 and Maze.kind(m, { x = tx, y = ty }) == "wall"
+			if wall and gold[ty * m.width + tx] then
+				close(x)
+				table.insert(rects, { x0 = x, y0 = y, x1 = x, y1 = y, marked = true })
+			elseif wall then
+				start = start or x
+			else
+				close(x)
+			end
+		end
 	end
 	return rects
+end
+
+-- A key that changes exactly when the frame's holes or marked walls do (f0126): the client rebuilds its walls then.
+function View.wallsKey(frame: Session.Frame): string
+	local parts = { frame.maze }
+	local walls = frame.walls
+	local lists: { { Maze.Tile } } = if walls then { walls.opened, walls.marked } else {}
+	for _, list in lists do
+		table.insert(parts, "|")
+		for _, tile in list do
+			table.insert(parts, `{tile.x},{tile.y}`)
+		end
+	end
+	return table.concat(parts, ";")
+end
+
+-- The maze a frame is played in: its layout with the frame's picked holes open (f0126). Kept for the last frame's
+-- holes, so a run of frames with the same holes builds it once.
+local lastKey: string? = nil
+local lastMaze: Maze.Maze? = nil
+function View.frameMaze(frame: Session.Frame): Maze.Maze
+	local opened: { Maze.Tile } = if frame.walls then frame.walls.opened else {}
+	local parts = { frame.maze }
+	for _, tile in opened do
+		table.insert(parts, `{tile.x},{tile.y}`)
+	end
+	local key = table.concat(parts, ";")
+	if key == lastKey and lastMaze then
+		return lastMaze
+	end
+	local m = Maze.opened(Maze.layout(frame.maze), opened)
+	lastKey, lastMaze = key, m
+	return m
 end
 
 -- How far between the previous and the latest snapshot we are, `elapsed` real seconds after the latest one

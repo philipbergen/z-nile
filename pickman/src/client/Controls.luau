@@ -66,6 +66,8 @@ function Controls.start(
 				fire()
 			elseif action == "Jump" then
 				intent:FireServer(Hop.INTENT)
+			elseif action == "Pick" then
+				intent:FireServer(View.PICK_INTENT)
 			end
 		end
 		-- the arrows are held: they look while down, and a cancelled input (focus lost) lets go
@@ -156,11 +158,13 @@ function Controls.start(
 		local rect = if snapRect then snapRect() else nil
 		local placed = if buttons then buttons() else nil
 		local effects
-		fingers, effects = Touch.track(
-			fingers,
-			{ id = id, phase = phase, x = sx, y = sy },
-			{ width = sw, snap = rect, fire = placed and placed.fire, hop = placed and placed.hop }
-		)
+		fingers, effects = Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy }, {
+			width = sw,
+			snap = rect,
+			fire = placed and placed.fire,
+			hop = placed and placed.hop,
+			pick = placed and placed.pick,
+		})
 		for _, effect in effects do
 			if effect.kind == "turn" then
 				intent:FireServer(effect.intent)
@@ -174,6 +178,8 @@ function Controls.start(
 				fire()
 			elseif effect.kind == "hop" then
 				intent:FireServer(Hop.INTENT)
+			elseif effect.kind == "pick" then
+				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
 			end
 		end
 		hold()
