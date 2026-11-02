@@ -164,6 +164,11 @@ local function env(services: { [string]: any }, modules: { [string]: any }, extr
 		},
 		require = function(spec: string): any
 			local found = modules[spec]
+			if found == nil and string.sub(spec, 1, #LOGIC) == LOGIC then
+				-- a Logic feature nobody stubbed is loaded as itself, so a later one-line require in an adapter keeps
+				-- these cases green (pickman-test/stub-loaders-fall-back); siblings and services still fail loudly
+				found = (require :: any)("@logic/" .. string.sub(spec, #LOGIC + 1))
+			end
 			assert(found ~= nil, `stub: no module for {spec}`)
 			return found
 		end,
