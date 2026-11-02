@@ -6,6 +6,7 @@
 local Flow = require("@logic/Flow")
 local Hiscores = require("@logic/Hiscores")
 local Lobby = require("@logic/Lobby")
+local Pad = require("@logic/Pad")
 local Travel = require("@logic/Travel")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -163,6 +164,11 @@ local function env(services: { [string]: any }, modules: { [string]: any }, extr
 		},
 		require = function(spec: string): any
 			local found = modules[spec]
+			if found == nil and string.sub(spec, 1, #LOGIC) == LOGIC then
+				-- a Logic feature nobody stubbed is loaded as itself, so a later one-line require in an adapter keeps
+				-- these cases green (pickman-test/stub-loaders-fall-back); siblings and services still fail loudly
+				found = (require :: any)("@logic/" .. string.sub(spec, #LOGIC + 1))
+			end
 			assert(found ~= nil, `stub: no module for {spec}`)
 			return found
 		end,
@@ -810,7 +816,7 @@ return t.spec("d0124 adapters", function(it)
 				ContextActionService = { BindAction = function() end },
 				Players = { LocalPlayer = localPlayer },
 				ReplicatedStorage = storage,
-			}, { [LOGIC .. "Flow"] = Flow })
+			}, { [LOGIC .. "Flow"] = Flow, [LOGIC .. "Pad"] = Pad })
 		)
 		view.start()
 		local function label(): any
