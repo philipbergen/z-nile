@@ -6,6 +6,7 @@
 local Flow = require("@logic/Flow")
 local Hiscores = require("@logic/Hiscores")
 local Lobby = require("@logic/Lobby")
+local Pad = require("@logic/Pad")
 local Travel = require("@logic/Travel")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -810,7 +811,7 @@ return t.spec("d0124 adapters", function(it)
 				ContextActionService = { BindAction = function() end },
 				Players = { LocalPlayer = localPlayer },
 				ReplicatedStorage = storage,
-			}, { [LOGIC .. "Flow"] = Flow })
+			}, { [LOGIC .. "Flow"] = Flow, [LOGIC .. "Pad"] = Pad })
 		)
 		view.start()
 		local function label(): any
