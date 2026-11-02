@@ -11,6 +11,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" scripts/tracker.sh promote-check R0044
 
-check "RC1: c0128, which narrows the promoted hiscore adapter specs this raft overrides, is done" bash -c '[[ "$(scripts/tracker.sh find c0128)" == tracker/issues/done/c0128 ]]'
+check "RC1: c0128, which narrows the promoted hiscore adapter specs this raft overrides, is done" bash -c '[[ "$(scripts/tracker.sh find c0128)" == */issues/done/c0128 ]]'
 
 finish
