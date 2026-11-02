@@ -15,6 +15,7 @@
 | 11 | 2026-11-01 17:24 | design-refute-005 | 0 | 0 | 25.0 | spend | design-review |  |
 | 12 | 2026-11-01 19:12 | prep | 4467 | 1 | 150.0 | spend | prep |  |
 | 13 | 2026-11-02 04:39 | c0191: bounded runner, CPU limits for the spec runner and engine | 207 | 1 | 20.0 | explicit | build |  |
+| 14 | 2026-11-02 04:46 | c0191: hook, reaper, reap command, gate call | 1711 | 5 | 25.0 | explicit | build |  |
 
-**Total:** +4674 / -2 lines, 379.0 agent-minutes, 1418955 tokens over 13 records
-<!-- totals: added=4674 removed=2 minutes=379.0 records=13 tokens=1418955 -->
+**Total:** +6385 / -7 lines, 404.0 agent-minutes, 1418955 tokens over 14 records
+<!-- totals: added=6385 removed=7 minutes=404.0 records=14 tokens=1418955 -->

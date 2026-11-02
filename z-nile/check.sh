@@ -53,6 +53,8 @@ picked() { # picked <name>: is the project in this run?
   return 1
 }
 
+# stop what earlier sessions leaked before the stages add their own load (c0191); quiet unless it stops something
+[[ -n $plan ]] || ./zn reap --auto || true
 source z-nile/lib/par.sh
 gate_start=$(par_now)
 
