@@ -1,6 +1,6 @@
 --!strict
 -- c0191 AC2: the two hook scripts. Copies of them run in a fixture folder against stand-ins for what they start: a `zn`
--- that records its arguments and answers only the call the Design names, and a hook entry that spins. Nothing here
+-- that records its arguments and answers only the call the Design names, and a hook entry. Nothing here spins, waits or
 -- touches the real repository or runs the real reaper.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -11,7 +11,7 @@ local dir = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
-local function fixture(spin: boolean)
+local function fixture(status: number?)
 	if fs.isDir(dir) then
 		fs.removeDir(dir)
 	end
@@ -30,11 +30,11 @@ local function fixture(spin: boolean)
 			.. "exit 64\n"
 	)
 	process.exec("chmod", { "+x", `{dir}/zn` })
-	-- the stand-in hook entry: ends at once, or spins for up to 15 CPU seconds (only the hook's own limit stops it)
+	-- the stand-in hook entry: ends at once with `status` (default: prints and ends 0)
 	fs.writeFile(
 		`{dir}/z-nile/guard-bash.luau`,
-		if spin
-			then "--!strict\nlocal t = os.clock()\nwhile os.clock() - t < 15 do end\n"
+		if status
+			then `--!strict\nrequire("@lune/process").exit({status})\n`
 			else '--!strict\nprint("entry ran")\n'
 	)
 end
@@ -67,7 +67,7 @@ return t.spec("the hook scripts", function(it)
 					"garbage",
 				}
 			do
-				fixture(false)
+				fixture()
 				local r = hook("session-end.sh", payload, { XDG_STATE_HOME = `{dir}/state` })
 				if r.code ~= 0 then
 					error(`payload {payload}: expected exit 0, got {r.code}: {r.stderr}`, 0)
@@ -81,7 +81,7 @@ return t.spec("the hook scripts", function(it)
 	)
 
 	it("AC2: session-end.sh does nothing when the session goes on (reason resume)", function()
-		fixture(false)
+		fixture()
 		local r = hook("session-end.sh", '{"reason":"resume"}', { XDG_STATE_HOME = `{dir}/state` })
 		t.expect(r.code).toBe(0)
 		t.expect(argv()).toBe("")
@@ -89,7 +89,7 @@ return t.spec("the hook scripts", function(it)
 	end)
 
 	it("AC2: session-end.sh runs the reaper with at most 15 seconds of CPU", function()
-		fixture(false)
+		fixture()
 		fs.writeFile(`{dir}/zn`, '#!/bin/sh\nulimit -t > "$(dirname "$0")/limit.txt"\nexit 0\n')
 		hook("session-end.sh", '{"reason":"other"}', { XDG_STATE_HOME = `{dir}/state` })
 		t.expect(fs.readFile(`{dir}/limit.txt`)).toBe("15\n")
@@ -98,7 +98,7 @@ return t.spec("the hook scripts", function(it)
 	it(
 		"AC2: pre-bash.sh runs the entry from its own checkout, with 2 seconds of CPU, and names the checkout",
 		function()
-			fixture(false)
+			fixture()
 			fs.writeFile(
 				`{dir}/z-nile/guard-bash.luau`,
 				'--!strict\nlocal process = require("@lune/process")\n'
@@ -111,13 +111,17 @@ return t.spec("the hook scripts", function(it)
 	)
 
 	it(
-		"AC2: a hook entry that hangs is stopped by pre-bash.sh's CPU limit, and does not refuse the call",
+		"AC2: an entry that the CPU limit stopped (status 1 or 152) does not refuse the call: only status 2 does",
 		function()
-			fixture(true)
-			local r = hook("pre-bash.sh", "{}", {})
-			-- stopped by SIGXCPU long before its own 15 seconds are up: a non-zero status that is not the refusal's 2
-			t.expect(r.code ~= 0 and r.code ~= 2).toBe(true)
-			t.expect(process.exec("pgrep", { "-f", `{dir}/z-nile/guard-bash` }).ok).toBe(false)
+			for _, status in { 1, 152 } do
+				fixture(status)
+				local r = hook("pre-bash.sh", "{}", {})
+				-- the hook ends with the entry's status, which is neither 0 (a pass) nor the refusal's 2: the harness
+				-- takes any other status as a non-blocking error and runs the call
+				t.expect(r.code).toBe(status)
+			end
+			fixture(2)
+			t.expect(hook("pre-bash.sh", "{}", {}).code).toBe(2)
 			fs.removeDir(dir)
 		end
 	)

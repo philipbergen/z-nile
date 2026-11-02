@@ -63,3 +63,22 @@
 - design-review-005 F8: z-design/spec-design-correspondence
 - note ownership by ancestry wherever the owner is known, the folder scope only once the owner is gone (round 4 candidate lesson, proposed to the lead as zz-arch/ownership-by-ancestry-before-folder): zz-arch/guard-no-is-explicit
 - note when a capture names several owners of one outcome ("agent or session"), the design says how each owner's end is observed or records a decided reading (round 5 candidate lesson, proposed to the lead): z-design/never-narrow-captured-scope
+- design-review-007 F1: zz-test/kill-mutants-where-the-value-is-built
+- design-review-007 F2: zz-test/kill-mutants-where-the-value-is-built
+- design-review-007 F3: z-design/restated-rules-move-together
+- design-review-007 F4: zz-arch/children-need-a-lifeline
+- design-review-007 F5: zz-test/no-vacuous-pass
+- design-review-007 F6: zz-test/seed-every-enumerated-case
+- design-review-007 F7: one-off: figures and identity checks that disagreed with their own header
+- note the user's "I'm not running that" (2026-11-01): a promoted spec never spins CPU or waits for a real limit; real-limit proofs are check.sh-only scripts that run before done (proposed lesson zz-test/specs-never-burn-real-resources in experiments/proposed-lessons.md): z-design/never-narrow-captured-scope
+
+- note the user's "I'm not running that" produced the proposed lesson zz-test/specs-never-burn-real-resources (experiments/proposed-lessons.md): zz-test/kill-mutants-where-the-value-is-built
+- design-review-008 F1: zz-test/check-sh-executes-only-sequestered-files
+- design-review-008 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-008 F3: z-design/never-narrow-captured-scope
+- design-review-008 F4: z-design/restated-rules-move-together
+- design-review-008 F5: zz-arch/children-need-a-lifeline
+- design-review-008 F6: z-design/spec-design-correspondence
+- note a result that contradicts a recorded finding is a new unknown with its own experiment (round 008 candidate lesson, proposed to the lead as z-design/contradicting-results-are-unknowns): z-design/spec-design-correspondence
+- note the user's "I'm not running that" (2026-11-01) about a promoted spec that spins CPU produced the rule that a promoted spec never burns real resources: zz-test/specs-never-burn-real-resources
+- note a self-bounded spinner that ulimit -t did not stop contradicted a recorded experiment and was handled as a new unknown, not a changed input: z-design/contradicting-results-are-unknowns
