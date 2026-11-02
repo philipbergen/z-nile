@@ -572,7 +572,7 @@ return t.spec("c0083 harness and game suites", function(it)
 		"a file a spec reads as text selects that spec, and a spec change selects the specs that scan every spec",
 		function()
 			local cases = {
-				{ ".github/workflows/check.yml", "tests/acceptance/c0001/ci-workflow.spec.luau" },
+				{ ".github/workflows/deploy.yml", "tests/acceptance/c0001/ci-workflow.spec.luau" },
 				{ "SETUP.md", "tests/acceptance/c0015/docs.spec.luau" },
 				{ "tracker/issues/done/c0008/check.sh", "tests/tooling/repo-fence.spec.luau" },
 				{ "tests/unit/smoke.spec.luau", "tests/tooling/repo-fence.spec.luau" },
@@ -586,7 +586,8 @@ return t.spec("c0083 harness and game suites", function(it)
 			end
 			-- and a file nothing names selects nothing by text
 			t.expect(#suites.textAffected(g, { "no-such-top-level-file.md" })).toBe(0)
-			-- a changed folder selects the specs that name an existing file inside it. No spec names the folder itself.
+			-- a changed folder selects the specs that name an existing file inside it. c0172's deploy.spec names the folder
+			-- itself; c0001's ci-workflow names only a file inside it (deploy.yml), so the inside-folder rule alone selects it.
 			t.expect(fs.isDir(".github/workflows")).toBe(true)
 			local inFolder = set(suites.textAffected(g, { ".github/workflows" }))
 			t.expect(inFolder["tests/acceptance/c0001/ci-workflow.spec.luau"]).toBe(true)
