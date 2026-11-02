@@ -48,7 +48,7 @@ function BlastView.push(frame: Session.Frame)
 	latest = frame
 	local shot = frame.shot
 	if shot and shot.tick == frame.tick then
-		draw(Maze.layout(frame.maze), shot.from, shot.heading)
+		draw(View.frameMaze(frame), shot.from, shot.heading)
 	end
 end
 
