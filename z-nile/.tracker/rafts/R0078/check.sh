@@ -13,6 +13,8 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0078
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the raft changes nothing but its own folder and its two members' folders (no code is written)" bash -c 'cd "$ZN_ROOT" && base=$(git merge-base origin/main HEAD) || { echo "no origin/main to compare with"; exit 1; }
+	extra=$(git diff --name-only "$base" | grep -v -E "^z-nile/\.tracker/(rafts|issues)/(active/|done/)?(R0078|c0173|c0174)/") || true
+	[[ -z $extra ]] || { printf "files outside the raft and its members:\n%s\n" "$extra"; exit 1; }'
 
 finish

@@ -13,6 +13,7 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0068
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: lessons and harvest ledgers of the whole tree pass the new step rules" "$ZN_ROOT/zn" lessons --check
+check "RC2: the raft's own harvest entries all name the step that erred" "$ZN_ROOT/zn" lessons --unattributed R0068
 
 finish
