@@ -1,7 +1,8 @@
 --!strict
 -- c0191 AC5: `./zn` gives its engine a CPU-time limit (ZN_ENGINE_CPU, default 1800 s) that only lowers the caller's, so a
 -- loop in engine code ends instead of spinning as long as the session lives. A copy of `zn` in a fixture folder runs a
--- stub engine; nothing here touches the real repository.
+-- stub engine; nothing here touches the real repository, spins or waits. That a spinning engine is really stopped by
+-- the limit is `proof-limits.luau`, which only check.sh runs, before `./zn done`, and `./zn done` never promotes.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -28,8 +29,6 @@ local STAND_IN = 'ulimit() { if [ "$1" = -t ] && [ $# -eq 1 ]; then echo "${FAKE
 	.. 'elif [ "$1" = -t ]; then echo "$2" >> "$FAKE_LOG"; fi; }\n'
 
 local STUB = '--!strict\nprint("engine ran")\n'
--- spins for at most 20 CPU seconds, then says so: only the limit can stop it before it does
-local SPIN = '--!strict\nlocal t = os.clock()\nwhile os.clock() - t < 20 do end\nprint("finished")\n'
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -53,7 +52,25 @@ local function asked(engineCpu: string?, limit: string?): string
 	return if fs.isFile(log) then (string.gsub(fs.readFile(log), "%s+$", "")) else ""
 end
 
+-- prints the limit its own child sees: no stand-in, so a limit set where it does not reach the engine shows here
+local REPORT =
+	'--!strict\nlocal process = require("@lune/process")\nprint(process.exec("sh", { "-c", "ulimit -t" }).stdout)\n'
+
 return t.spec("zn's engine CPU limit", function(it)
+	it(
+		"AC5: the limit is in force in the engine's processes (the real thing: 90 is below the jail's)",
+		function()
+			fixture(REPORT)
+			local r = process.exec(
+				"sh",
+				{ "-c", `exec {dir}/zn` },
+				{ cwd = dir, env = { ZN_ENGINE_CPU = "90" } }
+			)
+			t.expect(string.match(r.stdout, "%d+")).toBe("90")
+			fs.removeDir(dir)
+		end
+	)
+
 	it("AC5: zn asks for 1800 CPU seconds for its engine by default, and ZN_ENGINE_CPU sets it", function()
 		t.expect(asked(nil, nil)).toBe("1800")
 		t.expect(asked("90", nil)).toBe("90")
@@ -65,13 +82,5 @@ return t.spec("zn's engine CPU limit", function(it)
 		t.expect(asked("500", "500")).toBe("")
 		t.expect(asked("500", "5000")).toBe("500")
 		t.expect(asked(nil, "unlimited")).toBe("1800")
-	end)
-
-	it("AC5: an engine that spins is stopped by the real limit before it finishes", function()
-		fixture(SPIN)
-		local r = process.exec("sh", { "-c", `exec {dir}/zn` }, { cwd = dir, env = { ZN_ENGINE_CPU = "2" } })
-		t.expect(string.find(r.stdout, "finished", 1, true) ~= nil).toBe(false)
-		t.expect(r.code ~= 0).toBe(true)
-		fs.removeDir(dir)
 	end)
 end)
