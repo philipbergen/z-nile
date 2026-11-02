@@ -1,6 +1,6 @@
 --!strict
--- Server adapter: tells a player their run's all-time place (or that it missed the top N) once it is written. The rank comes from the server's
--- own write; nothing arrives from the client on this remote. It is created here, not in the place file.
+-- Server adapter: tells a player their run's all-time place (or that it missed the top N) once it is written.
+-- The rank comes from the server's own write; nothing arrives from the client on this remote. It is created here, not in the place file.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

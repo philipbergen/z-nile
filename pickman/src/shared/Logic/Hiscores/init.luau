@@ -43,7 +43,8 @@ export type Io = {
 	wait: (seconds: number) -> (),
 }
 export type Retry = { attempts: number, base: number, cap: number }
-export type DriveResult = { wrote: { [string]: boolean }, rank: number?, rows: { Row }? } -- rows: the all-time board read after the write
+-- rows: the all-time board read after the write
+export type DriveResult = { wrote: { [string]: boolean }, rank: number?, rows: { Row }? }
 export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
 export type Submission = { score: number, level: number, run: number }
 export type StepEvent = { kind: string, score: number?, level: number? }
