@@ -1,7 +1,8 @@
 --!strict
 -- c0191 AC5: the spec runner gives every spec process a CPU-time limit (`ulimit -t`), a second line behind the jail's
--- sweeper. A copy of the runner in a fixture repository runs a probe spec that reports the limit it sees and burns CPU
--- under it; nothing here touches the real repository.
+-- sweeper. A copy of the runner in a fixture repository runs a probe spec that reports the limit it sees; nothing here
+-- touches the real repository, burns CPU or waits. That a process that burns CPU is really stopped by the limit is
+-- `proof-limits.luau`, which only check.sh runs, before `./zn done`, and `./zn done` never promotes.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -64,16 +65,13 @@ local function fixture()
 		copyTree(rel)
 	end
 	must(process.exec("chmod", { "-R", "+x", `{repo}/z-nile/lib/git-hooks` }), "chmod")
-	-- the probe: writes the limit a child process sees, then burns CPU under it (its own alarm ends it at 20 s if the
-	-- limit is not there: 142 is the alarm, 152 the CPU limit's signal)
+	-- the probe: writes the limit a child process sees, and does nothing else
 	fs.writeFile(
 		`{repo}/z-nile/tests/probe/limit.spec.luau`,
 		`--!strict\nlocal fs = {REQ}("@lune/fs")\nlocal process = {REQ}("@lune/process")\nlocal t = {REQ}("@tests/lib/t")\n`
-			.. 'return t.spec("limit", function(it)\n\tit("reports the limit and burns CPU", function()\n'
+			.. 'return t.spec("limit", function(it)\n\tit("reports the limit", function()\n'
 			.. '\t\tlocal r = process.exec("sh", { "-c", "ulimit -t" })\n'
 			.. '\t\tfs.writeFile(".cache/limit.txt", r.stdout)\n'
-			.. '\t\tlocal b = process.exec("sh", { "-c", "perl -e \'alarm 20; 1 while 1\'; echo $?" })\n'
-			.. '\t\tfs.writeFile(".cache/burn.txt", b.stdout)\n'
 			.. "\t\tt.expect(1).toBe(1)\n\tend)\nend)\n"
 	)
 	must(process.exec("git", { "init", "-q", "-b", "main", repo }), "git init")
@@ -132,7 +130,7 @@ end
 
 local function runProbe(cpu: string?): Result
 	fixture()
-	for _, f in { "limit.txt", "burn.txt" } do
+	for _, f in { "limit.txt" } do
 		local path = `{repo}/z-nile/.cache/{f}`
 		if fs.isFile(path) then
 			fs.removeFile(path)
@@ -160,13 +158,16 @@ return t.spec("the spec runner's CPU limit", function(it)
 		t.expect(asked(nil, "unlimited")).toBe("1200")
 	end)
 
-	it("AC5: a process that burns CPU is stopped by the limit, not by its own alarm", function()
-		local r = runProbe("2")
-		t.expect(r.ok).toBe(true)
-		t.expect(read("burn.txt")).toBe("152")
-	end)
+	it(
+		"AC5: the limit is in force in the spec's processes (the real thing, no stand-in: 77 is below the jail's)",
+		function()
+			local r = runProbe("77")
+			t.expect(r.ok).toBe(true)
+			t.expect(read("limit.txt")).toBe("77")
+		end
+	)
 
-	it("AC5: the limit is in force in the spec's processes (the real thing, with a lower caller)", function()
+	it("AC5: and a lower caller's limit stays in force (the real thing)", function()
 		fixture()
 		local r = process.exec(
 			"sh",
