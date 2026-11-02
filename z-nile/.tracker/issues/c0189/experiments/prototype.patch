@@ -221,7 +221,7 @@ index 00000000..32329c56
 +
 +return hooks
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index c3ffdc92..b8cec884 100644
+index c3ffdc92..061cf756 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -6,6 +6,7 @@ local claimsLib = require("./claims")
@@ -244,7 +244,7 @@ index c3ffdc92..b8cec884 100644
  
  local FOCUS_FILE = ".cache/tracker-focus"
  local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
-@@ -4226,6 +4230,138 @@ function cmd.skills(pos: { string }, opts: { [string]: { string } })
+@@ -4226,6 +4230,130 @@ function cmd.skills(pos: { string }, opts: { [string]: { string } })
  	print(`skills: {#list} skills linked`)
  end
  
@@ -361,20 +361,12 @@ index c3ffdc92..b8cec884 100644
 +		print(`hooks: {dest} is up to date`)
 +		return
 +	end
-+	-- the new file is complete and executable before it replaces anything: git skips a hook that is not executable
++	-- the new file is complete and executable before it replaces anything (git skips a hook that is not executable):
++	-- one rename of a temporary file of its own, which replace-file.pl creates exclusively and removes on failure, so
++	-- two installs at once cannot move each other's file into place
 +	fs.writeDir(dir)
-+	local tmp = ""
-+	local ok, err = pcall(function()
-+		-- a name of its own (two installs at once must not share one, or one could move the other's non-executable file in)
-+		tmp = sh.must("mktemp", { `{dir}/.{hooksLib.NAME}.new.XXXXXX` })
-+		sh.writeReplacing(tmp, state.source :: string)
-+		sh.must("chmod", { "755", tmp })
-+		sh.must("mv", { "-f", tmp, dest })
-+	end)
++	local ok, err = pcall(sh.writeReplacing, dest, state.source :: string, "0755")
 +	if not ok then
-+		if tmp ~= "" then
-+			pcall(fs.removeFile, tmp)
-+		end
 +		fail(`hooks: could not install {dest}: {err}`)
 +	end
 +	print(`hooks: {if kind == "absent" then "installed" else "updated"} {dest}`)
@@ -383,9 +375,52 @@ index c3ffdc92..b8cec884 100644
  -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.
  function cmd.lessons(pos: { string }, opts: { [string]: { string } })
  	local function usage(why: string): never
+diff --git a/z-nile/lib/replace-file.pl b/z-nile/lib/replace-file.pl
+index acbecc56..7e0abfc1 100644
+--- a/z-nile/lib/replace-file.pl
++++ b/z-nile/lib/replace-file.pl
+@@ -1,6 +1,7 @@
+ #!/usr/bin/perl
+ # Replaces the file at <dest> with new content, never writing through whatever is there (c0077).
+ #   perl z-nile/lib/replace-file.pl <dest> [<src>]     # content from <src> (bytes), else from stdin
++#   perl z-nile/lib/replace-file.pl --mode=0755 <dest> ...   # the file's mode (octal), default 0644 (c0189)
+ # A sibling temporary file is created exclusively and without following links (O_CREAT|O_EXCL|O_NOFOLLOW), written,
+ # then rename(2)d onto <dest>. A rename replaces a link of any kind (to a file or to a directory) instead of
+ # following it, and refuses a real directory. On any failure the temporary file is removed. Every unjailed writer
+@@ -10,8 +11,20 @@ use warnings;
+ use Fcntl qw(O_WRONLY O_CREAT O_EXCL O_NOFOLLOW);
+ use File::Basename qw(dirname basename);
+ 
++# the mode the file has when the rename puts it in place: 0644, or the octal of a leading --mode=<octal> (a hook that
++# must be executable the moment it replaces the old one, c0189)
++my $mode = 0644;
++if (@ARGV && $ARGV[0] =~ /\A--mode=(.*)\z/s) {
++    my $given = $1;
++    shift @ARGV;
++    unless ($given =~ /\A[0-7]{3,4}\z/) {
++        print STDERR "replace-file: --mode must be octal like 0755\n";
++        exit 1;
++    }
++    $mode = oct($given);
++}
+ my ($dest, $src) = @ARGV;
+-die "usage: replace-file.pl <dest> [<src>]\n" unless defined $dest && $dest ne '';
++die "usage: replace-file.pl [--mode=<octal>] <dest> [<src>]\n" unless defined $dest && $dest ne '';
+ if (-d $dest && !-l $dest) {
+     print STDERR "replace-file: $dest is a directory; refusing\n";
+     exit 1;
+@@ -38,7 +51,7 @@ for my $try (1 .. 5) {
+     fail("$!") unless $!{EEXIST};
+ }
+ fail("no free temporary name") unless defined $tmp;
+-chmod 0644, $tmp or fail("chmod: $!"); # against the umask
++chmod $mode, $tmp or fail("chmod: $!"); # against the umask
+ binmode $out;
+ 
+ my $in;
 diff --git a/z-nile/lib/repo-hooks/reference-transaction b/z-nile/lib/repo-hooks/reference-transaction
 new file mode 100755
-index 00000000..3e2c4238
+index 00000000..6386af47
 --- /dev/null
 +++ b/z-nile/lib/repo-hooks/reference-transaction
 @@ -0,0 +1,77 @@
@@ -463,9 +498,32 @@ index 00000000..3e2c4238
 +  echo "reference-transaction (z-nile/lib/repo-hooks): refused. A commit written under a fixture identity (@example.invalid) cannot become a ref of this repository:"
 +  printf '%s\n' "$listed"
 +  echo "If this stopped a rebase or cherry-pick of older prototype commits: git rebase --abort (or git cherry-pick --abort), then merge instead of rebasing, or move the prototype to a scratch clone."
-+  echo "Fixture identities belong only to spec fixtures under .cache. A prototype lives in a scratch clone (git clone this checkout into \$TMPDIR or the scratchpad) or commits under your own identity (git commit --amend --reset-author takes over a prototype commit; c0189, zz-test skill). Pushing a prototype to a repository with this hook is refused the same way."
++  echo "Fixture identities belong only to spec fixtures under .cache. A prototype lives in a scratch clone (git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add) or commits under your own identity (git commit --amend --reset-author takes over a prototype commit; c0189, zz-test skill). Pushing a prototype to a repository with this hook is refused the same way."
 +} >&2
 +exit 1
+diff --git a/z-nile/lib/sh.luau b/z-nile/lib/sh.luau
+index 739a0415..d95713a1 100644
+--- a/z-nile/lib/sh.luau
++++ b/z-nile/lib/sh.luau
+@@ -48,9 +48,15 @@ end
+ -- Writes `text` to `path` through z-nile/lib/replace-file.pl: a sibling temporary file, created exclusively and never
+ -- followed, renamed onto `path`. A symlink a spec swapped in at `path` (to a file or to a directory) is replaced,
+ -- never followed; a real directory there is an error (c0077). `path` is relative to the current folder (the
+--- repository root for every tracker command; a project's home for a spec, c0120), or absolute.
+-function sh.writeReplacing(path: string, text: string)
+-	local r = process.exec("perl", { `{LIB}/replace-file.pl`, path }, { stdio = { stdin = text } })
++-- repository root for every tracker command; a project's home for a spec, c0120), or absolute. `mode` is the
++-- file's octal mode when the rename puts it in place ("0755" for a hook that must be executable at once; the
++-- default is 0644, c0189).
++function sh.writeReplacing(path: string, text: string, mode: string?)
++	local args = { `{LIB}/replace-file.pl`, path }
++	if mode then
++		args = { `{LIB}/replace-file.pl`, `--mode={mode}`, path }
++	end
++	local r = process.exec("perl", args, { stdio = { stdin = text } })
+ 	if not r.ok then
+ 		error(`writeReplacing {path}: {trim(r.stderr)}`, 0)
+ 	end
 diff --git a/z-nile/setup.sh b/z-nile/setup.sh
 index 1690f2c3..d5b285a9 100755
 --- a/z-nile/setup.sh
@@ -481,14 +539,14 @@ index 1690f2c3..d5b285a9 100755
  z-nile/check.sh --full
  
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
-index 9baa6675..a673a590 100644
+index 9baa6675..43b0c1d8 100644
 --- a/z-nile/skills/z-design/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
 @@ -28,6 +28,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
  - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
    - Each gets a pass/fail question, a method and a fallback.
    - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
-+  - A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape.
++  - A prototype or experiment lives in a scratch clone (never a `git worktree add`) under the main checkout's `.cache/.tmp/` (never the system temp folder or a harness's scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape.
  - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
  - **Override check**: promoted specs in `tests/acceptance/` are never edited during execution, so find the conflicts now.
    - For each Touched path, run `lune run z-nile/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.
@@ -515,14 +573,14 @@ index 5d60a654..66a48c0f 100644
  | `z-nile/templates/` | the item, raft and prompt templates |
  | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
 diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
-index 5628ff86..c9f96de3 100644
+index 5628ff86..450165d4 100644
 --- a/z-nile/skills/zz-execute/SKILL.md
 +++ b/z-nile/skills/zz-execute/SKILL.md
 @@ -19,6 +19,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
  
  ## Phase 1: Experiments (fail fast)
  - For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
-+- A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape.
++- A prototype or experiment lives in a scratch clone (never a `git worktree add`) under the main checkout's `.cache/.tmp/` (never the system temp folder or a harness's scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape.
  - **If an experiment fails:**
    - Switch to the documented fallback, and note that in the issue.
    - If there's no fallback: **stop** and escalate (see Stop conditions).
@@ -581,7 +639,7 @@ index aae9a04c..5d72683e 100644
  - `./zn compact [--force]`
  - `./zn remap`
 diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
-index 14e8f252..d3c08925 100644
+index 14e8f252..ad08c860 100644
 --- a/z-nile/skills/zz-test/SKILL.md
 +++ b/z-nile/skills/zz-test/SKILL.md
 @@ -8,7 +8,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
@@ -597,7 +655,7 @@ index 14e8f252..d3c08925 100644
    - **A pid above 99999**: the sweep doesn't reach it, should a future macOS raise `PID_MAX`.
    - **The guards trust their own environment**: a caller that sets `PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` as the jail does makes the home fence waive a sentinel it couldn't write (a `.cache` made unwritable outside any jail), and `PICKMAN_FENCE_HOOKS` at a folder of permissive hooks switches the ref guard off (captured as c0123). Nothing in the fence tells a real jail from forged markers (c0120 code review 004 F5): review a check or spec that sets any `PICKMAN_TEST_*` or `PICKMAN_FENCE_*` variable.
    - **AC18 trusts the `origin` it resolves** (c0120): it reads the published main with `git ls-remote origin`, so a swapped `origin` URL, a `url.*.insteadOf` or `GIT_CONFIG_*` in the environment can make any repository's main the reference. Every verdict prints the URL it resolved; check it names the project's GitHub repository (c0120 code review 009 F4).
-+- **Fixture identities stay in fixtures**: A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape. The hook is `z-nile/lib/repo-hooks/reference-transaction`, installed in the git directory every worktree shares by `./zn hooks` (`z-nile/setup.sh` runs it; the gate's static stage runs `./zn hooks --check`, which only reads), from `origin/main`'s copy and never from a branch's unmerged edit. It refuses, in the `prepared` phase, an update of `HEAD` or a ref to a commit whose author or committer email ends in `@example.invalid`; deleting a ref and a no-op update are allowed. It cannot see `git branch -m` or `git branch -c` (git writes those refs outside a transaction), so never rename or copy a branch whose tip is a fixture commit: delete it, or look at it with `git worktree add <dir> <branch>`. Spec fixtures have repositories of their own, which never run it.
++- **Fixture identities stay in fixtures**: A prototype or experiment lives in a scratch clone (never a `git worktree add`) under the main checkout's `.cache/.tmp/` (never the system temp folder or a harness's scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape. The hook is `z-nile/lib/repo-hooks/reference-transaction`, installed in the git directory every worktree shares by `./zn hooks` (`z-nile/setup.sh` runs it; the gate's static stage runs `./zn hooks --check`, which only reads), from `origin/main`'s copy and never from a branch's unmerged edit. It refuses, in the `prepared` phase, an update of `HEAD` or a ref to a commit whose author or committer email ends in `@example.invalid`; deleting a ref and a no-op update are allowed. It cannot see `git branch -m` or `git branch -c` (git writes those refs outside a transaction), so never rename or copy a branch whose tip is a fixture commit: delete it, or look at it with `git worktree add <dir> <branch>`. Spec fixtures have repositories of their own, which never run it. A gate run in a scratch clone of reviewed code has no hook of its own (git does not clone hooks), so it stops at its static stage, `./zn hooks --check`, with `missing; run ./zn hooks`: run `./zn hooks` there first, outside any spec jail, and make any commit that clone needs under a fixture identity before it (the hook refuses those). A clone holding unguarded code (Running specs against unguarded code) runs spec files only, jailed, and needs no hook.
  - **Running specs against unguarded code**: only in a clone under `$TMPDIR`, outside every repository (`git clone --no-hardlinks . "$(mktemp -d)/repo"`). That applies when prototyping the guards themselves, or on a branch from before them. A broken fixture there can only reach the clone.
 -- **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it.
 +- **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it. One exception: If the tripwire's only finding is "refs written by a fixture appeared" and every listed ref is checked out in a live `.worktree/<name>` outside `.cache` (`git worktree list`), retry the gate or `./zn land` once without asking, and say so; if it fires again, or reports anything else, stop and report.
