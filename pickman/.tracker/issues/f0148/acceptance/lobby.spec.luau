@@ -128,6 +128,31 @@ return t.spec("f0148 the lobby's level picker", function(it)
 		end
 	)
 
+	it(
+		"the teleport waits for the store hook in the press's own thread: none while the hook yields",
+		function()
+			local waiting: { thread } = {}
+			local stored: { any } = {}
+			local s = server(function(_player: any, requested: any)
+				table.insert(waiting, coroutine.running())
+				coroutine.yield() -- the write is under way
+				table.insert(stored, { level = requested })
+			end)
+			local p = fake.player(35)
+			s.join(p)
+			s.press(p, 3)
+			t.expect(#waiting).toBe(1)
+			t.expect(#s.engine.calls).toBe(0) -- no teleport before the choice is written
+			s.press(p, 2) -- a second press while the first waits: refused (one under way)
+			t.expect(#waiting).toBe(1)
+			t.expect(#s.engine.calls).toBe(0)
+			coroutine.resume(waiting[1])
+			t.expect(#stored).toBe(1)
+			t.expect(stored[1].level).toBe(3)
+			t.expect(#s.engine.calls).toBe(1) -- then exactly one teleport
+		end
+	)
+
 	it("with no destination nothing is chosen and nothing teleports", function()
 		local seen = 0
 		local s = fake.server(lobby, {})

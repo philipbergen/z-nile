@@ -40,6 +40,7 @@ return t.spec("f0148 game-design.md", function(it)
 				"**(prep)**, the user may veto any",
 				"the Left and Right arrow keys",
 				"does not answer within 10 s starts the run on level 1",
+				"the next arrival starts on the late choice",
 			}
 		do
 			if string.find(s, needle, 1, true) == nil then
@@ -52,5 +53,7 @@ return t.spec("f0148 game-design.md", function(it)
 		t.expect(has("each player's best level reached, which the lobby's level picker offers (f0148"))
 			.toBe(true)
 		t.expect(has("on the level the picker shows, once the player has reached level 2: f0148")).toBe(true)
+		t.expect(select(2, string.gsub(design, "%(picked in the lobby, f0148%)", ""))).toBe(2) -- Lives and Points × level
+		t.expect(has("(1 until f0148)")).toBe(false)
 	end)
 end)
