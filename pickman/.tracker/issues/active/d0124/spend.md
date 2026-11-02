@@ -19,7 +19,12 @@
 | 15 | 2026-10-22 00:19 | design-refute-005 | 0 | 0 | 15.0 | spend | design-review |  |
 | 16 | 2026-10-22 03:55 | design-review-005-tokens | 0 | 0 | 0.0 | spend | design-review | 130714 |
 | 17 | 2026-10-22 03:55 | prep | 1651 | 2 | 120.0 | spend | prep |  |
-| 18 | 2026-11-01 19:40 | d0124: apply the prototype (hiscores top-ten list); adapters.spec FlowView case blocked by f0146's Pad require | 475 | 43 | 0.7 | focus | build |  |
+| 18 | 2026-11-02 05:01 | design-review-006 | 0 | 0 | 3.0 | spend | design-review |  |
+| 19 | 2026-11-02 05:02 | design-refute-006 | 0 | 0 | 6.0 | spend | design-review |  |
+| 20 | 2026-11-02 05:05 | design-review-007 | 0 | 0 | 3.0 | spend | design-review |  |
+| 21 | 2026-11-02 05:06 | design-refute-007 | 0 | 0 | 1.0 | spend | design-review |  |
+| 22 | 2026-11-02 05:06 | prep | 7 | 1 | 25.0 | spend | prep |  |
+| 23 | 2026-11-01 19:40 | d0124: apply the prototype (hiscores top-ten list); adapters.spec FlowView case blocked by f0146's Pad require | 475 | 43 | 0.7 | focus | build |  |
 
-**Total:** +2126 / -45 lines, 262.7 agent-minutes, 677346 tokens over 18 records
-<!-- totals: added=2126 removed=45 minutes=262.7 records=18 tokens=677346 -->
+**Total:** +2133 / -46 lines, 300.7 agent-minutes, 677346 tokens over 23 records
+<!-- totals: added=2133 removed=46 minutes=300.7 records=23 tokens=677346 -->
