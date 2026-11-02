@@ -20,6 +20,7 @@
 | 16 | 2026-11-01 20:16 | design-review-007 | 0 | 0 | 14.0 | spend | design-review | 250000 |
 | 17 | 2026-11-02 02:38 | design-refute-007 | 0 | 0 | 200.0 | spend | design-review |  |
 | 18 | 2026-11-02 04:20 | design-review-008 (time estimated by the lead; tokens not reported) | 0 | 0 | 15.0 | spend | design-review |  |
+| 19 | 2026-11-02 04:49 | design-refute-008 | 0 | 0 | 75.0 | spend | design-review |  |
 
-**Total:** +0 / -0 lines, 938.0 agent-minutes, 1224543 tokens over 18 records
-<!-- totals: added=0 removed=0 minutes=938.0 records=18 tokens=1224543 -->
+**Total:** +0 / -0 lines, 1013.0 agent-minutes, 1224543 tokens over 19 records
+<!-- totals: added=0 removed=0 minutes=1013.0 records=19 tokens=1224543 -->
