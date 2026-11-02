@@ -13,6 +13,10 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0070
 
-# check "RC1: <end-to-end statement>" <command>
+# sequestered specs: in each issue's folder before `done`, promoted to tests/acceptance/<id> after it
+A89="$("$ZN_ROOT/zn" find c0189)/acceptance"; [[ -d $A89 ]] || A89="$PWD/tests/acceptance/c0189"
+A94="$("$ZN_ROOT/zn" find c0194)/acceptance"; [[ -d $A94 ]] || A94="$PWD/tests/acceptance/c0194"
+check "RC1: both members' pinned wording holds together in the shared skills" lune run tests/run -- "$A89/wiring.spec.luau" "$A94/docs.spec.luau"
+check "RC2: ./zn hooks --check and ./zn tmp leftovers both run read-only" bash -c '"$ZN_ROOT/zn" hooks --check && "$ZN_ROOT/zn" tmp leftovers'
 
 finish

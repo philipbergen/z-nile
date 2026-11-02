@@ -13,6 +13,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0072
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: both new lessons are listed for the steps they teach and the ledgers read clean" bash -c '"$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" lessons --skill zz-review --when build bound-every-probe | grep -q bound-every-probe && "$ZN_ROOT/zn" lessons --skill zz-arch --when design scanning-loops-advance | grep -q scanning-loops-advance'
 
 finish
