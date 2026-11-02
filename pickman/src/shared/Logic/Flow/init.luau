@@ -23,6 +23,8 @@ export type RankView = {
 	rank: number?, -- that run's all-time rank, only while its overlay is up
 	pending: number?, -- the next run's rank, heard before its overlay
 	pendingRun: number?,
+	missed: number?, -- that run missed the all-time top `missed`, only while its overlay is up
+	pendingMissed: number?, -- the next run missed the top `pendingMissed`, heard before its overlay
 }
 
 local Flow = {}
@@ -88,6 +90,14 @@ function Flow.rankLine(rank: number?): string?
 	return `ALL-TIME #{string.format("%d", rank)}`
 end
 
+-- The extra line at the end of a run that did not make the all-time top `top` the server sent.
+function Flow.missLine(top: number?): string?
+	if type(top) ~= "number" or top < 1 or top ~= math.floor(top) or top == math.huge then
+		return nil
+	end
+	return `NOT IN THE ALL-TIME TOP {string.format("%d", top)}`
+end
+
 -- Follow the end-of-run overlay. A new end of run (the edge) is the next run; its rank is the one heard early for
 -- exactly that run, never the previous run's. Closing the overlay drops the shown rank and keeps what is pending.
 function Flow.follow(view: RankView, gameOver: boolean, wasOver: boolean): (RankView, boolean)
@@ -96,10 +106,26 @@ function Flow.follow(view: RankView, gameOver: boolean, wasOver: boolean): (Rank
 	end
 	if gameOver then
 		local over = view.over + 1
-		local rank = if view.pendingRun == over then view.pending else nil
-		return { over = over, rank = rank, pending = nil, pendingRun = nil }, true
+		local mine = view.pendingRun == over
+		return {
+			over = over,
+			rank = if mine then view.pending else nil,
+			missed = if mine then view.pendingMissed else nil,
+			pending = nil,
+			pendingRun = nil,
+			pendingMissed = nil,
+		},
+			true
 	end
-	return { over = view.over, rank = nil, pending = view.pending, pendingRun = view.pendingRun }, false
+	return {
+		over = view.over,
+		rank = nil,
+		missed = nil,
+		pending = view.pending,
+		pendingRun = view.pendingRun,
+		pendingMissed = view.pendingMissed,
+	},
+		false
 end
 
 -- A rank arrived for `run`. For the run whose overlay is up it shows; for the next run it waits; for any other
@@ -112,9 +138,54 @@ function Flow.hearRank(view: RankView, run: number, rank: number?, gameOver: boo
 		if not gameOver then
 			return view
 		end
-		return { over = view.over, rank = rank, pending = view.pending, pendingRun = view.pendingRun }
+		return {
+			over = view.over,
+			rank = rank,
+			missed = nil,
+			pending = view.pending,
+			pendingRun = view.pendingRun,
+			pendingMissed = view.pendingMissed,
+		}
 	elseif run == view.over + 1 then
-		return { over = view.over, rank = view.rank, pending = rank, pendingRun = run }
+		return {
+			over = view.over,
+			rank = view.rank,
+			missed = view.missed,
+			pending = rank,
+			pendingRun = run,
+			pendingMissed = nil,
+		}
+	end
+	return view
+end
+
+-- The server said `run` missed the all-time top `top`. Kept, shown and dropped exactly as hearRank keeps a rank;
+-- a run has a rank or a miss, and the later one heard replaces the other.
+function Flow.hearMiss(view: RankView, run: number, top: number?, gameOver: boolean): RankView
+	if Flow.missLine(top) == nil then
+		return view
+	end
+	if run == view.over and view.over >= 1 then
+		if not gameOver then
+			return view
+		end
+		return {
+			over = view.over,
+			rank = nil,
+			missed = top,
+			pending = view.pending,
+			pendingRun = view.pendingRun,
+			pendingMissed = view.pendingMissed,
+		}
+	elseif run == view.over + 1 then
+		return {
+			over = view.over,
+			rank = view.rank,
+			missed = view.missed,
+			pending = nil,
+			pendingRun = run,
+			pendingMissed = top,
+		}
 	end
 	return view
 end
@@ -123,7 +194,7 @@ function Flow.shownRank(view: RankView, gameOver: boolean): string?
 	if not gameOver then
 		return nil
 	end
-	return Flow.rankLine(view.rank)
+	return Flow.rankLine(view.rank) or Flow.missLine(view.missed)
 end
 
 function Flow.isContinueKey(keyName: string): boolean

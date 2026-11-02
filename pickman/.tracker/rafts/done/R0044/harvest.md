@@ -13,3 +13,4 @@
 - design-review-004 F1: z-design/spec-design-correspondence
 - design-review-004 F2: z-design/never-narrow-captured-scope
 - design-review-005 F1: z-design/prove-specs-pass-on-a-prototype
+- review-001 F1: one-off: two comment lines past StyLua's 110 columns, caught by the reviewer; format check is in the gate
