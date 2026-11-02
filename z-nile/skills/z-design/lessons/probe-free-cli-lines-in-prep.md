@@ -10,4 +10,4 @@ An unproven command line left for execution's Phase 1 carries a wrong guess thro
 
 **How to apply:** for each unproven CLI line, read the subcommand's own help and try the call with a flag set that fails fast (the CLI validates its options before it spends anything); record the result as an experiment. Leave for Phase 1 only what needs a real, paid run, and say what it costs.
 
-Keep the probe free when the guess might be right (c0117 design review 006): a call that succeeds starts the paid thing (`claude --cloud` without `-p` opens a cloud session). Prefer the subcommand's own `--help`; run any real call under an alarm, in a scratch folder outside the repository, with flags that make the CLI refuse before it spends.
+Keep the probe free when the guess might be right (c0117 design review 006): a call that succeeds starts the paid thing (`claude --cloud` without `-p` opens a cloud session). Prefer the subcommand's own `--help`; run any real call through `./zn run`, in a scratch folder outside the repository, with flags that make the CLI refuse before it spends.

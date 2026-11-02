@@ -18,6 +18,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
    - Write down, for yourself, which files each issue touches.
 
 ## Phase 1: Experiments (fail fast)
+- Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
 - For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
 - **If an experiment fails:**
   - Switch to the documented fallback, and note that in the issue.
