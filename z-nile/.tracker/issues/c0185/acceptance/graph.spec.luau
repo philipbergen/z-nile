@@ -187,9 +187,9 @@ return t.spec("c0185 the graph follows code shared across homes", function(it)
 			t.expect(graph.mappings({ tree = { A = { ["$path"] = "/opt/x" } } }))
 				.toEqual({ { instance = "A", path = "/opt/x" } })
 			-- gameRoots answers from the same walker (longest instance first), without the tree node
-			local roots = graph.gameRoots(project)
-			t.expect(#roots).toBe(2)
-			t.expect(roots[1]).toEqual({ instance = "A/B", path = "../lib/b" })
+			local gameRoots = graph.gameRoots(project)
+			t.expect(#gameRoots).toBe(2)
+			t.expect(gameRoots[1]).toEqual({ instance = "A/B", path = "../lib/b" })
 			local cases: { [string]: boolean } = {
 				["src/shared"] = true,
 				["./src"] = true,
