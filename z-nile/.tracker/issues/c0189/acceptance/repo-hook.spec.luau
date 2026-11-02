@@ -126,6 +126,10 @@ return t.spec("c0189 the repository hook refuses commits under a fixture identit
 			t.expect(has(r.stderr, `(author {FX}): refs/heads/main`)).toBe(true)
 			t.expect(has(r.stderr, "(committer")).toBe(false)
 			t.expect(has(r.stderr, "scratch clone")).toBe(true)
+			-- where the clone goes is c0194's decision: under the main checkout's .cache/.tmp/, never the system temp folder
+			t.expect(has(r.stderr, "under the main checkout's .cache/.tmp/")).toBe(true)
+			t.expect(has(r.stderr, "scratchpad")).toBe(false)
+			t.expect(has(r.stderr, "TMPDIR")).toBe(false)
 			t.expect(has(r.stderr, "your own identity")).toBe(true)
 			t.expect(has(r.stderr, "delete that branch there")).toBe(false)
 		end
