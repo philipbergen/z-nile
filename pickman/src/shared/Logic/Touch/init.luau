@@ -8,7 +8,7 @@
 local Hud = require("./Hud")
 local View = require("./View")
 
-export type Zone = "turn" | "look" | "snap" | "fire" | "hop"
+export type Zone = "turn" | "look" | "snap" | "fire" | "hop" | "pick"
 export type Rect = { x: number, y: number, w: number, h: number } -- half-open [x, x+w) x [y, y+h)
 export type Phase = "begin" | "move" | "end"
 export type Event = { id: number, phase: Phase, x: number, y: number }
@@ -21,9 +21,10 @@ export type Effect =
 	| { kind: "snap" }
 	| { kind: "fire" }
 	| { kind: "hop" }
-export type Context = { width: number, snap: Rect?, fire: Rect?, hop: Rect? }
+	| { kind: "pick" } -- the PICK button (f0126)
+export type Context = { width: number, snap: Rect?, fire: Rect?, hop: Rect?, pick: Rect? }
 -- The touch controls' rectangles, as Touch.buttons places them.
-export type Buttons = { snap: Rect, fire: Rect, hop: Rect }
+export type Buttons = { snap: Rect, fire: Rect, hop: Rect, pick: Rect }
 -- Min/Max, the shape of an inset area.
 export type Area = { Min: { X: number, Y: number }, Max: { X: number, Y: number } }
 -- The HUD's sizes and its safe rectangle, as Hud.layout reports them.
@@ -56,7 +57,15 @@ local function inside(r: Rect?, x: number, y: number): boolean
 	return r ~= nil and x >= r.x and y >= r.y and x < r.x + r.w and y < r.y + r.h
 end
 
-function Touch.zone(width: number, x: number, y: number, snap: Rect?, fire: Rect?, hop: Rect?): Zone
+function Touch.zone(
+	width: number,
+	x: number,
+	y: number,
+	snap: Rect?,
+	fire: Rect?,
+	hop: Rect?,
+	pick: Rect?
+): Zone
 	if inside(snap, x, y) then
 		return "snap"
 	end
@@ -65,6 +74,9 @@ function Touch.zone(width: number, x: number, y: number, snap: Rect?, fire: Rect
 	end
 	if inside(hop, x, y) then
 		return "hop"
+	end
+	if inside(pick, x, y) then
+		return "pick"
 	end
 	if finite(width) and width > 0 and x < width / 2 then
 		return "turn"
@@ -97,7 +109,7 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
 	local finger: Finger? = fingers[event.id]
 	if event.phase == "begin" then
 		if finger == nil then
-			local zone: Zone = Touch.zone(ctx.width, event.x, event.y, ctx.snap, ctx.fire, ctx.hop)
+			local zone: Zone = Touch.zone(ctx.width, event.x, event.y, ctx.snap, ctx.fire, ctx.hop, ctx.pick)
 			local taken = false
 			for _, f in fingers do
 				taken = taken or f.zone == zone
@@ -110,6 +122,8 @@ function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect
 					table.insert(effects, { kind = "fire" })
 				elseif zone == "hop" then
 					table.insert(effects, { kind = "hop" })
+				elseif zone == "pick" then
+					table.insert(effects, { kind = "pick" })
 				end
 			end
 		end
@@ -198,9 +212,21 @@ function Touch.fireRect(box: Box): Rect
 	}
 end
 
+-- The pick button (f0126): the fire button's size, one margin left of it, level with it, so the row reads PICK,
+-- FIRE, JUMP. It clears every HUD block, the radar and the pick bar and banner on f0110's samples.
+function Touch.pickRect(box: Box): Rect
+	local fire = Touch.fireRect(box)
+	return { x = fire.x - box.margin - fire.w, y = fire.y, w = fire.w, h = fire.h }
+end
+
 -- Every touch control's rectangle.
 function Touch.buttons(box: Box): Buttons
-	return { snap = Touch.snapRect(box), fire = Touch.fireRect(box), hop = Touch.hopRect(box) }
+	return {
+		snap = Touch.snapRect(box),
+		fire = Touch.fireRect(box),
+		hop = Touch.hopRect(box),
+		pick = Touch.pickRect(box),
+	}
 end
 
 -- The screen's size from the full-screen area, or the fallback while that area is empty or bad.

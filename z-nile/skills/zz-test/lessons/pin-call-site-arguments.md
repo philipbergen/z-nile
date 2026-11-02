@@ -20,6 +20,10 @@ c0154 code review 001 (F1): the pure `render(old, runs, keep)` was pinned, but n
 
 f0146 design review 001 (F1): source pins on Controls and Sticks passed `if action == Pad.CONTINUE` (an action compared with a key name, never true) and `Pad.steer(steer, x, -y)` (an inverted stick). Running both on a stub engine with a recording handler per bound code list, a scripted `GetGamepadState` and a Heartbeat the case fires killed both.
 
+R0056 code review 001 F1: f0109's place case found `MazeView.edible(model, View.edible(frame.play))` in Main's text, so the call moved into the flash block (run only when the flash toggles) or guarded with `and false` passed every case. A wiring check pins where the call runs (which blocks enclose it in the handler), not only that it is written.
+
 c0170 design review 001 F1: a spy on a pure rule's input compared one spec's requires only; a call site that handed over a filtered list (only `@tests/lib/` requires) passed. A spy case compares every element the call site gathers with an independent reading.
 
 c0170 design review 002 F2: a spy compared what the call site gathered with the real tree, which had no example of one kind of input (a fixture dep in a helper or unit spec), so a call site that dropped that kind passed. A spy is only as strong as the kinds today's tree holds; hand the pure function the whole source (the graph) and let it choose, or seed a synthetic input with every kind.
+
+c0180 design review 002 F2: a new flag (`--recorded`) that narrows selection had cases on the selector alone, so the gate could drop it and every criterion still passed. A flag a caller must pass gets a case through every real caller: a run that drives the caller where that is possible, and a rule over the caller's text (as c0180's AC10 has for `z-nile/check.sh`, beside a measurement through the gate) only where the caller can't be driven in a spec; the text rule alone is the weaker answer.

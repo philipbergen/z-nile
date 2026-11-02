@@ -1,0 +1,7 @@
+- design-review-001 F1: z-raft/plan-the-switch-over
+- design-review-001 F2: z-raft/plan-the-switch-over
+- design-review-001 F3: z-raft/plan-the-switch-over
+- design-review-001 F4: z-raft/member-handshakes-reach-the-order
+- design-review-001 F5: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F6: z-raft/order-reasons-survive-workstreams
+- design-review-001 F7: one-off: the Theme's decision list was written from the members' captures, not from their Problem sections; zz-review item 7 already asks whether the Theme quotes the decisions

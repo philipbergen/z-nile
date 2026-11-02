@@ -19,3 +19,5 @@ c0159 design review 002 F1: a chore wrote "f0158 must not spell it so" in its ow
 d0149 design review 001 F1, F9: c0155's in-flight `narrowed.spec` runs f0110's buttons case through `Touch.snapRect`, and f0147's in-flight `hud.spec` reads `Touch.buttons(l).snap`; d0149 removes both, and its Overrides searched only `tests/acceptance` on main.
 
 **Also:** f0148 design review 002 F1: the Sessions.made and Starts contracts with f0145 lived only in messages; with no order, whichever landed second turned the other's specs red or dropped the continue offer. The order was fixed (f0148 first) and f0145's lead records it when its prep resumes.
+
+c0180 design review 002 F1: c0180's Problem said the user's gate placement was "folded into c0165", and no document of c0165 held it (c0165 still built the opposite). A `Decided with the user` line that names another issue as its builder is checked against that issue's documents in every round, and an owner that can't be reached goes to the user at once.
