@@ -23,3 +23,17 @@
 - design-review-005 F2: zz-arch/guards-decide-from-the-tools-resolution
 - design-review-005 F3: z-design/restated-rules-move-together
 - design-review-005 F4: z-design/spec-design-correspondence
+- design-review-006 F1: zz-test/new-commands-run-in-a-copy
+- design-review-006 F2: z-design/restated-rules-move-together
+- design-review-006 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-006 F4: zz-test/refusals-tested-on-both-sides
+- design-review-006 F5: one-off: two statements of the re-prep did not match the documents
+- design-review-007 F1: z-ticket/carry-the-plan-order-into-depends-on
+- design-review-007 F2: one-off: proposed new lesson z-design/depends-on-inherits-the-dependency-raft (see experiments/proposed-lessons.md)
+- design-review-007 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-007 F4: zz-test/new-commands-run-in-a-copy
+- design-review-007 F5: one-off: a harvest entry named the wrong lesson
+- design-review-007 F6: z-design/restated-rules-move-together
+- note a raft review found c0189's re-prep needed c0194's repository-wide scans run on the stacked prototypes (R0070 F2): z-design/peers-scans-run-on-the-prototype
+- note a new depends_on made c0189 wait for everything c0194's raft waits for, which review 007 F2 found unstated: z-design/depends-on-inherits-the-dependency-raft
+- note the install avoided mktemp by giving the shared replace-file writer a mode option instead of composing chmod and mv around it: zz-arch/shared-helper-takes-the-option
