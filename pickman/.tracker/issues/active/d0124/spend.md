@@ -26,6 +26,7 @@
 | 22 | 2026-11-02 05:06 | prep | 7 | 1 | 25.0 | spend | prep |  |
 | 23 | 2026-11-01 19:40 | d0124: apply the prototype (hiscores top-ten list); adapters.spec FlowView case blocked by f0146's Pad require | 475 | 43 | 0.7 | focus | build |  |
 | 24 | 2026-11-02 05:55 | d0124: verification log after the re-prep | 0 | 0 | 0.3 | focus | build |  |
+| 25 | 2026-11-02 06:13 | R0044: review-001 | 0 | 0 | 8.0 | focus | code-review | 141212 |
 
-**Total:** +2133 / -46 lines, 301.0 agent-minutes, 677346 tokens over 24 records
-<!-- totals: added=2133 removed=46 minutes=301.0 records=24 tokens=677346 -->
+**Total:** +2133 / -46 lines, 309.0 agent-minutes, 818558 tokens over 25 records
+<!-- totals: added=2133 removed=46 minutes=309.0 records=25 tokens=818558 -->
