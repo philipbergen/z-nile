@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 # Mutation check for c0189 on the scratch prototype: apply one mutant at a time, run its spec file, record the failing cases.
 import subprocess, sys, os, json, shutil
-S = open('/private/tmp/claude-501/-Users-philipbergen-code-pickman/b6cd737f-7438-4366-9577-3e3137f03e16/scratchpad/c0189/proto-dir.txt').read().strip() + '/repo'
+# usage: python3 mutate.py <scratch clone> <bounded.pl> [mutant ids...]   (the clone has the prototype applied, with this folder's
+# acceptance specs copied in; bounded.pl runs a command in its own process group and kills it on timeout)
+S = sys.argv.pop(1)
+BOUNDED = sys.argv.pop(1) if len(sys.argv) > 1 and sys.argv[1].endswith('.pl') else None  # optional bounded runner
 HOOK = 'z-nile/lib/repo-hooks/reference-transaction'
 PLAN = 'z-nile/engine/hooks.luau'
 MAIN = 'z-nile/engine/main.luau'
-SPECS = {'hook': 'tests/acceptance/c0189/repo-hook.spec.luau', 'plan': 'tests/acceptance/c0189/hooks-plan.spec.luau',
-         'cmd': 'tests/acceptance/c0189/hooks-command.spec.luau', 'wire': 'tests/acceptance/c0189/wiring.spec.luau'}
+A = '.tracker/issues/c0189/acceptance/'
+SPECS = {'hook': A + 'repo-hook.spec.luau', 'plan': A + 'hooks-plan.spec.luau', 'cmd': A + 'hooks-command.spec.luau',
+         'wire': A + 'wiring.spec.luau', 'mode': A + 'replace-mode.spec.luau',
+         'c0077': 'tests/acceptance/c0077/replace-file.spec.luau'}
+REPLACE = 'z-nile/lib/replace-file.pl'
+SH = 'z-nile/lib/sh.luau'
 # id: (file, old, new, spec key)
 M = {}
 def m(id, f, old, new, spec): M[id] = (f, old, new, spec)
@@ -28,7 +35,7 @@ m('H8b', HOOK, " && $2 ~ /^[0-9a-f]+$/", "", 'hook')
 m('H9', HOOK, '[ -n "$found" ] || exit 0', '[ -n "$found" ] || exit 0', 'hook')  # placeholder, replaced below
 m('H10', HOOK, '[ "$1" = prepared ] || exit 0\n', '', 'hook')
 m('H11', HOOK, "refuse \"cannot read the new commits; refusing (remove the hook only if git itself is broken)\"", "true", 'hook')
-m('H12a', HOOK, "A prototype lives in a scratch clone (git clone this checkout into \\$TMPDIR or the scratchpad) or commits under your own identity (c0189, zz-test skill).", "Do not do that.", 'hook')
+m('H12a', HOOK, "A prototype lives in a scratch clone (git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add) or commits under your own identity (git commit --amend --reset-author takes over a prototype commit; c0189, zz-test skill).", "Do not do that.", 'hook')
 m('H12b', HOOK, "if (refs[$1] ~ / refs\\/remotes\\//) remote = 1", "if (0) remote = 1", 'hook')
 m('H12c', HOOK, "if (refs[$1] ~ / refs\\/remotes\\//) remote = 1", "remote = 1", 'hook')
 m('H13', HOOK, "print sha, \"committer\", $2", "print sha, \"author\", $2", 'hook')
@@ -50,15 +57,12 @@ m('P11', PLAN, 'elseif s.kind == "other" then', 'elseif false then', 'plan')
 # --- the command
 m('C1old', MAIN, "\t\tprint(`hooks: {hooksLib.NAME} installed in {dir}, ok`)\n\t\treturn\n\tend\n\tif plan.action == \"refuse\"", "\t\tprint(`hooks: {hooksLib.NAME} installed in {dir}, ok`)\n\tend\n\tif plan.action == \"refuse\"", 'cmd')
 m('C1', MAIN, 'if opts["--check"] then\n\t\tif plan.action == "install" and plan.older then', 'if false then\n\t\tif plan.action == "install" and plan.older then', 'cmd')
-m('C12', MAIN, 'if not ok then\n\t\tpcall(fs.removeFile, tmp)\n\t\tfail(`hooks: could not install {dest}: {err}`)\n\tend\n', '', 'cmd')
-m('C2', MAIN, '\t\tsh.must("chmod", { "755", tmp })\n', '', 'cmd')
 m('C3', MAIN, "\tif plan.action == \"ok\" then\n\t\tprint(`hooks: {dest} is up to date`)\n\t\treturn\n\tend", "", 'cmd')
 m('C5', MAIN, 'if sh.run("test", { "-L", dest }).ok then\n\t\tkind = "link"\n\telseif', 'if false then\n\t\tkind = "link"\n\telseif', 'cmd')
 m('C6', MAIN, '{ "config", "--show-scope", "--get-all", hooksLib.CONFIG_KEY }', '{ "config", "--get-all", hooksLib.CONFIG_KEY }', 'cmd')
 m('C7', MAIN, '{ "rev-parse", "--path-format=absolute", "--git-common-dir" })\n\tlocal dir = `{common}/hooks`', '{ "rev-parse", "--path-format=absolute", "--git-dir" })\n\tlocal dir = `{common}/hooks`', 'cmd')
 m('C8', MAIN, "function cmd.hooks(pos: { string }, opts: { [string]: { string } })\n", "function cmd.hooks(pos: { string }, opts: { [string]: { string } })\n\trefuseInMainCheckout(\"hooks\")\n", 'cmd')
 m('C10', MAIN, '\t\tif k ~= "--check" then\n\t\t\tfail(`usage: ./zn hooks [--check] (unknown option {k})`)', '\t\tif false then\n\t\t\tfail(`usage: ./zn hooks [--check] (unknown option {k})`)', 'cmd')
-m('C11', MAIN, 'pcall(fs.removeFile, tmp)\n\t\tfail(`hooks: could not install', 'fail(`hooks: could not install', 'cmd')
 # --- wiring (text)
 m('W1', 'z-nile/check.sh', '[[ -f z-nile/lib/repo-hooks/reference-transaction ]] && par_start "hooks (./zn hooks --check)" ./zn hooks --check\n', '', 'wire')
 m('W2', 'z-nile/setup.sh', 'say "repository hook"\n./zn hooks # refuses commits under a fixture identity; the gate checks it\n\n', '', 'wire')
@@ -91,7 +95,6 @@ m('H16', HOOK, 'printf \'%s\\n%s\\n\' "$peeled" "$found"', 'printf \'%s\\n%s\\n\
 
 m('F1m', MAIN, '"--first-parent",\n\t\t\t\t"--format=",', '"--format=",', 'cmd')
 m('F2m', MAIN, 'local shown = sh.run("git", { "cat-file", "blob", `origin/main:{hooksLib.SOURCE}` })', 'local shown = { ok = true, stdout = sh.git({ "show", `origin/main:{hooksLib.SOURCE}` }) .. "\\n", stderr = "" }', 'cmd')
-m('F4m', MAIN, 'tmp = sh.must("mktemp", { `{dir}/.{hooksLib.NAME}.new.XXXXXX` })', 'tmp = `{dir}/.{hooksLib.NAME}.new`', 'cmd')
 m('H17', HOOK, '  echo "If this stopped a rebase or cherry-pick of older prototype commits: git rebase --abort (or git cherry-pick --abort), then merge instead of rebasing, or move the prototype to a scratch clone."\n', '', 'hook')
 
 m('K1', HOOK, '[ "${ref#refs/rewritten/}" = "$ref" ] && [ "$(git rev-parse -q --verify "$ref" 2>/dev/null)" = "$sha" ]; then', 'false; then', 'hook')
@@ -101,6 +104,27 @@ m('K3', HOOK, 'if [ "$ref" != HEAD ] && [ "${ref#refs/bisect/}"', 'if [ "${ref#r
 m('H18', HOOK, '    if (head) print "If this stopped a checkout', '    if (0) print "If this stopped a checkout', 'hook')
 m('H18b', HOOK, 'refs[$1] != "" && refs[$1] ~ / HEAD( |$)/ { head = 1 }', 'refs[$1] != "" { head = 1 }', 'hook')
 m('H19', HOOK, "(git commit --amend --reset-author takes over a prototype commit; c0189, zz-test skill)", "(c0189, zz-test skill)", 'hook')
+
+# --- re-prep (R0070's coherence review): the scratch clone goes under .cache/.tmp/, and the install makes no temporary name
+m('W8a', 'z-nile/skills/zz-execute/SKILL.md', "under the main checkout's `.cache/.tmp/` (never the system temp folder or a harness's scratchpad) or commits", "into `$TMPDIR` or the scratchpad or commits", 'wire')
+m('W8b', HOOK, "git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add", "git clone this checkout into \\$TMPDIR or the scratchpad", 'wire')
+m('W8c', HOOK, "git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add", "git clone this checkout somewhere", 'hook')
+m('W8d', HOOK, "git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add", "git clone this checkout under the main checkout's .cache/.tmp/ (or the scratchpad), never a git worktree add", 'hook')
+m('W9a', MAIN, "\tfs.writeDir(dir)\n\tlocal ok, err = pcall(sh.writeReplacing", "\tfs.writeDir(dir)\n\tlocal _ = sh.must(\"mktemp\", { `{dir}/.x.XXXXXX` })\n\tlocal ok, err = pcall(sh.writeReplacing", 'wire')
+m('W9b', MAIN, 'pcall(sh.writeReplacing, dest, state.source :: string, "0755")', 'pcall(sh.writeReplacing, dest, state.source :: string)', 'cmd')
+m('W9c', MAIN, 'local ok, err = pcall(sh.writeReplacing, dest, state.source :: string, "0755")', 'local ok, err = pcall(function()\n\t\tsh.writeReplacing(dest, state.source :: string)\n\t\tsh.must("chmod", { "755", dest })\n\tend)', 'wire')
+m('C12', MAIN, 'if not ok then\n\t\tfail(`hooks: could not install {dest}: {err}`)\n\tend\n', '', 'cmd')
+m('M1', REPLACE, 'chmod $mode, $tmp', 'chmod 0644, $tmp', 'mode')
+m('M2', REPLACE, "    unless ($given =~ /\\A[0-7]{3,4}\\z/) {", "    unless (1) {", 'mode')
+m('M3', REPLACE, 'chmod $mode, $tmp', 'chmod 0755, $tmp', 'mode')
+m('M4', REPLACE, "    shift @ARGV;\n", "", 'mode')
+m('M5', SH, "args = { `{LIB}/replace-file.pl`, `--mode={mode}`, path }", "args = { `{LIB}/replace-file.pl`, path }", 'mode')
+m('M6', REPLACE, "    $mode = oct($given);", "    $mode = oct($given) & 0644;", 'mode')
+m('W10', 'z-nile/skills/zz-test/SKILL.md', "run `./zn hooks` there first, outside any spec jail, and make any commit that clone needs under a fixture identity before it (the hook refuses those).", "run the gate there.", 'wire')
+m('W10b', 'z-nile/skills/zz-test/SKILL.md', " A clone holding unguarded code (Running specs against unguarded code) runs spec files only, jailed, and needs no hook.", "", 'wire')
+m('M9', REPLACE, "[0-7]{3,4}", "[0-7]{1,4}", 'mode')
+m('M7', REPLACE, "    unlink $tmp if defined $tmp;\n", "", 'c0077')
+m('M8', REPLACE, "if (-d $dest && !-l $dest) {", "if (0) {", 'mode')
 
 only = sys.argv[1:] or list(M)
 res = {}
@@ -113,7 +137,7 @@ for id in only:
         print(id, res[id], flush=True); continue
     open(path, 'w').write(orig.replace(old, new, 1))
     try:
-        r = subprocess.run(['bash', '-c', f'cd {S}/z-nile && export PATH=$HOME/.rokit/bin:$PATH && PICKMAN_JOBS=2 perl -e \'alarm shift; exec @ARGV\' 150 lune run tests/run -- {SPECS[spec]} 2>&1'], capture_output=True, text=True)
+        r = subprocess.run(['bash', '-c', f'cd {S}/z-nile && export PATH=$HOME/.rokit/bin:$PATH && PICKMAN_JOBS=2 perl {BOUNDED or '-e "alarm shift; exec @ARGV"'} 150 lune run tests/run -- {SPECS[spec]} 2>&1'], capture_output=True, text=True)
         out = r.stdout
     finally:
         open(path, 'w').write(orig)
