@@ -30,6 +30,7 @@
 | 26 | 2026-11-02 06:13 | d0124: wrap two comment lines past 110 columns (review-001 F1) | 4 | 3 | 0.0 | focus | code-review |  |
 | 27 | 2026-11-02 06:14 | R0044: refute-001, harvest, final log | 0 | 0 | 0.4 | focus | deliver |  |
 | 28 | 2026-11-02 06:19 | tracker: done R0044 | 0 | 0 | 5.5 | raft | deliver |  |
+| 29 | 2026-11-02 06:24 | deliver | 0 | 0 | 20.0 | spend | deliver |  |
 
-**Total:** +2137 / -49 lines, 314.9 agent-minutes, 818558 tokens over 28 records
-<!-- totals: added=2137 removed=49 minutes=314.9 records=28 tokens=818558 -->
+**Total:** +2137 / -49 lines, 334.9 agent-minutes, 818558 tokens over 29 records
+<!-- totals: added=2137 removed=49 minutes=334.9 records=29 tokens=818558 -->
