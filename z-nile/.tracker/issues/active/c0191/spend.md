@@ -14,6 +14,7 @@
 | 10 | 2026-11-01 17:14 | design-review-005 | 0 | 0 | 15.0 | spend | design-review | 293264 |
 | 11 | 2026-11-01 17:24 | design-refute-005 | 0 | 0 | 25.0 | spend | design-review |  |
 | 12 | 2026-11-01 19:12 | prep | 4467 | 1 | 150.0 | spend | prep |  |
+| 13 | 2026-11-02 04:39 | c0191: bounded runner, CPU limits for the spec runner and engine | 207 | 1 | 20.0 | explicit | build |  |
 
-**Total:** +4467 / -1 lines, 359.0 agent-minutes, 1418955 tokens over 12 records
-<!-- totals: added=4467 removed=1 minutes=359.0 records=12 tokens=1418955 -->
+**Total:** +4674 / -2 lines, 379.0 agent-minutes, 1418955 tokens over 13 records
+<!-- totals: added=4674 removed=2 minutes=379.0 records=13 tokens=1418955 -->

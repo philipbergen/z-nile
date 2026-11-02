@@ -112,6 +112,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/tests/tooling/fence-cache-entry.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
+	-- c0191: the reaper lists the jail's launcher as a tool process that owns the processes below it
+	["z-nile/engine/reap.luau"] = {
+		["sandbox-exec"] = "a name in the list of tool processes the reaper treats as ownerless; it never runs it",
+	},
+	-- c0191: clears the marker so a copied runner acts as a top-level run
+	["z-nile/tests/acceptance/c0191/runner-cpu.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- c0650: its spec proves the scan refuses these names
 	["z-nile/tests/acceptance/c0059/adapt.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
