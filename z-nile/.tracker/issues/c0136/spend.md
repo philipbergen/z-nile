@@ -14,6 +14,7 @@
 | 10 | 2026-11-01 13:48 | design-review-005 | 0 | 0 | 25.0 | spend | design-review |  |
 | 11 | 2026-11-01 13:52 | design-refute-005 | 0 | 0 | 20.0 | spend | design-review |  |
 | 12 | 2026-11-01 16:58 | prep | 3059 | 4 | 120.0 | spend | prep |  |
+| 13 | 2026-11-02 02:43 | design-review-001 | 0 | 0 | 1.8 | spend+proportional | design-review | 44844 |
 
-**Total:** +3059 / -4 lines, 389.0 agent-minutes, 0 tokens over 12 records
-<!-- totals: added=3059 removed=4 minutes=389.0 records=12 tokens=0 -->
+**Total:** +3059 / -4 lines, 390.8 agent-minutes, 44844 tokens over 13 records
+<!-- totals: added=3059 removed=4 minutes=390.8 records=13 tokens=44844 -->
