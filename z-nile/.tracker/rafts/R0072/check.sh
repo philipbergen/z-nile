@@ -13,6 +13,10 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0072
 
-check "RC1: both new lessons are listed for the steps they teach and the ledgers read clean" bash -c '"$ZN_ROOT/zn" lessons --check && "$ZN_ROOT/zn" lessons --skill zz-review --when build bound-every-probe | grep -q bound-every-probe && "$ZN_ROOT/zn" lessons --skill zz-arch --when design scanning-loops-advance | grep -q scanning-loops-advance'
+lessonlisted() { # $1 skill, $2 slug: the lesson is listed for both the design and the build steps (both are `when: both`)
+  local w; for w in design build; do "$ZN_ROOT/zn" lessons --skill "$1" --when "$w" "$2" | grep -q "^- $1/$2 (" || { echo "$1/$2 is not listed for $w"; return 1; }; done
+}
+export -f lessonlisted
+check "RC1: both new lessons are listed for the design and build steps and the ledgers read clean" bash -c '"$ZN_ROOT/zn" lessons --check && lessonlisted zz-review bound-every-probe && lessonlisted zz-arch scanning-loops-advance'
 
 finish
