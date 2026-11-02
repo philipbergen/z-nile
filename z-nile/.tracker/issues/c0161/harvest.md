@@ -1,0 +1,45 @@
+- design-review-001 F1: zz-arch/records-cover-what-was-reviewed, z-design/required-steps-on-every-path
+- design-review-001 F2: z-design/new-rules-migrate-existing-work
+- design-review-001 F3: zz-arch/one-reader-per-format
+- design-review-001 F4: z-design/quote-other-preps-before-promising
+- design-review-001 F5: zz-rules/audit-what-new-refuses
+- design-review-001 F6: zz-review/lists-paste-their-search, z-design/spec-design-correspondence
+- design-review-002 F1: z-design/required-steps-on-every-path, zz-arch/records-cover-what-was-reviewed
+- design-review-002 F2: z-design/reasoned-rows-claim-testable-reasons, z-design/mutant-ids-match-the-runner
+- design-review-002 F3: zz-arch/one-reader-per-format
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: z-design/required-steps-on-every-path
+- design-review-003 F1: z-design/required-steps-on-every-path
+- design-review-003 F2: z-design/new-rules-migrate-existing-work
+- design-review-003 F3: z-design/fallbacks-name-the-modes-they-cover
+- design-review-003 F4: z-design/quote-other-preps-before-promising
+- design-review-003 F5: z-design/spec-design-correspondence
+- design-review-003 F6: zz-arch/records-cover-what-was-reviewed
+- design-review-003 F7: one-off: a record taken after reading is a one-line wording fix in the reviewer's paragraph
+- design-review-003 F8: z-design/touched-paths-exist
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: z-design/spec-design-correspondence
+- design-review-004 F3: zz-arch/parsers-refuse-ambiguity, zz-arch/one-reader-per-format
+- design-review-004 F4: z-design/instructions-runnable-where-they-run
+- design-review-004 F5: zz-arch/records-cover-what-was-reviewed
+- design-review-004 F6: z-design/required-steps-on-every-path
+- design-review-004 F7: z-design/accepted-risks-checked-and-decided
+- design-review-004 F8: z-design/restated-rules-move-together
+- design-review-004 F9: z-design/results-land-on-every-path
+- design-review-004 F10: z-design/touched-paths-exist
+- design-review-005 F1: z-design/spec-design-correspondence
+- design-review-005 F2: z-design/new-refusals-reach-every-caller
+- design-review-005 F3: z-design/required-steps-on-every-path
+- design-review-005 F4: z-design/results-land-on-every-path, z-design/quote-other-preps-before-promising
+- design-review-005 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-005 F6: z-design/restated-rules-move-together
+- design-review-006 F1: zz-test/no-vacuous-pass, z-design/spec-design-correspondence
+- design-review-006 F2: zz-arch/refusals-are-gate-checks
+- design-review-006 F3: z-design/quote-other-preps-before-promising, z-design/results-land-on-every-path
+- design-review-006 F4: z-design/new-refusals-reach-every-caller
+- design-review-006 F5: z-design/restated-rules-move-together
+- design-review-007 F1: zz-arch/refusals-are-gate-checks, z-design/spec-design-correspondence
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/quote-other-preps-before-promising
+- note c0161's reviews 001 and 002 found the move to prepared accepted whatever round an earlier cycle of the item left: z-design/existence-checks-exclude-earlier-cycles
+- note running the recovery end to end in design review 007 showed the z-raft advice 'fold it again at the end' fails, and the corrected recovery takes two landings: z-raft/rafted-member-changes-stay-in-the-raft
