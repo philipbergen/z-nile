@@ -13,6 +13,10 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0080
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the raft changes nothing in pickman/ or any other raft's folder (c0161 changes nothing in pickman/)" bash -c 'cd "$ZN_ROOT" && base=$(git merge-base origin/main HEAD) || { echo "no origin/main to compare with"; exit 1; }
+	extra=$(git diff --name-only "$base" | grep -E "^pickman/" ) || true
+	[[ -z $extra ]] || { printf "pickman files changed:\n%s\n" "$extra"; exit 1; }
+	other=$(git diff --name-only "$base" | grep -E "^z-nile/\.tracker/rafts/(active/|done/)?R[0-9]+/" | grep -v -E "/R0080/") || true
+	[[ -z $other ]] || { printf "other rafts changed:\n%s\n" "$other"; exit 1; }'
 
 finish
