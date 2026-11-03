@@ -21,6 +21,7 @@
 | 17 | 2026-11-03 01:29 | c0155: verified the button-table pins | 0 | 0 | 3.0 | explicit | build |  |
 | 18 | 2026-11-03 01:41 | R0065: Phase 3 verification logs | 0 | 0 | 1.5 | raft+proportional | deliver |  |
 | 19 | 2026-11-03 01:48 | R0065: review-001 | 0 | 0 | 2.5 | raft+proportional | code-review |  |
+| 20 | 2026-11-03 01:49 | R0065: refute-001, harvest | 0 | 0 | 0.8 | raft+proportional | code-review |  |
 
-**Total:** +364 / -1 lines, 144.3 agent-minutes, 611702 tokens over 19 records
-<!-- totals: added=364 removed=1 minutes=144.3 records=19 tokens=611702 -->
+**Total:** +364 / -1 lines, 145.1 agent-minutes, 611702 tokens over 20 records
+<!-- totals: added=364 removed=1 minutes=145.1 records=20 tokens=611702 -->

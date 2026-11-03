@@ -20,6 +20,7 @@
 | 16 | 2026-11-03 01:36 | c0170: helper spec tier | 155 | 4 | 5.0 | explicit | build |  |
 | 17 | 2026-11-03 01:41 | R0065: Phase 3 verification logs | 0 | 0 | 1.5 | raft+proportional | deliver |  |
 | 18 | 2026-11-03 01:48 | R0065: review-001 | 0 | 0 | 2.5 | raft+proportional | code-review |  |
+| 19 | 2026-11-03 01:49 | R0065: refute-001, harvest | 0 | 0 | 0.8 | raft+proportional | code-review |  |
 
-**Total:** +944 / -5 lines, 311.3 agent-minutes, 597525 tokens over 18 records
-<!-- totals: added=944 removed=5 minutes=311.3 records=18 tokens=597525 -->
+**Total:** +944 / -5 lines, 312.1 agent-minutes, 597525 tokens over 19 records
+<!-- totals: added=944 removed=5 minutes=312.1 records=19 tokens=597525 -->

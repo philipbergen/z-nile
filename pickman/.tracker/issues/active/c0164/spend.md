@@ -21,6 +21,7 @@
 | 17 | 2026-11-03 01:30 | c0164: main walls behaviour case | 138 | 11 | 4.0 | explicit | build |  |
 | 18 | 2026-11-03 01:41 | R0065: Phase 3 verification logs | 0 | 0 | 1.5 | raft+proportional | deliver |  |
 | 19 | 2026-11-03 01:48 | R0065: review-001 | 0 | 0 | 2.5 | raft+proportional | code-review |  |
+| 20 | 2026-11-03 01:49 | R0065: refute-001, harvest | 0 | 0 | 0.8 | raft+proportional | code-review |  |
 
-**Total:** +529 / -12 lines, 270.3 agent-minutes, 275694 tokens over 19 records
-<!-- totals: added=529 removed=12 minutes=270.3 records=19 tokens=275694 -->
+**Total:** +529 / -12 lines, 271.1 agent-minutes, 275694 tokens over 20 records
+<!-- totals: added=529 removed=12 minutes=271.1 records=20 tokens=275694 -->
