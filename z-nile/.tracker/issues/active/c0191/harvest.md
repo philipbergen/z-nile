@@ -82,3 +82,4 @@
 - note a result that contradicts a recorded finding is a new unknown with its own experiment (round 008 candidate lesson, proposed to the lead as z-design/contradicting-results-are-unknowns): z-design/spec-design-correspondence
 - note the user's "I'm not running that" (2026-11-01) about a promoted spec that spins CPU produced the rule that a promoted spec never burns real resources: zz-test/specs-never-burn-real-resources
 - note a self-bounded spinner that ulimit -t did not stop contradicted a recorded experiment and was handled as a new unknown, not a changed input: z-design/contradicting-results-are-unknowns
+- note c0172 merge.spec pinned zz-rules Merging step 3 sentence that the docs draft rewrote; the prep regression sweep missed it: zz-test/moved-rules-pin-the-old-caller, z-design/restated-rules-move-together
