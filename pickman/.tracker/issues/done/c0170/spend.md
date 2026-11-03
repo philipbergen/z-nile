@@ -16,6 +16,13 @@
 | 12 | 2026-11-01 16:34 | design-review-001 | 0 | 0 | 3.0 | spend+proportional | design-review |  |
 | 13 | 2026-11-01 16:34 | design-review-001 tokens; the 12 min row was the reviewer's own estimate, measured 2.5 min | 0 | 0 | 0.0 | spend+proportional | design-review | 19643 |
 | 14 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
+| 15 | 2026-11-03 01:36 | c0170: stream-review-001 | 0 | 0 | 4.0 | explicit | code-review |  |
+| 16 | 2026-11-03 01:36 | c0170: helper spec tier | 155 | 4 | 5.0 | explicit | build |  |
+| 17 | 2026-11-03 01:41 | R0065: Phase 3 verification logs | 0 | 0 | 1.5 | raft+proportional | deliver |  |
+| 18 | 2026-11-03 01:48 | R0065: review-001 | 0 | 0 | 2.5 | raft+proportional | code-review |  |
+| 19 | 2026-11-03 01:49 | R0065: refute-001, harvest | 0 | 0 | 0.8 | raft+proportional | code-review |  |
+| 20 | 2026-11-03 01:49 | R0065: final verification logs | 0 | 0 | 0.8 | raft+proportional | deliver |  |
+| 21 | 2026-11-03 01:56 | tracker: done R0065 | 0 | 0 | 1.9 | raft+proportional | deliver |  |
 
-**Total:** +789 / -1 lines, 298.3 agent-minutes, 597525 tokens over 14 records
-<!-- totals: added=789 removed=1 minutes=298.3 records=14 tokens=597525 -->
+**Total:** +944 / -5 lines, 314.8 agent-minutes, 597525 tokens over 21 records
+<!-- totals: added=944 removed=5 minutes=314.8 records=21 tokens=597525 -->
