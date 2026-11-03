@@ -124,6 +124,8 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
 
 ## Hooks (Claude Code only)
 - After every `.luau` edit: stylua formats the file and selene lints it.
+- Before every Bash or Monitor call (PreToolUse, `scripts/hooks/pre-bash.sh`): an interpreter with no time limit, inline Python that loops or starts an untimed process, a `while`/`until` loop, a follow (`tail -f`, `watch`), a job started with `&` and not waited for, and a background call with anything unbounded in it, are refused, naming the wrapper.
+- At the end of a session (SessionEnd, `scripts/hooks/session-end.sh`): `./zn reap --session-end` stops what the session left running.
 - On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or `pickman/` (c0120: the game's home).
 
 ## Lessons
@@ -133,3 +135,12 @@ A new lesson (from a review finding, a correction by the user, or a step that fa
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
 - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 - **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
+
+## Bounded commands
+Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do.
+- A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
+- A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left.
+- `./zn run [--time S] [--cpu S] -- <command>` (`z-nile/lib/bounded.pl`, which needs `z-nile/lib/cpu.sh` beside it; started before the engine, also callable as `perl <checkout>/z-nile/lib/bounded.pl`): process group, `--time` wall-clock limit (default 60, at most 3600), `--cpu` CPU limit by `ulimit -t` (SIGXCPU; a process that ignores the signal is stopped by the wall-clock limit only; limits only ever lower), TERM then KILL, a watchdog if the runner dies, exit 124 (wall clock), 125 (CPU), 123 (the process that started it is gone), 128+n (a signal).
+- The hook (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`) fails open; `scripts/hooks/session-end.sh` runs the reaper at a session's end.
+- `./zn reap` (`z-nile/engine/reap.luau`): orphans, expired `./zn run` commands, the ending session's tool processes; also at `sync` and the gate start (`--auto`).
+- The spec runner sets `ulimit -t` on every spec process: `PICKMAN_SPEC_CPU`, default 1200 s.

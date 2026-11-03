@@ -20,6 +20,7 @@
 | 16 | 2026-11-02 05:36 | design-refute-008 | 0 | 0 | 25.0 | spend | design-review |  |
 | 17 | 2026-11-02 05:38 | prep | 608 | 198 | 120.0 | spend | prep |  |
 | 18 | 2026-11-03 00:50 | raft | 5 | 1 | 8.0 | spend | prep |  |
+| 19 | 2026-11-03 01:25 | c0191: runner, hook, reaper, CPU limits and docs (settings edit pending) | 1944 | 12 | 0.8 | focus | build |  |
 
-**Total:** +5080 / -200 lines, 590.0 agent-minutes, 1694955 tokens over 18 records
-<!-- totals: added=5080 removed=200 minutes=590.0 records=18 tokens=1694955 -->
+**Total:** +7024 / -212 lines, 590.8 agent-minutes, 1694955 tokens over 19 records
+<!-- totals: added=7024 removed=212 minutes=590.8 records=19 tokens=1694955 -->
