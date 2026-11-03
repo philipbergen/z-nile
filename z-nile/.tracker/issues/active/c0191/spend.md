@@ -18,6 +18,7 @@
 | 14 | 2026-11-02 04:46 | c0191: hook, reaper, reap command, gate call | 1711 | 5 | 25.0 | explicit | build |  |
 | 15 | 2026-11-02 04:57 | c0191: docs (rule in five places, zz-test Bounded commands, lists) | 26 | 5 | 20.0 | explicit | build |  |
 | 16 | 2026-11-02 05:06 | c0191: wire hooks and allow ./zn run in settings | 13 | 1 | 5.0 | explicit | build |  |
+| 17 | 2026-11-03 00:17 | c0191: experiments U1-U3 logged | 0 | 0 | 5.0 | explicit | build |  |
 
-**Total:** +6424 / -13 lines, 429.0 agent-minutes, 1418955 tokens over 16 records
-<!-- totals: added=6424 removed=13 minutes=429.0 records=16 tokens=1418955 -->
+**Total:** +6424 / -13 lines, 434.0 agent-minutes, 1418955 tokens over 17 records
+<!-- totals: added=6424 removed=13 minutes=434.0 records=17 tokens=1418955 -->
