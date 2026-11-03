@@ -21,6 +21,7 @@
 | 17 | 2026-11-02 05:38 | prep | 608 | 198 | 120.0 | spend | prep |  |
 | 18 | 2026-11-03 00:50 | raft | 5 | 1 | 8.0 | spend | prep |  |
 | 19 | 2026-11-03 01:25 | c0191: runner, hook, reaper, CPU limits and docs (settings edit pending) | 1944 | 12 | 0.8 | focus | build |  |
+| 20 | 2026-11-03 04:40 | c0191: settings hooks and ./zn run allow | 17 | 1 | 45.0 | focus | build |  |
 
-**Total:** +7024 / -212 lines, 590.8 agent-minutes, 1694955 tokens over 19 records
-<!-- totals: added=7024 removed=212 minutes=590.8 records=19 tokens=1694955 -->
+**Total:** +7041 / -213 lines, 635.8 agent-minutes, 1694955 tokens over 20 records
+<!-- totals: added=7041 removed=213 minutes=635.8 records=20 tokens=1694955 -->
