@@ -17,6 +17,7 @@
 | 13 | 2026-11-01 16:34 | design-review-001 | 0 | 0 | 3.0 | spend+proportional | design-review |  |
 | 14 | 2026-11-01 16:34 | design-review-001 tokens; the 12 min row was the reviewer's own estimate, measured 2.5 min | 0 | 0 | 0.0 | spend+proportional | design-review | 19644 |
 | 15 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
+| 16 | 2026-11-03 01:29 | c0155: stream-review-001 | 0 | 0 | 2.0 | explicit | code-review |  |
 
-**Total:** +364 / -1 lines, 135.3 agent-minutes, 611702 tokens over 15 records
-<!-- totals: added=364 removed=1 minutes=135.3 records=15 tokens=611702 -->
+**Total:** +364 / -1 lines, 137.3 agent-minutes, 611702 tokens over 16 records
+<!-- totals: added=364 removed=1 minutes=137.3 records=16 tokens=611702 -->
