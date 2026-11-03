@@ -19,6 +19,7 @@
 | 15 | 2026-11-03 01:49 | R0065: refute-001, harvest | 0 | 0 | 0.8 | raft+proportional | code-review |  |
 | 16 | 2026-11-03 01:49 | R0065: final verification logs | 0 | 0 | 0.8 | raft+proportional | deliver |  |
 | 17 | 2026-11-03 01:56 | tracker: done R0065 | 0 | 0 | 1.9 | raft+proportional | deliver |  |
+| 18 | 2026-11-03 02:01 | deliver | 0 | 0 | 6.3 | spend+proportional | deliver |  |
 
-**Total:** +611 / -22 lines, 142.8 agent-minutes, 408534 tokens over 17 records
-<!-- totals: added=611 removed=22 minutes=142.8 records=17 tokens=408534 -->
+**Total:** +611 / -22 lines, 149.1 agent-minutes, 408534 tokens over 18 records
+<!-- totals: added=611 removed=22 minutes=149.1 records=18 tokens=408534 -->
