@@ -20,6 +20,7 @@
 | 16 | 2026-11-02 05:06 | c0191: wire hooks and allow ./zn run in settings | 13 | 1 | 5.0 | explicit | build |  |
 | 17 | 2026-11-03 00:17 | c0191: experiments U1-U3 logged | 0 | 0 | 5.0 | explicit | build |  |
 | 18 | 2026-11-03 00:27 | c0191: Phase 3 verification logged | 0 | 0 | 5.0 | explicit | build |  |
+| 19 | 2026-11-03 00:39 | R0071: review-001 | 0 | 0 | 12.0 | focus | code-review | 226461 |
 
-**Total:** +6424 / -13 lines, 439.0 agent-minutes, 1418955 tokens over 18 records
-<!-- totals: added=6424 removed=13 minutes=439.0 records=18 tokens=1418955 -->
+**Total:** +6424 / -13 lines, 451.0 agent-minutes, 1645416 tokens over 19 records
+<!-- totals: added=6424 removed=13 minutes=451.0 records=19 tokens=1645416 -->
