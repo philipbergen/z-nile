@@ -21,6 +21,7 @@
 | 17 | 2026-11-02 05:16 | design-review-007 | 0 | 0 | 9.0 | spend | design-review | 140636 |
 | 18 | 2026-11-02 05:57 | design-refute-007 | 0 | 0 | 40.0 | spend | design-review |  |
 | 19 | 2026-11-02 05:59 | prep | 2249 | 1 | 200.0 | spend | prep |  |
+| 20 | 2026-11-03 00:50 | raft | 5 | 1 | 8.0 | spend | prep |  |
 
-**Total:** +2249 / -1 lines, 808.1 agent-minutes, 1532635 tokens over 19 records
-<!-- totals: added=2249 removed=1 minutes=808.1 records=19 tokens=1532635 -->
+**Total:** +2254 / -2 lines, 816.1 agent-minutes, 1532635 tokens over 20 records
+<!-- totals: added=2254 removed=2 minutes=816.1 records=20 tokens=1532635 -->
