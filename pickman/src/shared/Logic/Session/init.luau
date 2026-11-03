@@ -42,7 +42,9 @@ export type Config = {
 	play: Game.Config?, -- the run's rules; nil means no pauses (a run in play from tick 0)
 	eatSlowdown: boolean?, -- eating stops the player for a moment, as in the arcade
 	ghosts: boolean?, -- the four ghosts hunt the player (mazes with ghost data only)
+	ghostTuning: number?, -- the ghosts' speed factor; nil is Levels.GHOST_TUNING
 }
+export type Speeds = { player: number, ghost: number, tunnel: number, frightened: number, eyes: number }
 export type PlayerSnapshot = {
 	x: number,
 	y: number, -- Movement.position: continuous tile coordinates
@@ -167,8 +169,21 @@ local GAME_CONFIG: Config = {
 	play = Game.CLASSIC_CONFIG,
 	eatSlowdown = true,
 	ghosts = true,
+	ghostTuning = 1 / 1.1,
 }
 Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
+
+function Session.speeds(c: Config, level: number, frightened: boolean?): Speeds
+	local base = c.movement.speed
+	local tuning = c.ghostTuning or Levels.GHOST_TUNING
+	return {
+		player = Levels.playerSpeed(base, level, frightened),
+		ghost = Levels.ghostSpeed(base, level, "normal", tuning),
+		tunnel = Levels.ghostSpeed(base, level, "tunnel", tuning),
+		frightened = Levels.ghostSpeed(base, level, "frightened", tuning),
+		eyes = Levels.ghostSpeed(base, level, "eyes", tuning),
+	}
+end
 
 -- a speed that would cover more than one tile in a tick on some level is refused up front
 local function checkLevelSpeeds(base: number)
@@ -185,6 +200,21 @@ local function checkLevelSpeeds(base: number)
 	end
 end
 
+local function checkGhostSpeeds(c: Config)
+	local tuning = c.ghostTuning or Levels.GHOST_TUNING
+	for level = 1, Levels.COUNT do
+		local speeds = Session.speeds(c, level)
+		for _, speed in { speeds.ghost, speeds.tunnel, speeds.frightened } do
+			if speed > Movement.UNITS then
+				error(
+					`session: ghostTuning {tuning} is too fast: level {level} ghosts would be {speed} > {Movement.UNITS}`,
+					0
+				)
+			end
+		end
+	end
+end
+
 function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
 	local c = config or Session.DEFAULT_CONFIG
 	Movement.validateConfig(c.movement)
@@ -194,7 +224,15 @@ function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
 	if c.play and c.play.tickRate ~= Session.TICK_RATE then
 		error(`session: play.tickRate must be {Session.TICK_RATE}, got {c.play.tickRate}`, 0)
 	end
+	local tuning = c.ghostTuning
+	if
+		tuning ~= nil
+		and (type(tuning) ~= "number" or tuning <= 0 or tuning ~= tuning or tuning == math.huge)
+	then
+		error(`session: ghostTuning must be a positive finite number, got {tuning}`, 0)
+	end
 	checkLevelSpeeds(c.movement.speed)
+	checkGhostSpeeds(c)
 	return { tick = 0, maze = maze, seed = seed, config = c, members = {} }
 end
 
@@ -209,7 +247,9 @@ function Session.join(s: Session, id: PlayerId)
 		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
 		pellets = Pellets.new(s.maze),
 		stall = 0,
-		ghosts = if s.config.ghosts and Ghosts.available(s.maze) then Ghosts.new(s.maze, s.seed) else nil,
+		ghosts = if s.config.ghosts and Ghosts.available(s.maze)
+			then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning })
+			else nil,
 		ghostJump = {},
 		blaster = Blaster.new(s.seed),
 		fire = nil,
@@ -601,7 +641,7 @@ function Session.step(s: Session): { Event }
 			stopPick(s, member, id, "moved", out) -- any movement key leaves the wall
 		end
 		local airborne = Hop.airborne(member.hopped, s.tick, member.hopTicks)
-		local speed = Levels.playerSpeed(s.config.movement.speed, member.play.level, frightened)
+		local speed = Session.speeds(s.config, member.play.level, frightened).player
 		-- an eating pause is owed distance: this step covers what is left of the speed
 		local owed = math.min(member.stall, speed)
 		member.stall -= owed
