@@ -123,6 +123,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/tests/tooling/bounded-review.spec.luau"] = {
 		launchctl = "a command line the hook's case feeds to the scanner as text; never run",
 	},
+	-- c0191: the proof script (run by check.sh before done only) clears the marker so a copied runner acts as a top-level run
+	["z-nile/tests/acceptance/c0191/proof-limits.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- c0191: clears the marker so a copied runner acts as a top-level run
 	["z-nile/tests/acceptance/c0191/runner-cpu.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
