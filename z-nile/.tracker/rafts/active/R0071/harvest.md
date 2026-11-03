@@ -9,3 +9,4 @@
 - review-001 F9: z-design/instructions-runnable-where-they-run
 - review-001 F10: zz-arch/guard-no-is-explicit
 - review-001 F11: zz-test/scanners-read-the-programs-switch-grammar
+- note user correction, plan made without reading the designed tickets on origin/main; R0071 blocked by R0079 re-prep: z-run/refetch-main-before-launch-and-before-done
