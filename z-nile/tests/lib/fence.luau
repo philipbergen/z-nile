@@ -762,6 +762,25 @@ local REAPER = table.concat({
 }, " ")
 fence.REAPER = REAPER
 
+-- The CPU-time limit, in seconds, of every process of a spec run (`ulimit -t`, c0191): inherited by each worker and each
+-- spec's children, and kept after one is orphaned. A limit the caller already has stays when it is lower (it cannot be
+-- raised again), so a run under `./zn run --cpu 100` or the engine's 1800 s gets the smaller. PICKMAN_SPEC_CPU sets it; unset or empty is 1200; anything but a
+-- whole number of 1 to 86400 refuses the run (exit 2) before a spec starts.
+function fence.specCpu(): number
+	local v = process.env.PICKMAN_SPEC_CPU
+	if v == nil or v == "" then
+		return 1200
+	end
+	local n = tonumber(v)
+	if not string.match(v, "^%d+$") or n == nil or n < 1 or n > 86400 then
+		stdio.ewrite(
+			`tests/run: PICKMAN_SPEC_CPU must be a whole number of seconds, 1 to 86400 (got "{v}")\n`
+		)
+		process.exit(2)
+	end
+	return n :: number
+end
+
 function fence.enter()
 	local here = shell("pwd -P")
 	if guarded(here) then
@@ -823,6 +842,7 @@ function fence.enter()
 		)
 		process.exit(1)
 	end
+	local cpuLimit = fence.specCpu() -- a bad value refuses here, before anything is made or locked
 	-- decide the jail first: a run that must refuse does so before it takes the lock
 	-- the run's own temp folder, outside the checkout (a spec's `mktemp -d` must land outside .cache) and fresh,
 	-- so nothing outside the jail runs from it; removed when the run ends
@@ -855,13 +875,14 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 6 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
 		runTemp,
 		ROOT,
 		ceilings,
+		tostring(cpuLimit),
 	}
 	for _, a in process.args do
 		if a ~= "--" then

@@ -53,6 +53,7 @@ picked() { # picked <name>: is the project in this run?
   return 1
 }
 
+[[ -n $plan ]] || ./zn reap --auto || true
 source z-nile/lib/par.sh
 gate_start=$(par_now)
 
