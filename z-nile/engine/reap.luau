@@ -156,9 +156,20 @@ function reap.parse(text: string): ({ Proc }, { string })
 	return procs, problems
 end
 
+-- macOS runs every python3 (Homebrew, Command Line Tools, python.org, Xcode) as `.../Python.framework/.../Python.app/Contents/MacOS/Python`
+-- (F1 of review 001): that exact form is the interpreter, not a macOS application, so it is read as `python3`.
+function reap.isFrameworkPython(command: string): boolean
+	local first = string.match(command, "^%s*(%S+)") or ""
+	return string.find(first, "/Python.framework/", 1, true) ~= nil
+		and string.match(first, "/Python%.app/Contents/MacOS/Python$") ~= nil
+end
+
 -- The program's name: the first word of the command, without its folder or a login dash (`-/bin/zsh`).
 function reap.name(command: string): string
 	local first = string.match(command, "^%s*(%S+)") or ""
+	if reap.isFrameworkPython(command) then
+		return "python3"
+	end
 	return string.match((string.gsub(first, "^%-", "")), "([^/]*)$") or first
 end
 
@@ -355,7 +366,9 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			and stamp ~= nil
 			and stamp + opts.grace < opts.now
 			and (reap.TARGETS[name] or reap.INTERPRETERS[name])
-			and string.find(p.command, ".app/Contents/", 1, true) == nil
+			and (
+				string.find(p.command, ".app/Contents/", 1, true) == nil or reap.isFrameworkPython(p.command)
+			)
 		then
 			why = `past its ./zn run deadline by {opts.now - stamp}s`
 		elseif sessionShell then

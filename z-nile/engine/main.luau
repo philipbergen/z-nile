@@ -5650,7 +5650,7 @@ local function reapRun(opts: { [string]: { string } }): boolean
 		return tonumber(v) :: number
 	end
 	local listing = "pid=,ppid=,uid=,etime=,time=,lstart=,command="
-	local procs, problems = reapLib.parse(sh.must("ps", { "-axww", "-o", listing }))
+	local procs, problems = reapLib.parse(sh.must("env", { "LC_ALL=C", "ps", "-axww", "-o", listing }))
 	if #problems > 0 then
 		-- one line under --quiet: a host whose `ps` prints another layout must not print a page at every sync
 		stdio.ewrite(
@@ -5666,7 +5666,9 @@ local function reapRun(opts: { [string]: { string } }): boolean
 	for _, pr in procs do
 		byPid[pr.pid] = pr
 	end
-	for pid, deadline in reapLib.markers(sh.must("ps", { "-axww", "-E", "-o", "pid=,command=" }), procs) do
+	for pid, deadline in
+		reapLib.markers(sh.must("env", { "LC_ALL=C", "ps", "-axww", "-E", "-o", "pid=,command=" }), procs)
+	do
 		byPid[pid].deadline = deadline
 	end
 	-- the reaper and its ancestors: this process's parent shell is the first
@@ -5761,7 +5763,8 @@ local function reapRun(opts: { [string]: { string } }): boolean
 		if #ofIds == 0 then
 			return {}
 		end
-		local r = sh.run("ps", { "-o", "pid=,stat=,lstart=", "-p", table.concat(ofIds, ",") })
+		local r =
+			sh.run("env", { "LC_ALL=C", "ps", "-o", "pid=,stat=,lstart=", "-p", table.concat(ofIds, ",") })
 		local same: { [string]: boolean } = {}
 		for line in string.gmatch(r.stdout, "[^\n]+") do
 			local pid, stat, started = string.match(line, "^%s*(%d+)%s+(%S+)%s+(.-)%s*$")

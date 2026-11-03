@@ -25,6 +25,7 @@
 | 21 | 2026-11-03 04:45 | c0191: keep c0172's pinned cicd sentence in zz-rules Merging | 3 | 3 | 4.5 | focus | build |  |
 | 22 | 2026-11-03 04:49 | c0191: verification log | 0 | 0 | 4.3 | focus | deliver |  |
 | 23 | 2026-11-03 05:04 | R0079: review-001 | 0 | 0 | 11.0 | focus | code-review |  |
+| 24 | 2026-11-03 05:07 | c0191: review-001 fixes F1 F3 F4 F5 and the zz-test section F2 | 177 | 11 | 2.8 | focus | code-review |  |
 
-**Total:** +7044 / -216 lines, 655.6 agent-minutes, 1694955 tokens over 23 records
-<!-- totals: added=7044 removed=216 minutes=655.6 records=23 tokens=1694955 -->
+**Total:** +7221 / -227 lines, 658.4 agent-minutes, 1694955 tokens over 24 records
+<!-- totals: added=7221 removed=227 minutes=658.4 records=24 tokens=1694955 -->

@@ -31,7 +31,41 @@ local INTERPRETERS: { [string]: boolean } = {
 	bun = true,
 	luau = true,
 }
-local DETACHERS: { [string]: boolean } = { nohup = true, setsid = true, disown = true, daemonize = true }
+local DETACHERS: { [string]: boolean } =
+	{ nohup = true, setsid = true, disown = true, daemonize = true, at = true }
+-- a multiplexer or launcher is a detacher only in the form that starts something detached (`tmux ls` and `screen -ls` pass)
+local function detaches(name: string, args: { string }): boolean
+	if DETACHERS[name] then
+		return true
+	end
+	if name == "tmux" then
+		local sub = args[1]
+		return (
+			sub == "new"
+			or sub == "new-session"
+			or sub == "new-window"
+			or sub == "run-shell"
+			or sub == "run"
+		)
+				and table.find(args, "-d") ~= nil
+			or sub == "run-shell"
+			or sub == "run"
+	end
+	if name == "screen" then
+		-- `-dm`, `-d -m`, `-md`: detached start (`-d` alone reattaches, `-m` alone attaches)
+		local d, m = false, false
+		for _, a in args do
+			if string.match(a, "^%-[%a]*d") then
+				d = true
+			end
+			if string.match(a, "^%-[%a]*m") then
+				m = true
+			end
+		end
+		return d and m
+	end
+	return name == "launchctl" and (args[1] == "submit" or args[1] == "bootstrap" or args[1] == "load")
+end
 -- `tail -f`, `watch` and `gh ... watch`: they end only when told to
 local function FOLLOWERS(name: string, args: { string }): boolean
 	if name == "watch" then
@@ -73,10 +107,20 @@ local function pythonHit(source: string): string?
 	then
 		return "waits or forks for ever"
 	end
-	if string.find(script, "os%.system") or string.find(script, "os%.popen") then
+	if
+		string.find(script, "os%.system")
+		or string.find(script, "os%.popen")
+		or string.find(script, "os%.exec")
+	then
 		return "starts a process it cannot give a timeout (`os.system`)"
 	end
-	if string.find(script, "subprocess%.") and not string.find(script, "timeout%s*=") then
+	if
+		(
+			string.find(script, "subprocess%.")
+			or string.find(script, "from%s+subprocess%s+import")
+			or string.find(script, "import%s+subprocess%s+as")
+		) and not string.find(script, "timeout%s*=")
+	then
 		return "starts a process with no `timeout=` (`subprocess`)"
 	end
 	return nil
@@ -437,7 +481,7 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
 			line,
 			`\`{name}\` here follows or watches for ever, and a foreground call past its timeout moves to the background and runs on. Run it as \`{CTX.zn} run --time <seconds> -- {line}\` (up to 3600), or use the Monitor tool.`
 		)
-	elseif DETACHERS[name] then
+	elseif detaches(name, args) then
 		return refuse(
 			"detach",
 			name,
