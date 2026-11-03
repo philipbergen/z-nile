@@ -116,6 +116,13 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/engine/reap.luau"] = {
 		["sandbox-exec"] = "a name in the list of tool processes the reaper treats as ownerless; it never runs it",
 	},
+	-- R0079 review 001 F3: the hook refuses `launchctl submit` as a detacher; it only reads the word
+	["z-nile/engine/boundcmd.luau"] = {
+		launchctl = "a name the hook refuses in its submit, bootstrap and load forms; it never runs it",
+	},
+	["z-nile/tests/tooling/bounded-review.spec.luau"] = {
+		launchctl = "a command line the hook's case feeds to the scanner as text; never run",
+	},
 	-- c0191: clears the marker so a copied runner acts as a top-level run
 	["z-nile/tests/acceptance/c0191/runner-cpu.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",

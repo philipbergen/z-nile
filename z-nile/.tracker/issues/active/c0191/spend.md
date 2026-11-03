@@ -27,6 +27,7 @@
 | 23 | 2026-11-03 05:04 | R0079: review-001 | 0 | 0 | 11.0 | focus | code-review |  |
 | 24 | 2026-11-03 05:07 | c0191: review-001 fixes F1 F3 F4 F5 and the zz-test section F2 | 177 | 11 | 2.8 | focus | code-review |  |
 | 25 | 2026-11-03 05:08 | R0079: refute-001, harvest and lesson | 11 | 0 | 0.7 | focus | code-review |  |
+| 26 | 2026-11-03 05:09 | c0191: narrow repo-fence allowances for launchctl (F3) | 7 | 0 | 1.0 | focus | code-review |  |
 
-**Total:** +7232 / -227 lines, 659.1 agent-minutes, 1694955 tokens over 25 records
-<!-- totals: added=7232 removed=227 minutes=659.1 records=25 tokens=1694955 -->
+**Total:** +7239 / -227 lines, 660.1 agent-minutes, 1694955 tokens over 26 records
+<!-- totals: added=7239 removed=227 minutes=660.1 records=26 tokens=1694955 -->
