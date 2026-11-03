@@ -15,6 +15,7 @@
 | 11 | 2026-11-03 01:30 | c0159: stream-review-001 | 0 | 0 | 2.0 | explicit | code-review |  |
 | 12 | 2026-11-03 01:30 | c0159: narrow edge glow pins | 22 | 21 | 3.0 | explicit | build |  |
 | 13 | 2026-11-03 01:41 | R0065: Phase 3 verification logs | 0 | 0 | 1.5 | raft+proportional | deliver |  |
+| 14 | 2026-11-03 01:48 | R0065: review-001 | 0 | 0 | 2.5 | raft+proportional | code-review |  |
 
-**Total:** +611 / -22 lines, 136.8 agent-minutes, 408534 tokens over 13 records
-<!-- totals: added=611 removed=22 minutes=136.8 records=13 tokens=408534 -->
+**Total:** +611 / -22 lines, 139.3 agent-minutes, 408534 tokens over 14 records
+<!-- totals: added=611 removed=22 minutes=139.3 records=14 tokens=408534 -->
