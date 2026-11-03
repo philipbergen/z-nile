@@ -2,13 +2,14 @@
 -- R0056 code reviews 001 F1 and 002: Main hands the walls' state to MazeView and the danger radar on every frame,
 -- not only when something else changes. f0109's place case finds the calls' text; this one pins where they run in
 -- the frame handler (`snapshots.OnClientEvent:Connect(function(frame …)`): exactly one `MazeView.edible(` call,
--- `MazeView.edible(model, View.edible(frame.play))`, inside nothing but `if model then`; exactly one
--- `DangerHud.wallState(` call, `DangerHud.wallState(overlay.flash, View.edible(frame.play))`, at the handler's top
--- level; and no `return` in the handler before them. Main is read from the built place (`place.load()`), so the
+-- inside nothing but `if model then`; exactly one `DangerHud.wallState(` call, at the handler's top level; and no
+-- `return` in the handler before them. Narrowed by c0164 (decided with the user, 2026-11-01: "Keep both"): what the
+-- two calls are handed is pinned by behaviour in f0126's views.spec (c0164's case), so the rule no longer checks
+-- the calls' argument text (its variant case below still uses that text as anchors to build its variants); where
+-- they sit stays pinned, because no finite behaviour case covers every guard a Main could put around them. Main is read from the built place (`place.load()`), so the
 -- affected selector picks this spec whenever src/ changes, with comments and string literals removed, so a call
 -- inside `--[[ ]]` or a `[[ ]]` string is not counted. Blocks are read by indentation (one tab per block, as stylua
--- writes it); a refactor that moves the calls into a helper called every frame updates this case. A behaviour case
--- on f0126's Main harness is to replace it (c0164).
+-- writes it); a refactor that moves the calls into a helper called every frame updates this case.
 local graph = require("@znile/lib/graph")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
@@ -113,9 +114,6 @@ local function broken(source: string): string?
 	if #edible ~= 1 then
 		return `{#edible} MazeView.edible calls`
 	end
-	if trim(src[edible[1]]) ~= "MazeView.edible(model, View.edible(frame.play))" then
-		return `MazeView.edible is called as {trim(src[edible[1]])}`
-	end
 	local blocks, handler, from = enclosing(src, edible[1])
 	if handler ~= HANDLER or #blocks ~= 1 or blocks[1] ~= "if model then" then
 		return `MazeView.edible runs inside {table.concat(blocks, " / ")} of {handler}`
@@ -126,9 +124,6 @@ local function broken(source: string): string?
 	local radar = calls(src, "DangerHud.wallState(")
 	if #radar ~= 1 then
 		return `{#radar} DangerHud.wallState calls`
-	end
-	if trim(src[radar[1]]) ~= "DangerHud.wallState(overlay.flash, View.edible(frame.play))" then
-		return `DangerHud.wallState is called as {trim(src[radar[1]])}`
 	end
 	local around, top, start = enclosing(src, radar[1])
 	if top ~= HANDLER or #around ~= 0 then
