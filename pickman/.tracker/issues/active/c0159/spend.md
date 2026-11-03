@@ -13,6 +13,7 @@
 | 9 | 2026-11-01 16:34 | design-review-001 tokens; the 12 min row was the reviewer's own estimate, measured 2.5 min | 0 | 0 | 0.0 | spend+proportional | design-review | 19644 |
 | 10 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
 | 11 | 2026-11-03 01:30 | c0159: stream-review-001 | 0 | 0 | 2.0 | explicit | code-review |  |
+| 12 | 2026-11-03 01:30 | c0159: narrow edge glow pins | 22 | 21 | 3.0 | explicit | build |  |
 
-**Total:** +589 / -1 lines, 132.3 agent-minutes, 408534 tokens over 11 records
-<!-- totals: added=589 removed=1 minutes=132.3 records=11 tokens=408534 -->
+**Total:** +611 / -22 lines, 135.3 agent-minutes, 408534 tokens over 12 records
+<!-- totals: added=611 removed=22 minutes=135.3 records=12 tokens=408534 -->
