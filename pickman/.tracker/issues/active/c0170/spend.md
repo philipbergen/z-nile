@@ -17,6 +17,7 @@
 | 13 | 2026-11-01 16:34 | design-review-001 tokens; the 12 min row was the reviewer's own estimate, measured 2.5 min | 0 | 0 | 0.0 | spend+proportional | design-review | 19643 |
 | 14 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
 | 15 | 2026-11-03 01:36 | c0170: stream-review-001 | 0 | 0 | 4.0 | explicit | code-review |  |
+| 16 | 2026-11-03 01:36 | c0170: helper spec tier | 155 | 4 | 5.0 | explicit | build |  |
 
-**Total:** +789 / -1 lines, 302.3 agent-minutes, 597525 tokens over 15 records
-<!-- totals: added=789 removed=1 minutes=302.3 records=15 tokens=597525 -->
+**Total:** +944 / -5 lines, 307.3 agent-minutes, 597525 tokens over 16 records
+<!-- totals: added=944 removed=5 minutes=307.3 records=16 tokens=597525 -->
