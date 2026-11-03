@@ -9,6 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the lobby tooling spec still passes" lune run tests/run -- tests/acceptance/f0061/lobby-tooling.spec.luau
+check "AC2: no pattern in it escapes a brace, which luau-lsp rejects" bash -c '! grep -nF -e "%{" -e "%}" tests/acceptance/f0061/lobby-tooling.spec.luau' 
 
 finish
