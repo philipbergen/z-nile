@@ -12,6 +12,7 @@
 | 8 | 2026-11-03 04:57 | R0054: experiments | 0 | 0 | 15.0 | raft | build |  |
 | 9 | 2026-11-03 05:01 | f0125: tune ghost speeds from session config | 42 | 2 | 12.0 | focus | build |  |
 | 10 | 2026-11-03 05:01 | f0125: record verification | 0 | 0 | 2.0 | focus | build |  |
+| 11 | 2026-11-03 05:09 | f0125: record whole-raft verification | 0 | 0 | 7.0 | focus | build |  |
 
-**Total:** +284 / -7 lines, 265.0 agent-minutes, 0 tokens over 10 records
-<!-- totals: added=284 removed=7 minutes=265.0 records=10 tokens=0 -->
+**Total:** +284 / -7 lines, 272.0 agent-minutes, 0 tokens over 11 records
+<!-- totals: added=284 removed=7 minutes=272.0 records=11 tokens=0 -->
