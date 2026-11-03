@@ -1,0 +1,52 @@
+- design-review-001 F1: zz-test/split-paths-still-need-renamed-id
+- design-review-001 F2: zz-test/seed-every-enumerated-case
+- design-review-001 F3: zz-arch/pin-refusals-name-the-entry
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-001 F6: zz-arch/guard-no-is-explicit
+- design-review-001 F7: zz-test/narrow-guard-allowances
+- design-review-001 F8: one-off: a miscounted file list and a label that drifted from the criterion
+- design-review-002 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-002 F2: zz-arch/verify-the-value-you-use
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: zz-test/seed-every-enumerated-case
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-003 F1: zz-test/dry-run-promoted-specs-under-the-guard-scan
+- design-review-003 F2: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-003 F3: z-design/instructions-runnable-where-they-run
+- design-review-004 F1: zz-test/derive-after-stripping-overrides
+- design-review-004 F2: zz-review/no-scope-cut-as-fix
+- design-review-004 F3: zz-review/lists-paste-their-search
+- design-review-005 F1: zz-arch/allow-list-entries-are-not-caller-chosen
+- design-review-005 F2: z-design/new-rules-migrate-existing-work
+- design-review-005 F3: z-design/new-rules-migrate-existing-work
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: zz-test/seed-every-enumerated-case
+- design-review-005 F6: one-off: counts that drifted between the experiments, the table and the steps
+- design-review-006 F1: zz-arch/allow-list-entries-are-not-caller-chosen
+- design-review-006 F2: z-design/new-rules-migrate-existing-work
+- design-review-006 F3: z-design/accepted-risks-checked-and-decided
+- design-review-006 F4: zz-arch/parsers-refuse-ambiguity
+- design-review-006 F5: zz-arch/guard-no-is-explicit
+- design-review-006 F6: one-off: a claim about CI that the workflow does not support
+- design-review-007 F1: z-design/new-rules-migrate-existing-work
+- design-review-007 F2: z-design/migration-search-matches-built-names
+- design-review-007 F3: zz-arch/allow-list-entries-are-not-caller-chosen
+- design-review-007 F4: z-design/restated-rules-move-together
+- design-review-007 F5: zz-test/seed-every-enumerated-case
+- design-review-008 F1: zz-arch/compare-canonical-spellings, zz-arch/allow-list-entries-are-not-caller-chosen, zz-arch/guards-decide-from-the-tools-resolution
+- design-review-008 F2: z-design/quote-other-preps-before-promising, z-design/design-the-execution-window
+- design-review-008 F3: zz-test/fixtures-leave-nothing-a-guard-trusts, z-design/accepted-risks-checked-and-decided
+- design-review-008 F4: z-design/spec-design-correspondence
+- design-review-008 F5: zz-test/seed-every-enumerated-case, zz-test/one-rule-one-function
+- design-review-008 F6: z-design/restated-rules-move-together, zz-test/narrow-guard-allowances
+- design-review-008 F7: z-design/spec-design-correspondence
+- design-review-009 F1: zz-test/pin-the-writer-of-a-trust-record, zz-test/seed-every-enumerated-case
+- design-review-009 F2: z-design/accepted-risks-checked-and-decided
+- design-review-009 F3: z-design/restated-rules-move-together
+- design-review-009 F4: z-design/quote-other-preps-before-promising
+- design-review-009 F5: z-design/restated-rules-move-together
+- design-review-010 F1: zz-arch/guard-verifiers-run-in-an-environment-the-guard-builds, zz-arch/verify-the-value-you-use
+- design-review-010 F2: z-design/design-the-execution-window, z-design/quote-other-preps-before-promising
+- design-review-010 F3: z-design/accepted-risks-checked-and-decided
+- design-review-010 F4: z-design/spec-design-correspondence

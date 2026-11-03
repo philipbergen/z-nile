@@ -23,7 +23,7 @@ end
 
 -- The rule about prototypes (z-design, zz-execute, zz-test) and the retry-once rule (zz-test, AGENTS.md), word for word.
 local RULE =
-	"A prototype or experiment lives in a scratch clone (a `git clone` of the checkout into `$TMPDIR` or the scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape."
+	"A prototype or experiment lives in a scratch clone (never a `git worktree add`) under the main checkout's `.cache/.tmp/` (never the system temp folder or a harness's scratchpad) or commits under your own identity, and never commits as `@example.invalid` in the real repository or any worktree of it: the repository refuses such a commit (`./zn hooks`), because every running gate reads a ref at one as a spec's escape."
 local RETRY =
 	'If the tripwire\'s only finding is "refs written by a fixture appeared" and every listed ref is checked out in a live `.worktree/<name>` outside `.cache` (`git worktree list`), retry the gate or `./zn land` once without asking, and say so; if it fires again, or reports anything else, stop and report.'
 
@@ -135,6 +135,49 @@ return t.spec("c0189 the hook is wired into the gate, setup and the rules", func
 		).toBe(true)
 	end)
 
+	-- c0194 (temporary trees live in .cache/.tmp/) decided where a scratch clone goes; this rule must not send it elsewhere
+	it(
+		"the prototype rule and the hook's message put the scratch clone under .cache/.tmp/, and nothing sends it to $TMPDIR or the scratchpad",
+		function()
+			local tmpdir = "$" .. "TMPDIR" -- built here so that this file does not name it as a place
+			for _, path in
+				{
+					"z-nile/skills/z-design/SKILL.md",
+					"z-nile/skills/zz-execute/SKILL.md",
+					"z-nile/skills/zz-test/SKILL.md",
+					"z-nile/lib/repo-hooks/reference-transaction",
+				}
+			do
+				local text = read(path)
+				t.expect(`{path} {has(text, ".cache/.tmp/")}`).toBe(`{path} true`)
+				for _, old in { "or the scratchpad", "into `" .. tmpdir .. "`", "into \\" .. tmpdir } do
+					t.expect(`{path} {old} {has(text, old)}`).toBe(`{path} {old} false`)
+				end
+			end
+			-- the hook's last line says the same words as the rule, in its own form
+			local hook = read("z-nile/lib/repo-hooks/reference-transaction")
+			t.expect(
+				has(
+					hook,
+					"A prototype lives in a scratch clone (git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add) or commits under your own identity"
+				)
+			).toBe(true)
+		end
+	)
+
+	it("the install makes no temporary name of its own, and no move or chmod after the write", function()
+		local main = read("z-nile/engine/main.luau")
+		local from = at(main, "function cmd.hooks(") :: number
+		local upto = at(string.sub(main, from + 1), "\nfunction cmd.") :: number
+		local body = string.sub(main, from, from + upto)
+		-- what the install does is proved by hooks-command.spec and replace-mode.spec; this pins what it must not do
+		t.expect(has(body, "writeReplacing")).toBe(true)
+		t.expect(has(body, '"0755"')).toBe(true)
+		t.expect(has(body, "mktemp")).toBe(false)
+		t.expect(has(body, '"mv"')).toBe(false)
+		t.expect(has(body, '"chmod"')).toBe(false)
+	end)
+
 	it("the retry-once rule reads the same in zz-test and AGENTS.md", function()
 		for _, path in { "z-nile/skills/zz-test/SKILL.md", "AGENTS.md" } do
 			t.expect(`{path} {has(read(path), RETRY)}`).toBe(`{path} true`)
@@ -175,6 +218,12 @@ return t.spec("c0189 the hook is wired into the gate, setup and the rules", func
 			has(
 				text,
 				"It cannot see `git branch -m` or `git branch -c` (git writes those refs outside a transaction), so never rename or copy a branch whose tip is a fixture commit: delete it, or look at it with `git worktree add <dir> <branch>`. Spec fixtures have repositories of their own, which never run it."
+			)
+		).toBe(true)
+		t.expect(
+			has(
+				text,
+				"A gate run in a scratch clone of reviewed code has no hook of its own (git does not clone hooks), so it stops at its static stage, `./zn hooks --check`, with `missing; run ./zn hooks`: run `./zn hooks` there first, outside any spec jail, and make any commit that clone needs under a fixture identity before it (the hook refuses those). A clone holding unguarded code (Running specs against unguarded code) runs spec files only, jailed, and needs no hook."
 			)
 		).toBe(true)
 	end)

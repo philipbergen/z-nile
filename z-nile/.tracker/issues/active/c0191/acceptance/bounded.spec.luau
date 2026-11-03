@@ -1,7 +1,16 @@
 --!strict
--- c0191 AC1: the bounded runner (`./zn run`, z-nile/lib/bounded.pl) stops a command at its wall-clock limit, at
--- its CPU limit, with everything it started, when its own process dies, and refuses a limit it cannot honour. Every
--- process these cases start is the runner's to stop; a case that fails stops its own leftovers (`cleanup`).
+-- c0191 AC1 (the suite's half): the bounded runner (`./zn run`, z-nile/lib/bounded.pl) keeps a command's status and
+-- output, hands every process its limits and the deadline, refuses a limit it cannot honour, and classifies how a
+-- command ended (wall-clock limit: 124; CPU limit: 125; its own status near the limit: a note). Nothing here burns CPU,
+-- waits for a limit or leaves a process running: the limits' outcomes are observed through stand-ins.
+--   - a stand-in clock (`clock.pl`, a perl driver that overrides `time` for the runner and its watchdog with the real
+--     time plus the number in the file `FAKE_SKEW` names, read at each call) lets a command pass the runner's deadline
+--     by writing 100 to that file: the runner sees its wall-clock limit end on its next poll, a fifth of a second
+--     later, and stops the one blocked `sleep` it started (nothing waits for a real limit);
+--   - a stand-in `times` (`FAKE_CPU`, in the same driver) gives the CPU the command and its children "used", so the
+--     runner's classification of a command that ended with status 1, 152 or its own is observed with no CPU spent.
+-- The real-limit proofs (a spinner stopped by `--cpu` and by the wall clock, the whole group, the watchdog, the signals,
+-- the departed parent) are `proof-bounded.luau`, which only `check.sh` runs, before `./zn done`, and `./zn done` never promotes.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -13,15 +22,28 @@ local BOUNDED = `{ROOT}/z-nile/lib/bounded.pl`
 local ZN = `{ROOT}/zn`
 local WORK = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/bounded-run`
 
+-- the stand-in clock and CPU meter: a driver that loads the runner under overridden `time` and `times`
+local DRIVER = [=[
+BEGIN {
+	*CORE::GLOBAL::time = sub () {
+		my $s = 0;
+		if ( $ENV{FAKE_SKEW} && open my $f, '<', $ENV{FAKE_SKEW} ) { $s = <$f> + 0; close $f }
+		CORE::time() + $s;
+	};
+	*CORE::GLOBAL::times = sub () { defined $ENV{FAKE_CPU} ? ( 0, 0, $ENV{FAKE_CPU} + 0, 0 ) : CORE::times() };
+}
+$0 = shift @ARGV;
+do $0 or die "clock: $@ $!";
+]=]
+
 local pidFiles: { string } = {}
--- a name no other checkout's run shares, so `pgrep` finds only this case's Lune processes
-local PROBE = `spin-c0191-{os.time()}-{math.random(1, 1e9)}.luau`
 
 local function reset()
 	if fs.isDir(WORK) then
 		fs.removeDir(WORK)
 	end
 	fs.writeDir(WORK)
+	fs.writeFile(`{WORK}/clock.pl`, DRIVER)
 	pidFiles = {}
 end
 
@@ -48,39 +70,21 @@ local function cleanup()
 	end
 end
 
--- a bounded poll, not a sleep to let something finish: true once the pid is gone, false after `tries` tenths of a
--- second (default 10 s)
-local function goneSoon(pid: string, tries: number?): boolean
-	if pid == "" then
-		return false -- no pid was recorded: the command never ran, and nothing is gone
-	end
-	for _ = 1, tries or 50 do
-		if not alive(pid) then
-			return true
-		end
-		process.exec("sleep", { "0.2" })
-	end
-	return false
-end
-
--- the watchdog of a runner that was killed (it is a copy of the runner) is the last to go: it first gives the group
--- its two seconds of grace. True once no process of this spec's runner is left.
-local function runnerGoneSoon(): boolean
-	for _ = 1, 50 do
-		if not process.exec("pgrep", { "-f", `perl {BOUNDED} --time 60 -- sh -c` }).ok then
-			return true
-		end
-		process.exec("sleep", { "0.2" })
-	end
-	return false
-end
-
 local function bounded(args: { string }): Result
 	local argv = { BOUNDED }
 	for _, a in args do
 		table.insert(argv, a)
 	end
 	return process.exec("perl", argv, { cwd = WORK })
+end
+
+-- the same runner under the stand-in clock and CPU meter; `env` sets FAKE_SKEW and FAKE_CPU
+local function standIn(args: { string }, env: { [string]: string }): Result
+	local argv = { `{WORK}/clock.pl`, BOUNDED }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	return process.exec("perl", argv, { cwd = WORK, env = env })
 end
 
 -- every case starts from an empty work folder and stops its own leftovers, whatever its outcome
@@ -97,71 +101,30 @@ end
 
 return t.spec("the bounded runner", function(it)
 	it(
-		"AC1: a command past --time is stopped, with exit 124 and a message naming the limit",
+		"AC1: a command past --time is stopped, with exit 124 and a message naming the limit (stand-in clock)",
 		wrap(function()
-			local r = bounded({ "--time", "1", "--", "sh", "-c", "echo $$ > pid; exec sleep 61.1" })
+			local started = os.time()
+			local r = standIn(
+				{ "--time", "60", "--", "sh", "-c", "echo $$ > pid; echo 100 > skew; exec sleep 61.1" },
+				{ FAKE_SKEW = `{WORK}/skew` }
+			)
+			-- the stop takes a fifth of a second and the command's sleep is 61.1 s: a runner that only flags the limit
+			-- and signals nothing returns when the sleep ends, so this loose bound tells them apart without waiting
+			t.expect(os.time() - started < 10).toBe(true)
 			t.expect(r.code).toBe(124)
-			t.expect(string.find(r.stderr, "wall-clock limit (--time 1 s)", 1, true) ~= nil).toBe(true)
-			t.expect(goneSoon(readPid("pid"))).toBe(true)
+			t.expect(string.find(r.stderr, "wall-clock limit (--time 60 s)", 1, true) ~= nil).toBe(true)
+			local pid = readPid("pid")
+			t.expect(pid ~= "").toBe(true) -- the command did start
+			t.expect(alive(pid)).toBe(false)
 		end)
 	)
 
 	it(
-		"AC1: the whole tree is stopped, not just the process the runner started",
+		"AC1: a command that ends before its limit is not called stopped, though the clock is not moved",
 		wrap(function()
-			local r = bounded({
-				"--time",
-				"1",
-				"--",
-				"sh",
-				"-c",
-				"sleep 62.2 & echo $! > child; sleep 62.3 & echo $! > grandchild; wait",
-			})
-			t.expect(r.code).toBe(124)
-			t.expect(goneSoon(readPid("child"))).toBe(true)
-			t.expect(goneSoon(readPid("grandchild"))).toBe(true)
-		end)
-	)
-
-	it(
-		"AC1: a Lune script that spins is stopped with its tool child",
-		wrap(function()
-			fs.writeFile(`{WORK}/{PROBE}`, "--!strict\nwhile true do end\n")
-			local r = bounded({ "--time", "2", "--", "lune", "run", PROBE })
-			t.expect(r.code).toBe(124)
-			local left = true
-			for _ = 1, 50 do
-				if not process.exec("pgrep", { "-f", `lune run {PROBE}` }).ok then
-					left = false
-					break
-				end
-				process.exec("sleep", { "0.2" })
-			end
-			t.expect(left).toBe(false)
-		end)
-	)
-
-	it(
-		"AC1: what a command leaves running after it exits is stopped",
-		wrap(function()
-			local r = bounded({ "--", "sh", "-c", "sleep 63.1 >/dev/null 2>&1 & echo $! > left" })
+			local r = standIn({ "--time", "60", "--", "sh", "-c", "exit 0" }, { FAKE_SKEW = `{WORK}/skew` })
 			t.expect(r.code).toBe(0)
-			t.expect(goneSoon(readPid("left"))).toBe(true)
-		end)
-	)
-
-	it(
-		"AC1: a survivor that ignores TERM is dead when the runner returns, not two seconds later",
-		wrap(function()
-			local r = bounded({
-				"--",
-				"sh",
-				"-c",
-				"trap '' TERM; sleep 63.9 >/dev/null 2>&1 & echo $! > stubborn",
-			})
-			t.expect(r.code).toBe(0)
-			-- at the first or second look (well inside the two seconds): the runner's own final KILL did it; the watchdog's would come after its grace
-			t.expect(goneSoon(readPid("stubborn"), 2)).toBe(true)
+			t.expect(r.stderr).toBe("")
 		end)
 	)
 
@@ -176,11 +139,29 @@ return t.spec("the bounded runner", function(it)
 	)
 
 	it(
-		"AC1: a command that burns CPU is stopped at --cpu, exit 125, naming the CPU limit",
+		"AC1: a command that ended with status 1 or 152 having used its CPU allowance exits 125, naming the limit",
 		wrap(function()
-			local r = bounded({ "--time", "60", "--cpu", "1", "--", "perl", "-e", "1 while 1" })
-			t.expect(r.code).toBe(125)
-			t.expect(string.find(r.stderr, "CPU limit (--cpu 1 s", 1, true) ~= nil).toBe(true)
+			for _, status in { "1", "152" } do
+				local r = standIn(
+					{ "--time", "60", "--cpu", "1", "--", "sh", "-c", `exit {status}` },
+					{ FAKE_CPU = "1" }
+				)
+				if r.code ~= 125 then
+					error(`exit {status}: expected 125, got {r.code}: {r.stderr}`, 0)
+				end
+				t.expect(string.find(r.stderr, "CPU limit (--cpu 1 s", 1, true) ~= nil).toBe(true)
+			end
+			-- the same status with half the allowance used is the command's own
+			for _, status in { "1", "152" } do
+				local half = standIn(
+					{ "--time", "60", "--cpu", "1", "--", "sh", "-c", `exit {status}` },
+					{ FAKE_CPU = "0.5" }
+				)
+				if half.code ~= tonumber(status) then
+					error(`exit {status} at half the allowance: expected {status}, got {half.code}`, 0)
+				end
+				t.expect(string.find(half.stderr, "stopped at the CPU limit", 1, true) ~= nil).toBe(false)
+			end
 		end)
 	)
 
@@ -209,60 +190,6 @@ return t.spec("the bounded runner", function(it)
 			t.expect(string.match(r.stdout, "^%d%d%d%d%d%d%d%d%d%d$") ~= nil).toBe(true)
 			local deadline = tonumber(r.stdout) :: number
 			t.expect(deadline >= before + 30 and deadline <= os.time() + 30).toBe(true)
-		end)
-	)
-
-	it(
-		"AC1: when the runner itself is killed, its command's group is stopped by the watchdog",
-		wrap(function()
-			local script =
-				`perl {BOUNDED} --time 60 -- sh -c 'echo $$ > cmd; exec sleep 64.1' & echo $! > runner; wait`
-			-- the runner is started by a shell that this case then kills with the runner (KILL: nothing can clean up)
-			local r = process.exec("sh", {
-				"-c",
-				`{script} & sh_pid=$!; sleep 1; kill -KILL $(cat runner); wait $sh_pid 2>/dev/null; exit 0`,
-			}, { cwd = WORK })
-			t.expect(r.ok).toBe(true)
-			t.expect(goneSoon(readPid("cmd"))).toBe(true)
-			t.expect(runnerGoneSoon()).toBe(true)
-		end)
-	)
-
-	it(
-		"AC1: TERM, INT and HUP sent to the runner reach the command's group, exits 143, 130 and 129",
-		wrap(function()
-			local signals: { { sig: string, want: number } } =
-				{ { sig = "TERM", want = 143 }, { sig = "INT", want = 130 }, { sig = "HUP", want = 129 } }
-			for _, c in signals do
-				local sig, want = c.sig, c.want
-				local r = process.exec("sh", {
-					"-c",
-					`perl {BOUNDED} --time 60 -- sh -c 'echo $$ > cmd-{sig}; exec sleep 65.1' & p=$!; sleep 1; kill -{sig} $p; wait $p; echo "code=$?"`,
-				}, { cwd = WORK })
-				if not string.find(r.stdout, `code={want}`, 1, true) then
-					error(`{sig}: expected code={want}, got {r.stdout}{r.stderr}`, 0)
-				end
-				t.expect(goneSoon(readPid(`cmd-{sig}`))).toBe(true)
-			end
-			t.expect(runnerGoneSoon()).toBe(true)
-		end)
-	)
-
-	it(
-		"AC1: when the process that started the runner is gone, the command's group is stopped, exit 123",
-		wrap(function()
-			-- the runner is a background child of a shell that ends after a second: the runner is then an orphan
-			local r = process.exec("sh", {
-				"-c",
-				`perl {BOUNDED} --time 60 -- sh -c 'echo $$ > cmd; exec sleep 66.1' > out.txt 2> err.txt & echo $! > runner; sleep 1; exit 0`,
-			}, { cwd = WORK })
-			t.expect(r.code).toBe(0)
-			t.expect(goneSoon(readPid("cmd"))).toBe(true)
-			t.expect(goneSoon(readPid("runner"))).toBe(true)
-			t.expect(
-				string.find(fs.readFile(`{WORK}/err.txt`), "the process that started it is gone", 1, true)
-					~= nil
-			).toBe(true)
 		end)
 	)
 
@@ -317,12 +244,13 @@ return t.spec("the bounded runner", function(it)
 			t.expect(lower.stdout).toBe("5\n")
 			t.expect(lower.stderr).toBe("")
 			-- and what the lower limit stops is reported against that limit, not the larger one that was asked for
-			local burn = process.exec("sh", {
+			-- (stand-in meter: the command "used" the 2 s of the caller's limit)
+			local stopped = process.exec("sh", {
 				"-c",
-				`ulimit -t 2; exec perl {BOUNDED} --time 30 --cpu 50 -- perl -e '1 while 1'`,
-			}, { cwd = WORK })
-			t.expect(burn.code).toBe(125)
-			t.expect(string.find(burn.stderr, "stopped at the CPU limit (--cpu 2 s", 1, true) ~= nil)
+				`ulimit -t 2; exec perl {WORK}/clock.pl {BOUNDED} --time 30 --cpu 50 -- sh -c 'exit 1'`,
+			}, { cwd = WORK, env = { FAKE_CPU = "2" } })
+			t.expect(stopped.code).toBe(125)
+			t.expect(string.find(stopped.stderr, "stopped at the CPU limit (--cpu 2 s", 1, true) ~= nil)
 				.toBe(true)
 		end)
 	)
@@ -330,9 +258,11 @@ return t.spec("the bounded runner", function(it)
 	it(
 		"AC1: a failing command whose children together used most of the CPU limit keeps its own exit status",
 		wrap(function()
-			-- two children of 2.4 s each: 4.8 s in all, against a limit of 5 s per process; neither came near it
-			local burn = "perl -e '1 while (times)[0] < 2.4'"
-			local r = bounded({ "--time", "60", "--cpu", "5", "--", "sh", "-c", `{burn}; {burn}; exit 3` })
+			-- the meter says 4.8 s in all against a limit of 5 s per process: no single process came near it
+			local r = standIn(
+				{ "--time", "60", "--cpu", "5", "--", "sh", "-c", "exit 3" },
+				{ FAKE_CPU = "4.8" }
+			)
 			t.expect(r.code).toBe(3)
 			t.expect(string.find(r.stderr, "note: the command and its children used", 1, true) ~= nil)
 				.toBe(true)

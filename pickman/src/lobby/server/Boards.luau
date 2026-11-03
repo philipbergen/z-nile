@@ -2,9 +2,12 @@
 -- Lobby server adapter: answers a player's request for a hiscore board. It only reads. The client sends a board id,
 -- never a score; what counts as an id, how long a read is shared and how a failing board is left alone are
 -- Hiscores. Every request is answered once, also when the read fails, and requests that arrive while a read is
--- under way share it. Nothing is kept per player: one cache, one in-flight flag, one waiter list and one failure
--- run per board key.
+-- under way share it. Boards are kept per board key: one cache, one in-flight flag, one waiter list and one failure
+-- run each. The all-time board is the top-N list of runs, or the per-player board while no list is stored yet; its
+-- answer also carries the asker's own best. That is the one thing kept per player: a held best per present player,
+-- read at most once per CACHE_TTL, never twice at once, and dropped when they leave.
 local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Hiscores = require("@game/ReplicatedStorage/Shared/Logic/Hiscores")
@@ -22,6 +25,14 @@ local Boards = {}
 -- page the store refuses, a row that cannot be read).
 local function read(id: Hiscores.BoardId, now: number): { Hiscores.Row }?
 	local ok, result = pcall(function()
+		if id == "all" then
+			local list = DataStoreService:GetDataStore(Hiscores.TOP_STORE, Hiscores.TOP_SCOPE)
+				:GetAsync(Hiscores.TOP_KEY)
+			local listed = Hiscores.topRows(list)
+			if listed ~= nil then
+				return listed
+			end
+		end
 		local board = Hiscores.board(id, now)
 		local orderedName, orderedScope = Hiscores.storeTarget("ordered", board, true)
 		local companionName, companionScope = Hiscores.storeTarget("companion", board, true)
@@ -71,17 +82,45 @@ function Boards.start()
 	remote.Parent = remotes
 
 	local keys: { [string]: KeyState } = {}
+	-- each present player's all-time best and when it was read, keyed by user id and forgotten when they leave
+	local bests: { [string]: { at: number, best: Hiscores.Best?, reading: boolean } } = {}
+
+	Players.PlayerRemoving:Connect(function(player: Player)
+		bests[tostring(player.UserId)] = nil
+	end)
+
+	-- read the player's best unless it is held fresh or already being read; a read that ends after the player left,
+	-- or after a newer read began, is dropped
+	local function readBest(player: Player, now: number)
+		local userId = tostring(player.UserId)
+		local held = bests[userId]
+		if not Hiscores.needsRead(held, now, Hiscores.CACHE_TTL) then
+			return
+		end
+		local mark = { at = now, best = if held then held.best else nil, reading = true }
+		bests[userId] = mark
+		local ok, got = pcall(function()
+			local board = Hiscores.board("all", now)
+			local name, scope = Hiscores.storeTarget("companion", board, true)
+			return DataStoreService:GetDataStore(name, scope):GetAsync(Hiscores.entryKey(userId, board))
+		end)
+		if bests[userId] == mark and player.Parent ~= nil then
+			bests[userId] = { at = now, best = if ok then Hiscores.best(got) else nil, reading = false }
+		end
+	end
 
 	local function answer(player: Player, id: string, rows: { Hiscores.Row }, failed: boolean)
 		if player.Parent == nil then
 			return
 		end
+		local held = if id == "all" then bests[tostring(player.UserId)] else nil
 		remote:FireClient(
 			player,
 			id,
 			Hiscores.lobbyRows(rows),
 			Hiscores.rankOf(rows, tostring(player.UserId)),
-			failed
+			failed,
+			if held then held.best else nil
 		)
 	end
 
@@ -105,6 +144,9 @@ function Boards.start()
 		end
 		local now = os.time()
 		sweep(now)
+		if id == "all" then
+			readBest(player, now)
+		end
 		local key = Hiscores.cacheKey(id, now)
 		local held = keys[key]
 		if held == nil then

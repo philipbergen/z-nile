@@ -89,14 +89,14 @@ function LobbyView.start()
 			board:FireServer(id)
 		end
 
-		board.OnClientEvent:Connect(function(id: any, rows: any, highlight: any, failed: any)
+		board.OnClientEvent:Connect(function(id: any, rows: any, highlight: any, failed: any, best: any)
 			local shown = Lobby.board(id)
 			if shown == nil or shown ~= wanted then
 				return -- an answer for a board the player has left
 			end
 			local drawn = Lobby.boardPanel(rows, shown)
 			title.Text = drawn.title
-			list.Text = Lobby.lines(drawn, highlight)
+			list.Text = Lobby.text(drawn, highlight, best, shown)
 			if failed == true then
 				failures += 1
 				local wait = Lobby.retryAfter(failures)

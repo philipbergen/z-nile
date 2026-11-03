@@ -2,7 +2,7 @@
 title: Restated rules move together
 when: design
 tags: [stale-text, docs]
-check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree, and is the new wording pinned? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone, by a search for the old non-goal's words and for "either order", and, where a sentence names CI as the backstop because a worktree lacks a property of the checkout, has the design given the local check that property, and, for a clone that runs the gate outside the repo, does its origin still point at this checkout or is the real git directory missing from the `PICKMAN_FENCE_REAL_GIT` value the gate inherits?
+check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree, and is the new wording pinned? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone, by a search for the old non-goal's words and for "either order", and, where a sentence names CI as the backstop because a worktree lacks a property of the checkout, has the design given the local check that property, and, for a clone that runs the gate outside the repo, does its origin still point at this checkout or is the real git directory missing from the `PICKMAN_FENCE_REAL_GIT` value the gate inherits? When a refute answers "fixed" for a finding that named a sentence to change, does it search for that sentence and find it gone? And when a round's answer adds a failure path (a time limit, a fallback), have the earlier promises it contradicts been swept, not only the sentences the reviewer named?
 ---
 A rule is usually stated in one place and summarized in several others. A fix that changes the rule but not the summaries leaves an executor or a future agent reading the old rule.
 
@@ -27,3 +27,7 @@ f0126 design review 006 F7: after the user widened f0126 to every input, the old
 c0172 design review 001 F2: deleting the word CI from Merging left zz-execute, the worktree paragraph, the raft template and the Linux bullet still telling the agent that CI is the final check. The worktree sentence existed because a worktree under the repo loads the main checkout's `.luaurc`. The local check has to be a clone whose parent directories are not a checkout of this repo, not a renamed sentence about the same worktree.
 
 c0172 design review 002 F1: that clone, made with `git clone` of the local checkout, kept `origin` pointed at the checkout, and `pre-push` allows a push to a local directory that is absent from `PICKMAN_FENCE_REAL_GIT`. The procedure removes `origin` and appends this checkout's git directory to the variable the gate inherits.
+
+**Also:** f0148 design review 002 F3, F4: round 1 changed Behaviour 5 but left the Edge cases' "the lobby stores the best instead", and game-design.md kept "(1 until f0148)" twice.
+
+**Also:** f0148 design review 003 F3: round 2 bounded the lobby's write at 5 s, which made "a later arrival without a new pick starts on level 1" false when the write lands after the claim; the sentence was swept in round 3.

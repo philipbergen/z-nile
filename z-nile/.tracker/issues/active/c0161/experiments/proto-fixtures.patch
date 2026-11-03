@@ -1,0 +1,101 @@
+diff --git a/z-nile/tests/acceptance/c0053/commands-claim.spec.luau b/z-nile/tests/acceptance/c0053/commands-claim.spec.luau
+index 72f9bcbd..d3c46b66 100644
+--- a/z-nile/tests/acceptance/c0053/commands-claim.spec.luau
++++ b/z-nile/tests/acceptance/c0053/commands-claim.spec.luau
+@@ -112,6 +112,7 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
+ 			.toBe(false)
+ 		local c0240 = `{cap}/pickman/.tracker/issues/c0240/c0240.md`
+ 		fs.writeFile(c0240, (string.gsub(fs.readFile(c0240), "design: draft", "design: ready")))
++		fs.writeFile(`{cap}/pickman/.tracker/issues/c0240/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(cap, { "design-record", "c0240" }) .. "\n")
+ 		trOk(cap, { "status", "c0240", "prepared" })
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 		t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/c0240/c0240.md`), "status: prepared"))
+diff --git a/z-nile/tests/acceptance/c0053/commands-prep.spec.luau b/z-nile/tests/acceptance/c0053/commands-prep.spec.luau
+index 76d8de08..2a798303 100644
+--- a/z-nile/tests/acceptance/c0053/commands-prep.spec.luau
++++ b/z-nile/tests/acceptance/c0053/commands-prep.spec.luau
+@@ -101,6 +101,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
+ 			ready(doc)
+ 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 			ready(`{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`)
++			fs.writeFile(`{cap}/pickman/.tracker/issues/{zeta}/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(cap, { "design-record", zeta }) .. "\n")
+ 			local original = fs.readFile(doc)
+ 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [%1, {cnew}]`)))
+ 			local before = git(origin, { "rev-parse", "main" })
+@@ -118,6 +119,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
+ 			t.expect(has(early.stderr, "design: ready")).toBe(true)
+ 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 			ready(`{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`)
++			fs.writeFile(`{cap}/pickman/.tracker/issues/{cnew}/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(cap, { "design-record", cnew }) .. "\n")
+ 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [{cnew}]`)))
+ 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 			local zetaDoc = `{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`
+@@ -129,6 +131,8 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
+ 				.toBe(true)
+ 			t.expect(fs.readFile(zetaDoc)).toBe(zetaBefore)
+ 			git(cap, { "checkout", "-q", "--", "." })
++			fs.removeFile(`{cap}/pickman/.tracker/issues/{zeta}/design-review-001.md`) -- untracked: keep the tree clean
++			fs.removeFile(`{cap}/pickman/.tracker/issues/{cnew}/design-review-001.md`)
+ 		end
+ 	)
+ 
+diff --git a/z-nile/tests/acceptance/c0053/commands-start.spec.luau b/z-nile/tests/acceptance/c0053/commands-start.spec.luau
+index d641e8bd..181dbc26 100644
+--- a/z-nile/tests/acceptance/c0053/commands-start.spec.luau
++++ b/z-nile/tests/acceptance/c0053/commands-start.spec.luau
+@@ -64,6 +64,7 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
+ 			local text = fs.readFile(`{cap}/{path}`):gsub("design: draft", "design: ready")
+ 			fs.writeFile(`{cap}/{path}`, text)
+ 		end
++		fs.writeFile(`{cap}/pickman/.tracker/issues/c0240/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(cap, { "design-record", "c0240" }) .. "\n")
+ 		trOk(cap, { "status", "R0001", "prepared" })
+ 		git(cap, { "add", "-A" })
+ 		git(cap, { "commit", "-q", "-m", "tracker: prep R0001" })
+diff --git a/z-nile/tests/acceptance/c0116/claims.spec.luau b/z-nile/tests/acceptance/c0116/claims.spec.luau
+index 6cdb36a8..00260cb5 100644
+--- a/z-nile/tests/acceptance/c0116/claims.spec.luau
++++ b/z-nile/tests/acceptance/c0116/claims.spec.luau
+@@ -490,6 +490,7 @@ return t.spec(
+ 			trOk(wt, { "status", id, "preparing" })
+ 			local path = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
+ 			fs.writeFile(path, fs.readFile(path) .. `\n## Design\n{mark}: a new interface\n`)
++			fs.writeFile(`{wt}/pickman/.tracker/issues/{id}/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(wt, { "design-record", id }) .. "\n")
+ 			trOk(wt, { "status", id, "prepared" })
+ 			fixture.git(wt, { "add", "-A" })
+ 			fixture.git(wt, { "commit", "-q", "-m", `tracker: prep {id}` })
+@@ -525,6 +526,7 @@ return t.spec(
+ 				local path = `{K}/pickman/.tracker/issues/c0022/c0022.md`
+ 				trOk(K, { "sync" })
+ 				fs.writeFile(path, fs.readFile(path) .. "\n## Design\nREDESIGNED-LATE: a new interface\n")
++				fs.writeFile(`{K}/pickman/.tracker/issues/c0022/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(K, { "design-record", "c0022" }) .. "\n")
+ 				trOk(K, { "status", "c0022", "prepared" })
+ 				fixture.git(K, { "add", "-A" })
+ 				fixture.git(K, { "commit", "-q", "-m", "tracker: prep c0022" })
+@@ -599,6 +601,7 @@ return t.spec(
+ 				local doc = `{O}/pickman/.tracker/rafts/{RV}/{RV}.md`
+ 				setLine(doc, "design", "ready")
+ 				setLine(`{O}/pickman/.tracker/issues/c0025/c0025.md`, "design", "ready")
++				fs.writeFile(`{O}/pickman/.tracker/issues/c0025/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(O, { "design-record", "c0025" }) .. "\n")
+ 				setLine(doc, "issues", "[c0025, c0026]")
+ 				setLine(`{O}/pickman/.tracker/issues/c0026/c0026.md`, "raft", RV)
+ 				local claim = (string.gsub(fs.readFile(`{O}/.cache/tracker-claim-c0026`), "%s+$", ""))
+@@ -644,6 +647,7 @@ return t.spec(
+ 				fs.writeDir(`{dir}/acceptance`)
+ 				fs.writeFile(`{dir}/acceptance/new.spec.luau`, "--!strict\nreturn nil\n")
+ 			end
++			fs.writeFile(`{dir}/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(wt, { "design-record", id }) .. "\n")
+ 			trOk(wt, { "status", id, "prepared" })
+ 			fixture.git(wt, { "add", "-A" })
+ 			fixture.git(wt, { "commit", "-q", "-m", `tracker: prep {id}` })
+diff --git a/z-nile/tests/acceptance/c0116/issue-design.spec.luau b/z-nile/tests/acceptance/c0116/issue-design.spec.luau
+index 7e02c6eb..bfe7859a 100644
+--- a/z-nile/tests/acceptance/c0116/issue-design.spec.luau
++++ b/z-nile/tests/acceptance/c0116/issue-design.spec.luau
+@@ -88,6 +88,7 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
+ 		assert(s and e, "design: line")
+ 		fs.writeFile(path, string.sub(text, 1, s) .. "design: ready\n" .. string.sub(text, e + 1))
+ 		local mid = fixture.git(f.origin, { "rev-parse", "main" })
++		write(`{dir}/design-review-001.md`, REVIEW .. `\nDesign record: {trackerfix.trOk(f, wt, { "design-record", id })}\n`)
+ 		trackerfix.trOk(f, wt, { "status", id, "prepared" })
+ 		t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(mid)
+ 		t.expect(string.match(fs.readFile(path), "\nstatus: prepared%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)

@@ -4,6 +4,7 @@
 local fs = require("@lune/fs")
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
+local tiers = require("@tests/meta/tiers")
 
 local LOGIC = "src/shared/Logic"
 
@@ -145,6 +146,22 @@ return t.spec("architecture", function(it)
 		end
 		t.expect(cycle).toBe(nil)
 	end)
+
+	it(
+		"helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper",
+		function()
+			local helpers: { [string]: boolean } = {}
+			for _, name in fs.readDir("tests/lib") do
+				local base = string.match(name, "^(.+)%.luau$")
+				if base then
+					helpers[base] = true
+				elseif fs.isFile(`tests/lib/{name}/init.luau`) then
+					helpers[name] = true -- a helper kept as a folder (design review 004 F3)
+				end
+			end
+			t.expect(table.concat(tiers.violations(g, helpers), "\n")).toBe("")
+		end
+	)
 
 	it("every feature has unit specs", function()
 		local bad = {}
