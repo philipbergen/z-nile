@@ -19,6 +19,7 @@
 | 15 | 2026-11-02 04:57 | c0191: docs (rule in five places, zz-test Bounded commands, lists) | 26 | 5 | 20.0 | explicit | build |  |
 | 16 | 2026-11-02 05:06 | c0191: wire hooks and allow ./zn run in settings | 13 | 1 | 5.0 | explicit | build |  |
 | 17 | 2026-11-03 00:17 | c0191: experiments U1-U3 logged | 0 | 0 | 5.0 | explicit | build |  |
+| 18 | 2026-11-03 00:27 | c0191: Phase 3 verification logged | 0 | 0 | 5.0 | explicit | build |  |
 
-**Total:** +6424 / -13 lines, 434.0 agent-minutes, 1418955 tokens over 17 records
-<!-- totals: added=6424 removed=13 minutes=434.0 records=17 tokens=1418955 -->
+**Total:** +6424 / -13 lines, 439.0 agent-minutes, 1418955 tokens over 18 records
+<!-- totals: added=6424 removed=13 minutes=439.0 records=18 tokens=1418955 -->
