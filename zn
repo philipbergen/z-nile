@@ -23,7 +23,7 @@ export PATH="$HOME/.rokit/bin:$PATH"
 # CPU, not its children's (the gate, git), and a loop in it ends in half an hour instead of never. It only lowers the
 # limit the caller has, so the spec runner's 1200 s stays what it asks for
 lim=${ZN_ENGINE_CPU:-1800}
-[[ $lim =~ ^[0-9]+$ ]] || lim=1800
+[[ $lim =~ ^[1-9][0-9]*$ ]] || lim=1800
 source "$top/z-nile/lib/cpu.sh"
 zn_lower_cpu "$lim" 2>/dev/null || true
 exec lune run z-nile/engine/main -- "$@"

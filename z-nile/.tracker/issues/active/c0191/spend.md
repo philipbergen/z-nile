@@ -21,6 +21,7 @@
 | 17 | 2026-11-03 00:17 | c0191: experiments U1-U3 logged | 0 | 0 | 5.0 | explicit | build |  |
 | 18 | 2026-11-03 00:27 | c0191: Phase 3 verification logged | 0 | 0 | 5.0 | explicit | build |  |
 | 19 | 2026-11-03 00:39 | R0071: review-001 | 0 | 0 | 12.0 | focus | code-review | 226461 |
+| 20 | 2026-11-03 01:32 | c0191: review-001 fixes, lessons, refute-001 | 192 | 30 | 60.0 | focus | code-review |  |
 
-**Total:** +6424 / -13 lines, 451.0 agent-minutes, 1645416 tokens over 19 records
-<!-- totals: added=6424 removed=13 minutes=451.0 records=19 tokens=1645416 -->
+**Total:** +6616 / -43 lines, 511.0 agent-minutes, 1645416 tokens over 20 records
+<!-- totals: added=6616 removed=43 minutes=511.0 records=20 tokens=1645416 -->

@@ -202,8 +202,12 @@ local function inScope(cwd: string?, roots: { string }, scratch: { string }): bo
 	return false
 end
 
--- A detached `git maintenance` and the file-system monitor are meant to outlive their parent
+-- A detached `git maintenance` and the file-system monitor are meant to outlive their parent, and so is a Claude Code
+-- session hosted by node (an npm install, started headless at PPID 1): its tool shells are live work, never orphans
 local function legitGit(p: Proc): boolean
+	if string.find(p.command, "claude-code", 1, true) ~= nil then
+		return true
+	end
 	return reap.name(p.command) == "git"
 		and (
 			string.find(p.command, "maintenance", 1, true) ~= nil
@@ -426,6 +430,9 @@ function reap.checkOptions(a: Args): string?
 		end
 		if string.find("/" .. root .. "/", "/%.%./") then
 			return `--root {root} must not contain ..`
+		end
+		if string.sub(a.home .. "/", 1, #trimmed + 1) == trimmed .. "/" then
+			return `--root {root} contains the home folder: name a folder inside the repository`
 		end
 	end
 	local explicit = #a.roots > 0

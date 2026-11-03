@@ -1,0 +1,11 @@
+- review-001 F1: zz-test/evidence-measures-the-limits-unit
+- review-001 F2: zz-test/scanners-read-the-programs-switch-grammar
+- review-001 F3: zz-review/docs-sections-cover-the-designs-list
+- review-001 F4: one-off: the Design lists `yes` as a follow but the sequestered spec requires `yes | head` to pass; deferred c0231
+- review-001 F5: zz-test/refusals-tested-on-both-sides
+- review-001 F6: zz-arch/guard-no-is-explicit
+- review-001 F7: one-off: hook bounded by CPU only; deferred c0232
+- review-001 F8: one-off: a limit variable of 0 killed every command; positive whole numbers only
+- review-001 F9: z-design/instructions-runnable-where-they-run
+- review-001 F10: zz-arch/guard-no-is-explicit
+- review-001 F11: zz-test/scanners-read-the-programs-switch-grammar

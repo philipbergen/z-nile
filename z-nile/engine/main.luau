@@ -5678,6 +5678,10 @@ local function reapRun(opts: { [string]: { string } }): boolean
 		at = byPid[at.ppid]
 	end
 	local roots: { string } = opts["--root"] or {}
+	if opts["--under"] and tonumber(opts["--under"][1]) == nil then
+		stdio.ewrite(`reap: --under {opts["--under"][1]} is not a process id\n`)
+		process.exit(2)
+	end
 	local under: number? = if opts["--under"]
 		then tonumber(opts["--under"][1])
 		elseif opts["--session-end"] then reapLib.sessionRoot(procs, self)

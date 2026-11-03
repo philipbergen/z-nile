@@ -76,7 +76,13 @@ local function pythonHit(source: string): string?
 	if string.find(script, "os%.system") or string.find(script, "os%.popen") then
 		return "starts a process it cannot give a timeout (`os.system`)"
 	end
-	if string.find(script, "subprocess%.") and not string.find(script, "timeout%s*=") then
+	if
+		(
+			string.find(script, "subprocess%.")
+			or string.find(script, "from%s+subprocess%f[%W]")
+			or string.find(script, "import%s+subprocess%s+as%f[%W]")
+		) and not string.find(script, "timeout%s*=")
+	then
 		return "starts a process with no `timeout=` (`subprocess`)"
 	end
 	return nil
@@ -150,6 +156,10 @@ local function toolingMatch(target: string): boolean
 	local t = normalise(target)
 	local checkout = CTX.checkout
 	if string.sub(target, 1, 1) == "/" then
+		-- a path that climbs out (`<checkout>/../x`) is not under the checkout, whatever its prefix says
+		if string.find(target, "/%.%./") or string.sub(target, -3) == "/.." then
+			return false
+		end
 		if checkout ~= nil and not insideOf(target, checkout) then
 			return false
 		end
@@ -455,33 +465,50 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
 	elseif name == "eval" then
 		return checkText(table.concat(args, " "), depth + 1)
 	elseif name == "perl" then
-		for k, a in args do
-			local script = args[k + 1]
-			if
-				(a == "-e" or a == "-E")
-				and script ~= nil
-				and (
+		-- read perl's switches as perl does: `-e` may be bundled (`-we`, `-lne`) or carry its script (`-e'code'`); `-I`, `-M`,
+		-- `-m` and `-x` take a value (attached or the next word); the first word that is not a switch is the script file
+		local k = 1
+		while k <= #args do
+			local a = args[k]
+			if string.sub(a, 1, 1) ~= "-" or a == "-" then
+				break
+			elseif a == "--" then
+				break
+			elseif string.match(a, "^%-[IMmx]") then
+				k += if #a == 2 then 2 else 1
+			elseif string.match(a, "^%-[%w]*[eE]") then
+				local at = string.find(a, "[eE]", 2) :: number
+				local script = string.sub(a, at + 1)
+				if script == "" then
+					script = args[k + 1] or ""
+					k += 2
+				else
+					k += 1
+				end
+				if
 					string.find(script, "while%s*%(%s*1%s*%)")
 					or string.find(script, "while%s+1%f[%W]")
 					or string.find(script, "1%s+while%f[%W]")
 					or string.find(script, "for%s*%(%s*;%s*;")
 					or string.find(script, "until%s*%(%s*0%s*%)")
-				)
-			then
-				return refuse(
-					"unbounded",
-					name,
-					line,
-					`this \`perl -e\` loops for ever. Run it as \`{CTX.zn} run --time <seconds> -- perl -e ...\`.`
-				)
-			end
-			if (a == "-e" or a == "-E") and script ~= nil and string.find(script, "%f[%w_]alarm%f[^%w_]") then
-				return refuse(
-					"alarm",
-					name,
-					line,
-					`\`perl -e 'alarm ...; exec @ARGV'\` stops only its own process: the process a command starts under it (\`lune\` starts its tool as a child) keeps running, orphaned. Use \`{CTX.zn} run --time <seconds> -- <command>\`, which stops the whole group.`
-				)
+				then
+					return refuse(
+						"unbounded",
+						name,
+						line,
+						`this \`perl -e\` loops for ever. Run it as \`{CTX.zn} run --time <seconds> -- perl -e ...\`.`
+					)
+				end
+				if string.find(script, "%f[%w_]alarm%f[^%w_]") then
+					return refuse(
+						"alarm",
+						name,
+						line,
+						`\`perl -e 'alarm ...; exec @ARGV'\` stops only its own process: the process a command starts under it (\`lune\` starts its tool as a child) keeps running, orphaned. Use \`{CTX.zn} run --time <seconds> -- <command>\`, which stops the whole group.`
+					)
+				end
+			else
+				k += 1
 			end
 		end
 		return OK
