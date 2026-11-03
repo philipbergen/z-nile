@@ -1,6 +1,6 @@
 ---
 title: Re-read main's raft and issue state before launching and before done
-when: launch
+when: both
 tags: [tracker, origin-main, stale-state]
 check: Did I run `git fetch` and read the raft's and its issues' current folders and design on origin/main (not the readied copy in my checkout or prompt) before I launched, and again before the Phase 5 merge?
 ---
