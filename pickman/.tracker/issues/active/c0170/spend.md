@@ -18,6 +18,7 @@
 | 14 | 2026-11-01 16:34 | design-review-001 answers | 0 | 0 | 1.3 | spend+proportional | design-review |  |
 | 15 | 2026-11-03 01:36 | c0170: stream-review-001 | 0 | 0 | 4.0 | explicit | code-review |  |
 | 16 | 2026-11-03 01:36 | c0170: helper spec tier | 155 | 4 | 5.0 | explicit | build |  |
+| 17 | 2026-11-03 01:41 | R0065: Phase 3 verification logs | 0 | 0 | 1.5 | raft+proportional | deliver |  |
 
-**Total:** +944 / -5 lines, 307.3 agent-minutes, 597525 tokens over 16 records
-<!-- totals: added=944 removed=5 minutes=307.3 records=16 tokens=597525 -->
+**Total:** +944 / -5 lines, 308.8 agent-minutes, 597525 tokens over 17 records
+<!-- totals: added=944 removed=5 minutes=308.8 records=17 tokens=597525 -->
