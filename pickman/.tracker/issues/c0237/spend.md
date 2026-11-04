@@ -4,6 +4,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-04 15:32 | design-review-001 | 0 | 0 | 2.0 | spend | design-review | 64895 |
 | 2 | 2026-11-04 15:32 | design-refute-001 | 0 | 0 | 3.0 | spend | design-review |  |
+| 3 | 2026-11-04 15:32 | prep | 2 | 1 | 12.0 | spend | prep |  |
 
-**Total:** +0 / -0 lines, 5.0 agent-minutes, 64895 tokens over 2 records
-<!-- totals: added=0 removed=0 minutes=5.0 records=2 tokens=64895 -->
+**Total:** +2 / -1 lines, 17.0 agent-minutes, 64895 tokens over 3 records
+<!-- totals: added=2 removed=1 minutes=17.0 records=3 tokens=64895 -->
