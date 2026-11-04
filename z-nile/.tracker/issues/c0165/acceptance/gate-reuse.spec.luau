@@ -92,6 +92,72 @@ return t.spec("c0165 reuse through the orchestrator and the gate", function(it)
 		t.expect(has(outBase, "reused: an affected gate passed on this content")).toBe(false)
 	end)
 
+	it("AC7: an affected whole-gate digest holds HEAD and only declared refs", function()
+		local dir = gatefix.make(base, "headgate", {
+			setup = function(d: string)
+				write(
+					`{d}/pickman/tests/inputs.tsv`,
+					"# extra inputs per spec\ntests/unit/b.spec.luau\t*\ntests/unit/b.spec.luau\tref:refs/remotes/origin/main\ntests/unit/b.spec.luau\tref:refs/heads/declared\n"
+				)
+			end,
+		})
+		write(`{dir}/pickman/src/A.luau`, "return { value = 1 } -- edited\n")
+		fixture.git(dir, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+		fixture.git(dir, { "update-ref", "refs/heads/declared", "HEAD" })
+		local ok1, _ = gatefix.gate(dir, { "--affected" })
+		t.expect(ok1).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(1)
+		fixture.git(dir, { "update-ref", "refs/heads/unrelated", "HEAD" })
+		local okUnrelated, outUnrelated = gatefix.gate(dir, { "--affected" })
+		t.expect(okUnrelated).toBe(true)
+		t.expect(has(outUnrelated, "reused: an affected gate passed on this content")).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(1)
+		fixture.git(dir, { "commit", "-qam", "same content, new HEAD" })
+		local ok2, out2 = gatefix.gate(dir, { "--affected" })
+		t.expect(ok2).toBe(true)
+		t.expect(has(out2, "reused: an affected gate passed on this content")).toBe(false)
+		t.expect(count(ran(dir), "b")).toBe(2)
+		-- a declared ref that is not the base moves while HEAD and the base stand still: no reuse, b runs again
+		fixture.git(dir, { "update-ref", "refs/heads/declared", "HEAD" })
+		local okDeclared, outDeclared = gatefix.gate(dir, { "--affected" })
+		t.expect(okDeclared).toBe(true)
+		t.expect(has(outDeclared, "reused: an affected gate passed on this content")).toBe(false)
+		t.expect(count(ran(dir), "b")).toBe(3)
+		-- the base moves to HEAD, so the change set is empty: a spec with a ref: entry is still selected and reruns
+		fixture.git(dir, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+		local ok3, out3 = gatefix.gate(dir, { "--affected" })
+		t.expect(ok3).toBe(true)
+		t.expect(has(out3, "reused: an affected gate passed on this content")).toBe(false)
+		t.expect(count(ran(dir), "b")).toBe(4)
+	end)
+
+	it("AC5: a weak-jail run records neither spec rows nor a whole-gate row, affected or full", function()
+		local affected = gatefix.make(base, "norecord-affected")
+		write(`{affected}/pickman/src/A.luau`, "return { value = 1 } -- edited\n")
+		local weakA = { PATH = gatefix.weakJail(affected) }
+		local ok1, out1 = gatefix.gate(affected, { "--affected" }, weakA)
+		t.expect(ok1).toBe(true)
+		t.expect(has(out1, "not recorded: outer sandbox (protects the repository)")).toBe(true)
+		t.expect(gatefix.sql(affected, "select count(*) from specs")).toBe("0")
+		t.expect(gatefix.sql(affected, "select count(*) from gates")).toBe("0")
+		local ok2, out2 = gatefix.gate(affected, { "--affected" })
+		t.expect(ok2).toBe(true)
+		t.expect(has(out2, "reused: an affected gate passed on this content")).toBe(false)
+		t.expect(count(ran(affected), "a")).toBe(2)
+
+		local full = gatefix.make(base, "norecord-full")
+		local weakF = { PATH = gatefix.weakJail(full) }
+		local okF, _ = gatefix.gate(full, { "--full" }, weakF)
+		t.expect(okF).toBe(true)
+		t.expect(gatefix.sql(full, "select count(*) from specs")).toBe("0")
+		t.expect(gatefix.sql(full, "select count(*) from gates")).toBe("0")
+		clearRan(full)
+		local okR, outR = gatefix.gate(full, { "--full", "--reuse" })
+		t.expect(okR).toBe(true)
+		t.expect(has(outR, "reused: a full gate passed on this content")).toBe(false)
+		t.expect(count(ran(full), "a")).toBe(1)
+	end)
+
 	it("AC5: with reuse off (no sqlite3) every given spec runs and the result is unchanged", function()
 		local dir = gatefix.make(base, "off")
 		local miss = { PICKMAN_SQLITE3 = `{dir}/no-such-sqlite3` }

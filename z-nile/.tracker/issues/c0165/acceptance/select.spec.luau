@@ -11,6 +11,20 @@ local t = require("@tests/lib/t")
 local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
 	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
 local TOOLS = "Darwin arm64 | lune 0.11.1 | rojo 7.7.0"
+local GIT: fingerprint.GitState = {
+	head = string.rep("1", 40),
+	refs = { ["refs/heads/main"] = string.rep("1", 40) },
+}
+local function of(
+	ctx: select.Context,
+	spec: string,
+	blobs: fingerprint.Blobs,
+	tools: string,
+	mode: "affected" | "full",
+	git: fingerprint.GitState?
+): string
+	return fingerprint.of(ctx, spec, blobs, tools, mode, git or GIT)
+end
 
 local MAZE = "pickman/src/shared/Logic/Maze.luau"
 local GHOST = "pickman/src/shared/Logic/Ghost.luau"
@@ -164,8 +178,8 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			for _, e in CHANGES do
 				local after = apply(before, e)
 				for _, spec in SPECS do
-					local changedFp = fingerprint.of(ctx, spec, before, TOOLS, "affected")
-						~= fingerprint.of(ctx, spec, after, TOOLS, "affected")
+					local changedFp = of(ctx, spec, before, TOOLS, "affected")
+						~= of(ctx, spec, after, TOOLS, "affected")
 					local picked = picks(ctx, e.path, spec)
 					if changedFp ~= picked then
 						error(
@@ -203,6 +217,16 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		-- project roots select nothing, even under a forcing folder's name
 		t.expect(sel({ "z-nile/.tracker/issues/c0001/c0001.md" }, nil)).toEqual({})
 		t.expect(sel({ "pickman/.tracker/issues/f0001/f0001.md" }, nil)).toEqual({})
+		-- the hook gets the same homes and forcing rules, without a graph or declarations
+		t.expect(select.gateProjects(ctx.rules, { "z-nile/tests/lib/t.luau" }))
+			.toEqual({ "pickman", "z-nile" })
+		t.expect(select.gateProjects(ctx.rules, { "src/old.luau", "tests/old.luau" })).toEqual({ "z-nile" })
+		t.expect(select.gateProjects(ctx.rules, { MAZE, "z-nile/engine/main.luau" }))
+			.toEqual({ "pickman", "z-nile" })
+		t.expect(select.gateProjects(ctx.rules, { "pickman/.tracker/issues/f0001/f0001.md", "AGENTS.md" }))
+			.toEqual({})
+		-- a root file under no home still gets what the forcing rules name
+		t.expect(select.gateProjects(ctx.rules, { "scripts/check.sh" })).toEqual({ "pickman", "z-nile" })
 		-- the graph: a closure file selects its specs, a src file the place library's, relative to the home with --project
 		t.expect(sel({ MAZE }, nil)).toEqual({ BOOT_SPEC, GHOST_SPEC, MAZE_SPEC }) -- sorted
 		t.expect(sel({ GHOST }, "pickman"))
@@ -215,14 +239,8 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		local ctx = ctxWith(DECLARED)
 		local base = tree()
 		local function moves(spec: string, path: string): boolean
-			return fingerprint.of(ctx, spec, base, TOOLS, "affected")
-				~= fingerprint.of(
-					ctx,
-					spec,
-					apply(base, { kind = "modified", path = path }),
-					TOOLS,
-					"affected"
-				)
+			return of(ctx, spec, base, TOOLS, "affected")
+				~= of(ctx, spec, apply(base, { kind = "modified", path = path }), TOOLS, "affected")
 		end
 		t.expect(moves(MAZE_SPEC, MAZE_SPEC)).toBe(true) -- its own file
 		t.expect(moves(GHOST_SPEC, MAZE)).toBe(true) -- a file it requires through another
@@ -242,28 +260,26 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		t.expect(moves(TEXT_SPEC, "pickman/.tracker/issues/f0001/f0001.md")).toBe(true)
 		t.expect(moves(TEXT_SPEC, "pickman/.tracker/issues/f0001/spend.md")).toBe(false)
 		-- the gate mode is part of the fingerprint: a full run's rows never serve an affected run
-		t.expect(
-			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")
-				~= fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "full")
-		).toBe(true)
+		t.expect(of(ctx, MAZE_SPEC, base, TOOLS, "affected") ~= of(ctx, MAZE_SPEC, base, TOOLS, "full"))
+			.toBe(true)
 		-- the tools line, and a new declared or learned entry, change it too
 		t.expect(
-			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")
-				~= fingerprint.of(ctx, MAZE_SPEC, base, TOOLS .. " | git 2", "affected")
+			of(ctx, MAZE_SPEC, base, TOOLS, "affected")
+				~= of(ctx, MAZE_SPEC, base, TOOLS .. " | git 2", "affected")
 		).toBe(true)
 		local learned = ctxWith({ [MAZE_SPEC] = { DATA } })
 		t.expect(
-			fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")
-				~= fingerprint.of(learned, MAZE_SPEC, base, TOOLS, "affected")
-		).toBe(true)
+			of(ctx, MAZE_SPEC, base, TOOLS, "affected") ~= of(learned, MAZE_SPEC, base, TOOLS, "affected")
+		)
+			.toBe(true)
 		-- a file input (not a folder) matches only itself
 		t.expect(select.isInput(learned, MAZE_SPEC, DATA)).toBe(true)
 		t.expect(select.isInput(learned, MAZE_SPEC, "pickman/tests/fixtures/data/levels.json.bak"))
 			.toBe(false)
 		-- the same inputs, in any order of the blob map, give the same fingerprint (no time, no pid, no order)
-		t.expect(fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected"))
-			.toBe(fingerprint.of(ctx, MAZE_SPEC, tree(), TOOLS, "affected"))
-		t.expect(#fingerprint.of(ctx, MAZE_SPEC, base, TOOLS, "affected")).toBe(64)
+		t.expect(of(ctx, MAZE_SPEC, base, TOOLS, "affected"))
+			.toBe(of(ctx, MAZE_SPEC, tree(), TOOLS, "affected"))
+		t.expect(#of(ctx, MAZE_SPEC, base, TOOLS, "affected")).toBe(64)
 		-- the inputs list is sorted and holds only isInput paths that exist
 		local ins = fingerprint.inputs(ctx, GHOST_SPEC, base)
 		local sorted = table.clone(ins)
@@ -284,15 +300,8 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			t.expect(select.isInput(wide, MAZE_SPEC, doc)).toBe(false)
 			t.expect(select.isInput(wide, MAZE_SPEC, DATA)).toBe(true)
 			local base = tree()
-			t.expect(
-				fingerprint.of(
-					wide,
-					MAZE_SPEC,
-					apply(base, { kind = "modified", path = doc }),
-					TOOLS,
-					"affected"
-				)
-			).toBe(fingerprint.of(wide, MAZE_SPEC, base, TOOLS, "affected"))
+			t.expect(of(wide, MAZE_SPEC, apply(base, { kind = "modified", path = doc }), TOOLS, "affected"))
+				.toBe(of(wide, MAZE_SPEC, base, TOOLS, "affected"))
 		end
 	)
 
@@ -335,6 +344,48 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		end
 	end)
 
+	it("AC2: a spec with a ref: entry is selected by an empty change set, and no other spec is", function()
+		local declared = ctxWith(
+			select.parseInputs("tests/unit/Ghost.spec.luau\tref:refs/remotes/origin/main\n", "pickman/") :: select.Inputs
+		)
+		t.expect(select.affected(declared, {}, "pickman")).toEqual({ "tests/unit/Ghost.spec.luau" })
+		t.expect(select.affected(declared, { "AGENTS.md" }, "pickman"))
+			.toEqual({ "tests/unit/Ghost.spec.luau" })
+		t.expect(select.affected(ctxWith({}), {}, "pickman")).toEqual({})
+	end)
+
+	it("AC2: HEAD moves a * spec, unrelated refs do not, and a declared ref moves its spec", function()
+		local starred =
+			ctxWith(select.parseInputs("tests/unit/Maze.spec.luau\t*\n", "pickman/") :: select.Inputs)
+		local declared = ctxWith(
+			select.parseInputs("tests/unit/Ghost.spec.luau\tref:refs/remotes/origin/main\n", "pickman/") :: select.Inputs
+		)
+		local plain = ctxWith({})
+		local blobs = tree()
+		local movedHead: fingerprint.GitState = { head = string.rep("2", 40), refs = GIT.refs }
+		local movedRef: fingerprint.GitState = {
+			head = GIT.head,
+			refs = { ["refs/heads/main"] = string.rep("3", 40) },
+		}
+		t.expect(
+			of(starred, MAZE_SPEC, blobs, TOOLS, "affected", movedHead)
+				~= of(starred, MAZE_SPEC, blobs, TOOLS, "affected")
+		).toBe(true)
+		t.expect(of(starred, MAZE_SPEC, blobs, TOOLS, "affected", movedRef))
+			.toBe(of(starred, MAZE_SPEC, blobs, TOOLS, "affected"))
+		t.expect(of(plain, GHOST_SPEC, blobs, TOOLS, "affected", movedHead))
+			.toBe(of(plain, GHOST_SPEC, blobs, TOOLS, "affected"))
+		t.expect(fingerprint.refs(declared, GHOST_SPEC)).toEqual({ "refs/remotes/origin/main" })
+		local withRef = table.clone(GIT)
+		withRef.refs = { ["refs/remotes/origin/main"] = string.rep("4", 40) }
+		local movedDeclared = table.clone(withRef)
+		movedDeclared.refs = { ["refs/remotes/origin/main"] = string.rep("5", 40) }
+		t.expect(
+			of(declared, GHOST_SPEC, blobs, TOOLS, "affected", movedDeclared)
+				~= of(declared, GHOST_SPEC, blobs, TOOLS, "affected", withRef)
+		).toBe(true)
+	end)
+
 	it("AC9: one malformed line refuses the whole file, naming its line", function()
 		local good = "tests/unit/Maze.spec.luau\tpickman/tests/fixtures/data/levels.json\n"
 		for _, bad in
@@ -346,6 +397,10 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 				"tests/unit/Maze.spec.luau\tpickman/.tracker\n", -- a project root itself
 				"tests/unit/Maze.spec.luau\tpickman/.tracker/\n", -- the same, as a folder
 				"tests/unit/Maze.spec.luau\tpickman/.tracker/issues/f0001/spend.md\n", -- a spend.md
+				"tests/unit/Maze.spec.luau\tref:\n", -- empty ref
+				"tests/unit/Maze.spec.luau\tref:main\n", -- not a full ref
+				"tests/unit/Maze.spec.luau\tref:refs/heads/a..b\n", -- malformed ref
+				"tests/unit/Maze.spec.luau\tref:refs/heads/a b\n", -- whitespace in a ref
 				"tests/unit/Maze.spec.luau\t\n", -- empty input
 				"tests/unit/Maze.spec.luau\ta\tb\n", -- three fields
 			}

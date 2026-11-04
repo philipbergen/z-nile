@@ -28,8 +28,20 @@ return t.spec("c0165 restated gate rules", function(it)
 		"AC10: zz-execute runs the affected gate before the merge and reuses done's full gate at it",
 		function()
 			local f = "z-nile/skills/zz-execute/SKILL.md"
-			says(f, "Confirm `z-nile/check.sh --affected` passes here.")
+			says(
+				f,
+				"Run no gate here: the full gate runs once, at the merge (`./zn done` and zz-rules Merging 2), and a red `main` first shows there as a failure on the base too."
+			)
 			never(f, "Confirm `z-nile/check.sh --full` passes here.")
+			never(f, "Confirm `z-nile/check.sh --full --reuse` passes here.")
+			never(f, "Confirm `z-nile/check.sh --affected` passes here.")
+			never(f, "**If main is red, stop.**")
+			never(f, "gh run")
+			says(
+				f,
+				"- Main is red: `./zn done` prints `fails on the base too: main is red` for a spec that also fails on `origin/main`."
+			)
+			never(f, "- Main is red.\n")
 			says(f, "Double-check that `z-nile/check.sh --affected` passes as well")
 			says(
 				f,
@@ -78,7 +90,7 @@ return t.spec("c0165 restated gate rules", function(it)
 		never(f, "That's a selector bug. File it as a chore")
 		says(
 			f,
-			"**Declared inputs**: a spec that reads files outside its requires (a folder it walks, a document it reads as text) declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file or folder/>` line each; a path under a project root is allowed only below it, never the root itself or a `spend.md`. `lune run z-nile/affected -- --learned` also reads the inputs the full gate learned; a bare call reads only `inputs.tsv`."
+			"**Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob plus HEAD and `ref:` adds one named ref. A path under a project root is allowed only below it, never the root itself or a `spend.md`. `lune run z-nile/affected -- --learned` also reads the inputs the full gate learned; a bare selection call reads only `inputs.tsv`."
 		)
 		says(f, "**Reuse**:")
 		says(f, ".claude/.znile_tests.sqlite")
@@ -126,6 +138,12 @@ return t.spec("c0165 restated gate rules", function(it)
 			local r = process.exec("git", { "check-ignore", "-q", "--no-index", name }, { cwd = root })
 			t.expect(r.ok).toBe(true)
 		end
+	end)
+
+	it("AC10: the stop hook derives one project-scoped affected gate from the selector", function()
+		says("scripts/hooks/stop.sh", 'lune run z-nile/affected -- --gate-projects "${paths[@]}"')
+		says("scripts/hooks/stop.sh", 'scripts/check.sh "${args[@]}"')
+		never("scripts/hooks/stop.sh", "out=$(scripts/check.sh --affected")
 	end)
 
 	it("AC10: land, done, CI and setup.sh keep the fresh full gate", function()

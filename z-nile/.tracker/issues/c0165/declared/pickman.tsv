@@ -1,4 +1,4 @@
-# extra inputs per spec: <spec, relative to the home>	<input, relative to the repository, a folder ending in />, or * (always run: any change selects it, and it is never reused)>
+# extra inputs per spec: <spec, relative to the home>	<input: repo-relative file, folder/, * (every blob plus HEAD), or ref:<full ref>>
 tests/acceptance/c0002/affected-place.spec.luau	pickman/src/
 tests/acceptance/c0002/affected-place.spec.luau	pickman/tests/
 tests/acceptance/c0003/pipeline.spec.luau	.github/workflows/check.yml

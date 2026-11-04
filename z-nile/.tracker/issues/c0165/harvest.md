@@ -36,3 +36,26 @@
 - note prototype subagent (round 2): the design's own names collided with the promoted repo-fence scan, and the `*` entries changed two promoted selector pins, found only by running them on the prototype: z-design/prove-specs-pass-on-a-prototype
 - note prototype subagent (round 2): a pure table test passed while the call site ignored it (records), and end-state checks missed forwarded output and the clone's remote: zz-test/pin-call-site-arguments
 - note prototype subagent (round 2): an unused local in a new spec failed selene, which stops the full gate at its lint stage; the spec runs and promote-check passed: z-design/rerun-skipped-checks-after-edits
+- design-review-003 F1: zz-test/no-vacuous-pass
+- design-review-003 F2: z-design/declare-what-full-runs-covered
+- design-review-003 F3: z-design/declare-what-full-runs-covered
+- design-review-003 F4: zz-arch/companion-writes-share-the-record-gate
+- design-review-003 F5: z-design/declare-what-full-runs-covered
+- design-review-003 F6: zz-test/pin-call-site-arguments
+- design-review-003 F7: z-design/spec-design-correspondence
+- design-review-003 F8: z-design/spec-design-correspondence
+- design-review-003 F9: zz-arch/guard-no-is-explicit
+- design-review-004 F1: zz-arch/project-gates-use-selector-forcing
+- design-review-004 F2: zz-test/no-vacuous-pass
+- design-review-004 F3: z-design/declare-what-full-runs-covered
+- design-review-004 F4: z-design/declare-what-full-runs-covered
+- design-review-004 F5: zz-test/count-calls-in-poll-loops
+- design-review-004 F6: zz-test/new-commands-run-in-a-copy
+- design-review-004 F7: z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F8: z-design/declare-what-full-runs-covered, zz-test/no-vacuous-pass
+- design-review-005 F1: zz-rules/main-checkout-tools-span-the-move
+- design-review-005 F2: z-design/spec-design-correspondence
+- design-review-005 F3: z-design/rerun-skipped-checks-after-edits
+- design-review-005 F4: z-design/accepted-risks-checked-and-decided
+- design-review-005 F5: z-design/spec-design-correspondence
+- design-review-005 F6: z-design/spec-design-correspondence

@@ -17,11 +17,13 @@ end
 
 return t.spec("c0165 reuse decisions and the learning plan", function(it)
 	it("AC3: decide gives the table's action for every row", function()
-		-- fresh: always run, whatever the row
-		for _, r in { nil :: any, row("passed"), row("failed"), row("running", 7, "s") } do
+		-- fresh runs completed rows again, but never steals a live owner's running row
+		for _, r in { nil :: any, row("passed"), row("failed") } do
 			t.expect(reuseplan.decide(r, true, always)).toBe("run")
 			t.expect(reuseplan.decide(r, true, never)).toBe("run")
 		end
+		t.expect(reuseplan.decide(row("running", 7, "s"), true, always)).toBe("wait")
+		t.expect(reuseplan.decide(row("running", 7, "s"), true, never)).toBe("run")
 		t.expect(reuseplan.decide(nil, false, always)).toBe("run")
 		t.expect(reuseplan.decide(row("passed", 7, "s"), false, always)).toBe("reuse")
 		t.expect(reuseplan.decide(row("passed", 7, "s"), false, never)).toBe("reuse")
@@ -43,19 +45,16 @@ return t.spec("c0165 reuse decisions and the learning plan", function(it)
 		t.expect(reuseplan.decide(row("running", 7, "other"), false, holds)).toBe("wait")
 	end)
 
-	it("AC5: only a run in the host's strongest jail, or a nested fixture run, records", function()
-		t.expect(reuseplan.records("sandbox-exec", false, "macos")).toBe(true)
-		t.expect(reuseplan.records("outer sandbox (a probe refused writes)", false, "macos")).toBe(false)
-		t.expect(reuseplan.records("none (not macOS)", false, "macos")).toBe(false)
-		t.expect(reuseplan.records("", false, "macos")).toBe(false)
-		t.expect(reuseplan.records("none (not macOS)", false, "linux")).toBe(true)
-		t.expect(reuseplan.records("outer sandbox (a probe refused writes)", false, "linux")).toBe(false)
-		-- a nested run writes only its fixture's own db, whatever jail it reports
-		t.expect(reuseplan.records("outer sandbox (a fixture of a guarded checkout)", true, "macos"))
-			.toBe(true)
-		t.expect(reuseplan.records("", true, "linux")).toBe(true)
+	it("AC5: only a run in the host's strongest jail records", function()
+		t.expect(reuseplan.records("sandbox-exec", "macos")).toBe(true)
+		t.expect(reuseplan.records("outer sandbox (a fixture of a guarded checkout)", "macos")).toBe(true)
+		t.expect(reuseplan.records("outer sandbox (protects the repository)", "macos")).toBe(false)
+		t.expect(reuseplan.records("none (not macOS)", "macos")).toBe(false)
+		t.expect(reuseplan.records("", "macos")).toBe(false)
+		t.expect(reuseplan.records("none (not macOS)", "linux")).toBe(true)
+		t.expect(reuseplan.records("outer sandbox (a fixture of a guarded checkout)", "linux")).toBe(false)
 		-- an empty jail is no jail the runner chose: it records nothing, on any host
-		t.expect(reuseplan.records("", false, "linux")).toBe(false)
+		t.expect(reuseplan.records("", "linux")).toBe(false)
 	end)
 
 	it("AC8: only failures the selector didn't pick are misses; ALL picked everything", function()
@@ -65,6 +64,19 @@ return t.spec("c0165 reuse decisions and the learning plan", function(it)
 		t.expect(learn.misses(failed, "ALL")).toEqual({})
 		t.expect(learn.misses(failed, {})).toEqual(failed)
 		t.expect(learn.misses({}, {})).toEqual({})
+	end)
+
+	it("AC8: a selected failure is reported against the base alone, in a full run", function()
+		local failed = { "tests/a.spec.luau", "tests/b.spec.luau", "tests/c.spec.luau" }
+		t.expect(learn.selectedFailures(failed, { "tests/b.spec.luau", "tests/z.spec.luau" }))
+			.toEqual({ "tests/b.spec.luau" })
+		t.expect(learn.selectedFailures(failed, "ALL")).toEqual(failed)
+		t.expect(learn.selectedFailures(failed, {})).toEqual({})
+		-- a selected failure and a miss partition the failures
+		t.expect(
+			#learn.selectedFailures(failed, { "tests/b.spec.luau" })
+				+ #learn.misses(failed, { "tests/b.spec.luau" })
+		).toBe(#failed)
 	end)
 
 	it(

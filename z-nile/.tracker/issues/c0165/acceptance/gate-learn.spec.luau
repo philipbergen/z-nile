@@ -148,25 +148,77 @@ return t.spec("c0165 learning and declared inputs", function(it)
 	)
 
 	it(
-		"AC8: a * entry (always run): any change selects the spec, a tracker file included, and its pass is never reused",
+		"AC8: a selected failure gets the base trial: red on the base reports main is red, green says nothing",
 		function()
-			local dir = gatefix.make(base, "always", {
+			local dir = gatefix.make(base, "selected-red", {
+				extra = { broken = { broken = true }, text = { reads = "data/x.txt", probe = true } },
 				setup = function(d: string)
 					write(
 						`{d}/pickman/tests/inputs.tsv`,
-						"# extra inputs per spec\ntests/unit/b.spec.luau\t*\n"
+						"# extra inputs per spec\ntests/unit/broken.spec.luau\t*\ntests/unit/text.spec.luau\tpickman/data/x.txt\n"
 					)
 				end,
 			})
-			t.expect(gatefix.affected(dir, { "pickman/.tracker/issues/f0009/f0009.md" }))
-				.toBe("tests/unit/b.spec.luau")
-			t.expect(gatefix.affected(dir, { "AGENTS.md" })).toBe("tests/unit/b.spec.luau")
-			local one = { "--", "tests/unit/b.spec.luau" }
-			local ok1, _ = gatefix.specs(dir, one)
-			local ok2, out2 = gatefix.specs(dir, one)
-			t.expect(ok1 and ok2).toBe(true)
-			t.expect(count(ran(dir), "b")).toBe(2)
-			t.expect(has(out2, "reused tests/unit/b.spec.luau")).toBe(false)
+			write(`{dir}/pickman/data/x.txt`, "bad\n")
+			fixture.git(dir, { "commit", "-qam", "change x" })
+			local ok, out = gatefix.gate(dir, { "--full" })
+			t.expect(ok).toBe(false)
+			-- broken is selected by its * entry and fails on the base too: main is red
+			t.expect(has(out, "tests/unit/broken.spec.luau: fails on the base too: main is red")).toBe(true)
+			-- text is selected by its declared input and fails only with the change: the base trial prints nothing
+			t.expect(has(out, "tests/unit/text.spec.luau: fails on the base too")).toBe(false)
+			-- neither is a graph miss, and nothing is learned from a selected failure
+			t.expect(has(out, "graph miss:")).toBe(false)
+			t.expect(has(out, "add to pickman/tests/inputs.tsv:")).toBe(false)
 		end
 	)
+
+	it("AC8: a miss whose only changed candidate is spend.md has no learning trial", function()
+		local dir = gatefix.make(base, "spend-only", {
+			extra = { spendread = { reads = ".tracker/issues/f0009/spend.md" } },
+			setup = function(d: string)
+				write(`{d}/pickman/.tracker/issues/f0009/spend.md`, "ok\n")
+			end,
+		})
+		write(`{dir}/pickman/.tracker/issues/f0009/spend.md`, "bad\n")
+		fixture.git(dir, { "commit", "-qam", "change only spend" })
+		local ok, out = gatefix.gate(dir, { "--full" })
+		t.expect(ok).toBe(false)
+		t.expect(
+			has(out, "not learned: pickman/tests/unit/spendread.spec.luau: no candidate outside spend.md")
+		)
+			.toBe(true)
+		t.expect(gatefix.sql(dir, "select count(*) from learned")).toBe("0")
+	end)
+
+	it("AC8: a miss that does not fit the remaining learning budget runs no trial", function()
+		local dir = gatefix.make(base, "no-budget")
+		write(`{dir}/pickman/data/x.txt`, "bad\n")
+		fixture.git(dir, { "commit", "-qam", "change x" })
+		local ok, out = gatefix.gate(dir, { "--full" }, { PICKMAN_LEARN_BUDGET = "1" })
+		t.expect(ok).toBe(false)
+		t.expect(has(out, "not learned: pickman/tests/unit/text.spec.luau: learning budget spent")).toBe(true)
+		t.expect(gatefix.sql(dir, "select count(*) from learned")).toBe("0")
+	end)
+
+	it("AC8: a * entry selects on any change, ignores unrelated refs and reruns after HEAD moves", function()
+		local dir = gatefix.make(base, "always", {
+			setup = function(d: string)
+				write(`{d}/pickman/tests/inputs.tsv`, "# extra inputs per spec\ntests/unit/b.spec.luau\t*\n")
+			end,
+		})
+		t.expect(gatefix.affected(dir, { "pickman/.tracker/issues/f0009/f0009.md" }))
+			.toBe("tests/unit/b.spec.luau")
+		t.expect(gatefix.affected(dir, { "AGENTS.md" })).toBe("tests/unit/b.spec.luau")
+		local one = { "--", "tests/unit/b.spec.luau" }
+		local ok1, _ = gatefix.specs(dir, one)
+		local ok2, out2 = gatefix.specs(dir, one)
+		t.expect(ok1 and ok2).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(1)
+		t.expect(has(out2, "reused tests/unit/b.spec.luau")).toBe(true)
+		fixture.git(dir, { "commit", "-q", "--allow-empty", "-m", "move HEAD" })
+		local ok3, _ = gatefix.specs(dir, one)
+		t.expect(ok3).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(2)
+	end)
 end)

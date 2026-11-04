@@ -25,8 +25,8 @@ check "AC6: the runner writes every file's cases and results in process and conc
 check "AC7: --full runs every spec, --full --reuse skips only on a full record of the same content digest (done's staged tree included), a tree that changed records nothing, the digest ignores spend.md and ignored files, and the reads write nothing to git and fail closed" lune run tests/run -- "$A/digest.spec.luau" "$GF" "$GR"
 check "AC8: a seeded graph miss (a tracker file's too) fails the full gate, is recorded in the db and printed for inputs.tsv, affected --learned then selects it and a bare call does not; only unselected failures that pass on the base are learned, within a budget" lune run tests/run -- "$P" "$GL"
 check "AC9: inputs.tsv parses comments, blank lines, files and folders, and refuses the whole file on a malformed line" lune run tests/run -- "$S"
-check "AC10: the skills, the templates, AGENTS.md and .gitignore say the new gate modes and name the db" lune run tests/run -- "$A/docs.spec.luau"
-# promoted specs (every project's tests/acceptance) are unchanged, except the four Overrides and c0165's own folder
+check "AC10: the skills, templates, AGENTS.md and .gitignore say the new gate modes, and the stop hook makes one project-scoped affected gate call, falling back to the unscoped call" lune run tests/run -- "$A/docs.spec.luau" "$A/stop-hook.spec.luau"
+# promoted specs (every project's tests/acceptance) are unchanged, except the six Overrides and c0165's own folder
 OVERRIDES='^z-nile/tests/acceptance/(c0165/|c0120/docs\.spec\.luau$|c0114/docs\.spec\.luau$|c0120/homes\.spec\.luau$|c0120/promote-home\.spec\.luau$|c0114/gate-cover\.spec\.luau$|c0120/graph-homes\.spec\.luau$)'
 promoted_unchanged() {
   local out changed

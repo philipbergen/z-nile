@@ -146,6 +146,27 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		t.expect(fingerprint.digest(workspace.blobs(repo) :: fingerprint.Blobs, tools, extra)).toBe(d)
 	end)
 
+	it("AC7: gitState reads HEAD plus only requested refs", function()
+		setup()
+		local first = workspace.gitState(repo, { "refs/remotes/origin/main" }) :: fingerprint.GitState
+		t.expect(first.refs["refs/remotes/origin/main"]).toBe(nil)
+		fixture.git(repo, { "update-ref", "refs/remotes/origin/main", "HEAD" })
+		fixture.git(repo, { "update-ref", "refs/heads/unrelated", "HEAD" })
+		local declared = workspace.gitState(repo, { "refs/remotes/origin/main" }) :: fingerprint.GitState
+		t.expect(declared.refs["refs/remotes/origin/main"]).toBe(declared.head)
+		t.expect(declared.refs["refs/heads/unrelated"]).toBe(nil)
+		fixture.git(repo, { "update-ref", "-d", "refs/heads/unrelated" })
+		t.expect(workspace.gitState(repo, { "refs/remotes/origin/main" })).toEqual(declared)
+		fixture.git(repo, { "commit", "-q", "--allow-empty", "-m", "new object for declared ref" })
+		local next = trim(fixture.git(repo, { "rev-parse", "HEAD" }))
+		fixture.git(repo, { "update-ref", "HEAD", declared.head })
+		fixture.git(repo, { "update-ref", "refs/remotes/origin/main", next })
+		local moved = workspace.gitState(repo, { "refs/remotes/origin/main" }) :: fingerprint.GitState
+		t.expect(moved.head).toBe(declared.head)
+		t.expect(moved.refs["refs/remotes/origin/main"] ~= declared.refs["refs/remotes/origin/main"])
+			.toBe(true)
+	end)
+
 	it("AC7: the db path is the main checkout's .claude, from a worktree as well", function()
 		setup()
 		fixture.git(repo, { "commit", "-qam", "more" })
@@ -153,6 +174,15 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		t.expect((workspace.dbPath(repo))).toBe(`{main}/.claude/.znile_tests.sqlite`)
 		fixture.git(repo, { "worktree", "add", "-q", `{base}/wt`, "-b", "wt" })
 		t.expect((workspace.dbPath(`{base}/wt`))).toBe(`{main}/.claude/.znile_tests.sqlite`)
+		-- a nested orchestrator may write only a fixture db below .cache, never the real checkout's
+		local oldFence = process.env.PICKMAN_TEST_FENCE
+		process.env.PICKMAN_TEST_FENCE = "1"
+		local nested, nestedWhy = workspace.dbPath(root)
+		local fixturePath = workspace.dbPath(repo)
+		process.env.PICKMAN_TEST_FENCE = oldFence
+		t.expect(nested).toBe(nil)
+		t.expect(nestedWhy ~= nil and string.find(nestedWhy, ".cache", 1, true) ~= nil).toBe(true)
+		t.expect(fixturePath).toBe(`{main}/.claude/.znile_tests.sqlite`)
 		-- a folder in no repository has no db path
 		fs.writeDir(`{base}/plain`)
 		local p, why = workspace.dbPath(`{base}/plain`)

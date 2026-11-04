@@ -106,6 +106,102 @@ return t.spec("c0165 claims, waits and owners", function(it)
 		end
 	)
 
+	it("AC5: three specs with one owner cost one db read and one owner liveness check per poll", function()
+		local dir = gatefix.make(base, "poll-cost", {
+			extra = { hang2 = { hang = true }, hang3 = { hang = true } },
+		})
+		local specs = {
+			"--",
+			"tests/unit/hang.spec.luau",
+			"tests/unit/hang2.spec.luau",
+			"tests/unit/hang3.spec.luau",
+		}
+		local o = gatefix.ownerMany(dir, { table.unpack(specs, 2) })
+		local realSqlite = gatefix.trim(process.exec("sh", { "-c", "command -v sqlite3" }).stdout)
+		gatefix.write(
+			`{dir}/bin-count/sqlite3`,
+			'#!/bin/sh\necho sqlite >> "$COUNT_SQLITE"\nexec "' .. realSqlite .. '" "$@"\n'
+		)
+		gatefix.write(
+			`{dir}/bin-count/kill`,
+			'#!/bin/sh\n[ "$1" != -0 ] || echo kill >> "$COUNT_KILL"\nexec /bin/kill "$@"\n'
+		)
+		process.exec("chmod", { "+x", `{dir}/bin-count/sqlite3`, `{dir}/bin-count/kill` })
+		local sqliteLog, killLog = `{dir}/.cache/sqlite.log`, `{dir}/.cache/kill.log`
+		gatefix.write(sqliteLog, "")
+		gatefix.write(killLog, "")
+		local ok, out = gatefix.specs(dir, specs, {
+			PATH = `{dir}/bin-count:{dir}/bin:{process.env.PATH or ""}`,
+			PICKMAN_SQLITE3 = `{dir}/bin-count/sqlite3`,
+			PICKMAN_REUSE_WAIT = "2",
+			COUNT_SQLITE = sqliteLog,
+			COUNT_KILL = killLog,
+		})
+		fs.removeFile(`{dir}/hang.marker`)
+		gatefix.killGroup(o.group)
+		t.expect(ok).toBe(true)
+		t.expect(has(out, "gave up waiting")).toBe(true)
+		local sqliteCalls = select(2, string.gsub(fs.readFile(sqliteLog), "sqlite\n", ""))
+		local killCalls = select(2, string.gsub(fs.readFile(killLog), "kill\n", ""))
+		-- Two seconds of polling plus the initial open/read: per-spec reads or probes exceed these bounds.
+		t.expect(sqliteCalls <= 8).toBe(true)
+		t.expect(killCalls <= sqliteCalls + 1).toBe(true)
+	end)
+
+	it("AC5: --fresh waits for a live owner instead of stealing its row, then reuses its pass", function()
+		local dir = gatefix.make(base, "fresh-live")
+		local o = gatefix.owner(dir, "tests/unit/hang.spec.luau")
+		local ok, out = gatefix.waitRelease(dir, { "--fresh", table.unpack(HANG) })
+		gatefix.killGroup(o.group)
+		t.expect(ok).toBe(true)
+		t.expect(has(out, "waiting for pid")).toBe(true)
+		t.expect(has(out, "reused tests/unit/hang.spec.luau (waited for pid")).toBe(true)
+		t.expect(count(ran(dir), "hang")).toBe(1)
+	end)
+
+	it("AC5: EPERM probing an owner or sweeping its results counts as alive, never dead", function()
+		local dir = gatefix.make(base, "eperm")
+		local o = gatefix.owner(dir, "tests/unit/hang.spec.luau")
+		local owner = gatefix.sql(dir, "select owner_pid from specs where state = 'running'")
+		t.expect(owner ~= "").toBe(true)
+		local held = `{dir}/pickman/.cache/spec-results-{owner}.json`
+		gatefix.write(held, "the live owner's results\n")
+		local ok, out = gatefix.waitRelease(dir, HANG, {
+			PATH = gatefix.eperm(dir, owner),
+			EXPECT_HELD_FILE = held,
+		})
+		gatefix.killGroup(o.group)
+		t.expect(ok).toBe(true)
+		t.expect(has(out, "waiting for pid")).toBe(true)
+		t.expect(count(ran(dir), "hang")).toBe(1)
+	end)
+
+	it("AC5: the next run sweeps stale results files, including worker parts", function()
+		local dir = gatefix.make(base, "sweep")
+		gatefix.write(`{dir}/pickman/.cache/spec-results-999999.json`, "stale\n")
+		gatefix.write(`{dir}/pickman/.cache/spec-results-999999.json.1`, "stale\n")
+		local ok, _ = gatefix.specs(dir, { "--", "tests/unit/a.spec.luau" })
+		t.expect(ok).toBe(true)
+		t.expect(fs.isFile(`{dir}/pickman/.cache/spec-results-999999.json`)).toBe(false)
+		t.expect(fs.isFile(`{dir}/pickman/.cache/spec-results-999999.json.1`)).toBe(false)
+	end)
+
+	it("AC5: a results file that omits a claimed spec releases it and counts it failed", function()
+		local dir = gatefix.make(base, "omitted")
+		local ok, out = gatefix.specs(
+			dir,
+			{ "--", "tests/unit/a.spec.luau", "tests/unit/b.spec.luau" },
+			{ PATH = gatefix.omitResult(dir, "tests/unit/b.spec.luau") }
+		)
+		t.expect(ok).toBe(false)
+		t.expect(has(out, "FAIL tests/unit/b.spec.luau: no result for it")).toBe(true)
+		t.expect(gatefix.sql(dir, "select count(*) from specs where spec = 'tests/unit/b.spec.luau'"))
+			.toBe("0")
+		local ok2, _ = gatefix.specs(dir, { "--", "tests/unit/b.spec.luau" })
+		t.expect(ok2).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(2)
+	end)
+
 	it("AC5: a claimed spec with no result (the runner quit early) is released and counted failed", function()
 		local dir = gatefix.make(base, "quitter", { extra = { quitter = { quits = true } } })
 		local ok, out = gatefix.specs(

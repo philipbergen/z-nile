@@ -314,20 +314,27 @@ end
 -- it holds in that spec; returns once the spec has started, with the group's id and the runner's pid (the process
 -- running the spec, from its hangpid line). The case releases it by removing hang.marker, and kills `group` at the end.
 export type Owner = { group: string, runner: string }
-function gatefix.owner(dir: string, spec: string): Owner
+function gatefix.ownerMany(dir: string, specs: { string }): Owner
 	fs.writeFile(`{dir}/hang.marker`, "")
+	local args = { "run", "z-nile/specs", "--", "run", "--project", "pickman", "--" }
+	for _, spec in specs do
+		table.insert(args, spec)
+	end
 	local r = process.exec("bash", {
 		"-c",
 		-- `cd; cmd &`, not `cd && cmd &`: the latter backgrounds a subshell, so $! would not be the owner's group
-		'cd "$1"; C0165_HOLD=1 PATH="$1/bin:$PATH" perl -e \'setpgrp(0,0); exec @ARGV\' lune run z-nile/specs -- run --project pickman -- "$2" > /dev/null 2>&1 < /dev/null & '
-			.. `echo "$!"; for i in $(seq 1 {HOLD_POLLS}); do grep -q "^hangpid " "$1/ran.log" 2>/dev/null && exit 0; sleep 0.1; done; exit 1`,
+		'cd "$1"; d=$1; shift; C0165_HOLD=1 PATH="$d/bin:$PATH" perl -e \'setpgrp(0,0); exec @ARGV\' lune "$@" > /dev/null 2>&1 < /dev/null & '
+			.. `echo "$!"; for i in $(seq 1 {HOLD_POLLS}); do [ "$(grep -c "^hangpid " "$d/ran.log" 2>/dev/null)" = "{#specs}" ] && exit 0; sleep 0.1; done; exit 1`,
 		"_",
 		dir,
-		spec,
+		table.unpack(args),
 	}, { env = { PICKMAN_OPEN_GUARD = "" } })
 	t.expect(r.ok).toBe(true)
 	local runner = string.match(gatefix.ran(dir), "hangpid (%d+)") :: string
 	return { group = gatefix.trim(r.stdout), runner = runner }
+end
+function gatefix.owner(dir: string, spec: string): Owner
+	return gatefix.ownerMany(dir, { spec })
 end
 -- whether the process `pid` is gone within `seconds` (polled every 0.1 s)
 function gatefix.goneWithin(pid: string, seconds: number): boolean
@@ -342,6 +349,70 @@ function gatefix.goneWithin(pid: string, seconds: number): boolean
 end
 function gatefix.killGroup(group: string)
 	process.exec("bash", { "-c", 'kill -9 -- "-$1" 2>/dev/null; exit 0', "_", group })
+end
+
+-- A lune wrapper that lets the real runner finish, then edits its merged results before the orchestrator reads them.
+-- `body` gets `doc`. Returns a PATH with the wrapper first.
+function gatefix.editResults(dir: string, name: string, body: string): string
+	local script = `{dir}/{name}.luau`
+	gatefix.write(
+		script,
+		'local fs = require("@lune/fs")\nlocal serde = require("@lune/serde")\nlocal process = require("@lune/process")\n'
+			.. 'local doc = serde.decode("json", fs.readFile(process.args[1]))\n'
+			.. body
+			.. '\nfs.writeFile(process.args[1], serde.encode("json", doc))\n'
+	)
+	gatefix.write(
+		`{dir}/bin-{name}/lune`,
+		'#!/bin/sh\nif [ "$1" = run ] && [ "$2" = tests/run ]; then\n'
+			.. `"{dir}/bin/lune" "$@"\nrc=$?\n`
+			.. `if [ -f "$PICKMAN_RESULTS" ]; then "{dir}/bin/lune" run "{script}" -- "$PICKMAN_RESULTS"; fi\n`
+			.. 'exit "$rc"\nfi\n'
+			.. `exec "{dir}/bin/lune" "$@"\n`
+	)
+	process.exec("chmod", { "+x", `{dir}/bin-{name}/lune` })
+	return `{dir}/bin-{name}:{dir}/bin:{process.env.PATH or ""}`
+end
+function gatefix.weakJail(dir: string): string
+	return gatefix.editResults(dir, "weak-jail", 'doc.jail = "outer sandbox (protects the repository)"')
+end
+function gatefix.omitResult(dir: string, spec: string): string
+	return gatefix.editResults(dir, "omit-result", [[for i, f in doc.files do
+	if f.file == "]] .. spec .. [[" then table.remove(doc.files, i) break end
+end]])
+end
+-- A kill -0 of this owner answers EPERM; every other kill is real. Returns a PATH with the stand-in first.
+function gatefix.eperm(dir: string, pid: string): string
+	gatefix.write(
+		`{dir}/bin-eperm/kill`,
+		'#!/bin/sh\nif [ "$1" = -0 ] && [ "$2" = '
+			.. pid
+			.. ' ]; then echo "Operation not permitted" >&2; exit 1; fi\n'
+			.. 'exec /bin/kill "$@"\n'
+	)
+	process.exec("chmod", { "+x", `{dir}/bin-eperm/kill` })
+	return `{dir}/bin-eperm:{dir}/bin:{process.env.PATH or ""}`
+end
+-- Runs a waiter until its output proves it is waiting, then releases the owner's hang. Returns the waiter's result.
+function gatefix.waitRelease(dir: string, args: { string }, extra: { [string]: string }?): (boolean, string)
+	local out = `{dir}/../wait-release.out`
+	local r = process.exec("bash", {
+		"-c",
+		'd="$1"; cd "$d"; shift; lune run z-nile/specs -- run --project pickman "$@" > "'
+			.. out
+			.. '" 2>&1 & p=$!; '
+			.. `seen=1; for i in $(seq 1 {HOLD_POLLS}); do grep -q "waiting for pid" "{out}" 2>/dev/null && \{ seen=0; break; \}; sleep 0.1; done; `
+			.. '[ -z "$EXPECT_HELD_FILE" ] || [ -f "$EXPECT_HELD_FILE" ]; held=$?; '
+			.. 'rm -f "$d/hang.marker"; wait "$p"; rc=$?; [ "$seen" = 0 ] && [ "$held" = 0 ] && [ "$rc" = 0 ]',
+		"_",
+		dir,
+		table.unpack(args),
+	}, { env = gatefix.env(dir, extra) })
+	local text = if fs.isFile(out) then fs.readFile(out) else ""
+	if not r.ok then
+		print(`waitRelease failed:\n{text}`)
+	end
+	return r.ok, text
 end
 
 return gatefix
