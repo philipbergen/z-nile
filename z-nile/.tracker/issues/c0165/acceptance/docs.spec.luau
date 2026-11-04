@@ -1,8 +1,8 @@
 --!strict
--- c0165 AC10: the restated rules. Every step before the merge runs the affected gate, the merge's full gate runs for
--- real in `./zn done` (and land, CI, setup.sh), the merge condition reuses done's run on the same content
--- (`--full --reuse`), graph misses are learned, and the db is a named, ignored writer of the main checkout.
--- The sentences are the Design's "Wording" list. Read from the checkout's top.
+-- c0165 AC10: the words for the core. zz-test describes fingerprints, reuse, declared inputs and the db writer;
+-- AGENTS.md names the db among what writes the main checkout; .gitignore ignores it. Which step runs the affected or
+-- the full gate is c0239's wording, not pinned here. The sentences are the Design's "Wording" list. Read from the
+-- checkout's top.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -17,90 +17,18 @@ local function says(rel: string, line: string)
 		error(`{rel} does not say: {line}`)
 	end
 end
-local function never(rel: string, line: string)
-	if string.find(read(rel), line, 1, true) ~= nil then
-		error(`{rel} still says: {line}`)
-	end
-end
 
-return t.spec("c0165 restated gate rules", function(it)
-	it(
-		"AC10: zz-execute runs the affected gate before the merge and reuses done's full gate at it",
-		function()
-			local f = "z-nile/skills/zz-execute/SKILL.md"
-			says(
-				f,
-				"Run no gate here: the full gate runs once, at the merge (`./zn done` and zz-rules Merging 2), and a red `main` first shows there as a failure on the base too."
-			)
-			never(f, "Confirm `z-nile/check.sh --full` passes here.")
-			never(f, "Confirm `z-nile/check.sh --full --reuse` passes here.")
-			never(f, "Confirm `z-nile/check.sh --affected` passes here.")
-			never(f, "**If main is red, stop.**")
-			never(f, "gh run")
-			says(
-				f,
-				"- Main is red: `./zn done` prints `fails on the base too: main is red` for a spec that also fails on `origin/main`."
-			)
-			never(f, "- Main is red.\n")
-			says(f, "Double-check that `z-nile/check.sh --affected` passes as well")
-			says(
-				f,
-				"**Gate speed**: post the `gate wall time` and the `slowest:` specs of `./zn done`'s full gate in the `Ready to merge` PR comment (Phase 5 step 5)."
-			)
-			-- nothing tracked is edited after done: that would change the content the merge condition reuses
-			never(f, "in each issue's Verification log. If a stage")
-			says(f, "Run `z-nile/check.sh --affected` and read the whole lint summary")
-			never(f, "Run `z-nile/check.sh --full` and read the whole lint summary")
-			says(f, "rerun `z-nile/check.sh --affected`")
-			never(f, "rerun `z-nile/check.sh --full`")
-			says(f, "(`z-nile/check.sh --full --reuse` on the final head")
-		end
-	)
-
-	it("AC10: zz-rules and zz-review say the same", function()
-		says("z-nile/skills/zz-rules/SKILL.md", "and `z-nile/check.sh --affected`.")
-		says(
-			"z-nile/skills/zz-rules/SKILL.md",
-			"2. `z-nile/check.sh --full --reuse` passes on the final head, run by you."
-		)
-		says("z-nile/skills/zz-rules/SKILL.md", "runs `z-nile/check.sh --full` locally")
-		never("z-nile/skills/zz-rules/SKILL.md", "2. `z-nile/check.sh --full` passes on the final head")
-		says(
-			"z-nile/skills/zz-review/SKILL.md",
-			"Run `z-nile/check.sh --affected` and each `./zn check <id>` yourself."
-		)
-		never("z-nile/skills/zz-review/SKILL.md", "Run `z-nile/check.sh --full` and each")
-	end)
-
-	it("AC10: zz-test describes the modes, reuse, graph misses and the db writer", function()
+return t.spec("c0165 reuse wording", function(it)
+	it("AC10: zz-test describes reuse, declared inputs, --fresh and the db writer", function()
 		local f = "z-nile/skills/zz-test/SKILL.md"
-		says(
-			f,
-			"| `z-nile/check.sh --full` | every project's gate, every spec, always run for real. Used by `land`, `done`, CI and `setup.sh` |"
-		)
-		says(
-			f,
-			"| `z-nile/check.sh --full --reuse` | the merge condition: reuses a full gate that passed on the same content (`done`'s), else runs fresh |"
-		)
 		says(f, "| `z-nile/check.sh --affected --fresh` | the affected gate without reuse |")
 		says(
 			f,
-			"**Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. The full gate finds the file it depends on, records it in the results db and prints the line to commit to the home's `tests/inputs.tsv`."
+			"**Reuse**: in an affected run, a spec file whose fingerprint (its own content, everything it can reach, the tools and the gate mode) already passed is skipped and reported `reused <spec>`, and a whole affected gate that passed on the same content is skipped with its stored static report. `--fresh` reuses nothing and `--full` runs every spec. Passes are kept in `.claude/.znile_tests.sqlite`; deleting it only costs reruns."
 		)
-		never(f, "That's a selector bug. File it as a chore")
 		says(
 			f,
-			"**Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob plus HEAD and `ref:` adds one named ref. A path under a project root is allowed only below it, never the root itself or a `spend.md`. `lune run z-nile/affected -- --learned` also reads the inputs the full gate learned; a bare selection call reads only `inputs.tsv`."
-		)
-		says(f, "**Reuse**:")
-		says(f, ".claude/.znile_tests.sqlite")
-		says(
-			f,
-			"a raft's `check.sh` runs its project's gate (`\"$ZN_ROOT/z-nile/check.sh\" --project <project> --affected`)"
-		)
-		never(
-			f,
-			"a raft's `check.sh` runs its project's gate (`\"$ZN_ROOT/z-nile/check.sh\" --project <project> --full`)"
+			"**Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob plus HEAD and `ref:` adds one named ref. A path under a project root is allowed only below it, never the root itself or a `spend.md`. A spec that reads the files of every registered project (it loops the registry, itself or through a spec, wrapper or helper it runs) declares `*`, or, when it takes over 2 s idle, a line for each registered project; registering a project adds those lines."
 		)
 		says(
 			f,
@@ -108,16 +36,39 @@ return t.spec("c0165 restated gate rules", function(it)
 		)
 	end)
 
-	it("AC10: the prompt and raft templates, AGENTS.md and .gitignore", function()
-		says(
-			"z-nile/templates/prompt.md",
-			"Iterate with `z-nile/check.sh --affected`. The full gate runs at the merge, in `./zn done`."
-		)
-		says(
-			"z-nile/templates/raft/check.sh",
-			'check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --affected'
-		)
-		never("z-nile/templates/raft/check.sh", "--full")
+	-- R73: the rule is a rule, not today's set of projects. The two registry specs that take over 2 s keep a line per
+	-- registered project; registering a project without adding its two lines turns this red.
+	it(
+		"AC10: z-nile's inputs.tsv holds both tracker folders of every registered project for the two slow registry specs",
+		function()
+			local reg = process.exec("lune", { "run", "z-nile/roots", "--", "--projects" }, { cwd = root })
+			t.expect(reg.ok).toBe(true)
+			local have: { [string]: boolean } = {}
+			for line in string.gmatch(read("z-nile/tests/inputs.tsv"), "[^\n]+") do
+				have[line] = true
+			end
+			local missing: { string } = {}
+			local projects = 0
+			for line in string.gmatch(reg.stdout, "[^\n]+") do
+				local trackerRoot = string.match(line, "^[^\t]+\t[^\t]+\t([^\t]+)$")
+				if trackerRoot then
+					projects += 1
+					for _, spec in { "c0114/classified", "c0042/cli" } do
+						for _, kind in { "issues/", "rafts/" } do
+							local want = `tests/acceptance/{spec}.spec.luau\t{trackerRoot}/{kind}`
+							if not have[want] then
+								table.insert(missing, want)
+							end
+						end
+					end
+				end
+			end
+			t.expect(projects > 1).toBe(true)
+			t.expect(table.concat(missing, "\n")).toBe("")
+		end
+	)
+
+	it("AC10: AGENTS.md names the db and .gitignore ignores it", function()
 		-- AGENTS.md names the db in its list of what writes the main checkout
 		local agents = read("AGENTS.md")
 		local line = string.match(agents, "[^\n]*the main checkout is never edited[^\n]*") or ""
@@ -138,21 +89,5 @@ return t.spec("c0165 restated gate rules", function(it)
 			local r = process.exec("git", { "check-ignore", "-q", "--no-index", name }, { cwd = root })
 			t.expect(r.ok).toBe(true)
 		end
-	end)
-
-	it("AC10: the stop hook derives one project-scoped affected gate from the selector", function()
-		says("scripts/hooks/stop.sh", 'lune run z-nile/affected -- --gate-projects "${paths[@]}"')
-		says("scripts/hooks/stop.sh", 'scripts/check.sh "${args[@]}"')
-		never("scripts/hooks/stop.sh", "out=$(scripts/check.sh --affected")
-	end)
-
-	it("AC10: land, done, CI and setup.sh keep the fresh full gate", function()
-		says("z-nile/engine/main.luau", 'local gate = override or "z-nile/check.sh --full"')
-		says("z-nile/engine/main.luau", 'sh.stream("bash", { "z-nile/check.sh", "--full" })')
-		says(".github/workflows/check.yml", 'z-nile/check.sh --project "$PROJECT" --full')
-		says("z-nile/setup.sh", "z-nile/check.sh --full")
-		never("z-nile/engine/main.luau", "--reuse")
-		never(".github/workflows/check.yml", "--reuse")
-		never("z-nile/setup.sh", "--reuse")
 	end)
 end)

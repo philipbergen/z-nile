@@ -59,3 +59,31 @@
 - design-review-005 F4: z-design/accepted-risks-checked-and-decided
 - design-review-005 F5: z-design/spec-design-correspondence
 - design-review-005 F6: z-design/spec-design-correspondence
+- design-review-006 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F2: z-design/restated-rules-move-together
+- design-review-006 F3: z-design/spec-design-correspondence
+- design-review-006 F4: zz-test/seed-every-enumerated-case
+- design-review-006 F5: z-design/restated-rules-move-together
+- design-review-006 F6: z-design/spec-design-correspondence
+- design-review-007 F1: z-design/rerun-shipped-audits-at-execution, z-design/new-rules-migrate-existing-work
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: zz-test/promoted-specs-pin-rules-not-sets, zz-review/recommendations-pick-spec-or-check
+- design-review-007 F4: z-design/quote-other-preps-before-promising, z-ticket/split-designs-name-each-owner
+- design-review-007 F5: z-design/resplit-folded-specs-remeasure-lanes
+- design-review-007 F6: one-off: a function designed and tested but with no call site never runs (name the call site and add a case that a normal run reaches it)
+- design-review-007 F7: zz-test/refusals-tested-on-both-sides, zz-test/no-vacuous-pass
+- note subagent audit (round 1 of the re-prep): the first E9 audit had missed six older specs, found only by checking every read path against the real selector (`affected` must print ALL or the spec): z-design/rerun-shipped-audits-at-execution
+- design-review-008 F1: z-design/rerun-shipped-audits-at-execution, z-design/full-enforcement-means-every-clause, z-design/run-the-other-rafts-specs
+- design-review-008 F2: zz-arch/allow-list-entries-are-not-caller-chosen
+- design-review-008 F3: z-ticket/split-designs-name-each-owner
+- design-review-008 F4: one-off: a cleanup that removes by glob removes a concurrent run's marker (remove only what you wrote); a design says "refuses" where the case expects exit 0; reviewed data cut mid-word; a comment contradicting the library it reads
+- design-review-008 F5: one-off: noted, no change (whole-gate reuse is a captured outcome: a later step skips rerunning a gate that already passed on the same code)
+- note re-prep round 2: the registry-driven specs (12 now `*`, two with a line per project) were found while pre-classifying c0184; the first audit had declared them for two of seven homes: z-design/rerun-shipped-audits-at-execution
+- design-review-009 F1: z-design/run-the-other-rafts-specs, zz-test/narrowing-pins-the-whole-file
+- design-review-009 F2: z-design/rerun-shipped-audits-at-execution, z-design/full-enforcement-means-every-clause
+- design-review-009 F3: one-off: a promoted copy of a spec is scanned by repo-fence, which promote-check does not run, so an absence pin that names banned names needs ALLOWED entries and an environment change a spec makes must be restored when the call errors
+- design-review-009 F4: one-off: a floor that reads as a z-nile-only cost was new for game work; state a cost as a measured comparison against today and record the user's decision (c0242 follows up)
+- design-review-009 F5: one-off: wording a literal executor can get wrong (a backlog path after z-ready, a re-key list that omits the issue's own edits, a rule pinned as a set instead of a rule)
+- design-review-010 F1: z-design/rerun-shipped-audits-at-execution
+- design-review-010 F2: one-off: covered by the F1 decision
+- design-review-010 F3: zz-review/lists-paste-their-search, zz-test/narrow-guard-allowances

@@ -2,7 +2,10 @@
 -- c0165 AC1, AC2, AC9: one predicate (`select.isInput`) decides both which specs a change selects and what enters a
 -- spec's fingerprint, so the two can never disagree; the selection rules moved out of affected.luau keep their
 -- outcomes; `inputs.tsv` adds inputs and refuses a malformed file whole. Pure: the graph is built by hand (a Graph is
--- plain data), the blob map is invented, nothing is read from disk.
+-- plain data), the blob map is invented, nothing is read from disk. The "exactly when" property holds for specs
+-- without a `ref:` entry: such a spec is selected by every change set and its fingerprint (which holds the ref) decides.
+-- The moved rules include c0185's (c0165 depends on it): any `*.project.json` directly in a home forces that home's run,
+-- and a place spec's inputs are the home's project files and every folder they map (the arcade library's included).
 local fingerprint = require("@znile/lib/fingerprint")
 local projects = require("@znile/engine/projects")
 local select = require("@znile/lib/select")
@@ -35,6 +38,18 @@ local GHOST_SPEC = "pickman/tests/unit/Ghost.spec.luau"
 local BOOT_SPEC = "pickman/tests/place/Boot.spec.luau"
 local TEXT_SPEC = "pickman/tests/acceptance/x/narrowed.spec.luau"
 local DATA = "pickman/tests/fixtures/data/levels.json"
+local OTHER_PROJECT = "pickman/other.project.json" -- c0185: any project file directly in a home is a place's
+local SUB_PROJECT = "pickman/sub/x.project.json" -- a project file in a sub-folder is no place of the home
+local LIB_SHARED = "arcade/src/shared/Info.luau" -- mapped by the home's project file (c0185)
+local LIB_SERVER = "arcade/src/server/Boot.luau" -- the library's server folder, mapped only when the file says so
+local LIB_TESTS = "arcade/tests/unit/Info.spec.luau" -- the library's tests are in no place
+-- graph.placeInputs("pickman/") as c0185 defines it: the project files and every folder they map, collapsed
+local PLACE_INPUTS = {
+	"pickman/default.project.json",
+	"pickman/lobby.project.json",
+	"pickman/src",
+	"arcade/src/shared",
+}
 local TOOL_SPEC = "z-nile/tests/tooling/a.spec.luau"
 local TOOL_LIB = "z-nile/tests/tooling/helper.luau"
 local SPECS = { MAZE_SPEC, GHOST_SPEC, BOOT_SPEC, TEXT_SPEC, TOOL_SPEC }
@@ -70,9 +85,14 @@ local function graphOf(): any
 	}
 end
 
-local function ctxWith(inputs: select.Inputs): select.Context
+local function ctxWith(inputs: select.Inputs, places: { string }?): select.Context
 	local reg = projects.parse(REGISTRY) :: projects.Registry
-	return { rules = select.rules(reg), graph = graphOf(), inputs = inputs }
+	return {
+		rules = select.rules(reg),
+		graph = graphOf(),
+		inputs = inputs,
+		places = { ["pickman/"] = places or PLACE_INPUTS },
+	}
 end
 
 local DECLARED: select.Inputs =
@@ -96,6 +116,11 @@ local function tree(): fingerprint.Blobs
 			DATA,
 			"pickman/default.project.json",
 			"pickman/lobby.project.json",
+			OTHER_PROJECT,
+			SUB_PROJECT,
+			LIB_SHARED,
+			LIB_SERVER,
+			LIB_TESTS,
 			"pickman/tests/meta/architecture.spec.luau",
 			"pickman/scripts/check.sh",
 			"pickman/tests/inputs.tsv",
@@ -150,6 +175,11 @@ local CHANGES: { Edit } = {
 	{ kind = "modified", path = GHOST_SPEC }, -- a spec's own file
 	{ kind = "modified", path = UNUSED }, -- src: the place library's specs only
 	{ kind = "modified", path = "pickman/default.project.json" }, -- place project file
+	{ kind = "modified", path = OTHER_PROJECT }, -- c0185: any project file directly in the home: HOME_FULL
+	{ kind = "modified", path = SUB_PROJECT }, -- a project file in a sub-folder: nothing
+	{ kind = "modified", path = LIB_SHARED }, -- a folder a project file maps: the home's place specs
+	{ kind = "modified", path = LIB_SERVER }, -- a library folder no project file maps: nothing
+	{ kind = "modified", path = LIB_TESTS }, -- the library's tests are in no place
 	{ kind = "modified", path = "pickman/tests/meta/architecture.spec.luau" }, -- HOME_FULL (pickman)
 	{ kind = "modified", path = "pickman/scripts/check.sh" }, -- HOME_FULL (pickman)
 	{ kind = "modified", path = "z-nile/engine/main.luau" }, -- TOOLING (z-nile only)
@@ -217,16 +247,6 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		-- project roots select nothing, even under a forcing folder's name
 		t.expect(sel({ "z-nile/.tracker/issues/c0001/c0001.md" }, nil)).toEqual({})
 		t.expect(sel({ "pickman/.tracker/issues/f0001/f0001.md" }, nil)).toEqual({})
-		-- the hook gets the same homes and forcing rules, without a graph or declarations
-		t.expect(select.gateProjects(ctx.rules, { "z-nile/tests/lib/t.luau" }))
-			.toEqual({ "pickman", "z-nile" })
-		t.expect(select.gateProjects(ctx.rules, { "src/old.luau", "tests/old.luau" })).toEqual({ "z-nile" })
-		t.expect(select.gateProjects(ctx.rules, { MAZE, "z-nile/engine/main.luau" }))
-			.toEqual({ "pickman", "z-nile" })
-		t.expect(select.gateProjects(ctx.rules, { "pickman/.tracker/issues/f0001/f0001.md", "AGENTS.md" }))
-			.toEqual({})
-		-- a root file under no home still gets what the forcing rules name
-		t.expect(select.gateProjects(ctx.rules, { "scripts/check.sh" })).toEqual({ "pickman", "z-nile" })
 		-- the graph: a closure file selects its specs, a src file the place library's, relative to the home with --project
 		t.expect(sel({ MAZE }, nil)).toEqual({ BOOT_SPEC, GHOST_SPEC, MAZE_SPEC }) -- sorted
 		t.expect(sel({ GHOST }, "pickman"))
@@ -234,6 +254,38 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		t.expect(sel({ UNUSED }, "pickman")).toEqual({ "tests/place/Boot.spec.luau" })
 		t.expect(sel({ "AGENTS.md" }, nil)).toEqual({})
 	end)
+
+	it(
+		"AC1: c0185's rules are in select.luau: any project file of a home, and the library a place maps",
+		function()
+			local ctx = ctxWith({})
+			local function sel(paths: { string }, only: string?): any
+				return select.affected(ctx, paths, only)
+			end
+			-- HOME_FULL: any *.project.json directly in the home forces that home's run, not another's, not a sub-folder's
+			t.expect(sel({ OTHER_PROJECT }, "pickman")).toBe("ALL")
+			t.expect(sel({ "pickman/default.project.json" }, "pickman")).toBe("ALL")
+			t.expect(sel({ OTHER_PROJECT }, "z-nile")).toEqual({})
+			t.expect(sel({ OTHER_PROJECT }, nil)).toBe("ALL")
+			t.expect(sel({ SUB_PROJECT }, "pickman")).toEqual({})
+			-- the place rule: a folder the home's project files map selects its place specs (those whose closure holds the
+			-- home's place library), and no other
+			t.expect(sel({ LIB_SHARED }, "pickman")).toEqual({ "tests/place/Boot.spec.luau" })
+			t.expect(sel({ "pickman/src/shared/Logic/Maze.luau" }, "pickman"))
+				.toEqual({ "tests/place/Boot.spec.luau", "tests/unit/Ghost.spec.luau", "tests/unit/Maze.spec.luau" })
+			-- a library folder no project file maps is in no place; the library's tests are in none either
+			t.expect(sel({ LIB_SERVER }, "pickman")).toEqual({})
+			t.expect(sel({ LIB_TESTS }, "pickman")).toEqual({})
+			-- a project file that maps the server folder makes it a place input (the rule reads the mapping, not a name)
+			local mapped = ctxWith({}, { "pickman/default.project.json", "pickman/src", "arcade/src/server" })
+			t.expect(select.affected(mapped, { LIB_SERVER }, "pickman"))
+				.toEqual({ "tests/place/Boot.spec.luau" })
+			t.expect(select.affected(mapped, { LIB_SHARED }, "pickman")).toEqual({})
+			-- a home with no entry in places has no place inputs: its place specs are selected by their own closure only
+			local bare: select.Context = { rules = ctx.rules, graph = ctx.graph, inputs = {}, places = {} }
+			t.expect(select.affected(bare, { LIB_SHARED }, "pickman")).toEqual({})
+		end
+	)
 
 	it("AC2: each kind of input changes the fingerprint, and nothing else does", function()
 		local ctx = ctxWith(DECLARED)
@@ -262,19 +314,19 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		-- the gate mode is part of the fingerprint: a full run's rows never serve an affected run
 		t.expect(of(ctx, MAZE_SPEC, base, TOOLS, "affected") ~= of(ctx, MAZE_SPEC, base, TOOLS, "full"))
 			.toBe(true)
-		-- the tools line, and a new declared or learned entry, change it too
+		-- the tools line, and a new declared entry, change it too
 		t.expect(
 			of(ctx, MAZE_SPEC, base, TOOLS, "affected")
 				~= of(ctx, MAZE_SPEC, base, TOOLS .. " | git 2", "affected")
 		).toBe(true)
-		local learned = ctxWith({ [MAZE_SPEC] = { DATA } })
+		local declared = ctxWith({ [MAZE_SPEC] = { DATA } })
 		t.expect(
-			of(ctx, MAZE_SPEC, base, TOOLS, "affected") ~= of(learned, MAZE_SPEC, base, TOOLS, "affected")
+			of(ctx, MAZE_SPEC, base, TOOLS, "affected") ~= of(declared, MAZE_SPEC, base, TOOLS, "affected")
 		)
 			.toBe(true)
 		-- a file input (not a folder) matches only itself
-		t.expect(select.isInput(learned, MAZE_SPEC, DATA)).toBe(true)
-		t.expect(select.isInput(learned, MAZE_SPEC, "pickman/tests/fixtures/data/levels.json.bak"))
+		t.expect(select.isInput(declared, MAZE_SPEC, DATA)).toBe(true)
+		t.expect(select.isInput(declared, MAZE_SPEC, "pickman/tests/fixtures/data/levels.json.bak"))
 			.toBe(false)
 		-- the same inputs, in any order of the blob map, give the same fingerprint (no time, no pid, no order)
 		t.expect(of(ctx, MAZE_SPEC, base, TOOLS, "affected"))
@@ -352,6 +404,11 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		t.expect(select.affected(declared, { "AGENTS.md" }, "pickman"))
 			.toEqual({ "tests/unit/Ghost.spec.luau" })
 		t.expect(select.affected(ctxWith({}), {}, "pickman")).toEqual({})
+		-- only its own project's run gets it: another project's runner could not load the path (design review 006 F4)
+		t.expect(select.affected(declared, {}, "z-nile")).toEqual({})
+		t.expect(select.affected(declared, { "AGENTS.md" }, "z-nile")).toEqual({})
+		-- without --project the path is repository-relative, like every other answer
+		t.expect(select.affected(declared, {}, nil)).toEqual({ GHOST_SPEC })
 	end)
 
 	it("AC2: HEAD moves a * spec, unrelated refs do not, and a declared ref moves its spec", function()
@@ -409,7 +466,8 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			if inputs ~= nil or err == nil then
 				error(`accepted a malformed line: {bad}`)
 			end
-			t.expect(string.find(err :: string, "2", 1, true) ~= nil).toBe(true)
+			-- the Design's form: `line N: <reason>`, N the first malformed line (the good line is line 1)
+			t.expect(string.sub(err :: string, 1, 7)).toBe("line 2:")
 		end
 	end)
 end)

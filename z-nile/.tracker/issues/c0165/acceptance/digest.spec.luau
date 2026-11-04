@@ -175,11 +175,20 @@ return t.spec("c0165 content digest and workspace reads", function(it)
 		fixture.git(repo, { "worktree", "add", "-q", `{base}/wt`, "-b", "wt" })
 		t.expect((workspace.dbPath(`{base}/wt`))).toBe(`{main}/.claude/.znile_tests.sqlite`)
 		-- a nested orchestrator may write only a fixture db below .cache, never the real checkout's
+		-- the variable is restored whether or not dbPath errors (design review 009 F3)
 		local oldFence = process.env.PICKMAN_TEST_FENCE
 		process.env.PICKMAN_TEST_FENCE = "1"
-		local nested, nestedWhy = workspace.dbPath(root)
-		local fixturePath = workspace.dbPath(repo)
+		local nested: string?
+		local nestedWhy: string?
+		local fixturePath: string?
+		local ran, err = pcall(function()
+			nested, nestedWhy = workspace.dbPath(root)
+			fixturePath = workspace.dbPath(repo)
+		end)
 		process.env.PICKMAN_TEST_FENCE = oldFence
+		if not ran then
+			error(err, 0)
+		end
 		t.expect(nested).toBe(nil)
 		t.expect(nestedWhy ~= nil and string.find(nestedWhy, ".cache", 1, true) ~= nil).toBe(true)
 		t.expect(fixturePath).toBe(`{main}/.claude/.znile_tests.sqlite`)

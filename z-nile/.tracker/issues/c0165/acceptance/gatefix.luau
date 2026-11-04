@@ -1,6 +1,6 @@
 --!strict
--- c0165's gate fixtures, shared by the four gate-*.spec files (split by mechanism so each file stays short, design
--- review 002 F9). A fixture is a repository under the calling spec's own .cache folder: a copy of the tooling with a
+-- c0165's gate fixtures, shared by the gate-*.spec files (split by mechanism so each file stays short, design
+-- reviews 002 F9 and 007 F5: a file holds at most 4 fixture builds and 10 gate runs, about 40 s idle). A fixture is a repository under the calling spec's own .cache folder: a copy of the tooling with a
 -- tiny pickman home whose specs append their name to ran.log when they run, so "ran" and "reused" are counted, not
 -- inferred from output. Static tools are stubs; lune, git, perl and sqlite3 are real. The fixture's own main checkout
 -- holds its db (.claude/.znile_tests.sqlite under the fixture), never the real one.
@@ -51,15 +51,10 @@ export type SpecOpts = {
 	reads: string?,
 	-- holds while <dir>/hold.marker exists (every run of it)
 	hold: boolean?,
-	-- holds while <dir>/hang.marker exists and the run has C0165_HOLD=1 (an owner the case started), and logs the pid
-	-- of the process running it, so a case can tell whether that process outlived its owner
-	hang: boolean?,
 	broken: boolean?,
 	writes: { path: string, text: string }?,
 	opens: boolean?,
 	quits: boolean?,
-	-- logs `remote:<git remote of its checkout>` and `realgit:<PICKMAN_FENCE_REAL_GIT>` (a learning trial's view)
-	probe: boolean?,
 }
 function gatefix.specText(dir: string, name: string, o: SpecOpts): string
 	local lines = {
@@ -74,16 +69,6 @@ function gatefix.specText(dir: string, name: string, o: SpecOpts): string
 	table.insert(lines, `return t.spec("{name}", function(it)`)
 	table.insert(lines, '\tit("runs", function()')
 	table.insert(lines, `\t\tprocess.exec("sh", \{ "-c", 'echo {name} >> "$1"', "_", "{dir}/ran.log" })`)
-	if o.hang then
-		table.insert(
-			lines,
-			`\t\tprocess.exec("sh", \{ "-c", 'echo "hangpid $PPID" >> "$1"', "_", "{dir}/ran.log" })`
-		)
-		table.insert(
-			lines,
-			`\t\tfor _ = 1, {HOLD_POLLS} do if process.env.C0165_HOLD ~= "1" or not fs.isFile("{dir}/hang.marker") then break end process.exec("sleep", \{ "0.1" }) end`
-		)
-	end
 	if o.hold then
 		table.insert(
 			lines,
@@ -95,12 +80,6 @@ function gatefix.specText(dir: string, name: string, o: SpecOpts): string
 	end
 	if o.reads then
 		table.insert(lines, `\t\tt.expect(fs.readFile("{o.reads}")).toBe("ok\\n")`)
-	end
-	if o.probe then
-		table.insert(
-			lines,
-			`\t\tprocess.exec("sh", \{ "-c", 'echo "remote:$(git remote | head -1)" >> "$1"; echo "realgit:$PICKMAN_FENCE_REAL_GIT" >> "$1"', "_", "{dir}/ran.log" })`
-		)
 	end
 	if o.opens then
 		-- the runner's browser guard answers this (its recording stub), and fails the run after the spec passed
@@ -143,7 +122,7 @@ function gatefix.stubTools(dir: string)
 end
 
 -- The fixture repository `<base>/<name>`: the tooling and a pickman home with specs a (needs A), b (needs B), text
--- (reads data/x.txt), slow1 and slow2 (hold), hang (an owner's hang), plus `extra`'s specs; `setup` adds files before
+-- (reads data/x.txt), slow1 (holds while hold.marker exists), plus `extra`'s specs; `setup` adds files before
 -- the base commit. Committed on main, then checked out on a branch `work`.
 export type MakeOpts = { extra: { [string]: SpecOpts }?, setup: ((dir: string) -> ())? }
 function gatefix.make(base: string, name: string, opts: MakeOpts?): string
@@ -169,7 +148,7 @@ function gatefix.make(base: string, name: string, opts: MakeOpts?): string
 	end
 	gatefix.write(
 		`{dir}/.gitignore`,
-		".cache/\nsourcemap.json\n/.claude/.znile_tests.sqlite*\nran.log\nhang.marker\nhold.marker\nbin/\nbin-*/\nhome/\n*.out\n*.rc\n"
+		".cache/\nsourcemap.json\n/.claude/.znile_tests.sqlite*\nran.log\nhold.marker\nbin/\nbin-*/\nhome/\n*.out\n*.rc\n"
 	)
 	gatefix.write(`{dir}/pickman/.tracker/.gitkeep`, "")
 	gatefix.write(`{dir}/z-nile/.tracker/.gitkeep`, "")
@@ -184,8 +163,6 @@ function gatefix.make(base: string, name: string, opts: MakeOpts?): string
 		b = { needs = "B" },
 		text = { reads = "data/x.txt" },
 		slow1 = { hold = true },
-		slow2 = { hold = true },
-		hang = { hang = true },
 	}
 	for n, spec in o.extra or ({} :: { [string]: SpecOpts }) do
 		specs[n] = spec
@@ -252,6 +229,15 @@ function gatefix.gate(dir: string, args: { string }, extra: { [string]: string }
 	end
 	return gatefix.gateRaw(dir, argv, extra)
 end
+-- the exit status and output of `bash z-nile/check.sh --project pickman <args>`, nothing printed (for a refusal)
+function gatefix.gateStatus(dir: string, args: { string }, extra: { [string]: string }?): (number, string)
+	local argv = { "z-nile/check.sh", "--project", "pickman" }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	local r = process.exec("bash", argv, { cwd = dir, env = gatefix.env(dir, extra) })
+	return r.code, r.stdout .. r.stderr
+end
 -- `lune run z-nile/affected -- --project pickman <args>` in the fixture, its stdout trimmed
 function gatefix.affected(dir: string, args: { string }): string
 	local argv = { "run", "z-nile/affected", "--", "--project", "pickman" }
@@ -263,6 +249,13 @@ end
 -- one sqlite3 query on the fixture's db, its output trimmed
 function gatefix.sql(dir: string, query: string): string
 	return gatefix.trim(process.exec("sqlite3", { `{dir}/.claude/.znile_tests.sqlite`, query }).stdout)
+end
+-- one sqlite3 statement that changes the fixture's db (seeding a row)
+function gatefix.sqlWrite(dir: string, statement: string)
+	local r = process.exec("sqlite3", { `{dir}/.claude/.znile_tests.sqlite`, statement })
+	if not r.ok then
+		error(`sqlite3 {statement} failed: {r.stderr}`)
+	end
 end
 function gatefix.ran(dir: string): string
 	return if fs.isFile(`{dir}/ran.log`) then fs.readFile(`{dir}/ran.log`) else ""
@@ -282,23 +275,30 @@ function gatefix.worktree(dir: string, path: string)
 end
 
 -- Two orchestrators at once, one in `dir` and one in `other` (a worktree of it), both running `args`, while
--- <dir>/hold.marker holds the held specs: the marker is removed only once either run prints that it waits for the
--- other, so the two runs overlap by construction, never by timing. Returns each run's output and exit code.
+-- <dir>/hold.marker holds `spec` (a held fixture spec, both runs log its name to <dir>/ran.log). `strict`: the marker is
+-- removed only once the spec has started twice, so the two runs overlap by construction, never by timing, and neither
+-- waited for the other (proof-interim.luau, today's behaviour). Not strict: the marker is also removed 3 s after the
+-- spec first started, so a second run that waits for the first (c0238) cannot hold the case until the poll limit. Both
+-- release at once when both orchestrators have ended (a run that fails early does not hold the case 60 s).
+-- Returns each run's output and exit code.
 export type Pair = { out1: string, out2: string, rc1: string, rc2: string }
-function gatefix.together(dir: string, other: string, args: { string }): Pair
+function gatefix.together(dir: string, other: string, spec: string, args: { string }, strict: boolean): Pair
 	fs.writeFile(`{dir}/hold.marker`, "")
 	local outs = `{dir}/..`
 	local r = process.exec("bash", {
 		"-c",
-		"d=$1 o=$2 x=$3; shift 3; "
+		"d=$1 o=$2 x=$3 spec=$4 strict=$5; shift 5; "
 			.. '(cd "$d"; PATH="$d/bin:$PATH" lune run z-nile/specs -- run --project pickman "$@" > "$x/p1.out" 2>&1; echo "$?" > "$x/p1.rc") & '
 			.. '(cd "$o"; PATH="$o/bin:$PATH" lune run z-nile/specs -- run --project pickman "$@" > "$x/p2.out" 2>&1; echo "$?" > "$x/p2.rc") & '
-			.. `for i in $(seq 1 {HOLD_POLLS}); do grep -q "waiting for pid" "$x/p1.out" "$x/p2.out" 2>/dev/null && break; sleep 0.1; done; `
+			.. `n=0; for i in $(seq 1 {HOLD_POLLS}); do c=$(grep -c "^$spec$" "$d/ran.log" 2>/dev/null); [ "$c" = 2 ] && break; `
+			.. 'if [ "$strict" != 1 ] && [ "${c:-0}" -ge 1 ]; then n=$((n+1)); [ "$n" -ge 30 ] && break; fi; [ -f "$x/p1.rc" ] && [ -f "$x/p2.rc" ] && break; sleep 0.1; done; '
 			.. 'rm -f "$d/hold.marker"; wait',
 		"_",
 		dir,
 		other,
 		outs,
+		spec,
+		if strict then "1" else "0",
 		table.unpack(args),
 	}, { env = { PICKMAN_OPEN_GUARD = "", PICKMAN_JOBS = "2" } })
 	t.expect(r.ok).toBe(true)
@@ -308,47 +308,6 @@ function gatefix.together(dir: string, other: string, args: { string }): Pair
 		rc1 = gatefix.trim(fs.readFile(`{outs}/p1.rc`)),
 		rc2 = gatefix.trim(fs.readFile(`{outs}/p2.rc`)),
 	}
-end
-
--- Starts an owner run of `spec` in the background, in its own process group, with C0165_HOLD=1 and hang.marker set, so
--- it holds in that spec; returns once the spec has started, with the group's id and the runner's pid (the process
--- running the spec, from its hangpid line). The case releases it by removing hang.marker, and kills `group` at the end.
-export type Owner = { group: string, runner: string }
-function gatefix.ownerMany(dir: string, specs: { string }): Owner
-	fs.writeFile(`{dir}/hang.marker`, "")
-	local args = { "run", "z-nile/specs", "--", "run", "--project", "pickman", "--" }
-	for _, spec in specs do
-		table.insert(args, spec)
-	end
-	local r = process.exec("bash", {
-		"-c",
-		-- `cd; cmd &`, not `cd && cmd &`: the latter backgrounds a subshell, so $! would not be the owner's group
-		'cd "$1"; d=$1; shift; C0165_HOLD=1 PATH="$d/bin:$PATH" perl -e \'setpgrp(0,0); exec @ARGV\' lune "$@" > /dev/null 2>&1 < /dev/null & '
-			.. `echo "$!"; for i in $(seq 1 {HOLD_POLLS}); do [ "$(grep -c "^hangpid " "$d/ran.log" 2>/dev/null)" = "{#specs}" ] && exit 0; sleep 0.1; done; exit 1`,
-		"_",
-		dir,
-		table.unpack(args),
-	}, { env = { PICKMAN_OPEN_GUARD = "" } })
-	t.expect(r.ok).toBe(true)
-	local runner = string.match(gatefix.ran(dir), "hangpid (%d+)") :: string
-	return { group = gatefix.trim(r.stdout), runner = runner }
-end
-function gatefix.owner(dir: string, spec: string): Owner
-	return gatefix.ownerMany(dir, { spec })
-end
--- whether the process `pid` is gone within `seconds` (polled every 0.1 s)
-function gatefix.goneWithin(pid: string, seconds: number): boolean
-	local r = process.exec("bash", {
-		"-c",
-		'for i in $(seq 1 "$2"); do kill -0 "$1" 2>/dev/null || exit 0; sleep 0.1; done; exit 1',
-		"_",
-		pid,
-		tostring(seconds * 10),
-	})
-	return r.ok
-end
-function gatefix.killGroup(group: string)
-	process.exec("bash", { "-c", 'kill -9 -- "-$1" 2>/dev/null; exit 0', "_", group })
 end
 
 -- A lune wrapper that lets the real runner finish, then edits its merged results before the orchestrator reads them.
@@ -381,38 +340,4 @@ function gatefix.omitResult(dir: string, spec: string): string
 	if f.file == "]] .. spec .. [[" then table.remove(doc.files, i) break end
 end]])
 end
--- A kill -0 of this owner answers EPERM; every other kill is real. Returns a PATH with the stand-in first.
-function gatefix.eperm(dir: string, pid: string): string
-	gatefix.write(
-		`{dir}/bin-eperm/kill`,
-		'#!/bin/sh\nif [ "$1" = -0 ] && [ "$2" = '
-			.. pid
-			.. ' ]; then echo "Operation not permitted" >&2; exit 1; fi\n'
-			.. 'exec /bin/kill "$@"\n'
-	)
-	process.exec("chmod", { "+x", `{dir}/bin-eperm/kill` })
-	return `{dir}/bin-eperm:{dir}/bin:{process.env.PATH or ""}`
-end
--- Runs a waiter until its output proves it is waiting, then releases the owner's hang. Returns the waiter's result.
-function gatefix.waitRelease(dir: string, args: { string }, extra: { [string]: string }?): (boolean, string)
-	local out = `{dir}/../wait-release.out`
-	local r = process.exec("bash", {
-		"-c",
-		'd="$1"; cd "$d"; shift; lune run z-nile/specs -- run --project pickman "$@" > "'
-			.. out
-			.. '" 2>&1 & p=$!; '
-			.. `seen=1; for i in $(seq 1 {HOLD_POLLS}); do grep -q "waiting for pid" "{out}" 2>/dev/null && \{ seen=0; break; \}; sleep 0.1; done; `
-			.. '[ -z "$EXPECT_HELD_FILE" ] || [ -f "$EXPECT_HELD_FILE" ]; held=$?; '
-			.. 'rm -f "$d/hang.marker"; wait "$p"; rc=$?; [ "$seen" = 0 ] && [ "$held" = 0 ] && [ "$rc" = 0 ]',
-		"_",
-		dir,
-		table.unpack(args),
-	}, { env = gatefix.env(dir, extra) })
-	local text = if fs.isFile(out) then fs.readFile(out) else ""
-	if not r.ok then
-		print(`waitRelease failed:\n{text}`)
-	end
-	return r.ok, text
-end
-
 return gatefix
