@@ -4179,14 +4179,16 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 end
 
 -- The prompt's Lessons section: the index of the build and both lessons (c0111).
--- Only the lessons of z-nile's skills and of the raft's own project's (c0115): another project's are left out.
+-- Only the lessons of z-nile's skills, of the raft's own project's and of the skills those extend (c0115, c0184): another
+-- project's are left out.
 local function buildLessons(project: string?): string
 	local tree = lessonsLib.load(".")
 	local sources = lessonsLib.sources(tree.items)
 	local mine = {}
+	local bases = skillsLib.bases((skillsLib.plan((skillsLib.load(".")))), project)
 	for _, l in parsedLessons(tree) do
 		local owner = tree.owners and tree.owners[l.skill]
-		if not owner or owner == skillsLib.ZNILE or owner == project then
+		if not owner or owner == skillsLib.ZNILE or owner == project or bases[l.skill] then
 			table.insert(mine, l)
 		end
 	end
@@ -4402,28 +4404,9 @@ local function projectOfRoot(root: string): string?
 	return p and p.name
 end
 
--- The SKILL.md files a raft's prompt inlines (c0115): z-nile's skills.INLINED, then every skill of the raft's
--- project (none more for z-nile's own rafts). Real paths, never through .claude/skills.
+-- The SKILL.md files a raft's prompt inlines (c0115, c0184): skills.inlined over the skills found.
 local function inlinedSkills(project: string?): { string }
-	local found = skillsLib.load(".")
-	local list = skillsLib.plan(found)
-	local out: { string } = {}
-	local byName: { [string]: skillsLib.Skill } = {}
-	for _, sk in list do
-		byName[sk.name] = sk
-	end
-	for _, name in skillsLib.INLINED do
-		local sk = byName[name]
-		table.insert(out, if sk then `{sk.dir}/SKILL.md` else `{skillsLib.ZNILE}/skills/{name}/SKILL.md`)
-	end
-	if project and project ~= skillsLib.ZNILE then
-		for _, sk in list do
-			if sk.project == project then
-				table.insert(out, `{sk.dir}/SKILL.md`)
-			end
-		end
-	end
-	return out
+	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
 end
 
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,

@@ -9,6 +9,7 @@
 -- reason names, because the agent may be in a scratch folder.
 local boundcmd = require("./engine/boundcmd")
 local process = require("@lune/process")
+local projects = require("./engine/projects")
 local serde = require("@lune/serde")
 local stdio = require("@lune/stdio")
 
@@ -25,12 +26,28 @@ if type(command) ~= "string" then
 	process.exit(0)
 end
 local checkout = process.env.ZN_CHECKOUT
+-- the registry's homes, from the checkout the hook was told (c0244); any problem reading it leaves `homes` nil and
+-- TOOLING's own entries decide, as before
+local homes: { string }? = nil
+if checkout ~= nil and checkout ~= "" then
+	local loaded, reg = pcall(function()
+		return projects.load(checkout :: string)
+	end)
+	if loaded then
+		local list = {}
+		for _, p in (reg :: projects.Registry).projects do
+			table.insert(list, p.home)
+		end
+		homes = list
+	end
+end
 local verdict = boundcmd.check(command :: string, {
 	monitor = call.tool_name == "Monitor",
 	background = (input :: { [string]: any }).run_in_background == true,
 	zn = if checkout ~= nil and checkout ~= "" then `{checkout}/zn` else nil,
 	checkout = if checkout ~= nil and checkout ~= "" then checkout else nil,
 	cwd = if type(call.cwd) == "string" then call.cwd :: string else nil,
+	homes = homes,
 })
 if verdict.ok then
 	process.exit(0)

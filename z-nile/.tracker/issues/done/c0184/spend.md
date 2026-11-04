@@ -16,6 +16,15 @@
 | 12 | 2026-11-01 17:02 | design-review-006 | 0 | 0 | 14.2 | spend | design-review | 167448 |
 | 13 | 2026-11-01 17:02 | design-refute-006 | 0 | 0 | 15.0 | spend | design-review |  |
 | 14 | 2026-11-01 17:03 | prep | 2407 | 1 | 150.0 | spend | prep |  |
+| 15 | 2026-11-04 21:12 | c0184: scaffold arcade homes, registry-driven hand paths, extends skills | 1271 | 73 | 25.0 | focus | build |  |
+| 16 | 2026-11-04 21:14 | c0184: truncate skills.plan to its list at the two engine call sites (plan now returns two values since R0079) | 2 | 2 | 5.0 | focus | build |  |
+| 17 | 2026-11-04 21:15 | c0184: truncate skills.load to its list as well | 2 | 2 | 3.0 | focus | build |  |
+| 18 | 2026-11-04 21:20 | c0184: verification log | 0 | 0 | 5.0 | focus | build |  |
+| 19 | 2026-11-04 21:30 | R0075: review-001 and its answers (c0244 emergent: registry homes in the bounded-command seatbelt) | 84 | 6 | 30.0 | focus | code-review |  |
+| 20 | 2026-11-04 22:03 | R0075: review-003 answers (F1 deferred c0246, F2 sentence, F3 comment) | 5 | 2 | 10.0 | focus | code-review |  |
+| 21 | 2026-11-04 22:03 | R0075: verification log and merge main | 0 | 0 | 3.0 | focus | deliver |  |
+| 22 | 2026-11-04 22:03 | c0184: final verification log | 0 | 0 | 2.0 | focus | deliver |  |
+| 23 | 2026-11-04 22:11 | tracker: done R0075 | 0 | 0 | 4.0 | raft+proportional | deliver |  |
 
-**Total:** +2407 / -1 lines, 469.9 agent-minutes, 1231521 tokens over 14 records
-<!-- totals: added=2407 removed=1 minutes=469.9 records=14 tokens=1231521 -->
+**Total:** +3771 / -86 lines, 556.9 agent-minutes, 1231521 tokens over 23 records
+<!-- totals: added=3771 removed=86 minutes=556.9 records=23 tokens=1231521 -->

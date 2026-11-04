@@ -2,16 +2,26 @@
 -- c0114 AC9: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
 -- (scripts/tracker.sh is named once, as the forwarder), and they state the project-root rules the engine follows.
 local fs = require("@lune/fs")
+local projects = require("@znile/engine/projects")
 -- c0120 override: the spec runs from z-nile/, its home, after the move
 local process = require("@lune/process")
 local serde = require("@lune/serde")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links); each
+-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
+local function skillBases(top: string): { string }
+	local out: { string } = {}
+	for _, folder in skills.folders(projects.load(top)) do
+		table.insert(out, folder.path)
+	end
+	return out
+end
+-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links); each
 -- entry is a repository-relative skill folder ("z-nile/skills/zz-rules")
 local function skillDirs(top: string): { string }
 	local out = {}
-	for _, base in { "z-nile/skills", "pickman/skills" } do
+	for _, base in skillBases(top) do
 		local names = fs.readDir(`{top}/{base}`)
 		table.sort(names)
 		for _, name in names do
