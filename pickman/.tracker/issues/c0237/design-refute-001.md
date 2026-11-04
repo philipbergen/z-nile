@@ -1,0 +1,3 @@
+- F1: fixed: AC2 now requires the file to exist (`[[ -f $f ]] &&`) before the absence grep; consequences: none (a check's single assertion; AC1 and AC3 already failed on a missing file).
+- F2: fixed: Unknowns now says AC1, AC2 and AC3; consequences: none.
+- F3: fixed: Usability names its evidence, the gate that merged #230 and the raft's full gate at done; consequences: none.

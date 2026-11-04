@@ -10,6 +10,7 @@ A="$HERE/acceptance"
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the lobby tooling spec still passes" lune run tests/run -- tests/acceptance/f0061/lobby-tooling.spec.luau
-check "AC2: no pattern in it escapes a brace, which luau-lsp rejects" bash -c '! grep -nF -e "%{" -e "%}" tests/acceptance/f0061/lobby-tooling.spec.luau' 
+check "AC2: no pattern in it escapes a brace, which luau-lsp rejects" bash -c 'f=tests/acceptance/f0061/lobby-tooling.spec.luau; [[ -f $f ]] && ! grep -nF -e "%{" -e "%}" $f' 
+check "AC3: it holds the unescaped project-loop pattern, exactly once" bash -c '[[ $(grep -cF -e "for f in \"%\${p}\"%*%.project%.json; do" tests/acceptance/f0061/lobby-tooling.spec.luau) == 1 ]]'
 
 finish
