@@ -22,6 +22,7 @@
 | 18 | 2026-11-04 21:20 | c0184: verification log | 0 | 0 | 5.0 | focus | build |  |
 | 19 | 2026-11-04 21:30 | R0075: review-001 and its answers (c0244 emergent: registry homes in the bounded-command seatbelt) | 84 | 6 | 30.0 | focus | code-review |  |
 | 20 | 2026-11-04 22:03 | R0075: review-003 answers (F1 deferred c0246, F2 sentence, F3 comment) | 5 | 2 | 10.0 | focus | code-review |  |
+| 21 | 2026-11-04 22:03 | R0075: verification log and merge main | 0 | 0 | 3.0 | focus | deliver |  |
 
-**Total:** +3771 / -86 lines, 547.9 agent-minutes, 1231521 tokens over 20 records
-<!-- totals: added=3771 removed=86 minutes=547.9 records=20 tokens=1231521 -->
+**Total:** +3771 / -86 lines, 550.9 agent-minutes, 1231521 tokens over 21 records
+<!-- totals: added=3771 removed=86 minutes=550.9 records=21 tokens=1231521 -->
