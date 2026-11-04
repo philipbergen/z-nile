@@ -204,7 +204,8 @@ local function insideOf(a: string, b: string): boolean
 end
 
 -- `<home>/tests/run` for a home of the registry (c0244): the same jailed runner as pickman's. A name that is not one plain
--- folder adds nothing. Without `homes` (the registry could not be read) only TOOLING's entries count.
+-- folder adds nothing (the registry only yields plain names, so these checks are a second fence and `normalise` already
+-- strips `./` and `../`). Without `homes` (the registry could not be read) only TOOLING's entries count.
 local function homeRunner(t: string): boolean
 	local homes: { string } = CTX.homes or {}
 	for _, home in homes do

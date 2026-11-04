@@ -7,3 +7,6 @@
 - review-002 F2: zz-test/pin-call-site-arguments
 - review-002 F3: zz-test/promoted-specs-pin-rules-not-sets
 - review-002 F4: one-off: a bookkeeping line forgotten for an emergent issue
+- review-003 F1: zz-arch/parsers-refuse-ambiguity
+- review-003 F2: zz-rules/exhaustive-lists-name-new-things
+- review-003 F3: one-off: a defensive check the normaliser already makes dead
