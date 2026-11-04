@@ -6,7 +6,7 @@ description: Code structure rules for pickman's game (strict Luau, pure Logic fe
 # Architecture (pickman)
 
 ## Layout (Rojo: `default.project.json` is the game place, `lobby.project.json` the lobby)
-The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository).
+The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository). The arcade's projects extend this skill (`extends: pickman-arch`, c0184): a rule changed here changes theirs, so a change names its effect on them.
 | path | Roblox location | contains |
 |---|---|---|
 | `src/shared/Logic/<Feature>/` | ReplicatedStorage.Shared.Logic | **pure game logic**: no engine access, fully unit-tested in Lune |

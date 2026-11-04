@@ -6,7 +6,9 @@
 -- else, the old architecture lessons are zz-arch's, .claude/README.md is gone, and z-design
 -- has its three checklists. Reads the real tree only (fs, git ls-files, git show).
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local realfs = require("@lune/fs")
+local skills = require("@znile/engine/skills")
 -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local function top(p: string): string
@@ -135,15 +137,24 @@ return t.spec("c0115 the skills are renamed and live in their projects' folders"
 			if mode == "120000" and string.match(path :: string, "^%.claude/skills/[^/]+$") then
 				local name = string.match(path :: string, "[^/]+$") :: string
 				table.insert(links, name)
-				local base = if fs.isDir(`pickman/skills/{name}`) then "pickman" else "z-nile"
-				t.expect(git({ "show", `HEAD:{path}` })).toBe(`../../{base}/skills/{name}`)
+				-- c0184 override: the skill's folder is the one of whichever project's skills folder holds it
+				local base = "z-nile/skills"
+				for _, folder in skills.folders(projects.load(TOP)) do
+					if fs.isDir(`{folder.path}/{name}`) then
+						base = folder.path
+					end
+				end
+				t.expect(git({ "show", `HEAD:{path}` })).toBe(`../../{base}/{name}`)
 			elseif string.sub(path :: string, 1, #".claude/skills/") == ".claude/skills/" then
 				table.insert(others, path :: string)
 			end
 		end
-		local all = folders("z-nile/skills")
-		for _, n in folders("pickman/skills") do
-			table.insert(all, n)
+		-- c0184 override: every project's skills folder, from the registry
+		local all: { string } = {}
+		for _, folder in skills.folders(projects.load(TOP)) do
+			for _, n in folders(folder.path) do
+				table.insert(all, n)
+			end
 		end
 		t.expect(#all >= #ZNILE + #PICKMAN).toBe(true)
 		t.expect(sorted(links)).toEqual(sorted(all))

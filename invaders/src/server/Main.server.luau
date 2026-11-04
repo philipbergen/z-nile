@@ -1,0 +1,2 @@
+--!strict
+-- invaders's server entry (c0184 scaffold): boots the server adapters as the features arrive.

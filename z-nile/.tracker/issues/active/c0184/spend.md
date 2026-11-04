@@ -16,6 +16,7 @@
 | 12 | 2026-11-01 17:02 | design-review-006 | 0 | 0 | 14.2 | spend | design-review | 167448 |
 | 13 | 2026-11-01 17:02 | design-refute-006 | 0 | 0 | 15.0 | spend | design-review |  |
 | 14 | 2026-11-01 17:03 | prep | 2407 | 1 | 150.0 | spend | prep |  |
+| 15 | 2026-11-04 21:12 | c0184: scaffold arcade homes, registry-driven hand paths, extends skills | 1271 | 73 | 25.0 | focus | build |  |
 
-**Total:** +2407 / -1 lines, 469.9 agent-minutes, 1231521 tokens over 14 records
-<!-- totals: added=2407 removed=1 minutes=469.9 records=14 tokens=1231521 -->
+**Total:** +3678 / -74 lines, 494.9 agent-minutes, 1231521 tokens over 15 records
+<!-- totals: added=3678 removed=74 minutes=494.9 records=15 tokens=1231521 -->

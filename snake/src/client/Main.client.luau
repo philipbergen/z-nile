@@ -1,0 +1,2 @@
+--!strict
+-- snake's client entry (c0184 scaffold): boots the client adapters as the features arrive.

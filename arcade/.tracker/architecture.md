@@ -62,3 +62,11 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
 - **E5:** a party teleport into a reserved server for 2-player Invaders. This can only be tested on Beta.
 - **E6:** a Lune benchmark of a 24-player Snake arena (step cost and snapshot bytes) to set the player cap.
 - **E7:** drawing the Asteroids wrap-around in first person: the cost of rendering the tiled field (nearby copies only) and whether it reads clearly in a Studio prototype.
+
+## Allowed dependencies
+
+One `Consumer -> Provider` per line.
+
+```deps
+# no features yet
+```

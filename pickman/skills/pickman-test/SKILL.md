@@ -5,7 +5,7 @@ description: How pickman's game is tested - its spec tiers (unit, helper, contra
 
 # Testing the game (pickman)
 
-This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too.
+This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The arcade's projects extend this skill (`extends: pickman-test`, c0184): a rule changed here changes theirs, so a change names its effect on them.
 
 ## Running pickman's specs
 Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.

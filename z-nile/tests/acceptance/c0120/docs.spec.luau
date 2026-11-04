@@ -7,14 +7,24 @@
 -- These specs run from z-nile/: the documents are read from the checkout's top.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links), as
+-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
+local function skillBases(top: string): { string }
+	local out: { string } = {}
+	for _, folder in skills.folders(projects.load(top)) do
+		table.insert(out, folder.path)
+	end
+	return out
+end
+-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links), as
 -- repository-relative folders ("z-nile/skills/zz-rules")
 local function skillDirs(): { string }
 	local out = {}
-	for _, base in { "z-nile/skills", "pickman/skills" } do
+	for _, base in skillBases(TOP) do
 		local names = fs.readDir(`{TOP}/{base}`)
 		table.sort(names)
 		for _, name in names do

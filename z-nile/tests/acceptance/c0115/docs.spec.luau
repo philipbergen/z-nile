@@ -6,7 +6,9 @@
 -- naming rule and the `skills` command in every list a command joins; every skill's lessons paragraph names the real
 -- folder; AGENTS.md and SETUP.md name the new skills and commands; `./zn`'s usage names `skills`. Reads the real tree.
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local realfs = require("@lune/fs")
+local skills = require("@znile/engine/skills")
 -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local function top(p: string): string
@@ -182,8 +184,14 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		for _, n in ALL do
 			table.insert(dirs, `{Z}/{n}`)
 		end
-		table.insert(dirs, "pickman/skills/pickman-arch")
-		table.insert(dirs, "pickman/skills/pickman-test")
+		-- c0184 override: every other project's skills too, from the registry
+		for _, folder in skills.folders(projects.load(TOP)) do
+			if folder.project ~= "z-nile" then
+				for _, n in realfs.readDir(`{TOP}/{folder.path}`) do
+					table.insert(dirs, `{folder.path}/{n}`)
+				end
+			end
+		end
 		for _, d in dirs do
 			local s = section(read(`{d}/SKILL.md`), "## Lessons")
 			at(

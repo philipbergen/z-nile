@@ -1,6 +1,6 @@
 # pickman
 
-A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`.
+A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home).
 
 **Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout. Before doing anything, read the skill that applies. The skills hold all the rules.
 
@@ -28,6 +28,8 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
 | `z-nile/skills/zz-stats/SKILL.md` | cost and rework reporting |
 | `pickman/skills/pickman-arch/SKILL.md` | designing or writing anything in `pickman/src/` |
 | `pickman/skills/pickman-test/SKILL.md` | writing pickman's game specs (with zz-test) |
+| `<name>/skills/<name>-arch/SKILL.md`, for `arcade`, `portal`, `snake`, `invaders` and `asteroids` | designing or writing anything in that project's `src/` (each follows pickman-arch's rules with the changes it states, arcade's for a library) |
+| `<name>/skills/<name>-test/SKILL.md`, for the same five | writing that project's specs (with zz-test and pickman-test) |
 
 The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step. The `zz-` and `z-` prefixes are z-nile's: a project's skills are named `<project>-…`.
 
