@@ -3,3 +3,7 @@
 - review-001 F3: one-off: a comment that lagged the code it described
 - review-001 F4: zz-arch/one-reader-per-format
 - note prototype's engine patch carried a type error a one-home gate does not see: z-design/prototype-engine-edits-pass-the-type-stages
+- review-002 F1: zz-execute/fix-rounds-rerun-every-member-check
+- review-002 F2: zz-test/pin-call-site-arguments
+- review-002 F3: zz-test/promoted-specs-pin-rules-not-sets
+- review-002 F4: one-off: a bookkeeping line forgotten for an emergent issue

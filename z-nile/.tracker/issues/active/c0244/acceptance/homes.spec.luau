@@ -14,8 +14,11 @@ local function refused(command: string, ctx: boundcmd.Context?): boolean
 	return (not v.ok) and v.rule == "unbounded"
 end
 
-local function hook(command: string, checkout: string)
-	local payload = serde.encode("json", { tool_name = "Bash", cwd = checkout, tool_input = { command = command } })
+local function hook(command: string, checkout: string, cwd: string?)
+	local payload = serde.encode(
+		"json",
+		{ tool_name = "Bash", cwd = cwd or checkout, tool_input = { command = command } }
+	)
 	return process.exec(
 		"lune",
 		{ "run", `{ROOT}/z-nile/guard-bash` },
@@ -57,9 +60,36 @@ return t.spec("c0244 the seatbelt knows every registered home's runner", functio
 		t.expect(refused("lune run /tmp/other/snake/tests/run", ctx)).toBe(true)
 	end)
 
-	it("AC1: the hook reads the registry of its checkout and lets a registered home's runner through", function()
-		t.expect(hook("lune run snake/tests/run", ROOT).code).toBe(0)
-		t.expect(hook("lune run nowhere/tests/run", ROOT).code).toBe(2)
+	it(
+		"AC1: the hook reads the registry of its checkout and lets a registered home's runner through",
+		function()
+			t.expect(hook("lune run snake/tests/run", ROOT).code).toBe(0)
+			t.expect(hook("lune run nowhere/tests/run", ROOT).code).toBe(2)
+		end
+	)
+
+	it(
+		"AC1: the hook takes its homes from the registry it is pointed at, not from a list of names",
+		function()
+			-- a fixture checkout whose registry names one project, `zz`: its runner passes, a real home's does not
+			local dir = `{ROOT}/z-nile/.cache/c0244-own-registry`
+			fs.writeDir(`{dir}/z-nile`)
+			fs.writeFile(
+				`{dir}/z-nile/projects.toml`,
+				'retired = []\n\n[[project]]\nname = "zz"\nroot = "zz/.tracker"\n'
+			)
+			local zz = hook("lune run zz/tests/run", dir).code
+			local snake = hook("lune run snake/tests/run", dir).code
+			fs.removeDir(dir)
+			t.expect(zz).toBe(0)
+			t.expect(snake).toBe(2)
+		end
+	)
+
+	it("AC1: the registry is read from ZN_CHECKOUT, whatever folder the call runs in", function()
+		-- from pickman/, `../snake/tests/run` is the registered home's runner; from a folder outside the checkout it is not
+		t.expect(hook("lune run ../snake/tests/run", ROOT, `{ROOT}/pickman`).code).toBe(0)
+		t.expect(hook("lune run snake/tests/run", ROOT, "/tmp").code).toBe(2)
 	end)
 
 	it("AC1: a checkout whose registry cannot be read keeps today's list", function()
