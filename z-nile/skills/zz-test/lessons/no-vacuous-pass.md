@@ -2,7 +2,7 @@
 title: A check must not pass because it found nothing
 when: both
 tags: [coverage, exit-codes]
-check: Can this check pass because it found nothing to check, and does "not found" differ from "checked and clean"?
+check: Can this check pass because it found nothing to check, and does "not found" differ from "checked and clean"? Does a baseline on a fresh or unchanged tree select an empty affected set and therefore prove nothing; what existing full or CI result establishes that baseline instead?
 ---
 A coverage or validation check that treats "nothing found" as success passes when its input is wrong: a missing folder, a mistyped id, or a reader that skips a location. Make "not found" an error, or a different outcome from "checked, clean", and test both.
 

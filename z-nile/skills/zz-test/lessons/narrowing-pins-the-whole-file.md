@@ -19,3 +19,5 @@ R0045 code review 001 F1: c0128's golden.spec (copied from c0103's narrowed.spec
 R0045 code review 002 F1: the fixed golden.spec's `joined()` mutant builder searched the raw file, so a CRLF checkout turned a case red while both digests passed. Every helper that reads the pinned file reads it through the same normaliser as the digest, or the pin's independence from line endings holds for the digest only.
 
 c0153 design review 001 F1: a chore that narrowed f0032's frame case pinned it with two `string.find` probes (the helper is called; the exact compare is gone). Deleting an assertion, widening the tolerance, never asserting the result or widening the size bound each passed. Narrowing one line is still narrowing the file: pin it whole, record its base blob, and stop at step 0 when it moved.
+
+**Also:** c0165 design review 009 F1: an override search must also cover promoted specs that pin a file by digest (they name the file as a separate string): `c0172/narrowed.spec` pins `c0114/gate-cover.spec` by SHA-256, so narrowing it with `--graph-only` broke that pin, unnamed.
