@@ -12,6 +12,7 @@
 | 8 | 2026-11-01 19:06 | design-review-004 | 0 | 0 | 9.0 | spend | design-review | 171250 |
 | 9 | 2026-11-01 19:08 | design-refute-004 | 0 | 0 | 20.0 | spend | design-review |  |
 | 10 | 2026-11-01 19:18 | prep | 2704 | 1 | 110.0 | spend | prep |  |
+| 11 | 2026-11-04 23:39 | c0185: apply the prototype patch (alias, library mappings, shared place harness, graph and selector, cross-home rules, restated rules) | 481 | 106 | 20.0 | focus | build |  |
 
-**Total:** +2704 / -1 lines, 311.0 agent-minutes, 850996 tokens over 10 records
-<!-- totals: added=2704 removed=1 minutes=311.0 records=10 tokens=850996 -->
+**Total:** +3185 / -107 lines, 331.0 agent-minutes, 850996 tokens over 11 records
+<!-- totals: added=3185 removed=107 minutes=331.0 records=11 tokens=850996 -->

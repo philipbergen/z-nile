@@ -29,13 +29,15 @@ local SHARED_FULL = {
 	"^stylua%.toml$",
 }
 -- Within a project's home (prefix "" for the root's, "pickman/" for pickman's): these force that project's full run.
+-- Every Rojo project file counts (c0185): a place may map folders of another home, and a project file decides how a
+-- file's `@game` requires resolve; a change to any of them reruns the project.
 local HOME_FULL = {
 	"tests/lib/",
 	"tests/run%.luau$",
 	"tests/meta/",
 	"scripts/",
 	"%.luaurc$",
-	"default%.project%.json$",
+	"[^/]*%.project%.json$",
 }
 -- The rest of z-nile/ (the engine, the gate, the templates) forces z-nile's full run: its specs are the tooling's.
 local TOOLING = "z-nile"

@@ -1,34 +1,33 @@
 --!strict
--- The Rojo-built place, loaded headlessly with @lune/roblox, for tests/place specs.
--- graph.luau resolves requires on the filesystem (what Lune does); resolveRequire resolves them
--- on the instance tree (what Roblox does). Specs that require this file are selected by
--- scripts/affected for every src/ or project file change (graph.PLACE_LIB).
+-- The Rojo-built place, loaded headlessly with @lune/roblox, for the place tier of every project home (c0185: it was
+-- pickman's; each home re-exports it as tests/lib/place.luau, so a spec's closure names its home). It runs from the
+-- home: the project files and .cache are the home's. graph.luau resolves requires on the filesystem (what Lune does);
+-- resolveRequire resolves them on the instance tree (what Roblox does). Specs that require a home's re-export are
+-- selected for every change to that home's place inputs (graph.placeInputs, graph.PLACE_LIB).
 local fs = require("@lune/fs")
-local graph = require("@znile/lib/graph")
+local graph = require("../../lib/graph")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
+local serde = require("@lune/serde")
 
 export type Instance = any -- @lune/roblox Instance
 
 local OUT_PREFIX = ".cache/place-test"
-local SCRIPT_ROOTS = {
-	{ "ReplicatedStorage", "Shared" },
-	{ "ServerScriptService", "Server" },
-	{ "StarterPlayer", "StarterPlayerScripts", "Client" },
-	{ "ServerScriptService", "Lobby" },
-	{ "StarterPlayer", "StarterPlayerScripts", "Lobby" },
-}
 
 local place = {}
 
 local cached: { [string]: Instance } = {}
+-- the script roots of each loaded place: the instance paths of the project file's own "$path" nodes
+local rootsOf: { [Instance]: { string } } = setmetatable({}, { __mode = "k" }) :: any
 
 -- Builds a Rojo project (default: default.project.json, the game place) once per process and returns the
--- deserialized DataModel. place.load("lobby.project.json") is the lobby place.
+-- deserialized DataModel. place.load("lobby.project.json") is the lobby place. The script roots place.scripts lists are
+-- read from the project file: every node it maps from inside its own folder.
 function place.load(project: string?): Instance
 	local file = project or "default.project.json"
 	local loaded = cached[file]
 	if loaded == nil then
+		local decoded: any = serde.decode("json" :: "json", fs.readFile(file))
 		fs.writeDir(".cache")
 		-- per-process file, so concurrent test processes never read each other's partial builds
 		local out = `{OUT_PREFIX}-{os.time()}-{math.random(1, 1e9)}.rbxl`
@@ -41,23 +40,42 @@ function place.load(project: string?): Instance
 		if not ok then
 			error(`could not load {out}: {result}`)
 		end
+		local roots: { string } = {}
+		for _, root in graph.gameRoots(decoded) do
+			if graph.insideFolder(root.path) then
+				table.insert(roots, root.instance)
+			end
+		end
+		rootsOf[result] = roots
 		cached[file] = result
 		loaded = result
 	end
 	return loaded
 end
 
--- Every LuaSourceContainer under the script roots of both places, in GetFullName order.
+-- Every LuaSourceContainer under the script roots of the loaded place (the nodes its project file maps from its own
+-- folder), in GetFullName order.
 function place.scripts(game: Instance): { Instance }
+	local roots = rootsOf[game]
+	if roots == nil then
+		error(
+			"place.scripts: the place was not loaded by place.load, so its project file's script roots are unknown",
+			0
+		)
+	end
 	local out: { Instance } = {}
-	for _, path in SCRIPT_ROOTS do
+	local seen: { [Instance]: boolean } = {}
+	for _, path in roots do
 		local node = game
-		for _, name in path do
+		for _, name in string.split(path, "/") do
 			node = node and node:FindFirstChild(name)
 		end
 		if node then
-			for _, d in node:GetDescendants() do
-				if d:IsA("LuaSourceContainer") then
+			local found: { Instance } = node:GetDescendants()
+			table.insert(found, node)
+			for _, d in found do
+				if d:IsA("LuaSourceContainer") and not seen[d] then
+					seen[d] = true
 					table.insert(out, d)
 				end
 			end
