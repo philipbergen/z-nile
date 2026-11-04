@@ -4184,7 +4184,7 @@ local function buildLessons(project: string?): string
 	local tree = lessonsLib.load(".")
 	local sources = lessonsLib.sources(tree.items)
 	local mine = {}
-	local bases = skillsLib.bases((skillsLib.plan(skillsLib.load("."))), project)
+	local bases = skillsLib.bases((skillsLib.plan((skillsLib.load(".")))), project)
 	for _, l in parsedLessons(tree) do
 		local owner = tree.owners and tree.owners[l.skill]
 		if not owner or owner == skillsLib.ZNILE or owner == project or bases[l.skill] then
@@ -4405,7 +4405,7 @@ end
 
 -- The SKILL.md files a raft's prompt inlines (c0115, c0184): skills.inlined over the skills found.
 local function inlinedSkills(project: string?): { string }
-	return skillsLib.inlined((skillsLib.plan(skillsLib.load("."))), project)
+	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
 end
 
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
