@@ -19,6 +19,7 @@
 | 15 | 2026-11-04 21:12 | c0184: scaffold arcade homes, registry-driven hand paths, extends skills | 1271 | 73 | 25.0 | focus | build |  |
 | 16 | 2026-11-04 21:14 | c0184: truncate skills.plan to its list at the two engine call sites (plan now returns two values since R0079) | 2 | 2 | 5.0 | focus | build |  |
 | 17 | 2026-11-04 21:15 | c0184: truncate skills.load to its list as well | 2 | 2 | 3.0 | focus | build |  |
+| 18 | 2026-11-04 21:20 | c0184: verification log | 0 | 0 | 5.0 | focus | build |  |
 
-**Total:** +3682 / -78 lines, 502.9 agent-minutes, 1231521 tokens over 17 records
-<!-- totals: added=3682 removed=78 minutes=502.9 records=17 tokens=1231521 -->
+**Total:** +3682 / -78 lines, 507.9 agent-minutes, 1231521 tokens over 18 records
+<!-- totals: added=3682 removed=78 minutes=507.9 records=18 tokens=1231521 -->
