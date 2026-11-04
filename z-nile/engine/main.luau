@@ -4179,7 +4179,8 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 end
 
 -- The prompt's Lessons section: the index of the build and both lessons (c0111).
--- Only the lessons of z-nile's skills and of the raft's own project's (c0115): another project's are left out.
+-- Only the lessons of z-nile's skills, of the raft's own project's and of the skills those extend (c0115, c0184): another
+-- project's are left out.
 local function buildLessons(project: string?): string
 	local tree = lessonsLib.load(".")
 	local sources = lessonsLib.sources(tree.items)

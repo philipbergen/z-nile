@@ -188,7 +188,10 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		for _, folder in skills.folders(projects.load(TOP)) do
 			if folder.project ~= "z-nile" then
 				for _, n in realfs.readDir(`{TOP}/{folder.path}`) do
-					table.insert(dirs, `{folder.path}/{n}`)
+					-- as skills.load reads it: no dot-entries (.DS_Store), only folders
+					if string.sub(n, 1, 1) ~= "." and realfs.isDir(`{TOP}/{folder.path}/{n}`) then
+						table.insert(dirs, `{folder.path}/{n}`)
+					end
 				end
 			end
 		end

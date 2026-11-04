@@ -8,8 +8,14 @@
 
 local boundcmd = {}
 
-export type Context =
-	{ monitor: boolean?, background: boolean?, zn: string?, checkout: string?, cwd: string? }
+export type Context = {
+	monitor: boolean?,
+	background: boolean?,
+	zn: string?,
+	checkout: string?,
+	cwd: string?,
+	homes: { string }?,
+}
 export type Verdict = { ok: boolean, rule: string?, program: string?, command: string?, say: string? }
 
 -- `lune run <target>` for these targets is the gate's own tooling: jailed, swept and CPU-limited by the runner
@@ -163,8 +169,18 @@ local CTX: {
 	cwd: string?,
 	dir: string?,
 	line: string,
+	homes: { string }?,
 } =
-	{ monitor = false, background = false, zn = "./zn", checkout = nil, cwd = nil, dir = nil, line = "" }
+	{
+		monitor = false,
+		background = false,
+		zn = "./zn",
+		checkout = nil,
+		cwd = nil,
+		dir = nil,
+		line = "",
+		homes = nil,
+	}
 
 -- `./x`, `../x`, `pickman/x` and `z-nile/x` all name the same tooling entry from any folder under the repository
 local function normalise(target: string): string
@@ -185,6 +201,24 @@ end
 local function insideOf(a: string, b: string): boolean
 	local base = (string.gsub(b, "/+$", ""))
 	return a == base or string.sub(a, 1, #base + 1) == base .. "/"
+end
+
+-- `<home>/tests/run` for a home of the registry (c0244): the same jailed runner as pickman's. A name that is not one plain
+-- folder adds nothing. Without `homes` (the registry could not be read) only TOOLING's entries count.
+local function homeRunner(t: string): boolean
+	local homes: { string } = CTX.homes or {}
+	for _, home in homes do
+		if
+			home ~= ""
+			and home ~= "."
+			and home ~= ".."
+			and not string.find(home, "/", 1, true)
+			and t == `{home}/tests/run`
+		then
+			return true
+		end
+	end
+	return false
 end
 
 -- The entry in TOOLING, in this checkout: a relative target from a folder inside it, or an absolute one under it (its
@@ -212,7 +246,7 @@ local function toolingMatch(target: string): boolean
 	if checkout ~= nil and CTX.cwd ~= nil and (CTX.dir == nil or not insideOf(CTX.dir, checkout)) then
 		return false
 	end
-	return TOOLING[t] == true
+	return TOOLING[t] == true or homeRunner(t)
 end
 
 -- Splits one shell line into simple commands (each a list of words, quotes removed) and the sub-commands inside
@@ -789,6 +823,7 @@ function boundcmd.check(command: string, ctx: Context?): Verdict
 	local c: Context = ctx or {}
 	CTX.monitor, CTX.background, CTX.zn = c.monitor == true, c.background == true, c.zn or "./zn"
 	CTX.checkout, CTX.cwd, CTX.dir, CTX.line = c.checkout, c.cwd, c.cwd, command
+	CTX.homes = c.homes
 	local text, bodies, pyBodies = boundcmd.withoutHeredocs(command)
 	-- `for ((;;))` and the like: a C-style loop with no condition (quoted text does not count)
 	local bare = string.gsub(string.gsub(text, "'[^']*'", "''"), '"[^"]*"', '""')

@@ -1,0 +1,5 @@
+- review-001 F1: zz-rules/exhaustive-lists-name-new-things
+- review-001 F2: zz-execute/check-a-deviations-cause-with-git-log
+- review-001 F3: one-off: a comment that lagged the code it described
+- review-001 F4: zz-arch/one-reader-per-format
+- note prototype's engine patch carried a type error a one-home gate does not see: z-design/prototype-engine-edits-pass-the-type-stages

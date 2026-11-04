@@ -20,6 +20,7 @@
 | 16 | 2026-11-04 21:14 | c0184: truncate skills.plan to its list at the two engine call sites (plan now returns two values since R0079) | 2 | 2 | 5.0 | focus | build |  |
 | 17 | 2026-11-04 21:15 | c0184: truncate skills.load to its list as well | 2 | 2 | 3.0 | focus | build |  |
 | 18 | 2026-11-04 21:20 | c0184: verification log | 0 | 0 | 5.0 | focus | build |  |
+| 19 | 2026-11-04 21:30 | R0075: review-001 and its answers (c0244 emergent: registry homes in the bounded-command seatbelt) | 84 | 6 | 30.0 | focus | code-review |  |
 
-**Total:** +3682 / -78 lines, 507.9 agent-minutes, 1231521 tokens over 18 records
-<!-- totals: added=3682 removed=78 minutes=507.9 records=18 tokens=1231521 -->
+**Total:** +3766 / -84 lines, 537.9 agent-minutes, 1231521 tokens over 19 records
+<!-- totals: added=3766 removed=84 minutes=537.9 records=19 tokens=1231521 -->
