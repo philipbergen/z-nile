@@ -25,6 +25,7 @@
 | 21 | 2026-11-04 22:03 | R0075: verification log and merge main | 0 | 0 | 3.0 | focus | deliver |  |
 | 22 | 2026-11-04 22:03 | c0184: final verification log | 0 | 0 | 2.0 | focus | deliver |  |
 | 23 | 2026-11-04 22:11 | tracker: done R0075 | 0 | 0 | 4.0 | raft+proportional | deliver |  |
+| 24 | 2026-11-04 22:16 | deliver | 0 | 0 | 7.5 | spend+proportional | deliver |  |
 
-**Total:** +3771 / -86 lines, 556.9 agent-minutes, 1231521 tokens over 23 records
-<!-- totals: added=3771 removed=86 minutes=556.9 records=23 tokens=1231521 -->
+**Total:** +3771 / -86 lines, 564.4 agent-minutes, 1231521 tokens over 24 records
+<!-- totals: added=3771 removed=86 minutes=564.4 records=24 tokens=1231521 -->
