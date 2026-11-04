@@ -9,6 +9,7 @@
 | 5 | 2026-11-04 17:42 | R0082: review-001 | 0 | 0 | 2.0 | focus | code-review | 64018 |
 | 6 | 2026-11-04 17:42 | R0082: addressed during execution | 0 | 0 | 0.1 | focus | deliver |  |
 | 7 | 2026-11-04 17:46 | tracker: done R0082 | 0 | 0 | 3.8 | raft | deliver |  |
+| 8 | 2026-11-04 17:51 | deliver | 0 | 0 | 12.0 | spend | deliver |  |
 
-**Total:** +2 / -1 lines, 32.9 agent-minutes, 128913 tokens over 7 records
-<!-- totals: added=2 removed=1 minutes=32.9 records=7 tokens=128913 -->
+**Total:** +2 / -1 lines, 44.9 agent-minutes, 128913 tokens over 8 records
+<!-- totals: added=2 removed=1 minutes=44.9 records=8 tokens=128913 -->
