@@ -112,6 +112,25 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/tests/tooling/fence-cache-entry.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
+	-- c0191: the reaper lists the jail's launcher as a tool process that owns the processes below it
+	["z-nile/engine/reap.luau"] = {
+		["sandbox-exec"] = "a name in the list of tool processes the reaper treats as ownerless; it never runs it",
+	},
+	-- R0079 review 001 F3: the hook refuses `launchctl submit` as a detacher; it only reads the word
+	["z-nile/engine/boundcmd.luau"] = {
+		launchctl = "a name the hook refuses in its submit, bootstrap and load forms; it never runs it",
+	},
+	["z-nile/tests/tooling/bounded-review.spec.luau"] = {
+		launchctl = "a command line the hook's case feeds to the scanner as text; never run",
+	},
+	-- c0191: the proof script (run by check.sh before done only) clears the marker so a copied runner acts as a top-level run
+	["z-nile/tests/acceptance/c0191/proof-limits.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
+	-- c0191: clears the marker so a copied runner acts as a top-level run
+	["z-nile/tests/acceptance/c0191/runner-cpu.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- c0650: its spec proves the scan refuses these names
 	["z-nile/tests/acceptance/c0059/adapt.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
@@ -267,6 +286,13 @@ do
 			PICKMAN_FENCE_ = "drives the ref guard hook in a .cache fixture, naming only that fixture as protected",
 		}
 	end
+end
+-- c0172: merge.spec quotes the fence variable as a needle in the Merging skill text. It never sets it.
+local C0172 = renamed.id("c0172")
+for _, dir in { "z-nile/tests/acceptance/" .. C0172 } do
+	ALLOWED[`{dir}/merge.spec.luau`] = {
+		PICKMAN_FENCE_ = "quotes the fence variable as a needle in the Merging skill text, and never sets it (c0172)",
+	}
 end
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
 local EXEMPT_DIRS = { "z-nile/lib/git-hooks/" }

@@ -1,0 +1,5 @@
+- review-001 F1: zz-test/program-names-read-from-real-ps
+- review-001 F2: z-design/restated-rules-move-together
+- review-001 F3: zz-test/refusals-tested-on-both-sides
+- review-001 F4: one-off: more readable spellings of refused classes; the rest are named as limits in zz-test
+- review-001 F5: zz-test/specs-set-host-markers-explicitly

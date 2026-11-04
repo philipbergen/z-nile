@@ -1,6 +1,6 @@
 ---
 name: pickman-test
-description: How pickman's game is tested - its spec tiers (unit, contract, integration, scenario, place, runtime), the sim harness, the fake engine and the Roblox runtime tests, all from pickman's home. Read with zz-test (the gate, check.sh, the guards) before writing a game spec.
+description: How pickman's game is tested - its spec tiers (unit, helper, contract, integration, scenario, place, runtime), the sim harness, the fake engine and the Roblox runtime tests, all from pickman's home. Read with zz-test (the gate, check.sh, the guards) before writing a game spec.
 ---
 
 # Testing the game (pickman)
@@ -8,16 +8,17 @@ description: How pickman's game is tested - its spec tiers (unit, contract, inte
 This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too.
 
 ## Running pickman's specs
-Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place` and `fakeengine` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.
+Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.
 
 ## Spec tiers
 | dir | tier | may require |
 |---|---|---|
 | `tests/unit/<Feature>/` | one feature's behavior | only that feature (through its `init`) plus `@tests/lib/t` |
+| `tests/helper/<helper>/` | one `tests/lib` helper's behavior (`tests/helper/plain/` for `tests/lib/plain.luau`) | only that helper (`@tests/lib/<helper>`), `@tests/lib/t`, its own fixtures under `@tests/fixtures/<helper>/` and `@lune/` builtins |
 | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
 | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
 | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
-| `tests/runtime/` | scripts that run inside a real Roblox server of the published Beta game place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`, run by CI after a publish; skipped when no key is configured); `tests/runtime/lobby/` holds the lobby's, run in the lobby with `--lobby <version>` once both places are published (c0064). Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
+| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (`./zn run --time 600 -- lune run scripts/runtime-test -- <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--lobby <version>` once both places are published (c0064)). A merge runs `lune run scripts/cicd` from `pickman/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
 | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/`, `default.project.json` or `lobby.project.json` change. `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
 
 A spec file looks like this:
@@ -65,7 +66,7 @@ t.expect(sim.firstTick(trace, "Bump")).toBe(6)
 - **Replays**: a failure writes `.cache/sim/<model>-seed<seed>-tick<t>.json` (gitignored) and names it in the message. To debug, re-run it from a scratch spec: `sim.replay(Model, ".cache/sim/…json")`. It re-runs the model, so a `print` in the model works; for a step error the failing step runs again and re-raises.
 - **`sim.bench`** steps N worlds interleaved, like the server, and returns elapsed seconds. Budgets are the one **timing exception** to "no wall-clock time": keep a margin of at least 50x over the measured cost.
 
-**Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time.
+**Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time. A spec of a `tests/lib` helper itself goes in `tests/helper/<helper>/`, never in `tests/unit/`; a spec driven through `@tests/lib/sim` stays in `tests/scenario/` (sim's own `harness.spec` there included). `tests/meta/architecture.spec.luau` enforces the helper tier's and the unit tier's helper rules on the files each require resolves to (`tests/meta/tiers.luau`): a unit spec loads no `tests/lib` helper but `@tests/lib/t` (c0170).
 
 ## Lessons
 Before you start, read this skill's lessons: `./zn lessons --skill pickman-test --full`. Each is a mistake made before, with the question that catches it.

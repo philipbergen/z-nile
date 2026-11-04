@@ -1,0 +1,51 @@
+# Review 002: c0183 (design mode)
+Inputs: prep worktree `prep-register-arcade-projects` at bd2f1ff7 plus its uncommitted c0183 folder (c0183.md sha256 405f4616bc06…, check.sh bc1a5aac3509…, acceptance/*.spec.luau, experiments/E2-proto.py, E2-rehash.py, E4-digests.py, design-review-001.md, design-refute-001.md, harvest.md) and the three new lessons; prototype `proto/repo` (b347106a prep, 54cf80ca implementation, be130ff8 lessons; base d6c68db2, which differs from today's origin/main 23c53c5a only in four `spend.md` files); c0190 as in `.worktree/capture-arcade-step-two` (origin/main still holds its stub bcfe19de).
+Capture: judged against `git show cda05ea6:…/c0183.md` (the range-subject capture; `./zn capture c0183` reports the stub e0e09cff). The current document's Problem, Non-goals and Solution, including every "Designs to move into place" block, are byte-identical to cda05ea6's; only frontmatter and the sections from Design on changed.
+Evidence runs: review clone `scratchpad/review2/repo` (cloned from `proto/repo`, identity review@localhost). There `./zn check c0183` on 54cf80ca printed 6/6 PASS; `python3 -I experiments/E4-digests.py` over today's c0183.md prints exactly the nine digests pinned in designs.spec and check.sh.
+Dropped from design-review-001: F1, F2, F3, F4, F5, F6 (each answer holds; see "Round-1 answers" below).
+
+### F1 [medium] Registering the games leaves two skills telling agents that game work is `--project pickman`
+Where: Design item 6 (Docs); `z-nile/skills/z-ticket/SKILL.md:18`; `z-nile/skills/zz-rules/SKILL.md:24`, `:65`; the pin in `z-nile/tests/acceptance/c0114/docs.spec.luau:194`.
+Evidence: the search (rerunnable):
+```
+$ git grep -noE "game work (is|passes) \`--project pickman\`[^.;]*|\`pickman/\.tracker\` or \`z-nile/\.tracker\`" -- '*.md' ':!*/.tracker/**' ':!**/lessons/**'
+z-nile/skills/z-ticket/SKILL.md:18:game work is `--project pickman`, or a capture run in `pickman/` (zz-rules skill, Projects)
+z-nile/skills/zz-rules/SKILL.md:24:game work passes `--project pickman` and tooling (the tracker, the gate, the guards, the skills) `--project z-nile`
+z-nile/skills/zz-rules/SKILL.md:65:`pickman/.tracker` or `z-nile/.tracker`
+$ git grep -noE 'game work is `--project pickman`[^"]*' -- '*/tests/**'
+z-nile/tests/acceptance/c0114/docs.spec.luau:194:game work is `--project pickman`, or a capture run in `pickman/`
+```
+Once c0183 lands, snake, invaders and asteroids are game projects, the portal is a place and arcade the library, yet z-ticket's step 2 still says "game work is `--project pickman`" and zz-rules' Projects bullet says "There, game work passes `--project pickman`". zz-rules' Paths bullet says the item's root is "`pickman/.tracker` or `z-nile/.tracker`". The very next tracked work, c0190's capture of about 25 game issues, runs z-ticket, and every later "snake bug:" capture from the checkout's root follows the same sentence into pickman's root. Design item 6 changes zz-rules' deploy.yml sentence for this reason (z-design/restated-rules-move-together, which the Lessons pass names) but not these three.
+Critique: the tempting fix is to edit the two skills' sentences only. c0114's `docs.spec` pins z-ticket's sentence verbatim (line 194), so that edit turns z-nile's gate red unless it is overridden, and an override that pins a new seven-project sentence is the same set pin F3 of round 1 removed elsewhere.
+Consequences: c0114 `docs.spec` joins the Overrides list (it is not one of c0172 `narrowed`'s rows, so no digest changes: `grep -n '"c0114",' -A1 z-nile/tests/acceptance/c0172/narrowed.spec.luau` lists only gate-cover and layout). The new wording must stay true when c0184 scaffolds the homes and when a further game is registered.
+Recommendation: in Design item 6, rewrite the three places as rules: z-ticket "Tooling work (…) is `--project z-nile`; work on a game, the portal or the shared library is that project's `--project <name>` (pickman, snake, invaders, asteroids, portal, arcade: `z-nile/projects.toml`), or a capture run in its folder"; zz-rules :24 to match; zz-rules :65 "(`<root>` is the item's project root, `<name>/.tracker`, as `z-nile/projects.toml` lists)". Override c0114 `docs.spec`'s line 194 with a `-- c0183 override:` to the rule's stable words (for example `at(make, "Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`")`, which it already pins, plus `at(make, "that project's `--project <name>`")`), and add the exact new sentences to check.sh AC6 (today's text, done-time only). Add a Rules and mutants row: mutant "z-ticket still says game work is `--project pickman`" fails check.sh AC6. Add c0114 `docs.spec` to Touched modules and Overrides.
+Lesson: z-design/restated-rules-move-together
+
+### F2 [low] pickman's c0015 `workflow` override reads the registry through a second parser that the selector can't see
+Where: Overrides bullet for `pickman/tests/acceptance/c0015/workflow.spec.luau`; `experiments/E2-proto.py` `PICKMAN_HELPER`.
+Evidence: the override parses `lune run z-nile/roots -- --projects` with its own pattern `[^\t\n]+\t[^\t\n]+\t([^\n]+)`, a second reader of the roots output beside `projects.roots` (used by the gate-cover and ci copies of the same derived list). In the review clone, `lune run z-nile/affected -- --project pickman z-nile/roots.luau` and `… z-nile/projects.toml` both print nothing, and c0120 `graph-homes` pins that `z-nile/engine/projects.luau` selects no pickman spec. So a change to the registry or its reader that breaks this pickman spec is found only by a full gate (land, done), not by the affected gate or the stop hook. The design chose the subprocess precisely to stay out of graph-homes' sight.
+Critique: there are now three copies of one derived rule (zz-test/one-rule-one-function), two readers of one format (zz-arch/one-reader-per-format), and one of them hidden from the selector. Precedent (`c0015/tools.spec` reads `../z-nile/setup.sh`) makes this low, not medium. The tempting fix, requiring `@znile/engine/projects` from pickman, is what graph-homes forbids.
+Consequences: whatever the pickman spec keeps must still guard pickman's own deploy trigger.
+Recommendation: narrow the pickman override to pickman's concern, with no registry read: `paths-ignore` contains `pickman/.tracker/**` and `z-nile/next`, and every other entry has the shape `<name>/.tracker/**`. The whole derived list stays in z-nile's gate-cover and ci, which the selector does run on a registry change; put their shared `ignoredRoots()` in one place (a `z-nile/tests/lib` helper both require) so it is one function. Update the c0172 `narrowed` digest row for c0015 `workflow` from the new text (E2-rehash.py), and rerun the h4 probe.
+
+## Round-1 answers (checked)
+- F1 → check.sh AC3 compares the nine delivered files with pinned digests through `shasum -a 256 -c`; designs.spec keeps the any-version rule. Holds: the review clone's `./zn check c0183` passed, and the author's `broken-after` probe (E5) is the case round 1 asked for.
+- F2 → designs.spec pins digests and reads no document. Holds: E4 rerun over today's c0183.md reproduces all nine digests; the spec reads only `TOP/<file>` and `git log`/`git show` of that path. Compaction rewrites ids with `%f[%w]…%f[^%w]` frontiers (`z-nile/engine/ids.luau:114`), so no hex digest is touched, and committed versions keep their digests.
+- F3 → c0183's specs pin rules; today's exact lists are in check.sh; the inherited set pins are derived. Holds for the registry and the deploy list. h4 is the right probe. (F2 above is a refinement of the derived-list copies, not a reopening.)
+- F4 → the "settles" sentence is gone; item 5 says c0184 owns the final form and names what it overrides. Holds.
+- F5 → c0190 owns the step-2 captures. Holds on condition that c0190's full document lands (origin/main still has the stub at bcfe19de with `depends_on: []`); its Problem lists every step-2 group including the pickman switch chores.
+- F6 → `Overrides:` line. Holds.
+
+## Checked and clean
+- Scope: Problem, Non-goals, Solution and the five design blocks are byte-identical to cda05ea6; every captured outcome (five registrations, roots, four game designs, the arcade map, stub maps, the prep check of gate/audit/board/check-paths, the step-2 hand-off) has a Design and a criterion or an owner (c0190).
+- c0120 `check-paths` on the prep-only tree (b347106a, no implementation): 4 passed, so the prep PR itself keeps z-nile's gate green on that spec. `./zn lessons --check` on prep + lessons: "143 lessons, 884 harvest entries, ok".
+- AC4's negative half is live: the plan prints `specs: <home>, from <home>` and `build: <home>/…`, which the check's patterns match.
+- check.sh's real-repository commands (`./zn list`, `./zn audit`, `check.sh --full --plan`, `roots`) don't fetch or write: `cmd.list` and `cmd.audit` (main.luau 2646, 2718) call none of the fetching helpers (`originIds`, `refuseStale`, `originPaths`). capture.spec writes only `.cache/c0183-capture`.
+- In-flight work: no local or origin branch adds a line pinning the two-project registry or the old deploy list (search over every branch's diff from its merge-base for `"z-nile/.tracker/**"`, `"pickman/.tracker", "z-nile/.tracker"` and the two-line roots output: no hits). Unfinished items' specs that read a registry (c0117, c0139, c0141, c0160) all use their own fixture registry.
+- A project registered with no `.gitkeep`s and no deploy entry still audits clean and lists (review clone, `pong`): the `.gitkeep`s are tidiness, so zz-rules' new "registry entry and its deploy.yml entry" sentence is not missing a requirement.
+- New lessons: history-tolerant-checks-need-a-done-check and pin-expected-text-not-documents are general rules another design can fail; capture-subject-lists-every-id is a usable workaround (round 1's tooling candidate, `./zn capture` not expanding ranges, is still uncaptured; that is the lead's call, not a finding).
+
+## Candidate lessons (for the lead)
+- None new: F1 repeats z-design/restated-rules-move-together. Its check could name the search: "after registering or renaming a project, `git grep` the skills for sentences that enumerate projects (`--project pickman`, `pickman/.tracker` or …) and the specs that pin them".
+
+Verdict: changes

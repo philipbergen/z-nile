@@ -1,0 +1,1 @@
+- F1: fixed 79d7d911: wrapped the two comment lines (Ranks.luau, Hiscores DriveResult comment); consequences: none (comments only, stylua --check clean on both files, d0124 rechecked below)
