@@ -13,6 +13,7 @@
 | 9 | 2026-11-01 19:08 | design-refute-004 | 0 | 0 | 20.0 | spend | design-review |  |
 | 10 | 2026-11-01 19:18 | prep | 2704 | 1 | 110.0 | spend | prep |  |
 | 11 | 2026-11-04 23:39 | c0185: apply the prototype patch (alias, library mappings, shared place harness, graph and selector, cross-home rules, restated rules) | 481 | 106 | 20.0 | focus | build |  |
+| 12 | 2026-11-05 00:00 | c0185: fixture copies tiers.luau (user-approved check.sh edit), Verification log | 0 | 0 | 10.0 | focus | build |  |
 
-**Total:** +3185 / -107 lines, 331.0 agent-minutes, 850996 tokens over 11 records
-<!-- totals: added=3185 removed=107 minutes=331.0 records=11 tokens=850996 -->
+**Total:** +3185 / -107 lines, 341.0 agent-minutes, 850996 tokens over 12 records
+<!-- totals: added=3185 removed=107 minutes=341.0 records=12 tokens=850996 -->

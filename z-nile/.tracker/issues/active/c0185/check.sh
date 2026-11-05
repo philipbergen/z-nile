@@ -89,6 +89,7 @@ EOT
 	printf '%s\n' '--!strict' "local F = $Q(\"@game/ServerStorage/Arcade/Receipts\")" >"$home/$s/lobby/Boards.luau" # a server file of the second place alone
 	printf '%s\n' '--!strict' "local F = $Q(\"@logic/Feature\")" >"$home/tests/unit/Feature/feature.spec.luau"
 	cp "$ZN_ROOT/pickman/tests/meta/architecture.spec.luau" "$home/tests/meta/architecture.spec.luau"
+	cp "$ZN_ROOT/pickman/tests/meta/tiers.luau" "$home/tests/meta/tiers.luau" # the spec requires it (R0065); user-approved edit during R0076
 	cat >"$home/run.luau" <<EOT
 --!strict
 -- runs three cases of the copied architecture spec in this folder and prints PASS or FAIL for each
