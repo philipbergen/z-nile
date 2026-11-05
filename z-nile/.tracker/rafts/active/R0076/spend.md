@@ -2,10 +2,10 @@
 
 | issue | type | emergent | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|---|---|
-| c0185 | chore |  | 3185 | 107 | 341.0 | 850996 |
+| c0185 | chore |  | 3185 | 107 | 386.0 | 850996 |
 
-**Total:** +3185 / -107 lines, 341.0 agent-minutes, 850996 tokens over 12 records
-<!-- totals: added=3185 removed=107 minutes=341.0 records=12 tokens=850996 -->
+**Total:** +3185 / -107 lines, 386.0 agent-minutes, 850996 tokens over 13 records
+<!-- totals: added=3185 removed=107 minutes=386.0 records=13 tokens=850996 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
@@ -13,3 +13,4 @@
 | prep | 2704 | 1 | 110.0 | 0 |
 | design-review | 0 | 0 | 196.0 | 850996 |
 | build | 481 | 106 | 30.0 | 0 |
+| code-review | 0 | 0 | 45.0 | 0 |
