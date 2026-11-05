@@ -26,6 +26,7 @@
 | 22 | 2026-11-05 00:44 | c0165: isInput, parseInputs, fingerprint and workspace reads | 463 | 9 | 40.0 | focus | build |  |
 | 23 | 2026-11-05 00:45 | c0165: context.luau, inputs.tsv files, --graph-only and the three selector Overrides | 441 | 11 | 30.0 | focus | build |  |
 | 24 | 2026-11-05 00:47 | c0165: reuseplan and resultsdb | 247 | 0 | 35.0 | focus | build |  |
+| 25 | 2026-11-05 00:48 | c0165: the runner records per-file results under PICKMAN_RESULTS; fence.myPid | 85 | 3 | 35.0 | focus | build |  |
 
-**Total:** +4605 / -151 lines, 761.0 agent-minutes, 7440865 tokens over 24 records
-<!-- totals: added=4605 removed=151 minutes=761.0 records=24 tokens=7440865 -->
+**Total:** +4690 / -154 lines, 796.0 agent-minutes, 7440865 tokens over 25 records
+<!-- totals: added=4690 removed=154 minutes=796.0 records=25 tokens=7440865 -->

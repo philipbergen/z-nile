@@ -12,6 +12,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local schedule = require("./lib/schedule")
+local serde = require("@lune/serde")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
@@ -182,6 +183,37 @@ table.sort(files)
 
 type Outcome = { file: string, seconds: number, code: number, stdout: string, stderr: string }
 
+-- c0165: with PICKMAN_RESULTS set, this run records every file's cases and results (the orchestrator specs.luau reads
+-- them; a run without the variable is exactly as before). A path outside this home's .cache is never written.
+type FileResult = {
+	file: string,
+	loaded: boolean,
+	cases: { { name: string, ok: boolean } },
+	detail: string,
+	seconds: number,
+}
+local function resultsPath(): string?
+	local p = process.env.PICKMAN_RESULTS
+	if p == nil or p == "" then
+		return nil
+	end
+	local prefix = HERE .. "/.cache/"
+	if string.sub(p, 1, #prefix) ~= prefix or string.find(p, "..", 1, true) then
+		return nil
+	end
+	return p
+end
+local function writeResults(path: string, list: { FileResult })
+	pcall(function()
+		local tmp = `{path}.{math.random(1, 1e9)}.tmp`
+		fs.writeFile(
+			tmp,
+			serde.encode("json" :: "json", { jail = process.env.PICKMAN_TEST_JAIL or "", files = list })
+		)
+		fs.move(tmp, path, true)
+	end)
+end
+
 -- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
 local DURATIONS = ".cache/spec-durations.tsv"
 local function recorded(): schedule.Durations
@@ -192,6 +224,7 @@ end
 -- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
 local function runConcurrently()
 	local outcomes: { Outcome } = {}
+	local resultsFile = resultsPath()
 	local queue = schedule.order(files, recorded())
 	local nextIndex, running = 1, math.min(jobs, #files)
 	for _ = 1, math.min(jobs, #files) do
@@ -201,7 +234,13 @@ local function runConcurrently()
 				nextIndex += 1
 				local file = files[index]
 				local started = os.clock()
-				local ok, r = pcall(process.exec, "lune", { "run", "tests/run", "--", "--jobs", "1", file })
+				local part = if resultsFile then `{resultsFile}.{index}` else nil
+				local ok, r = pcall(
+					process.exec,
+					"lune",
+					{ "run", "tests/run", "--", "--jobs", "1", file },
+					if part then { env = { PICKMAN_RESULTS = part } } else nil
+				)
 				outcomes[index] = {
 					file = file,
 					seconds = os.clock() - started,
@@ -247,6 +286,31 @@ local function runConcurrently()
 				fs.move(tmp, DURATIONS, true)
 			end)
 		end
+	end
+
+	-- the workers' part files, merged in file order and removed; a worker that died left none: its file is not loaded
+	if resultsFile then
+		local merged: { FileResult } = {}
+		for index, o in outcomes do
+			local part = `{resultsFile}.{index}`
+			local got: FileResult? = nil
+			local readOk, text = pcall(fs.readFile, part)
+			if readOk then
+				local decOk, doc = pcall(serde.decode, "json" :: "json", text :: string)
+				if decOk and type(doc) == "table" and type((doc :: any).files) == "table" then
+					got = (doc :: any).files[1]
+				end
+				pcall(fs.removeFile, part)
+			end
+			table.insert(merged, got or {
+				file = o.file,
+				loaded = false,
+				cases = {},
+				detail = `FAIL {o.file}: worker exited with code {o.code}`,
+				seconds = o.seconds,
+			})
+		end
+		writeResults(resultsFile, merged)
 	end
 
 	-- merge in sorted file order, never in finish order
@@ -298,28 +362,45 @@ if jobs > 1 and #files >= 2 then
 end
 
 local passed, failed = 0, 0
+local results: { FileResult } = {}
 for _, file in files do
 	-- require paths are relative to this file (z-nile/tests/run.luau); a spec path is relative to the folder the run
 	-- started in (a project's home, c0120)
+	local started = os.clock()
 	local modPath = "../../" .. HOME_PREFIX .. string.gsub(file, "%.luau$", "")
 	local ok, spec = pcall(require, modPath)
 	if not ok or type(spec) ~= "table" or type((spec :: any).cases) ~= "table" then
 		failed += 1
-		print(`FAIL {file}: could not load spec: {spec}`)
+		local line = `FAIL {file}: could not load spec: {spec}`
+		print(line)
+		table.insert(
+			results,
+			{ file = file, loaded = false, cases = {}, detail = line, seconds = os.clock() - started }
+		)
 		continue
 	end
+	local record: FileResult = { file = file, loaded = true, cases = {}, detail = "", seconds = 0 }
 	for _, case in (spec :: Spec).cases do
 		local err: any = nil
 		local cOk = xpcall(case.fn, function(e: any)
 			err = e
 		end)
+		table.insert(record.cases, { name = case.name, ok = cOk })
 		if cOk then
 			passed += 1
 		else
 			failed += 1
-			print(`FAIL {file} :: {case.name}\n     {err}`)
+			local line = `FAIL {file} :: {case.name}\n     {err}`
+			print(line)
+			record.detail ..= (if record.detail == "" then "" else "\n") .. line
 		end
 	end
+	record.seconds = os.clock() - started
+	table.insert(results, record)
+end
+local resultsFile = resultsPath()
+if resultsFile then
+	writeResults(resultsFile, results)
 end
 
 print(`{passed} passed, {failed} failed, {#files} spec files`)
