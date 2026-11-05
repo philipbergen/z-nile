@@ -26,3 +26,8 @@
 - review-005 F4: one-off: the counter is never carried by a rafting PR
 - review-005 F5: one-off: R0063 removed the check the merge text named
 - review-005 F6: one-off: names c0193
+- review-006 F1: zz-arch/one-reader-per-format
+- review-006 F2: one-off: a window GitHub gives no base pin for; judged once more right before the merge
+- review-006 F3: zz-test/refusals-tested-on-both-sides
+- review-006 F4: zz-arch/refusals-are-gate-checks
+- review-006 F5: one-off: a garbled sentence

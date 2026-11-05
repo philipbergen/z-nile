@@ -73,9 +73,9 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				"new-quiet-copper-falcon"
 			),
 			-- code review 002 F1: an active raft and a backlog raft on main, each with its exit criteria
-			["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\ntitle: an active raft\nissues: []\n---\n",
+			["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\nslug: a-raft\ntitle: an active raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/active/R0040/check.sh"] = "bash members-check.sh\n",
-			["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: [c0094]\n---\n",
+			["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\nslug: a-raft\ntitle: a backlog raft\nissues: [c0094]\n---\n",
 			-- code review 003 F1: an active raft's member, a backlog raft's member, a retired raft
 			["pickman/.tracker/issues/active/c0093/c0093.md"] = inRaft(
 				prepared("c0093", "active-member"),
@@ -83,7 +83,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			),
 			["pickman/.tracker/issues/active/c0093/check.sh"] = "bash acceptance.sh\n",
 			["pickman/.tracker/issues/c0094/c0094.md"] = inRaft(prepared("c0094", "backlog-member"), "R0041"),
-			["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\ntitle: a retired raft\nissues: []\n---\n",
+			["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\nslug: a-raft\ntitle: a retired raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/R0041/check.sh"] = "bash members-check.sh\n",
 			["pickman/.tracker/issues/c0092/c0092.md"] = prepared("c0092", "bystander-thing"),
 		})
@@ -194,7 +194,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local doc = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/issues/c0096/c0096.md" })
 			local member = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/issues/c0091/c0091.md" })
 			local own = {
-				["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091]\n---\n",
+				["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0096, c0091]\n---\n",
 				["pickman/.tracker/issues/c0096/c0096.md"] = (
 					string.gsub(doc, "\nraft: \n", "\nraft: R0050\n")
 				),
@@ -231,7 +231,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local active = gate(
 				41,
 				with({
-					["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\ntitle: an active raft \nissues: []\n---\n",
+					["pickman/.tracker/rafts/active/R0040/R0040.md"] = "---\nid: R0040\nslug: a-raft\ntitle: an active raft \nissues: []\n---\n",
 					["pickman/.tracker/rafts/active/R0040/check.sh"] = "exit 0\n",
 				})
 			)
@@ -241,7 +241,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local backlog = gate(
 				42,
 				with({
-					["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft \nissues: [c0094]\n---\n",
+					["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\nslug: a-raft\ntitle: a backlog raft \nissues: [c0094]\n---\n",
 					["pickman/.tracker/rafts/R0041/check.sh"] = "exit 0\n",
 				})
 			)
@@ -251,7 +251,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local listed = gate(
 				43,
 				with({
-					["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0092]\n---\n",
+					["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0096, c0091, c0092]\n---\n",
 					["pickman/.tracker/issues/c0092/c0092.md"] = prepared("c0092", "bystander-thing")
 						.. "\nrewritten\n",
 				})
@@ -263,6 +263,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local function onMain(path: string): string
 				return process.exec("git", { "show", `main:{path}` }, { cwd = h.f.origin }).stdout
 			end
+			local c0096 = "pickman/.tracker/issues/c0096/c0096.md"
 			local c0093 = "pickman/.tracker/issues/active/c0093/c0093.md"
 			local c0092 = "pickman/.tracker/issues/c0092/c0092.md"
 			local c0094 = "pickman/.tracker/issues/c0094/c0094.md"
@@ -292,7 +293,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 61,
 					files = {
-						["pickman/.tracker/rafts/active/R0051/R0051.md"] = "---\nid: R0051\ntitle: x\nissues: []\n---\n",
+						["pickman/.tracker/rafts/active/R0051/R0051.md"] = "---\nid: R0051\nslug: a-raft\ntitle: x\nissues: []\n---\n",
 					},
 					says = "outside the backlog folder",
 				},
@@ -301,7 +302,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 70,
 					files = {
-						["z-nile/.tracker/rafts/R0040/R0040.md"] = "---\nid: R0040\ntitle: x\nissues: [c0092]\n---\n",
+						["z-nile/.tracker/rafts/R0040/R0040.md"] = "---\nid: R0040\nslug: a-raft\ntitle: x\nissues: [c0092]\n---\n",
 						[c0092] = inRaft(onMain(c0092), "R0040"),
 					},
 					says = "raft R0040 belongs to pickman/.tracker",
@@ -310,7 +311,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 74,
 					files = {
-						["z-nile/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: x\nissues: []\n---\n",
+						["z-nile/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: x\nissues: []\n---\n",
 					},
 					says = "raft R0050 in two roots",
 				},
@@ -324,7 +325,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 76,
 					files = {
-						["z-nile/.tracker/rafts/R0091/R0091.md"] = "---\nid: R0091\ntitle: x\nissues: []\n---\n",
+						["z-nile/.tracker/rafts/R0091/R0091.md"] = "---\nid: R0091\nslug: a-raft\ntitle: x\nissues: []\n---\n",
 						[c0092] = inRaft(onMain(c0092), "R0091"),
 					},
 					says = "only between empty and a raft this PR carries",
@@ -341,7 +342,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 78,
 					files = {
-						["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0099\ntitle: x\nissues: []\n---\n",
+						["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0099\nslug: a-raft\ntitle: x\nissues: []\n---\n",
 					},
 					says = "without a valid pickman/.tracker/rafts/R0050/R0050.md",
 				},
@@ -352,11 +353,42 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					files = { ["z-nile/next"] = "issue 300 x\nraft 9999 x\n" },
 					says = "never carries the id counter",
 				},
+				-- code review 006 F1: documents the tracker's own readers reject
+				{
+					n = 88,
+					files = {
+						["pickman/.tracker/rafts/R0090/R0090.md"] = "---\nid: R0090\ntitle: x\nissues: [c0092]\n---\n",
+						[c0092] = inRaft(onMain(c0092), "R0090"),
+					},
+					says = "no-slug",
+				},
+				{
+					n = 89,
+					files = {
+						["pickman/.tracker/rafts/R0090/R0090.md"] = "---\nid: R0090\nslug: a-raft\nid: R0099\ntitle: x\nissues: [c0092]\n---\n",
+						[c0092] = inRaft(onMain(c0092), "R0090"),
+					},
+					says = "id-mismatch",
+				},
+				{
+					n = 90,
+					files = {
+						["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: x\nissues: [c0096, c0091, c0094]\n---\n",
+					},
+					says = "lists c0094, whose raft: line does not name R0050",
+				},
+				{
+					n = 91,
+					files = {
+						["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: x\nissues: [c0096]\n---\n",
+					},
+					says = "c0091's raft: line names R0050, which does not list it",
+				},
 				-- a retired raft's document
 				{
 					n = 55,
 					files = {
-						["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\ntitle: x\nissues: []\n---\n",
+						["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\nslug: a-raft\ntitle: x\nissues: []\n---\n",
 					},
 					says = "raft R0042 is retired",
 				},
@@ -447,8 +479,8 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					{
 						n = 60,
 						files = with({
-							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
-							["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
+							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
+							["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\nslug: a-raft\ntitle: a backlog raft\nissues: []\n---\n",
 							[c0094] = (string.gsub(onMain(c0094), "\nraft: R0041\n", "\nraft: R0050\n")),
 						}),
 					},
@@ -462,6 +494,27 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					error(`PR #{case.n} did not merge\n{r.stdout}{r.stderr}`)
 				end
 			end
+			-- code review 006 F3: a head sharing no history with main (one new raft document)
+			do
+				local other = h.f.other
+				fixture.git(other, { "checkout", "-q", "--orphan", "orphan-92" })
+				fixture.git(other, { "rm", "-rfq", "." })
+				fs.writeDir(`{other}/pickman/.tracker/rafts/R0090`)
+				fs.writeFile(
+					`{other}/pickman/.tracker/rafts/R0090/R0090.md`,
+					"---\nid: R0090\nslug: a-raft\ntitle: x\nissues: []\n---\n"
+				)
+				fixture.git(other, { "add", "-A" })
+				fixture.git(other, { "commit", "-q", "-m", "orphan" })
+				local sha = fixture.git(other, { "rev-parse", "HEAD" })
+				fixture.git(other, { "push", "-q", "-f", "origin", "HEAD:refs/pull/92/head" })
+				fixture.git(other, { "checkout", "-q", "-f", "main" })
+				fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(92, sha))
+				local r = zn({ "dispatch", "c0096" })
+				if r.code ~= 4 or not has(r.stdout, "shares no history") then
+					error(`PR #92: exit {r.code}, wanted 4 saying "shares no history"\n{r.stdout}{r.stderr}`)
+				end
+			end
 			-- code review 005 F1: main moves while the PRs wait. All are cut first, then main readies R0041 (with its
 			-- member c0094) and adds a raft R0060 to pickman, and gets a spend row on c0092
 			local r41 = "pickman/.tracker/rafts/R0041"
@@ -473,7 +526,7 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 						h,
 						80,
 						with({
-							[`{r41}/R0041.md`] = "---\nid: R0041\ntitle: retitled by the rafting PR\nissues: [c0094]\n---\n",
+							[`{r41}/R0041.md`] = "---\nid: R0041\nslug: a-raft\ntitle: retitled by the rafting PR\nissues: [c0094]\n---\n",
 						})
 					),
 					refused = true,
@@ -485,8 +538,8 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 						h,
 						86,
 						with({
-							[`{r41}/R0041.md`] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
-							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
+							[`{r41}/R0041.md`] = "---\nid: R0041\nslug: a-raft\ntitle: a backlog raft\nissues: []\n---\n",
+							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
 							[c0094] = (string.gsub(onMain(c0094), "\nraft: R0041\n", "\nraft: R0050\n")),
 						})
 					),
@@ -496,16 +549,26 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				{
 					n = 81,
 					sha = fakecli.pullRequest(h, 81, {
-						["z-nile/.tracker/rafts/R0060/R0060.md"] = "---\nid: R0060\ntitle: x\nissues: []\n---\n",
+						["z-nile/.tracker/rafts/R0060/R0060.md"] = "---\nid: R0060\nslug: a-raft\ntitle: x\nissues: []\n---\n",
 					}),
 					refused = true,
 				},
 				-- the same raft PR as #34, which main leaves alone but for an unrelated spend row
-				{ n = 87, sha = fakecli.pullRequest(h, 87, own), refused = false },
+				{
+					n = 87,
+					sha = fakecli.pullRequest(h, 87, {
+						["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0091]\n---\n",
+						["pickman/.tracker/issues/c0091/c0091.md"] = own["pickman/.tracker/issues/c0091/c0091.md"],
+					}),
+					refused = false,
+				},
+				-- code review 006 F3: main touches only the carried issue itself
+				{ n = 93, sha = fakecli.pullRequest(h, 93, own), refused = true },
 			}
 			fakecli.advanceMain(h, {
-				["pickman/.tracker/rafts/R0060/R0060.md"] = "---\nid: R0060\ntitle: y\nissues: []\n---\n",
+				["pickman/.tracker/rafts/R0060/R0060.md"] = "---\nid: R0060\nslug: a-raft\ntitle: y\nissues: []\n---\n",
 				["pickman/.tracker/issues/c0092/spend.md"] = "| c0092 | prep | 1 |\n",
+				[c0096] = onMain(c0096) .. "\nre-claimed on main\n",
 			}, {
 				[r41] = "pickman/.tracker/rafts/active/R0041",
 				["pickman/.tracker/issues/c0094"] = "pickman/.tracker/issues/active/c0094",

@@ -13,6 +13,7 @@
 -- user), pending.json rows in state.json, stop (the stop marker), pid, stdin, gh/ (the step's empty gh configuration),
 -- and <step>-<mode>-<n>/ for a step a step dispatched (a review), with its own state; .cache/dispatch/broker/.
 local adapters = require("./adapters")
+local audit = require("./audit")
 local broker = require("./broker")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
@@ -1260,6 +1261,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 	-- PR's to change)
 	local own: { [string]: boolean } = if gateName == "prep" then { [id] = true } else {}
 	local only: (path: string) -> string?
+	local carriedRafts: { string } = {}
 	if gateName == "prep" then
 		only = function(path: string): string?
 			if
@@ -1313,7 +1315,10 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		-- code review 005 F1: the merge lands on today's main, not on the base, so every rule below that reads an item
 		-- "at the base" is only true while main left that item alone. An item (any root, any lifecycle folder) that
 		-- main changed since the base is refused, whatever the PR does to it: the rafting PR is rebased first
-		local _, moved = git(root, { "diff", "--name-only", "--no-renames", from, main })
+		local okMoved, moved = git(root, { "diff", "--name-only", "--no-renames", from, main })
+		if not okMoved then
+			return "what origin's main changed since this PR was cut could not be read"
+		end
 		local movedIds: { [string]: string } = {}
 		for path in string.gmatch(moved, "[^\n]+") do
 			local mid = trackerstate.itemOf(path, roots :: { string })
@@ -1371,6 +1376,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		-- folder's name (a deleted, renamed or missing document strands its members and breaks find and audit)
 		for key, _ in rafts do
 			local r, rid = string.match(key, "^(.*)/(R%d+)$")
+			table.insert(carriedRafts, rid :: string)
 			local docPath = `{r}/rafts/{rid}/{rid}.md`
 			local text = show(ref, docPath)
 			local front = if text then string.match(text :: string, "^%-%-%-\n(.-\n)%-%-%-") else nil
@@ -1482,7 +1488,96 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			only = only,
 		}
 	)
-	return why
+	if why or gateName == "prep" then
+		return why
+	end
+	return dispatcher.backstop(ctx, pr.number, main, ref, roots :: { string }, carriedRafts)
+end
+
+-- Code review 005 F2, 006 F1: the rafting gate's last word is the tracker's own readers on what the merge would make:
+-- `git merge-tree` of today's main and the head (a conflict refuses: GitHub would not merge it either), then `audit`
+-- over that tree and over main, and the rule `./zn ready` applies to each carried raft. A PR whose merged tree has an
+-- audit error main does not, or a carried raft whose `issues:` and members disagree, is refused, whatever its shape.
+function dispatcher.backstop(
+	ctx: Ctx,
+	number: number,
+	main: string,
+	ref: string,
+	roots: { string },
+	carriedRafts: { string }
+): string?
+	local root = ctx.mainRoot()
+	local ok, out = git(root, { "merge-tree", "--write-tree", main, ref })
+	if not ok then
+		return "its merge with origin's main conflicts or could not be made"
+	end
+	local tree = string.match(out, "^(%x+)")
+	if not tree then
+		return "its merge with origin's main made no tree"
+	end
+	local paths = { projects.FILE, trackerstate.COUNTER }
+	for _, r in roots do
+		table.insert(paths, r)
+	end
+	local base = `{physicalCache()}judge-{number}`
+	local function audited(label: string, rev: string): ({ [string]: boolean }, string?, string?)
+		local dir = `{base}/{label}`
+		if fs.isDir(dir) then
+			fs.removeDir(dir)
+		end
+		fs.writeDir(dir)
+		local tar = `{base}/{label}.tar`
+		local here: { string } = {}
+		for _, path in paths do
+			if git(root, { "cat-file", "-e", `{rev}:{path}` }) then
+				table.insert(here, path)
+			end
+		end
+		local okA = #here > 0
+			and git(root, { "archive", "--format=tar", "-o", tar, rev, "--", table.unpack(here) })
+		local x = if okA then process.exec("tar", { "-xf", tar, "-C", dir }) else nil
+		if not okA or not x or not x.ok then
+			return {}, nil, `the {label} tree could not be exported for the audit`
+		end
+		process.exec("git", { "init", "-q" }, { cwd = dir })
+		process.exec("git", { "add", "-A" }, { cwd = dir })
+		local okRun, problems = pcall(audit.run, dir)
+		if not okRun then
+			return {}, dir, `the audit of the {label} tree failed: {problems}`
+		end
+		local errs: { [string]: boolean } = {}
+		for _, p in problems :: { audit.Problem } do
+			if p.level == "error" then
+				errs[audit.format(p)] = true
+			end
+		end
+		return errs, dir, nil
+	end
+	local mainErrs, mainDir, why = audited("main", main)
+	local mergedErrs, mergedDir, why2 = audited("merged", tree)
+	local result: string? = why or why2
+	if not result then
+		for line in mergedErrs do
+			if not mainErrs[line] then
+				result = `its merge would add an audit error: {line}`
+				break
+			end
+		end
+	end
+	if not result and mergedDir then
+		local okM, bad = pcall(audit.membership, mergedDir, carriedRafts)
+		if not okM then
+			result = `the merged tree's raft membership could not be read: {bad}`
+		elseif #(bad :: { string }) > 0 then
+			result = `its merge would leave a carried raft inconsistent: {(bad :: { string })[1]}`
+		end
+	end
+	for _, d in { mainDir, mergedDir } do
+		if d and fs.isDir(d) then
+			fs.removeDir(d)
+		end
+	end
+	return result
 end
 
 -- What the chain sees of `id` now.
@@ -1628,6 +1723,15 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			save(st)
 			return action.code or 1
 		elseif action.kind == "merge" then
+			-- code review 006 F2: judged once more at the last moment, so the window main can move in is the call
+			-- itself (GitHub pins no base; what remains is stated in zz-rules)
+			local again = dispatch.next(dispatcher.facts(ctx, st, id, description))
+			if again.kind ~= "merge" or again.head ~= action.head then
+				print(
+					"stop: the PR changed or main moved while the gate was judging it; run the dispatcher again"
+				)
+				return dispatch.EXIT.failure
+			end
 			if not merge(ctx, st, action.pr :: number, action.head or "") then
 				print(`stop: the {action.gate} PR #{action.pr} did not merge`)
 				return dispatch.EXIT.failure
