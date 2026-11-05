@@ -317,9 +317,9 @@ function gatefix.editResults(dir: string, name: string, body: string): string
 	gatefix.write(
 		script,
 		'local fs = require("@lune/fs")\nlocal serde = require("@lune/serde")\nlocal process = require("@lune/process")\n'
-			.. 'local doc = serde.decode("json", fs.readFile(process.args[1]))\n'
+			.. 'local doc = serde.decode("json", fs.readFile(process.args[#process.args]))\n'
 			.. body
-			.. '\nfs.writeFile(process.args[1], serde.encode("json", doc))\n'
+			.. '\nfs.writeFile(process.args[#process.args], serde.encode("json", doc))\n'
 	)
 	gatefix.write(
 		`{dir}/bin-{name}/lune`,
