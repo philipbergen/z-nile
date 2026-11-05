@@ -42,6 +42,7 @@
 | 38 | 2026-11-05 04:28 | R0081: review-002 | 0 | 0 | 55.0 | focus | code-review |  |
 | 39 | 2026-11-05 04:31 | c0165: review 002 fixes: failed rows, one SQL text, jail verdict from the run, end-to-end orchestrator spec | 578 | 77 | 70.0 | focus | code-review |  |
 | 40 | 2026-11-05 04:31 | R0081: refute-002, harvest, lesson, Verification log | 0 | 0 | 20.0 | focus | code-review |  |
+| 41 | 2026-11-05 04:50 | R0081: review-003 | 0 | 0 | 30.0 | focus | code-review |  |
 
-**Total:** +6181 / -313 lines, 1321.0 agent-minutes, 7440865 tokens over 40 records
-<!-- totals: added=6181 removed=313 minutes=1321.0 records=40 tokens=7440865 -->
+**Total:** +6181 / -313 lines, 1351.0 agent-minutes, 7440865 tokens over 41 records
+<!-- totals: added=6181 removed=313 minutes=1351.0 records=41 tokens=7440865 -->
