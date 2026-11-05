@@ -15,3 +15,5 @@ An exemption follows from what the item is, not from what a PR says about it (R0
 A set of exempt items is derived from the base, never from the change being judged (R0052 code review 002 F1): after 001's fix the rafting gate still exempted every raft whose document the PR touched, active ones included, and let a raft's `issues:` line make any issue carry-able. A PR that can name a raft or an issue in its own files chooses its exemptions; read each item's state and membership from main.
 
 An exemption granted per item still lets the change rewrite the item (R0052 code review 003 F1): after 002's fix an issue joined the carry-able set by the `raft:` line in the PR's own version, so a PR moved an active raft's member out and rewrote its design. Judge an existing item's change by its shape against the base (which lines may differ, in which folder, between which values), not only by whose item it is.
+
+An allowance for 'any file of item X' includes the file that makes X an item: a carried item keeps its identity file at the head (R0052 code review 005 F2). Check: can the PR delete, rename or omit the file the tracker's reader finds the item by?

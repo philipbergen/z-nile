@@ -196,11 +196,16 @@ function fakecli.pullRequest(
 	n: number,
 	files: { [string]: string },
 	moves: { [string]: string }?,
-	message: string?
+	message: string?,
+	deletes: { string }?
 ): string
 	local other = h.f.other
 	fixture.git(other, { "fetch", "-q", "origin", "main" })
 	fixture.git(other, { "checkout", "-q", "-B", `pr-{n}`, "FETCH_HEAD" })
+	local gone_: { string } = deletes or {}
+	for _, gone in gone_ do
+		fixture.git(other, { "rm", "-q", gone })
+	end
 	local renames: { [string]: string } = moves or {}
 	for from, to in renames do
 		local parent = string.match(to, "^(.*)/[^/]+$")
@@ -222,6 +227,33 @@ function fakecli.pullRequest(
 	fixture.git(other, { "push", "-q", "-f", "origin", `HEAD:refs/pull/{n}/head` })
 	fixture.git(other, { "checkout", "-q", "main" })
 	return sha
+end
+
+-- A forward commit on origin's main (what z-ready or another rafting PR does while a PR waits): `files` written and
+-- `moves` (from -> to) made on main's tip, pushed to main.
+function fakecli.advanceMain(h: Harness, files: { [string]: string }, moves: { [string]: string }?)
+	local other = h.f.other
+	fixture.git(other, { "fetch", "-q", "origin", "main" })
+	fixture.git(other, { "checkout", "-q", "-B", "advance", "FETCH_HEAD" })
+	local moved: { [string]: string } = moves or {}
+	for from, to in moved do
+		local parent = string.match(to, "^(.*)/[^/]+$")
+		if parent then
+			fs.writeDir(`{other}/{parent}`)
+		end
+		fixture.git(other, { "mv", from, to })
+	end
+	for path, text in files do
+		local parent = string.match(path, "^(.*)/[^/]+$")
+		if parent then
+			fs.writeDir(`{other}/{parent}`)
+		end
+		fs.writeFile(`{other}/{path}`, text)
+	end
+	fixture.git(other, { "add", "-A" })
+	fixture.git(other, { "commit", "-q", "-m", "main moves on" })
+	fixture.git(other, { "push", "-q", "origin", "HEAD:refs/heads/main" })
+	fixture.git(other, { "checkout", "-q", "main" })
 end
 
 function fakecli.mode(h: Harness, name: string, value: string?)

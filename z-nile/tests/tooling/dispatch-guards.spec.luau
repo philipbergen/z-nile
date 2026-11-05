@@ -320,6 +320,38 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					files = { [c0094] = (string.gsub(onMain(c0094), "\nraft: R0041\n", "\nraft: R0050\n")) },
 					says = "only between empty and a raft this PR carries",
 				},
+				-- code review 005 F3: a new z-nile raft nothing names, and a pickman issue naming it
+				{
+					n = 76,
+					files = {
+						["z-nile/.tracker/rafts/R0091/R0091.md"] = "---\nid: R0091\ntitle: x\nissues: []\n---\n",
+						[c0092] = inRaft(onMain(c0092), "R0091"),
+					},
+					says = "only between empty and a raft this PR carries",
+				},
+				-- code review 005 F2: a new raft with no document, and one whose document names another id
+				{
+					n = 77,
+					files = {
+						["pickman/.tracker/rafts/R0090/notes.md"] = "notes\n",
+						[c0092] = inRaft(onMain(c0092), "R0090"),
+					},
+					says = "without a valid pickman/.tracker/rafts/R0090/R0090.md",
+				},
+				{
+					n = 78,
+					files = {
+						["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0099\ntitle: x\nissues: []\n---\n",
+					},
+					says = "without a valid pickman/.tracker/rafts/R0050/R0050.md",
+				},
+				-- code review 005 F4: the counter, nonsense or a plausible bump
+				{ n = 79, files = { ["z-nile/next"] = "nonsense\n" }, says = "never carries the id counter" },
+				{
+					n = 83,
+					files = { ["z-nile/next"] = "issue 300 x\nraft 9999 x\n" },
+					says = "never carries the id counter",
+				},
 				-- a retired raft's document
 				{
 					n = 55,
@@ -353,6 +385,29 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					)
 				end
 				t.expect(has(fakecli.log(h), `realgh pr merge {life.n} `)).toBe(false)
+			end
+			-- code review 005 F2: a backlog raft's document deleted, or renamed inside its folder
+			do
+				local r41 = "pickman/.tracker/rafts/R0041"
+				for _, case in
+					{
+						{ n = 84, moves = {}, deletes = { `{r41}/R0041.md` } },
+						{ n = 85, moves = { [`{r41}/R0041.md`] = `{r41}/old.md` }, deletes = {} },
+					}
+				do
+					local sha = fakecli.pullRequest(h, case.n, {}, case.moves, nil, case.deletes)
+					fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(case.n, sha))
+					local r = zn({ "dispatch", "c0096" })
+					if
+						r.code ~= 4
+						or not has(r.stdout, "without a valid pickman/.tracker/rafts/R0041/R0041.md")
+					then
+						error(
+							`PR #{case.n}: exit {r.code}, wanted 4 naming the document\n{r.stdout}{r.stderr}`
+						)
+					end
+					t.expect(has(fakecli.log(h), `realgh pr merge {case.n} `)).toBe(false)
+				end
 			end
 			-- code review 003 F2: a new raft's check.sh is the rendered template's RC0 lines, then only RCn checks
 			local template = raftcheck.render(
@@ -405,6 +460,68 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				local r = zn({ "dispatch", "c0096" })
 				if not has(fakecli.log(h), `realgh pr merge {case.n} --squash --match-head-commit {sha}`) then
 					error(`PR #{case.n} did not merge\n{r.stdout}{r.stderr}`)
+				end
+			end
+			-- code review 005 F1: main moves while the PRs wait. All are cut first, then main readies R0041 (with its
+			-- member c0094) and adds a raft R0060 to pickman, and gets a spend row on c0092
+			local r41 = "pickman/.tracker/rafts/R0041"
+			local cut: { { n: number, sha: string, refused: boolean } } = {
+				-- a retitle of the backlog raft main now readies
+				{
+					n = 80,
+					sha = fakecli.pullRequest(
+						h,
+						80,
+						with({
+							[`{r41}/R0041.md`] = "---\nid: R0041\ntitle: retitled by the rafting PR\nissues: [c0094]\n---\n",
+						})
+					),
+					refused = true,
+				},
+				-- a recombine out of that raft
+				{
+					n = 86,
+					sha = fakecli.pullRequest(
+						h,
+						86,
+						with({
+							[`{r41}/R0041.md`] = "---\nid: R0041\ntitle: a backlog raft\nissues: []\n---\n",
+							["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: a raft\nissues: [c0096, c0091, c0094]\n---\n",
+							[c0094] = (string.gsub(onMain(c0094), "\nraft: R0041\n", "\nraft: R0050\n")),
+						})
+					),
+					refused = true,
+				},
+				-- a new z-nile raft whose id main takes in pickman
+				{
+					n = 81,
+					sha = fakecli.pullRequest(h, 81, {
+						["z-nile/.tracker/rafts/R0060/R0060.md"] = "---\nid: R0060\ntitle: x\nissues: []\n---\n",
+					}),
+					refused = true,
+				},
+				-- the same raft PR as #34, which main leaves alone but for an unrelated spend row
+				{ n = 87, sha = fakecli.pullRequest(h, 87, own), refused = false },
+			}
+			fakecli.advanceMain(h, {
+				["pickman/.tracker/rafts/R0060/R0060.md"] = "---\nid: R0060\ntitle: y\nissues: []\n---\n",
+				["pickman/.tracker/issues/c0092/spend.md"] = "| c0092 | prep | 1 |\n",
+			}, {
+				[r41] = "pickman/.tracker/rafts/active/R0041",
+				["pickman/.tracker/issues/c0094"] = "pickman/.tracker/issues/active/c0094",
+			})
+			for _, c in cut do
+				fakecli.clear(h)
+				fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(c.n, c.sha))
+				local r = zn({ "dispatch", "c0096" })
+				local merged =
+					has(fakecli.log(h), `realgh pr merge {c.n} --squash --match-head-commit {c.sha}`)
+				if c.refused and (r.code ~= 4 or merged or not has(r.stdout, "since this PR was cut")) then
+					error(
+						`PR #{c.n}: exit {r.code}, wanted 4 saying "since this PR was cut"\n{r.stdout}{r.stderr}`
+					)
+				elseif not c.refused and not merged then
+					error(`PR #{c.n} did not merge\n{r.stdout}{r.stderr}`)
 				end
 			end
 		end

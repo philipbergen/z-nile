@@ -1302,10 +1302,30 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			end
 			return nil
 		end
+		if not okBase then
+			return "it shares no history with origin's main"
+		end
 		local _, names = git(root, { "diff", "--name-only", "--no-renames", from, ref })
 		local paths: { string } = {}
 		for path in string.gmatch(names, "[^\n]+") do
 			table.insert(paths, path)
+		end
+		-- code review 005 F1: the merge lands on today's main, not on the base, so every rule below that reads an item
+		-- "at the base" is only true while main left that item alone. An item (any root, any lifecycle folder) that
+		-- main changed since the base is refused, whatever the PR does to it: the rafting PR is rebased first
+		local _, moved = git(root, { "diff", "--name-only", "--no-renames", from, main })
+		local movedIds: { [string]: string } = {}
+		for path in string.gmatch(moved, "[^\n]+") do
+			local mid = trackerstate.itemOf(path, roots :: { string })
+			if mid then
+				movedIds[mid :: string] = path
+			end
+		end
+		for _, path in paths do
+			local pid = trackerstate.itemOf(path, roots :: { string })
+			if pid and movedIds[pid :: string] then
+				return `it carries {path}, but origin's main changed {movedIds[pid :: string]} since this PR was cut: rebase it onto main`
+			end
 		end
 		-- the rafts this PR carries, keyed by root and id (code review 004 F2: an id is per root, and an issue may
 		-- name only a raft of its own root): new, or in the backlog on the base, and in the backlog folder at the head
@@ -1346,6 +1366,18 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		end
 		if #live > 0 then
 			return `it changes an active, done or retired raft: {table.concat(live, ", ")}`
+		end
+		-- code review 005 F2: a carried raft keeps the file that makes it a raft: `<id>.md` at the head, its `id:` the
+		-- folder's name (a deleted, renamed or missing document strands its members and breaks find and audit)
+		for key, _ in rafts do
+			local r, rid = string.match(key, "^(.*)/(R%d+)$")
+			local docPath = `{r}/rafts/{rid}/{rid}.md`
+			local text = show(ref, docPath)
+			local front = if text then string.match(text :: string, "^%-%-%-\n(.-\n)%-%-%-") else nil
+			local docId = if front then string.match("\n" .. front, "\nid:[ \t]*([^\n]-)[ \t]*\n") else nil
+			if docId ~= rid then
+				return `it carries raft {rid} without a valid {docPath} (the file must exist, with id: {rid})`
+			end
 		end
 		local function raftLine(text: string): string?
 			local front = string.match(text, "^%-%-%-\n(.-\n)%-%-%-")
@@ -1427,7 +1459,12 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			end
 		end
 		only = function(path: string): string?
-			if path == trackerstate.COUNTER or carried[path] then
+			if path == trackerstate.COUNTER then
+				-- code review 005 F4: `./zn new` reserves ids on origin by its own push, so a rafting PR has no reason to
+				-- carry the counter, and a bad one stops every capture
+				return `it carries {path}: a rafting PR never carries the id counter`
+			end
+			if carried[path] then
 				return nil
 			end
 			return reasons[path] or `it carries {path}, which is not one of the raft's own items`

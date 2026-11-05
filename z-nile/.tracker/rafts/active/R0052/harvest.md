@@ -20,3 +20,9 @@
 - review-004 F5: zz-rules/grep-markers-before-merge-commit
 - review-004 F6: zz-arch/one-reader-per-format
 - review-004 F7: one-off: not this raft's to fix; the lead captures an issue for z-raft (item 9 for every RCn line a rafting adds)
+- review-005 F1: zz-arch/merge-gate-checks-what-it-merges
+- review-005 F2: zz-arch/item-rules-scoped-to-their-call
+- review-005 F3: zz-test/refusals-tested-on-both-sides
+- review-005 F4: one-off: the counter is never carried by a rafting PR
+- review-005 F5: one-off: R0063 removed the check the merge text named
+- review-005 F6: one-off: names c0193
