@@ -268,3 +268,6 @@ tests/tooling/tracker-review-guards.spec.luau	portal/.tracker/issues/
 tests/tooling/tracker-review-guards.spec.luau	snake/.tracker/issues/
 tests/tooling/tracker-review-guards.spec.luau	z-nile/.tracker/issues/
 tests/tooling/worktree-fetch.spec.luau	*
+tests/acceptance/c0184/docs.spec.luau	AGENTS.md
+tests/acceptance/c0184/homes.spec.luau	*
+tests/acceptance/c0185/selector.spec.luau	*

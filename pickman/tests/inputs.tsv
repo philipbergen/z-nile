@@ -104,3 +104,6 @@ tests/meta/architecture.spec.luau	pickman/src/
 tests/meta/architecture.spec.luau	pickman/tests/
 tests/unit/Lobby/layout.spec.luau	pickman/src/lobby/client/LobbyView.luau
 tests/meta/fence.spec.luau	*
+tests/meta/home.spec.luau	pickman/
+tests/meta/home.spec.luau	stylua.toml
+tests/meta/home.spec.luau	selene.toml
