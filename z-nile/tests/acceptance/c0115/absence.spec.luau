@@ -8,6 +8,7 @@
 -- folder. And no live file cites an old lesson id (`testing/no-vacuous-pass`) whose renamed lesson exists. Plain finds
 -- only (lesson zz-test/plain-find-for-literals); `scan` and `oldLessonIds` are also run on planted texts.
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local realfs = require("@lune/fs")
 -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -90,7 +91,23 @@ local function tracked(): { string }
 end
 
 local LIVE_TOP = { "AGENTS.md", "SETUP.md", "zn" }
-local LIVE_DIRS = { "z-nile/", "pickman/", ".claude/", "scripts/", ".github/" }
+-- c0184 override: every registered project's home, from the registry, not pickman's alone
+local LIVE_DIRS = { "z-nile/", ".claude/", "scripts/", ".github/" }
+local HOMES: { string } = {}
+for _, p in projects.load(TOP).projects do
+	table.insert(HOMES, `{p.home}/`)
+	if p.home ~= "z-nile" then
+		table.insert(LIVE_DIRS, `{p.home}/`)
+	end
+end
+local function promotedHome(path: string): boolean
+	for _, h in HOMES do
+		if starts(path, `{h}tests/acceptance/`) then
+			return true
+		end
+	end
+	return false
+end
 local function live(path: string): boolean
 	if string.find(path, "/.tracker/", 1, true) or starts(path, "tracker/") then
 		return false
@@ -99,6 +116,7 @@ local function live(path: string): boolean
 		-- promoted specs are sequestered, every project's (z-nile's home is z-nile/, c0120)
 		starts(path, "z-nile/tests/acceptance/")
 		or starts(path, "pickman/tests/acceptance/")
+		or promotedHome(path)
 		or starts(path, "z-nile/vendor/")
 	then
 		return false

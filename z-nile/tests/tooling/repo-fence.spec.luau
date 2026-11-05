@@ -112,6 +112,25 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/tests/tooling/fence-cache-entry.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
 	},
+	-- c0191: the reaper lists the jail's launcher as a tool process that owns the processes below it
+	["z-nile/engine/reap.luau"] = {
+		["sandbox-exec"] = "a name in the list of tool processes the reaper treats as ownerless; it never runs it",
+	},
+	-- R0079 review 001 F3: the hook refuses `launchctl submit` as a detacher; it only reads the word
+	["z-nile/engine/boundcmd.luau"] = {
+		launchctl = "a name the hook refuses in its submit, bootstrap and load forms; it never runs it",
+	},
+	["z-nile/tests/tooling/bounded-review.spec.luau"] = {
+		launchctl = "a command line the hook's case feeds to the scanner as text; never run",
+	},
+	-- c0191: the proof script (run by check.sh before done only) clears the marker so a copied runner acts as a top-level run
+	["z-nile/tests/acceptance/c0191/proof-limits.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
+	-- c0191: clears the marker so a copied runner acts as a top-level run
+	["z-nile/tests/acceptance/c0191/runner-cpu.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+	},
 	-- c0650: its spec proves the scan refuses these names
 	["z-nile/tests/acceptance/c0059/adapt.spec.luau"] = {
 		GIT_CEILING_DIRECTORIES = "asserts c0510 names none",
@@ -215,6 +234,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/tests/acceptance/c0114/gate-cover.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs the copied gate as a top-level run",
 	},
+	-- c0184: its fence-scan case runs a copied runner with the marker cleared, so the copy acts as a top-level run
+	["z-nile/tests/acceptance/c0184/generic.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs the copied runner as a top-level run",
+	},
 	-- c0114: one fence call in a fixture gets the hook folder cleared and the jail marker unset or set, to prove the
 	-- fence refuses a checkout with no hooks outside the jail; this run's own environment is never changed
 	["z-nile/tests/acceptance/c0114/guards.spec.luau"] = {
@@ -240,13 +263,23 @@ local EXEMPT: { [string]: boolean } = {
 -- fixtures copy only tests/ and z-nile/lib/) uses the roots c0114 shipped with; an engine that is there but fails to
 -- load is an error, never a narrower scan (design review 002 F4).
 local ROOTS: { string } = { "tracker", "z-nile/.tracker" }
+-- the folders that run as checks besides the root's scripts/ (c0120): every project's home, from the registry (c0184);
+-- a copy with no engine keeps the two homes c0120 shipped with
+local HOMES: { string } = { "z-nile", "pickman" }
 -- the checkout's registry, read at its root (c0120: this spec also runs from pickman/, see `checkout`)
 if fs.isFile(`{checkout}/z-nile/engine/projects.luau`) then
 	local okP, lib = pcall(require, "@znile/engine/projects")
 	if not okP then
 		error(`repo-fence: z-nile/engine/projects.luau does not load: {lib}`)
 	end
-	ROOTS = (lib :: any).roots((lib :: any).load(checkout))
+	local reg = (lib :: any).load(checkout)
+	ROOTS = (lib :: any).roots(reg)
+	HOMES = {}
+	for _, p in reg.projects do
+		if p.home ~= "." then
+			table.insert(HOMES, p.home)
+		end
+	end
 end
 -- c0640 lives in z-nile's tracker root since c0114; every root and state is listed so a move never unexempts it
 local C0640_DIRS = { "z-nile/tests/acceptance/" .. C0640 }
@@ -282,6 +315,13 @@ do
 			PICKMAN_FENCE_ = "drives the ref guard hook in a .cache fixture, naming only that fixture as protected",
 		}
 	end
+end
+-- c0172: merge.spec quotes the fence variable as a needle in the Merging skill text. It never sets it.
+local C0172 = renamed.id("c0172")
+for _, dir in { "z-nile/tests/acceptance/" .. C0172 } do
+	ALLOWED[`{dir}/merge.spec.luau`] = {
+		PICKMAN_FENCE_ = "quotes the fence variable as a needle in the Merging skill text, and never sets it (c0172)",
+	}
 end
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
 local EXEMPT_DIRS = { "z-nile/lib/git-hooks/" }
@@ -326,7 +366,8 @@ local function sources(): { string }
 		skip[r] = true
 	end
 	-- c0120: every home runs as a check (its specs, scripts, gate entry and forwarders)
-	for _, dir in { "scripts", "z-nile", "pickman" } do
+	files("scripts", all, skip)
+	for _, dir in HOMES do
 		files(dir, all, skip)
 	end
 	local checks: { string } = {}

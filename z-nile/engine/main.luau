@@ -18,6 +18,7 @@ local projects = require("./projects")
 local publish = require("./publish")
 local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
+local reapLib = require("./reap")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
 local spend = require("./spend")
@@ -49,6 +50,11 @@ usage: ./zn <command> ...
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
   stamp <state>                                 print a fresh status stamp (diagnostics)
+  run [--time S] [--cpu S] -- <command>         run a command that stops at its limits, when it ends and when you do
+                                                (the bounded runner, z-nile/lib/bounded.pl; started before this engine)
+  reap [--dry-run] [--min-age S] [--root DIR]... [--under PID | --session-end] [--log FILE] [--quiet] [--auto]
+                                                stop this user's leaked tool processes: orphans, commands past their
+                                                ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
   list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
@@ -238,7 +244,8 @@ end
 -- broken, pickman_guarded missing, a crash, any other output) counts as guarded and publishes nothing (c0114:
 -- a guard's "no" is one explicit answer).
 local guardedRun: boolean? = nil
-local function guarded(): boolean
+local guardedSaying: string? = nil -- what to say, once, when a caller that publishes asks (not `reap --auto`, which asks quietly)
+local function guarded(quiet: boolean?): boolean
 	if guardedRun == nil then
 		local ok, r = pcall(process.exec, "bash", {
 			"-c",
@@ -248,17 +255,19 @@ local function guarded(): boolean
 		local answer = if ok then sh.trim(r.stdout) else ""
 		guardedRun = not (ok and r.ok and answer == "unguarded")
 		if ok and r.ok and answer == "guarded" then
-			stdio.ewrite(
+			guardedSaying =
 				`not publishing: {process.cwd} is protected by the repository guards (a check run)\n`
-			)
 		elseif guardedRun then
 			local why = if ok then sh.trim(r.stderr) else tostring(r)
-			stdio.ewrite(
+			guardedSaying =
 				`not publishing: cannot ask z-nile/lib/fence.sh whether a check runs in {process.cwd} (exit {if ok
 					then r.code
 					else "none"}{if why ~= "" then ": " .. why else ""})\n`
-			)
 		end
+	end
+	if quiet ~= true and guardedSaying ~= nil then
+		stdio.ewrite(guardedSaying)
+		guardedSaying = nil
 	end
 	return guardedRun == true
 end
@@ -783,6 +792,9 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--uncovered"
 			or a == "--apply"
 			or a == "--dry-run"
+			or a == "--quiet"
+			or a == "--auto"
+			or a == "--session-end"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -2147,10 +2159,16 @@ function cmd.stamp(pos: { string })
 	print(stamp(state))
 end
 
+-- The reaper at the start of `sync` and of the gate (`reap --auto`, defined with the other commands below)
+local function reapAuto()
+	cmd.reap({}, { ["--auto"] = { "true" } })
+end
+
 -- `sync` brings origin/main into this checkout (a merge in a worktree, a fast-forward in the main
 -- checkout). `sync --fetch` only updates origin/main: reviewers and stream agents use it, because
 -- a merge would add a commit and change the diff they judge.
 function cmd.sync(_: { string }, opts: { [string]: { string } })
+	reapAuto()
 	sh.git({ "fetch", "--quiet", "origin", "main" })
 	if not opts["--fetch"] then
 		if sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot() then
@@ -4209,14 +4227,16 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 end
 
 -- The prompt's Lessons section: the index of the build and both lessons (c0111).
--- Only the lessons of z-nile's skills and of the raft's own project's (c0115): another project's are left out.
+-- Only the lessons of z-nile's skills, of the raft's own project's and of the skills those extend (c0115, c0184): another
+-- project's are left out.
 local function buildLessons(project: string?): string
 	local tree = lessonsLib.load(".")
 	local sources = lessonsLib.sources(tree.items)
 	local mine = {}
+	local bases = skillsLib.bases((skillsLib.plan((skillsLib.load(".")))), project)
 	for _, l in parsedLessons(tree) do
 		local owner = tree.owners and tree.owners[l.skill]
-		if not owner or owner == skillsLib.ZNILE or owner == project then
+		if not owner or owner == skillsLib.ZNILE or owner == project or bases[l.skill] then
 			table.insert(mine, l)
 		end
 	end
@@ -4432,28 +4452,9 @@ local function projectOfRoot(root: string): string?
 	return p and p.name
 end
 
--- The SKILL.md files a raft's prompt inlines (c0115): z-nile's skills.INLINED, then every skill of the raft's
--- project (none more for z-nile's own rafts). Real paths, never through .claude/skills.
+-- The SKILL.md files a raft's prompt inlines (c0115, c0184): skills.inlined over the skills found.
 local function inlinedSkills(project: string?): { string }
-	local found = skillsLib.load(".")
-	local list = skillsLib.plan(found)
-	local out: { string } = {}
-	local byName: { [string]: skillsLib.Skill } = {}
-	for _, sk in list do
-		byName[sk.name] = sk
-	end
-	for _, name in skillsLib.INLINED do
-		local sk = byName[name]
-		table.insert(out, if sk then `{sk.dir}/SKILL.md` else `{skillsLib.ZNILE}/skills/{name}/SKILL.md`)
-	end
-	if project and project ~= skillsLib.ZNILE then
-		for _, sk in list do
-			if sk.project == project then
-				table.insert(out, `{sk.dir}/SKILL.md`)
-			end
-		end
-	end
-	return out
+	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
 end
 
 -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
@@ -5722,6 +5723,254 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		end,
 	}, pos, opts)
 	process.exit(code)
+end
+
+-- `reap` finds this user's leaked processes (z-nile/engine/reap.luau decides; this reads `ps` and `lsof` and signals,
+-- zz-test skill, "Bounded commands"). Returns true when a leak could not be stopped.
+local function reapRun(opts: { [string]: { string } }): boolean
+	local quiet = opts["--quiet"] ~= nil
+	if process.os ~= "macos" then
+		if quiet then
+			return false -- `--auto` on another host: the reaper reads BSD `ps`, so there is nothing to do
+		end
+		stdio.ewrite("reap: supported on macOS only (it reads BSD ps and lsof)\n")
+		process.exit(2)
+	end
+	local function num(flag: string, default: number): number
+		local v = opts[flag] and opts[flag][1]
+		if v == nil then
+			return default
+		end
+		if not string.match(v, "^%d+$") then
+			stdio.ewrite(`reap: {flag} needs a whole number of seconds\n`)
+			process.exit(2)
+		end
+		return tonumber(v) :: number
+	end
+	local listing = "pid=,ppid=,uid=,etime=,time=,lstart=,command="
+	local procs, problems = reapLib.parse(sh.must("env", { "LC_ALL=C", "ps", "-axww", "-o", listing }))
+	if #problems > 0 then
+		-- one line under --quiet: a host whose `ps` prints another layout must not print a page at every sync
+		stdio.ewrite(
+			if quiet
+				then `reap: skipped ({#problems} unreadable ps lines)\n`
+				else table.concat(problems, "\n") .. "\n"
+		)
+		if quiet then
+			return false
+		end
+	end
+	local byPid: { [number]: reapLib.Proc } = {}
+	for _, pr in procs do
+		byPid[pr.pid] = pr
+	end
+	for pid, deadline in
+		reapLib.markers(sh.must("env", { "LC_ALL=C", "ps", "-axww", "-E", "-o", "pid=,command=" }), procs)
+	do
+		byPid[pid].deadline = deadline
+	end
+	-- the reaper and its ancestors: this process's parent shell is the first
+	local me = tonumber(sh.trim(sh.must("sh", { "-c", "echo $PPID" }))) or 0
+	local self: { number } = { me }
+	local at = byPid[me]
+	while at ~= nil and at.ppid > 1 and #self < 64 do
+		table.insert(self, at.ppid)
+		at = byPid[at.ppid]
+	end
+	local roots: { string } = opts["--root"] or {}
+	local under: number? = if opts["--under"]
+		then tonumber(opts["--under"][1])
+		elseif opts["--session-end"] then reapLib.sessionRoot(procs, self)
+		else nil
+	local minAge = num("--min-age", 60)
+	local home = process.env.HOME or ""
+	local bad = reapLib.checkOptions({
+		roots = roots,
+		under = if opts["--under"] then under else nil,
+		underIsClaude = under ~= nil
+			and byPid[under] ~= nil
+			and reapLib.name(byPid[under].command) == "claude",
+		minAge = minAge,
+		home = home,
+	})
+	if bad then
+		stdio.ewrite(`reap: {bad}\n`)
+		process.exit(2)
+	end
+	local main = ""
+	if #roots == 0 then
+		local common = sh.git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
+		main = (string.gsub(common, "/%.git/?$", ""))
+	end
+	local temp = sh.trim(sh.run("getconf", { "DARWIN_USER_TEMP_DIR" }).stdout)
+	local scope = reapLib.scope(
+		main,
+		sh.trim(sh.must("id", { "-u" })),
+		if temp ~= "" then "/private" .. (string.gsub(temp, "/+$", "")) else "",
+		roots
+	)
+	local options: reapLib.Options = {
+		uid = tonumber(sh.trim(sh.must("id", { "-u" }))) :: number,
+		now = os.time(),
+		minAge = minAge,
+		grace = 5,
+		roots = scope.roots,
+		scratch = scope.scratch,
+		self = self,
+		under = under,
+		sessionAnywhere = scope.sessionAnywhere,
+	}
+	local want = reapLib.wantCwd(procs, options)
+	for i = 1, #want, 200 do
+		local chunk = table.move(want, i, math.min(i + 199, #want), 1, {})
+		-- lsof exits 1 when some pid is gone; what it printed is still right
+		local r = sh.run("lsof", { "-a", "-d", "cwd", "-Fpn", "-p", table.concat(chunk, ",") })
+		local current: reapLib.Proc? = nil
+		for line in string.gmatch(r.stdout, "[^\n]+") do
+			local tag, rest = string.sub(line, 1, 1), string.sub(line, 2)
+			if tag == "p" then
+				current = byPid[tonumber(rest) :: number]
+			elseif tag == "n" and current ~= nil then
+				current.cwd = rest
+			end
+		end
+	end
+	local targets = reapLib.decide(procs, options)
+	local dry = opts["--dry-run"] ~= nil
+	local lines: { string } = {}
+	local failed = false
+	-- Every target's tree is checked first (each process is still the one the snapshot saw: a pid may have been reused;
+	-- a changed root leaves its target alone, a changed descendant is left out), then all are signalled together: TERM,
+	-- a shared wait of up to two seconds, KILL for what is left. One wait for all keeps a session end inside its budget.
+	local stopping: { { target: reapLib.Target, pids: { string } } } = {}
+	-- the start time of every process of every tree, read once: a pid whose start time still is the snapshot's is the
+	-- same process (a pid may have been reused since)
+	local snapshot: { [string]: string } = {}
+	for _, t in targets do
+		snapshot[tostring(t.proc.pid)] = t.proc.start
+		for _, d in t.tree do
+			snapshot[tostring(d.pid)] = d.start
+		end
+	end
+	local ids: { string } = {}
+	for id in snapshot do
+		table.insert(ids, id)
+	end
+	-- the pids of `ids` that are running now and are still the snapshot's process: one `ps` for all (a zombie is gone)
+	local function running(ofIds: { string }): { string }
+		if #ofIds == 0 then
+			return {}
+		end
+		local r =
+			sh.run("env", { "LC_ALL=C", "ps", "-o", "pid=,stat=,lstart=", "-p", table.concat(ofIds, ",") })
+		local same: { [string]: boolean } = {}
+		for line in string.gmatch(r.stdout, "[^\n]+") do
+			local pid, stat, started = string.match(line, "^%s*(%d+)%s+(%S+)%s+(.-)%s*$")
+			if pid and stat and started and string.sub(stat, 1, 1) ~= "Z" and snapshot[pid] == started then
+				same[pid] = true
+			end
+		end
+		local left: { string } = {}
+		for _, id in ofIds do
+			if same[id] then
+				table.insert(left, id)
+			end
+		end
+		return left
+	end
+	local alive: { [string]: boolean } = {}
+	for _, id in running(ids) do
+		alive[id] = true
+	end
+	for _, t in targets do
+		if dry then
+			table.insert(lines, reapLib.line(t, "would stop"))
+			continue
+		end
+		local pids: { string } = {}
+		local root = tostring(t.proc.pid)
+		if alive[root] then
+			table.insert(pids, root)
+			for _, d in t.tree do
+				if alive[tostring(d.pid)] then
+					table.insert(pids, tostring(d.pid))
+				end
+			end
+			table.insert(stopping, { target = t, pids = pids })
+		else
+			table.insert(lines, reapLib.line(t, "left alone (changed since the snapshot)"))
+		end
+	end
+	local all: { string } = {}
+	for _, item in stopping do
+		for _, pid in item.pids do
+			table.insert(all, pid)
+		end
+	end
+	if #all > 0 then
+		sh.run("kill", { "-TERM", table.unpack(all) })
+		-- a shared wait, bounded by the clock (two seconds), polling every tenth of a second: one `ps` and one `sleep` a poll
+		local left = all
+		local deadline = os.time() + 2
+		repeat
+			left = running(left)
+			if #left == 0 then
+				break
+			end
+			sh.run("sleep", { "0.1" })
+		until os.time() >= deadline
+		left = running(left)
+		if #left > 0 then
+			sh.run("kill", { "-KILL", table.unpack(left) }) -- only what is still the snapshot's process
+			sh.run("sleep", { "0.2" })
+		end
+	end
+	local remaining: { [string]: boolean } = {}
+	for _, pid in running(all) do
+		remaining[pid] = true
+	end
+	for _, item in stopping do
+		local stuck = false
+		for _, pid in item.pids do
+			stuck = stuck or remaining[pid] == true
+		end
+		failed = failed or stuck
+		table.insert(lines, reapLib.line(item.target, if stuck then "COULD NOT STOP" else "stopped"))
+	end
+	if #lines == 0 and not quiet then
+		table.insert(lines, "reap: no leaked processes")
+	end
+	for _, l in lines do
+		stdio.ewrite(l .. "\n")
+	end
+	local log = opts["--log"] and opts["--log"][1]
+	if log ~= nil and #targets > 0 then
+		-- one appending write per line (O_APPEND is atomic for a line, so two reapers never interleave inside one)
+		local when = os.date("%Y-%m-%d %H:%M:%S ") :: string
+		for _, l in lines do
+			sh.run("sh", { "-c", 'printf "%s\\n" "$1" >> "$2"', "_", when .. l, log })
+		end
+	end
+	return failed
+end
+
+-- `reap` is also what `sync` and the gate run (`--auto`): quiet unless it stops something, a no-op inside a check run
+-- (the guards protect this repository there), and never a reason for the caller to fail.
+function cmd.reap(_: { string }, opts: { [string]: { string } })
+	if opts["--auto"] == nil then
+		if reapRun(opts) then
+			process.exit(1)
+		end
+		return
+	end
+	if guarded(true) then
+		return
+	end
+	opts["--quiet"] = { "true" }
+	local ok, err = pcall(reapRun, opts)
+	if not ok then
+		stdio.ewrite(`reap: skipped ({err})\n`)
+	end
 end
 
 local args = table.clone(process.args)

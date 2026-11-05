@@ -1,0 +1,29 @@
+- design-review-001 F1: z-design/quote-other-preps-before-promising
+- design-review-001 F2: pickman-arch/decide-the-gesture-before-acting
+- design-review-001 F3: z-design/finished-overrides-land-before-ready
+- design-review-001 F4: zz-test/narrowing-keeps-each-members-check
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: pickman-arch/folds-reset-when-their-source-changes
+- design-review-001 F8: one-off: the Overrides line written as a bullet; the template's line form restored
+- design-review-001 F9: z-design/quote-other-preps-before-promising
+- design-review-001 F10: z-design/late-pins-run-on-the-merged-deps-tree
+- note c0182's capture land lost the race to main twice (other sessions pushing): its filled text moved into d0149's prep PR instead of a third retry: z-design/results-land-on-every-path
+- design-review-002 F1: pickman-arch/source-changes-compare-values
+- design-review-002 F2: z-design/rerun-the-sweep-after-each-round
+- design-review-002 F3: z-design/rerun-the-sweep-after-each-round, z-design/restated-rules-move-together
+- design-review-002 F4: z-design/restated-rules-move-together
+- design-review-002 F5: z-design/restated-rules-move-together
+- note the mutation runner undid uncommitted prototype edits (each mutant is restored with git checkout); it now refuses a dirty src: z-design/mutation-runner-runs-correct-variants
+- design-review-003 F1: pickman-arch/timers-read-live-state
+- design-review-003 F2: pickman-arch/source-changes-compare-values
+- design-review-003 F3: pickman-arch/timers-read-live-state
+- design-review-003 F4: z-design/finished-overrides-land-before-ready
+- design-review-003 F5: z-design/restated-rules-move-together
+- note the new hold case found that a timer-promoted finger lifted under TAP_SECONDS still hopped; a looking finger now never hops: pickman-arch/decide-the-gesture-before-acting
+- design-review-004 F1: pickman-arch/timers-read-live-state
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-004 F3: z-design/restated-rules-move-together
+- design-review-005 F1: pickman-arch/one-step-into-the-fold
+- design-review-005 F2: one-off: a whole-document absence scan becomes a permanent ban once promoted; gated behind D0149_EXACT as f0158 gates its exact overlaps
+- design-review-005 F3: z-design/restated-rules-move-together

@@ -1,0 +1,12 @@
+# Refute 001: d0149 (design mode)
+
+- F1: fixed: `tests/acceptance/c0155/narrowed.spec.luau` is in the Overrides with c0182; c0182 depends on c0155 and lists the spec; AC8 runs `zn check c0155`; E8 records it (c0155's lead confirmed the same on 2026-10-31). consequences: c0182 lands after c0155, as its `depends_on` now says.
+- F2: fixed: a look finger points nothing until it is a pull (moved `TAP_SLOP` or held `TAP_SECONDS`); `Touch.tick`, called by Controls every Heartbeat, starts a thumb held still; a tap's whole output is one `hop`. consequences: new rules, cases and rows D1–D7, F4, C8 (fold: off-centre taps, the 12 px / 0.25 s boundary, the tick; adapters: a held thumb, an off-centre tap); E9 records the before and after; a pull starts turning only after 12 px or 0.25 s, which the user's partition implies (no new user decision).
+- F3: fixed: c0182 (carried in this prep PR, since its capture land kept losing the race to main) depends on f0110, f0126, f0143, f0158 and c0155, lists every overridden case, c0155's spec and f0158's exact-mode ACCEPTED entries, and says finished `check.sh` edits land in a tracker PR before ready; step 1 checks them. consequences: none beyond c0182's own prep.
+- F4: fixed: c0182 keeps every file (prep's choice, the user may veto), or removes one only with its owner's `check.sh` line in a tracker PR before ready; AC6 runs with `nullglob` and refuses a list of fewer than 20 files. consequences: none.
+- F5: fixed: docs.spec reads the whole of game-design.md (outside the Touch circles bullet) for the old controls, and asserts the three rewritten statements (Look, the pick, the boost), whose text is in `experiments/mobile.md`. consequences: the executor's document edits grow by three sentences (step 5).
+- F6: fixed: `LOOK_DEAD == 0.25` pinned, with the 0.249 / 0.25 boundary; row L5 (0.5) killed.
+- F7: fixed: Controls lets every finger go (point nil, knobs centred) when `buttons()` returns a new layout; adapters case "when the controls move…"; row C9 killed. consequences: a finger held through a turn stops until lifted (as on focus loss).
+- F8: fixed: `Overrides:` is a line of its own.
+- F9: fixed: E8 records it; f0147's prep was told on 2026-10-31 (message to its session) to read `steer`, `look`, `fire` and `pick`.
+- F10: fixed: the stub carries `sector`; f0158's ring.spec geometry cases pass on it (E3); step 1 reruns clear.spec on the real ring.

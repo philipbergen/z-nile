@@ -42,6 +42,15 @@ function Blaster.drop(b: Blaster): boolean
 	return false
 end
 
+-- A shot granted outright (f0126's blaster boon): true when it was gained, false (wasted) while full. No roll.
+function Blaster.gain(b: Blaster): boolean
+	if b.shots >= Blaster.MAX_SHOTS then
+		return false
+	end
+	b.shots += 1
+	return true
+end
+
 -- Spends one shot. False (and nothing spent) when there is none.
 function Blaster.spend(b: Blaster): boolean
 	if b.shots <= 0 then

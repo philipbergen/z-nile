@@ -27,7 +27,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
 - **Touched modules**: one backticked path per bullet. Then run `lune run z-nile/affected -- <paths>` and paste its output, plus the new specs, into **Affected specs**.
 - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
   - Each gets a pass/fail question, a method and a fallback.
-  - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
+  - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1. Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do.
 - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
 - **Override check**: promoted specs in `tests/acceptance/` are never edited during execution, so find the conflicts now.
   - For each Touched path, run `lune run z-nile/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.

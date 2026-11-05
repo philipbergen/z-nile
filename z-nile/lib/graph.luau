@@ -23,9 +23,11 @@ export type GameRoot = {
 
 local graph = {}
 
--- Specs that require this library load the Rojo-built place, so they implicitly depend on every
--- file under src/ and on both project files, default.project.json and lobby.project.json (see affectedSpecs).
--- A project's home has its own (c0120): `<home>/tests/lib/place.luau` stands for `<home>/src/` and its project files.
+-- Specs that require this library load the Rojo-built place, so they implicitly depend on every file the place is
+-- built from: the home's project files and every folder or file they map with a "$path", a folder of another home
+-- included (c0185: `../arcade/src/shared`). See graph.placeInputs and affectedSpecs.
+-- A project's home has its own (c0120): `<home>/tests/lib/place.luau` stands for that home's place inputs. Since c0185 it
+-- is a one-line re-export of the shared harness's z-nile/tests/lib/place.luau, so the closure of a place spec names its home.
 graph.PLACE_LIB = "tests/lib/place.luau"
 
 -- Captures the spec of a string-literal require. Apply to stripComments output only.
@@ -161,18 +163,58 @@ end
 
 local gameRootsCache: { GameRoot }? = nil
 
-local function collectRoots(node: any, prefix: { string }, out: { GameRoot })
+-- Every "$path" of a Rojo project and the instance path of the node that maps it, in both of Rojo's forms (a string, or the
+-- `optional` string of a table), at any depth, the tree node itself included (instance ""). The one walker of a project's
+-- mappings (c0185): gameRoots, placeInputs and the home rule all read them through here.
+local function walkMappings(node: any, prefix: { string }, out: { GameRoot })
+	local path = node["$path"]
+	if type(path) == "table" and type((path :: any).optional) == "string" then
+		path = (path :: any).optional
+	end
+	if type(path) == "string" then
+		-- an absolute path stays absolute (Rojo accepts one; it names nothing of a home)
+		table.insert(out, {
+			instance = table.concat(prefix, "/"),
+			path = if string.sub(path, 1, 1) == "/" then path else normalize(path),
+		})
+	end
 	for key, child in node do
-		if string.sub(key, 1, 1) ~= "$" and type(child) == "table" then
+		if string.sub(tostring(key), 1, 1) ~= "$" and type(child) == "table" then
 			local inst = table.clone(prefix)
 			table.insert(inst, key)
-			local path = child["$path"]
-			if type(path) == "string" then
-				table.insert(out, { instance = table.concat(inst, "/"), path = normalize(path) })
-			end
-			collectRoots(child, inst, out)
+			walkMappings(child, inst, out)
 		end
 	end
+end
+
+-- Every mapping of a decoded project (instance path "/"-joined, "$path" normalized against the project file's folder, so
+-- "../arcade/src/shared" stays as written), in tree order. A table without a tree has none.
+function graph.mappings(project: any): { GameRoot }
+	local out: { GameRoot } = {}
+	if type(project) == "table" and type((project :: any).tree) == "table" then
+		walkMappings((project :: any).tree, {}, out)
+	end
+	return out
+end
+
+-- Whether a "$path" written in a project file stays inside the folder of that file once its "." and ".." segments are
+-- applied ("src/../../arcade" does not).
+function graph.insideFolder(path: string): boolean
+	if string.sub(path, 1, 1) == "/" then
+		return false
+	end
+	local depth = 0
+	for seg in string.gmatch(path, "[^/]+") do
+		if seg == ".." then
+			depth -= 1
+			if depth < 0 then
+				return false
+			end
+		elseif seg ~= "." then
+			depth += 1
+		end
+	end
+	return true
 end
 
 -- Every node of the Rojo project tree that has a "$path", longest instance path first. `project` is
@@ -190,7 +232,11 @@ function graph.gameRoots(project: any?): { GameRoot }
 				else {}
 		)
 	local out: { GameRoot } = {}
-	collectRoots(decoded.tree or {}, {}, out)
+	for _, m in graph.mappings(decoded) do
+		if m.instance ~= "" then
+			table.insert(out, m)
+		end
+	end
 	table.sort(out, function(a, b)
 		if #a.instance ~= #b.instance then
 			return #a.instance > #b.instance
@@ -281,12 +327,82 @@ function graph.resolveGame(spec: string, roots: { GameRoot }?): string?
 	return nil
 end
 
--- true for "./…", "../…", "@self/<x>" and "@game/ReplicatedStorage/<x>": the only specs src may use.
-function graph.srcAliasAllowed(spec: string): boolean
+-- true for "./…", "../…", "@self/<x>" and "@game/ReplicatedStorage/<x>", and, for a file of a server root
+-- (`fromServer`, c0185), "@game/ServerStorage/<x>": the only specs src may use. ServerStorage never replicates, so a
+-- client or shared file requiring it fails at runtime; ServerScriptService and StarterPlayer stay refused everywhere.
+function graph.srcAliasAllowed(spec: string, fromServer: boolean?): boolean
 	return string.sub(spec, 1, 2) == "./"
 		or string.sub(spec, 1, 3) == "../"
 		or string.sub(spec, 1, 6) == "@self/"
 		or string.sub(spec, 1, 24) == "@game/ReplicatedStorage/"
+		or (fromServer == true and string.sub(spec, 1, 20) == "@game/ServerStorage/")
+end
+
+-- The one lister of a folder's Rojo projects (c0185): every `*.project.json` directly in `dir`, in name order, decoded. A file
+-- that is not a Rojo project (JSON with a tree) is an error naming it: neither the selector nor the server-file rule can be
+-- judged without it. A missing folder holds none.
+local function projectsIn(dir: string): { { name: string, project: any } }
+	local names: { string } = {}
+	if fs.isDir(dir) then
+		for _, name in fs.readDir(dir) do
+			if string.match(name, "%.project%.json$") and fs.isFile(`{dir}/{name}`) then
+				table.insert(names, name)
+			end
+		end
+	end
+	table.sort(names)
+	local out: { { name: string, project: any } } = {}
+	for _, name in names do
+		local ok, project = pcall(serde.decode, "json" :: "json", fs.readFile(`{dir}/{name}`))
+		if not ok or type(project) ~= "table" or type((project :: any).tree) ~= "table" then
+			error(
+				`graph: {dir}/{name} is not a Rojo project (JSON with a tree): its mappings can't be told`,
+				0
+			)
+		end
+		table.insert(out, { name = name, project = project })
+	end
+	return out
+end
+
+-- The mappings (graph.gameRoots) of every project of the current folder, one list per place.
+local function currentPlaces(): { { GameRoot } }
+	local out: { { GameRoot } } = {}
+	for _, entry in projectsIn(".") do
+		table.insert(out, graph.gameRoots(entry.project))
+	end
+	return out
+end
+
+-- Whether `file` (relative to the current folder) is a server file (c0185): at least one place maps it, and every place that
+-- maps it does so under ServerScriptService or ServerStorage, the longest mapped path owning it within each place. A folder
+-- one place keeps on the server and another replicates (a ServerStorage require would fail there) is no server file.
+-- `places` injects the places' mappings, one list each (default: every project file of the current folder).
+function graph.serverFile(file: string, places: { { GameRoot } }?): boolean
+	local owners, servers = 0, 0
+	for _, roots in places or currentPlaces() do
+		local best: GameRoot? = nil
+		for _, root in roots do
+			if file == root.path or string.sub(file, 1, #root.path + 1) == root.path .. "/" then
+				if best == nil or #root.path > #(best :: GameRoot).path then
+					best = root
+				end
+			end
+		end
+		if best ~= nil then
+			owners += 1
+			local inst = (best :: GameRoot).instance
+			if
+				inst == "ServerScriptService"
+				or inst == "ServerStorage"
+				or string.sub(inst, 1, 20) == "ServerScriptService/"
+				or string.sub(inst, 1, 14) == "ServerStorage/"
+			then
+				servers += 1
+			end
+		end
+	end
+	return owners > 0 and servers == owners
 end
 
 -- Resolve a require string from `from` (repo-relative file) to a repo-relative file, or nil.
@@ -411,12 +527,15 @@ function graph.build(roots: { string }, game: { GameRoot }?): Graph
 	return g
 end
 
--- Every string-literal require in `dir` (recursive, comments ignored) that srcAliasAllowed rejects.
-function graph.srcAliasViolations(dir: string): { { file: string, spec: string } }
+-- Every string-literal require in `dir` (recursive, comments ignored) that srcAliasAllowed rejects for its file
+-- (c0185: a file of a server root may use "@game/ServerStorage/"). `places` optionally injects the places' mappings (graph.serverFile).
+function graph.srcAliasViolations(dir: string, places: { { GameRoot } }?): { { file: string, spec: string } }
 	local out: { { file: string, spec: string } } = {}
+	places = places or currentPlaces()
 	for _, file in graph.listLuau(dir) do
+		local server = graph.serverFile(file, places)
 		for spec in string.gmatch(graph.stripComments(fs.readFile(file)), graph.REQUIRE_PATTERN) do
-			if not graph.srcAliasAllowed(spec) then
+			if not graph.srcAliasAllowed(spec, server) then
 				table.insert(out, { file = file, spec = spec })
 			end
 		end
@@ -441,10 +560,46 @@ function graph.closure(g: Graph, file: string): { [string]: boolean }
 	return seen
 end
 
+-- What the place built for a project home depends on (c0185), as repo-relative files and folders: each
+-- `*.project.json` in the home, and every "$path" any of them maps resolved against the home, so `../arcade/src/shared`
+-- from `snake/` is `arcade/src/shared`. `home` is "" for the current folder or "<dir>/". A home with no project file
+-- gets the legacy answer (its src/ and the two project files c0120 named), the conservative one. A project file
+-- that is not JSON with a tree is an error naming it (projectsIn): the selection can't be made without it, and the build refuses it too.
+function graph.placeInputs(home: string): { string }
+	local dir = if home == "" then "." else string.sub(home, 1, -2)
+	local found = projectsIn(dir)
+	if #found == 0 then
+		return { home .. "src", home .. "default.project.json", home .. "lobby.project.json" }
+	end
+	local out: { string } = {}
+	for _, entry in found do
+		table.insert(out, normalize(home .. entry.name))
+		for _, m in graph.mappings(entry.project) do
+			table.insert(out, if string.sub(m.path, 1, 1) == "/" then m.path else normalize(home .. m.path))
+		end
+	end
+	return out
+end
+
+local function underAny(f: string, list: { string }): boolean
+	for _, p in list do
+		if f == p or string.sub(f, 1, #p + 1) == p .. "/" then
+			return true
+		end
+	end
+	return false
+end
+
 -- Spec files (per `isSpec`) whose require closure contains any changed file (or a file under a
--- changed directory prefix). A closure containing PLACE_LIB also counts as containing every file
--- under src/ and the two project files, because the places are built from them.
-function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> boolean): { string }
+-- changed directory prefix). A closure containing a place library (PLACE_LIB, the root's or a home's) also counts as
+-- containing that home's place inputs (graph.placeInputs, or `inputsOf` when given), because the place is built from them.
+function graph.affectedSpecs(
+	g: Graph,
+	changed: { string },
+	isSpec: (string) -> boolean,
+	inputsOf: ((string) -> { string })?
+): { string }
+	local inputs = inputsOf or graph.placeInputs
 	local changedSet: { [string]: boolean } = {}
 	for _, f in changed do
 		changedSet[f] = true
@@ -453,13 +608,9 @@ function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> 
 	for _, file in g.files do
 		if file == graph.PLACE_LIB or string.sub(file, -(#graph.PLACE_LIB + 1)) == "/" .. graph.PLACE_LIB then
 			local home = string.sub(file, 1, #file - #graph.PLACE_LIB)
+			local list = inputs(home)
 			for _, f in changed do
-				if
-					f == home .. "src"
-					or string.sub(f, 1, #home + 4) == home .. "src/"
-					or f == home .. "default.project.json"
-					or f == home .. "lobby.project.json"
-				then
+				if underAny(f, list) then
 					changedSet[file] = true
 				end
 			end
@@ -467,13 +618,9 @@ function graph.affectedSpecs(g: Graph, changed: { string }, isSpec: (string) -> 
 	end
 	-- a graph that lists no place library (a fixture's) still marks the root's, as before
 	if not changedSet[graph.PLACE_LIB] then
+		local list = inputs("")
 		for _, f in changed do
-			if
-				f == "src"
-				or string.sub(f, 1, 4) == "src/"
-				or f == "default.project.json"
-				or f == "lobby.project.json"
-			then
+			if underAny(f, list) then
 				changedSet[graph.PLACE_LIB] = true
 			end
 		end

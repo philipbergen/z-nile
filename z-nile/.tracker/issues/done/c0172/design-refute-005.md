@@ -1,0 +1,1 @@
+- F1: fixed: E7 stays the earlier 18-case run. E9 records this round: `cicd.spec` 21 passed and `merge.spec` 17 passed, the expired-hold mutant failed the success case, and passing the literals `"3"` and `"4"` failed the task count. consequences: none.

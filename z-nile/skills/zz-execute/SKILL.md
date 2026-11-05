@@ -18,6 +18,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
    - Write down, for yourself, which files each issue touches.
 
 ## Phase 1: Experiments (fail fast)
+- Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
 - For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
 - **If an experiment fails:**
   - Switch to the documented fallback, and note that in the issue.
@@ -105,7 +106,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 
 ## Phase 6: Merge and clean up
 Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment: the merge of the run's PR is a human's gate, and the dispatcher records the run's spend after it. Skip this phase.
-1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (`z-nile/check.sh --full` on the final head, CI green on that sha, mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
+1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. After the merge and before the final report, `./zn spend R0010 --phase deliver --time <minutes from done to merged>`.
 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
 4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.

@@ -1,5 +1,6 @@
 --!strict
--- The reviewed list of .cache paths in scripts/, z-nile/ and pickman/scripts/ (c0077, c0114, c0120). Unjailed writers under .cache must never
+-- The reviewed list of .cache paths in scripts/, z-nile/ and every project home's scripts/ (c0077, c0114, c0120, c0184).
+-- Unjailed writers under .cache must never
 -- write through a symlink a spec swapped in there (the jail can't refuse a swap, c0077 E1), so every line in those
 -- folders that names a .cache path is listed here with how it stays safe: through z-nile/lib/replace-file.pl (a
 -- rename, never a write through a link), a `mkdir -p` of a plain folder the fence checks, a read, or a message. A new
@@ -15,10 +16,22 @@ local cachepaths = {}
 cachepaths.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
 -- The folders whose .luau and .sh files the list covers, and the ones inside them it skips: tracker documents, and
 -- z-nile's own specs and harness (z-nile/tests, c0120), which are specs, not writers. Every .cache is skipped too.
-cachepaths.ROOTS = { "scripts", "z-nile", "pickman/scripts" }
+-- The folders are the root's scripts/, z-nile/ and the scripts/ of every other project's home, from the registry
+-- (c0184): a new project's writers join the scan without an edit here. Pure over a parsed registry.
+function cachepaths.rootsOf(reg: projects.Registry): { string }
+	local out = { "scripts", "z-nile" }
+	for _, p in reg.projects do
+		if p.home ~= "." and p.home ~= "z-nile" then
+			table.insert(out, `{p.home}/scripts`)
+		end
+	end
+	return out
+end
+local registry = projects.load(cachepaths.TOP)
+cachepaths.ROOTS = cachepaths.rootsOf(registry)
 -- every project root of the registry (design review 001 F5): a new root is skipped without an edit here
 cachepaths.SKIP = { ["z-nile/tests"] = true } :: { [string]: boolean }
-for _, r in projects.roots(projects.load(cachepaths.TOP)) do
+for _, r in projects.roots(registry) do
 	cachepaths.SKIP[r] = true
 end
 

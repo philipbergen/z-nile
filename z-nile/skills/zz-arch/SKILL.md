@@ -12,11 +12,12 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 |---|---|
 | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
 | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+| `z-nile/lib/bounded.pl`, `z-nile/lib/cpu.sh`, `z-nile/engine/reap.luau`, `z-nile/engine/boundcmd.luau`, `z-nile/guard-bash.luau` | the bounded runner, the reaper's rules, the hook's rules and its entry |
 | `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
 | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
 | `z-nile/templates/` | the item, raft and prompt templates |
 | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
-| `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh`, `ci-verify.sh` | the gate, the affected-spec selector, the registry's shell reader, the bootstrap and CI dispatch |
+| `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh` | the gate, the affected-spec selector, the registry's shell reader and the bootstrap |
 | `z-nile/tests/run.luau`, `lib/`, `tooling/`, `meta/`, `acceptance/` | the shared runner and harness, the tooling's specs, its structural rules and z-nile's promoted specs; they run from z-nile's home, `z-nile/` |
 
 ## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`)
@@ -28,6 +29,8 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 6. **Parsers refuse ambiguity.** A repeated single-value field, an unknown key or an out-of-shape value is a problem the parser names, with the file and the rule.
 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
+
+A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `z-nile/engine/boundcmd.luau` (the PreToolUse hook refuses every other `lune run` that is not wrapped).
 
 ## Design checklist (answer these in every tooling issue's Design section)
 - **Scalability**: the git calls, file reads and processes per command, and how they grow with the items, the roots and the projects.

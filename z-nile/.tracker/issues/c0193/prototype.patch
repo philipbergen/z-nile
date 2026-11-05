@@ -1,0 +1,1041 @@
+diff --git a/z-nile/engine/scan.luau b/z-nile/engine/scan.luau
+new file mode 100644
+index 00000000..3a8753b6
+--- /dev/null
++++ b/z-nile/engine/scan.luau
+@@ -0,0 +1,16 @@
++--!strict
++-- The fail-closed step of a scanning loop (zz-arch skill, lesson scanning-loops-advance). A loop that takes its next
++-- position from a helper or an expression writes `i = scan.advance(i, next)`, so a pass that would leave the position
++-- where it was, or move it back, raises instead of spinning forever. A step by a literal at the loop's top level
++-- (`i += 1`) needs no call: tests/lib/loops.luau accepts both.
++local scan = {}
++
++-- `to` when it is past `from`; otherwise an error naming both, raised at the caller's line. A NaN is not past anything.
++function scan.advance(from: number, to: number): number
++	if not (to > from) then
++		error(`scanner did not advance: from {from} to {to}`, 2)
++	end
++	return to
++end
++
++return scan
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index 5d60a654..bec9f226 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -19,7 +19,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ | `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh` | the gate, the affected-spec selector, the registry's shell reader and the bootstrap |
+ | `z-nile/tests/run.luau`, `lib/`, `tooling/`, `meta/`, `acceptance/` | the shared runner and harness, the tooling's specs, its structural rules and z-nile's promoted specs; they run from z-nile's home, `z-nile/` |
+ 
+-## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`)
++## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`, the ninth by `z-nile/tests/acceptance/c0193/tree.spec.luau`)
+ 1. **`--!strict` is the first line of every Luau file**, `.tracker/` folders aside.
+ 2. **The tooling is Luau on Lune.** Shell only where a shell must run it: `zn`, `check.sh` files, `ac.sh`, `fence.sh` and the hooks.
+ 3. **Requires are relative, or through the root `.luaurc` aliases** (`@znile`, `@tests`, `@scripts`, `@lune`); `@znile` names `z-nile/`, because an alias can't hold a hyphen. Every require under `z-nile/tests/` resolves. Specs require only through aliases, because `done` moves them.
+@@ -28,6 +28,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ 6. **Parsers refuse ambiguity.** A repeated single-value field, an unknown key or an out-of-shape value is a problem the parser names, with the file and the rule.
+ 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
+ 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
++9. **Every scanning loop advances on every pass, or fails closed.** A `while` or `repeat` loop steps its position by a literal at its top level (`i += 1`) or through `scan.advance(i, next)` (`z-nile/engine/scan.luau`); any other loop is listed with why it ends in `z-nile/tests/lib/loops.luau`. "Proven" means no write that the loop's own lines show; a loop that reads text is never proven, always listed and swept, because a write through a call, a closure or an alias is the reviewer's question. A function that walks a text gets a case in `z-nile/tests/lib/scanners.luau`, with a witness (an input and the result only the scanner's work gives), which runs it over every short hostile text under a limit (`z-nile/tests/lib/hostile.luau`, through the bounded runner of zz-test).
+ 
+ ## Design checklist (answer these in every tooling issue's Design section)
+ - **Scalability**: the git calls, file reads and processes per command, and how they grow with the items, the roots and the projects.
+diff --git a/z-nile/skills/zz-arch/lessons/scanning-loops-advance.md b/z-nile/skills/zz-arch/lessons/scanning-loops-advance.md
+new file mode 100644
+index 00000000..9f324ba0
+--- /dev/null
++++ b/z-nile/skills/zz-arch/lessons/scanning-loops-advance.md
+@@ -0,0 +1,13 @@
++---
++title: Every scanning loop advances on every pass, or fails closed
++when: both
++tags: [loops, parsers, input, hang]
++check: Can any branch of this loop leave its position where it was, and does a hostile input (a lone backslash, an unterminated quote, an empty needle, a line end where a word was expected) reach that branch (a write through a call, a closure or an alias is not in the loop's own lines)?
++---
++A loop that walks a text, an argument list or a queue by a position moves it on every pass, or stops with an error. A helper that returns "where I stopped" can return the position it was given (a character it does not accept), and the loop then spins at 100% CPU for as long as the machine is up. Tests that feed well-formed input never notice.
++
++**Enforced by** `z-nile/tests/lib/loops.luau` (a loop that is not provably advancing, or reads text, is on a reviewed list with why it ends), `z-nile/tests/lib/scanners.luau` and `z-nile/tests/lib/hostile.luau` (every text scanner runs every short hostile text under a limit) and `z-nile/engine/scan.luau` (`scan.advance` fails closed).
++
++**Why:** c0193: raftcheck's `word()` (PR #125) returned its start index on an unquoted backslash, the loop over a check line spun, and three probes held a core each for 14 h.
++
++**How to apply:** compute the next position, then step once at the loop's top level: `i += 1`, or `i = scan.advance(i, next)`. A loop that reads text is listed and swept: a new scanner gets a case in `scanners.luau` with a witness. `pos = b + 1` after `string.find` spins on an empty needle.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..2f88b606 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -33,6 +33,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ - **Assert on public API results**, never on internals.
+ - **Survive a compaction** (`./zn compact` renumbers every item): a spec that pins a real tracker item maps its id through `tests/lib/renamed.luau` (`renamed.id("R0010")`), and test data that names a `tests/acceptance/<id>` path spells it in two parts (`"tests/" .. "acceptance/"`), or the compaction rewrites it.
+ - **Hard to fake.** An acceptance spec must fail for plausible wrong implementations: an off-by-one, a missing edge case, a hard-coded value. Include at least one case that a hard-coded or partial implementation would fail.
++- **Hostile inputs.** A function that walks a text (a parser, a scanner, a rewriter) also runs over every short hostile text: add it as a case in `z-nile/tests/lib/scanners.luau` with a witness that proves the call reaches the scanner's work (and, for each loop that lists the case as its sweep, run the mutant that stops that loop's advance and see the sweep fail), and `hostile.finishes` (`z-nile/tests/lib/hostile.luau`) runs it in a child with a limit, so a scanner that never returns fails within the limit and names the texts it stopped in instead of hanging the gate (zz-arch skill, rule 9).
+ - **No browsers.** `tests/run` puts recording `open` and `xdg-open` stubs first on `PATH` for the whole run (workers and nested runners included, through `PICKMAN_OPEN_GUARD`) and fails the run if any is called. Run `./zn board` with `-O`; a spec that tests opening puts its own stubs first on `PATH`. A spec that sets `PATH` for a child prepends to it, never replaces it, or the guard's stubs are lost.
+ 
+ ## Affected selection
+diff --git a/z-nile/tests/lib/hostile.luau b/z-nile/tests/lib/hostile.luau
+new file mode 100644
+index 00000000..4a298fee
+--- /dev/null
++++ b/z-nile/tests/lib/hostile.luau
+@@ -0,0 +1,291 @@
++--!strict
++-- Hostile inputs for scanners (zz-arch skill, lesson scanning-loops-advance): every short text over the characters that
++-- make a scanner branch, and a bounded child process that runs scanners over them, so a scanner that never returns
++-- fails with the inputs that hung it instead of hanging the gate. Deterministic: the same texts in the same order,
++-- no randomness. The limit is only the failure bound; a passing sweep takes a second or so.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++
++local hostile = {}
++
++-- a scanner to run: a Luau expression that calls it on `text` (its value is the case's result), with its module bound to `m`. The module is either a
++-- `require` path (`module`: an alias) or the source of a module (`source`: a fixture, written next to the driver);
++-- exactly one of the two. `prefix` (default none) is put before every text, to get past a scanner's entry guard (a
++-- check line that must start with the raft template's head): a case must reach its scanner's loop, or it tests nothing.
++-- `witness` proves it does: an input (before the prefix is added) and `tostring` of the result only the scanner's work
++-- produces; a case whose witness gives another result fails, whatever the sweep did
++export type Witness = { text: string, result: string }
++export type Case = {
++	name: string,
++	call: string,
++	module: string?,
++	source: string?,
++	prefix: string?,
++	witness: Witness?,
++}
++export type Outcome = { ok: boolean, message: string }
++
++-- the characters that make scanners branch: escapes, quotes, expansions, line ends and tabs, comment and long-bracket
++-- openers
++hostile.ALPHABET =
++	{ "\\", "'", '"', "`", "$", "(", "{", "#", "\n", "\t", " ", "-", "a", "[", "]", "=" } :: { string }
++-- the most texts one call may build, and how many seconds a child gets (the failure bound, not an expected time)
++hostile.MAX_TEXTS = 200000
++hostile.SECONDS = 30
++-- a hung child is traced to a block of this many consecutive texts (a breadcrumb per text would cost seconds)
++hostile.BLOCK = 16
++
++-- Every text of up to `maxLen` (default 4) characters over `alphabet` (default hostile.ALPHABET): the empty text, then
++-- the one-character texts, and so on, each length in the alphabet's order. Refuses an empty alphabet, a repeated or
++-- multi-character entry, and more than MAX_TEXTS texts.
++function hostile.texts(alphabet: { string }?, maxLen: number?): { string }
++	local chars: { string } = alphabet or hostile.ALPHABET
++	local n = maxLen or 4
++	if #chars == 0 then
++		error("hostile.texts: an empty alphabet", 2)
++	end
++	local seen: { [string]: boolean } = {}
++	for _, c in chars do
++		if #c ~= 1 or seen[c] then
++			error(`hostile.texts: {string.format("%q", c)} is repeated or is not one character`, 2)
++		end
++		seen[c] = true
++	end
++	if n ~= math.floor(n) or n < 0 then
++		error("hostile.texts: the length must be a whole number, 0 or more", 2)
++	end
++	local total, power = 1, 1
++	for _ = 1, n do
++		power *= #chars
++		total += power
++		if total > hostile.MAX_TEXTS then
++			error(`hostile.texts: more than {hostile.MAX_TEXTS} texts`, 2)
++		end
++	end
++	local out: { string } = { "" }
++	local frontier: { string } = { "" }
++	for _ = 1, n do
++		local nxt: { string } = {}
++		for _, s in frontier do
++			for _, c in chars do
++				table.insert(nxt, s .. c)
++			end
++		end
++		for _, s in nxt do
++			table.insert(out, s)
++		end
++		frontier = nxt
++	end
++	return out
++end
++
++-- The checkout that holds this harness: three folders above z-nile/tests/lib/hostile.luau.
++hostile.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
++
++-- Runs `argv` under c0191's bounded runner (`z-nile/lib/bounded.pl`: a process group of its own, a wall-clock limit of
++-- `seconds` and a CPU limit, a watchdog that stops the group if the runner dies, a kill of the whole group when the
++-- command ends; exit 124 on the wall-clock limit, 125 on the CPU limit, else the command's own). Not `exec` under
++-- `alarm`: where `lune` is a launcher that spawns the real binary (rokit's shim), the alarm killed the launcher and
++-- the real `lune` ran on at 100% CPU with no parent (c0193 E11).
++function hostile.bounded(seconds: number, argv: { string }, cwd: string?): process.ExecResult
++	local args = { `{hostile.TOP}/z-nile/lib/bounded.pl`, "--time", tostring(seconds), "--" }
++	for _, a in argv do
++		table.insert(args, a)
++	end
++	return process.exec("perl", args, { cwd = cwd })
++end
++
++-- built in parts: the graph scanner would take literal require text in this file for a real require
++local REQ = "re" .. "quire"
++
++local function req(path: string): string
++	return `{REQ}({string.format("%q", path)})`
++end
++
++local DRIVER = [==[
++for _, c in cases do
++	stdio.ewrite("at\t" .. c[1] .. "\t0\n")
++	local witnessOk = true
++	if c[4] then
++		local ok, got = pcall(c[2], c[3] .. c[4][1])
++		got = if ok then tostring(got) else "raised: " .. string.sub(string.gsub(tostring(got), "%s+", " "), 1, 200)
++		if got ~= c[4][2] then
++			witnessOk = false
++			stdio.ewrite("wit\t" .. c[1] .. "\t" .. string.gsub(got, "[\r\n\t]+", " ") .. "\n")
++		end
++	end
++	local returned, first = 0, ""
++	if witnessOk then
++		for i, text in texts do
++			if i % BLOCK == 1 then
++				stdio.ewrite("at\t" .. c[1] .. "\t" .. i .. "\n")
++			end
++			local ok, err = pcall(c[2], c[3] .. text)
++			if ok then
++				if text ~= "" then
++					returned += 1
++				end
++			elseif first == "" then
++				first = string.sub(string.gsub(tostring(err), "%s+", " "), 1, 200)
++			end
++		end
++		stdio.ewrite("ran\t" .. c[1] .. "\t" .. returned .. "\t" .. first .. "\n")
++	end
++end
++stdio.ewrite("done\n")
++]==]
++
++local function driver(dir: string, cases: { Case }): string
++	local lines = {
++		`local fs = {req("@lune/fs")}`,
++		`local serde = {req("@lune/serde")}`,
++		`local stdio = {req("@lune/stdio")}`,
++		`local BLOCK = {hostile.BLOCK}`,
++		`local texts = serde.decode("json", fs.readFile({string.format("%q", dir .. "/texts.json")}))`,
++		"local cases = {}",
++	}
++	for i, c in cases do
++		table.insert(lines, "do")
++		local path = if c.source then `./case-{i}` else c.module
++		if (c.source == nil) == (c.module == nil) or path == nil then
++			error(`hostile.finishes: case {c.name} needs exactly one of module and source`, 3)
++		end
++		if c.source then
++			fs.writeFile(`{dir}/case-{i}.luau`, c.source)
++		end
++		table.insert(lines, `local m = {req(path)}`)
++		table.insert(
++			lines,
++			"cases["
++				.. i
++				.. "] = { "
++				.. string.format("%q", c.name)
++				.. ", function(text) return "
++				.. c.call
++				.. " end, "
++				.. string.format("%q", c.prefix or "")
++				.. ", "
++				.. (if c.witness
++					then "{ " .. string.format("%q", c.witness.text) .. ", " .. string.format(
++						"%q",
++						c.witness.result
++					) .. " }"
++					else "false")
++				.. " }"
++		)
++		table.insert(lines, "end")
++	end
++	table.insert(lines, DRIVER)
++	return table.concat(lines, "\n")
++end
++
++-- Runs every case over every text in one child (`lune run` under hostile.bounded, killed after `seconds`, a whole
++-- number from 1 to 3600; default hostile.SECONDS), in the folder `<home>/.cache/hostile-<name>` (unique to the calling
++-- spec; created, and removed again). Passes when the child reaches its last line, every case with a witness gave its
++-- witness, and every case returned on at least one non-empty text. A text on which a scanner raises is not a failure:
++-- refusing is closing. A case that raised on every text, or whose witness fails, never ran its scanner's work (a typo,
++-- a changed signature, an entry guard, an argument of the wrong shape), so it fails too. A hang, a crash or a driver
++-- that cannot start fails with the case, the block of texts it stopped in, or the child's own message.
++function hostile.finishes(name: string, cases: { Case }, texts: { string }?, seconds: number?): Outcome
++	if not string.match(name, "^[%w%-]+$") then
++		error("hostile.finishes: the name must be letters, digits and hyphens", 2)
++	end
++	local inputs = texts or hostile.texts()
++	local limit = seconds or hostile.SECONDS
++	if not (limit >= 1 and limit <= 3600) or limit ~= math.floor(limit) then
++		error(`hostile.finishes: the limit must be a whole number of seconds from 1 to 3600 (got {limit})`, 2)
++	end
++	local nonEmpty = false
++	for _, s in inputs do
++		nonEmpty = nonEmpty or s ~= ""
++	end
++	if not nonEmpty then
++		error("hostile.finishes: no text to run (an empty list, or only the empty text)", 2)
++	end
++	local root = string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", "")
++	local dir = `{root}/.cache/hostile-{name}`
++	if fs.isDir(dir) then
++		fs.removeDir(dir)
++	end
++	fs.writeDir(dir)
++	fs.writeFile(`{dir}/texts.json`, serde.encode("json", inputs))
++	local ok, source = pcall(driver, dir, cases)
++	if not ok then
++		fs.removeDir(dir)
++		error(source, 0)
++	end
++	fs.writeFile(`{dir}/driver.luau`, source)
++	local r = hostile.bounded(limit, { "lune", "run", `{dir}/driver.luau` }, root)
++	fs.removeDir(dir)
++	local lines = string.split(r.stderr, "\n")
++	while #lines > 0 and lines[#lines] == "" do
++		table.remove(lines)
++	end
++	if lines[#lines] == "done" then
++		local expected: { [string]: string } = {}
++		for _, c in cases do
++			if c.witness then
++				expected[c.name] = c.witness.result
++			end
++		end
++		for _, line in lines do
++			local case, got = string.match(line, "^wit\t(.-)\t(.*)$")
++			if case then
++				return {
++					ok = false,
++					message = `{case}: its witness gave "{got}", not "{expected[case]}": the call does not reach the scanner's work`,
++				}
++			end
++		end
++		for _, line in lines do
++			local case, returned, err = string.match(line, "^ran\t(.-)\t(%d+)\t(.*)$")
++			if case and tonumber(returned) == 0 then
++				return {
++					ok = false,
++					message = `{case}: raised on every text, so the sweep never ran it: {err}`,
++				}
++			end
++		end
++		return { ok = true, message = "" }
++	end
++	local case, at = nil, 0
++	for i = #lines, 1, -1 do
++		local c, k = string.match(lines[i], "^at\t(.-)\t(%d+)$")
++		if c then
++			case, at = c, tonumber(k) :: number
++			break
++		end
++	end
++	if not case then
++		local tail = table.concat(lines, "\n")
++		return { ok = false, message = `the sweep driver could not run: {string.sub(tail, -400)}` }
++	end
++	local shown: { string } = {}
++	local first, last = math.max(at, 1), math.min(at + hostile.BLOCK - 1, #inputs)
++	for k = first, last do
++		table.insert(shown, string.format("%q", inputs[k]))
++	end
++	local where = `texts {first}..{last} of {#inputs}: {table.concat(shown, " ")}`
++	if at == 0 then
++		-- the last breadcrumb is the case's start: it stopped on its witness, before any text ran
++		local w = ""
++		for _, c in cases do
++			if c.name == case and c.witness then
++				w = c.witness.text
++			end
++		end
++		where = `its witness {string.format("%q", w)}, before any text ran`
++	end
++	if r.code == 124 or r.code == 125 then
++		local which = if r.code == 124 then "within" else "inside the CPU limit of"
++		return { ok = false, message = `{case}: did not finish {which} {limit} s; it stopped in {where}` }
++	end
++	local tail = string.sub(table.concat(lines, "\n"), -300)
++	return {
++		ok = false,
++		message = `{case}: the driver ended with code {r.code} in {where}; its last output: {tail}`,
++	}
++end
++
++return hostile
+diff --git a/z-nile/tests/lib/loops.luau b/z-nile/tests/lib/loops.luau
+new file mode 100644
+index 00000000..73f67ac4
+--- /dev/null
++++ b/z-nile/tests/lib/loops.luau
+@@ -0,0 +1,487 @@
++--!strict
++-- The scanning-loop rule's lint (zz-arch skill, lesson scanning-loops-advance), pure over texts, and its reviewed list.
++-- A `while` or `repeat` loop is provably advancing when all of these hold: its condition is `V < B`, `V <= B`, `V > B`
++-- or `V >= B` with V a plain name and B a number, a name or `#name`; the loop's own top level steps V on every pass
++-- (`V += n` or `V = V + n`, `-` for a `>` condition, n a positive literal, or `V = scan.advance(V, next)`) before any
++-- `continue`; no other statement in the body, at any depth, assigns V except further steps in the same direction; and the body never writes B.
++-- A loop that reads text is never proven: the proof sees only the loop's own lines, and a scanner is where that is not
++-- enough, so it is listed, with the case that sweeps it. Every other loop is on `loops.ALLOWED`, in file order, with why it ends (and, for a loop that reads text, the
++-- scanners case that sweeps it). Indentation is tabs (stylua, the gate), so a loop ends at the first line at or
++-- above its own indent, which must be `end` (`until …` for a `repeat`); anything else is a loop whose end was not found.
++local fs = require("@lune/fs")
++local projects = require("@znile/engine/projects")
++
++local loops = {}
++
++export type Loop = { line: number, header: string, advances: boolean, scansText: boolean }
++export type Allowed = { loop: string, why: string, sweep: (string | boolean)? }
++
++-- the lesson every problem names, and the fix
++local LESSON = "zz-arch/scanning-loops-advance"
++local FIX =
++	"step its position by a literal at the loop's top level, or through scan.advance(i, next), or list the loop in z-nile/tests/lib/loops.luau with why it ends"
++
++local TEXT_CALLS =
++	{ "string.find", "string.sub", "string.match", "string.byte", ":find(", ":sub(", ":match(", ":byte(" }
++
++local function readsText(line: string): boolean
++	for _, call in TEXT_CALLS do
++		if string.find(line, call, 1, true) then
++			return true
++		end
++	end
++	return false
++end
++
++-- is the call that `s` opens with `scan.advance(` closed by the last character of `s` and by nothing earlier?
++local function closesAtEnd(s: string): boolean
++	local open = string.find(s, "scan.advance(", 1, true)
++	if not open then
++		return false
++	end
++	local depth = 1
++	for i = open + #"scan.advance(", #s do
++		local c = string.sub(s, i, i)
++		if c == "(" then
++			depth += 1
++		elseif c == ")" then
++			depth -= 1
++			if depth == 0 then
++				return i == #s
++			end
++		end
++	end
++	return false
++end
++
++-- is `stmt` (a statement at the loop's top level) a step of `v` in the direction of the loop's condition?
++local function steps(stmt: string, v: string, up: boolean): boolean
++	local s = string.gsub(stmt, "%s+%-%-.*$", "")
++	if up then
++		return string.match(s, `^{v} %+= [1-9]%d*$`) ~= nil
++			or string.match(s, `^{v} = {v} %+ [1-9]%d*$`) ~= nil
++			or (string.match(s, `^{v} = scan%.advance%({v}, `) ~= nil and closesAtEnd(s))
++	end
++	return string.match(s, `^{v} %-= [1-9]%d*$`) ~= nil or string.match(s, `^{v} = {v} %- [1-9]%d*$`) ~= nil
++end
++
++-- does `line` assign `v` (a statement that starts with a list of names, possibly after `local`, a `for` or an `if …
++-- then`, ending in `=` or `+=`/`-=`)? A name that merely appears in a comparison does not count.
++local function assigns(line: string, v: string): boolean
++	local lhs = string.match(line, "^%s*([%w_,%s%.]-)%s*[%+%-]?=[^=]")
++	return lhs ~= nil and string.find(lhs, `%f[%w_]{v}%f[^%w_]`) ~= nil
++end
++
++-- does `line` write the bound `name` (a name or a dotted path): assign it or one of its fields, call a table function
++-- or a method on it?
++local function writes(line: string, name: string): boolean
++	local at = string.find(line, name, 1, true)
++	while at do
++		local before = if at > 1 then string.sub(line, at - 1, at - 1) else ""
++		local after = string.sub(line, at + #name)
++		if not string.match(before, "[%w_%.]") and not string.match(after, "^[%w_]") then
++			if
++				string.match(after, "^[^=]-[%+%-]?=[^=]")
++				and not string.find(string.sub(line, 1, at - 1), "=", 1, true)
++			then
++				return true
++			end
++			if
++				string.match(after, "^:")
++				or string.match(before .. string.sub(line, 1, at - 1), "table%.[a-z]+%($")
++			then
++				return true
++			end
++		end
++		at = string.find(line, name, at + 1, true)
++	end
++	return assigns(line, name)
++end
++
++-- The line after the loop that starts at `n` (indent `ind`) ends it: the first non-blank line at or above `ind`, which
++-- must be `end` (`until …` for a repeat). Returns that line's number, or nil when the end is not found.
++local function endOf(lines: { string }, n: number, ind: string, isRepeat: boolean): number?
++	for k = n + 1, #lines do
++		local l = lines[k]
++		if string.match(l, "^%s*$") then
++			continue
++		end
++		local lead = string.match(l, "^\t*") :: string
++		if #lead <= #ind then
++			if
++				#lead == #ind
++				and not isRepeat
++				and (l == ind .. "end" or string.match(l, "^" .. ind .. "end%s+%-%-"))
++			then
++				return k
++			end
++			if #lead == #ind and isRepeat and string.sub(l, 1, #ind + 5) == ind .. "until" then
++				return k
++			end
++			return nil
++		end
++	end
++	return nil
++end
++
++-- Every `while` and `repeat` loop in `text`, in order, each with whether it provably advances and whether its header
++-- or body reads text.
++function loops.find(text: string): { Loop }
++	local lines = string.split(text, "\n")
++	local out: { Loop } = {}
++	for n, line in lines do
++		local ind = string.match(line, "^\t*") :: string
++		local rest = string.sub(line, #ind + 1)
++		local isWhile = rest == "while" or string.sub(rest, 1, 6) == "while "
++		local isRepeat = rest == "repeat" or string.sub(rest, 1, 7) == "repeat "
++		if isWhile or isRepeat then
++			local oneLine = string.match(rest, " end$") ~= nil
++			local last = if oneLine then nil else endOf(lines, n, ind, isRepeat)
++			local reads = readsText(rest)
++			local advances = false
++			local v: string?, op: string?, bound: string? = nil, nil, nil
++			if isWhile and not oneLine then
++				v, op, bound = string.match(rest, "^while ([%a_][%w_]*) ([<>]=?) (.+) do$")
++			end
++			local plainBound = bound ~= nil
++				and (string.match(bound, "^%d+$") ~= nil or string.match(bound, "^#?[%a_][%w_%.]*$") ~= nil)
++			if bound and string.sub(bound, 1, 5) == "math." then
++				plainBound = false -- math.huge and the like are no bound at all
++			end
++			local boundName = if bound and plainBound then string.match(bound, "^#?(.-)$") else nil
++			local assigned, stepped, sawContinue, writesBound = 0, false, false, false
++			if last then
++				for k = n + 1, last - 1 do
++					local l = lines[k]
++					if readsText(l) then
++						reads = true
++					end
++					if string.match(l, "%f[%w_]continue%f[^%w_]") then
++						sawContinue = true
++					end
++					if v and op and assigns(l, v) then
++						local stmt = string.match(l, "^%s*(.-)%s*$") :: string
++						-- another step in the same direction (a branch that takes a value) cannot hold the loop back
++						if not steps(stmt, v, string.sub(op, 1, 1) == "<") then
++							assigned += 1
++						end
++					end
++					if boundName and not string.match(boundName, "^%d+$") and writes(l, boundName) then
++						writesBound = true
++					end
++					local body = string.match(l, "^" .. ind .. "\t([^\t].*)$")
++					if
++						v
++						and op
++						and body
++						and not sawContinue
++						and steps(body, v, string.sub(op, 1, 1) == "<")
++					then
++						stepped = true
++					end
++				end
++				advances = stepped and assigned == 0 and plainBound and not writesBound and not reads
++			end
++			table.insert(out, { line = n, header = rest, advances = advances, scansText = reads })
++		end
++	end
++	return out
++end
++
++-- The problems with the loops of one file: `allowed` is its entries of loops.ALLOWED (nil for none), `sweeps` the
++-- scanners cases, each with the file of its module. Each loop that does not provably advance must be the next entry, in file order, with a
++-- reason; a loop that reads text names the case that sweeps it, or `false` (the reason says why none is needed).
++function loops.problems(
++	file: string,
++	text: string,
++	allowed: { Allowed }?,
++	sweeps: { [string]: string }
++): { string }
++	local list = allowed or {}
++	local out: { string } = {}
++	local k = 0
++	for _, l in loops.find(text) do
++		if l.advances then
++			continue
++		end
++		k += 1
++		local a = list[k]
++		local where = `{file}:{l.line}: loop "{l.header}"`
++		if not a then
++			table.insert(
++				out,
++				`{where} does not provably advance and is not on loops.ALLOWED ({LESSON}): {FIX}`
++			)
++		elseif a.loop ~= l.header then
++			table.insert(
++				out,
++				`{where} is not the listed loop "{a.loop}" (the entries of {file} are in file order, {LESSON})`
++			)
++		else
++			if #string.gsub(a.why, "%s+", " ") < 12 then
++				table.insert(
++					out,
++					`{where}: its loops.ALLOWED entry gives no reason (why it ends or advances)`
++				)
++			end
++			if l.scansText then
++				local s = a.sweep
++				if s == nil then
++					table.insert(
++						out,
++						`{where} reads text: its entry names the scanners case that sweeps it, or false ({LESSON})`
++					)
++				elseif type(s) == "string" and not sweeps[s] then
++					table.insert(
++						out,
++						`{where}: its entry names the scanners case "{s}", which does not exist`
++					)
++				elseif type(s) == "string" and sweeps[s] ~= file then
++					table.insert(
++						out,
++						`{where}: its entry names the scanners case "{s}", whose module is {sweeps[s]}, not this file`
++					)
++				end
++			end
++		end
++	end
++	for i = k + 1, #list do
++		table.insert(
++			out,
++			`{file}: loops.ALLOWED lists "{list[i].loop}", which is no longer there: remove the entry`
++		)
++	end
++	return out
++end
++
++-- The checkout that holds this harness: three folders above z-nile/tests/lib/loops.luau. Specs run from a project's
++-- home (c0120), so the scan reads the checkout from here, with root-relative paths.
++loops.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
++-- the folders whose .luau files the lint covers, and the ones inside them it skips: tracker documents (every project
++-- root of the registry), promoted specs (never edited) and fixtures, vendored code, and every .cache
++loops.ROOTS = { "z-nile", "scripts", "pickman/scripts" }
++loops.SKIP =
++	{ ["z-nile/tests/acceptance"] = true, ["z-nile/tests/fixtures"] = true, ["z-nile/vendor"] = true } :: {
++		[string]: boolean,
++	}
++for _, r in projects.roots(projects.load(loops.TOP)) do
++	loops.SKIP[r] = true
++end
++
++-- The text of every .luau file the lint covers except a spec (`*.spec.luau`), keyed by its root-relative path.
++function loops.files(): { [string]: string }
++	local out: { [string]: string } = {}
++	local function walk(dir: string)
++		if not fs.isDir(`{loops.TOP}/{dir}`) then
++			return
++		end
++		for _, name in fs.readDir(`{loops.TOP}/{dir}`) do
++			local path = `{dir}/{name}`
++			if loops.SKIP[path] or name == ".cache" then
++				continue
++			elseif fs.isDir(`{loops.TOP}/{path}`) then
++				walk(path)
++			elseif string.match(name, "%.luau$") and not string.match(name, "%.spec%.luau$") then
++				out[path] = fs.readFile(`{loops.TOP}/{path}`)
++			end
++		end
++	end
++	for _, r in loops.ROOTS do
++		walk(r)
++	end
++	return out
++end
++
++-- The loops that do not provably advance, per file in file order (zz-arch skill, lesson scanning-loops-advance): the
++-- header as written, why the loop ends or advances, and for a loop that reads text the scanners case that sweeps it
++-- (tests/lib/scanners.luau) or false with the reason none is needed. A reviewer reads every new entry.
++loops.ALLOWED = {
++	["pickman/scripts/cicd.luau"] = {
++		{
++			loop = "while index <= #args do",
++			why = "every branch steps index by 1 or 2, or exits the process",
++		},
++	},
++	["pickman/scripts/lib/lease.luau"] = {
++		{
++			loop = "while true do",
++			why = "redact returns early on an empty key, so each pass cuts rest past a non-empty match",
++			sweep = false,
++		},
++		{
++			loop = "while i <= #raw do",
++			why = "base64 over bytes: i += 3 at the top of every pass",
++			sweep = false,
++		},
++		{
++			loop = "while true do",
++			why = "the request loop returns unless the answer is transient, and attempt reaches 5",
++		},
++	},
++	["pickman/scripts/lib/opencloud.luau"] = {
++		{
++			loop = "while true do",
++			why = "returns unless transient, and attempt and the spent seconds grow each retry",
++		},
++		{
++			loop = "while true do",
++			why = "polls until the task ends or waited (grown by poll each pass) reaches the timeout",
++		},
++	},
++	["z-nile/engine/ids.luau"] = {
++		{
++			loop = "while true do",
++			why = "breaks when find fails; i moves past a non-empty match",
++			sweep = "ids.rewritePaths",
++		},
++	},
++	["z-nile/engine/main.luau"] = {
++		{
++			loop = "while i <= #args do",
++			why = "the command line: every branch steps i by 1 or 2 or exits, and args is finite",
++			sweep = false,
++		},
++		{
++			loop = "while true do",
++			why = "old is `<id>@<hash>`, never empty, and at moves past each match",
++			sweep = false,
++		},
++		{
++			loop = "while i <= #a and i <= #b and a[i] == b[i] do",
++			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
++		},
++		{
++			loop = "while #remaining > 0 do",
++			why = "each pass removes one id from remaining, or returns on a cycle",
++		},
++	},
++	["z-nile/engine/paths.luau"] = {
++		{
++			loop = "while true do",
++			why = "breaks when no root matches; pos moves past the match",
++			sweep = "paths.rewrite",
++		},
++		{
++			loop = "while true do",
++			why = "from moves past each match of a non-empty needle",
++			sweep = "paths.rewrite",
++		},
++	},
++	["z-nile/engine/publish.luau"] = {
++		{
++			loop = "repeat",
++			why = "`until true`: a block that runs once and leaves it early by break",
++			sweep = false,
++		},
++	},
++	["z-nile/engine/raftplan.luau"] = {
++		{
++			loop = "while parent[k] ~= k do",
++			why = "path halving up a finite union-find forest that has no cycle",
++		},
++	},
++	["z-nile/engine/skills.luau"] = {
++		{
++			loop = "while true do",
++			why = "pos moves past a match of a non-empty needle",
++			sweep = "skills.oldLessonIds",
++		},
++		{
++			loop = "while true do",
++			why = "pos moves past a match of a non-empty needle",
++			sweep = "skills.oldNames",
++		},
++	},
++	["z-nile/engine/stats.luau"] = {
++		{
++			loop = "while yy < lastY or (yy == lastY and mm <= lastM) do",
++			why = "addMonths moves (yy, mm) a month on every pass",
++		},
++	},
++	["z-nile/engine/trail.luau"] = {
++		{
++			loop = "while i >= 1 do",
++			why = "the inner loop always takes sorted[i] itself (its sha is sha), so i falls by 1 or more",
++			sweep = false,
++		},
++		{
++			loop = "while i >= 1 and sorted[i].sha == sha do",
++			why = "i falls by 1 on every pass, so the group ends at the first commit with another sha or at 0",
++			sweep = false,
++		},
++	},
++	["z-nile/lib/graph.luau"] = {
++		{
++			loop = "while i <= #a and i <= #b and a[i] == b[i] do",
++			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
++		},
++		{
++			loop = "while true do",
++			why = "at loses its last folder each pass and the loop breaks at /",
++			sweep = false,
++		},
++		{
++			loop = 'while d ~= "." and d ~= "" and string.sub(d, 1, 2) ~= ".." do',
++			why = "dirname shortens d each pass",
++			sweep = false,
++		},
++		{
++			loop = "while i <= n do",
++			why = "every branch moves i past the token it took",
++			sweep = "graph.stripComments",
++		},
++		{
++			loop = "while j <= n do",
++			why = "every branch moves j by 1 or 2 or breaks",
++			sweep = "graph.stripComments",
++		},
++		{ loop = "while #stack > 0 do", why = "pops one file per pass and pushes only files not seen yet" },
++	},
++	["z-nile/tests/lib/cleanup.luau"] = {
++		{
++			loop = "while head <= #queue and #out < MAX_LISTED do",
++			why = "a breadth-first walk: head grows by 1 every pass over a finite tree, and the list is capped by MAX_LISTED",
++		},
++		{
++			loop = "while true do",
++			why = "returns on success or a vanished tree, and raises once the bound has passed",
++		},
++	},
++	["z-nile/tests/lib/fence.luau"] = {
++		{
++			loop = 'while not process.exec("mkdir", { lock }).ok do',
++			why = "waited grows 0.1 each pass and the run gives up at the limit",
++		},
++		{ loop = 'while up and up ~= "" do', why = "up loses its last folder each pass", sweep = false },
++	},
++	["z-nile/tests/lib/fixture.luau"] = {
++		{
++			loop = 'while args[i] and string.sub(args[i], 1, 1) == "-" do',
++			why = "the last statement steps i by 1 or 2",
++			sweep = false,
++		},
++	},
++	["z-nile/tests/lib/loops.luau"] = {
++		{
++			loop = "while at do",
++			why = "every find starts at at + 1, so at grows on every pass or the find returns nil",
++			sweep = "loops.find",
++		},
++	},
++	["z-nile/tests/lib/hostile.luau"] = {
++		{ loop = 'while #lines > 0 and lines[#lines] == "" do', why = "pops the last line on every pass" },
++	},
++	["z-nile/tests/run.luau"] = {
++		{
++			loop = "while i <= #args do",
++			why = "the command line: every branch steps i by 1 or 2 or exits, and args is finite",
++			sweep = false,
++		},
++		{
++			loop = "while running > 0 do",
++			why = "waits for the lane workers, each of which ends with its spec file's process",
++		},
++	},
++} :: { [string]: { Allowed } }
++
++return loops
+diff --git a/z-nile/tests/lib/scanners.luau b/z-nile/tests/lib/scanners.luau
+new file mode 100644
+index 00000000..64aa4464
+--- /dev/null
++++ b/z-nile/tests/lib/scanners.luau
+@@ -0,0 +1,131 @@
++--!strict
++-- The tooling's text scanners that the hostile sweep runs (zz-arch skill, lesson scanning-loops-advance): one case per
++-- public function whose loops walk a text. tests/lib/loops.luau's list names these cases in its `sweep` field. A new
++-- text scanner adds its case here; tests/acceptance/c0193/scanners.spec.luau runs them all.
++local hostile = require("./hostile")
++
++local scanners = {}
++
++scanners.CASES = {
++	{
++		name = "graph.stripComments",
++		module = "@znile/lib/graph",
++		call = "m.stripComments(text)",
++		witness = { text = "a --c\nb", result = "a \nb" },
++	},
++	{
++		name = "paths.rewrite",
++		module = "@znile/engine/paths",
++		call = 'm.rewrite(text, { c0001 = "z-nile/.tracker/issues/active/c0001" })',
++		witness = {
++			text = "see z-nile/.tracker/issues/c0001/c0001.md",
++			result = "see z-nile/.tracker/issues/active/c0001/c0001.md",
++		},
++	},
++	{
++		name = "ids.rewritePaths",
++		module = "@znile/engine/ids",
++		call = 'm.rewritePaths(text, { c0001 = "c0002" }, { "pickman", "z-nile" })',
++		witness = { text = "tests/acceptance/c0001/a.spec", result = "tests/acceptance/c0002/a.spec" },
++	},
++	{
++		name = "ids.rewrite",
++		module = "@znile/engine/ids",
++		call = 'm.rewrite(text, { c0001 = "c0002" })',
++		witness = { text = "c0001 and c0001", result = "c0002 and c0002" },
++	},
++	{
++		name = "skills.oldLessonIds",
++		module = "@znile/engine/skills",
++		call = '#m.oldLessonIds(text, { ["zz-test/pin"] = true })',
++		witness = { text = "see testing/pin and x", result = "1" },
++	},
++	{
++		name = "skills.oldNames",
++		module = "@znile/engine/skills",
++		call = "#m.oldNames(text)",
++		witness = { text = "the testing skill", result = "1" },
++	},
++	{
++		name = "loops.find",
++		module = "@tests/lib/loops",
++		-- the text goes into a body line that names the bound n, so every text reaches writes()'s `while at do` loop
++		call = '#m.find("while i < n do\\n\\tx(" .. text .. "n" .. text .. ")\\n\\ti += 1\\nend\\n")',
++		witness = { text = "", result = "1" },
++	},
++} :: { hostile.Case }
++
++-- the repository file each case's module names, by alias: `@znile/` is z-nile/, `@tests/` z-nile/tests/, `@scripts/`
++-- scripts/. An alias not listed maps to "?", which no file equals, so loops.problems refuses a sweep that names it.
++local ALIASES: { [string]: string } =
++	{ ["@znile/"] = "z-nile/", ["@tests/"] = "z-nile/tests/", ["@scripts/"] = "scripts/" }
++
++function scanners.files(): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, c in scanners.CASES do
++		local file = "?"
++		local m: string = c.module or ""
++		for alias, root in ALIASES do
++			if string.sub(m, 1, #alias) == alias then
++				file = root .. string.sub(m, #alias + 1) .. ".luau"
++			end
++		end
++		out[c.name] = file
++	end
++	return out
++end
++
++-- The characters the scanners above compare a character with, beyond hostile.ALPHABET's: path and mention characters.
++-- scanners.spec checks that every one-character literal a case's module compares is in the alphabet or on
++-- `scanners.EXCEPT` (case name -> character -> why none is needed).
++scanners.ALPHABET = {} :: { string }
++for _, c in hostile.ALPHABET do
++	table.insert(scanners.ALPHABET, c)
++end
++for _, c in { ".", "/", "@", "~", ")", "<" } do
++	table.insert(scanners.ALPHABET, c)
++end
++scanners.EXCEPT = {} :: { [string]: { [string]: string } }
++
++-- the scanners' own needles: the strings their loops look for, each fed with every wider character on either side
++scanners.NEEDLES = {
++	"tests/acceptance/c0001",
++	"z-nile/.tracker/issues/c0001",
++	"pickman/",
++	".claude/skills/testing/",
++	"the testing skill",
++	"zz-test/pin",
++} :: { string }
++
++-- The texts the sweep feeds each: every text of up to 4 hostile characters, every text of up to 3 characters over the
++-- wider alphabet, and each scanner's own needles with every wider character on either side, so a scanner that matches
++-- a needle meets the characters next to it. (A case with a guard on its input, such as a check line that must start
++-- with a template, sets `prefix` on its Case; raftcheck.judge's starts with the rendered RC0 head and ends with
++-- `check "RC1: `, or the sweep never reaches its loops.) Every case has a `witness`: an input and the result only the
++-- scanner's work gives, so a call that never reaches the scanner's loops (a map of the wrong shape, a changed
++-- signature) fails; scanners.spec requires it.
++function scanners.texts(): { string }
++	local seen: { [string]: boolean } = {}
++	local out: { string } = {}
++	local function add(s: string)
++		if not seen[s] then
++			seen[s] = true
++			table.insert(out, s)
++		end
++	end
++	for _, s in hostile.texts() do
++		add(s)
++	end
++	for _, s in hostile.texts(scanners.ALPHABET, 3) do
++		add(s)
++	end
++	for _, n in scanners.NEEDLES do
++		for _, c in scanners.ALPHABET do
++			add(n .. c)
++			add(c .. n)
++		end
++	end
++	return out
++end
++
++return scanners
+diff --git a/z-nile/tests/meta/scanning-loops.spec.luau b/z-nile/tests/meta/scanning-loops.spec.luau
+new file mode 100644
+index 00000000..caa1d911
+--- /dev/null
++++ b/z-nile/tests/meta/scanning-loops.spec.luau
+@@ -0,0 +1,34 @@
++--!strict
++-- The scanning-loop rule on the tooling's own files (zz-arch skill, lesson scanning-loops-advance): every `while` or
++-- `repeat` loop in z-nile/, scripts/ and pickman/scripts/ provably advances or is on the reviewed list in
++-- tests/lib/loops.luau, with a reason and, for a loop that reads text, the scanners case that sweeps it. This case is
++-- the lesson's enforcing ref while its sequestered twin (tests/acceptance/c0193/tree.spec) is not promoted yet.
++local loops = require("@tests/lib/loops")
++local scanners = require("@tests/lib/scanners")
++local t = require("@tests/lib/t")
++
++return t.spec("scanning loops (tooling)", function(it)
++	it(
++		"[zz-arch/scanning-loops-advance] every loop in the tooling provably advances or is on the reviewed list",
++		function()
++			local sweeps = scanners.files()
++			local bad: { string } = {}
++			local files = loops.files()
++			for path, text in files do
++				for _, p in loops.problems(path, text, loops.ALLOWED[path], sweeps) do
++					table.insert(bad, p)
++				end
++			end
++			for path in loops.ALLOWED do
++				if not files[path] then
++					table.insert(
++						bad,
++						`loops.ALLOWED lists {path}, which is not a covered file: remove its entries`
++					)
++				end
++			end
++			table.sort(bad)
++			t.expect(table.concat(bad, "\n")).toBe("")
++		end
++	)
++end)

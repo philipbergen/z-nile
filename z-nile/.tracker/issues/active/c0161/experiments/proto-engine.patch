@@ -1,0 +1,393 @@
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..2dcd7ca2 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -75,6 +75,7 @@ usage: ./zn <command> ...
+   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
+   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
+   capture <id>                                  print the item's document as captured (read-only)
++  design-record <issue-id>                      print the record of the design a design review round reads (read-only)
+   metrics [--include-active]                    cost per issue and rework %
+   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
+                                                 and open it in the browser; -O only writes it
+@@ -971,8 +972,49 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+ 			end
+ 		end
+ 	end
++	-- c0161: the `Design record:` lines of an issue's design reviews that matched its design before the rewrite are
++	-- re-recorded after it, like `Grouped:` lines: the rewrite changes the ids inside the design, not what the round read.
++	-- A line that did not match before still does not. It runs BEFORE the `grouped:` re-record below: a member's grouped
++	-- record hashes its reviews, so it must see the re-recorded lines. Only folders that hold a design review are read.
++	local quoting: { { id: string, name: string, hash: string } } = {}
++	for iid, dir in before do
++		if not store.isRaftId(iid) and fs.isFile(`{dir}/{iid}.md`) then
++			local rounds = false
++			for _, name in fs.readDir(dir) do
++				if string.match(name, "^design%-review%-%d+%.md$") then
++					rounds = true
++				end
++			end
++			if rounds then
++				local files = gitFolderFiles(dir)
++				local current = raftplan.designRecord(iid, files)
++				for name, text in files do
++					if string.match(name, "^design%-review%-%d+%.md$") then
++						local _, hash = statusLib.roundLines(text)
++						if hash ~= nil and hash == current then
++							table.insert(quoting, { id = iid, name = name, hash = hash })
++						end
++					end
++				end
++			end
++		end
++	end
+ 	rewrite()
+ 	local after = byId()
++	for _, q in quoting do
++		local dir = after[idMap[q.id] or q.id]
++		if dir then
++			local fresh = raftplan.designRecord(idMap[q.id] or q.id, gitFolderFiles(dir))
++			local p = `{dir}/{q.name}`
++			if fs.isFile(p) then
++				local text = fs.readFile(p)
++				local out = statusLib.rewriteRecord(text, q.hash, fresh)
++				if out ~= text then
++					fs.writeFile(p, out)
++				end
++			end
++		end
++	end
+ 	for _, k in kept do
+ 		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
+ 		local rdir, mdir = after[rid], after[mid]
+@@ -1028,6 +1070,14 @@ local function reviewCovers(files: { [string]: string }, map: { [string]: string
+ 	return false
+ end
+ 
++-- c0161, "Check at next read": a prepared issue whose newest design round quotes a record must still match it as the
++-- issue is on origin/main (`files`: its folder there). An issue none of whose rounds quotes a record predates the rule
++-- and is exempt. Used by `new raft`, `fold`, `recombine` and `ready`.
++local function preparedRead(id: string, files: { [string]: string }): string?
++	local problem = statusLib.preparedReadProblem(files, raftplan.designRecord(id, files))
++	return if problem then `{id} {problem}` else nil
++end
++
+ local cmd = {}
+ 
+ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1231,6 +1281,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 						return `{id} is {st} on origin/main, not new or prepared`
+ 					end
+ 					kinds[st] = true
++					if st == "prepared" then
++						local stale = preparedRead(id, treeFolderFiles(paths, read, string.sub(path, 1, #path - #id - 4)))
++						if stale then
++							return stale
++						end
++					end
+ 					if front.solo == "true" then
+ 						solo = id
+ 					end
+@@ -1473,6 +1529,15 @@ local function setStatus(id: string, to: string)
+ 				if store.readFront(localItem.doc).design ~= "ready" then
+ 					return `{t} is not design: ready: set it (z-design) before status {id} prepared`
+ 				end
++				if not store.isRaftId(t) then
++					-- c0161: an approving design review round that read this design, in the issue's own folder (the work
++					-- tree as git sees it, so reviews written before the prep commit count)
++					local own = gitFolderFiles(localItem.dir)
++					local problem = statusLib.designReviewProblem(own, raftplan.designRecord(t, own))
++					if problem then
++						return `{t} {problem}`
++					end
++				end
+ 			end
+ 			if
+ 				not (
+@@ -1653,6 +1718,10 @@ local function refuseUnraftable(issue: store.Item, raft: store.Item)
+ 	if issue.root ~= raft.root then
+ 		fail(`a raft holds issues of one project: {issue.id} is in {issue.root}, not {raft.root}`)
+ 	end
++	local stale = preparedRead(issue.id, originFolderFiles(issue.dir))
++	if stale then
++		fail(stale)
++	end
+ end
+ 
+ -- `fold <R-id> <issue>...`: puts prepared, raftless issues into a prepared backlog raft. It publishes the raft's claim
+@@ -3575,6 +3644,7 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+ 	if opts["--apply"] then
+ 		refuseInMainCheckout("raft-plan --apply")
+ 	end
++	local hasOriginMain = sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
+ 	local issues: { raftplan.Issue } = {}
+ 	local slugOf: { [string]: string } = {}
+ 	for _, it in store.all("issue") do
+@@ -3591,7 +3661,16 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+ 			size = raftplan.parseSize(front.size),
+ 			solo = front.solo == "true",
+ 			touched = touchedModules(it),
++			stale = nil,
+ 		})
++		-- c0161, "Check at next read": a prepared, raftless issue edited after its quoted round is skipped, not planned
++		-- (--apply would stop half way, after earlier commands published their claims)
++		local planned = issues[#issues]
++		-- (only when origin/main exists: offline the plan is printed as before, and the commands it prints refuse there)
++		if hasOriginMain and planned.status == "prepared" and planned.raft == "" and planned.state == "backlog" then
++			local files = originFolderFiles(it.dir)
++			planned.stale = statusLib.preparedReadProblem(files, raftplan.designRecord(it.id, files))
++		end
+ 	end
+ 	local rafts: { raftplan.Raft } = {}
+ 	for _, r in store.all("raft") do
+@@ -4660,10 +4739,12 @@ function cmd.ready(pos: { string })
+ 				for _, m in members do
+ 					local mp = docPath(paths, m.id)
+ 					if mp then
+-						now[m.id] = raftplan.recordHash(
+-							m.id,
+-							treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
+-						)
++						local mfiles = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
++						now[m.id] = raftplan.recordHash(m.id, mfiles)
++						local stale = preparedRead(m.id, mfiles)
++						if stale then
++							return stale
++						end
+ 					end
+ 				end
+ 				local redesigned = regrouped(map, now)
+@@ -5267,6 +5348,20 @@ local function metricsLessons()
+ 	)
+ end
+ 
++-- design-record <id> (c0161): the record of the design a design review round reads, read-only: the hash the reviewer of
++-- every design round quotes (`Design record: <hash>`). It refuses in the main checkout, where no preparing design lives. It is computed over the
++-- folder as git sees the work tree (tracked, and untracked that are not ignored), the view `status <id> prepared` takes.
++cmd["design-record"] = function(pos: { string }, _opts: { [string]: { string } })
++	-- a preparing issue's design lives in its prep worktree, never in the main checkout: run it there (design review 004 F4)
++	refuseInMainCheckout("design-record")
++	local id = pos[1]
++	if not id or not string.match(id, "^[fdc]%d%d%d%d$") or #pos > 1 then
++		fail("usage: design-record <issue-id>")
++	end
++	local item = store.get(id)
++	print(raftplan.designRecord(id, gitFolderFiles(item.dir)))
++end
++
+ -- capture <id> (c0119): the item's document as captured, read-only. The capture is the newest commit on origin/main
+ -- (HEAD without one), under the item's current id, whose subject is `tracker: new` naming it, or else the document's
+ -- first add; the header line carries a marker for every weaker answer (trail.capture, trail.read).
+diff --git a/z-nile/engine/raftplan.luau b/z-nile/engine/raftplan.luau
+index b929a66b..b150510a 100644
+--- a/z-nile/engine/raftplan.luau
++++ b/z-nile/engine/raftplan.luau
+@@ -22,6 +22,7 @@ export type Issue = {
+ 	size: number?, -- the designer's estimate of changed lines; nil when missing or not a number
+ 	solo: boolean,
+ 	touched: { string }?,
++	stale: string?, -- c0161: why a prepared issue's design is stale on origin/main (the check at next read); it is skipped
+ }
+ export type Raft = {
+ 	id: string,
+@@ -134,6 +135,10 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op
+ 		if not isCandidate(i) then
+ 			continue
+ 		end
++		if i.stale then
++			table.insert(skips, { id = i.id, reason = i.stale })
++			continue
++		end
+ 		if i.size == nil then
+ 			table.insert(
+ 				skips,
+@@ -340,21 +345,63 @@ function raftplan.commands(
+ 	return runs, nil
+ end
+ 
+-function raftplan.designHash(text: string): string
++-- The document with the frontmatter lines named in `skip` left out (a key at the start of a line, in the first block).
++local function withoutFront(text: string, skip: { string }): string
+ 	local kept: { string } = {}
+ 	local inFront, seen = false, 0
+ 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local drop = false
++		if inFront then
++			for _, key in skip do
++				if string.sub(line, 1, #key + 1) == key .. ":" then
++					drop = true
++				end
++			end
++		end
+ 		if line == "---" and seen < 2 then
+ 			seen += 1
+ 			inFront = seen == 1
+ 			table.insert(kept, line)
+-		elseif inFront and (string.match(line, "^status:") or string.match(line, "^raft:")) then
+-			continue
+-		else
++		elseif not drop then
+ 			table.insert(kept, line)
+ 		end
+ 	end
+-	return string.sub(serde.hash("sha256", table.concat(kept, "\n")), 1, 12)
++	return table.concat(kept, "\n")
++end
++
++function raftplan.designHash(text: string): string
++	return string.sub(serde.hash("sha256", withoutFront(text, { "status", "raft" })), 1, 12)
++end
++
++-- c0161: the files a design review round reads, relative to the issue's folder, sorted: its document, `check.sh`,
++-- everything under `acceptance/` and everything under `experiments/` (an executor applies the prototype kept there).
++-- `specsOnly`: just `check.sh` and `acceptance/`, the files a spec proof covers. Not the reviews, refutes and
++-- `harvest.md` (they answer the design, they are not it), `spend.md` or `prompt.md`. The one list of what the record
++-- covers (lesson zz-arch/records-cover-what-was-reviewed).
++function raftplan.recordPaths(id: string, files: { [string]: string }, specsOnly: boolean?): { string }
++	local rels: { string } = {}
++	for rel in files do
++		local spec = rel == "check.sh" or string.sub(rel, 1, #"acceptance/") == "acceptance/"
++		if spec or (not specsOnly and (rel == `{id}.md` or string.sub(rel, 1, #"experiments/") == "experiments/")) then
++			table.insert(rels, rel)
++		end
++	end
++	table.sort(rels)
++	return rels
++end
++
++-- c0161: the record of the design a design review round read: one hash over `recordPaths`, each path with its length
++-- and bytes; the document without its `status:`, `raft:` and `design:` lines, which the process itself writes as the
++-- design is reviewed and prepared. `files`: path relative to the folder -> text. The reviewer of each design round quotes it
++-- (`Design record: <hash>`, from `./zn design-record <id>`) and `status <id> prepared` compares it with the design as it
++-- is.
++function raftplan.designRecord(id: string, files: { [string]: string }): string
++	local parts: { string } = {}
++	for _, rel in raftplan.recordPaths(id, files) do
++		local text = if rel == `{id}.md` then withoutFront(files[rel], { "status", "raft", "design" }) else files[rel]
++		table.insert(parts, `{rel}\0{#text}\0{text}`)
++	end
++	return string.sub(serde.hash("sha256", table.concat(parts, "\0")), 1, 12)
+ end
+ 
+ -- c0116 (review 003 F1): the files a member's reviewed design is made of, relative to its folder: its document,
+diff --git a/z-nile/engine/status.luau b/z-nile/engine/status.luau
+index 0aaa67ea..ea2f3224 100644
+--- a/z-nile/engine/status.luau
++++ b/z-nile/engine/status.luau
+@@ -110,6 +110,116 @@ function status.effective(front: { [string]: string }, state: string): string
+ 	return status.parse(front.status) or status.derive(state, front.design, inRaft)
+ end
+ 
++-- c0161: the lines of a design review round that the engine reads, from one reader (the move to prepared, the check at
++-- the next read, and the re-record after an id rewrite all use it). A round is written once, so a second `Verdict: ` line
++-- or a second `Design record: ` line (each at the start of a line) is a problem, and so is a `Design record:` line that
++-- is not just a hash. Returns the last verdict word (trailing spaces dropped), the quoted hash, and the problem, if any.
++function status.roundLines(text: string): (string?, string?, string?)
++	local verdict, record, problem = nil, nil, nil
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		if string.sub(line, 1, #"Verdict: ") == "Verdict: " then
++			if verdict ~= nil then
++				problem = 'has two "Verdict:" lines: a round is written once (zz-review)'
++			end
++			verdict = (string.gsub(string.sub(line, #"Verdict: " + 1), "%s+$", ""))
++		elseif string.sub(line, 1, #"Design record:") == "Design record:" then
++			local hash = string.match(line, "^Design record: (%x+)[ \r]*$")
++			if hash == nil then
++				problem = 'has a "Design record:" line that is not just the hash (zz-review)'
++			elseif record ~= nil then
++				problem = 'has two "Design record:" lines: a round is written once (zz-review)'
++			end
++			record = hash or record
++		end
++	end
++	return verdict, record, problem
++end
++
++-- The same round with its quoted record `from` replaced by `to` (only on a line that is exactly the quote).
++function status.rewriteRecord(text: string, from: string, to: string): string
++	local out: { string } = {}
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		if string.match(line, "^Design record: (%x+)[ \r]*$") == from then
++			table.insert(out, (string.gsub(line, from, to, 1)))
++		else
++			table.insert(out, line)
++		end
++	end
++	return table.concat(out, "\n")
++end
++
++-- The highest round number in a folder's files (0: none): `design-review-NNN.md`, three digits, top level only (the
++-- pattern is `lessons.isStem`'s).
++local function newestRound(files: { [string]: string }): number
++	local newest = 0
++	for rel in files do
++		local n = string.match(rel, "^design%-review%-(%d%d%d)%.md$")
++		if n and (tonumber(n) :: number) > newest then
++			newest = tonumber(n) :: number
++		end
++	end
++	return newest
++end
++
++-- c0161: whether an issue's folder holds the design review z-design step 5 requires before the move to `prepared`.
++-- `files`: the folder's files, path relative to it -> text; `record`: the design as it is now (`raftplan.designRecord`).
++-- nil when the newest round approves and quotes the design as it is; else the problem, which starts with the file it is
++-- about. The newest `design-review-NNN.md` decides, and only a reviewer's word counts: its `Verdict:` is `approve`, and
++-- its `Design record: <hash>` equals `record`. A round that says `changes` is never the last (answering its findings by
++-- an edit needs a new round), and a Design changed after the approving round needs a new one: refutes, harvest and
++-- spend are not read. The engine cannot tell what a review judged, only that a reviewer's round of this design
++-- approved it. `done` reads code-review files (`review-NNN.md`, `refute-NNN.md`) with its own rules; the finding
++-- convention elsewhere is `lessons.findings`'.
++function status.designReviewProblem(files: { [string]: string }, record: string): string?
++	local newest = newestRound(files)
++	if newest == 0 then
++		return "has no design-review-001.md: z-design step 5 runs at least one clean review round on every issue before `prepared`, a closure (no code change) included"
++	end
++	local name = `design-review-{string.format("%03d", newest)}.md`
++	local verdict, quoted, problem = status.roundLines(files[name])
++	if problem then
++		return `{name} {problem}`
++	end
++	if verdict == "changes" then
++		return `{name} says "Verdict: changes": the final round approves, so answer it by editing the design and running the next round (z-design step 5.4); a refute alone does not stand in for it`
++	end
++	if verdict ~= "approve" then
++		return `{name} has no "Verdict: approve" or "Verdict: changes" line (zz-review's format)`
++	end
++	if quoted == nil then
++		return `{name} quotes no "Design record: <hash>" line: the reviewer ends the round with the output of ./zn design-record <id>`
++	end
++	if quoted ~= record then
++		return `{name} quotes Design record {quoted}, but the design is now {record}: it changed after this round, or the round quoted another checkout's design; make it current with a design round for this issue, run in the worktree that holds the edit and landed with it (z-design 5.3: a Design changed after a round, or by answering one, needs a new round; for a rafted member: unfold it with the edit and the round, land, then fold it again: z-raft 2)`
++	end
++	return nil
++end
++
++-- c0161, "Check at next read": whether a prepared issue, as it is on origin/main, still matches the record its newest
++-- round quotes. An issue none of whose rounds quotes a record was prepared by an engine that predates the rule and is
++-- exempt (nil): the exempt set is found by search, never listed by hand. Read by `new raft`, `fold`, `recombine` and
++-- `ready`, so a design edited after the move to prepared (a gate fix, a PR answer, a conflict resolved in the document)
++-- is caught before the issue is rafted or readied.
++function status.preparedReadProblem(files: { [string]: string }, record: string): string?
++	local quotes = false
++	for rel, text in files do
++		if string.match(rel, "^design%-review%-%d%d%d%.md$") then
++			local _, quoted = status.roundLines(text)
++			if quoted ~= nil then
++				quotes = true
++			end
++		end
++	end
++	if not quotes then
++		return nil
++	end
++	local problem = status.designReviewProblem(files, record)
++	if problem then
++		return `is prepared on origin/main but {problem}`
++	end
++	return nil
++end
++
+ function status.nextNumber(ids: { string }): number
+ 	local max = 0
+ 	for _, id in ids do

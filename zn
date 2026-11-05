@@ -3,6 +3,13 @@
 # The directory it is run from gives the project (a command's --project overrides it): ZN_CWD is that directory
 # relative to the checkout, and ZN_TOP the checkout, so the engine trusts ZN_CWD only when it runs in ZN_TOP.
 set -euo pipefail
+# `./zn run` is the bounded runner (c0191): it starts before anything else, in the caller's folder, with no Lune of its
+# own between the caller and the command it bounds.
+if [[ ${1:-} == run ]]; then
+  shift
+  export PATH="$HOME/.rokit/bin:$PATH"
+  exec perl "$(cd "$(dirname "$0")" && pwd -P)/z-nile/lib/bounded.pl" "$@"
+fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"
 case "$here/" in
@@ -12,4 +19,11 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
+# the engine's own CPU limit (c0191), ZN_ENGINE_CPU seconds (default 1800): what an engine command spends is its own
+# CPU, not its children's (the gate, git), and a loop in it ends in half an hour instead of never. It only lowers the
+# limit the caller has, so the spec runner's 1200 s stays what it asks for
+lim=${ZN_ENGINE_CPU:-1800}
+[[ $lim =~ ^[0-9]+$ ]] || lim=1800
+source "$top/z-nile/lib/cpu.sh"
+zn_lower_cpu "$lim" 2>/dev/null || true
 exec lune run z-nile/engine/main -- "$@"
