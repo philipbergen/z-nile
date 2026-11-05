@@ -1,0 +1,1215 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 84e3d423..de0c447f 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -29,4 +29,4 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
+ 
+ The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step. The `zz-` and `z-` prefixes are z-nile's: a project's skills are named `<project>-…`.
+ 
+-Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Every skill reads its own when it starts. z-design and zz-execute harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.
++Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Every skill reads its own when it starts. z-design, z-raft and zz-execute harvest every review finding into them (the lead of a prep or raft also each stream and focused review), each under the step that erred (`(erred <skill>)` on its harvest line; zz-rules skill, Items). Any other new lesson depends on your role: the lead of a prep or raft writes it under the step that erred, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.
+diff --git a/pickman/skills/pickman-arch/SKILL.md b/pickman/skills/pickman-arch/SKILL.md
+index 390a8ab3..3bb708f8 100644
+--- a/pickman/skills/pickman-arch/SKILL.md
++++ b/pickman/skills/pickman-arch/SKILL.md
+@@ -61,6 +61,8 @@ Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill pickman-arch --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
+index 9556d019..bf1a3336 100644
+--- a/pickman/skills/pickman-test/SKILL.md
++++ b/pickman/skills/pickman-test/SKILL.md
+@@ -70,6 +70,8 @@ t.expect(sim.firstTick(trace, "Bump")).toBe(6)
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill pickman-test --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/engine/compact.luau b/z-nile/engine/compact.luau
+index cbe5bae5..4a6f6278 100644
+--- a/z-nile/engine/compact.luau
++++ b/z-nile/engine/compact.luau
+@@ -43,6 +43,39 @@ local function rewritesIds(path: string, roots: { string }): boolean
+ 		and (string.match(path, "%.md$") ~= nil or string.match(path, "%.sh$") ~= nil)
+ end
+ 
++-- c0136: a stream review or refute names its issue (stream-review-<issue>-NNN.md) and lives in its raft's folder, so a
++-- text rewrite of the ids changes the id in a harvest entry that names the file but not the file's own name. This
++-- moves those files in `folders` (item folders, at the place they now have) by the same map, in two phases like the
++-- folders. Shared by compact.apply (compact, remap) and renumber.
++function compact.moveStreams(root: string, folders: { string }, map: { [string]: string })
++	local streams: { { from: string, to: string } } = {}
++	for _, dir in folders do
++		if fs.isDir(`{root}/{dir}`) then
++			for _, name in fs.readDir(`{root}/{dir}`) do
++				local kind, id, n = string.match(name, "^stream%-(%a+)%-([fdc]%d%d%d%d)%-(%d%d%d)%.md$")
++				local new = if id then map[id] else nil
++				if (kind == "review" or kind == "refute") and new and new ~= id then
++					table.insert(streams, { from = `{dir}/{name}`, to = `{dir}/stream-{kind}-{new}-{n}.md` })
++				end
++			end
++		end
++	end
++	-- a file git does not track yet (an uncommitted stream review) moves with the plain filesystem call
++	local function mv(from: string, to: string)
++		if process.exec("git", { "ls-files", "--error-unmatch", from }, { cwd = root }).ok then
++			gitIn(root, { "mv", from, to })
++		else
++			fs.move(`{root}/{from}`, `{root}/{to}`)
++		end
++	end
++	for _, m in streams do
++		mv(m.from, `{m.to}.compacting`)
++	end
++	for _, m in streams do
++		mv(`{m.to}.compacting`, m.to)
++	end
++end
++
+ -- Renames every item in `found` that the map moves, and every tests/acceptance/<old> folder of every project
+ -- (c0120: pickman/tests/acceptance too), then rewrites: ids in the .md and .sh files under every project root, and
+ -- tests/acceptance/<id> paths (also as <home>/tests/acceptance/<id>) in every other tracked text file (the templates
+@@ -80,6 +113,12 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
+ 			gitIn(root, { "mv", `{d.dir}/{d.old}.md`, `{d.dir}/{d.new}.md` })
+ 		end
+ 	end
++	local folders: { string } = {}
++	for _, f in found do
++		local parent = string.match(f.path, "^(.*)/[^/]+$") :: string
++		table.insert(folders, `{parent}/{map[f.id] or f.id}`)
++	end
++	compact.moveStreams(root, folders, map)
+ 	for path in string.gmatch(gitIn(root, { "ls-files" }), "[^\n]+") do
+ 		local abs = `{root}/{path}`
+ 		local template = string.sub(path, 1, #TEMPLATES) == TEMPLATES
+diff --git a/z-nile/engine/lessons.luau b/z-nile/engine/lessons.luau
+index ffae7c73..e6845753 100644
+--- a/z-nile/engine/lessons.luau
++++ b/z-nile/engine/lessons.luau
+@@ -32,6 +32,10 @@ export type Entry = {
+ 	lessons: { string },
+ 	oneOff: string?,
+ 	note: string?,
++	-- c0136: the step that erred (a skill, or "none") and the earlier step that should have prevented it, from the
++	-- `(erred <skill>[, upstream <skill>])` group before the colon; nil on an entry written without one
++	erred: string?,
++	upstream: string?,
+ }
+ -- one reviewed item: review stem -> text (design-review-NNN, review-NNN), and its harvest.md text if any
+ export type Item = { id: string, reviews: { [string]: string }, harvest: string? }
+@@ -48,6 +52,10 @@ export type Tree = {
+ export type Query =
+ 	{ skills: { string }?, when: ("design" | "build")?, tags: { string }?, words: { string }? }
+ 
++-- c0136 (c0140): the steps that happen in design. A mistake one of them made, or should have caught, is a lesson design
++-- reads: a harvest line naming one refuses a lesson that is `when: build`.
++lessons.DESIGN_STEPS = { "z-ticket", "z-design", "z-raft" }
++
+ local KEBAB = "^[a-z0-9]+%-?[a-z0-9%-]*$"
+ local KEYS = { title = true, when = true, tags = true, check = true, from = true }
+ local WHEN = { design = true, build = true, both = true }
+@@ -60,6 +68,24 @@ local function kebab(s: string): boolean
+ 	return string.match(s, KEBAB) ~= nil and string.sub(s, -1) ~= "-" and string.find(s, "--", 1, true) == nil
+ end
+ 
++-- c0136: the one rule for a pair of steps, spelled as a harvest group or as a review's two lines. `upstream` is nil
++-- when none. Returns the problem, or nil. A skill is lowercase kebab; `none` is only an `erred` with no upstream.
++local function validSteps(erred: string, upstream: string?): string?
++	if erred ~= "none" and not kebab(erred) then
++		return "erred is a skill name or none"
++	end
++	if upstream ~= nil and (upstream == "none" or not kebab(upstream)) then
++		return "upstream is a skill name, or left out for none"
++	end
++	if erred == "none" and upstream ~= nil then
++		return "erred none has no upstream"
++	end
++	if upstream == erred then
++		return "upstream is the same step as erred"
++	end
++	return nil
++end
++
+ function lessons.parse(id: string, text: string): (Lesson?, string?)
+ 	local skill, slug = string.match(id, "^([^/]+)/([^/]+)$")
+ 	if not skill or not slug then
+@@ -140,6 +166,199 @@ function lessons.findings(review: string): { string }
+ 	return out
+ end
+ 
++local function isStem(stem: string): boolean
++	return string.match(stem, "^design%-review%-%d%d%d$") ~= nil
++		or string.match(stem, "^review%-%d%d%d$") ~= nil
++		or string.match(stem, "^stream%-review%-[fdc]%d%d%d%d%-%d%d%d$") ~= nil -- c0136
++		or string.match(stem, "^focused%-review%-%d%d%d$") ~= nil -- c0136
++end
++
++-- c0136: a step named in a record that is never edited (a review file, a ledger) is read through the rename table, so a
++-- skill that is renamed later (skills.RENAMED, c0115) keeps its old records valid.
++local function canon(name: string, skills: { [string]: boolean }?): string
++	if skills and skills[name] then
++		return name -- a skill that exists under that name is never mapped away
++	end
++	return skillsLib.RENAMED[name] or name
++end
++
++-- c0136: a note about a finding starts with its head, `<stem> F<n> <text>`: returns the stem, the finding and the rest.
++-- The one reader for the waiver note and for the phase of a note.
++function lessons.noteHead(text: string): (string?, string?, string)
++	local stem, finding, rest = string.match(text, "^(%S+) (F%d+)%s*(.*)$")
++	if stem and finding and isStem(stem) then
++		return stem, finding, rest or ""
++	end
++	return nil, nil, text
++end
++
++-- c0136: the phase a focused review's heading names, `(focused mode, design)` or `(focused mode, build)`, exactly those
++-- words; `none` for any other heading (a missing word, `Design`, `both`): an unreadable phase is never read as build.
++local function headingPhase(text: string): string
++	local word = string.match(string.match(text, "^[^\n]*") or "", "%(focused mode, (%a+)%)")
++	return if word == "design" or word == "build" then word else "none"
++end
++
++-- c0136: the phase a review looked at, which decides whether its findings are design's: a design round (an issue's, or
++-- z-raft's coherence round) is `design`; a focused review says so in its heading; every other review is `build`.
++function lessons.reviewPhase(stem: string, text: string): string
++	if string.match(stem, "^design%-review%-") then
++		return "design"
++	end
++	if string.match(stem, "^focused%-review%-") then
++		return headingPhase(text)
++	end
++	return "build"
++end
++
++-- c0136: what a reviewer wrote under each finding: `Erred: <skill|none>` (the step that made the mistake) and
++-- `Upstream: <skill|none>` (an earlier step that should have prevented or caught it). Returns the finding id -> steps
++-- (`upstream` is nil for `none`), and the problems of a file that uses the lines: a repeated or malformed line, or a
++-- finding missing one of the two once any finding has either. A file with neither line anywhere (written before
++-- c0136) has no steps and no problems.
++export type FindingSteps = { erred: string, upstream: string? }
++-- The fence a line opens or closes: its character and length, when it has up to three spaces then three or more
++-- backticks or tildes (CommonMark); nil otherwise.
++local function fenceOf(line: string): (string?, number)
++	local indent, run = string.match(line, "^( *)([`~]+)")
++	if indent == nil or run == nil or #indent > 3 or #run < 3 then
++		return nil, 0
++	end
++	local c = string.sub(run, 1, 1)
++	if string.find(run, if c == "`" then "~" else "`", 1, true) then
++		return nil, 0 -- a run that mixes both characters is not a fence
++	end
++	return c, #run
++end
++
++-- One pass over a review: the Erred and Upstream value of each finding, the findings in order (every `### F<n>`
++-- heading, as `lessons.findings` and `done` read them, a fenced one included), and the problems of the lines. With
++-- `fences` a line inside a fenced code block is not read; it returns whether a fence was still open at the end.
++local function scanSteps(review: string, fences: boolean)
++	local erred: { [string]: string } = {}
++	local upstream: { [string]: string } = {}
++	local order: { string } = {}
++	local problems: { string } = {}
++	local bad: { [string]: boolean } = {}
++	local current: string? = nil
++	local fence: string? = nil
++	local fenceLen = 0
++	for line in string.gmatch(review .. "\n", "([^\n]*)\n") do
++		local id = string.match(line, "^###%s+(F%d+)")
++		if id then
++			current = id
++			table.insert(order, id)
++			continue
++		end
++		if fences then
++			local c, n = fenceOf(line)
++			if fence == nil and c ~= nil then
++				fence, fenceLen = c, n
++				continue
++			elseif fence ~= nil and c == fence and n >= fenceLen and string.match(line, "^ *[`~]+%s*$") then
++				fence = nil
++				continue
++			end
++			if fence ~= nil then
++				continue
++			end
++		end
++		if string.sub(line, 1, 3) == "## " then
++			current = nil -- a section after the findings (Judged criteria) is no finding's
++			continue
++		end
++		local key, value = string.match(line, "^(%a+):%s*(.-)%s*$")
++		if current and (key == "Erred" or key == "Upstream") then
++			local into = if key == "Erred" then erred else upstream
++			if into[current] ~= nil then
++				table.insert(problems, `{current}: {key}: is repeated`)
++				bad[current] = true
++			elseif value == nil or not kebab(value) then
++				table.insert(problems, `{current}: {key}: needs a skill name or none`)
++				bad[current] = true
++			else
++				into[current] = value
++			end
++		end
++	end
++	return erred, upstream, order, problems, bad, fence ~= nil
++end
++
++function lessons.findingSteps(
++	review: string,
++	skills: { [string]: boolean }?
++): ({ [string]: FindingSteps }, { string })
++	local erred, upstream, order, problems, bad, open = scanSteps(review, true)
++	if open then
++		-- a fence that is never closed would hide every line after it as quoted: read the file with no fences at all, so a
++		-- slip shows as a problem and not as a review that has no lines
++		erred, upstream, order, problems, bad = scanSteps(review, false)
++	end
++	local out: { [string]: FindingSteps } = {}
++	local used = next(erred) ~= nil or next(upstream) ~= nil
++	for _, id in order do
++		if bad[id] then
++			continue
++		end
++		local e, up = erred[id], upstream[id]
++		if e and up then
++			local u: string? = if up == "none" then nil else up
++			local problem = validSteps(e, u)
++			if problem then
++				table.insert(problems, `{id}: Erred: {e}, Upstream: {up}: {problem}`)
++				continue
++			end
++			if skills then
++				local unknown = false
++				if e ~= "none" and not skills[canon(e, skills)] then
++					table.insert(problems, `{id}: Erred: no skill {e}`)
++					unknown = true
++				end
++				if u ~= nil and not skills[canon(u, skills)] then
++					table.insert(problems, `{id}: Upstream: no skill {u}`)
++					unknown = true
++				end
++				if unknown then
++					continue
++				end
++			end
++			out[id] = { erred = canon(e, skills), upstream = if u then canon(u, skills) else nil }
++		elseif used then
++			table.insert(problems, `{id}: write both Erred: and Upstream: (none when no step applies)`)
++		end
++	end
++	return out, problems
++end
++
++-- c0136: what a reviewer or a lead checks on a NEW review before it is handed back or committed (`--check-review`):
++-- the problems of its step lines, a file that has findings and no lines at all (a new review gives every finding
++-- both), and a focused heading with no readable phase (judged from the text, whatever the file is called). A file
++-- with no finding (an approving round) passes. Old reviews are never run through it.
++function lessons.checkNewReview(stem: string, text: string, skills: { [string]: boolean }?): { string }
++	local steps, problems = lessons.findingSteps(text, skills)
++	local out = table.clone(problems)
++	local findings = lessons.findings(text)
++	if #findings > 0 and next(steps) == nil and #problems == 0 then
++		table.insert(
++			out,
++			"no step lines: a new review gives every finding Erred: and Upstream: at the start of a line, unbolded (zz-review)"
++		)
++	end
++	local first = string.match(text, "^[^\n]*") or ""
++	if
++		(string.match(stem, "^focused%-review%-") or string.find(first, "(focused mode", 1, true))
++		and headingPhase(text) == "none"
++	then
++		table.insert(out, "the heading must say (focused mode, design) or (focused mode, build)")
++	end
++	return out
++end
++
++-- the step group as an entry or a message spells it
++local function stepsText(erred: string, upstream: string?): string
++	return if upstream then `erred {erred}, upstream {upstream}` else `erred {erred}`
++end
++
+ local function twice(ids: { string }): string?
+ 	for i, id in ids do
+ 		if table.find(ids, id, i + 1) then
+@@ -149,9 +368,21 @@ local function twice(ids: { string }): string?
+ 	return nil
+ end
+ 
+-local function isStem(stem: string): boolean
+-	return string.match(stem, "^design%-review%-%d%d%d$") ~= nil
+-		or string.match(stem, "^review%-%d%d%d$") ~= nil
++-- c0136: the step group `(erred <skill>)` or `(erred <skill>, upstream <skill>)`, given its text between the
++-- parentheses. A skill is lowercase kebab; erred alone may be `none` (no step erred). Returns erred, upstream, or a problem.
++local function parseSteps(inner: string): (string?, string?, string?)
++	local erred, upstream = string.match(inner, "^erred ([^%s,]+), upstream ([^%s,]+)$")
++	if not erred then
++		erred = string.match(inner, "^erred ([^%s,]+)$")
++	end
++	if not erred then
++		return nil, nil, "the step group is (erred <skill>) or (erred <skill>, upstream <skill>)"
++	end
++	local problem = validSteps(erred, upstream)
++	if problem then
++		return nil, nil, problem
++	end
++	return erred, upstream, nil
+ end
+ 
+ function lessons.parseHarvest(item: string, text: string): ({ Entry }, { string })
+@@ -166,13 +397,25 @@ function lessons.parseHarvest(item: string, text: string): ({ Entry }, { string
+ 		if noteText then
+ 			local note = trim(noteText)
+ 			local entry: Entry = { item = item, review = "note", finding = "", lessons = {}, note = note }
++			-- c0136: a trailing `(erred …)` group belongs to the entry, not to the note's text
++			local base, inner = string.match(note, "^(.-)%s*%((erred [^()]*)%)$")
++			local stepProblem: string? = nil
++			if base and inner then
++				note = trim(base)
++				entry.note = note
++				entry.erred, entry.upstream, stepProblem = parseSteps(inner)
++			end
+ 			for id in string.gmatch(ids :: string, "[^,]+") do
+ 				table.insert(entry.lessons, trim(id))
+ 			end
+-			if note == "" then
++			if stepProblem then
++				table.insert(problems, `{item}/harvest.md: note {note}: {stepProblem}`)
++			elseif note == "" then
+ 				table.insert(problems, `{item}/harvest.md: note: a note needs its text`)
+ 			elseif #entry.lessons == 0 or table.find(entry.lessons, "") then
+ 				table.insert(problems, `{item}/harvest.md: note {note}: the target must be lesson ids`)
++			elseif entry.erred == "none" then
++				table.insert(problems, `{item}/harvest.md: note {note}: erred none names no lesson`)
+ 			else
+ 				local ok = true
+ 				for _, lid in entry.lessons do
+@@ -189,13 +432,26 @@ function lessons.parseHarvest(item: string, text: string): ({ Entry }, { string
+ 			end
+ 			continue
+ 		end
+-		local stem, finding, target = string.match(line, "^%- (%S+) (F%d+):%s*(.-)%s*$")
++		local stem, finding, rest = string.match(line, "^%- (%S+) (F%d+)(.*)$")
++		-- c0136: `: target`, or ` (erred …): target`
++		local inner, target = string.match(rest or "", "^%s*%(([^()]*)%)%s*:%s*(.-)%s*$")
++		if not inner then
++			target = string.match(rest or "", "^:%s*(.-)%s*$")
++		end
+ 		if not stem or not finding or not target or not isStem(stem) then
+ 			table.insert(problems, `{item}/harvest.md: not an entry: {line}`)
+ 			continue
+ 		end
+ 		local key = `{stem} {finding}`
+ 		local entry: Entry = { item = item, review = stem, finding = finding, lessons = {}, oneOff = nil }
++		if inner then
++			local stepProblem: string?
++			entry.erred, entry.upstream, stepProblem = parseSteps(inner)
++			if stepProblem then
++				table.insert(problems, `{item}/harvest.md: {key}: {stepProblem}: ({inner})`)
++				continue
++			end
++		end
+ 		local reason = string.match(target, "^one%-off:%s*(.*)$")
+ 		if reason then
+ 			if trim(reason) == "" then
+@@ -226,6 +482,10 @@ function lessons.parseHarvest(item: string, text: string): ({ Entry }, { string
+ 			table.insert(problems, `{item}/harvest.md: {key}: lesson {dup} is named twice`)
+ 			continue
+ 		end
++		if entry.erred == "none" and #entry.lessons > 0 then
++			table.insert(problems, `{item}/harvest.md: {key}: erred none names no lesson`)
++			continue
++		end
+ 		if seen[key] then
+ 			table.insert(problems, `{item}/harvest.md: {key}: a second entry for the same finding`)
+ 			continue
+@@ -316,6 +576,23 @@ function lessons.uncovered(items: { Item }): { string }
+ 	return out
+ end
+ 
++-- c0136: the harvest entries that name no step: `<item> <review> <finding>` for a review entry, `<item> note <text>`
++-- for a note. A finding with no entry at all is `uncovered`'s, not listed here.
++function lessons.unattributed(items: { Item }): { string }
++	local out = {}
++	for _, item in byId(items) do
++		for _, e in entriesOf(item) do
++			if e.erred == nil then
++				table.insert(
++					out,
++					if e.note then `{item.id} note {e.note}` else `{item.id} {e.review} {e.finding}`
++				)
++			end
++		end
++	end
++	return out
++end
++
+ -- findings per lesson tag: every review entry (not a note, not one-off) that names a lesson carrying the tag counts
+ -- once for that tag, however many of its lessons carry it; `items` counts the distinct items those findings are in.
+ -- Most findings first, then tag order. A lesson id that `all` does not hold adds nothing.
+@@ -426,23 +703,200 @@ function lessons.check(tree: Tree): { string }
+ 		end
+ 	end
+ 	for _, item in tree.items do
+-		if not item.harvest then
+-			continue
++		-- c0136: the problems of each review's step lines, per finding
++		local stepProblems: { [string]: { [string]: boolean } } = {}
++		local lineProblems: { { stem: string, finding: string, text: string } } = {}
++		for stem, text in item.reviews do
++			stepProblems[stem] = {}
++			local _, bad = lessons.findingSteps(text, tree.skills)
++			for _, p in bad do
++				local finding = string.match(p, "^(F%d+):") or ""
++				stepProblems[stem][finding] = true
++				table.insert(lineProblems, { stem = stem, finding = finding, text = p })
++			end
++		end
++		local entries: { Entry } = {}
++		if item.harvest then
++			local bad: { string }
++			entries, bad = lessons.parseHarvest(item.id, item.harvest)
++			for _, p in bad do
++				add(p)
++			end
++		end
++		-- a focused review whose heading names no readable phase is a problem; a committed one is never edited, so a note
++		-- `- note focused-review-NNN phase <design|build> (erred zz-review): <lessons>` supplies the phase and clears it
++		local phaseOf: { [string]: string } = {}
++		for stem, text in item.reviews do
++			phaseOf[stem] = lessons.reviewPhase(stem, text)
++		end
++		for _, e in entries do
++			local stem, word = string.match(e.note or "", "^(%S+) phase (%a+)$")
++			if e.note and stem and word then
++				local who = `{item.id}/harvest.md: note {e.note}`
++				if not string.match(stem, "^focused%-review%-%d%d%d$") then
++					add(`{who}: a phase note names a focused review`)
++				elseif e.erred ~= "zz-review" then
++					add(`{who}: a phase note is (erred zz-review)`)
++				elseif word ~= "design" and word ~= "build" then
++					add(`{who}: the phase is design or build`)
++				elseif not item.reviews[stem] then
++					add(`{who}: no {stem}.md in {item.id}`)
++				elseif phaseOf[stem] ~= "none" then
++					add(`{who}: {stem}.md already names its phase`)
++				else
++					phaseOf[stem] = word
++				end
++			end
++		end
++		for stem, phase in phaseOf do
++			if phase == "none" then
++				add(
++					`{item.id}/{stem}.md: the heading must say (focused mode, design) or (focused mode, build)`
++				)
++			end
+ 		end
+-		local entries, bad = lessons.parseHarvest(item.id, item.harvest)
+-		for _, p in bad do
+-			add(p)
++		-- a review committed with step lines that cannot be read is never edited: a note
++		-- `- note <stem> F<n> step lines invalid (erred zz-review): <lessons>` waives that finding's problems, and only a
++		-- finding that has one
++		local waived: { [string]: boolean } = {}
++		for _, e in entries do
++			local stem, finding, rest = lessons.noteHead(e.note or "")
++			if
++				e.note
++				and stem
++				and finding
++				and string.sub(rest, 1, #"step lines invalid") == "step lines invalid"
++			then
++				local who = `{item.id}/harvest.md: note {e.note}`
++				if e.erred ~= "zz-review" then
++					add(`{who}: a waiver note is (erred zz-review)`)
++				elseif not item.reviews[stem] then
++					add(`{who}: no {stem}.md in {item.id}`)
++				elseif not stepProblems[stem][finding] then
++					add(`{who}: {stem}.md {finding} has no step-line problem to waive`)
++				else
++					waived[`{stem} {finding}`] = true
++				end
++			end
++		end
++		for _, lp in lineProblems do
++			if not waived[`{lp.stem} {lp.finding}`] then
++				add(`{item.id}/{lp.stem}.md {lp.text}`)
++			end
++		end
++		-- c0136: whether a finding is design's is a fact about the finding, computed once and applied to its entry and
++		-- to every note headed for it: its review is a design round (or unreadable), or the step lines that bind or the
++		-- group of its entry name a design step
++		local findingDesign: { [string]: boolean } = {}
++		local function isDesignStep(name: string?): boolean
++			return name ~= nil and table.find(lessons.DESIGN_STEPS, canon(name, tree.skills)) ~= nil
++		end
++		for stem, text in item.reviews do
++			for finding, bound in lessons.findingSteps(text, tree.skills) do
++				if isDesignStep(bound.erred) or isDesignStep(bound.upstream) then
++					findingDesign[`{stem} {finding}`] = true
++				end
++			end
++		end
++		for _, e in entries do
++			if not e.note and (isDesignStep(e.erred) or isDesignStep(e.upstream)) then
++				findingDesign[`{e.review} {e.finding}`] = true
++			end
+ 		end
+ 		for _, e in entries do
++			-- c0136: the named steps are skills, and a lesson is filed under one of them
++			local who = if e.note
++				then `{item.id}/harvest.md: note {e.note}`
++				else `{item.id}/harvest.md: {e.review} {e.finding}`
++			-- a note about a finding must name a review of this item and a finding that review has, as an entry must
++			local noteStem, noteFinding, noteRest = lessons.noteHead(e.note or "")
++			if
++				e.note
++				and noteStem
++				and noteFinding
++				and string.sub(noteRest, 1, #"step lines invalid") ~= "step lines invalid"
++			then
++				local review = item.reviews[noteStem]
++				if not review then
++					add(`{who}: no {noteStem}.md in {item.id}`)
++				elseif not table.find(lessons.findings(review), noteFinding) then
++					add(`{who}: {noteStem}.md has no {noteFinding}`)
++				end
++			end
++			-- an attempt at a head that does not read (a typo'd stem, a lowercase f1, a comma) is a message, never an
++			-- unjudged note; legacy notes (no group) are not judged
++			if e.note and e.erred ~= nil and noteStem == nil then
++				local words = string.split(e.note, " ")
++				local phaseNote = string.match(e.note, "^%S+ phase %a+$") ~= nil
++				local tries = words[1] ~= nil and string.find(words[1], "review-", 1, true) ~= nil
++				for i = 1, #words do
++					tries = tries or string.match(words[i], "^[Ff]%d+%p*$") ~= nil
++				end
++				if tries and not phaseNote then
++					add(`{who}: a note about a finding starts <stem> F<n>, such as design-review-001 F1`)
++				end
++			end
++			local erred = e.erred
++			if erred ~= nil then
++				local steps = stepsText(erred, e.upstream)
++				local both: { string } = if e.upstream then { erred, e.upstream } else { erred }
++				for _, step in both do
++					if step ~= "none" and not tree.skills[canon(step, tree.skills)] then
++						add(`{who}: no skill {step} (no {step}/SKILL.md in any skills folder)`)
++					end
++				end
++				local up = e.upstream
++				local erredNow = canon(erred, tree.skills)
++				local upNow = if up then canon(up, tree.skills) else nil
++				-- a mistake design made or should have caught: it names a design step, or it answers a finding of a
++				-- design-phase review (a design round, or a focused review that says design), as an entry or as a note
++				-- headed `<stem> F<n>`, unless it is the reviewer's own mistake
++				local designStep = table.find(lessons.DESIGN_STEPS, erredNow) ~= nil
++					or (upNow ~= nil and table.find(lessons.DESIGN_STEPS, upNow) ~= nil)
++				local headStem: string? = if e.note then noteStem else e.review
++				local headFinding: string? = if e.note then noteFinding else e.finding
++				-- an unreadable phase counts as design: it is never read as the unguarded answer
++				local headPhase = if headStem then phaseOf[headStem] else nil
++				local designKey = if headStem and headFinding then `{headStem} {headFinding}` else nil
++				local designFinding = designKey ~= nil and findingDesign[designKey] == true
++				local designReview = headPhase ~= nil
++					and (headPhase ~= "build" or designFinding)
++					and erred ~= "none"
++				local why = if designStep
++					then "the line names a design step"
++					elseif headPhase ~= "build" then "it answers a design review finding"
++					else "it answers a finding whose lines or entry name a design step"
++				for _, lid in e.lessons do
++					local skill = string.match(lid, "^([^/]+)/")
++					if skill ~= erredNow and skill ~= upNow then
++						add(
++							`{who}: lesson {lid} is filed under {skill}, which the line does not name ({steps})`
++						)
++					end
++					local parsed = if tree.lessons[lid] then lessons.parse(lid, tree.lessons[lid]) else nil
++					-- the reviewer's own mistake is a reviewer lesson, which a reviewer reads whatever its `when:`: exempt only
++					-- when the lesson is filed under zz-review (a lesson filed under the upstream skill reaches design)
++					local ownMistake = erredNow == "zz-review" and skill == "zz-review"
++					if
++						(designStep or (designReview and not ownMistake))
++						and parsed
++						and parsed.when == "build"
++					then
++						add(
++							`{who}: lesson {lid} is when: build, but {why} ({steps}): a mistake design made or should have caught reaches design (when: design or both)`
++						)
++					end
++				end
++			end
+ 			if e.note then
+ 				for _, lid in e.lessons do
+ 					if not tree.lessons[lid] then
+-						add(`{item.id}/harvest.md: note {e.note}: no lesson {lid}`)
++						add(`{who}: no lesson {lid}`)
+ 					end
+ 				end
+ 				continue
+ 			end
+-			local key = `{item.id}/harvest.md: {e.review} {e.finding}`
++			local key = who
+ 			local review = item.reviews[e.review]
+ 			if not review then
+ 				add(`{key}: no {e.review}.md in {item.id}`)
+@@ -451,6 +905,22 @@ function lessons.check(tree: Tree): { string }
+ 			if not table.find(lessons.findings(review), e.finding) then
+ 				add(`{key}: {e.review}.md has no {e.finding}`)
+ 			end
++			-- c0136: the reviewer's attribution is the entry's, when the review gives one
++			local said = lessons.findingSteps(review, tree.skills)[e.finding]
++			if said and erred == nil then
++				add(
++					`{key}: {e.review}.md {e.finding} gives Erred: {said.erred}, Upstream: {said.upstream or "none"}: the entry copies them as its (erred …) group`
++				)
++			end
++			if said and erred ~= nil then
++				local entryUp = if e.upstream then canon(e.upstream, tree.skills) else nil
++				if canon(erred, tree.skills) ~= said.erred or entryUp ~= said.upstream then
++					local was = `Erred: {said.erred}, Upstream: {said.upstream or "none"}`
++					add(
++						`{key}: the line says ({stepsText(erred, e.upstream)}) but {e.review}.md {e.finding} says {was}`
++					)
++				end
++			end
+ 			for _, lid in e.lessons do
+ 				if not tree.lessons[lid] then
+ 					add(`{key}: no lesson {lid}`)
+@@ -658,14 +1128,33 @@ local function ledgerLine(
+ 		for _, hit in skillsLib.oldLessonIds(text, existing) do
+ 			table.insert(found, `{hit.old}/{hit.slug}`)
+ 		end
+-		return skillsLib.renameLessonIds(text, existing)
++		local renamed, n = skillsLib.renameLessonIds(text, existing)
++		-- c0136: the skill names of a step group are renamed too (the table keeps old records valid; this keeps the
++		-- ledger itself current)
++		local renames = 0
++		local out = string.gsub(renamed, "%((erred [^()]*)%)", function(inner: string): string
++			local fixed = inner
++			for _, key in { "erred", "upstream" } do
++				fixed = string.gsub(fixed, `{key} ([%w%-]+)`, function(name: string): string
++					local new = skillsLib.RENAMED[name]
++					if new then
++						renames += 1
++						table.insert(found, `{name}/(step)`)
++						return `{key} {new}`
++					end
++					return `{key} {name}`
++				end)
++			end
++			return `({fixed})`
++		end)
++		return out, n + renames
+ 	end
+ 	local entry = lessons.parseHarvest("x", line)[1]
+ 	local head, ids
+ 	if entry and entry.note then
+ 		head, ids = string.match(line, "^(%- note .*: )([^:]*)$")
+ 	elseif entry and not entry.oneOff then
+-		head, ids = string.match(line, "^(%- %S+ F%d+:%s*)(.*)$")
++		head, ids = string.match(line, "^(%- %S+ F%d+[^:]*:%s*)(.*)$")
+ 	end
+ 	if not entry or entry.oneOff or not head or not ids then
+ 		-- no id list on this line: all of it is prose
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..5ceb89cc 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -79,7 +79,7 @@ usage: ./zn <command> ...
+   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
+                                                 and open it in the browser; -O only writes it
+   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
+-                                                list skill lessons; also --tags, --check, and --uncovered <id>...
++                                                list skill lessons; also --tags, --check, --check-review <path>, --uncovered <id>... and --unattributed <id>...
+   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
+                                                 <project>/skills); --check writes nothing and exits 1 on a problem]]
+ 
+@@ -762,6 +762,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 			or a == "--check"
+ 			or a == "--tags"
+ 			or a == "--uncovered"
++			or a == "--unattributed"
+ 			or a == "--apply"
+ 		then
+ 			opts[a] = { "true" }
+@@ -2880,6 +2881,14 @@ function cmd.renumber(pos: { string })
+ 			fs.move(item.dir, dest)
+ 			fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
+ 		end
++		if not byDir then
++			-- c0136: the stream reviews of this issue, in whichever raft folder holds them, take the new id too
++			local folders: { string } = {}
++			for _, found in audit.scan(".") do
++				table.insert(folders, found.path)
++			end
++			compactLib.moveStreams(".", folders, { [old] = new :: string })
++		end
+ 		if byDir then
+ 			rewriteUnder(dest, old, new :: string)
+ 		else
+@@ -4176,7 +4185,7 @@ local function buildLessons(project: string?): string
+ end
+ 
+ local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
+-	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
++	.. "       ./zn lessons --tags | --check | --check-review <review.md> | --uncovered [<id>...] | --unattributed [<id>...]"
+ 
+ -- `skills [--check]` (c0115): one relative link in .claude/skills per skill folder. --check only reads (the gate
+ -- runs it); without it the links are written, so it refuses in the main checkout like every other writer.
+@@ -4240,6 +4249,8 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 		["--tags"] = true,
+ 		["--check"] = true,
+ 		["--uncovered"] = true,
++		["--unattributed"] = true,
++		["--check-review"] = true,
+ 	}
+ 	local n = 0
+ 	for k, values in opts do
+@@ -4254,13 +4265,13 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 		n += 1
+ 	end
+ 	local modes = 0
+-	for _, k in { "--tags", "--check", "--uncovered" } do
++	for _, k in { "--tags", "--check", "--uncovered", "--unattributed", "--check-review" } do
+ 		if opts[k] then
+ 			modes += 1
+ 		end
+ 	end
+-	if modes > 0 and (n > 1 or (not opts["--uncovered"] and #pos > 0)) then
+-		usage("--tags, --check and --uncovered take no other option")
++	if modes > 0 and (n > 1 or (not opts["--uncovered"] and not opts["--unattributed"] and #pos > 0)) then
++		usage("--tags, --check, --check-review, --uncovered and --unattributed take no other option")
+ 	end
+ 	local when = opts["--when"] and opts["--when"][1]
+ 	if opts["--when"] and (#opts["--when"] > 1 or (when ~= "design" and when ~= "build")) then
+@@ -4287,7 +4298,27 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 		print(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`)
+ 		return
+ 	end
+-	if opts["--uncovered"] then
++	if opts["--check-review"] then
++		-- c0136: the step lines of one review file, wherever it is (an interactive reviewer's file, a dispatcher's state
++		-- folder, a stream reviewer's text a lead holds): read-only, before the file is committed and never edited
++		local path = opts["--check-review"][1]
++		if not fs.isFile(path) then
++			usage(`{path}: no such file`)
++		end
++		local stem = string.match(path, "([^/]+)%.md$") or ""
++		local text = fs.readFile(path)
++		local out: { string } = {}
++		for _, p in lessonsLib.checkNewReview(stem, text, tree.skills) do
++			table.insert(out, `{path} {p}`)
++		end
++		if #out > 0 then
++			print(table.concat(out, "\n"))
++			process.exit(1)
++		end
++		print(`{path}: step lines ok`)
++		return
++	end
++	if opts["--uncovered"] or opts["--unattributed"] then
+ 		local items = tree.items
+ 		if #pos > 0 then
+ 			items = {}
+@@ -4306,12 +4337,18 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 				end
+ 			end
+ 		end
+-		local gaps = lessonsLib.uncovered(items)
++		local gaps = if opts["--uncovered"]
++			then lessonsLib.uncovered(items)
++			else lessonsLib.unattributed(items)
+ 		if #gaps > 0 then
+ 			print(table.concat(gaps, "\n"))
+ 			process.exit(1)
+ 		end
+-		print("harvest: every finding is covered")
++		print(
++			if opts["--uncovered"]
++				then "harvest: every finding is covered"
++				else "harvest: every entry names its step"
++		)
+ 		return
+ 	end
+ 	local all = parsedLessons(tree)
+diff --git a/z-nile/engine/trail.luau b/z-nile/engine/trail.luau
+index 3b027518..ccf2bb6e 100644
+--- a/z-nile/engine/trail.luau
++++ b/z-nile/engine/trail.luau
+@@ -58,7 +58,13 @@ function trail.isDoc(name: string): boolean
+ 		return false
+ 	end
+ 	for _, pattern in
+-		{ "^design%-review%-%d+%.md$", "^review%-%d+%.md$", "^design%-refute%-%d+%.md$", "^refute%-%d+%.md$" }
++		{
++			"^design%-review%-%d+%.md$",
++			"^review%-%d+%.md$",
++			"^design%-refute%-%d+%.md$",
++			"^refute%-%d+%.md$",
++			"^focused%-review%-%d+%.md$",
++		}
+ 	do
+ 		if string.match(name, pattern) then
+ 			return false
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 9baa6675..f04495ff 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -63,14 +63,14 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+    - Fix it in the documents, specs or `check.sh`.
+    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`). Once the round is answered, `./zn spend <id> --phase design-review --time <your answering minutes> --note design-refute-NNN`.
+    - **Never answer a finding by cutting scope.** If the only fix you see removes, defers or shrinks an outcome the Problem asks for, ask the user before you answer it, and write their answer into the Problem as a `Scope decision` line (**Scope is what was captured**, above). Without that line, the answer is a redesign that keeps the outcome.
+-   - **Harvest the round** as you answer it: add one entry per finding of `design-review-NNN.md` to `harvest.md` in the issue's folder, naming a new lesson, a new source for an existing one (prefer this), or `one-off: <reason>` (format: zz-rules skill, Items). A finding that repeats a lesson the pass should have caught sharpens that lesson's `check`. Then run `./zn lessons --check`, and rerun `./zn promote-check <id>` after the round's spec edits (the test runner does not type-check). The next round's reviewer judges the new lessons; the lessons and the ledger ride in the prep commit.
++   - **Harvest the round** as you answer it: add one entry per finding of `design-review-NNN.md` to `harvest.md` in the issue's folder. Each entry carries the step group copied from the finding's `Erred:` and `Upstream:` lines (`(erred z-design, upstream z-ticket)`), and names a lesson filed under one of those skills, `when: design` or `both` (a finding of a design round is a mistake design made or should have caught; only a lesson filed under `zz-review` for the reviewer's own mistake is exempt) (a new source for an existing one is preferred to a new lesson), or `one-off: <reason>` (`(erred none)` when the finding points out no mistake) (format: zz-rules skill, Items). A round written before these lines existed has none, and you name the step, the skill whose instructions you were following or the earlier step that should have prevented it; a new round without them goes back to its reviewer before you commit or harvest it: run `./zn lessons --check-review <the round's file>` on every round you receive, and a failure sends it back. A finding that repeats a lesson the pass should have caught sharpens that lesson's `check`. Then run `./zn lessons --check`, and rerun `./zn promote-check <id>` after the round's spec edits (the test runner does not type-check). The next round's reviewer judges the new lessons; the lessons and the ledger ride in the prep commit.
+ 4. **Rounds: up to 5 rounds, prefer 3.** One rule decides, from the round's `design-review-NNN.md` severities and the diff of your answers:
+    - After round 1 or 2, run another round with a new clean reviewer if any high finding was fixed or refuted (a new reviewer rules on a refutation), or answering the round was more than minor (defined below).
+    - After round 3 or 4, run the next round only if that round was **major**: it had a **high** finding, or answering it was more than minor.
+    - Minor means the answers changed only wording, labels, comments or single assertions, and added no rule, interface, state, spec case, Rules and mutants row or public API change.
+    - A re-prep after the user resets an item's scope restarts the count: its first new round is round 1, whatever its file number, and the issue's Unknowns & experiments says which file it starts at.
+    - The **final round** is the round after which this rule runs no further round: any round 1 to 4 where it says stop, or round 5, which is always final. A final round holds a high only in round 5, and such a round goes to the user, whatever you answered to it.
+-5. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered <id>` still lists (rounds written before lessons existed, or a round that slipped), as step 3 says. Then `./zn lessons --uncovered <id>` and `./zn lessons --check` must both pass. Then **check the scope**: compare the issue's document with `./zn capture <id>` (**Scope is what was captured**, above). Its title, Problem and Solution ideas may only have gained detail and decision lines, and every captured outcome has a Design and an acceptance criterion. Anything else goes to the user before `design: ready`.
++5. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered <id>` still lists (rounds written before lessons existed, or a round that slipped), as step 3 says, and give a step to every entry `./zn lessons --unattributed <id>` lists. Then `./zn lessons --uncovered <id>`, `./zn lessons --unattributed <id>` and `./zn lessons --check` must all pass. Then **check the scope**: compare the issue's document with `./zn capture <id>` (**Scope is what was captured**, above). Its title, Problem and Solution ideas may only have gained detail and decision lines, and every captured outcome has a Design and an acceptance criterion. Anything else goes to the user before `design: ready`.
+    When the final round has `Verdict: approve`, or it has no high finding and every finding in it is answered `fixed` or `refuted`, set `design: ready` (a final round with a high, which only round 5 can be, or with an unanswered finding goes to the user instead) on the issue, **then run `./zn status <id> prepared`** (carried: it edits the local document, and refuses unless the issue is `design: ready` and `preparing` on `origin/main`), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` line by hand to `prepared-<three words>` instead). Without it the issue keeps its `preparing` stamp and z-raft can't group it. Leave `raft:` empty: z-raft writes it.
+ 
+ ## 6. Commit and hand off
+@@ -87,6 +87,8 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-design --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index b9eec2d1..389ce69d 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -38,7 +38,7 @@ In each raft document this branch changes (`R<NNNN>.md`):
+ Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
+ 
+ ## 4. Coherence review (a raft of several issues)
+-A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on Opus 5.5 (as z-design step 5.2 says). It writes `design-review-NNN.md` in the raft's folder. Answer every finding in the raft document, or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One round per grouping: a raft whose record changes (a member folded, re-folded or recombined in) gets a new round, and an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), and a review file is never edited after it is written (a new round is a new `design-review-NNN.md`), and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
++A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on Opus 5.5 (as z-design step 5.2 says). It writes `design-review-NNN.md` in the raft's folder. Answer every finding in the raft document, or in `design-refute-NNN.md`, run `./zn lessons --check-review` on it, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>`, `./zn lessons --unattributed <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One round per grouping: a raft whose record changes (a member folded, re-folded or recombined in) gets a new round, and an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), and a review file is never edited after it is written (a new round is a new `design-review-NNN.md`), and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
+ As soon as the reviewer returns, `./zn spend <R-id> --phase design-review --time <reviewer minutes> --tokens <reviewer tokens> --note design-review-NNN` (it shares the row among the members this branch gives the raft), and again for your answering time.
+ 
+ ## 5. Prepare and land
+@@ -56,6 +56,8 @@ The rafts and their members, the plan's skips, the coherence findings and what c
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-raft --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/z-ready/SKILL.md b/z-nile/skills/z-ready/SKILL.md
+index 7e8e396f..9597111a 100644
+--- a/z-nile/skills/z-ready/SKILL.md
++++ b/z-nile/skills/z-ready/SKILL.md
+@@ -25,6 +25,8 @@ To change what every prompt contains, edit `z-nile/templates/prompt.md` or the s
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-ready --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/z-run/SKILL.md b/z-nile/skills/z-run/SKILL.md
+index 1be60a47..9957cd91 100644
+--- a/z-nile/skills/z-run/SKILL.md
++++ b/z-nile/skills/z-run/SKILL.md
+@@ -15,6 +15,8 @@ Start the session in the main checkout, which stays on `main`. The skill takes a
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-run --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/z-stop/SKILL.md b/z-nile/skills/z-stop/SKILL.md
+index d323cc20..1e84f50c 100644
+--- a/z-nile/skills/z-stop/SKILL.md
++++ b/z-nile/skills/z-stop/SKILL.md
+@@ -19,6 +19,8 @@ description: Undo z-ready, or abort a started raft. Gives the claim back, moves
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-stop --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
+index 5b284959..532c1ac6 100644
+--- a/z-nile/skills/z-ticket/SKILL.md
++++ b/z-nile/skills/z-ticket/SKILL.md
+@@ -28,6 +28,8 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-ticket --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index 5d60a654..9b74ff7e 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -38,6 +38,8 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-arch --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 5628ff86..2259d4b2 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -43,7 +43,7 @@ For each issue:
+ ## Phase 2B: Parallel workstreams (instead of Phase 2, when the plan allows it)
+ Use this when `./zn workstreams <R-id>` ends with `parallel: yes` (the prompt embeds the plan) and the human hasn't asked for sequential execution. Otherwise run Phase 2 as written (Phase 2A). You are the **lead**: you alone push, merge, comment on the PR, allocate ids, and run `./zn commit`, `focus` and `done`. The rest of this phase uses subagents; they can't spawn others, so you start every one of them.
+ 
+-**Candidate lessons are written as they arrive**, so no path (an approving review, a blocked or taken-over stream) can drop them. Each time a stream's report reaches you (done or blocked), and each time you commit a `stream-review-<issue>-NNN.md`, write the candidate lessons it holds as `- note ws-<issue>: <lesson ids>` (from a report) or `- note stream-review-<issue>-NNN: <lesson ids>` (from a stream review) in the raft's `harvest.md`, with a new lesson file only when no lesson fits. Commit them on their own: `./zn commit -m "<issue>: lessons" --phase code-review --issue <issue>`.
++**Candidate lessons are written as they arrive**, so no path (an approving review, a blocked or taken-over stream) can drop them. Each time a stream's report reaches you (done or blocked), and each time you commit a `stream-review-<issue>-NNN.md`, write what it holds in the raft's `harvest.md`: a candidate lesson of a report as `- note ws-<issue> (erred <skill>): <lesson ids>` (you name the step the candidate is about), and every finding of a stream review as an entry `- stream-review-<issue>-NNN F<n>: <lesson ids>` (or `one-off: <reason>`), each with its step group `(erred <skill>[, upstream <skill>])` before the colon, copied from the finding's `Erred:` and `Upstream:` lines (run `./zn lessons --check-review <the file>` on each stream review before you commit it; one that fails, or has none, goes back to its reviewer). A new lesson file only when no lesson fits. Commit them on their own: `./zn commit -m "<issue>: lessons" --phase code-review --issue <issue>`.
+ 
+ 1. **Plan.** Run `./zn workstreams <R-id>`, post it as a PR comment, and execute **wave by wave**. A stream is one issue; the issues in a wave don't depend on each other and don't share files.
+ 2. **Start a wave.** For every issue in the wave, create its worktree from the raft branch: `./zn worktree ws-<issue> --from <raft branch>`. Then spawn one **Sonnet** subagent per stream (Agent tool, `model: "sonnet"`), **all in one message so the streams run concurrently**. Each brief contains:
+@@ -86,7 +86,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+    - `- F3: deferred <id>: <why>`, only as step 7 allows (a medium or low finding left in the final round).
+    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as z-design's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
+    4a. **Question a twice-hit mechanism.** When a finding is the second in two rounds against the same mechanism (the same guard, module or rule), stop patching. Before the next round, question the mechanism (a deny-list or an allowlist? a patch or a redesign?) and say which you chose, and why, in the refute file.
+-5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md` (any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
++5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md`, with its step group (a code review that finds a design hole names `z-design`, not this step, and a finding about something design wrote, the issue document, `check.sh` or a sequestered spec, names `Upstream: z-design`; run `./zn lessons --check-review <the round's file>` on each new review round, and a round that fails, or has no step lines, goes back to its reviewer; any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+ 6. **Re-review** after round 1 or 2 with `review-NNN+1.md` from a *new* clean reviewer if any of these are true (repeat from step 1); from round 3 on, step 7 decides instead:
+    - any high-severity finding was fixed;
+    - the fixes changed a public API or the design;
+@@ -99,7 +99,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+ ## Phase 5: Done
+ 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
+ 2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --full`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
+-3. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
++3. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Give a step to every entry `./zn lessons --unattributed R0010` lists (a raft prepped before steps existed: you judge it, as z-design step 5.3 says). Then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
+ 4. `./zn done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
+ 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
+ 
+@@ -145,6 +145,8 @@ Workstreams: <issue>: <stream review verdict> | sequential   (one line per issue
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-execute --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index cec2eae1..9993cf9f 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -17,6 +17,7 @@ You have no shared context with the author. Judge only what's in front of you:
+ ## Output file
+ - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
+ - Code mode: `review-NNN.md`, in the raft directory.
++- Stream and focused modes: the reviewer returns the markdown and the lead writes `stream-review-<issue>-NNN.md` (the raft's folder) or `focused-review-NNN.md` (folder: zz-rules skill, Items).
+ - `NNN` continues from the highest existing number.
+ 
+ ```markdown
+@@ -30,6 +31,8 @@ Critique: <why it matters, and the fix the author will be tempted to make>
+ Consequences: <take that fix one step further: the new rules, state, edge cases or user decisions it brings, or "none">
+ Recommendation: <the fix that holds up after its consequences, with the spec cases or decisions it needs>
+ Lesson: <skill>/<slug> (only when the finding repeats an existing lesson)
++Erred: <skill, or none>
++Upstream: <earlier skill, or none>
+ 
+ ### F2 [medium] ...
+ 
+@@ -44,6 +47,11 @@ Verdict: approve | changes
+ - **medium**: a likely future defect, a scalability trap, an architecture rule bent, a missing test for an edge case.
+ - **low**: a clarity or maintainability improvement.
+ 
++**Attribute every finding.** Each finding ends with two lines, and a review with any of them has them on every finding:
++- `Erred:` the skill of the step that made the mistake, the skill whose instructions the author was following when it was made: `z-ticket` for a vague capture, `z-design` for a design hole, `zz-execute` for a build mistake, or a skill the author read for it (`zz-test` for a spec, `zz-arch` or `pickman-arch` for code). Never the step under review by default: a code review that finds a design hole names `z-design`, and a design review that finds a capture too vague names `z-ticket`. Every finding of a design review is a mistake made in design (or in the capture it was given): name `z-design`, `z-ticket` or `z-raft`, or the skill the author read for it with `Upstream: z-design`; `Erred: zz-review` is for an earlier round's own mistake (a wrong finding or recommendation); a mistake an earlier round missed names the step that made it, with `Upstream: zz-review`. In code mode, when the mistake sits in something design wrote (the issue document, `check.sh`, a sequestered spec, a prototype it copied), `Upstream:` names `z-design`. `none` when no step erred (a clarity improvement, a taste call).
++- `Upstream:` the skill of an earlier step that should have prevented or caught it (the capture that left the point out, the design that did not specify it, the earlier review that missed it), or `none`. Ask: which step made this mistake, and which earlier step should have caught it?
++The author's harvest line copies both and the lesson is filed under one of them (zz-rules skill, Items); `./zn lessons --check` refuses a line that differs from yours. Before you end, run `./zn lessons --check-review <the file you wrote>` (read-only; it works wherever the file is, a dispatcher's state folder included) and fix every problem it names: a file is never edited after you hand it back, and a line that cannot be read binds nothing. `./zn lessons --check-review` refuses a file that has findings and no step lines (unbolded, at the start of a line). A round with no step lines at all is not finished: the author sends it back to you (a lead holding a stream or focused reviewer's text asks that reviewer again), and uses your text as it is.
++
+ **Think one step further.** A finding isn't finished at "here's the fix". Say what new rule, state, edge case or user decision the fix brings, and how it interacts with existing rules, and make the Recommendation cover it, including its spec cases, so it doesn't come back as next round's finding.
+ 
+ **Never prescribe a cut.** Scope belongs to the user. A Recommendation never makes an outcome the issue's Problem asks for smaller, later or optional. When narrowing is the only fix you can see, the Recommendation starts `escalate to the user:` and lists the options, including what keeping the full scope would cost.
+@@ -79,14 +87,17 @@ Attack all of the following:
+ 7. **Raft coherence**: do the issue designs agree with the whole-raft design and with each other, and is the order right?
+ 8. **Executability**: could an agent that has never seen this repo deliver it from the documents alone, without asking a question?
+ 9. **Repository safety**: could any spec, `check.sh` or script in this raft change the real repository (zz-test skill, "Specs never touch the real repository")? Every command that changes anything must run in a fixture under `.cache/<unique name>` with its own repository, committing as `@example.invalid`. Check especially what the runner can't enforce (that section's "Caught only by review" list). Any path to the real repository, or any weakening of its guards, is **high**.
+-10. **Lessons**: run `./zn lessons --when design --full` and ask each lesson's `check` of the draft. A draft that repeats a lesson's defect is a finding, with that lesson on its `Lesson:` line. Then judge the lessons the author added since the last round (`harvest.md`): each must be a lesson a different raft could fail, not a restated finding; a restated finding is a low finding.
++10. **Lessons**: run `./zn lessons --when design --full` and ask each lesson's `check` of the draft. A draft that repeats a lesson's defect is a finding, with that lesson on its `Lesson:` line. Then judge the lessons the author added since the last round (`harvest.md`): each must be a lesson a different raft could fail, not a restated finding; a restated finding is a low finding. Check each lesson's `when:` against its origin: a lesson for a design step (`z-ticket`, `z-design`, `z-raft`), or from a finding of a design-phase review (a design round, or a focused review whose heading says design) except a lesson filed under `zz-review` for the reviewer's own mistake, must be `design` or `both`, so the next design's lessons pass shows it.
+ 11. **Scope fidelity**: for each item, print its capture (`./zn capture <id>`) and compare the document with it (z-design, **Scope is what was captured**). Its title, Problem and Solution ideas may only gain detail, `Scope decision (user, YYYY-MM-DD)` lines and `Decided with the user (YYYY-MM-DD)` lines. Then check that every captured outcome has a Design and an acceptance criterion: Checked, or Judged or Observed only where the zz-test skill allows it. An outcome dropped, deferred, moved into Non-goals, reworded away or left without a criterion, with no `Scope decision` or `Decided with the user` line, or a Problem rewritten to match a smaller design, is **high**. A capture carrying any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) is not a confirmed capture: say so, and judge the scope from the item's history.
+ 
+ ## Stream mode (zz-execute Phase 2B)
+ A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
+ - **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (the lead puts that text in the brief; it is not in the stream tree). Run the stream's checks (`./zn check <issue>`, `z-nile/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules and its own document. A `stream-review-*` or `stream-refute-*` file in that diff is a finding: those files live only on the raft branch.
+-- **Output**: return the review markdown. Write no file. The lead writes `<root>/rafts/active/<R-id>/stream-review-<issue>-NNN.md` (the raft's folder, `./zn find <R-id>`) on the raft branch, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author returns the refute text; the lead writes `stream-refute-<issue>-NNN.md` on the raft branch.
+-- These files are not review rounds: `./zn done` and `metrics` ignore them.
++- **Output**: return the review markdown, with the `Erred:` and `Upstream:` lines on every finding. Write no file. The lead writes `<root>/rafts/active/<R-id>/stream-review-<issue>-NNN.md` (the raft's folder, `./zn find <R-id>`) on the raft branch, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author returns the refute text; the lead writes `stream-refute-<issue>-NNN.md` on the raft branch.
++- These files are not review rounds: `./zn done` and `metrics` ignore them. The lead writes the reviewer's text as it is, runs `./zn lessons --check-review <the file>` before it commits it (a problem goes back to the reviewer), and harvests every finding as it does, as an entry `- stream-review-<issue>-NNN F<n> (erred <skill>): …` of the raft's `harvest.md` (zz-execute Phase 2B), and `./zn lessons --uncovered <R-id>` lists any it missed.
++
++## Focused mode (any review outside a design or code round)
++A clean reviewer asked about one thing: a rework of a finding, a fix, a recommendation of an earlier review, a change to a skill. The format is the one above (`# Review NNN: <id> (focused mode, design)` when the work reviewed includes design's, the issue document, its specs and `check.sh` (a review of both is `design`), or `(focused mode, build)` otherwise, those words exactly; no Judged section, `Erred:` and `Upstream:` on every finding). The reviewer returns the markdown; the lead runs `./zn lessons --check-review` on it (a problem goes back to the reviewer), writes it as `focused-review-NNN.md` in the folder of the `harvest.md` it will harvest into, the issue's during prep and the raft's during a raft's execution whatever item the review concerns (`./zn find <id>`), numbered from 001, and harvests every finding like a round's, as an entry `- focused-review-NNN F<n> (erred <skill>): …`. It is not a design or code round: `./zn done` and `metrics` ignore the file, and it needs no refute file (the lead answers in the commit that fixes it). A review that concerns no item in the lead's worktree (a programme review with the user, a review of work already in `done/`) leaves no file: the lead harvests each of its findings as a `- note <text> (erred <skill>): <lesson ids>` entry, or, as a lead in the main checkout, captures the lesson as an issue (its Lessons section).
+ 
+ ## Code mode (before the PR is marked ready)
+ Inputs: `./zn sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff origin/main...HEAD`, the raft and issue documents, and the `check.sh` files.
+@@ -105,6 +116,8 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh`
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-review --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 8301ee47..367284fd 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -31,11 +31,12 @@ Each item is a directory named by its ID:
+ <ID>/experiments/       spikes for unknowns (issues)
+ <ID>/design-review-NNN.md, design-refute-NNN.md   from z-design, on the issue; z-raft's coherence review, on the raft
+ <ID>/review-NNN.md, refute-NNN.md                 code review, on the raft
++<ID>/stream-review-<issue>-NNN.md, focused-review-NNN.md   a stream review (raft) and a focused review (the issue's in prep, the raft's in execution): harvested like a round, never a round
+ <ID>/spend.md           written by `./zn commit` and `./zn spend`; never edit by hand
+ ```
+ 
+ - **Skills**: z-nile's skills live in `z-nile/skills/<name>/SKILL.md`, a project's own in `<project>/skills/<name>/SKILL.md` (its name in `z-nile/projects.toml`: `pickman/skills/`). The harnesses find them through `.claude/skills/<name>`, a committed relative link to the real folder (`../../z-nile/skills/<name>`), which `./zn skills` writes and `./zn skills --check` (in the gate) checks: one link per skill, nothing else in `.claude/skills/`. Names are unique across the repository and equal the `name:` in the skill's frontmatter. The `z-` (pipeline) and `zz-` (called from inside a step) prefixes are z-nile's alone: a project's skill is named `<project>-…`, and `./zn skills` refuses any other. Git can't add a path through a link, so every tool, spec, Touched path and edit uses the real folder, never `.claude/skills/<name>/…`.
+-- **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2: <lesson id>, <lesson id>` or `- review-001 F3: one-off: <reason>`, plus `- note <text>: <lesson ids>` for a source that is not a review finding (a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A lesson's sources are the entries naming it, each once. See `./zn lessons`.
++- **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2 (erred z-design): <lesson id>, <lesson id>` or `- review-001 F3 (erred zz-execute): one-off: <reason>`, plus `- note <text>: <lesson ids>` (with its group before the colon too: `- note <text> (erred z-ticket): <lesson ids>`) for a source that is not a review finding (a programme review, a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A review's stem is `design-review-NNN` or `review-NNN` (a design or code round), `stream-review-<issue>-NNN` (a stream review, in its raft's folder) or `focused-review-NNN` (a focused review, in the folder of the `harvest.md` its lead writes in: the issue's during prep, the raft's during a raft's execution, whatever item it concerns). **The step group** (c0136) is `(erred <skill>)` or `(erred <skill>, upstream <skill>)` between the finding and the colon, and every entry names it: `erred` is the skill whose instructions the author was following when the mistake was made (`z-ticket` for a vague capture, `z-design` for a design hole, `zz-execute` for a build mistake, or a skill the author read: `zz-test`, `zz-arch`, `pickman-arch`), `upstream` an earlier step that should have prevented or caught it, and `erred none` (a one-off only) a finding that points out no mistake. Each lesson an entry names is filed under its `erred` or its `upstream` skill, is `when: design` or `both` when either is a design step (`z-ticket`, `z-design`, `z-raft`: a mistake design made, or should have caught, reaches design, even when a code review found it) or the entry answers a finding of a design-phase review (a design round, or a focused review whose heading says `design`; except a lesson filed under `zz-review` for the reviewer's own mistake, which a reviewer reads whatever its `when:`), and `lessons --check` refuses one that is not either, a step that is no skill, and a line that differs from the `Erred:` and `Upstream:` lines of the finding it answers (zz-review skill). Lines that cannot be read (a skill that does not exist, the same skill on both lines, a line missing; a line inside a code fence is not read at all, and a fence never closed is read as no fence) bind nothing and `--check` reports them; the review is never edited, so a note `- note <stem> F<n> step lines invalid (erred zz-review): <lesson ids>` waives that finding's problems (it must be `erred zz-review` and name a finding that has one). A focused review whose heading names no readable phase (exactly `(focused mode, design)` or `(focused mode, build)`; an unreadable phase counts as design) is cleared, as it was never editable, by a note `- note focused-review-NNN phase <design|build> (erred zz-review): <lesson ids>`. A note about a finding, whether an author's disagreement or a further lesson in a third skill (an entry names at most two), is `- note <stem> F<n> <text> (erred <skill>): <lesson ids>` and is judged by the same phase rule as the finding's entry, and must name a review of its item and a finding that review has; `./zn lessons --check-review <path>` checks one new review's step lines (a file with findings and none is refused) and its focused heading, wherever it is. `--unattributed` judges review entries and notes only; any other kind of entry a later change adds is not judged by it. An entry with no group is read as before (it was written before c0136) unless the review it answers gives step lines, when `--check` refuses it (it copies them), and `./zn lessons --unattributed [<id>...]` lists those. A grouped note that starts like a head and is not one (`design-review-01 F1`, `f1`, a comma after the stem) is refused with the form. A lesson's sources are the entries naming it, each once. See `./zn lessons`.
+ 
+ ## Worktrees
+ Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request (except tracker state, see Sync and claim). The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree.
+@@ -77,7 +78,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as the specs do; `--open`, the old opt-in, is still accepted and is the default). The board is the local page; GitHub Actions does not build it. Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
+ | busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`; c0115: `./zn busy .claude/skills z-nile/skills pickman/skills`) is readied only when it prints nothing. Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own and `origin/main` still holds the move's mark; then the move's own branches, the branches listed as stacked on them, the ones the user approved by name, any branch holding the move commit, the move's own active raft, and worktrees on those branches, are named on stderr (`ignored for c0115's freeze: ...`) and not counted; without paths, with a path outside the move's, or once the move lands, nothing is exempt |
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+-| lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
++| lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--check-review <path>`, `--uncovered [<id>...]`, `--unattributed [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any), or lists the entries and notes that name no step (`--unattributed`, exit 1 if any), or checks the step lines of one review file wherever it is (`--check-review`, exit 1 on a problem) |
+ | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
+ | raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
+ | fold | `./zn fold <R-id> <issue>...` | in a worktree, on a clean tree. Puts prepared backlog issues with no `raft:` into a prepared backlog raft of their type and project: publishes the raft's claim (its `status:` only; a raft this checkout already claimed is not claimed again), then writes each issue's `raft:` and the raft's `issues:` here and commits. Refuses a solo issue with others, and a raft that is new, being prepared, active or done |
+@@ -176,6 +177,8 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-rules --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/zz-stats/SKILL.md b/z-nile/skills/zz-stats/SKILL.md
+index 7951422a..63813cec 100644
+--- a/z-nile/skills/zz-stats/SKILL.md
++++ b/z-nile/skills/zz-stats/SKILL.md
+@@ -26,6 +26,8 @@ description: Report cost per issue (agent active time, lines) and the rework rat
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-stats --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..2c31bc95 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -129,6 +129,8 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-test --full`. Each is a mistake made before, with the question that catches it.
+ 
++A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made, or the skill of an earlier step that should have prevented or caught it (that skill is `<the skill the lesson improves>` below). The harvest line names that step as `(erred <skill>[, upstream <skill>])` before its colon (zz-rules skill, Items), and every kind of review and correction is harvested: a finding of a design, code, stream or focused review as an entry of the item's `harvest.md`, and a programme review, a correction by the user or a failed step as a `- note` entry.
++
+ A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+diff --git a/z-nile/tests/acceptance/c0111/harvest.spec.luau b/z-nile/tests/acceptance/c0111/harvest.spec.luau
+index c209392b..4e60d14f 100644
+--- a/z-nile/tests/acceptance/c0111/harvest.spec.luau
++++ b/z-nile/tests/acceptance/c0111/harvest.spec.luau
+@@ -70,7 +70,7 @@ return t.spec("c0111 harvest ledgers", function(it)
+ 				.. "- design-review-001 F1: review/text\n" -- duplicate
+ 				.. "- review-001 F2: one-off:\n" -- no reason
+ 				.. "- review-001 F3: Not An Id\n" -- neither
+-				.. "- stream-review-c0010-001 F1: testing/pin\n" -- not a review stem
++				.. "- stream-review-c0010-1 F1: testing/pin\n" -- not a review stem (c0136: stream-review-c0010-001 is one)
+ 				.. "- design-review-001: testing/pin\n" -- no finding
+ 		)
+ 		t.expect(#problems).toBe(5)
+@@ -78,7 +78,7 @@ return t.spec("c0111 harvest ledgers", function(it)
+ 		t.expect(has(problems, "design-review-001 F1")).toBe(true)
+ 		t.expect(has(problems, "review-001 F2")).toBe(true)
+ 		t.expect(has(problems, "review-001 F3")).toBe(true)
+-		t.expect(has(problems, "stream-review-c0010-001")).toBe(true)
++		t.expect(has(problems, "stream-review-c0010-1")).toBe(true)
+ 	end)
+ 
+ 	it("uncovered findings are listed in item, review and number order", function()
+diff --git a/z-nile/tests/acceptance/c0111/lessons-cli.spec.luau b/z-nile/tests/acceptance/c0111/lessons-cli.spec.luau
+index 34a68da1..766f5d1a 100644
+--- a/z-nile/tests/acceptance/c0111/lessons-cli.spec.luau
++++ b/z-nile/tests/acceptance/c0111/lessons-cli.spec.luau
+@@ -61,7 +61,7 @@ local SEED: { [string]: string } = {
+ 	["pickman/.tracker/rafts/done/R0070/review-001.md"] = review("F1"),
+ 	["pickman/.tracker/issues/active/c0080/review-001.md"] = review("F1"),
+ 	["pickman/.tracker/issues/c0090/design-review-001.md"] = review("F1"),
+-	-- not reviews: a stream review and an experiment copy
++	-- c0136 override: a stream review is a harvest source now (its finding is uncovered below); an experiment copy is not a review
+ 	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 	["pickman/.tracker/rafts/R0010/stream-review-c0010-001.md"] = review("F1"),
+ 	["pickman/.tracker/issues/c0040/experiments/old/design-review-001.md"] = review("F1"),
+@@ -175,6 +175,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
+ 		t.expect(code).toBe(1)
+ 		t.expect(lines(out)).toEqual({
+ 			"R0010 review-001 F1",
++			"R0010 stream-review-c0010-001 F1",
+ 			"R0050 design-review-001 F1",
+ 			"R0070 review-001 F1",
+ 			"c0020 review-001 F1",
+@@ -186,7 +187,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
+ 		t.expect(lines(activeOut)).toEqual({ "R0050 design-review-001 F1" })
+ 		local one, oneOut = run({ "--uncovered", "R0010" })
+ 		t.expect(one).toBe(1)
+-		t.expect(lines(oneOut)).toEqual({ "R0010 review-001 F1" })
++		t.expect(lines(oneOut)).toEqual({ "R0010 review-001 F1", "R0010 stream-review-c0010-001 F1" })
+ 		local ok, okOut = run({ "--uncovered", "R0030" })
+ 		t.expect(ok).toBe(0)
+ 		t.expect(has(okOut, "harvest: every finding is covered")).toBe(true)
+diff --git a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+index 3fd389a0..52ce7e2e 100644
+--- a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
++++ b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+@@ -112,8 +112,8 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
+ 			-- written as each report or stream review arrives, before step 1, so no later path can skip them
+ 			t.expect(at(p2b, "**Candidate lessons are written as they arrive**") < at(p2b, "\n1. "))
+ 				.toBe(true)
+-			at(p2b, "`- note ws-<issue>: <lesson ids>`")
+-			at(p2b, "`- note stream-review-<issue>-NNN: <lesson ids>`")
++			at(p2b, "`- note ws-<issue> (erred <skill>): <lesson ids>`") -- c0136 override: every entry names its step
++			at(p2b, "`- stream-review-<issue>-NNN F<n>: <lesson ids>`") -- c0136 override: its findings are entries, not notes
+ 			local p4 = section(text, "Phase 4")
+ 			t.expect(at(p4, "harvest.md") < at(p4, "\n6. ")).toBe(true) -- before the re-review
+ 			local p5 = section(text, "Phase 5")

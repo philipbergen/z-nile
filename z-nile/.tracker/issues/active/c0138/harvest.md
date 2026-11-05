@@ -1,0 +1,20 @@
+- design-review-001 F1: zz-test/one-rule-one-function, z-design/spec-design-correspondence
+- design-review-001 F2: z-design/spec-design-correspondence, z-design/restated-rules-move-together
+- design-review-001 F3: z-design/quote-other-preps-before-promising, z-design/promises-name-their-exceptions
+- design-review-001 F4: one-off: leftover wording (ls-tree for diff-tree), two spec-header labels and a comment about git's behaviour on a tree object
+- design-review-001 F5: one-off: the capture commit's Solution was empty; the bullets came 14 s later
+- design-review-002 F1: z-design/spec-design-correspondence
+- design-review-002 F2: zz-test/seed-every-enumerated-case, z-design/reasoned-rows-claim-testable-reasons
+- design-review-002 F3: z-design/restated-rules-move-together
+- design-review-002 F4: z-design/restated-rules-move-together, z-design/quote-other-preps-before-promising
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: z-design/instructions-runnable-where-they-run
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/spec-design-correspondence
+- design-review-004 F1: z-design/instructions-runnable-where-they-run
+- design-review-004 F2: z-design/spec-design-correspondence, zz-test/seed-every-enumerated-case
+- design-review-004 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-004 F4: z-design/instructions-runnable-where-they-run
+- design-review-004 F5: zz-review/lists-paste-their-search, z-design/restated-rules-move-together
+- design-review-004 F6: z-design/spec-design-correspondence, zz-test/pin-fail-safes-where-they-act
+- design-review-005 F1: zz-test/no-vacuous-pass

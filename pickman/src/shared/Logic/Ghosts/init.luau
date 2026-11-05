@@ -51,6 +51,7 @@ export type Input = {
 	level: number,
 	baseSpeed: number, -- level 1's player speed in units per tick
 	tickRate: number,
+	maze: Maze.Maze?, -- the maze to walk this tick (a copy with picked holes, f0126); nil keeps the set's
 }
 export type Event = { kind: string, ghost: Name?, mode: Mode?, ticks: number?, x: number?, y: number? }
 export type Contact = { name: Name, kind: "kill" | "eat" }
@@ -302,6 +303,15 @@ function Ghosts.new(m: Maze.Maze, seed: number, opts: Options?): Set
 	return set
 end
 
+-- The ghosts walk a changed copy of their maze from now on (a picked hole, f0126). Refuses a maze of another
+-- layout or size.
+function Ghosts.useMaze(set: Set, m: Maze.Maze)
+	if m.id ~= set.maze.id or m.width ~= set.maze.width or m.height ~= set.maze.height then
+		fail(`maze '{m.id}' is not a copy of '{set.maze.id}'`)
+	end
+	set.maze = m
+end
+
 -- Does the maze have ghosts at all?
 function Ghosts.available(m: Maze.Maze): boolean
 	return Classic.of(m) ~= nil
@@ -549,6 +559,9 @@ end
 function Ghosts.step(set: Set, input: Input): { Event }
 	local out: { Event } = {}
 	set.level = input.level
+	if input.maze then
+		Ghosts.useMaze(set, input.maze)
+	end
 	tickMode(set, input, out)
 	-- idle release and zero-limit release
 	local house = set.house

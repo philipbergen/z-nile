@@ -1,0 +1,40 @@
+- design-review-001 F1: z-design/trace-every-way-code-runs
+- design-review-001 F2: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-001 F3: z-design/quote-other-preps-before-promising
+- design-review-001 F4: zz-arch/records-cover-what-was-reviewed
+- design-review-001 F5: z-design/prove-specs-pass-on-a-prototype, z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/required-steps-on-every-path, z-design/design-the-execution-window
+- design-review-001 F7: z-design/spec-design-correspondence
+- design-review-001 F8: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F9: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F10: z-design/restated-rules-move-together
+- note prep round 2: a "the split narrows" case written for F5 was vacuous (every command misses the other 36 command modules) and was rewritten before its mutant could pass: zz-test/no-vacuous-pass
+- design-review-002 F1: z-design/quote-other-preps-before-promising
+- design-review-002 F2: zz-test/pin-call-site-arguments
+- design-review-002 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: zz-arch/records-cover-what-was-reviewed
+- design-review-002 F6: zz-arch/records-cover-what-was-reviewed, z-design/quote-other-preps-before-promising
+- design-review-002 F7: z-design/required-steps-on-every-path, z-design/instructions-runnable-where-they-run, z-design/in-flight-bases-pin-their-source
+- design-review-002 F8: zz-review/lists-paste-their-search, z-design/trace-every-way-code-runs
+- design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F10: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F1: z-design/trace-every-way-code-runs
+- design-review-003 F2: zz-arch/records-cover-what-was-reviewed
+- design-review-003 F3: z-design/spec-design-correspondence, z-design/required-steps-on-every-path
+- design-review-003 F4: z-design/restated-rules-move-together
+- design-review-003 F5: zz-test/no-vacuous-pass
+- design-review-003 F6: zz-test/pin-call-site-arguments
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: zz-arch/records-cover-what-was-reviewed, zz-arch/read-paired-facts-at-one-moment
+- design-review-004 F3: z-design/spec-design-correspondence
+- design-review-004 F4: z-design/required-steps-on-every-path
+- design-review-004 F5: zz-test/no-vacuous-pass
+- design-review-004 F6: zz-test/specs-read-sources-through-the-selector
+- note prep round 5: the mutation runner's `git checkout` restore reverted uncommitted prototype edits, so one mutant ran on broken code; re-applied, committed, rerun: z-design/rerun-skipped-checks-after-edits
+- design-review-005 F1: zz-arch/read-paired-facts-at-one-moment, z-design/spec-design-correspondence
+- design-review-005 F2: z-design/spec-design-correspondence
+- design-review-005 F3: z-design/instructions-runnable-where-they-run
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: z-design/restated-rules-move-together
+- note prep merge gate: a new lesson named the retired path `scripts/tracker/`, which c0114/docs bans from skills and lessons; only the full gate on the prep's head found it: z-design/prove-specs-pass-on-a-prototype

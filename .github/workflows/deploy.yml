@@ -1,0 +1,50 @@
+name: deploy
+# Publishes the place to Pickman (Beta). It does not run the gate or the runtime tests:
+# those are local (z-nile/check.sh --full). A merge does not wait for this workflow.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'arcade/.tracker/**', 'portal/.tracker/**', 'snake/.tracker/**', 'invaders/.tracker/**', 'asteroids/.tracker/**', 'z-nile/next']
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: beta-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - run: z-nile/setup.sh --tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - id: deploy
+        working-directory: pickman
+        run: lune run scripts/deploy-beta
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+          ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+          ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
+      - if: steps.deploy.outputs.version != '' && github.event_name == 'pull_request'
+        run: |
+          gh pr comment "$PR" --edit-last --create-if-none \
+            --body "Published to Pickman (Beta): version $VERSION (commit $SHA)."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          VERSION: ${{ steps.deploy.outputs.version }}
+          SHA: ${{ github.event.pull_request.head.sha }}

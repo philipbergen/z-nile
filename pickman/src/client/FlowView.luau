@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
+local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 
 local YELLOW = Color3.fromRGB(255, 255, 0)
 local BLACK = Color3.fromRGB(0, 0, 0)
@@ -83,8 +84,8 @@ function FlowView.start()
 	-- the server's own rank for a run, sent after its write; the remote is made when the server script runs
 	local rank = remotes:FindFirstChild("Rank")
 	if rank then
-		(rank :: RemoteEvent).OnClientEvent:Connect(function(run: number, place: number)
-			rankView = Flow.hearRank(rankView, run, place, gameOverUp)
+		(rank :: RemoteEvent).OnClientEvent:Connect(function(run: number, place: number?, missed: number?)
+			rankView = Flow.hearMiss(Flow.hearRank(rankView, run, place, gameOverUp), run, missed, gameOverUp)
 			drawRank()
 		end)
 	end
@@ -104,10 +105,14 @@ function FlowView.start()
 	for _, name in Flow.CONTINUE_KEYS do
 		table.insert(keys, (Enum.KeyCode :: any)[name])
 	end
+	table.insert(keys, (Enum.KeyCode :: any)[Pad.CONTINUE]) -- the gamepad's continue (f0146)
 	ContextActionService:BindAction(
 		"PickmanContinue",
 		function(_name: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
-			if state == Enum.UserInputState.Begin and Flow.isContinueKey(input.KeyCode.Name) then
+			if
+				state == Enum.UserInputState.Begin
+				and (Flow.isContinueKey(input.KeyCode.Name) or input.KeyCode.Name == Pad.CONTINUE)
+			then
 				ask()
 			end
 			return Enum.ContextActionResult.Pass

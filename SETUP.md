@@ -36,14 +36,10 @@ z-nile/setup.sh
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
 - **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
-- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
-`.github/workflows/check.yml` bootstraps the runner with `z-nile/setup.sh --tools`, the same script as a new host, then runs one project's gate per job (`gate (pickman)`, `gate (z-nile)`, c0120), so every CI run also proves this document on a clean Linux machine. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root. setup.sh ends with `z-nile/check.sh --full`.
-
-- **When it runs**: pushes to main, PRs that are **not drafts** (draft pushes cost no CI), and manual dispatch.
-- **Dispatch from a draft branch**: `z-nile/ci-verify.sh` dispatches CI for the current branch, waits, and exits with the run's result. Push first; it refuses when the local HEAD differs from `origin/<branch>`. Dispatched runs also execute the active raft's sequestered acceptance specs.
-- **In CI, setup.sh** checks auth with `gh api rate_limit` (Actions tokens can fail `gh auth status`), authenticates rokit with `GH_TOKEN`, and adds `~/.rokit/bin` to `GITHUB_PATH` for later steps.
+Verification is local. `z-nile/check.sh --full` runs every project's gate on the machine that lands or merges (`./zn land`, `./zn done`, and zz-rules Merging). GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.
 
 ## Troubleshooting
 | symptom | fix |
@@ -55,18 +51,18 @@ z-nile/setup.sh
 | lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
 
 ## Beta publishing (Pickman Beta)
-Every PR that is ready for review is published to the private **Pickman (Beta)** experience by the `beta` job in `.github/workflows/check.yml`, after the gate is green. A PR comment names the published version and commit, and a later push edits that comment.
-- **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write. It only exists in CI.
+`.github/workflows/deploy.yml` is the only workflow. It publishes a pull request that is ready for review from this repo to the private **Pickman (Beta)** experience by running `lune run scripts/deploy-beta` from `pickman/`. A push to `main` and a manual dispatch start the workflow and skip the job. It does not run the gate or the runtime tests. A pull-request comment names the published version and commit.
+- **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write, plus `datastore.control:create` and data-store entry read, create, update and delete for the reservation. The live publish's copy is a GitHub Actions secret. The merging machine keeps its own in `~/.config/pickman/cicd.toml`, mode `600`, outside the repo.
 - **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits. `ROBLOX_BETA_PLACE_ID` is the experience's start place.
 - **Two places** (c0064): the repo variable `ROBLOX_BETA_GAME_PLACE_ID` is the id of the game place. With it set, the deploy publishes `default.project.json` (the game) to it and `lobby.project.json` (the lobby) to `ROBLOX_BETA_PLACE_ID`, with the game place's id written into the lobby's `GamePlaceId` (in a copy of the project built outside the checkout; the checked-in value stays 0). Both are built before either is published. Without it, the deploy warns and publishes the game to `ROBLOX_BETA_PLACE_ID` as before, and the lobby is not live.
 - **Setting up the game place** (once, by the owner of the experience; nothing in the repo can do it):
   1. Creator Dashboard, Pickman (Beta), Places: create a new place (for example "Pickman Game") and copy its place id (the digits in its URL). Leave the existing place as the start place: it becomes the lobby.
   2. GitHub, Settings, Secrets and variables, Actions, Variables: add the repository variable `ROBLOX_BETA_GAME_PLACE_ID` with that id.
   3. Check the key: `ROBLOX_API_KEY` must cover the new place too (`universe-places` write and `luau-execution-sessions` read and write for the experience, not for one place). A key limited to the old place fails the game publish with HTTP 403.
-  4. Mark any PR ready for review: the `beta` job publishes both places and runs both runtime suites; its log names both versions.
+  4. A pull request that is ready for review publishes both places. The job does not run the runtime suites. Its log names both versions.
 - If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
-- Publishes happen in the order the gates finish, not strictly in the order of pushes; the PR comment names the PR's commit; Beta runs that commit merged with `main` (as the gate does).
+- Publishes happen one at a time (`beta-deploy`, and a running publish is not cancelled). The comment names the pull request's commit.
 - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
-- The job installs only the tools (`z-nile/setup.sh --tools`); the gate has already run.
+- The job installs only the tools (`z-nile/setup.sh --tools`).
 - By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta` in `pickman/` (the job runs its steps there too). That publishes to Beta.
-- After the publish, the job runs the runtime tests (`tests/runtime/`, in `pickman/`) in a real server of that version of the game place: `lune run scripts/runtime-test -- <version>`, and the lobby's (`tests/runtime/lobby/`) in the lobby: `lune run scripts/runtime-test -- --lobby <lobby version>`. They skip with a warning when the settings are missing. The PR comment's version is the game place's.
+- A merge runs `lune run scripts/cicd` from `pickman/`. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file or a failed suite stops the merge. The command is not part of the gate. By hand, after a version exists: `lune run scripts/runtime-test -- <version>` for the game place (`tests/runtime/`), and `lune run scripts/runtime-test -- --lobby <lobby version>` for the lobby (`tests/runtime/lobby`). They skip with a warning when the settings are missing. The comment's version is the game place's.

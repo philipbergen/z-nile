@@ -3,7 +3,8 @@
 -- content, Hud.layout of the screen and its safe inset the sizes, and Touch.blocks the places: score top-left,
 -- level top-right, a disc per life bottom-left, and the power bar bottom-right, hidden when no power is
 -- running. The snap control sits left of the bar (Touch.snapRect); Controls hit-tests the same rectangle. The
--- blaster's shots (f0100) are bars after the lives, placed by Hud.shotIcons.
+-- blaster's shots (f0100) are bars after the lives, placed by Hud.shotIcons. On a touch screen the fire and hop
+-- buttons (f0110) sit in Roblox's jump corner (Touch.buttons); Controls hit-tests the same rectangles.
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -17,6 +18,8 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 local YELLOW = Color3.fromRGB(255, 255, 0)
 local BLUE = Color3.fromRGB(33, 33, 222)
 local CYAN = Color3.fromRGB(0, 255, 255)
+local GOLD = Color3.fromRGB(255, 215, 0) -- the marked walls' gold (f0126)
+local BLACK = Color3.fromRGB(0, 0, 0)
 
 local HudView = {}
 
@@ -28,10 +31,19 @@ local fill: Frame? = nil
 local snapFrame: Frame? = nil
 local shownLives = -1
 local snapAt: Touch.Rect? = nil
+type Button = { frame: Frame, caption: TextLabel }
+local fireButton: Button? = nil
+local hopButton: Button? = nil
+local pickButton: Button? = nil
+local buttonsAt: Touch.Buttons? = nil
 -- the screen size and inset of the last layout, so a change of any of them re-lays
 type Key = { sw: number, sh: number, inset: Hud.Inset }
 local laidFor: Key? = nil
 local shots: Frame? = nil
+-- f0126: the pick bar, its fill and the boon banner, made on the first frame that needs them
+local pickBar: Frame? = nil
+local pickFill: Frame? = nil
+local banner: TextLabel? = nil
 local shownShots = 0
 
 local function label(name: string, align: Enum.TextXAlignment, parent: Instance): TextLabel
@@ -44,6 +56,15 @@ local function label(name: string, align: Enum.TextXAlignment, parent: Instance)
 	l.Text = ""
 	l.Parent = parent
 	return l
+end
+
+-- A touch button's frame on its rectangle, its caption at the HUD's text size.
+local function place(b: Button?, r: Touch.Rect, textSize: number)
+	if b then
+		b.frame.Size = UDim2.fromOffset(r.w, r.h)
+		b.frame.Position = UDim2.fromOffset(r.x, r.y)
+		b.caption.TextSize = textSize
+	end
 end
 
 -- Places everything for a screen of sw x sh pixels with `inset` kept free, in screen pixels.
@@ -87,17 +108,57 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 		bar.Size = UDim2.fromOffset(blocks.power.w, blocks.power.h)
 		bar.Position = UDim2.fromOffset(blocks.power.x, blocks.power.y)
 	end
+	if pickBar and banner then
+		local barBox, boonBox = Hud.pickBox(l), Hud.boonBox(l)
+		pickBar.Position = UDim2.fromOffset(barBox.x, barBox.y)
+		pickBar.Size = UDim2.fromOffset(barBox.w, barBox.h)
+		banner.Position = UDim2.fromOffset(boonBox.x, boonBox.y)
+		banner.Size = UDim2.fromOffset(boonBox.w, boonBox.h)
+	end
 	local rect = Touch.snapRect(l)
 	snapAt = rect
 	if snapFrame then
 		snapFrame.Size = UDim2.fromOffset(rect.w, rect.h)
 		snapFrame.Position = UDim2.fromOffset(rect.x, rect.y)
 	end
+	local placed = Touch.buttons(l)
+	buttonsAt = placed
+	place(fireButton, placed.fire, l.textSize)
+	place(hopButton, placed.hop, l.textSize)
+	place(pickButton, placed.pick, l.textSize)
+end
+
+-- A touch button (f0110): a drawn disc with a caption. Like the snap control it takes no input itself.
+local function button(name: string, caption: string, colour: Color3, parent: Instance): Button
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.Active = false
+	f.Visible = UserInputService.TouchEnabled
+	f.BackgroundColor3 = colour
+	f.BackgroundTransparency = 0.6
+	f.BorderSizePixel = 0
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = f
+	local l = label("Caption", Enum.TextXAlignment.Center, f)
+	l.Active = false
+	l.Size = UDim2.fromScale(1, 1)
+	l.Text = caption
+	-- a full outline: the caption, not the colour alone, tells FIRE from JUMP
+	l.TextStrokeColor3 = BLACK
+	l.TextStrokeTransparency = 0
+	f.Parent = parent
+	return { frame = f, caption = l }
 end
 
 -- The snap control's rectangle in screen pixels, or nil before the first layout.
 function HudView.snapRect(): Touch.Rect?
 	return snapAt
+end
+
+-- The touch controls' rectangles in screen pixels (f0110), or nil before the first layout.
+function HudView.buttons(): Touch.Buttons?
+	return buttonsAt
 end
 
 function HudView.start()
@@ -149,6 +210,9 @@ function HudView.start()
 	corner.Parent = s
 	s.Parent = gui
 	snapFrame = s
+	fireButton = button("Fire", "FIRE", CYAN, gui)
+	hopButton = button("Hop", "JUMP", WHITE, gui)
+	pickButton = button("Pick", "PICK", GOLD, gui) -- f0126: a wall pick, gold as the walls it picks
 	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
 	local camera = workspace.CurrentCamera :: Camera
 	-- polled: the first frames can report an empty area, and a half turn swaps the side insets without
@@ -201,6 +265,46 @@ function HudView.show(play: Session.PlayFrame)
 		bar.Visible = m.power > 0
 		fill.Size = UDim2.fromScale(m.power, 1)
 	end
+end
+
+-- f0126: the pick under way as a gold bar filling up, and the boon a finished pick granted as a banner.
+function HudView.pick(pick: Session.Pick?, boon: Session.BoonGrant?, tick: number)
+	local gui = if lives then lives.Parent else nil
+	if gui == nil then
+		return
+	end
+	if pickBar == nil then
+		local b = Instance.new("Frame")
+		b.Name = "PickBar"
+		b.BackgroundColor3 = Color3.fromRGB(60, 45, 0)
+		b.BorderSizePixel = 0
+		local f = Instance.new("Frame")
+		f.Name = "Fill"
+		f.BackgroundColor3 = GOLD
+		f.BorderSizePixel = 0
+		f.Parent = b
+		b.Parent = gui
+		pickBar, pickFill = b, f
+		local l = Instance.new("TextLabel")
+		l.Name = "Boon"
+		l.BackgroundTransparency = 1
+		l.TextScaled = true
+		l.Font = Enum.Font.Arcade
+		l.TextColor3 = GOLD
+		l.Parent = gui
+		banner = l
+		local last = laidFor
+		if last then
+			lay(last.sw, last.sh, last.inset)
+		end
+	end
+	local share = Hud.pickProgress(pick, tick)
+	local b, f, l = pickBar :: Frame, pickFill :: Frame, banner :: TextLabel
+	b.Visible = share ~= nil
+	f.Size = UDim2.fromScale(share or 0, 1)
+	local text = Hud.boonBanner(boon, tick)
+	l.Visible = text ~= nil
+	l.Text = text or ""
 end
 
 -- The shots held, from the frame (nil before a server that sends them: none).

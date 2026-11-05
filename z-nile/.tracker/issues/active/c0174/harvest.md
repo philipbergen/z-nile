@@ -1,0 +1,25 @@
+- design-review-001 F1: z-design/spec-design-correspondence, z-design/experiments-assert-on-the-assertions-subject
+- design-review-001 F2: one-off: applied only to the fixture that F1 removed
+- design-review-001 F3: z-design/exact-checks-compare-against-the-merge-base
+- design-review-001 F4: z-design/finished-overrides-land-before-ready
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: one-off: the harness restated a comment stripper that zz-arch rule 5 (one reader per format) already names; no lesson needed
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-002 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-002 F2: z-design/restated-rules-move-together
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: z-design/restated-rules-move-together
+- design-review-002 F5: z-design/exact-checks-compare-against-the-merge-base
+- design-review-003 F1: z-design/restated-rules-move-together
+- design-review-003 F2: z-design/new-rules-migrate-existing-work, z-design/pins-name-who-reprep-goes-first
+- design-review-003 F3: z-design/spec-design-correspondence
+- design-review-003 F4: z-design/instructions-runnable-where-they-run
+- design-review-003 F5: zz-review/sequestration-reference-not-a-ref
+- design-review-003 F6: z-design/exact-checks-compare-against-the-merge-base
+- note round 2 candidate (a check whose base already holds the delivered edit; macOS patch reverses silently): z-design/exact-checks-compare-against-the-merge-base
+- design-review-004 F1: z-design/decided-guesses-rewrite-their-body, z-design/exact-checks-compare-against-the-merge-base, z-design/rederive-tolerances-from-the-decided-route
+- design-review-004 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-004 F3: zz-review/lists-paste-their-search
+- design-review-004 F4: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/decided-guesses-rewrite-their-body, z-design/exact-checks-compare-against-the-merge-base, z-design/checks-read-only-what-the-branch-cannot-rewrite
+- design-review-005 F2: z-design/spec-design-correspondence

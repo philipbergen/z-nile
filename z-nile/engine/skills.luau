@@ -21,7 +21,8 @@ export type Folder = { project: string, path: string }
 export type Entry = { name: string, text: string? }
 export type Found = { folder: Folder, entries: { Entry } }
 -- A skill: its name, its project and its real folder ("z-nile/skills/zz-test").
-export type Skill = { name: string, project: string, dir: string }
+-- `extends` (c0184) is the name of the skill whose rules this one defers to: a raft prompt inlines it after the project's own.
+export type Skill = { name: string, project: string, dir: string, extends: string? }
 -- What .claude/skills holds: per entry name, the link's target, or false for anything that is not a link.
 export type Present = { [string]: string | false }
 
@@ -39,19 +40,24 @@ function skills.folders(reg: projects.Registry): { Folder }
 	return out
 end
 
--- The `name:` of a SKILL.md's frontmatter, or nil.
-function skills.frontName(text: string): string?
+-- The value of `key:` in a SKILL.md's frontmatter, or nil.
+local function frontValue(text: string, key: string): string?
 	local front = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
 	if not front then
 		return nil
 	end
 	for line in string.gmatch(front, "[^\n]+") do
-		local v = string.match(line, "^name:%s*(.-)%s*$")
+		local v = string.match(line, `^{key}:%s*(.-)%s*$`)
 		if v then
 			return v
 		end
 	end
 	return nil
+end
+
+-- The `name:` of a SKILL.md's frontmatter, or nil.
+function skills.frontName(text: string): string?
+	return frontValue(text, "name")
 end
 
 local function starts(s: string, prefix: string): boolean
@@ -100,13 +106,93 @@ function skills.plan(found: { Found }): ({ Skill }, { string })
 				continue
 			end
 			where[e.name] = dir
-			table.insert(out, { name = e.name, project = f.folder.project, dir = dir })
+			table.insert(out, {
+				name = e.name,
+				project = f.folder.project,
+				dir = dir,
+				extends = frontValue(e.text :: string, "extends"),
+			})
 		end
 	end
 	table.sort(out, function(a, b)
 		return a.name < b.name
 	end)
-	return out, problems
+	-- a skill that extends another names a skill that is there, not itself and not itself an extender (one level), and a
+	-- z-nile skill extends nothing (c0184)
+	local extOf: { [string]: string } = {}
+	for _, sk in out do
+		if sk.extends then
+			extOf[sk.name] = sk.extends
+		end
+	end
+	local kept: { Skill } = {}
+	for _, sk in out do
+		local base = sk.extends
+		local why: string? = nil
+		if base then
+			if sk.project == skills.ZNILE then
+				why = "a z-nile skill extends nothing"
+			elseif base == sk.name or not where[base] then
+				why = `extends {base}, which is no other skill`
+			elseif extOf[base] then
+				why = `extends {base}, which itself extends {extOf[base]}: one level only`
+			end
+		end
+		if why then
+			table.insert(problems, `{sk.dir}/SKILL.md: {why}`)
+		else
+			table.insert(kept, sk)
+		end
+	end
+	return kept, problems
+end
+
+-- The names of the skills the project's skills extend (c0184): the rules they defer to, which a raft's prompt carries
+-- with its own (its skills, and their lessons). Pure.
+function skills.bases(list: { Skill }, project: string?): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	for _, sk in list do
+		if sk.project == project and project ~= skills.ZNILE and sk.extends then
+			out[sk.extends] = true
+		end
+	end
+	return out
+end
+
+-- The SKILL.md files a raft's prompt inlines, real paths (c0115): z-nile's `INLINED`, then every skill of the raft's
+-- project (none more for z-nile's own rafts), then each skill those extend (c0184), once each. Pure.
+function skills.inlined(list: { Skill }, project: string?): { string }
+	local byName: { [string]: Skill } = {}
+	for _, sk in list do
+		byName[sk.name] = sk
+	end
+	local out: { string } = {}
+	local seen: { [string]: boolean } = {}
+	local function add(name: string, fallback: string)
+		if seen[name] then
+			return
+		end
+		seen[name] = true
+		local sk = byName[name]
+		table.insert(out, if sk then `{sk.dir}/SKILL.md` else fallback)
+	end
+	for _, name in skills.INLINED do
+		add(name, `{skills.ZNILE}/skills/{name}/SKILL.md`)
+	end
+	if project and project ~= skills.ZNILE then
+		for _, sk in list do
+			if sk.project == project then
+				add(sk.name, "")
+			end
+		end
+		local bases = skills.bases(list, project)
+		for _, sk in list do
+			if bases[sk.name] then
+				add(sk.name, "")
+			end
+		end
+	end
+	return out
 end
 
 -- The relative target of a skill's link in .claude/skills.

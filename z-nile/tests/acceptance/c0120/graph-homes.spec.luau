@@ -60,7 +60,8 @@ return t.spec("c0120 the graph and the selector know the homes", function(it)
 		t.expect(map.x).toBe(`{base}/a/b/BX`)
 		t.expect(map.y).toBe(`{base}/a/Y`)
 		t.expect(map.tests).toBe("tests") -- this home's (z-nile/.luaurc), inherited
-		t.expect(map.logic).toBe("../pickman/src/shared/Logic") -- the root's, inherited, above the current folder
+		-- c0184 override: the root keeps no alias into a game, so the inherited one shown is the root's scripts
+		t.expect(map.scripts).toBe("../scripts") -- the root's, inherited, above the current folder
 		t.expect(graph.aliases(`{base}/a`).x).toBe(`{base}/a/X`)
 	end)
 

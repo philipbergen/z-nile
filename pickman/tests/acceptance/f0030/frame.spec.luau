@@ -5,7 +5,7 @@ local Game = require("@logic/Game")
 local Maze = require("@logic/Maze")
 local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
-local serde = require("@lune/serde")
+local plain = require("@tests/lib/plain")
 local t = require("@tests/lib/t")
 
 -- the spawn is at x = 4; walking west eats (3,1), (2,1) and then the power pellet at (1,1), which clears the level
@@ -120,7 +120,8 @@ return t.spec("f0290 Session.frame pellets", function(it)
 		Session.join(s, "p")
 		stepUntil(s, eaten(3))
 		local frame = Session.frame(s, "p")
-		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
+		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
+		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
 		t.expect((Session.snapshot(s, "p") :: any).pellets).toBe(nil)
 	end)
 
