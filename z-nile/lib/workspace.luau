@@ -79,8 +79,12 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 				blobs[path] = `120000 {trim(id)}`
 			elseif fs.isFile(full) then
 				table.insert(toHash, path)
+			elseif string.sub(path, -1) == "/" then
+				-- an untracked nested repository (git lists it as `dir/`): neither a file nor a link, and not
+				-- something to drop from a digest (review 004 F1): reuse is off
+				return nil, `a path that is neither a file nor a link: {path}`
 			else
-				blobs[path] = nil -- deleted
+				blobs[path] = nil -- deleted, or now a folder (its files are listed as their own paths)
 			end
 		end
 	end

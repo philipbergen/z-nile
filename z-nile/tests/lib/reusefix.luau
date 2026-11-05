@@ -1,5 +1,5 @@
 --!strict
--- A copy of c0165's gatefix (acceptance/gatefix.luau, sequestered), for the executor's own tooling specs: the gate fixtures, shared by the gate-*.spec files (split by mechanism so each file stays short, design
+-- A copy of c0165's gatefix (acceptance/gatefix.luau, sequestered), for the executor's own tooling specs: the gate fixtures (split by mechanism so each file stays short, design
 -- reviews 002 F9 and 007 F5: a file holds at most 4 fixture builds and 10 gate runs, about 40 s idle). A fixture is a repository under the calling spec's own .cache folder: a copy of the tooling with a
 -- tiny pickman home whose specs append their name to ran.log when they run, so "ran" and "reused" are counted, not
 -- inferred from output. Static tools are stubs; lune, git, perl and sqlite3 are real. The fixture's own main checkout

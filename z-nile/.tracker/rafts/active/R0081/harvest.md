@@ -15,3 +15,8 @@
 - review-003 F3: zz-test/guard-needs-its-own-case
 - review-003 F4: one-off: a header that still described the original file
 - review-003 F5: one-off: wording and the log lagging the code
+- review-004 F1: zz-arch/digests-hash-paths-as-git-stores-them
+- review-004 F2: zz-test/guard-needs-its-own-case
+- review-004 F3: zz-arch/read-cache-as-untrusted-input
+- review-004 F4: one-off: a header and a case title that promised more than they held
+- note refute-003 dropped a case on an untested claim about git ls-files: zz-review/run-the-evidence-you-cite

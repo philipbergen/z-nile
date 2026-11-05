@@ -112,7 +112,7 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		end
 	)
 
-	it("a record for another file, or with a wrong type, counts as no result", function()
+	it("a record for another file counts as no result", function()
 		local dir = reusefix.make(base, "wrongfile")
 		local path = reusefix.editResults(dir, "wrongfile", [[doc.files[1].file = "tests/unit/b.spec.luau"]])
 		local ok, out = reusefix.specs(dir, { "--", "tests/unit/a.spec.luau" }, { PATH = path })
@@ -141,6 +141,46 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		t.expect(digest()).toBe(d0)
 		t.expect(process.exec("ln", { "-s", "does-not-exist", `{dir}/dangling` }).ok).toBe(true)
 		t.expect(digest() ~= d0).toBe(true)
+	end)
+
+	it("a link's text is part of the digest, a nested repository turns reuse off", function()
+		local dir = reusefix.make(base, "linktext")
+		write(`{dir}/pickman/src/A.luau`, "return { value = 1 } -- edited\n")
+		local function digest(): string
+			local r = process.exec(
+				"lune",
+				{ "run", "z-nile/specs", "--", "digest", "--mode", "affected", "--projects", "pickman" },
+				{ cwd = dir, env = reusefix.env(dir) }
+			)
+			return reusefix.trim(r.stdout)
+		end
+		local d0 = digest()
+		t.expect(#d0).toBe(64)
+		-- the same link name pointing at two folders, then at a file, then a copy of that file
+		process.exec("ln", { "-s", "pickman/src", `{dir}/L` })
+		local toSrc = digest()
+		process.exec("rm", { `{dir}/L` })
+		process.exec("ln", { "-s", "pickman", `{dir}/L` })
+		local toHome = digest()
+		t.expect(toSrc ~= toHome).toBe(true)
+		process.exec("rm", { `{dir}/L` })
+		process.exec("ln", { "-s", "pickman/src/A.luau", `{dir}/L` })
+		local toFile = digest()
+		process.exec("rm", { `{dir}/L` })
+		process.exec("cp", { `{dir}/pickman/src/A.luau`, `{dir}/L` })
+		t.expect(digest() ~= toFile).toBe(true)
+		process.exec("rm", { `{dir}/L` })
+		t.expect(digest()).toBe(d0)
+		-- an untracked nested repository (git lists it as a folder): no digest at all, so no reuse
+		t.expect(process.exec("git", { "init", "-q", `{dir}/nested` }).ok).toBe(true)
+		write(`{dir}/nested/x.luau`, "return 1\n")
+		fixture.git(`{dir}/nested`, { "config", "user.name", "c0165-nested" })
+		fixture.git(`{dir}/nested`, { "config", "user.email", "c0165-nested@example.invalid" })
+		fixture.git(`{dir}/nested`, { "add", "-A" })
+		fixture.git(`{dir}/nested`, { "commit", "-qm", "nested" })
+		t.expect(digest()).toBe("")
+		process.exec("rm", { "-rf", `{dir}/nested` })
+		t.expect(digest()).toBe(d0)
 	end)
 
 	it("HEAD moves a whole-gate digest only when a * spec is selected", function()
