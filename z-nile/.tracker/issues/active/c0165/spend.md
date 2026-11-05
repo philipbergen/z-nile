@@ -30,6 +30,7 @@
 | 26 | 2026-11-05 00:56 | c0165: specs.luau orchestrator, check.sh reuse (--fresh, whole-gate record), results on the runner | 514 | 10 | 90.0 | focus | build |  |
 | 27 | 2026-11-05 02:54 | c0165: gatefix reads the last argument (user-approved), Verification log | 0 | 0 | 10.0 | focus | build |  |
 | 28 | 2026-11-05 02:56 | c0165: zz-test, AGENTS.md and .gitignore wording; repo-fence and cachepaths entries | 37 | 1 | 40.0 | focus | build |  |
+| 29 | 2026-11-05 02:57 | c0165: rehash c0172/narrowed's gate-cover digest | 1 | 1 | 5.0 | focus | build |  |
 
-**Total:** +5241 / -165 lines, 936.0 agent-minutes, 7440865 tokens over 28 records
-<!-- totals: added=5241 removed=165 minutes=936.0 records=28 tokens=7440865 -->
+**Total:** +5242 / -166 lines, 941.0 agent-minutes, 7440865 tokens over 29 records
+<!-- totals: added=5242 removed=166 minutes=941.0 records=29 tokens=7440865 -->
