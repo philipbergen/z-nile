@@ -51,7 +51,7 @@ if not sel.forcedAll(rules, files, only) then
 		stdio.ewrite(`affected: {why}\n`)
 		process.exit(2)
 	end
-	result = sel.affected(ctx, files, only)
+	result = sel.affected(ctx :: sel.Context, files, only)
 end
 if result == "ALL" then
 	print("ALL")

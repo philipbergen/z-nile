@@ -25,7 +25,7 @@ local workspace = require("./lib/workspace")
 
 local ROOT = (string.gsub(process.cwd, "/+$", ""))
 
-local function fail(message: string, code: number?): never
+local function fail(message: string, code: number?)
 	stdio.ewrite(`specs: {message}\n`)
 	process.exit(code or 2)
 end
