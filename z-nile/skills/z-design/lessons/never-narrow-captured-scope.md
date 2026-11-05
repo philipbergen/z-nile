@@ -12,4 +12,5 @@ The capture (title, Problem and the user's Solution ideas) is the scope. Prep ad
 
 R0044 design review 4 (F2): a design that meets a captured outcome except in rare failure modes (a write that fails for good, an old build) must say so in Risks and name the option that would close the gap for the user, rather than leave the limit unstated or reword the outcome.
 
+c0118 design review 001 (F4): when a Scope decision moves outcomes to another issue, the findings and recommendations that came with them (a programme review's, a reviewer's) must move too, into that issue's document, through a capture `land`; a line in the source item's answers ("c0121's prep must take F3 whole") reaches no one, because the next prep starts from the other issue's document.
 **Also:** f0147 design review 001 F1: the capture left "how the rounding keeps each level strictly faster" open for prep; prep answered that two slow ghost speeds may stay level for two levels and marked it (prep), which made "every level is 5% faster for the ghosts" only partly true. The user chose "Carry fractions" once asked.
