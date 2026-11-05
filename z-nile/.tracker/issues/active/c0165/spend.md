@@ -36,6 +36,7 @@
 | 32 | 2026-11-05 03:34 | c0165: typed empty-table loops, one-value gitState, nil path guard | 21 | 11 | 20.0 | focus | build |  |
 | 33 | 2026-11-05 03:43 | c0165: type fixes, Verification log (Phase 3, step 7) | 2 | 2 | 15.0 | focus | build |  |
 | 34 | 2026-11-05 03:59 | R0081: review-001 | 0 | 0 | 50.0 | focus | code-review |  |
+| 35 | 2026-11-05 04:04 | c0165: review 001 fixes: json()-wrapped reads and a guarded rows, one-call recording, jail name, HEAD rule pinned, wording | 286 | 51 | 60.0 | focus | code-review |  |
 
-**Total:** +5311 / -179 lines, 1086.0 agent-minutes, 7440865 tokens over 34 records
-<!-- totals: added=5311 removed=179 minutes=1086.0 records=34 tokens=7440865 -->
+**Total:** +5597 / -230 lines, 1146.0 agent-minutes, 7440865 tokens over 35 records
+<!-- totals: added=5597 removed=230 minutes=1146.0 records=35 tokens=7440865 -->

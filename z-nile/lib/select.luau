@@ -15,7 +15,7 @@ export type Context = {
 	rules: Rules,
 	graph: graph.Graph,
 	inputs: Inputs,
-	places: { [string]: { string } }, -- home prefix -> its place inputs (empty until c0165 step 2 reads them)
+	places: { [string]: { string } }, -- home prefix -> its place inputs (graph.placeInputs, read by context.luau)
 }
 
 -- Changes to these paths can affect every spec of every project, so they force a full run: the shared runner

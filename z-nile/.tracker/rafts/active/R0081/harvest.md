@@ -1,0 +1,8 @@
+- review-001 F1: zz-arch/json-readers-do-not-depend-on-a-build
+- review-001 F2: zz-arch/names-come-from-their-producer
+- review-001 F3: zz-test/refusals-tested-on-both-sides
+- review-001 F4: one-off: a per-spec record loop where the Design asks for one call
+- review-001 F5: one-off: five output differences from the Design, recorded or fixed
+- review-001 F6: one-off: a bullet that contradicted the list beside it
+- review-001 F7: one-off: refuted, a runner cannot unset an inherited OS variable from inside Lune
+- review-001 F8: one-off: an experiment result left out of the log

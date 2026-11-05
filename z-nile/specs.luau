@@ -185,7 +185,13 @@ local function runCommand()
 					fingerprint.of(state.ctx, prefix .. f, state.blobs, state.tools, "affected", gitState)
 				table.insert(list, fps[f])
 			end
-			local rows = resultsdb.rows(db :: resultsdb.Db, list)
+			local rowsOk, rows = pcall(resultsdb.rows, db :: resultsdb.Db, list)
+			if not rowsOk then
+				-- a db that can't be read turns reuse off; it never fails the gate
+				stdio.write(`reuse off: {rows}\n`)
+				db = nil
+				rows = {}
+			end
 			for _, f in files do
 				local row = rows[fps[f]]
 				if reuseplan.decide(row, fresh) == "reuse" then
@@ -260,40 +266,47 @@ local function runCommand()
 			else
 				local after = workspace.blobs(ROOT)
 				local now = os.time()
-				local gitAfter = workspace.gitState(ROOT, {})
+				-- the refs the run's specs declare, read once for all of them
+				local union: { string } = {}
+				local seen: { [string]: boolean } = {}
 				for _, f in toRun do
-					local rec = byFile[f]
-					local stands = after ~= nil and gitAfter ~= nil
-					if stands then
-						-- the same fingerprint under the content now: nothing it reads changed while it ran
-						local refState = workspace.gitState(ROOT, fingerprint.refs(state.ctx, prefix .. f))
-						stands = refState ~= nil
-							and fingerprint.of(
-									state.ctx,
-									prefix .. f,
-									after :: fingerprint.Blobs,
-									state.tools,
-									"affected",
-									refState :: fingerprint.GitState
-								)
-								== fps[f]
-					end
-					if rec ~= nil and stands then
-						pcall(
-							resultsdb.record,
-							db :: resultsdb.Db,
-							fps[f],
-							home,
-							f,
-							rec.loaded == true,
-							rec.cases or {},
-							if rec.detail ~= "" then rec.detail else nil,
-							rec.seconds or 0,
-							now
-						)
+					for _, ref in fingerprint.refs(state.ctx, prefix .. f) do
+						if not seen[ref] then
+							seen[ref] = true
+							table.insert(union, ref)
+						end
 					end
 				end
-				pcall(resultsdb.prune, db :: resultsdb.Db, now)
+				local gitAfter = workspace.gitState(ROOT, union)
+				local items: { resultsdb.Item } = {}
+				for _, f in toRun do
+					local rec = byFile[f]
+					-- the same fingerprint under the content now: nothing it reads changed while it ran
+					local stands = after ~= nil
+						and gitAfter ~= nil
+						and fingerprint.of(
+								state.ctx,
+								prefix .. f,
+								after :: fingerprint.Blobs,
+								state.tools,
+								"affected",
+								gitAfter :: fingerprint.GitState
+							)
+							== fps[f]
+					if rec ~= nil and stands then
+						table.insert(items, {
+							fp = fps[f],
+							home = home,
+							spec = f,
+							loaded = rec.loaded == true,
+							cases = rec.cases or {},
+							detail = if rec.detail ~= "" then rec.detail else nil,
+							seconds = rec.seconds or 0,
+						})
+					end
+				end
+				-- one call, one transaction: every row and the prune, or nothing
+				pcall(resultsdb.recordMany, db :: resultsdb.Db, items, now)
 			end
 		end
 	end
@@ -357,17 +370,8 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 	end
 	local baseRef = base
 		or (if git({ "rev-parse", "--verify", "-q", "origin/main" }) ~= nil then "origin/main" else "main")
-	local extra = {
-		`mode {mode}`,
-		`projects {table.concat(names, ",")}`,
-		`base {git({ "rev-parse", baseRef }) or "?"}`,
-	}
-	if starred then
-		table.insert(extra, `HEAD {gitState.head}`)
-	end
-	for _, ref in refs do
-		table.insert(extra, `{ref}\t{gitState.refs[ref] or "MISSING"}`)
-	end
+	local extra =
+		fingerprint.digestExtra(mode, names, git({ "rev-parse", baseRef }) or "?", starred, gitState, refs)
 	return fingerprint.digest(state.blobs, state.tools, extra)
 end
 

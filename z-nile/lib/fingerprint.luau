@@ -77,6 +77,26 @@ function fingerprint.of(
 	return sha256(table.concat(lines, "\n"))
 end
 
+-- The facts a whole affected gate's digest holds besides the files: the mode, the projects, the base, HEAD only when the
+-- selection holds a `*` spec, and every declared ref of the selected specs. Pure.
+function fingerprint.digestExtra(
+	mode: string,
+	names: { string },
+	base: string,
+	starred: boolean,
+	git: GitState,
+	refs: { string }
+): { string }
+	local extra = { `mode {mode}`, `projects {table.concat(names, ",")}`, `base {base}` }
+	if starred then
+		table.insert(extra, `HEAD {git.head}`)
+	end
+	for _, ref in refs do
+		table.insert(extra, `{ref}\t{git.refs[ref] or "MISSING"}`)
+	end
+	return extra
+end
+
 -- A spend.md under a project root: `./zn spend` writes it late, so it never enters a digest.
 local function isSpend(path: string): boolean
 	return string.match(path, "[^/]*$") == "spend.md" and string.find(path, "/.tracker/", 1, true) ~= nil

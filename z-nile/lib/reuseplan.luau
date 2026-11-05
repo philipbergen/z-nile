@@ -27,7 +27,7 @@ function reuseplan.records(jail: string, os: "macos" | "linux"): boolean
 	if os == "macos" then
 		return jail == "sandbox-exec" or startsWith(jail, "outer sandbox (a fixture of a guarded checkout")
 	end
-	return startsWith(jail, "none (not macOS)")
+	return startsWith(jail, "none")
 end
 
 return reuseplan

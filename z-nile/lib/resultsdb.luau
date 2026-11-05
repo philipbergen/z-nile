@@ -109,16 +109,23 @@ function resultsdb.rows(db: Db, fps: { string }): { [string]: Row }
 	end
 	local v, err = call(
 		db.path,
-		`SELECT json_object('rows', (SELECT json_group_array(json_object('fp', fp, 'state', state, 'cases', cases, 'detail', detail, 'seconds', seconds, 'updated', updated)) FROM specs WHERE fp IN ({table.concat(
+		`SELECT json_object('rows', json((SELECT json_group_array(json_object('fp', fp, 'state', state, 'cases', cases, 'detail', detail, 'seconds', seconds, 'updated', updated)) FROM specs WHERE fp IN ({table.concat(
 			list,
 			","
-		)})));`
+		)}))));`
 	)
 	if v == nil then
 		error(err)
 	end
 	local out: { [string]: Row } = {}
-	for _, r in (v :: any).rows or {} do
+	-- a nested array comes back as an array on some sqlite3 builds and as text on others; json() above makes it one,
+	-- and a text one is decoded here too, so no build can break the read
+	local list: any = (v :: any).rows or {}
+	if type(list) == "string" then
+		local decoded = serde.decode("json" :: "json", list)
+		list = decoded
+	end
+	for _, r in list do
 		local cases: { Case } = if r.cases then serde.decode("json" :: "json", r.cases) else {}
 		out[r.fp] = {
 			state = r.state,
@@ -184,9 +191,9 @@ end
 function resultsdb.gatePassed(db: Db, key: string): { passedAt: number, summary: string }?
 	local v, err = call(
 		db.path,
-		`SELECT json_object('gate', (SELECT json_object('passed_at', passed_at, 'summary', summary) FROM gates WHERE key = {q(
+		`SELECT json_object('gate', json((SELECT json_object('passed_at', passed_at, 'summary', summary) FROM gates WHERE key = {q(
 			key
-		)}));`
+		)})));`
 	)
 	if v == nil then
 		error(err)
@@ -206,6 +213,47 @@ function resultsdb.prune(db: Db, now: number)
 		db.path,
 		`DELETE FROM specs WHERE updated < {cutoff};\nDELETE FROM gates WHERE passed_at < {cutoff};\nSELECT json_object('ok', 1);`
 	)
+	if err then
+		error(err)
+	end
+end
+
+export type Item = {
+	fp: string,
+	home: string,
+	spec: string,
+	loaded: boolean,
+	cases: { Case },
+	detail: string?,
+	seconds: number,
+}
+
+-- Records every item and prunes in ONE sqlite3 call, in one transaction: a failure records nothing. Same rule as record.
+function resultsdb.recordMany(db: Db, items: { Item }, now: number)
+	local sql = { "BEGIN IMMEDIATE;" }
+	for _, it in items do
+		local passed = it.loaded
+		for _, c in it.cases do
+			if not c.ok then
+				passed = false
+			end
+		end
+		local encoded = serde.encode("json" :: "json", it.cases)
+		table.insert(
+			sql,
+			`INSERT INTO specs(fp, home, spec, state, cases, detail, seconds, updated) VALUES ({q(it.fp)}, {q(
+				it.home
+			)}, {q(it.spec)}, {q(if passed then "passed" else "failed")}, {q(encoded)}, {if it.detail
+				then q(it.detail)
+				else "NULL"}, {it.seconds}, {now}) ON CONFLICT(fp) DO UPDATE SET home=excluded.home, spec=excluded.spec, state=excluded.state, cases=excluded.cases, detail=excluded.detail, seconds=excluded.seconds, updated=excluded.updated;`
+		)
+	end
+	local cutoff = now - KEEP_SECONDS
+	table.insert(sql, `DELETE FROM specs WHERE updated < {cutoff};`)
+	table.insert(sql, `DELETE FROM gates WHERE passed_at < {cutoff};`)
+	table.insert(sql, "COMMIT;")
+	table.insert(sql, "SELECT json_object('ok', 1);")
+	local _, err = call(db.path, table.concat(sql, "\n"))
 	if err then
 		error(err)
 	end
