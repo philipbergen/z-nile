@@ -138,37 +138,6 @@ function resultsdb.rows(db: Db, fps: { string }): { [string]: Row }
 	return out
 end
 
--- Records a result under a fingerprint: passed only for a loaded file with every case ok; the latest write wins.
-function resultsdb.record(
-	db: Db,
-	fp: string,
-	home: string,
-	spec: string,
-	loaded: boolean,
-	cases: { Case },
-	detail: string?,
-	seconds: number,
-	now: number?
-)
-	local passed = loaded
-	for _, c in cases do
-		if not c.ok then
-			passed = false
-		end
-	end
-	local stamp = now or os.time()
-	local encoded = serde.encode("json" :: "json", cases)
-	local _, err = call(
-		db.path,
-		`INSERT INTO specs(fp, home, spec, state, cases, detail, seconds, updated) VALUES ({q(fp)}, {q(home)}, {q(
-			spec
-		)}, {q(if passed then "passed" else "failed")}, {q(encoded)}, {if detail then q(detail) else "NULL"}, {seconds}, {stamp}) ON CONFLICT(fp) DO UPDATE SET home=excluded.home, spec=excluded.spec, state=excluded.state, cases=excluded.cases, detail=excluded.detail, seconds=excluded.seconds, updated=excluded.updated;\nSELECT json_object('changes', changes());`
-	)
-	if err then
-		error(err)
-	end
-end
-
 function resultsdb.recordGate(
 	db: Db,
 	key: string,
@@ -206,18 +175,6 @@ function resultsdb.gatePassed(db: Db, key: string): { passedAt: number, summary:
 	return { passedAt = decoded.passed_at, summary = decoded.summary }
 end
 
--- Drops rows and gates older than 30 days.
-function resultsdb.prune(db: Db, now: number)
-	local cutoff = now - KEEP_SECONDS
-	local _, err = call(
-		db.path,
-		`DELETE FROM specs WHERE updated < {cutoff};\nDELETE FROM gates WHERE passed_at < {cutoff};\nSELECT json_object('ok', 1);`
-	)
-	if err then
-		error(err)
-	end
-end
-
 export type Item = {
 	fp: string,
 	home: string,
@@ -228,29 +185,84 @@ export type Item = {
 	seconds: number,
 }
 
--- Records every item and prunes in ONE sqlite3 call, in one transaction: a failure records nothing. Same rule as record.
+-- Text any bytes survive: SQLite's CLI reads its script as text, so a NUL byte ends a statement early and a stored
+-- value that is not UTF-8 makes the JSON the reads come back in unreadable. Both become "?" (review 002 F1).
+local function clean(s: string): string
+	local out = string.gsub(s, "%z", "?")
+	if utf8.len(out) == nil then
+		out = string.gsub(out, "[\128-\255]", "?")
+	end
+	return out
+end
+
+-- The one rule for a result: passed only for a loaded file with every case ok; the latest write wins. record,
+-- recordMany and every spec of AC4 go through this text (review 002 F2).
+local function upsertSql(it: Item, now: number): string
+	local passed = it.loaded
+	for _, c in it.cases do
+		if not c.ok then
+			passed = false
+		end
+	end
+	local cases: { Case } = {}
+	for _, c in it.cases do
+		table.insert(cases, { name = clean(c.name), ok = c.ok })
+	end
+	local encoded = serde.encode("json" :: "json", cases)
+	local detail = if it.detail then q(clean(it.detail)) else "NULL"
+	return `INSERT INTO specs(fp, home, spec, state, cases, detail, seconds, updated) VALUES ({q(clean(it.fp))}, {q(
+		clean(it.home)
+	)}, {q(clean(it.spec))}, {q(if passed then "passed" else "failed")}, {q(clean(encoded))}, {detail}, {it.seconds}, {now}) ON CONFLICT(fp) DO UPDATE SET home=excluded.home, spec=excluded.spec, state=excluded.state, cases=excluded.cases, detail=excluded.detail, seconds=excluded.seconds, updated=excluded.updated;`
+end
+
+local function pruneSql(now: number): string
+	local cutoff = now - KEEP_SECONDS
+	return `DELETE FROM specs WHERE updated < {cutoff};\nDELETE FROM gates WHERE passed_at < {cutoff};`
+end
+
+-- Records a result under a fingerprint: passed only for a loaded file with every case ok; the latest write wins.
+function resultsdb.record(
+	db: Db,
+	fp: string,
+	home: string,
+	spec: string,
+	loaded: boolean,
+	cases: { Case },
+	detail: string?,
+	seconds: number,
+	now: number?
+)
+	local it: Item = {
+		fp = fp,
+		home = home,
+		spec = spec,
+		loaded = loaded,
+		cases = cases,
+		detail = detail,
+		seconds = seconds,
+	}
+	local _, err =
+		call(db.path, `{upsertSql(it, now or os.time())}\nSELECT json_object('changes', changes());`)
+	if err then
+		error(err)
+	end
+end
+
+-- Drops rows and gates older than 30 days.
+function resultsdb.prune(db: Db, now: number)
+	local _, err = call(db.path, `{pruneSql(now)}\nSELECT json_object('ok', 1);`)
+	if err then
+		error(err)
+	end
+end
+
+-- Records every item and prunes in ONE sqlite3 call, in one transaction: a failure records nothing.
 function resultsdb.recordMany(db: Db, items: { Item }, now: number)
 	local sql = { "BEGIN IMMEDIATE;" }
 	for _, it in items do
-		local passed = it.loaded
-		for _, c in it.cases do
-			if not c.ok then
-				passed = false
-			end
-		end
-		local encoded = serde.encode("json" :: "json", it.cases)
-		table.insert(
-			sql,
-			`INSERT INTO specs(fp, home, spec, state, cases, detail, seconds, updated) VALUES ({q(it.fp)}, {q(
-				it.home
-			)}, {q(it.spec)}, {q(if passed then "passed" else "failed")}, {q(encoded)}, {if it.detail
-				then q(it.detail)
-				else "NULL"}, {it.seconds}, {now}) ON CONFLICT(fp) DO UPDATE SET home=excluded.home, spec=excluded.spec, state=excluded.state, cases=excluded.cases, detail=excluded.detail, seconds=excluded.seconds, updated=excluded.updated;`
-		)
+		table.insert(sql, upsertSql(it, now))
 	end
-	local cutoff = now - KEEP_SECONDS
-	table.insert(sql, `DELETE FROM specs WHERE updated < {cutoff};`)
-	table.insert(sql, `DELETE FROM gates WHERE passed_at < {cutoff};`)
+	table.insert(sql, pruneSql(now))
 	table.insert(sql, "COMMIT;")
 	table.insert(sql, "SELECT json_object('ok', 1);")
 	local _, err = call(db.path, table.concat(sql, "\n"))

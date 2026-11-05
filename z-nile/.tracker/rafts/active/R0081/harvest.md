@@ -6,3 +6,7 @@
 - review-001 F6: one-off: a bullet that contradicted the list beside it
 - review-001 F7: one-off: refuted, a runner cannot unset an inherited OS variable from inside Lune
 - review-001 F8: one-off: an experiment result left out of the log
+- review-002 F1: one-off: the Design's failed-row rule left out as a deviation; the Design and the scope decision ("record each case's name and result") name it
+- review-002 F2: zz-test/promoted-specs-pin-rules-not-sets
+- review-002 F3: zz-arch/guard-decisions-do-not-hang-on-optional-features
+- review-002 F4: zz-test/pin-call-site-arguments

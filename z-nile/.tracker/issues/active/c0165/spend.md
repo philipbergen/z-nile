@@ -40,6 +40,7 @@
 | 36 | 2026-11-05 04:04 | R0081: refute-001, harvest, lessons, Verification log | 0 | 0 | 20.0 | focus | code-review |  |
 | 37 | 2026-11-05 04:06 | c0165: selene shadowing, pcall expect, re-key the new spec | 6 | 6 | 10.0 | focus | code-review |  |
 | 38 | 2026-11-05 04:28 | R0081: review-002 | 0 | 0 | 55.0 | focus | code-review |  |
+| 39 | 2026-11-05 04:31 | c0165: review 002 fixes: failed rows, one SQL text, jail verdict from the run, end-to-end orchestrator spec | 578 | 77 | 70.0 | focus | code-review |  |
 
-**Total:** +5603 / -236 lines, 1231.0 agent-minutes, 7440865 tokens over 38 records
-<!-- totals: added=5603 removed=236 minutes=1231.0 records=38 tokens=7440865 -->
+**Total:** +6181 / -313 lines, 1301.0 agent-minutes, 7440865 tokens over 39 records
+<!-- totals: added=6181 removed=313 minutes=1301.0 records=39 tokens=7440865 -->

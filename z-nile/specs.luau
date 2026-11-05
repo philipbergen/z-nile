@@ -253,17 +253,20 @@ local function runCommand()
 				end
 			end
 		end
-		if db ~= nil and state ~= nil and doc ~= nil then
-			if code ~= 0 then
-				-- no pass is recorded from a run that did not exit 0 (a spec can pass and the runner still fail, as the browser guard does)
-				stdio.write(`results not recorded: the run exited {code}\n`)
-			elseif not reuseplan.records(doc.jail or "", hostOs()) then
+		if doc ~= nil then
+			-- whether this run may record at all is decided by the run alone (its jail), never by whether the db can be read
+			if not reuseplan.records(doc.jail or "", hostOs()) then
 				stdio.write(`not recorded: {doc.jail or ""}\n`)
 				local pid = process.env.PICKMAN_GATE_PID
 				if pid ~= nil and pid ~= "" then
 					pcall(fs.writeFile, noRecordMarker(home, pid), "")
 				end
-			else
+			elseif db ~= nil and state ~= nil then
+				if code ~= 0 then
+					-- a pass is recorded only from a run that exited 0 (a spec can pass and the runner still fail, as the
+					-- browser guard does); a failed file is recorded as failed
+					stdio.write(`results not recorded: the run exited {code}\n`)
+				end
 				local after = workspace.blobs(ROOT)
 				local now = os.time()
 				-- the refs the run's specs declare, read once for all of them
@@ -294,19 +297,29 @@ local function runCommand()
 							)
 							== fps[f]
 					if rec ~= nil and stands then
-						table.insert(items, {
-							fp = fps[f],
-							home = home,
-							spec = f,
-							loaded = rec.loaded == true,
-							cases = rec.cases or {},
-							detail = if rec.detail ~= "" then rec.detail else nil,
-							seconds = rec.seconds or 0,
-						})
+						local failed = rec.loaded ~= true
+						for _, c in rec.cases or {} do
+							if not c.ok then
+								failed = true
+							end
+						end
+						if code == 0 or failed then
+							table.insert(items, {
+								fp = fps[f],
+								home = home,
+								spec = f,
+								loaded = rec.loaded == true,
+								cases = rec.cases or {},
+								detail = if rec.detail ~= "" then rec.detail else nil,
+								seconds = rec.seconds or 0,
+							})
+						end
 					end
 				end
 				-- one call, one transaction: every row and the prune, or nothing
-				pcall(resultsdb.recordMany, db :: resultsdb.Db, items, now)
+				if code == 0 or #items > 0 then
+					pcall(resultsdb.recordMany, db :: resultsdb.Db, items, now)
+				end
 			end
 		end
 	end
