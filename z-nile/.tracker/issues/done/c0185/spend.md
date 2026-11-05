@@ -12,6 +12,12 @@
 | 8 | 2026-11-01 19:06 | design-review-004 | 0 | 0 | 9.0 | spend | design-review | 171250 |
 | 9 | 2026-11-01 19:08 | design-refute-004 | 0 | 0 | 20.0 | spend | design-review |  |
 | 10 | 2026-11-01 19:18 | prep | 2704 | 1 | 110.0 | spend | prep |  |
+| 11 | 2026-11-04 23:39 | c0185: apply the prototype patch (alias, library mappings, shared place harness, graph and selector, cross-home rules, restated rules) | 481 | 106 | 20.0 | focus | build |  |
+| 12 | 2026-11-05 00:00 | c0185: fixture copies tiers.luau (user-approved check.sh edit), Verification log | 0 | 0 | 10.0 | focus | build |  |
+| 13 | 2026-11-05 00:13 | R0076: review-001 | 0 | 0 | 45.0 | focus | code-review |  |
+| 14 | 2026-11-05 00:14 | R0076: refute-001, harvest, lesson | 11 | 0 | 15.0 | focus | code-review |  |
+| 15 | 2026-11-05 00:15 | R0076: final Verification log | 0 | 0 | 5.0 | focus | deliver |  |
+| 16 | 2026-11-05 00:22 | tracker: done R0076 | 0 | 0 | 7.7 | raft | deliver |  |
 
-**Total:** +2704 / -1 lines, 311.0 agent-minutes, 850996 tokens over 10 records
-<!-- totals: added=2704 removed=1 minutes=311.0 records=10 tokens=850996 -->
+**Total:** +3196 / -107 lines, 413.7 agent-minutes, 850996 tokens over 16 records
+<!-- totals: added=3196 removed=107 minutes=413.7 records=16 tokens=850996 -->

@@ -8,7 +8,7 @@ description: How pickman's game is tested - its spec tiers (unit, helper, contra
 This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The arcade's projects extend this skill (`extends: pickman-test`, c0184): a rule changed here changes theirs, so a change names its effect on them.
 
 ## Running pickman's specs
-Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.
+Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`, and so is `place` (the Rojo-built place, `z-nile/tests/lib/place.luau`, c0185). `@arcade` is the library's `src/shared` (`../arcade/src/shared`).
 
 ## Spec tiers
 | dir | tier | may require |
@@ -19,7 +19,7 @@ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run
 | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
 | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
 | `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (`./zn run --time 600 -- lune run scripts/runtime-test -- <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--lobby <version>` once both places are published (c0064)). A merge runs `lune run scripts/cicd` from `pickman/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
-| `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/`, `default.project.json` or `lobby.project.json` change. `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
+| `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every change to what the place is built from: a project file of the home and every folder it maps, the library's included (c0185). `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
 
 A spec file looks like this:
 ```lua

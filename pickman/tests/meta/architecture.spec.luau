@@ -1,6 +1,7 @@
 --!strict
 -- Structural rules from the `pickman-arch` and `pickman-test` skills, enforced mechanically: pickman's (c0120), run from
 -- pickman/ like every pickman spec. The tooling's own rules are in the root's tests/meta/architecture.spec.luau.
+local crosshome = require("@znile/tests/lib/crosshome")
 local fs = require("@lune/fs")
 local graph = require("@znile/lib/graph")
 local t = require("@tests/lib/t")
@@ -51,12 +52,21 @@ return t.spec("architecture", function(it)
 		t.expect(table.concat(msgs, "\n")).toBe("")
 	end)
 
-	it("src requires use only relative paths, @self/ or @game/ReplicatedStorage/", function()
+	it("src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)", function()
 		local msgs = {}
 		for _, v in graph.srcAliasViolations("src") do
 			table.insert(msgs, `{v.file}: {v.spec}`)
 		end
 		t.expect(table.concat(msgs, "\n")).toBe("")
+	end)
+
+	it("Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter", function()
+		t.expect(table.concat(crosshome.logicOutside(g.deps, LOGIC), "\n")).toBe("")
+	end)
+
+	it("specs reach the shared place harness only through the home's tests/lib/place", function()
+		local shared, wrapper = "../z-nile/tests/lib/place.luau", "tests/lib/place.luau"
+		t.expect(table.concat(crosshome.placeBypass(g.deps, shared, wrapper), "\n")).toBe("")
 	end)
 
 	it("src has no dynamic requires", function()

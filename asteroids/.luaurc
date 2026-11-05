@@ -3,6 +3,7 @@
   "aliases": {
     "logic": "./src/shared/Logic",
     "shared": "./src/shared",
+    "arcade": "../arcade/src/shared",
     "tests": "./tests",
     "znile": "../z-nile"
   }

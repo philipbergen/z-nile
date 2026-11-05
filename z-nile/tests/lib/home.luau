@@ -5,6 +5,7 @@
 -- selects its own check, zz-test lesson specs-pin-only-their-own-project), and the promoted homes.spec, which runs it on
 -- fixture homes to prove the rule reads the registry and not a list of names.
 local fs = require("@lune/fs")
+local graph = require("../../lib/graph")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 
@@ -36,21 +37,30 @@ local R = "req" .. "uire" -- keeps literal require text out of this file (the gr
 -- The home whose tests/meta/architecture.spec.luau holds the structural rules; every other home runs it from its folder.
 home.RULES_HOME = "pickman"
 local RULES_HOME = home.RULES_HOME
+-- The library every place shares (c0185): its home, and the two folders a place maps from it. Every home's default place
+-- maps them under ReplicatedStorage.Arcade and ServerStorage.Arcade (the library's own from inside its home), and every home's
+-- .luaurc names the shared one `arcade` for its specs.
+home.LIBRARY_HOME = "arcade"
+local LIBRARY_HOME = home.LIBRARY_HOME
+local LIBRARY_SHARED, LIBRARY_SERVER = `{LIBRARY_HOME}/src/shared`, `{LIBRARY_HOME}/src/server`
 
--- Whether `path`, relative to a home, stays inside it once its `..` and `.` segments are applied.
-local function inside(path: string): boolean
-	local depth = 0
+-- `path` with its "." and ".." segments applied ("snake/../arcade/src" is "arcade/src"); a ".." that climbs out stays.
+local function collapse(path: string): string
+	local parts: { string } = {}
 	for seg in string.gmatch(path, "[^/]+") do
-		if seg == ".." then
-			depth -= 1
-			if depth < 0 then
-				return false
-			end
+		if seg == ".." and #parts > 0 and parts[#parts] ~= ".." then
+			table.remove(parts)
 		elseif seg ~= "." then
-			depth += 1
+			table.insert(parts, seg)
 		end
 	end
-	return true
+	return table.concat(parts, "/")
+end
+
+-- Where a "$path" written in a project file of home `h` points, repo-relative and collapsed; an absolute one is itself (Rojo
+-- reads "/../arcade/src/shared" as "/arcade/src/shared", never as a folder of the home).
+local function resolveIn(h: string, path: string): string
+	return if string.sub(path, 1, 1) == "/" then path else collapse(`{h}/{path}`)
 end
 
 -- Whether `folder`, with its links followed, lies under `root`, with its links followed.
@@ -104,18 +114,6 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 			bad(owner, `{rel} is not exactly: {table.concat(lines, " / ")}`)
 		end
 	end
-	local function paths(node: any, into: { string })
-		if type(node) ~= "table" then
-			return
-		end
-		for key, value in node :: { [string]: any } do
-			if key == "$path" and type(value) == "string" then
-				table.insert(into, value)
-			else
-				paths(value, into)
-			end
-		end
-	end
 	for _, p in reg.projects do
 		if p.name == "z-nile" or p.home == "." or (only and p.name ~= only) then
 			continue
@@ -138,6 +136,7 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 			local want = {
 				logic = "./src/shared/Logic",
 				shared = "./src/shared",
+				arcade = `../{LIBRARY_SHARED}`,
 				tests = "./tests",
 				znile = "../z-nile",
 			}
@@ -170,19 +169,40 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 		if not table.find(files, "default.project.json") then
 			bad(h, "missing default.project.json")
 		end
+		-- the library's two folders, and the one node each may sit at
+		local libraryNode =
+			{ [LIBRARY_SHARED] = "ReplicatedStorage/Arcade", [LIBRARY_SERVER] = "ServerStorage/Arcade" }
+		local mapped: { [string]: { graph.GameRoot } } = {} -- project file -> its mappings
 		for _, name in files do
-			local found: { string } = {}
-			paths(serde.decode("json", fs.readFile(`{top}/{h}/{name}`)), found)
+			local ok, decoded: any = pcall(serde.decode, "json" :: "json", fs.readFile(`{top}/{h}/{name}`))
+			local found: { graph.GameRoot } = if ok then graph.mappings(decoded) else {}
+			mapped[name] = found
 			if #found == 0 then
 				bad(h, `{name} maps no $path`)
 			end
-			for _, path in found do
-				if not inside(path) then
+			for _, m in found do
+				local path = m.path
+				local target = resolveIn(h, path)
+				if not graph.insideFolder(path) and libraryNode[target] then
+					-- the library's two folders are the one place a project file may map from another home, each at its node
+					if m.instance ~= libraryNode[target] then
+						bad(
+							h,
+							`{name} maps the library's {target} at {m.instance}, which is not its node ({libraryNode[target]})`
+						)
+					elseif not fs.isDir(`{top}/{h}/{path}`) then
+						bad(h, `{name} maps $path {path}, which is no folder of the library`)
+					elseif not physicallyInside(`{top}/{LIBRARY_HOME}`, `{top}/{h}/{path}`) then
+						bad(h, `{name} maps $path {path}, which is a link out of the library`)
+					end
+				elseif not graph.insideFolder(path) then
 					bad(h, `{name} maps $path {path}, which is outside the home`)
 				elseif not fs.isDir(`{top}/{h}/{path}`) then
 					bad(h, `{name} maps $path {path}, which is no folder of the home`)
 				elseif not physicallyInside(`{top}/{h}`, `{top}/{h}/{path}`) then
 					bad(h, `{name} maps $path {path}, which is a link out of the home`)
+				elseif fs.isFile(`{top}/{h}/{path}/default.project.json`) then
+					bad(h, `{name} maps $path {path}, a nested project (Rojo would follow its own mappings)`)
 				else
 					-- a link inside the mapped folder that leaves the home is followed by Rojo too
 					local links = process.exec("find", { `{top}/{h}/{path}`, "-type", "l" })
@@ -193,6 +213,17 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 						end
 					end
 				end
+			end
+		end
+		-- the library in the default place: ReplicatedStorage.Arcade and ServerStorage.Arcade map its two folders
+		for target, node in libraryNode do
+			local found = false
+			local defaults: { graph.GameRoot } = mapped["default.project.json"] or {}
+			for _, m in defaults do
+				found = found or (m.instance == node and resolveIn(h, m.path) == target)
+			end
+			if mapped["default.project.json"] and not found then
+				bad(h, `default.project.json does not map {(string.gsub(node, "/", "."))} to {target}`)
 			end
 		end
 		for _, dir in { "src/shared/Logic", "src/server" } do
@@ -219,6 +250,12 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 			"tests/meta/fence.spec.luau",
 			{ "--!strict", `return {R}("../../../z-nile/tests/tooling/repo-fence.spec")` }
 		)
+		wrapper(h, "tests/lib/place.luau", { "--!strict", `return {R}("../../../z-nile/tests/lib/place")` })
+		wrapper(h, "tests/place/library.spec.luau", {
+			"--!strict",
+			`local place = {R}("@tests/lib/place")`,
+			`return {R}("../../../z-nile/tests/lib/placespec")(place)`,
+		})
 		wrapper(
 			h,
 			"tests/meta/home.spec.luau",

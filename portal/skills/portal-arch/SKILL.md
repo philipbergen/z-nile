@@ -22,7 +22,7 @@ Read `pickman/skills/pickman-arch/SKILL.md` first, and its lessons (`./zn lesson
 `tests/meta/architecture.spec.luau` enforces the structural rules here: it runs pickman's meta spec from this home, so it reads `portal/src` and `portal/.tracker/architecture.md`.
 
 ## Changes to pickman's rules
-1. **Arcade features are leaves that adapters wire in** (`arcade/.tracker/architecture.md`). The portal's Logic never requires arcade Logic: an arcade feature (the boards, paid play, travel) reaches Logic as a parameter, and an adapter requires it through `@game/ReplicatedStorage/Arcade/...` (server adapters also `@game/ServerStorage/Arcade/...`). Until the cross-home gate exists (c0185), the portal requires nothing from `arcade/`.
+1. **Arcade features are leaves that adapters wire in** (`arcade/.tracker/architecture.md`). The portal's Logic never requires arcade Logic: an arcade feature (the boards, paid play, travel) reaches Logic as a parameter, and an adapter requires it through `@game/ReplicatedStorage/Arcade/...` (server adapters also `@game/ServerStorage/Arcade/...`). The gate holds it (c0185): `tests/meta/architecture.spec` fails a Logic require that resolves outside the home, `@game/ServerStorage/...` is allowed from a server root only, and a spec reaches the library as `@arcade/Logic/<Feature>`.
 2. **The server is authoritative** for what a player may do: a play is granted once, on the server (ProcessReceipt), and TeleportData is never trusted (game-design.md, Purchase).
 
 ## Design checklist (answer these in every portal issue's Design section)

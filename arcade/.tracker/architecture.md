@@ -37,7 +37,7 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
   - The Session clock and intent limiter move only when Snake needs them.
 - **Pickman migrates one feature at a time:** an arcade issue copies the feature and its specs, then a pickman issue switches the adapters and deletes the old copy. A raft never spans two projects.
 - **Gate and selector, all in z-nile:**
-  - `graph.affectedSpecs` re-runs a home's place specs when anything under any `$path` of its project files changes. Today `src/` and `lobby.project.json` are hard-coded.
+  - `graph.affectedSpecs` re-runs a home's place specs when anything under any `$path` of its project files changes, another home's folders included (c0185; the old rule named `src/` and `lobby.project.json`).
   - `z-nile/affected.luau` matches every `*.project.json`.
   - `pickman/tests/lib/place.luau` moves into the shared harness and reads its script roots from the project file.
   - `tests/meta/architecture.spec` fails any Logic require that resolves outside its home.

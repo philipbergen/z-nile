@@ -22,7 +22,7 @@ Read `pickman/skills/pickman-arch/SKILL.md` first, and its lessons (`./zn lesson
 `tests/meta/architecture.spec.luau` enforces the structural rules here: it runs pickman's meta spec from this home, so it reads `invaders/src` and `invaders/.tracker/architecture.md`.
 
 ## Changes to pickman's rules
-1. **Arcade features are leaves that adapters wire in** (`arcade/.tracker/architecture.md`). Invaders's Logic never requires arcade Logic: an arcade feature reaches Logic as a parameter (an RNG, a store, a travel status), and an adapter requires it through `@game/ReplicatedStorage/Arcade/...` (server adapters also `@game/ServerStorage/Arcade/...`). Until the cross-home gate exists (c0185), invaders requires nothing from `arcade/`.
+1. **Arcade features are leaves that adapters wire in** (`arcade/.tracker/architecture.md`). Invaders's Logic never requires arcade Logic: an arcade feature reaches Logic as a parameter (an RNG, a store, a travel status), and an adapter requires it through `@game/ReplicatedStorage/Arcade/...` (server adapters also `@game/ServerStorage/Arcade/...`). The gate holds it (c0185): `tests/meta/architecture.spec` fails a Logic require that resolves outside the home, `@game/ServerStorage/...` is allowed from a server root only, and a spec reaches the library as `@arcade/Logic/<Feature>`.
 2. **The server is authoritative** (rule 7) for invaders's state; the clients send intents and render.
 
 ## Design checklist (answer these in every invaders issue's Design section)

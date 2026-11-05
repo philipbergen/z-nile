@@ -9,13 +9,13 @@ description: How portal's start place is tested - from portal's home, with pickm
 This is portal's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The spec tiers, the shape of a spec and the simulation harness are pickman's, in `pickman/skills/pickman-test/SKILL.md`: read it, and its lessons (`./zn lessons --skill pickman-test --full`).
 
 ## Running portal's specs
-Specs run from portal's home, `portal/`: `cd portal && lune run tests/run -- tests/unit/Foo`, or `portal/check.sh` for portal's whole gate. Every path in pickman-test is relative to the project's home, so for portal it is relative to `portal/`, where `portal/.luaurc` points `@tests`, `@logic` and `@shared` at portal's own folders. The assertions (`@tests/lib/t`) and `renamed` are the shared ones, re-exported from `portal/tests/lib/`.
+Specs run from portal's home, `portal/`: `cd portal && lune run tests/run -- tests/unit/Foo`, or `portal/check.sh` for portal's whole gate. Every path in pickman-test is relative to the project's home, so for portal it is relative to `portal/`, where `portal/.luaurc` points `@tests`, `@logic` and `@shared` at portal's own folders and `@arcade` at the library's `src/shared` (`../arcade/src/shared`). The assertions (`@tests/lib/t`) and `renamed` are the shared ones, re-exported from `portal/tests/lib/`.
 
 ## What portal has
 - `tests/meta/architecture.spec.luau` runs pickman's structural rules from this home (the pickman-arch rules, on `portal/src`).
 - `tests/meta/fence.spec.luau` proves the run is guarded and jailed to `portal/.cache`, as pickman's does.
 - `tests/meta/home.spec.luau` checks this home against the home rule (z-nile/README.md, A project's home), so a missing file or a wrong setting fails its gate.
-- A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim`, `place` and `fakeengine` are pickman's (`pickman/tests/lib/`): a portal spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 does for `place`.
+- A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim` and `fakeengine` are pickman's (`pickman/tests/lib/`): a portal spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
 
 ## Lessons
 Before you start, read this skill's lessons: `./zn lessons --skill portal-test --full`. Each is a mistake made before, with the question that catches it.
