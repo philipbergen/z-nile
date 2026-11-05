@@ -63,7 +63,21 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 			if string.find(path, "\n", 1, true) then
 				return nil, `a path holds a newline: {path}`
 			end
-			if fs.isFile(`{root}/{path}`) then
+			local full = `{root}/{path}`
+			if process.exec("test", { "-L", full }).ok then
+				-- a link is hashed the way git stores it: mode 120000 and the link's text. A link to a folder or a dangling
+				-- one is a link all the same (review 003 F2): fs.isFile follows links and would call it deleted.
+				local target = process.exec("readlink", { full })
+				if not target.ok then
+					return nil, `cannot read the link {path}`
+				end
+				local okLink, id =
+					git(root, { "hash-object", "--stdin" }, (string.gsub(target.stdout, "\n$", "")))
+				if not okLink or not string.match(id, "^%x+") then
+					return nil, `git hash-object failed for the link {path}`
+				end
+				blobs[path] = `120000 {trim(id)}`
+			elseif fs.isFile(full) then
 				table.insert(toHash, path)
 			else
 				blobs[path] = nil -- deleted

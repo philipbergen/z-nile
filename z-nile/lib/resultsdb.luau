@@ -33,6 +33,24 @@ local function q(s: string): string
 	return "'" .. string.gsub(s, "'", "''") .. "'"
 end
 
+-- Text any bytes survive: SQLite's CLI reads its script as text, so a NUL byte ends a statement early and a stored
+-- value that is not UTF-8 makes the JSON the reads come back in unreadable. Both become "?" (review 002 F1).
+local function clean(s: string): string
+	local out = string.gsub(s, "%z", "?")
+	if utf8.len(out) == nil then
+		out = string.gsub(out, "[\128-\255]", "?")
+	end
+	return out
+end
+
+-- A number that reached SQL text is one this module formatted: whatever a results file said, no other text gets in (review 003 F1).
+local function sqlNumber(n: any, integer: boolean): string
+	if type(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge then
+		return "0"
+	end
+	return if integer then string.format("%d", math.floor(n)) else string.format("%.6f", n)
+end
+
 -- Runs SQL on a db file and returns the decoded last output line, or nil and the error text.
 local function call(path: string, sql: string): (any, string?)
 	local ok, r = pcall(process.exec, binary(), { "-batch", "-bail", "-noheader", "-list", path }, {
@@ -148,9 +166,10 @@ function resultsdb.recordGate(
 )
 	local _, err = call(
 		db.path,
-		`INSERT INTO gates(key, mode, projects, passed_at, summary) VALUES ({q(key)}, {q(mode)}, {q(projects)}, {now}, {q(
-			summary
-		)}) ON CONFLICT(key) DO UPDATE SET mode=excluded.mode, projects=excluded.projects, passed_at=excluded.passed_at, summary=excluded.summary;\nSELECT json_object('changes', changes());`
+		`INSERT INTO gates(key, mode, projects, passed_at, summary) VALUES ({q(key)}, {q(mode)}, {q(projects)}, {sqlNumber(
+			now,
+			true
+		)}, {q(clean(summary))}) ON CONFLICT(key) DO UPDATE SET mode=excluded.mode, projects=excluded.projects, passed_at=excluded.passed_at, summary=excluded.summary;\nSELECT json_object('changes', changes());`
 	)
 	if err then
 		error(err)
@@ -185,16 +204,6 @@ export type Item = {
 	seconds: number,
 }
 
--- Text any bytes survive: SQLite's CLI reads its script as text, so a NUL byte ends a statement early and a stored
--- value that is not UTF-8 makes the JSON the reads come back in unreadable. Both become "?" (review 002 F1).
-local function clean(s: string): string
-	local out = string.gsub(s, "%z", "?")
-	if utf8.len(out) == nil then
-		out = string.gsub(out, "[\128-\255]", "?")
-	end
-	return out
-end
-
 -- The one rule for a result: passed only for a loaded file with every case ok; the latest write wins. record,
 -- recordMany and every spec of AC4 go through this text (review 002 F2).
 local function upsertSql(it: Item, now: number): string
@@ -212,11 +221,14 @@ local function upsertSql(it: Item, now: number): string
 	local detail = if it.detail then q(clean(it.detail)) else "NULL"
 	return `INSERT INTO specs(fp, home, spec, state, cases, detail, seconds, updated) VALUES ({q(clean(it.fp))}, {q(
 		clean(it.home)
-	)}, {q(clean(it.spec))}, {q(if passed then "passed" else "failed")}, {q(clean(encoded))}, {detail}, {it.seconds}, {now}) ON CONFLICT(fp) DO UPDATE SET home=excluded.home, spec=excluded.spec, state=excluded.state, cases=excluded.cases, detail=excluded.detail, seconds=excluded.seconds, updated=excluded.updated;`
+	)}, {q(clean(it.spec))}, {q(if passed then "passed" else "failed")}, {q(clean(encoded))}, {detail}, {sqlNumber(
+		it.seconds,
+		false
+	)}, {sqlNumber(now, true)}) ON CONFLICT(fp) DO UPDATE SET home=excluded.home, spec=excluded.spec, state=excluded.state, cases=excluded.cases, detail=excluded.detail, seconds=excluded.seconds, updated=excluded.updated;`
 end
 
 local function pruneSql(now: number): string
-	local cutoff = now - KEEP_SECONDS
+	local cutoff = sqlNumber(now - KEEP_SECONDS, true)
 	return `DELETE FROM specs WHERE updated < {cutoff};\nDELETE FROM gates WHERE passed_at < {cutoff};`
 end
 

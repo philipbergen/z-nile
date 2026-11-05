@@ -298,7 +298,11 @@ local function runConcurrently()
 			if readOk then
 				local decOk, doc = pcall(serde.decode, "json" :: "json", text :: string)
 				if decOk and type(doc) == "table" and type((doc :: any).files) == "table" then
-					got = (doc :: any).files[1]
+					local first = (doc :: any).files[1]
+					-- a part names its own file: a spec that overwrote another worker's part cannot speak for it
+					if type(first) == "table" and first.file == o.file then
+						got = first
+					end
 				end
 				pcall(fs.removeFile, part)
 			end

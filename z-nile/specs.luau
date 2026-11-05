@@ -94,6 +94,34 @@ local function prefixOf(home: string): string
 	return if home == "." then "" else home .. "/"
 end
 
+-- A record from a results file, checked field by field: the file lies in a .cache folder every spec may write, so its
+-- content is untrusted input (review 003 F1). nil for anything that is not exactly a record for `file`.
+local function validRecord(rec: any, file: string): any
+	if
+		type(rec) ~= "table"
+		or rec.file ~= file
+		or type(rec.loaded) ~= "boolean"
+		or type(rec.cases) ~= "table"
+	then
+		return nil
+	end
+	local cases: { { name: string, ok: boolean } } = {}
+	for _, c in rec.cases do
+		if type(c) ~= "table" or type(c.name) ~= "string" or type(c.ok) ~= "boolean" then
+			return nil
+		end
+		table.insert(cases, { name = c.name, ok = c.ok })
+	end
+	local seconds = if type(rec.seconds) == "number" and rec.seconds == rec.seconds then rec.seconds else 0
+	return {
+		file = file,
+		loaded = rec.loaded,
+		cases = cases,
+		detail = if type(rec.detail) == "string" then rec.detail else "",
+		seconds = seconds,
+	}
+end
+
 local function noRecordMarker(home: string, pid: string): string
 	return `{ROOT}/{prefixOf(home)}.cache/spec-norecord-{pid}`
 end
@@ -235,10 +263,16 @@ local function runCommand()
 		end
 		pcall(fs.removeFile, resultsFile)
 		local byFile: { [string]: any } = {}
-		if doc ~= nil and type(doc.files) == "table" then
-			for _, rec in doc.files do
-				byFile[rec.file] = rec
+		if doc ~= nil and type(doc) == "table" and type(doc.files) == "table" then
+			for _, f in toRun do
+				for _, rec in doc.files do
+					if type(rec) == "table" and rec.file == f then
+						byFile[f] = validRecord(rec, f)
+					end
+				end
 			end
+		else
+			doc = nil
 		end
 		if doc == nil then
 			stdio.write(`results file missing: nothing from this run is recorded\n`)
@@ -255,8 +289,8 @@ local function runCommand()
 		end
 		if doc ~= nil then
 			-- whether this run may record at all is decided by the run alone (its jail), never by whether the db can be read
-			if not reuseplan.records(doc.jail or "", hostOs()) then
-				stdio.write(`not recorded: {doc.jail or ""}\n`)
+			if not reuseplan.records(if type(doc.jail) == "string" then doc.jail else "", hostOs()) then
+				stdio.write(`not recorded: {if type(doc.jail) == "string" then doc.jail else ""}\n`)
 				local pid = process.env.PICKMAN_GATE_PID
 				if pid ~= nil and pid ~= "" then
 					pcall(fs.writeFile, noRecordMarker(home, pid), "")

@@ -68,6 +68,36 @@ return t.spec("c0165 reuse rules beyond the sequestered specs", function(it)
 		end)
 	end)
 
+	it(
+		"F3 (review 003): record cleans NUL and non-UTF-8, and formats a forged number, so the batch and the reads survive",
+		function()
+			local path = `{base}/clean.sqlite`
+			for _, suffix in { "", "-wal", "-shm" } do
+				if fs.isFile(path .. suffix) then
+					fs.removeFile(path .. suffix)
+				end
+			end
+			local db = resultsdb.open(path) :: resultsdb.Db
+			resultsdb.record(
+				db,
+				"fpnul",
+				"z-nile",
+				"tests/n.spec.luau",
+				true,
+				{ { name = "c\0d", ok = false } },
+				"FAIL a\0b \255\254 c",
+				("1); ATTACH DATABASE '" .. base .. "/PWNED.sqlite' AS x; --") :: any,
+				5
+			)
+			local row = resultsdb.rows(db, { "fpnul" })["fpnul"]
+			t.expect(row.state).toBe("failed")
+			t.expect(row.detail).toBe("FAIL a?b ?? c")
+			t.expect(row.cases[1].name).toBe("c?d")
+			t.expect(row.seconds).toBe(0)
+			t.expect(fs.isFile(`{base}/PWNED.sqlite`)).toBe(false)
+		end
+	)
+
 	it("F2: the jail name fence.luau writes off macOS lets a Linux run record, a macOS run not", function()
 		local name = "none (not macOS: environment guards only)"
 		t.expect(reuseplan.records(name, "linux")).toBe(true)

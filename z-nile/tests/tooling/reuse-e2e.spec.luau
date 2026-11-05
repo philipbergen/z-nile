@@ -94,6 +94,55 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		t.expect(fs.isFile(`{dir}/pickman/.cache/spec-norecord-4242`)).toBe(true)
 	end)
 
+	it(
+		"a results file cannot put SQL into the db: a forged number is stored as 0 and nothing else runs",
+		function()
+			local dir = reusefix.make(base, "forge")
+			local path = reusefix.editResults(
+				dir,
+				"forge",
+				[[doc.files[1].seconds = "0); ATTACH DATABASE 'PWNED.sqlite' AS x; --"]]
+			)
+			local ok, _ = reusefix.specs(dir, { "--", "tests/unit/a.spec.luau" }, { PATH = path })
+			t.expect(ok).toBe(true)
+			t.expect(fs.isFile(`{dir}/PWNED.sqlite`)).toBe(false)
+			t.expect(fs.isFile(`{dir}/pickman/PWNED.sqlite`)).toBe(false)
+			t.expect(reusefix.sql(dir, "select seconds from specs where spec = 'tests/unit/a.spec.luau'"))
+				.toBe("0.0")
+		end
+	)
+
+	it("a record for another file, or with a wrong type, counts as no result", function()
+		local dir = reusefix.make(base, "wrongfile")
+		local path = reusefix.editResults(dir, "wrongfile", [[doc.files[1].file = "tests/unit/b.spec.luau"]])
+		local ok, out = reusefix.specs(dir, { "--", "tests/unit/a.spec.luau" }, { PATH = path })
+		t.expect(ok).toBe(false)
+		t.expect(has(out, "FAIL tests/unit/a.spec.luau: no result for it")).toBe(true)
+		t.expect(reusefix.sql(dir, "select count(*) from specs")).toBe("0")
+	end)
+
+	it("a link is part of a digest the way git stores it: a link to a folder, added and removed", function()
+		local dir = reusefix.make(base, "link")
+		write(`{dir}/pickman/src/A.luau`, "return { value = 1 } -- edited\n")
+		local function digest(): string
+			local r = process.exec(
+				"lune",
+				{ "run", "z-nile/specs", "--", "digest", "--mode", "affected", "--projects", "pickman" },
+				{ cwd = dir, env = reusefix.env(dir) }
+			)
+			return reusefix.trim(r.stdout)
+		end
+		local d0 = digest()
+		t.expect(#d0).toBe(64)
+		t.expect(process.exec("ln", { "-s", "pickman/src", `{dir}/folderlink` }).ok).toBe(true)
+		local d1 = digest()
+		t.expect(d1 ~= d0).toBe(true)
+		process.exec("rm", { `{dir}/folderlink` })
+		t.expect(digest()).toBe(d0)
+		t.expect(process.exec("ln", { "-s", "does-not-exist", `{dir}/dangling` }).ok).toBe(true)
+		t.expect(digest() ~= d0).toBe(true)
+	end)
+
 	it("HEAD moves a whole-gate digest only when a * spec is selected", function()
 		local function digest(dir: string): string
 			local r = process.exec(

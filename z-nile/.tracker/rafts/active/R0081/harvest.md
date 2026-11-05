@@ -10,3 +10,8 @@
 - review-002 F2: zz-test/promoted-specs-pin-rules-not-sets
 - review-002 F3: zz-arch/guard-decisions-do-not-hang-on-optional-features
 - review-002 F4: zz-test/pin-call-site-arguments
+- review-003 F1: zz-arch/read-cache-as-untrusted-input
+- review-003 F2: zz-arch/digests-hash-paths-as-git-stores-them
+- review-003 F3: zz-test/guard-needs-its-own-case
+- review-003 F4: one-off: a header that still described the original file
+- review-003 F5: one-off: wording and the log lagging the code

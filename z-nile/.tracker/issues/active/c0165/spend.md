@@ -43,6 +43,7 @@
 | 39 | 2026-11-05 04:31 | c0165: review 002 fixes: failed rows, one SQL text, jail verdict from the run, end-to-end orchestrator spec | 578 | 77 | 70.0 | focus | code-review |  |
 | 40 | 2026-11-05 04:31 | R0081: refute-002, harvest, lesson, Verification log | 0 | 0 | 20.0 | focus | code-review |  |
 | 41 | 2026-11-05 04:50 | R0081: review-003 | 0 | 0 | 30.0 | focus | code-review |  |
+| 42 | 2026-11-05 04:54 | c0165: review 003 fixes: results files are untrusted input, links hashed as git stores them, clean pinned | 189 | 24 | 60.0 | focus | code-review |  |
 
-**Total:** +6181 / -313 lines, 1351.0 agent-minutes, 7440865 tokens over 41 records
-<!-- totals: added=6181 removed=313 minutes=1351.0 records=41 tokens=7440865 -->
+**Total:** +6370 / -337 lines, 1411.0 agent-minutes, 7440865 tokens over 42 records
+<!-- totals: added=6370 removed=337 minutes=1411.0 records=42 tokens=7440865 -->
