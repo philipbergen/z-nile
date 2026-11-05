@@ -296,6 +296,30 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					},
 					says = "outside the backlog folder",
 				},
+				-- code review 004 F2: a new raft in z-nile's root with the id of pickman's active R0040, and a pickman
+				-- issue naming it
+				{
+					n = 70,
+					files = {
+						["z-nile/.tracker/rafts/R0040/R0040.md"] = "---\nid: R0040\ntitle: x\nissues: [c0092]\n---\n",
+						[c0092] = inRaft(onMain(c0092), "R0040"),
+					},
+					says = "raft R0040 belongs to pickman/.tracker",
+				},
+				-- the same new id in both roots, a pickman issue naming it
+				{
+					n = 74,
+					files = {
+						["z-nile/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\ntitle: x\nissues: []\n---\n",
+					},
+					says = "raft R0050 in two roots",
+				},
+				-- code review 004 F4: a member moved out of a backlog raft the PR does not touch
+				{
+					n = 75,
+					files = { [c0094] = (string.gsub(onMain(c0094), "\nraft: R0041\n", "\nraft: R0050\n")) },
+					says = "only between empty and a raft this PR carries",
+				},
 				-- a retired raft's document
 				{
 					n = 55,
@@ -310,6 +334,25 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				if r.code ~= 4 or not has(r.stdout, case.says) then
 					error(`PR #{case.n}: exit {r.code}, wanted 4 saying "{case.says}"\n{r.stdout}{r.stderr}`)
 				end
+			end
+			-- code review 004 F1: a backlog raft moved to active/ or done/ (its folder, with its check.sh) is not a
+			-- rafting PR's to move: PR #71 to done/, PR #72 to active/ with a member added in the same PR
+			for _, life in { { n = 71, to = "done" }, { n = 72, to = "active" } } do
+				local from, dest = "pickman/.tracker/rafts/R0041", `pickman/.tracker/rafts/{life.to}/R0041`
+				local sha = fakecli.pullRequest(
+					h,
+					life.n,
+					life.to == "active" and { [c0092] = inRaft(onMain(c0092), "R0041") } or {},
+					{ [`{from}/R0041.md`] = `{dest}/R0041.md`, [`{from}/check.sh`] = `{dest}/check.sh` }
+				)
+				fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(life.n, sha))
+				local moved = zn({ "dispatch", "c0096" })
+				if moved.code ~= 4 or not has(moved.stdout, "out of the backlog folder") then
+					error(
+						`PR #{life.n}: exit {moved.code}, wanted 4 saying "out of the backlog folder"\n{moved.stdout}{moved.stderr}`
+					)
+				end
+				t.expect(has(fakecli.log(h), `realgh pr merge {life.n} `)).toBe(false)
 			end
 			-- code review 003 F2: a new raft's check.sh is the rendered template's RC0 lines, then only RCn checks
 			local template = raftcheck.render(

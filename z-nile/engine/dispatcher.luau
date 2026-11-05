@@ -1307,21 +1307,38 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		for path in string.gmatch(names, "[^\n]+") do
 			table.insert(paths, path)
 		end
-		-- the rafts this PR carries: new, or in the backlog on the base
-		local rafts: { [string]: string } = {} -- id -> "new" or "backlog"
+		-- the rafts this PR carries, keyed by root and id (code review 004 F2: an id is per root, and an issue may
+		-- name only a raft of its own root): new, or in the backlog on the base, and in the backlog folder at the head
+		-- too (F1: a carried raft moved to active/, done/ or retired/ is not the PR's to move; a retire waits for a human)
+		local rafts: { [string]: string } = {} -- "<root>/<id>" -> "new" or "backlog"
 		local live: { string } = {}
+		local newIn: { [string]: string } = {} -- a new raft's id -> the one root it appears in
 		for _, path in paths do
 			local rid, dirOfItem = trackerstate.itemOf(path, roots :: { string })
 			if rid and store.isRaftId(rid :: string) then
 				local r = rootOf(path) :: string
 				local life = lifeOnBase(r, "rafts", rid :: string)
+				-- the id on the base in any other root: not this root's raft, and not a new one either
+				for _, other in roots :: { string } do
+					if other ~= r and lifeOnBase(other, "rafts", rid :: string) ~= nil then
+						return `it carries {path}, but raft {rid} belongs to {other}`
+					end
+				end
 				if life == nil then
 					if dirOfItem ~= `{r}/rafts/{rid}` then
 						return `it adds raft {rid} outside the backlog folder ({path})`
 					end
-					rafts[rid :: string] = "new"
+					local prev = newIn[rid :: string]
+					if prev ~= nil and prev ~= r then
+						return `it adds raft {rid} in two roots ({prev} and {r})`
+					end
+					newIn[rid :: string] = r
+					rafts[`{r}/{rid}`] = "new"
 				elseif life == "" then
-					rafts[rid :: string] = "backlog"
+					if dirOfItem ~= `{r}/rafts/{rid}` then
+						return `it moves raft {rid} out of the backlog folder ({path}): a rafting PR leaves a backlog raft where it is`
+					end
+					rafts[`{r}/{rid}`] = "backlog"
 				else
 					table.insert(live, `{path} (raft {rid} is {string.sub(life, 1, -2)})`)
 				end
@@ -1340,7 +1357,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		local function shapeOf(path: string): string?
 			local pid, _, rel = trackerstate.itemOf(path, roots :: { string })
 			if pid and store.isRaftId(pid :: string) then
-				if rafts[pid :: string] == "new" and rel == "check.sh" then
+				if rafts[`{rootOf(path) :: string}/{pid}`] == "new" and rel == "check.sh" then
 					local r = rootOf(path) :: string
 					local reg = projects.at(fresh, root)
 					local p = if reg then projects.projectOf(reg :: projects.Registry, r) else nil
@@ -1388,7 +1405,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 					return `it changes {path} beyond its raft: line`
 				end
 				for _, v in { was, became } do
-					if v ~= "" and not rafts[v :: string] then
+					if v ~= "" and not rafts[`{r}/{v}`] then
 						return `it moves {pid}'s raft: line from {if was == "" then "empty" else was} to {if became
 								== ""
 							then "empty"

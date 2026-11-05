@@ -53,7 +53,12 @@ local function word(text: string, i: number): (number?, string?)
 		if quoted and ch == '"' then
 			return j + 1, nil
 		end
-		if not quoted and (ch == " " or ch == "\t" or ch == "\n" or ch == "\\") then
+		if not quoted and (ch == " " or ch == "\t" or ch == "\n") then
+			return j, nil
+		end
+		-- a backslash is only a line continuation (it ends the word and the caller consumes it); any other
+		-- one is refused, so no word ever returns its own start (R0052 code review 004 F3)
+		if not quoted and ch == "\\" and string.sub(text, j + 1, j + 1) == "\n" then
 			return j, nil
 		end
 		if ch == "`" or ch == "\\" then
@@ -122,6 +127,9 @@ function raftcheck.judge(text: string, rendered: string): string?
 					local nxt, err = word(text, j)
 					if not nxt then
 						return err
+					end
+					if nxt <= j then
+						return "a word that did not advance"
 					end
 					words += 1
 					j = nxt :: number

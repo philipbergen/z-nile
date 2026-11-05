@@ -55,6 +55,13 @@ return t.spec("c0117 a new raft's check.sh (R0052 code review 003 F2)", function
 			nocommand = head .. '\ncheck "RC1: x"\nfinish\n',
 			nofinish = head .. '\ncheck "RC1: x" true\n',
 			after = rendered .. "exit 0\n",
+			-- R0052 code review 004 F3: a backslash that is not a line continuation used to loop forever
+			escapedpattern = head .. '\ncheck "RC1: x" grep -q R0050\\.md log.txt\nfinish\n',
+			escapedletter = head .. '\ncheck "RC1: x" true \\x\nfinish\n',
+			escapedspace = head .. '\ncheck "RC1: x" true\\ ;exit 0\nfinish\n',
+			crcontinuation = head .. '\ncheck "RC1: x" true \\\r\nfinish\n',
+			-- F4: the quoted backquote has its own rule (the bare one is refused by the bare-character rule)
+			quotedbackquote = head .. '\ncheck "RC1: x" grep -q "a`b`" f\nfinish\n',
 		}
 		for name, text in cases do
 			if raftcheck.judge(text, rendered) == nil then

@@ -13,3 +13,10 @@
 - review-003 F1: zz-arch/item-rules-scoped-to-their-call
 - review-003 F2: zz-arch/item-rules-scoped-to-their-call
 - review-003 F3: zz-arch/guards-decide-from-the-tools-resolution
+- review-004 F1: zz-arch/item-rules-scoped-to-their-call
+- review-004 F2: zz-arch/parsers-refuse-ambiguity
+- review-004 F3: zz-test/hand-written-parsers-advance-or-refuse
+- review-004 F4: zz-test/refusals-tested-on-both-sides
+- review-004 F5: zz-rules/grep-markers-before-merge-commit
+- review-004 F6: zz-arch/one-reader-per-format
+- review-004 F7: one-off: not this raft's to fix; the lead captures an issue for z-raft (item 9 for every RCn line a rafting adds)
