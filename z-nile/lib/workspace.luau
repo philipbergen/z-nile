@@ -14,14 +14,11 @@ local function trim(s: string): string
 	return (string.gsub(s, "%s+$", ""))
 end
 
+-- git runs in the checkout (its cwd) with the subcommand first, the way a person types it: a wrapper on PATH sees it so
 local function git(root: string, args: { string }, stdin: string?): (boolean, string)
-	local full = { "-C", root }
-	for _, a in args do
-		table.insert(full, a)
-	end
 	local r = if stdin
-		then process.exec("git", full, { stdio = { stdin = stdin } })
-		else process.exec("git", full)
+		then process.exec("git", args, { cwd = root, stdio = { stdin = stdin } })
+		else process.exec("git", args, { cwd = root })
 	return r.ok, r.stdout
 end
 

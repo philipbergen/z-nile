@@ -27,6 +27,7 @@
 | 23 | 2026-11-05 00:45 | c0165: context.luau, inputs.tsv files, --graph-only and the three selector Overrides | 441 | 11 | 30.0 | focus | build |  |
 | 24 | 2026-11-05 00:47 | c0165: reuseplan and resultsdb | 247 | 0 | 35.0 | focus | build |  |
 | 25 | 2026-11-05 00:48 | c0165: the runner records per-file results under PICKMAN_RESULTS; fence.myPid | 85 | 3 | 35.0 | focus | build |  |
+| 26 | 2026-11-05 00:56 | c0165: specs.luau orchestrator, check.sh reuse (--fresh, whole-gate record), results on the runner | 514 | 10 | 90.0 | focus | build |  |
 
-**Total:** +4690 / -154 lines, 796.0 agent-minutes, 7440865 tokens over 25 records
-<!-- totals: added=4690 removed=154 minutes=796.0 records=25 tokens=7440865 -->
+**Total:** +5204 / -164 lines, 886.0 agent-minutes, 7440865 tokens over 26 records
+<!-- totals: added=5204 removed=164 minutes=886.0 records=26 tokens=7440865 -->
