@@ -24,6 +24,7 @@
 | 20 | 2026-11-04 07:34 | prep | 3276 | 1 | 120.0 | spend | prep |  |
 | 21 | 2026-11-05 00:42 | c0165: move the selection rules into lib/select.luau (no rule change) | 178 | 130 | 20.0 | focus | build |  |
 | 22 | 2026-11-05 00:44 | c0165: isInput, parseInputs, fingerprint and workspace reads | 463 | 9 | 40.0 | focus | build |  |
+| 23 | 2026-11-05 00:45 | c0165: context.luau, inputs.tsv files, --graph-only and the three selector Overrides | 441 | 11 | 30.0 | focus | build |  |
 
-**Total:** +3917 / -140 lines, 696.0 agent-minutes, 7440865 tokens over 22 records
-<!-- totals: added=3917 removed=140 minutes=696.0 records=22 tokens=7440865 -->
+**Total:** +4358 / -151 lines, 726.0 agent-minutes, 7440865 tokens over 23 records
+<!-- totals: added=4358 removed=151 minutes=726.0 records=23 tokens=7440865 -->

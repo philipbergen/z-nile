@@ -19,13 +19,15 @@ local function git(root: string, args: { string }, stdin: string?): (boolean, st
 	for _, a in args do
 		table.insert(full, a)
 	end
-	local r = process.exec("git", full, { stdin = stdin })
+	local r = if stdin
+		then process.exec("git", full, { stdio = { stdin = stdin } })
+		else process.exec("git", full)
 	return r.ok, r.stdout
 end
 
 local function nulSplit(text: string): { string }
 	local out: { string } = {}
-	for item in string.gmatch(text, "([^%z]+)") do
+	for item in string.gmatch(text, "([^\0]+)") do
 		table.insert(out, item)
 	end
 	return out

@@ -4,11 +4,12 @@
 --   lune run z-nile/affected -- --base <ref>    -- changes vs <ref>
 --   lune run z-nile/affected -- <file> ...      -- explicit changed files
 --   ... --project <name>                         -- that project's specs only, relative to its home (c0120)
+--   ... --graph-only                             -- read no tests/inputs.tsv (c0165)
 -- Prints one spec path per line (repo-relative; home-relative with --project), or the single line "ALL" when a full
 -- run is required. Prints nothing if no spec is affected.
 
 local changes = require("./lib/changed")
-local graph = require("./lib/graph")
+local context = require("./lib/context")
 local process = require("@lune/process")
 local projects = require("./engine/projects")
 local sel = require("./lib/select")
@@ -16,6 +17,7 @@ local stdio = require("@lune/stdio")
 
 local base: string? = nil
 local only: string? = nil
+local graphOnly = false
 local explicit: { string } = {}
 local i = 1
 while i <= #process.args do
@@ -23,6 +25,8 @@ while i <= #process.args do
 	if a == "--base" then
 		base = process.args[i + 1]
 		i += 1
+	elseif a == "--graph-only" then
+		graphOnly = true
 	elseif a == "--project" then
 		only = process.args[i + 1]
 		i += 1
@@ -42,11 +46,12 @@ local files = if #explicit > 0 then explicit else changes.files(base)
 local result: { string } | "ALL" = "ALL"
 if not sel.forcedAll(rules, files, only) then
 	-- the graph is read only when no forcing path decided the answer
-	result = sel.affected(
-		{ rules = rules, graph = graph.build(sel.graphRoots(rules)), inputs = {}, places = {} },
-		files,
-		only
-	)
+	local ctx, why = context.build(reg, graphOnly)
+	if ctx == nil then
+		stdio.ewrite(`affected: {why}\n`)
+		process.exit(2)
+	end
+	result = sel.affected(ctx, files, only)
 end
 if result == "ALL" then
 	print("ALL")

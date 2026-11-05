@@ -23,7 +23,7 @@ local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 local function affected(path: string): string
-	local r = process.exec("lune", { "run", "z-nile/affected", "--", path }, { cwd = root }) -- c0120 override: at the top
+	local r = process.exec("lune", { "run", "z-nile/affected", "--", "--graph-only", path }, { cwd = root }) -- c0120 override: at the top
 	if not r.ok then
 		error(r.stderr)
 	end
