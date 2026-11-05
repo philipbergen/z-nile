@@ -22,6 +22,7 @@
 | 18 | 2026-11-04 07:19 | design-review-010 | 0 | 0 | 12.0 | spend | design-review | 150000 |
 | 19 | 2026-11-04 07:34 | design-refute-010 | 0 | 0 | 20.0 | spend | design-review |  |
 | 20 | 2026-11-04 07:34 | prep | 3276 | 1 | 120.0 | spend | prep |  |
+| 21 | 2026-11-05 00:42 | c0165: move the selection rules into lib/select.luau (no rule change) | 178 | 130 | 20.0 | focus | build |  |
 
-**Total:** +3276 / -1 lines, 636.0 agent-minutes, 7440865 tokens over 20 records
-<!-- totals: added=3276 removed=1 minutes=636.0 records=20 tokens=7440865 -->
+**Total:** +3454 / -131 lines, 656.0 agent-minutes, 7440865 tokens over 21 records
+<!-- totals: added=3454 removed=131 minutes=656.0 records=21 tokens=7440865 -->
