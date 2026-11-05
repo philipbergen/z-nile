@@ -16,6 +16,7 @@
 | 12 | 2026-11-05 00:00 | c0185: fixture copies tiers.luau (user-approved check.sh edit), Verification log | 0 | 0 | 10.0 | focus | build |  |
 | 13 | 2026-11-05 00:13 | R0076: review-001 | 0 | 0 | 45.0 | focus | code-review |  |
 | 14 | 2026-11-05 00:14 | R0076: refute-001, harvest, lesson | 11 | 0 | 15.0 | focus | code-review |  |
+| 15 | 2026-11-05 00:15 | R0076: final Verification log | 0 | 0 | 5.0 | focus | deliver |  |
 
-**Total:** +3196 / -107 lines, 401.0 agent-minutes, 850996 tokens over 14 records
-<!-- totals: added=3196 removed=107 minutes=401.0 records=14 tokens=850996 -->
+**Total:** +3196 / -107 lines, 406.0 agent-minutes, 850996 tokens over 15 records
+<!-- totals: added=3196 removed=107 minutes=406.0 records=15 tokens=850996 -->
