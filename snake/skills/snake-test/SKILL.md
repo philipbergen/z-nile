@@ -15,7 +15,7 @@ Specs run from snake's home, `snake/`: `cd snake && lune run tests/run -- tests/
 - `tests/meta/architecture.spec.luau` runs pickman's structural rules from this home (the pickman-arch rules, on `snake/src`).
 - `tests/meta/fence.spec.luau` proves the run is guarded and jailed to `snake/.cache`, as pickman's does.
 - `tests/meta/home.spec.luau` checks this home against the home rule (z-nile/README.md, A project's home), so a missing file or a wrong setting fails its gate.
-- A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim`, `place` and `fakeengine` are pickman's (`pickman/tests/lib/`): a snake spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
+- A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim` and `fakeengine` are pickman's (`pickman/tests/lib/`): a snake spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
 
 ## Lessons
 Before you start, read this skill's lessons: `./zn lessons --skill snake-test --full`. Each is a mistake made before, with the question that catches it.
