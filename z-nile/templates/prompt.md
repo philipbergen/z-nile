@@ -36,12 +36,12 @@ If it says `parallel: yes`, follow zz-execute Phase 2B unless the human told you
 ## Architecture map ({{ARCHITECTURE_PATH}})
 {{ARCHITECTURE}}
 
-## Lessons (build and both, from z-nile's skills and the {{PROJECT}} project's)
+## Lessons (build and both, from z-nile's skills and the {{PROJECT}} project's, with the skills they extend)
 Apply each before you write the code it concerns; its full text is `./zn lessons --full <id>`.
 {{LESSONS}}
 
 ## Work items (verbatim from {{ROOT}}/)
 {{ITEMS}}
 
-## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, the binding rules)
+## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, with the skills they extend, the binding rules)
 {{SKILLS}}

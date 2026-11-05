@@ -9,3 +9,5 @@ Two files read milliseconds apart can come from two different writers: the folde
 **Why:** R0047 design review 004 F2: the takeover's owner was judged from `takeover/pid` and `takeover/start`, read separately; if the takeover changed hands between the reads, a live owner looked reused and its takeover was removed, a race the old rule (pid only) didn't have.
 
 **How to apply:** write the pair as one line in one file, through a temp file and a rename, and parse both from that one read; or re-read the first file after the second and judge only if it is unchanged. The same goes for any single value a reader can catch half written: write it whole.
+
+c0180 design review 005 F1: a runner read a tree's state before and after a run and combined the two reads, but every case set the state before the run started, so a runner reading it only before, or only after, passed them all. A rule that reads one fact twice around a run needs a case where the fact changes during the run, in each direction.

@@ -12,8 +12,11 @@ local GhostView = require("./GhostView")
 local HudView = require("./HudView")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
+local Pads = require("./Pads")
 local PelletView = require("./PelletView")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+local Sticks = require("./Sticks")
+local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local snapshots = remotes:WaitForChild("Snapshot") :: RemoteEvent
@@ -26,6 +29,7 @@ local built: string? = nil
 local model: Model? = nil
 local pellets: PelletView.Handle? = nil
 local lit = false -- the walls are drawn lit
+local wallsKey: string? = nil -- the holes and marks the walls were built with (f0126)
 snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	if built ~= frame.maze then
 		built = frame.maze
@@ -37,14 +41,22 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 		model = walls
 		pellets = PelletView.build(m, walls)
 		lit = false -- new walls are built unlit
+		wallsKey = nil
+	end
+	local key = View.wallsKey(frame)
+	if model and key ~= wallsKey then
+		wallsKey = key
+		MazeView.rewall(model, View.frameMaze(frame), if frame.walls then frame.walls.marked else {})
 	end
 	Camera.push(frame)
 	Camera.hopped(frame.hopped)
+	Camera.hopTicks(frame.hopTicks)
 	local snap: Session.Snapshot = frame -- a frame carries everything a snapshot does
 	GhostView.push(snap)
-	DangerHud.push(snap, Maze.layout(snap.maze))
+	DangerHud.push(snap, View.frameMaze(frame))
 	HudView.show(frame.play)
 	HudView.shots(frame.shots)
+	HudView.pick(frame.pick, frame.boon, frame.tick)
 	BlastView.push(frame)
 	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
 	FlowView.show(overlay)
@@ -52,6 +64,10 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 		lit = overlay.flash
 		MazeView.flash(model, overlay.flash)
 	end
+	if model then
+		MazeView.edible(model, View.edible(frame.play))
+	end
+	DangerHud.wallState(overlay.flash, View.edible(frame.play))
 	Camera.setCursor(overlay.cursor)
 	-- last: a code that fails to decode can't stop the rest of the frame
 	if pellets then
@@ -59,12 +75,15 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	end
 end)
 
+Pads.start()
+Camera.pad(Pads.stick)
 Camera.start()
 GhostView.start()
 DangerHud.start(Camera.pose)
 Controls.keys({ arrows = Camera.arrows, aim = Camera.aim })
-Controls.start(Camera.snap, Camera.lookBy, HudView.snapRect, Camera.holdMouse)
+Controls.start(Camera.snap, Camera.lookBy, HudView.snapRect, Camera.holdMouse, HudView.buttons)
 PelletView.start()
+Sticks.start(Pads.stick)
 HudView.start()
 FlowView.start()
 

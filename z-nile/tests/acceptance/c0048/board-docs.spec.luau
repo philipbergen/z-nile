@@ -9,32 +9,17 @@ local t = require("@tests/lib/t")
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 return t.spec("c0460 board docs", function(it)
-	it(
-		"the tracker skill's board row names the workflow, the artifact and a download into a fresh directory",
-		function()
-			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
-			local text = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
-			local row = ""
-			for line in string.gmatch(text, "[^\n]+") do
-				if string.sub(line, 1, 10) == "| board | " then
-					row = line
-				end
-			end
-			t.expect(row ~= "").toBe(true)
-			-- Concatenated so this file does not literally name the download directory.
-			-- c0049 counts a `.cache/<dir>` mention as a fixture (c0108).
-			local boardCi = ".cache/" .. "board-ci"
-			for _, token in
-				{
-					"board.yml",
-					"tracker-board",
-					"gh run download",
-					"rm -rf " .. boardCi,
-					"-D " .. boardCi,
-				}
-			do
-				t.expect(string.find(row, token, 1, true) ~= nil).toBe(true)
+	it("the tracker skill's board row names the local board command", function()
+		-- c0120 override: the spec runs from its home: the checkout's files are read from the top
+		-- c0172 override: the artifact tokens left with the board workflow. The row still names the local command.
+		local text = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
+		local row = ""
+		for line in string.gmatch(text, "[^\n]+") do
+			if string.sub(line, 1, 10) == "| board | " then
+				row = line
 			end
 		end
-	)
+		t.expect(row ~= "").toBe(true)
+		t.expect(string.find(row, "./zn board", 1, true) ~= nil).toBe(true)
+	end)
 end)

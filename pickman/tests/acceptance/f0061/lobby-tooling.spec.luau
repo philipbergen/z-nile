@@ -52,7 +52,7 @@ return t.spec("f0670 tooling", function(it)
 		for line in string.gmatch(text, "[^\n]+") do
 			-- c0120 override: the gate now builds every project file of each home in a loop; the case asserts the loop
 			-- and its rojo build, and below that the home holds both project files
-			if string.match(line, '^%s*for f in "%$%{p%}"%*%.project%.json; do') then
+			if string.match(line, '^%s*for f in "%${p}"%*%.project%.json; do') then
 				each = true
 			elseif string.match(line, '^%s*par_start .*rojo build "%$f"') then
 				build = true

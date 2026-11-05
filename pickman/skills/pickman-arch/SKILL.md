@@ -6,7 +6,7 @@ description: Code structure rules for pickman's game (strict Luau, pure Logic fe
 # Architecture (pickman)
 
 ## Layout (Rojo: `default.project.json` is the game place, `lobby.project.json` the lobby)
-The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository).
+The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository). The arcade's projects extend this skill (`extends: pickman-arch`, c0184): a rule changed here changes theirs, so a change names its effect on them.
 | path | Roblox location | contains |
 |---|---|---|
 | `src/shared/Logic/<Feature>/` | ReplicatedStorage.Shared.Logic | **pure game logic**: no engine access, fully unit-tested in Lune |
@@ -16,7 +16,7 @@ The game is pickman's, in its home `pickman/` (c0120): every path in this skill 
 | `src/lobby/server/` | ServerScriptService.Lobby (lobby place) | the lobby's server adapters: the start request and the teleport. `Main.server.luau` boots them |
 | `src/lobby/client/` | StarterPlayerScripts.Lobby (lobby place) | the lobby's screen. `Main.client.luau` boots it |
 
-Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is a further `<name>.project.json` and `src/<name>/`; `tests/lib/place.luau` (`place.load(project)`, its script roots) and the selector in `z-nile/lib/graph.luau` must learn it too.
+Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is a further `<name>.project.json` and `src/<name>/`; the place harness (`z-nile/tests/lib/place.luau`, which every home's `tests/lib/place.luau` re-exports) reads its script roots from the project file, and the selector (`graph.placeInputs`) from every `$path` in the home's project files, so neither needs to learn it (c0185). A place maps the arcade library with `ReplicatedStorage.Arcade` = `../arcade/src/shared` and `ServerStorage.Arcade` = `../arcade/src/server`; those folders are the one place a `$path` leaves the home.
 
 ## Rules (most are enforced by `tests/meta/architecture.spec.luau`)
 1. **`--!strict` is the first line of every Luau file.**
@@ -32,10 +32,10 @@ Both places share `src/shared` as `ReplicatedStorage.Shared`. A further place is
    - A feature's own files use `require("@self/…")` or `./…`.
 5. **Requires are string literals, with relative paths, `@self` or `@game/ReplicatedStorage/`.**
    - Roblox and Lune resolve relative paths and `@self` the same way (not `@game`, which Lune can't resolve; that's why adapters are never required from `tests/`). Inside `init.luau`, `./X` means a *sibling of the feature directory*.
-   - `.luaurc` aliases (`@logic`, `@shared`, `@tests`, `@scripts`, `@znile`) are only for `tests/`, `scripts/` and `z-nile/`, because Roblox doesn't read `.luaurc`. `@znile` names `z-nile/` (an alias can't hold a hyphen).
+   - `.luaurc` aliases (`@logic`, `@shared`, `@arcade`, `@tests`, `@scripts`, `@znile`) are only for `tests/`, `scripts/` and `z-nile/`, because Roblox doesn't read `.luaurc`. `@znile` names `z-nile/` (an alias can't hold a hyphen). `@arcade` is the library's `src/shared` (`../arcade/src/shared`): a spec reaches an arcade feature as `@arcade/Logic/<Feature>`, the Roblox path `ReplicatedStorage.Arcade.Logic.<Feature>` without its service (c0185).
    - `src` reaches another Rojo root only through Roblox's built-in alias, across Rojo roots: e.g. an adapter's `require("@game/ReplicatedStorage/Shared/Logic/Session")`. Within one root, use relative paths or `@self`.
-   - `@game` requires in `src` go only into ReplicatedStorage. `ServerScriptService` never replicates to clients, so a client require there fails at runtime; running client scripts are clones under `Players.<p>.PlayerScripts`, so a require into `StarterPlayer` loads a second, separate module instance. The resolvers can't tell these apart, so `tests/meta` enforces the rule through `graph.srcAliasAllowed`.
-   - Logic never uses `@game`: the engine-word rule in `tests/meta` already rejects the word `game` in Logic files. `tests/place` and `tests/meta` both resolve `@game` through `default.project.json`.
+   - `@game` requires in `src` go only into ReplicatedStorage, and from a server file (one that every place of the home that maps it, each `*.project.json`, puts under a `ServerScriptService` or `ServerStorage` node, and at least one place maps) also into `ServerStorage` (`@game/ServerStorage/Arcade/...`, c0185). `ServerStorage` and `ServerScriptService` never replicate to clients, so a client or shared file requiring there fails at runtime; running client scripts are clones under `Players.<p>.PlayerScripts`, so a require into `StarterPlayer` loads a second, separate module instance. The resolvers can't tell these apart, so `tests/meta` enforces the rule through `graph.srcAliasAllowed`.
+   - Logic never uses `@game`: the engine-word rule in `tests/meta` already rejects the word `game` in Logic files. `tests/place` and `tests/meta` both resolve `@game` through `default.project.json`. Logic never requires outside its home either: a relative path into another home resolves on disk (Lune, the graph) but not in Roblox's instance tree, and the instance-tree spelling resolves in Roblox but not on disk, so an arcade feature reaches Logic as a parameter an adapter passes in, and `tests/meta` fails any Logic require that resolves outside the home (c0185).
    - No dynamic requires in `src/`.
 6. **Dependencies between features must be declared** in the ```` ```deps ```` block of `pickman/.tracker/architecture.md` (`.tracker/architecture.md` from pickman's home; `Consumer -> Provider`), and the graph must stay acyclic.
    - Adding an edge is a design decision, made in z-design and not during execution.

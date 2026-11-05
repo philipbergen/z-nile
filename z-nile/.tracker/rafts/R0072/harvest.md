@@ -1,0 +1,6 @@
+- design-review-001 F1: z-raft/interface-names-every-writer
+- design-review-001 F2: z-raft/whole-tree-rule-names-inflight-items
+- design-review-001 F3: z-raft/interface-names-every-writer
+- design-review-001 F4: one-off: a stated difference between two members' lesson forms, nothing to prevent beyond zz-review item 7
+- design-review-001 F5: zz-test/no-vacuous-pass
+- design-review-001 F6: one-off: counts quoted from a design that its own references had outgrown; the executors re-measure

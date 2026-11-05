@@ -2,7 +2,7 @@
 title: Run each sequestered spec against a prototype
 when: design
 tags: [specs, prototype, acceptance]
-check: Has every sequestered case whose module or command already exists been run against a scratch prototype, passing for the intended implementation and failing for its listed mutant, with the result recorded? And has `promote-check` type-checked the specs against a prototype that exports the design's types, rather than against a module that does not exist yet And is the prototype's base still `origin/main` for every file the specs load (the Touched modules and anything a spec reads), with the specs, mutants and gate re-run after any change there? And has each platform the specs run on (macOS in the jail, Linux in CI, which `z-nile/ci-verify.sh` reaches from a throwaway branch) run them on the prototype, rather than leaving one platform for execution?
+check: Has every sequestered case whose module or command already exists been run against a scratch prototype, passing for the intended implementation and failing for its listed mutant, with the result recorded? And has `promote-check` type-checked the specs against a prototype that exports the design's types, rather than against a module that does not exist yet And is the prototype's base still `origin/main` for every file the specs load (the Touched modules and anything a spec reads), with the specs, mutants and gate re-run after any change there? And has the local full gate on the machine that merges run them on the prototype? And does every later step that says that gate passes match the result that run recorded?
 ---
 Reading a spec does not show whether a correct implementation can pass it. A sequestered case that contradicts a promoted spec, the publish rules or a command's refusal stops the executor, who may not edit it. Each such case is cheap to run on a scratch patch in prep.
 
@@ -24,3 +24,7 @@ Run the whole item on every experimental patch, not only the spec it was written
 Run the `done` command itself too, not only a hand-made move: it leaves its moves and promotions uncommitted while the gate runs, so a spec that clones HEAD and overlays the working tree sees a moved item twice. c0116's retired.spec did, and only a simulated `done` of c0116 (a stub active raft in a scratch clone with no origin) found it.
 
 **Note** (c0117, found by c0118's simulation of c0117 done): run the promotion dry run at the promoted location too. Repo-wide scans (repo-fence's banned names, c0049's fixture isolation) read only `tests/`, so a sequestered spec passes them in place and fails the `done` gate once promoted. In a scratch clone, move the specs to `tests/acceptance/<id>` and the folder to `done/`, commit it as a simulation, and run the full gate there.
+
+**Note** (f0146 design review 001 F5): a user rule changed a document row the specs pin after the prototype ran, and the record still said 6/6. Rerun the prototype after every spec change, including wording changes from a decision, and update the record's numbers.
+
+c0172 design review 001 F4: E2 recorded the full gate red on `classified.spec`, and implementation step 4 still said the gate passes. A later step that says a run passed has to match the result the experiment recorded.

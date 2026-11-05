@@ -1,5 +1,8 @@
 {
   "permissions": {
+    "deny": [
+      "Agent(fork)"
+    ],
     "allow": [
       "Bash(scripts/check.sh:*)",
       "Bash(scripts/tracker.sh list:*)",
@@ -22,7 +25,8 @@
       "Bash(selene:*)",
       "Bash(luau-lsp analyze:*)",
       "Bash(rojo build:*)",
-      "Bash(rojo sourcemap:*)"
+      "Bash(rojo sourcemap:*)",
+      "Bash(./zn run:*)"
     ]
   },
   "hooks": {
@@ -35,6 +39,21 @@
     "Stop": [
       {
         "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/stop.sh", "timeout": 300 }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/pre-bash.sh", "timeout": 10 }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/session-end.sh", "timeout": 20 }
+        ]
       }
     ]
   }

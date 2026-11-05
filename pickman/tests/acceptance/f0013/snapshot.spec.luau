@@ -3,7 +3,7 @@
 -- jumpTick that tells the client when not to interpolate.
 local Maze = require("@logic/Maze")
 local Session = require("@logic/Session")
-local serde = require("@lune/serde")
+local plain = require("@tests/lib/plain")
 local t = require("@tests/lib/t")
 
 local function keys(v: { [string]: any }): { string }
@@ -38,7 +38,8 @@ return t.spec("f0120 snapshot schema", function(it)
 			Session.step(s)
 		end
 		local snap = Session.snapshot(s, "p")
-		t.expect(serde.decode("json", serde.encode("json", snap))).toEqual(snap)
+		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
+		t.expect({ plain.roundTrip(snap, 1e-9) }).toEqual({ true })
 	end)
 
 	it("is a fresh table: changing it does not change the session", function()

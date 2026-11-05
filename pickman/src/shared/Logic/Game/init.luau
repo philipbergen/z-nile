@@ -135,11 +135,12 @@ end
 -- A power pellet was eaten: the level's frightened period starts over (it never adds). Only a run in
 -- play has one, so the counter is 0 in every other phase. Where the level has no frightened time the
 -- event still reports it, with `ticks = 0`.
-function Game.power(g: Game): { Event }
+-- `factor` (default 1) lengthens it: f0126's long ghost pill is a power pellet of twice the level's time.
+function Game.power(g: Game, factor: number?): { Event }
 	if g.phase ~= "playing" then
 		return {}
 	end
-	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate)
+	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate) * (factor or 1)
 	g.frightened = ticks
 	return { { kind = "PowerStarted", ticks = ticks, level = g.level } }
 end

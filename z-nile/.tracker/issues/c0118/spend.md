@@ -16,6 +16,9 @@
 | 12 | 2026-10-25 17:19 | design-review-007 | 0 | 0 | 30.0 | spend | design-review |  |
 | 13 | 2026-10-25 17:27 | design-review-008 | 0 | 0 | 30.0 | spend | design-review |  |
 | 14 | 2026-10-25 17:38 | design-review-009 | 0 | 0 | 12.0 | spend | design-review |  |
+| 15 | 2026-10-26 14:48 | design-review-010 | 0 | 0 | 20.0 | spend | design-review |  |
+| 16 | 2026-10-26 15:56 | design-review-011 | 0 | 0 | 40.0 | spend | design-review |  |
+| 17 | 2026-11-05 00:54 | land: sync with main, lessons merge, prepared | 1676 | 5 | 10.0 | spend | prep |  |
 
-**Total:** +0 / -0 lines, 141.4 agent-minutes, 196270 tokens over 14 records
-<!-- totals: added=0 removed=0 minutes=141.4 records=14 tokens=196270 -->
+**Total:** +1676 / -5 lines, 211.4 agent-minutes, 196270 tokens over 17 records
+<!-- totals: added=1676 removed=5 minutes=211.4 records=17 tokens=196270 -->

@@ -134,6 +134,8 @@ local function adapterPasses(source: string): boolean
 	return passes(caseNamed(spec, ADAPTER_CASE))
 end
 
+-- The fingerprint below is of adapter.spec as c0159 narrowed it (2026-10-31: its last case no longer requires
+-- Awareness.edgePoint, for f0158's danger ring); before that it was 732226448:2134.
 local REGION_FROM = "\t\t\t-- the radarBox call may take"
 local REGION_TO = "\t\t\tlocal function count("
 
@@ -210,7 +212,7 @@ return t.spec("c0106 the narrowed d0105 adapter spec", function(it)
 
 	it("adapter.spec is exactly today's file outside the narrowed radarBox assertion", function()
 		local sum, len = fingerprint(fs.readFile(DIR .. "adapter.spec.luau"), REGION_FROM, REGION_TO)
-		t.expect(sum .. ":" .. len).toBe("732226448:2134")
+		t.expect(sum .. ":" .. len).toBe("1671723699:2275")
 	end)
 
 	it("the adapter fingerprint ignores tracker ids, so a compaction does not move it", function()
@@ -218,6 +220,6 @@ return t.spec("c0106 the narrowed d0105 adapter spec", function(it)
 		local renumbered = string.gsub(text, "d0105", "d0123")
 		t.expect(renumbered ~= text).toBe(true)
 		local sum, len = fingerprint(renumbered, REGION_FROM, REGION_TO)
-		t.expect(sum .. ":" .. len).toBe("732226448:2134")
+		t.expect(sum .. ":" .. len).toBe("1671723699:2275")
 	end)
 end)

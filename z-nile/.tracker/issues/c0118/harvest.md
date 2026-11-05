@@ -26,3 +26,7 @@
 - design-review-008 F2: zz-test/source-text-pins-read-the-code
 - design-review-008 F3: z-design/restated-rules-move-together
 - design-review-009 F1: z-design/restated-rules-move-together
+- design-review-010 F1: z-design/watch-steps-name-their-base, zz-arch/history-tests-survive-squash
+- design-review-010 F2: z-design/design-the-execution-window, z-design/watch-steps-name-their-base
+- design-review-010 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
+- design-review-011 F1: z-design/watch-steps-name-their-base

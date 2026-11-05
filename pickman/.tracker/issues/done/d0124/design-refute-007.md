@@ -1,0 +1,1 @@
+- F1: fixed: the lesson's `check:` now asks, for every stub loader whatever adapter it loads, whether an unstubbed Logic module loads as `@logic/<name>`; consequences: none (wording only, no spec change)

@@ -1,0 +1,4 @@
+- design-review-001 F1: z-raft/cross-raft-order-written-in-both
+- design-review-001 F2: z-raft/order-reasons-survive-workstreams
+- design-review-001 F3: z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F4: one-off: a branch-hygiene rule specific to checks that diff against the merge base; stated in Risks
