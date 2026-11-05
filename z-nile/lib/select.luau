@@ -133,23 +133,140 @@ function sel.forcedAll(rules: Rules, changed: { string }, only: string?): boolea
 	return false
 end
 
+local PLACE_LIB = "tests/lib/place.luau"
+
+local function underAny(f: string, list: { string }): boolean
+	for _, p in list do
+		if f == p or string.sub(f, 1, #p + 1) == p .. "/" then
+			return true
+		end
+	end
+	return false
+end
+
+-- the project a repo-relative path belongs to (nil: the root's, which belongs to none)
+local function projectOf(rules: Rules, path: string): string?
+	local h = homeOf(rules.homes, path)
+	return if h and h.prefix ~= "" then h.name else nil
+end
+
+-- one closure per (graph, file): a context is read many times
+local closures: { [any]: { [string]: { [string]: boolean } } } = setmetatable({}, { __mode = "k" }) :: any
+local function closureOf(g: graph.Graph, file: string): { [string]: boolean }
+	local perGraph = closures[g]
+	if perGraph == nil then
+		perGraph = {}
+		closures[g] = perGraph
+	end
+	local c = perGraph[file]
+	if c == nil then
+		c = graph.closure(g, file)
+		perGraph[file] = c
+	end
+	return c
+end
+
+local function isRefEntry(e: string): boolean
+	return string.sub(e, 1, 4) == "ref:"
+end
+
+local function underRoot(rules: Rules, path: string): string?
+	for _, r in rules.roots do
+		if path == r or string.sub(path, 1, #r + 1) == r .. "/" then
+			return r
+		end
+	end
+	return nil
+end
+
+-- Whether a change to `path` can change spec S's result: the one predicate of selection and of fingerprints.
+function sel.isInput(ctx: Context, spec: string, path: string): boolean
+	local entries = ctx.inputs[spec] or {}
+	for _, e in entries do
+		if e == "*" then
+			return true
+		end
+	end
+	local rules = ctx.rules
+	-- a tracker document is an input only through an entry that itself names a path under the same root
+	local root = underRoot(rules, path)
+	if root then
+		if string.match(path, "[^/]*$") == "spend.md" then
+			return false
+		end
+		for _, e in entries do
+			if e ~= "*" and not isRefEntry(e) and string.sub(e, 1, #root + 1) == root .. "/" then
+				if e == path or (string.sub(e, -1) == "/" and string.sub(path, 1, #e) == e) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	local project = projectOf(rules, spec)
+	local forced = sel.forces(rules, path)
+	if forced == "all" or (forced ~= nil and forced == project) then
+		return true
+	end
+	local closure = closureOf(ctx.graph, spec)
+	if closure[path] then
+		return true
+	end
+	for dep in closure do
+		if string.sub(dep, 1, #path + 1) == path .. "/" then
+			return true
+		end
+	end
+	local h = homeOf(rules.homes, spec)
+	if h and closure[h.prefix .. PLACE_LIB] and underAny(path, ctx.places[h.prefix] or {}) then
+		return true
+	end
+	for _, e in entries do
+		if e ~= "*" and not isRefEntry(e) then
+			if e == path or (string.sub(e, -1) == "/" and string.sub(path, 1, #e) == e) then
+				return true
+			end
+		end
+	end
+	if h and #entries > 0 and path == h.prefix .. "tests/inputs.tsv" then
+		return true
+	end
+	return false
+end
+
 -- The specs a set of changed paths reaches, or "ALL" when a full run is required. `only` limits the answer to one
--- project's specs, relative to its home.
+-- project's specs, relative to its home. A spec with a `ref:` entry of the project asked for (every project's without
+-- `only`) is always selected: selection is stateless and can't see a ref move, so its fingerprint decides.
 function sel.affected(ctx: Context, changed: { string }, only: string?): { string } | "ALL"
 	if sel.forcedAll(ctx.rules, changed, only) then
 		return "ALL"
 	end
-	local specs = graph.affectedSpecs(ctx.graph, changed, isSpec)
-	if not only then
-		return specs
-	end
 	local out: { string } = {}
-	for _, s in specs do
-		local h = homeOf(ctx.rules.homes, s)
-		if h and h.name == only then
-			table.insert(out, string.sub(s, #h.prefix + 1))
+	for _, file in ctx.graph.files do
+		if isSpec(file) then
+			local h = homeOf(ctx.rules.homes, file)
+			if only == nil or (h and h.name == only) then
+				local hit = false
+				for _, e in ctx.inputs[file] or {} do
+					if isRefEntry(e) then
+						hit = true
+					end
+				end
+				if not hit then
+					for _, p in changed do
+						if sel.isInput(ctx, file, p) then
+							hit = true
+							break
+						end
+					end
+				end
+				if hit then
+					table.insert(out, if only and h then string.sub(file, #h.prefix + 1) else file)
+				end
+			end
 		end
 	end
+	table.sort(out)
 	return out
 end
 
@@ -161,6 +278,87 @@ function sel.graphRoots(rules: Rules): { string }
 		table.insert(roots, h.prefix .. "tests")
 	end
 	return roots
+end
+
+-- A full ref name `git check-ref-format` accepts (the component rules), under refs/.
+local function refOk(ref: string): boolean
+	if string.sub(ref, 1, 5) ~= "refs/" or #ref <= 5 then
+		return false
+	end
+	if
+		string.find(ref, "[%c%s~%^:%?%*%[\\]")
+		or string.find(ref, "..", 1, true)
+		or string.find(ref, "@{", 1, true)
+	then
+		return false
+	end
+	if string.sub(ref, -1) == "/" or string.sub(ref, -1) == "." or string.find(ref, "//", 1, true) then
+		return false
+	end
+	for comp in string.gmatch(ref, "[^/]+") do
+		if string.sub(comp, 1, 1) == "." or string.sub(comp, -5) == ".lock" then
+			return false
+		end
+	end
+	return ref ~= "@"
+end
+
+-- The declarations of one home's tests/inputs.tsv: `#` comments and blank lines are skipped; every other line is
+-- `<home-relative spec path>\t<input>`: a repo-relative file, a folder ending `/`, `*`, or `ref:<full ref>`. Any
+-- malformed line refuses the whole file with "line N: <reason>" (N counted from 1).
+function sel.parseInputs(text: string, homePrefix: string, roots: { string }?): (Inputs?, string?)
+	local out: Inputs = {}
+	local n = 0
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		n += 1
+		if line ~= "" and string.sub(line, 1, 1) ~= "#" then
+			local fields = string.split(line, "\t")
+			if #fields ~= 2 then
+				return nil, `line {n}: expected <spec><TAB><input>`
+			end
+			local spec, input = fields[1] :: string, fields[2] :: string
+			if string.sub(spec, -10) ~= ".spec.luau" then
+				return nil, `line {n}: {spec} is not a .spec.luau path`
+			end
+			if input == "" then
+				return nil, `line {n}: empty input`
+			end
+			if isRefEntry(input) then
+				if not refOk(string.sub(input, 5)) then
+					return nil, `line {n}: {input} is not a full ref name`
+				end
+			elseif input ~= "*" then
+				if string.sub(input, 1, 1) == "/" then
+					return nil, `line {n}: {input} is absolute`
+				end
+				for comp in string.gmatch(input, "[^/]+") do
+					if comp == ".." then
+						return nil, `line {n}: {input} contains ..`
+					end
+				end
+				local bare = if string.sub(input, -1) == "/" then string.sub(input, 1, -2) else input
+				for _, r in roots or {} do
+					if bare == r then
+						return nil, `line {n}: {input} is a project root`
+					end
+				end
+				if string.sub(bare, -8) == ".tracker" then
+					return nil, `line {n}: {input} is a project root`
+				end
+				if string.match(bare, "[^/]*$") == "spend.md" then
+					return nil, `line {n}: {input} is a spend.md`
+				end
+			end
+			local key = homePrefix .. spec
+			local list = out[key]
+			if list == nil then
+				list = {}
+				out[key] = list
+			end
+			table.insert(list, input)
+		end
+	end
+	return out, nil
 end
 
 return sel
