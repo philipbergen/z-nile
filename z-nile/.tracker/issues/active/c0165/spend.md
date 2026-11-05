@@ -39,6 +39,7 @@
 | 35 | 2026-11-05 04:04 | c0165: review 001 fixes: json()-wrapped reads and a guarded rows, one-call recording, jail name, HEAD rule pinned, wording | 286 | 51 | 60.0 | focus | code-review |  |
 | 36 | 2026-11-05 04:04 | R0081: refute-001, harvest, lessons, Verification log | 0 | 0 | 20.0 | focus | code-review |  |
 | 37 | 2026-11-05 04:06 | c0165: selene shadowing, pcall expect, re-key the new spec | 6 | 6 | 10.0 | focus | code-review |  |
+| 38 | 2026-11-05 04:28 | R0081: review-002 | 0 | 0 | 55.0 | focus | code-review |  |
 
-**Total:** +5603 / -236 lines, 1176.0 agent-minutes, 7440865 tokens over 37 records
-<!-- totals: added=5603 removed=236 minutes=1176.0 records=37 tokens=7440865 -->
+**Total:** +5603 / -236 lines, 1231.0 agent-minutes, 7440865 tokens over 38 records
+<!-- totals: added=5603 removed=236 minutes=1231.0 records=38 tokens=7440865 -->
