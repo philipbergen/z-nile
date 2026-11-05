@@ -29,6 +29,7 @@
 | 25 | 2026-11-05 00:48 | c0165: the runner records per-file results under PICKMAN_RESULTS; fence.myPid | 85 | 3 | 35.0 | focus | build |  |
 | 26 | 2026-11-05 00:56 | c0165: specs.luau orchestrator, check.sh reuse (--fresh, whole-gate record), results on the runner | 514 | 10 | 90.0 | focus | build |  |
 | 27 | 2026-11-05 02:54 | c0165: gatefix reads the last argument (user-approved), Verification log | 0 | 0 | 10.0 | focus | build |  |
+| 28 | 2026-11-05 02:56 | c0165: zz-test, AGENTS.md and .gitignore wording; repo-fence and cachepaths entries | 37 | 1 | 40.0 | focus | build |  |
 
-**Total:** +5204 / -164 lines, 896.0 agent-minutes, 7440865 tokens over 27 records
-<!-- totals: added=5204 removed=164 minutes=896.0 records=27 tokens=7440865 -->
+**Total:** +5241 / -165 lines, 936.0 agent-minutes, 7440865 tokens over 28 records
+<!-- totals: added=5241 removed=165 minutes=936.0 records=28 tokens=7440865 -->
