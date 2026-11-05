@@ -181,7 +181,7 @@ end
 
 -- Whether a change to `path` can change spec S's result: the one predicate of selection and of fingerprints.
 function sel.isInput(ctx: Context, spec: string, path: string): boolean
-	local entries = ctx.inputs[spec] or {}
+	local entries: { string } = ctx.inputs[spec] or {}
 	for _, e in entries do
 		if e == "*" then
 			return true
@@ -218,7 +218,11 @@ function sel.isInput(ctx: Context, spec: string, path: string): boolean
 		end
 	end
 	local h = homeOf(rules.homes, spec)
-	if h and closure[h.prefix .. PLACE_LIB] and underAny(path, ctx.places[h.prefix] or {}) then
+	if
+		h
+		and closure[h.prefix .. PLACE_LIB]
+		and underAny(path, ctx.places[h.prefix] or ({} :: { string }))
+	then
 		return true
 	end
 	for _, e in entries do
@@ -247,7 +251,7 @@ function sel.affected(ctx: Context, changed: { string }, only: string?): { strin
 			local h = homeOf(ctx.rules.homes, file)
 			if only == nil or (h and h.name == only) then
 				local hit = false
-				for _, e in ctx.inputs[file] or {} do
+				for _, e in (ctx.inputs[file] :: { string }?) or ({} :: { string }) do
 					if isRefEntry(e) then
 						hit = true
 					end
@@ -337,7 +341,7 @@ function sel.parseInputs(text: string, homePrefix: string, roots: { string }?): 
 					end
 				end
 				local bare = if string.sub(input, -1) == "/" then string.sub(input, 1, -2) else input
-				for _, r in roots or {} do
+				for _, r in (roots :: { string }?) or ({} :: { string }) do
 					if bare == r then
 						return nil, `line {n}: {input} is a project root`
 					end

@@ -11,6 +11,12 @@ local fingerprint = {}
 export type Blobs = { [string]: string } -- repo path -> "<mode> <blob id>" for every file present (tracked + untracked)
 export type GitState = { head: string, refs: { [string]: string } }
 
+-- a spec's declared entries (none: an empty list), typed so a loop over it checks
+local function entriesOf(ctx: select.Context, spec: string): { string }
+	local list: { string } = ctx.inputs[spec] or {}
+	return list
+end
+
 local function sha256(text: string): string
 	return serde.hash("sha256", text)
 end
@@ -34,7 +40,7 @@ end
 -- sorted full ref names a spec declares with ref:
 function fingerprint.refs(ctx: select.Context, spec: string): { string }
 	local out: { string } = {}
-	for _, e in ctx.inputs[spec] or {} do
+	for _, e in entriesOf(ctx, spec) do
 		if isRef(e) then
 			table.insert(out, string.sub(e, 5))
 		end
@@ -56,7 +62,7 @@ function fingerprint.of(
 		table.insert(lines, `{p}\t{blobs[p]}`)
 	end
 	local starred = false
-	for _, e in ctx.inputs[spec] or {} do
+	for _, e in entriesOf(ctx, spec) do
 		table.insert(lines, e)
 		if e == "*" then
 			starred = true

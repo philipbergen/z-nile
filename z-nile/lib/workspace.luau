@@ -44,7 +44,7 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 	local blobs: fingerprint.Blobs = {}
 	for _, entry in nulSplit(staged) do
 		local mode, id, _, path = string.match(entry, "^(%d+) (%x+) (%d)\t(.+)$")
-		if mode == nil then
+		if mode == nil or path == nil then
 			return nil, `unreadable ls-files entry: {entry}`
 		end
 		if string.find(path, "\n", 1, true) then
@@ -92,10 +92,10 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 end
 
 -- HEAD and only the requested full refs; a missing ref is absent, not an error.
-function workspace.gitState(root: string, refs: { string }): (fingerprint.GitState?, string?)
+function workspace.gitState(root: string, refs: { string }): fingerprint.GitState?
 	local ok, head = git(root, { "rev-parse", "HEAD" })
 	if not ok then
-		return nil, "git rev-parse HEAD failed"
+		return nil
 	end
 	local state: fingerprint.GitState = { head = trim(head), refs = {} }
 	for _, ref in refs do
@@ -104,7 +104,7 @@ function workspace.gitState(root: string, refs: { string }): (fingerprint.GitSta
 			state.refs[ref] = trim(commit)
 		end
 	end
-	return state, nil
+	return state
 end
 
 local function firstLine(s: string): string

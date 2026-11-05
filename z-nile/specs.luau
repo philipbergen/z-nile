@@ -336,7 +336,7 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 			end
 		end
 		for _, spec in specs do
-			for _, e in state.ctx.inputs[spec] or {} do
+			for _, e in (state.ctx.inputs[spec] :: { string }?) or ({} :: { string }) do
 				if e == "*" then
 					starred = true
 				end
