@@ -120,12 +120,12 @@ function resultsdb.rows(db: Db, fps: { string }): { [string]: Row }
 	local out: { [string]: Row } = {}
 	-- a nested array comes back as an array on some sqlite3 builds and as text on others; json() above makes it one,
 	-- and a text one is decoded here too, so no build can break the read
-	local list: any = (v :: any).rows or {}
-	if type(list) == "string" then
-		local decoded = serde.decode("json" :: "json", list)
-		list = decoded
+	local found: any = (v :: any).rows or {}
+	if type(found) == "string" then
+		local decoded = serde.decode("json" :: "json", found)
+		found = decoded
 	end
-	for _, r in list do
+	for _, r in found do
 		local cases: { Case } = if r.cases then serde.decode("json" :: "json", r.cases) else {}
 		out[r.fp] = {
 			state = r.state,

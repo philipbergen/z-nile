@@ -63,7 +63,7 @@ return t.spec("c0165 reuse rules beyond the sequestered specs", function(it)
 		)
 		withSqlite(bin, function()
 			local db = resultsdb.open(`{base}/fail.sqlite`) :: resultsdb.Db
-			t.expect(pcall(resultsdb.rows, db, { "a" })).toBe(false)
+			t.expect((pcall(resultsdb.rows, db, { "a" }))).toBe(false)
 			return nil
 		end)
 	end)
