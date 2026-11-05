@@ -31,6 +31,7 @@
 | 27 | 2026-11-05 02:54 | c0165: gatefix reads the last argument (user-approved), Verification log | 0 | 0 | 10.0 | focus | build |  |
 | 28 | 2026-11-05 02:56 | c0165: zz-test, AGENTS.md and .gitignore wording; repo-fence and cachepaths entries | 37 | 1 | 40.0 | focus | build |  |
 | 29 | 2026-11-05 02:57 | c0165: rehash c0172/narrowed's gate-cover digest | 1 | 1 | 5.0 | focus | build |  |
+| 30 | 2026-11-05 03:28 | c0165: AC15's proof runs inside the runner (user-approved edit), Verification log | 0 | 0 | 15.0 | focus | build |  |
 
-**Total:** +5242 / -166 lines, 941.0 agent-minutes, 7440865 tokens over 29 records
-<!-- totals: added=5242 removed=166 minutes=941.0 records=29 tokens=7440865 -->
+**Total:** +5242 / -166 lines, 956.0 agent-minutes, 7440865 tokens over 30 records
+<!-- totals: added=5242 removed=166 minutes=956.0 records=30 tokens=7440865 -->
