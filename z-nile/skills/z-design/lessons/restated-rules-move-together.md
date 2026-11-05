@@ -24,7 +24,6 @@ c0118 design review 009 F1: a note added to a lesson's body restated a new rule,
 
 A scoping sentence covers only what it points at (c0117 design review 010 F1): "the names above are the interactive path's" left a section further down still stating the old rule unscoped. When a rule gains a second path, search the whole skill for the old rule's wording, not just the section you edited, and scope each hit.
 
-f0126 design review 006 F7: after the user widened f0126 to every input, the old non-goal "a gamepad button (f0146)", "touch has no pick", "either order" and the first prototype's base and counts survived beside the new sections.
 
 c0172 design review 001 F2: deleting the word CI from Merging left zz-execute, the worktree paragraph, the raft template and the Linux bullet still telling the agent that CI is the final check. The worktree sentence existed because a worktree under the repo loads the main checkout's `.luaurc`. The local check has to be a clone whose parent directories are not a checkout of this repo, not a renamed sentence about the same worktree.
 
