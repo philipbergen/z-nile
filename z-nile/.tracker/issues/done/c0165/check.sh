@@ -169,7 +169,7 @@ check "AC14: every spec file the E9 search hits and every spec with declared inp
 # the two facts that hold of the core today and that c0238 (the second run waits) and c0239 (--full records) change on purpose:
 # a script, before ./zn done only, never a promoted spec (design review 007 F3)
 check "AC15: before ./zn done only, two runs that reach one fingerprint at once both run it, and --full neither reads nor writes the db (today's behaviour, which c0238 and c0239 change)" \
-	bash -c "[ '$A' != '$HERE/acceptance' ] || '$ZN_ROOT/zn' run --time 600 -- lune run '$A/proof-interim.luau'"
+	bash -c "[ '$A' != '$HERE/acceptance' ] || lune run tests/run -- '$A/proof-interim.luau'"
 # c0165's promoted files are scanned by tooling/repo-fence once `done` moves them into z-nile/tests/acceptance/c0165/, and the
 # gate there is the first place a banned name without an ALLOWED entry shows (design review 009 F3). So each file of
 # acceptance/*.luau that names a banned name (repo-fence's NAMES, case-insensitively, as the scan does) needs that name as a

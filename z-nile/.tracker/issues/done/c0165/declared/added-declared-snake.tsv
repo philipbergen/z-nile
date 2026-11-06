@@ -1,0 +1,7 @@
+tests/meta/home.spec.luau	snake/
+tests/meta/home.spec.luau	stylua.toml
+tests/meta/home.spec.luau	selene.toml
+tests/meta/fence.spec.luau	*
+tests/meta/architecture.spec.luau	snake/.tracker/architecture.md
+tests/meta/architecture.spec.luau	snake/src/
+tests/meta/architecture.spec.luau	snake/tests/
