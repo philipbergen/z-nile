@@ -78,7 +78,7 @@ function fingerprint.of(
 end
 
 -- The facts a whole affected gate's digest holds besides the files: the mode, the projects, the base, HEAD only when the
--- selection holds a `*` spec, and every declared ref of the selected specs. Pure.
+-- selection holds a `*` spec, and every declared ref of the selected specs (the caller appends each project's selection). Pure.
 function fingerprint.digestExtra(
 	mode: string,
 	names: { string },

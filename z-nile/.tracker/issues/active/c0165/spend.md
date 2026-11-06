@@ -51,6 +51,7 @@
 | 47 | 2026-11-05 05:24 | R0081: review-005 | 0 | 0 | 30.0 | focus | code-review |  |
 | 48 | 2026-11-06 06:34 | c0165: review 005 fixes: the digest holds the selection, a submodule turns reuse off, the reused line prints its time | 92 | 1 | 25.0 | focus | code-review |  |
 | 49 | 2026-11-06 06:39 | c0165: re-key reuse-e2e.spec in the declared-inputs audit | 0 | 0 | 2.0 | focus | code-review |  |
+| 50 | 2026-11-06 06:52 | R0081: review-006, refute-006: index mode in the digest, untracked marking deferred to c0255 | 49 | 6 | 20.0 | focus | code-review |  |
 
-**Total:** +6512 / -341 lines, 1573.0 agent-minutes, 7440865 tokens over 49 records
-<!-- totals: added=6512 removed=341 minutes=1573.0 records=49 tokens=7440865 -->
+**Total:** +6561 / -347 lines, 1593.0 agent-minutes, 7440865 tokens over 50 records
+<!-- totals: added=6561 removed=347 minutes=1593.0 records=50 tokens=7440865 -->

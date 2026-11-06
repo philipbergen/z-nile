@@ -142,7 +142,7 @@ if [[ ! -s $defs || -L $defs ]]; then
 fi
 
 # c0165: an affected gate that already passed on this exact content is reused whole, its static report included. The
-# digest holds the projects, the base, the tools and every file (z-nile/specs); a failed read gives none and the gate runs.
+# digest holds the projects, the base, each project's selection, the tools and every file (z-nile/specs); a failed read gives none and the gate runs.
 digest=
 report=
 if [[ $mode == affected ]]; then

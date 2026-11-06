@@ -369,8 +369,8 @@ local function runCommand()
 end
 
 -- ---------------------------------------------------------------------------------------------------- digest
--- The digest of a whole affected gate: the projects it covers, the base it compares with, the tools, every file's blob
--- and, when the selection holds a `*` spec, HEAD; always the union of the selected specs' declared refs.
+-- The digest of a whole affected gate: the projects it covers, the base it compares with, each project's selection, the
+-- tools, every file's blob and, when the selection holds a `*` spec, HEAD; always the union of the selected specs' declared refs.
 local function digestOf(mode: string, names: { string }, base: string?): string?
 	local reg = loadRegistry()
 	local state = readState(reg)

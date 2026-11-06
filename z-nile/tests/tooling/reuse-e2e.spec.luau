@@ -266,4 +266,32 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		fixture.git(starred, { "commit", "-qam", "same content, new HEAD" })
 		t.expect(digest(starred) ~= s1).toBe(true)
 	end)
+
+	-- review 006 F1: git's index is part of how git stores a path
+	it("a staged mode that differs from the tree moves the digest, and a plain git add does not", function()
+		local dir = withC("index")
+		write(`{dir}/pickman/src/C.luau`, "return { value = 1 } -- edited\n")
+		local d0 = digestAt(dir)
+		t.expect(#d0).toBe(64)
+		fixture.git(dir, { "add", "pickman/src/C.luau" }) -- the cost guard: staging an edit moves nothing
+		t.expect(digestAt(dir)).toBe(d0)
+		fixture.git(dir, { "reset", "-q" })
+		t.expect(digestAt(dir)).toBe(d0)
+		-- a link staged as a regular file: the tree holds the same bytes, the index another mode
+		t.expect(process.exec("ln", { "-s", "pickman/src", `{dir}/L` }).ok).toBe(true)
+		fixture.git(dir, { "add", "L" })
+		local staged = digestAt(dir)
+		fixture.git(dir, {
+			"update-index",
+			"--cacheinfo",
+			`100644,{reusefix.trim(
+				process.exec(
+					"git",
+					{ "hash-object", "--stdin" },
+					{ cwd = dir, stdio = { stdin = "pickman/src" } }
+				).stdout
+			)},L`,
+		})
+		t.expect(digestAt(dir) ~= staged).toBe(true)
+	end)
 end)

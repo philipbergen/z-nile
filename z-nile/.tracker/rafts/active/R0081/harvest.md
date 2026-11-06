@@ -23,3 +23,5 @@
 - review-005 F1: zz-arch/a-digest-holds-every-input-of-its-decision
 - review-005 F2: zz-arch/digests-hash-paths-as-git-stores-them
 - review-005 F3: one-off: the Design promised a time the code dropped
+- review-006 F1: zz-arch/digests-hash-paths-as-git-stores-them
+- review-006 F2: one-off: three comments lagging the code

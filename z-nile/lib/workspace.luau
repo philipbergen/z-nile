@@ -42,6 +42,7 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 		return nil, "git ls-files failed"
 	end
 	local blobs: fingerprint.Blobs = {}
+	local indexMode: { [string]: string } = {} -- the mode the index holds for a tracked path
 	for _, entry in nulSplit(staged) do
 		local mode, id, _, path = string.match(entry, "^(%d+) (%x+) (%d)\t(.+)$")
 		if mode == nil or path == nil then
@@ -55,6 +56,7 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 			return nil, `a submodule: {path}; reuse off`
 		end
 		blobs[path] = `{mode} {id}`
+		indexMode[path] = mode
 	end
 	local okMod, modified = git(root, { "ls-files", "-m", "-z" })
 	local okNew, others = git(root, { "ls-files", "--others", "--exclude-standard", "-z" })
@@ -62,6 +64,17 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 		return nil, "git ls-files failed"
 	end
 	local toHash: { string } = {}
+	-- git's index is part of how git stores a path (review 006 F1): a tracked path whose working-tree mode differs from the
+	-- index's says what the index holds; the index's blob ids are not hashed, so a plain `git add` of an edited file moves
+	-- nothing. Whether a path is tracked is not marked: the sequestered digest.spec pins an untracked blob as `<mode> <id>`
+	local function stored(path: string, mode: string, id: string): string
+		local value = `{mode} {id}`
+		local inIndex = indexMode[path]
+		if inIndex ~= nil and inIndex ~= mode then
+			return `{value} index {inIndex}`
+		end
+		return value
+	end
 	for _, list in { nulSplit(modified), nulSplit(others) } do
 		for _, path in list do
 			if string.find(path, "\n", 1, true) then
@@ -80,7 +93,7 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 				if not okLink or not string.match(id, "^%x+") then
 					return nil, `git hash-object failed for the link {path}`
 				end
-				blobs[path] = `120000 {trim(id)}`
+				blobs[path] = stored(path, "120000", trim(id))
 			elseif fs.isFile(full) then
 				table.insert(toHash, path)
 			elseif string.sub(path, -1) == "/" then
@@ -107,7 +120,7 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 			return nil, "hash-object returned another number of ids than paths"
 		end
 		for i, path in toHash do
-			blobs[path] = `{if executable(`{root}/{path}`) then "100755" else "100644"} {ids[i]}`
+			blobs[path] = stored(path, if executable(`{root}/{path}`) then "100755" else "100644", ids[i])
 		end
 	end
 	return blobs, nil
