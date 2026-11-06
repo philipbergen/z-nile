@@ -86,12 +86,12 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		local env = {
 			PATH = reusefix.weakJail(dir),
 			PICKMAN_SQLITE3 = failingRead(dir),
-			PICKMAN_GATE_PID = "4242",
+			PICKMAN_GATE_PID = "7316",
 		}
 		local ok, out = reusefix.specs(dir, AB, env)
 		t.expect(ok).toBe(true)
 		t.expect(has(out, "not recorded: outer sandbox")).toBe(true)
-		t.expect(fs.isFile(`{dir}/pickman/.cache/spec-norecord-4242`)).toBe(true)
+		t.expect(fs.isFile(`{dir}/pickman/.cache/spec-norecord-7316`)).toBe(true)
 	end)
 
 	it(
