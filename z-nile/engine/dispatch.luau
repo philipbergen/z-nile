@@ -293,7 +293,7 @@ function dispatch.next(f: Facts): Action
 	if f.last and f.last.outcome == "tripwire" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first`
+			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome ~= "ok" then

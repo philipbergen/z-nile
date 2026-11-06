@@ -157,8 +157,8 @@ function fakecli.new(name: string, seed: { [string]: string }): Harness
 			'echo "realgh $*" >> "$FAKE_DIR/log"',
 			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (the watermark's PR rule)
 			'if [ "$1" = api ]; then sha=$(printf "%s" "$2" | sed -n "s#.*/commits/\\([0-9a-f]*\\)/pulls#\\1#p"); cat "$FAKE_DIR/pulls-$sha.json" 2>/dev/null || echo "[]"; exit 0; fi',
-			-- `pr view <n> --json mergeCommit …` prints the squash commit `pr merge` made (or nothing: not merged)
-			'if [ "$1" = pr ] && [ "$2" = view ] && [ "$5" = mergeCommit ]; then cat "$FAKE_DIR/mergecommit-$3" 2>/dev/null; exit 0; fi',
+			-- `pr view <n> --json mergeCommit` prints what gh prints: the squash commit `pr merge` made, or null (not merged)
+			'if [ "$1" = pr ] && [ "$2" = view ] && [ "$5" = mergeCommit ] && [ "$#" = 5 ]; then if [ -f "$FAKE_DIR/mergecommit-$3" ]; then echo "{\\"mergeCommit\\":{\\"oid\\":\\"$(cat "$FAKE_DIR/mergecommit-$3")\\"}}"; else echo "{\\"mergeCommit\\":null}"; fi; exit 0; fi',
 			'if [ "$1" = pr ] && [ "$2" = view ]; then cat "$FAKE_DIR/pr-$3.json" 2>/dev/null || exit 1; exit 0; fi',
 			-- `pr merge <n>` squashes like GitHub: a commit on origin's main, subject "merged (#<n>)", the PR's head tree is
 			-- not needed (the fixtures judge parents, not content): its parent is main's tip

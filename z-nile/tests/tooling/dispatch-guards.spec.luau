@@ -641,6 +641,29 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			-- the stop is recorded as an attempt of its own, so the next run holds
 			local again = zn({ "dispatch", "c0096" })
 			t.expect(again.code).toBe(5)
+			local stateText = fs.readFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
+			t.expect(has(stateText, "merge-check")).toBe(true)
+			-- `vet` alone leaves the stop; `retry` clears it (the stop's own message names both)
+			t.expect(has(late.stdout, "./zn dispatch retry")).toBe(true)
+			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+			t.expect(zn({ "dispatch", "c0096" }).code).toBe(5)
+			zn({ "dispatch", "retry", "c0096" })
+			t.expect(has(fs.readFile(`{h.f.main}/.cache/dispatch/c0096/state.json`), '"outcome":"tripwire"'))
+				.toBe(false)
+			-- a commit over a bystander while the merge lands is no reason to stop (PR #98)
+			local sha98 = fakecli.pullRequest(h, 98, {
+				["pickman/.tracker/rafts/R0050/R0050.md"] = raftDoc,
+				["pickman/.tracker/issues/c0091/c0091.md"] = own["pickman/.tracker/issues/c0091/c0091.md"],
+			})
+			fakecli.clear(h)
+			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(98, sha98))
+			fs.writeFile(`{h.fakes}/race-98`, "pickman/.tracker/issues/c0092/spend.md")
+			fs.removeFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
+			local bystander = zn({ "dispatch", "c0096" })
+			t.expect(has(fakecli.log(h), "realgh pr merge 98 ")).toBe(true)
+			if bystander.code == 5 then
+				error(`PR #98: a commit over a bystander stopped the run\n{bystander.stdout}`)
+			end
 			-- a merge whose commit GitHub cannot name is a stop too: nothing was compared
 			local sha97 = fakecli.pullRequest(h, 97, {
 				["pickman/.tracker/rafts/R0050/R0050.md"] = raftDoc,
@@ -651,10 +674,22 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			fs.writeFile(`{h.fakes}/nosquash`, "1")
 			fs.removeFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
 			local unread = zn({ "dispatch", "c0096" })
-			if unread.code ~= 5 or not has(unread.stdout, "could not be read from GitHub") then
+			if unread.code ~= 5 or not has(unread.stdout, "GitHub names no merge commit") then
 				error(
 					`PR #97: exit {unread.code}, wanted 5 saying the merge commit was unreadable\n{unread.stdout}`
 				)
+			end
+			-- the prep gate compares too (code review 009 F3): a prep PR's merge with a commit over its own issue
+			local c0095doc = "pickman/.tracker/issues/c0095/c0095.md"
+			local sha99 = fakecli.pullRequest(h, 99, {
+				[c0095doc] = fixture.git(h.f.origin, { "show", `main:{c0095doc}` }) .. "\nmore design\n",
+			})
+			fakecli.clear(h)
+			fs.writeFile(`{h.fakes}/pr-prep-prep-thing.json`, prJson(99, sha99))
+			fs.writeFile(`{h.fakes}/race-99`, "pickman/.tracker/issues/c0095/spend.md")
+			local prepLate = zn({ "dispatch", "c0095" })
+			if prepLate.code ~= 5 or not has(prepLate.stdout, "not the main it was judged against") then
+				error(`PR #99: exit {prepLate.code}, wanted 5\n{prepLate.stdout}{prepLate.stderr}`)
 			end
 			-- every judgement's scratch export is gone (code review 008 F5)
 			local left = 0

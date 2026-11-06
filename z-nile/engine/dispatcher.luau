@@ -1737,16 +1737,22 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): stri
 	-- the merge commit is what GitHub says it is, never a search of main's subjects (code review 008 F1); a failure to
 	-- read it is a stop, because nothing was compared
 	local gh = resolveBin("gh", dispatcher.realPath()) or "gh"
-	local view = process.exec(
-		gh,
-		{ "pr", "view", tostring(number), "--json", "mergeCommit", "-q", ".mergeCommit.oid" }
-	)
-	local commit = trim(view.stdout)
-	if not view.ok or string.match(commit, "^%x+$") == nil then
-		return `PR #{number} merged, but its merge commit could not be read from GitHub, so nothing was compared with the main it was judged against: look at main`
+	local view = process.exec(gh, { "pr", "view", tostring(number), "--json", "mergeCommit" })
+	local commit = ""
+	if view.ok then
+		local okj, j = pcall(function()
+			return serde.decode("json", view.stdout)
+		end)
+		local mc = if okj and type(j) == "table" then (j :: any).mergeCommit else nil
+		if type(mc) == "table" and type(mc.oid) == "string" and string.match(mc.oid, "^%x+$") then
+			commit = mc.oid
+		end
+	end
+	if commit == "" then
+		return `PR #{number}: GitHub names no merge commit for it (a merge queue, a delay, or gh failing), so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry <id>`
 	end
 	if not freshMain(ctx) or not (git(root, { "cat-file", "-e", `{commit}^\{commit\}` })) then
-		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main`
+		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry <id>`
 	end
 	local okP, parent = git(root, { "rev-parse", `{commit}^1` })
 	if not okP then
@@ -1757,7 +1763,7 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): stri
 	end
 	local okD, names = git(root, { "diff", "--name-only", "--no-renames", pr.judgedMain :: string, parent })
 	if not okD then
-		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it`
+		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it, then run ./zn dispatch vet and ./zn dispatch retry <id>`
 	end
 	local roots = rootsAt(ctx, parent) or {}
 	local mine: { [string]: boolean } = {}
@@ -1768,7 +1774,7 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): stri
 	for path in string.gmatch(names, "[^\n]+") do
 		local pid = trackerstate.itemOf(path, roots)
 		if pid and mine[pid :: string] then
-			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it`
+			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it, then run ./zn dispatch vet and ./zn dispatch retry <id>`
 		end
 	end
 	return nil
