@@ -231,7 +231,12 @@ end
 
 -- A forward commit on origin's main (what z-ready or another rafting PR does while a PR waits): `files` written and
 -- `moves` (from -> to) made on main's tip, pushed to main.
-function fakecli.advanceMain(h: Harness, files: { [string]: string }, moves: { [string]: string }?)
+function fakecli.advanceMain(
+	h: Harness,
+	files: { [string]: string },
+	moves: { [string]: string }?,
+	message: string?
+)
 	local other = h.f.other
 	fixture.git(other, { "fetch", "-q", "origin", "main" })
 	fixture.git(other, { "checkout", "-q", "-B", "advance", "FETCH_HEAD" })
@@ -251,7 +256,7 @@ function fakecli.advanceMain(h: Harness, files: { [string]: string }, moves: { [
 		fs.writeFile(`{other}/{path}`, text)
 	end
 	fixture.git(other, { "add", "-A" })
-	fixture.git(other, { "commit", "-q", "-m", "main moves on" })
+	fixture.git(other, { "commit", "-q", "-m", message or "main moves on" })
 	fixture.git(other, { "push", "-q", "origin", "HEAD:refs/heads/main" })
 	fixture.git(other, { "checkout", "-q", "main" })
 end

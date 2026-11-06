@@ -31,3 +31,8 @@
 - review-006 F3: zz-test/refusals-tested-on-both-sides
 - review-006 F4: zz-arch/refusals-are-gate-checks
 - review-006 F5: one-off: a garbled sentence
+- review-007 F1: zz-execute/run-every-check-before-refute
+- review-007 F2: zz-arch/merge-gate-checks-what-it-merges
+- review-007 F3: zz-arch/merge-gate-checks-what-it-merges
+- review-007 F4: one-off: scratch trees unique per run
+- review-007 F5: one-off: unchecked git init

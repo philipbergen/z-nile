@@ -1247,6 +1247,8 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		return `its fetched head {got} is not the head GitHub reports ({pr.head})`
 	end
 	local main = guard.fresh :: string
+	pr.judgedMain = main
+	pr.itemIds = if folder ~= "" then { id } else {}
 	local okBase, base = git(root, { "merge-base", main, ref })
 	local roots = rootsAt(ctx, main)
 	if not roots then
@@ -1326,6 +1328,19 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 				movedIds[mid :: string] = path
 			end
 		end
+		pr.judgedMain = main
+		local carriedIds: { [string]: boolean } = {}
+		for _, path in paths do
+			local pid = trackerstate.itemOf(path, roots :: { string })
+			if pid then
+				carriedIds[pid :: string] = true
+			end
+		end
+		local idList: { string } = {}
+		for cid in carriedIds do
+			table.insert(idList, cid)
+		end
+		pr.itemIds = idList
 		for _, path in paths do
 			local pid = trackerstate.itemOf(path, roots :: { string })
 			if pid and movedIds[pid :: string] then
@@ -1488,10 +1503,20 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 			only = only,
 		}
 	)
-	if why or gateName == "prep" then
+	if why then
 		return why
 	end
-	return dispatcher.backstop(ctx, pr.number, main, ref, roots :: { string }, carriedRafts)
+	-- code review 007 F2: the prep gate auto-merges too, so it is judged by the tracker's readers the same way (its
+	-- issue's `raft:` line, if any, is held to the raft's own list)
+	return dispatcher.backstop(
+		ctx,
+		pr.number,
+		main,
+		ref,
+		roots :: { string },
+		carriedRafts,
+		if gateName == "prep" and folder ~= "" then `{folder}/{id}.md` else nil
+	)
 end
 
 -- Code review 005 F2, 006 F1: the rafting gate's last word is the tracker's own readers on what the merge would make:
@@ -1504,7 +1529,8 @@ function dispatcher.backstop(
 	main: string,
 	ref: string,
 	roots: { string },
-	carriedRafts: { string }
+	carriedRafts: { string },
+	issueDoc: string?
 ): string?
 	local root = ctx.mainRoot()
 	local ok, out = git(root, { "merge-tree", "--write-tree", main, ref })
@@ -1519,7 +1545,13 @@ function dispatcher.backstop(
 	for _, r in roots do
 		table.insert(paths, r)
 	end
-	local base = `{physicalCache()}judge-{number}`
+	-- a folder of this judgement alone (code review 007 F4), inside this checkout's dispatcher state, removed whole
+	local base = `{root}/{HOME}/judge-{number}-{os.time()}-{math.random(1, 1000000000)}`
+	local function cleanup()
+		if fs.isDir(base) then
+			pcall(fs.removeDir, base)
+		end
+	end
 	local function audited(label: string, rev: string): ({ [string]: boolean }, string?, string?)
 		local dir = `{base}/{label}`
 		if fs.isDir(dir) then
@@ -1539,8 +1571,14 @@ function dispatcher.backstop(
 		if not okA or not x or not x.ok then
 			return {}, nil, `the {label} tree could not be exported for the audit`
 		end
-		process.exec("git", { "init", "-q" }, { cwd = dir })
-		process.exec("git", { "add", "-A" }, { cwd = dir })
+		local init = process.exec("git", { "init", "-q" }, { cwd = dir })
+		if not init.ok or not fs.isDir(`{dir}/.git`) then
+			return {}, nil, `the {label} tree could not be prepared for the audit`
+		end
+		local added = process.exec("git", { "add", "-A" }, { cwd = dir })
+		if not added.ok then
+			return {}, nil, `the {label} tree could not be prepared for the audit`
+		end
 		local okRun, problems = pcall(audit.run, dir)
 		if not okRun then
 			return {}, dir, `the audit of the {label} tree failed: {problems}`
@@ -1553,7 +1591,7 @@ function dispatcher.backstop(
 		end
 		return errs, dir, nil
 	end
-	local mainErrs, mainDir, why = audited("main", main)
+	local mainErrs, _, why = audited("main", main)
 	local mergedErrs, mergedDir, why2 = audited("merged", tree)
 	local result: string? = why or why2
 	if not result then
@@ -1564,19 +1602,22 @@ function dispatcher.backstop(
 			end
 		end
 	end
+	local rafts: { string } = table.clone(carriedRafts)
+	if not result and mergedDir and issueDoc and fs.isFile(`{mergedDir}/{issueDoc}`) then
+		local named = audit.front(fs.readFile(`{mergedDir}/{issueDoc}`)).raft
+		if named and named ~= "" then
+			table.insert(rafts, named)
+		end
+	end
 	if not result and mergedDir then
-		local okM, bad = pcall(audit.membership, mergedDir, carriedRafts)
+		local okM, bad = pcall(audit.membership, mergedDir, rafts)
 		if not okM then
 			result = `the merged tree's raft membership could not be read: {bad}`
 		elseif #(bad :: { string }) > 0 then
 			result = `its merge would leave a carried raft inconsistent: {(bad :: { string })[1]}`
 		end
 	end
-	for _, d in { mainDir, mergedDir } do
-		if d and fs.isDir(d) then
-			fs.removeDir(d)
-		end
-	end
+	cleanup()
 	return result
 end
 
@@ -1686,6 +1727,55 @@ local function merge(ctx: Ctx, st: State, pr: number, head: string): boolean
 	return r.ok
 end
 
+-- After a gate merge: the merge commit's first parent is the main the gate judged, or main moved over an item the PR
+-- carries in between (a state the judgement never saw): why not, or nil. The merge is not undone; a human looks.
+function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): string?
+	if not pr or not pr.judgedMain then
+		return nil
+	end
+	local root = ctx.mainRoot()
+	if not freshMain(ctx) then
+		return nil
+	end
+	local ok, log =
+		git(root, { "log", "--first-parent", "-n", "30", "--format=%H%x09%s", guard.fresh :: string })
+	if not ok then
+		return nil
+	end
+	local commit: string? = nil
+	for line in string.gmatch(log, "[^\n]+") do
+		local sha, subject = string.match(line, "^(%x+)\t(.*)$")
+		if sha and string.find(subject :: string, `(#{number})`, 1, true) then
+			commit = sha
+			break
+		end
+	end
+	if not commit then
+		return nil
+	end
+	local okP, parent = git(root, { "rev-parse", `{commit}^1` })
+	if not okP or parent == pr.judgedMain then
+		return nil
+	end
+	local okD, names = git(root, { "diff", "--name-only", "--no-renames", pr.judgedMain :: string, parent })
+	if not okD then
+		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it`
+	end
+	local roots = rootsAt(ctx, parent) or {}
+	local mine: { [string]: boolean } = {}
+	local ids: { string } = pr.itemIds or {}
+	for _, cid in ids do
+		mine[cid] = true
+	end
+	for path in string.gmatch(names, "[^\n]+") do
+		local pid = trackerstate.itemOf(path, roots)
+		if pid and mine[pid :: string] then
+			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it`
+		end
+	end
+	return nil
+end
+
 -- The chain on `id` (or a new issue from `description`), until a gate, questions.md, a failure or done.
 function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, given: State?): number
 	local description: string? = opts["--description"] and opts["--description"][1]
@@ -1723,18 +1813,18 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			save(st)
 			return action.code or 1
 		elseif action.kind == "merge" then
-			-- code review 006 F2: judged once more at the last moment, so the window main can move in is the call
-			-- itself (GitHub pins no base; what remains is stated in zz-rules)
-			local again = dispatch.next(dispatcher.facts(ctx, st, id, description))
-			if again.kind ~= "merge" or again.head ~= action.head then
-				print(
-					"stop: the PR changed or main moved while the gate was judging it; run the dispatcher again"
-				)
-				return dispatch.EXIT.failure
-			end
 			if not merge(ctx, st, action.pr :: number, action.head or "") then
 				print(`stop: the {action.gate} PR #{action.pr} did not merge`)
 				return dispatch.EXIT.failure
+			end
+			-- code review 006 F2, 007 F3: GitHub merges into whatever main is by then, so what landed is compared with
+			-- what was judged: a merge commit whose parent is another main, over items the PR carries, stops the run
+			local moved = dispatcher.afterMerge(ctx, action.pr :: number, f.pr)
+			if moved then
+				st.outcome = "tripwire"
+				save(st)
+				print(`stop: {moved}`)
+				return dispatch.EXIT.tripwire
 			end
 		elseif action.step == "follow" then
 			st.follows = action.target

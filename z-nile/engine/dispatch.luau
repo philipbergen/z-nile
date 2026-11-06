@@ -171,6 +171,10 @@ export type Pr = {
 	-- why its fetched head is not this gate's to merge (the one tracker-state function on the head, review 003 F5),
 	-- or nil; the dispatcher judges it before the chain decides
 	judged: string?,
+	-- what the judgement saw (code review 007 F3): the main it judged against and the ids of the items the PR carries,
+	-- for the comparison after the merge
+	judgedMain: string?,
+	itemIds: { string }?,
 }
 export type Facts = {
 	id: string,

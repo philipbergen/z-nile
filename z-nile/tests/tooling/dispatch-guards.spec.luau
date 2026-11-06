@@ -86,6 +86,13 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			["pickman/.tracker/rafts/retired/R0042/R0042.md"] = "---\nid: R0042\nslug: a-raft\ntitle: a retired raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/R0041/check.sh"] = "bash members-check.sh\n",
 			["pickman/.tracker/issues/c0092/c0092.md"] = prepared("c0092", "bystander-thing"),
+			-- code review 007 F2: an issue in preparation, whose prep PR the prep gate may merge
+			["pickman/.tracker/issues/c0095/c0095.md"] = (string.gsub(
+				prepared("c0095", "prep-thing"),
+				"prepared%-quiet%-copper%-falcon",
+				"preparing-quiet-copper-falcon"
+			)),
+			["pickman/.tracker/issues/c0095/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0095/acceptance/a.spec.luau\n",
 		})
 		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 	end)
@@ -515,6 +522,34 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					error(`PR #92: exit {r.code}, wanted 4 saying "shares no history"\n{r.stdout}{r.stderr}`)
 				end
 			end
+			-- code review 007 F2: the prep gate judges by the tracker's readers too: a prep PR stripping its issue's slug,
+			-- and one naming a raft that does not list it
+			do
+				local c0095 = "pickman/.tracker/issues/c0095/c0095.md"
+				-- the dispatcher's own claim: a z-design step of its own in the item's history
+				fs.writeDir(`{h.f.main}/.cache/dispatch/c0095`)
+				fs.writeFile(
+					`{h.f.main}/.cache/dispatch/c0095/state.json`,
+					'{"id":"c0095","mode":"chain","history":[{"step":"z-design","outcome":"ok"}],"merged":[],"pushed":[],"pending":[]}'
+				)
+				for _, case in
+					{
+						{
+							n = 94,
+							text = (string.gsub(onMain(c0095), "\nslug: [^\n]*", "")),
+							says = "no-slug",
+						},
+						{ n = 95, text = inRaft(onMain(c0095), "R0041"), says = "does not list it" },
+					}
+				do
+					local sha = fakecli.pullRequest(h, case.n, { [c0095] = case.text })
+					fs.writeFile(`{h.fakes}/pr-prep-prep-thing.json`, prJson(case.n, sha))
+					local r = zn({ "dispatch", "c0095" })
+					if has(fakecli.log(h), `realgh pr merge {case.n} `) or not has(r.stdout, case.says) then
+						error(`PR #{case.n}: wanted a refusal saying "{case.says}"\n{r.stdout}{r.stderr}`)
+					end
+				end
+			end
 			-- code review 005 F1: main moves while the PRs wait. All are cut first, then main readies R0041 (with its
 			-- member c0094) and adds a raft R0060 to pickman, and gets a spend row on c0092
 			local r41 = "pickman/.tracker/rafts/R0041"
@@ -586,6 +621,27 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 				elseif not c.refused and not merged then
 					error(`PR #{c.n} did not merge\n{r.stdout}{r.stderr}`)
 				end
+			end
+			-- code review 007 F3: the merge lands on a main the gate did not judge. PR #96 is cut after main gained a commit
+			-- over an item the PR carries (so nothing moved since its base); the squash GitHub made (the fake gh does not) has that
+			-- commit's parent as its parent, so the run stops (exit 5) after the merge
+			fakecli.advanceMain(
+				h,
+				{ ["pickman/.tracker/issues/c0091/spend.md"] = "| c0091 | prep | 2 |\n" },
+				nil,
+				"land (#96)"
+			)
+			local sha96 = fakecli.pullRequest(h, 96, {
+				["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0091]\n---\n",
+				["pickman/.tracker/issues/c0091/c0091.md"] = own["pickman/.tracker/issues/c0091/c0091.md"],
+			})
+			fakecli.clear(h)
+			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(96, sha96))
+			local late = zn({ "dispatch", "c0096" })
+			if late.code ~= 5 or not has(late.stdout, "not the main it was judged against") then
+				error(
+					`PR #96: exit {late.code}, wanted 5 saying the main was not the judged one\n{late.stdout}{late.stderr}`
+				)
 			end
 		end
 	)
