@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "znile.board",
+  "name": "znile board",
+  "version": "0.1.0",
+  "author": "pbergen",
+  "license": "MIT",
+  "description": "Every znile ticket and raft in one tiled window: where each one is in the pipeline, what blocks it, drag to reprioritize, and a click to dive in with the AI CLI.",
+  "kinds": ["service", "bar-widget", "panel"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Board.qml"
+  },
+  "barWidget": {
+    "displayName": "znile board",
+    "description": "Active ticket count; click to open the znile board.",
+    "category": "Development",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
