@@ -253,7 +253,7 @@ Item {
   FloatingWindow {
     id: window
     visible: false
-    title: "znile board"
+    title: "Z-nile board"
     color: root.bg
     implicitWidth: 1440
     implicitHeight: 900
@@ -300,7 +300,7 @@ Item {
             Layout.fillWidth: true
             spacing: 2
             PlainLabel {
-              text: "znile"
+              text: "Z-nile"
               font.pixelSize: Style.font.display
               font.bold: true
               color: root.fg

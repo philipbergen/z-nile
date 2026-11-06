@@ -1,4 +1,4 @@
-# znile board
+# Z-nile board
 
 A bar icon (kanban glyph + active ticket count) that opens a tiled window with every znile **ticket** and **raft** in `~/code/pickman`. A ticket is one feature, defect or chore; a raft is a group of tickets delivered together as one PR.
 

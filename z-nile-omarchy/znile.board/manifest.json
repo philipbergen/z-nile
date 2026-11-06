@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "znile.board",
-  "name": "znile board",
+  "name": "Z-nile board",
   "version": "0.1.0",
   "author": "pbergen",
   "license": "MIT",
@@ -14,8 +14,8 @@
     "panel": "Board.qml"
   },
   "barWidget": {
-    "displayName": "znile board",
-    "description": "Active ticket count; click to open the znile board.",
+    "displayName": "Z-nile board",
+    "description": "Active ticket count; click to open the Z-nile board.",
     "category": "Development",
     "allowMultiple": false,
     "defaultSection": "right"

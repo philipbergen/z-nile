@@ -31,9 +31,9 @@ BarWidget {
     slotSize: Style.bar.iconSlot + (labelText === "" ? 0 : countMetrics.advanceWidth + Style.space(4))
     tooltipText: root.service
       ? (root.service.error !== ""
-        ? "znile: " + root.service.error
-        : "znile: " + root.service.activeCount + " active · " + root.service.openCount + " open")
-      : "znile board"
+        ? "Z-nile: " + root.service.error
+        : "Z-nile: " + root.service.activeCount + " active · " + root.service.openCount + " open")
+      : "Z-nile board"
     onPressed: function(mouseButton) {
       if (!root.bar) return
       if (mouseButton === Qt.RightButton) { if (root.service) root.service.refresh() }
