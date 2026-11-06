@@ -14,6 +14,13 @@
 | 10 | 2026-11-06 16:14 | design-review-005 | 0 | 0 | 3.0 | spend | design-review | 78540 |
 | 11 | 2026-11-06 16:14 | design-refute-005 | 0 | 0 | 8.0 | spend | design-review |  |
 | 12 | 2026-11-06 16:15 | prep | 389 | 3 | 90.0 | spend | prep |  |
+| 13 | 2026-11-06 16:28 | c0259: insert the How it should work section into the z-nile README | 87 | 0 | 10.0 | focus | build |  |
+| 14 | 2026-11-06 16:35 | R0085: review-001 | 1 | 1 | 3.0 | focus | code-review |  |
+| 15 | 2026-11-06 16:35 | R0085: refute-001, harvest | 3 | 1 | 3.0 | focus | code-review |  |
+| 16 | 2026-11-06 16:35 | R0085: addressed during execution | 0 | 0 | 2.0 | focus | deliver |  |
+| 17 | 2026-11-06 16:57 | R0085: verification log | 0 | 0 | 2.0 | focus | deliver |  |
+| 18 | 2026-11-06 18:22 | R0085: verification log | 0 | 0 | 2.0 | focus | deliver |  |
+| 19 | 2026-11-06 18:30 | tracker: done R0085 | 0 | 0 | 8.5 | raft | deliver |  |
 
-**Total:** +389 / -3 lines, 196.0 agent-minutes, 574426 tokens over 12 records
-<!-- totals: added=389 removed=3 minutes=196.0 records=12 tokens=574426 -->
+**Total:** +480 / -5 lines, 226.5 agent-minutes, 574426 tokens over 19 records
+<!-- totals: added=480 removed=5 minutes=226.5 records=19 tokens=574426 -->
