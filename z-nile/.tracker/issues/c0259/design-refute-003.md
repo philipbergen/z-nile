@@ -1,0 +1,6 @@
+# Answers to design-review-003 (c0259)
+All three findings are fixed or decided; none is refuted.
+
+- F1: fixed: line 51's label is `*captured* (c0254)`, and the mechanism changed as the reviewer recommended: check.sh pins the ordered label map (sub-section, state, id or `-`) and the roadmap's issue column (column 2) with its state, and judges only each state word against `real()`; the six listed mutants (Trust relabelled with c0115, a label moved, a row naming c0115 marked `exists`, an id changed, an id swapped, the c0118 row `captured`) each fail AC7 (run); the unlabelled-sentence residual is handed to the code reviewer, who diffs the delivered section against `experiments/README.draft.md` (Implementation steps); consequences: the roadmap can't gain a row without a check.sh edit, which is intended because the executor copies the draft.
+- F2: decided as a guess for the user, unattended (Guess G1 in the issue): the window is accepted and the Trust sentence no longer carries a state claim beyond its label ("none of it is built yet" is gone); the legend names old notes generically ("(cNNNN, planned)"); the promoted rule (a) is not adopted because it reads the live tracker; the user is asked to confirm in the final report.
+- F3: fixed: E1 now says AC1 to AC7 fail on `main` and AC8 passes; line 65 reads "what c0117 designs (*designed* (c0117))".
