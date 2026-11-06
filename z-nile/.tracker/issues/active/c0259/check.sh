@@ -3,7 +3,7 @@
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
 source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home
-# sequestered specs: here before `./zn done`, promoted to its project's tests/acceptance/c0259 after it
+# sequestered specs: here before `done`, promoted to its project's tests/acceptance/c0259 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0259"
 ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
@@ -14,7 +14,7 @@ words() { local w; for w in "$@"; do grep -qF -e "$w" "$README" || { echo "READM
 # The tracker's state of an issue: done = exists, design: ready = designed, else captured.
 real() {
 	local path
-	path="$(cd "$ROOT" && ./zn find "$1" 2>/dev/null | head -1)"; [[ -n $path ]] || { echo missing; return; }
+	path="$(cd "$ROOT" && "$ROOT/zn" find "$1" 2>/dev/null | head -1)"; [[ -n $path ]] || { echo missing; return; }
 	if [[ $path == */done/* ]]; then echo exists
 	elif grep -q '^design: ready' "$ROOT/$path/$1.md" "$path/$1.md" 2>/dev/null; then echo designed
 	else echo captured; fi
