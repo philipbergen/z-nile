@@ -55,6 +55,7 @@
 | 51 | 2026-11-06 07:00 | R0081: refute-006 wording | 0 | 0 | 1.0 | focus | code-review |  |
 | 52 | 2026-11-06 07:35 | R0081: reuse-e2e uses its own gate pid (c0049 isolation) | 2 | 2 | 3.0 | focus | deliver |  |
 | 53 | 2026-11-06 07:50 | tracker: done R0081 | 0 | 0 | 15.6 | raft | deliver |  |
+| 54 | 2026-11-06 08:00 | deliver | 0 | 0 | 60.0 | spend | deliver |  |
 
-**Total:** +6563 / -349 lines, 1612.6 agent-minutes, 7440865 tokens over 53 records
-<!-- totals: added=6563 removed=349 minutes=1612.6 records=53 tokens=7440865 -->
+**Total:** +6563 / -349 lines, 1672.6 agent-minutes, 7440865 tokens over 54 records
+<!-- totals: added=6563 removed=349 minutes=1672.6 records=54 tokens=7440865 -->
