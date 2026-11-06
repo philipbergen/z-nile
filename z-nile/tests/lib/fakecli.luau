@@ -157,8 +157,20 @@ function fakecli.new(name: string, seed: { [string]: string }): Harness
 			'echo "realgh $*" >> "$FAKE_DIR/log"',
 			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (the watermark's PR rule)
 			'if [ "$1" = api ]; then sha=$(printf "%s" "$2" | sed -n "s#.*/commits/\\([0-9a-f]*\\)/pulls#\\1#p"); cat "$FAKE_DIR/pulls-$sha.json" 2>/dev/null || echo "[]"; exit 0; fi',
+			-- `pr view <n> --json mergeCommit …` prints the squash commit `pr merge` made (or nothing: not merged)
+			'if [ "$1" = pr ] && [ "$2" = view ] && [ "$5" = mergeCommit ]; then cat "$FAKE_DIR/mergecommit-$3" 2>/dev/null; exit 0; fi',
 			'if [ "$1" = pr ] && [ "$2" = view ]; then cat "$FAKE_DIR/pr-$3.json" 2>/dev/null || exit 1; exit 0; fi',
-			'if [ "$1" = pr ] && [ "$2" = merge ]; then for p in "$FAKE_DIR"/pr-*.json; do sed -i.bak "s/\\"OPEN\\"/\\"MERGED\\"/" "$p"; done; exit 0; fi',
+			-- `pr merge <n>` squashes like GitHub: a commit on origin's main, subject "merged (#<n>)", the PR's head tree is
+			-- not needed (the fixtures judge parents, not content): its parent is main's tip
+			-- and the commit is recorded for `pr view --json mergeCommit`
+			'if [ "$1" = pr ] && [ "$2" = merge ]; then for p in "$FAKE_DIR"/pr-*.json; do sed -i.bak "s/\\"OPEN\\"/\\"MERGED\\"/" "$p"; done; '
+				.. '[ -f "$FAKE_DIR/nosquash" ] && exit 0; '
+				-- <fakes>/race-<n> names a file another commit changes on main just before the squash (a main that
+				-- moves under the merge)
+				.. 'if [ -f "$FAKE_DIR/race-$3" ]; then d=$(mktemp -d) && git clone -q "$(git remote get-url origin)" "$d" && ( cd "$d" && p=$(cat "$FAKE_DIR/race-$3") && mkdir -p "$(dirname "$p")" && echo race >> "$p" && git add -A && git -c user.name=race -c user.email=race@example.invalid commit -q -m race && git push -q origin HEAD:main ); fi; '
+				.. "git fetch -q origin main && tip=$(git rev-parse FETCH_HEAD) && parent=$tip; "
+				.. 'sq=$(git -c user.name=fake-gh -c user.email=fake-gh@example.invalid commit-tree "$tip^{tree}" -p "$parent" -m "merged (#$3)") && '
+				.. 'git push -q origin "$sq:refs/heads/main" && echo "$sq" > "$FAKE_DIR/mergecommit-$3"; exit 0; fi',
 			"exit 0",
 			"",
 		}, "\n")

@@ -36,3 +36,8 @@
 - review-007 F3: zz-arch/merge-gate-checks-what-it-merges
 - review-007 F4: one-off: scratch trees unique per run
 - review-007 F5: one-off: unchecked git init
+- review-008 F1: zz-arch/merge-gate-checks-what-it-merges
+- review-008 F2: zz-arch/merge-gate-checks-what-it-merges
+- review-008 F3: one-off: stale doc wording
+- review-008 F4: one-off: the user's approval recorded in the issue
+- review-008 F5: zz-arch/merge-gate-checks-what-it-merges

@@ -1734,27 +1734,25 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): stri
 		return nil
 	end
 	local root = ctx.mainRoot()
-	if not freshMain(ctx) then
-		return nil
+	-- the merge commit is what GitHub says it is, never a search of main's subjects (code review 008 F1); a failure to
+	-- read it is a stop, because nothing was compared
+	local gh = resolveBin("gh", dispatcher.realPath()) or "gh"
+	local view = process.exec(
+		gh,
+		{ "pr", "view", tostring(number), "--json", "mergeCommit", "-q", ".mergeCommit.oid" }
+	)
+	local commit = trim(view.stdout)
+	if not view.ok or string.match(commit, "^%x+$") == nil then
+		return `PR #{number} merged, but its merge commit could not be read from GitHub, so nothing was compared with the main it was judged against: look at main`
 	end
-	local ok, log =
-		git(root, { "log", "--first-parent", "-n", "30", "--format=%H%x09%s", guard.fresh :: string })
-	if not ok then
-		return nil
-	end
-	local commit: string? = nil
-	for line in string.gmatch(log, "[^\n]+") do
-		local sha, subject = string.match(line, "^(%x+)\t(.*)$")
-		if sha and string.find(subject :: string, `(#{number})`, 1, true) then
-			commit = sha
-			break
-		end
-	end
-	if not commit then
-		return nil
+	if not freshMain(ctx) or not (git(root, { "cat-file", "-e", `{commit}^\{commit\}` })) then
+		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main`
 	end
 	local okP, parent = git(root, { "rev-parse", `{commit}^1` })
-	if not okP or parent == pr.judgedMain then
+	if not okP then
+		return `PR #{number} merged as {commit}, whose parent could not be read: look at main`
+	end
+	if parent == pr.judgedMain then
 		return nil
 	end
 	local okD, names = git(root, { "diff", "--name-only", "--no-renames", pr.judgedMain :: string, parent })
@@ -1821,7 +1819,21 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			-- what was judged: a merge commit whose parent is another main, over items the PR carries, stops the run
 			local moved = dispatcher.afterMerge(ctx, action.pr :: number, f.pr)
 			if moved then
+				-- recorded as an attempt of its own (code review 008 F2), so the next run reads a step and a detail and
+				-- holds, whatever the item's earlier steps were
+				table.insert(st.history, {
+					step = "merge-check",
+					cli = "",
+					runtime = "",
+					model = "",
+					outcome = "tripwire",
+					detail = moved,
+					tokens = 0,
+					minutes = 0,
+				})
+				st.step = "merge-check"
 				st.outcome = "tripwire"
+				st.detail = moved
 				save(st)
 				print(`stop: {moved}`)
 				return dispatch.EXIT.tripwire

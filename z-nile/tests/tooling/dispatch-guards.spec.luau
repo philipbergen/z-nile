@@ -622,27 +622,48 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 					error(`PR #{c.n} did not merge\n{r.stdout}{r.stderr}`)
 				end
 			end
-			-- code review 007 F3: the merge lands on a main the gate did not judge. PR #96 is cut after main gained a commit
-			-- over an item the PR carries (so nothing moved since its base); the squash GitHub made (the fake gh does not) has that
-			-- commit's parent as its parent, so the run stops (exit 5) after the merge
-			fakecli.advanceMain(
-				h,
-				{ ["pickman/.tracker/issues/c0091/spend.md"] = "| c0091 | prep | 2 |\n" },
-				nil,
-				"land (#96)"
-			)
+			-- code review 007 F3, 008 F1: the merge lands on a main the gate did not judge. The fake gh lands a commit over an
+			-- item the PR carries on main just before it squashes, as a main that moves under the merge does
+			local raftDoc = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0091]\n---\n"
 			local sha96 = fakecli.pullRequest(h, 96, {
-				["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0091]\n---\n",
+				["pickman/.tracker/rafts/R0050/R0050.md"] = raftDoc,
 				["pickman/.tracker/issues/c0091/c0091.md"] = own["pickman/.tracker/issues/c0091/c0091.md"],
 			})
 			fakecli.clear(h)
 			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(96, sha96))
+			fs.writeFile(`{h.fakes}/race-96`, "pickman/.tracker/issues/c0091/spend.md")
 			local late = zn({ "dispatch", "c0096" })
 			if late.code ~= 5 or not has(late.stdout, "not the main it was judged against") then
 				error(
 					`PR #96: exit {late.code}, wanted 5 saying the main was not the judged one\n{late.stdout}{late.stderr}`
 				)
 			end
+			-- the stop is recorded as an attempt of its own, so the next run holds
+			local again = zn({ "dispatch", "c0096" })
+			t.expect(again.code).toBe(5)
+			-- a merge whose commit GitHub cannot name is a stop too: nothing was compared
+			local sha97 = fakecli.pullRequest(h, 97, {
+				["pickman/.tracker/rafts/R0050/R0050.md"] = raftDoc,
+				["pickman/.tracker/issues/c0091/c0091.md"] = own["pickman/.tracker/issues/c0091/c0091.md"],
+			})
+			fakecli.clear(h)
+			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(97, sha97))
+			fs.writeFile(`{h.fakes}/nosquash`, "1")
+			fs.removeFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
+			local unread = zn({ "dispatch", "c0096" })
+			if unread.code ~= 5 or not has(unread.stdout, "could not be read from GitHub") then
+				error(
+					`PR #97: exit {unread.code}, wanted 5 saying the merge commit was unreadable\n{unread.stdout}`
+				)
+			end
+			-- every judgement's scratch export is gone (code review 008 F5)
+			local left = 0
+			for _, name in fs.readDir(`{h.f.main}/.cache/dispatch`) do
+				if string.sub(name, 1, 6) == "judge-" then
+					left += 1
+				end
+			end
+			t.expect(left).toBe(0)
 		end
 	)
 end)
