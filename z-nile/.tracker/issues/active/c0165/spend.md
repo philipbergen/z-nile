@@ -49,6 +49,7 @@
 | 45 | 2026-11-05 05:12 | c0165: review 004 fixes: nested repository turns reuse off, link text pinned, orchestrator named in zz-test | 50 | 3 | 40.0 | focus | code-review |  |
 | 46 | 2026-11-05 05:12 | R0081: refute-004, harvest, Verification log | 0 | 0 | 15.0 | focus | code-review |  |
 | 47 | 2026-11-05 05:24 | R0081: review-005 | 0 | 0 | 30.0 | focus | code-review |  |
+| 48 | 2026-11-06 06:34 | c0165: review 005 fixes: the digest holds the selection, a submodule turns reuse off, the reused line prints its time | 92 | 1 | 25.0 | focus | code-review |  |
 
-**Total:** +6420 / -340 lines, 1546.0 agent-minutes, 7440865 tokens over 47 records
-<!-- totals: added=6420 removed=340 minutes=1546.0 records=47 tokens=7440865 -->
+**Total:** +6512 / -341 lines, 1571.0 agent-minutes, 7440865 tokens over 48 records
+<!-- totals: added=6512 removed=341 minutes=1571.0 records=48 tokens=7440865 -->

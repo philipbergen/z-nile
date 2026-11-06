@@ -380,9 +380,17 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 	local starred = false
 	local refSet: { [string]: boolean } = {}
 	local changed = changes.files(base)
+	local selected: { string } = {} -- the selection itself (review 005 F1): it reads the merge-base and HEAD's tree too
 	for _, name in names do
 		local sel = select.affected(state.ctx, changed, name)
 		local specs: { string } = {}
+		if sel == "ALL" then
+			table.insert(selected, `selected {name} ALL`)
+		else
+			local sorted: { string } = table.clone(sel :: { string })
+			table.sort(sorted)
+			table.insert(selected, `selected {name}\t{table.concat(sorted, "\t")}`)
+		end
 		local prefix = prefixOf(homeOf(reg, name))
 		if sel == "ALL" then
 			for _, f in state.ctx.graph.files do
@@ -419,6 +427,9 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 		or (if git({ "rev-parse", "--verify", "-q", "origin/main" }) ~= nil then "origin/main" else "main")
 	local extra =
 		fingerprint.digestExtra(mode, names, git({ "rev-parse", baseRef }) or "?", starred, gitState, refs)
+	for _, line in selected do
+		table.insert(extra, line)
+	end
 	return fingerprint.digest(state.blobs, state.tools, extra)
 end
 
@@ -467,7 +478,12 @@ local function gateCheckCommand()
 	if gate == nil then
 		process.exit(1)
 	end
-	print("reused: an affected gate passed on this content")
+	print(
+		`reused: an affected gate passed on this content at {os.date(
+			"!%Y-%m-%dT%H:%M:%SZ",
+			(gate :: any).passedAt
+		)}`
+	)
 	stdio.write((gate :: any).summary)
 	process.exit(0)
 end

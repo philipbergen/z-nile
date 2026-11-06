@@ -50,6 +50,10 @@ function workspace.blobs(root: string): (fingerprint.Blobs?, string?)
 		if string.find(path, "\n", 1, true) then
 			return nil, `a path holds a newline: {path}`
 		end
+		if mode == "160000" then
+			-- a submodule: its commit and content are not hashed here, so reuse is off (review 005 F2)
+			return nil, `a submodule: {path}; reuse off`
+		end
 		blobs[path] = `{mode} {id}`
 	end
 	local okMod, modified = git(root, { "ls-files", "-m", "-z" })

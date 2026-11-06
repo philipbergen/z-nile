@@ -20,3 +20,6 @@
 - review-004 F3: zz-arch/read-cache-as-untrusted-input
 - review-004 F4: one-off: a header and a case title that promised more than they held
 - note refute-003 dropped a case on an untested claim about git ls-files: zz-review/run-the-evidence-you-cite
+- review-005 F1: zz-arch/a-digest-holds-every-input-of-its-decision
+- review-005 F2: zz-arch/digests-hash-paths-as-git-stores-them
+- review-005 F3: one-off: the Design promised a time the code dropped

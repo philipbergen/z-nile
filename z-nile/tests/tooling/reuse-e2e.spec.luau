@@ -181,6 +181,64 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		t.expect(digest()).toBe("")
 		process.exec("rm", { "-rf", `{dir}/nested` })
 		t.expect(digest()).toBe(d0)
+		-- a submodule (a gitlink in the index) turns reuse off too (review 005 F2)
+		t.expect(process.exec("git", { "init", "-q", `{dir}/sub` }).ok).toBe(true)
+		write(`{dir}/sub/x.luau`, "return 1\n")
+		fixture.git(`{dir}/sub`, { "config", "user.name", "c0165-sub" })
+		fixture.git(`{dir}/sub`, { "config", "user.email", "c0165-sub@example.invalid" })
+		fixture.git(`{dir}/sub`, { "add", "-A" })
+		fixture.git(`{dir}/sub`, { "commit", "-qm", "sub" })
+		local subHead =
+			reusefix.trim(process.exec("git", { "rev-parse", "HEAD" }, { cwd = `{dir}/sub` }).stdout)
+		fixture.git(dir, { "update-index", "--add", "--cacheinfo", `160000,{subHead},sub` })
+		t.expect(digest()).toBe("")
+		fixture.git(dir, { "update-index", "--force-remove", "sub" })
+		process.exec("rm", { "-rf", `{dir}/sub` })
+		t.expect(digest()).toBe(d0)
+	end)
+
+	-- review 005 F1: the digest holds the selection, which reads the merge-base and HEAD's tree besides the files
+	local function digestAt(dir: string): string
+		local r = process.exec(
+			"lune",
+			{ "run", "z-nile/specs", "--", "digest", "--mode", "affected", "--projects", "pickman" },
+			{ cwd = dir, env = reusefix.env(dir) }
+		)
+		return reusefix.trim(r.stdout)
+	end
+	local function withC(name: string): string
+		return reusefix.make(base, name, {
+			extra = { c = { needs = "C", expect = 1 } },
+			setup = function(d: string)
+				write(`{d}/pickman/src/C.luau`, "return { value = 1 }\n")
+			end,
+		})
+	end
+
+	it("the same tree on main by another commit is another digest when the selection differs", function()
+		local dir = withC("sel-mergebase")
+		write(`{dir}/pickman/src/C.luau`, "return { value = 3 }\n")
+		fixture.git(dir, { "commit", "-qam", "C = 3" })
+		fixture.git(dir, { "checkout", "-q", "main" })
+		fixture.git(dir, { "checkout", "-q", "work", "--", "." })
+		fixture.git(dir, { "commit", "-qm", "same tree by another commit" })
+		local onMain = digestAt(dir) -- nothing affected
+		fixture.git(dir, { "checkout", "-q", "work" })
+		local onWork = digestAt(dir) -- c.spec affected
+		t.expect(#onMain).toBe(64)
+		t.expect(#onWork).toBe(64)
+		t.expect(onMain ~= onWork).toBe(true)
+	end)
+
+	it("a commit undone in the index leaves the same tree and another selection: another digest", function()
+		local dir = withC("sel-head")
+		local onMain = digestAt(dir)
+		write(`{dir}/pickman/src/C.luau`, "return { value = 2 }\n")
+		fixture.git(dir, { "commit", "-qam", "C = 2" })
+		fixture.git(dir, { "checkout", "-q", "main", "--", "pickman/src/C.luau" })
+		local undone = digestAt(dir)
+		t.expect(#undone).toBe(64)
+		t.expect(undone ~= onMain).toBe(true)
 	end)
 
 	it("HEAD moves a whole-gate digest only when a * spec is selected", function()

@@ -9,3 +9,5 @@ check: Does the digest treat a link (to a file, a folder, or nothing) as a link 
 **Why:** R0081 code review 003 F2: removing the `.claude/skills` link of a new skill left the gate digest unchanged while `./zn skills --check` started failing, and `gate-check` still said "reused".
 
 **How to apply:** test `-L` first, hash the link text as mode 120000, hash regular files by content, and treat a path that is neither as unreadable.
+
+Also a submodule (mode 160000): git lists it as a folder whose files never arrive through `--others`, so it is not "now a folder, deleted". Any gitlink turns reuse off (R0081 review 005 F2).
