@@ -83,9 +83,9 @@ check "AC3: the roadmap is a table of rows with a defined state, one of them the
 check "AC4: the diagram fences are balanced and the diagram shows the engineer end and the worker end" lune run tests/run -- "$A/readme.spec.luau"
 check "AC5: the README keeps what it said before" lune run tests/run -- "$A/readme.spec.luau"
 check "AC6: the README states the rules: ranked order, the worker end, the claim, the merge, review by another family, escalation, stacked delivery" words \
-	'`rank:`' '`depends_on`' '`./zn work`' 'The push is the lock' 'dispatcher merges' 'different model family' 'fallback' \
+	'`rank:`' '`depends_on`' 'zn work`' 'The push is the lock' 'dispatcher merges' 'different model family' 'fallback' \
 	'`blocked`' '`review-exhausted`' '`design-gap`' '`needs-decision`' '`red-gate`' '`quota`' '`tripwire`' '`escalation.md`' \
-	'`./zn resolve' '`amend-design`' '`approve`' '`split`' '`retry`' '`abort`' 'stacked PR set' 'bottom-up' 'stack of one'
+	'zn resolve' '`amend-design`' '`approve`' '`split`' '`retry`' '`abort`' 'stacked PR set' 'bottom-up' 'stack of one'
 check "AC7: every roadmap row and every issue-labelled sentence has the state the tracker shows for its issue" truth
 check "AC8: the README only gains the section: with it cut out the file equals the branch point's" removed
 
