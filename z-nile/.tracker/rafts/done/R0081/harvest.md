@@ -1,0 +1,27 @@
+- review-001 F1: zz-arch/json-readers-do-not-depend-on-a-build
+- review-001 F2: zz-arch/names-come-from-their-producer
+- review-001 F3: zz-test/refusals-tested-on-both-sides
+- review-001 F4: one-off: a per-spec record loop where the Design asks for one call
+- review-001 F5: one-off: five output differences from the Design, recorded or fixed
+- review-001 F6: one-off: a bullet that contradicted the list beside it
+- review-001 F7: one-off: refuted, a runner cannot unset an inherited OS variable from inside Lune
+- review-001 F8: one-off: an experiment result left out of the log
+- review-002 F1: one-off: the Design's failed-row rule left out as a deviation; the Design and the scope decision ("record each case's name and result") name it
+- review-002 F2: zz-test/promoted-specs-pin-rules-not-sets
+- review-002 F3: zz-arch/guard-decisions-do-not-hang-on-optional-features
+- review-002 F4: zz-test/pin-call-site-arguments
+- review-003 F1: zz-arch/read-cache-as-untrusted-input
+- review-003 F2: zz-arch/digests-hash-paths-as-git-stores-them
+- review-003 F3: zz-test/guard-needs-its-own-case
+- review-003 F4: one-off: a header that still described the original file
+- review-003 F5: one-off: wording and the log lagging the code
+- review-004 F1: zz-arch/digests-hash-paths-as-git-stores-them
+- review-004 F2: zz-test/guard-needs-its-own-case
+- review-004 F3: zz-arch/read-cache-as-untrusted-input
+- review-004 F4: one-off: a header and a case title that promised more than they held
+- note refute-003 dropped a case on an untested claim about git ls-files: zz-review/run-the-evidence-you-cite
+- review-005 F1: zz-arch/a-digest-holds-every-input-of-its-decision
+- review-005 F2: zz-arch/digests-hash-paths-as-git-stores-them
+- review-005 F3: one-off: the Design promised a time the code dropped
+- review-006 F1: zz-arch/digests-hash-paths-as-git-stores-them
+- review-006 F2: one-off: three comments lagging the code

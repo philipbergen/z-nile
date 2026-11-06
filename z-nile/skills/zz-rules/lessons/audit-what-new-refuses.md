@@ -15,3 +15,5 @@ R0050 code review 002 F1: c0116 added the `dead-raft` audit error (an issue nami
 R0050 code review 003 F1: a clean audit is not the test. `unfold` on an active issue whose raft was missing cleared the `dead-raft` line, but left the issue in `active/`, where `status`, `stop <R-id>` and `unfold` all refused it. Prove the named command by running it and then the item's next lifecycle command (the claim, `ready` or `stop`), not only by the audit coming back clean, and give each state the command that works for it.
 
 c0135 design review 003 F1: an audit hint that says a derived name may stay stale ("branch and worktree names need not follow") was false for rafts, whose branch is `{id}-{slug}` and is how the engine finds a started raft. Before writing such a hint, `git grep` the format of every name derived from the field. Check: is the "name" in this hint a key anywhere in the engine?
+
+R0052 code review 009 F2: every stop names the one command that clears it and a case runs it: after an exit 5 the documented `vet` left the stop in place and only `retry` cleared it.

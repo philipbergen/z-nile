@@ -644,7 +644,9 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			local stateText = fs.readFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
 			t.expect(has(stateText, "merge-check")).toBe(true)
 			-- `vet` alone leaves the stop; `retry` clears it (the stop's own message names both)
-			t.expect(has(late.stdout, "./zn dispatch retry")).toBe(true)
+			t.expect(has(late.stdout, "./zn dispatch retry c0096")).toBe(true)
+			t.expect(has(again.stdout, "./zn dispatch retry c0096")).toBe(true)
+			t.expect(has(again.stdout, "did not make")).toBe(false)
 			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 			t.expect(zn({ "dispatch", "c0096" }).code).toBe(5)
 			zn({ "dispatch", "retry", "c0096" })
@@ -674,7 +676,11 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			fs.writeFile(`{h.fakes}/nosquash`, "1")
 			fs.removeFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
 			local unread = zn({ "dispatch", "c0096" })
-			if unread.code ~= 5 or not has(unread.stdout, "GitHub names no merge commit") then
+			if
+				unread.code ~= 5
+				or not has(unread.stdout, "GitHub names no merge commit")
+				or not has(unread.stdout, "./zn dispatch retry c0096")
+			then
 				error(
 					`PR #97: exit {unread.code}, wanted 5 saying the merge commit was unreadable\n{unread.stdout}`
 				)

@@ -12,7 +12,7 @@ local t = require("@tests/lib/t")
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local function affected(args: { string }): { string }
-	local argv = { "run", "z-nile/affected", "--" }
+	local argv = { "run", "z-nile/affected", "--", "--graph-only" }
 	for _, a in args do
 		table.insert(argv, a)
 	end

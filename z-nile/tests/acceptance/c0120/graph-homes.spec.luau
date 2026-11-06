@@ -24,7 +24,7 @@ local function write(rel: string, text: string)
 	fs.writeFile(path, text)
 end
 local function affected(args: { string }): (boolean, string)
-	local argv = { "run", "z-nile/affected", "--" }
+	local argv = { "run", "z-nile/affected", "--", "--graph-only" }
 	for _, a in args do
 		table.insert(argv, a)
 	end

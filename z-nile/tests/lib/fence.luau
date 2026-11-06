@@ -126,6 +126,7 @@ local alive = fence.alive
 local function myPid(): string
 	return shell("echo $PPID")
 end
+fence.myPid = myPid
 
 -- A file's trimmed contents, or "" when it is missing: another run may release its lock while this one reads it.
 local function readMaybe(path: string): string

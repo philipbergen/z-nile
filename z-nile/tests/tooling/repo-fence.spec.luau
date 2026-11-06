@@ -87,6 +87,23 @@ end
 -- Names a file may use for a stated reason, each reviewed (zz-review skill, Repository safety). Nothing else in
 -- the file may name them.
 local ALLOWED: { [string]: { [string]: string } } = {
+	-- c0165: the results db may be written only while no spec runs; the reader of the checkout's facts only reads the marker
+	["z-nile/lib/workspace.luau"] = {
+		PICKMAN_TEST_FENCE = "read only: a nested orchestrator's db must lie under .cache; dbPath never sets or clears it",
+	},
+	-- c0165: compared with the jail name the runner wrote in its results; never run
+	["z-nile/lib/reuseplan.luau"] = {
+		["sandbox-exec"] = "compared with the jail name the runner wrote; never run",
+	},
+	-- c0165: the absence pin of what workspace.luau must never use, and the two in-process dbPath calls under the marker
+	["z-nile/tests/acceptance/c0165/digest.spec.luau"] = {
+		GIT_DIR = "the absence pin of a name workspace.luau must never use",
+		GIT_INDEX_FILE = "the absence pin of a name workspace.luau must never use",
+		PICKMAN_TEST_FENCE = "set to 1 around two in-process dbPath calls to prove a nested orchestrator refuses a db outside .cache, restored after; only git rev-parse runs meanwhile",
+	},
+	["z-nile/tests/acceptance/c0165/plan.spec.luau"] = {
+		["sandbox-exec"] = "the jail name passed to the pure reuseplan.records; never run",
+	},
 	-- c0660: the fixture helper names these to refuse them, and its spec proves it
 	["z-nile/tests/lib/fixture.luau"] = {
 		GIT_CONFIG_ = "refused (config in env)",

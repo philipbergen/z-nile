@@ -1729,7 +1729,7 @@ end
 
 -- After a gate merge: the merge commit's first parent is the main the gate judged, or main moved over an item the PR
 -- carries in between (a state the judgement never saw): why not, or nil. The merge is not undone; a human looks.
-function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): string?
+function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?, id: string): string?
 	if not pr or not pr.judgedMain then
 		return nil
 	end
@@ -1749,21 +1749,21 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): stri
 		end
 	end
 	if commit == "" then
-		return `PR #{number}: GitHub names no merge commit for it (a merge queue, a delay, or gh failing), so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry <id>`
+		return `PR #{number}: GitHub names no merge commit for it (a merge queue, a delay, or gh failing), so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry {id}`
 	end
 	if not freshMain(ctx) or not (git(root, { "cat-file", "-e", `{commit}^\{commit\}` })) then
-		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry <id>`
+		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry {id}`
 	end
 	local okP, parent = git(root, { "rev-parse", `{commit}^1` })
 	if not okP then
-		return `PR #{number} merged as {commit}, whose parent could not be read: look at main`
+		return `PR #{number} merged as {commit}, whose parent could not be read: look at main, then run ./zn dispatch vet and ./zn dispatch retry {id}`
 	end
 	if parent == pr.judgedMain then
 		return nil
 	end
 	local okD, names = git(root, { "diff", "--name-only", "--no-renames", pr.judgedMain :: string, parent })
 	if not okD then
-		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it, then run ./zn dispatch vet and ./zn dispatch retry <id>`
+		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it, then run ./zn dispatch vet and ./zn dispatch retry {id}`
 	end
 	local roots = rootsAt(ctx, parent) or {}
 	local mine: { [string]: boolean } = {}
@@ -1774,7 +1774,7 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?): stri
 	for path in string.gmatch(names, "[^\n]+") do
 		local pid = trackerstate.itemOf(path, roots)
 		if pid and mine[pid :: string] then
-			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it, then run ./zn dispatch vet and ./zn dispatch retry <id>`
+			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it, then run ./zn dispatch vet and ./zn dispatch retry {id}`
 		end
 	end
 	return nil
@@ -1823,7 +1823,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			end
 			-- code review 006 F2, 007 F3: GitHub merges into whatever main is by then, so what landed is compared with
 			-- what was judged: a merge commit whose parent is another main, over items the PR carries, stops the run
-			local moved = dispatcher.afterMerge(ctx, action.pr :: number, f.pr)
+			local moved = dispatcher.afterMerge(ctx, action.pr :: number, f.pr, id)
 			if moved then
 				-- recorded as an attempt of its own (code review 008 F2), so the next run reads a step and a detail and
 				-- holds, whatever the item's earlier steps were

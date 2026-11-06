@@ -41,8 +41,11 @@
 - review-008 F3: one-off: stale doc wording
 - review-008 F4: one-off: the user's approval recorded in the issue
 - review-008 F5: zz-arch/merge-gate-checks-what-it-merges
-- review-009 F1: zz-test/fakes-return-what-the-real-tool-returns
-- review-009 F2: zz-rules/every-stop-names-its-command
+- review-009 F1: zz-test/stand-ins-answer-only-named-arguments
+- review-009 F2: zz-rules/audit-what-new-refuses
 - review-009 F3: zz-test/refusals-tested-on-both-sides
 - review-009 F4: one-off: no merge queue in this repository
 - review-009 F5: one-off: a record entry beside the state that holds
+- review-010 F1: one-off: main landed R0081's declared-inputs rule; the branch declares its specs' inputs
+- review-010 F2: zz-rules/audit-what-new-refuses
+- review-010 F3: one-off: folded the two new lessons into existing ones

@@ -1,0 +1,7 @@
+tests/meta/home.spec.luau	arcade/
+tests/meta/home.spec.luau	stylua.toml
+tests/meta/home.spec.luau	selene.toml
+tests/meta/fence.spec.luau	*
+tests/meta/architecture.spec.luau	arcade/.tracker/architecture.md
+tests/meta/architecture.spec.luau	arcade/src/
+tests/meta/architecture.spec.luau	arcade/tests/

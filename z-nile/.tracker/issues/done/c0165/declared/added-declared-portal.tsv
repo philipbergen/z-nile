@@ -1,0 +1,7 @@
+tests/meta/home.spec.luau	portal/
+tests/meta/home.spec.luau	stylua.toml
+tests/meta/home.spec.luau	selene.toml
+tests/meta/fence.spec.luau	*
+tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
+tests/meta/architecture.spec.luau	portal/src/
+tests/meta/architecture.spec.luau	portal/tests/

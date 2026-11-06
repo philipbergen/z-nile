@@ -290,6 +290,12 @@ function dispatch.next(f: Facts): Action
 			"needs the user: answer questions.md, then ./zn dispatch retry " .. f.id
 		)
 	end
+	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then
+		return stop(
+			dispatch.EXIT.tripwire,
+			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+		)
+	end
 	if f.last and f.last.outcome == "tripwire" then
 		return stop(
 			dispatch.EXIT.tripwire,
