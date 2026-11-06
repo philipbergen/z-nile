@@ -162,3 +162,12 @@ test("PRs attach by branch and title ids; tickets get their raft's PR", () => {
   assert.deepEqual(m.byId.c0132.prs.map(p => p.number), [175])
   assert.equal(m.byId.c0132.prs[0].draft, false)
 })
+
+test("ticketPrompt names the project and the capture skill; bad project names drop out", () => {
+  const a = M.ticketPrompt("snake", "  bug: tail clips walls ")
+  assert.match(a, /in project snake \(--project snake\)/)
+  assert.match(a, /z-nile\/skills\/z-ticket\/SKILL\.md/)
+  assert.match(a, /It is about: bug: tail clips walls$/)
+  assert.match(M.ticketPrompt("pickman", ""), /First ask me what the ticket is about\.$/)
+  assert.doesNotMatch(M.ticketPrompt("x; rm -rf /", "y"), /rm -rf/)
+})

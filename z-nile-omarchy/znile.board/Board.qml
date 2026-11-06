@@ -29,6 +29,7 @@ Item {
       var parsed = JSON.parse(String(payloadJson || "{}"))
       wanted = String(parsed.select || "")
       big = parsed.max === true
+      if (parsed.newTicket === true) Qt.callLater(function() { newDialog.open() })
     } catch (e) {}
     Qt.callLater(function() {
       keys.forceActiveFocus()
@@ -192,6 +193,7 @@ Item {
   }
   onSelectedIdChanged: if (selectedId === "") { anchorTile = null; anchorRect = null; maximized = false }
   function dive(item) { if (service && item) service.dive(item) }
+  function focusBoard() { keys.forceActiveFocus() }
   // Arrow and page keys scroll the open card's description.
   function scrollBody(key) {
     var f = bodyFlick, page = f.height * 0.9, line = Style.space(40)
@@ -269,6 +271,15 @@ Item {
       anchors.fill: parent
       focus: true
       Keys.onPressed: function(event) {
+        if (newDialog.shown) {
+          if (event.key === Qt.Key_Escape) { newDialog.close(); event.accepted = true }
+          return
+        }
+        // Single-letter keys, unless typing in the search.
+        var plain = !search.activeFocus && (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) === 0
+        if (plain && event.key === Qt.Key_N) { newDialog.open(); event.accepted = true; return }
+        if (plain && event.key === Qt.Key_R) { root.view = "rafts"; root.selectedId = ""; event.accepted = true; return }
+        if (plain && event.key === Qt.Key_T) { root.view = "tickets"; root.selectedId = ""; event.accepted = true; return }
         if (event.key === Qt.Key_Escape) {
           if (root.maximized) root.maximized = false
           else if (root.selectedId !== "") root.selectedId = ""
@@ -353,6 +364,30 @@ Item {
                   }
                 }
               }
+            }
+          }
+
+          // New ticket (N): pick project and AI, open it in a terminal.
+          Rectangle {
+            radius: height / 2
+            implicitHeight: newText.implicitHeight + Style.space(10)
+            implicitWidth: newText.implicitWidth + Style.space(24)
+            color: newArea.containsMouse ? Qt.lighter(Commons.Color.accent, 1.1) : Commons.Color.accent
+            Behavior on color { ColorAnimation { duration: Style.duration(120) } }
+            PlainLabel {
+              id: newText
+              anchors.centerIn: parent
+              text: "\uf067  New ticket"
+              color: root.bg
+              font.bold: true
+              font.pixelSize: Style.font.bodySmall
+            }
+            MouseArea {
+              id: newArea
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: newDialog.open()
             }
           }
 
@@ -1031,12 +1066,19 @@ Item {
       // The card being dragged flies above everything.
       Item { id: dragLayer; anchors.fill: parent; z: 1000 }
 
+      NewTicketDialog {
+        id: newDialog
+        anchors.fill: parent
+        z: 2000
+        board: root
+      }
+
       // Notice toast.
       Rectangle {
         id: toast
         property string text: ""
         anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: Style.space(24) }
-        z: 1001
+        z: 2001
         radius: height / 2
         height: toastText.implicitHeight + Style.space(16)
         width: toastText.implicitWidth + Style.space(32)

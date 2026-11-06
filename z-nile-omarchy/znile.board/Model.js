@@ -415,3 +415,16 @@ function attachPrs(model, prs) {
   }
   return model
 }
+
+// The prompt that starts an AI CLI on capturing a new ticket. It names the
+// project and the repo's own capture skill, so any agent follows the same
+// rules; the user's words, when given, are the ticket's starting point.
+function ticketPrompt(project, about) {
+  var p = /^[a-z0-9][a-z0-9-]{0,40}$/.test(String(project)) ? String(project) : ""
+  var text = clip(String(about || "").trim(), 2000)
+  var head = "Capture a new z-nile ticket" + (p ? " in project " + p + " (--project " + p + ")" : "")
+    + ", following z-nile/skills/z-ticket/SKILL.md step by step (it starts in a capture worktree)."
+  return text !== ""
+    ? head + " It is about: " + text
+    : head + " First ask me what the ticket is about."
+}

@@ -104,17 +104,24 @@ Item {
   // running interactively in the repo, seeded with the dive-in prompt.
   function dive(item, agentId) {
     if (!item) return
-    var id = agentId || agent
+    launch(agentId || agent, Model.divePrompt(item), "opening " + item.id)
+  }
+
+  // A new terminal with the AI capturing a new ticket in `project`.
+  function newTicket(project, agentId, about) {
+    launch(agentId || agent, Model.ticketPrompt(project, about), "new " + project + " ticket")
+  }
+
+  function launch(id, prompt, what) {
     var a = Model.agentById(id)
     if (!a) { say("no AI CLI installed: set one up with omarchy agent"); return }
-    var prompt = Model.divePrompt(item)
     // Each value is its own argv element; nothing is parsed by a shell.
     Quickshell.execDetached(Model.diveArgv(id, repoPath, prompt))
     if (a.clipboard) {
       Quickshell.execDetached(["wl-copy", "--", prompt])
       say(a.name + " can't take a starting prompt: it's on the clipboard, paste it in")
     } else {
-      say("opening " + item.id + " in " + a.name)
+      say(what + " in " + a.name)
     }
   }
 
