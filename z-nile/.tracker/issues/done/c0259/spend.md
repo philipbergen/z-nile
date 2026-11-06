@@ -21,6 +21,7 @@
 | 17 | 2026-11-06 16:57 | R0085: verification log | 0 | 0 | 2.0 | focus | deliver |  |
 | 18 | 2026-11-06 18:22 | R0085: verification log | 0 | 0 | 2.0 | focus | deliver |  |
 | 19 | 2026-11-06 18:30 | tracker: done R0085 | 0 | 0 | 8.5 | raft | deliver |  |
+| 20 | 2026-11-06 18:35 | deliver | 0 | 0 | 25.0 | spend | deliver |  |
 
-**Total:** +480 / -5 lines, 226.5 agent-minutes, 574426 tokens over 19 records
-<!-- totals: added=480 removed=5 minutes=226.5 records=19 tokens=574426 -->
+**Total:** +480 / -5 lines, 251.5 agent-minutes, 574426 tokens over 20 records
+<!-- totals: added=480 removed=5 minutes=251.5 records=20 tokens=574426 -->
