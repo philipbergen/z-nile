@@ -61,6 +61,7 @@ function cleanItem(raw, kind, project) {
     path: "",
     url: "",
     prs: [],
+    cost: null,
     emergent: raw.emergent === true,
     command: raw.command ? clip(raw.command, 80) : "",
     body: clip(raw.body, MAX_BODY)
@@ -106,6 +107,24 @@ function normalize(raw) {
       var mem = byId[rafts[b].issues[c]]
       if (mem && mem.kind === "issue" && mem.blockedBy.length > 0)
         rafts[b].blockedMembers.push({ id: mem.id, by: mem.blockedBy })
+    }
+  }
+  // Cost: a ticket's own spend; a raft's own rollup once it has one, else
+  // the sum of its tickets'. Phases add up the same way.
+  var spendOf = raw.spend && typeof raw.spend === "object" ? raw.spend : {}
+  for (var si = 0; si < issues.length; si++) issues[si].cost = cleanCost(spendOf[issues[si].id])
+  for (var sr = 0; sr < rafts.length; sr++) {
+    var own = cleanCost(spendOf[rafts[sr].id])
+    var sum = emptyCost()
+    for (var sm = 0; sm < rafts[sr].issues.length; sm++) {
+      var member = byId[rafts[sr].issues[sm]]
+      if (member && member.cost) addCost(sum, member.cost)
+    }
+    if (own.minutes > 0 || own.tokens > 0) {
+      if (Object.keys(own.phases).length === 0) own.phases = sum.phases
+      rafts[sr].cost = own
+    } else {
+      rafts[sr].cost = sum
     }
   }
   var paths = raw.paths && typeof raw.paths === "object" ? raw.paths : {}
@@ -427,4 +446,71 @@ function ticketPrompt(project, about) {
   return text !== ""
     ? head + " It is about: " + text
     : head + " First ask me what the ticket is about."
+}
+
+function emptyCost() { return { minutes: 0, tokens: 0, added: 0, removed: 0, phases: {} } }
+
+function nonNeg(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : 0 }
+
+function cleanCost(raw) {
+  var c = emptyCost()
+  if (!raw || typeof raw !== "object") return c
+  c.minutes = nonNeg(raw.minutes); c.tokens = nonNeg(raw.tokens)
+  c.added = nonNeg(raw.added); c.removed = nonNeg(raw.removed)
+  var ph = raw.phases && typeof raw.phases === "object" ? raw.phases : {}
+  for (var k in ph) {
+    if (!/^[a-z][a-z-]{0,30}$/.test(k)) continue
+    c.phases[k] = { minutes: nonNeg(ph[k] && ph[k].minutes), tokens: nonNeg(ph[k] && ph[k].tokens) }
+  }
+  return c
+}
+
+function addCost(into, c) {
+  into.minutes += c.minutes; into.tokens += c.tokens
+  into.added += c.added; into.removed += c.removed
+  for (var k in c.phases) {
+    var p = into.phases[k] = into.phases[k] || { minutes: 0, tokens: 0 }
+    p.minutes += c.phases[k].minutes; p.tokens += c.phases[k].tokens
+  }
+}
+
+// "45 min", "5.7 h"
+function fmtMinutes(m) {
+  m = nonNeg(m)
+  if (m < 59.5) return Math.round(m) + " min"
+  var h = m / 60
+  return (h < 10 ? Math.round(h * 10) / 10 : Math.round(h)) + " h"
+}
+
+// "850", "430k", "1.2M" tokens
+function fmtTokens(t) {
+  t = nonNeg(t)
+  if (t < 1000) return String(Math.round(t))
+  if (t < 999500) return Math.round(t / 1000) + "k"
+  var m = t / 1e6
+  return (m < 10 ? Math.round(m * 10) / 10 : Math.round(m)) + "M"
+}
+
+// The card's one-line cost, or "" when nothing was recorded.
+function costLine(c) {
+  if (!c || (c.minutes <= 0 && c.tokens <= 0)) return ""
+  var parts = []
+  if (c.minutes > 0) parts.push(fmtMinutes(c.minutes))
+  if (c.tokens > 0) parts.push(fmtTokens(c.tokens) + " tokens")
+  return parts.join(" · ")
+}
+
+// "capture 3 min · design-review 3.6 h, 1.2M · prep 2 h", in pipeline order.
+var PHASE_ORDER = ["capture", "prep", "design-review", "build", "code-review", "deliver"]
+function phaseLine(c) {
+  if (!c) return ""
+  var keys = Object.keys(c.phases).sort(function(a, b) {
+    var ia = PHASE_ORDER.indexOf(a), ib = PHASE_ORDER.indexOf(b)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || (a < b ? -1 : 1)
+  })
+  return keys.filter(function(k) { return c.phases[k].minutes > 0 || c.phases[k].tokens > 0 })
+    .map(function(k) {
+      var p = c.phases[k]
+      return k + " " + fmtMinutes(p.minutes) + (p.tokens > 0 ? ", " + fmtTokens(p.tokens) : "")
+    }).join(" · ")
 }

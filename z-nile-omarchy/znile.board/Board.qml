@@ -244,6 +244,15 @@ Item {
       rows.push({ k: p === 0 ? (it.prs.length > 1 ? "pull requests" : "pull request") : "",
         v: "#" + pr.number + (pr.draft ? " (draft)" : "") + "  " + pr.title, url: pr.url })
     }
+    var cost = it.cost ? Model.costLine(it.cost) : ""
+    if (cost !== "") {
+      var lines = it.cost.added > 0 || it.cost.removed > 0 ? "   (+" + Math.round(it.cost.added) + " / −" + Math.round(it.cost.removed) + " lines)" : ""
+      rows.push({ k: it.kind === "raft" ? "cost (raft)" : "cost", v: cost + lines })
+      var phases = Model.phaseLine(it.cost)
+      if (phases !== "") rows.push({ k: "", v: phases, dim: true })
+    } else {
+      rows.push({ k: "cost", v: "nothing recorded yet", dim: true })
+    }
     rows.push(it.command ? { k: "next", v: "", cmd: it.command } : { k: "next", v: "–" })
     return rows
   }

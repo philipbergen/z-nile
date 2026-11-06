@@ -63,6 +63,45 @@ with open(os.path.join(cache, "projects.tsv"), encoding="utf-8") as f:
                         doc = os.path.join(root, kind, sub, entry, entry + ".md")
                         paths[entry] = os.path.normpath(doc)
 
+# Spend per item, from the spend.md beside each document: the totals line
+# `./zn` writes for machines, and the rows' phase column for a breakdown.
+TOTALS = re.compile(r"<!-- totals: (.*?) -->")
+def num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+spend = {}
+for entry, doc in paths.items():
+    f = os.path.join(repo, os.path.dirname(doc), "spend.md")
+    if not os.path.isfile(f):
+        continue
+    with open(f, encoding="utf-8") as fh:
+        text = fh.read()
+    m = TOTALS.search(text)
+    if not m:
+        continue
+    kv = dict(p.split("=", 1) for p in m.group(1).split() if "=" in p)
+    phases = {}
+    for line in text.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        # issue rows: # | when | commit | +lines | -lines | minutes | attribution | phase | tokens
+        if len(cells) == 9 and cells[0].isdigit():
+            ph = phases.setdefault(cells[7] or "other", {"minutes": 0.0, "tokens": 0.0})
+            ph["minutes"] += num(cells[5])
+            ph["tokens"] += num(cells[8])
+        # a raft's phase table: phase | +lines | -lines | minutes | tokens
+        elif len(cells) == 5 and re.match(r"^[a-z][a-z-]*$", cells[0]) and cells[0] != "phase":
+            ph = phases.setdefault(cells[0], {"minutes": 0.0, "tokens": 0.0})
+            ph["minutes"] += num(cells[3])
+            ph["tokens"] += num(cells[4])
+    spend[entry] = {
+        "minutes": num(kv.get("minutes")), "tokens": num(kv.get("tokens")),
+        "added": num(kv.get("added")), "removed": num(kv.get("removed")),
+        "phases": phases,
+    }
+model["spend"] = spend
+
 model.pop("home", None)
 model["projects"] = projects
 model["projectOrder"] = order

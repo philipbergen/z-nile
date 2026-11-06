@@ -171,3 +171,33 @@ test("ticketPrompt names the project and the capture skill; bad project names dr
   assert.match(M.ticketPrompt("pickman", ""), /First ask me what the ticket is about\.$/)
   assert.doesNotMatch(M.ticketPrompt("x; rm -rf /", "y"), /rm -rf/)
 })
+
+test("cost: ticket spend, raft rollup or member sum, formatting", () => {
+  const m = M.normalize({
+    issues: [
+      { id: "c0001", title: "a", stage: "done", raft: "R0001" },
+      { id: "c0002", title: "b", stage: "prepared", raft: "R0002" },
+      { id: "c0003", title: "c", stage: "prepared", raft: "R0002" },
+    ],
+    rafts: [
+      { id: "R0001", title: "x", stage: "done", issues: ["c0001"] },
+      { id: "R0002", title: "y", stage: "prepared", issues: ["c0002", "c0003"] },
+    ],
+    spend: {
+      c0001: { minutes: 30, tokens: 0, phases: { build: { minutes: 30 } } },
+      R0001: { minutes: 340.4, tokens: 430000, phases: { prep: { minutes: 90 }, "design-review": { minutes: 128, tokens: 430000 } } },
+      c0002: { minutes: 120, tokens: 1177234, phases: { prep: { minutes: 120 }, "design-review": { minutes: 0, tokens: 1177234 } } },
+      c0003: { minutes: 3, tokens: -5, phases: { capture: { minutes: 3 }, "<b>": { minutes: 9 } } },
+    },
+  })
+  assert.equal(m.byId.R0001.cost.minutes, 340.4)                // own rollup wins
+  assert.equal(m.byId.R0002.cost.minutes, 123)                  // backlog raft: sum of tickets
+  assert.equal(m.byId.R0002.cost.tokens, 1177234)
+  assert.equal(m.byId.c0003.cost.tokens, 0)                     // negative dropped
+  assert.ok(!("<b>" in m.byId.c0003.cost.phases))               // odd phase names dropped
+  assert.equal(M.costLine(m.byId.R0001.cost), "5.7 h · 430k tokens")
+  assert.equal(M.costLine(m.byId.c0003.cost), "3 min")
+  assert.equal(M.costLine(M.normalize({ issues: [{ id: "c0009", title: "z", stage: "new" }] }).byId.c0009.cost), "")
+  assert.equal(M.fmtTokens(1177234), "1.2M")
+  assert.equal(M.phaseLine(m.byId.R0002.cost), "capture 3 min · prep 2 h · design-review 0 min, 1.2M")
+})

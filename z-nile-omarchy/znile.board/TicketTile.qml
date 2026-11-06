@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Commons as Commons
+import "Model.js" as Model
 
 // One ticket or raft card. All tracker text is untrusted and drawn as
 // PlainText. The card drags itself (Board.qml reparents it while it flies)
@@ -186,6 +187,16 @@ Rectangle {
       IdChip { id: chipPartly; visible: !!tile.item && tile.item.kind === "raft" && tile.item.issues.length > 1 && tile.item.blockedMembers.length > 0; glyph: "\uf023"; prefix: tile.item ? tile.item.blockedMembers.length + " of " + tile.item.issues.length + " blocked:" : ""; ids: tile.item ? tile.item.blockedMembers.map(function(b) { return b.id }) : []; tint: Commons.Color.urgent; onOpen: function(id) { tile.openId(id) } }
       IdChip { id: chipAfter; visible: !!tile.item && tile.item.after.length > 0; glyph: "\uf160"; prefix: "after"; ids: tile.item ? tile.item.after : []; tint: Commons.Color.foreground; onOpen: function(id) { tile.openId(id) } }
       Chip { id: chipDeps; visible: !!tile.item && !tile.blocked && tile.item.after.length === 0 && tile.item.dependsOn.length > 0; glyph: "\uf0c1"; label: tile.item ? String(tile.item.dependsOn.length) : ""; tint: Commons.Color.foreground }
+    }
+
+    // Cost so far: agent time and tokens.
+    PlainLabel {
+      visible: text !== ""
+      width: parent.width
+      text: tile.item && tile.item.cost && Model.costLine(tile.item.cost) !== "" ? "\uf017  " + Model.costLine(tile.item.cost) : ""
+      elide: Text.ElideRight
+      font.pixelSize: Style.font.caption
+      color: Util.alpha(Commons.Color.foreground, 0.55)
     }
 
     // Next step and the dive-in action.
