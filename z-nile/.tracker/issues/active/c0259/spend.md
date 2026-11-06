@@ -14,6 +14,7 @@
 | 10 | 2026-11-06 16:14 | design-review-005 | 0 | 0 | 3.0 | spend | design-review | 78540 |
 | 11 | 2026-11-06 16:14 | design-refute-005 | 0 | 0 | 8.0 | spend | design-review |  |
 | 12 | 2026-11-06 16:15 | prep | 389 | 3 | 90.0 | spend | prep |  |
+| 13 | 2026-11-06 16:28 | c0259: insert the How it should work section into the z-nile README | 87 | 0 | 10.0 | focus | build |  |
 
-**Total:** +389 / -3 lines, 196.0 agent-minutes, 574426 tokens over 12 records
-<!-- totals: added=389 removed=3 minutes=196.0 records=12 tokens=574426 -->
+**Total:** +476 / -3 lines, 206.0 agent-minutes, 574426 tokens over 13 records
+<!-- totals: added=476 removed=3 minutes=206.0 records=13 tokens=574426 -->
