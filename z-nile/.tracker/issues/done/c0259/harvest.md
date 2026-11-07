@@ -1,0 +1,24 @@
+# Harvest: c0259
+- design-review-001 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-001 F2: z-design/status-labels-need-a-tracker-fact, zz-test/criterion-fails-on-todays-file
+- design-review-001 F3: zz-test/criterion-fails-on-todays-file
+- design-review-001 F4: z-design/restated-rules-move-together
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F7: one-off: a CLI's skill support asserted without the experiment that found it
+- design-review-001 F8: z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F9: z-design/restated-rules-move-together
+- design-review-002 F1: z-design/leave-lines-other-items-replace
+- design-review-002 F2: z-design/status-labels-need-a-tracker-fact
+- design-review-002 F3: z-design/status-labels-need-a-tracker-fact
+- design-review-002 F4: zz-test/refusals-tested-on-both-sides
+- design-review-002 F5: z-design/quote-other-preps-before-promising
+- design-review-002 F6: one-off: a word of the draft's vocabulary without its definition
+- design-review-002 F7: z-design/status-labels-need-a-tracker-fact
+- design-review-003 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-003 F2: z-design/accepted-risks-checked-and-decided
+- design-review-003 F3: one-off: a stale experiment record and a doubled id in a sentence
+- design-review-004 F1: zz-test/refusals-tested-on-both-sides, z-design/status-labels-need-a-tracker-fact
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-005 F2: one-off: two clauses run together in a lesson's text
