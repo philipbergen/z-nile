@@ -1,0 +1,51 @@
+- review-001 F1: zz-arch/item-rules-scoped-to-their-call
+- review-001 F2: zz-test/pin-fail-safes-where-they-act
+- review-001 F3: zz-arch/guards-decide-from-the-tools-resolution
+- review-001 F4: zz-arch/guards-decide-from-the-tools-resolution
+- review-001 F5: z-design/instructions-runnable-where-they-run
+- review-001 F6: one-off: the model id accepted by one reader and refused by another; one predicate now
+- review-001 F7: zz-arch/guards-trust-only-origin
+- review-001 F8: one-off: comments left behind by decisions
+- review-002 F1: zz-arch/item-rules-scoped-to-their-call
+- review-002 F2: zz-arch/guards-decide-from-the-tools-resolution
+- review-002 F3: zz-arch/guards-trust-only-origin
+- review-002 F4: zz-test/pin-fail-safes-where-they-act
+- review-003 F1: zz-arch/item-rules-scoped-to-their-call
+- review-003 F2: zz-arch/item-rules-scoped-to-their-call
+- review-003 F3: zz-arch/guards-decide-from-the-tools-resolution
+- review-004 F1: zz-arch/item-rules-scoped-to-their-call
+- review-004 F2: zz-arch/parsers-refuse-ambiguity
+- review-004 F3: zz-test/hand-written-parsers-advance-or-refuse
+- review-004 F4: zz-test/refusals-tested-on-both-sides
+- review-004 F5: zz-rules/grep-markers-before-merge-commit
+- review-004 F6: zz-arch/one-reader-per-format
+- review-004 F7: one-off: not this raft's to fix; the lead captures an issue for z-raft (item 9 for every RCn line a rafting adds)
+- review-005 F1: zz-arch/merge-gate-checks-what-it-merges
+- review-005 F2: zz-arch/item-rules-scoped-to-their-call
+- review-005 F3: zz-test/refusals-tested-on-both-sides
+- review-005 F4: one-off: the counter is never carried by a rafting PR
+- review-005 F5: one-off: R0063 removed the check the merge text named
+- review-005 F6: one-off: names c0193
+- review-006 F1: zz-arch/one-reader-per-format
+- review-006 F2: one-off: a window GitHub gives no base pin for; judged once more right before the merge
+- review-006 F3: zz-test/refusals-tested-on-both-sides
+- review-006 F4: zz-arch/refusals-are-gate-checks
+- review-006 F5: one-off: a garbled sentence
+- review-007 F1: zz-execute/run-every-check-before-refute
+- review-007 F2: zz-arch/merge-gate-checks-what-it-merges
+- review-007 F3: zz-arch/merge-gate-checks-what-it-merges
+- review-007 F4: one-off: scratch trees unique per run
+- review-007 F5: one-off: unchecked git init
+- review-008 F1: zz-arch/merge-gate-checks-what-it-merges
+- review-008 F2: zz-arch/merge-gate-checks-what-it-merges
+- review-008 F3: one-off: stale doc wording
+- review-008 F4: one-off: the user's approval recorded in the issue
+- review-008 F5: zz-arch/merge-gate-checks-what-it-merges
+- review-009 F1: zz-test/stand-ins-answer-only-named-arguments
+- review-009 F2: zz-rules/audit-what-new-refuses
+- review-009 F3: zz-test/refusals-tested-on-both-sides
+- review-009 F4: one-off: no merge queue in this repository
+- review-009 F5: one-off: a record entry beside the state that holds
+- review-010 F1: one-off: main landed R0081's declared-inputs rule; the branch declares its specs' inputs
+- review-010 F2: zz-rules/audit-what-new-refuses
+- review-010 F3: one-off: folded the two new lessons into existing ones

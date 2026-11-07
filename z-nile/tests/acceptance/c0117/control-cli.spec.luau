@@ -523,7 +523,7 @@ G=$ZN_REAL_GIT
 				return `\{"number":{n},"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{head}"\}`
 			end
 			local doc = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/issues/c0096/c0096.md" })
-			local raft = "---\nid: R0050\ntitle: a raft\nissues: [c0096]\n---\n"
+			local raft = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0096]\n---\n"
 			local own = {
 				["pickman/.tracker/rafts/R0050/R0050.md"] = raft,
 				["pickman/.tracker/issues/c0096/c0096.md"] = (

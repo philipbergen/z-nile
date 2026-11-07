@@ -14,10 +14,14 @@ You have no shared context with the author. Judge only what's in front of you:
 - the zz-rules, zz-arch and zz-test skills, and the project's own skills (`pickman-arch`, `pickman-test` for pickman);
 - in code mode, the diff.
 
+## Who reviews
+A review runs on the review model of the CLI (the user's rule): Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`, never the author's own cheaper model. `./zn dispatch zz-review <id> --mode design|raft|code|stream` starts it from the author's worktree on the CLI and model `.models.toml` names for `zz-review`; under the dispatcher a stream review runs on the review model of the CLI too, and an interactive session may still run stream reviews on Sonnet subagents (Stream mode).
+
 ## Output file
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
 - Code mode: `review-NNN.md`, in the raft directory.
 - `NNN` continues from the highest existing number.
+- Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
 
 ```markdown
 # Review NNN: <R0010 | f0010> (<design | code> mode)
@@ -57,7 +61,7 @@ On a re-review round, first read the previous `review-NNN.md` and `refute-NNN.md
 
 ## Visible record
 In code mode the PR shows the review as it happens: the author pushes and posts a "started" comment before you begin, and commits, pushes and summarizes `review-NNN.md` when you finish. So:
-- Write `review-NNN.md` in full; findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
+- Write `review-NNN.md` in full (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says); findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
 - On a re-review, list withdrawn findings in a non-heading line under `Inputs:`, for example `Dropped from review-001: F2, F4`. Give a repeated finding a new id and say `(repeat of review-001 F3)` in its claim. Every `### F<n>` heading is a finding that `./zn done` requires an answer to, and ids restart at F1 each round.
 - Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
 
@@ -84,9 +88,9 @@ Attack all of the following:
 12. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Did the experiments and probes in the draft (and their recorded results) run that way, and does any step tell the executor to run something unbounded?
 
 ## Stream mode (zz-execute Phase 2B)
-A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
-- **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (the lead puts that text in the brief; it is not in the stream tree). Run the stream's checks (`./zn check <issue>`, `z-nile/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules and its own document. A `stream-review-*` or `stream-refute-*` file in that diff is a finding: those files live only on the raft branch.
-- **Output**: return the review markdown. Write no file. The lead writes `<root>/rafts/active/<R-id>/stream-review-<issue>-NNN.md` (the raft's folder, `./zn find <R-id>`) on the raft branch, in the format above (no Judged section: the Opus review rules on Judged criteria). Number rounds from 001; there are at most two. The author returns the refute text; the lead writes `stream-refute-<issue>-NNN.md` on the raft branch.
+A stream review is a cheap first filter on **one issue's** work, before the lead merges the stream: in an interactive session a clean **Sonnet** subagent runs it, and under the dispatcher `./zn dispatch zz-review <issue> --mode stream` does, on the review model of the CLI. It never replaces the code review of the whole raft (Code mode, on the review model of the CLI).
+- **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (in an interactive session the lead puts that text in the brief; it is not in the stream tree). Under `./zn dispatch`, from round 2 read the previous `stream-review-<issue>-NNN.md` and `stream-refute-<issue>-NNN.md` in the raft's folder of your worktree (the prompt names them). Run the stream's checks (`./zn check <issue>`, `z-nile/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules and its own document. A `stream-review-*` or `stream-refute-*` file in that diff is a finding: those files live only on the raft branch.
+- **Output**: An interactive subagent returns the review markdown and writes no file: the lead writes `<root>/rafts/active/<R-id>/stream-review-<issue>-NNN.md` (the raft's folder, `./zn find <R-id>`) on the raft branch. Under `./zn dispatch`, the reviewer writes its review to `$ZN_DISPATCH_DIR/review.md` (its own state folder), and the dispatcher numbers it into the raft's folder as `stream-review-<issue>-NNN.md` (the next round of that issue) in the lead's raft worktree; the reviewer reads the stream's diff and runs its checks in `ws-<issue>` (read only there). A dispatched run has no caller to return text to, and a step that spent tokens but wrote no review fails. Either way the file is in the format above (no Judged section: the code review rules on Judged criteria). Number rounds from 001; there are at most two. The author returns the refute text; the lead writes `stream-refute-<issue>-NNN.md` on the raft branch.
 - These files are not review rounds: `./zn done` and `metrics` ignore them.
 
 ## Code mode (before the PR is marked ready)

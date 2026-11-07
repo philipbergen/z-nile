@@ -151,6 +151,13 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 	},
+	["z-nile/engine/dispatcher.luau"] = {
+		["checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start"] = "a comment in a type",
+		['local HOME = ".cache/dispatch"'] = `the dispatcher's run state (c0117) in the main checkout: state.json and the markers through sh.writeReplacing ({RENAMED}); the runner's pid file is a nested file the launcher creates`,
+		['local at = string.find(here, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (c0117: only a fake under .cache starts inside a check); nothing is written",
+		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
+		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
 	},

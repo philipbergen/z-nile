@@ -161,6 +161,21 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
 	},
+	-- c0117: the agent's credential replaces the user's in a dispatched step's environment (appended git config, an
+	-- empty gh configuration, a credential helper that answers with the agent's token)
+	["z-nile/engine/credential.luau"] = {
+		GIT_CONFIG_ = "appends the agent's credential helper after the guards' own entries",
+		GH_CONFIG_DIR = "an empty gh configuration folder of the step's own",
+		["credential."] = "resets git's credential helpers to the agent's token only",
+	},
+	-- c0117: the fake CLIs log the step's gh configuration folder, to prove the agent's credential replaced the user's
+	["z-nile/tests/lib/fakecli.luau"] = {
+		GH_CONFIG_DIR = "logged by a fake CLI to prove the step's own, empty gh configuration",
+	},
+	-- c0117: its refusal case sets the spec-run marker explicitly (review 001 F15), never to switch a guard
+	["z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau"] = {
+		PICKMAN_FENCE_ = "sets the spec-run marker the dispatcher's check reads",
+	},
 	-- c0077: the reviewed list of .cache lines quotes fence.sh lines that name these
 	["z-nile/tests/lib/cachepaths.luau"] = {
 		GIT_CEILING_DIRECTORIES = "quotes a fence.sh line in the reviewed .cache list",

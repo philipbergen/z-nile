@@ -31,6 +31,8 @@ local function front(text: string): { [string]: string }
 	return out
 end
 
+audit.front = front
+
 export type Found = { id: string, path: string, kind: string }
 
 -- The project roots of the checkout at `root` (c0114), or none and the registry's problem: never a guessed root.
@@ -460,6 +462,45 @@ function audit.run(root: string): { Problem }
 		return a.code < b.code
 	end)
 	return problems
+end
+
+-- The rule `./zn ready` applies to a raft (code review 006 F1): the ids its `issues:` line lists and the issues whose
+-- `raft:` line names it are the same set. Returns what disagrees, for each raft id of `rafts`, in the checkout `root`.
+function audit.membership(root: string, rafts: { string }): { string }
+	local out: { string } = {}
+	local found = audit.scan(root)
+	local listed: { [string]: { [string]: boolean } } = {}
+	local members: { [string]: { [string]: boolean } } = {}
+	for _, rid in rafts do
+		listed[rid], members[rid] = {}, {}
+	end
+	for _, f in found do
+		local doc = `{root}/{f.path}/{f.id}.md`
+		if fs.isFile(doc) then
+			local fm = front(fs.readFile(doc))
+			if f.kind == "raft" and listed[f.id] then
+				for id in string.gmatch(fm.issues or "", "[%w]+") do
+					listed[f.id][id] = true
+				end
+			elseif f.kind == "issue" and fm.raft and members[fm.raft] then
+				members[fm.raft][f.id] = true
+			end
+		end
+	end
+	for _, rid in rafts do
+		for id in listed[rid] do
+			if not members[rid][id] then
+				table.insert(out, `raft {rid} lists {id}, whose raft: line does not name {rid}`)
+			end
+		end
+		for id in members[rid] do
+			if not listed[rid][id] then
+				table.insert(out, `{id}'s raft: line names {rid}, which does not list it`)
+			end
+		end
+	end
+	table.sort(out)
+	return out
 end
 
 function audit.format(p: Problem): string
