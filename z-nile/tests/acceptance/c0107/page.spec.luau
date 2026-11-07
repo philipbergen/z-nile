@@ -134,6 +134,8 @@ vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
 loadingAt = -1;
 doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
+// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
+els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
 function key(k, target) {
   const ev = { key: k, target: target || body, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
   if (target) target.dispatch("keydown", ev);

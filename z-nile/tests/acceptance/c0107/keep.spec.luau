@@ -68,6 +68,8 @@ vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
 loadingAt = -1;
 doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
+// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
+els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
 const out = { pane: els.pane.innerHTML };
 els.search.value = "f9100";
 els.search.dispatch("keydown", { key: "Enter", target: els.search });
