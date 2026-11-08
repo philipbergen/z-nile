@@ -2,8 +2,11 @@
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
+local brokerLib = require("./broker")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
+local dispatchLib = require("./dispatch")
+local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
@@ -13,6 +16,7 @@ local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
+local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
 local reapLib = require("./reap")
 local sh = require("../lib/sh")
@@ -71,9 +75,17 @@ usage: ./zn <command> ...
   start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
-                                                stage all, record spend, commit, push
-  spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--note <text>]
-                                                append one phase's rows to origin/main; changes nothing here
+         [--model <id>]                         stage all, record spend, commit, push
+  spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>]
+         [--note <text>]                        append one phase's rows to origin/main; changes nothing here
+  dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
+                                                ready, run), stopping at a merge gate, questions.md or a failure
+  dispatch new "<description>" [--project <name>] [--dry-run]
+                                                capture a new issue (z-ticket) and run its chain
+  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
+                                                run one step: a model step on .models.toml's CLIs, a script step itself
+  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+  dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
@@ -112,12 +124,7 @@ local function projectNameOf(root: string): string
 end
 
 local function render(path: string, vars: { [string]: string }): string
-	local text = fs.readFile(path)
-	return (
-		string.gsub(text, "{{([%w_]+)}}", function(k: string): string
-			return vars[k] or "{{" .. k .. "}}"
-		end)
-	)
+	return raftcheck.render(fs.readFile(path), vars)
 end
 
 local function today(): string
@@ -150,7 +157,8 @@ end
 
 -- Only a GitHub origin gets draft PRs: anything else (a local bare remote in a spec) has no `gh`.
 local function onGitHub(): boolean
-	local r = sh.run("git", { "remote", "get-url", "origin" })
+	-- the URL as configured, before any insteadOf rewrite (c0117: a spec's GitHub-named origin is a local path)
+	local r = sh.run("git", { "config", "--get", "remote.origin.url" })
 	return r.ok and string.find(r.stdout, "github.com", 1, true) ~= nil
 end
 
@@ -262,6 +270,17 @@ local function guarded(quiet: boolean?): boolean
 		guardedSaying = nil
 	end
 	return guardedRun == true
+end
+
+-- Whether this process runs inside a guarded run (a spec, or a check.sh fenced through ac.sh), asked of the guards'
+-- own script like `guarded` (c0117): only the exact answer `free` means no; inside one, ./zn dispatch starts no model
+-- CLI but a fake one under the checkout's .cache.
+local function checking(): boolean
+	local ok, r = pcall(process.exec, "bash", {
+		"-c",
+		"[ -f z-nile/lib/fence.sh ] || exit 3; source z-nile/lib/fence.sh && pickman_checking",
+	})
+	return not (ok and r.ok and sh.trim(r.stdout) == "free")
 end
 
 local function publishing(): boolean
@@ -2294,7 +2313,19 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
 		end
 		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
-		local pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
+		local pushed: sh.Result
+		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
+			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
+			local ok, said = brokerLib.request(
+				process.env.ZN_PUBLISH_BROKER :: string,
+				process.env.ZN_PUBLISH_TOKEN or "",
+				sha,
+				nil
+			)
+			pushed = { ok = ok, code = if ok then 0 else 1, stdout = "", stderr = said }
+		else
+			pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
+		end
 		if pushed.ok then
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
@@ -3791,6 +3822,18 @@ function cmd.focus(pos: { string })
 	print(`focus: {issue.id}`)
 end
 
+-- `--model <id>` of commit and spend (c0117): the model that spent the row's tokens; nil when not given.
+local function modelOption(what: string, opts: { [string]: { string } }): string?
+	if not opts["--model"] then
+		return nil
+	end
+	local raw = opts["--model"][1]
+	if #opts["--model"] > 1 or not ledger.isModel(raw) then
+		fail(`{what} --model takes one model id (letters, digits, '.', '_' and '-')`)
+	end
+	return raw
+end
+
 local function recordAndCommit(
 	raft: store.Item,
 	message: string,
@@ -3798,7 +3841,8 @@ local function recordAndCommit(
 	explicitMinutes: number?,
 	isDone: boolean?,
 	phase: string?,
-	tokens: number?
+	tokens: number?,
+	model: string?
 )
 	phase = if phase and phase ~= "" then phase else "build"
 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
@@ -3828,7 +3872,7 @@ local function recordAndCommit(
 		if share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0 then
 			continue
 		end
-		spend.appendRow(store.get(share.id), share, message, phase)
+		spend.appendRow(store.get(share.id), share, message, phase, model)
 		local trailer =
 			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
 		if phase ~= "build" then
@@ -3836,6 +3880,9 @@ local function recordAndCommit(
 		end
 		if share.tokens ~= nil then
 			trailer ..= ` {share.tokens} tokens`
+		end
+		if model then
+			trailer ..= ` {model}`
 		end
 		table.insert(trailers, trailer)
 	end
@@ -3854,7 +3901,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	local message = opts["-m"] and opts["-m"][1]
 	if not message or message == "" then
 		fail(
-			"usage: commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]"
+			"usage: commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>] [--model <id>]"
 		)
 	end
 	-- phase and tokens are checked before anything is staged
@@ -3875,8 +3922,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		end
 		tokens = tonumber(raw)
 	end
+	local model = modelOption("commit", opts)
 	local t = opts["--time"] and tonumber((string.gsub(opts["--time"][1], "m$", "")))
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens)
+	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -4983,7 +5031,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
 		fail(
-			"usage: spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--note <text>]"
+			"usage: spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>] [--note <text>]"
 		)
 	end
 	local phase = opts["--phase"] and opts["--phase"][1] or ""
@@ -5006,6 +5054,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		end
 		tokens = tonumber(raw)
 	end
+	local model = modelOption("spend", opts)
 	local note = phase
 	if opts["--note"] and opts["--note"][1] ~= "" then
 		note = opts["--note"][1]
@@ -5116,6 +5165,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 				how = share.how,
 				phase = phase,
 				tokens = share.tokens,
+				model = model,
 			}
 			local itemTitle = frontOf(text).title or share.id
 			local okAppend, content = pcall(ledger.append, read(spendPath), share.id, itemTitle, row)
@@ -5608,6 +5658,71 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 			stdio.ewrite(`warning: could not open {out} with {opener}; the page is written\n`)
 		end
 	end
+end
+
+-- `dispatch …` (c0117): the dispatcher, dispatcher.luau, with the tracker's readers of origin/main.
+function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
+	local function origin(id: string): dispatcherLib.OriginItem?
+		if not hasOrigin() then
+			return nil
+		end
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local readTree, files = originTree()
+		local path = if readTree then docPath(files, id) else nil
+		if not path then
+			return nil
+		end
+		local shown = sh.run("git", { "show", `origin/main:{path}` })
+		if not shown.ok then
+			return nil
+		end
+		local front = frontOf(shown.stdout)
+		local state = stateOfPath(path)
+		return { path = path, front = front, state = state, status = statusLib.effective(front, state) }
+	end
+	local function originIssueIds(): { string }
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local _, files = originTree()
+		local out: { string } = {}
+		for _, p in files do
+			local pid, rel = publish.itemPath(p)
+			if pid and store.isIssueId(pid) and rel == `{pid}.md` then
+				table.insert(out, pid)
+			end
+		end
+		return out
+	end
+	local code = dispatcherLib.main({
+		fail = fail,
+		mainRoot = mainRoot,
+		onGitHub = onGitHub,
+		checking = checking,
+		origin = origin,
+		originIssueIds = originIssueIds,
+		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
+		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
+		prMerged = function(sha: string): boolean
+			if not onGitHub() then
+				return false
+			end
+			local r = sh.run("gh", { "api", `repos/\{owner\}/\{repo\}/commits/{sha}/pulls` })
+			return r.ok and dispatchLib.prMergedFrom(r.stdout, sha)
+		end,
+		prView = function(branch: string): string?
+			if not onGitHub() then
+				return nil
+			end
+			local r = sh.run("gh", {
+				"pr",
+				"view",
+				branch,
+				"--json",
+				"number,state,isDraft,mergeable,statusCheckRollup,headRefOid",
+			})
+			return if r.ok then r.stdout else nil
+		end,
+	}, pos, opts)
+	process.exit(code)
 end
 
 -- `reap` finds this user's leaked processes (z-nile/engine/reap.luau decides; this reads `ps` and `lsof` and signals,

@@ -229,7 +229,8 @@ function spend.readTotals(dir: string): Totals
 	return ledger.sum(parsed.rows)
 end
 
-function spend.appendRow(issue: store.Item, share: Share, subject: string, phase: string?)
+-- `model`: the model id that spent the share's tokens (c0117); nil leaves the row's model cell empty.
+function spend.appendRow(issue: store.Item, share: Share, subject: string, phase: string?, model: string?)
 	local path = `{issue.dir}/spend.md`
 	local existing = if fs.isFile(path) then fs.readFile(path) else nil
 	local title = store.readFront(issue.doc).title or issue.id
@@ -242,6 +243,7 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string, phase
 		how = share.how,
 		phase = phase or "build",
 		tokens = share.tokens,
+		model = model,
 	}
 	fs.writeFile(path, ledger.append(existing, issue.id, title, row))
 end

@@ -1,6 +1,7 @@
 --!strict
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
+local broker = require("./broker")
 local ids = require("./ids")
 local ledger = require("./ledger")
 local pathsLib = require("./paths")
@@ -582,10 +583,25 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if sha == "" then
 			return { ok = true } -- the change was already there
 		end
-		local pushed = git(
-			cwd,
-			{ "push", "-q", `--force-with-lease=refs/heads/main:{base}`, "origin", `{sha}:refs/heads/main` }
-		)
+		local pushed
+		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
+			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
+			local ok, said = broker.request(
+				process.env.ZN_PUBLISH_BROKER :: string,
+				process.env.ZN_PUBLISH_TOKEN or "",
+				sha,
+				base
+			)
+			pushed = { ok = ok, code = if ok then 0 else 1, stdout = "", stderr = said }
+		else
+			pushed = git(cwd, {
+				"push",
+				"-q",
+				`--force-with-lease=refs/heads/main:{base}`,
+				"origin",
+				`{sha}:refs/heads/main`,
+			})
+		end
 		if pushed.ok then
 			return { ok = true, sha = sha }
 		end

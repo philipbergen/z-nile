@@ -1,0 +1,2 @@
+# Answers to review-001 (R0085)
+- F1: fixed e1267d87: the engineer-end sentence now says everything the engineer produces lands on `main` by pull request or, for a capture or a claim, is pushed straight to it (`./zn land`, `./zn status`); consequences: the `*exists*` label and its place are unchanged, so AC7's pinned label map is unchanged (`./zn check c0259` 8/8, run); the delivered section now differs from the draft by that one sentence, recorded in c0259's Verification log.

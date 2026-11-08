@@ -87,6 +87,23 @@ end
 -- Names a file may use for a stated reason, each reviewed (zz-review skill, Repository safety). Nothing else in
 -- the file may name them.
 local ALLOWED: { [string]: { [string]: string } } = {
+	-- c0165: the results db may be written only while no spec runs; the reader of the checkout's facts only reads the marker
+	["z-nile/lib/workspace.luau"] = {
+		PICKMAN_TEST_FENCE = "read only: a nested orchestrator's db must lie under .cache; dbPath never sets or clears it",
+	},
+	-- c0165: compared with the jail name the runner wrote in its results; never run
+	["z-nile/lib/reuseplan.luau"] = {
+		["sandbox-exec"] = "compared with the jail name the runner wrote; never run",
+	},
+	-- c0165: the absence pin of what workspace.luau must never use, and the two in-process dbPath calls under the marker
+	["z-nile/tests/acceptance/c0165/digest.spec.luau"] = {
+		GIT_DIR = "the absence pin of a name workspace.luau must never use",
+		GIT_INDEX_FILE = "the absence pin of a name workspace.luau must never use",
+		PICKMAN_TEST_FENCE = "set to 1 around two in-process dbPath calls to prove a nested orchestrator refuses a db outside .cache, restored after; only git rev-parse runs meanwhile",
+	},
+	["z-nile/tests/acceptance/c0165/plan.spec.luau"] = {
+		["sandbox-exec"] = "the jail name passed to the pure reuseplan.records; never run",
+	},
 	-- c0660: the fixture helper names these to refuse them, and its spec proves it
 	["z-nile/tests/lib/fixture.luau"] = {
 		GIT_CONFIG_ = "refused (config in env)",
@@ -143,6 +160,21 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_DIR = "fixture hook",
 		GIT_INDEX_FILE = "fixture hook",
 		GIT_WORK_TREE = "fixture hook",
+	},
+	-- c0117: the agent's credential replaces the user's in a dispatched step's environment (appended git config, an
+	-- empty gh configuration, a credential helper that answers with the agent's token)
+	["z-nile/engine/credential.luau"] = {
+		GIT_CONFIG_ = "appends the agent's credential helper after the guards' own entries",
+		GH_CONFIG_DIR = "an empty gh configuration folder of the step's own",
+		["credential."] = "resets git's credential helpers to the agent's token only",
+	},
+	-- c0117: the fake CLIs log the step's gh configuration folder, to prove the agent's credential replaced the user's
+	["z-nile/tests/lib/fakecli.luau"] = {
+		GH_CONFIG_DIR = "logged by a fake CLI to prove the step's own, empty gh configuration",
+	},
+	-- c0117: its refusal case sets the spec-run marker explicitly (review 001 F15), never to switch a guard
+	["z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau"] = {
+		PICKMAN_FENCE_ = "sets the spec-run marker the dispatcher's check reads",
 	},
 	-- c0077: the reviewed list of .cache lines quotes fence.sh lines that name these
 	["z-nile/tests/lib/cachepaths.luau"] = {
