@@ -19,6 +19,12 @@
 | 15 | 2026-11-08 17:15 | design-refute-006 | 0 | 0 | 100.0 | spend | design-review |  |  |
 | 16 | 2026-11-08 17:26 | design-review-007 | 0 | 0 | 12.0 | spend | design-review |  | claude-opus-5-5 |
 | 17 | 2026-11-08 17:27 | design-refute-007 | 0 | 0 | 30.0 | spend | design-review |  |  |
+| 18 | 2026-11-08 18:33 | design-refute-008 | 0 | 0 | 45.0 | spend | design-review |  |  |
+| 19 | 2026-11-08 18:44 | design-review-008 | 0 | 0 | 9.0 | spend | design-review |  | claude-opus-5-5 |
+| 20 | 2026-11-08 18:44 | design-refute-008 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 21 | 2026-11-08 20:09 | design-refute-008 | 0 | 0 | 15.0 | spend | design-review |  |  |
+| 22 | 2026-11-08 20:13 | design-review-009 | 0 | 0 | 4.0 | spend | design-review |  | claude-opus-5-5 |
+| 23 | 2026-11-08 20:13 | design-refute-009 | 0 | 0 | 15.0 | spend | design-review |  |  |
 
-**Total:** +0 / -0 lines, 637.3 agent-minutes, 205527 tokens over 17 records
-<!-- totals: added=0 removed=0 minutes=637.3 records=17 tokens=205527 -->
+**Total:** +0 / -0 lines, 750.3 agent-minutes, 205527 tokens over 23 records
+<!-- totals: added=0 removed=0 minutes=750.3 records=23 tokens=205527 -->

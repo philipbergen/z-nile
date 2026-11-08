@@ -9,3 +9,5 @@ check: Does every path a check.sh builds from `./zn find` or `./zn members` outp
 **Why:** R0051's RC1, 2026-10-26: `F0110_SPECS="$ZN_ROOT/$F0110/acceptance"` failed at execution's Phase 3; the user approved a one-line fix of the sequestered file.
 
 **How to apply:** use `$PWD/$(…zn find <id>)` (or the path as printed); run the raft's `check.sh` in prep with the specs still sequestered, the way `done` runs it.
+
+**Also:** c0118 design review 013 F1: a check.sh line written while answering a round (with `git -C "$ZN_ROOT"` and top-relative `z-nile/…` pathspecs, and a `\t*` word) turned c0120's `check-paths.spec` red, so the prep alone broke z-nile's full gate; the full gate that was cited had run on the prototype, whose check.sh did not hold the line. Check: after any check.sh edit in a round, was the gate run with that check.sh in the tree (main + prep + apply), and are the paths home-relative?

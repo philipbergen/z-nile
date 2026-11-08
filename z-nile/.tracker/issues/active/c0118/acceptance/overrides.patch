@@ -1,0 +1,160 @@
+diff --git a/z-nile/tests/acceptance/c0042/model.spec.luau b/z-nile/tests/acceptance/c0042/model.spec.luau
+index fc626084..86faa832 100644
+--- a/z-nile/tests/acceptance/c0042/model.spec.luau
++++ b/z-nile/tests/acceptance/c0042/model.spec.luau
+@@ -346,7 +346,7 @@ return t.spec("c0400 board model", function(it)
+ 		t.expect(m.views.issues.ready).toEqual({ "f0020", "f0030", "f0031" })
+ 		t.expect(m.views.issues["not"]).toEqual({ "c0050", "f0040", "f0060", "f0070", "f0080" })
+ 		t.expect(m.views.issues.done).toEqual({ "c0010", "c0070" })
+-		t.expect(m.initialView).toBe("rafts")
++		t.expect(m.initialView).toBe("board")
+ 		t.expect(rafts.R0020.command).toBe("/z-run R0020")
+ 		t.expect(rafts.R0030.command).toBe("/z-ready R0030")
+ 		t.expect(rafts.R0040.command).toBe(nil)
+@@ -360,12 +360,12 @@ return t.spec("c0400 board model", function(it)
+ 		end
+ 	end)
+ 
+-	it("opens on Rafts even when nothing is active", function()
+-		t.expect(m.initialView).toBe("rafts")
++	it("opens on the Board (c0118) even when nothing is active", function()
++		t.expect(m.initialView).toBe("board")
+ 		fixture.write(ROOT .. "-noactive", false, "/active/")
+ 		local quiet = board.collect(ROOT .. "-noactive")
+ 		fs.removeDir(ROOT .. "-noactive")
+-		t.expect(quiet.initialView).toBe("rafts")
++		t.expect(quiet.initialView).toBe("board")
+ 		t.expect(quiet.views.rafts.ready).toEqual({ "R0030" })
+ 	end)
+ 
+diff --git a/z-nile/tests/acceptance/c0042/smoke.spec.luau b/z-nile/tests/acceptance/c0042/smoke.spec.luau
+index 65409897..8f6e31d9 100644
+--- a/z-nile/tests/acceptance/c0042/smoke.spec.luau
++++ b/z-nile/tests/acceptance/c0042/smoke.spec.luau
+@@ -126,6 +126,8 @@ vm.createContext(sandbox);
+ for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
+ loadingAt = -1;
+ doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
++// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
++if (!hash) els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
+ function key(k, target) {
+   const ev = { key: k, target: target || body, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+   if (target) target.dispatch("keydown", ev);
+@@ -157,9 +159,11 @@ if (mode === "walk") {
+   expect(/Second/.test(pane()), "the first issue is selected");
+   key("ArrowLeft");
+   expect(/Beta/.test(pane()) && /R0020/.test(list()), "ArrowLeft returns to Rafts");
++  key("ArrowLeft"); // c0118: Board sits before Rafts
+   key("ArrowLeft");
+   expect(/data-id="f0020"/.test(list()) && !/data-id="R0020"/.test(list()), "ArrowLeft wraps to Issues");
+   key("ArrowRight");
++  key("ArrowRight");
+   expect(/R0020/.test(list()), "ArrowRight wraps to Rafts");
+   expect(key("/") === true, "/ calls preventDefault, so the / is not typed into the field");
+   expect(sandbox.document.activeElement === els.search, "/ focuses the search field");
+diff --git a/z-nile/tests/acceptance/c0107/keep.spec.luau b/z-nile/tests/acceptance/c0107/keep.spec.luau
+index a4e47d5f..c863c128 100644
+--- a/z-nile/tests/acceptance/c0107/keep.spec.luau
++++ b/z-nile/tests/acceptance/c0107/keep.spec.luau
+@@ -68,6 +68,8 @@ vm.createContext(sandbox);
+ for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
+ loadingAt = -1;
+ doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
++// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
++els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
+ const out = { pane: els.pane.innerHTML };
+ els.search.value = "f9100";
+ els.search.dispatch("keydown", { key: "Enter", target: els.search });
+diff --git a/z-nile/tests/acceptance/c0107/page.spec.luau b/z-nile/tests/acceptance/c0107/page.spec.luau
+index 4833755f..3864e494 100644
+--- a/z-nile/tests/acceptance/c0107/page.spec.luau
++++ b/z-nile/tests/acceptance/c0107/page.spec.luau
+@@ -134,6 +134,8 @@ vm.createContext(sandbox);
+ for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
+ loadingAt = -1;
+ doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
++// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
++els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
+ function key(k, target) {
+   const ev = { key: k, target: target || body, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+   if (target) target.dispatch("keydown", ev);
+diff --git a/z-nile/tests/acceptance/c0107/views.spec.luau b/z-nile/tests/acceptance/c0107/views.spec.luau
+index 8decf487..03ba2d48 100644
+--- a/z-nile/tests/acceptance/c0107/views.spec.luau
++++ b/z-nile/tests/acceptance/c0107/views.spec.luau
+@@ -236,8 +236,8 @@ return t.spec("c0107 board views", function(it)
+ 	local rafts = byId(m.rafts)
+ 	local issues = byId(m.issues)
+ 
+-	it("opens on Rafts and drops the Active, Waiting and Done lists", function()
+-		t.expect(m.initialView).toBe("rafts")
++	it("opens on the Board (c0118) and drops the Active, Waiting and Done lists", function()
++		t.expect(m.initialView).toBe("board")
+ 		t.expect(m.tabs).toBe(nil)
+ 		t.expect(m.initialTab).toBe(nil)
+ 		t.expect(rafts.R9001.tab).toBe(nil)
+diff --git a/z-nile/tests/acceptance/c0115/readme.spec.luau b/z-nile/tests/acceptance/c0115/readme.spec.luau
+index fe8bff0f..d365eb9b 100644
+--- a/z-nile/tests/acceptance/c0115/readme.spec.luau
++++ b/z-nile/tests/acceptance/c0115/readme.spec.luau
+@@ -140,7 +140,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
+ 		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
+ 		at(pic, 'dispatcher["dispatcher: ./zn dispatch"]', "the picture") -- c0117 override: the dispatcher is built
+ 		at(pic, 'models[".models.toml: the model and CLI per step"]', "the picture") -- c0117 override
+-		at(pic, "c0118, planned", "the picture")
++		at(pic, 'board["board: ./zn board, a tab per project"]', "the picture") -- c0118 override: the board is built
+ 	end)
+ 
+ 	it("a short account of the five parts follows the picture", function()
+diff --git a/z-nile/tests/acceptance/c0172/narrowed.spec.luau b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+index f78fc83f..6145cd6c 100644
+--- a/z-nile/tests/acceptance/c0172/narrowed.spec.luau
++++ b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+@@ -58,7 +58,7 @@ local PINNED = {
+ 		"z-nile",
+ 		"c0107",
+ 		"keep.spec.luau",
+-		"3f845366862fa5466ad7e944cc88f64fe2daac41914d6ece981a1d4fc5e46783",
++		"9711d49620ba326c5c850f955eef8463704cf6409d214eae13162fec0f9a8972",
+ 	},
+ 	{
+ 		"z-nile",
+diff --git a/z-nile/tests/tooling/board.spec.luau b/z-nile/tests/tooling/board.spec.luau
+index 653adfc4..d5e95f20 100644
+--- a/z-nile/tests/tooling/board.spec.luau
++++ b/z-nile/tests/tooling/board.spec.luau
+@@ -34,7 +34,7 @@ function el(id) {
+     focus() {}, blur() {}, select() {}, scrollIntoView() {}, getAttribute: () => null, closest: () => null };
+ }
+ const els = {};
+-["tab-rafts", "tab-issues", "search", "list", "pane", "board-data"].forEach(i => (els[i] = el(i)));
++["tab-rafts", "tab-issues", "search", "list", "pane", "board-data", "columns"].forEach(i => (els[i] = el(i)));
+ els["board-data"].textContent = scripts.find(x => /id="board-data"/.test(x[1]))[2];
+ const doc = el("document");
+ const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
+@@ -43,13 +43,14 @@ const sandbox = { document: { getElementById: i => els[i] || null, querySelector
+ sandbox.window = sandbox; sandbox.globalThis = sandbox;
+ vm.createContext(sandbox);
+ for (const x of scripts) if (!/json/.test(x[1])) vm.runInContext(x[2], sandbox);
++if (!hash) els["tab-rafts"].dispatch("click", {}); // c0118: the page opens on Board; these cases read the Rafts pane
+ const key = (k, extra) => { const ev = Object.assign({ key: k, target: {}, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, extra); doc.dispatch("keydown", ev); return ev.defaultPrevented; };
+-const out = { listBefore: els.list.innerHTML };
++const out = { listBefore: els.list.innerHTML + els.columns.innerHTML };
+ if (query) { els.search.value = query; els.search.dispatch("keydown", { key: "Enter", target: els.search }); }
+ out.miss = els.search.classList.contains("miss");
+ out.metaPrevented = key("ArrowLeft", { metaKey: true });
+ out.altPrevented = key("ArrowLeft", { altKey: true });
+-out.list = els.list.innerHTML; out.pane = els.pane.innerHTML;
++out.list = els.list.innerHTML + els.columns.innerHTML; out.pane = els.pane.innerHTML;
+ console.log(JSON.stringify(out));
+ ]==]
+ 
+@@ -89,7 +90,7 @@ return t.spec("board unit", function(it)
+ 			issues = { ready = {}, ["not"] = {}, done = {} },
+ 		})
+ 		t.expect(m.home).toEqual({})
+-		t.expect(m.initialView).toBe("rafts")
++		t.expect(m.initialView).toBe("board")
+ 		local raw = m :: any
+ 		t.expect(raw.tabs).toBe(nil)
+ 		t.expect(raw.initialTab).toBe(nil)

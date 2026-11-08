@@ -169,7 +169,7 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		local raft = read("z-nile/templates/raft/check.sh")
 		at(
 			raft,
-			'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --full',
+			'check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --affected',
 			"raft check.sh"
 		)
 		at(raft, 'for dir in $("$ZN_ROOT/zn" members {{ID}}); do', "raft check.sh")
