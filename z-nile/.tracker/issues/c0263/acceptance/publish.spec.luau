@@ -43,7 +43,7 @@ local function row(event: string, actor: string, detail: string): string
 	return `| 2026-11-08 10:00 | {event} | {actor} | {detail} |\n`
 end
 local function one(id: string): string
-	return header(id) .. row("approved", "human:Ann", "design=aaaaaaaaaaaa")
+	return header(id) .. row("confirmed", "human:Ann", "said=\"yes\"")
 end
 
 return t.spec("c0263 publish and provenance.md", function(it)
@@ -107,8 +107,13 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		refused(one("c0020"), `{ACTIVE}/provenance.md`, "active")
 		-- no document beside it
 		refused(one("c0030"), "pickman/.tracker/issues/c0030/provenance.md", "c0030")
+		-- a published record takes the published events only: an approval, a rafting or a delivery is written in a PR
+		for _, ev in { "approved", "rafted", "delivered" } do
+			refused(first .. row(ev, "human:Bee", "raft=R0010"), nil, ev)
+		end
+		refused(header("R0010") .. row("approved", "human:Ann", "design=aaaaaaaaaaaa"), `{RAFT}/provenance.md`, "approved")
 		-- a valid append, and a valid create in a raft's folder
-		local more = one("c0010") .. row("unblocked", "human:Bee", "")
+		local more = one("c0010") .. row("ranked", "human:Bee", "rank=3")
 		t.expect(publish.commit(work, function()
 			return { { path = `{ISSUE}/provenance.md`, content = more } }
 		end, "tracker: record").ok).toBe(true)

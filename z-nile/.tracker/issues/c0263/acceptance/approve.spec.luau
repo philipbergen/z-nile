@@ -123,6 +123,10 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 			t.expect(fixture.git(W1, { "log", "-1", "--format=%an|%s" }))
 				.toBe(`{NAME}|tracker: approve c0010`)
 			t.expect(fixture.git(W1, { "status", "--porcelain" })).toBe("")
+			-- a dispatched worker cannot prepare a design either, approval or not
+			local dispatched = tr(W1, { "status", "c0010", "prepared" }, { ZN_DISPATCH = "1" })
+			t.expect(dispatched.ok).toBe(false)
+			t.expect(has(dispatched.stderr, "dispatch")).toBe(true)
 			-- now the carried move goes through, and it is carried: nothing is published
 			local before = fixture.git(f.origin, { "rev-parse", "main" })
 			trOk(W1, { "status", "c0010", "prepared" })

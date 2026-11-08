@@ -175,6 +175,10 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 		t.expect(fs.isFile(`{W2}/{RAFTS}/{rid}/provenance.md`)).toBe(false)
 		trOk(W2, { "status", rid, "new" }, { ZN_ACTOR = OPUS })
+		-- a published append is built from origin/main's file: the worktree's rafted row never reaches main
+		for _, id in { "c0011", "c0012" } do
+			t.expect(#rows(onOrigin(`{ISSUES}/{id}/provenance.md`), "rafted")).toBe(0)
+		end
 		-- the worktree held a committed rafted row and main got an unblocked row: the engine's merge unioned the file
 		for _, id in { "c0011", "c0012" } do
 			t.expect(#rows(onOrigin(`{ISSUES}/{id}/provenance.md`), "unblocked")).toBe(1)

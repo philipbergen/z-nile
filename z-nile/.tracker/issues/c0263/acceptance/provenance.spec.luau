@@ -205,11 +205,16 @@ return t.spec("c0263 ticket provenance", function(it)
 		local sonnet = { "Claude Sonnet 5.5 <noreply@anthropic.com>" }
 		local opus = { "Claude Opus 5.5 <noreply@anthropic.com>" }
 		local n = 0
-		-- 1790000000 is 2026-09-21 14:13:20 UTC; `day` counts from there
-		local function commit(day: number, author: string, subject: string, trailers: { string }, status: string, path: string): trail.Commit
+		local raftAt: { [string]: string } = {}
+		-- 1790000000 is 2026-09-21 14:13:20 UTC; `day` counts from there; `raft` is the document's raft: after the commit
+		local function commit(day: number, author: string, subject: string, trailers: { string }, status: string, path: string, raft: string?): trail.Commit
 			n += 1
+			local sha = `sha{n}`
+			if raft ~= nil then
+				raftAt[sha] = raft
+			end
 			return {
-				sha = `sha{n}`,
+				sha = sha,
 				time = 1790000000 + day * 86400,
 				subject = subject,
 				status = status,
@@ -222,22 +227,35 @@ return t.spec("c0263 ticket provenance", function(it)
 				trailers = trailers,
 			}
 		end
-		-- the item's life, newest first (what trail.read returns): 09-22 capture, 09-23 preparing, 09-24 new, 09-25 raft
-		-- R0011 (Bob), 09-26 unfold, 09-27 raft R0011 again (Fay), 09-28 the move to done/
+		local ACTIVE = "z-nile/.tracker/issues/active/c0010/c0010.md"
+		local function sameSha(c: trail.Commit, status: string, path: string): trail.Commit
+			local other = table.clone(c)
+			other.status = status
+			other.path = path
+			other.order += 1
+			return other
+		end
+		-- the item's life, newest first (what trail.read returns): 09-22 capture, 09-23 preparing, 09-24 new, 09-25 a
+		-- rafting into R0011 (Bob), 09-26 unfold, 09-27 raft R0011 again (Fay), 09-28 ready (moves backlog -> active),
+		-- 09-29 a restamp, 09-30 the move to done/ (a delete of the active path and an add of the done path in one commit)
+		local done = commit(9, "Cy", "R0011: demo (#1)", sonnet, "A", DONE, "R0011")
 		local life = {
-			commit(7, "Cy", "R0011: demo (#1)", sonnet, "A", DONE),
-			commit(6, "Fay", "tracker: raft R0011 again", {}, "M", DOC),
-			commit(5, "Gus", "tracker: unfold c0010", {}, "M", DOC),
-			commit(4, "Bob", "tracker: prep R0010-R0011 rafts for c0010 (#12)", opus, "M", DOC),
-			commit(3, "Dee", "tracker: c0010 new", {}, "M", DOC),
-			commit(2, "Dee", "tracker: c0010 preparing", {}, "M", DOC),
-			commit(1, "Ann", "tracker: new c0010 alpha", {}, "A", DOC),
+			done,
+			sameSha(done, "D", ACTIVE),
+			commit(8, "Ida", "tracker: R0011 prepared", {}, "M", ACTIVE, "R0011"),
+			commit(7, "Hal", "tracker: ready R0011 demo", {}, "A", ACTIVE, "R0011"),
+			commit(6, "Fay", "tracker: raft R0011 again", {}, "M", DOC, "R0011"),
+			commit(5, "Gus", "tracker: unfold c0010", {}, "M", DOC, ""),
+			commit(4, "Bob", "tracker: prep R0010-R0011 rafts for c0010 (#12)", opus, "M", DOC, "R0011"),
+			commit(3, "Dee", "tracker: c0010 new", {}, "M", DOC, ""),
+			commit(2, "Dee", "tracker: c0010 preparing", {}, "M", DOC, ""),
+			commit(1, "Ann", "tracker: new c0010 alpha", {}, "A", DOC, ""),
 		}
 		local people: { [string]: boolean } = {}
 		for _, c in life do
 			people[c.email or ""] = true
 		end
-		local d = provenance.select(life, "c0010", "done", "R0011", people)
+		local d = provenance.select(life, "c0010", "done", "R0011", people, raftAt)
 		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
 		-- a status commit is an entry of its own with its author; a `new` commit is the unblock; the capture is neither
 		t.expect(#d.statuses).toBe(1)
@@ -245,7 +263,8 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect(d.statuses[1].actor).toBe("human:Dee (from git)")
 		t.expect(#d.unblocked).toBe(1)
 		t.expect(d.unblocked[1].actor).toBe("human:Dee (from git)")
-		-- the rafting commit of the CURRENT raft, not the first rafting and not the move to done/
+		-- the rafter is whoever made `raft:` the current value and it stayed so: Fay (09-27), not Bob (09-25, undone by the
+		-- unfold), not the ready, the restamp or the move to done/ that kept the value
 		t.expect((d.rafted :: provenance.Entry).actor).toBe("human:Fay (from git)")
 		t.expect((d.rafted :: provenance.Entry).detail).toBe("raft=R0011")
 		-- the delivery is the commit that first added the document under done/, and it is also the merge
@@ -253,7 +272,7 @@ return t.spec("c0263 ticket provenance", function(it)
 		-- who merged is the commit's author, trailers ignored (a squash is authored by the user with the agent as co-author)
 		t.expect((d.merged :: provenance.Entry).actor).toBe("human:Cy (from git)")
 		-- an unfolded item (raft: empty) has no rafter, and a backlog item no delivery or merge
-		local open = provenance.select({ life[5], life[6], life[7] }, "c0010", "backlog", "", people)
+		local open = provenance.select({ life[8], life[9], life[10] }, "c0010", "backlog", "", people, raftAt)
 		t.expect(open.rafted).toBe(nil)
 		t.expect(open.delivered).toBe(nil)
 		t.expect(open.merged).toBe(nil)
@@ -262,10 +281,10 @@ return t.spec("c0263 ticket provenance", function(it)
 		local rec = table.clone(give)
 		rec.path = "z-nile/.tracker/issues/c0010/provenance.md"
 		rec.order += 1
-		t.expect(#provenance.select({ give, rec, life[7] }, "c0010", "backlog", "", people).unblocked).toBe(0)
-		t.expect(#provenance.select({ give, life[7] }, "c0010", "backlog", "", people).unblocked).toBe(1)
+		t.expect(#provenance.select({ give, rec, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked).toBe(0)
+		t.expect(#provenance.select({ give, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked).toBe(1)
 		-- an idea taken from a first add (no commit names the item) says so
-		local weak = provenance.select({ commit(1, "Zed", "tracker: rename things", {}, "A", DOC) }, "c0010", "backlog", "", people)
+		local weak = provenance.select({ commit(1, "Zed", "tracker: rename things", {}, "A", DOC) }, "c0010", "backlog", "", people, {})
 		t.expect((weak.idea :: provenance.Entry).actor).toBe("human:Zed (from git, first add)")
 		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
 		-- merge: a stored row wins over a derived fallback of its event; oldest first by date, a derived entry before a

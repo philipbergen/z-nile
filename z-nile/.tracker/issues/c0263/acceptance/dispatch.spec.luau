@@ -123,6 +123,7 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 		local r = zn({ "dispatch", "c0020" })
 		t.expect(r.code).toBe(4)
 		t.expect(has(r.stdout, "./zn approve c0020")).toBe(true)
+		t.expect(has(r.stdout, "./zn dispatch c0020 again")).toBe(true)
 		t.expect(has(fakecli.log(h), "realgh pr merge 7")).toBe(false)
 		-- with prep absent from auto_merge (an item-level []) the reason is the old one, and the suffix is still there
 		local sha21 = fakecli.pullRequest(h, 8, { ["pickman/.tracker/issues/c0021/x.md"] = "notes\n" })
@@ -203,27 +204,35 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 			t.expect(has(r.stdout, "provenance.md") or has(r.stdout, "beyond its raft: line") or has(r.stdout, "notes.md")).toBe(true)
 			t.expect(has(fakecli.log(h), `realgh pr merge {40 + i} `)).toBe(false)
 		end
-		-- main gains a row on c0096 after the PR is cut (a rank, a confirmation): the sync unions it before ours, so main's
-		-- record stays a prefix of the PR's and the gate still merges it
+		local function cut(n: number): string
+			return fakecli.pullRequest(h, n, {
+				["pickman/.tracker/rafts/R0050/R0050.md"] = raftDocText,
+				[c96] = rafted(onMain(c96)),
+				[c91] = rafted(onMain(c91)),
+				[p96] = appended(p96, "c0096", "rafted"),
+				[p91] = appended(p91, "c0091", "rafted"),
+			})
+		end
+		-- PR #50 is cut, then main gains a row on c0096 (a rank, a confirmation): the PR is stale and the gate refuses it
+		fakecli.clear(h)
+		local early = cut(50)
+		fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(50, early))
 		trackerfix.elsewhere(
 			h.f,
 			{ [p96] = fixture.git(h.f.origin, { "show", `main:{p96}` }) .. "\n| 2026-11-08 09:30 | ranked | human:Ann | rank=3 |\n" },
 			"a rank on c0096"
 		)
 		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-		-- merged, pinned to the head: one rafted row per ticket
+		local stale = zn({ "dispatch", "c0096" })
+		t.expect(stale.code).toBe(4)
+		t.expect(has(fakecli.log(h), "realgh pr merge 50 ")).toBe(false)
+		-- the synced PR #51 carries what the engine's union yields: main's rows (approved, ranked) first, then ours; the gate merges it
 		fakecli.clear(h)
-		local sha = fakecli.pullRequest(h, 50, {
-			["pickman/.tracker/rafts/R0050/R0050.md"] = raftDocText,
-			[c96] = rafted(onMain(c96)),
-			[c91] = rafted(onMain(c91)),
-			[p96] = appended(p96, "c0096", "rafted"),
-			[p91] = appended(p91, "c0091", "rafted"),
-		})
-		fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(50, sha))
+		local sha = cut(51)
+		fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(51, sha))
 		local r = zn({ "dispatch", "c0096" })
-		if not has(fakecli.log(h), `realgh pr merge 50 --squash --match-head-commit {sha}`) then
-			error(`PR #50 did not merge\n{r.stdout}{r.stderr}`)
+		if not has(fakecli.log(h), `realgh pr merge 51 --squash --match-head-commit {sha}`) then
+			error(`PR #51 did not merge\n{r.stdout}{r.stderr}`)
 		end
 	end)
 	it("a script step records the user who started the pipeline and the step it ran under", function()

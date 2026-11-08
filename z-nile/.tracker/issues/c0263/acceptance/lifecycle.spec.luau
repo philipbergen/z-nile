@@ -131,6 +131,27 @@ return t.spec("c0263 the offline lifecycle stamps provenance", function(it)
 		write(`{RAFTS}/active/R0010/review-001.md`, "# Review 001\n\n### F1 [low] x\nEvidence: y\n\nVerdict: approve\n")
 		write(`{RAFTS}/active/R0010/refute-001.md`, "- F1: refuted: by design\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit review")
+		-- a done that fails and rolls back leaves no delivered row (the rows are staged with the moves), and the retry
+		-- appends exactly one per member, including the members that had no record of their own yet
+		local REQ = "req" .. "uire"
+		local function alpha(expected: number): string
+			return "--!strict\nlocal t = "
+				.. REQ
+				.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe('
+				.. tostring(expected)
+				.. ")\n\tend)\nend)\n"
+		end
+		fs.writeDir(`{dir}/{ISSUES}/active/f0010/acceptance`)
+		write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(2))
+		must(tr({ "commit", "-m", "a failing promoted spec", "--time", "1" }), "commit")
+		local failed = tr({ "done", "R0010" }, { ZN_ACTOR = OPUS })
+		t.expect(failed.ok).toBe(false)
+		t.expect(has(`{ISSUES}/active/f0010/provenance.md`, "| delivered |")).toBe(false)
+		t.expect(has(`{ISSUES}/active/f0020/provenance.md`, "| delivered |")).toBe(false)
+		t.expect(fs.isDir(`{dir}/{ISSUES}/done/f0010`)).toBe(false)
+		t.expect(git({ "status", "--porcelain" })).toBe("")
+		write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(1))
+		must(tr({ "commit", "-m", "the spec passes", "--time", "1" }), "commit")
 		must(tr({ "done", "R0010" }, { ZN_ACTOR = OPUS }), "done")
 		-- one row per member, riding the raft PR into done/, with the actor and the raft
 		for _, id in { "f0010", "f0020", eid } do

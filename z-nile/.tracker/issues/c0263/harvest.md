@@ -86,3 +86,15 @@
 - design-review-005 F16: z-design/accepted-risks-checked-and-decided
 - design-review-005 F17: zz-arch/one-reader-per-format
 - note review 005 candidates (a union keeps the target branch's rows first; lenient runs stop proving anything at the first missing command; when several refusals apply to one call the Design states their order): z-design/one-file-two-write-channels, z-design/prove-specs-pass-on-a-prototype, zz-test/guard-needs-its-own-case
+- design-review-006 F1: z-design/restated-rules-move-together
+- design-review-006 F2: z-design/histories-checked-against-a-real-life
+- design-review-006 F3: zz-arch/validators-restrict-which-rows
+- design-review-006 F4: z-design/required-steps-on-every-path
+- design-review-006 F5: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F6: z-design/spec-design-correspondence
+- design-review-006 F7: zz-arch/refusals-are-gate-checks
+- design-review-006 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-006 F9: z-design/restated-rules-move-together
+- design-review-006 F10: zz-arch/one-reader-per-format
+- design-review-006 F11: z-design/results-land-on-every-path
+- note review 006 candidates (a history rule is checked against a real life; a validator restricts which rows a direct push may add; a refute pastes the grep of the changed spec line): z-design/histories-checked-against-a-real-life, zz-arch/validators-restrict-which-rows, z-design/restated-rules-move-together

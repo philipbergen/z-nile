@@ -129,6 +129,16 @@ return t.spec("c0263 who and the board", function(it)
 				.. "| 2026-10-14 09:00 | unblocked | human:Fay | block=design-gap |\n"
 		)
 		commit("Fay", "tracker: c0040 new", "2026-10-14T09:00:00Z")
+		-- c0050: rafted by Bob, readied by Hal (a move to active/), merged by Cy (a move to done/); no stored row
+		put("c0050", doc("c0050", "", "new-a-b-c"))
+		commit("Ann", "tracker: new c0050 epsilon", "2026-10-15T09:00:00Z")
+		put("c0050", doc("c0050", "R0020", "prepared-a-b-c"))
+		commit("Bob", "tracker: raft R0020 epsilon", "2026-10-16T09:00:00Z")
+		fs.writeDir(`{dir}/{IDS}/active`)
+		git(dir, { "mv", `{IDS}/c0050`, `{IDS}/active/c0050` }, "Hal", "2026-10-17T09:00:00Z")
+		commit("Hal", "tracker: ready R0020 epsilon", "2026-10-17T09:00:00Z")
+		git(dir, { "mv", `{IDS}/active/c0050`, `{IDS}/done/c0050` }, "Cy", "2026-10-18T09:00:00Z")
+		commit("Cy", "R0020: epsilon (#3)", "2026-10-18T09:00:00Z")
 		process.exec("git", { "clone", "-q", "--bare", dir, origin })
 		git(dir, { "remote", "add", "origin", origin })
 		git(dir, { "fetch", "-q", "origin" })
@@ -162,7 +172,7 @@ return t.spec("c0263 who and the board", function(it)
 		t.expect(has(out, "delivered  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
 		t.expect(has(out, "worker=claude-opus-5-5-high")).toBe(true)
 		-- and who merged it is a derived entry of its own
-		t.expect(has(out, "merged  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
+		t.expect(has(out, "merged  human:Cy (from git)")).toBe(true)
 		-- oldest first, by the dates the fixture set
 		local order: { string } = {}
 		for line in string.gmatch(out, "[^\n]+") do
@@ -193,6 +203,15 @@ return t.spec("c0263 who and the board", function(it)
 		t.expect(has(r.stdout, "unblocked  human:Fay  block=design-gap  (record)")).toBe(true)
 		local _, n = string.gsub(r.stdout, "unblocked", "")
 		t.expect(n).toBe(2)
+	end)
+
+	it("the rafter of an old item is who made raft: the current value, not the readier or the merger", function()
+		local r = zn(W, { "who", "c0050" })
+		t.expect(r.ok).toBe(true)
+		t.expect(has(r.stdout, "rafted  human:Bob (from git)  raft=R0020")).toBe(true)
+		t.expect(has(r.stdout, "rafted  human:Hal")).toBe(false)
+		t.expect(has(r.stdout, "rafted  human:Cy")).toBe(false)
+		t.expect(has(r.stdout, "merged  human:Cy (from git)")).toBe(true)
 	end)
 
 	it("a reused number is a new life: nothing of the first leaks into who", function()
@@ -230,11 +249,20 @@ return t.spec("c0263 who and the board", function(it)
 		end
 		local item = find(data)
 		t.expect(item ~= nil).toBe(true)
-		local events: { string } = {}
+		-- the whole entries, not their names: when, event, actor, detail and source, in who's order
+		local got: { string } = {}
 		for _, e in item.provenance do
-			table.insert(events, e.event)
+			table.insert(got, `{e.event}|{e.actor}|{e.detail}|{e.source}`)
 		end
-		t.expect(events).toEqual({ "idea", "status:preparing", "unblocked", "approved", "rafted", "delivered", "merged" })
+		t.expect(got).toEqual({
+			"idea|human:Ann (from git)||git",
+			"status:preparing|human:Dee (from git)||git",
+			"unblocked|human:Dee (from git)||git",
+			'approved|human:Ann|design=aaaaaaaaaaaa; said="ok"|record',
+			`rafted|{OPUS}|raft=R0011|record`,
+			"delivered|agent:claude-sonnet-5-5 effort unknown (from git)|raft=R0011; worker=claude-opus-5-5-high|git",
+			"merged|human:Cy (from git)||git",
+		})
 		-- the view's script (outside the JSON) writes the section
 		local script = string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
 		t.expect(has(script, "Provenance")).toBe(true)
