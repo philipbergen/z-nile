@@ -16,7 +16,17 @@ words() { local w; for w in "$@"; do grep -qF -e "$w" "$README" || { echo "READM
 no_tiers() {
 	if sed -n '/^## Intent/,/^## The five parts/p' "$README" | grep -nEi '(^|[^a-z])tiers?([^a-z]|$)|cheap, sharp|wait tier|(^|[^a-z])sharp([^a-z]|$)'; then echo "tier vocabulary in the README"; return 1; fi
 }
-vocabulary() { words "$@" && no_tiers; }
+# The user also decided the README quotes no model names where it speaks of the models to use (the model names in the ask
+# were examples): not in Intent, The idea stage, The worker, Models per command and activity or The full-force review.
+# (c0251's older line, "Reviews by different models", names models and is c0251's to reword.)
+no_models() {
+	local t bad=0
+	for t in "Intent" "The idea stage" "The worker" "Models per command and activity" "The full-force review"; do
+		if awk -v t="$t" '$0=="## "t || $0=="### "t {on=1; next} /^##+ /{on=0} on' "$README" | grep -nEi 'sonnet|opus|haiku|composer|xhigh|gpt|gemini|(^|[^0-9.])4\.[0-9]([^0-9]|$)'; then echo "a model name in '$t'"; bad=1; fi
+	done
+	return $bad
+}
+vocabulary() { words "$@" && no_tiers && no_models; }
 # The tracker's state of an issue: done = exists, design: ready = designed, else captured.
 real() {
 	local path
@@ -112,13 +122,13 @@ check "AC2: the intent names the two human stages, the worker, the full-force re
 check "AC3: the intent claims nothing as built" lune run tests/run -- "$A/intent.spec.luau"
 check "AC4: the idea stage, the worker, models per command and activity, the full-force review and provenance are sub-sections, each labelled with its issue" lune run tests/run -- "$A/intent.spec.luau"
 check "AC5: a worker clears its context and takes the next raft whenever a raft ends, merged or blocked" lune run tests/run -- "$A/intent.spec.luau"
-check "AC6: the README states the rules of the worker model, and names no tiers" vocabulary \
+check "AC6: the README states the rules of the worker model, and names no tiers and no model names" vocabulary \
 	'`z-work`' '`kimi`' '`agy`' '`deepseek`' 'stays with it all the way to merge' 'one ticket at a time' \
 	'clears its context and picks up the next raft whenever a raft ends' 'It lets go of a raft only when the raft is blocked' \
 	'marks the raft blocked' 'verbatim' 'every question z-ticket asked with its answer' 'confirms the idea' \
 	'acceptance tests as code' 'a real model for each command and for each activity' 'the cheapest do the waiting' \
 	'Nothing expensive orchestrates or waits' 'a heartbeat branch, not on `main`' 'A takeover deletes the old heartbeat branch' \
-	'a numbered copy continues the work' 'limited view' 'stayed on course' 'Off course means a redo' \
+	'a numbered copy of it continues the work' 'it never orchestrates on an expensive one' 'and a person approves it' 'limited view' 'stayed on course' 'Off course means a redo' \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \

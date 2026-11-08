@@ -76,7 +76,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
 - It lets go of a raft only when the raft is blocked.
 - The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
-- A CLI that cannot read skills gets the same instructions from `./zn work`.
+- A CLI that cannot read skills gets the same instructions from a `./zn` command.
 
 ### Order
 Tickets have no order today. They should: every issue and raft gets a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins). *captured* (c0249)
@@ -88,14 +88,14 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 
 ### Claiming across hosts
 A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
-- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. A takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim; its worktree is kept, renamed, and a numbered copy continues the work. *captured* (c0265)
+- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. A takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim; the old worker's work is kept, and a numbered copy of it continues the work. *captured* (c0265)
 
 ### Autonomous delivery
 Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and merged with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the PR is green and regression-free. This replaces c0117's "stops at a merge" gate with the dispatcher merging after its own checks. *captured* (c0252)
 
 ### Models per command and activity
 `.models.toml` already names a real model for each step and CLI, and spend records the model. *exists* (c0117)
-- What is planned is a real model for each command and for each activity within it, not a named level: z-ticket's sharpening of the idea and its review, for example, use different models. *captured* (c0261)
+- What is planned is a real model for each command and for each activity within it, not a named level: z-ticket's sharpening of the idea and its review, for example, each get their own model. *captured* (c0261)
 - Expensive models do every final review: the idea review, the final design review round, the final code review round and the full-force review.
 - Cheaper, faster models do everything on the way there: authoring, the middle review rounds, the streams, the fixes. The cheapest do the waiting and the polling. Nothing expensive orchestrates or waits.
 - Spend shows the cost per activity.
