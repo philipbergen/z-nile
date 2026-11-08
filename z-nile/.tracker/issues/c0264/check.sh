@@ -11,6 +11,12 @@ README="$ROOT/z-nile/README.md"
 
 # Every literal the rules need (this file, not the promoted spec, owns the vocabulary).
 words() { local w; for w in "$@"; do grep -qF -e "$w" "$README" || { echo "README lacks: $w"; return 1; }; done; }
+# The user decided (2026-11-08) that models are real names tied to each command and activity, not named levels: the
+# README says tiers, cheap/sharp/wait and "sharp model" nowhere between Intent and The five parts.
+no_tiers() {
+	if sed -n '/^## Intent/,/^## The five parts/p' "$README" | grep -nEi '(^|[^a-z])tiers?([^a-z]|$)|cheap, sharp|wait tier|(^|[^a-z])sharp([^a-z]|$)'; then echo "tier vocabulary in the README"; return 1; fi
+}
+vocabulary() { words "$@" && no_tiers; }
 # The tracker's state of an issue: done = exists, design: ready = designed, else captured.
 real() {
 	local path
@@ -36,7 +42,8 @@ Claiming across hosts|c0254
 Claiming across hosts|-
 Claiming across hosts|c0265
 Autonomous delivery|c0252
-Model tiers|c0261
+Models per command and activity|c0117
+Models per command and activity|c0261
 Reviews by different models|c0251
 Reviews by different models|c0117
 The full-force review|c0262
@@ -103,14 +110,15 @@ others() {
 check "AC1: ## Intent comes after the opening picture and before How it should work" lune run tests/run -- "$A/intent.spec.luau"
 check "AC2: the intent names the two human stages, the worker, the full-force review, the economy and the names" lune run tests/run -- "$A/intent.spec.luau"
 check "AC3: the intent claims nothing as built" lune run tests/run -- "$A/intent.spec.luau"
-check "AC4: the idea stage, the worker, model tiers, the full-force review and provenance are sub-sections, each labelled with its issue" lune run tests/run -- "$A/intent.spec.luau"
+check "AC4: the idea stage, the worker, models per command and activity, the full-force review and provenance are sub-sections, each labelled with its issue" lune run tests/run -- "$A/intent.spec.luau"
 check "AC5: a worker clears its context and takes the next raft whenever a raft ends, merged or blocked" lune run tests/run -- "$A/intent.spec.luau"
-check "AC6: the README states the rules of the worker model" words \
+check "AC6: the README states the rules of the worker model, and names no tiers" vocabulary \
 	'`z-work`' '`kimi`' '`agy`' '`deepseek`' 'stays with it all the way to merge' 'one ticket at a time' \
 	'clears its context and picks up the next raft whenever a raft ends' 'It lets go of a raft only when the raft is blocked' \
 	'marks the raft blocked' 'verbatim' 'every question z-ticket asked with its answer' 'confirms the idea' \
-	'acceptance tests as code' 'cheap, sharp and wait' '4.6 at high' '4.7 at xhigh' 'Haiku' 'composer' \
-	'never orchestrates and never waits' 'limited view' 'stayed on course' 'Off course means a redo' \
+	'acceptance tests as code' 'a real model for each command and for each activity' 'the cheapest do the waiting' \
+	'Nothing expensive orchestrates or waits' 'a heartbeat branch, not on `main`' 'A takeover deletes the old heartbeat branch' \
+	'a numbered copy continues the work' 'limited view' 'stayed on course' 'Off course means a redo' \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \
@@ -119,5 +127,7 @@ check "AC6: the README states the rules of the worker model" words \
 check "AC7: every roadmap row and every issue-labelled sentence has the state the tracker shows for its issue" truth
 check "AC8: the README changes only in Intent and How it should work" others
 check "AC9: the workflow diagram is the reviewed one, word for word: the interview, the approval, z-work, lost first, one ticket at a time, the full-force review, and both ways a raft ends as edges back into claiming" drawn
+
+check "AC10: no issue id has more than one Roadmap row" lune run tests/run -- "$A/roadmap-unique.spec.luau"
 
 finish

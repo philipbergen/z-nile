@@ -56,7 +56,17 @@ return t.spec("c0264 the README states z-nile's intent", function(it)
 		function()
 			local i = lower(section("Intent"))
 			for _, w in
-				{ "idea", "design", "`z-work`", "merge", "full-force", "sharp", "cheap", "wait", "approved" }
+				{
+					"idea",
+					"design",
+					"`z-work`",
+					"merge",
+					"full-force",
+					"expensive",
+					"cheap",
+					"waiting",
+					"approved",
+				}
 			do
 				if not has(i, w) then
 					error(`## Intent lacks: {w}`, 0)
@@ -77,7 +87,7 @@ return t.spec("c0264 the README states z-nile's intent", function(it)
 			{
 				{ "The idea stage", "c0260" },
 				{ "The worker", "c0253" },
-				{ "Model tiers", "c0261" },
+				{ "Models per command and activity", "c0261" },
 				{ "The full-force review", "c0262" },
 				{ "Provenance", "c0263" },
 			}

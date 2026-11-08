@@ -27,7 +27,7 @@ z-nile exists so that people spend their time on ideas and designs, and agents c
 - **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
 - **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then clears its context and takes the next raft.
 - **The result stays true to the ask.** Before a ticket merges, a final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
-- **It stays cheap.** Sharp, expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
+- **It stays cheap.** Expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
 - **Every decision has a name.** A ticket says whose idea it was, who approved its design, who unblocked it and which worker delivered it.
 
 ## How it should work
@@ -42,7 +42,7 @@ flowchart LR
     res["resolve blocks: ./zn resolve"]
     cap --> des
   end
-  stack[("ranked stack on origin/main: tickets, rafts, state, heartbeats")]
+  stack[("ranked stack on origin/main: tickets, rafts, state; heartbeat branches")]
   subgraph wrk["worker end: any AI CLI running z-work"]
     direction TB
     loop["claim the top raft: lost first, then rank"]
@@ -66,7 +66,7 @@ flowchart LR
 ### The idea stage
 z-ticket challenges an idea before anything is designed. *captured* (c0260). It builds on c0247, which has z-ticket confirm intent before it creates a ticket.
 - The ticket keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order.
-- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on a sharp model checks that it says what the person said: nothing dropped, added or bent.
+- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent.
 - The person confirms the idea as it then stands. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, reviews back and forth.
 
 ### The worker
@@ -75,7 +75,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
 - It lets go of a raft only when the raft is blocked.
-- The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to a sharp model) runs on the wait tier.
+- The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
 - A CLI that cannot read skills gets the same instructions from `./zn work`.
 
 ### Order
@@ -88,17 +88,17 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 
 ### Claiming across hosts
 A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
-- A worker that holds an item updates a heartbeat on it every 5 minutes, pushed to `main`. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. *captured* (c0265)
+- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. A takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim; its worktree is kept, renamed, and a numbered copy continues the work. *captured* (c0265)
 
 ### Autonomous delivery
 Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and merged with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the PR is green and regression-free. This replaces c0117's "stops at a merge" gate with the dispatcher merging after its own checks. *captured* (c0252)
 
-### Model tiers
-Each CLI has three models: cheap, sharp and wait. *captured* (c0261)
-- Sharp, the expensive one, does every final review: the idea review, the final design review round, the final code review round and the full-force review.
-- Cheap, faster, does everything on the way there: authoring, the middle review rounds, the streams, the fixes. For `grok` and `agent` cheap is 4.6 at high and sharp is 4.7 at xhigh; for `claude` cheap is Sonnet and sharp is Opus.
-- Wait, the cheapest (Haiku, composer or similar), does the waiting and the polling. An expensive model never orchestrates and never waits.
-- Spend records the tier with the model.
+### Models per command and activity
+`.models.toml` already names a real model for each step and CLI, and spend records the model. *exists* (c0117)
+- What is planned is a real model for each command and for each activity within it, not a named level: z-ticket's sharpening of the idea and its review, for example, use different models. *captured* (c0261)
+- Expensive models do every final review: the idea review, the final design review round, the final code review round and the full-force review.
+- Cheaper, faster models do everything on the way there: authoring, the middle review rounds, the streams, the fixes. The cheapest do the waiting and the polling. Nothing expensive orchestrates or waits.
+- Spend shows the cost per activity.
 
 ### Reviews by different models
 - A reviewer should run on a different model family than the author, and successive rounds rotate (author Sonnet, round one Opus through `claude` or `agent`, round two `grok-4.7-xhigh` through `grok`). `.models.toml` names a review pool; the dispatcher takes the first member whose family differs from the author's and the previous round's reviewer. *captured* (c0251); what c0117 built (*exists* (c0117)) fixes only which model reviews per CLI.
@@ -107,7 +107,7 @@ Each CLI has three models: cheap, sharp and wait. *captured* (c0261)
 
 ### The full-force review
 Once per ticket, before its layer merges, a final adversarial review checks that the design covers the idea and that the implementation delivers the design. *captured* (c0262)
-- It runs on a sharp model in a fresh context, with a limited view: the original ask (the verbatim ask, the interview and the confirmed idea), the design and the implementation as given. It sees no design reviews, refutes, harvests, PR comments or worker notes, so it judges the result on its merits and not through the compromises on the way.
+- It runs on an expensive model in a fresh context, with a limited view: the original ask (the verbatim ask, the interview and the confirmed idea), the design and the implementation as given. It sees no design reviews, refutes, harvests, PR comments or worker notes, so it judges the result on its merits and not through the compromises on the way.
 - Its verdict says plainly whether the work stayed on course, naming each gap against the ask or the design.
 - Off course means a redo: back to z-design when the design missed the idea, a rebuilt layer when the implementation missed the design, and then the review again. A second off-course verdict blocks the ticket.
 
@@ -157,7 +157,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
 | `./zn land` usage and a cheap retry | c0258 | captured |
 | the capture interview and the idea review | c0260 | captured |
-| model tiers: cheap, sharp, wait | c0261 | captured |
+| a real model for each command and activity | c0261 | captured |
 | the full-force review | c0262 | captured |
 | provenance: author, approver, unblocker | c0263 | captured |
 | heartbeat and lost work | c0265 | captured |
