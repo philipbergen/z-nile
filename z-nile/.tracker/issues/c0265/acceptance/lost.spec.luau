@@ -72,9 +72,10 @@ end
 local function subjectOf(path: string): string
 	return fixture.git(h.f.origin, { "log", "-1", "--format=%s", "main", "--", path })
 end
+-- the heartbeat branches on origin: their refs, "refs/heads/hb/<stamp>"
 local function beatRefs(): { string }
 	local out = {}
-	local refs = fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", "refs/zn/hb/" })
+	local refs = fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", "refs/heads/hb/" })
 	for line in string.gmatch(refs, "[^\n]+") do
 		table.insert(out, line)
 	end
@@ -83,9 +84,18 @@ end
 local function stampsWithBeats(): { string }
 	local out = {}
 	for _, ref in beatRefs() do
-		table.insert(out, (string.match(ref, "^refs/zn/hb/([%a%-]+)/%d+$")) or ref)
+		table.insert(out, (string.match(ref, "^refs/heads/hb/(.+)$")) or ref)
 	end
 	return out
+end
+local function tipOf(stamp: string): string
+	return fixture.git(h.f.origin, { "for-each-ref", "--format=%(objectname)", `refs/heads/hb/{stamp}` })
+end
+-- another terminal's beat: a commit with main's tree and tip as parent, force-pushed as the stamp's branch
+local function pushBeat(stamp: string, epoch: number)
+	local tree = fixture.git(h.f.other, { "rev-parse", "HEAD^{tree}" })
+	local sha = fixture.git(h.f.other, { "commit-tree", tree, "-p", "HEAD", "-m", `hb {stamp} {epoch}` })
+	fixture.git(h.f.other, { "push", "-q", "-f", "origin", `{sha}:refs/heads/hb/{stamp}` })
 end
 local function issue(id: string, status: string, raft: string?, design: string?): string
 	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
@@ -105,14 +115,17 @@ if [ "$1" = pr ] && [ "$2" = list ]; then
 fi
 exit 0
 ]]
--- the git shim: ls-remote fails (lsfail) or hangs (lshang); every ls-remote is counted in <fakes>/lscalls and every
--- fetch in <fakes>/fetchcalls
+-- the git shim: the heartbeat read (a fetch of the hb branches into refs/zn/hb-seen) fails (lsfail) or hangs (lshang) and
+-- is counted in <fakes>/lscalls; every fetch is counted in <fakes>/fetchcalls
 local SHIM = [[#!/bin/sh
 if [ "$1" = fetch ]; then echo f >> "$FAKE_DIR/fetchcalls"; fi
-if [ "$1" = ls-remote ]; then
-  echo x >> "$FAKE_DIR/lscalls"
-  [ -f "$FAKE_DIR/lsfail" ] && { echo "fatal: fake ls-remote failure" >&2; exit 128; }
-  [ -f "$FAKE_DIR/lshang" ] && sleep 30
+if [ "$1" = fetch ]; then
+  case "$*" in
+    *hb-seen*)
+      echo x >> "$FAKE_DIR/lscalls"
+      [ -f "$FAKE_DIR/lsfail" ] && { echo "fatal: fake heartbeat read failure" >&2; exit 128; }
+      [ -f "$FAKE_DIR/lshang" ] && sleep 30 ;;
+  esac
 fi
 ]]
 
@@ -145,15 +158,9 @@ return t.spec("c0265 lost work", function(it)
 		must(zn(h.f.main, { "ready", "R0010" }, T0), "ready R0010") -- readied, nobody starts it
 		-- c0010 beats once more, so it is silent for less time than c0050 (never beaten) although its id is lower:
 		-- silence order and id order differ, which pins "longest silent first"
-		fixture.git(
-			h.f.other,
-			{ "push", "-q", "origin", `HEAD:refs/zn/hb/{stampOf(`{P}/c0010/c0010.md`)}/{T0 + 600}` }
-		)
+		pushBeat(stampOf(`{P}/c0010/c0010.md`), T0 + 600)
 		-- the done item's old claim has a beat on origin, as one that finished mid-work would
-		fixture.git(
-			h.f.other,
-			{ "push", "-q", "origin", `HEAD:refs/zn/hb/active-brisk-amber-otter/{T0 - 99999}` }
-		)
+		pushBeat("active-brisk-amber-otter", T0 - 99999)
 	end)
 
 	it("nothing is lost while the claims are fresh", function()
@@ -387,17 +394,17 @@ return t.spec("c0265 lost work", function(it)
 		t.expect(blind.ok).toBe(false)
 		t.expect(has(blind.stderr, "heartbeat")).toBe(true)
 		fs.removeFile(`{h.fakes}/lsfail`)
-		fixture.git(h.f.other, { "push", "-q", "origin", "HEAD:refs/zn/hb/garbage" })
+		fixture.git(h.f.other, { "push", "-q", "origin", "HEAD:refs/heads/hb/garbage" })
 		local bad = zn(wt2, { "status", "c0010", "preparing" }, at)
 		t.expect(bad.ok).toBe(false)
-		t.expect(has(bad.stderr, "refs/zn/hb/garbage")).toBe(true)
+		t.expect(has(bad.stderr, "refs/heads/hb/garbage")).toBe(true)
 		-- a malformed ref makes every stale claim unknown, everywhere, and the message says how to clear it
-		t.expect(has(bad.stderr, "git push origin :refs/zn/hb/garbage")).toBe(true)
+		t.expect(has(bad.stderr, "git push origin :refs/heads/hb/garbage")).toBe(true)
 		local still = zn(h.f.main, { "lost" }, at)
 		t.expect(has(still.stdout, "c0010")).toBe(false)
-		t.expect(has(still.stderr, "refs/zn/hb/garbage")).toBe(true)
+		t.expect(has(still.stderr, "refs/heads/hb/garbage")).toBe(true)
 		t.expect(has(lineOf(zn(h.f.main, { "status" }, at).stdout, "c0010"), "[stale?]")).toBe(true)
-		fixture.git(h.f.other, { "push", "-q", "origin", ":refs/zn/hb/garbage" })
+		fixture.git(h.f.other, { "push", "-q", "origin", ":refs/heads/hb/garbage" })
 	end)
 
 	it(
@@ -412,7 +419,9 @@ return t.spec("c0265 lost work", function(it)
 			t.expect(subjectOf(`{P}/c0010/c0010.md`)).toBe(`tracker: c0010 preparing (takes over {before})`)
 			local stamps = stampsWithBeats()
 			t.expect(table.find(stamps, after) ~= nil).toBe(true)
+			-- the takeover deleted the old owner's branch and created its own in one push
 			t.expect(table.find(stamps, before)).toBe(nil)
+			t.expect(tipOf(before)).toBe("")
 		end
 	)
 
@@ -468,14 +477,12 @@ return t.spec("c0265 lost work", function(it)
 		-- an interval later its autobeat sees another stamp on origin: it drops the entry and writes no beat
 		local taken = stampOf(`{P}/c0010/c0010.md`)
 		local before = #beatRefs()
+		local tipBefore = tipOf(taken)
 		local told = zn(wt, { "lessons", "--tags" }, at + 2 * STALE)
 		t.expect(told.ok).toBe(true)
 		t.expect(has(told.stderr, "c0010's claim was taken over")).toBe(false) -- told once, by the first command
-		t.expect(#beatRefs()).toBe(before) -- no beat of either stamp
-		for _, ref in beatRefs() do
-			t.expect(ref == `refs/zn/hb/{taken}/{at + 2 * STALE}`).toBe(false)
-		end
-		t.expect(#beatRefs()).toBe(before)
+		t.expect(#beatRefs()).toBe(before) -- no branch came back for the old stamp, none was added
+		t.expect(tipOf(taken)).toBe(tipBefore) -- and the taker's branch was not touched by the old owner
 	end)
 
 	it("an entry for a claim that merely ended is dropped with 'claim ended', not 'taken over'", function()

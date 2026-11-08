@@ -2,30 +2,44 @@
 -- E5 prototype of engine/heartbeat.luau (prep only; copy it to z-nile/engine/ to replay the mutants). Not committed
 -- to engine/ by prep: the executor writes the real one (this one type-checks under promote-check).
 local heartbeat = {}
-export type Beat = { stamp: string, epoch: number, ref: string }
+export type Beat = { stamp: string, epoch: number, ref: string, sha: string }
+export type Entry = { ref: string, sha: string, subject: string } -- one per branch under the prefix, as the single read returns it
 export type Claim = { id: string, state: string, stamp: string, since: number?, match: { string } }
 export type Verdict = { id: string, state: string, stamp: string, silent: number, kind: string }
 export type Pr = { title: string, head: string }
-heartbeat.PREFIX = "refs/zn/hb/"
+heartbeat.PREFIX = "refs/heads/hb/"
 heartbeat.INTERVAL = 300
 heartbeat.STALE = 900
 heartbeat.SKEW = 300
 
-function heartbeat.refName(stamp: string, epoch: number): string
-	return `{heartbeat.PREFIX}{stamp}/{epoch}`
+-- The heartbeat branch of a claim: one per claim stamp, shared by a raft and its members.
+function heartbeat.branch(stamp: string): string
+	return `{heartbeat.PREFIX}{stamp}`
 end
 
-function heartbeat.parse(refs: { string }): ({ Beat }, { string })
+-- The subject of the one beat commit (its parent is origin/main's tip and its tree is main's tree, so ./zn busy never
+-- sees a change): the epoch is read from here, not from a clock the reader trusts.
+function heartbeat.subject(stamp: string, epoch: number): string
+	return `hb {stamp} {epoch}`
+end
+
+-- Entries (one per branch under the prefix) to beats, and a problem naming each branch that is not a beat.
+function heartbeat.parse(entries: { Entry }): ({ Beat }, { string })
 	local beats: { Beat }, problems: { string } = {}, {}
-	for _, ref in refs do
-		if string.sub(ref, 1, #heartbeat.PREFIX) == heartbeat.PREFIX then
-			local stamp, kind, epoch = string.match(ref, "^refs/zn/hb/((%a+)%-%a+%-%a+%-%a+)/(%d+)$")
-			if stamp and (kind == "preparing" or kind == "active") then
-				table.insert(beats, { stamp = stamp, epoch = tonumber(epoch) :: number, ref = ref })
+	for _, e in entries do
+		if string.sub(e.ref, 1, #heartbeat.PREFIX) == heartbeat.PREFIX then
+			local stamp = string.sub(e.ref, #heartbeat.PREFIX + 1)
+			local kind = string.match(stamp, "^(%a+)%-%a+%-%a+%-%a+$")
+			local sStamp, epoch = string.match(e.subject, "^hb (%S+) (%d+)$")
+			if kind and (kind == "preparing" or kind == "active") and sStamp == stamp and epoch then
+				table.insert(
+					beats,
+					{ stamp = stamp, epoch = tonumber(epoch) :: number, ref = e.ref, sha = e.sha }
+				)
 			else
 				table.insert(
 					problems,
-					`{ref}: not a beat (refs/zn/hb/<preparing|active>-<three words>/<epoch>)`
+					`{e.ref}: not a beat (a branch hb/<preparing|active>-<three words> whose commit subject is "hb <stamp> <epoch>"); clear it with git push origin :{e.ref}`
 				)
 			end
 		end
@@ -155,26 +169,76 @@ function heartbeat.order(vs: { Verdict }): { Verdict }
 	return out
 end
 
+export type Push = {
+	write: { ref: string, subject: string, lease: string }?,
+	delete: { { ref: string, lease: string } },
+}
+
+-- One beat: replace the claim's branch (the lease is the sha seen, or "" to create only if absent); never go backwards
+-- or repeat a second; delete the branches of stamps no claim holds once they are older than the limit (a young one may
+-- be a claim this checkout has not fetched yet).
 function heartbeat.plan(
 	stamp: string,
 	epoch: number,
 	beats: { Beat },
 	claimed: { [string]: boolean },
 	now: number
-): { write: string?, delete: { string } }
-	local write: string? = heartbeat.refName(stamp, epoch)
-	local delete: { string } = {}
+): Push
+	local existing: Beat? = nil
+	local delete: { { ref: string, lease: string } } = {}
 	for _, b in beats do
-		if b.stamp == stamp and b.epoch == epoch then
-			write = nil
-		elseif
-			(b.stamp == stamp and b.epoch < epoch)
-			or (not claimed[b.stamp] and b.epoch < now - heartbeat.STALE)
-		then
-			table.insert(delete, b.ref)
+		if b.stamp == stamp then
+			existing = b
+		elseif not claimed[b.stamp] and b.epoch < now - heartbeat.STALE then
+			table.insert(delete, { ref = b.ref, lease = b.sha })
 		end
 	end
-	return { write = write, delete = delete }
+	if existing ~= nil and existing.epoch >= epoch then
+		return { write = nil, delete = delete }
+	end
+	return {
+		write = {
+			ref = heartbeat.branch(stamp),
+			subject = heartbeat.subject(stamp, epoch),
+			lease = if existing then existing.sha else "",
+		},
+		delete = delete,
+	}
+end
+
+-- A takeover, in one atomic push: create the taker's branch (create-only) and delete the old owner's with a lease on
+-- the sha seen, so the old owner's next beat finds its branch gone and its lease rejected.
+function heartbeat.takeoverPlan(oldStamp: string, newStamp: string, epoch: number, beats: { Beat }): Push
+	local delete: { { ref: string, lease: string } } = {}
+	for _, b in beats do
+		if b.stamp == oldStamp then
+			table.insert(delete, { ref = b.ref, lease = b.sha })
+		end
+	end
+	return {
+		write = { ref = heartbeat.branch(newStamp), subject = heartbeat.subject(newStamp, epoch), lease = "" },
+		delete = delete,
+	}
+end
+
+-- What a beat does when its push was rejected (the lease was stale): re-read, then retry on the branch that is there,
+-- create it if this claim still stands but its branch is gone, or learn that the claim was lost.
+function heartbeat.rejected(
+	stamp: string,
+	originStamp: string?,
+	beats: { Beat }
+): { action: string, lease: string?, why: string? }
+	if originStamp == nil then
+		return { action = "lost", why = "ended" }
+	elseif originStamp ~= stamp then
+		return { action = "lost", why = `taken over (now {originStamp})` }
+	end
+	for _, b in beats do
+		if b.stamp == stamp then
+			return { action = "retry", lease = b.sha }
+		end
+	end
+	return { action = "create", lease = "" }
 end
 
 -- A takeover needs an explicit lost verdict judged for the stamp origin still holds.

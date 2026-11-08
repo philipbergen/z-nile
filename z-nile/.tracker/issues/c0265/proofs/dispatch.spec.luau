@@ -25,8 +25,9 @@ local h: fakecli.Harness
 -- the epochs of the beats origin holds for STAMP
 local function epochs(): { number }
 	local out = {}
-	local refs = fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", `refs/zn/hb/{STAMP}/` })
-	for line in string.gmatch(refs, "[^\n]+") do
+	local subjects =
+		fixture.git(h.f.origin, { "for-each-ref", "--format=%(subject)", `refs/heads/hb/{STAMP}` })
+	for line in string.gmatch(subjects, "[^\n]+") do
 		table.insert(out, tonumber(string.match(line, "(%d+)$")) :: number)
 	end
 	return out
@@ -45,9 +46,13 @@ return t.spec("c0265 the dispatcher beats", function(it)
 			table.concat({
 				"start=$(date +%s); i=0",
 				"while [ $i -lt 15 ]; do",
-				'  for r in $(git ls-remote origin "refs/zn/hb/' .. STAMP .. "/*\" | awk '{print $2}'); do",
-				'    if [ "${r##*/}" -ge $((start+2)) ]; then echo seen > "$FAKE_DIR/beat-seen"; exit 0; fi',
-				"  done",
+				'  git fetch -q origin "+refs/heads/hb/'
+					.. STAMP
+					.. ":refs/zn/hb-seen/"
+					.. STAMP
+					.. '" 2>/dev/null',
+				"  s=$(git log -1 --format=%s refs/zn/hb-seen/" .. STAMP .. " 2>/dev/null); e=${s##* }",
+				'  if [ -n "$e" ] && [ "$e" -ge $((start+2)) ]; then echo seen > "$FAKE_DIR/beat-seen"; exit 0; fi',
 				"  sleep 1; i=$((i+1))",
 				"done",
 				"",

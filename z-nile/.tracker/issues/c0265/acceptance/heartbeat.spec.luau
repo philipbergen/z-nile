@@ -21,7 +21,14 @@ local function claim(id: string, stamp: string, since: number?, match: { string 
 	}
 end
 local function beat(stamp: string, epoch: number)
-	return { stamp = stamp, epoch = epoch, ref = heartbeat.refName(stamp, epoch) }
+	return { stamp = stamp, epoch = epoch, ref = heartbeat.branch(stamp), sha = `sha-{stamp}-{epoch}` }
+end
+local function entry(stamp: string, epoch: number)
+	return {
+		ref = heartbeat.branch(stamp),
+		sha = `sha-{stamp}-{epoch}`,
+		subject = heartbeat.subject(stamp, epoch),
+	}
 end
 local function kinds(vs: { heartbeat.Verdict }): { string }
 	local out = {}
@@ -32,31 +39,38 @@ local function kinds(vs: { heartbeat.Verdict }): { string }
 end
 
 return t.spec("c0265 heartbeat rules", function(it)
-	it("a beat is the ref refs/zn/hb/<stamp>/<epoch>, and parse reads it back", function()
-		local name = heartbeat.refName(A, NOW)
-		t.expect(name).toBe(`refs/zn/hb/{A}/{NOW}`)
-		local beats, problems = heartbeat.parse({ name, "refs/heads/main" })
-		t.expect(#problems).toBe(0)
-		t.expect(#beats).toBe(1)
-		t.expect(beats[1].stamp).toBe(A)
-		t.expect(beats[1].epoch).toBe(NOW)
-		t.expect(beats[1].ref).toBe(name)
-	end)
-
-	it("a ref under the prefix that is not a beat is a problem naming it; other refs are ignored", function()
-		local beats, problems = heartbeat.parse({
-			`refs/zn/hb/{A}/soon`,
-			"refs/zn/hb/new/1800000000",
-			`refs/zn/hb/{A}/{NOW}/extra`,
-			"refs/zn/other/x",
-			"refs/tags/v1",
-		})
-		t.expect(#beats).toBe(0)
-		t.expect(#problems).toBe(3)
-		for _, p in problems do
-			t.expect(string.find(p, "refs/zn/hb/", 1, true) ~= nil).toBe(true)
+	it(
+		"a beat is the branch refs/heads/hb/<stamp> whose commit subject is 'hb <stamp> <epoch>'; parse reads it back",
+		function()
+			t.expect(heartbeat.branch(A)).toBe(`refs/heads/hb/{A}`)
+			t.expect(heartbeat.subject(A, NOW)).toBe(`hb {A} {NOW}`)
+			local beats, problems =
+				heartbeat.parse({ entry(A, NOW), { ref = "refs/heads/main", sha = "x", subject = "m" } })
+			t.expect(#problems).toBe(0)
+			t.expect(#beats).toBe(1)
+			t.expect(beats[1].stamp).toBe(A)
+			t.expect(beats[1].epoch).toBe(NOW)
+			t.expect(beats[1].ref).toBe(`refs/heads/hb/{A}`)
+			t.expect(beats[1].sha).toBe(`sha-{A}-{NOW}`)
 		end
-	end)
+	)
+
+	it(
+		"a branch under the prefix that is not a beat is a problem naming it and its cure; other branches are ignored",
+		function()
+			local beats, problems = heartbeat.parse({
+				{ ref = "refs/heads/hb/garbage", sha = "1", subject = "just a commit" },
+				{ ref = `refs/heads/hb/{A}`, sha = "2", subject = `hb {C} {NOW}` }, -- the subject names another stamp
+				{ ref = `refs/heads/hb/{A}`, sha = "3", subject = `hb {A} soon` },
+				{ ref = "refs/heads/prep-x", sha = "4", subject = "work" },
+			})
+			t.expect(#beats).toBe(0)
+			t.expect(#problems).toBe(3)
+			for _, p in problems do
+				t.expect(string.find(p, "git push origin :refs/heads/hb/", 1, true) ~= nil).toBe(true)
+			end
+		end
+	)
 
 	it(
 		"the interval is five minutes, the limit three beats, and a claim is stale only strictly past it",
@@ -177,36 +191,63 @@ return t.spec("c0265 heartbeat rules", function(it)
 		t.expect(ids).toEqual({ "c0050", "c0020", "c0040", "c0030", "c0010" }) -- c0050 never beat: silent longest
 	end)
 
-	it("a new beat deletes the older beats of its stamp and long-unclaimed ones, and nothing else", function()
-		local beats = {
-			beat(A, NOW - 600),
-			beat(A, NOW - 300),
-			beat(B, NOW - 300), -- another live claim
-			beat(C, NOW - heartbeat.STALE - 1), -- its claim is gone, and has been for longer than the limit
-			beat(D, NOW - 60), -- unclaimed here, but young: this checkout may simply not have fetched its claim yet
-		}
-		local plan = heartbeat.plan(A, NOW, beats, { [A] = true, [B] = true }, NOW)
-		t.expect(plan.write).toBe(heartbeat.refName(A, NOW))
-		local want = {
-			heartbeat.refName(A, NOW - 600),
-			heartbeat.refName(A, NOW - 300),
-			heartbeat.refName(C, NOW - heartbeat.STALE - 1),
-		}
-		table.sort(plan.delete)
-		table.sort(want)
-		t.expect(plan.delete).toEqual(want)
-	end)
+	it(
+		"a beat replaces the claim's branch with a lease on the sha seen, creates it with an empty lease, never goes backwards",
+		function()
+			local first = heartbeat.plan(A, NOW, {}, { [A] = true }, NOW)
+			t.expect(first.write)
+				.toEqual({ ref = heartbeat.branch(A), subject = heartbeat.subject(A, NOW), lease = "" })
+			local again = heartbeat.plan(A, NOW + 300, { beat(A, NOW) }, { [A] = true }, NOW + 300)
+			t.expect(again.write).toEqual({
+				ref = heartbeat.branch(A),
+				subject = heartbeat.subject(A, NOW + 300),
+				lease = `sha-{A}-{NOW}`,
+			})
+			t.expect(heartbeat.plan(A, NOW, { beat(A, NOW) }, { [A] = true }, NOW).write).toBe(nil) -- the same second
+			t.expect(heartbeat.plan(A, NOW, { beat(A, NOW + 5) }, { [A] = true }, NOW).write).toBe(nil) -- another beater's, ahead
+		end
+	)
 
 	it(
-		"a beat at the same second as one already there writes nothing, and a newer beat is never deleted",
+		"a beat also deletes the branches of long-unclaimed stamps, each with its lease, and nothing else",
 		function()
-			local beats = { beat(A, NOW), beat(A, NOW + 5) }
-			local plan = heartbeat.plan(A, NOW, beats, { [A] = true }, NOW)
-			t.expect(plan.write).toBe(nil)
-			t.expect(plan.delete).toEqual({})
-			local ahead = heartbeat.plan(A, NOW + 1, beats, { [A] = true }, NOW + 1)
-			t.expect(ahead.write).toBe(heartbeat.refName(A, NOW + 1))
-			t.expect(ahead.delete).toEqual({ heartbeat.refName(A, NOW) })
+			local beats = {
+				beat(A, NOW - 300),
+				beat(B, NOW - 300), -- another live claim
+				beat(C, NOW - heartbeat.STALE - 1), -- its claim is gone, and has been for longer than the limit
+				beat(D, NOW - 60), -- unclaimed here, but young: this checkout may simply not have fetched its claim yet
+			}
+			local plan = heartbeat.plan(A, NOW, beats, { [A] = true, [B] = true }, NOW)
+			t.expect(plan.delete)
+				.toEqual({ { ref = heartbeat.branch(C), lease = `sha-{C}-{NOW - heartbeat.STALE - 1}` } })
+		end
+	)
+
+	it(
+		"a takeover creates the taker's branch and deletes the old owner's with a lease, in one plan",
+		function()
+			local plan = heartbeat.takeoverPlan(A, C, NOW, { beat(A, NOW - 2000), beat(B, NOW - 5) })
+			t.expect(plan.write)
+				.toEqual({ ref = heartbeat.branch(C), subject = heartbeat.subject(C, NOW), lease = "" })
+			t.expect(plan.delete).toEqual({ { ref = heartbeat.branch(A), lease = `sha-{A}-{NOW - 2000}` } })
+			t.expect(heartbeat.takeoverPlan(A, C, NOW, {}).delete).toEqual({}) -- an old owner that never beat has no branch
+		end
+	)
+
+	it(
+		"a rejected beat learns whether it lost the claim: ended, taken over, or retries on what is there",
+		function()
+			local lost = heartbeat.rejected(A, C, { beat(C, NOW) })
+			t.expect(lost.action).toBe("lost")
+			t.expect(string.find(lost.why or "", C, 1, true) ~= nil).toBe(true) -- names the new stamp
+			t.expect(heartbeat.rejected(A, nil, {}).action).toBe("lost")
+			t.expect(heartbeat.rejected(A, nil, {}).why).toBe("ended")
+			local retry = heartbeat.rejected(A, A, { beat(A, NOW) })
+			t.expect(retry.action).toBe("retry")
+			t.expect(retry.lease).toBe(`sha-{A}-{NOW}`)
+			local create = heartbeat.rejected(A, A, {}) -- the claim stands, its branch is gone (pruned by mistake)
+			t.expect(create.action).toBe("create")
+			t.expect(create.lease).toBe("")
 		end
 	)
 

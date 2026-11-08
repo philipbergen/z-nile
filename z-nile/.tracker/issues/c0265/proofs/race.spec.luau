@@ -45,8 +45,9 @@ end
 -- the epochs of the beats origin holds for `stamp`
 local function epochs(stamp: string): { number }
 	local out = {}
-	local refs = fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", `refs/zn/hb/{stamp}/` })
-	for line in string.gmatch(refs, "[^\n]+") do
+	local subjects =
+		fixture.git(h.f.origin, { "for-each-ref", "--format=%(subject)", `refs/heads/hb/{stamp}` })
+	for line in string.gmatch(subjects, "[^\n]+") do
 		table.insert(out, tonumber(string.match(line, "(%d+)$")) :: number)
 	end
 	return out
@@ -67,9 +68,12 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
-if [ "$1" = ls-remote ]; then
-  echo x >> "$FAKE_DIR/lscalls"
-  [ -f "$FAKE_DIR/lshang" ] && sleep 30
+if [ "$1" = fetch ]; then
+  case "$*" in
+    *hb-seen*)
+      echo x >> "$FAKE_DIR/lscalls"
+      [ -f "$FAKE_DIR/lshang" ] && sleep 30 ;;
+  esac
 fi
 if [ "$1" = push ]; then
   case "$*" in
@@ -82,7 +86,7 @@ if [ "$1" = push ]; then
         "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
         "$REAL_GIT" -C "$o" push -q origin HEAD:main
       fi ;;
-    *:refs/zn/hb/*)
+    *:refs/heads/hb/*)
       if [ -f "$FAKE_DIR/pushfail" ]; then rm -f "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
       if [ -f "$FAKE_DIR/restamp" ]; then
         rm -f "$FAKE_DIR/restamp"
@@ -110,9 +114,9 @@ return t.spec("c0265 real-time proofs", function(it)
 				"#!/usr/bin/env bash",
 				"start=$(date +%s); i=0",
 				"while [ $i -lt 15 ]; do",
-				"  for r in $(git ls-remote origin \"refs/zn/hb/*\" | awk '{print $2}'); do",
-				'    case "$r" in *"$STAMP"/*) [ "${r##*/}" -ge $((start+2)) ] && { echo seen > "$FAKE_DIR/check-beat"; exit 0; } ;; esac',
-				"  done",
+				'  git fetch -q origin "+refs/heads/hb/$STAMP:refs/zn/hb-seen/$STAMP" 2>/dev/null',
+				'  s=$(git log -1 --format=%s "refs/zn/hb-seen/$STAMP" 2>/dev/null); e=${s##* }',
+				'  if [ -n "$e" ] && [ "$e" -ge $((start+2)) ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi',
 				"  sleep 1; i=$((i+1))",
 				"done",
 				"exit 1",

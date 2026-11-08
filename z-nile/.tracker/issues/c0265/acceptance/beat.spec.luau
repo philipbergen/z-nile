@@ -1,9 +1,10 @@
 --!strict
--- c0265: a beat is a ref (refs/zn/hb/<claim stamp>/<epoch>) pushed to origin outside main: a claim writes the first
--- one, `beat` writes the next from any checkout and deletes the older (never a young beat of a claim this checkout has
+-- c0265: a beat is a branch (hb/<claim stamp>) on origin, outside main: one commit, replaced by each beat, whose tree is
+-- main's tree and whose parent is main's tip (so ./zn busy never sees it) and whose subject is "hb <stamp> <epoch>".
+-- A claim writes the first one, `beat` replaces it from any checkout (never a young branch of a claim this checkout has
 -- not fetched), `ready` and `new raft` beat for the raft they claim, any ./zn command in a worktree that holds a claim
--- beats it once an interval has passed, `--watch` runs only under ./zn run and ends before its bound, and `beat`
--- refuses what nobody claims, done items included. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/c0265-beat.
+-- beats it once an interval has passed, `--watch` refuses to run without a numeric bound, and `beat` refuses what
+-- nobody claims, done items included. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/c0265-beat.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -37,19 +38,24 @@ local function must(r: fixture.Result, what: string): string
 	end
 	return r.stdout
 end
--- the beat refs on origin, as { stamp, epoch } read from the remote's own ref names
-local function beats(): { { stamp: string, epoch: number } }
+-- the heartbeat branches on origin, as { stamp, epoch, sha } read from the branch name and the commit subject
+local function beats(): { { stamp: string, epoch: number, sha: string } }
 	local out = {}
-	for line in
-		string.gmatch(
-			fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", "refs/zn/hb/" }),
-			"[^\n]+"
-		)
-	do
-		local stamp, epoch = string.match(line, "^refs/zn/hb/([%a%-]+)/(%d+)$")
-		table.insert(out, { stamp = stamp :: string, epoch = tonumber(epoch) :: number })
+	local lines = fixture.git(
+		h.f.origin,
+		{ "for-each-ref", "--format=%(refname) %(objectname) %(subject)", "refs/heads/hb/" }
+	)
+	for line in string.gmatch(lines, "[^\n]+") do
+		local stamp, sha, epoch = string.match(line, "^refs/heads/hb/(%S+) (%x+) hb %S+ (%d+)$")
+		table.insert(out, { stamp = stamp or line, epoch = tonumber(epoch) or 0, sha = sha or "" })
 	end
 	return out
+end
+-- another terminal's beat: a commit with main's tree and tip as parent, force-pushed as the stamp's branch
+local function pushBeat(stamp: string, epoch: number)
+	local tree = fixture.git(h.f.other, { "rev-parse", "HEAD^{tree}" })
+	local sha = fixture.git(h.f.other, { "commit-tree", tree, "-p", "HEAD", "-m", `hb {stamp} {epoch}` })
+	fixture.git(h.f.other, { "push", "-q", "-f", "origin", `{sha}:refs/heads/hb/{stamp}` })
 end
 local function stampOf(id: string, path: string): string
 	local text = fixture.git(h.f.origin, { "show", `main:{path}` })
@@ -99,7 +105,7 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-beat" }), "worktree"), "%s+$", ""))
 	end)
 
-	it("a claim writes the first beat as a ref, and main only gets the claim", function()
+	it("a claim writes the first beat as a branch, and main only gets the claim", function()
 		local main = fixture.git(h.f.origin, { "rev-parse", "main" })
 		must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010")
 		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
@@ -107,22 +113,33 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		t.expect(#list).toBe(1)
 		t.expect(list[1].stamp).toBe(stamp)
 		t.expect(list[1].epoch).toBe(T0)
-		-- the claim is one commit on main and the beat is not: nothing else moved, no branch was made for it
+		-- the claim is one commit on main and the beat is not: the beat is one branch whose commit changes nothing
 		t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{main}..main` })).toBe("1")
 		t.expect(fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", "refs/heads/" }))
-			.toBe("refs/heads/main")
+			.toBe(`refs/heads/hb/{stamp}\nrefs/heads/main`)
+		local tip = `refs/heads/hb/{stamp}`
+		t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^{tree}" }))
+			.toBe(fixture.git(h.f.origin, { "rev-parse", "main^{tree}" }))
+		t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^" }))
+			.toBe(fixture.git(h.f.origin, { "rev-parse", "main" }))
+		t.expect(fixture.git(h.f.origin, { "log", "-1", "--format=%s", tip })).toBe(`hb {stamp} {T0}`)
+		-- ./zn busy sees no change on it
+		t.expect(has(zn(h.f.main, { "busy", "z-nile", "pickman" }, T0).stdout, "hb/")).toBe(false)
 	end)
 
-	it("beat pushes a ref from the main checkout too, replaces the older one, and touches no file", function()
-		local main = fixture.git(h.f.origin, { "rev-parse", "main" })
-		must(zn(h.f.main, { "beat", "c0010" }, T0 + 300), "beat in the main checkout")
-		must(zn(h.f.main, { "beat", "c0010" }, T0 + 600), "beat again")
-		local list = beats()
-		t.expect(#list).toBe(1) -- the older beats of the stamp are deleted
-		t.expect(list[1].epoch).toBe(T0 + 600)
-		t.expect(fixture.git(h.f.origin, { "rev-parse", "main" })).toBe(main)
-		t.expect(fixture.git(h.f.main, { "status", "--porcelain" })).toBe("")
-	end)
+	it(
+		"beat pushes a branch from the main checkout too, replaces the older commit, and touches no file",
+		function()
+			local main = fixture.git(h.f.origin, { "rev-parse", "main" })
+			must(zn(h.f.main, { "beat", "c0010" }, T0 + 300), "beat in the main checkout")
+			must(zn(h.f.main, { "beat", "c0010" }, T0 + 600), "beat again")
+			local list = beats()
+			t.expect(#list).toBe(1) -- one branch per claim, its commit replaced
+			t.expect(list[1].epoch).toBe(T0 + 600)
+			t.expect(fixture.git(h.f.origin, { "rev-parse", "main" })).toBe(main)
+			t.expect(fixture.git(h.f.main, { "status", "--porcelain" })).toBe("")
+		end
+	)
 
 	it("beat refuses what nobody claims, naming the item and the rule", function()
 		for _, id in { "c0020", "c0040", "c0060", "c9999" } do
@@ -171,10 +188,7 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		trackerfix.elsewhere(h.f, {
 			[`{P}/c0030/c0030.md`] = issue("c0030", "preparing-sunny-heron-lynx"),
 		}, "other claims c0030")
-		fixture.git(
-			h.f.other,
-			{ "push", "-q", "origin", `HEAD:refs/zn/hb/preparing-sunny-heron-lynx/{T0 + 1150}` }
-		)
+		pushBeat("preparing-sunny-heron-lynx", T0 + 1150)
 		must(zn(h.f.main, { "beat", "c0010" }, T0 + 1200), "beat in a checkout that has not fetched")
 		local found = false
 		for _, b in beats() do
