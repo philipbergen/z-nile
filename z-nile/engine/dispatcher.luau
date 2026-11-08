@@ -93,6 +93,12 @@ function dispatcher.home(ctx: Ctx): string
 	return `{ctx.mainRoot()}/{HOME}`
 end
 
+-- Whether the dispatcher's run state for `id` under the main checkout `root` holds a questions.md: a step waits on the
+-- user, so a claim on `id` is parked, not lost (c0265).
+function dispatcher.waitsOnUser(root: string, id: string): boolean
+	return fs.isFile(`{root}/{HOME}/{id}/questions.md`)
+end
+
 local function dirOf(ctx: Ctx, id: string): string
 	return nested or `{dispatcher.home(ctx)}/{id}`
 end

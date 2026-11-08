@@ -1564,7 +1564,7 @@ local function judgeAll(paths: { string }): Judged
 	local runs: { [string]: boolean } = {}
 	for _, c in claims do
 		for _, id in c.match do
-			if fs.isFile(`{mainRoot()}/.cache/dispatch/{id}/questions.md`) then
+			if dispatcherLib.waitsOnUser(mainRoot(), id) then
 				runs[id] = true
 			end
 		end
