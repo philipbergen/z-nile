@@ -27,6 +27,8 @@ z-nile/setup.sh
 4. **Gate**: runs `z-nile/check.sh --full`.
    - The first run downloads the Roblox type definitions for luau-lsp to `.cache/globalTypes.d.luau`. This is gitignored and fetched again if missing.
 
+Hosts keep network time (NTP): the work heartbeat compares a beat's epoch with the reader's clock, so a host clock off by more than five minutes mislabels claims.
+
 ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
 1. Install Roblox Studio.
 2. Install the Rojo plugin with `rojo plugin install`, or from the Studio plugin marketplace.

@@ -1582,11 +1582,13 @@ end
 -- written (or already newer), else the text to say and whether it means the claim was lost (taken over or ended).
 local function beatOnce(id: string, stamp: string): (string?, boolean)
 	for attempt = 1, 2 do
-		local paths = originPaths()
+		-- the beats first, then main: a branch seen was seen before the claimed set was read, so a taker's branch
+		-- (younger than anything read here) is never judged unclaimed
 		local beats, _, err = readBeats()
 		if err then
 			return err, false
 		end
+		local paths = originPaths()
 		local claimed: { [string]: boolean } = {}
 		for _, c in claimsOf(paths, false) do
 			claimed[c.stamp] = true

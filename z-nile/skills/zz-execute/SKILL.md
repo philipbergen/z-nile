@@ -13,6 +13,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
 ## Phase 0: Claim (in the first minutes)
 1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Phase 0 runs no gate and reads no CI result: a red `main` first shows at the merge.
 2. `./zn start R0010`. The claim was made by z-ready: the raft and its members are already in `active/` on `origin/main`, so `start` only creates the branch (if the worktree isn't already on it), makes an empty `tracker: start` commit, pushes, and opens a **draft** PR. If it refuses with `run ./zn sync first`, sync and retry. A raft that was never readied (a legacy start) is claimed and moved by `start` itself; if a step after that claim fails, see the zz-rules skill, Sync and claim, A failed start.
+2b. Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 

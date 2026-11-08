@@ -12,8 +12,8 @@ The goal is an issue that **any strong agent can deliver on the first attempt wi
 ## 1. Claim the issue
 **Work in a prep worktree** for the whole design (specs, experiments, reviews): `cd "$(./zn worktree prep-<slug>)"`, named by the issue's slug (zz-rules skill, Worktrees). Design reviews run there too, and their files ride in the design PR.
 
-- **Sync first**: `./zn sync` (zz-rules skill, Sync and claim). **Candidates**: `./zn status` (what is `new`, and what others have claimed) and `./zn list backlog`.
-- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. Give it back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
+- **Sync first**: `./zn sync` (zz-rules skill, Sync and claim). **Candidates**: take `./zn lost` first (lost work comes before anything not yet started, whatever its rank), then `./zn status` (what is `new`, and what others have claimed) and `./zn list backlog`.
+- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. Give it back with `./zn status <id> new`. Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes. (Not under `ZN_DISPATCH=1`: the dispatcher beats for its steps.) An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
 - If an issue is missing, create it first with the `z-ticket` skill.
 
 ## 2. Product decisions and architecture
