@@ -13,11 +13,11 @@ ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
 read -r -d '' INTENT <<'TXT'
 ## Intent
 z-nile is built so that people spend their time on ideas and designs, and workers do the rest, cheaply until the last step and sharply at it.
-- **Humans at the idea and the design.** A person has the idea, settles what is asked and approves the design: `z-ticket` captures it, `z-design` sharpens it into a prepared issue and its design review. Nothing is designed past a person's ask.
+- **Humans at the idea and the design.** A person talks the idea through with the AI in plan mode, settles what is asked and approves the design; a worker may draft the design. `z-ticket` captures the idea, `z-design` sharpens it into a prepared issue and its design review. Nothing is designed past a person's ask.
 - **Workers from the raft to the merge.** Workers carry a prepared issue's raft to its merge: raft, ready, run, review, gate, merge. They stop and escalate only when blocked (Escalation to the human), and a person comes back only for that.
 - **Cheap on the way, sharp at the end.** The steps on the way run on cheap models; the final review, the one that decides whether the work merges, runs on the sharpest model. Rigor does not move: the checks, the gate and the review rounds still run.
 
-This section is the aim and carries no status label. How it should work, below, labels each part as exists, designed or captured; where its plans have a worker design, how they meet this aim is the user's open question.
+This section is the aim and carries no status label. How it should work, below, labels each part as exists, designed or captured; where its plans for Autonomous delivery and the worker end have a worker design, they mean drafts that a person approves.
 TXT
 verbatim() {
 	local got

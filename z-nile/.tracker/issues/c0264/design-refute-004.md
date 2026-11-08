@@ -1,0 +1,5 @@
+# Answers to design-review-004 (c0264)
+- F1: fixed in the documents, not by capturing: the Design lists every follow-up edit (c0252 with the missing approval gate, c0253, c0249, c0254, c0117 as a new issue, and the gloss's removal) and says the coordinator captures them separately at the user's instruction; the ids go on the PR once they exist. This issue is a prep and does not file issues; consequences: the gloss stays until those land.
+- F2: fixed: "no mechanism" is corrected (plan mode is the user's word); the c0260 conflict and its three options are in Siblings and in the report, decided by no one here; consequences: none for this text, which holds under all three.
+- F3: fixed: the closing sentence names the sections ("its plans for Autonomous delivery and the worker end have a worker design, they mean drafts that a person approves"); the Design block, check.sh and readme.patch agree; consequences: none (wording of one pinned sentence).
+- F4: fixed: E3 records the two round-4 mutants (4/5 each) and the final run (5/5); E1 and E2 are marked as run on the earlier text, with AC5 rerunning the twelve specs.

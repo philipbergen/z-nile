@@ -15,3 +15,7 @@
 - design-review-003 F1: z-design/spec-design-correspondence
 - design-review-003 F2: z-design/restated-rules-move-together
 - design-review-003 F3: z-design/status-labels-need-a-tracker-fact
+- design-review-004 F1: z-design/never-narrow-captured-scope
+- design-review-004 F2: z-design/quote-other-preps-before-promising
+- design-review-004 F3: z-design/restated-rules-move-together
+- design-review-004 F4: z-design/spec-design-correspondence
