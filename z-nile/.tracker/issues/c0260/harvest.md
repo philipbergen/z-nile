@@ -65,3 +65,9 @@
 - design-review-007 F3: z-design/exemption-markers-refuse-omission
 - design-review-007 F4: z-design/instructions-runnable-where-they-run
 - design-review-007 F5: z-design/restated-rules-move-together
+- note review 007's candidates (a refute that says fixed pastes each grep's output; an audit rule on every tree needs everyday-state cases): z-design/restated-rules-move-together, z-design/spec-design-correspondence
+- design-review-008 F1: z-design/gates-call-the-checker
+- design-review-008 F2: z-design/spec-design-correspondence
+- design-review-008 F3: z-design/restated-rules-move-together
+- design-review-008 F4: z-design/spec-design-correspondence
+- design-review-008 F5: z-design/restated-rules-move-together

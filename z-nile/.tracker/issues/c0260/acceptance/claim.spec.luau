@@ -55,6 +55,7 @@ local function identity(dir: string)
 end
 
 local ISSUES = "pickman/.tracker/issues"
+local REVIEW_FILE = "# Review 001\n\n### F1 [low] a claim\n"
 -- a full user record (the claim needs all five sections; the audit judges their content, c0260 AC3/AC4)
 local RECORD = "\n## Ask (verbatim)\n### Message 2026-11-08\n```\nmore ghosts\n```\n\n## Interview\n### Q1\nQuestion: restate?\nOptions: approve | correct\nAnswer: approve\n\n"
 	.. '## Idea\nMore ghosts.\n\n## Idea review\n### Round 1\n- F1: fixed: done\n\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n'
@@ -252,6 +253,7 @@ return t.spec("c0260 the claim gate", function(it)
 			local text = fs.readFile(doc)
 			text = (string.gsub(text, "\n## Design", RECORD .. "\n## Design", 1))
 			fs.writeFile(doc, text)
+			write(`{rec}/{ISSUES}/{id}/capture/idea-review-001.md`, REVIEW_FILE)
 			git(rec, { "add", "-A" })
 			git(rec, { "commit", "-q", "-m", `tracker: new {id} record` })
 			git(rec, { "push", "-q", "origin", "HEAD:main" })
@@ -267,12 +269,32 @@ return t.spec("c0260 the claim gate", function(it)
 			git(rec, { "reset", "-q", "--hard", "origin/main" })
 			local doc2 = `{rec}/{ISSUES}/{id2}/{id2}.md`
 			fs.writeFile(doc2, (string.gsub(fs.readFile(doc2), "\n## Design", RECORD .. "\n## Design", 1)))
+			write(`{rec}/{ISSUES}/{id2}/capture/idea-review-001.md`, REVIEW_FILE)
 			git(rec, { "add", "-A" })
 			git(rec, { "commit", "-q", "-m", `tracker: new {id2} record` })
 			git(rec, { "push", "-q", "origin", "HEAD:main" })
 			git(wt, { "fetch", "-q", "origin" })
 			git(wt, { "reset", "-q", "--hard", "origin/main" })
 			trOk(wt, { "new", "raft", "chore", "recorded-raft", id2, "--project", "pickman" }) -- a raft claims a recorded member
+			-- the same record with no raw review beside it is refused: the claim calls the record check
+			local id3 = string.match(
+				trOk(
+					wt,
+					{ "new", "issue", "c", "no-review", "--desc", "Unreviewed.", "--project", "pickman" }
+				),
+				"(c%d%d%d%d)"
+			) :: string
+			git(rec, { "fetch", "-q", "origin" })
+			git(rec, { "reset", "-q", "--hard", "origin/main" })
+			local doc3 = `{rec}/{ISSUES}/{id3}/{id3}.md`
+			fs.writeFile(doc3, (string.gsub(fs.readFile(doc3), "\n## Design", RECORD .. "\n## Design", 1)))
+			git(rec, { "add", "-A" })
+			git(rec, { "commit", "-q", "-m", `tracker: new {id3} record without a review` })
+			git(rec, { "push", "-q", "origin", "HEAD:main" })
+			local refused = tr(wt, { "status", id3, "preparing" })
+			t.expect(refused.ok).toBe(false)
+			t.expect(has(refused.stderr, "made after the capture record landed")).toBe(true)
+			fs.removeDir(base)
 		end
 	)
 end)

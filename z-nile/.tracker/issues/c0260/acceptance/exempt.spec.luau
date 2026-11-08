@@ -15,6 +15,11 @@ local function agent(problem: string?, filed: string?, extra: string?): string
 		"## Design\n",
 	})
 end
+-- the gate calls the checker with the raw reviews beside the document (review 008 F1)
+local REVIEWS: { [string]: string } = { ["idea-review-001.md"] = "# R\n\n### F1 [low] x\n" }
+local function satisfies(doc: string, reviews: { [string]: string }?): boolean
+	return capturecheck.satisfies(doc, reviews or REVIEWS)
+end
 local function problems(d: string): string
 	return table.concat(capturecheck.check(d, {}), "\n")
 end
@@ -66,6 +71,8 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 				"lesson:z-ticket/split-designs-name-each-owner",
 				"review:c0260/design-review-003 F4",
 				"review:R0090/review-001 F12",
+				"agent:c0260/graph-miss",
+				"agent:R0090/gate-slow",
 			}
 		do
 			t.expect(capturecheck.source(ok)).toBe(ok)
@@ -73,6 +80,10 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 		for _, bad in
 			{
 				"",
+				"agent:c0260/Graph Miss",
+				"agent:c0260/UPPER",
+				"agent:c0260/",
+				"agent:c0260/-lead",
 				"make the ghosts scarier",
 				"review:c0260/design-review-003",
 				"review:c0260/design-review-003 F",
@@ -112,12 +123,12 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 	it(
 		"AC10: the claim accepts an agent ticket only with a valid marker, and a user capture only with all five sections",
 		function()
-			t.expect(capturecheck.satisfies(agent())).toBe(true)
-			t.expect(capturecheck.satisfies(agent(nil, "Source: free text\n"))).toBe(false)
+			t.expect(satisfies(agent())).toBe(true)
+			t.expect(satisfies(agent(nil, "Source: free text\n"))).toBe(false)
 			local onlyAsk =
 				"---\nid: c0902\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-08\n```\nhi\n```\n"
-			t.expect(capturecheck.satisfies(onlyAsk)).toBe(false)
-			t.expect(capturecheck.satisfies("## Problem\nold\n")).toBe(false)
+			t.expect(satisfies(onlyAsk)).toBe(false)
+			t.expect(satisfies("## Problem\nold\n")).toBe(false)
 		end
 	)
 
@@ -126,17 +137,16 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 		function()
 			local full =
 				'---\nid: c0903\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-08\n```\nhi\n```\n\n## Interview\n### Q1\nQuestion: q\nOptions: a\nAnswer: a\n\n## Idea\nI.\n\n## Idea review\n### Round 1\n- F1: fixed: x\n\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "y"\n\n## Design\n'
-			t.expect(capturecheck.satisfies(full)).toBe(true)
+			t.expect(satisfies(full)).toBe(true)
 			for _, section in { "Ask (verbatim)", "Interview", "Idea", "Idea review", "Confirmation" } do
 				local escaped = (string.gsub(section, "[%(%)]", "%%%0"))
 				local emptied = (string.gsub(full, "(## " .. escaped .. "\n).-(\n## )", "%1%2", 1))
-				t.expect(capturecheck.satisfies(emptied)).toBe(false)
+				t.expect(satisfies(emptied)).toBe(false)
 			end
-			t.expect(capturecheck.satisfies((string.gsub(full, "### Message 2026%-11%-08", "text", 1))))
-				.toBe(false)
+			t.expect(satisfies((string.gsub(full, "### Message 2026%-11%-08", "text", 1)))).toBe(false)
 			-- text under a heading that is not that section's kind of text
 			t.expect(
-				capturecheck.satisfies(
+				satisfies(
 					(
 						string.gsub(
 							full,
@@ -147,8 +157,29 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 					)
 				)
 			).toBe(false)
-			t.expect(capturecheck.satisfies((string.gsub(full, "### Round 1", "round one", 1)))).toBe(false)
-			t.expect(capturecheck.satisfies((string.gsub(full, "### Q1", "question one", 1)))).toBe(false)
+			t.expect(satisfies((string.gsub(full, "### Round 1", "round one", 1)))).toBe(false)
+			t.expect(satisfies((string.gsub(full, "### Q1", "question one", 1)))).toBe(false)
+		end
+	)
+
+	it(
+		"AC10: the claim calls the record check: a record the check refuses is not claimed, however its sections look",
+		function()
+			local full =
+				'---\nid: c0903\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-08\n```\nhi\n```\n\n## Interview\n### Q1\nQuestion: q\nOptions: a\nAnswer: a\n\n## Idea\nI.\n\n## Idea review\n### Round 1\n- F1: fixed: x\n\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "y"\n\n## Design\n'
+			t.expect(satisfies(full)).toBe(true)
+			local function without(from: string, to: string): string
+				return (string.gsub(full, from, to, 1))
+			end
+			t.expect(
+				satisfies(
+					without('Confirmed %(user, 2026%-11%-08%) after round 1: "y"', "Pending (later, maybe)")
+				)
+			).toBe(false)
+			t.expect(satisfies(without("Question: q\nOptions: a\nAnswer: a", "Question: q"))).toBe(false) -- Q1 with no Options or Answer
+			t.expect(satisfies(without("### Q1", "### Q2"))).toBe(false) -- a gap in the numbering
+			t.expect(satisfies(without('"y"\n', '"y"\nanother line\n'))).toBe(false) -- a line after the Confirmed one
+			t.expect(satisfies(full, {})).toBe(false) -- never reviewed: no raw review beside the document
 		end
 	)
 end)

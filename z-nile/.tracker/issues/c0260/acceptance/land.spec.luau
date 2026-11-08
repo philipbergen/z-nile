@@ -222,13 +222,23 @@ return t.spec("c0260 a capture lands its record", function(it)
 	)
 
 	it(
-		"AC6: only `./zn new --filed-by` writes the agent-filed marker: a land that adds, changes or removes it is refused",
+		"AC6: only `./zn new --filed-by` writes the agent-filed marker: a land that adds, changes or removes it, or drops its Scope line, is refused",
 		function()
+			-- adding it to a user's stub
 			local wt, id = capture("capture-marker", "marker")
 			local doc = docOf(wt, id)
 			local before = tip()
-			fs.writeFile(
-				doc,
+			local clean = git(wt, { "rev-parse", "HEAD" })
+			local function attempt(text: string)
+				fs.writeFile(doc, text)
+				commit(wt)
+				local r = tr(wt, { "land" })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "only ./zn new --filed-by writes the marker")).toBe(true)
+				t.expect(tip()).toBe(before)
+				git(wt, { "reset", "-q", "--hard", clean })
+			end
+			attempt(
 				(
 					string.gsub(
 						fs.readFile(doc),
@@ -238,14 +248,41 @@ return t.spec("c0260 a capture lands its record", function(it)
 					)
 				)
 			)
-			commit(wt)
-			local r = tr(wt, { "land" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "only ./zn new --filed-by writes the marker")).toBe(true)
-			t.expect(tip()).toBe(before)
+			-- changing, removing the marker and dropping the Scope line of an agent-filed stub
+			local wt2 = trOk(main, { "worktree", "capture-marker2" })
+			identity(wt2)
+			local made = trOk(wt2, {
+				"new",
+				"issue",
+				"c",
+				"agent-stub",
+				"--desc",
+				"A finding.",
+				"--project",
+				"pickman",
+				"--filed-by",
+				"agent:c0260/graph-miss",
+			})
+			local id2 = string.match(made, "(c%d%d%d%d)") :: string
+			doc = docOf(wt2, id2)
+			wt = wt2
+			before = tip()
+			clean = git(wt2, { "rev-parse", "HEAD" })
+			local text = fs.readFile(doc)
+			attempt(
+				(
+					string.gsub(
+						text,
+						"Source: agent:c0260/graph%-miss",
+						"Source: agent:c0260/something-else",
+						1
+					)
+				)
+			)
+			attempt((string.gsub(text, "\n## Filed by %(agent%)\nSource: [^\n]*\n", "", 1)))
+			attempt((string.gsub(text, "\nScope decision %(user[^\n]*", "", 1)))
 		end
 	)
-
 	it(
 		"AC6: land refuses a review for an issue that is no draft, or that another terminal has already claimed",
 		function()

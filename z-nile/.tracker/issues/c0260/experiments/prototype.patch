@@ -180,7 +180,7 @@ index f76ef60b..a4193fdc 100644
  3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
  4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 7e05c8ac..a6f8248a 100644
+index 7e05c8ac..36d30b6f 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
 @@ -1,6 +1,8 @@
@@ -232,7 +232,7 @@ index 7e05c8ac..a6f8248a 100644
 +			-- `ready` only with the record or the agent-filed marker
 +			if
 +				capturecut.required(front(doc))
-+				and not capturecheck.satisfies(doc)
++				and not capturecheck.satisfies(doc, reviews)
 +				and (design == "ready" or design == "reviewed")
 +				and not string.find(f.path, "/done/", 1, true) -- a finished item passed the claim gate already
 +			then
@@ -250,10 +250,10 @@ index 7e05c8ac..a6f8248a 100644
  			for _, p in paths do
 diff --git a/z-nile/engine/capturecheck.luau b/z-nile/engine/capturecheck.luau
 new file mode 100644
-index 00000000..57ef534b
+index 00000000..c292c17c
 --- /dev/null
 +++ b/z-nile/engine/capturecheck.luau
-@@ -0,0 +1,536 @@
+@@ -0,0 +1,546 @@
 +--!strict
 +-- c0260: the shape of a capture's record, which lives in sections of the issue document (z-ticket skill, The capture
 +-- record): `## Ask (verbatim)`, `## Interview`, `## Idea`, `## Idea review`, `## Confirmation`. A ticket an agent filed
@@ -732,12 +732,13 @@ index 00000000..57ef534b
 +capturecheck.SCOPE_LINE =
 +	"Scope decision (user, 2026-11-08): agent-filed tickets are exempt from the ask, interview, idea review and confirmation (c0260)"
 +
-+-- True when `doc` may be claimed: an agent-filed ticket with a valid marker, or a user capture with all five record
-+-- sections (their content is the audit's to judge). The claim and the audit use this, not "any section" (review 006 F4).
-+function capturecheck.satisfies(doc: string): boolean
++-- True when `doc` may be claimed: an agent-filed ticket with a valid marker, or a user capture whose five sections are
++-- present, non-empty and pass `check` with the raw reviews beside it. The claim and the audit use this (reviews 006 F4,
++-- 007 F2, 008 F1).
++function capturecheck.satisfies(doc: string, reviews: { [string]: string }): boolean
 +	local kind = capturecheck.kind(doc)
 +	if kind == "agent" then
-+		return #capturecheck.check(doc, {}) == 0
++		return #capturecheck.check(doc, reviews) == 0
 +	end
 +	if kind ~= "user" then
 +		return false
@@ -757,6 +758,7 @@ index 00000000..57ef534b
 +		and has("Interview", "\n### Q1")
 +		and has("Idea review", "\n### Round 1")
 +		and has("Confirmation", "\n%u%l+ %(")
++		and #capturecheck.check(doc, reviews) == 0 -- the gate calls the checker, not a lighter copy (review 008 F1)
 +end
 +
 +-- The agent marker section's text, or nil: `./zn land` compares it between the base and the branch (only
@@ -765,8 +767,16 @@ index 00000000..57ef534b
 +	if not mentions(doc) then
 +		return nil
 +	end
-+	local sec = find((sections(doc)), AGENT)
-+	return if sec then sec.body else nil
++	local secs = sections(doc)
++	local sec = find(secs, AGENT)
++	if not sec then
++		return nil
++	end
++	-- the Scope decision line of the Problem is part of the marker: dropping it breaks the ticket
++	local problem = find(secs, "Problem")
++	local scope = problem ~= nil
++		and string.find("\n" .. problem.body, "\n" .. capturecheck.SCOPE_LINE .. "\n", 1, true) ~= nil
++	return sec.body .. (if scope then "\n[scope line present]" else "")
 +end
 +
 +-- True when the record's Confirmation holds a `Confirmed (…)` line (not only an Unconfirmed one).
@@ -943,7 +953,7 @@ index 76fd5265..a758bdca 100644
  	end
  	if first == "vet" then
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index fffb4027..a33452ce 100644
+index fffb4027..02cca274 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -3,6 +3,8 @@
@@ -1048,7 +1058,7 @@ index fffb4027..a33452ce 100644
  			local chosen = ""
  			local root = ""
  			-- c0116: one fresh value, so `release` and the same-claim test never mistake another raft's claim for it
-@@ -1405,6 +1452,28 @@ local function originPaths(): { string }
+@@ -1405,6 +1452,40 @@ local function originPaths(): { string }
  	return paths
  end
  
@@ -1067,7 +1077,19 @@ index fffb4027..a33452ce 100644
 +		return -- an unknown id fails in setStatus with its own message
 +	end
 +	local doc = sh.git({ "show", `origin/main:{p :: string}` })
-+	if capturecut.required(frontOf(doc)) and not capturecheck.satisfies(doc) then
++	-- the raw idea reviews beside the document on origin/main (land carries them in the same commit as the document)
++	local reviews: { [string]: string } = {}
++	local folder = string.match(p :: string, "^(.*)/[^/]+$") :: string
++	local lsed = sh.run("git", { "ls-tree", "--name-only", "origin/main", `{folder}/capture/` })
++	if lsed.ok then
++		for line in string.gmatch(lsed.stdout, "[^\n]+") do
++			local name = string.match(line, "([^/]+)$") :: string
++			if string.match(name, capturecheck.REVIEW) then
++				reviews[name] = sh.git({ "show", `origin/main:{line}` })
++			end
++		end
++	end
++	if capturecut.required(frontOf(doc)) and not capturecheck.satisfies(doc, reviews) then
 +		fail(
 +			`{id} was made after the capture record landed and has neither the record (## Ask (verbatim) … ## Confirmation) nor ## Filed by (agent): continue its capture with the z-ticket skill on this id (steps 0a to 4b, no new issue) or file a ticket from your own finding with ./zn new --filed-by before preparing it`
 +		)
@@ -1077,7 +1099,7 @@ index fffb4027..a33452ce 100644
  -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
  -- `status` and by `stop`'s give-back of a legacy-started raft.
  local function setStatus(id: string, to: string)
-@@ -1638,6 +1707,15 @@ function cmd.status(pos: { string })
+@@ -1638,6 +1719,15 @@ function cmd.status(pos: { string })
  			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
  		)
  	end
@@ -1093,7 +1115,7 @@ index fffb4027..a33452ce 100644
  	setStatus(id, to)
  end
  
-@@ -2224,8 +2302,37 @@ local function captureScope(diff: string, base: string): string?
+@@ -2224,8 +2314,37 @@ local function captureScope(diff: string, base: string): string?
  		if root and rest then
  			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
  		end
@@ -1132,7 +1154,7 @@ index fffb4027..a33452ce 100644
  		end
  		local theirs = sh.run("git", { "show", `{base}:{path}` })
  		local mine = sh.run("git", { "show", `HEAD:{path}` })
-@@ -2251,6 +2358,21 @@ local function captureScope(diff: string, base: string): string?
+@@ -2251,6 +2370,21 @@ local function captureScope(diff: string, base: string): string?
  				end
  			end
  		end

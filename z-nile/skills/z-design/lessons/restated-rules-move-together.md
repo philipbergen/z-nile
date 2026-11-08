@@ -32,3 +32,6 @@ c0172 design review 002 F1: that clone, made with `git clone` of the local check
 **Also:** f0148 design review 002 F3, F4: round 1 changed Behaviour 5 but left the Edge cases' "the lobby stores the best instead", and game-design.md kept "(1 until f0148)" twice.
 
 **Also:** f0148 design review 003 F3: round 2 bounded the lobby's write at 5 s, which made "a later arrival without a new pick starts on level 1" false when the write lands after the claim; the sentence was swept in round 3.
+
+c0260 design review 007 F5: a refute that says "fixed (greps run)" pastes each grep's output and runs the grep the reviewer named, not only the patterns the author chose.
+
