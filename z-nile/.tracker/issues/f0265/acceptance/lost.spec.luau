@@ -1,9 +1,10 @@
 --!strict
--- f0265: a claim whose newest beat is older than the stale limit is stale; the open pull requests then decide: one that
--- names the item parks it, none makes it lost. `lost` and `status` say so and list lost work first. A claim nobody ever
--- beat is "no beat", never lost. Whatever cannot be read (the beats, the pull requests, a malformed beat ref) makes
--- nothing lost and refuses a takeover. A lost preparing claim is taken over by `status <id> preparing`; the old
--- claimant's carried move is then refused. Time is ZN_NOW, honoured only inside a check. Fixture under .cache/f0265-lost.
+-- f0265: a claim whose newest sign of life (its newest beat, else the moment it landed) is older than the stale limit is
+-- stale; the open pull requests then decide: one that names the item (or anything holding its stamp) parks it, none
+-- makes it lost. `lost` and `status` say so and list lost work first. Whatever cannot be read (the beats, the pull
+-- requests, a malformed beat ref, a hung remote) makes nothing lost and refuses a takeover. A lost preparing claim,
+-- an issue's or a raft's, is taken over by `status <id> preparing`; the old claimant's carried move is then refused and
+-- its worktree stops beating. Time is ZN_NOW (honoured only inside a spec run). Fixture under .cache/f0265-lost.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -16,7 +17,9 @@ local h: fakecli.Harness
 local wt, wt2 = "", "" -- two worktrees of the fixture: two terminals
 local T0 = os.time()
 local STALE = heartbeat.STALE
-local LATE = T0 + STALE + 1 -- the first moment a claim that last beat at T0 is stale
+-- a moment when everything claimed at about T0 is stale, whatever the seconds the fixture took to build
+local LATE = T0 + 3 * STALE
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -47,20 +50,30 @@ local function stampOf(path: string): string
 	local text = fixture.git(h.f.origin, { "show", `main:{path}` })
 	return string.match(text, "\nstatus: ([%a%-]+)\n") or error(`{path} has no status on origin`)
 end
-local function beatStamps(): { string }
+local function beatRefs(): { string }
 	local out = {}
 	local refs = fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", "refs/zn/hb/" })
 	for line in string.gmatch(refs, "[^\n]+") do
-		table.insert(out, (string.match(line, "^refs/zn/hb/([%a%-]+)/%d+$")) or line)
+		table.insert(out, line)
 	end
 	return out
 end
-local function issue(id: string, status: string): string
-	return trackerfix.stub(id, id, status)
+local function stampsWithBeats(): { string }
+	local out = {}
+	for _, ref in beatRefs() do
+		table.insert(out, (string.match(ref, "^refs/zn/hb/([%a%-]+)/%d+$")) or ref)
+	end
+	return out
+end
+local function issue(id: string, status: string, raft: string?, design: string?): string
+	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
+	return (string.gsub(doc, "\nraft: \n", `\nraft: {raft or ""}\n`, 1))
 end
 local function lineOf(text: string, id: string): string
 	return string.match(text, `(%f[%w]{id}%f[%W][^\n]*)`) or ""
 end
+local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
+	.. 'check "AC1: ok" true\nfinish\n'
 local P = "pickman/.tracker/issues"
 local GH = [[#!/bin/sh
 if [ "$1" = pr ] && [ "$2" = list ]; then
@@ -70,33 +83,40 @@ if [ "$1" = pr ] && [ "$2" = list ]; then
 fi
 exit 0
 ]]
+-- the git shim: ls-remote fails (lsfail) or hangs (lshang), and every call is counted in <fakes>/lscalls
+local SHIM = [[#!/bin/sh
+if [ "$1" = ls-remote ]; then
+  echo x >> "$FAKE_DIR/lscalls"
+  [ -f "$FAKE_DIR/lsfail" ] && { echo "fatal: fake ls-remote failure" >&2; exit 128; }
+  [ -f "$FAKE_DIR/lshang" ] && sleep 30
+fi
+]]
 
 return t.spec("f0265 lost work", function(it)
-	it("sets up claimable issues, one claimed and never beaten, a done one, and the fakes", function()
+	it("sets up claimable issues, a never-beaten claim, a done one, a prepared raft and the fakes", function()
 		h = fakecli.new("f0265-lost", {
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
 			[`{P}/c0020/c0020.md`] = issue("c0020", "new-a-b-c"),
+			[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
+			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "R0010", "ready"),
+			[`{P}/c0040/check.sh`] = CHECK,
+			["pickman/.tracker/rafts/R0010/R0010.md"] = `---\nid: R0010\ntype: chore\ntitle: Lost\nslug: lost\nsingle: false\nissues: [c0040]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0010\n`,
+			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 			[`{P}/c0050/c0050.md`] = issue("c0050", "preparing-lucky-violet-heron"), -- claimed before beats existed
 			[`{P}/done/c0060/c0060.md`] = issue("c0060", "active-brisk-amber-otter"), -- keeps its claim stamp
 		})
 		fs.writeFile(`{h.bin}/gh`, GH)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
-		local shim = fs.readFile(`{h.bin}/git`)
-		fs.writeFile(
-			`{h.bin}/git`,
-			(
-				string.gsub(
-					shim,
-					"^#!/bin/sh\n",
-					'#!/bin/sh\nif [ "$1" = ls-remote ] && [ -f "$FAKE_DIR/lsfail" ]; then echo "fatal: fake ls-remote failure" >&2; exit 128; fi\n',
-					1
-				)
-			)
-		)
+		local real = fs.readFile(`{h.bin}/git`)
+		fs.writeFile(`{h.bin}/git`, (string.gsub(real, "^#!/bin/sh\n", SHIM, 1)))
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-lost" }), "worktree"), "%s+$", ""))
 		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-lost2" }), "worktree"), "%s+$", ""))
 		must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010")
 		must(zn(wt, { "status", "c0020", "preparing" }, T0), "claim c0020")
+		must(zn(wt, { "new", "raft", "chore", "lostraft", "c0030", "--project", "pickman" }, T0), "new raft")
+		must(zn(h.f.main, { "ready", "R0010" }, T0), "ready R0010") -- readied, nobody starts it
 		-- the done item's old claim has a beat on origin, as one that finished mid-work would
 		fixture.git(
 			h.f.other,
@@ -104,41 +124,57 @@ return t.spec("f0265 lost work", function(it)
 		)
 	end)
 
-	it("nothing is lost while the beats are fresh; the stale limit is inclusive", function()
+	it("nothing is lost while the claims are fresh; the stale limit is inclusive", function()
 		t.expect(zn(h.f.main, { "lost" }, T0 + 60).stdout).toBe("")
 		t.expect(zn(h.f.main, { "lost" }, T0 + STALE).stdout).toBe("")
-		t.expect(has(zn(h.f.main, { "status" }, T0 + STALE).stdout, "lost")).toBe(false)
+		t.expect(has(zn(h.f.main, { "status" }, T0 + STALE).stdout, "[lost")).toBe(false)
 	end)
 
-	it(
-		"a stale claim with no pull request is lost and listed first; a parked one and a beatless one are not lost",
-		function()
-			fs.writeFile(
-				`{h.fakes}/prs.json`,
-				'[{"title":"tracker: prep c0020 Something","headRefName":"prep-something"}]'
-			)
-			local lost = must(zn(h.f.main, { "lost" }, LATE), "lost")
-			t.expect(string.match(lost, "^c0010 preparing %d+m\n$") ~= nil).toBe(true) -- one line: id, state, minutes
-			local listing = must(zn(h.f.main, { "status" }, LATE), "status")
-			local first = string.match(listing, "^[^\n]+") or ""
-			t.expect(string.sub(first, 1, 5)).toBe("c0010") -- lost work is listed first
-			t.expect(has(first, "[lost ")).toBe(true)
-			t.expect(has(lineOf(listing, "c0020"), "[parked]")).toBe(true)
-			t.expect(has(lineOf(listing, "c0050"), "[no beat]")).toBe(true) -- never beaten: not lost, but not hidden
-			t.expect(has(lineOf(listing, "c0050"), "lost")).toBe(false)
-			t.expect(has(listing, "c0060")).toBe(false) -- a done item keeps its stamp and is never a claim
-			-- a dispatcher waiting on the user's answer (questions.md in its run state) parks the claim too
-			fs.writeDir(`{h.f.main}/.cache/dispatch/c0010`)
-			fs.writeFile(`{h.f.main}/.cache/dispatch/c0010/questions.md`, "## Q1\nWhich scope?\n")
-			t.expect(has(lineOf(zn(h.f.main, { "status" }, LATE).stdout, "c0010"), "[parked]")).toBe(true)
-			t.expect(zn(h.f.main, { "lost" }, LATE).stdout).toBe("")
-			fs.removeFile(`{h.f.main}/.cache/dispatch/c0010/questions.md`)
+	it("a stale claim with no pull request is lost and listed first; a parked one is not lost", function()
+		fs.writeFile(
+			`{h.fakes}/prs.json`,
+			'[{"title":"tracker: prep c0020 Something","headRefName":"prep-something"}]'
+		)
+		local lost = must(zn(h.f.main, { "lost" }, LATE), "lost")
+		t.expect(string.match(lost, "c0010 preparing %d+m\n") ~= nil).toBe(true) -- one line: id, state, minutes
+		t.expect(has(lost, "c0050 preparing")).toBe(true) -- never beaten: silent since it landed (flatline)
+		t.expect(has(lost, "R0010 active")).toBe(true) -- readied and not started
+		t.expect(has(lost, "c0020")).toBe(false) -- a pull request names it
+		t.expect(has(lost, "c0060")).toBe(false) -- a done item keeps its stamp and is never a claim
+		local listing = must(zn(h.f.main, { "status" }, LATE), "status")
+		local seenOther = false
+		for line in string.gmatch(listing, "[^\n]+") do
+			local isLost = has(line, "[lost ")
+			t.expect(isLost and seenOther).toBe(false) -- every lost line comes before every other line
+			seenOther = seenOther or not isLost
 		end
-	)
+		t.expect(has(lineOf(listing, "c0010"), "[lost ")).toBe(true)
+		t.expect(has(lineOf(listing, "c0020"), "[parked]")).toBe(true)
+		t.expect(has(listing, "c0060")).toBe(false)
+		-- a dispatcher waiting on the user's answer (questions.md in its run state) parks the claim too
+		fs.writeDir(`{h.f.main}/.cache/dispatch/c0010`)
+		fs.writeFile(`{h.f.main}/.cache/dispatch/c0010/questions.md`, "## Q1\nWhich scope?\n")
+		t.expect(has(lineOf(zn(h.f.main, { "status" }, LATE).stdout, "c0010"), "[parked]")).toBe(true)
+		t.expect(has(zn(h.f.main, { "lost" }, LATE).stdout, "c0010")).toBe(false)
+		fs.removeFile(`{h.f.main}/.cache/dispatch/c0010/questions.md`)
+	end)
+
+	it("a pull request naming only the raft parks the raft and its member, which share its stamp", function()
+		fs.writeFile(
+			`{h.fakes}/prs.json`,
+			'[{"title":"R0010: lost raft","headRefName":"R0010-lost"},{"title":"tracker: prep c0020","headRefName":"p"}]'
+		)
+		local lost = must(zn(h.f.main, { "lost" }, LATE), "lost")
+		t.expect(has(lost, "R0010")).toBe(false)
+		t.expect(has(lost, "c0040")).toBe(false)
+		local listing = must(zn(h.f.main, { "status" }, LATE), "status")
+		t.expect(has(lineOf(listing, "R0010"), "[parked]")).toBe(true)
+		t.expect(has(lineOf(listing, "c0040"), "[parked]")).toBe(true)
+	end)
 
 	it("a beat revives a lost claim", function()
 		must(zn(h.f.main, { "beat", "c0010" }, LATE), "beat of a lost claim")
-		t.expect(zn(h.f.main, { "lost" }, LATE + STALE).stdout).toBe("")
+		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE).stdout, "c0010")).toBe(false)
 		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE + 1).stdout, "c0010")).toBe(true)
 	end)
 
@@ -158,31 +194,67 @@ return t.spec("f0265 lost work", function(it)
 		t.expect(beatsGone.ok).toBe(false)
 		t.expect(beatsGone.stdout).toBe("")
 		t.expect(has(beatsGone.stderr, "heartbeat")).toBe(true)
+		local list = zn(h.f.main, { "status" }, LATE + 5 * STALE)
+		t.expect(list.ok).toBe(true) -- the list prints as it always did
+		t.expect(has(list.stderr, "heartbeats unreadable")).toBe(true)
+		t.expect(has(list.stdout, "[lost")).toBe(false)
 		fs.removeFile(`{h.fakes}/lsfail`)
 	end)
 
+	it(
+		"a hung remote is bounded: status returns, warns, and a failed beat attempt is not retried inside the interval",
+		function()
+			fs.writeFile(`{h.fakes}/lshang`, "1")
+			local started = os.time()
+			local r = zn(h.f.main, { "status" }, LATE + 5 * STALE, { ZN_NET_SECONDS = "1" })
+			t.expect(r.ok).toBe(true)
+			t.expect(os.time() - started < 20).toBe(true)
+			t.expect(has(r.stderr, "heartbeats unreadable")).toBe(true)
+			-- in a worktree that holds claims, a command that judges nothing makes one failed attempt per claim and no more
+			local function calls(): number
+				local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
+				return #string.gsub(text, "[^x]", "")
+			end
+			local before = calls()
+			must(
+				zn(wt, { "lessons", "--check" }, LATE + 6 * STALE, { ZN_NET_SECONDS = "1" }),
+				"lessons in the worktree"
+			)
+			local first = calls()
+			t.expect(first > before).toBe(true)
+			must(
+				zn(wt, { "lessons", "--check" }, LATE + 6 * STALE + 10, { ZN_NET_SECONDS = "1" }),
+				"lessons again"
+			)
+			t.expect(calls()).toBe(first) -- inside the interval: no new attempt
+			fs.removeFile(`{h.fakes}/lshang`)
+		end
+	)
+
 	it("a takeover is refused for a live claim, a parked one, and whenever the answer is unknown", function()
-		local live = zn(wt2, { "status", "c0010", "preparing" }, LATE + 10)
+		must(zn(h.f.main, { "beat", "c0010" }, LATE + 6 * STALE), "keep c0010 alive")
+		local live = zn(wt2, { "status", "c0010", "preparing" }, LATE + 6 * STALE + 10)
 		t.expect(live.ok).toBe(false)
 		t.expect(has(live.stderr, "is preparing on origin/main")).toBe(true)
 		t.expect(has(live.stderr, "heartbeat")).toBe(true)
-		local parked = zn(wt2, { "status", "c0020", "preparing" }, LATE + 5 * STALE)
+		local parked = zn(wt2, { "status", "c0020", "preparing" }, LATE + 9 * STALE)
 		t.expect(parked.ok).toBe(false)
 		t.expect(has(parked.stderr, "parked")).toBe(true)
 		-- unknown: pull requests unreadable, beats unreadable, a malformed beat ref on origin
+		local at = LATE + 9 * STALE
 		fs.writeFile(`{h.fakes}/ghfail`, "1")
-		t.expect(zn(wt2, { "status", "c0010", "preparing" }, LATE + 5 * STALE).ok).toBe(false)
+		t.expect(zn(wt2, { "status", "c0010", "preparing" }, at).ok).toBe(false)
 		fs.removeFile(`{h.fakes}/ghfail`)
 		fs.writeFile(`{h.fakes}/lsfail`, "1")
-		local blind = zn(wt2, { "status", "c0010", "preparing" }, LATE + 5 * STALE)
+		local blind = zn(wt2, { "status", "c0010", "preparing" }, at)
 		t.expect(blind.ok).toBe(false)
 		t.expect(has(blind.stderr, "heartbeat")).toBe(true)
 		fs.removeFile(`{h.fakes}/lsfail`)
 		fixture.git(h.f.other, { "push", "-q", "origin", "HEAD:refs/zn/hb/garbage" })
-		local bad = zn(wt2, { "status", "c0010", "preparing" }, LATE + 5 * STALE)
+		local bad = zn(wt2, { "status", "c0010", "preparing" }, at)
 		t.expect(bad.ok).toBe(false)
 		t.expect(has(bad.stderr, "refs/zn/hb/garbage")).toBe(true)
-		local still = zn(h.f.main, { "lost" }, LATE + 5 * STALE) -- the lost claim is still listed, the ref named
+		local still = zn(h.f.main, { "lost" }, at) -- the lost claim is still listed, the ref named
 		t.expect(has(still.stdout, "c0010")).toBe(true)
 		t.expect(has(still.stderr, "refs/zn/hb/garbage")).toBe(true)
 		fixture.git(h.f.other, { "push", "-q", "origin", ":refs/zn/hb/garbage" })
@@ -191,27 +263,43 @@ return t.spec("f0265 lost work", function(it)
 	it(
 		"a lost claim is taken over with a fresh stamp, a first beat, and the old claim's beats pruned",
 		function()
+			local at = LATE + 9 * STALE
 			local before = stampOf(`{P}/c0010/c0010.md`)
-			must(zn(wt2, { "status", "c0010", "preparing" }, LATE + 5 * STALE), "takeover of a lost claim")
+			must(zn(wt2, { "status", "c0010", "preparing" }, at), "takeover of a lost claim")
 			local after = stampOf(`{P}/c0010/c0010.md`)
 			t.expect(after ~= before).toBe(true)
-			local stamps = beatStamps()
+			local stamps = stampsWithBeats()
 			t.expect(table.find(stamps, after) ~= nil).toBe(true)
 			t.expect(table.find(stamps, before)).toBe(nil)
 		end
 	)
 
-	it("the old claimant's carried move to prepared is refused once its claim was taken over", function()
-		local doc = `{wt}/{P}/c0010/c0010.md`
-		must(zn(wt, { "sync" }, nil), "sync")
-		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "design: draft", "design: ready")))
-		local r = zn(wt, { "status", "c0010", "prepared" }, LATE + 5 * STALE)
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "taken over")).toBe(true)
+	it("a lost rafting claim is taken over the same way, its member following", function()
+		local at = LATE + 9 * STALE
+		local listing = must(zn(h.f.main, { "status" }, at), "status")
+		local rid = string.match(listing, "(R%d+) preparing") or error("no rafting claim in the status list")
+		local doc = `pickman/.tracker/rafts/{rid}/{rid}.md`
+		local before = stampOf(doc)
+		must(zn(wt2, { "status", rid, "preparing" }, at), "takeover of a rafting claim")
+		local after = stampOf(doc)
+		t.expect(after ~= before).toBe(true)
+		t.expect(stampOf(`{P}/c0030/c0030.md`)).toBe(after)
+		t.expect(table.find(stampsWithBeats(), after) ~= nil).toBe(true)
 	end)
 
-	it("ZN_NOW is ignored outside a spec run", function()
-		local r = zn(h.f.main, { "lost" }, LATE + 50 * STALE, { PICKMAN_FENCE_SPECS = "" })
-		t.expect(r.stdout).toBe("")
+	it("the old claimant's carried move is refused, and its worktree stops beating what it lost", function()
+		local at = LATE + 9 * STALE
+		local doc = `{wt}/{P}/c0010/c0010.md`
+		must(zn(wt, { "sync" }, at), "sync")
+		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "design: draft", "design: ready")))
+		local r = zn(wt, { "status", "c0010", "prepared" }, at)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "taken over")).toBe(true)
+		-- an interval later its autobeat sees another stamp on origin: it drops the entry and writes no beat
+		local taken = stampOf(`{P}/c0010/c0010.md`)
+		must(zn(wt, { "lessons", "--check" }, at + 2 * STALE), "a command in the old worktree")
+		for _, ref in beatRefs() do
+			t.expect(ref == `refs/zn/hb/{taken}/{at + 2 * STALE}`).toBe(false)
+		end
 	end)
 end)

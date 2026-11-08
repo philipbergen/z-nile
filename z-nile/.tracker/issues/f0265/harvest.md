@@ -16,3 +16,16 @@
 - design-review-001 F15: z-design/status-labels-need-a-tracker-fact
 - design-review-001 F16: z-design/specify-every-named-artifact
 - design-review-001 F17: one-off: experiment commands and the prototype were not recorded in the draft
+- design-review-002 F1: zz-arch/automatic-effects-have-an-end-and-a-subject-check, z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F2: zz-test/future-dated-fixtures-and-whole-output-assertions, zz-test/background-seeds-meet-later-assertions
+- design-review-002 F3: zz-test/future-dated-fixtures-and-whole-output-assertions, zz-test/specs-set-host-markers-explicitly
+- design-review-002 F4: z-design/liveness-names-held-not-worked-states
+- design-review-002 F5: zz-arch/lock-reads-live-state
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: zz-test/pin-fail-safes-where-they-act
+- design-review-002 F8: zz-test/specs-set-host-markers-explicitly
+- design-review-002 F9: one-off: the prep prototype was not strict; promote-check now run with it
+- design-review-002 F10: zz-test/kill-mutants-where-the-value-is-built
+- design-review-002 F11: z-design/accepted-risks-checked-and-decided
+- design-review-002 F12: z-design/instructions-runnable-where-they-run
+- note f0265 prep: the user reversed Q4 ("flatline") after round 2 had reviewed the "heartless" reading, and the capture was rewritten on an unlanded branch (c0265) with a new wording ("pushed to main"): z-design/never-narrow-captured-scope

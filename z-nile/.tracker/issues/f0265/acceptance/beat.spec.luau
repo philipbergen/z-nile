@@ -21,10 +21,13 @@ local T0 = os.time()
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
-local function zn(cwd: string, args: { string }, now: number?): fixture.Result
+local function zn(cwd: string, args: { string }, now: number?, extra: { [string]: string }?): fixture.Result
 	local env: { [string]: string } = {}
 	if now then
 		env.ZN_NOW = tostring(now)
+	end
+	for k, v in (extra or {}) :: { [string]: string } do
+		env[k] = v
 	end
 	return fixture.exec(cwd, "bash", { "scripts/tracker.sh", table.unpack(args) }, { env = env })
 end
@@ -130,15 +133,23 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 	end)
 
 	it("any ./zn command in a worktree that holds a claim beats it once an interval has passed", function()
-		must(zn(wt, { "status", "c0010" }, T0 + 1000), "status in the worktree") -- last beat from here: T0
-		local newest = 0
-		for _, b in beats() do
-			newest = math.max(newest, b.epoch)
+		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
+		local function mine(): { number }
+			local out = {}
+			for _, b in beats() do
+				if b.stamp == stamp then
+					table.insert(out, b.epoch)
+				end
+			end
+			return out
 		end
-		t.expect(newest).toBe(T0 + 1000)
+		must(zn(wt, { "status", "c0010" }, T0 + 1000), "status in the worktree") -- its last beat from here: T0
+		t.expect(mine()).toEqual({ T0 + 1000 })
 		must(zn(wt, { "status", "c0010" }, T0 + 1100), "status again, inside the interval")
-		t.expect(#beats()).toBe(1)
-		t.expect(beats()[1].epoch).toBe(T0 + 1000) -- no second push inside the interval
+		t.expect(mine()).toEqual({ T0 + 1000 }) -- no second push inside the interval
+		-- the main checkout holds no work: a command there beats nothing, however old the last beat
+		must(zn(h.f.main, { "status", "c0010" }, T0 + 5000), "status in the main checkout")
+		t.expect(mine()).toEqual({ T0 + 1000 })
 	end)
 
 	it("a beat never deletes the young beat of a claim this checkout has not fetched yet", function()
@@ -173,18 +184,20 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 		t.expect(found).toBe(true)
 	end)
 
-	it("--watch refuses to run outside ./zn run, and under it ends before its bound after beating", function()
-		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil)
+	it("--watch refuses without a bound, and under ./zn run beats until just before it", function()
+		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil, { ZN_BOUNDED_DEADLINE = "" })
 		t.expect(refused.ok).toBe(false)
 		t.expect(has(refused.stderr, "./zn run")).toBe(true)
+		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
 		local started = os.time()
-		local r = fixture.exec(wt, "bash", { "scripts/tracker.sh", "beat", "c0010", "--watch" }, {
-			env = { ZN_BOUNDED_DEADLINE = tostring(started + 5), ZN_BEAT_EVERY = "1" },
+		local r = zn(wt, { "beat", "c0010", "--watch" }, nil, {
+			ZN_BOUNDED_DEADLINE = tostring(started + 6),
+			ZN_BEAT_EVERY = "1",
 		})
 		t.expect(r.ok).toBe(true) -- it stops itself before the bound kills it
 		local newest = 0
 		for _, b in beats() do
-			if has(b.stamp, "") then
+			if b.stamp == stamp and b.epoch <= os.time() then -- real-clock beats of this claim only
 				newest = math.max(newest, b.epoch)
 			end
 		end

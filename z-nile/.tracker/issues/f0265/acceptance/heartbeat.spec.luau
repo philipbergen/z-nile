@@ -11,8 +11,9 @@ local C = "preparing-lucky-violet-heron"
 local D = "preparing-mellow-badger-jolly"
 local NOW = 1800000000
 
-local function claim(id: string, stamp: string, match: { string }?)
+local function claim(id: string, stamp: string, since: number?, match: { string }?)
 	return {
+		since = since or NOW - 99999,
 		id = id,
 		state = if string.sub(stamp, 1, 6) == "active" then "active" else "preparing",
 		stamp = stamp,
@@ -77,20 +78,25 @@ return t.spec("f0265 heartbeat rules", function(it)
 		local v = heartbeat.judge(claims, beats, NOW)[1]
 		t.expect(v.kind).toBe("live")
 		t.expect(v.silent).toBe(10)
-		-- a beat of an earlier claim of the same item (its old stamp) keeps nothing alive, and proves nothing either
-		t.expect(heartbeat.judge(claims, { beat(C, NOW) }, NOW)[1].kind).toBe("unbeaten")
+		-- a beat of an earlier claim of the same item (its old stamp) keeps nothing alive
+		t.expect(heartbeat.judge(claims, { beat(C, NOW) }, NOW)[1].kind).toBe("stale")
 	end)
 
-	it("a claim that never had a beat is unbeaten, never stale, however old", function()
-		local v = heartbeat.judge({ claim("f0010", A) }, {}, NOW + 10 * heartbeat.STALE)[1]
-		t.expect(v.kind).toBe("unbeaten")
-		t.expect(v.silent).toBe(nil)
-		t.expect(heartbeat.settle({ v }, {})[1].kind).toBe("unbeaten") -- settling does not turn it lost
-	end)
+	it(
+		"a claim nobody ever beat is silent since it landed, so it turns lost on the same clock (flatline)",
+		function()
+			local fresh = heartbeat.judge({ claim("f0010", A, NOW - 60) }, {}, NOW)[1]
+			t.expect(fresh.kind).toBe("live")
+			t.expect(fresh.silent).toBe(60)
+			local old = heartbeat.judge({ claim("f0010", A, NOW - heartbeat.STALE - 1) }, {}, NOW)[1]
+			t.expect(old.kind).toBe("stale")
+			t.expect(heartbeat.settle({ old }, {})[1].kind).toBe("lost")
+		end
+	)
 
 	it("a beat dated past the skew allowance is ignored, one near it reads as now", function()
 		local claims = { claim("f0010", A) }
-		t.expect(heartbeat.judge(claims, { beat(A, NOW + heartbeat.SKEW + 1) }, NOW)[1].kind).toBe("unbeaten")
+		t.expect(heartbeat.judge(claims, { beat(A, NOW + heartbeat.SKEW + 1) }, NOW)[1].kind).toBe("stale")
 		local v = heartbeat.judge(claims, { beat(A, NOW + heartbeat.SKEW) }, NOW)[1]
 		t.expect(v.kind).toBe("live")
 		t.expect(v.silent).toBe(0)
@@ -118,7 +124,7 @@ return t.spec("f0265 heartbeat rules", function(it)
 	it("a PR parks the claims whose item id it names, in its title or its branch, whole ids only", function()
 		local claims = {
 			claim("c0010", A),
-			claim("R0010", B, { "R0010", "c0040", "c0050" }),
+			claim("R0010", B, nil, { "R0010", "c0040", "c0050" }),
 			claim("c0060", C),
 			claim("c0070", D),
 		}
@@ -151,7 +157,7 @@ return t.spec("f0265 heartbeat rules", function(it)
 		for _, v in heartbeat.order(verdicts) do
 			table.insert(ids, v.id)
 		end
-		t.expect(ids).toEqual({ "c0020", "c0040", "c0030", "c0010", "c0050" })
+		t.expect(ids).toEqual({ "c0050", "c0020", "c0040", "c0030", "c0010" }) -- c0050 never beat: silent longest
 	end)
 
 	it("a new beat deletes the older beats of its stamp and long-unclaimed ones, and nothing else", function()
@@ -186,4 +192,44 @@ return t.spec("f0265 heartbeat rules", function(it)
 			t.expect(ahead.delete).toEqual({ heartbeat.refName(A, NOW) })
 		end
 	)
+
+	it("a PR parks a stamp: every item holding it is parked, from a PR that names only the raft", function()
+		local raft = claim("R0010", B, nil, { "R0010", "c0040" })
+		local member = claim("c0040", B, nil, { "c0040" })
+		local other = claim("c0070", A)
+		local parked = heartbeat.parkedBy(
+			{ { title = "R0010: the raft", head = "R0010-thing" } },
+			{ raft, member, other }
+		)
+		t.expect(parked.R0010).toBe(true)
+		t.expect(parked.c0040).toBe(true) -- shares the raft's stamp
+		t.expect(parked.c0070).toBe(nil)
+		-- a dispatcher run state under the raft's id parks the same stamp
+		local viaRun = heartbeat.parkedBy({}, { raft, member }, { R0010 = true })
+		t.expect(viaRun.c0040).toBe(true)
+	end)
+
+	it("the clock is ZN_NOW only inside a spec run", function()
+		t.expect(heartbeat.clock({ ZN_NOW = "5", PICKMAN_FENCE_SPECS = "1" }, 100)).toBe(5)
+		t.expect(heartbeat.clock({ ZN_NOW = "5" }, 100)).toBe(100)
+		t.expect(heartbeat.clock({ ZN_NOW = "5", PICKMAN_FENCE_SPECS = "" }, 100)).toBe(100)
+		t.expect(heartbeat.clock({ ZN_NOW = "soon", PICKMAN_FENCE_SPECS = "1" }, 100)).toBe(100)
+		t.expect(heartbeat.clock({ PICKMAN_FENCE_SPECS = "1" }, 100)).toBe(100)
+	end)
+
+	it("a takeover needs an explicit lost verdict judged for the stamp origin still holds", function()
+		t.expect(heartbeat.canTakeOver("lost", A, A)).toBe(true)
+		t.expect(heartbeat.canTakeOver("lost", A, C)).toBe(false) -- restamped since the verdict
+		for _, kind in { "live", "stale", "parked" } do
+			t.expect(heartbeat.canTakeOver(kind, A, A)).toBe(false)
+		end
+	end)
+
+	it("watch beats until the claim's stamp changes or the next tick would pass the bound", function()
+		t.expect(heartbeat.watch(A, A, NOW, NOW + 100, 5)).toBe("beat")
+		t.expect(heartbeat.watch(A, C, NOW, NOW + 100, 5)).toBe("stop-restamped")
+		t.expect(heartbeat.watch(A, nil, NOW, NOW + 100, 5)).toBe("stop-restamped") -- the claim ended
+		t.expect(heartbeat.watch(A, A, NOW + 95, NOW + 100, 5)).toBe("stop-bound")
+		t.expect(heartbeat.watch(A, A, NOW + 94, NOW + 100, 5)).toBe("beat")
+	end)
 end)

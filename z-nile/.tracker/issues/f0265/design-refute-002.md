@@ -1,0 +1,14 @@
+# Refute 002 (f0265): round 2 answered; the user's later answers applied (Q4 "flatline", Q6 "refuse", Q7 "accept")
+
+- F1: fixed: the automatic beat is keyed on a worktree's `.cache/tracker-beats/<id>` entry, never written or read in the main checkout; an entry whose stamp differs from origin's is dropped (takeover, give-back, finish); the epoch advances on failure; `lost`/`status` in the main checkout judge without beating. Docs corrected ("pushes refs, and from a worktree writes an ignored throttle entry"). Cases: lost.spec passes the main-checkout steps by construction; beat.spec checks the main checkout beats nothing; lost.spec checks the old worktree writes no beat for the taker's stamp; a readied unstarted raft is lost. Edge prototype: not built (it is most of the 640 lines); instead the pure module is prototyped and type-clean, the fixtures were run with it (setup and claims succeed, every case fails on an assertion), and the cases were walked by hand against the design. Consequences: a readied raft nobody starts reads lost 15 minutes after `ready`, which is the intended pick.
+- F2: fixed: the case filters by c0010's stamp and also checks the main checkout beats nothing.
+- F3: fixed: the refusal half sets `ZN_BOUNDED_DEADLINE` to empty; the running half filters to the claim's own real-clock beats; the stamp-change stop and the bound are the pure `heartbeat.watch` (cases, mutants run); the failed-tick retry has no branch to test (the loop retries by construction), said in the row.
+- F4: fixed: parking is per stamp (`parkedBy`), a PR naming only the raft parks its members; pure and fixture cases.
+- F5: fixed: `heartbeat.canTakeOver(kind, judgedStamp, originStamp)` called inside the publish callback; pure case; the race itself is `reasoned` (cannot be forced in a blocking fixture).
+- F6: fixed where the fixture allows: rafting-claim takeover (`new raft` then `status <R> preparing`), `new raft` and `ready` beats, the `status` list under a failing `ls-remote`; `fold`/`recombine`/`start` first beats stay `reasoned` (same hook as `new raft`); the dispatcher's failure line is `reasoned` (a beat child that fails needs a second fake, and the line is a warning).
+- F7: fixed: every heartbeat call is killed after `ZN_NET_SECONDS` (default 10) and counts as unreadable; the throttle advances on failure; a case with a hanging `ls-remote` shim.
+- F8: fixed: `heartbeat.clock(env, real)` is pure with its cases; the marker-clearing edge case is removed.
+- F9: fixed: the prototype is `--!strict`, type-clean (`promote-check` with it in place reports nothing).
+- F10: refuted as a missing case: a collision cannot be observed (1 in 13,824); row `reasoned` with that reason; the draw's retry is `status-fresh.spec`'s.
+- F11: fixed: the limit is in the Assumptions list.
+- F12: fixed: the skill bullet says what to do when the hour ends.
