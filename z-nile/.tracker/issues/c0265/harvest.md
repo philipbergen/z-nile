@@ -84,12 +84,11 @@
 - design-review-008 F6: z-design/reasoned-rows-claim-testable-reasons
 - design-review-008 F7: z-design/specify-every-named-artifact
 - note c0265 prep round 9: the answers to round 8 ran the promoted board specs against a guard marker (E9): zz-arch/every-command-effects-name-the-check-flows
-- design-review-009 F1: zz-review/sequestration-reference-not-a-ref, z-design/spec-design-correspondence
+- design-review-009 F1: z-design/proofs-run-only-by-check-are-pinned, zz-review/sequestration-reference-not-a-ref
 - design-review-009 F2: zz-arch/every-command-effects-name-the-check-flows
 - design-review-009 F3: z-design/reasoned-rows-claim-testable-reasons
 - design-review-009 F4: z-design/restated-rules-move-together
 - design-review-009 F5: z-design/prove-specs-pass-on-a-prototype
-- note c0265 prep round 10: a proof only check.sh runs is protected only if check.sh pins it: z-design/spec-design-correspondence
 - design-review-010 F1: z-design/confirm-overrides-with-a-suite-run, zz-arch/guard-no-is-explicit
 - design-review-010 F2: z-design/restated-rules-move-together
-- design-review-010 F3: one-off: the round-9 lesson candidate was mapped to an existing lesson and not yet written as a note
+- design-review-010 F3: z-design/proofs-run-only-by-check-are-pinned

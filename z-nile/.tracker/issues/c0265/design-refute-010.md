@@ -1,0 +1,5 @@
+# Refute 010 (c0265): round 10 answered (the user: "fix it and run round 11")
+
+- F1 (high): fixed: `./zn status` refuses in a protected checkout exactly as it does today (`publishing()` is false there), before any fetch; `lost` asks `guarded(true)` before `publishing()`, says so on stderr and exits 0 with nothing on stdout; the board skips its verdict reads. The spec asserts `status` `ok == false` with "protected" in stderr and no `[lost`, `lost` ok with empty stdout, and that neither an `ls-remote` nor a `fetch` ran (the shim now counts fetches too). The Rules row is narrowed and its mutant adds "`status` made to list there (it would fetch)". Consequence: a protected checkout can never list or name lost work, which is the rule; nothing in the gate calls `status` there.
+- F2: fixed: AC3 (document and check.sh) names the protected case for the board, `status` and `lost`; Affected specs says the proofs are pinned.
+- F3: fixed: `z-design/proofs-run-only-by-check-are-pinned` written; harvest.md maps round 9 F1 and round 10 F3 to it and drops the stray note.

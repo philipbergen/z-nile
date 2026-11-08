@@ -105,8 +105,10 @@ if [ "$1" = pr ] && [ "$2" = list ]; then
 fi
 exit 0
 ]]
--- the git shim: ls-remote fails (lsfail) or hangs (lshang), and every call is counted in <fakes>/lscalls
+-- the git shim: ls-remote fails (lsfail) or hangs (lshang); every ls-remote is counted in <fakes>/lscalls and every
+-- fetch in <fakes>/fetchcalls
 local SHIM = [[#!/bin/sh
+if [ "$1" = fetch ]; then echo f >> "$FAKE_DIR/fetchcalls"; fi
 if [ "$1" = ls-remote ]; then
   echo x >> "$FAKE_DIR/lscalls"
   [ -f "$FAKE_DIR/lsfail" ] && { echo "fatal: fake ls-remote failure" >&2; exit 128; }
@@ -260,7 +262,7 @@ return t.spec("c0265 lost work", function(it)
 	end)
 
 	it(
-		"a protected checkout reads no remote: the board carries no verdicts, status shows none, lost says so",
+		"a protected checkout reads no remote: the board carries no verdicts, status refuses before any fetch, lost says so",
 		function()
 			local function calls(): number
 				local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
@@ -273,7 +275,13 @@ return t.spec("c0265 lost work", function(it)
 			)
 			local inherited = process.env.PICKMAN_FENCE_REAL_GIT or ""
 			local listed = if inherited ~= "" then `{inherited}:{common}` else common
-			local before = calls()
+			local function fetches(): number
+				local text = if fs.isFile(`{h.fakes}/fetchcalls`)
+					then fs.readFile(`{h.fakes}/fetchcalls`)
+					else ""
+				return #string.gsub(text, "[^f]", "")
+			end
+			local before, fetchedBefore = calls(), fetches()
 			must(
 				zn(
 					h.f.main,
@@ -290,13 +298,16 @@ return t.spec("c0265 lost work", function(it)
 				end
 			end
 			local listing = zn(h.f.main, { "status" }, LATE, { PICKMAN_FENCE_REAL_GIT = listed })
-			t.expect(listing.ok).toBe(true)
+			-- status refuses in a protected checkout as it does today (publishing() is false there), before any fetch
+			t.expect(listing.ok).toBe(false)
+			t.expect(has(listing.stderr, "protected")).toBe(true)
 			t.expect(has(listing.stdout, "[lost")).toBe(false)
 			local lostHere = zn(h.f.main, { "lost" }, LATE, { PICKMAN_FENCE_REAL_GIT = listed })
 			t.expect(lostHere.ok).toBe(true)
 			t.expect(lostHere.stdout).toBe("")
 			t.expect(has(lostHere.stderr, "protected checkout")).toBe(true)
 			t.expect(calls()).toBe(before) -- no ls-remote: nothing was read from the remote
+			t.expect(fetches()).toBe(fetchedBefore) -- and no fetch either
 		end
 	)
 
