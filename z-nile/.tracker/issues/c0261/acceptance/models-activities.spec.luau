@@ -162,4 +162,23 @@ return t.spec("c0261 a model per activity", function(it)
 			layer("[dispatch]\nwait_minutes = 0\n")
 		end), "wait_minutes")).toBe(true)
 	end)
+
+	it("a fallback is allowed through agent only: on claude or grok it would void the rule, so it is refused (AC2)", function()
+		local function onClaude(): string
+			return errorOf(function()
+				models.resolve({ layer(ORDER .. table_("zz-review", "claude", "claude-opus-5-5", nil, 4, '["claude-sonnet-5-5"]')) }, "zz-review")
+			end)
+		end
+		local function onGrok(): string
+			return errorOf(function()
+				models.resolve({ layer(ORDER .. table_("zz-review", "grok", "grok-4.7", "xhigh", 4, '["grok-4.5"]')) }, "zz-review")
+			end)
+		end
+		t.expect(has(onClaude(), "agent only")).toBe(true)
+		t.expect(has(onGrok(), "agent only")).toBe(true)
+		-- the final-review kinds are the same list for the rule and for the commands that refuse
+		t.expect(has(errorOf(function()
+			m.resolveActivity({ layer(ORDER .. table_("zz-review-idea", "claude", "claude-opus-5-5", nil, 4, '["claude-opus-5-6"]')) }, "zz-review-idea")
+		end), "agent only")).toBe(true)
+	end)
 end)
