@@ -37,3 +37,15 @@
 - design-review-003 F10: z-design/quote-other-preps-before-promising
 - design-review-003 F11: z-design/restated-rules-move-together
 - note the user's answers of 2026-11-08 (agent's ordered list, "Commands refuse"), the first changing the review rule's agent clause, the second adding AC11: z-design/never-narrow-captured-scope, z-design/decided-guesses-rewrite-their-body
+- design-review-004 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-004 F2: z-design/spec-design-correspondence
+- design-review-004 F3: z-design/specify-every-named-artifact
+- design-review-004 F4: z-design/confirm-overrides-with-a-suite-run, z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F5: z-design/new-rules-migrate-existing-work
+- design-review-004 F6: z-design/never-narrow-captured-scope
+- design-review-004 F7: z-design/spec-design-correspondence
+- design-review-004 F8: z-design/specify-every-named-artifact
+- design-review-004 F9: zz-test/pin-fail-safes-where-they-act
+- design-review-004 F10: z-design/restated-rules-move-together
+- design-review-004 F11: one-off: a refusal text that named the design spend line for a code round
+- design-review-004 F12: one-off: bookkeeping slips
