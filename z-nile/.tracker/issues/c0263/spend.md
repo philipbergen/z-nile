@@ -1,4 +1,4 @@
-# Spend: f0263 Ticket provenance
+# Spend: c0263 Ticket provenance
 
 | # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |
 |---|---|---|---|---|---|---|---|---|
