@@ -44,3 +44,6 @@
 - design-review-014 F3: z-design/restated-rules-move-together
 - design-review-014 F4: z-design/restated-rules-move-together
 - design-review-014 F5: z-design/instructions-runnable-where-they-run
+- design-review-015 F1: z-design/design-the-execution-window, zz-test/narrowing-pins-the-whole-file
+- design-review-015 F2: zz-test/no-vacuous-pass
+- design-review-015 F3: z-design/restated-rules-move-together

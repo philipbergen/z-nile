@@ -12,8 +12,8 @@ TIP="${1:-$(git -C "$TOP" ls-remote origin refs/heads/main | cut -f1)}"
 git -C "$TOP" cat-file -e "$TIP^{commit}" || { echo "AC9: main's tip $TIP is not in this repository: fetch origin" >&2; exit 1; }
 # the last commit of main the branch has: its delta is what the patch must explain
 if git -C "$TOP" merge-base --is-ancestor HEAD "$TIP"; then
-	echo "AC9: this branch is already part of main $TIP: nothing left to judge" >&2
-	exit 0
+	echo "AC9: HEAD is already part of main $TIP: there is no branch delta to judge (an unimplemented tree must not pass)" >&2
+	exit 1
 fi
 BASE="$(git -C "$TOP" merge-base HEAD "$TIP")" || { echo "AC9: HEAD and main $TIP share no history" >&2; exit 1; }
 PATCH="$HERE/overrides.patch"

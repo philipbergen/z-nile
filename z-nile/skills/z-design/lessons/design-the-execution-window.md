@@ -17,3 +17,5 @@ R0051 design review 005 F1: f0110 depends on d0151, whose fix lands in the adapt
 **Note** (f0146 design review 001 F4): "whichever of two issues lands second adds it" names no owner and no check. Give a shared piece one owner, a `depends_on` that orders the two, and an acceptance case in the owner.
 
 **Also:** c0118 design review 013 F2: when a design accepts "if main changes file X before the raft, re-prep", search the open items and PRs that change X (`git grep` over `*/.tracker/issues` outside `done/`, `gh pr list`) and name them (c0239 changes another row of `c0172/narrowed.spec`, a file c0118's override pin read whole). A compare of a file to one frozen commit, or to main's tip, is the form to avoid (a code reviewer may not merge main); compare it to the branch's merge-base file plus the reviewed hunks (exact-checks-compare-against-the-merge-base).
+
+**Also:** c0118 design review 015 F1: a check that a file is exactly "base plus these hunks" forbids any other member of the same raft from changing that file; the design names the prepared items that do (search `*/.tracker/issues` outside `done/` for each pinned path) and keeps them out of the raft.
