@@ -83,3 +83,4 @@
 - design-review-008 F5: z-design/spec-design-correspondence
 - design-review-008 F6: z-design/reasoned-rows-claim-testable-reasons
 - design-review-008 F7: z-design/specify-every-named-artifact
+- note c0265 prep round 9: the answers to round 8 ran the promoted board specs against a guard marker (E9): zz-arch/every-command-effects-name-the-check-flows

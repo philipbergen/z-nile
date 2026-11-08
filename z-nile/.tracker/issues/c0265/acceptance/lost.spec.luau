@@ -141,6 +141,9 @@ return t.spec("c0265 lost work", function(it)
 		must(zn(wt, { "status", "c0020", "preparing" }, T0), "claim c0020")
 		must(zn(wt, { "new", "raft", "chore", "lostraft", "c0030", "--project", "pickman" }, T0), "new raft")
 		must(zn(h.f.main, { "ready", "R0010" }, T0), "ready R0010") -- readied, nobody starts it
+		-- c0010 beats once more, so it is silent for less time than c0050 (never beaten) although its id is lower:
+		-- silence order and id order differ, which pins "longest silent first"
+		must(zn(h.f.main, { "beat", "c0010" }, T0 + 600), "a later beat of c0010")
 		-- the done item's old claim has a beat on origin, as one that finished mid-work would
 		fixture.git(
 			h.f.other,
@@ -162,6 +165,8 @@ return t.spec("c0265 lost work", function(it)
 		local lost = must(zn(h.f.main, { "lost" }, LATE), "lost")
 		t.expect(string.match(lost, "c0010 preparing %d+m\n") ~= nil).toBe(true) -- one line: id, state, minutes
 		t.expect(has(lost, "c0050 preparing")).toBe(true) -- never beaten: silent since it landed (flatline)
+		t.expect((string.find(lost, "c0050 ", 1, true) or 0) < (string.find(lost, "c0010 ", 1, true) or 0))
+			.toBe(true) -- longest silent first, against id order
 		t.expect(has(lost, "R0010 active")).toBe(true) -- readied and not started
 		t.expect(has(lost, "c0020")).toBe(false) -- a pull request names it
 		t.expect(has(lost, "c0060")).toBe(false) -- a done item keeps its stamp and is never a claim
@@ -208,11 +213,11 @@ return t.spec("c0265 lost work", function(it)
 			local model = boardModel(out)
 			local c0010 = itemOf(model, "c0010")
 			t.expect(c0010.heartbeat).toBe("lost")
-			-- minutes from each input's own clock: the beat is dated T0, the claim landed a few seconds later
+			-- minutes from each input's own clock: the last beat is dated T0 + 600, the claim landed earlier
 			local landed = tonumber(
 				fixture.git(h.f.origin, { "log", "-1", "--format=%ct", "main", "--", `{P}/c0010/c0010.md` })
 			)
-			t.expect(c0010.minutes).toBe(math.floor((LATE - math.max(landed :: number, T0)) / 60))
+			t.expect(c0010.minutes).toBe(math.floor((LATE - math.max(landed :: number, T0 + 600)) / 60))
 			t.expect(itemOf(model, "c0020").heartbeat).toBe("parked") -- a pull request names it
 			t.expect(itemOf(model, "R0010").heartbeat).toBe("parked") -- a pull request names only the raft
 			t.expect(itemOf(model, "c0070").heartbeat).toBe(nil) -- not claimed: no verdict
@@ -220,6 +225,9 @@ return t.spec("c0265 lost work", function(it)
 			local bucket = model.views.issues["not"]
 			local lostAt, parkedAt = table.find(bucket, "c0050") or 0, table.find(bucket, "c0020") or 0
 			t.expect(lostAt > 0 and parkedAt > 0 and lostAt < parkedAt).toBe(true)
+			-- and longest silent first among the lost: c0050 (silent longest) before c0010 although its id is higher
+			local firstAt, secondAt = table.find(bucket, "c0050") or 0, table.find(bucket, "c0010") or 0
+			t.expect(firstAt > 0 and secondAt > 0 and firstAt < secondAt).toBe(true)
 			-- pull requests that cannot be read: stale, shown as unconfirmed, never lost
 			fs.writeFile(`{h.fakes}/ghfail`, "1")
 			must(
@@ -248,12 +256,45 @@ return t.spec("c0265 lost work", function(it)
 		t.expect(itemOf(model, "c0010").heartbeat).toBe("lost")
 	end)
 
+	it("a board built in a protected checkout carries no verdicts and reads no remote", function()
+		local function calls(): number
+			local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
+			return #string.gsub(text, "[^x]", "")
+		end
+		local common = string.gsub(
+			fixture.git(h.f.main, { "rev-parse", "--path-format=absolute", "--git-common-dir" }),
+			"%s+$",
+			""
+		)
+		local inherited = process.env.PICKMAN_FENCE_REAL_GIT or ""
+		local listed = if inherited ~= "" then `{inherited}:{common}` else common
+		local before = calls()
+		must(
+			zn(
+				h.f.main,
+				{ "board", "--out", ".cache/board-guarded.html", "-O" },
+				LATE,
+				{ PICKMAN_FENCE_REAL_GIT = listed }
+			),
+			"board"
+		)
+		local model = boardModel(`{h.f.main}/.cache/board-guarded.html`)
+		for _, list in { model.issues, model.rafts } do
+			for _, item in list do
+				t.expect(item.heartbeat).toBe(nil)
+			end
+		end
+		t.expect(calls()).toBe(before) -- no ls-remote: nothing was read from the remote
+	end)
+
 	it("a failed first beat does not fail the claim", function()
 		fs.writeFile(`{h.fakes}/lsfail`, "1")
 		local r = zn(wt2, { "status", "c0075", "preparing" }, LATE)
 		fs.removeFile(`{h.fakes}/lsfail`)
 		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stderr, "beat")).toBe(true) -- said, not hidden
+		t.expect(has(r.stderr, "beat: c0075:")).toBe(true) -- said, with the item named (not the board's own note)
+		-- and the worktree still keeps the claim alive: the failed attempt wrote its throttle entry
+		t.expect(fs.isFile(`{wt2}/.cache/tracker-beats/c0075`)).toBe(true)
 		t.expect(string.sub(stampOf(`{P}/c0075/c0075.md`), 1, 10)).toBe("preparing-")
 		t.expect(table.find(stampsWithBeats(), stampOf(`{P}/c0075/c0075.md`))).toBe(nil)
 	end)
@@ -411,5 +452,15 @@ return t.spec("c0265 lost work", function(it)
 			t.expect(ref == `refs/zn/hb/{taken}/{at + 2 * STALE}`).toBe(false)
 		end
 		t.expect(#beatRefs()).toBe(before)
+	end)
+
+	it("an entry for a claim that merely ended is dropped with 'claim ended', not 'taken over'", function()
+		local at = LATE + 12 * STALE
+		must(zn(wt2, { "status", "c0070", "new" }, at), "give c0070 back") -- wt2 claimed it earlier and holds an entry
+		local told = zn(wt2, { "lessons", "--tags" }, at + 10)
+		t.expect(told.ok).toBe(true)
+		t.expect(has(told.stderr, "c0070's claim ended")).toBe(true)
+		t.expect(has(told.stderr, "c0070's claim was taken over")).toBe(false)
+		t.expect(fs.isFile(`{wt2}/.cache/tracker-beats/c0070`)).toBe(false)
 	end)
 end)
