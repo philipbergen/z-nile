@@ -70,3 +70,9 @@
 - design-review-006 F8: one-off: duplicated fixture setup left over from splitting a spec
 - design-review-006 F9: z-design/restated-rules-move-together
 - design-review-006 F10: zz-arch/guard-no-is-explicit
+- design-review-007 F1: z-design/prove-specs-pass-on-a-prototype, zz-test/future-dated-fixtures-and-whole-output-assertions
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/trace-every-way-code-runs
+- design-review-007 F4: z-design/confirm-overrides-with-a-suite-run
+- design-review-007 F5: z-design/restated-rules-move-together
+- design-review-007 F6: z-design/reasoned-rows-claim-testable-reasons
