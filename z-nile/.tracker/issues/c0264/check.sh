@@ -22,7 +22,7 @@ no_tiers() {
 no_models() {
 	local t bad=0
 	for t in "Intent" "The idea stage" "The worker" "Models per command and activity" "The full-force review"; do
-		if awk -v t="$t" '$0=="## "t || $0=="### "t {on=1; next} /^##+ /{on=0} on' "$README" | grep -nEi 'sonnet|opus|haiku|composer|xhigh|gpt|gemini|(^|[^0-9.])4\.[0-9]([^0-9]|$)'; then echo "a model name in '$t'"; bad=1; fi
+		if awk -v t="$t" '$0=="## "t || $0=="### "t {on=1; next} /^##+ /{on=0} on' "$README" | grep -nEi 'sonnet|opus|haiku|composer|xhigh|gpt|gemini|kimi-k|grok-[0-9a-z]|deepseek-[a-z0-9]|[a-z]-[0-9]+\.[0-9]|(^|[^0-9.])4\.[0-9]([^0-9]|$)'; then echo "a model name in '$t'"; bad=1; fi
 	done
 	return $bad
 }
@@ -132,7 +132,8 @@ check "AC6: the README states the rules of the worker model, and names no tiers,
 	'Expensive models do every final review;' 'Expensive models do every final review:' \
 	'on an expensive model checks that it says what the person said' \
 	'so the order works around a blocked item without changing any rank' \
-	'even when a person started it without changing its rank' 'It runs on an expensive model in a fresh context' 'limited view' 'stayed on course' 'Off course means a redo' \
+	'even when a person started it without changing its rank' 'It runs on an expensive model in a fresh context' \
+	'It sees no design reviews, refutes, harvests, PR comments or worker notes' 'It keeps one context for the whole raft' 'limited view' 'stayed on course' 'Off course means a redo' \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \

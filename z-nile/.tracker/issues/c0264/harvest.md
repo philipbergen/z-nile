@@ -20,3 +20,9 @@
 - design-review-006 F3: z-design/restated-rules-move-together
 - design-review-006 F4: z-design/spec-design-correspondence
 - design-review-006 F5: z-design/spec-design-correspondence
+- design-review-007 F1: z-design/quote-other-preps-before-promising
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/quote-other-preps-before-promising
+- design-review-007 F4: one-off: a prep path written for the prep location
+- design-review-007 F5: z-design/spec-design-correspondence
+- note re-check the tracker for splits of every labelled id after each merge of main, and back a landing-order claim with a real merge and its conflict count: z-design/quote-other-preps-before-promising
