@@ -39,3 +39,8 @@
 - design-review-013 F3: z-design/declare-what-full-runs-covered
 - design-review-013 F4: z-design/watch-steps-name-their-base
 - design-review-013 F5: z-design/restated-rules-move-together
+- design-review-014 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-014 F2: z-design/exact-checks-compare-against-the-merge-base, zz-review/sequestration-reference-not-a-ref
+- design-review-014 F3: z-design/restated-rules-move-together
+- design-review-014 F4: z-design/restated-rules-move-together
+- design-review-014 F5: z-design/instructions-runnable-where-they-run

@@ -33,7 +33,8 @@ check "AC8: metrics counts review rounds by the board's rule, and the README pic
   lune run tests/run -- "$A/metrics.spec.luau" tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
   tests/acceptance/c0111/metrics-lessons.spec.luau tests/acceptance/c0116/issue-design.spec.luau \
   tests/acceptance/c0116/retired.spec.luau tests/acceptance/c0115/readme.spec.luau
-check "AC9: each of the eight overridden specs is main's file plus the reviewed hunks and nothing else (three-way, fails closed)" \
+echo "AC9 reads origin's main from: $(git ls-remote --get-url origin)" # the URL it will resolve (a redirect is detected here, not prevented)
+check "AC9: each of the eight overridden specs is the merge base's file plus the reviewed hunks and nothing else (fails closed)" \
   bash "$A/overrides.sh"
 check "AC10: real.spec declares every blob and HEAD as its input (c0165)" \
   awk -F '\t' '$1 == "tests/acceptance/c0118/real.spec.luau" && $2 == "*" { n++ } END { exit n != 1 }' tests/inputs.tsv
