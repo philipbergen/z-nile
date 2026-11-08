@@ -1,0 +1,19 @@
+# Harvest: c0263
+- design-review-001 F1: z-design/fixtures-keep-what-commands-need, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2: z-design/spec-design-correspondence, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: z-design/live-defaults-checked-in-their-session
+- design-review-001 F4: zz-test/grammar-cases-from-real-producers, zz-test/pin-call-site-arguments
+- design-review-001 F5: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F6: z-design/required-steps-on-every-path
+- design-review-001 F7: zz-arch/guard-no-is-explicit
+- design-review-001 F8: zz-test/refusals-tested-on-both-sides
+- design-review-001 F9: z-design/design-the-execution-window
+- design-review-001 F10: zz-review/run-the-evidence-you-cite
+- design-review-001 F11: z-design/spec-design-correspondence
+- design-review-001 F12: z-design/restated-rules-move-together
+- design-review-001 F13: one-off: the back-fill took the first rafting commit; the Design now names the newest and the empty-raft case
+- design-review-001 F14: z-design/spec-design-correspondence
+- design-review-001 F15: z-design/declare-what-full-runs-covered
+- design-review-001 F16: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F17: zz-arch/one-reader-per-format
+- note reviewer's candidate lessons: z-design/fixtures-keep-what-commands-need, z-design/live-defaults-checked-in-their-session, zz-test/grammar-cases-from-real-producers
