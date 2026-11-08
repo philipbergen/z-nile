@@ -76,3 +76,10 @@
 - design-review-007 F4: z-design/confirm-overrides-with-a-suite-run
 - design-review-007 F5: z-design/restated-rules-move-together
 - design-review-007 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-008 F1: zz-arch/every-command-effects-name-the-check-flows, z-design/confirm-overrides-with-a-suite-run
+- design-review-008 F2: zz-test/specs-never-burn-real-resources
+- design-review-008 F3: z-design/spec-design-correspondence
+- design-review-008 F4: z-design/required-steps-on-every-path
+- design-review-008 F5: z-design/spec-design-correspondence
+- design-review-008 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-008 F7: z-design/specify-every-named-artifact
