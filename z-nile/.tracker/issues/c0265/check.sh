@@ -30,6 +30,6 @@ check "AC6: the usage text, zz-rules, the skills and the README name the heartbe
   grep -qE "^\| .* \| c0265 \| exists \|" "$R/README.md" || { echo "README roadmap has no c0265 exists row" >&2; exit 1; }
 '
 
-check "AC7: taking over a lost claim discards the old worker's worktree and recovers its work: the old worktree stays at its path marked discarded with its branch renamed, a numbered copy <name>-<n> (smallest free number) on the original branch name continues the pushed branch (the PR head is untouched), the dirty files and unpushed commits are listed and kept, a plain worktree lookup finds the copy, a live, parked, unreadable or claim-less worktree and a fresh copy cannot be taken over this way, and the old process is told it was discarded by every command, the beat included" lune run tests/run -- "$A/discard.spec.luau"
+check "AC7: taking over a lost claim discards the old worker's worktree and recovers its work: the old worktree stays at its path marked discarded with its branch renamed, a numbered copy <name>-<n> (smallest free number) on the original branch name continues the pushed branch (the PR head is untouched), the dirty files and unpushed commits are listed and kept, a plain worktree lookup finds the copy, a live, parked, unreadable or claim-less worktree and a copy a taker is starting in cannot be taken over this way (and by id the worktree is found by its claim), and the old process is told it was discarded by every command, the beat included" lune run tests/run -- "$A/discard.spec.luau"
 
 finish

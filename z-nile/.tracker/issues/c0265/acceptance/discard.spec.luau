@@ -102,7 +102,11 @@ return t.spec("c0265 discarded worktrees", function(it)
 			t.expect(blind.ok).toBe(false)
 			t.expect(has(blind.stderr, "no heartbeat verdict")).toBe(true)
 			fs.removeFile(`{h.fakes}/ghfail`)
-			local none = zn(h.f.main, { "worktree", "prep-fresh", "--takeover" }, LATE) -- prep-fresh holds no claim memory
+			local young = zn(h.f.main, { "worktree", "prep-fresh", "--takeover" }, LATE) -- created by a takeover: a taker is starting in it
+			t.expect(young.ok).toBe(false)
+			t.expect(has(young.stderr, "fresh")).toBe(true)
+			must(zn(h.f.main, { "worktree", "prep-plain" }), "a plain worktree") -- no claim memory, no fresh marker
+			local none = zn(h.f.main, { "worktree", "prep-plain", "--takeover" }, LATE)
 			t.expect(none.ok).toBe(false)
 			t.expect(has(none.stderr, "--item")).toBe(true)
 			t.expect(fs.isDir(dir(`{NAME}-1`))).toBe(false)
@@ -126,7 +130,10 @@ return t.spec("c0265 discarded worktrees", function(it)
 			-- nothing is lost: the old worktree keeps its dirty file and its unpushed commit, and the message says so
 			t.expect(fs.isFile(`{dir(NAME)}/pickman/dirty.txt`)).toBe(true)
 			t.expect(fs.isFile(`{dir(NAME)}/pickman/unpushed.txt`)).toBe(true)
-			t.expect(has(r.stderr, NAME)).toBe(true)
+			t.expect(has(r.stderr, `discarded worktree: {dir(NAME)}`)).toBe(true)
+			local upstream =
+				fixture.exec(h.f.main, "git", { "config", "--get", `branch.{NAME}-discarded-1.remote` })
+			t.expect(trim(upstream.stdout)).toBe("") -- no upstream: a bare push from the discarded worktree cannot move the PR head
 			t.expect(has(r.stderr, "dirty.txt")).toBe(true)
 			t.expect(has(r.stderr, "unpushed work")).toBe(true)
 			-- a plain lookup finds the copy, never the discarded worktree
@@ -160,7 +167,7 @@ return t.spec("c0265 discarded worktrees", function(it)
 			must(zn(dir(`{NAME}-1`), { "status", "c0010", "preparing" }, LATE), "the takeover claim")
 			t.expect(fs.isFile(`{dir(`{NAME}-1`)}/.cache/fresh`)).toBe(false) -- it holds claim memory now
 			local busy = zn(h.f.main, { "busy", "pickman" }, LATE)
-			t.expect(has(busy.stdout .. busy.stderr, NAME)).toBe(true)
+			t.expect(has(busy.stdout .. busy.stderr, `{NAME}-discarded-1`)).toBe(true) -- its renamed branch holds the unpushed commit
 		end
 	)
 
@@ -168,7 +175,7 @@ return t.spec("c0265 discarded worktrees", function(it)
 		"the next takeover discards the copy and numbers the new one -2, leaving the first discarded worktree alone",
 		function()
 			local again = LATE + 3 * STALE
-			local r = zn(h.f.main, { "worktree", NAME, "--takeover" }, again)
+			local r = zn(h.f.main, { "worktree", "--takeover", "c0010" }, again) -- by id: found by its claim
 			must(r, "second takeover")
 			t.expect(trim(r.stdout)).toBe(dir(`{NAME}-2`))
 			t.expect(branchOf(dir(`{NAME}-2`))).toBe(NAME)

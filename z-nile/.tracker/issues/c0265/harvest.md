@@ -134,3 +134,12 @@
 - design-review-015 F9: z-design/restated-rules-move-together
 - design-review-015 F10: z-design/reasoned-rows-claim-testable-reasons
 - design-review-015 F11: one-off: small gaps listed in the review
+- design-review-016 F1: z-design/accepted-risks-checked-and-decided, z-design/restated-rules-move-together
+- design-review-016 F2: z-design/new-rules-migrate-existing-work
+- design-review-016 F3: z-design/restated-rules-move-together
+- design-review-016 F4: z-design/required-steps-on-every-path
+- design-review-016 F5: z-design/trace-every-way-code-runs
+- design-review-016 F6: zz-test/kill-mutants-where-the-value-is-built
+- design-review-016 F7: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-016 F8: zz-arch/guard-no-is-explicit
+- design-review-016 F9: one-off: small gaps listed in the review
