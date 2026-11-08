@@ -20,6 +20,14 @@
 | 16 | 2026-11-08 04:37 | design-refute-004 | 0 | 0 | 12.0 | spend | design-review |  |  |
 | 17 | 2026-11-08 04:47 | design-review-004 | 0 | 0 | 9.0 | spend | design-review |  |  |
 | 18 | 2026-11-08 04:47 | design-refute-004 | 0 | 0 | 8.0 | spend | design-review |  |  |
+| 19 | 2026-11-08 05:07 | design-review-005 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 20 | 2026-11-08 05:07 | design-refute-005 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 21 | 2026-11-08 05:19 | design-review-006 | 0 | 0 | 10.0 | spend | design-review |  |  |
+| 22 | 2026-11-08 05:19 | design-refute-006 | 0 | 0 | 20.0 | spend | design-review |  |  |
+| 23 | 2026-11-08 05:30 | design-review-007 | 0 | 0 | 10.0 | spend | design-review |  |  |
+| 24 | 2026-11-08 05:30 | design-refute-007 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 25 | 2026-11-08 05:37 | design-review-008 | 0 | 0 | 9.0 | spend | design-review |  |  |
+| 26 | 2026-11-08 05:37 | design-refute-008 | 0 | 0 | 12.0 | spend | design-review |  |  |
 
-**Total:** +156 / -3 lines, 208.0 agent-minutes, 418177 tokens over 18 records
-<!-- totals: added=156 removed=3 minutes=208.0 records=18 tokens=418177 -->
+**Total:** +156 / -3 lines, 318.0 agent-minutes, 418177 tokens over 26 records
+<!-- totals: added=156 removed=3 minutes=318.0 records=26 tokens=418177 -->
