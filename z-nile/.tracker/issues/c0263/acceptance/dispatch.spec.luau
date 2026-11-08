@@ -232,14 +232,10 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 			fakecli.clear(h)
 			local early = cut(50)
 			fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(50, early))
-			trackerfix.elsewhere(
-				h.f,
-				{
-					[p96] = fixture.git(h.f.origin, { "show", `main:{p96}` })
-						.. "\n| 2026-11-08 09:30 | ranked | human:Ann | rank=3 |\n",
-				},
-				"a rank on c0096"
-			)
+			trackerfix.elsewhere(h.f, {
+				[p96] = fixture.git(h.f.origin, { "show", `main:{p96}` })
+					.. "\n| 2026-11-08 09:30 | ranked | human:Ann | rank=3 |\n",
+			}, "a rank on c0096")
 			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 			local stale = zn({ "dispatch", "c0096" })
 			t.expect(stale.code).toBe(4)

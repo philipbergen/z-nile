@@ -27,10 +27,7 @@ local f: trackerfix.Fixture
 local W1, W2 = "", ""
 
 local function env(extra: { [string]: string }?): { [string]: string }
-	local out: { [string]: string } = {}
-	for k, v in HUMAN do
-		out[k] = v
-	end
+	local out: { [string]: string } = table.clone(HUMAN)
 	local more: { [string]: string } = extra or {}
 	for k, v in more do
 		out[k] = v
@@ -187,16 +184,12 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 			refused({ "approve", "c0011" }, "outside")
 			fixture.git(W1, { "checkout", "--", `{ISSUES}/c0012/c0012.md` })
 			-- no git identity: the human cannot be named
-			refused(
-				{ "approve", "c0011" },
-				"identity",
-				{
-					GIT_AUTHOR_NAME = "",
-					GIT_AUTHOR_EMAIL = "",
-					GIT_COMMITTER_NAME = "",
-					GIT_COMMITTER_EMAIL = "",
-				}
-			)
+			refused({ "approve", "c0011" }, "identity", {
+				GIT_AUTHOR_NAME = "",
+				GIT_AUTHOR_EMAIL = "",
+				GIT_COMMITTER_NAME = "",
+				GIT_COMMITTER_EMAIL = "",
+			})
 			-- an agent session or a dispatched step is refused whatever it passes: the human must have run it, and the
 			-- refusal tells the user where (their own terminal); there is no option, flag or variable that lets it through
 			local sessions: { { [string]: string } } = {
@@ -302,10 +295,10 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 				"c0017",
 				"without an approval"
 			)
-			local ready = tr(f.main, { "ready", "R0120" })
-			t.expect(ready.ok).toBe(false)
-			t.expect(has(ready.stderr, "c0016")).toBe(true)
-			t.expect(has(ready.stderr, "no longer covers")).toBe(true)
+			local readied = tr(f.main, { "ready", "R0120" })
+			t.expect(readied.ok).toBe(false)
+			t.expect(has(readied.stderr, "c0016")).toBe(true)
+			t.expect(has(readied.stderr, "no longer covers")).toBe(true)
 			t.expect(tip()).toBe(before)
 			t.expect(string.match(onOrigin("pickman/.tracker/rafts/R0110/R0110.md"), "\nstatus: prepared%-"))
 				.toBe("\nstatus: prepared-")

@@ -36,10 +36,7 @@ local f: trackerfix.Fixture
 local W1, W2, W3, W4, W5 = "", "", "", "", ""
 
 local function env(extra: { [string]: string }?): { [string]: string }
-	local out: { [string]: string } = {}
-	for k, v in HUMAN do
-		out[k] = v
-	end
+	local out: { [string]: string } = table.clone(HUMAN)
 	local more: { [string]: string } = extra or {}
 	for k, v in more do
 		out[k] = v
