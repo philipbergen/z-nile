@@ -23,6 +23,7 @@
 | 19 | 2026-11-08 03:01 | design-review-013 | 0 | 0 | 16.0 | spend | design-review | 234311 | claude-opus-5-5 |
 | 20 | 2026-11-08 03:02 | design-review-014 | 0 | 0 | 19.0 | spend | design-review | 238734 | claude-opus-5-5 |
 | 21 | 2026-11-08 03:02 | design-review-015 | 0 | 0 | 13.0 | spend | design-review | 207302 | claude-opus-5-5 |
+| 22 | 2026-11-08 20:08 | c0118: carry the board per project from proto2-c0118 (6bb217fb) | 1245 | 95 | 20.0 | focus | build |  |  |
 
-**Total:** +1676 / -5 lines, 275.4 agent-minutes, 1066279 tokens over 21 records
-<!-- totals: added=1676 removed=5 minutes=275.4 records=21 tokens=1066279 -->
+**Total:** +2921 / -100 lines, 295.4 agent-minutes, 1066279 tokens over 22 records
+<!-- totals: added=2921 removed=100 minutes=295.4 records=22 tokens=1066279 -->
