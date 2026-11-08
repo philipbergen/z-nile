@@ -75,7 +75,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
 - It lets go of a raft only when the raft is blocked.
-- The worker itself runs on a cheap model and never waits on an expensive one.
+- The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to a sharp model) runs on the wait tier.
 - A CLI that cannot read skills gets the same instructions from `./zn work`.
 
 ### Order
@@ -91,7 +91,7 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
 - A worker that holds an item updates a heartbeat on it every 5 minutes, pushed to `main`. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. *captured* (c0265)
 
 ### Autonomous delivery
-Unless something blocks, an item is designed, design-reviewed, rafted, executed, code-reviewed, tested and merged with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the PR is green and regression-free. This replaces c0117's "stops at a merge" gate with the dispatcher merging after its own checks. *captured* (c0252)
+Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and merged with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the PR is green and regression-free. This replaces c0117's "stops at a merge" gate with the dispatcher merging after its own checks. *captured* (c0252)
 
 ### Model tiers
 Each CLI has three models: cheap, sharp and wait. *captured* (c0261)
@@ -163,7 +163,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | provenance: author, approver, unblocker | c0263 | captured |
 | heartbeat and lost work | c0265 | captured |
 
-The worker's tickets (c0248 to c0254 and c0260 to c0265) are designed one at a time with the user; z-raft then groups them, delivered as stacked PR sets, layers merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+The worker's tickets (c0248 to c0254, c0260 to c0263 and c0265) are designed one at a time with the user; z-raft then groups them, delivered as stacked PR sets, layers merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 
 ### Stacked delivery
 The general model (*captured* (c0248); today a raft is one branch and one PR): a raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. Each layer is reviewed and gated on its own diff, and each ticket is worked to completion before the next is picked up, by the same worker, so its context carries over; layers merge bottom-up, each retargeted to `main` as the one below merges. A one-issue raft is a stack of one. A blocked layer stops the layers above it, not the ones below.

@@ -1,0 +1,7 @@
+# Harvest: c0264
+- design-review-001 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-001 F2: z-design/restated-rules-move-together
+- design-review-001 F3: one-off: a paraphrase of the user's rule narrowed it ("never waits on an expensive one" for "don't orchestrate and wait on expensive models")
+- design-review-001 F4: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F5: one-off: an id range counted the issue itself
+- design-review-001 F6: one-off: a mutation runner that writes a tracked file restores it on signals too, and runs through ./zn run

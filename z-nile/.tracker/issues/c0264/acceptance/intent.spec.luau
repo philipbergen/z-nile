@@ -51,14 +51,19 @@ return t.spec("c0264 the README states z-nile's intent", function(it)
 		t.expect((picture :: number) < (intent :: number) and (intent :: number) < (how :: number)).toBe(true)
 	end)
 
-	it("AC2: the intent names the two human stages, the worker, the full-force review, the economy and the names", function()
-		local i = lower(section("Intent"))
-		for _, w in { "idea", "design", "`z-work`", "merge", "full-force", "sharp", "cheap", "wait", "approved" } do
-			if not has(i, w) then
-				error(`## Intent lacks: {w}`, 0)
+	it(
+		"AC2: the intent names the two human stages, the worker, the full-force review, the economy and the names",
+		function()
+			local i = lower(section("Intent"))
+			for _, w in
+				{ "idea", "design", "`z-work`", "merge", "full-force", "sharp", "cheap", "wait", "approved" }
+			do
+				if not has(i, w) then
+					error(`## Intent lacks: {w}`, 0)
+				end
 			end
 		end
-	end)
+	)
 
 	it("AC3: the intent claims nothing as built: it carries no state label", function()
 		local i = section("Intent")
@@ -85,10 +90,23 @@ return t.spec("c0264 the README states z-nile's intent", function(it)
 		end
 	end)
 
-	it("AC5: a worker clears its context and takes the next raft whenever a raft ends, merged or blocked", function()
-		local w = lower(sub("The worker"))
-		t.expect(has(w, "clears its context and picks up the next raft whenever a raft ends")).toBe(true)
-		t.expect(has(w, "merged")).toBe(true)
-		t.expect(has(w, "blocked")).toBe(true)
-	end)
+	it(
+		"AC5: a worker clears its context and takes the next raft whenever a raft ends, merged or blocked",
+		function()
+			-- the rule's parts in one bullet; its exact words are check.sh's (AC6)
+			local found = false
+			for bullet in string.gmatch(lower(sub("The worker")), "\n%- ([^\n]+)") do
+				if
+					has(bullet, "clears")
+					and has(bullet, "context")
+					and has(bullet, "next raft")
+					and has(bullet, "merged")
+					and has(bullet, "blocked")
+				then
+					found = true
+				end
+			end
+			t.expect(found).toBe(true)
+		end
+	)
 end)

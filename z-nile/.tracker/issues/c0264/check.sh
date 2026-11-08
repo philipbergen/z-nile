@@ -88,6 +88,10 @@ truth() {
 	done <<<"$states"
 	return $bad
 }
+# The diagram of How it should work shows the new flow: the interview, the approval, z-work, lost-first claiming, one
+# ticket at a time with the full-force review, and both ways a raft ends (this file owns its words).
+diagram() { sed -n '/^## How it should work/,/^## The five parts/p' "$README" | sed -n '/^```mermaid/,/^```$/p'; }
+pictured() { local d w; d="$(diagram)"; for w in "$@"; do grep -qF -e "$w" <<<"$d" || { echo "diagram lacks: $w"; return 1; }; done; }
 # The README changes only in ## Intent (new) and ## How it should work: with both cut out it equals the branch point's
 # README with its How it should work cut out.
 cut() { awk '/^## (Intent|How it should work)$/{skip=1; next} /^## /{skip=0} !skip'; }
@@ -110,8 +114,12 @@ check "AC6: the README states the rules of the worker model" words \
 	'never orchestrates and never waits' 'limited view' 'stayed on course' 'Off course means a redo' \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
-	'each ticket is worked to completion before the next is picked up, by the same worker'
+	'each ticket is worked to completion before the next is picked up, by the same worker' \
+	'once a person has approved its design'
 check "AC7: every roadmap row and every issue-labelled sentence has the state the tracker shows for its issue" truth
 check "AC8: the README changes only in Intent and How it should work" others
+check "AC9: the workflow diagram shows the interview, the approval, z-work, lost first, one ticket at a time, the full-force review and both ways a raft ends" pictured \
+	'interview' 'idea review' 'approve' 'z-work' 'lost first' 'one ticket at a time' 'full-force review' \
+	'raft merged: clear context' 'raft released: clear context'
 
 finish
