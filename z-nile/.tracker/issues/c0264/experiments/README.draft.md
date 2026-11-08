@@ -84,11 +84,15 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 - Lost work comes first: anything in progress whose heartbeat is stale comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *captured* (c0265)
 - The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
 - z-ticket and z-design append by default. You move things with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A raft takes the best rank of its members. The board shows the stack in order.
+- The board shows lost, parked and stale claims, lost first. *captured* (c0276)
 - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
 ### Claiming across hosts
 A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
-- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. A takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim; the old worker's work is kept, and a numbered copy of it continues the work. *captured* (c0265)
+- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. *captured* (c0265)
+- Agents keep their claims alive without remembering to beat: the claim paths, every `./zn` command in a worktree, long commands and the dispatcher beat. *captured* (c0275)
+- A lost claim is taken over as a normal claim and recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *captured* (c0274)
+- A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *captured* (c0277)
 
 ### Autonomous delivery
 Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and merged with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the PR is green and regression-free. This replaces c0117's "stops at a merge" gate with the dispatcher merging after its own checks. *captured* (c0252)
@@ -130,10 +134,12 @@ A worker never guesses past a wall; it escalates formally. *captured* (c0250)
 - Nothing else stops a worker.
 
 ### Provenance
-Every ticket says who did what to it. *captured* (c0263)
-- Whose idea it was comes from git: the author of the ticket's capture commit.
-- Who confirmed the idea, who approved the design (an explicit step by a person before `prepared`), who set its rank, who rafted it, who unblocked it, each time, and which worker delivered each layer.
-- What git already knows is read from git; only what git cannot tell, such as a person's approval pushed by a bot, is stored. The board shows it.
+Every ticket says who did what to it.
+- The record is kept on the ticket and appended by `./zn record`; what git already knows is read from git and never stored. Who confirmed the idea and who set its rank are recorded in it. *captured* (c0263)
+- `./zn who <id>` prints a ticket's history, oldest first: whose idea it was (the author of the ticket's capture commit), each status change, the merge, and the worker of each delivered layer, read from the ticket's spend rows. *captured* (c0280)
+- The record gets a row, with its actor, when a ticket is unblocked, rafted or delivered. *captured* (c0282)
+- Design approval is an explicit step by a person before `prepared`: `./zn approve <id>` records the person, the design hash and their words, and `prepared` is refused until it has run. *captured* (c0283)
+- The board shows each ticket's provenance, the same entries `./zn who` prints. *captured* (c0284)
 
 ### Trust
 *exists* (c0117).
@@ -159,10 +165,18 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | the capture interview and the idea review | c0260 | captured |
 | a real model for each command and activity | c0261 | captured |
 | the full-force review | c0262 | captured |
-| provenance: author, approver, unblocker | c0263 | captured |
-| heartbeat and lost work | c0265 | captured |
+| provenance: the record, `./zn record` | c0263 | captured |
+| the heartbeat branch, `./zn beat`, lost work | c0265 | captured |
+| take over a lost claim, the old owner told | c0274 | captured |
+| automatic heartbeats | c0275 | captured |
+| the board shows lost work | c0276 | captured |
+| discard and recover a worktree: the numbered copy | c0277 | captured |
+| `./zn who`, the history from git | c0280 | captured |
+| provenance rows: unblocked, rafted, delivered | c0282 | captured |
+| design approval: `./zn approve`, `prepared` refused without it | c0283 | captured |
+| the board shows provenance | c0284 | captured |
 
-The worker's tickets (c0248 to c0254, c0260 to c0263 and c0265) are designed one at a time with the user; z-raft then groups them, delivered as stacked PR sets, layers merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+The worker's tickets (c0248 to c0254, c0260 to c0263, c0265, c0274 to c0277, c0280, c0282, c0283 and c0284) are designed one at a time with the user; z-raft then groups them, delivered as stacked PR sets, layers merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 
 ### Stacked delivery
 The general model (*captured* (c0248); today a raft is one branch and one PR): a raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. Each layer is reviewed and gated on its own diff, and each ticket is worked to completion before the next is picked up, by the same worker, so its context carries over; layers merge bottom-up, each retargeted to `main` as the one below merges. A one-issue raft is a stack of one. A blocked layer stops the layers above it, not the ones below.

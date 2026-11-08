@@ -47,10 +47,14 @@ The worker|c0253
 The worker|c0175
 Order|c0249
 Order|c0265
+Order|c0276
 Order|c0257
 Claiming across hosts|c0254
 Claiming across hosts|-
 Claiming across hosts|c0265
+Claiming across hosts|c0275
+Claiming across hosts|c0274
+Claiming across hosts|c0277
 Autonomous delivery|c0252
 Models per command and activity|c0117
 Models per command and activity|c0261
@@ -59,6 +63,10 @@ Reviews by different models|c0117
 The full-force review|c0262
 Escalation to the human|c0250
 Provenance|c0263
+Provenance|c0280
+Provenance|c0282
+Provenance|c0283
+Provenance|c0284
 Trust|c0117
 Stacked delivery|c0248'
 ROWS='c0117
@@ -78,7 +86,15 @@ c0260
 c0261
 c0262
 c0263
-c0265'
+c0265
+c0274
+c0275
+c0276
+c0277
+c0280
+c0282
+c0283
+c0284'
 # The legend line is the one text exempt from the label scan, word for word; table rows are read by their issue column.
 LEGEND="$(cat "$HERE/legend.txt")"
 truth() {
@@ -127,7 +143,8 @@ check "AC6: the README states the rules of the worker model, and names no tiers,
 	'clears its context and picks up the next raft whenever a raft ends' 'It lets go of a raft only when the raft is blocked' \
 	'marks the raft blocked' 'verbatim' 'every question z-ticket asked with its answer' 'confirms the idea' \
 	'acceptance tests as code' 'a real model for each command and for each activity' 'the cheapest do the waiting' \
-	'Nothing expensive orchestrates or waits' 'a heartbeat branch, not on `main`' 'A takeover deletes the old heartbeat branch' \
+	'Nothing expensive orchestrates or waits' 'a heartbeat branch, not on `main`' 'the takeover deletes the old heartbeat branch' 'its old owner is refused and told' 'Agents keep their claims alive without remembering to beat' \
+	'`./zn who <id>` prints a ticket'"'"'s history, oldest first' '`./zn approve <id>` records the person' 'and `prepared` is refused until it has run' 'the same entries `./zn who` prints' \
 	'a numbered copy of it continues the work' 'it never orchestrates on an expensive one' 'and a person approves it' \
 	'Expensive models do every final review;' 'Expensive models do every final review:' \
 	'on an expensive model checks that it says what the person said' \
@@ -135,7 +152,7 @@ check "AC6: the README states the rules of the worker model, and names no tiers,
 	'even when a person started it without changing its rank' 'It runs on an expensive model in a fresh context' \
 	'It sees no design reviews, refutes, harvests, PR comments or worker notes' 'It keeps one context for the whole raft' 'limited view' 'stayed on course' 'Off course means a redo' \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
-	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
+	'z-raft asks for a raft' 'drag and drop' 'whose idea it was (the author of the ticket'"'"'s capture commit)' 'when a ticket is unblocked, rafted or delivered' 'Design approval is an explicit step by a person before `prepared`' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \
 	'once a person has approved its design' \
 	'giving a rank when a person wants one' 'with no one to answer, the rank stays unset'
