@@ -21,6 +21,7 @@
 | 17 | 2026-11-08 19:22 | R0086: review-001 | 0 | 0 | 7.0 | raft | code-review | 171958 | claude-opus-5-5 |
 | 18 | 2026-11-08 19:23 | R0086: refute-001, harvest, verification log | 11 | 0 | 6.0 | raft | code-review |  |  |
 | 19 | 2026-11-08 19:23 | R0086: addressed during execution | 0 | 0 | 2.0 | raft | deliver |  |  |
+| 20 | 2026-11-08 19:34 | tracker: done R0086 | 0 | 0 | 11.0 | raft | deliver |  |  |
 
-**Total:** +728 / -46 lines, 419.0 agent-minutes, 1349192 tokens over 19 records
-<!-- totals: added=728 removed=46 minutes=419.0 records=19 tokens=1349192 -->
+**Total:** +728 / -46 lines, 430.0 agent-minutes, 1349192 tokens over 20 records
+<!-- totals: added=728 removed=46 minutes=430.0 records=20 tokens=1349192 -->
