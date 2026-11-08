@@ -12,14 +12,14 @@ local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{here}/.cache/c0260-audit`
 local ITEM = "pickman/.tracker/issues/c0900"
 
+local Q1TEXT = "### Q1\nQuestion: restate?\nOptions: approve | correct\nAnswer: approve"
 local function front(design: string): string
 	return `---\nid: c0900\ntype: chore\ntitle: C\nslug: c\ndesign: {design}\nstatus: new-a-b-c\n---\n\n# c0900: C\n\n## Problem\nP\n\n`
 end
 local RECORD = "## Ask (verbatim)\n### Message 2026-11-07\n```\nmore ghosts\n```\n\n## Interview\nINTERVIEW\n\n## Idea\nMore ghosts.\n\n"
 	.. "## Idea review\n### Round 1\n- F1: ask: how many?\n\n## Confirmation\nCONFIRMATION\n\n## Design\n"
 local CONFIRMED = 'Confirmed (user, 2026-11-07) after round 1: "yes"'
-local UNCONFIRMED =
-	"Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
+local UNCONFIRMED = "Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
 local function record(interview: string, confirmation: string): string
 	return (string.gsub(string.gsub(RECORD, "INTERVIEW", interview), "CONFIRMATION", confirmation))
 end
@@ -58,10 +58,7 @@ return t.spec("c0260 audit checks the capture record", function(it)
 		engine.roots(base)
 		write(`{ITEM}/c0900.md`, front("draft") .. "## Design\n")
 		t.expect(captureLines(audit())).toBe("")
-		write(
-			`{ITEM}/c0900.md`,
-			front("draft") .. record("None: unattended, nobody could be asked", UNCONFIRMED)
-		)
+		write(`{ITEM}/c0900.md`, front("draft") .. record(Q1TEXT, UNCONFIRMED))
 		write(`{ITEM}/capture/idea-review-001.md`, REVIEW)
 		t.expect(captureLines(audit())).toBe("")
 	end)
@@ -70,15 +67,12 @@ return t.spec("c0260 audit checks the capture record", function(it)
 		local before = errors(audit())
 		write(`{ITEM}/c0900.md`, front("draft") .. record("None:", UNCONFIRMED))
 		local out = audit()
-		t.expect(has(captureLines(out), "needs the reason")).toBe(true)
+		t.expect(has(captureLines(out), "not an interview")).toBe(true)
 		t.expect(errors(out) > before).toBe(true)
 	end)
 
 	it("a file in capture/ that is not a raw idea review is an error; a hidden file is not", function()
-		write(
-			`{ITEM}/c0900.md`,
-			front("draft") .. record("None: unattended, nobody could be asked", UNCONFIRMED)
-		)
+		write(`{ITEM}/c0900.md`, front("draft") .. record(Q1TEXT, UNCONFIRMED))
 		write(`{ITEM}/capture/.DS_Store`, "junk")
 		t.expect(captureLines(audit())).toBe("")
 		write(`{ITEM}/capture/notes.md`, "mine\n")
@@ -87,27 +81,23 @@ return t.spec("c0260 audit checks the capture record", function(it)
 		t.expect(captureLines(audit())).toBe("")
 	end)
 
-	it(
-		"a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms",
-		function()
-			local unattended = front("reviewed")
-				.. record("None: unattended, nobody could be asked", UNCONFIRMED)
-			write(`{ITEM}/c0900.md`, unattended)
-			t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
-			local confirmed = front("reviewed")
-				.. (
-					string.gsub(
-						record(
-							"None: unattended, nobody could be asked\n### Q1\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
-							UNCONFIRMED .. "\n" .. CONFIRMED
-						),
-						"%- F1: ask: how many%?",
-						"- F1: fixed: asked as Q1"
-					)
+	it("a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms", function()
+		local unattended = front("reviewed") .. record(Q1TEXT, UNCONFIRMED)
+		write(`{ITEM}/c0900.md`, unattended)
+		t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
+		local confirmed = front("reviewed")
+			.. (
+				string.gsub(
+					record(
+						Q1TEXT .. "\n### Q2\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
+						UNCONFIRMED .. "\n" .. CONFIRMED
+					),
+					"%- F1: ask: how many%?",
+					"- F1: fixed: asked as Q2"
 				)
-			write(`{ITEM}/c0900.md`, confirmed)
-			t.expect(captureLines(audit())).toBe("")
-			fs.removeDir(base)
-		end
-	)
+			)
+		write(`{ITEM}/c0900.md`, confirmed)
+		t.expect(captureLines(audit())).toBe("")
+		fs.removeDir(base)
+	end)
 end)

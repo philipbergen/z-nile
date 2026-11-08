@@ -33,3 +33,13 @@
 - design-review-002 F6: z-design/spec-design-correspondence
 - design-review-002 F7: z-design/user-words-parsers-accept-anything
 - design-review-002 F8: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/exemption-markers-refuse-omission
+- design-review-004 F2: z-design/never-narrow-captured-scope
+- design-review-004 F3: z-design/instructions-runnable-where-they-run
+- design-review-004 F4: z-design/run-the-other-rafts-specs
+- design-review-004 F5: z-design/quote-other-preps-before-promising
+- design-review-004 F6: z-design/new-refusals-reach-every-caller
+- design-review-004 F7: z-design/spec-design-correspondence
+- design-review-004 F8: z-design/never-narrow-captured-scope
+- design-review-004 F9: z-design/spec-design-correspondence
+- note review 004's candidates: an identity a rule reads from history must survive renumbering, compaction, merge landings and shallow clones, or the rule reads a mark stored in the item: z-design/exemption-markers-refuse-omission

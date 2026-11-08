@@ -8,4 +8,4 @@ A rule with an exempt class is enforced only if "not exempt and no record" is an
 
 **Why:** c0260 design review 003 F2: an issue with neither the capture record nor the agent-filed marker was `none`, claimable and designable.
 
-**How to apply:** define the cut-over from the landing (git ancestry, not dates), refuse `none` after it at the claim and at the later gate, and fail closed where the history cannot be read.
+**How to apply:** make the cut-over a mark stored in the item when it is created (written only once the rule is in force on the base), refuse a marked item with neither the record nor the marker at the claim and at the later gate, and do not read history for it: an identity read from history breaks under renumbering, compaction, merge-commit landings and shallow clones (c0260 design review 004 F1).

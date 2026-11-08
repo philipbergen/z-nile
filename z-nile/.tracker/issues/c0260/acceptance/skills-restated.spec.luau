@@ -18,21 +18,17 @@ end
 
 return t.spec("c0260 the places that restate the flow agree", function(it)
 	it(
-		"AC8: z-design reads the capture record, keeps the Problem as the scope, and confirms an unattended capture first",
+		"AC8: z-design confirms an unattended capture first, as the one small exception, and changes nothing else",
 		function()
 			local d = skill("z-design")
-			t.expect(has(d, "**The capture record.**")).toBe(true)
-			t.expect(has(d, "never widen or narrow it")).toBe(true)
 			t.expect(has(d, "not designed until the user confirms it")).toBe(true)
 			t.expect(has(d, "small exception")).toBe(true)
 			t.expect(has(d, "Nothing else in z-design changes")).toBe(true)
 			t.expect(has(d, "update `## Idea` to match")).toBe(true) -- the extra review round judges the answered idea
-			t.expect(has(d, "No Design, `design: reviewed` or `ready` is written before that line exists"))
-				.toBe(true)
+			t.expect(has(d, "No Design, `design: reviewed` or `ready` is written before that line exists")).toBe(true)
 			t.expect(has(d, "subagent form of z-ticket step 4a")).toBe(true)
 			t.expect(has(d, "- Fn: ask:")).toBe(true)
 			t.expect(has(d, "Confirmed (<who>, YYYY-MM-DD)")).toBe(true) -- a distinct line, the Unconfirmed one stays
-			t.expect(has(d, "## Filed by (agent)")).toBe(true)
 		end
 	)
 

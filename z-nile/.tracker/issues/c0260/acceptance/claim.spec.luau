@@ -103,7 +103,7 @@ return t.spec("c0260 the claim gate", function(it)
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
 	end)
 
-	it("AC10: an issue made before the landing is claimed as before", function()
+	it("AC10: an issue made before the landing (no mark) is claimed as before", function()
 		local wt = trOk(main, { "worktree", "prep-old" })
 		identity(wt)
 		trOk(wt, { "status", "c0777", "preparing" })
@@ -154,7 +154,7 @@ return t.spec("c0260 the claim gate", function(it)
 			local wt = trOk(main, { "worktree", "prep-bad" })
 			identity(wt)
 			local before = tip()
-			for _, bad in { "", "make the ghosts scarier", "lesson:no-slash" } do
+			for _, bad in { "", "make the ghosts scarier", "lesson:no-slash", "agent:no-item" } do
 				local r = tr(wt, {
 					"new",
 					"issue",
@@ -174,18 +174,32 @@ return t.spec("c0260 the claim gate", function(it)
 		end
 	)
 
-	it(
-		"AC10: a history the gate cannot read (a shallow clone) refuses the claim of an issue it cannot place",
-		function()
-			local shallow = `{base}/shallow`
-			process.exec("git", { "clone", "-q", "--depth", "1", `file://{origin}`, shallow }) -- raw: clone to a named path
-			identity(shallow)
-			local wt = trOk(shallow, { "worktree", "prep-shallow" })
-			identity(wt)
-			local r = tr(wt, { "status", "c0777", "preparing" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "cannot tell whether")).toBe(true)
-			fs.removeDir(base)
-		end
-	)
+	it("AC10: an issue made after the landing is marked, so a shallow clone judges it the same", function()
+		local shallow = `{base}/shallow`
+		process.exec("git", { "clone", "-q", "--depth", "1", `file://{origin}`, shallow }) -- raw: clone to a named path
+		identity(shallow)
+		local wt = trOk(shallow, { "worktree", "prep-shallow" })
+		identity(wt)
+		local id =
+			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) after%-landing") :: string
+		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "capture: required")).toBe(true)
+		local r = tr(wt, { "status", id, "preparing" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
+		-- an old issue carries no mark
+		t.expect(has(git(origin, { "show", `main:{ISSUES}/c0777/c0777.md` }), "capture:")).toBe(false)
+	end)
+
+	it("AC10: a raft claims its members through the same gate", function()
+		local wt = trOk(main, { "worktree", "raft-gate" })
+		identity(wt)
+		local made = trOk(wt, { "new", "issue", "c", "raft-member", "--desc", "A bare stub.", "--project", "pickman" })
+		local id = string.match(made, "(c%d%d%d%d)") :: string
+		local raft = trOk(wt, { "new", "raft", "chore", "gated-raft", id, "--project", "pickman" })
+		local rid = string.match(raft, "(R%d%d%d%d)") :: string
+		local r = tr(wt, { "status", rid, "preparing" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
+		fs.removeDir(base)
+	end)
 end)
