@@ -61,10 +61,6 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
-if [ "$1" = ls-remote ]; then
-  echo x >> "$FAKE_DIR/lscalls"
-  [ -f "$FAKE_DIR/lshang" ] && sleep 30
-fi
 if [ "$1" = push ]; then
   case "$*" in
     *:refs/heads/main*)
@@ -73,16 +69,6 @@ if [ "$1" = push ]; then
         o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0070/c0070.md"
         "$REAL_GIT" -C "$o" pull -q origin main
         sed -i.bak "s/^status: .*/status: preparing-sunny-heron-lynx/" "$f"; rm -f "$f.bak"
-        "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
-        "$REAL_GIT" -C "$o" push -q origin HEAD:main
-      fi ;;
-    *:refs/zn/hb/*)
-      if [ -f "$FAKE_DIR/pushfail" ]; then rm -f "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
-      if [ -f "$FAKE_DIR/restamp" ]; then
-        rm -f "$FAKE_DIR/restamp"
-        o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0085/c0085.md"
-        "$REAL_GIT" -C "$o" pull -q origin main
-        sed -i.bak "s/^status: .*/status: preparing-mellow-badger-jolly/" "$f"; rm -f "$f.bak"
         "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
         "$REAL_GIT" -C "$o" push -q origin HEAD:main
       fi ;;
@@ -96,22 +82,6 @@ return t.spec("c0265 takeover race and fold", function(it)
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
-			[`{P}/c0080/c0080.md`] = issue("c0080", "new-a-b-c"),
-			[`{P}/c0085/c0085.md`] = issue("c0085", "new-a-b-c"),
-			[`{P}/c0090/c0090.md`] = issue("c0090", "new-a-b-c"),
-			-- c0090's check runs while a beat must arrive: it polls origin for a beat dated two seconds into the run
-			[`{P}/c0090/check.sh`] = table.concat({
-				"#!/usr/bin/env bash",
-				"start=$(date +%s); i=0",
-				"while [ $i -lt 15 ]; do",
-				"  for r in $(git ls-remote origin \"refs/zn/hb/*\" | awk '{print $2}'); do",
-				'    case "$r" in *"$STAMP"/*) [ "${r##*/}" -ge $((start+2)) ] && { echo seen > "$FAKE_DIR/check-beat"; exit 0; } ;; esac',
-				"  done",
-				"  sleep 1; i=$((i+1))",
-				"done",
-				"exit 1",
-				"",
-			}, "\n"),
 			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
 			[`{P}/c0095/check.sh`] = CHECK,
 			[`{P}/c0096/c0096.md`] = issue("c0096", "prepared-quiet-copper-falcon", "ready", "R0030"),
@@ -136,9 +106,7 @@ return t.spec("c0265 takeover race and fold", function(it)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge" }), "worktree"), "%s+$", ""))
 		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge2" }), "worktree"), "%s+$", ""))
-		for _, id in { "c0070", "c0080", "c0085", "c0090" } do
-			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
-		end
+		must(zn(wt, { "status", "c0070", "preparing" }), "claim c0070")
 	end)
 
 	it("a takeover that meets a claim restamped between its verdict and its publish is refused", function()

@@ -204,6 +204,11 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		)
 		t.expect(#beats()).toBe(before)
 		t.expect(fs.readFile(entry)).toBe(entryBefore) -- not even a failed attempt: the entry is untouched
+		-- the explicit command refuses there too, naming the rule (the fence's pre-push hook is only the second line)
+		local explicit = zn(wt, { "beat", "c0010" }, T0 + 9000, { PICKMAN_FENCE_REAL_GIT = listed })
+		t.expect(explicit.ok).toBe(false)
+		t.expect(has(explicit.stderr, "protected")).toBe(true)
+		t.expect(#beats()).toBe(before)
 	end)
 
 	it("--watch refuses to run without a numeric bound (outside ./zn run)", function()

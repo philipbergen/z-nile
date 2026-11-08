@@ -10,6 +10,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local heartbeat = require("@znile/engine/heartbeat")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -50,6 +51,23 @@ end
 local function stampOf(path: string): string
 	local text = fixture.git(h.f.origin, { "show", `main:{path}` })
 	return string.match(text, "\nstatus: ([%a%-]+)\n") or error(`{path} has no status on origin`)
+end
+-- the model a board page embeds (<script id="board-data">): decoded, so a case asserts data, not rendered text
+local function boardModel(path: string): any
+	local html = fs.readFile(path)
+	local json = string.match(html, '<script[^>]-id="board%-data"[^>]*>(.-)</script>')
+		or error("no board-data in the page")
+	return serde.decode("json", json)
+end
+local function itemOf(model: any, id: string): any
+	for _, list in { model.issues, model.rafts } do
+		for _, item in list do
+			if item.id == id then
+				return item
+			end
+		end
+	end
+	error(`{id} is not on the board`)
 end
 local function subjectOf(path: string): string
 	return fixture.git(h.f.origin, { "log", "-1", "--format=%s", "main", "--", path })
@@ -108,6 +126,8 @@ return t.spec("c0265 lost work", function(it)
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = `---\nid: R0010\ntype: chore\ntitle: Lost\nslug: lost\nsingle: false\nissues: [c0040]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0010\n`,
 			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
+			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
+			[`{P}/c0075/c0075.md`] = issue("c0075", "new-a-b-c"),
 			[`{P}/c0050/c0050.md`] = issue("c0050", "preparing-lucky-violet-heron"), -- claimed before beats existed
 			[`{P}/done/c0060/c0060.md`] = issue("c0060", "active-brisk-amber-otter"), -- keeps its claim stamp
 		})
@@ -181,17 +201,62 @@ return t.spec("c0265 lost work", function(it)
 	end)
 
 	it(
-		"the board marks lost and parked work and lists lost work first; no mark while claims are fresh",
+		"the board's model carries each verdict, lost work first in its bucket, and none while claims are fresh",
 		function()
-			local out = ".cache/board-lost.html"
-			must(zn(h.f.main, { "board", "--out", out, "-O" }, LATE), "board")
-			local html = fs.readFile(`{h.f.main}/{out}`)
-			t.expect(has(html, '"heartbeat"')).toBe(true) -- the model carries each verdict
-			t.expect(has(html, "lost 45m")).toBe(true) -- c0010: silent 2700 s since its beat at T0
-			must(zn(h.f.main, { "board", "--out", out, "-O" }, T0 + 60), "board while fresh")
-			t.expect(has(fs.readFile(`{h.f.main}/{out}`), '"heartbeat"')).toBe(false)
+			local out = `{h.f.main}/.cache/board-lost.html`
+			must(zn(h.f.main, { "board", "--out", ".cache/board-lost.html", "-O" }, LATE), "board")
+			local model = boardModel(out)
+			local c0010 = itemOf(model, "c0010")
+			t.expect(c0010.heartbeat).toBe("lost")
+			-- minutes from each input's own clock: the beat is dated T0, the claim landed a few seconds later
+			local landed = tonumber(
+				fixture.git(h.f.origin, { "log", "-1", "--format=%ct", "main", "--", `{P}/c0010/c0010.md` })
+			)
+			t.expect(c0010.minutes).toBe(math.floor((LATE - math.max(landed :: number, T0)) / 60))
+			t.expect(itemOf(model, "c0020").heartbeat).toBe("parked") -- a pull request names it
+			t.expect(itemOf(model, "R0010").heartbeat).toBe("parked") -- a pull request names only the raft
+			t.expect(itemOf(model, "c0070").heartbeat).toBe(nil) -- not claimed: no verdict
+			-- lost work comes first within its bucket: c0050 (lost) before c0020 (parked), against id order
+			local bucket = model.views.issues["not"]
+			local lostAt, parkedAt = table.find(bucket, "c0050") or 0, table.find(bucket, "c0020") or 0
+			t.expect(lostAt > 0 and parkedAt > 0 and lostAt < parkedAt).toBe(true)
+			-- pull requests that cannot be read: stale, shown as unconfirmed, never lost
+			fs.writeFile(`{h.fakes}/ghfail`, "1")
+			must(
+				zn(h.f.main, { "board", "--out", ".cache/board-lost.html", "-O" }, LATE),
+				"board, no pull requests"
+			)
+			t.expect(itemOf(boardModel(out), "c0010").heartbeat).toBe("stale")
+			fs.removeFile(`{h.fakes}/ghfail`)
+			-- fresh claims: no item carries a verdict
+			must(
+				zn(h.f.main, { "board", "--out", ".cache/board-lost.html", "-O" }, T0 + 60),
+				"board while fresh"
+			)
+			local fresh = boardModel(out)
+			for _, list in { fresh.issues, fresh.rafts } do
+				for _, item in list do
+					t.expect(item.heartbeat).toBe(nil)
+				end
+			end
 		end
 	)
+
+	it("the board every publish rebuilds carries the verdicts too", function()
+		must(zn(wt2, { "status", "c0070", "preparing" }, LATE), "a publish")
+		local model = boardModel(`{h.f.main}/.cache/board.html`)
+		t.expect(itemOf(model, "c0010").heartbeat).toBe("lost")
+	end)
+
+	it("a failed first beat does not fail the claim", function()
+		fs.writeFile(`{h.fakes}/lsfail`, "1")
+		local r = zn(wt2, { "status", "c0075", "preparing" }, LATE)
+		fs.removeFile(`{h.fakes}/lsfail`)
+		t.expect(r.ok).toBe(true)
+		t.expect(has(r.stderr, "beat")).toBe(true) -- said, not hidden
+		t.expect(string.sub(stampOf(`{P}/c0075/c0075.md`), 1, 10)).toBe("preparing-")
+		t.expect(table.find(stampsWithBeats(), stampOf(`{P}/c0075/c0075.md`))).toBe(nil)
+	end)
 
 	it("a beat revives a lost claim", function()
 		must(zn(h.f.main, { "beat", "c0010" }, LATE), "beat of a lost claim")

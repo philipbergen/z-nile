@@ -157,6 +157,7 @@ return t.spec("c0265 real-time proofs", function(it)
 		)
 		t.expect(r.ok).toBe(true)
 		t.expect(has(r.stderr, "fake beat push failure")).toBe(true)
+		t.expect(os.time() - started < 8).toBe(true) -- it stopped itself before its bound (started + 8)
 		t.expect(newest(stamp) >= started + 2).toBe(true) -- a later tick beat
 		t.expect(newest(stamp) <= os.time()).toBe(true)
 	end)
