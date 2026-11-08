@@ -89,3 +89,4 @@
 - design-review-009 F3: z-design/reasoned-rows-claim-testable-reasons
 - design-review-009 F4: z-design/restated-rules-move-together
 - design-review-009 F5: z-design/prove-specs-pass-on-a-prototype
+- note c0265 prep round 10: a proof only check.sh runs is protected only if check.sh pins it: z-design/spec-design-correspondence

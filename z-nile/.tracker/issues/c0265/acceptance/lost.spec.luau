@@ -143,7 +143,10 @@ return t.spec("c0265 lost work", function(it)
 		must(zn(h.f.main, { "ready", "R0010" }, T0), "ready R0010") -- readied, nobody starts it
 		-- c0010 beats once more, so it is silent for less time than c0050 (never beaten) although its id is lower:
 		-- silence order and id order differ, which pins "longest silent first"
-		must(zn(h.f.main, { "beat", "c0010" }, T0 + 600), "a later beat of c0010")
+		fixture.git(
+			h.f.other,
+			{ "push", "-q", "origin", `HEAD:refs/zn/hb/{stampOf(`{P}/c0010/c0010.md`)}/{T0 + 600}` }
+		)
 		-- the done item's old claim has a beat on origin, as one that finished mid-work would
 		fixture.git(
 			h.f.other,
@@ -256,36 +259,46 @@ return t.spec("c0265 lost work", function(it)
 		t.expect(itemOf(model, "c0010").heartbeat).toBe("lost")
 	end)
 
-	it("a board built in a protected checkout carries no verdicts and reads no remote", function()
-		local function calls(): number
-			local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
-			return #string.gsub(text, "[^x]", "")
-		end
-		local common = string.gsub(
-			fixture.git(h.f.main, { "rev-parse", "--path-format=absolute", "--git-common-dir" }),
-			"%s+$",
-			""
-		)
-		local inherited = process.env.PICKMAN_FENCE_REAL_GIT or ""
-		local listed = if inherited ~= "" then `{inherited}:{common}` else common
-		local before = calls()
-		must(
-			zn(
-				h.f.main,
-				{ "board", "--out", ".cache/board-guarded.html", "-O" },
-				LATE,
-				{ PICKMAN_FENCE_REAL_GIT = listed }
-			),
-			"board"
-		)
-		local model = boardModel(`{h.f.main}/.cache/board-guarded.html`)
-		for _, list in { model.issues, model.rafts } do
-			for _, item in list do
-				t.expect(item.heartbeat).toBe(nil)
+	it(
+		"a protected checkout reads no remote: the board carries no verdicts, status shows none, lost says so",
+		function()
+			local function calls(): number
+				local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
+				return #string.gsub(text, "[^x]", "")
 			end
+			local common = string.gsub(
+				fixture.git(h.f.main, { "rev-parse", "--path-format=absolute", "--git-common-dir" }),
+				"%s+$",
+				""
+			)
+			local inherited = process.env.PICKMAN_FENCE_REAL_GIT or ""
+			local listed = if inherited ~= "" then `{inherited}:{common}` else common
+			local before = calls()
+			must(
+				zn(
+					h.f.main,
+					{ "board", "--out", ".cache/board-guarded.html", "-O" },
+					LATE,
+					{ PICKMAN_FENCE_REAL_GIT = listed }
+				),
+				"board"
+			)
+			local model = boardModel(`{h.f.main}/.cache/board-guarded.html`)
+			for _, list in { model.issues, model.rafts } do
+				for _, item in list do
+					t.expect(item.heartbeat).toBe(nil)
+				end
+			end
+			local listing = zn(h.f.main, { "status" }, LATE, { PICKMAN_FENCE_REAL_GIT = listed })
+			t.expect(listing.ok).toBe(true)
+			t.expect(has(listing.stdout, "[lost")).toBe(false)
+			local lostHere = zn(h.f.main, { "lost" }, LATE, { PICKMAN_FENCE_REAL_GIT = listed })
+			t.expect(lostHere.ok).toBe(true)
+			t.expect(lostHere.stdout).toBe("")
+			t.expect(has(lostHere.stderr, "protected checkout")).toBe(true)
+			t.expect(calls()).toBe(before) -- no ls-remote: nothing was read from the remote
 		end
-		t.expect(calls()).toBe(before) -- no ls-remote: nothing was read from the remote
-	end)
+	)
 
 	it("a failed first beat does not fail the claim", function()
 		fs.writeFile(`{h.fakes}/lsfail`, "1")
