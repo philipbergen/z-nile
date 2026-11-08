@@ -174,7 +174,7 @@ return t.spec("c0118 code review 001", function(it)
 			)
 			write(
 				`{TRACKER}/issues/done/c0012/spend.md`,
-				"# Spend: c0012 t\n\n| 1 | 2026-10-20 10:00 | unterminated\n"
+				"# Spend: c0012 t\n\n| 1 | 2026-10-20 10:00 | <b>unterminated\n"
 			)
 			local m = board.collect(TRACKER, nil, FACTS)
 			t.expect(#m.problems).toBe(1)
@@ -183,6 +183,7 @@ return t.spec("c0118 code review 001", function(it)
 			local out = node(`{dir}/page-bad.html`)
 			t.expect(has(out.open.problems, "1 file could not be read")).toBe(true)
 			t.expect(has(out.open.problems, "c0012/spend.md")).toBe(true)
+			t.expect(has(out.open.problems, "<b>")).toBe(false) -- the quoted row is escaped, never drawn as markup (review 003 F2)
 			t.expect(out.cleared.problems).toBe("") -- load with no problems clears the note
 			t.expect(has(out.two.problems, "2 files could not be read")).toBe(true)
 			t.expect(has(out.two.problems, "history: map line")).toBe(true)

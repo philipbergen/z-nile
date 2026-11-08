@@ -27,6 +27,7 @@
 | 23 | 2026-11-08 20:29 | c0118: verification log | 0 | 0 | 5.0 | focus | build |  |  |
 | 24 | 2026-11-08 21:09 | c0118: code review 001 fixes (chart size and units, problems on the page, one round rule) | 164 | 13 | 40.0 | focus | code-review |  |  |
 | 25 | 2026-11-08 22:12 | c0118: code review 002 answers (page fixes driven through the node fake DOM, stronger round-rule pin) | 130 | 24 | 30.0 | focus | code-review |  |  |
+| 26 | 2026-11-08 22:58 | c0118: code review 003 answers (problems note escaped, deviations line; the spy pin is c0281) | 4 | 1 | 25.0 | focus | code-review | 150000 | claude-opus-5-5 |
 
-**Total:** +3215 / -137 lines, 370.4 agent-minutes, 1066279 tokens over 25 records
-<!-- totals: added=3215 removed=137 minutes=370.4 records=25 tokens=1066279 -->
+**Total:** +3219 / -138 lines, 395.4 agent-minutes, 1216279 tokens over 26 records
+<!-- totals: added=3219 removed=138 minutes=395.4 records=26 tokens=1216279 -->

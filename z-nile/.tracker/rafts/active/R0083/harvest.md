@@ -6,3 +6,7 @@
 - review-002 F2: zz-test/source-text-pins-read-the-code
 - review-002 F3: z-design/restated-rules-move-together
 - note review-002 lesson candidate: a fix's mutant must turn the behaviour off while leaving the searched-for text in place, else the spec pins text: zz-test/source-text-pins-read-the-code
+- review-003 F1: zz-test/source-text-pins-read-the-code
+- review-003 F2: zz-test/seed-every-enumerated-case
+- review-003 F3: one-off: a fix to the Verification log's Deviations line that review 002 F3 already asked for (z-design/restated-rules-move-together)
+- note review-003 lesson candidate (after a source pin has been patched twice, ask whether a spy or fixture can observe the protected call before asking for one more forbidden spelling): zz-test/source-text-pins-read-the-code, filed as c0281
