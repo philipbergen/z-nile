@@ -8,6 +8,7 @@
 local board = require("@znile/engine/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 local stats = require("@znile/engine/stats")
 local t = require("@tests/lib/t")
 
@@ -45,6 +46,61 @@ local function code(src: string): string
 	return table.concat(lines, "\n")
 end
 
+-- The page's own script, run by node against a fake DOM (as c0118's page.spec does): what #problems and #charts hold after
+-- the page opens and after znBoard.load swaps the model. Never literal require text: the repo scanner would read it.
+local HARNESS = [==[
+const load = m => module["req" + "uire"](m);
+const fs = load("fs"), vm = load("vm");
+const html = fs.readFileSync(process.argv[2], "utf8");
+const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+const els = {};
+function el(id) {
+  const ls = {}, cl = new Set(), attrs = {};
+  return els[id] = { id, innerHTML: "", textContent: "", value: "", scrollTop: 0,
+    classList: { add: c => cl.add(c), remove: c => cl.delete(c), contains: c => cl.has(c),
+      toggle: (c, f) => { const on = f === undefined ? !cl.has(c) : !!f; on ? cl.add(c) : cl.delete(c); return on; } },
+    addEventListener: (t, f) => (ls[t] = ls[t] || []).push(f), dispatch: (t, e) => (ls[t] || []).forEach(f => f(e)),
+    setAttribute: (n, v) => (attrs[n] = String(v)), removeAttribute: n => delete attrs[n], hasAttribute: n => n in attrs,
+    getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
+    querySelectorAll: () => [] };
+}
+["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "problems", "window", "range",
+ "as-of", "list", "pane", "board-data", "stats"].forEach(el);
+els.board.setAttribute("hidden", "");
+els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
+const doc = el("document");
+const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
+  location: { hash: "" }, history: { replaceState: (a, b, h) => (sandbox.location.hash = h) }, navigator: {},
+  console, JSON, Math, String, Array, Object, Number, Date, decodeURIComponent, encodeURIComponent };
+sandbox.window = sandbox; sandbox.globalThis = sandbox;
+vm.createContext(sandbox);
+for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
+const snap = () => ({ problems: els.problems.innerHTML, charts: els.charts.innerHTML });
+const out = { open: snap() };
+const base = JSON.parse(els["board-data"].textContent);
+const clean = Object.assign({}, base, { problems: [] });
+sandbox.znBoard.load(clean); out.cleared = snap();
+const two = Object.assign({}, base, { problems: ["a/spend.md does not parse", "history: map line"] });
+sandbox.znBoard.load(two); out.two = snap();
+const one = Object.assign({}, base, { problems: ["only/spend.md does not parse"] });
+sandbox.znBoard.load(one); out.one = snap();
+const bare = JSON.parse(JSON.stringify(base));
+for (const p of Object.keys(bare.charts)) delete bare.charts[p].captions;
+sandbox.znBoard.load(bare); out.bare = snap();
+console.log(JSON.stringify(out));
+]==]
+
+local function node(page: string): any
+	local ok, r = pcall(process.exec, "node", { `{dir}/harness.js`, page })
+	if not ok then
+		error(`node is required for this spec: {r}`)
+	end
+	if not r.ok then
+		error(r.stderr)
+	end
+	return serde.decode("json", r.stdout)
+end
+
 return t.spec("c0118 code review 001", function(it)
 	it("sets up a done raft whose only review spend is one model's 12 million tokens", function()
 		if fs.isDir(dir) then
@@ -76,15 +132,41 @@ return t.spec("c0118 code review 001", function(it)
 		end
 	)
 
-	it("F1: the page puts the caption in the figure and sizes the board's charts apart from Stats", function()
-		local html = board.build(TRACKER, nil, FACTS)
-		t.expect(has(html, "ch.captions.tokens[range]")).toBe(true)
-		t.expect(has(html, "#charts .chart { width: 100%; max-width: 640px; }")).toBe(true)
-		t.expect(has(html, ".chart { width: 320px; height: auto; }")).toBe(true) -- Stats keeps its own size
-	end)
+	it(
+		"F1: the page draws each figure's own caption (the node run of the page's script), and sizes the charts apart from Stats",
+		function()
+			fs.writeFile(`{dir}/page-ok.html`, board.build(TRACKER, nil, FACTS))
+			fs.writeFile(`{dir}/harness.js`, HARNESS)
+			local out = node(`{dir}/page-ok.html`)
+			-- each caption sits in its own figure
+			local rounds = string.match(
+				out.open.charts,
+				'<figure class="chart%-fig" data%-chart="rounds">.-</figure>'
+			) :: string
+			local tokens = string.match(
+				out.open.charts,
+				'<figure class="chart%-fig" data%-chart="tokens">.-</figure>'
+			) :: string
+			t.expect(has(rounds, "<figcaption>Review rounds by week</figcaption>")).toBe(true)
+			t.expect(has(tokens, "<figcaption>Review tokens by model, M tokens: opus-x</figcaption>"))
+				.toBe(true)
+			-- a model without captions (an older served model) still draws, with the plain captions
+			local bare = string.match(
+				out.bare.charts,
+				'<figure class="chart%-fig" data%-chart="tokens">.-</figure>'
+			) :: string
+			t.expect(has(bare, "<figcaption>Review tokens by model</figcaption>")).toBe(true)
+			local html = fs.readFile(`{dir}/page-ok.html`)
+			t.expect(has(html, "#charts .chart { width: 100%; max-width: 640px; }")).toBe(true)
+			t.expect(has(html, ".chart { width: 320px; height: auto; }")).toBe(true) -- Stats keeps its own size
+			-- one rule for the board's chart width: a later rule could undo it
+			local _, count = string.gsub(html, "#charts .chart {", "", nil :: any)
+			t.expect(count).toBe(1)
+		end
+	)
 
 	it(
-		"F2: a spend.md that does not parse is named in the model and the page shows the model's problems",
+		"F2: a spend.md that does not parse is named in the model, and the page shows it and redraws it on load",
 		function()
 			write(
 				`{TRACKER}/issues/done/c0012/c0012.md`,
@@ -95,25 +177,47 @@ return t.spec("c0118 code review 001", function(it)
 				"# Spend: c0012 t\n\n| 1 | 2026-10-20 10:00 | unterminated\n"
 			)
 			local m = board.collect(TRACKER, nil, FACTS)
-			t.expect(#m.problems >= 1).toBe(true)
-			local named = false
-			for _, p in m.problems do
-				if has(p, "c0012/spend.md") then
-					named = true
-				end
-			end
-			t.expect(named).toBe(true)
-			local html = board.build(TRACKER, nil, FACTS)
-			t.expect(has(html, 'id="problems"')).toBe(true)
-			t.expect(has(html, "problemsEl.innerHTML")).toBe(true)
-			t.expect(has(html, "files could not be read")).toBe(true)
-			t.expect(has(html, "c0012/spend.md")).toBe(true) -- in the embedded model
+			t.expect(#m.problems).toBe(1)
+			t.expect(has(m.problems[1], "c0012/spend.md")).toBe(true)
+			fs.writeFile(`{dir}/page-bad.html`, board.build(TRACKER, nil, FACTS))
+			local out = node(`{dir}/page-bad.html`)
+			t.expect(has(out.open.problems, "1 file could not be read")).toBe(true)
+			t.expect(has(out.open.problems, "c0012/spend.md")).toBe(true)
+			t.expect(out.cleared.problems).toBe("") -- load with no problems clears the note
+			t.expect(has(out.two.problems, "2 files could not be read")).toBe(true)
+			t.expect(has(out.two.problems, "history: map line")).toBe(true)
+			t.expect(has(out.one.problems, "1 file could not be read")).toBe(true) -- one problem is shown, not hidden
 		end
 	)
 
-	it("F3: board.luau keeps no round-file pattern of its own: boardview.rounds counts the files", function()
-		local src = code(readSource("engine/board.luau"))
-		t.expect(has(src, "review%-")).toBe(false)
-		t.expect(has(src, "boardview.rounds(")).toBe(true)
-	end)
+	it(
+		"F3: board.luau keeps no round-file pattern of its own: reviewFiles matches nothing, boardview.rounds counts",
+		function()
+			local src = code(readSource("engine/board.luau"))
+			t.expect(has(src, "review%-")).toBe(false)
+			t.expect(has(src, "boardview.rounds(")).toBe(true)
+			-- reviewFiles lists the folder and nothing more (any spelling of a filter would show as a match call)
+			local body = string.match(src, "local function reviewFiles.-\nend\n") :: string
+			t.expect(body ~= nil).toBe(true)
+			for _, call in
+				{
+					"string.match",
+					"string.find",
+					"string.gmatch",
+					"string.gsub",
+					":match(",
+					":find(",
+					"string.sub",
+				}
+			do
+				t.expect(has(body, call)).toBe(false)
+			end
+			-- no string literal in the file names a review together with a pattern character (`[-]`, `%-`, `^`, `$`)
+			for lit in string.gmatch(src, '"([^"\n]*)"') do
+				if string.find(lit, "review", 1, true) and string.find(lit, "[%%%[%]%^%$]") then
+					error(`a pattern naming a review: "{lit}"`)
+				end
+			end
+		end
+	)
 end)

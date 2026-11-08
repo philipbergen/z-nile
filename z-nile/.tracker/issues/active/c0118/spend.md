@@ -26,6 +26,7 @@
 | 22 | 2026-11-08 20:08 | c0118: carry the board per project from proto2-c0118 (6bb217fb) | 1245 | 95 | 20.0 | focus | build |  |  |
 | 23 | 2026-11-08 20:29 | c0118: verification log | 0 | 0 | 5.0 | focus | build |  |  |
 | 24 | 2026-11-08 21:09 | c0118: code review 001 fixes (chart size and units, problems on the page, one round rule) | 164 | 13 | 40.0 | focus | code-review |  |  |
+| 25 | 2026-11-08 22:12 | c0118: code review 002 answers (page fixes driven through the node fake DOM, stronger round-rule pin) | 130 | 24 | 30.0 | focus | code-review |  |  |
 
-**Total:** +3085 / -113 lines, 340.4 agent-minutes, 1066279 tokens over 24 records
-<!-- totals: added=3085 removed=113 minutes=340.4 records=24 tokens=1066279 -->
+**Total:** +3215 / -137 lines, 370.4 agent-minutes, 1066279 tokens over 25 records
+<!-- totals: added=3215 removed=137 minutes=370.4 records=25 tokens=1066279 -->
