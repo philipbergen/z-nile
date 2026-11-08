@@ -5,3 +5,5 @@
 - design-review-001 F4: zz-test/promoted-specs-pin-rules-not-sets
 - design-review-001 F5: one-off: an id range counted the issue itself
 - design-review-001 F6: one-off: a mutation runner that writes a tracked file restores it on signals too, and runs through ./zn run
+- design-review-002 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-002 F2: z-design/mutant-ids-match-the-runner

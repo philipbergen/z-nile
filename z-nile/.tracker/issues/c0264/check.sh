@@ -89,7 +89,8 @@ truth() {
 	return $bad
 }
 # The diagram of How it should work shows the new flow: the interview, the approval, z-work, lost-first claiming, one
-# ticket at a time with the full-force review, and both ways a raft ends (this file owns its words).
+# ticket at a time with the full-force review, and both ways a raft ends, as edges back into claiming (node ids `stack`,
+# `loop`, `layer` and `esc` are fixed by the design; this file owns the words).
 diagram() { sed -n '/^## How it should work/,/^## The five parts/p' "$README" | sed -n '/^```mermaid/,/^```$/p'; }
 pictured() { local d w; d="$(diagram)"; for w in "$@"; do grep -qF -e "$w" <<<"$d" || { echo "diagram lacks: $w"; return 1; }; done; }
 # The README changes only in ## Intent (new) and ## How it should work: with both cut out it equals the branch point's
@@ -120,6 +121,6 @@ check "AC7: every roadmap row and every issue-labelled sentence has the state th
 check "AC8: the README changes only in Intent and How it should work" others
 check "AC9: the workflow diagram shows the interview, the approval, z-work, lost first, one ticket at a time, the full-force review and both ways a raft ends" pictured \
 	'interview' 'idea review' 'approve' 'z-work' 'lost first' 'one ticket at a time' 'full-force review' \
-	'raft merged: clear context' 'raft released: clear context'
+	'stack --> loop' 'loop --> layer' 'layer -->|"raft merged: clear context"| loop' 'esc -->|"raft released: clear context"| loop'
 
 finish
