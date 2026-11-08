@@ -152,3 +152,12 @@
 - design-review-017 F7: zz-arch/every-command-effects-name-the-check-flows
 - design-review-017 F8: one-off: leftovers listed in the review
 - note c0265 prep (review 017): a guard that refuses every command in a checkout must exempt the cleanup that runs there (reap, hooks), and a lookup made to find copies must keep every refusal the old lookup had (c0005): zz-arch/every-command-effects-name-the-check-flows
+- design-review-018 F1: z-design/trace-every-way-code-runs, zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-018 F2: z-design/spec-design-correspondence
+- design-review-018 F3: zz-test/new-commands-run-in-a-copy
+- design-review-018 F4: z-design/reasoned-rows-claim-testable-reasons
+- design-review-018 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-018 F6: z-design/spec-design-correspondence
+- design-review-018 F7: z-design/never-narrow-captured-scope
+- design-review-018 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-018 F9: z-design/restated-rules-move-together
