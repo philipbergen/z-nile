@@ -106,4 +106,16 @@ return t.spec("c0261 docs", function(it)
 			at(head, w, ".models.toml header")
 		end
 	end)
+
+	it("an approving round on the way does not end a code review: only a --final round does (rule)", function()
+		local e = skill("zz-execute")
+		at(e, "If the verdict is `approve` with no findings and the round was run with `--final`, go to Phase 5", "zz-execute")
+		absent(e, "**If the verdict is `approve` with no findings, go to Phase 5**", "zz-execute")
+	end)
+
+	it("the lists of model steps and the dispatcher's description name z-wait and the wait at a gate (rule)", function()
+		at(skill("zz-rules"), "`z-run`, `z-wait` and `zz-review`", "zz-rules Steps")
+		at(read("z-nile/README.md"), "it waits on the cheap `z-wait` step and then merges", "README")
+		absent(read("z-nile/README.md"), "It stops at a merge gate, at a step's", "README")
+	end)
 end)

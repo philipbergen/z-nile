@@ -25,3 +25,14 @@
 - design-review-002 F10: z-design/decided-guesses-rewrite-their-body
 - design-review-002 F11: z-design/quote-other-preps-before-promising
 - design-review-002 F12: one-off: counts and labels that did not match what ran
+- design-review-003 F1: one-off: a label lost in an edit that fixed a count
+- design-review-003 F2: z-design/split-term-every-reader
+- design-review-003 F3: z-design/spec-design-correspondence
+- design-review-003 F4: z-design/spec-design-correspondence
+- design-review-003 F5: z-design/accepted-risks-checked-and-decided
+- design-review-003 F6: z-design/specify-every-named-artifact
+- design-review-003 F7: z-design/never-narrow-captured-scope
+- design-review-003 F8: z-design/never-narrow-captured-scope
+- design-review-003 F9: z-design/restated-rules-move-together
+- design-review-003 F10: z-design/quote-other-preps-before-promising
+- design-review-003 F11: z-design/restated-rules-move-together

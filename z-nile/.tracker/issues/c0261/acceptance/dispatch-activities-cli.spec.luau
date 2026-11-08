@@ -9,6 +9,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local dispatch = require("@znile/engine/dispatch")
+local dispatcher = require("@znile/engine/dispatcher")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
@@ -162,5 +163,19 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		t.expect((run("merged", { FAKE_STATE = "MERGED" }))).toBe(0)
 		t.expect((run("merged", { FAKE_STATE = "CLOSED" }))).toBe(2)
 		t.expect((run("merged", { FAKE_STATE = "OPEN" }))).toBe(3)
+	end)
+
+	it("parsePr reads GitHub's mergeable state: CONFLICTING conflicts, UNKNOWN (still computing) does not, missing does not (AC5)", function()
+		local function pr(mergeable: string?): any
+			local field = if mergeable then `,"mergeable":"{mergeable}"` else ""
+			return dispatcher.parsePr(`\{"number":7,"state":"OPEN","isDraft":false,"headRefOid":"abc","statusCheckRollup":[]{field}\}`)
+		end
+		t.expect(pr("MERGEABLE").mergeable).toBe(true)
+		t.expect(pr("MERGEABLE").conflicting).toBe(false)
+		t.expect(pr("CONFLICTING").mergeable).toBe(false)
+		t.expect(pr("CONFLICTING").conflicting).toBe(true)
+		t.expect(pr("UNKNOWN").mergeable).toBe(false)
+		t.expect(pr("UNKNOWN").conflicting).toBe(false)
+		t.expect(pr(nil).conflicting).toBe(false)
 	end)
 end)
