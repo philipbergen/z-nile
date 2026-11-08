@@ -187,27 +187,23 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 	end)
 
 	it("a nested ./zn in a protected checkout never beats", function()
-		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
+		local entry = `{wt}/.cache/tracker-beats/c0010`
 		local before = #beats()
-		local newest = 0
-		for _, b in beats() do
-			if b.stamp == stamp then
-				newest = math.max(newest, b.epoch)
-			end
-		end
-		local common = `{h.f.main}/.git/.` -- the fixture's git directory, spelled another way
+		local entryBefore = fs.readFile(entry)
+		-- the fence's own spelling: the canonical git common directory, appended to what the runner already lists
+		local common = string.gsub(
+			fixture.git(h.f.main, { "rev-parse", "--path-format=absolute", "--git-common-dir" }),
+			"%s+$",
+			""
+		)
+		local inherited = process.env.PICKMAN_FENCE_REAL_GIT or ""
+		local listed = if inherited ~= "" then `{inherited}:{common}` else common
 		must(
-			zn(wt, { "lessons", "--tags" }, T0 + 9000, { PICKMAN_FENCE_REAL_GIT = common }),
+			zn(wt, { "lessons", "--tags" }, T0 + 9000, { PICKMAN_FENCE_REAL_GIT = listed }),
 			"a nested command"
 		)
-		local after = 0
-		for _, b in beats() do
-			if b.stamp == stamp then
-				after = math.max(after, b.epoch)
-			end
-		end
-		t.expect(after).toBe(newest)
 		t.expect(#beats()).toBe(before)
+		t.expect(fs.readFile(entry)).toBe(entryBefore) -- not even a failed attempt: the entry is untouched
 	end)
 
 	it("--watch refuses to run without a numeric bound (outside ./zn run)", function()

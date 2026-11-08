@@ -3,7 +3,7 @@
 -- to engine/ by prep: the executor writes the real one (this one type-checks under promote-check).
 local heartbeat = {}
 export type Beat = { stamp: string, epoch: number, ref: string }
-export type Claim = { id: string, state: string, stamp: string, since: number, match: { string } }
+export type Claim = { id: string, state: string, stamp: string, since: number?, match: { string } }
 export type Verdict = { id: string, state: string, stamp: string, silent: number, kind: string }
 export type Pr = { title: string, head: string }
 heartbeat.PREFIX = "refs/zn/hb/"
@@ -52,25 +52,30 @@ function heartbeat.setting(env: { [string]: string? }, name: string, default: nu
 	return default
 end
 
--- live | stale, from the newest sign of life: the newest usable beat, else the moment the claim landed.
+-- live | stale | unknown, from the newest sign of life: the newest usable beat, else the moment the claim landed.
 function heartbeat.judge(claims: { Claim }, beats: { Beat }, now: number, stale: number?): { Verdict }
 	local limit = stale or heartbeat.STALE
 	local out: { Verdict } = {}
 	for _, c in claims do
-		local last = c.since
+		local last: number? = c.since
 		for _, b in beats do
 			if b.stamp == c.stamp and b.epoch <= now + heartbeat.SKEW then
-				last = math.max(last, b.epoch)
+				last = math.max(last or b.epoch, b.epoch)
 			end
 		end
-		local silent = math.max(0, now - last)
-		table.insert(out, {
-			id = c.id,
-			state = c.state,
-			stamp = c.stamp,
-			silent = silent,
-			kind = if silent > limit then "stale" else "live",
-		})
+		if last == nil then
+			-- neither a beat nor a readable landing time: unknown, never lost
+			table.insert(out, { id = c.id, state = c.state, stamp = c.stamp, silent = 0, kind = "unknown" })
+		else
+			local silent = math.max(0, now - last)
+			table.insert(out, {
+				id = c.id,
+				state = c.state,
+				stamp = c.stamp,
+				silent = silent,
+				kind = if silent > limit then "stale" else "live",
+			})
+		end
 	end
 	return out
 end

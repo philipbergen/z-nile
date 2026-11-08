@@ -124,7 +124,7 @@ return t.spec("f0265 lost work", function(it)
 		)
 	end)
 
-	it("nothing is lost while the claims are fresh; the stale limit is inclusive", function()
+	it("nothing is lost while the claims are fresh", function()
 		t.expect(zn(h.f.main, { "lost" }, T0 + 60).stdout).toBe("")
 		t.expect(zn(h.f.main, { "lost" }, T0 + STALE).stdout).toBe("")
 		t.expect(has(zn(h.f.main, { "status" }, T0 + STALE).stdout, "[lost")).toBe(false)
@@ -262,6 +262,13 @@ return t.spec("f0265 lost work", function(it)
 		t.expect(after ~= before).toBe(true)
 		t.expect(stampOf(`{P}/c0030/c0030.md`)).toBe(after)
 		t.expect(table.find(stampsWithBeats(), after) ~= nil).toBe(true)
+		-- the old rafting claimant (wt made it with `new raft`) is refused its carried move: new raft recorded its stamp
+		local rdoc = `{wt}/pickman/.tracker/rafts/{rid}/{rid}.md`
+		must(zn(wt, { "sync" }, at), "sync")
+		fs.writeFile(rdoc, (string.gsub(fs.readFile(rdoc), "design: draft", "design: ready")))
+		local old = zn(wt, { "status", rid, "prepared" }, at)
+		t.expect(old.ok).toBe(false)
+		t.expect(has(old.stderr, "taken over")).toBe(true)
 		-- the taker holds the stamp but not the rafting ownership: release needs --force, as after any status R preparing
 		local rel = zn(wt2, { "release", rid }, at)
 		t.expect(rel.ok).toBe(false)

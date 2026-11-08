@@ -53,3 +53,10 @@
 - design-review-004 F9: zz-test/specs-set-host-markers-explicitly
 - design-review-004 F10: zz-test/stand-ins-answer-only-named-arguments
 - design-review-004 F11: one-off: the c0114 classified gate failure comes from f0263/f0265 being filed as features in z-nile's root; the reviewer's evidence for the user's rename decision, not a design defect of this issue
+- design-review-005 F1: zz-test/seed-guard-inputs-in-the-producers-spelling, z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F2: z-design/claim-memory-rules-list-every-claim-path
+- design-review-005 F3: zz-test/proofs-hold-only-the-cases-that-wait
+- design-review-005 F4: zz-test/stand-ins-answer-only-named-arguments
+- design-review-005 F5: zz-rules/exhaustive-lists-name-new-things
+- design-review-005 F6: z-design/restated-rules-move-together
+- design-review-005 F7: zz-arch/guard-no-is-explicit

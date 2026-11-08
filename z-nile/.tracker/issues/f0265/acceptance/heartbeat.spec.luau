@@ -94,6 +94,23 @@ return t.spec("f0265 heartbeat rules", function(it)
 		end
 	)
 
+	it("a claim with neither a beat nor a readable landing time is unknown, never lost", function()
+		local v = heartbeat.judge(
+			{ { id = "f0010", state = "preparing", stamp = A, match = { "f0010" } } },
+			{},
+			NOW
+		)[1]
+		t.expect(v.kind).toBe("unknown")
+		t.expect(heartbeat.settle({ v }, {})[1].kind).toBe("unknown")
+		-- a beat is still a sign of life for it
+		local alive = heartbeat.judge(
+			{ { id = "f0010", state = "preparing", stamp = A, match = { "f0010" } } },
+			{ beat(A, NOW - 5) },
+			NOW
+		)[1]
+		t.expect(alive.kind).toBe("live")
+	end)
+
 	it("a beat dated past the skew allowance is ignored, one near it reads as now", function()
 		local claims = { claim("f0010", A) }
 		t.expect(heartbeat.judge(claims, { beat(A, NOW + heartbeat.SKEW + 1) }, NOW)[1].kind).toBe("stale")
