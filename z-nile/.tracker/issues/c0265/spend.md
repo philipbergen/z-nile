@@ -18,6 +18,7 @@
 | 14 | 2026-11-08 18:55 | design-review-012 | 0 | 0 | 16.0 | spend | design-review | 219871 |
 | 15 | 2026-11-08 19:22 | design-review-013 | 0 | 0 | 12.0 | spend | design-review | 194123 |
 | 16 | 2026-11-08 19:46 | design-review-014 | 0 | 0 | 13.0 | spend | design-review | 199203 |
+| 17 | 2026-11-08 20:32 | design-review-015 | 0 | 0 | 14.0 | spend | design-review | 186716 |
 
-**Total:** +1170 / -1 lines, 433.0 agent-minutes, 2749909 tokens over 16 records
-<!-- totals: added=1170 removed=1 minutes=433.0 records=16 tokens=2749909 -->
+**Total:** +1170 / -1 lines, 447.0 agent-minutes, 2936625 tokens over 17 records
+<!-- totals: added=1170 removed=1 minutes=447.0 records=17 tokens=2936625 -->
