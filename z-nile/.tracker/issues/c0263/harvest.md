@@ -17,3 +17,14 @@
 - design-review-001 F16: zz-test/source-pins-name-what-the-design-names
 - design-review-001 F17: zz-arch/one-reader-per-format
 - note reviewer's candidate lessons: z-design/fixtures-keep-what-commands-need, z-design/live-defaults-checked-in-their-session, zz-test/grammar-cases-from-real-producers
+- design-review-002 F1: z-design/prove-specs-pass-on-a-prototype, z-design/fixtures-keep-what-commands-need
+- design-review-002 F2: z-design/spec-design-correspondence
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: z-design/required-steps-on-every-path
+- design-review-002 F5: z-design/design-the-execution-window
+- design-review-002 F6: zz-arch/one-reader-per-format
+- design-review-002 F7: z-design/restated-rules-move-together
+- design-review-002 F8: zz-test/grammar-cases-from-real-producers
+- design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F10: z-design/spec-design-correspondence
+- note review 002 candidates (a run that stops at the first missing key proves only the steps before it; a slot is safe only if both neighbours are lines no flow edits): z-design/prove-specs-pass-on-a-prototype, z-design/design-the-execution-window

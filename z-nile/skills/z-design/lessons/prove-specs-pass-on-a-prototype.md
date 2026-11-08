@@ -28,3 +28,5 @@ Run the `done` command itself too, not only a hand-made move: it leaves its move
 **Note** (f0146 design review 001 F5): a user rule changed a document row the specs pin after the prototype ran, and the record still said 6/6. Rerun the prototype after every spec change, including wording changes from a decision, and update the record's numbers.
 
 c0172 design review 001 F4: E2 recorded the full gate red on `classified.spec`, and implementation step 4 still said the gate passes. A later step that says a run passed has to match the result the experiment recorded.
+
+c0263 design review 002 F1: a `./zn check` run stops each case at its first missing-feature assertion, so it proves only the steps before it; three fixture steps after it (a merge conflict, an `audit` that needs a counter, a recombine blocked by an earlier claim) could never pass. Also run a lenient copy of every fixture spec (assertions print, command failures print, run to the end) and read each command's result.

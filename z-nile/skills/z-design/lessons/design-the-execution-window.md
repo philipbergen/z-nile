@@ -15,3 +15,5 @@ R0051 design review 003 F1: while the prep sat between rounds the user captured 
 R0051 design review 005 F1: f0110 depends on d0151, whose fix lands in the adapters f0110's specs load through stubs; d0151's prep can't see f0110's unpromoted specs, so R0051's Order now has the readying lead merge main into the prototype and re-run the specs and mutants before `ready`, and send R0051 back to z-design if a spec must change.
 
 **Note** (f0146 design review 001 F4): "whichever of two issues lands second adds it" names no owner and no check. Give a shared piece one owner, a `depends_on` that orders the two, and an acceptance case in the owner.
+
+c0263 design review 002 F5: a frontmatter slot is safe only if both neighbouring lines are ones no flow edits; the slot after `type:` touched `title:`, which every capture edits, and git conflicts on touching hunks (a scratch merge proved it).
