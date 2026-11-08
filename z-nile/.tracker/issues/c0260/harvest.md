@@ -1,0 +1,15 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/instructions-runnable-where-they-run
+- design-review-001 F3: z-design/user-words-parsers-accept-anything
+- design-review-001 F4: z-design/specify-every-named-artifact
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/accepted-risks-checked-and-decided
+- design-review-001 F7: z-design/restated-rules-move-together
+- design-review-001 F8: z-design/readings-from-text-not-disk
+- design-review-001 F9: z-design/design-the-execution-window
+- design-review-001 F10: one-off: a mode-specific lesson read; the prompt's lesson command is the only place
+- design-review-001 F11: z-design/probe-free-cli-lines-in-prep
+- design-review-001 F12: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F13: z-design/spec-design-correspondence
+- design-review-001 F14: one-off: two sentences of the same step disagreed
+- note review 001's second candidate (a new review step copies every launch form the existing review steps allow): z-design/instructions-runnable-where-they-run

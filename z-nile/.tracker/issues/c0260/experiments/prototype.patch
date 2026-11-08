@@ -1,0 +1,742 @@
+diff --git a/z-nile/README.md b/z-nile/README.md
+index f76ef60b..0eec307f 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -103,6 +103,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ | `./zn work` pull loop | c0253 | captured |
+ | workers on several hosts, worker identity in spend | c0254 | captured |
+ | `./zn land` usage and a cheap retry | c0258 | captured |
++| capture interview and idea review (`capture/`, `zz-review --mode idea`) | c0260 | exists |
+ 
+ c0248 to c0254 are meant to be one raft once designed, delivered as a stacked PR set: layer 1 is c0248 on `main`, each next layer on the one below, in that order, merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+ 
+@@ -119,7 +120,7 @@ The general model (*captured* (c0248); today a raft is one branch and one PR): a
+ ## Skills
+ | skill | step | what it does |
+ |---|---|---|
+-| `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
++| `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land`: it interviews the user, keeps the verbatim ask and every question and answer in `capture/ask.md`, writes a clean idea, has a clean reviewer attack it (`zz-review --mode idea`) and lands it once the user confirms |
+ | `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
+ | `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
+ | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
+@@ -154,7 +155,7 @@ z-design reads the checklist for the issue's type before it writes the Design:
+ 
+ ## The flow
+ One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes are chores. A lone issue still gets a raft.
+-1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
++1. **z-ticket**, in `capture-<slug>`: the user is interviewed, the issue and its `capture/` record (the verbatim ask, the interview, the idea review, the confirmation) land on `main` with `design: draft` and status `new`. No PR.
+ 2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
+ 3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
+ 4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
+diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
+index 7e05c8ac..e69e5b7d 100644
+--- a/z-nile/engine/audit.luau
++++ b/z-nile/engine/audit.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
+ -- malformed tree (which store.find refuses) can still be described. See c0880.
++local capturecheck = require("./capturecheck")
+ local fs = require("@lune/fs")
+ local ids = require("./ids")
+ local process = require("@lune/process")
+@@ -231,6 +232,44 @@ function audit.run(root: string): { Problem }
+ 			end
+ 		end
+ 	end
++	-- c0260: an issue captured from the user's words keeps `capture/` (z-ticket skill); its shape is capturecheck's
++	for _, f in found do
++		local dir = `{root}/{f.path}/capture`
++		if fs.isDir(dir) and not fs.isFile(`{dir}/ask.md`) then
++			add("error", "capture", `{f.path}/capture`, "capture/ has no ask.md")
++		elseif fs.isFile(`{dir}/ask.md`) then
++			local files: { [string]: string } = {}
++			for _, name in fs.readDir(dir) do
++				if name ~= "ask.md" and string.sub(name, 1, 1) ~= "." then -- a Finder's .DS_Store is no capture file
++					if
++						fs.isFile(`{dir}/{name}`)
++						and (
++							string.match(name, capturecheck.REVIEW) or string.match(name, capturecheck.REFUTE)
++						)
++					then
++						files[name] = fs.readFile(`{dir}/{name}`)
++					else
++						add("error", "capture", `{f.path}/capture`, `{name} is not a capture file`)
++					end
++				end
++			end
++			local ask = fs.readFile(`{dir}/ask.md`)
++			for _, message in capturecheck.check(ask, files) do
++				add("error", "capture", `{f.path}/capture`, message)
++			end
++			-- an unattended capture is confirmed by the user at z-design: a designed issue still saying so skipped it
++			local doc = `{root}/{f.path}/{f.id}.md`
++			local design = if fs.isFile(doc) then front(fs.readFile(doc)).design else nil
++			if capturecheck.unattended(ask) and (design == "ready" or design == "reviewed") then
++				add(
++					"error",
++					"capture",
++					`{f.path}/capture`,
++					"the Confirmation is still unattended but the design is done: z-design shows the user the idea and replaces it (z-design skill, The capture folder)"
++				)
++			end
++		end
++	end
+ 	for _, paths in byId do
+ 		if #paths > 1 then
+ 			for _, p in paths do
+diff --git a/z-nile/engine/capturecheck.luau b/z-nile/engine/capturecheck.luau
+new file mode 100644
+index 00000000..7f30b507
+--- /dev/null
++++ b/z-nile/engine/capturecheck.luau
+@@ -0,0 +1,290 @@
++--!strict
++-- c0260: the shape of an issue's `capture/` folder (z-ticket skill, The capture folder): the user's verbatim ask, the
++-- interview, the idea review's findings each answered, and the confirmation that names the last review round.
++-- Pure over texts; audit.luau reads the folder and calls `check`. It judges shape only: that the ask is verbatim and
++-- that the user really confirmed is for the reviewers (the audit cannot see either).
++local capturecheck = {}
++
++capturecheck.REVIEW = "^idea%-review%-(%d%d%d)%.md$"
++capturecheck.REFUTE = "^idea%-refute%-(%d%d%d)%.md$"
++
++local function blank(text: string): boolean
++	return string.match(text, "^%s*$") ~= nil
++end
++
++-- The fence a line opens or closes: its character and length (three or more backticks or tildes), or nil. A fenced
++-- block holds the user's words as written, headings and all (F3): nothing inside it is structure.
++local function fenceOf(line: string): (string?, number)
++	local ticks = string.match(line, "^(`+)%s*[%w]*%s*$")
++	if ticks and #ticks >= 3 then
++		return "`", #ticks
++	end
++	local tildes = string.match(line, "^(~+)%s*[%w]*%s*$")
++	if tildes and #tildes >= 3 then
++		return "~", #tildes
++	end
++	return nil, 0
++end
++
++-- Calls `visit(line, inFence)` for each line of `text`; returns false when a fence is never closed.
++local function eachLine(text: string, visit: (string, boolean) -> ()): boolean
++	local open: string? = nil
++	local width = 0
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local ch, n = fenceOf(line)
++		if open == nil then
++			if ch then
++				open, width = ch, n
++				visit(line, true)
++			else
++				visit(line, false)
++			end
++		else
++			visit(line, true)
++			if ch == open and n >= width and string.match(line, "^[`~]+%s*$") then
++				open = nil
++			end
++		end
++	end
++	return open == nil
++end
++
++-- The `## ` sections of `text` in order: title, body (fenced lines included). The second result is false when a
++-- fence is never closed.
++local function sections(text: string): ({ { title: string, body: string } }, boolean)
++	local out: { { title: string, body: string } } = {}
++	local closed = eachLine(text, function(line: string, fenced: boolean)
++		local title = if fenced then nil else string.match(line, "^## (.-)%s*$")
++		if title then
++			table.insert(out, { title = title, body = "" })
++		elseif #out > 0 then
++			out[#out].body ..= line .. "\n"
++		end
++	end)
++	return out, closed
++end
++
++-- The interview's problems: `None: <why>` alone, or `### Qn` blocks numbered from 1 without gaps, each with its three
++-- lines filled in.
++local function interview(body: string, out: { string })
++	local none = string.match(body, "^%s*None:%s*(.-)%s*$")
++	if none ~= nil then
++		if blank(none) then
++			table.insert(out, "Interview: `None:` needs the reason")
++		elseif string.find(none, "\n", 1, true) then
++			table.insert(out, "Interview: `None: <why>` must be the only line (or write ### Q1 blocks)")
++		end
++		return
++	end
++	local want = 1
++	local cur: { [string]: string }? = nil
++	local lastKey: string? = nil
++	local function close()
++		if cur then
++			for _, key in { "Question", "Options", "Answer" } do
++				if blank(cur[key] or "") then
++					table.insert(out, `Interview: Q{want - 1} has no {key}: line`)
++				end
++			end
++		end
++	end
++	local closed = eachLine(body, function(line: string, fenced: boolean)
++		if fenced then
++			-- a fenced block after `Answer:` (or `Question:`) is that line's text: several lines, headings and all
++			if cur and lastKey and blank(cur[lastKey] or "") then
++				cur[lastKey] = "(fenced)"
++			end
++			return
++		end
++		local n = string.match(line, "^### Q(%d+)%s*$")
++		if n then
++			close()
++			if tonumber(n) ~= want then
++				table.insert(out, `Interview: found Q{n} where Q{want} belongs (number from 1, no gaps)`)
++			end
++			want += 1
++			cur, lastKey = {}, nil
++		elseif cur then
++			local k, v = string.match(line, "^(%a+):%s*(.*)$")
++			if k and (k == "Question" or k == "Options" or k == "Answer") and cur[k] == nil then
++				cur[k] = v :: string
++				lastKey = k
++			end
++		elseif not blank(line) then
++			table.insert(out, `Interview: text before the first ### Q1 block: {line}`)
++		end
++	end)
++	close()
++	if not closed then
++		table.insert(out, "Interview: a fenced block is never closed")
++	end
++	if want == 1 then
++		table.insert(out, "Interview: no ### Q1 block and no `None: <why>` line")
++	end
++end
++
++-- `ask`: capture/ask.md. `files`: the other files of the folder, name -> text. The problems, in reading order.
++function capturecheck.check(ask: string, files: { [string]: string }): { string }
++	local out: { string } = {}
++	local secs, closed = sections(ask)
++	if not closed then
++		table.insert(out, "ask.md has a fenced block that is never closed")
++		return out
++	end
++	local titles: { string } = {}
++	for _, sec in secs do
++		table.insert(titles, sec.title)
++	end
++	local joined = table.concat(titles, "|")
++	if
++		joined ~= "Verbatim ask|Interview|Confirmation"
++		and joined ~= "Verbatim ask|Part|Interview|Confirmation"
++	then
++		table.insert(
++			out,
++			`ask.md sections must be Verbatim ask, [Part,] Interview, Confirmation, in that order (found: {table.concat(
++				titles,
++				", "
++			)})`
++		)
++		return out
++	end
++	local partAt = if #secs == 4 then 2 else nil
++	if blank(secs[1].body) then
++		table.insert(out, "Verbatim ask is empty")
++	end
++	if partAt and blank(secs[2].body) then
++		table.insert(out, "Part is empty (it names the sibling issues and quotes this issue's part)")
++	end
++	local iv, cf = secs[#secs - 1], secs[#secs]
++	interview(iv.body, out)
++
++	-- the review rounds: idea-review-001.. without gaps, each with its refute file answering every finding
++	local anyAsk = false
++	local last = 0
++	local rounds: { [number]: boolean } = {}
++	for name in files do
++		local n = string.match(name, capturecheck.REVIEW)
++		if n then
++			rounds[tonumber(n) :: number] = true
++			last = math.max(last, tonumber(n) :: number)
++		end
++	end
++	if last == 0 then
++		table.insert(out, "no idea-review-001.md: the idea was never reviewed")
++	end
++	for n = 1, last do
++		local rev = string.format("idea-review-%03d.md", n)
++		local ref = string.format("idea-refute-%03d.md", n)
++		if not rounds[n] then
++			table.insert(out, `{rev} is missing (rounds number from 001 without gaps)`)
++		elseif files[ref] == nil then
++			table.insert(out, `{ref} is missing: answer every finding of {rev}`)
++		else
++			local answered: { [string]: boolean } = {}
++			for line in string.gmatch(files[ref], "[^\n]+") do
++				local f, kind, why = string.match(line, "^%- F(%d+): (%a+):%s*(.*)$")
++				if f then
++					if kind ~= "fixed" and kind ~= "refuted" and kind ~= "ask" then
++						table.insert(out, `{ref}: F{f} is answered "{kind}" (fixed, refuted or ask)`)
++					elseif blank(why :: string) then
++						table.insert(out, `{ref}: F{f} has an empty answer`)
++					end
++					if kind == "ask" then
++						anyAsk = true
++					end
++					answered[f :: string] = true
++				end
++			end
++			local seen: { [string]: boolean } = {}
++			for f in string.gmatch(files[rev], "\n### F(%d+)") do
++				seen[f] = true
++				if not answered[f] then
++					table.insert(
++						out,
++						`{ref}: finding F{f} of {rev} has no answer line (- F{f}: fixed|refuted|ask: …)`
++					)
++				end
++			end
++			for f in answered do
++				if not seen[f] then
++					table.insert(out, `{ref}: answers F{f}, which {rev} does not have`)
++				end
++			end
++		end
++	end
++
++	-- the confirmation: one line, last, naming the highest review round
++	local lines: { string } = {}
++	for line in string.gmatch(cf.body, "[^\n]+") do
++		if not blank(line) then
++			table.insert(lines, line)
++		end
++	end
++	if #lines ~= 1 then
++		table.insert(out, `Confirmation must be one line (found {#lines})`)
++	else
++		local who, date, round, words = string.match(
++			lines[1],
++			"^Confirmed %((%a+), (%d%d%d%d%-%d%d%-%d%d)%) after idea%-review%-(%d%d%d): (.+)$"
++		)
++		if not who or (who ~= "user" and who ~= "unattended") or not date or blank(words :: string) then
++			table.insert(
++				out,
++				"Confirmation must read `Confirmed (user|unattended, YYYY-MM-DD) after idea-review-NNN: <words>`"
++			)
++		elseif who == "unattended" and string.match(iv.body, "^%s*None:") == nil then
++			table.insert(
++				out,
++				"Confirmed (unattended …) needs the Interview to be `None: <why>`: nobody was asked"
++			)
++		elseif who == "user" and anyAsk then
++			table.insert(
++				out,
++				"a `- Fn: ask:` answer is open: once the user answered it, rewrite it `- Fn: fixed: asked as Qn` (an `ask:` is kept only with an unattended confirmation)"
++			)
++		elseif last > 0 and tonumber(round :: string) ~= last then
++			table.insert(
++				out,
++				`Confirmation follows idea-review-{round} but the last round is idea-review-{string.format(
++					"%03d",
++					last
++				)}`
++			)
++		end
++	end
++	return out
++end
++
++-- True when ask.md says `Confirmed (unattended …)`: the user has not confirmed the idea yet (z-design asks them).
++function capturecheck.unattended(ask: string): boolean
++	return string.find(ask, "\nConfirmed (unattended,", 1, true) ~= nil
++end
++
++-- The parts of ask.md a later change must keep: the Verbatim ask, the Part and each `### Qn` block already there.
++-- Returns the first thing `new` changed or dropped compared with `old`, or nil (appending a block, or changing the
++-- Confirmation, is allowed; so is turning the `None:` line into the questions put to the user later).
++function capturecheck.appendOnly(old: string, new: string): string?
++	local a = (sections(old))
++	local b = (sections(new))
++	local function by(secs: { { title: string, body: string } }, title: string): string?
++		for _, sec in secs do
++			if sec.title == title then
++				return sec.body
++			end
++		end
++		return nil
++	end
++	for _, title in { "Verbatim ask", "Part" } do
++		if by(a, title) ~= nil and by(a, title) ~= by(b, title) then
++			return `{title} changed`
++		end
++	end
++	local oldIv, newIv = by(a, "Interview") or "", by(b, "Interview") or ""
++	if string.match(oldIv, "^%s*None:") == nil and string.sub(newIv, 1, #oldIv) ~= oldIv then
++		return "an Interview block changed or was dropped (questions are only added)"
++	end
++	return nil
++end
++
++return capturecheck
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index e62a2a11..11dc75a8 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -36,12 +36,14 @@ dispatch.STEPS = {
+ dispatch.READ_INSIDE = { ["zz-rules"] = true, ["zz-arch"] = true, ["zz-test"] = true, ["zz-execute"] = true }
+ -- zz-review's modes: the lessons each reads and the phase of its row.
+ dispatch.REVIEW_MODES = {
++	-- c0260: the review of a captured idea (z-ticket); its cost is the capture's
++	idea = { lessons = "design", phase = "capture", skills = { "z-ticket", "zz-review" } },
+ 	design = { lessons = "design", phase = "design-review" },
+ 	raft = { lessons = "design", phase = "design-review" },
+ 	code = { lessons = "build", phase = "code-review" },
+ 	-- a stream's review (z-run Phase 2B) under the dispatcher: the review model of the CLI, like a code review
+ 	stream = { lessons = "build", phase = "code-review" },
+-} :: { [string]: { lessons: string, phase: string } }
++} :: { [string]: { lessons: string, phase: string, skills: { string }? } }
+ 
+ -- The step `name` is, or an error naming it: a skill read inside steps, a project's skill, or an unknown name.
+ function dispatch.step(name: string): Step
+@@ -80,7 +82,7 @@ function dispatch.lessonsOf(name: string, mode: string?): string
+ 	if name == "zz-review" then
+ 		local m = dispatch.REVIEW_MODES[mode or "design"]
+ 		if not m then
+-			error(`zz-review has no mode {tostring(mode)} (design, raft, code, stream)`, 0)
++			error(`zz-review has no mode {tostring(mode)} (idea, design, raft, code, stream)`, 0)
+ 		end
+ 		return m.lessons
+ 	end
+@@ -117,6 +119,11 @@ export type PromptInput = {
+ -- skill text, architecture map or other issue is pasted (the user's "Name the files in the prompt").
+ function dispatch.prompt(p: PromptInput): string
+ 	local lessons = dispatch.lessonsOf(p.step, p.mode)
++	-- an idea review reads the capture skills' lessons only (c0260): the design lessons are about designs
++	local lessonArgs = `--when {lessons}`
++	if p.step == "zz-review" and p.mode == "idea" then
++		lessonArgs = "--skill z-ticket --skill zz-review"
++	end
+ 	local what: string
+ 	if p.step == "z-ticket" then
+ 		what = `Read \`{p.skillPath}\` and follow it to capture this as one issue{if p.project
+@@ -144,6 +151,7 @@ function dispatch.prompt(p: PromptInput): string
+ 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
+ 					== "code"
+ 				then "`review-NNN.md`"
++				elseif p.mode == "idea" then "`capture/idea-review-NNN.md`"
+ 				else "`design-review-NNN.md`"}).`
+ 	else
+ 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
+@@ -151,7 +159,7 @@ function dispatch.prompt(p: PromptInput): string
+ 	local lines = {
+ 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
+ 		what,
+-		`Before you start, run \`./zn lessons --when {lessons} --full\` and ask each lesson's check of your work.`,
++		`Before you start, run \`./zn lessons {lessonArgs} --full\` and ask each lesson's check of your work.`,
+ 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
+ 		`Nobody will answer a question. When a decision needs the user (a scope change, a final review round that goes to the user, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop.`,
+ 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index 76fd5265..f841dea5 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -918,8 +918,13 @@ function dispatcher.modelStep(
+ 		if streamDir then
+ 			land = { dir = streamDir, prefix = `stream-review-{id}-`, note = "stream-review-" }
+ 		else
+-			local prefix = if mode == "code" then "review-" else "design-review-"
+-			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
++			local prefix = if mode == "code"
++				then "review-"
++				elseif mode == "idea" then "idea-review-"
++				else "design-review-"
++			-- an idea review lands in the issue's capture/ folder (c0260); the first may be its first file
++			local dir = if mode == "idea" then `{store.get(id).dir}/capture` else store.get(id).dir
++			land = { dir = dir, prefix = prefix, note = prefix }
+ 		end
+ 	end
+ 	local outcome = "failed"
+@@ -1120,6 +1125,7 @@ function dispatcher.modelStep(
+ 	if land and outcome == "ok" then
+ 		local l = land :: Landing
+ 		if fs.isFile(landing) then
++			fs.writeDir(`{cwd}/{l.dir}`)
+ 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
+ 			local name = string.format("%s%03d.md", l.prefix, last + 1)
+ 			fs.move(landing, `{cwd}/{l.dir}/{name}`)
+@@ -1948,7 +1954,7 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+ 	local first = pos[1]
+ 	if not first then
+ 		ctx.fail(
+-			'usage: ./zn dispatch <id> | new "<description>" | <step> <id> [--mode design|code|raft|stream] | stop|retry|status <id> | vet [--dry-run]'
++			'usage: ./zn dispatch <id> | new "<description>" | <step> <id> [--mode idea|design|code|raft|stream] | stop|retry|status <id> | vet [--dry-run]'
+ 		)
+ 	end
+ 	if first == "vet" then
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index fffb4027..56de4e5d 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -3,6 +3,7 @@
+ local audit = require("./audit")
+ local board = require("./board")
+ local brokerLib = require("./broker")
++local capturecheck = require("./capturecheck")
+ local claimsLib = require("./claims")
+ local compactLib = require("./compact")
+ local dispatchLib = require("./dispatch")
+@@ -2224,8 +2225,58 @@ local function captureScope(diff: string, base: string): string?
+ 		if root and rest then
+ 			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
+ 		end
++		-- c0260: a capture also adds or edits the files of its issue's capture/ folder (z-ticket skill): ask.md and
++		-- the idea review's idea-review-NNN.md and idea-refute-NNN.md, plain files, of an issue the base already holds
++		-- as a draft backlog document
++		local owner, file = nil, nil
++		if root and rest then
++			owner, file = string.match(rest, "^issues/([^/]+)/capture/([^/]+)$")
++		end
++		if
++			owner
++			and store.isIssueId(owner)
++			and (kind == "A" or kind == "M")
++			and (
++				file == "ask.md"
++				or string.match(file :: string, capturecheck.REVIEW) ~= nil
++				or string.match(file :: string, capturecheck.REFUTE) ~= nil
++			)
++		then
++			local doc = `{root}/issues/{owner}/{owner}.md`
++			local theirs = sh.run("git", { "show", `{base}:{doc}` })
++			local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
++			if not theirs.ok or frontOf(theirs.stdout).design ~= "draft" then
++				return `not a capture change: {path} belongs to {owner}, which is no draft backlog issue on {base}`
++			end
++			-- the capture's files ride only into an issue nobody has claimed since its stub was pushed
++			if string.match(frontOf(theirs.stdout).status or "", "^new%-") == nil then
++				return `not a capture change: {path}: {owner} is claimed on {base} (status {frontOf(
++					theirs.stdout
++				).status}); its design started without this capture, tell the user`
++			end
++			-- the reviewer's record is never edited, and ask.md only grows (the verbatim ask and the questions stay)
++			if kind == "M" then
++				if string.match(file :: string, capturecheck.REVIEW) then
++					return `not a capture change: {path} is a review already landed (never edited)`
++				end
++				if file == "ask.md" then
++					local was = sh.run("git", { "show", `{base}:{path}` })
++					local now = sh.run("git", { "show", `HEAD:{path}` })
++					local changed = if was.ok and now.ok
++						then capturecheck.appendOnly(was.stdout, now.stdout)
++						else "unreadable"
++					if changed then
++						return `not a capture change: {path}: {changed}`
++					end
++				end
++			end
++			if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
++				return `not a capture change: {path} must stay a plain file (mode 100644)`
++			end
++			continue
++		end
+ 		if kind ~= "M" or not a or a ~= b or not store.isIssueId(a) then
+-			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents; land that through a pull request)`
++			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents and their capture/ files; land that through a pull request)`
+ 		end
+ 		local theirs = sh.run("git", { "show", `{base}:{path}` })
+ 		local mine = sh.run("git", { "show", `HEAD:{path}` })
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index abc71add..018926ac 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -16,6 +16,8 @@ The goal is an issue that **any strong agent can deliver on the first attempt wi
+ - **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. Give it back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
+ - If an issue is missing, create it first with the `z-ticket` skill.
+ 
++**The capture folder.** An issue captured from the user's words has `capture/` beside its document (z-ticket skill, The capture folder): `ask.md` is the user's verbatim ask, the interview and their confirmation, and `idea-review-NNN.md` and `idea-refute-NNN.md` are the idea's review. Read it before designing, to understand the Problem's words. The Problem the user confirmed is the scope, so `ask.md` is evidence for reading it and never widens or narrows it. A capture the user did not confirm (`Confirmed (unattended, …)` in `ask.md`, from `./zn dispatch new`) is confirmed here, before the first review round: show the user the clean idea (Problem, Non-goals, Solution ideas) and every `- Fn: ask: …` line of the `idea-refute-NNN.md` files (interactive: AskUserQuestion; dispatched: write `$ZN_DISPATCH_DIR/questions.md` and stop: the issue exists, so a retry is safe). Record the questions and the user's answers as `### Qn` blocks in `ask.md` (replacing the `None:` line), rewrite each answered line `- Fn: fixed: asked as Qn`, write each answer that adds to the scope into the Problem as a `Decided with the user (YYYY-MM-DD)` line, and replace the Confirmation with `Confirmed (user, YYYY-MM-DD) after idea-review-NNN: "<their words>"`. `./zn audit` fails an issue that is `design: ready` with the unattended line. An issue with no `capture/` folder was captured before c0260 or from an agent's own finding: nothing to read.
++
+ ## 2. Product decisions and architecture
+ `pickman/.tracker/game-design.md` holds the user's product decisions for the game, and it's binding. A design that needs to change a decision stops and asks the user. The issue's Design **quotes the decisions it relies on**, so z-raft can carry them into the raft's Theme and the execution prompt.
+ 
+diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
+index a6ce2399..a4ff73e1 100644
+--- a/z-nile/skills/z-ticket/SKILL.md
++++ b/z-nile/skills/z-ticket/SKILL.md
+@@ -5,8 +5,12 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+ 
+ # Make an issue
+ 
++An issue starts from the user's own words. z-ticket keeps them, asks what they left open, writes a clean idea, has a clean reviewer attack it, and lands it only when the user confirms it. What the user said, asked and answered is kept in the issue's `capture/` folder, so a later reader (z-design, a reviewer) can see where the Problem's words came from. An issue captured from an agent's own finding (a lesson, a review's follow-up), where no user words exist, has no ask: it skips the ask, the interview, the review and the confirmation (steps 1, 2, 6 and 7), writes its Problem from the finding, and gets no `capture/` folder.
++
+ 0. **Open a capture worktree first**, before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
+-1. **Classify the work**:
++1. **Keep the ask verbatim.** Copy the user's request exactly as they wrote it, typos and all, into the **Verbatim ask** section of `capture/ask.md` (the format is below) as soon as the item has a folder (step 4), inside a fenced block (the fence one backtick longer than the longest run of backticks in the text, at least three), so headings and code in a pasted plan stay as written. It is never edited, shortened or "fixed" afterwards, and `./zn land` refuses a later change to it. A batch captured from one request or plan (z-ticket lesson: the capture subject lists every id) copies the whole ask and the whole interview into each of its issues' `ask.md`, and adds a `## Part` section (between the Verbatim ask and the Interview) naming the sibling ids and quoting this issue's part.
++2. **Interview the user.** Ask what the ask leaves open, until you can write each outcome of the Problem without guessing. Ask only what the repository cannot answer (read the tracker, `game-design.md` and the code first), in rounds of at most four questions (Claude Code: AskUserQuestion; another CLI: plain numbered questions, answered in text), each with the options you propose and what each costs. Cover: the classification (step 3), who is affected, what should happen, how "done" is judged, what is out of scope, and any overlap with a backlog issue (`./zn list backlog`: say so and ask whether to merge). Record **every** question exactly as asked, the options offered, and the user's answer in their own words (a free-text "Other" answer verbatim; an answer of several lines goes in a fenced block after `Answer:`): none is dropped, even one the user waved away ("whatever you think" is an answer). The interview ends when the user says so or you have no open question. No question to ask is recorded as `None: <why the ask was complete>`.
++3. **Classify the work**:
+    - **feature** (`f`): new player-facing or developer-facing capability.
+    - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
+    - **chore** (`c`): tooling, refactors or infrastructure, with no change in behavior. **Anything related to CI or tests is always a chore, even when it's a bug**, for example:
+@@ -15,19 +19,56 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+      - a broken gate script, `setup.sh`, hook or workflow;
+      - tracker CLI bugs.
+      These never count as rework.
+-2. **Create it**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). The stub, with that line as its Problem, is pushed to `origin/main` at once, so other terminals see the id and the item. The slug is 2–5 words describing the outcome.
+-3. **Fill in the frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
+-4. **Fill in only these sections**:
+-   - **Problem**: the user's words, sharpened. Who is affected, what happens now, and what should happen. Every outcome it names, and every idea the user gives under Solution, is the issue's scope: once it lands, prep may add detail but never narrows, defers or drops an outcome without the user (z-design, **Scope is what was captured**).
++4. **Create it**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). The stub, with that line as its Problem, is pushed to `origin/main` at once, so other terminals see the id and the item. The slug is 2–5 words describing the outcome. Then write `capture/ask.md` in the item's folder (`./zn find <id>`) with the Verbatim ask and the interview so far.
++5. **Write the clean idea** in the issue document, from the ask and the answers, and only these parts:
++   - **Frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
++   - **Problem**: the user's words, sharpened. Who is affected, what happens now, and what should happen. Every outcome the ask or an answer names, and every idea the user gives under Solution, is the issue's scope: once it lands, prep may add detail but never narrows, defers or drops an outcome without the user (z-design, **Scope is what was captured**). Add nothing the user did not say or answer; a gap you would fill with a guess is a question for step 2.
+    - **Non-goals**: whatever came up and belongs elsewhere.
+    - A few bullet-point ideas under Solution, if they came up.
+    Everything else is left for `z-design`. Keep `design: draft`.
+-5. **Duplicates**: look for overlaps with `./zn list backlog`. If there's an overlap, say so and ask whether to merge.
+-6. **Land it.** Commit in the capture worktree (`git add -A && git commit -m "tracker: new <id> <title>"`), run `./zn land`, and before the worktree is removed record `./zn spend <id> --phase capture --time <minutes>`, then remove the worktree with the command it prints. No PR: land runs the gate locally and pushes to `main`. Under the dispatcher, land without asking (the user started it); the dispatcher pushes the capture for you. Report the ID and path.
++6. **Have the idea checked.** Run `./zn dispatch zz-review <id> --mode idea` from the capture worktree, with a Bash timeout of two hours (7200000 ms): a clean reviewer on the review model of the CLI (zz-review skill, Idea mode) reads `capture/ask.md` and the issue document and writes `capture/idea-review-NNN.md`, and the dispatcher records its spend under the `capture` phase. Do not review the idea yourself. Where the dispatcher cannot run (no agent credential or watermark on this machine), an interactive Claude Code session starts a fresh subagent with `model: "opus"` instead (as z-design step 5.2 allows), given the zz-review skill's Idea mode and the issue's path; it writes `capture/idea-review-NNN.md` itself (the next number), and you record its spend, `./zn spend <id> --phase capture --time <its minutes> --tokens <its tokens> --note idea-review-NNN`. A headless run uses the dispatcher only. Answer every finding in `capture/idea-refute-NNN.md`, one line each, `- F1: fixed: <what changed in the idea>` or `- F1: refuted: <evidence from the ask or an answer>` or `- F1: ask: <the question it needs from the user>`. A finding that needs the user goes back to step 2 as a new question; every answer to it joins the interview. Run another round (a new reviewer) after a round that had a high finding, or whose answers changed the Problem's outcomes (not only its wording). At most three rounds that you start; a high finding left in round three goes to the user at step 7 with the findings. A change the user asks for at step 7 always gets one more round, whatever the count.
++7. **Have the user confirm it.** Show the user the clean idea (Problem, Non-goals, Solution ideas), the review's findings with your answers, and anything left open, and ask them to confirm it as the captured scope (Claude Code: AskUserQuestion with "Confirm" and "Change it"; another CLI: ask in text). A change they ask for is applied, added to the interview as a question and answer, and sent back through step 6 for one more round. Once the user has answered an `ask:` finding, rewrite its line `- Fn: fixed: asked as Qn`. Only the user's confirmation ends the capture. Write it as the last line of `capture/ask.md`.
++8. **Land it.** Commit in the capture worktree (`git add -A && git commit -m "tracker: new <id> <title>"`), run `./zn land`, and before the worktree is removed record `./zn spend <id> --phase capture --time <minutes>`, then remove the worktree with the command it prints. No PR: land runs the gate locally, whose audit checks `capture/` (below), and pushes to `main`. Under the dispatcher, land without asking (the user started it); the dispatcher pushes the capture for you. Report the ID and path.
++
++## The capture folder
++`<id>/capture/` holds the capture's record: `ask.md`, `idea-review-NNN.md` (the reviewer's, numbered by the dispatcher) and `idea-refute-NNN.md` (yours). The gate's audit checks them (`./zn audit`, `z-nile/engine/capturecheck.luau`): an issue with a `capture/ask.md` must have all of the following, and one without a `capture/` folder is not checked (every issue before c0260). `ask.md`:
++
++````markdown
++# Ask for <id>
++
++## Verbatim ask
++```
++<the user's words, exactly>
++```
++
++## Part
++<only in a batch: the sibling ids, and this issue's part quoted>
++
++## Interview
++### Q1
++Question: <exactly as asked>
++Options: <the options offered, or "free text">
++Answer: <the user's words, exactly>
++### Q2
++...
++
++## Confirmation
++Confirmed (user, YYYY-MM-DD) after idea-review-NNN: "<the user's words>"
++````
++
++`## Part` is present only for a batch capture. `## Interview` holds `### Qn` blocks numbered from 1 without gaps, each with its `Question:`, `Options:` and `Answer:` lines, or the single line `None: <why>`. `NNN` in the Confirmation line is the highest `idea-review-NNN.md` in the folder. Every `### Fn` finding of each review has a line `- Fn: fixed|refuted|ask: …` in the same-numbered `idea-refute-NNN.md`; an `ask:` line is kept only while the Confirmation is `unattended`. A fenced block is the user's words as written: nothing inside it is a heading or a field, and an unclosed fence is an error. `./zn land` lets a later land add questions and change the Confirmation, and refuses a change to the Verbatim ask, the Part, an existing question or any landed `idea-review-NNN.md`; it also refuses the capture files of an issue another terminal has already claimed.
+ 
+ ## Headless (under `./zn dispatch`)
+ When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
+ 
++## A capture under the dispatcher
++This is the one exception to the stop-and-ask above, for the interview and the confirmation: a capture does not stop for the user (a stop after `./zn new` would leave a stub that a retry duplicates, and `./zn dispatch retry` keeps no description for a new capture). Under the dispatcher the ask is the description you were given, and the user who started the dispatch is the only confirmation there is:
++- Step 1 as usual: the description, verbatim, in `capture/ask.md`.
++- Step 2: nobody can be asked, so the Interview is the single line `None: unattended, nobody could be asked`. Every question you would have asked is instead kept as an open point: a finding of step 6 answered `- Fn: ask: <the question and the options>`.
++- Step 6 as usual (`./zn dispatch zz-review <id> --mode idea` is allowed here, with its two-hour timeout); a finding that needs the user is answered `ask:`, and the idea is not changed to a guess.
++- Step 7 is the Confirmation line `Confirmed (unattended, YYYY-MM-DD) after idea-review-NNN: the user started this dispatch with this ask`. That is not the user's confirmation of the idea: z-design shows the user the clean idea and every `ask:` line before it designs, and replaces this line with theirs (z-design skill, The capture folder); the audit refuses a designed issue that still says `unattended`.
++- Step 8: land without asking; the dispatcher pushes the capture for you.
++
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill z-ticket --full`. Each is a mistake made before, with the question that catches it.
+ 
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index ca27aa8b..5db4711d 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: zz-review
+-description: Instructions for the clean, adversarial reviewer - design mode (z-design) and code mode (before a PR leaves draft). Use when acting as, or launching, a reviewer.
++description: Instructions for the clean, adversarial reviewer - idea mode (z-ticket), design mode (z-design) and code mode (before a PR leaves draft). Use when acting as, or launching, a reviewer.
+ ---
+ 
+ # Adversarial review
+@@ -15,10 +15,11 @@ You have no shared context with the author. Judge only what's in front of you:
+ - in code mode, the diff.
+ 
+ ## Who reviews
+-A review runs on the review model of the CLI (the user's rule): Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`, never the author's own cheaper model. `./zn dispatch zz-review <id> --mode design|raft|code|stream` starts it from the author's worktree on the CLI and model `.models.toml` names for `zz-review`; under the dispatcher a stream review runs on the review model of the CLI too, and an interactive session may still run stream reviews on Sonnet subagents (Stream mode).
++A review runs on the review model of the CLI (the user's rule): Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`, never the author's own cheaper model. `./zn dispatch zz-review <id> --mode design|raft|code|stream` starts it from the author's worktree on the CLI and model `.models.toml` names for `zz-review`; a captured idea's review (Idea mode) is `--mode idea`, on the same model; under the dispatcher a stream review runs on the review model of the CLI too, and an interactive session may still run stream reviews on Sonnet subagents (Stream mode).
+ 
+ ## Output file
+ - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
++- Idea mode: `idea-review-NNN.md`, in the issue's `capture/` folder (z-ticket); its findings are answered in `idea-refute-NNN.md` beside it. Interactively (a subagent reviewer, z-ticket step 6) you write it yourself, numbered after the highest `idea-review-NNN.md` there.
+ - Code mode: `review-NNN.md`, in the raft directory.
+ - `NNN` continues from the highest existing number.
+ - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
+@@ -87,6 +88,17 @@ Attack all of the following:
+ 11. **Scope fidelity**: for each item, print its capture (`./zn capture <id>`) and compare the document with it (z-design, **Scope is what was captured**). Its title, Problem and Solution ideas may only gain detail, `Scope decision (user, YYYY-MM-DD)` lines and `Decided with the user (YYYY-MM-DD)` lines. Then check that every captured outcome has a Design and an acceptance criterion: Checked, or Judged or Observed only where the zz-test skill allows it. An outcome dropped, deferred, moved into Non-goals, reworded away or left without a criterion, with no `Scope decision` or `Decided with the user` line, or a Problem rewritten to match a smaller design, is **high**. A capture carrying any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) is not a confirmed capture: say so, and judge the scope from the item's history.
+ 12. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Did the experiments and probes in the draft (and their recorded results) run that way, and does any step tell the executor to run something unbounded?
+ 
++## Idea mode (from z-ticket)
++One round on a captured idea, before the user confirms it. You read `<issue folder>/capture/ask.md` (the user's verbatim ask, the interview, no Confirmation yet) and the issue document (`./zn find <id>`): the Problem, Non-goals and Solution ideas as the author wrote them. From round 2, first read the previous rounds' `idea-review-NNN.md` and `idea-refute-NNN.md`. You judge the idea, never a design: how it would be built is z-design's. Attack all of the following:
++1. **Fidelity**: every outcome the ask or an answer names appears in the Problem or the Solution ideas, in the user's meaning. Quote the ask for each outcome that is missing or reworded. Anything in the Problem the user never said or answered (an invented outcome, a guessed default, an author's preference stated as the user's) is **high**.
++2. **Ambiguity**: a word or sentence two engineers would build differently, and the question that would settle it. A question the interview should have asked and did not is a finding; a question the repository answers (the tracker, `game-design.md`, the skills) is not.
++3. **One issue**: does the idea hold outcomes that cannot land together (a feature and an unrelated chore, two projects)? Name the split. Only the user decides a split.
++4. **Overlap and conflict**: run `./zn list backlog`, `./zn list` for the other states and `game-design.md`'s decisions: a duplicate, a contradiction of a decision the user made, or an item that already does part of it.
++5. **Doneness**: could someone tell, from the Problem alone, that the work is finished? A Problem with no observable outcome is a finding.
++6. **Non-goals and scope words**: "and", "all", "every", "etc." and "as needed" hide scope; a non-goal that quietly drops something the user asked for is **high**.
++7. **Interview record**: every `### Qn` has the exact question, the options and the user's own words; a gap or a paraphrased answer is a finding. Under the dispatcher the Interview is `None: unattended…` and the open points are `ask:` answers, which is not a finding.
++Never prescribe a cut: a Recommendation that makes an outcome smaller, later or optional starts `escalate to the user:`. Output as in Output file (findings `### F<n> [severity]`, `Verdict: approve | changes`); there is no `Judged criteria` section.
++
+ ## Stream mode (zz-execute Phase 2B)
+ A stream review is a cheap first filter on **one issue's** work, before the lead merges the stream: in an interactive session a clean **Sonnet** subagent runs it, and under the dispatcher `./zn dispatch zz-review <issue> --mode stream` does, on the review model of the CLI. It never replaces the code review of the whole raft (Code mode, on the review model of the CLI).
+ - **Scope**: `git diff <raft branch>...ws-<issue>`, that issue's document, `check.sh` and acceptance specs, and from round 2 the previous review and refute text (in an interactive session the lead puts that text in the brief; it is not in the stream tree). Under `./zn dispatch`, from round 2 read the previous `stream-review-<issue>-NNN.md` and `stream-refute-<issue>-NNN.md` in the raft's folder of your worktree (the prompt names them). Run the stream's checks (`./zn check <issue>`, `z-nile/check.sh --affected`) in the stream worktree. Check that the diff touches only the issue's Touched modules and its own document. A `stream-review-*` or `stream-refute-*` file in that diff is a finding: those files live only on the raft branch.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index a6c835ea..b9fa8654 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -29,6 +29,8 @@ Each item is a directory named by its ID:
+ <ID>/check.sh           acceptance criteria as executable checks (see the zz-test skill)
+ <ID>/acceptance/        sequestered acceptance specs (issues); `done` moves them to tests/acceptance/<ID>/
+ <ID>/experiments/       spikes for unknowns (issues)
++<ID>/capture/ask.md                  from z-ticket: the user's verbatim ask, the interview, their confirmation (issues captured from user words)
++<ID>/capture/idea-review-NNN.md, idea-refute-NNN.md   from z-ticket's idea review, `zz-review --mode idea`
+ <ID>/design-review-NNN.md, design-refute-NNN.md   from z-design, on the issue; z-raft's coherence review, on the raft
+ <ID>/review-NNN.md, refute-NNN.md                 code review, on the raft
+ <ID>/spend.md           written by `./zn commit` and `./zn spend`; never edit by hand
+@@ -100,7 +102,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+    - A `CONFLICT (add/add)` on a tracker document means two items picked the same number: see Conflicts.
+    - Then run `./zn list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `z-nile/check.sh --full`.
+ 1. **Commit in the worktree**: `./zn commit` inside a raft; plain `git add` and `git commit` elsewhere.
+-2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs `z-nile/check.sh --full` locally, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, pushes one commit to `main` (retrying a lost race) and prints the worktree-removal command.
++2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs `z-nile/check.sh --full` locally, checks that only the sections, title and `depends_on` of draft backlog issue documents, and the `capture/` files of such an issue nobody has claimed (`ask.md`, `idea-review-NNN.md`, `idea-refute-NNN.md`; `ask.md` only grows and a landed review is never edited), changed, pushes one commit to `main` (retrying a lost race) and prints the worktree-removal command.
+ 3. **Merge** a PR only when the conditions under Merging hold, with `gh pr merge --squash`. A raft additionally needs `./zn done` and a resolved review. A prep the user didn't ask for is not merged without asking, and a capture they didn't ask for is not landed without asking. Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4). (A capture has no PR: `./zn land` in step 2 is its landing.)
+ 4. **After the merge, one chained command, run last**: `"<root>/zn" sync; git -C <root> worktree remove <path> && git -C <root> branch -D <branch>; git -C <root> worktree prune`. `<root>` is the first path in `git worktree list`; `sync` fast-forwards the root and rebuilds its board. When the session works inside the worktree (with z-run it started in the main checkout and `cd`'d into the worktree), removing it removes the session's own directory, so every command after it must use `-C <root>` or absolute paths, and nothing should run after this command: post the final report first. The alternative is to leave removal to `./zn worktree-prune`, run later from the main checkout.
+ 
+@@ -121,7 +123,7 @@ The draft PR opened by `start` stays the live log of the raft. Every `./zn commi
+ 
+ ## Spend (best effort, automatic)
+ Rows are only ever appended. A row has nine columns: when, commit, +lines, -lines, minutes, attribution, phase and tokens, and a tenth, model, once any row of the file records the model that spent its tokens (`--model <id>` on `spend` and `commit`; a file with no such row keeps nine columns, and a row with no model leaves the cell empty). The phase is one of `capture`, `prep`, `design-review`, `build`, `code-review` or `deliver`.
+-- `capture`: `./zn spend <issue> --phase capture` after `./zn land`, before the capture worktree is removed. No lines.
++- `capture`: `./zn spend <issue> --phase capture` after `./zn land`, before the capture worktree is removed. No lines. The idea review's own rows are recorded too: by the dispatcher (`idea-review-NNN`, with its wall minutes) or, for a subagent reviewer, by the author with `--note idea-review-NNN`.
+ - `prep`: `./zn spend <issue> --phase prep` once, when the issue's design PR is opened, before anyone readies it. Lines are that branch's own `check.sh`, `acceptance/` and `experiments/` files.
+ - `design-review`: `./zn spend <issue> --phase design-review` for the reviewer's run and again for the answering time; z-raft's coherence review is `./zn spend <R-id> --phase design-review` (shared among the members). No lines. Design reviews live where they ran (the issue's folder, or the raft's for the coherence review), and `./zn metrics` rolls an issue's up to its raft through `raft:`.
+ - `build`: `./zn commit` (the default phase). Lines are the staged diff.
+@@ -161,12 +163,12 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - `./zn compact [--force]`
+ - `./zn remap`
+ - `./zn run [--time S] [--cpu S] -- <command>`, `./zn reap [--dry-run]`
+-- `./zn dispatch <id>`, `./zn dispatch new "<description>"`, `./zn dispatch <step> <id> [--mode design|raft|code]`, `./zn dispatch stop|retry|status <id>`, each with `--dry-run` (Dispatch)
++- `./zn dispatch <id>`, `./zn dispatch new "<description>"`, `./zn dispatch <step> <id> [--mode idea|design|raft|code|stream]`, `./zn dispatch stop|retry|status <id>`, each with `--dry-run` (Dispatch)
+ 
+ ## Dispatch
+ `./zn dispatch` runs the pipeline headless and unattended. The rules are `z-nile/engine/dispatch.luau`'s; the stacked model files are `models.luau`'s.
+ - **What the guards are** (the user's "Keep same user, accept detection", 2026-10-21). Unattended agents run as the user's own OS user. Every guard below (the wrapper, the broker, the tripwire, the watermark and the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent, which can read the user's credentials, rewrite the watermark or the repository's configuration between runs, or merge with the user's token. Known limits are said where each guard is.
+-- **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test`, `zz-execute` (z-run's protocol) and a project's skills are read inside a step and are never one; any other name is an error.
++- **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `idea`, `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test`, `zz-execute` (z-run's protocol) and a project's skills are read inside a step and are never one; any other name is an error.
+ - **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (`order` whole, each `[dispatch]` setting, each field of each `[<skill>.<cli>]` table). `order` is the CLI priority, top first; the supported CLIs are `claude`, `grok` and `agent` (Cursor), and a table naming any other is an error. Each `[<skill>.<cli>]` has `model`, `rank`, `runtime` and `max_tokens` (and optionally `effort`), and an `agent` table also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` table without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli`, `grok-cli` and `cursor-cli` (the remote runtimes are c0142's). Nothing defaults: a skill no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's order; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`). `zz-review` follows the review rule: Opus (`claude-opus-…`) through `claude` and `agent`, any grok model (`grok-…`) at `effort = "xhigh"` through `grok`; any other is an error.
+ - **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the watermark and the server's protection are what catch its use.
+ - **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire, the watermark and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
+@@ -185,7 +187,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Also the `capture/` files of that capture (z-ticket skill, The capture folder), and nothing else: designs, design reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+ - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+ - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
