@@ -234,7 +234,7 @@ return t.spec("f0265 heartbeat rules", function(it)
 	end)
 
 	it("tuning settings are honoured only inside a spec run, and only as positive whole numbers", function()
-		local inside = { PICKMAN_FENCE_SPECS = "1", ZN_BEAT_EVERY = "1" }
+		local inside: { [string]: string? } = { PICKMAN_FENCE_SPECS = "1", ZN_BEAT_EVERY = "1" }
 		t.expect(heartbeat.setting(inside, "ZN_BEAT_EVERY", 300)).toBe(1)
 		t.expect(heartbeat.setting({ ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300)).toBe(300)
 		t.expect(heartbeat.setting({ PICKMAN_FENCE_SPECS = "", ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300))
