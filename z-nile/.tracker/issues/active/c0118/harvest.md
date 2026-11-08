@@ -30,3 +30,20 @@
 - design-review-010 F2: z-design/design-the-execution-window, z-design/watch-steps-name-their-base
 - design-review-010 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
 - design-review-011 F1: z-design/watch-steps-name-their-base
+- design-review-012 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-012 F2: z-design/declare-what-full-runs-covered, z-design/rerun-shipped-audits-at-execution
+- design-review-012 F3: z-design/restated-rules-move-together
+- design-review-012 F4: one-off: c0249's future override of the banding case is recorded in Maintainability; no rule to learn
+- design-review-013 F1: z-design/check-paths-from-the-home, z-design/rerun-skipped-checks-after-edits
+- design-review-013 F2: z-design/exact-checks-compare-against-the-merge-base, z-design/design-the-execution-window
+- design-review-013 F3: z-design/declare-what-full-runs-covered
+- design-review-013 F4: z-design/watch-steps-name-their-base
+- design-review-013 F5: z-design/restated-rules-move-together
+- design-review-014 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-014 F2: z-design/exact-checks-compare-against-the-merge-base, zz-review/sequestration-reference-not-a-ref
+- design-review-014 F3: z-design/restated-rules-move-together
+- design-review-014 F4: z-design/restated-rules-move-together
+- design-review-014 F5: z-design/instructions-runnable-where-they-run
+- design-review-015 F1: z-design/design-the-execution-window, zz-test/narrowing-pins-the-whole-file
+- design-review-015 F2: zz-test/no-vacuous-pass
+- design-review-015 F3: z-design/restated-rules-move-together

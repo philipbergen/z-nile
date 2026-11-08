@@ -1,0 +1,30 @@
+# Spend: c0261 Model tiers cheap sharp wait
+
+| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-11-08 06:25 | design-review-001 | 0 | 0 | 14.3 | spend | design-review | 205527 | claude-opus-5-5 |
+| 2 | 2026-11-08 06:25 | design-refute-001 | 0 | 0 | 20.0 | spend | design-review |  |  |
+| 3 | 2026-11-08 06:41 | design-review-002 | 0 | 0 | 13.0 | spend | design-review |  | claude-opus-5-5 |
+| 4 | 2026-11-08 07:48 | design-refute-002 | 0 | 0 | 40.0 | spend | design-review |  |  |
+| 5 | 2026-11-08 08:02 | design-review-003 | 0 | 0 | 12.0 | spend | design-review |  | claude-opus-5-5 |
+| 6 | 2026-11-08 08:02 | design-refute-003 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 7 | 2026-11-08 08:39 | design-refute-003 | 0 | 0 | 60.0 | spend | design-review |  |  |
+| 8 | 2026-11-08 08:51 | design-review-004 | 0 | 0 | 12.0 | spend | design-review |  | claude-opus-5-5 |
+| 9 | 2026-11-08 08:51 | design-refute-003 | 0 | 0 | 20.0 | spend | design-review |  |  |
+| 10 | 2026-11-08 09:06 | design-refute-004 | 0 | 0 | 90.0 | spend | design-review |  |  |
+| 11 | 2026-11-08 09:21 | design-review-005 | 0 | 0 | 11.0 | spend | design-review |  | claude-opus-5-5 |
+| 12 | 2026-11-08 09:32 | design-refute-005 | 0 | 0 | 120.0 | spend | design-review |  |  |
+| 13 | 2026-11-08 09:46 | design-review-006 | 0 | 0 | 13.0 | spend | design-review |  | claude-opus-5-5 |
+| 14 | 2026-11-08 09:46 | design-refute-006 | 0 | 0 | 45.0 | spend | design-review |  |  |
+| 15 | 2026-11-08 17:15 | design-refute-006 | 0 | 0 | 100.0 | spend | design-review |  |  |
+| 16 | 2026-11-08 17:26 | design-review-007 | 0 | 0 | 12.0 | spend | design-review |  | claude-opus-5-5 |
+| 17 | 2026-11-08 17:27 | design-refute-007 | 0 | 0 | 30.0 | spend | design-review |  |  |
+| 18 | 2026-11-08 18:33 | design-refute-008 | 0 | 0 | 45.0 | spend | design-review |  |  |
+| 19 | 2026-11-08 18:44 | design-review-008 | 0 | 0 | 9.0 | spend | design-review |  | claude-opus-5-5 |
+| 20 | 2026-11-08 18:44 | design-refute-008 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 21 | 2026-11-08 20:09 | design-refute-008 | 0 | 0 | 15.0 | spend | design-review |  |  |
+| 22 | 2026-11-08 20:13 | design-review-009 | 0 | 0 | 4.0 | spend | design-review |  | claude-opus-5-5 |
+| 23 | 2026-11-08 20:13 | design-refute-009 | 0 | 0 | 15.0 | spend | design-review |  |  |
+
+**Total:** +0 / -0 lines, 750.3 agent-minutes, 205527 tokens over 23 records
+<!-- totals: added=0 removed=0 minutes=750.3 records=23 tokens=205527 -->

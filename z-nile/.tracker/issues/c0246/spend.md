@@ -14,6 +14,12 @@
 | 10 | 2026-11-08 02:14 | design-refute-005 | 0 | 0 | 25.0 | spend | design-review |  |
 | 11 | 2026-11-08 02:24 | design-review-006 | 0 | 0 | 9.0 | spend | design-review | 162000 |
 | 12 | 2026-11-08 02:24 | design-refute-006 | 0 | 0 | 20.0 | spend | design-review |  |
+| 13 | 2026-11-08 03:44 | design-review-007 | 0 | 0 | 8.0 | spend | design-review | 137000 |
+| 14 | 2026-11-08 03:44 | design-refute-007 | 0 | 0 | 6.0 | spend | design-review |  |
+| 15 | 2026-11-08 20:19 | round 8 redesign: rojo-driven check | 0 | 0 | 45.0 | spend | design-review |  |
+| 16 | 2026-11-08 20:34 | design-review-008 | 0 | 0 | 25.0 | spend | design-review | 144000 |
+| 17 | 2026-11-08 20:34 | design-refute-008 | 0 | 0 | 30.0 | spend | design-review |  |
+| 18 | 2026-11-08 20:56 | prep | 474 | 1 | 150.0 | spend | prep |  |
 
-**Total:** +0 / -0 lines, 129.0 agent-minutes, 776000 tokens over 12 records
-<!-- totals: added=0 removed=0 minutes=129.0 records=12 tokens=776000 -->
+**Total:** +474 / -1 lines, 393.0 agent-minutes, 1057000 tokens over 18 records
+<!-- totals: added=474 removed=1 minutes=393.0 records=18 tokens=1057000 -->

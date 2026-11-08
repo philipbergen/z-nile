@@ -9,7 +9,7 @@ description: How z-nile tests and gates every project - the gate and its modes, 
 | command | use |
 |---|---|
 | `z-nile/check.sh` / `--affected` | while iterating: format, lint, types for src (Roblox definitions) and tests/scripts (Lune definitions), rojo build, and **only the affected specs** |
-| `z-nile/check.sh --full` | every project's gate, every spec. Used by `land` and `setup.sh` |
+| `z-nile/check.sh --full` | every project's gate, every spec. Used by `land` and `setup.sh`, and by the merge's clean clone |
 | `z-nile/check.sh --affected --fresh` | the affected gate without reuse |
 | `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate: its static stages and its specs alone (each project has its own gate; no `--project` runs every project's). A home's `scripts/check.sh` runs that project's gate (c0120): `pickman/scripts/check.sh` pickman's, `z-nile/scripts/check.sh` z-nile's. The local full gate runs every project (`z-nile/check.sh --full` with no `--project`). GitHub Actions does not run it. |
 | `z-nile/check.sh --plan` | print what each stage reads for each project, and run nothing |
@@ -17,6 +17,16 @@ description: How z-nile tests and gates every project - the gate and its modes, 
 | `lune run z-nile/affected -- [--base REF] [files…]` | show which specs a change selects (`ALL` = full run) |
 | `./zn check <id>` | an item's acceptance checks |
 | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
+
+**Gate by step**: the full gate runs once, at the merge; every step before it runs `--affected`, `./zn done` included. `land`, `setup.sh` and the merge's clean clone run `--full` fresh.
+
+| step | gate |
+|---|---|
+| zz-execute Phase 0 | none (a red `main` first shows at the merge) |
+| Phase 2 iterations, stream checks, the raft's RC0, Phase 3, Phase 4 step 1, zz-review code mode, Phase 5 step 2, the pre-PR gate | `--affected` (RC0 scoped `--project <project>`) |
+| `./zn done` | `--affected` on the done tree |
+| `./zn land`, `setup.sh`, zz-rules Merging steps 2 and 4 (the clean clone) | `--full`, every spec, fresh |
+| a red merge gate | BLOCKED: failing specs named, a graph-miss chore for each spec the affected selection did not list |
 
 ## Spec layout (`*.spec.luau`)
 Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place`, `fakeengine` and `plain` are pickman's; `place` re-exports the shared harness's (`z-nile/tests/lib/place.luau`, c0185), which reads its script roots from the project file, as every home's `tests/lib/place.luau` does. A project's own tiers (pickman's `tests/unit`, `helper`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place`, `fakeengine` and `plain` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has. Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau` (z-nile/README.md, A project's home), and the same place tier: `tests/lib/place.luau` and `tests/place/library.spec.luau`, which build the home's place and judge it. A spec that loads the place requires it as `@tests/lib/place`, never the shared file, so the selector knows which home's place it loads.
@@ -60,7 +70,7 @@ finish
 - Work outside `check` is limited to running a spec through `tests/run` (which list mode refuses), `./zn members` and other cheap reads; everything else goes inside `check`.
 - **Every literal path resolves from its home** (a standing rule since c0120's `check-paths` spec is promoted, c0120 code review 005 F7): every literal path an unfinished item's `check.sh` names must exist from its project's home, or lie under the item's (or its raft's members') Touched modules, which the work creates. Otherwise z-nile's gate goes red on the prep's PR. A path a `depends_on` item will create, and is not done yet, is named through `$ZN_ROOT` or created inside `check`. The exempt files are the four restamped ones c0120 lists by blob (R0030, c0083, R0039, c0075); each leaves the list when its re-prep changes its text.
 - **One `check` per Checked criterion.** The label starts with the AC number from the document.
-- **Exit criteria**: a raft's `check.sh` runs its project's gate (`"$ZN_ROOT/z-nile/check.sh" --project <project> --full`), then every member's `check.sh`, then the raft's own RCn checks. A project's gate proves that project alone (c0120): A game raft's `done` does not prove z-nile is green; the merger's `z-nile/check.sh --full` does, because it runs every project.
+- **Exit criteria**: a raft's `check.sh` runs its project's gate (`"$ZN_ROOT/z-nile/check.sh" --project <project> --affected`), then every member's `check.sh`, then the raft's own RCn checks. A project's gate proves that project alone (c0120): A game raft's `done` does not prove z-nile is green; the merger's `z-nile/check.sh --full` does, because it runs every project.
 - **Commands**: checks may run any deterministic command, such as a spec, a `lune run` script, `rojo build`, or a `grep` that must match nothing.
 - **Where acceptance specs live**: z-design writes them in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/*.spec.luau`, under the issue's project root), **not** in `tests/`.
   - They target code that doesn't exist yet, so putting them in `tests/` would turn main red.
@@ -131,7 +141,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
 - After every `.luau` edit: stylua formats the file and selene lints it.
 - Before every Bash or Monitor call (PreToolUse, `scripts/hooks/pre-bash.sh`): an interpreter with no time limit, inline Python that loops or starts an untimed process, a `while`/`until` loop, a follow (`tail -f`, `watch`), a job started with `&` and not waited for, and a background call with anything unbounded in it, are refused, naming the wrapper.
 - At the end of a session (SessionEnd, `scripts/hooks/session-end.sh`): `./zn reap --session-end` stops what the session left running.
-- On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or the home of a registered project (c0184: `pickman/`, `snake/`, and the rest, from the registry; a registry that does not parse gates every change).
+- On stop: the project-scoped affected gate (`--affected --project <name>`) runs when `z-nile/specs scope` names one project, and the unscoped affected gate runs for every other answer (`ALL`, any other output, a failure, a tree with no `z-nile/specs`; through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate), if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or the home of a registered project (c0184: `pickman/`, `snake/`, and the rest, from the registry; a registry that does not parse gates every change).
 
 ## Lessons
 Before you start, read this skill's lessons: `./zn lessons --skill zz-test --full`. Each is a mistake made before, with the question that catches it.
