@@ -7,7 +7,7 @@ flowchart LR
     res["resolve blocks: ./zn resolve"]
     cap --> des
   end
-  stack[("ranked stack on origin/main: tickets, rafts, state; heartbeat branches")]
+  stack[("ranked stack on origin: tickets, rafts and state on main, heartbeats on branches")]
   subgraph wrk["worker end: any AI CLI running z-work"]
     direction TB
     loop["claim the top raft: lost first, then rank"]

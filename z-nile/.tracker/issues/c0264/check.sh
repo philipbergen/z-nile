@@ -122,13 +122,17 @@ check "AC2: the intent names the two human stages, the worker, the full-force re
 check "AC3: the intent claims nothing as built" lune run tests/run -- "$A/intent.spec.luau"
 check "AC4: the idea stage, the worker, models per command and activity, the full-force review and provenance are sub-sections, each labelled with its issue" lune run tests/run -- "$A/intent.spec.luau"
 check "AC5: a worker clears its context and takes the next raft whenever a raft ends, merged or blocked" lune run tests/run -- "$A/intent.spec.luau"
-check "AC6: the README states the rules of the worker model, and names no tiers and no model names" vocabulary \
+check "AC6: the README states the rules of the worker model, and names no tiers, and no model names where it speaks of the models to use" vocabulary \
 	'`z-work`' '`kimi`' '`agy`' '`deepseek`' 'stays with it all the way to merge' 'one ticket at a time' \
 	'clears its context and picks up the next raft whenever a raft ends' 'It lets go of a raft only when the raft is blocked' \
 	'marks the raft blocked' 'verbatim' 'every question z-ticket asked with its answer' 'confirms the idea' \
 	'acceptance tests as code' 'a real model for each command and for each activity' 'the cheapest do the waiting' \
 	'Nothing expensive orchestrates or waits' 'a heartbeat branch, not on `main`' 'A takeover deletes the old heartbeat branch' \
-	'a numbered copy of it continues the work' 'it never orchestrates on an expensive one' 'and a person approves it' 'limited view' 'stayed on course' 'Off course means a redo' \
+	'a numbered copy of it continues the work' 'it never orchestrates on an expensive one' 'and a person approves it' \
+	'Expensive models do every final review;' 'Expensive models do every final review:' \
+	'on an expensive model checks that it says what the person said' \
+	'so the order works around a blocked item without changing any rank' \
+	'even when a person started it without changing its rank' 'It runs on an expensive model in a fresh context' 'limited view' 'stayed on course' 'Off course means a redo' \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \
