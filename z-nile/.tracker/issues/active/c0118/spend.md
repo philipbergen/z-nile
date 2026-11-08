@@ -28,6 +28,7 @@
 | 24 | 2026-11-08 21:09 | c0118: code review 001 fixes (chart size and units, problems on the page, one round rule) | 164 | 13 | 40.0 | focus | code-review |  |  |
 | 25 | 2026-11-08 22:12 | c0118: code review 002 answers (page fixes driven through the node fake DOM, stronger round-rule pin) | 130 | 24 | 30.0 | focus | code-review |  |  |
 | 26 | 2026-11-08 22:58 | c0118: code review 003 answers (problems note escaped, deviations line; the spy pin is c0281) | 4 | 1 | 25.0 | focus | code-review | 150000 | claude-opus-5-5 |
+| 27 | 2026-11-08 22:59 | c0118: harvest note format | 0 | 0 | 1.0 | focus | code-review |  |  |
 
-**Total:** +3219 / -138 lines, 395.4 agent-minutes, 1216279 tokens over 26 records
-<!-- totals: added=3219 removed=138 minutes=395.4 records=26 tokens=1216279 -->
+**Total:** +3219 / -138 lines, 396.4 agent-minutes, 1216279 tokens over 27 records
+<!-- totals: added=3219 removed=138 minutes=396.4 records=27 tokens=1216279 -->
