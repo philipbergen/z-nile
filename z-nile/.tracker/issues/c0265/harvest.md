@@ -95,3 +95,13 @@
 - design-review-011 F1: z-design/run-the-other-rafts-specs
 - design-review-011 F2: zz-arch/every-command-effects-name-the-check-flows
 - design-review-011 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-012 F1: z-design/liveness-names-held-not-worked-states, zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-012 F2: z-design/never-narrow-captured-scope
+- design-review-012 F3: z-design/spec-design-correspondence
+- design-review-012 F4: z-design/restated-rules-move-together, zz-arch/one-reader-per-format
+- design-review-012 F5: zz-arch/guard-no-is-explicit
+- design-review-012 F6: z-design/confirm-overrides-with-a-suite-run
+- design-review-012 F7: z-design/restated-rules-move-together
+- design-review-012 F8: z-design/accepted-risks-checked-and-decided
+- design-review-012 F9: one-off: a shared local ref namespace; fails safe
+- design-review-012 F10: z-design/reasoned-rows-claim-testable-reasons

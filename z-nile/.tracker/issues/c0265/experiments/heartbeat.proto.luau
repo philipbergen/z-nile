@@ -174,7 +174,8 @@ export type Push = {
 	delete: { { ref: string, lease: string } },
 }
 
--- One beat: replace the claim's branch (the lease is the sha seen, or "" to create only if absent); never go backwards
+-- One beat: replace the claim's branch (the lease is the sha this checkout last wrote for the stamp, else the sha seen,
+-- else "" to create only if absent); never go backwards
 -- or repeat a second; delete the branches of stamps no claim holds once they are older than the limit (a young one may
 -- be a claim this checkout has not fetched yet).
 function heartbeat.plan(
@@ -182,7 +183,8 @@ function heartbeat.plan(
 	epoch: number,
 	beats: { Beat },
 	claimed: { [string]: boolean },
-	now: number
+	now: number,
+	remembered: string?
 ): Push
 	local existing: Beat? = nil
 	local delete: { { ref: string, lease: string } } = {}
@@ -200,7 +202,7 @@ function heartbeat.plan(
 		write = {
 			ref = heartbeat.branch(stamp),
 			subject = heartbeat.subject(stamp, epoch),
-			lease = if existing then existing.sha else "",
+			lease = remembered or (if existing then existing.sha else ""),
 		},
 		delete = delete,
 	}

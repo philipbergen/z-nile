@@ -131,8 +131,8 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		"beat pushes a branch from the main checkout too, replaces the older commit, and touches no file",
 		function()
 			local main = fixture.git(h.f.origin, { "rev-parse", "main" })
-			must(zn(h.f.main, { "beat", "c0010" }, T0 + 300), "beat in the main checkout")
-			must(zn(h.f.main, { "beat", "c0010" }, T0 + 600), "beat again")
+			must(zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 300), "beat in the main checkout")
+			must(zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 600), "beat again")
 			local list = beats()
 			t.expect(#list).toBe(1) -- one branch per claim, its commit replaced
 			t.expect(list[1].epoch).toBe(T0 + 600)
@@ -189,7 +189,10 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 			[`{P}/c0030/c0030.md`] = issue("c0030", "preparing-sunny-heron-lynx"),
 		}, "other claims c0030")
 		pushBeat("preparing-sunny-heron-lynx", T0 + 1150)
-		must(zn(h.f.main, { "beat", "c0010" }, T0 + 1200), "beat in a checkout that has not fetched")
+		must(
+			zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 1200),
+			"beat in a checkout that has not fetched"
+		)
 		local found = false
 		for _, b in beats() do
 			found = found or b.stamp == "preparing-sunny-heron-lynx"
@@ -250,4 +253,34 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		t.expect(refused.ok).toBe(false)
 		t.expect(has(refused.stderr, "./zn run")).toBe(true)
 	end)
+
+	it(
+		"a checkout that does not hold the claim refuses a bare beat, and the dispatcher's form is bound to the stamp it read",
+		function()
+			local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
+			local before = beats()
+			-- the main checkout holds no claim memory for c0010: a bare beat would adopt whatever stamp origin has
+			local bare = zn(h.f.main, { "beat", "c0010" }, T0 + 1500)
+			t.expect(bare.ok).toBe(false)
+			t.expect(has(bare.stderr, "does not hold")).toBe(true)
+			t.expect(has(bare.stderr, "--adopt")).toBe(true)
+			-- the dispatcher's form names the stamp it read at the step's start; a restamped item is refused, not beaten
+			local stale = zn(
+				h.f.main,
+				{ "beat", "c0010", "--adopt", "--stamp", "preparing-silver-otter-quiet" },
+				T0 + 1500
+			)
+			t.expect(stale.ok).toBe(false)
+			t.expect(has(stale.stderr, `c0010's claim was taken over (now {stamp})`)).toBe(true)
+			t.expect(#beats()).toBe(#before)
+			for i, b in beats() do
+				t.expect(b.sha).toBe(before[i].sha) -- nothing was written
+			end
+			-- and with the right stamp it beats
+			must(
+				zn(h.f.main, { "beat", "c0010", "--adopt", "--stamp", stamp }, T0 + 1500),
+				"the dispatcher's form"
+			)
+		end
+	)
 end)

@@ -331,7 +331,7 @@ return t.spec("c0265 lost work", function(it)
 	end)
 
 	it("a beat revives a lost claim", function()
-		must(zn(h.f.main, { "beat", "c0010" }, LATE), "beat of a lost claim")
+		must(zn(h.f.main, { "beat", "c0010", "--adopt" }, LATE), "beat of a lost claim")
 		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE).stdout, "c0010")).toBe(false)
 		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE + 1).stdout, "c0010")).toBe(true)
 	end)
@@ -376,7 +376,7 @@ return t.spec("c0265 lost work", function(it)
 	end)
 
 	it("a takeover is refused for a live claim, a parked one, and whenever the answer is unknown", function()
-		must(zn(h.f.main, { "beat", "c0010" }, LATE + 6 * STALE), "keep c0010 alive")
+		must(zn(h.f.main, { "beat", "c0010", "--adopt" }, LATE + 6 * STALE), "keep c0010 alive")
 		local live = zn(wt2, { "status", "c0010", "preparing" }, LATE + 6 * STALE + 10)
 		t.expect(live.ok).toBe(false)
 		t.expect(has(live.stderr, "is preparing on origin/main")).toBe(true)
@@ -467,6 +467,20 @@ return t.spec("c0265 lost work", function(it)
 		local r = zn(wt, { "status", "c0010", "prepared" }, at)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "taken over")).toBe(true)
+		-- coming back by an explicit beat or a restarted loop does not adopt the taker's claim: wt remembers the old stamp
+		local tipTaken = tipOf(stampOf(`{P}/c0010/c0010.md`))
+		local comeBack = zn(wt, { "beat", "c0010" }, at)
+		t.expect(comeBack.ok).toBe(false)
+		t.expect(has(comeBack.stderr, "c0010's claim was taken over")).toBe(true)
+		local loop = zn(
+			wt,
+			{ "beat", "c0010", "--watch" },
+			at,
+			{ ZN_BOUNDED_DEADLINE = tostring(os.time() + 600) }
+		)
+		t.expect(loop.ok).toBe(false)
+		t.expect(has(loop.stderr, "c0010's claim was taken over")).toBe(true)
+		t.expect(tipOf(stampOf(`{P}/c0010/c0010.md`))).toBe(tipTaken) -- the taker's branch was not touched
 		-- the old rafting claimant (wt made it with `new raft`) is refused its carried move too. The stamp-record check
 		-- runs before setStatus' member design check, so c0030 left at design: draft does not change the answer
 		local rdoc = `{wt}/pickman/.tracker/rafts/{raftId}/{raftId}.md`
@@ -487,11 +501,38 @@ return t.spec("c0265 lost work", function(it)
 
 	it("an entry for a claim that merely ended is dropped with 'claim ended', not 'taken over'", function()
 		local at = LATE + 12 * STALE
+		local c0070Stamp = stampOf(`{P}/c0070/c0070.md`)
+		t.expect(tipOf(c0070Stamp) ~= "").toBe(true)
 		must(zn(wt2, { "status", "c0070", "new" }, at), "give c0070 back") -- wt2 claimed it earlier and holds an entry
 		local told = zn(wt2, { "lessons", "--tags" }, at + 10)
 		t.expect(told.ok).toBe(true)
 		t.expect(has(told.stderr, "c0070's claim ended")).toBe(true)
 		t.expect(has(told.stderr, "c0070's claim was taken over")).toBe(false)
 		t.expect(fs.isFile(`{wt2}/.cache/tracker-beats/c0070`)).toBe(false)
+		t.expect(tipOf(c0070Stamp)).toBe("") -- giving the claim back deleted its heartbeat branch
 	end)
+
+	it(
+		"a lost readied raft is taken over by stop and ready: the old branch goes, a fresh active stamp and branch come, and the stop records the lost stamp",
+		function()
+			local at = LATE + 14 * STALE
+			local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
+			local old = stampOf(doc)
+			t.expect(tipOf(old) ~= "").toBe(true)
+			t.expect(has(zn(h.f.main, { "lost" }, at).stdout, "R0010 active")).toBe(true)
+			must(zn(h.f.main, { "stop", "R0010" }, at), "stop")
+			t.expect(tipOf(old)).toBe("") -- stop dropped the heartbeat branch
+			t.expect(
+				fixture.git(
+					h.f.origin,
+					{ "log", "-1", "--format=%s", "main", "--", "pickman/.tracker/rafts/R0010/R0010.md" }
+				)
+			).toBe(`tracker: stop R0010 (claim {old})`)
+			must(zn(h.f.main, { "ready", "R0010" }, at + 10), "ready")
+			local new = stampOf(doc)
+			t.expect(new ~= old).toBe(true)
+			t.expect(tipOf(new) ~= "").toBe(true) -- the new claim's first beat
+			t.expect(tipOf(old)).toBe("")
+		end
+	)
 end)

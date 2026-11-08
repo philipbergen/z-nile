@@ -65,6 +65,24 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
+# another terminal takes $FAKE_ITEM's claim over: it restamps the item on main and, in one atomic push, deletes the old
+# owner's branch and creates its own
+takeover() {
+  o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/$FAKE_ITEM/$FAKE_ITEM.md"
+  "$REAL_GIT" -C "$o" pull -q origin main
+  sed -i.bak "s/^status: .*/status: $FAKE_NEWSTAMP/" "$f"; rm -f "$f.bak"
+  "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m takeover
+  "$REAL_GIT" -C "$o" push -q origin HEAD:main
+  tree=$("$REAL_GIT" -C "$o" rev-parse "HEAD^{tree}")
+  new=$("$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit-tree "$tree" -p HEAD -m "hb $FAKE_NEWSTAMP 1")
+  "$REAL_GIT" -C "$o" push -q --atomic origin ":refs/heads/hb/$FAKE_OLDSTAMP" "$new:refs/heads/hb/$FAKE_NEWSTAMP"
+}
+if [ "$1" = fetch ]; then
+  case "$*" in
+    *hb-seen*)
+      if [ -f "$FAKE_DIR/raceread" ]; then rm -f "$FAKE_DIR/raceread"; takeover; fi ;;
+  esac
+fi
 if [ "$1" = push ]; then
   case "$*" in
     *:refs/heads/main*)
@@ -77,19 +95,7 @@ if [ "$1" = push ]; then
         "$REAL_GIT" -C "$o" push -q origin HEAD:main
       fi ;;
     *:refs/heads/hb/*)
-      if [ -f "$FAKE_DIR/racebeat" ]; then
-        rm -f "$FAKE_DIR/racebeat"
-        # another terminal takes the claim over just before this beat's push: it restamps the item on main and,
-        # in one atomic push, deletes the old owner's branch and creates its own
-        o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0071/c0071.md"
-        "$REAL_GIT" -C "$o" pull -q origin main
-        sed -i.bak "s/^status: .*/status: $FAKE_NEWSTAMP/" "$f"; rm -f "$f.bak"
-        "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m takeover
-        "$REAL_GIT" -C "$o" push -q origin HEAD:main
-        tree=$("$REAL_GIT" -C "$o" rev-parse "HEAD^{tree}")
-        new=$("$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit-tree "$tree" -p HEAD -m "hb $FAKE_NEWSTAMP 1")
-        "$REAL_GIT" -C "$o" push -q --atomic origin ":refs/heads/hb/$FAKE_OLDSTAMP" "$new:refs/heads/hb/$FAKE_NEWSTAMP"
-      fi ;;
+      if [ -f "$FAKE_DIR/racebeat" ]; then rm -f "$FAKE_DIR/racebeat"; takeover; fi ;;
   esac
 fi
 ]]
@@ -101,6 +107,7 @@ return t.spec("c0265 takeover race and fold", function(it)
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
 			[`{P}/c0071/c0071.md`] = issue("c0071", "new-a-b-c"),
+			[`{P}/c0072/c0072.md`] = issue("c0072", "new-a-b-c"),
 			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
 			[`{P}/c0095/check.sh`] = CHECK,
 			[`{P}/c0096/c0096.md`] = issue("c0096", "prepared-quiet-copper-falcon", "ready", "R0030"),
@@ -127,6 +134,7 @@ return t.spec("c0265 takeover race and fold", function(it)
 		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge2" }), "worktree"), "%s+$", ""))
 		must(zn(wt, { "status", "c0070", "preparing" }), "claim c0070")
 		must(zn(wt, { "status", "c0071", "preparing" }), "claim c0071")
+		must(zn(wt, { "status", "c0072", "preparing" }), "claim c0072")
 	end)
 
 	it("a takeover that meets a claim restamped between its verdict and its publish is refused", function()
@@ -150,7 +158,7 @@ return t.spec("c0265 takeover race and fold", function(it)
 			local told = zn(
 				wt,
 				{ "lessons", "--tags" },
-				{ ZN_NOW = due, FAKE_OLDSTAMP = old, FAKE_NEWSTAMP = new }
+				{ ZN_NOW = due, FAKE_ITEM = "c0071", FAKE_OLDSTAMP = old, FAKE_NEWSTAMP = new }
 			)
 			t.expect(told.ok).toBe(true) -- an automatic beat never fails the command
 			t.expect(has(told.stderr, `c0071's claim was taken over (now {new})`)).toBe(true)
@@ -161,6 +169,25 @@ return t.spec("c0265 takeover race and fold", function(it)
 			t.expect(fs.isFile(`{wt}/.cache/tracker-beats/c0071`)).toBe(false) -- and its entry is gone
 		end
 	)
+
+	it("a create-only beat that races a takeover deletes what it created and reports the loss", function()
+		local old = stampOf(`{P}/c0072/c0072.md`)
+		local new = "preparing-silver-otter-quiet"
+		-- a checkout with no memory adopts the stamp it read, then the takeover lands between its main read and its hb read:
+		-- it sees no branch, so its write is create-only and succeeds; the re-read of main shows another stamp
+		fs.writeFile(`{h.fakes}/raceread`, "1")
+		local r = zn(h.f.main, { "beat", "c0072", "--adopt" }, {
+			ZN_NOW = tostring(os.time() + 1000),
+			FAKE_ITEM = "c0072",
+			FAKE_OLDSTAMP = old,
+			FAKE_NEWSTAMP = new,
+		})
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, `c0072's claim was taken over (now {new})`)).toBe(true)
+		t.expect(tipOf(old)).toBe("") -- what it created was deleted again
+		t.expect(tipOf(new) ~= "").toBe(true) -- the taker's branch stands
+		t.expect(epochs(new)).toEqual({ 1 })
+	end)
 
 	it("fold beats for the raft it claims", function()
 		must(zn(wt, { "fold", "R0030", "c0095" }), "fold")

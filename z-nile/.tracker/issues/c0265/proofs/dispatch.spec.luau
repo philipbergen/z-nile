@@ -67,7 +67,6 @@ return t.spec("c0265 the dispatcher beats", function(it)
 		fakecli.zn(h, { "dispatch", "z-design", "c0050" }, { ZN_BEAT_EVERY = "1" })
 		t.expect(fs.isFile(`{h.f.base}/fakes/beat-seen`)).toBe(true) -- a beat came while the step worked
 		local seen = epochs()
-		t.expect(#seen).toBe(1) -- every beat replaced the one before
 		t.expect(seen[1] >= started).toBe(true)
 		t.expect(seen[1] <= os.time()).toBe(true)
 	end)

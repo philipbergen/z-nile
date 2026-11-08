@@ -30,6 +30,9 @@ local function entry(stamp: string, epoch: number)
 		subject = heartbeat.subject(stamp, epoch),
 	}
 end
+local function leaseOf(push: heartbeat.Push): string
+	return if push.write then push.write.lease else "<none>"
+end
 local function kinds(vs: { heartbeat.Verdict }): { string }
 	local out = {}
 	for _, v in vs do
@@ -205,6 +208,20 @@ return t.spec("c0265 heartbeat rules", function(it)
 			})
 			t.expect(heartbeat.plan(A, NOW, { beat(A, NOW) }, { [A] = true }, NOW).write).toBe(nil) -- the same second
 			t.expect(heartbeat.plan(A, NOW, { beat(A, NOW + 5) }, { [A] = true }, NOW).write).toBe(nil) -- another beater's, ahead
+		end
+	)
+
+	it(
+		"the lease is the sha this checkout last wrote when it remembers one, else the sha seen, else empty",
+		function()
+			local seen = { beat(A, NOW) }
+			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, "mine")))
+				.toBe("mine")
+			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, "mine")))
+				.toBe("mine") -- branch gone: rejected
+			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, nil)))
+				.toBe(`sha-{A}-{NOW}`)
+			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, nil))).toBe("")
 		end
 	)
 
