@@ -17,6 +17,7 @@
 | 13 | 2026-11-08 02:15 | prep | 1 | 1 | 15.0 | spend | prep |  |
 | 14 | 2026-11-08 18:40 | c0239: affected gate for done, scoped stop hook, gate-by-step wording | 188 | 41 | 40.0 | raft | build |  |
 | 15 | 2026-11-08 18:50 | c0239: verification log | 0 | 0 | 3.0 | raft | build |  |
+| 16 | 2026-11-08 19:02 | c0239: keep c0172's pinned Merging phrase whole | 1 | 1 | 5.0 | raft | build |  |
 
-**Total:** +716 / -45 lines, 399.0 agent-minutes, 1177234 tokens over 15 records
-<!-- totals: added=716 removed=45 minutes=399.0 records=15 tokens=1177234 -->
+**Total:** +717 / -46 lines, 404.0 agent-minutes, 1177234 tokens over 16 records
+<!-- totals: added=717 removed=46 minutes=404.0 records=16 tokens=1177234 -->
