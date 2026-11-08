@@ -6,6 +6,7 @@
 -- (tests/lib/trackerfix): a clone with an origin, whose seed commit holds the engine, finalround.luau included.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local ledger = require("@znile/engine/ledger")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -120,5 +121,59 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 		local r = trackerfix.tr(f, wt, { "status", id, "prepared" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout .. r.stderr, "has no design review round")).toBe(true)
+	end)
+
+	it("the cutoff reads the rows' own dates: a model-less round dated before the landing passes, one dated after is refused (AC11)", function()
+		local f = trackerfix.new("c0261-final-round-e", nil)
+		fs.writeFile(`{f.main}/.models.toml`, MODELS)
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-q", "-m", "models" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-solo" })
+		trackerfix.trOk(f, wt, { "sync" })
+		local id = string.match(
+			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
+		trackerfix.trOk(f, wt, { "status", id, "preparing" })
+		local dir = `{wt}/pickman/.tracker/issues/{id}`
+		fs.writeFile(`{dir}/design-review-001.md`, REVIEW)
+		designReady(`{dir}/{id}.md`)
+		local function rowDated(when: string): string
+			return ledger.render(id, id, { {
+				when = when, subject = "design-review-001", added = 0, removed = 0, minutes = 1, how = "x",
+				phase = "design-review", tokens = 5, model = nil,
+			} :: any })
+		end
+		local spendPath = `pickman/.tracker/issues/{id}/spend.md`
+		-- reviewed long before the rule landed, with no model recorded: not locked out
+		trackerfix.elsewhere(f, { [spendPath] = rowDated("2020-01-01 00:00") }, "old round")
+		trackerfix.trOk(f, wt, { "status", id, "prepared" })
+	end)
+
+	it("a model-less round dated after the landing is refused (AC11)", function()
+		local f = trackerfix.new("c0261-final-round-f", nil)
+		fs.writeFile(`{f.main}/.models.toml`, MODELS)
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-q", "-m", "models" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-solo" })
+		trackerfix.trOk(f, wt, { "sync" })
+		local id = string.match(
+			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
+		trackerfix.trOk(f, wt, { "status", id, "preparing" })
+		local dir = `{wt}/pickman/.tracker/issues/{id}`
+		fs.writeFile(`{dir}/design-review-001.md`, REVIEW)
+		designReady(`{dir}/{id}.md`)
+		local text = ledger.render(id, id, { {
+			when = "2099-01-01 00:00", subject = "design-review-001", added = 0, removed = 0, minutes = 1, how = "x",
+			phase = "design-review", tokens = 5, model = nil,
+		} :: any })
+		trackerfix.elsewhere(f, { [`pickman/.tracker/issues/{id}/spend.md`] = text }, "new round")
+		local r = trackerfix.tr(f, wt, { "status", id, "prepared" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "no model")).toBe(true)
 	end)
 end)

@@ -37,10 +37,10 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 	end)
 
 	it("the kinds of final-review model are defined once, per CLI family, and matched by shape (AC11)", function()
-		for _, id in { "claude-opus-5-5", "claude-opus-5-5-high", "claude-opus-6-0", "claude-opus-9-9-max", "kimi-k3-high", "kimi-k3-max", "grok-4.7-xhigh", "grok-5-xhigh", "grok-4.9-xhigh" } do
+		for _, id in { "claude-opus-5-5", "claude-opus-5-5-high", "claude-opus-6-0", "claude-opus-9-9-max", "kimi-k3-high", "kimi-k3-max", "grok-4.7-xhigh", "grok-5-xhigh", "grok-4.9-xhigh", "grok-code-fast-1-xhigh", "grok-5-pro-xhigh" } do
 			t.expect(`{id}={m.isFinalModel(id)}`).toBe(`{id}=true`) -- a new Opus id, kimi-k3 or grok at xhigh still passes
 		end
-		for _, id in { "claude-sonnet-5-5-high", "claude-haiku-5-5", "grok-4.7-high", "grok-4.7-low", "grok-4.6-high", "kimi-k3-low", "kimi-k2.7-code", "composer-2.5", "cursor-grok-4.6-high", "gpt-5.5-high", "opus" } do
+		for _, id in { "claude-sonnet-5-5-high", "claude-haiku-5-5", "grok-4.7-high", "grok-4.7-low", "grok-5-pro-high", "grok-4.7-xhigh-fast", "grok-4.6-high", "kimi-k3-low", "kimi-k2.7-code", "composer-2.5", "cursor-grok-4.6-high", "gpt-5.5-high", "opus" } do
 			t.expect(`{id}={m.isFinalModel(id)}`).toBe(`{id}=false`)
 		end
 	end)
@@ -60,7 +60,7 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 			t.expect(has(r, "--final")).toBe(true)
 		end
 		t.expect(has(refusal(DESIGN, { row("design-review-002", nil) }) :: string, "no model")).toBe(true)
-		t.expect(has(refusal(DESIGN, {}) :: string, "no row")).toBe(true)
+		t.expect(has(refusal(DESIGN, {}) :: string, "there is no row")).toBe(true)
 	end)
 
 	it("only the last round is judged: an earlier cheap round does not matter, a missing last row does (AC11)", function()
@@ -134,5 +134,12 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 		t.expect(fr.firstWhen(rows, "design")).toBe("2026-11-03 10:00")
 		t.expect(fr.firstWhen({}, "design")).toBe(nil)
 		t.expect(fr.firstWhen({ row("R1: review-001", "x", "code-review") }, "design")).toBe(nil)
+	end)
+
+	it("a raft's refusal names the raft review mode, an issue's the design mode (AC11)", function()
+		local raft = refusal({ "design-review-001.md" }, {}, "design", "R0010") :: string
+		t.expect(has(raft, "--mode raft --final")).toBe(true)
+		t.expect(has(raft, "./zn spend R0010 --phase design-review")).toBe(true)
+		t.expect(has(refusal(DESIGN, {}) :: string, "--mode design --final")).toBe(true)
 	end)
 end)
