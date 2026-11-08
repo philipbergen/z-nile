@@ -143,3 +143,11 @@
 - design-review-016 F7: zz-arch/automatic-effects-have-an-end-and-a-subject-check
 - design-review-016 F8: zz-arch/guard-no-is-explicit
 - design-review-016 F9: one-off: small gaps listed in the review
+- design-review-017 F1: z-design/confirm-overrides-with-a-suite-run
+- design-review-017 F2: z-design/spec-design-correspondence
+- design-review-017 F3: z-design/trace-every-way-code-runs
+- design-review-017 F4: z-design/restated-rules-move-together
+- design-review-017 F5: z-test/pin-fail-safes-where-they-act
+- design-review-017 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-017 F7: zz-arch/every-command-effects-name-the-check-flows
+- design-review-017 F8: one-off: leftovers listed in the review
