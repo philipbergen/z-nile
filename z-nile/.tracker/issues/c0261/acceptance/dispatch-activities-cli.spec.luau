@@ -104,7 +104,7 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 	end)
 
-	it("a code review with no table of its own, and a raft review, take the expensive model (AC10)", function()
+	it("a code review with no table of its own takes the expensive model (AC10)", function()
 		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
 		fakecli.clear(h)
 		fakecli.mode(h, "claude.zz-review", "script")
@@ -129,25 +129,38 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		t.expect(has(d.stdout, "model=claude-opus-5-5")).toBe(true)
 	end)
 
-	-- the poll itself, run for real against a fake gh (the runner's `./zn run --time` wrapper is cut off: it only bounds)
-	it("the wait command exits 0 when the condition holds and 2 when it cannot hold, against a fake gh (AC4)", function()
+	-- the poll itself, run for real against a fake gh that counts its calls and answers a sequence of exit codes (the
+	-- runner's `./zn run --time` wrapper is cut off: it only bounds). every = 0 and seconds = 1 keep it fast.
+	it("the wait command re-polls while checks are pending, ends 0 when they pass, 2 when one fails, 3 when time runs out (AC4)", function()
 		fs.writeFile(
 			`{h.bin}/gh`,
-			'#!/bin/bash\ncase "$*" in\n "pr view"*) echo "$FAKE_STATE";;\n "pr checks"*) echo "$FAKE_OUT"; exit ${FAKE_RC:-0};;\nesac\n'
+			'#!/bin/bash\ncase "$*" in\n "pr view"*) echo "$FAKE_STATE";;\n "pr checks"*)\n n=$(cat "$FAKE_COUNT" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$FAKE_COUNT"\n seq=($FAKE_SEQ); rc=${seq[$((n-1))]:-${seq[${#seq[@]}-1]}}\n echo "$FAKE_OUT"; exit $rc;;\nesac\n'
 		)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
-		local function run(what: string, env: { [string]: string }): number
-			local command: string = (dispatch :: any).waitCommand(what, 42, 60)
+		local count = `{h.f.base}/gh-count`
+		local function run(what: string, env: { [string]: string }): (number, number)
+			fs.writeFile(count, "0")
+			local command: string = (dispatch :: any).waitCommand(what, 42, 1, 0)
 			local inner = string.match(command, "%-%- (bash %-c .*)$") :: string
-			local e = { PATH = `{h.bin}:{process.env.PATH}` }
+			local e = { PATH = `{h.bin}:{process.env.PATH}`, FAKE_COUNT = count }
 			for k, v in env do
 				e[k] = v
 			end
-			return fixture.exec(h.f.main, "bash", { "-c", inner }, { env = e }).code
+			local code = fixture.exec(h.f.main, "bash", { "-c", inner }, { env = e }).code
+			return code, tonumber(fs.readFile(count)) :: number
 		end
-		t.expect(run("merged", { FAKE_STATE = "MERGED" })).toBe(0)
-		t.expect(run("merged", { FAKE_STATE = "CLOSED" })).toBe(2)
-		t.expect(run("checks", { FAKE_RC = "0", FAKE_OUT = "all passed" })).toBe(0)
-		t.expect(run("checks", { FAKE_RC = "1", FAKE_OUT = "build failed" })).toBe(2)
+		local code, calls = run("checks", { FAKE_SEQ = "8", FAKE_OUT = "pending" })
+		t.expect(code).toBe(3) -- pending until the deadline is "ran out", not "failed"
+		t.expect(calls > 1).toBe(true) -- and it polled more than once
+		code, calls = run("checks", { FAKE_SEQ = "8 0", FAKE_OUT = "x" })
+		t.expect(code).toBe(0)
+		t.expect(calls).toBe(2)
+		code = run("checks", { FAKE_SEQ = "1 0", FAKE_OUT = "no checks reported on the branch" })
+		t.expect(code).toBe(0)
+		code = run("checks", { FAKE_SEQ = "1", FAKE_OUT = "build failed" })
+		t.expect(code).toBe(2)
+		t.expect((run("merged", { FAKE_STATE = "MERGED" }))).toBe(0)
+		t.expect((run("merged", { FAKE_STATE = "CLOSED" }))).toBe(2)
+		t.expect((run("merged", { FAKE_STATE = "OPEN" }))).toBe(3)
 	end)
 end)

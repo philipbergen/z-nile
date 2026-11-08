@@ -43,7 +43,7 @@ end
 -- on the way (cheap), final review (expensive), waiting (cheapest)
 local WAY = { ["z-ticket"] = true, ["z-design"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review-design"] = true, ["zz-review-code"] = true, ["zz-review-stream"] = true } :: { [string]: boolean }
 local IDS = {
-	way = { claude = "claude-sonnet-5", grok = "grok-4.6-high", agent = "cursor-grok-4.6-high" },
+	way = { claude = "claude-sonnet-5-5-high", grok = "grok-4.6-high", agent = "cursor-grok-4.6-high" },
 	final = { claude = "claude-opus-5-5", grok = "grok-4.7-xhigh", agent = "grok-4.7-xhigh" },
 	wait = { claude = "claude-haiku-5-5", grok = "grok-4.5-low", agent = "composer-2.5" },
 } :: { [string]: { [string]: string } }
@@ -69,11 +69,14 @@ return t.spec("c0261 root .models.toml per activity", function(it)
 	it("every final review resolves to a model that obeys the review rule, and ranks above the rounds on the way (rule)", function()
 		for _, a in activities() do
 			local r = m.resolveActivity(layers(), a)
-			local way = m.resolveActivity(layers(), "z-design")
 			for _, cli in models.CLIS do
 				if classOf(a) == "final" then
-					t.expect(r.specs[cli].rank > way.specs[cli].rank).toBe(true)
 					t.expect(models.reviewRule("zz-review", r.specs[cli])).toBe(nil)
+					for _, other in activities() do
+						if classOf(other) == "way" then
+							t.expect(r.specs[cli].rank > m.resolveActivity(layers(), other).specs[cli].rank).toBe(true)
+						end
+					end
 				end
 			end
 		end

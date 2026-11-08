@@ -13,3 +13,15 @@
 - design-review-001 F12: z-design/restated-rules-move-together
 - design-review-001 F13: z-design/spec-design-correspondence
 - design-review-001 F14: one-off: a probe recorded without the command that ran it
+- design-review-002 F1: z-design/confirm-overrides-with-a-suite-run, z-design/override-search-every-require-spelling
+- design-review-002 F2: z-design/split-term-every-reader, z-design/restated-rules-move-together
+- design-review-002 F3: z-design/never-narrow-captured-scope
+- design-review-002 F4: zz-test/pin-fail-safes-where-they-act
+- design-review-002 F5: z-design/spec-design-correspondence
+- design-review-002 F6: z-design/accepted-risks-checked-and-decided
+- design-review-002 F7: z-design/spec-design-correspondence
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-002 F9: z-design/never-narrow-captured-scope
+- design-review-002 F10: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F11: z-design/quote-other-preps-before-promising
+- design-review-002 F12: one-off: counts and labels that did not match what ran

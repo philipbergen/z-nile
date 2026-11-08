@@ -59,17 +59,17 @@ return t.spec("c0261 dispatcher activities", function(it)
 		local s = dispatch.STEPS["z-wait"]
 		t.expect(s ~= nil and s.kind == "model").toBe(true)
 		for _, what in { "checks", "merged" } do
-			local c: string = d.waitCommand(what, 42, 600)
-			t.expect(has(c, "./zn run --time 630 --")).toBe(true) -- the bound sits above the loop's own deadline
+			local c: string = d.waitCommand(what, 42, 600, 30)
+			t.expect(has(c, "./zn run --time 660 --")).toBe(true) -- deadline + one sleep + a margin for gh itself
 			t.expect(has(c, "end=$((SECONDS+600))")).toBe(true)
-			t.expect(has(c, "sleep 30")).toBe(true)
+			t.expect(has(c, "[ $((SECONDS+30)) -lt $end ] || break; sleep 30")).toBe(true) -- sleeps only if the next poll fits
 			t.expect(has(c, "exit 0")).toBe(true)
 			t.expect(has(c, "exit 2")).toBe(true)
 			t.expect(has(c, "exit 3")).toBe(true)
 		end
-		t.expect(has(d.waitCommand("checks", 42, 600), "gh pr checks 42")).toBe(true)
-		t.expect(has(d.waitCommand("merged", 42, 600), "gh pr view 42")).toBe(true)
-		t.expect(has(d.waitCommand("merged", 42, 600), "CLOSED")).toBe(true)
+		t.expect(has(d.waitCommand("checks", 42, 600, 30), "gh pr checks 42")).toBe(true)
+		t.expect(has(d.waitCommand("merged", 42, 600, 30), "gh pr view 42")).toBe(true)
+		t.expect(has(d.waitCommand("merged", 42, 600, 30), "CLOSED")).toBe(true)
 		t.expect(has(errorOf(function()
 			d.waitCommand("tomorrow", 42, 600)
 		end), "checks, merged")).toBe(true)
@@ -79,12 +79,12 @@ return t.spec("c0261 dispatcher activities", function(it)
 	end)
 
 	it("the wait prompt runs the one command with a tool timeout, again on 3, stops on 0 or 2, and does nothing else (AC4)", function()
-		local p: string = d.waitPrompt("./zn run --time 630 -- true", 6)
-		t.expect(has(p, "./zn run --time 630 -- true")).toBe(true)
+		local p: string = d.waitPrompt("./zn run --time 660 -- true", 6)
+		t.expect(has(p, "./zn run --time 660 -- true")).toBe(true)
 		t.expect(has(p, "tool timeout of 660000 ms")).toBe(true)
 		t.expect(has(p, "exit code 3")).toBe(true)
 		t.expect(has(p, "at most 6 times")).toBe(true)
-		t.expect(has(p, "exit code 0 or 2")).toBe(true)
+		t.expect(has(p, "exit code 0 or 2, or with any other exit code")).toBe(true)
 		t.expect(has(p, "Do nothing else")).toBe(true)
 	end)
 
@@ -129,5 +129,43 @@ return t.spec("c0261 dispatcher activities", function(it)
 		t.expect((dispatch.next(facts({ pr = pr() })) :: any).kind).toBe("merge")
 		local run = facts({ kind = "raft", where = "active", status = "active", pr = pr({ green = false }) })
 		t.expect((dispatch.next(run) :: any).kind).toBe("stop")
+	end)
+
+	it("the wait step's prompt is the poll and nothing else: no skill to read, no lessons, no spend line (AC4)", function()
+		local p: string = dispatch.prompt({
+			step = "z-wait", id = "c0010", skillPath = "z-nile/skills/z-wait/SKILL.md", worktree = "/w", stateDir = "/s",
+			waitCommand = "./zn run --time 660 -- true", waitTimes = 6,
+		} :: any)
+		t.expect(has(p, "./zn run --time 660 -- true")).toBe(true)
+		for _, w in { "SKILL.md", "./zn lessons", "Record your own spend" } do
+			t.expect(has(p, w)).toBe(false)
+		end
+	end)
+
+	it("a review mode with no activity of its own is zz-review-<mode>, final when it is a final review by nature (AC3)", function()
+		local modes: any = dispatch.REVIEW_MODES
+		local had = modes.idea
+		modes.idea = { lessons = "design", phase = "design-review" }
+		local ok, a1, a2 = pcall(function()
+			return d.activityOf("zz-review", "idea", false), d.activityOf("zz-review", "idea", true)
+		end)
+		modes.idea = had
+		t.expect(ok).toBe(true)
+		t.expect(a1).toBe("zz-review-idea")
+		t.expect(a2).toBe("zz-review-idea")
+		modes.novel = { lessons = "design", phase = "design-review" }
+		local never = errorOf(function()
+			d.activityOf("zz-review", "novel", true)
+		end)
+		modes.novel = nil
+		t.expect(has(never, "never final")).toBe(true)
+	end)
+
+	it("a gate waits for its checks only when a human has nothing to judge: not for a conflict, a carried change, an unknown head (AC5)", function()
+		t.expect((dispatch.next(facts({ pr = pr({ green = false, conflicting = true }) })) :: any).kind).toBe("stop")
+		t.expect((dispatch.next(facts({ pr = pr({ green = false, judged = "it carries c0099" }) })) :: any).kind).toBe("stop")
+		t.expect((dispatch.next(facts({ pr = pr({ green = false, head = "" }) })) :: any).kind).toBe("stop")
+		-- GitHub still computing the merge state (UNKNOWN: mergeable false, conflicting false) waits
+		t.expect((dispatch.next(facts({ pr = pr({ green = false, mergeable = false, conflicting = false }) })) :: any).step).toBe("z-wait")
 	end)
 end)
