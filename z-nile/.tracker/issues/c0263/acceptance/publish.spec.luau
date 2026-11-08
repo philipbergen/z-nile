@@ -43,7 +43,7 @@ local function row(event: string, actor: string, detail: string): string
 	return `| 2026-11-08 10:00 | {event} | {actor} | {detail} |\n`
 end
 local function one(id: string): string
-	return header(id) .. row("confirmed", "human:Ann", "said=\"yes\"")
+	return header(id) .. row("confirmed", "human:Ann", 'said="yes"')
 end
 
 return t.spec("c0263 publish and provenance.md", function(it)
@@ -67,10 +67,18 @@ return t.spec("c0263 publish and provenance.md", function(it)
 	end)
 
 	it("the file name is allowed in a backlog item's folder and nowhere odd", function()
-		for _, ok in { `{ISSUE}/provenance.md`, `{RAFT}/provenance.md`, "pickman/.tracker/issues/done/c0010/provenance.md" } do
+		for _, ok in
+			{
+				`{ISSUE}/provenance.md`,
+				`{RAFT}/provenance.md`,
+				"pickman/.tracker/issues/done/c0010/provenance.md",
+			}
+		do
 			t.expect(publish.allowed(ok, { "pickman/.tracker" })).toBe(true)
 		end
-		for _, bad in { "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` } do
+		for _, bad in
+			{ "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` }
+		do
 			t.expect(publish.allowed(bad, { "pickman/.tracker" })).toBe(false)
 		end
 	end)
@@ -96,7 +104,11 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		-- an edited row
 		refused((string.gsub(first, "human:Ann", "human:Eve")), nil, "provenance.md")
 		-- a stale approval made current by rewriting its design hash, with a legitimate row appended after it
-		refused((string.gsub(first, "said=\"yes\"", "said=\"no\"")) .. row("ranked", "human:Bee", "rank=3"), nil, "provenance.md")
+		refused(
+			(string.gsub(first, 'said="yes"', 'said="no"')) .. row("ranked", "human:Bee", "rank=3"),
+			nil,
+			"provenance.md"
+		)
 		-- a row removed (nothing appended)
 		refused(header("c0010"), nil, "provenance.md")
 		-- nothing appended
@@ -113,14 +125,23 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		for _, ev in { "approved", "rafted", "delivered" } do
 			refused(first .. row(ev, "human:Bee", "raft=R0010"), nil, ev)
 		end
-		refused(header("R0010") .. row("approved", "human:Ann", "design=aaaaaaaaaaaa"), `{RAFT}/provenance.md`, "approved")
+		refused(
+			header("R0010") .. row("approved", "human:Ann", "design=aaaaaaaaaaaa"),
+			`{RAFT}/provenance.md`,
+			"approved"
+		)
 		-- a valid append, and a valid create in a raft's folder
 		local more = one("c0010") .. row("ranked", "human:Bee", "rank=3")
 		t.expect(publish.commit(work, function()
 			return { { path = `{ISSUE}/provenance.md`, content = more } }
 		end, "tracker: record").ok).toBe(true)
 		t.expect(publish.commit(work, function()
-			return { { path = `{ACTIVE}/provenance.md`, content = header("c0020") .. row("unblocked", "human:Bee", "block=red-gate") } }
+			return {
+				{
+					path = `{ACTIVE}/provenance.md`,
+					content = header("c0020") .. row("unblocked", "human:Bee", "block=red-gate"),
+				},
+			}
 		end, "tracker: record active").ok).toBe(true)
 		local raft = header("R0010") .. row("unblocked", "human:Bee", "block=needs-decision")
 		t.expect(publish.commit(work, function()

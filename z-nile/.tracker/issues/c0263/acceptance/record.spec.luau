@@ -105,9 +105,21 @@ return t.spec("c0263 the record's writes", function(it)
 		seed[`{ISSUES}/c0070/c0070.md`] = issue("c0070", "R0140")
 		seed[`{ISSUES}/c0050/c0050.md`] = issue("c0050", "R0130")
 		-- an active raft holding an active issue (a worker blocks while it holds a raft: c0250)
-		seed[`{ISSUES}/active/c0090/c0090.md`] = (string.gsub(issue("c0090", "R0150"), "status: prepared%-quiet%-copper%-falcon", "status: active-quiet-copper-falcon"))
+		seed[`{ISSUES}/active/c0090/c0090.md`] = (
+			string.gsub(
+				issue("c0090", "R0150"),
+				"status: prepared%-quiet%-copper%-falcon",
+				"status: active-quiet-copper-falcon"
+			)
+		)
 		seed[`{ISSUES}/active/c0090/check.sh`] = CHECK
-		seed[`{RAFTS}/active/R0150/R0150.md`] = (string.gsub(raftDoc("R0150", "c0090"), "status: prepared%-quiet%-copper%-falcon", "status: active-quiet-copper-falcon"))
+		seed[`{RAFTS}/active/R0150/R0150.md`] = (
+			string.gsub(
+				raftDoc("R0150", "c0090"),
+				"status: prepared%-quiet%-copper%-falcon",
+				"status: active-quiet-copper-falcon"
+			)
+		)
 		seed[`{RAFTS}/active/R0150/check.sh`] = CHECK
 		for _, r in { { "R0110", "" }, { "R0130", "c0050" }, { "R0140", "c0070" } } do
 			seed[`{RAFTS}/{r[1]}/{r[1]}.md`] = raftDoc(r[1], r[2])
@@ -215,44 +227,58 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(fs.isFile(`{W4}/{RAFTS}/R0130/provenance.md`)).toBe(false)
 	end)
 
+	it("./zn record publishes the events other tickets will call and refuses the rest", function()
+		land(W3)
+		local before = tip()
+		trOk(W1, { "record", "c0011", "confirmed", "--actor", "human:Ann", "--detail", 'said="yes"' })
+		local rec = onOrigin(`{ISSUES}/c0011/provenance.md`)
+		t.expect(has(rec, '| confirmed | human:Ann | said="yes"')).toBe(true)
+		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
+			.toBe(`{ISSUES}/c0011/provenance.md`)
+		trOk(W1, { "record", "c0011", "ranked", "--detail", "rank=3" })
+		t.expect(#rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")).toBe(1)
+		-- the closed list, the actor grammar, and the events another command writes
+		local mark = tip()
+		for _, args in
+			{
+				{ "record", "c0011", "invented" },
+				{ "record", "c0011", "approved" },
+				{ "record", "c0011", "rafted" },
+				{ "record", "c0011", "confirmed", "--actor", "somebody" },
+				{ "record", "c0099", "confirmed" },
+			}
+		do
+			t.expect(tr(W1, args).ok).toBe(false)
+			t.expect(tip()).toBe(mark)
+		end
+	end)
+
 	it(
-		"./zn record publishes the events other tickets will call and refuses the rest",
+		"./zn record reaches a raft's record and an active item's, and takes unblocked rows only there",
 		function()
-			land(W3)
-			local before = tip()
-			trOk(W1, { "record", "c0011", "confirmed", "--actor", "human:Ann", "--detail", 'said="yes"' })
-			local rec = onOrigin(`{ISSUES}/c0011/provenance.md`)
-			t.expect(has(rec, '| confirmed | human:Ann | said="yes"')).toBe(true)
-			t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
-				.toBe(`{ISSUES}/c0011/provenance.md`)
-			trOk(W1, { "record", "c0011", "ranked", "--detail", "rank=3" })
-			t.expect(#rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")).toBe(1)
-			-- the closed list, the actor grammar, and the events another command writes
+			trOk(
+				W1,
+				{ "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" }
+			)
+			t.expect(
+				has(
+					onOrigin(`{RAFTS}/R0130/provenance.md`),
+					"| unblocked | human:Ann | block=needs-decision |"
+				)
+			)
+				.toBe(true)
+			trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
+			t.expect(
+				has(
+					onOrigin(`{ISSUES}/active/c0090/provenance.md`),
+					"| unblocked | human:Ann | block=red-gate |"
+				)
+			).toBe(true)
 			local mark = tip()
-			for _, args in
-				{
-					{ "record", "c0011", "invented" },
-					{ "record", "c0011", "approved" },
-					{ "record", "c0011", "rafted" },
-					{ "record", "c0011", "confirmed", "--actor", "somebody" },
-					{ "record", "c0099", "confirmed" },
-				}
-			do
-				t.expect(tr(W1, args).ok).toBe(false)
-				t.expect(tip()).toBe(mark)
-			end
+			t.expect(tr(W1, { "record", "c0090", "confirmed", "--actor", "human:Ann" }).ok).toBe(false)
+			t.expect(tip()).toBe(mark)
 		end
 	)
-
-	it("./zn record reaches a raft's record and an active item's, and takes unblocked rows only there", function()
-		trOk(W1, { "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" })
-		t.expect(has(onOrigin(`{RAFTS}/R0130/provenance.md`), "| unblocked | human:Ann | block=needs-decision |")).toBe(true)
-		trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
-		t.expect(has(onOrigin(`{ISSUES}/active/c0090/provenance.md`), "| unblocked | human:Ann | block=red-gate |")).toBe(true)
-		local mark = tip()
-		t.expect(tr(W1, { "record", "c0090", "confirmed", "--actor", "human:Ann" }).ok).toBe(false)
-		t.expect(tip()).toBe(mark)
-	end)
 
 	it("a conflict outside provenance.md aborts the merge and leaves the tree as it was", function()
 		local doc = `{W4}/{ISSUES}/c0050/c0050.md`
@@ -289,44 +315,56 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect((bee :: number) < (ann :: number)).toBe(true)
 	end)
 
-	it("a record follows its item's folder when the other side moves it (ready moves a backlog item to active/)", function()
-		local rec = `{W5}/{ISSUES}/c0019/provenance.md`
-		local head = "# Provenance: c0019\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | rafted | human:Ann | raft=R0155 |\n")
-		fixture.git(W5, { "add", "-A" })
-		fixture.git(W5, { "commit", "-q", "-m", "our row" })
-		-- main: a row published into the same record, then the folder moved to active/ (what `ready` does)
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		fs.writeFile(`{f.other}/{ISSUES}/c0019/provenance.md`, head .. "| 2026-11-08 10:05 | unblocked | human:Bee |  |\n")
-		fixture.git(f.other, { "add", "-A" })
-		fixture.git(f.other, { "commit", "-q", "-m", "tracker: record c0019 unblocked" })
-		fixture.git(f.other, { "mv", `{ISSUES}/c0019`, `{ISSUES}/active/c0019` })
-		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0155" })
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(W5, { "sync" })
-		-- one record, in the item's new folder, holding both sides' rows (main's first), and nothing left at the old path
-		t.expect(fs.isDir(`{W5}/{ISSUES}/c0019`)).toBe(false)
-		local united = fs.readFile(`{W5}/{ISSUES}/active/c0019/provenance.md`)
-		t.expect(#rows(united, "unblocked")).toBe(1)
-		t.expect(#rows(united, "rafted")).toBe(1)
-		t.expect(fixture.git(W5, { "status", "--porcelain" })).toBe("")
-	end)
+	it(
+		"a record follows its item's folder when the other side moves it (ready moves a backlog item to active/)",
+		function()
+			local rec = `{W5}/{ISSUES}/c0019/provenance.md`
+			local head = "# Provenance: c0019\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+			fs.writeFile(rec, head .. "| 2026-11-08 10:00 | rafted | human:Ann | raft=R0155 |\n")
+			fixture.git(W5, { "add", "-A" })
+			fixture.git(W5, { "commit", "-q", "-m", "our row" })
+			-- main: a row published into the same record, then the folder moved to active/ (what `ready` does)
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fs.writeFile(
+				`{f.other}/{ISSUES}/c0019/provenance.md`,
+				head .. "| 2026-11-08 10:05 | unblocked | human:Bee |  |\n"
+			)
+			fixture.git(f.other, { "add", "-A" })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: record c0019 unblocked" })
+			fixture.git(f.other, { "mv", `{ISSUES}/c0019`, `{ISSUES}/active/c0019` })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0155" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			trOk(W5, { "sync" })
+			-- one record, in the item's new folder, holding both sides' rows (main's first), and nothing left at the old path
+			t.expect(fs.isDir(`{W5}/{ISSUES}/c0019`)).toBe(false)
+			local united = fs.readFile(`{W5}/{ISSUES}/active/c0019/provenance.md`)
+			t.expect(#rows(united, "unblocked")).toBe(1)
+			t.expect(#rows(united, "rafted")).toBe(1)
+			t.expect(fixture.git(W5, { "status", "--porcelain" })).toBe("")
+		end
+	)
 
-	it("audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder", function()
-		local p = `{W4}/{ISSUES}/c0050/provenance.md`
-		fs.writeFile(p, "not a record\n")
-		local bad = tr(W4, { "audit" })
-		t.expect(bad.ok).toBe(false)
-		t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
-		fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
-		local other = tr(W4, { "audit" })
-		t.expect(other.ok).toBe(false)
-		t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
-		fs.removeFile(p)
-		-- a raft's own record (c0250 blocks whole rafts) is fine
-		fs.writeFile(`{W4}/{RAFTS}/R0130/provenance.md`, "# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
-		trOk(W4, { "audit" })
-		fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
-		trOk(W4, { "audit" })
-	end)
+	it(
+		"audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder",
+		function()
+			local p = `{W4}/{ISSUES}/c0050/provenance.md`
+			fs.writeFile(p, "not a record\n")
+			local bad = tr(W4, { "audit" })
+			t.expect(bad.ok).toBe(false)
+			t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
+			fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
+			local other = tr(W4, { "audit" })
+			t.expect(other.ok).toBe(false)
+			t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
+			fs.removeFile(p)
+			-- a raft's own record (c0250 blocks whole rafts) is fine
+			fs.writeFile(
+				`{W4}/{RAFTS}/R0130/provenance.md`,
+				"# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+			)
+			trOk(W4, { "audit" })
+			fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
+			trOk(W4, { "audit" })
+		end
+	)
 end)

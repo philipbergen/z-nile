@@ -6,39 +6,43 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local provenance = require("@znile/engine/provenance")
-local trail = require("@znile/engine/trail")
 local t = require("@tests/lib/t")
+local trail = require("@znile/engine/trail")
 
 local OPUS = "agent:claude-opus-5-5 effort high"
 
 return t.spec("c0263 ticket provenance", function(it)
 	it("grammar and resolution", function()
-		for _, ok in {
-			"human:Philip Bergen",
-			OPUS,
-			"agent:grok-4-7 effort xhigh",
-			"agent:claude-sonnet-5-thinking-high effort unknown",
-			"agent:unknown effort high",
-			"agent:claude-opus-5-5 effort unknown (from git)",
-			"human:Phil (from git)",
-			"unknown",
-			"unknown (from git)",
-			"human:Ann (from git, first add)",
-		} do
+		for _, ok in
+			{
+				"human:Philip Bergen",
+				OPUS,
+				"agent:grok-4-7 effort xhigh",
+				"agent:claude-sonnet-5-thinking-high effort unknown",
+				"agent:unknown effort high",
+				"agent:claude-opus-5-5 effort unknown (from git)",
+				"human:Phil (from git)",
+				"unknown",
+				"unknown (from git)",
+				"human:Ann (from git, first add)",
+			}
+		do
 			t.expect(provenance.isValid(ok)).toBe(true)
 		end
-		for _, bad in {
-			"",
-			"human:",
-			"agent:claude-opus-5-5",
-			"agent:claude opus effort high",
-			"agent:grok-4.7 effort medium", -- the stored id has no dots (modelId)
-			"robot:x",
-			"unknown (from git) extra",
-			"Philip",
-			"none", -- the superseded design's value: nothing records it
-			"human:A\nidea_by: human:B",
-		} do
+		for _, bad in
+			{
+				"",
+				"human:",
+				"agent:claude-opus-5-5",
+				"agent:claude opus effort high",
+				"agent:grok-4.7 effort medium", -- the stored id has no dots (modelId)
+				"robot:x",
+				"unknown (from git) extra",
+				"Philip",
+				"none", -- the superseded design's value: nothing records it
+				"human:A\nidea_by: human:B",
+			}
+		do
 			t.expect(provenance.isValid(bad)).toBe(false)
 		end
 		-- one spelling per model, whichever side it comes from: every model of today's .models.toml
@@ -77,7 +81,8 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect((provenance.resolve("human:Flag", "human:Env", session, "Git"))).toBe("human:Flag")
 		t.expect((provenance.resolve(nil, "human:Env", session, "Git"))).toBe("human:Env")
 		t.expect((provenance.resolve(nil, nil, session, "Git"))).toBe("agent:unknown effort high")
-		t.expect((provenance.resolve(nil, nil, { agent = true, effort = nil }, "Git"))).toBe("agent:unknown effort unknown")
+		t.expect((provenance.resolve(nil, nil, { agent = true, effort = nil }, "Git")))
+			.toBe("agent:unknown effort unknown")
 		t.expect((provenance.resolve(nil, nil, none, "Git"))).toBe("human:Git")
 		t.expect((provenance.resolve("", "", none, "Git"))).toBe("human:Git")
 		-- git has no identity: unknown, not a refusal
@@ -102,13 +107,20 @@ return t.spec("c0263 ticket provenance", function(it)
 		-- every commit author's email in the log: a trailer with one of these is a person
 		local people = { ["p@x"] = true, ["philip.bergen@me.com"] = true }
 		local sonnet = "Claude Sonnet 5.5 <noreply@anthropic.com>"
-		t.expect(provenance.fromCommit("Phil", { sonnet }, people)).toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
+		t.expect(provenance.fromCommit("Phil", { sonnet }, people))
+			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
 		t.expect(provenance.fromCommit("Phil", {}, people)).toBe("human:Phil (from git)")
 		-- a trailer whose email is a commit author's elsewhere is a person, whatever name the commit's author has
-		t.expect(provenance.fromCommit("Phil", { "Philip Bergen <philip.bergen@me.com>" }, people)).toBe("human:Phil (from git)")
+		t.expect(provenance.fromCommit("Phil", { "Philip Bergen <philip.bergen@me.com>" }, people))
+			.toBe("human:Phil (from git)")
 		-- a person's trailer beside an agent's: the agent
-		t.expect(provenance.fromCommit("Phil", { "Philip Bergen <p@x>", "Claude Opus 5.5 <noreply@anthropic.com>" }, people))
-			.toBe("agent:claude-opus-5-5 effort unknown (from git)")
+		t.expect(
+			provenance.fromCommit(
+				"Phil",
+				{ "Philip Bergen <p@x>", "Claude Opus 5.5 <noreply@anthropic.com>" },
+				people
+			)
+		).toBe("agent:claude-opus-5-5 effort unknown (from git)")
 		-- the last agent trailer wins
 		t.expect(provenance.fromCommit("Phil", { "Claude Opus 5.5 <a@anthropic.com>", sonnet }, people))
 			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
@@ -116,7 +128,8 @@ return t.spec("c0263 ticket provenance", function(it)
 
 	it("the record", function()
 		local now = "2026-11-08 10:00"
-		local one = provenance.record(nil, "c0010", "approved", "human:Ann", "design=1a2b3c4d5e6f; said=\"yes\"", now)
+		local one =
+			provenance.record(nil, "c0010", "approved", "human:Ann", 'design=1a2b3c4d5e6f; said="yes"', now)
 		t.expect(one ~= nil).toBe(true)
 		local rows, why = provenance.parse(one :: string)
 		t.expect(why).toBe(nil)
@@ -126,10 +139,12 @@ return t.spec("c0263 ticket provenance", function(it)
 		-- render is the form record writes: parse then render is the identity, and rows carry no number
 		t.expect(provenance.render("c0010", rows :: { any })).toBe(one)
 		t.expect((string.find(one :: string, "| 1 |", 1, true))).toBe(nil)
-		local two = provenance.record(one, "c0010", "unblocked", OPUS, "block=design-gap", "2026-11-08 11:00") :: string
+		local two =
+			provenance.record(one, "c0010", "unblocked", OPUS, "block=design-gap", "2026-11-08 11:00") :: string
 		t.expect(#(provenance.parse(two) :: { any })).toBe(2)
 		-- a separator or a newline in a detail cannot split a row
-		local messy = provenance.record(two, "c0010", "confirmed", "human:Ann", "said=\"a | b\nc\"", now) :: string
+		local messy =
+			provenance.record(two, "c0010", "confirmed", "human:Ann", 'said="a | b\nc"', now) :: string
 		t.expect(#(provenance.parse(messy) :: { any })).toBe(3)
 		t.expect(string.find(messy, "a / b c", 1, true) ~= nil).toBe(true)
 		-- the closed event list and the stored grammar
@@ -142,12 +157,14 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect((provenance.parse("not a record"))).toBe(nil)
 		-- a malformed row under a valid header is refused, never skipped
 		local head = (string.match(two, "^(.-\n|%-%-%-%S*\n)")) :: string
-		for _, bad in {
-			"| 2026-11-08 10:00 | approved | human:Ann |\n", -- three cells
-			"| yesterday | approved | human:Ann | design=aaaaaaaaaaaa |\n", -- a bad when
-			"| 2026-11-08 10:00 | approved | human:Ann | design=aaaaaaaaaaaa\n", -- no closing bar
-			"| 2026-11-08 10:00 | approved | none | |\n", -- an actor nothing records
-		} do
+		for _, bad in
+			{
+				"| 2026-11-08 10:00 | approved | human:Ann |\n", -- three cells
+				"| yesterday | approved | human:Ann | design=aaaaaaaaaaaa |\n", -- a bad when
+				"| 2026-11-08 10:00 | approved | human:Ann | design=aaaaaaaaaaaa\n", -- no closing bar
+				"| 2026-11-08 10:00 | approved | none | |\n", -- an actor nothing records
+			}
+		do
 			t.expect((provenance.parse(head .. bad))).toBe(nil)
 			t.expect(#provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", head .. bad)).toBe(1)
 		end
@@ -157,14 +174,29 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect(provenance.appendOnly(two, one :: string, "c0010") ~= nil).toBe(true) -- a row removed
 		t.expect(provenance.appendOnly(two, two, "c0010") ~= nil).toBe(true) -- nothing appended
 		-- every cell of an old row is pinned: the actor, the detail (a stale approval made current) and the when
-		t.expect(provenance.appendOnly(one, (string.gsub(two, "human:Ann", "human:Eve", 1)), "c0010") ~= nil).toBe(true)
-		t.expect(provenance.appendOnly(one, (string.gsub(two, "design=1a2b3c4d5e6f", "design=ffffffffffff", 1)), "c0010") ~= nil).toBe(true)
-		t.expect(provenance.appendOnly(one, (string.gsub(two, "2026%-11%-08 10:00", "2026-11-08 10:01", 1)), "c0010") ~= nil).toBe(true)
+		t.expect(provenance.appendOnly(one, (string.gsub(two, "human:Ann", "human:Eve", 1)), "c0010") ~= nil)
+			.toBe(true)
+		t.expect(
+			provenance.appendOnly(
+				one,
+				(string.gsub(two, "design=1a2b3c4d5e6f", "design=ffffffffffff", 1)),
+				"c0010"
+			) ~= nil
+		).toBe(true)
+		t.expect(
+			provenance.appendOnly(
+				one,
+				(string.gsub(two, "2026%-11%-08 10:00", "2026-11-08 10:01", 1)),
+				"c0010"
+			) ~= nil
+		).toBe(true)
 		t.expect(provenance.appendOnly(one, two, "c0011") ~= nil).toBe(true) -- another item's record
 		t.expect(provenance.appendOnly(nil, "garbage", "c0010") ~= nil).toBe(true) -- a create that does not parse
 		-- union: two sides that each appended to the same base keep both rows, base first, no row twice
-		local ours = provenance.record(one, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
-		local theirs = provenance.record(one, "c0010", "unblocked", "human:Bee", "", "2026-11-08 10:35") :: string
+		local ours =
+			provenance.record(one, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
+		local theirs =
+			provenance.record(one, "c0010", "unblocked", "human:Bee", "", "2026-11-08 10:35") :: string
 		local united = provenance.union(one :: string, ours, theirs)
 		local urows = provenance.parse(united) :: { any }
 		t.expect(#urows).toBe(3)
@@ -176,15 +208,26 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect(provenance.appendOnly(theirs, united, "c0010")).toBe(nil)
 		t.expect(provenance.union(one :: string, ours, ours)).toBe(ours) -- the same append on both sides is one row
 		-- repeated rows: a base that holds the same row twice keeps both, and main stays a prefix of the result
-		local twice = provenance.record(one, "c0010", "approved", "human:Ann", "design=1a2b3c4d5e6f; said=\"yes\"", "2026-11-08 10:00") :: string
-		local oursR = provenance.record(twice, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
-		local theirsR = provenance.record(twice, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
+		local twice = provenance.record(
+			one,
+			"c0010",
+			"approved",
+			"human:Ann",
+			'design=1a2b3c4d5e6f; said="yes"',
+			"2026-11-08 10:00"
+		) :: string
+		local oursR =
+			provenance.record(twice, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
+		local theirsR =
+			provenance.record(twice, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
 		local unitedR = provenance.union(twice, oursR, theirsR)
 		t.expect(#(provenance.parse(unitedR) :: { any })).toBe(4)
 		t.expect(provenance.appendOnly(theirsR, unitedR, "c0010")).toBe(nil)
 		-- the same row appended on both sides is once, with ours' extra row after it
-		local sameRow = provenance.record(one, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
-		local oursPlus = provenance.record(sameRow, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:40") :: string
+		local sameRow =
+			provenance.record(one, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
+		local oursPlus =
+			provenance.record(sameRow, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:40") :: string
 		local unitedS = provenance.parse(provenance.union(one :: string, oursPlus, sameRow)) :: { any }
 		t.expect(#unitedS).toBe(3)
 		t.expect(unitedS[2].event).toBe("ranked")
@@ -201,18 +244,33 @@ return t.spec("c0263 ticket provenance", function(it)
 		end
 		local none = provenance.record(nil, "c0010", "unblocked", OPUS, "", "2026-11-08 09:00") :: string
 		t.expect((provenance.approval(rows(none), "aaaaaaaaaaaa"))).toBe("none")
-		local one = provenance.record(none, "c0010", "approved", "human:Ann", "design=aaaaaaaaaaaa; said=\"ok\"", "2026-11-08 10:00") :: string
+		local one = provenance.record(
+			none,
+			"c0010",
+			"approved",
+			"human:Ann",
+			'design=aaaaaaaaaaaa; said="ok"',
+			"2026-11-08 10:00"
+		) :: string
 		t.expect((provenance.approval(rows(one), "aaaaaaaaaaaa"))).toBe("current")
 		-- a redesign changes the hash: stale, and it says what the approval covered
 		local state, old = provenance.approval(rows(one), "bbbbbbbbbbbb")
 		t.expect(state).toBe("stale")
 		t.expect(old).toBe("aaaaaaaaaaaa")
 		-- the newest approval decides, not the first and not a match anywhere in the history
-		local two = provenance.record(one, "c0010", "approved", "human:Ann", "design=bbbbbbbbbbbb", "2026-11-08 11:00") :: string
+		local two = provenance.record(
+			one,
+			"c0010",
+			"approved",
+			"human:Ann",
+			"design=bbbbbbbbbbbb",
+			"2026-11-08 11:00"
+		) :: string
 		t.expect((provenance.approval(rows(two), "bbbbbbbbbbbb"))).toBe("current")
 		t.expect((provenance.approval(rows(two), "aaaaaaaaaaaa"))).toBe("stale")
 		-- a row without a design hash approves nothing
-		local bare = provenance.record(nil, "c0010", "approved", "human:Ann", "said=\"ok\"", "2026-11-08 10:00") :: string
+		local bare =
+			provenance.record(nil, "c0010", "approved", "human:Ann", 'said="ok"', "2026-11-08 10:00") :: string
 		t.expect((provenance.approval(rows(bare), "aaaaaaaaaaaa"))).toBe("stale")
 	end)
 
@@ -222,7 +280,9 @@ return t.spec("c0263 ticket provenance", function(it)
 		-- no file on the base: the rule is not in force (nil), not an empty list
 		t.expect((provenance.exemptParse(nil))).toBe(nil)
 		-- a malformed or repeated line is refused, not skipped
-		for _, bad in { "c0260\n", "c0260 nothex\n", "c0260 aaaaaaaaaaaa\nc0260 bbbbbbbbbbbb\n", "stray text\n" } do
+		for _, bad in
+			{ "c0260\n", "c0260 nothex\n", "c0260 aaaaaaaaaaaa\nc0260 bbbbbbbbbbbb\n", "stray text\n" }
+		do
 			local got, why = provenance.exemptParse(bad)
 			t.expect(got).toBe(nil)
 			t.expect(why ~= nil).toBe(true)
@@ -230,20 +290,51 @@ return t.spec("c0263 ticket provenance", function(it)
 		-- render then parse is the identity, sorted, with the two comment lines first
 		local rendered = provenance.exemptRender({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
 		t.expect(string.sub(rendered, 1, 1)).toBe("#")
-		t.expect((provenance.exemptParse(rendered))).toEqual({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
+		t.expect((provenance.exemptParse(rendered)))
+			.toEqual({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
 		-- the doors: not in force without a list; a current approval passes; a listed issue passes only at its listed design
 		local none = {} :: { provenance.Row }
 		local current = provenance.parse(
-			provenance.record(nil, "c0010", "approved", "human:Ann", "design=cccccccccccc", "2026-11-08 10:00") :: string
+			provenance.record(
+				nil,
+				"c0010",
+				"approved",
+				"human:Ann",
+				"design=cccccccccccc",
+				"2026-11-08 10:00"
+			) :: string
 		) :: { provenance.Row }
 		t.expect(provenance.approvalProblem("c0010", "cccccccccccc", none, nil)).toBe(nil)
 		t.expect(provenance.approvalProblem("c0010", "cccccccccccc", current, {})).toBe(nil)
-		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", none, { c0010 = "dddddddddddd" })).toBe(nil)
-		t.expect(string.find(provenance.approvalProblem("c0010", "eeeeeeeeeeee", none, { c0010 = "dddddddddddd" }) :: string, "redesigned since the freeze", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(provenance.approvalProblem("c0011", "dddddddddddd", none, { c0010 = "dddddddddddd" }) :: string, "without an approval", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(provenance.approvalProblem("c0010", "dddddddddddd", current, {}) :: string, "no longer covers", 1, true) ~= nil).toBe(true)
+		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", none, { c0010 = "dddddddddddd" }))
+			.toBe(nil)
+		t.expect(
+			string.find(
+				provenance.approvalProblem("c0010", "eeeeeeeeeeee", none, { c0010 = "dddddddddddd" }) :: string,
+				"redesigned since the freeze",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+		t.expect(
+			string.find(
+				provenance.approvalProblem("c0011", "dddddddddddd", none, { c0010 = "dddddddddddd" }) :: string,
+				"without an approval",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+		t.expect(
+			string.find(
+				provenance.approvalProblem("c0010", "dddddddddddd", current, {}) :: string,
+				"no longer covers",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
 		-- a listed issue with a stale approval at the listed design still passes (the list is its approval until it changes)
-		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", current, { c0010 = "dddddddddddd" })).toBe(nil)
+		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", current, { c0010 = "dddddddddddd" }))
+			.toBe(nil)
 	end)
 
 	it("derive and merge", function()
@@ -254,7 +345,15 @@ return t.spec("c0263 ticket provenance", function(it)
 		local n = 0
 		local raftAt: { [string]: string } = {}
 		-- 1790000000 is 2026-09-21 14:13:20 UTC; `day` counts from there; `raft` is the document's raft: after the commit
-		local function commit(day: number, author: string, subject: string, trailers: { string }, status: string, path: string, raft: string?): trail.Commit
+		local function commit(
+			day: number,
+			author: string,
+			subject: string,
+			trailers: { string },
+			status: string,
+			path: string,
+			raft: string?
+		): trail.Commit
 			n += 1
 			local sha = `sha{n}`
 			if raft ~= nil then
@@ -315,7 +414,8 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect((d.rafted :: provenance.Entry).actor).toBe("human:Fay (from git)")
 		t.expect((d.rafted :: provenance.Entry).detail).toBe("raft=R0011")
 		-- the delivery is the commit that first added the document under done/, and it is also the merge
-		t.expect((d.delivered :: provenance.Entry).actor).toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
+		t.expect((d.delivered :: provenance.Entry).actor)
+			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
 		-- who merged is the commit's author, trailers ignored (a squash is authored by the user with the agent as co-author)
 		t.expect((d.merged :: provenance.Entry).actor).toBe("human:Cy (from git)")
 		-- an unfolded item (raft: empty) has no rafter, and a backlog item no delivery or merge
@@ -328,16 +428,41 @@ return t.spec("c0263 ticket provenance", function(it)
 		local rec = table.clone(give)
 		rec.path = "z-nile/.tracker/issues/c0010/provenance.md"
 		rec.order += 1
-		t.expect(#provenance.select({ give, rec, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked).toBe(0)
-		t.expect(#provenance.select({ give, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked).toBe(1)
+		t.expect(
+			#provenance.select({ give, rec, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked
+		)
+			.toBe(0)
+		t.expect(#provenance.select({ give, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked)
+			.toBe(1)
 		-- an idea taken from a first add (no commit names the item) says so
-		local weak = provenance.select({ commit(1, "Zed", "tracker: rename things", {}, "A", DOC) }, "c0010", "backlog", "", people, {})
+		local weak = provenance.select(
+			{ commit(1, "Zed", "tracker: rename things", {}, "A", DOC) },
+			"c0010",
+			"backlog",
+			"",
+			people,
+			{}
+		)
 		t.expect((weak.idea :: provenance.Entry).actor).toBe("human:Zed (from git, first add)")
 		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
 		-- merge: a stored row wins over a derived fallback of its event; oldest first by date, a derived entry before a
 		-- stored one in the same minute. The stored dates fall inside the derived range (09-22 14:13 .. 09-28 14:13).
-		local text = provenance.record(nil, "c0010", "confirmed", "human:Ann", "said=\"yes\"", "2026-09-22 14:13") :: string
-		text = provenance.record(text, "c0010", "approved", "human:Ann", "design=aaaaaaaaaaaa", "2026-09-24 20:00") :: string
+		local text = provenance.record(
+			nil,
+			"c0010",
+			"confirmed",
+			"human:Ann",
+			'said="yes"',
+			"2026-09-22 14:13"
+		) :: string
+		text = provenance.record(
+			text,
+			"c0010",
+			"approved",
+			"human:Ann",
+			"design=aaaaaaaaaaaa",
+			"2026-09-24 20:00"
+		) :: string
 		text = provenance.record(text, "c0010", "rafted", OPUS, "raft=R0011", "2026-09-27 15:00") :: string
 		local rows = provenance.parse(text) :: { provenance.Row }
 		local merged = provenance.merge(d, rows, "claude-opus-5-5-high")
@@ -365,7 +490,8 @@ return t.spec("c0263 ticket provenance", function(it)
 		end
 		-- the worker comes from a spend row: the model column today, host and CLI once c0254 adds them
 		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high" })).toBe("claude-opus-5-5-high")
-		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high", host = "h1", cli = "claude" })).toBe("h1/claude/claude-opus-5-5-high")
+		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high", host = "h1", cli = "claude" }))
+			.toBe("h1/claude/claude-opus-5-5-high")
 		t.expect(provenance.workerOf({})).toBe(nil)
 		t.expect(provenance.workerOf(nil)).toBe(nil)
 	end)
@@ -390,11 +516,25 @@ return t.spec("c0263 ticket provenance", function(it)
 	end)
 
 	it("audit", function()
-		local good = provenance.record(nil, "c0010", "approved", "human:Ann", "design=aaaaaaaaaaaa", "2026-11-08 10:00") :: string
+		local good = provenance.record(
+			nil,
+			"c0010",
+			"approved",
+			"human:Ann",
+			"design=aaaaaaaaaaaa",
+			"2026-11-08 10:00"
+		) :: string
 		t.expect(provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", good)).toEqual({})
 		t.expect(#provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", "garbage")).toBe(1)
 		-- a raft may have one (c0250 blocks whole rafts); a header that names another id may not
-		local raft = provenance.record(nil, "R0010", "unblocked", "human:Ann", "block=needs-decision", "2026-11-08 10:00") :: string
+		local raft = provenance.record(
+			nil,
+			"R0010",
+			"unblocked",
+			"human:Ann",
+			"block=needs-decision",
+			"2026-11-08 10:00"
+		) :: string
 		t.expect(provenance.problems("z-nile/.tracker/rafts/R0010/provenance.md", raft)).toEqual({})
 		t.expect(#provenance.problems("z-nile/.tracker/issues/c0011/provenance.md", good)).toBe(1)
 	end)

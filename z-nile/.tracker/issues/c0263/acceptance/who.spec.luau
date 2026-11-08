@@ -7,8 +7,8 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
-local serde = require("@lune/serde")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -82,7 +82,11 @@ return t.spec("c0263 who and the board", function(it)
 		put("c0010", doc("c0010", "", "new-d-e-f"))
 		commit("Dee", "tracker: c0010 new", "2026-10-03T09:00:00Z")
 		put("c0010", doc("c0010", "R0010", "prepared-a-b-c"))
-		commit("Bob", "tracker: raft R0010 demo\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>", "2026-10-04T09:00:00Z")
+		commit(
+			"Bob",
+			"tracker: raft R0010 demo\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+			"2026-10-04T09:00:00Z"
+		)
 		put("c0010", doc("c0010", "", "prepared-a-b-c"))
 		commit("Gus", "tracker: unfold c0010", "2026-10-05T09:00:00Z")
 		put("c0010", doc("c0010", "R0011", "prepared-a-b-c"))
@@ -97,13 +101,27 @@ return t.spec("c0263 who and the board", function(it)
 		fs.writeFile(
 			`{dir}/{IDS}/c0010/spend.md`,
 			ledger.render("c0010", "alpha", {
-				{ when = "2026-10-06 10:00", subject = "work", added = 1, removed = 0, minutes = 1, how = "focus", phase = "deliver", tokens = 5, model = "claude-opus-5-5-high" },
+				{
+					when = "2026-10-06 10:00",
+					subject = "work",
+					added = 1,
+					removed = 0,
+					minutes = 1,
+					how = "focus",
+					phase = "deliver",
+					tokens = 5,
+					model = "claude-opus-5-5-high",
+				},
 			})
 		)
 		commit("Fay", "tracker: record c0010", "2026-10-06T09:40:00Z")
 		fs.writeDir(`{dir}/{IDS}/done`)
 		git(dir, { "mv", `{IDS}/c0010`, `{IDS}/done/c0010` }, "Cy", "2026-10-07T09:00:00Z")
-		commit("Cy", "R0011: demo (#1)\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>", "2026-10-07T09:00:00Z")
+		commit(
+			"Cy",
+			"R0011: demo (#1)\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>",
+			"2026-10-07T09:00:00Z"
+		)
 		-- c0020: an old backlog item, captured by Eve, no record
 		put("c0020", doc("c0020", "", "new-a-b-c"))
 		commit("Eve", "tracker: new c0020 beta", "2026-10-08T09:00:00Z")
@@ -150,41 +168,45 @@ return t.spec("c0263 who and the board", function(it)
 		W = (string.gsub(made.stdout, "%s+$", ""))
 	end)
 
-	it("who prints the derived entries and the record, oldest first by date, the record winning over a git fallback", function()
-		local before = git(W, { "status", "--porcelain" })
-		local r = zn(W, { "who", "c0010" })
-		if not r.ok then
-			error(r.stdout .. r.stderr)
-		end
-		local out = r.stdout
-		t.expect(has(out, "idea  human:Ann (from git)")).toBe(true)
-		t.expect(has(out, "status:preparing  human:Dee (from git)")).toBe(true)
-		-- a `tracker: c0010 new` commit is the unblock (once, never also a status line), and no row is stored for it
-		t.expect(has(out, "unblocked  human:Dee (from git)")).toBe(true)
-		t.expect(has(out, "status:new")).toBe(false)
-		-- the stored approval is the human's and its design hash; the stored rafted row beats the git rafter (Fay)
-		t.expect(has(out, "approved  human:Ann")).toBe(true)
-		t.expect(has(out, "design=aaaaaaaaaaaa")).toBe(true)
-		t.expect(has(out, `rafted  {OPUS}`)).toBe(true)
-		t.expect(has(out, "rafted  human:Fay")).toBe(false)
-		-- a delivery nothing recorded comes from the done commit, the agent that merged it, with the worker read from
-		-- the ticket's spend rows
-		t.expect(has(out, "delivered  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
-		t.expect(has(out, "worker=claude-opus-5-5-high")).toBe(true)
-		-- and who merged it is a derived entry of its own
-		t.expect(has(out, "merged  human:Cy (from git)")).toBe(true)
-		-- oldest first, by the dates the fixture set
-		local order: { string } = {}
-		for line in string.gmatch(out, "[^\n]+") do
-			local event = string.match(line, "^%S+ %S+%s+(%S+)")
-			if event then
-				table.insert(order, event)
+	it(
+		"who prints the derived entries and the record, oldest first by date, the record winning over a git fallback",
+		function()
+			local before = git(W, { "status", "--porcelain" })
+			local r = zn(W, { "who", "c0010" })
+			if not r.ok then
+				error(r.stdout .. r.stderr)
 			end
+			local out = r.stdout
+			t.expect(has(out, "idea  human:Ann (from git)")).toBe(true)
+			t.expect(has(out, "status:preparing  human:Dee (from git)")).toBe(true)
+			-- a `tracker: c0010 new` commit is the unblock (once, never also a status line), and no row is stored for it
+			t.expect(has(out, "unblocked  human:Dee (from git)")).toBe(true)
+			t.expect(has(out, "status:new")).toBe(false)
+			-- the stored approval is the human's and its design hash; the stored rafted row beats the git rafter (Fay)
+			t.expect(has(out, "approved  human:Ann")).toBe(true)
+			t.expect(has(out, "design=aaaaaaaaaaaa")).toBe(true)
+			t.expect(has(out, `rafted  {OPUS}`)).toBe(true)
+			t.expect(has(out, "rafted  human:Fay")).toBe(false)
+			-- a delivery nothing recorded comes from the done commit, the agent that merged it, with the worker read from
+			-- the ticket's spend rows
+			t.expect(has(out, "delivered  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
+			t.expect(has(out, "worker=claude-opus-5-5-high")).toBe(true)
+			-- and who merged it is a derived entry of its own
+			t.expect(has(out, "merged  human:Cy (from git)")).toBe(true)
+			-- oldest first, by the dates the fixture set
+			local order: { string } = {}
+			for line in string.gmatch(out, "[^\n]+") do
+				local event = string.match(line, "^%S+ %S+%s+(%S+)")
+				if event then
+					table.insert(order, event)
+				end
+			end
+			t.expect(order)
+				.toEqual({ "idea", "status:preparing", "unblocked", "approved", "rafted", "delivered", "merged" })
+			-- it reads and writes nothing
+			t.expect(git(W, { "status", "--porcelain" })).toBe(before)
 		end
-		t.expect(order).toEqual({ "idea", "status:preparing", "unblocked", "approved", "rafted", "delivered", "merged" })
-		-- it reads and writes nothing
-		t.expect(git(W, { "status", "--porcelain" })).toBe(before)
-	end)
+	)
 
 	it("an old item with no record is answered from git alone, and who runs in the main checkout", function()
 		local r = zn(dir, { "who", "c0020" })
@@ -194,25 +216,31 @@ return t.spec("c0263 who and the board", function(it)
 		t.expect(zn(dir, { "who", "c0099" }).ok).toBe(false)
 	end)
 
-	it("an idea taken from a first add says so, and a give-back is covered per commit, not per event", function()
-		local r = zn(W, { "who", "c0040" })
-		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stdout, "idea  human:Rex (from git, first add)")).toBe(true)
-		-- the old give-back has no stored row: derived; the newer one's commit also wrote the row: stored, not repeated
-		t.expect(has(r.stdout, "unblocked  human:Dee (from git)")).toBe(true)
-		t.expect(has(r.stdout, "unblocked  human:Fay  block=design-gap  (record)")).toBe(true)
-		local _, n = string.gsub(r.stdout, "unblocked", "")
-		t.expect(n).toBe(2)
-	end)
+	it(
+		"an idea taken from a first add says so, and a give-back is covered per commit, not per event",
+		function()
+			local r = zn(W, { "who", "c0040" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(r.stdout, "idea  human:Rex (from git, first add)")).toBe(true)
+			-- the old give-back has no stored row: derived; the newer one's commit also wrote the row: stored, not repeated
+			t.expect(has(r.stdout, "unblocked  human:Dee (from git)")).toBe(true)
+			t.expect(has(r.stdout, "unblocked  human:Fay  block=design-gap  (record)")).toBe(true)
+			local _, n = string.gsub(r.stdout, "unblocked", "")
+			t.expect(n).toBe(2)
+		end
+	)
 
-	it("the rafter of an old item is who made raft: the current value, not the readier or the merger", function()
-		local r = zn(W, { "who", "c0050" })
-		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stdout, "rafted  human:Bob (from git)  raft=R0020")).toBe(true)
-		t.expect(has(r.stdout, "rafted  human:Hal")).toBe(false)
-		t.expect(has(r.stdout, "rafted  human:Cy")).toBe(false)
-		t.expect(has(r.stdout, "merged  human:Cy (from git)")).toBe(true)
-	end)
+	it(
+		"the rafter of an old item is who made raft: the current value, not the readier or the merger",
+		function()
+			local r = zn(W, { "who", "c0050" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(r.stdout, "rafted  human:Bob (from git)  raft=R0020")).toBe(true)
+			t.expect(has(r.stdout, "rafted  human:Hal")).toBe(false)
+			t.expect(has(r.stdout, "rafted  human:Cy")).toBe(false)
+			t.expect(has(r.stdout, "merged  human:Cy (from git)")).toBe(true)
+		end
+	)
 
 	it("a reused number is a new life: nothing of the first leaks into who", function()
 		local r = zn(W, { "who", "c0030" })
@@ -222,68 +250,72 @@ return t.spec("c0263 who and the board", function(it)
 		t.expect(has(r.stdout, "unblocked")).toBe(false)
 	end)
 
-	it("the board model carries the same entries as who, and the item view writes a Provenance section", function()
-		local page = `{base}/board.html`
-		local r = zn(W, { "board", "-O", "--out", page })
-		if not r.ok then
-			error(r.stdout .. r.stderr)
-		end
-		local html = fs.readFile(page)
-		local json = string.match(html, '<script type="application/json" id="board%-data">(.-)</script>')
-		t.expect(json ~= nil).toBe(true)
-		local data = serde.decode("json", json :: string)
-		-- find an item's model wherever the board keeps its issues
-		local function find(node: any, id: string): any
-			if type(node) == "table" then
-				if node.id == id and node.provenance ~= nil then
-					return node
-				end
-				for _, v in node do
-					local hit = find(v, id)
-					if hit then
-						return hit
+	it(
+		"the board model carries the same entries as who, and the item view writes a Provenance section",
+		function()
+			local page = `{base}/board.html`
+			local r = zn(W, { "board", "-O", "--out", page })
+			if not r.ok then
+				error(r.stdout .. r.stderr)
+			end
+			local html = fs.readFile(page)
+			local json = string.match(html, '<script type="application/json" id="board%-data">(.-)</script>')
+			t.expect(json ~= nil).toBe(true)
+			local data = serde.decode("json", json :: string)
+			-- find an item's model wherever the board keeps its issues
+			local function find(node: any, id: string): any
+				if type(node) == "table" then
+					if node.id == id and node.provenance ~= nil then
+						return node
+					end
+					for _, v in node do
+						local hit = find(v, id)
+						if hit then
+							return hit
+						end
 					end
 				end
+				return nil
 			end
-			return nil
-		end
-		-- the whole entries, not their names, for each kind of item: one that needs nothing but its log (c0010), a
-		-- reused number (c0030), an idea from a first add with a stored and a derived give-back (c0040), and an old
-		-- item with no record (c0050). The board reads the same life as who (the same cut, the same people); it leaves
-		-- out the one entry that needs a read per commit, the derived `rafted` fallback, which only who prints.
-		local expected: { [string]: { string } } = {
-			c0010 = {
-				"idea|human:Ann (from git)||git",
-				"status:preparing|human:Dee (from git)||git",
-				"unblocked|human:Dee (from git)||git",
-				'approved|human:Ann|design=aaaaaaaaaaaa; said="ok"|record',
-				`rafted|{OPUS}|raft=R0011|record`,
-				"delivered|agent:claude-sonnet-5-5 effort unknown (from git)|raft=R0011; worker=claude-opus-5-5-high|git",
-				"merged|human:Cy (from git)||git",
-			},
-			c0030 = { "idea|human:Yan (from git)||git" },
-			c0040 = {
-				"idea|human:Rex (from git, first add)||git",
-				"unblocked|human:Dee (from git)||git",
-				"unblocked|human:Fay|block=design-gap|record",
-			},
-			c0050 = {
-				"idea|human:Ann (from git)||git",
-				"delivered|human:Cy (from git)|raft=R0020|git",
-				"merged|human:Cy (from git)||git",
-			},
-		}
-		for id, want in expected do
-			local item = find(data, id)
-			t.expect(item ~= nil).toBe(true)
-			local got: { string } = {}
-			for _, e in item.provenance do
-				table.insert(got, `{e.event}|{e.actor}|{e.detail}|{e.source}`)
+			-- the whole entries, not their names, for each kind of item: one that needs nothing but its log (c0010), a
+			-- reused number (c0030), an idea from a first add with a stored and a derived give-back (c0040), and an old
+			-- item with no record (c0050). The board reads the same life as who (the same cut, the same people); it leaves
+			-- out the one entry that needs a read per commit, the derived `rafted` fallback, which only who prints.
+			local expected: { [string]: { string } } = {
+				c0010 = {
+					"idea|human:Ann (from git)||git",
+					"status:preparing|human:Dee (from git)||git",
+					"unblocked|human:Dee (from git)||git",
+					'approved|human:Ann|design=aaaaaaaaaaaa; said="ok"|record',
+					`rafted|{OPUS}|raft=R0011|record`,
+					"delivered|agent:claude-sonnet-5-5 effort unknown (from git)|raft=R0011; worker=claude-opus-5-5-high|git",
+					"merged|human:Cy (from git)||git",
+				},
+				c0030 = { "idea|human:Yan (from git)||git" },
+				c0040 = {
+					"idea|human:Rex (from git, first add)||git",
+					"unblocked|human:Dee (from git)||git",
+					"unblocked|human:Fay|block=design-gap|record",
+				},
+				c0050 = {
+					"idea|human:Ann (from git)||git",
+					"delivered|human:Cy (from git)|raft=R0020|git",
+					"merged|human:Cy (from git)||git",
+				},
+			}
+			for id, want in expected do
+				local item = find(data, id)
+				t.expect(item ~= nil).toBe(true)
+				local got: { string } = {}
+				for _, e in item.provenance do
+					table.insert(got, `{e.event}|{e.actor}|{e.detail}|{e.source}`)
+				end
+				t.expect(got).toEqual(want)
 			end
-			t.expect(got).toEqual(want)
+			-- the view's script (outside the JSON) writes the section
+			local script =
+				string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
+			t.expect(has(script, "Provenance")).toBe(true)
 		end
-		-- the view's script (outside the JSON) writes the section
-		local script = string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
-		t.expect(has(script, "Provenance")).toBe(true)
-	end)
+	)
 end)
