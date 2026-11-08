@@ -6,6 +6,9 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+-- the cells of today's text are pinned only where ZN_C0261_EXACT is set (this issue's check line), never in the gate
+local EXACT = process.env.ZN_C0261_EXACT ~= nil
+
 local TOP = (
 	string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 )
@@ -99,10 +102,12 @@ return t.spec("c0261 docs", function(it)
 
 	it("AGENTS.md, the README and the .models.toml header say it per activity (rule)", function()
 		at(read("AGENTS.md"), "final-round reviewers", "AGENTS.md")
-		at(read("AGENTS.md"), "A lead you start by hand runs on the model `.models.toml` names for its activity (`/z-run` the cheap one, `/z-design` Opus at medium), and hands every final review to a `--final` round.", "AGENTS.md")
+		-- the rule words only; the cells are in the check-time case below
+		at(read("AGENTS.md"), "A lead you start by hand runs on the model `.models.toml` names for its activity", "AGENTS.md")
+		at(read("AGENTS.md"), "and hands every final review to a `--final` round.", "AGENTS.md")
 		absent(read("AGENTS.md"), "(`/z-run`, `/z-design`) runs on the cheap model", "AGENTS.md")
-		at(skill("zz-rules"), "a z-design session on Opus at medium blocks on its nested review rounds (accepted by the user)", "zz-rules")
-		at(read("AGENTS.md"), "Opus 5.5 first on claude and agent (agent falls back to a kimi model, then grok-4.7-xhigh)", "AGENTS.md")
+		at(skill("zz-rules"), "blocks on its nested review rounds (accepted by the user)", "zz-rules")
+		at(skill("zz-rules"), "Nothing expensive orchestrates or waits, with one accepted exception:", "zz-rules")
 		absent(read("AGENTS.md"), "which the skills pin to Opus 5.5", "AGENTS.md")
 		local readme = read("z-nile/README.md")
 		at(bullet(readme, "- **`.models.toml`.**"), "Models per activity", "README")
@@ -147,5 +152,14 @@ return t.spec("c0261 docs", function(it)
 		at(skill("zz-rules"), "an issue with no design review round at all is refused too", "zz-rules")
 		at(skill("zz-rules"), "`<R-id>: design-review-NNN`", "zz-rules")
 		at(skill("z-raft"), "under the subject `<R-id>: design-review-NNN`", "z-raft")
+	end)
+
+	it("the cells named in AGENTS.md and zz-rules are today's (check time only)", function()
+		if not EXACT then
+			return
+		end
+		at(read("AGENTS.md"), "(`/z-run` the cheap one, `/z-design` Opus at medium on claude)", "AGENTS.md")
+		at(read("AGENTS.md"), "Opus 5.5 first on claude and agent (agent falls back to a kimi model, then grok-4.7-xhigh)", "AGENTS.md")
+		at(skill("zz-rules"), "a z-design session on Opus at medium blocks on its nested review rounds (accepted by the user)", "zz-rules")
 	end)
 end)

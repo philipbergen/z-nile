@@ -73,3 +73,6 @@
 - design-review-008 F4: z-design/spec-design-correspondence
 - design-review-008 F5: z-design/restated-rules-move-together
 - note the user's answers "Accept it" (Open question 9) and "Yes, grok-4.7-high" (Open question 10), applied in c0261.md: z-design/decided-guesses-rewrite-their-body
+- design-review-009 F1: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-009 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-009 F3: z-design/restated-rules-move-together
