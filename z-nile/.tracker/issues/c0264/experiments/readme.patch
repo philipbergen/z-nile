@@ -1,5 +1,5 @@
 diff --git a/z-nile/README.md b/z-nile/README.md
-index f76ef60b..e473ddbf 100644
+index f76ef60b..92ec77c7 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -22,6 +22,14 @@ flowchart LR
@@ -7,13 +7,76 @@ index f76ef60b..e473ddbf 100644
  z-nile is the tooling that tracks, designs, gates and delivers the work of every project in this repository. A game is a project: pickman is one, in `pickman/`. The arcade adds five more (c0183): the shared library `arcade`, the start place `portal`, and the games `snake`, `invaders` and `asteroids`, each in its own folder. z-nile belongs to no game.
  
 +## Intent
-+z-nile is built so that people spend their time on ideas and designs, and workers do the rest, cheaply until the last step and sharply at it.
++z-nile exists to move all human interaction up to the idea and the design, and to have workers carry everything else to the merge, at a low cost.
 +- **Humans at the idea and the design.** A person talks the idea through with the AI in plan mode, settles what is asked and approves the design; a worker may draft the design. `z-ticket` captures the idea, `z-design` sharpens it into a prepared issue and its design review. Nothing is designed past a person's ask.
-+- **Workers from the raft to the merge.** Workers carry a prepared issue's raft to its merge: raft, ready, run, review, gate, merge. They stop and escalate only when blocked (Escalation to the human), and a person comes back only for that.
-+- **Cheap on the way, sharp at the end.** The steps on the way run on cheap models; the final review, the one that decides whether the work merges, runs on the sharpest model. Rigor does not move: the checks, the gate and the review rounds still run.
++- **Workers from the raft to the merge.** A worker takes a raft, stays with it until it merges, and works its tickets one at a time, each to completion before the next, through ready, run, review, the final review, gate and merge. It lets go only when the raft is blocked (Escalation to the human); it then clears its context and takes the next raft, and so it does whenever a raft merges.
++- **Cheap on the way, sharp at the end.** Sharp, expensive models run every final review; cheap, fast models do the work on the way there, and the cheapest wait. Nothing expensive orchestrates or waits. Rigor does not move: the checks, the gate and the review rounds still run.
 +
-+This section is the aim and carries no status label. How it should work, below, labels each part as exists, designed or captured; where its plans for Autonomous delivery and the worker end have a worker design, they mean drafts that a person approves.
++This section is the aim and carries no status label. How it should work, below, labels each part as exists, designed or captured; where an older line below that names the same ticket and one of the sub-sections from The worker, z-work to The board app (added for the 2026-11-07 ask) differ, the sub-section follows the ticket's current capture, and where a line has a worker design, it means a draft that a person approves.
 +
  ## How it should work
  Status labels, on every sub-section below and every roadmap row (*captured* is this section's word for an issue that exists as a draft): **exists** (built and on `main`), **designed** (its issue's Design is ready, not built), **captured** (an issue exists as a draft with no design yet). Nothing below is described as built unless it is labelled *exists*. A feature's PR changes its own roadmap row and every label that names it. Older notes in this file written "(cNNNN, planned)" predate these labels and mean not built.
+ 
+@@ -43,6 +51,14 @@ flowchart LR
+   loop -. blocked .-> esc["escalation.md, status blocked"]
+   esc --> res
+   res --> stack
++  interview["idea interview, review, confirmation: c0260"] --> cap
++  zwork["z-work, any CLI: c0253"] --> loop
++  tiers["cheap on the way, sharp for every final review, cheapest waiting: c0261"] -.-> loop
++  rev --> final["full-force final review, limited view: c0262"]
++  final -. "off course: redo" .-> loop
++  merge -. "raft merged or blocked: clear context, next raft: c0253" .-> loop
++  lost["lost work first: heartbeat c0265, rank c0249"] -.-> stack
++  prov["who had the idea, approved the design, unblocked it: c0263"] -.-> stack
+ ```
+ 
+ ### Two ends, one stack
+@@ -89,6 +105,33 @@ A worker never guesses past a wall; it escalates formally. *captured* (c0250)
+ 
+ Workers run with a bot credential that can push branches and open PRs but cannot merge or bypass `main`'s protection; only the dispatcher merges. The guards (git/gh wrapper, publish broker, tripwire, watermark) catch honest mistakes and casual misbehaviour; none is a boundary against a determined agent (c0117).
+ 
++### The worker, z-work
++A person starts any CLI by hand (kimi, agy, claude, grok, agent, deepseek) and runs `z-work`, and that agent becomes a worker. It picks up a raft, the first claimable one in the order (Rank and lost work, below), and moves it forward. It stays with the raft all the way to merge and delivers it as a PR stack, one ticket at a time, each worked to completion before the next is picked up. It beats every 5 minutes while it holds a raft. The headless `./zn work` is the same worker launched without a person, and a CLI that cannot read skills gets the same instructions printed by a `./zn` command. The worker itself runs on a cheap model and never orchestrates or waits on an expensive one. *captured* (c0253); the PR stack *captured* (c0248); the beat *captured* (c0265); the six CLIs *captured* (c0175); the worker running cheap *captured* (c0261)
++
++### When a raft ends, the worker moves on
++Whenever a raft's last layer merges, or the raft is blocked and released, the worker clears its context and picks up the next raft. Context stays only within one raft. An agent cannot clear its own context in every CLI, so design settles how it is cleared; one option is a cheap supervisor that runs each raft in a fresh CLI session. *captured* (c0253)
++
++### Blocked, and who unblocked it
++When any ticket of a raft blocks, the raft is marked blocked (the reasons are in Escalation to the human, above) and the worker lets go of it. A blocked layer stops the layers above it, not the ones below. Resolving a block records who unblocked it, each time. *captured* (c0250); who unblocked it *captured* (c0263)
++
++### The idea stage
++z-ticket really challenges the idea, and the ticket keeps it all: the user's ask word for word and dated, every question asked and its answer in order, and a clean, fully formed idea written from them. A clean adversarial agent on the sharp model checks that the written idea matches what the user said, nothing dropped, added or bent, and its findings are answered before the user sees the idea. The user confirms the idea as it now stands, and the confirmation is recorded. Only a confirmed idea goes to z-design, which takes over as it is today: acceptance tests as code and a design, reviewed back and forth. *captured* (c0260)
++
++### Model tiers
++Each CLI has three tiers: cheap and fast for the way there, sharp and expensive for every final review, and the cheapest for waiting. For grok and agent, cheap is 4.6 at high and sharp is 4.7 at xhigh, with no finer levels; for claude, cheap is Sonnet, sharp is Opus and the waiting tier is Haiku; agent waits on composer or similar; every other supported CLI is mapped the same way. Sharp runs every final review: the idea review, the final design round, the final code round and the full-force review. Everything on the way runs cheap, and nothing expensive orchestrates or waits. Spend records the tier with the model. *captured* (c0261)
++
++### The full-force final review
++Once per ticket, before its layer merges, a full-force adversarial review on the sharp model, in a fresh context, checks that the design covers the idea and that the implementation delivers the design. It is given a limited view: the original ask, the design and the implementation as given, and none of the design reviews, refutes, harvests, PR comments or worker notes on the way, so it judges the result on its merits. Its verdict says plainly whether the work stayed on course, with each gap named. When it did not, the ticket goes back to z-design (the design missed the idea) or its layer is rebuilt (the implementation missed the design), and the review runs again; a second off-course verdict blocks the ticket. *captured* (c0262)
++
++### Rank and lost work
++A ticket or raft may carry a rank, and unset is the lowest. Equal or unset ranks fall back to the ticket number, so the order is always stable. Work that is in progress but lost, meaning its heartbeat (pushed to `main` every 5 minutes) went stale, comes before anything not yet started, whatever its rank and even if a person started it without updating the rank. An item that is blocked, or waits on undone work (`depends_on`), is skipped and keeps its rank. z-raft asks for a rank when it makes a raft, and unset is a valid answer; `./zn rank` can also unset a rank. A worker that takes over lost work does so as a normal claim, and the takeover is recorded. *captured* (c0249); the heartbeat and lost work *captured* (c0265)
++
++### Provenance
++A ticket records who had the idea (taken from git), who approved the design, who unblocked it, who confirmed the idea, who set the rank, who rafted it and which worker delivered each layer, and the board shows them. Design approval is an explicit human step before a ticket is prepared. *captured* (c0263)
++
++### The board app
++The Omarchy board app shows tickets and rafts in the order Rank and lost work describes (lost work first, then rank with unset ranks last, the ticket number as the tiebreak), marks lost items, and reorders by drag and drop, which sets the rank through `./zn rank`. *captured* (c0257)
++
+ ### Roadmap
+ | piece | issue | state |
+ |---|---|---|
+@@ -103,6 +146,13 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ | `./zn work` pull loop | c0253 | captured |
+ | workers on several hosts, worker identity in spend | c0254 | captured |
+ | `./zn land` usage and a cheap retry | c0258 | captured |
++| the capture interview and idea review | c0260 | captured |
++| model tiers: cheap, sharp, wait | c0261 | captured |
++| the full-force final review, limited view, redo | c0262 | captured |
++| ticket provenance: author, design approver, who unblocked | c0263 | captured |
++| work heartbeat, lost items first | c0265 | captured |
++| the Omarchy board app: rank order, drag and drop | c0257 | captured |
++| `agy`, `kimi` and `deepseek` as dispatch CLIs | c0175 | captured |
+ 
+ c0248 to c0254 are meant to be one raft once designed, delivered as a stacked PR set: layer 1 is c0248 on `main`, each next layer on the one below, in that order, merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
  

@@ -19,3 +19,23 @@
 - design-review-004 F2: z-design/quote-other-preps-before-promising
 - design-review-004 F3: z-design/restated-rules-move-together
 - design-review-004 F4: z-design/spec-design-correspondence
+- design-review-005 F1: z-design/spec-design-correspondence
+- design-review-005 F2: z-design/quote-other-preps-before-promising
+- design-review-005 F3: z-design/never-narrow-captured-scope
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: z-design/quote-other-preps-before-promising
+- design-review-005 F6: z-design/spec-design-correspondence
+- design-review-005 F7: one-off: loose ends outside c0264's text
+- design-review-006 F1: z-design/spec-design-correspondence
+- design-review-006 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F3: z-design/quote-other-preps-before-promising
+- design-review-006 F4: z-design/quote-other-preps-before-promising
+- design-review-006 F5: z-design/restated-rules-move-together
+- design-review-006 F6: z-design/spec-design-correspondence
+- design-review-006 F7: one-off: status line written before the final round
+- design-review-007 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: one-off: harvest mapping slip
+- design-review-008 F1: z-design/restated-rules-move-together
+- design-review-008 F2: z-design/spec-design-correspondence
+- design-review-008 F3: one-off: harvest mapping slip repeated
