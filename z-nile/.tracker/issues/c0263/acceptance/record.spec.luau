@@ -103,6 +103,11 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 		seed[`{ISSUES}/c0070/c0070.md`] = issue("c0070", "R0140")
 		seed[`{ISSUES}/c0050/c0050.md`] = issue("c0050", "R0130")
+		-- an active raft holding an active issue (a worker blocks while it holds a raft: c0250)
+		seed[`{ISSUES}/active/c0090/c0090.md`] = (string.gsub(issue("c0090", "R0150"), "status: prepared%-quiet%-copper%-falcon", "status: active-quiet-copper-falcon"))
+		seed[`{ISSUES}/active/c0090/check.sh`] = CHECK
+		seed[`{RAFTS}/active/R0150/R0150.md`] = (string.gsub(raftDoc("R0150", "c0090"), "status: prepared%-quiet%-copper%-falcon", "status: active-quiet-copper-falcon"))
+		seed[`{RAFTS}/active/R0150/check.sh`] = CHECK
 		for _, r in { { "R0110", "" }, { "R0130", "c0050" }, { "R0140", "c0070" } } do
 			seed[`{RAFTS}/{r[1]}/{r[1]}.md`] = raftDoc(r[1], r[2])
 			seed[`{RAFTS}/{r[1]}/check.sh`] = CHECK
@@ -232,6 +237,51 @@ return t.spec("c0263 the record's writes", function(it)
 			end
 		end
 	)
+
+	it("./zn record reaches a raft's record and an active item's, and takes unblocked rows only there", function()
+		trOk(W1, { "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" })
+		t.expect(has(onOrigin(`{RAFTS}/R0130/provenance.md`), "| unblocked | human:Ann | block=needs-decision |")).toBe(true)
+		trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
+		t.expect(has(onOrigin(`{ISSUES}/active/c0090/provenance.md`), "| unblocked | human:Ann | block=red-gate |")).toBe(true)
+		local mark = tip()
+		t.expect(tr(W1, { "record", "c0090", "confirmed", "--actor", "human:Ann" }).ok).toBe(false)
+		t.expect(tip()).toBe(mark)
+	end)
+
+	it("a conflict outside provenance.md aborts the merge and leaves the tree as it was", function()
+		local doc = `{W4}/{ISSUES}/c0050/c0050.md`
+		local rec = `{W4}/{ISSUES}/c0050/provenance.md`
+		local head = "# Provenance: c0050\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+		local function edit(text: string, title: string): string
+			return (string.gsub(text, "\ntitle: [^\n]*\n", `\ntitle: {title}\n`, 1))
+		end
+		fs.writeFile(doc, edit(fs.readFile(doc), "ours"))
+		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | unblocked | human:Ann |  |\n")
+		fixture.git(W4, { "add", "-A" })
+		fixture.git(W4, { "commit", "-q", "-m", "our edit" })
+		local before = fixture.git(W4, { "rev-parse", "HEAD" })
+		trackerfix.elsewhere(f, {
+			[`{ISSUES}/c0050/c0050.md`] = edit(fs.readFile(doc), "theirs"),
+			[`{ISSUES}/c0050/provenance.md`] = head .. "| 2026-11-08 10:05 | unblocked | human:Bee |  |\n",
+		}, "their edit")
+		local r = tr(W4, { "sync" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr .. r.stdout, "c0050.md")).toBe(true)
+		t.expect(fixture.exec(W4, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		t.expect(fixture.git(W4, { "rev-parse", "HEAD" })).toBe(before)
+		t.expect(fixture.git(W4, { "status", "--porcelain" })).toBe("")
+		-- the same two appends without the document conflict are unioned (main's row first, then ours)
+		fixture.git(W4, { "reset", "-q", "--hard", "HEAD~1" })
+		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | unblocked | human:Ann |  |\n")
+		fixture.git(W4, { "add", "-A" })
+		fixture.git(W4, { "commit", "-q", "-m", "our row" })
+		trOk(W4, { "sync" })
+		local united = fs.readFile(rec)
+		t.expect(has(united, "human:Bee")).toBe(true)
+		t.expect(has(united, "human:Ann")).toBe(true)
+		local bee, ann = string.find(united, "human:Bee", 1, true), string.find(united, "human:Ann", 1, true)
+		t.expect((bee :: number) < (ann :: number)).toBe(true)
+	end)
 
 	it("audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder", function()
 		local p = `{W4}/{ISSUES}/c0050/provenance.md`

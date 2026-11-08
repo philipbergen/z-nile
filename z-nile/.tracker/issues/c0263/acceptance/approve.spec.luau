@@ -71,6 +71,8 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		local seed: { [string]: string } = {
 			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n",
 			["pickman/.tracker/architecture.md"] = "# Architecture\n",
+			-- the counter a published tree has: audit reads it
+			["z-nile/next"] = "issue 5000 quiet-copper-falcon\nraft 5000 quiet-copper-falcon\n",
 		}
 		for _, id in { "c0010", "c0011", "c0012", "c0013" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
@@ -129,6 +131,9 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 				string.match(fs.readFile(`{W1}/{ISSUES}/c0010/c0010.md`), "\nstatus: (prepared)%-") ~= nil
 			)
 				.toBe(true)
+			-- the carried move only edits the document: commit it, so the next cases start from a clean worktree
+			fixture.git(W1, { "add", "-A" })
+			fixture.git(W1, { "commit", "-q", "-m", "tracker: prep c0010" })
 		end
 	)
 
@@ -159,6 +164,10 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		fs.writeFile(`{W1}/stray.txt`, "x\n")
 		refused({ "approve", "c0011" }, "outside")
 		fs.removeFile(`{W1}/stray.txt`)
+		-- and a change in another issue's folder is outside too
+		fs.writeFile(`{W1}/{ISSUES}/c0012/c0012.md`, fs.readFile(`{W1}/{ISSUES}/c0012/c0012.md`) .. "\nedit\n")
+		refused({ "approve", "c0011" }, "outside")
+		fixture.git(W1, { "checkout", "--", `{ISSUES}/c0012/c0012.md` })
 		-- no git identity: the human cannot be named
 		refused(
 			{ "approve", "c0011" },

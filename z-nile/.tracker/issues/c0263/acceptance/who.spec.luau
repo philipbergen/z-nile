@@ -116,6 +116,19 @@ return t.spec("c0263 who and the board", function(it)
 		commit("Zoe", "tracker: drop c0030", "2026-10-10T09:00:00Z")
 		put("c0030", doc("c0030", "", "new-y-y-y"))
 		commit("Yan", "tracker: new c0030 second-life", "2026-10-11T09:00:00Z")
+		-- c0040: its capture commit does not name it (renumbered), and two give-backs: an old one with no record, and a
+		-- newer one whose commit also appends the stored row
+		put("c0040", doc("c0040", "", "new-a-b-c"))
+		commit("Rex", "tracker: rename ids (#9)", "2026-10-12T09:00:00Z")
+		put("c0040", doc("c0040", "", "new-b-b-b"))
+		commit("Dee", "tracker: c0040 new", "2026-10-13T09:00:00Z")
+		put("c0040", doc("c0040", "", "new-c-c-c"))
+		fs.writeFile(
+			`{dir}/{IDS}/c0040/provenance.md`,
+			"# Provenance: c0040\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+				.. "| 2026-10-14 09:00 | unblocked | human:Fay | block=design-gap |\n"
+		)
+		commit("Fay", "tracker: c0040 new", "2026-10-14T09:00:00Z")
 		process.exec("git", { "clone", "-q", "--bare", dir, origin })
 		git(dir, { "remote", "add", "origin", origin })
 		git(dir, { "fetch", "-q", "origin" })
@@ -169,6 +182,17 @@ return t.spec("c0263 who and the board", function(it)
 		t.expect(has(r.stdout, "idea  human:Eve (from git)")).toBe(true)
 		t.expect(fs.isFile(`{dir}/{IDS}/c0020/provenance.md`)).toBe(false)
 		t.expect(zn(dir, { "who", "c0099" }).ok).toBe(false)
+	end)
+
+	it("an idea taken from a first add says so, and a give-back is covered per commit, not per event", function()
+		local r = zn(W, { "who", "c0040" })
+		t.expect(r.ok).toBe(true)
+		t.expect(has(r.stdout, "idea  human:Rex (from git, first add)")).toBe(true)
+		-- the old give-back has no stored row: derived; the newer one's commit also wrote the row: stored, not repeated
+		t.expect(has(r.stdout, "unblocked  human:Dee (from git)")).toBe(true)
+		t.expect(has(r.stdout, "unblocked  human:Fay  block=design-gap  (record)")).toBe(true)
+		local _, n = string.gsub(r.stdout, "unblocked", "")
+		t.expect(n).toBe(2)
 	end)
 
 	it("a reused number is a new life: nothing of the first leaks into who", function()

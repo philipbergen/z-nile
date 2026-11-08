@@ -80,7 +80,8 @@ return t.spec("c0263 publish and provenance.md", function(it)
 			return { { path = `{ISSUE}/provenance.md`, content = one("c0010") } }
 		end, "tracker: record c0010")
 		t.expect(made.ok).toBe(true)
-		local first = git(origin, { "show", `main:{ISSUE}/provenance.md` })
+		local first = one("c0010") -- what the create wrote, byte for byte (git() trims)
+		t.expect(git(origin, { "show", `main:{ISSUE}/provenance.md` })).toBe((string.gsub(first, "\n$", "")))
 		local before = git(origin, { "rev-parse", "main" })
 		local function refused(content: string, path: string?, why: string)
 			local r = publish.commit(work, function()
@@ -107,7 +108,7 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		-- no document beside it
 		refused(one("c0030"), "pickman/.tracker/issues/c0030/provenance.md", "c0030")
 		-- a valid append, and a valid create in a raft's folder
-		local more = first .. row("unblocked", "human:Bee", "")
+		local more = one("c0010") .. row("unblocked", "human:Bee", "")
 		t.expect(publish.commit(work, function()
 			return { { path = `{ISSUE}/provenance.md`, content = more } }
 		end, "tracker: record").ok).toBe(true)

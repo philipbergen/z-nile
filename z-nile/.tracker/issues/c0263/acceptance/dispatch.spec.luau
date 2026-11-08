@@ -203,6 +203,14 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 			t.expect(has(r.stdout, "provenance.md") or has(r.stdout, "beyond its raft: line") or has(r.stdout, "notes.md")).toBe(true)
 			t.expect(has(fakecli.log(h), `realgh pr merge {40 + i} `)).toBe(false)
 		end
+		-- main gains a row on c0096 after the PR is cut (a rank, a confirmation): the sync unions it before ours, so main's
+		-- record stays a prefix of the PR's and the gate still merges it
+		trackerfix.elsewhere(
+			h.f,
+			{ [p96] = fixture.git(h.f.origin, { "show", `main:{p96}` }) .. "\n| 2026-11-08 09:30 | ranked | human:Ann | rank=3 |\n" },
+			"a rank on c0096"
+		)
+		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 		-- merged, pinned to the head: one rafted row per ticket
 		fakecli.clear(h)
 		local sha = fakecli.pullRequest(h, 50, {

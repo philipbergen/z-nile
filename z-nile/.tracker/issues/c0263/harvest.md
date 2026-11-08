@@ -68,3 +68,21 @@
 - design-review-004 F19: z-design/specify-every-named-artifact
 - design-review-004 F20: z-design/restated-rules-move-together
 - note review 004 candidates (grep the specs for every name a refute says is gone; one pass must mean one parse; a grandfather rule needs a fact fixed at merge): z-design/restated-rules-move-together, z-design/specify-every-named-artifact, zz-arch/refusals-are-gate-checks
+- design-review-005 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F2: z-design/fixtures-keep-what-commands-need
+- design-review-005 F3: zz-test/helpers-that-trim-change-expected-strings
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: z-design/exact-checks-compare-against-the-merge-base
+- design-review-005 F6: zz-test/guard-needs-its-own-case
+- design-review-005 F7: zz-test/refusals-tested-on-both-sides
+- design-review-005 F8: z-design/spec-design-correspondence
+- design-review-005 F9: z-design/specify-every-named-artifact
+- design-review-005 F10: z-design/new-rules-migrate-existing-work
+- design-review-005 F11: z-design/required-steps-on-every-path
+- design-review-005 F12: z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F13: zz-test/refusals-tested-on-both-sides
+- design-review-005 F14: z-design/restated-rules-move-together
+- design-review-005 F15: z-design/instructions-runnable-where-they-run
+- design-review-005 F16: z-design/accepted-risks-checked-and-decided
+- design-review-005 F17: zz-arch/one-reader-per-format
+- note review 005 candidates (a union keeps the target branch's rows first; lenient runs stop proving anything at the first missing command; when several refusals apply to one call the Design states their order): z-design/one-file-two-write-channels, z-design/prove-specs-pass-on-a-prototype, zz-test/guard-needs-its-own-case

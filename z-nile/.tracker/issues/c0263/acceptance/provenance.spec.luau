@@ -23,7 +23,7 @@ return t.spec("c0263 ticket provenance", function(it)
 			"human:Phil (from git)",
 			"unknown",
 			"unknown (from git)",
-			"none",
+			"human:Ann (from git, first add)",
 		} do
 			t.expect(provenance.isValid(ok)).toBe(true)
 		end
@@ -36,6 +36,7 @@ return t.spec("c0263 ticket provenance", function(it)
 			"robot:x",
 			"unknown (from git) extra",
 			"Philip",
+			"none", -- the superseded design's value: nothing records it
 			"human:A\nidea_by: human:B",
 		} do
 			t.expect(provenance.isValid(bad)).toBe(false)
@@ -139,6 +140,17 @@ return t.spec("c0263 ticket provenance", function(it)
 		local unknownEvent = (string.gsub(two, "| unblocked |", "| made-up |", 1))
 		t.expect((provenance.parse(unknownEvent))).toBe(nil)
 		t.expect((provenance.parse("not a record"))).toBe(nil)
+		-- a malformed row under a valid header is refused, never skipped
+		local head = (string.match(two, "^(.-\n|%-%-%-%S*\n)")) :: string
+		for _, bad in {
+			"| 2026-11-08 10:00 | approved | human:Ann |\n", -- three cells
+			"| yesterday | approved | human:Ann | design=aaaaaaaaaaaa |\n", -- a bad when
+			"| 2026-11-08 10:00 | approved | human:Ann | design=aaaaaaaaaaaa\n", -- no closing bar
+			"| 2026-11-08 10:00 | approved | none | |\n", -- an actor nothing records
+		} do
+			t.expect((provenance.parse(head .. bad))).toBe(nil)
+			t.expect(#provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", head .. bad)).toBe(1)
+		end
 		-- append-only: the old rows unchanged and in place, at least one more; nothing edited, removed or reordered
 		t.expect(provenance.appendOnly(one, two, "c0010")).toBe(nil)
 		t.expect(provenance.appendOnly(nil, one :: string, "c0010")).toBe(nil)
@@ -154,8 +166,11 @@ return t.spec("c0263 ticket provenance", function(it)
 		local urows = provenance.parse(united) :: { any }
 		t.expect(#urows).toBe(3)
 		t.expect(urows[1].event).toBe("approved")
-		t.expect(urows[2].event).toBe("rafted")
-		t.expect(urows[3].event).toBe("unblocked")
+		-- base first, then the target branch's (origin/main's) new rows, then ours: main's record stays a prefix, so the
+		-- rafting gate's append-only rule still accepts the PR after a sync
+		t.expect(urows[2].event).toBe("unblocked")
+		t.expect(urows[3].event).toBe("rafted")
+		t.expect(provenance.appendOnly(theirs, united, "c0010")).toBe(nil)
 		t.expect(provenance.union(one :: string, ours, ours)).toBe(ours) -- the same append on both sides is one row
 		t.expect(provenance.union(nil :: any, ours, theirs) ~= nil).toBe(true) -- both sides created it
 		-- a record is not a document: trail must not count it as the item's life
@@ -201,6 +216,7 @@ return t.spec("c0263 ticket provenance", function(it)
 				path = path,
 				order = n,
 				doc = true,
+				id = "c0010",
 				author = author,
 				email = `{author}@example.invalid`,
 				trailers = trailers,
@@ -212,7 +228,7 @@ return t.spec("c0263 ticket provenance", function(it)
 			commit(7, "Cy", "R0011: demo (#1)", sonnet, "A", DONE),
 			commit(6, "Fay", "tracker: raft R0011 again", {}, "M", DOC),
 			commit(5, "Gus", "tracker: unfold c0010", {}, "M", DOC),
-			commit(4, "Bob", "tracker: raft R0011 demo", opus, "M", DOC),
+			commit(4, "Bob", "tracker: prep R0010-R0011 rafts for c0010 (#12)", opus, "M", DOC),
 			commit(3, "Dee", "tracker: c0010 new", {}, "M", DOC),
 			commit(2, "Dee", "tracker: c0010 preparing", {}, "M", DOC),
 			commit(1, "Ann", "tracker: new c0010 alpha", {}, "A", DOC),
@@ -234,12 +250,24 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect((d.rafted :: provenance.Entry).detail).toBe("raft=R0011")
 		-- the delivery is the commit that first added the document under done/, and it is also the merge
 		t.expect((d.delivered :: provenance.Entry).actor).toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
-		t.expect((d.merged :: provenance.Entry).actor).toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
+		-- who merged is the commit's author, trailers ignored (a squash is authored by the user with the agent as co-author)
+		t.expect((d.merged :: provenance.Entry).actor).toBe("human:Cy (from git)")
 		-- an unfolded item (raft: empty) has no rafter, and a backlog item no delivery or merge
 		local open = provenance.select({ life[5], life[6], life[7] }, "c0010", "backlog", "", people)
 		t.expect(open.rafted).toBe(nil)
 		t.expect(open.delivered).toBe(nil)
 		t.expect(open.merged).toBe(nil)
+		-- a `new` commit that also changed the item's record is covered by its stored row; any other prints as derived
+		local give = commit(8, "Eli", "tracker: c0010 new", {}, "M", DOC)
+		local rec = table.clone(give)
+		rec.path = "z-nile/.tracker/issues/c0010/provenance.md"
+		rec.order += 1
+		t.expect(#provenance.select({ give, rec, life[7] }, "c0010", "backlog", "", people).unblocked).toBe(0)
+		t.expect(#provenance.select({ give, life[7] }, "c0010", "backlog", "", people).unblocked).toBe(1)
+		-- an idea taken from a first add (no commit names the item) says so
+		local weak = provenance.select({ commit(1, "Zed", "tracker: rename things", {}, "A", DOC) }, "c0010", "backlog", "", people)
+		t.expect((weak.idea :: provenance.Entry).actor).toBe("human:Zed (from git, first add)")
+		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
 		-- merge: a stored row wins over a derived fallback of its event; oldest first by date, a derived entry before a
 		-- stored one in the same minute. The stored dates fall inside the derived range (09-22 14:13 .. 09-28 14:13).
 		local text = provenance.record(nil, "c0010", "confirmed", "human:Ann", "said=\"yes\"", "2026-09-22 14:13") :: string

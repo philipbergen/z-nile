@@ -9,3 +9,5 @@ Two appends at the end of one file conflict in git even when they touch differen
 **Why:** c0263 design review 003 F1: `new raft` committed a `rafted` row in the worktree, then `status <R> new` published an `unblocked` row into the same file; `mergeOrigin` aborted on the conflict. An experiment (E8) showed a union merge of the three blobs gives a valid file and a clean squash merge afterwards.
 
 **How to apply:** give the rows no number, resolve a conflict confined to the record by union inside the engine's own merge helper, and build a published append from `origin/main`'s file; run the conflicting pair in a spec.
+
+c0263 design review 005 F5: the order of a union is part of the rule. `git merge-file --union` puts the worktree's rows before the target branch's, so after a sync the target's record is no longer a prefix and an append-only gate refuses the PR; put the target branch's new rows first.
