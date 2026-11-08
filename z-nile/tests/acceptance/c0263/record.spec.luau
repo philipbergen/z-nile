@@ -129,14 +129,14 @@ return t.spec("c0263 the record's writes", function(it)
 		-- a published append is built from origin/main's file, never from the worktree's: a row only this worktree holds
 		-- (committed here, not published) does not leak to main, and the merge afterwards unites it with main's
 		trOk(W1, { "sync" })
-		local rec = `{W1}/{ISSUES}/c0011/provenance.md`
-		fs.writeFile(rec, fs.readFile(rec) .. "| 2026-11-08 09:00 | ranked | human:Zed | rank=9 |\n")
+		local mine = `{W1}/{ISSUES}/c0011/provenance.md`
+		fs.writeFile(mine, fs.readFile(mine) .. "| 2026-11-08 09:00 | ranked | human:Zed | rank=9 |\n")
 		fixture.git(W1, { "add", "-A" })
 		fixture.git(W1, { "commit", "-q", "-m", "a row only this worktree holds" })
 		trOk(W1, { "record", "c0011", "ranked", "--detail", "rank=3" })
 		t.expect(has(onOrigin(`{ISSUES}/c0011/provenance.md`), "human:Zed")).toBe(false)
 		t.expect(#rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")).toBe(1)
-		t.expect(#rows(fs.readFile(rec), "ranked")).toBe(2)
+		t.expect(#rows(fs.readFile(mine), "ranked")).toBe(2)
 		-- the closed list, the actor grammar, and the events another command writes
 		local mark = tip()
 		for _, args in
