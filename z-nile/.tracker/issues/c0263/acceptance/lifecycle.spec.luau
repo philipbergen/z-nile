@@ -141,13 +141,16 @@ return t.spec("c0263 the offline lifecycle stamps provenance", function(it)
 				.. tostring(expected)
 				.. ")\n\tend)\nend)\n"
 		end
+		-- f0020 is an old member with no record at all (a raft made before records existed): done creates its file
+		git({ "rm", "-q", `{ISSUES}/active/f0020/provenance.md` })
+		git({ "commit", "-qm", "an old member with no record" })
 		fs.writeDir(`{dir}/{ISSUES}/active/f0010/acceptance`)
 		write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(2))
 		must(tr({ "commit", "-m", "a failing promoted spec", "--time", "1" }), "commit")
 		local failed = tr({ "done", "R0010" }, { ZN_ACTOR = OPUS })
 		t.expect(failed.ok).toBe(false)
 		t.expect(has(`{ISSUES}/active/f0010/provenance.md`, "| delivered |")).toBe(false)
-		t.expect(has(`{ISSUES}/active/f0020/provenance.md`, "| delivered |")).toBe(false)
+		t.expect(fs.isFile(`{dir}/{ISSUES}/active/f0020/provenance.md`)).toBe(false) -- the created file is rolled back too
 		t.expect(fs.isDir(`{dir}/{ISSUES}/done/f0010`)).toBe(false)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
 		write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(1))

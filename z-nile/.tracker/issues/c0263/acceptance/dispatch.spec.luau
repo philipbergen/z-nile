@@ -137,7 +137,7 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 		t.expect(has(r21.stdout, "./zn approve c0021")).toBe(true)
 		t.expect(has(fakecli.log(h), "realgh pr merge 8")).toBe(false)
 		-- a step that runs `./zn approve` is refused: the dispatched worker has no human behind it
-		local approve = zn({ "approve", "c0020", "--said", "go" }, { ZN_DISPATCH = "1" })
+		local approve = zn({ "approve", "c0020" }, { ZN_DISPATCH = "1" })
 		t.expect(approve.ok).toBe(false)
 		t.expect(has(approve.stderr, "dispatch")).toBe(true)
 	end)

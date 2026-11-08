@@ -232,14 +232,14 @@ return t.spec("c0263 who and the board", function(it)
 		local json = string.match(html, '<script type="application/json" id="board%-data">(.-)</script>')
 		t.expect(json ~= nil).toBe(true)
 		local data = serde.decode("json", json :: string)
-		-- find c0010's model wherever the board keeps its issues
-		local function find(node: any): any
+		-- find an item's model wherever the board keeps its issues
+		local function find(node: any, id: string): any
 			if type(node) == "table" then
-				if node.id == "c0010" and node.provenance ~= nil then
+				if node.id == id and node.provenance ~= nil then
 					return node
 				end
 				for _, v in node do
-					local hit = find(v)
+					local hit = find(v, id)
 					if hit then
 						return hit
 					end
@@ -247,22 +247,41 @@ return t.spec("c0263 who and the board", function(it)
 			end
 			return nil
 		end
-		local item = find(data)
-		t.expect(item ~= nil).toBe(true)
-		-- the whole entries, not their names: when, event, actor, detail and source, in who's order
-		local got: { string } = {}
-		for _, e in item.provenance do
-			table.insert(got, `{e.event}|{e.actor}|{e.detail}|{e.source}`)
+		-- the whole entries, not their names, for each kind of item: one that needs nothing but its log (c0010), a
+		-- reused number (c0030), an idea from a first add with a stored and a derived give-back (c0040), and an old
+		-- item with no record (c0050). The board reads the same life as who (the same cut, the same people); it leaves
+		-- out the one entry that needs a read per commit, the derived `rafted` fallback, which only who prints.
+		local expected: { [string]: { string } } = {
+			c0010 = {
+				"idea|human:Ann (from git)||git",
+				"status:preparing|human:Dee (from git)||git",
+				"unblocked|human:Dee (from git)||git",
+				'approved|human:Ann|design=aaaaaaaaaaaa; said="ok"|record',
+				`rafted|{OPUS}|raft=R0011|record`,
+				"delivered|agent:claude-sonnet-5-5 effort unknown (from git)|raft=R0011; worker=claude-opus-5-5-high|git",
+				"merged|human:Cy (from git)||git",
+			},
+			c0030 = { "idea|human:Yan (from git)||git" },
+			c0040 = {
+				"idea|human:Rex (from git, first add)||git",
+				"unblocked|human:Dee (from git)||git",
+				"unblocked|human:Fay|block=design-gap|record",
+			},
+			c0050 = {
+				"idea|human:Ann (from git)||git",
+				"delivered|human:Cy (from git)|raft=R0020|git",
+				"merged|human:Cy (from git)||git",
+			},
+		}
+		for id, want in expected do
+			local item = find(data, id)
+			t.expect(item ~= nil).toBe(true)
+			local got: { string } = {}
+			for _, e in item.provenance do
+				table.insert(got, `{e.event}|{e.actor}|{e.detail}|{e.source}`)
+			end
+			t.expect(got).toEqual(want)
 		end
-		t.expect(got).toEqual({
-			"idea|human:Ann (from git)||git",
-			"status:preparing|human:Dee (from git)||git",
-			"unblocked|human:Dee (from git)||git",
-			'approved|human:Ann|design=aaaaaaaaaaaa; said="ok"|record',
-			`rafted|{OPUS}|raft=R0011|record`,
-			"delivered|agent:claude-sonnet-5-5 effort unknown (from git)|raft=R0011; worker=claude-opus-5-5-high|git",
-			"merged|human:Cy (from git)||git",
-		})
 		-- the view's script (outside the JSON) writes the section
 		local script = string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
 		t.expect(has(script, "Provenance")).toBe(true)

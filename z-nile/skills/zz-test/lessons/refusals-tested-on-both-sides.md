@@ -9,3 +9,5 @@ A spec that only refuses a value far over a bound, and accepts values far under 
 **Why:** f0125 design reviews 001 F3 and 002 F1: `ghostTuning` was bounded so that no ghost covers more than a tile a tick. The case refused base 96 with k = 1.1 and accepted untuned and k < 1 configs, so "refuse any k > 1" passed it, and so did `>=` for `>`.
 
 **How to apply:** at one input, accept the largest allowed value (here k giving exactly 120) and refuse the next (121); add an accepted value only the stricter wrong rule would refuse (base 30, k = 2); list those wrong rules as mutants and run them.
+
+c0263 design review 007 F4: an append-only rule's spec edits every cell of an old row, not one: a validator that skipped the detail cell let a direct push turn a stale approval current.

@@ -2,8 +2,9 @@
 -- c0263 AC5, AC6, AC7: the record's writes, through the commands that make them, in worktrees of a trackerfix fixture
 -- with a bare origin. `status <id> new` appends an `unblocked` row in its published commit (and the publish validator
 -- lets that file through, append-only); `./zn record` publishes a `confirmed` row for the tickets that will call it;
--- `new raft`, `fold` and `recombine` append a `rafted` row per ticket, `unfold` and `release` none; a raft's own folder
--- never gets a record; `./zn audit` refuses a malformed one. The no-origin path (done, an emergent issue) is
+-- `new raft`, `fold` and `recombine` append a `rafted` row per ticket, `unfold` and `release` none; a raft's give-back
+-- records its issues and not the raft; `./zn record` also reaches a raft's record and an active item's; `./zn audit`
+-- refuses a malformed one. The no-origin path (done, an emergent issue) is
 -- lifecycle.spec.luau.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -32,7 +33,7 @@ local function raftDoc(id: string, issues: string): string
 end
 
 local f: trackerfix.Fixture
-local W1, W2, W3, W4 = "", "", "", ""
+local W1, W2, W3, W4, W5 = "", "", "", "", ""
 
 local function env(extra: { [string]: string }?): { [string]: string }
 	local out: { [string]: string } = {}
@@ -93,7 +94,7 @@ return t.spec("c0263 the record's writes", function(it)
 			-- the counter a published tree has: audit reads it
 			["z-nile/next"] = "issue 5000 quiet-copper-falcon\nraft 5000 quiet-copper-falcon\n",
 		}
-		for _, id in { "c0010", "c0011", "c0012", "c0013" } do
+		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0019" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
@@ -117,6 +118,7 @@ return t.spec("c0263 the record's writes", function(it)
 		W2 = trackerfix.trOk(f, f.main, { "worktree", "raft-b" })
 		W3 = trackerfix.trOk(f, f.main, { "worktree", "raft-c" })
 		W4 = trackerfix.trOk(f, f.main, { "worktree", "raft-d" })
+		W5 = trackerfix.trOk(f, f.main, { "worktree", "raft-e" })
 		-- the fixture audits clean before any of this, so a refusal below is the record's
 		trOk(W1, { "audit" })
 	end)
@@ -285,6 +287,29 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(has(united, "human:Ann")).toBe(true)
 		local bee, ann = string.find(united, "human:Bee", 1, true), string.find(united, "human:Ann", 1, true)
 		t.expect((bee :: number) < (ann :: number)).toBe(true)
+	end)
+
+	it("a record follows its item's folder when the other side moves it (ready moves a backlog item to active/)", function()
+		local rec = `{W5}/{ISSUES}/c0019/provenance.md`
+		local head = "# Provenance: c0019\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | rafted | human:Ann | raft=R0155 |\n")
+		fixture.git(W5, { "add", "-A" })
+		fixture.git(W5, { "commit", "-q", "-m", "our row" })
+		-- main: a row published into the same record, then the folder moved to active/ (what `ready` does)
+		fixture.git(f.other, { "pull", "-q", "origin", "main" })
+		fs.writeFile(`{f.other}/{ISSUES}/c0019/provenance.md`, head .. "| 2026-11-08 10:05 | unblocked | human:Bee |  |\n")
+		fixture.git(f.other, { "add", "-A" })
+		fixture.git(f.other, { "commit", "-q", "-m", "tracker: record c0019 unblocked" })
+		fixture.git(f.other, { "mv", `{ISSUES}/c0019`, `{ISSUES}/active/c0019` })
+		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0155" })
+		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+		trOk(W5, { "sync" })
+		-- one record, in the item's new folder, holding both sides' rows (main's first), and nothing left at the old path
+		t.expect(fs.isDir(`{W5}/{ISSUES}/c0019`)).toBe(false)
+		local united = fs.readFile(`{W5}/{ISSUES}/active/c0019/provenance.md`)
+		t.expect(#rows(united, "unblocked")).toBe(1)
+		t.expect(#rows(united, "rafted")).toBe(1)
+		t.expect(fixture.git(W5, { "status", "--porcelain" })).toBe("")
 	end)
 
 	it("audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder", function()

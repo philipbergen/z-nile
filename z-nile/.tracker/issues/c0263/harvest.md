@@ -98,3 +98,11 @@
 - design-review-006 F10: zz-arch/one-reader-per-format
 - design-review-006 F11: z-design/results-land-on-every-path
 - note review 006 candidates (a history rule is checked against a real life; a validator restricts which rows a direct push may add; a refute pastes the grep of the changed spec line): z-design/histories-checked-against-a-real-life, zz-arch/validators-restrict-which-rows, z-design/restated-rules-move-together
+- design-review-007 F1: z-design/one-reader-for-equal-views
+- design-review-007 F2: zz-test/rollback-cases-seed-each-prior-state
+- design-review-007 F3: z-design/confirm-overrides-with-a-suite-run
+- design-review-007 F4: zz-test/refusals-tested-on-both-sides
+- design-review-007 F5: z-design/spec-design-correspondence
+- design-review-007 F6: z-design/restated-rules-move-together
+- design-review-007 F7: z-design/accepted-risks-checked-and-decided
+- note review 007 candidates (two views of one history read by one function; a rollback case seeds each prior state; an append-only spec edits every cell): z-design/one-reader-for-equal-views, zz-test/rollback-cases-seed-each-prior-state, zz-test/refusals-tested-on-both-sides

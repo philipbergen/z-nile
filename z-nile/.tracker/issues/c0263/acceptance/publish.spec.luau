@@ -95,6 +95,8 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		end
 		-- an edited row
 		refused((string.gsub(first, "human:Ann", "human:Eve")), nil, "provenance.md")
+		-- a stale approval made current by rewriting its design hash, with a legitimate row appended after it
+		refused((string.gsub(first, "said=\"yes\"", "said=\"no\"")) .. row("ranked", "human:Bee", "rank=3"), nil, "provenance.md")
 		-- a row removed (nothing appended)
 		refused(header("c0010"), nil, "provenance.md")
 		-- nothing appended

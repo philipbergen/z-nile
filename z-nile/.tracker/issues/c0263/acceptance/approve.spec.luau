@@ -5,6 +5,7 @@
 -- agent session needs the user's words, a dispatched worker cannot approve, a redesign makes the approval stale, and a
 -- raft's move needs each issue it moves approved.
 local fixture = require("@tests/lib/fixture")
+local raftplan = require("@znile/engine/raftplan")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -95,6 +96,14 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		end
 		seed[`{ISSUES}/c0014/provenance.md`] = stale("c0014")
 		seed[`{ISSUES}/c0016/provenance.md`] = stale("c0016")
+		-- c0017 was never approved and is not on the list; c0018 is on the list at a design it no longer has
+		for _, id in { "c0017", "c0018" } do
+			seed[`{ISSUES}/{id}/{id}.md`] = prepared(id, "")
+			seed[`{ISSUES}/{id}/check.sh`] = CHECK
+		end
+		-- the frozen list: c0015 at its current design (the record hash of its document and check.sh), c0018 at another
+		local c15hash = raftplan.recordHash("c0015", { ["c0015.md"] = prepared("c0015", ""), ["check.sh"] = CHECK })
+		seed["z-nile/provenance-exempt.txt"] = `# frozen\nc0015 {c15hash}\nc0018 000000000000\n`
 		seed["pickman/.tracker/rafts/R0110/R0110.md"] = raftOf("R0110", "")
 		seed["pickman/.tracker/rafts/R0110/check.sh"] = CHECK
 		seed["pickman/.tracker/rafts/R0120/R0120.md"] = raftOf("R0120", "c0016")
@@ -141,7 +150,7 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		end
 	)
 
-	it("approve refuses a worker, the main checkout, an unclaimed issue, an undesigned one, no identity and an agent without the user's words, each for its own reason", function()
+	it("approve refuses an agent session, a worker, the main checkout, an unclaimed issue, an undesigned one and no identity, each for its own reason", function()
 		ready(W1, "c0011")
 		local mark = fixture.git(W1, { "rev-parse", "HEAD" })
 		local function refused(args: { string }, why: string, extra: { [string]: string }?, cwd: string?)
@@ -178,15 +187,24 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 			"identity",
 			{ GIT_AUTHOR_NAME = "", GIT_AUTHOR_EMAIL = "", GIT_COMMITTER_NAME = "", GIT_COMMITTER_EMAIL = "" }
 		)
-		-- an agent session carries the user's git identity, so the user's words are required
-		refused({ "approve", "c0011" }, "--said", { CLAUDECODE = "1", CLAUDE_EFFORT = "high" })
-		refused({ "approve", "c0011", "--said", "" }, "--said", { CLAUDECODE = "1" })
-		-- with the words it records the human, the agent that ran it, and the words
-		trOk(W1, { "approve", "c0011", "--said", "yes, approved | go ahead" }, { CLAUDECODE = "1", CLAUDE_EFFORT = "high", ZN_ACTOR = OPUS })
+		-- an agent session or a dispatched step is refused whatever it passes: the human must have run it, and the
+		-- refusal tells the user where (their own terminal); there is no option, flag or variable that lets it through
+		local sessions: { { [string]: string } } = {
+			{ CLAUDECODE = "1", CLAUDE_EFFORT = "high" },
+			{ AI_AGENT = "claude-code_2" },
+			{ ZN_DISPATCH = "1" },
+			{ CLAUDECODE = "1", ZN_ACTOR = "human:" .. NAME },
+		}
+		for _, extra in sessions do
+			refused({ "approve", "c0011" }, "your own terminal", extra)
+		end
+		refused({ "approve", "c0011", "--said", "the user said yes" }, "your own terminal", { CLAUDECODE = "1" })
+		-- a human session approves: it records the human and the design, with no words and no agent trace
+		trOk(W1, { "approve", "c0011" })
 		local rec = record(W1, "c0011")
-		t.expect(has(rec, `| approved | {ME} |`)).toBe(true)
-		t.expect(has(rec, `via={OPUS}`)).toBe(true)
-		t.expect(has(rec, 'said="yes, approved / go ahead"')).toBe(true)
+		t.expect(has(rec, `| approved | {ME} | design=`)).toBe(true)
+		t.expect(has(rec, "said=")).toBe(false)
+		t.expect(has(rec, "via=")).toBe(false)
 	end)
 
 	it("a redesign makes the approval stale, a stop with no edit keeps it, and a fresh approval makes it current", function()
@@ -220,14 +238,14 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		t.expect(tr(W1, { "status", "c0011", "prepared" }).ok).toBe(false)
 		fs.writeFile(`{W1}/{ISSUES}/c0011/check.sh`, CHECK)
 		fs.writeFile(doc, fs.readFile(doc) .. "\nA changed rule.\n")
-		trOk(W1, { "approve", "c0011", "--said", "still fine" }, { CLAUDECODE = "1" })
+		trOk(W1, { "approve", "c0011" })
 		trOk(W1, { "status", "c0011", "prepared" })
 		-- the approvals stack: two rows now, the newest counts
 		local _, n = string.gsub(record(W1, "c0011"), "| approved |", "")
 		t.expect(n).toBe(2)
 	end)
 
-	it("the other doors are shut too: fold, new raft, ready and raft-plan refuse a stale approval, audit warns, and a prepared issue with no record passes", function()
+	it("the doors are shut: fold, new raft, ready and raft-plan refuse a prepared issue with no current approval unless the frozen list covers its design, and audit errors", function()
 		local function tip(): string
 			return fixture.git(f.origin, { "rev-parse", "main" })
 		end
@@ -238,31 +256,42 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		fixture.git(W2, { "add", "-A" })
 		fixture.git(W2, { "commit", "-q", "--allow-empty", "-m", "wip" })
 		local before = tip()
-		-- audit: a warning naming the issue and its approval, exit 0
+		-- audit: an error for each prepared issue that has no current approval and is not covered by the list
 		local audit = tr(W2, { "audit" })
-		t.expect(audit.ok).toBe(true)
-		t.expect(has(audit.stdout .. audit.stderr, "c0014")).toBe(true)
-		t.expect(has(audit.stdout .. audit.stderr, "approval")).toBe(true)
-		-- each door refuses before it publishes anything
-		local fold = tr(W2, { "fold", "R0110", "c0014" })
-		t.expect(fold.ok).toBe(false)
-		t.expect(has(fold.stderr, "c0014")).toBe(true)
-		t.expect(has(fold.stderr, "approval")).toBe(true)
-		local raft = tr(W2, { "new", "raft", "chore", "x", "c0014", "--project", "pickman" })
-		t.expect(raft.ok).toBe(false)
-		t.expect(has(raft.stderr, "approval")).toBe(true)
+		t.expect(audit.ok).toBe(false)
+		local said = audit.stdout .. audit.stderr
+		for _, id in { "c0014", "c0016", "c0017", "c0018" } do
+			t.expect(has(said, id)).toBe(true)
+		end
+		t.expect(has(said, "c0015")).toBe(false) -- listed, design unchanged
+		-- each door refuses before it publishes anything, with the reason of its case
+		local function door(args: { string }, id: string, why: string)
+			local r = tr(W2, args)
+			if r.ok then
+				error(`{table.concat(args, " ")} was accepted: {r.stdout}{r.stderr}`, 2)
+			end
+			if not has(r.stderr, id) or not has(r.stderr, why) then
+				error(`{table.concat(args, " ")}: stderr lacks {id} / {why}: {r.stderr}`, 2)
+			end
+		end
+		door({ "fold", "R0110", "c0014" }, "c0014", "no longer covers")
+		door({ "fold", "R0110", "c0017" }, "c0017", "without an approval")
+		door({ "fold", "R0110", "c0018" }, "c0018", "redesigned since the freeze")
+		door({ "new", "raft", "chore", "x", "c0017", "--project", "pickman" }, "c0017", "without an approval")
 		local ready = tr(f.main, { "ready", "R0120" })
 		t.expect(ready.ok).toBe(false)
 		t.expect(has(ready.stderr, "c0016")).toBe(true)
-		t.expect(has(ready.stderr, "approval")).toBe(true)
+		t.expect(has(ready.stderr, "no longer covers")).toBe(true)
 		t.expect(tip()).toBe(before)
 		t.expect(string.match(onOrigin("pickman/.tracker/rafts/R0110/R0110.md"), "\nstatus: prepared%-")).toBe("\nstatus: prepared-")
-		-- raft-plan skips it and plans the rest, applying nothing half-way
+		-- raft-plan skips each and plans the listed one, applying nothing half-way
 		local plan = tr(W2, { "raft-plan" })
 		t.expect(plan.ok).toBe(true)
-		t.expect(has(plan.stdout, "skip c0014")).toBe(true)
-		t.expect(has(plan.stdout, "fold R0110 c0014")).toBe(false)
-		-- an issue prepared before approvals existed (no record at all) is let through: today's rule, open question 3
+		for _, id in { "c0014", "c0017", "c0018" } do
+			t.expect(has(plan.stdout, `skip {id}`)).toBe(true)
+		end
+		t.expect(has(plan.stdout, "skip c0015")).toBe(false)
+		-- an issue the frozen list covers (listed at its current design) passes
 		local ok = tr(W2, { "fold", "R0110", "c0015" })
 		if not ok.ok then
 			error(ok.stderr .. ok.stdout)

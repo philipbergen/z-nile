@@ -15,9 +15,9 @@ check "AC2: a Co-Authored-By trailer becomes a normalised agent actor, and a tra
   lune run tests/run -- "$A/provenance.spec.luau"
 check "AC3: ./zn who prints the idea's author from the capture commit and each status change's author from git, for old items too, and writes nothing" \
   lune run tests/run -- "$A/who.spec.luau" "$A/provenance.spec.luau"
-check "AC4: ./zn approve records the human, the design hash and the user's words as the human's commit, and refuses a worker, the main checkout, an undesigned issue and an agent without the user's words" \
+check "AC4: ./zn approve records the human and the design hash as the human's commit in a plain session and is refused in every agent session or dispatched step, and refuses the main checkout, no identity, an issue not preparing, a design not ready and changes outside the folder" \
   lune run tests/run -- "$A/approve.spec.luau"
-check "AC5: status prepared is refused until the newest approval matches the design, a redesign makes it stale, and a raft's move needs each issue it moves approved" \
+check "AC5: status prepared is refused until the newest approval matches the design (also after a redesign and under ZN_DISPATCH), a raft's move needs each issue it moves approved, and fold, new raft, ready, raft-plan and audit hold every prepared issue to an approval or the frozen list" \
   lune run tests/run -- "$A/approve.spec.luau" "$A/provenance.spec.luau"
 check "AC6: unblocked, rafted and delivered rows are appended per ticket by the commands that make the events, ./zn record takes the other tickets' events, the engine's merge unions the record, and the publish validator and the rafting gate let only appended rows through" \
   lune run tests/run -- "$A/record.spec.luau" "$A/lifecycle.spec.luau" "$A/dispatch.spec.luau" "$A/publish.spec.luau" "$A/provenance.spec.luau"
@@ -31,6 +31,8 @@ check "AC10: ./zn audit refuses a malformed record, an unknown event, a bad acto
   lune run tests/run -- "$A/record.spec.luau" "$A/approve.spec.luau" "$A/provenance.spec.luau"
 check "AC11: zz-rules, z-design, z-raft, zz-execute and the README document approve, who, record, the actor options and the session variables" \
   lune run tests/run -- "$A/provenance.spec.luau"
+check "AC13: ./zn provenance freeze writes the frozen list once from the prepared backlog issues and audit holds listed and unlisted issues to it" \
+  lune run tests/run -- "$A/freeze.spec.luau" "$A/provenance.spec.luau"
 check "AC12: the real tree audits and lessons-checks clean and the promoted specs this issue does not override stay green" \
   bash -c '"$ZN_ROOT/zn" audit && "$ZN_ROOT/zn" lessons --check && lune run tests/run -- tests/acceptance/c0072/land.spec.luau tests/acceptance/c0073/board-stats.spec.luau tests/acceptance/c0081/publish-guard.spec.luau tests/acceptance/c0053/publish.spec.luau tests/acceptance/c0116/plan.spec.luau'
 

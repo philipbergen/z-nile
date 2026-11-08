@@ -156,7 +156,10 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect(provenance.appendOnly(nil, one :: string, "c0010")).toBe(nil)
 		t.expect(provenance.appendOnly(two, one :: string, "c0010") ~= nil).toBe(true) -- a row removed
 		t.expect(provenance.appendOnly(two, two, "c0010") ~= nil).toBe(true) -- nothing appended
+		-- every cell of an old row is pinned: the actor, the detail (a stale approval made current) and the when
 		t.expect(provenance.appendOnly(one, (string.gsub(two, "human:Ann", "human:Eve", 1)), "c0010") ~= nil).toBe(true)
+		t.expect(provenance.appendOnly(one, (string.gsub(two, "design=1a2b3c4d5e6f", "design=ffffffffffff", 1)), "c0010") ~= nil).toBe(true)
+		t.expect(provenance.appendOnly(one, (string.gsub(two, "2026%-11%-08 10:00", "2026-11-08 10:01", 1)), "c0010") ~= nil).toBe(true)
 		t.expect(provenance.appendOnly(one, two, "c0011") ~= nil).toBe(true) -- another item's record
 		t.expect(provenance.appendOnly(nil, "garbage", "c0010") ~= nil).toBe(true) -- a create that does not parse
 		-- union: two sides that each appended to the same base keep both rows, base first, no row twice
@@ -172,6 +175,20 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect(urows[3].event).toBe("rafted")
 		t.expect(provenance.appendOnly(theirs, united, "c0010")).toBe(nil)
 		t.expect(provenance.union(one :: string, ours, ours)).toBe(ours) -- the same append on both sides is one row
+		-- repeated rows: a base that holds the same row twice keeps both, and main stays a prefix of the result
+		local twice = provenance.record(one, "c0010", "approved", "human:Ann", "design=1a2b3c4d5e6f; said=\"yes\"", "2026-11-08 10:00") :: string
+		local oursR = provenance.record(twice, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
+		local theirsR = provenance.record(twice, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
+		local unitedR = provenance.union(twice, oursR, theirsR)
+		t.expect(#(provenance.parse(unitedR) :: { any })).toBe(4)
+		t.expect(provenance.appendOnly(theirsR, unitedR, "c0010")).toBe(nil)
+		-- the same row appended on both sides is once, with ours' extra row after it
+		local sameRow = provenance.record(one, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
+		local oursPlus = provenance.record(sameRow, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:40") :: string
+		local unitedS = provenance.parse(provenance.union(one :: string, oursPlus, sameRow)) :: { any }
+		t.expect(#unitedS).toBe(3)
+		t.expect(unitedS[2].event).toBe("ranked")
+		t.expect(unitedS[3].event).toBe("rafted")
 		t.expect(provenance.union(nil :: any, ours, theirs) ~= nil).toBe(true) -- both sides created it
 		-- a record is not a document: trail must not count it as the item's life
 		t.expect(trail.isDoc("provenance.md")).toBe(false)
@@ -197,6 +214,36 @@ return t.spec("c0263 ticket provenance", function(it)
 		-- a row without a design hash approves nothing
 		local bare = provenance.record(nil, "c0010", "approved", "human:Ann", "said=\"ok\"", "2026-11-08 10:00") :: string
 		t.expect((provenance.approval(rows(bare), "aaaaaaaaaaaa"))).toBe("stale")
+	end)
+
+	it("the frozen list", function()
+		local list = provenance.exemptParse("# comment\nc0260 1a2b3c4d5e6f\nf0010 aaaaaaaaaaaa\n")
+		t.expect(list).toEqual({ c0260 = "1a2b3c4d5e6f", f0010 = "aaaaaaaaaaaa" })
+		-- no file on the base: the rule is not in force (nil), not an empty list
+		t.expect((provenance.exemptParse(nil))).toBe(nil)
+		-- a malformed or repeated line is refused, not skipped
+		for _, bad in { "c0260\n", "c0260 nothex\n", "c0260 aaaaaaaaaaaa\nc0260 bbbbbbbbbbbb\n", "stray text\n" } do
+			local got, why = provenance.exemptParse(bad)
+			t.expect(got).toBe(nil)
+			t.expect(why ~= nil).toBe(true)
+		end
+		-- render then parse is the identity, sorted, with the two comment lines first
+		local rendered = provenance.exemptRender({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
+		t.expect(string.sub(rendered, 1, 1)).toBe("#")
+		t.expect((provenance.exemptParse(rendered))).toEqual({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
+		-- the doors: not in force without a list; a current approval passes; a listed issue passes only at its listed design
+		local none = {} :: { provenance.Row }
+		local current = provenance.parse(
+			provenance.record(nil, "c0010", "approved", "human:Ann", "design=cccccccccccc", "2026-11-08 10:00") :: string
+		) :: { provenance.Row }
+		t.expect(provenance.approvalProblem("c0010", "cccccccccccc", none, nil)).toBe(nil)
+		t.expect(provenance.approvalProblem("c0010", "cccccccccccc", current, {})).toBe(nil)
+		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", none, { c0010 = "dddddddddddd" })).toBe(nil)
+		t.expect(string.find(provenance.approvalProblem("c0010", "eeeeeeeeeeee", none, { c0010 = "dddddddddddd" }) :: string, "redesigned since the freeze", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(provenance.approvalProblem("c0011", "dddddddddddd", none, { c0010 = "dddddddddddd" }) :: string, "without an approval", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(provenance.approvalProblem("c0010", "dddddddddddd", current, {}) :: string, "no longer covers", 1, true) ~= nil).toBe(true)
+		-- a listed issue with a stale approval at the listed design still passes (the list is its approval until it changes)
+		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", current, { c0010 = "dddddddddddd" })).toBe(nil)
 	end)
 
 	it("derive and merge", function()
