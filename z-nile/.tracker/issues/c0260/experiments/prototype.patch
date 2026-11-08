@@ -180,7 +180,7 @@ index f76ef60b..a4193fdc 100644
  3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
  4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 7e05c8ac..cdf34371 100644
+index 7e05c8ac..a6f8248a 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
 @@ -1,6 +1,8 @@
@@ -231,8 +231,8 @@ index 7e05c8ac..cdf34371 100644
 +			-- an issue made after the capture record landed (it carries the mark `./zn new` wrote) reaches `reviewed` or
 +			-- `ready` only with the record or the agent-filed marker
 +			if
-+				capturecheck.kind(doc) == "none"
-+				and capturecut.required(front(doc))
++				capturecut.required(front(doc))
++				and not capturecheck.satisfies(doc)
 +				and (design == "ready" or design == "reviewed")
 +				and not string.find(f.path, "/done/", 1, true) -- a finished item passed the claim gate already
 +			then
@@ -250,10 +250,10 @@ index 7e05c8ac..cdf34371 100644
  			for _, p in paths do
 diff --git a/z-nile/engine/capturecheck.luau b/z-nile/engine/capturecheck.luau
 new file mode 100644
-index 00000000..dfc0e906
+index 00000000..9ffa2b2e
 --- /dev/null
 +++ b/z-nile/engine/capturecheck.luau
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,518 @@
 +--!strict
 +-- c0260: the shape of a capture's record, which lives in sections of the issue document (z-ticket skill, The capture
 +-- record): `## Ask (verbatim)`, `## Interview`, `## Idea`, `## Idea review`, `## Confirmation`. A ticket an agent filed
@@ -490,25 +490,23 @@ index 00000000..dfc0e906
 +				)}); the exemption is for tickets with no user ask`
 +			)
 +		end
-+		local source = string.match(agent.body, "\nSource:%s*(%S.-)%s*\n")
-+			or string.match("\n" .. agent.body, "\nSource:%s*(%S.-)%s*\n")
-+		if not source then
-+			table.insert(out, "Filed by (agent) needs a `Source: <review file, finding id or lesson>` line")
++		local source = string.match("\n" .. agent.body, "\nSource:%s*(%S[^\n]-)%s*\n")
++		if not source or not capturecheck.source(source) then
++			table.insert(
++				out,
++				"Filed by (agent) needs a `Source:` line that is a lesson (lesson:<skill>/<slug>), a review finding (review:<id>/<file> F<n>) or another finding of an agent (agent:<id>/<slug>)"
++			)
 +		end
 +		local problem = find(secs, "Problem")
-+		local scope = problem
-+				and string.match(problem.body, "\nScope decision %(user, %d%d%d%d%-%d%d%-%d%d%): .+")
-+			or nil
 +		if
-+			not scope
-+			and not (
++			not (
 +				problem
-+				and string.match("\n" .. problem.body, "\nScope decision %(user, %d%d%d%d%-%d%d%-%d%d%): .+")
++				and string.find("\n" .. problem.body, "\n" .. capturecheck.SCOPE_LINE .. "\n", 1, true)
 +			)
 +		then
 +			table.insert(
 +				out,
-+				"a ticket filed by an agent carries a `Scope decision (user, YYYY-MM-DD): …` line in its Problem"
++				"a ticket filed by an agent carries the exact Scope decision line in its Problem (capturecheck.SCOPE_LINE)"
 +			)
 +		end
 +		return out
@@ -734,6 +732,25 @@ index 00000000..dfc0e906
 +capturecheck.SCOPE_LINE =
 +	"Scope decision (user, 2026-11-08): agent-filed tickets are exempt from the ask, interview, idea review and confirmation (c0260)"
 +
++-- True when `doc` may be claimed: an agent-filed ticket with a valid marker, or a user capture with all five record
++-- sections (their content is the audit's to judge). The claim and the audit use this, not "any section" (review 006 F4).
++function capturecheck.satisfies(doc: string): boolean
++	local kind = capturecheck.kind(doc)
++	if kind == "agent" then
++		return #capturecheck.check(doc, {}) == 0
++	end
++	if kind ~= "user" then
++		return false
++	end
++	local secs = sections(doc)
++	for _, title in CAPTURE do
++		if not find(secs, title) then
++			return false
++		end
++	end
++	return true
++end
++
 +-- True when the record's Confirmation holds a `Confirmed (…)` line (not only an Unconfirmed one).
 +function capturecheck.confirmed(doc: string): boolean
 +	if not mentions(doc) then
@@ -908,7 +925,7 @@ index 76fd5265..a758bdca 100644
  	end
  	if first == "vet" then
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index fffb4027..947e463a 100644
+index fffb4027..79d18c09 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -3,6 +3,8 @@
@@ -1032,7 +1049,7 @@ index fffb4027..947e463a 100644
 +		return -- an unknown id fails in setStatus with its own message
 +	end
 +	local doc = sh.git({ "show", `origin/main:{p :: string}` })
-+	if capturecheck.kind(doc) == "none" and capturecut.required(frontOf(doc)) then
++	if capturecut.required(frontOf(doc)) and not capturecheck.satisfies(doc) then
 +		fail(
 +			`{id} was made after the capture record landed and has neither the record (## Ask (verbatim) … ## Confirmation) nor ## Filed by (agent): continue its capture with the z-ticket skill on this id (steps 0a to 4b, no new issue) or file a ticket from your own finding with ./zn new --filed-by before preparing it`
 +		)
@@ -1210,7 +1227,7 @@ index d323cc20..6cd2c9a5 100644
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
-index a6ce2399..a249e742 100644
+index a6ce2399..f9c1f49a 100644
 --- a/z-nile/skills/z-ticket/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
 @@ -5,7 +5,11 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
@@ -1222,7 +1239,7 @@ index a6ce2399..a249e742 100644
 +
 +0. **Open a capture worktree first**, after the confirmation above and before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
 +0a. **Keep the ask verbatim.** Copy every message of the user's request exactly as they wrote it (the messages of the request, and any correction they made to the restatement above, each dated; in plan mode take them from the plan file's `Ask (verbatim)` heading, which the paragraph above has you write before the restatement), typos and all, into `## Ask (verbatim)` (below), one `### Message YYYY-MM-DD` block per message, each inside a fenced block (the fence one backtick longer than the longest run of backticks in the text, at least three), so headings and code in a pasted plan stay as written. It is never edited, shortened or "fixed", and `./zn land` refuses a later change that is not an appended message.
-+0b. **Interview the user.** The restatement shown above and the user's approval or correction are `### Q1` (Question: the restatement as shown; Options: approve | correct; Answer: the user's words, or the reply `./zn dispatch retry` handed over). Then challenge the idea: ask the questions that expose gaps, conflicts, edge cases and unstated assumptions, until you can write each outcome of the Problem without guessing. Ask only what the repository cannot answer (read the tracker, `game-design.md` and the code first), in rounds of at most four questions (Claude Code: AskUserQuestion; another CLI: plain numbered questions), each with the options you propose and what each costs. Cover the classification (step 1), who is affected, what should happen, how "done" is judged, what is out of scope, and any overlap with a backlog issue (`./zn list backlog`: say so and ask whether to merge). Record **every** question, in order, exactly as asked, with the options offered and the user's answer in their own words (an answer of several lines goes in a fenced block after `Answer:`): none is dropped, even one the user waved away. The interview ends when the user says so or you have no open question; Q1 alone is a complete interview.
++0b. **Interview the user.** Every restatement shown above and the user's approval or correction of it is the next `### Qn`, in order (Q1 the first; Question: the restatement as shown; Options: approve | correct; Answer: the user's words, or the reply `./zn dispatch retry` handed over; a correction makes a second restatement and so a Q2). Then challenge the idea: ask the questions that expose gaps, conflicts, edge cases and unstated assumptions, until you can write each outcome of the Problem without guessing. Ask only what the repository cannot answer (read the tracker, `game-design.md` and the code first), in rounds of at most four questions (Claude Code: AskUserQuestion; another CLI: plain numbered questions), each with the options you propose and what each costs. Cover the classification (step 1), who is affected, what should happen, how "done" is judged, what is out of scope, and any overlap with a backlog issue (`./zn list backlog`: say so and ask whether to merge). Record **every** question, in order, exactly as asked, with the options offered and the user's answer in their own words (an answer of several lines goes in a fenced block after `Answer:`): none is dropped, even one the user waved away. The interview ends when the user says so or you have no open question; Q1 alone is a complete interview.
  1. **Classify the work**:
     - **feature** (`f`): new player-facing or developer-facing capability.
     - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
@@ -1284,7 +1301,7 @@ index a6ce2399..a249e742 100644
 +## A capture under the dispatcher
 +The user decided (2026-11-07) "Keep headless, confirm later". This is the one exception to the stop-and-ask above, for the interview and the confirmation: a capture does not stop for the user (a stop after `./zn new` would leave a stub that a retry duplicates). Under the dispatcher the ask is the description you were given, dated today:
 +- Step 0a as usual.
-+- Step 0b: the restatement and the reply `dispatch retry` handed over are `### Q1`; nobody can be asked more, so a question you would have asked is a finding of step 4a, answered `ask:`.
++- Step 0b: every restatement and the reply `dispatch retry` handed over for it (c0256 hands over the whole list, each dated) are `### Q1`, `### Q2`, …; nobody can be asked more, so a question you would have asked is a finding of step 4a, answered `ask:`.
 +- Step 4a as usual (`./zn dispatch zz-review <id> --mode idea` is allowed here); the reviewer is told the interview is unattended.
 +- Step 4b is the single line `Unconfirmed (unattended, YYYY-MM-DD) after round N: the dispatch was started with this ask`. It is not a confirmation, and you never write `Confirmed`.
 +- Step 6: land without asking; the dispatcher pushes the capture for you.
@@ -1378,7 +1395,7 @@ index ca27aa8b..21890478 100644
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index a6c835ea..f531bdfb 100644
+index a6c835ea..5c927c43 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -29,13 +29,14 @@ Each item is a directory named by its ID:
@@ -1393,7 +1410,7 @@ index a6c835ea..f531bdfb 100644
  
  - **Skills**: z-nile's skills live in `z-nile/skills/<name>/SKILL.md`, a project's own in `<project>/skills/<name>/SKILL.md` (its name in `z-nile/projects.toml`: `pickman/skills/`). The harnesses find them through `.claude/skills/<name>`, a committed relative link to the real folder (`../../z-nile/skills/<name>`), which `./zn skills` writes and `./zn skills --check` (in the gate) checks: one link per skill, nothing else in `.claude/skills/`. Names are unique across the repository and equal the `name:` in the skill's frontmatter. A project's skill may name one other skill in `extends:`, the skill whose rules it defers to (`snake-arch` extends `pickman-arch`): a raft's prompt inlines it after the project's own skills, and `./zn skills` refuses a name that is no other skill. The `z-` (pipeline) and `zz-` (called from inside a step) prefixes are z-nile's alone: a project's skill is named `<project>-…`, and `./zn skills` refuses any other. Git can't add a path through a link, so every tool, spec, Touched path and edit uses the real folder, never `.claude/skills/<name>/…`.
 -- **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2: <lesson id>, <lesson id>` or `- review-001 F3: one-off: <reason>`, plus `- note <text>: <lesson ids>` for a source that is not a review finding (a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A lesson's sources are the entries naming it, each once. See `./zn lessons`.
-+- **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2: <lesson id>, <lesson id>` or `- review-001 F3: one-off: <reason>`, plus `- note <text>: <lesson ids>` for a source that is not a review finding (a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A lesson's sources are the entries naming it, each once. See `./zn lessons`. **Filing one from an agent's finding**: `<source>` is what the agent filed it from: `review:<item id>/<review file> F<n>` (a lesson from a review finding) or `lesson:<skill>/<slug>` (a note on an existing lesson). `./zn new issue … --project <name> --filed-by "<source>"` writes the `## Filed by (agent)` marker and the Scope decision line (c0260: the user exempted agent-filed tickets); it refuses an empty or free-text source. A lesson that comes from the user's correction carries their words: capture it with the z-ticket skill, without `--filed-by`.
++- **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2: <lesson id>, <lesson id>` or `- review-001 F3: one-off: <reason>`, plus `- note <text>: <lesson ids>` for a source that is not a review finding (a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A lesson's sources are the entries naming it, each once. See `./zn lessons`. **Filing one from an agent's finding**: `<source>` is what the agent filed it from: `review:<item id>/<review file> F<n>` (a lesson from a review finding), `lesson:<skill>/<slug>` (a note on an existing lesson) or `agent:<item id>/<slug>` (another finding of an agent; `<item id>` is the nearest item the work serves, and a lead with none captures through the z-ticket skill). `./zn new issue … --project <name> --filed-by "<source>"` writes the `## Filed by (agent)` marker and the Scope decision line (c0260: the user exempted agent-filed tickets); it refuses an empty or free-text source. A lesson that comes from the user's correction carries their words: capture it with the z-ticket skill, without `--filed-by`.
  
  ## Worktrees
  Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request (except tracker state, see Sync and claim). The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree.

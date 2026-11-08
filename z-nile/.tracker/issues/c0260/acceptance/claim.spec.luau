@@ -55,6 +55,9 @@ local function identity(dir: string)
 end
 
 local ISSUES = "pickman/.tracker/issues"
+-- a full user record (the claim needs all five sections; the audit judges their content, c0260 AC3/AC4)
+local RECORD = "\n## Ask (verbatim)\n### Message 2026-11-08\n```\nmore ghosts\n```\n\n## Interview\n### Q1\nQuestion: restate?\nOptions: approve | correct\nAnswer: approve\n\n"
+	.. '## Idea\nMore ghosts.\n\n## Idea review\n### Round 1\n- F1: fixed: done\n\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n'
 
 return t.spec("c0260 the claim gate", function(it)
 	it("sets up an origin whose history holds an old issue, then the marker's landing", function()
@@ -96,23 +99,18 @@ return t.spec("c0260 the claim gate", function(it)
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/c0777/c0777.md` }), "status: preparing")).toBe(true)
 	end)
 
-	it(
-		"AC10: an issue made after the landing without the record is refused, and its claim is not published",
-		function()
-			local wt = trOk(main, { "worktree", "prep-new" })
-			identity(wt)
-			local made = trOk(
-				wt,
-				{ "new", "issue", "c", "after-landing", "--desc", "A bare stub.", "--project", "pickman" }
-			)
-			local id = string.match(made, "(c%d%d%d%d)") :: string
-			local before = tip()
-			local r = tr(wt, { "status", id, "preparing" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
-			t.expect(tip()).toBe(before)
-		end
-	)
+	it("AC10: an issue made after the landing without the record is refused, and its claim is not published", function()
+		local wt = trOk(main, { "worktree", "prep-new" })
+		identity(wt)
+		local made =
+			trOk(wt, { "new", "issue", "c", "after-landing", "--desc", "A bare stub.", "--project", "pickman" })
+		local id = string.match(made, "(c%d%d%d%d)") :: string
+		local before = tip()
+		local r = tr(wt, { "status", id, "preparing" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
+		t.expect(tip()).toBe(before)
+	end)
 
 	it(
 		"AC11: --filed-by writes the marker with its source and the Scope decision, and that ticket is claimed",
@@ -171,10 +169,8 @@ return t.spec("c0260 the claim gate", function(it)
 		identity(shallow)
 		local wt = trOk(shallow, { "worktree", "prep-shallow" })
 		identity(wt)
-		local id = string.match(
-			git(origin, { "log", "--format=%s", "main" }),
-			"tracker: new (c%d+) after%-landing"
-		) :: string
+		local id =
+			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) after%-landing") :: string
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "capture: required")).toBe(true)
 		local r = tr(wt, { "status", id, "preparing" })
 		t.expect(r.ok).toBe(false)
@@ -188,10 +184,8 @@ return t.spec("c0260 the claim gate", function(it)
 		function()
 			local wt = trOk(main, { "worktree", "raft-direct" })
 			identity(wt)
-			local made = trOk(
-				wt,
-				{ "new", "issue", "c", "direct-member", "--desc", "A bare stub.", "--project", "pickman" }
-			)
+			local made =
+				trOk(wt, { "new", "issue", "c", "direct-member", "--desc", "A bare stub.", "--project", "pickman" })
 			local id = string.match(made, "(c%d%d%d%d)") :: string
 			local before = tip()
 			local r = tr(wt, { "new", "raft", "chore", "direct-raft", id, "--project", "pickman" })
@@ -221,6 +215,43 @@ return t.spec("c0260 the claim gate", function(it)
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "Source: agent:c0260/graph-miss"))
 			.toBe(true)
 		trOk(wt, { "status", id, "preparing" })
-		fs.removeDir(base)
 	end)
+
+	it(
+		"AC10: a marked ticket with a full user record is claimed by status and by new raft; the gate refuses only what lacks it",
+		function()
+			local wt = trOk(main, { "worktree", "prep-record" })
+			identity(wt)
+			local id = string.match(
+				trOk(wt, { "new", "issue", "c", "with-record", "--desc", "A captured idea.", "--project", "pickman" }),
+				"(c%d%d%d%d)"
+			) :: string
+			local rec = trOk(main, { "worktree", "prep-record2" })
+			identity(rec)
+			git(rec, { "fetch", "-q", "origin" })
+			git(rec, { "reset", "-q", "--hard", "origin/main" })
+			local doc = `{rec}/{ISSUES}/{id}/{id}.md`
+			local text = fs.readFile(doc)
+			text = (string.gsub(text, "\n## Design", RECORD .. "\n## Design", 1))
+			fs.writeFile(doc, text)
+			git(rec, { "add", "-A" })
+			git(rec, { "commit", "-q", "-m", `tracker: new {id} record` })
+			git(rec, { "push", "-q", "origin", "HEAD:main" })
+			trOk(wt, { "status", id, "preparing" }) -- claimed: the record is there
+			local id2 = string.match(
+				trOk(wt, { "new", "issue", "c", "second-record", "--desc", "Another.", "--project", "pickman" }),
+				"(c%d%d%d%d)"
+			) :: string
+			git(rec, { "fetch", "-q", "origin" })
+			git(rec, { "reset", "-q", "--hard", "origin/main" })
+			local doc2 = `{rec}/{ISSUES}/{id2}/{id2}.md`
+			fs.writeFile(doc2, (string.gsub(fs.readFile(doc2), "\n## Design", RECORD .. "\n## Design", 1)))
+			git(rec, { "add", "-A" })
+			git(rec, { "commit", "-q", "-m", `tracker: new {id2} record` })
+			git(rec, { "push", "-q", "origin", "HEAD:main" })
+			git(wt, { "fetch", "-q", "origin" })
+			git(wt, { "reset", "-q", "--hard", "origin/main" })
+			trOk(wt, { "new", "raft", "chore", "recorded-raft", id2, "--project", "pickman" }) -- a raft claims a recorded member
+		end
+	)
 end)

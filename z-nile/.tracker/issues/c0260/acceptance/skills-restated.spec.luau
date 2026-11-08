@@ -25,8 +25,7 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 			t.expect(has(d, "small exception")).toBe(true)
 			t.expect(has(d, "Nothing else in z-design changes")).toBe(true)
 			t.expect(has(d, "update `## Idea` to match")).toBe(true) -- the extra review round judges the answered idea
-			t.expect(has(d, "No Design, `design: reviewed` or `ready` is written before that line exists"))
-				.toBe(true)
+			t.expect(has(d, "No Design, `design: reviewed` or `ready` is written before that line exists")).toBe(true)
 			t.expect(has(d, "subagent form of z-ticket step 4a")).toBe(true)
 			t.expect(has(d, "- Fn: ask:")).toBe(true)
 			t.expect(has(d, "Confirmed (<who>, YYYY-MM-DD)")).toBe(true) -- a distinct line, the Unconfirmed one stays

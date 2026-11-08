@@ -17,9 +17,9 @@ check "AC5: ./zn dispatch zz-review <id> --mode idea runs the model of the z-tic
 check "AC6: ./zn land carries only the raw idea reviews of an unclaimed draft, and an Ask that only grows." lune run tests/run -- "$A/land.spec.luau"
 check "AC7: zz-review has the idea mode: three sections seen, dropped, added and bent attacked." lune run tests/run -- "$A/skills-review.spec.luau"
 check "AC8: z-design (confirms an unattended capture first), zz-rules and the README restate the flow." lune run tests/run -- "$A/skills-restated.spec.luau"
-check "AC9: an agent-filed ticket is exempt only through the marker section; a ticket with a user ask cannot claim it; z-ticket says what an agent filing a ticket writes; --filed-by accepts a lesson or review finding only." lune run tests/run -- "$A/exempt.spec.luau"
+check "AC9: an agent-filed ticket is exempt only through the marker section; a ticket with a user ask cannot claim it; z-ticket says what an agent filing a ticket writes; --filed-by accepts a lesson, review finding or agent: finding only." lune run tests/run -- "$A/exempt.spec.luau"
 
-check "AC10: an issue made after the capture record landed is refused at the claim, and at design: reviewed|ready by the audit, unless it has the record or the marker; the cut-over is a mark stored in the issue (capture: required), a raft claims its members through the same gate, and an unmarked (older) issue is claimed as before." bash -c 'lune run tests/run -- "$0/cut.spec.luau" "$0/claim.spec.luau"' "$A"
+check "AC10: an issue made after the capture record landed (it carries capture: required, written by ./zn new) is refused at the claim (status, and new raft for each member) and at design: reviewed|ready by the audit unless it has the record or the marker; only the frontmatter counts; no history is read, so a shallow clone judges it the same; an unmarked (older) issue is claimed as before." bash -c 'lune run tests/run -- "$0/cut.spec.luau" "$0/claim.spec.luau"' "$A"
 check "AC11: ./zn new issue … --filed-by <source> writes the marker, the source and the Scope decision line and that ticket is claimed; it refuses an empty, free-text or user source and creates nothing; every skill's lesson line passes the flag." bash -c 'lune run tests/run -- "$0/claim.spec.luau" "$0/exempt.spec.luau"' "$A"
 
 finish

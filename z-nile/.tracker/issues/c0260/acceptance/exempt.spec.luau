@@ -10,7 +10,7 @@ local SCOPE =
 local function agent(problem: string?, filed: string?, extra: string?): string
 	return table.concat({
 		"---\nid: c0901\n---\n\n## Problem\n" .. (problem or ("A lesson.\n" .. SCOPE)) .. "\n",
-		"## Filed by (agent)\n" .. (filed or "Source: design-review-002 F4 of c0260\n") .. "\n",
+		"## Filed by (agent)\n" .. (filed or "Source: review:c0260/design-review-002 F4\n") .. "\n",
 		extra or "",
 		"## Design\n",
 	})
@@ -33,29 +33,22 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 
 	it("AC9: the marker needs a Source line and the Scope decision line", function()
 		t.expect(has(problems(agent(nil, "no source here\n")), "needs a `Source:")).toBe(true)
-		t.expect(has(problems(agent("A lesson.\n")), "Scope decision (user, YYYY-MM-DD)")).toBe(true)
-		t.expect(
-			has(problems(agent("A lesson.\nScope decision: yes\n")), "Scope decision (user, YYYY-MM-DD)")
-		)
-			.toBe(true)
+		t.expect(has(problems(agent("A lesson.\n")), "exact Scope decision line")).toBe(true)
+		t.expect(has(problems(agent("A lesson.\nScope decision: yes\n")), "exact Scope decision line")).toBe(true)
 	end)
 
-	it(
-		"AC9: a ticket that has a user ask (or any capture section) cannot also claim the exemption",
-		function()
-			for _, section in
-				{
-					"## Ask (verbatim)\n### Message 2026-11-07\n```\nhi\n```\n\n",
-					"## Interview\nNone: x\n\n",
-					"## Idea\nx\n\n",
-					"## Confirmation\nx\n\n",
-				}
-			do
-				t.expect(has(problems(agent(nil, nil, section)), "cannot also carry a user's capture record"))
-					.toBe(true)
-			end
+	it("AC9: a ticket that has a user ask (or any capture section) cannot also claim the exemption", function()
+		for _, section in
+			{
+				"## Ask (verbatim)\n### Message 2026-11-07\n```\nhi\n```\n\n",
+				"## Interview\nNone: x\n\n",
+				"## Idea\nx\n\n",
+				"## Confirmation\nx\n\n",
+			}
+		do
+			t.expect(has(problems(agent(nil, nil, section)), "cannot also carry a user's capture record")).toBe(true)
 		end
-	)
+	end)
 
 	it("AC9: free text in the Problem is not the marker", function()
 		local text = "---\nid: c0902\n---\n\n## Problem\nFiled by an agent from a review. " .. SCOPE .. "\n"
@@ -87,4 +80,32 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 			t.expect(capturecheck.source(bad)).toBe(nil)
 		end
 	end)
+
+	it(
+		"AC9: the Source must be a lesson, a review finding or an agent finding, and the Scope line the exact one",
+		function()
+			t.expect(has(problems(agent(nil, "Source: the user asked me to\n")), "needs a `Source:` line")).toBe(true)
+			t.expect(has(problems(agent(nil, "Source: lesson:z-ticket/split-designs-name-each-owner\n")), "Source"))
+				.toBe(false)
+			t.expect(problems(agent(nil, "Source: agent:c0260/graph-miss\n"))).toBe("")
+			t.expect(
+				has(
+					problems(agent("A lesson.\nScope decision (user, 2026-11-08): agents may file what they like\n")),
+					"exact Scope decision line"
+				)
+			).toBe(true)
+		end
+	)
+
+	it(
+		"AC10: the claim accepts an agent ticket only with a valid marker, and a user capture only with all five sections",
+		function()
+			t.expect(capturecheck.satisfies(agent())).toBe(true)
+			t.expect(capturecheck.satisfies(agent(nil, "Source: free text\n"))).toBe(false)
+			local onlyAsk =
+				"---\nid: c0902\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-08\n```\nhi\n```\n"
+			t.expect(capturecheck.satisfies(onlyAsk)).toBe(false)
+			t.expect(capturecheck.satisfies("## Problem\nold\n")).toBe(false)
+		end
+	)
 end)
