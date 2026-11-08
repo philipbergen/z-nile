@@ -34,4 +34,8 @@ run skeleton-diagram AC9 's/(## How it should work\n.*?```mermaid\n).*?(\n```)/$
 run diagram-one-way-out AC9 's/  esc -->\|"raft released: clear context"\| loop\n//'
 run ends-float AC9 's/  layer -->\|"raft merged: clear context"\| loop\n//; s/  esc -->\|"raft released: clear context"\| loop\n/  note["raft merged: clear context; raft released: clear context"]\n/'
 run todays-diagram AC9 'BEGIN { $old = `git show origin/main:z-nile/README.md`; ($old) = $old =~ /## How it should work\n.*?(```mermaid\n.*?\n```)/s } s/(## How it should work\n.*?)```mermaid\n.*?\n```/$1$old/s'
+run edges-commented AC9 's/  layer -->/  %% layer -->/; s/  esc -->\|"raft released/  %% esc -->|"raft released/'
+run node-renamed AC9 's/z-ticket: interview, idea, idea review, confirm/z-ticket: capture/'
+run intent-rank-unexcepted AC6 's/, and giving a rank when a person wants one,//'
+run rank-asked-of-no-one AC6 's/: with no one to answer, the rank stays unset//'
 ok worker-rule-users-words AC5 's/A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go\./A worker clears itself and picks up the next raft whenever a raft is merged, or blocked and let go; its context does not carry over./'

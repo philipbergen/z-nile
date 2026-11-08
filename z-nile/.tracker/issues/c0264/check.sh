@@ -88,11 +88,11 @@ truth() {
 	done <<<"$states"
 	return $bad
 }
-# The diagram of How it should work shows the new flow: the interview, the approval, z-work, lost-first claiming, one
-# ticket at a time with the full-force review, and both ways a raft ends, as edges back into claiming (node ids `stack`,
-# `loop`, `layer` and `esc` are fixed by the design; this file owns the words).
+# The workflow diagram is the reviewed one, word for word (diagram.txt, like legend.txt): it shows the interview, the
+# approval, z-work, lost-first claiming, one ticket at a time with the full-force review, and both ways a raft ends as
+# edges back into claiming. A word check let edges be dropped or commented out (design reviews 002 F1, 003 F1).
 diagram() { sed -n '/^## How it should work/,/^## The five parts/p' "$README" | sed -n '/^```mermaid/,/^```$/p'; }
-pictured() { local d w; d="$(diagram)"; for w in "$@"; do grep -qF -e "$w" <<<"$d" || { echo "diagram lacks: $w"; return 1; }; done; }
+drawn() { diff <(diagram) "$HERE/diagram.txt"; }
 # The README changes only in ## Intent (new) and ## How it should work: with both cut out it equals the branch point's
 # README with its How it should work cut out.
 cut() { awk '/^## (Intent|How it should work)$/{skip=1; next} /^## /{skip=0} !skip'; }
@@ -116,11 +116,10 @@ check "AC6: the README states the rules of the worker model" words \
 	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'Whose idea it was comes from git' 'who approved the design' 'who unblocked it' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \
-	'once a person has approved its design'
+	'once a person has approved its design' \
+	'giving a rank when a person wants one' 'with no one to answer, the rank stays unset'
 check "AC7: every roadmap row and every issue-labelled sentence has the state the tracker shows for its issue" truth
 check "AC8: the README changes only in Intent and How it should work" others
-check "AC9: the workflow diagram shows the interview, the approval, z-work, lost first, one ticket at a time, the full-force review and both ways a raft ends" pictured \
-	'interview' 'idea review' 'approve' 'z-work' 'lost first' 'one ticket at a time' 'full-force review' \
-	'stack --> loop' 'loop --> layer' 'layer -->|"raft merged: clear context"| loop' 'esc -->|"raft released: clear context"| loop'
+check "AC9: the workflow diagram is the reviewed one, word for word: the interview, the approval, z-work, lost first, one ticket at a time, the full-force review, and both ways a raft ends as edges back into claiming" drawn
 
 finish

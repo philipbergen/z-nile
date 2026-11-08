@@ -24,7 +24,7 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
 
 ## Intent
 z-nile exists so that people spend their time on ideas and designs, and agents carry everything after that to merge. This section is the intent, set by the user (2026-11-07, c0264); what of it is built is labelled sub-section by sub-section in How it should work.
-- **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, those are the only two stages that ask a person for anything.
+- **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
 - **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then clears its context and takes the next raft.
 - **The result stays true to the ask.** Before a ticket merges, a final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
 - **It stays cheap.** Sharp, expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
@@ -83,7 +83,7 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 - An unset `rank:` is the lowest rank, and equal or unset ranks fall back to the ticket number, so the order is always stable.
 - Lost work comes first: anything in progress whose heartbeat is stale comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *captured* (c0265)
 - The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
-- z-ticket and z-design append by default. You move things with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer. A raft takes the best rank of its members. The board shows the stack in order.
+- z-ticket and z-design append by default. You move things with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A raft takes the best rank of its members. The board shows the stack in order.
 - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
 ### Claiming across hosts
