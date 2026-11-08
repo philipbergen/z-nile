@@ -1,21 +1,19 @@
 --!strict
--- c0265: what a blocking fixture can force with a `git` shim that acts on one named push: a takeover that meets a claim
--- restamped between its verdict and its publish is refused, and `fold` beats for the raft it claims. Instant cases.
--- Fixture under .cache/c0265-edge.
+-- c0265: what a blocking fixture can force with a `git` shim that acts on one named push or read: a beat that races a
+-- takeover (another terminal restamps the item and swaps the heartbeat branches) is rejected by its lease and the beater
+-- learns it lost the claim; a create-only beat that races one deletes what it created; a lease rejection from a co-beater
+-- of the same claim is retried silently. Instant cases. Fixture under .cache/c0265-edge.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
-local heartbeat = require("@znile/engine/heartbeat")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2 = "", ""
-local STALE = heartbeat.STALE
+local wt = ""
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
-local RESTAMP = "preparing-sunny-heron-lynx"
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -60,8 +58,6 @@ local function issue(id: string, status: string, design: string?, raft: string?)
 	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
 	return (string.gsub(doc, "\nraft: \n", `\nraft: {raft or ""}\n`, 1))
 end
-local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
-	.. 'check "AC1: ok" true\nfinish\n'
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
@@ -75,26 +71,16 @@ takeover() {
   "$REAL_GIT" -C "$o" push -q origin HEAD:main
   tree=$("$REAL_GIT" -C "$o" rev-parse "HEAD^{tree}")
   new=$("$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit-tree "$tree" -p HEAD -m "hb $FAKE_NEWSTAMP 1")
-  "$REAL_GIT" -C "$o" push -q --atomic origin ":refs/heads/hb/$FAKE_OLDSTAMP" "$new:refs/heads/hb/$FAKE_NEWSTAMP"
+  if "$REAL_GIT" -C "$o" ls-remote --exit-code origin "refs/heads/hb/$FAKE_OLDSTAMP" >/dev/null 2>&1; then
+    "$REAL_GIT" -C "$o" push -q --atomic origin ":refs/heads/hb/$FAKE_OLDSTAMP" "$new:refs/heads/hb/$FAKE_NEWSTAMP"
+  else
+    "$REAL_GIT" -C "$o" push -q origin "$new:refs/heads/hb/$FAKE_NEWSTAMP"
+  fi
 }
-if [ "$1" = fetch ]; then
-  case "$*" in
-    *hb-seen*)
-      if [ -f "$FAKE_DIR/raceread" ]; then rm -f "$FAKE_DIR/raceread"; takeover; fi ;;
-  esac
-fi
 if [ "$1" = push ]; then
   case "$*" in
-    *:refs/heads/main*)
-      if [ -f "$FAKE_DIR/race" ]; then
-        rm -f "$FAKE_DIR/race"
-        o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0070/c0070.md"
-        "$REAL_GIT" -C "$o" pull -q origin main
-        sed -i.bak "s/^status: .*/status: preparing-sunny-heron-lynx/" "$f"; rm -f "$f.bak"
-        "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
-        "$REAL_GIT" -C "$o" push -q origin HEAD:main
-      fi ;;
     *":refs/heads/hb/$FAKE_OLDSTAMP"*)
+      echo p >> "$FAKE_DIR/oldpushes"
       if [ -f "$FAKE_DIR/racebeat" ]; then rm -f "$FAKE_DIR/racebeat"; takeover; fi
       if [ -f "$FAKE_DIR/cobeat" ]; then
         rm -f "$FAKE_DIR/cobeat"
@@ -107,21 +93,14 @@ if [ "$1" = push ]; then
 fi
 ]]
 
-return t.spec("c0265 takeover race and fold", function(it)
-	it("sets up claims, a prepared raft to fold into, a checked item, and the shim", function()
+return t.spec("c0265 beat races", function(it)
+	it("sets up claims and the shim", function()
 		h = fakecli.new("c0265-edge", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
-			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
 			[`{P}/c0071/c0071.md`] = issue("c0071", "new-a-b-c"),
 			[`{P}/c0072/c0072.md`] = issue("c0072", "new-a-b-c"),
 			[`{P}/c0073/c0073.md`] = issue("c0073", "new-a-b-c"),
-			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
-			[`{P}/c0095/check.sh`] = CHECK,
-			[`{P}/c0096/c0096.md`] = issue("c0096", "prepared-quiet-copper-falcon", "ready", "R0030"),
-			[`{P}/c0096/check.sh`] = CHECK,
-			["pickman/.tracker/rafts/R0030/R0030.md"] = `---\nid: R0030\ntype: chore\ntitle: Fold\nslug: fold\nsingle: false\nissues: [c0096]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0030\n`,
-			["pickman/.tracker/rafts/R0030/check.sh"] = CHECK,
 		})
 		fs.writeFile(`{h.bin}/gh`, GH)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -139,21 +118,13 @@ return t.spec("c0265 takeover race and fold", function(it)
 			)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge" }), "worktree"), "%s+$", ""))
-		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge2" }), "worktree"), "%s+$", ""))
-		must(zn(wt, { "status", "c0070", "preparing" }), "claim c0070")
 		must(zn(wt, { "status", "c0071", "preparing" }), "claim c0071")
 		must(zn(wt, { "status", "c0072", "preparing" }), "claim c0072")
 		must(zn(wt, { "status", "c0073", "preparing" }), "claim c0073")
-	end)
-
-	it("a takeover that meets a claim restamped between its verdict and its publish is refused", function()
-		local old = stampOf(`{P}/c0070/c0070.md`)
-		fs.writeFile(`{h.fakes}/race`, "1")
-		local r = zn(wt2, { "status", "c0070", "preparing" }, { ZN_NOW = tostring(os.time() + 3 * STALE) })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, RESTAMP)).toBe(true) -- names the stamp it met
-		t.expect(stampOf(`{P}/c0070/c0070.md`)).toBe(RESTAMP) -- the other terminal's claim stands
-		t.expect(old ~= RESTAMP).toBe(true)
+		-- each claim has a beat on origin: the branch a later beat replaces with a lease
+		for _, id in { "c0071", "c0073" } do
+			must(zn(wt, { "beat", id }, { ZN_NOW = tostring(os.time()) }), `first beat of {id}`)
+		end
 	end)
 
 	it(
@@ -161,31 +132,33 @@ return t.spec("c0265 takeover race and fold", function(it)
 		function()
 			local old = stampOf(`{P}/c0071/c0071.md`)
 			local new = "preparing-mellow-badger-jolly"
-			t.expect(tipOf(old) ~= "").toBe(true) -- the claim's first beat made its branch, and wt remembers its sha
+			t.expect(tipOf(old) ~= "").toBe(true) -- the first beat made its branch: the next beat replaces it with a lease
 			fs.writeFile(`{h.fakes}/racebeat`, "1")
-			local due = tostring(os.time() + 1000) -- wt's entry for c0071 is due: its autobeat pushes with a lease
-			local told = zn(
-				wt,
-				{ "lessons", "--tags" },
-				{ ZN_NOW = due, FAKE_ITEM = "c0071", FAKE_OLDSTAMP = old, FAKE_NEWSTAMP = new }
-			)
-			t.expect(told.ok).toBe(true) -- an automatic beat never fails the command
+			fs.writeFile(`{h.fakes}/oldpushes`, "")
+			local told = zn(wt, { "beat", "c0071" }, {
+				ZN_NOW = tostring(os.time() + 1000),
+				FAKE_ITEM = "c0071",
+				FAKE_OLDSTAMP = old,
+				FAKE_NEWSTAMP = new,
+			})
+			t.expect(told.ok).toBe(false) -- the beater learns it lost the claim
 			t.expect(has(told.stderr, `c0071's claim was taken over (now {new})`)).toBe(true)
 			t.expect(stampOf(`{P}/c0071/c0071.md`)).toBe(new)
 			t.expect(tipOf(old)).toBe("") -- the old owner's push was rejected: it did not recreate its branch
+			-- and it learned from the rejection: one push to its branch, no second try on a claim it lost
+			t.expect(#string.gsub(fs.readFile(`{h.fakes}/oldpushes`), "[^p]", "")).toBe(1)
 			t.expect(tipOf(new) ~= "").toBe(true) -- the taker's branch stands, untouched by the old owner
 			t.expect(epochs(new)).toEqual({ 1 })
-			t.expect(fs.isFile(`{wt}/.cache/tracker-beats/c0071`)).toBe(false) -- and its entry is gone
 		end
 	)
 
 	it("a create-only beat that races a takeover deletes what it created and reports the loss", function()
 		local old = stampOf(`{P}/c0072/c0072.md`)
 		local new = "preparing-silver-otter-quiet"
-		-- a checkout with no memory adopts the stamp it read, then the takeover lands between its main read and its hb read:
-		-- it sees no branch, so its write is create-only and succeeds; the re-read of main shows another stamp
-		fs.writeFile(`{h.fakes}/raceread`, "1")
-		local r = zn(h.f.main, { "beat", "c0072", "--adopt" }, {
+		-- c0072 was never beaten: its write is create-only. The takeover lands between the beat's reads and its push,
+		-- so the write succeeds; the re-read of main shows another stamp and the beat deletes what it created
+		fs.writeFile(`{h.fakes}/racebeat`, "1")
+		local r = zn(h.f.main, { "beat", "c0072" }, {
 			ZN_NOW = tostring(os.time() + 1000),
 			FAKE_ITEM = "c0072",
 			FAKE_OLDSTAMP = old,
@@ -202,16 +175,9 @@ return t.spec("c0265 takeover race and fold", function(it)
 		local stamp = stampOf(`{P}/c0073/c0073.md`)
 		fs.writeFile(`{h.fakes}/cobeat`, "1")
 		local due = os.time() + 1000
-		local told = zn(wt, { "lessons", "--tags" }, { ZN_NOW = tostring(due), FAKE_OLDSTAMP = stamp })
+		local told = zn(wt, { "beat", "c0073" }, { ZN_NOW = tostring(due), FAKE_OLDSTAMP = stamp })
 		t.expect(told.ok).toBe(true)
 		t.expect(has(told.stderr, "beat: c0073")).toBe(false) -- a "stale info" rejection is not worth saying
 		t.expect(epochs(stamp)).toEqual({ due }) -- and the retry wrote this beat over the co-beater's
-	end)
-
-	it("fold beats for the raft it claims", function()
-		must(zn(wt, { "fold", "R0030", "c0095" }), "fold")
-		local stamp = stampOf("pickman/.tracker/rafts/R0030/R0030.md")
-		t.expect(string.sub(stamp, 1, 10)).toBe("preparing-")
-		t.expect(#epochs(stamp)).toBe(1)
 	end)
 end)

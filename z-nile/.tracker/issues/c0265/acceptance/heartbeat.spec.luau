@@ -30,9 +30,6 @@ local function entry(stamp: string, epoch: number)
 		subject = heartbeat.subject(stamp, epoch),
 	}
 end
-local function leaseOf(push: heartbeat.Push): string
-	return if push.write then push.write.lease else "<none>"
-end
 local function kinds(vs: { heartbeat.Verdict }): { string }
 	local out = {}
 	for _, v in vs do
@@ -212,20 +209,6 @@ return t.spec("c0265 heartbeat rules", function(it)
 	)
 
 	it(
-		"the lease is the sha this checkout last wrote when it remembers one, else the sha seen, else empty",
-		function()
-			local seen = { beat(A, NOW) }
-			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, "mine")))
-				.toBe("mine")
-			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, "mine")))
-				.toBe("mine") -- branch gone: rejected
-			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, nil)))
-				.toBe(`sha-{A}-{NOW}`)
-			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, nil))).toBe("")
-		end
-	)
-
-	it(
 		"a beat also deletes the branches of long-unclaimed stamps, each with its lease, and nothing else",
 		function()
 			local beats = {
@@ -237,17 +220,6 @@ return t.spec("c0265 heartbeat rules", function(it)
 			local plan = heartbeat.plan(A, NOW, beats, { [A] = true, [B] = true }, NOW)
 			t.expect(plan.delete)
 				.toEqual({ { ref = heartbeat.branch(C), lease = `sha-{C}-{NOW - heartbeat.STALE - 1}` } })
-		end
-	)
-
-	it(
-		"a takeover creates the taker's branch and deletes the old owner's with a lease, in one plan",
-		function()
-			local plan = heartbeat.takeoverPlan(A, C, NOW, { beat(A, NOW - 2000), beat(B, NOW - 5) })
-			t.expect(plan.write)
-				.toEqual({ ref = heartbeat.branch(C), subject = heartbeat.subject(C, NOW), lease = "" })
-			t.expect(plan.delete).toEqual({ { ref = heartbeat.branch(A), lease = `sha-{A}-{NOW - 2000}` } })
-			t.expect(heartbeat.takeoverPlan(A, C, NOW, {}).delete).toEqual({}) -- an old owner that never beat has no branch
 		end
 	)
 
@@ -285,19 +257,10 @@ return t.spec("c0265 heartbeat rules", function(it)
 	end)
 
 	it("the clock is ZN_NOW only inside a spec run", function()
-		t.expect(heartbeat.clock({ ZN_NOW = "5", PICKMAN_FENCE_SPECS = "1" }, 100)).toBe(5)
-		t.expect(heartbeat.clock({ ZN_NOW = "5" }, 100)).toBe(100)
-		t.expect(heartbeat.clock({ ZN_NOW = "5", PICKMAN_FENCE_SPECS = "" }, 100)).toBe(100)
-		t.expect(heartbeat.clock({ ZN_NOW = "soon", PICKMAN_FENCE_SPECS = "1" }, 100)).toBe(100)
-		t.expect(heartbeat.clock({ PICKMAN_FENCE_SPECS = "1" }, 100)).toBe(100)
-	end)
-
-	it("a takeover needs an explicit lost verdict judged for the stamp origin still holds", function()
-		t.expect(heartbeat.canTakeOver("lost", A, A)).toBe(true)
-		t.expect(heartbeat.canTakeOver("lost", A, C)).toBe(false) -- restamped since the verdict
-		for _, kind in { "live", "stale", "parked" } do
-			t.expect(heartbeat.canTakeOver(kind, A, A)).toBe(false)
-		end
+		t.expect(heartbeat.clock({ ZN_NOW = "5" }, 100, true)).toBe(5)
+		t.expect(heartbeat.clock({ ZN_NOW = "5" }, 100, false)).toBe(100)
+		t.expect(heartbeat.clock({ ZN_NOW = "soon" }, 100, true)).toBe(100)
+		t.expect(heartbeat.clock({}, 100, true)).toBe(100)
 	end)
 
 	it("watch beats until the claim's stamp changes or the next tick would pass the bound", function()
@@ -309,23 +272,10 @@ return t.spec("c0265 heartbeat rules", function(it)
 	end)
 
 	it("tuning settings are honoured only inside a spec run, and only as positive whole numbers", function()
-		local inside: { [string]: string? } = { PICKMAN_FENCE_SPECS = "1", ZN_BEAT_EVERY = "1" }
-		t.expect(heartbeat.setting(inside, "ZN_BEAT_EVERY", 300)).toBe(1)
-		t.expect(heartbeat.setting({ ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300)).toBe(300)
-		t.expect(heartbeat.setting({ PICKMAN_FENCE_SPECS = "", ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300))
-			.toBe(300)
+		t.expect(heartbeat.setting({ ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300, true)).toBe(1)
+		t.expect(heartbeat.setting({ ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300, false)).toBe(300)
 		for _, bad in { "0", "-3", "1.5", "soon", "" } do
-			t.expect(
-				heartbeat.setting({ PICKMAN_FENCE_SPECS = "1", ZN_NET_SECONDS = bad }, "ZN_NET_SECONDS", 10)
-			)
-				.toBe(10)
+			t.expect(heartbeat.setting({ ZN_NET_SECONDS = bad }, "ZN_NET_SECONDS", 10, true)).toBe(10)
 		end
-	end)
-
-	it("a discarded worktree is named with the smallest free numeric suffix", function()
-		t.expect(heartbeat.nextSuffix("R0010", {})).toBe("R0010-1")
-		t.expect(heartbeat.nextSuffix("R0010", { "R0010", "R0010-1" })).toBe("R0010-2")
-		t.expect(heartbeat.nextSuffix("R0010", { "R0010-1", "R0010-3" })).toBe("R0010-2") -- the smallest free
-		t.expect(heartbeat.nextSuffix("prep-x", { "prep-xy-1" })).toBe("prep-x-1") -- another name's suffix is not ours
 	end)
 end)

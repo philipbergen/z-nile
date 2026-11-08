@@ -1,10 +1,10 @@
 --!strict
 -- c0265: a beat is a branch (hb/<claim stamp>) on origin, outside main: one commit, replaced by each beat, whose tree is
 -- main's tree and whose parent is main's tip (so ./zn busy never sees it) and whose subject is "hb <stamp> <epoch>".
--- A claim writes the first one, `beat` replaces it from any checkout (never a young branch of a claim this checkout has
--- not fetched), `ready` and `new raft` beat for the raft they claim, any ./zn command in a worktree that holds a claim
--- beats it once an interval has passed, `--watch` refuses to run without a numeric bound, and `beat` refuses what
--- nobody claims, done items included. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/c0265-beat.
+-- `beat <id>` writes it from any checkout, for the stamp main shows for the item; it never prunes a young branch of a
+-- claim this checkout has not fetched, prunes the branch of a claim long gone, never beats from a protected (fenced)
+-- checkout, refuses what nobody claims (done items included), and `--watch` refuses to run without a numeric bound.
+-- Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/c0265-beat.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -51,15 +51,24 @@ local function beats(): { { stamp: string, epoch: number, sha: string } }
 	end
 	return out
 end
+local function epochsOf(stamp: string): { number }
+	local out = {}
+	for _, b in beats() do
+		if b.stamp == stamp then
+			table.insert(out, b.epoch)
+		end
+	end
+	return out
+end
 -- another terminal's beat: a commit with main's tree and tip as parent, force-pushed as the stamp's branch
 local function pushBeat(stamp: string, epoch: number)
 	local tree = fixture.git(h.f.other, { "rev-parse", "HEAD^{tree}" })
 	local sha = fixture.git(h.f.other, { "commit-tree", tree, "-p", "HEAD", "-m", `hb {stamp} {epoch}` })
 	fixture.git(h.f.other, { "push", "-q", "-f", "origin", `{sha}:refs/heads/hb/{stamp}` })
 end
-local function stampOf(id: string, path: string): string
+local function stampOf(path: string): string
 	local text = fixture.git(h.f.origin, { "show", `main:{path}` })
-	return string.match(text, "\nstatus: ([%a%-]+)\n") or error(`{id} has no status on origin`)
+	return string.match(text, "\nstatus: ([%a%-]+)\n") or error(`{path} has no status on origin`)
 end
 local function issue(id: string, status: string, design: string?, raft: string?): string
 	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
@@ -72,7 +81,7 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 	.. 'check "AC1: ok" true\nfinish\n'
 local P = "pickman/.tracker/issues"
 
-return t.spec("c0265 a beat is a ref outside main", function(it)
+return t.spec("c0265 a beat is a branch outside main", function(it)
 	it("sets up a tracker with new issues, a prepared raft and a claimed issue with fake CLIs", function()
 		h = fakecli.new("c0265-beat", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
@@ -80,7 +89,6 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
 			[`{P}/c0020/c0020.md`] = issue("c0020", "new-a-b-c"),
 			[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
-			[`{P}/c0095/c0095.md`] = issue("c0095", "new-a-b-c"),
 			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready", "R0010"),
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0040"),
@@ -104,43 +112,47 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 			)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-beat" }), "worktree"), "%s+$", ""))
+		must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010") -- a claim is a status stamp on main, no beat yet
 	end)
 
-	it("a claim writes the first beat as a branch, and main only gets the claim", function()
-		local main = fixture.git(h.f.origin, { "rev-parse", "main" })
-		must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010")
-		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
-		local list = beats()
-		t.expect(#list).toBe(1)
-		t.expect(list[1].stamp).toBe(stamp)
-		t.expect(list[1].epoch).toBe(T0)
-		-- the claim is one commit on main and the beat is not: the beat is one branch whose commit changes nothing
-		t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{main}..main` })).toBe("1")
-		t.expect(fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname)", "refs/heads/" }))
-			.toBe(`refs/heads/hb/{stamp}\nrefs/heads/main`)
-		local tip = `refs/heads/hb/{stamp}`
-		t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^{tree}" }))
-			.toBe(fixture.git(h.f.origin, { "rev-parse", "main^{tree}" }))
-		t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^" }))
-			.toBe(fixture.git(h.f.origin, { "rev-parse", "main" }))
-		t.expect(fixture.git(h.f.origin, { "log", "-1", "--format=%s", tip })).toBe(`hb {stamp} {T0}`)
-		-- ./zn busy sees no change on it
-		t.expect(has(zn(h.f.main, { "busy", "z-nile", "pickman" }, T0).stdout, "hb/")).toBe(false)
+	it("a claim alone writes no beat: main gets the stamp and origin holds no heartbeat branch", function()
+		t.expect(#beats()).toBe(0)
 	end)
 
 	it(
-		"beat pushes a branch from the main checkout too, replaces the older commit, and touches no file",
+		"beat writes a one-commit branch with main's tree and tip, from the main checkout, touching no file",
 		function()
 			local main = fixture.git(h.f.origin, { "rev-parse", "main" })
-			must(zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 300), "beat in the main checkout")
-			must(zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 600), "beat again")
+			local stamp = stampOf(`{P}/c0010/c0010.md`)
+			must(zn(h.f.main, { "beat", "c0010" }, T0 + 300), "beat in the main checkout")
 			local list = beats()
-			t.expect(#list).toBe(1) -- one branch per claim, its commit replaced
-			t.expect(list[1].epoch).toBe(T0 + 600)
-			t.expect(fixture.git(h.f.origin, { "rev-parse", "main" })).toBe(main)
+			t.expect(#list).toBe(1)
+			t.expect(list[1].stamp).toBe(stamp)
+			t.expect(list[1].epoch).toBe(T0 + 300)
+			local tip = `refs/heads/hb/{stamp}`
+			t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^{tree}" }))
+				.toBe(fixture.git(h.f.origin, { "rev-parse", "main^{tree}" }))
+			t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^" })).toBe(main)
+			t.expect(fixture.git(h.f.origin, { "log", "-1", "--format=%s", tip }))
+				.toBe(`hb {stamp} {T0 + 300}`)
+			t.expect(fixture.git(h.f.origin, { "rev-parse", "main" })).toBe(main) -- never a commit on main
 			t.expect(fixture.git(h.f.main, { "status", "--porcelain" })).toBe("")
+			-- ./zn busy sees no change on it
+			t.expect(has(zn(h.f.main, { "busy", "z-nile", "pickman" }, T0 + 300).stdout, "hb/")).toBe(false)
 		end
 	)
+
+	it("a second beat, from a worktree, replaces the commit: one branch per claim", function()
+		must(zn(wt, { "beat", "c0010" }, T0 + 600), "beat in the worktree")
+		local stamp = stampOf(`{P}/c0010/c0010.md`)
+		t.expect(epochsOf(stamp)).toEqual({ T0 + 600 })
+		t.expect(#beats()).toBe(1)
+		-- the same second, or an older one, is not written again (never backwards)
+		local sha = beats()[1].sha
+		must(zn(wt, { "beat", "c0010" }, T0 + 600), "beat in the same second")
+		must(zn(wt, { "beat", "c0010" }, T0 + 500), "beat in an earlier second")
+		t.expect(beats()[1].sha).toBe(sha)
+	end)
 
 	it("beat refuses what nobody claims, naming the item and the rule", function()
 		for _, id in { "c0020", "c0040", "c0060", "c9999" } do
@@ -153,35 +165,20 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		t.expect(#beats()).toBe(1)
 	end)
 
-	it("ready beats for the raft it claims", function()
-		must(zn(h.f.main, { "ready", "R0010" }, T0), "ready R0010")
-		local stamp = stampOf("R0010", "pickman/.tracker/rafts/active/R0010/R0010.md")
-		local found = false
-		for _, b in beats() do
-			found = found or (b.stamp == stamp and b.epoch == T0)
+	it(
+		"a claim seeded without a beat (c0050, from before beats existed) is beaten by its stamp on main",
+		function()
+			must(zn(h.f.main, { "beat", "c0050" }, T0 + 700), "beat c0050")
+			t.expect(epochsOf("preparing-lucky-violet-heron")).toEqual({ T0 + 700 })
 		end
-		t.expect(found).toBe(true)
-		t.expect(string.sub(stamp, 1, 7)).toBe("active-")
-	end)
+	)
 
-	it("any ./zn command in a worktree that holds a claim beats it once an interval has passed", function()
-		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
-		local function mine(): { number }
-			local out = {}
-			for _, b in beats() do
-				if b.stamp == stamp then
-					table.insert(out, b.epoch)
-				end
-			end
-			return out
-		end
-		must(zn(wt, { "status", "c0010" }, T0 + 1000), "status in the worktree") -- its last beat from here: T0
-		t.expect(mine()).toEqual({ T0 + 1000 })
-		must(zn(wt, { "status", "c0010" }, T0 + 1100), "status again, inside the interval")
-		t.expect(mine()).toEqual({ T0 + 1000 }) -- no second push inside the interval
-		-- the main checkout holds no work: a command there beats nothing, however old the last beat
-		must(zn(h.f.main, { "status", "c0010" }, T0 + 5000), "status in the main checkout")
-		t.expect(mine()).toEqual({ T0 + 1000 })
+	it("a readied raft and a rafting claim are claims too: beat writes their branch", function()
+		must(zn(h.f.main, { "ready", "R0010" }, T0 + 800), "ready R0010")
+		local stamp = stampOf("pickman/.tracker/rafts/active/R0010/R0010.md")
+		t.expect(string.sub(stamp, 1, 7)).toBe("active-")
+		must(zn(h.f.main, { "beat", "R0010" }, T0 + 800), "beat R0010")
+		t.expect(epochsOf(stamp)).toEqual({ T0 + 800 })
 	end)
 
 	it("a beat keeps another terminal's fresh beat of a claim it has not fetched", function()
@@ -190,115 +187,40 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 			[`{P}/c0030/c0030.md`] = issue("c0030", "preparing-sunny-heron-lynx"),
 		}, "other claims c0030")
 		pushBeat("preparing-sunny-heron-lynx", T0 + 1150)
-		must(
-			zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 1200),
-			"beat in a checkout that has not fetched"
-		)
-		local found = false
-		for _, b in beats() do
-			found = found or b.stamp == "preparing-sunny-heron-lynx"
-		end
-		t.expect(found).toBe(true)
+		must(zn(h.f.main, { "beat", "c0010" }, T0 + 1200), "beat in a checkout that has not fetched")
+		t.expect(epochsOf("preparing-sunny-heron-lynx")).toEqual({ T0 + 1150 })
 	end)
 
-	it("new raft beats for the raft it claims", function()
-		must(
-			zn(wt, { "new", "raft", "chore", "beatraft", "c0020", "--project", "pickman" }, T0 + 1300),
-			"new raft"
-		)
-		local listing = zn(h.f.main, { "status" }, T0 + 1300).stdout
-		local rid = string.match(listing, "(R%d+) preparing") or error("no new raft in the status list")
-		local stamp = stampOf(rid, `pickman/.tracker/rafts/{rid}/{rid}.md`)
-		local found = false
-		for _, b in beats() do
-			found = found or (b.stamp == stamp and b.epoch == T0 + 1300)
-		end
-		t.expect(found).toBe(true)
+	it("a beat prunes the branch of a stamp no claim holds once it is older than the limit", function()
+		pushBeat("preparing-gone-gone-gone", T0 - 5000) -- its claim ended long ago
+		pushBeat("preparing-fresh-fresh-fresh", T0 + 1190) -- unclaimed here, but young: may simply not be fetched
+		must(zn(h.f.main, { "beat", "c0010" }, T0 + 1300), "beat")
+		t.expect(epochsOf("preparing-gone-gone-gone")).toEqual({})
+		t.expect(epochsOf("preparing-fresh-fresh-fresh")).toEqual({ T0 + 1190 })
 	end)
 
-	it("a nested ./zn in a protected checkout never beats", function()
-		local entry = `{wt}/.cache/tracker-beats/c0010`
+	it("a protected checkout never beats: the explicit beat refuses there before any network call", function()
 		local before = #beats()
-		local entryBefore = fs.readFile(entry)
 		local function net(): number
 			local text = if fs.isFile(`{h.fakes}/netcalls`) then fs.readFile(`{h.fakes}/netcalls`) else ""
 			return #string.gsub(text, "[^x]", "")
 		end
 		local netBefore = net()
-		-- the fence's own spelling: the canonical git common directory, appended to what the runner already lists
-		local common = string.gsub(
-			fixture.git(h.f.main, { "rev-parse", "--path-format=absolute", "--git-common-dir" }),
-			"%s+$",
-			""
-		)
-		local inherited = process.env.PICKMAN_FENCE_REAL_GIT or ""
-		local listed = if inherited ~= "" then `{inherited}:{common}` else common
-		must(
-			zn(wt, { "lessons", "--tags" }, T0 + 9000, { PICKMAN_FENCE_REAL_GIT = listed }),
-			"a nested command"
-		)
-		t.expect(#beats()).toBe(before)
-		t.expect(fs.readFile(entry)).toBe(entryBefore) -- not even a failed attempt: the entry is untouched
-		-- the explicit command refuses there too, naming the rule (the fence's pre-push hook is only the second line)
-		local explicit = zn(wt, { "beat", "c0010" }, T0 + 9000, { PICKMAN_FENCE_REAL_GIT = listed })
+		-- a protected checkout: the guards in this worktree answer "guarded" (the fixture's own copy of fence.sh)
+		local fence = `{wt}/z-nile/lib/fence.sh`
+		local original = fs.readFile(fence)
+		fs.writeFile(fence, original .. "\npickman_guarded() { echo guarded; }\n")
+		local explicit = zn(wt, { "beat", "c0010" }, T0 + 9000)
+		fs.writeFile(fence, original)
 		t.expect(explicit.ok).toBe(false)
 		t.expect(has(explicit.stderr, "protected")).toBe(true)
 		t.expect(#beats()).toBe(before)
-		-- every heartbeat path asks the guard before its first network call: neither the autobeat nor the explicit
-		-- beat fetched, listed or pushed anything
-		t.expect(net()).toBe(netBefore)
+		t.expect(net()).toBe(netBefore) -- nothing was fetched, listed or pushed
 	end)
 
 	it("--watch refuses to run without a numeric bound (outside ./zn run)", function()
 		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil, { ZN_BOUNDED_DEADLINE = "" })
 		t.expect(refused.ok).toBe(false)
 		t.expect(has(refused.stderr, "./zn run")).toBe(true)
-	end)
-
-	it(
-		"a checkout that does not hold the claim refuses a bare beat, and the dispatcher's form is bound to the stamp it read",
-		function()
-			must(zn(wt, { "status", "c0095", "preparing" }, T0 + 1400), "claim c0095 in the worktree")
-			local stamp = stampOf("c0095", `{P}/c0095/c0095.md`)
-			local before = beats()
-			-- the main checkout never adopted c0095, so it holds no claim memory for it: a bare beat would adopt whatever stamp origin has
-			local bare = zn(h.f.main, { "beat", "c0095" }, T0 + 1500)
-			t.expect(bare.ok).toBe(false)
-			t.expect(has(bare.stderr, "does not hold")).toBe(true)
-			t.expect(has(bare.stderr, "--adopt")).toBe(true)
-			-- the dispatcher's form names the stamp it read at the step's start; a restamped item is refused, not beaten
-			local stale = zn(
-				h.f.main,
-				{ "beat", "c0095", "--adopt", "--stamp", "preparing-silver-otter-quiet" },
-				T0 + 1500
-			)
-			t.expect(stale.ok).toBe(false)
-			t.expect(has(stale.stderr, `c0095's claim was taken over (now {stamp})`)).toBe(true)
-			t.expect(#beats()).toBe(#before)
-			for i, b in beats() do
-				t.expect(b.sha).toBe(before[i].sha) -- nothing was written
-			end
-			-- and with the right stamp it beats
-			must(
-				zn(h.f.main, { "beat", "c0095", "--adopt", "--stamp", stamp }, T0 + 1500),
-				"the dispatcher's form"
-			)
-		end
-	)
-
-	it("a main-checkout adoption writes no memory, so a re-claim does not make it refuse", function()
-		must(zn(h.f.main, { "beat", "c0095", "--adopt" }, T0 + 1600), "main adopts c0095")
-		t.expect(fs.isFile(`{h.f.main}/.cache/tracker-stamp-c0095`)).toBe(false)
-		local first = stampOf("c0095", `{P}/c0095/c0095.md`)
-		must(zn(wt, { "status", "c0095", "new" }, T0 + 1700), "give c0095 back")
-		must(zn(wt, { "status", "c0095", "preparing" }, T0 + 1800), "claim c0095 again")
-		local second = stampOf("c0095", `{P}/c0095/c0095.md`)
-		t.expect(second ~= first).toBe(true)
-		must(zn(h.f.main, { "beat", "c0095", "--adopt" }, T0 + 1900), "main adopts the new claim")
-		local found = false
-		for _, b in beats() do
-			found = found or (b.stamp == second and b.epoch == T0 + 1900)
-		end
-		t.expect(found).toBe(true)
 	end)
 end)

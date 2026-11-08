@@ -161,3 +161,5 @@
 - design-review-018 F7: z-design/never-narrow-captured-scope
 - design-review-018 F8: z-design/confirm-overrides-with-a-suite-run
 - design-review-018 F9: z-design/restated-rules-move-together
+- note the monolithic c0265 ran 18 design-review rounds (3.5 M tokens) without converging, only its pure module prototyped, the engine edge and about 2,300 lines of fixture specs never run: z-design/prove-specs-pass-on-a-prototype
+- note size: 640 from round 1 to round 18 while the design grew to six interlocking mechanisms and the specs tripled, split only after 18 rounds by the user: z-design/size-is-re-estimated-when-scope-grows

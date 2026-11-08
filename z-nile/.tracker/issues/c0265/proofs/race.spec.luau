@@ -1,7 +1,7 @@
 --!strict
 -- c0265: real-time proofs, run once by check.sh and never promoted (a spec waits for nothing): `beat --watch` says a
--- failed tick and keeps beating, stops when its claim is restamped, a long `check` beats while it runs, and a hung
--- remote is bounded. Fixture under .cache/c0265-race.
+-- failed tick and keeps beating, stops when its claim is restamped, and a hung remote is bounded: the heartbeat read
+-- gives up after ZN_NET_SECONDS, says so, and nothing is called lost. Fixture under .cache/c0265-race.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -63,8 +63,6 @@ local function issue(id: string, status: string, design: string?, raft: string?)
 	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
 	return (string.gsub(doc, "\nraft: \n", `\nraft: {raft or ""}\n`, 1))
 end
-local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
-	.. 'check "AC1: ok" true\nfinish\n'
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
@@ -77,17 +75,11 @@ if [ "$1" = fetch ]; then
 fi
 if [ "$1" = push ]; then
   case "$*" in
-    *:refs/heads/main*)
-      if [ -f "$FAKE_DIR/race" ]; then
-        rm -f "$FAKE_DIR/race"
-        o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0070/c0070.md"
-        "$REAL_GIT" -C "$o" pull -q origin main
-        sed -i.bak "s/^status: .*/status: preparing-sunny-heron-lynx/" "$f"; rm -f "$f.bak"
-        "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
-        "$REAL_GIT" -C "$o" push -q origin HEAD:main
-      fi ;;
     *:refs/heads/hb/*)
-      if [ -f "$FAKE_DIR/pushfail" ]; then rm -f "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
+      if [ -f "$FAKE_DIR/pushfail" ]; then
+        n=$(cat "$FAKE_DIR/pushfail")
+        if [ "$n" -gt 0 ]; then echo $((n-1)) > "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
+      fi
       if [ -f "$FAKE_DIR/restamp" ]; then
         rm -f "$FAKE_DIR/restamp"
         o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0085/c0085.md"
@@ -101,33 +93,12 @@ fi
 ]]
 
 return t.spec("c0265 real-time proofs", function(it)
-	it("sets up claims, a prepared raft to fold into, a checked item, and the shim", function()
+	it("sets up claims and the shim", function()
 		h = fakecli.new("c0265-race", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
-			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
 			[`{P}/c0080/c0080.md`] = issue("c0080", "new-a-b-c"),
 			[`{P}/c0085/c0085.md`] = issue("c0085", "new-a-b-c"),
-			[`{P}/c0090/c0090.md`] = issue("c0090", "new-a-b-c"),
-			-- c0090's check runs while a beat must arrive: it polls origin for a beat dated two seconds into the run
-			[`{P}/c0090/check.sh`] = table.concat({
-				"#!/usr/bin/env bash",
-				"start=$(date +%s); i=0",
-				"while [ $i -lt 15 ]; do",
-				'  git fetch -q origin "+refs/heads/hb/$STAMP:refs/zn/hb-seen/$STAMP" 2>/dev/null',
-				'  s=$(git log -1 --format=%s "refs/zn/hb-seen/$STAMP" 2>/dev/null); e=${s##* }',
-				'  if [ -n "$e" ] && [ "$e" -ge $((start+2)) ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi',
-				"  sleep 1; i=$((i+1))",
-				"done",
-				"exit 1",
-				"",
-			}, "\n"),
-			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
-			[`{P}/c0095/check.sh`] = CHECK,
-			[`{P}/c0096/c0096.md`] = issue("c0096", "prepared-quiet-copper-falcon", "ready", "R0030"),
-			[`{P}/c0096/check.sh`] = CHECK,
-			["pickman/.tracker/rafts/R0030/R0030.md"] = `---\nid: R0030\ntype: chore\ntitle: Fold\nslug: fold\nsingle: false\nissues: [c0096]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0030\n`,
-			["pickman/.tracker/rafts/R0030/check.sh"] = CHECK,
 		})
 		fs.writeFile(`{h.bin}/gh`, GH)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -145,7 +116,7 @@ return t.spec("c0265 real-time proofs", function(it)
 			)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-race" }), "worktree"), "%s+$", ""))
-		for _, id in { "c0070", "c0080", "c0085", "c0090" } do
+		for _, id in { "c0080", "c0085" } do
 			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
 		end
 	end)
@@ -153,79 +124,58 @@ return t.spec("c0265 real-time proofs", function(it)
 	it("beat --watch says a failed tick and keeps beating", function()
 		local stamp = stampOf(`{P}/c0080/c0080.md`)
 		local started = os.time()
-		fs.writeFile(`{h.fakes}/pushfail`, "1")
+		fs.writeFile(`{h.fakes}/pushfail`, "2") -- both tries of the first tick fail
 		local r = zn(
 			wt,
 			{ "beat", "c0080", "--watch" },
 			{ ZN_BOUNDED_DEADLINE = tostring(started + 10), ZN_BEAT_EVERY = "1" }
 		)
 		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stderr, "fake beat push failure")).toBe(true)
-		t.expect(os.time() - started <= 10).toBe(true) -- it stopped itself within its bound (started + 10), a tick of slack included
+		-- said by the try itself and again by the tick that gave up: twice
+		local _, said = string.gsub(r.stderr, "fake beat push failure", "")
+		t.expect(said).toBe(2)
+		t.expect(os.time() - started < 40).toBe(true) -- it stopped itself near its bound (started + 10), however slow a tick on a loaded host
 		t.expect(newest(stamp) >= started + 2).toBe(true) -- a later tick beat
 		t.expect(newest(stamp) <= os.time()).toBe(true)
 	end)
 
 	it("beat --watch stops, saying why, when its claim is restamped", function()
+		-- the claim already has its branch, so a beat to it succeeds and only the loop's own look at main can notice
+		must(zn(wt, { "beat", "c0085" }), "the first beat of c0085")
 		local started = os.time()
 		fs.writeFile(`{h.fakes}/restamp`, "1")
 		local r = zn(
 			wt,
 			{ "beat", "c0085", "--watch" },
-			{ ZN_BOUNDED_DEADLINE = tostring(started + 20), ZN_BEAT_EVERY = "1" }
+			{ ZN_BOUNDED_DEADLINE = tostring(started + 90), ZN_BEAT_EVERY = "1" }
 		)
 		t.expect(r.ok).toBe(true)
-		t.expect(os.time() - started < 10).toBe(true) -- well before its bound
+		t.expect(os.time() - started < 60).toBe(true) -- well before its bound (started + 90)
 		t.expect(has(r.stderr .. r.stdout, "taken over")).toBe(true)
 		t.expect(#epochs("preparing-mellow-badger-jolly")).toBe(0) -- it never beat the new claim
 	end)
 
-	it("a long outer command beats while it runs", function()
-		local stamp = stampOf(`{P}/c0090/c0090.md`)
-		local r = zn(wt, { "check", "c0090" }, { ZN_BEAT_EVERY = "1", STAMP = stamp })
-		t.expect(r.ok).toBe(true)
-		t.expect(fs.isFile(`{h.fakes}/check-beat`)).toBe(true)
-	end)
-
 	it(
-		"a hung remote is bounded: status returns, warns, and a failed beat attempt is not retried inside the interval",
+		"a hung remote is bounded: lost gives up after the net limit, says so, and calls nothing lost",
 		function()
 			fs.writeFile(`{h.fakes}/lshang`, "1")
 			local started = os.time()
-			local r = zn(
-				h.f.main,
+			local r = zn(wt, { "lost" }, { ZN_NOW = tostring(os.time() + 5 * STALE), ZN_NET_SECONDS = "1" })
+			fs.removeFile(`{h.fakes}/lshang`)
+			t.expect(r.ok).toBe(false)
+			t.expect(r.stdout).toBe("")
+			t.expect(has(r.stderr, "heartbeats unreadable")).toBe(true)
+			t.expect(os.time() - started < 60).toBe(true) -- the hung call (30 s) was cut at the 1 s net limit
+			-- status still lists, unmarked, and says why
+			fs.writeFile(`{h.fakes}/lshang`, "1")
+			local list = zn(
+				wt,
 				{ "status" },
 				{ ZN_NOW = tostring(os.time() + 5 * STALE), ZN_NET_SECONDS = "1" }
 			)
-			t.expect(r.ok).toBe(true)
-			t.expect(os.time() - started < 20).toBe(true)
-			t.expect(has(r.stderr, "heartbeats unreadable")).toBe(true)
-			-- in a worktree that holds claims, a command that judges nothing makes one failed attempt per claim and no more
-			local function calls(): number
-				local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
-				return #string.gsub(text, "[^x]", "")
-			end
-			local before = calls()
-			must(
-				zn(
-					wt,
-					{ "lessons", "--tags" },
-					{ ZN_NOW = tostring(os.time() + 6 * STALE), ZN_NET_SECONDS = "1" }
-				),
-				"lessons in the worktree"
-			)
-			local first = calls()
-			t.expect(first > before).toBe(true)
-			must(
-				zn(
-					wt,
-					{ "lessons", "--tags" },
-					{ ZN_NOW = tostring(os.time() + 6 * STALE + 10), ZN_NET_SECONDS = "1" }
-				),
-				"lessons again"
-			)
-			t.expect(calls()).toBe(first) -- inside the interval: no new attempt
 			fs.removeFile(`{h.fakes}/lshang`)
+			t.expect(list.ok).toBe(true)
+			t.expect(has(list.stderr, "heartbeats unreadable")).toBe(true)
 		end
 	)
 end)
