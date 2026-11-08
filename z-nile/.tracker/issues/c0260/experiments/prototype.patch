@@ -250,10 +250,10 @@ index 7e05c8ac..a6f8248a 100644
  			for _, p in paths do
 diff --git a/z-nile/engine/capturecheck.luau b/z-nile/engine/capturecheck.luau
 new file mode 100644
-index 00000000..9ffa2b2e
+index 00000000..57ef534b
 --- /dev/null
 +++ b/z-nile/engine/capturecheck.luau
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,536 @@
 +--!strict
 +-- c0260: the shape of a capture's record, which lives in sections of the issue document (z-ticket skill, The capture
 +-- record): `## Ask (verbatim)`, `## Interview`, `## Idea`, `## Idea review`, `## Confirmation`. A ticket an agent filed
@@ -744,11 +744,29 @@ index 00000000..9ffa2b2e
 +	end
 +	local secs = sections(doc)
 +	for _, title in CAPTURE do
-+		if not find(secs, title) then
-+			return false
++		local sec = find(secs, title)
++		if not sec or blank(sec.body) then
++			return false -- a missing or empty section: a headings-only record is not a record (review 007 F2)
 +		end
 +	end
-+	return true
++	-- each section holds what its kind of section is for
++	local function has(title: string, pattern: string): boolean
++		return string.find("\n" .. (find(secs, title) :: Section).body, pattern) ~= nil
++	end
++	return has("Ask (verbatim)", "\n### Message ")
++		and has("Interview", "\n### Q1")
++		and has("Idea review", "\n### Round 1")
++		and has("Confirmation", "\n%u%l+ %(")
++end
++
++-- The agent marker section's text, or nil: `./zn land` compares it between the base and the branch (only
++-- `./zn new --filed-by` writes it, review 007 F3).
++function capturecheck.markerOf(doc: string): string?
++	if not mentions(doc) then
++		return nil
++	end
++	local sec = find((sections(doc)), AGENT)
++	return if sec then sec.body else nil
 +end
 +
 +-- True when the record's Confirmation holds a `Confirmed (…)` line (not only an Unconfirmed one).
@@ -925,7 +943,7 @@ index 76fd5265..a758bdca 100644
  	end
  	if first == "vet" then
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index fffb4027..79d18c09 100644
+index fffb4027..a33452ce 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -3,6 +3,8 @@
@@ -1114,10 +1132,14 @@ index fffb4027..79d18c09 100644
  		end
  		local theirs = sh.run("git", { "show", `{base}:{path}` })
  		local mine = sh.run("git", { "show", `HEAD:{path}` })
-@@ -2251,6 +2358,17 @@ local function captureScope(diff: string, base: string): string?
+@@ -2251,6 +2358,21 @@ local function captureScope(diff: string, base: string): string?
  				end
  			end
  		end
++		-- only `./zn new --filed-by` writes the agent-filed marker: a land that adds, changes or removes it is refused
++		if capturecheck.markerOf(theirs.stdout) ~= capturecheck.markerOf(mine.stdout) then
++			return `not a capture change: {path} adds or changes ## Filed by (agent); only ./zn new --filed-by writes the marker`
++		end
 +		-- a dispatched run never confirms (the user's "Keep headless, confirm later"): it lands Unconfirmed only
 +		if
 +			process.env.ZN_DISPATCH == "1"
@@ -1227,7 +1249,7 @@ index d323cc20..6cd2c9a5 100644
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
-index a6ce2399..f9c1f49a 100644
+index a6ce2399..bd828e50 100644
 --- a/z-nile/skills/z-ticket/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
 @@ -5,7 +5,11 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
@@ -1235,15 +1257,15 @@ index a6ce2399..f9c1f49a 100644
  # Make an issue
  
 -0. **Open a capture worktree first**, before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
-+**Confirm intent first.** When the ticket carries words of the user's (a request, a correction, a problem they point out), restate it before anything is created (no worktree, no `./zn new`): the title, the outcome, who is affected, the non-goals, the Solution ideas, the type (feature, defect or chore) and the project, as you would write them into the Problem, with any overlap `./zn list backlog` shows. The user approves or corrects it, and the stub is made from the approved version. A correction means you restate again. Under `./zn dispatch` (`ZN_DISPATCH=1`), on any CLI, never use plan mode and never only print: ask it the way the dispatcher's prompt tells you to ask the user a question, and stop. Otherwise, in Claude Code, when `EnterPlanMode` is offered (or listed as a deferred tool: load it with ToolSearch) and you are not already in plan mode, call it, write the user's messages of this request to the plan file first, verbatim and each dated, under the heading `Ask (verbatim)` (the plan file is the source of the original messages once approval clears the context), then the restatement, ending with the line `Next: capture with the z-ticket skill, steps 0 to 6; build nothing.`, and call `ExitPlanMode`: the user's approval is the go-ahead, and a rejection means you ask what to change and restate. Without it, or if the user declines plan mode, or if you are already in plan mode (leave its plan alone), print the restatement and stop until the user answers; a subagent returns the restatement to its lead, which confirms it with the user. A message with several tickets gets one restatement covering all of them, one block per ticket. The restatement adds no design and no scope: it is the user's words, sharpened. A restatement the user has already approved counts, whether they gave it in this conversation or it comes in your brief or in the reply `./zn dispatch retry` hands over. A ticket made only from your own finding (a review finding, a failed step, a graph miss you found) has no words of the user's to check and is filed at once.
++**Confirm intent first.** When the ticket carries words of the user's (a request, a correction, a problem they point out), restate it before anything is created (no worktree, no `./zn new`): the title, the outcome, who is affected, the non-goals, the Solution ideas, the type (feature, defect or chore) and the project, as you would write them into the Problem, with any overlap `./zn list backlog` shows. The user approves or corrects it, and the stub is made from the approved version. A correction means you restate again. Under `./zn dispatch` (`ZN_DISPATCH=1`), on any CLI, never use plan mode and never only print: ask it the way the dispatcher's prompt tells you to ask the user a question, and stop. Otherwise, in Claude Code, when `EnterPlanMode` is offered (or listed as a deferred tool: load it with ToolSearch) and you are not already in plan mode, call it, write the user's messages of this request to the plan file first, verbatim and each dated, under the heading `Ask (verbatim)`, then every restatement you have shown and each reply of the user to it, in order and dated, under the heading `Restatements` (the plan file is the source of the original messages and of the whole exchange once approval clears the context), then the current restatement, ending with the line `Next: capture with the z-ticket skill, steps 0 to 6; build nothing.`, and call `ExitPlanMode`: the user's approval is the go-ahead, and a rejection means you ask what to change and restate. Without it, or if the user declines plan mode, or if you are already in plan mode (leave its plan alone), print the restatement and stop until the user answers; a subagent returns the restatement to its lead, which confirms it with the user. A message with several tickets gets one restatement covering all of them, one block per ticket. The restatement adds no design and no scope: it is the user's words, sharpened. A restatement the user has already approved counts, whether they gave it in this conversation or it comes in your brief or in the reply `./zn dispatch retry` hands over. A ticket made only from your own finding (a review finding, a failed step, a graph miss you found) has no words of the user's to check and is filed at once.
 +
 +0. **Open a capture worktree first**, after the confirmation above and before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
-+0a. **Keep the ask verbatim.** Copy every message of the user's request exactly as they wrote it (the messages of the request, and any correction they made to the restatement above, each dated; in plan mode take them from the plan file's `Ask (verbatim)` heading, which the paragraph above has you write before the restatement), typos and all, into `## Ask (verbatim)` (below), one `### Message YYYY-MM-DD` block per message, each inside a fenced block (the fence one backtick longer than the longest run of backticks in the text, at least three), so headings and code in a pasted plan stay as written. It is never edited, shortened or "fixed", and `./zn land` refuses a later change that is not an appended message.
-+0b. **Interview the user.** Every restatement shown above and the user's approval or correction of it is the next `### Qn`, in order (Q1 the first; Question: the restatement as shown; Options: approve | correct; Answer: the user's words, or the reply `./zn dispatch retry` handed over; a correction makes a second restatement and so a Q2). Then challenge the idea: ask the questions that expose gaps, conflicts, edge cases and unstated assumptions, until you can write each outcome of the Problem without guessing. Ask only what the repository cannot answer (read the tracker, `game-design.md` and the code first), in rounds of at most four questions (Claude Code: AskUserQuestion; another CLI: plain numbered questions), each with the options you propose and what each costs. Cover the classification (step 1), who is affected, what should happen, how "done" is judged, what is out of scope, and any overlap with a backlog issue (`./zn list backlog`: say so and ask whether to merge). Record **every** question, in order, exactly as asked, with the options offered and the user's answer in their own words (an answer of several lines goes in a fenced block after `Answer:`): none is dropped, even one the user waved away. The interview ends when the user says so or you have no open question; Q1 alone is a complete interview.
++0a. **Keep the ask verbatim.** Copy every message of the user's request exactly as they wrote it (the messages of the request, and any correction they made to the restatement above, each dated; in plan mode take them from the plan file's `Ask (verbatim)` heading, and each restatement with the user's reply from its `Restatements` heading, which the paragraph above has you write), typos and all, into `## Ask (verbatim)` (below), one `### Message YYYY-MM-DD` block per message, each inside a fenced block (the fence one backtick longer than the longest run of backticks in the text, at least three), so headings and code in a pasted plan stay as written. It is never edited, shortened or "fixed", and `./zn land` refuses a later change that is not an appended message.
++0b. **Interview the user.** Every restatement shown above and the user's approval or correction of it is the next `### Qn`, in order (Q1 the first; Question: the restatement as shown; Options: approve | correct; Answer: the user's words, or the reply `./zn dispatch retry` handed over; a correction makes a second restatement and so a Q2; in plan mode they come from the plan file's `Restatements` heading). Then challenge the idea: ask the questions that expose gaps, conflicts, edge cases and unstated assumptions, until you can write each outcome of the Problem without guessing. Ask only what the repository cannot answer (read the tracker, `game-design.md` and the code first), in rounds of at most four questions (Claude Code: AskUserQuestion; another CLI: plain numbered questions), each with the options you propose and what each costs. Cover the classification (step 1), who is affected, what should happen, how "done" is judged, what is out of scope, and any overlap with a backlog issue (`./zn list backlog`: say so and ask whether to merge). Record **every** question, in order, exactly as asked, with the options offered and the user's answer in their own words (an answer of several lines goes in a fenced block after `Answer:`): none is dropped, even one the user waved away. The interview ends when the user says so or you have no open question; Q1 alone is a complete interview.
  1. **Classify the work**:
     - **feature** (`f`): new player-facing or developer-facing capability.
     - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
-@@ -16,22 +20,70 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+@@ -16,22 +20,72 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
       - tracker CLI bugs.
       These never count as rework.
  2. **Create it**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). The stub, with that line as its Problem, is pushed to `origin/main` at once, so other terminals see the id and the item. The slug is 2–5 words describing the outcome.
@@ -1293,16 +1315,18 @@ index a6ce2399..f9c1f49a 100644
 +
 +**Filed by an agent.** A ticket made only from an agent's own finding (a lesson, a review follow-up, a failed step, a graph miss) has no user words, and the user decided (2026-11-08) that it is exempt: no `## Ask (verbatim)`, interview, idea, idea review or confirmation. `./zn new issue <f|d|c> <slug> --project <name> --filed-by "<source>" --desc "…"` writes it for you: the `## Filed by (agent)` section with `Source: <source>` (a lesson, `lesson:<skill>/<slug>`; a review finding, `review:<item id>/<review file> F<n>`; or another finding of yours such as a failed step, a graph miss, a postponed problem or an override chore, `agent:<item id>/<slug>`; the command refuses an empty or free-text source) and the `Scope decision (user, 2026-11-08): agent-filed tickets are exempt from the ask, interview, idea review and confirmation (c0260)` line in the Problem. Never use `--filed-by` for a ticket that carries the user's words. The audit refuses a ticket that has this section and also any of the user's sections: a ticket with a user ask cannot claim the exemption.
 +
++**A stub an agent made without `--filed-by`** cannot be exempted afterwards: `./zn land` refuses to add or change `## Filed by (agent)`, so only `./zn new issue … --project <name> --filed-by` writes it. Recreate the ticket with the flag, or, if it carries the user's words after all, capture it as a user ticket (next paragraph).
++
 +**A marked stub with no record yet** (`capture: required` in its frontmatter: `./zn new` made it, or its capture stopped before step 4b landed) is continued, not recreated: open a capture worktree and run steps 0a to 4b against that id; `./zn status <id> preparing` refuses it until the record is there.
 +
  ## Headless (under `./zn dispatch`)
  When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user (a scope change, a final review round that goes to the user, a missing credential): write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says, but without `--tokens` for your own session: the dispatcher records the session's tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
  
 +## A capture under the dispatcher
-+The user decided (2026-11-07) "Keep headless, confirm later". This is the one exception to the stop-and-ask above, for the interview and the confirmation: a capture does not stop for the user (a stop after `./zn new` would leave a stub that a retry duplicates). Under the dispatcher the ask is the description you were given, dated today:
++The user decided (2026-11-07) "Keep headless, confirm later". This is the one exception to the stop-and-ask above, for the interview and the confirmation: a capture does not stop for the user (a stop after `./zn new` would leave a stub that a retry duplicates). Under the dispatcher the ask is the description you were given, dated by its first message as c0256 hands it over:
 +- Step 0a as usual.
 +- Step 0b: every restatement and the reply `dispatch retry` handed over for it (c0256 hands over the whole list, each dated) are `### Q1`, `### Q2`, …; nobody can be asked more, so a question you would have asked is a finding of step 4a, answered `ask:`.
-+- Step 4a as usual (`./zn dispatch zz-review <id> --mode idea` is allowed here); the reviewer is told the interview is unattended.
++- Step 4a as usual (`./zn dispatch zz-review <id> --mode idea` is allowed here); the reviewer's prompt says the user answered only the questions in `## Interview`.
 +- Step 4b is the single line `Unconfirmed (unattended, YYYY-MM-DD) after round N: the dispatch was started with this ask`. It is not a confirmation, and you never write `Confirmed`.
 +- Step 6: land without asking; the dispatcher pushes the capture for you.
 +z-design confirms with the user before it designs (z-design skill, The capture record): it shows the idea and every `ask:` line, appends the questions and answers to `## Interview`, rewrites the answered lines `fixed: asked as Qn`, and appends the distinct line `Confirmed (<who>, YYYY-MM-DD) after round N: "<their words>"`; the audit refuses a designed issue whose last line is still `Unconfirmed`.

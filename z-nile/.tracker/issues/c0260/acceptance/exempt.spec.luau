@@ -34,21 +34,26 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 	it("AC9: the marker needs a Source line and the Scope decision line", function()
 		t.expect(has(problems(agent(nil, "no source here\n")), "needs a `Source:")).toBe(true)
 		t.expect(has(problems(agent("A lesson.\n")), "exact Scope decision line")).toBe(true)
-		t.expect(has(problems(agent("A lesson.\nScope decision: yes\n")), "exact Scope decision line")).toBe(true)
+		t.expect(has(problems(agent("A lesson.\nScope decision: yes\n")), "exact Scope decision line"))
+			.toBe(true)
 	end)
 
-	it("AC9: a ticket that has a user ask (or any capture section) cannot also claim the exemption", function()
-		for _, section in
-			{
-				"## Ask (verbatim)\n### Message 2026-11-07\n```\nhi\n```\n\n",
-				"## Interview\nNone: x\n\n",
-				"## Idea\nx\n\n",
-				"## Confirmation\nx\n\n",
-			}
-		do
-			t.expect(has(problems(agent(nil, nil, section)), "cannot also carry a user's capture record")).toBe(true)
+	it(
+		"AC9: a ticket that has a user ask (or any capture section) cannot also claim the exemption",
+		function()
+			for _, section in
+				{
+					"## Ask (verbatim)\n### Message 2026-11-07\n```\nhi\n```\n\n",
+					"## Interview\nNone: x\n\n",
+					"## Idea\nx\n\n",
+					"## Confirmation\nx\n\n",
+				}
+			do
+				t.expect(has(problems(agent(nil, nil, section)), "cannot also carry a user's capture record"))
+					.toBe(true)
+			end
 		end
-	end)
+	)
 
 	it("AC9: free text in the Problem is not the marker", function()
 		local text = "---\nid: c0902\n---\n\n## Problem\nFiled by an agent from a review. " .. SCOPE .. "\n"
@@ -84,13 +89,20 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 	it(
 		"AC9: the Source must be a lesson, a review finding or an agent finding, and the Scope line the exact one",
 		function()
-			t.expect(has(problems(agent(nil, "Source: the user asked me to\n")), "needs a `Source:` line")).toBe(true)
-			t.expect(has(problems(agent(nil, "Source: lesson:z-ticket/split-designs-name-each-owner\n")), "Source"))
+			t.expect(has(problems(agent(nil, "Source: the user asked me to\n")), "needs a `Source:` line"))
+				.toBe(true)
+			t.expect(
+				has(problems(agent(nil, "Source: lesson:z-ticket/split-designs-name-each-owner\n")), "Source")
+			)
 				.toBe(false)
 			t.expect(problems(agent(nil, "Source: agent:c0260/graph-miss\n"))).toBe("")
 			t.expect(
 				has(
-					problems(agent("A lesson.\nScope decision (user, 2026-11-08): agents may file what they like\n")),
+					problems(
+						agent(
+							"A lesson.\nScope decision (user, 2026-11-08): agents may file what they like\n"
+						)
+					),
 					"exact Scope decision line"
 				)
 			).toBe(true)
@@ -106,6 +118,37 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 				"---\nid: c0902\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-08\n```\nhi\n```\n"
 			t.expect(capturecheck.satisfies(onlyAsk)).toBe(false)
 			t.expect(capturecheck.satisfies("## Problem\nold\n")).toBe(false)
+		end
+	)
+
+	it(
+		"AC10: every section of a user record must be non-empty and of its kind: a headings-only record is not claimed",
+		function()
+			local full =
+				'---\nid: c0903\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-08\n```\nhi\n```\n\n## Interview\n### Q1\nQuestion: q\nOptions: a\nAnswer: a\n\n## Idea\nI.\n\n## Idea review\n### Round 1\n- F1: fixed: x\n\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "y"\n\n## Design\n'
+			t.expect(capturecheck.satisfies(full)).toBe(true)
+			for _, section in { "Ask (verbatim)", "Interview", "Idea", "Idea review", "Confirmation" } do
+				local escaped = (string.gsub(section, "[%(%)]", "%%%0"))
+				local emptied = (string.gsub(full, "(## " .. escaped .. "\n).-(\n## )", "%1%2", 1))
+				t.expect(capturecheck.satisfies(emptied)).toBe(false)
+			end
+			t.expect(capturecheck.satisfies((string.gsub(full, "### Message 2026%-11%-08", "text", 1))))
+				.toBe(false)
+			-- text under a heading that is not that section's kind of text
+			t.expect(
+				capturecheck.satisfies(
+					(
+						string.gsub(
+							full,
+							'Confirmed %(user, 2026%-11%-08%) after round 1: "y"',
+							"the user said yes",
+							1
+						)
+					)
+				)
+			).toBe(false)
+			t.expect(capturecheck.satisfies((string.gsub(full, "### Round 1", "round one", 1)))).toBe(false)
+			t.expect(capturecheck.satisfies((string.gsub(full, "### Q1", "question one", 1)))).toBe(false)
 		end
 	)
 end)

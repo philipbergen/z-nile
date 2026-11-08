@@ -18,15 +18,21 @@ return t.spec("c0260 the cut-over is a mark in the issue", function(it)
 		t.expect(capturecut.required({ capture = "optional" })).toBe(false)
 	end)
 
-	it("AC10: an unmarked issue is never judged: it is older, or made where the rule was not in force", function()
-		t.expect(capturecheck.kind(DOC)).toBe("none")
-		t.expect(capturecut.required(require("@znile/engine/audit").front(DOC))).toBe(false)
-	end)
+	it(
+		"AC10: an unmarked issue is never judged: it is older, or made where the rule was not in force",
+		function()
+			t.expect(capturecheck.kind(DOC)).toBe("none")
+			t.expect(capturecut.required(require("@znile/engine/audit").front(DOC))).toBe(false)
+		end
+	)
 
-	it("AC10: the mark survives a renumbering (the id is not what is read) and a copy to another folder", function()
-		local renumbered = (string.gsub(capturecut.mark(DOC), "c0900", "c0123"))
-		t.expect(capturecut.required(require("@znile/engine/audit").front(renumbered))).toBe(true)
-	end)
+	it(
+		"AC10: the mark survives a renumbering (the id is not what is read) and a copy to another folder",
+		function()
+			local renumbered = (string.gsub(capturecut.mark(DOC), "c0900", "c0123"))
+			t.expect(capturecut.required(require("@znile/engine/audit").front(renumbered))).toBe(true)
+		end
+	)
 
 	it("AC10: the marker file the landing adds is z-nile/.tracker/capture-since", function()
 		t.expect(capturecut.MARKER).toBe("z-nile/.tracker/capture-since")
